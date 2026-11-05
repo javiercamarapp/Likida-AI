@@ -139,7 +139,10 @@ export type EntidadBitacora =
   // la confirmación humana de cada lote y las reversas. `entidadId` es el comercio, el
   // lote o el gasto según la acción; el detalle nunca lleva cookies, códigos ni RFC.
   | 'portal_vinculacion'
-  | 'autofactura';
+  | 'autofactura'
+  // CT-A345-09: lo que el correo entrante de Carta Porte NO leyó (extensión no admitida, sin identificador, ilegible, cuerpo corto).
+  // `entidadId` es el id del correo en Resend; el detalle lleva conteos por motivo y extensiones, nunca nombres de archivo ni texto.
+  | 'cp_correo';
 
 /**
  * Quién lo hizo. `'sistema'` es una decisión, no un olvido: un cron o una

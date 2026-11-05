@@ -539,3 +539,21 @@ describe('la lista enlaza a su detalle y el texto no habla del otro canal', () =
     expect(html).not.toMatch(/whatsapp|wa_|plantilla meta/i);
   });
 });
+
+// CT-A12-09: «operador sin alta» tiene tres causas y la ayuda sigue a cada una.
+import { ayudaExcepcion } from './desgloses';
+describe('ayudaExcepcion: operador sin alta según su motivo (CT-A12-09)', () => {
+  it('baja, ambiguo y no_existe dicen cosas distintas, y ambiguo no manda a dar de alta', () => {
+    const baja = ayudaExcepcion('operador_no_encontrado', { motivo: 'baja' });
+    const ambiguo = ayudaExcepcion('operador_no_encontrado', { motivo: 'ambiguo' });
+    const noExiste = ayudaExcepcion('operador_no_encontrado', { motivo: 'no_existe' });
+    expect(baja).toContain('dado de baja');
+    expect(ambiguo).toContain('más de un operador');
+    expect(ambiguo).toContain('no lo des de alta otra vez');
+    expect(noExiste).toContain('no está dado de alta');
+    expect(new Set([baja, ambiguo, noExiste]).size).toBe(3);
+  });
+  it('otros tipos conservan su ayuda de siempre', () => {
+    expect(ayudaExcepcion('sin_poliza')).toContain('No se enviará hasta tener póliza');
+  });
+});

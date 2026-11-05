@@ -23,6 +23,7 @@ import { logger } from '@/lib/logger';
 import { esTokenValido, generarToken } from '@/lib/correo/buzon';
 import { remitenteReconocido, SIN_REMITENTES_AUTORIZADOS } from '@/lib/correo/remitente';
 import { estaApagado } from '../interruptores';
+import { anotarBitacora } from '../bitacora_escritura';
 import { aceptableSinExtension } from './contenido';
 import { ETIQUETA_HTML, quitarScriptYEstilo } from './html_quitar';
 import { nombreArchivoSeguro, procesarDocumento, recibirDocumento, type DepsServicio } from './servicio';
@@ -37,6 +38,10 @@ export const MIN_CUERPO_CHARS = 80;
 const EXT_ADJUNTO = /\.(pdf|xlsx|xls|csv|xml|json|png|jpe?g|webp|eml|txt)$/i;
 /** Una extensión de verdad: punto + letra + hasta 5 caracteres al final. «CCP v3.0» o «CCP EJEMPLO (3)» NO la tienen. */
 const EXT_CUALQUIERA = /\.[a-z][a-z0-9]{0,5}$/i;
+
+/** CT-A345-09: por qué un adjunto o un correo NO se leyó. Cada uno deja rastro; ninguno se pierde en silencio. */
+export type MotivoDescarte = 'extension_no_admitida' | 'sin_identificador' | 'descarga_fallida' | 'demasiado_grande' | 'contenido_no_reconocido' | 'formato_no_legible' | 'cuerpo_corto';
+const extensionDe = (nombre: string | null | undefined): string => (/\.([a-z][a-z0-9]{0,5})$/i.exec((nombre ?? '').trim())?.[1] ?? '').toLowerCase();
 
 /** Un adjunto sin nombre o sin extensión: el portal de un cliente manda su JSON así. Se decide por los bytes después de bajarlo. */
 export const sinExtension = (nombre: string | null | undefined): boolean => !EXT_CUALQUIERA.test((nombre ?? '').trim());
@@ -119,14 +124,24 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
 
   // Con extensión conocida, entra; sin extensión, entra como CANDIDATO y se decide por los bytes al bajarlo (T-A3-58);
   // con una extensión que no es de documento (.exe, .zip, .docx) no se descarga.
-  const candidatos = (correo.attachments ?? []).filter((a) => a.id && (EXT_ADJUNTO.test(a.filename ?? '') || sinExtension(a.filename)));
+  // CT-A345-09: lo que se deja fuera se CUENTA por motivo (y por extensión) y queda en la bitácora; nada se pierde sin rastro.
+  const descartes: Array<{ motivo: MotivoDescarte; ext: string }> = [];
+  const candidatos = (correo.attachments ?? []).filter((a) => {
+    if (!a.id) { descartes.push({ motivo: 'sin_identificador', ext: extensionDe(a.filename) }); return false; }
+    if (EXT_ADJUNTO.test(a.filename ?? '') || sinExtension(a.filename)) return true;
+    descartes.push({ motivo: 'extension_no_admitida', ext: extensionDe(a.filename) });
+    return false;
+  });
   const adjuntos = candidatos.slice(0, MAX_ADJUNTOS);
   // A37-S31-03: lo que pasa de MAX_ADJUNTOS o de MAX_ADJUNTO_BYTES no se lee; eso se DICE (evento a la oficina), no se calla.
   const sobrantes = candidatos.length - adjuntos.length;
   const cuerpoTexto = (correo.text && correo.text.trim().length > 0 ? correo.text : htmlATexto(correo.html ?? '')).trim();
   const hayCuerpo = cuerpoTexto.length >= MIN_CUERPO_CHARS;
   if (adjuntos.length === 0 && !hayCuerpo) {
-    return { status: 200, cuerpo: { ok: true, ignorado: 'sin_contenido' } };
+    // Un cuerpo de menos de 80 caracteres no es documento, pero tampoco desaparece sin rastro.
+    if (cuerpoTexto.length > 0) descartes.push({ motivo: 'cuerpo_corto', ext: '' });
+    await anotarDescartes(tenantId, correo.emailId, descartes);
+    return { status: 200, cuerpo: { ok: true, ignorado: 'sin_contenido', descartados: descartes.length } };
   }
 
   // El interruptor ANTES de consumir el correo: 503 para que vuelva cuando lo enciendan (un 200 lo perdería).
@@ -154,6 +169,7 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
     if (!r.ok) {
       // Un formato ilegible o un agente apagado entre medias: permanente, no se reintenta.
       ignorados++;
+      descartes.push({ motivo: 'formato_no_legible', ext: extensionDe(nombre) });
       logger.info('cp_correo.rechazado', { emailId: correo.emailId, motivo: r.motivo });
       return;
     }
@@ -166,9 +182,9 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
   try {
     for (const a of adjuntos) {
       const d = await deps.descargar(correo.emailId, a.id as string);
-      if (!d.ok) { if (d.transitorio) caidas++; else ignorados++; continue; }
-      if (d.bytes.length > MAX_ADJUNTO_BYTES) { ignorados++; demasiadoGrandes++; continue; }
-      if (!EXT_ADJUNTO.test(a.filename ?? '') && !aceptableSinExtension(d.bytes, a.content_type)) { ignorados++; continue; }
+      if (!d.ok) { if (d.transitorio) caidas++; else { ignorados++; descartes.push({ motivo: 'descarga_fallida', ext: extensionDe(a.filename) }); } continue; }
+      if (d.bytes.length > MAX_ADJUNTO_BYTES) { ignorados++; demasiadoGrandes++; descartes.push({ motivo: 'demasiado_grande', ext: extensionDe(a.filename) }); continue; }
+      if (!EXT_ADJUNTO.test(a.filename ?? '') && !aceptableSinExtension(d.bytes, a.content_type)) { ignorados++; descartes.push({ motivo: 'contenido_no_reconocido', ext: '' }); continue; }
       await recibir(nombreArchivoSeguro(a.filename), d.bytes);
     }
     if (hayCuerpo) {
@@ -212,9 +228,27 @@ export async function atenderCorreoCartaPorte(token: string, correo: CorreoEntra
     }
   }
 
+  await anotarDescartes(tenantId, correo.emailId, descartes);
+
   if (!(await repo.finalizarCorreo(correo.emailId, claim.token, true))) {
     return { status: 503, cuerpo: { error: 'no se pudo finalizar el correo' } };
   }
   logger.info('cp_correo.procesado', { emailId: correo.emailId, tenantId, recibidos, duplicados, ignorados, procesados });
-  return { status: 200, cuerpo: { ok: true, recibidos, duplicados, ignorados, procesados, pendientes: porProcesar.length - procesados, omitidos: sobrantes + demasiadoGrandes } };
+  return { status: 200, cuerpo: { ok: true, recibidos, duplicados, ignorados, procesados, pendientes: porProcesar.length - procesados, omitidos: sobrantes + demasiadoGrandes, descartados: descartes.length } };
+}
+
+/**
+ * CT-A345-09: deja en la bitácora de la flota lo que el correo trajo y NO se leyó: cuántos por motivo y qué extensiones, jamás el
+ * nombre del archivo ni el texto (la tabla sobrevive a un borrado ARCO). Best-effort: anotar nunca tumba el correo.
+ */
+async function anotarDescartes(tenantId: string, emailId: string, descartes: ReadonlyArray<{ motivo: MotivoDescarte; ext: string }>): Promise<void> {
+  if (descartes.length === 0) return;
+  const porMotivo: Record<string, number> = {};
+  const extensiones = new Set<string>();
+  for (const d of descartes) { porMotivo[d.motivo] = (porMotivo[d.motivo] ?? 0) + 1; if (d.ext) extensiones.add(d.ext); }
+  logger.warn('cp_correo.descartes', { emailId, tenantId, total: descartes.length, ...porMotivo });
+  await anotarBitacora({
+    tenantId, actor: 'sistema', accion: 'cp_correo.descartes', entidad: 'cp_correo', entidadId: emailId,
+    detalle: { total: descartes.length, por_motivo: porMotivo, extensiones: [...extensiones].sort().slice(0, 20) },
+  }, { evento: 'cp_correo.descartes_sin_bitacora', contexto: { emailId, tenantId } });
 }

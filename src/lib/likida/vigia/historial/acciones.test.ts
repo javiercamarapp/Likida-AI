@@ -101,7 +101,7 @@ describe('importarHistorialPanel', () => {
     expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), null, d)).toMatchObject({ ok: false });
     expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), archivo(CHAT, 'chat.pdf'), d)).toMatchObject({ ok: false });
     expect(await importarHistorialPanel(dueno, fd({ grupoId: 'no' , equipo: 'Ana' }), archivo(CHAT), d)).toMatchObject({ ok: false });
-    expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), { nombre: 'a.txt', bytes: new Uint8Array(MAX_ARCHIVO_BYTES + 1) }, d)).toMatchObject({ ok: false, error: expect.stringContaining('9 MB') });
+    expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), { nombre: 'a.txt', bytes: new Uint8Array(MAX_ARCHIVO_BYTES + 1) }, d)).toMatchObject({ ok: false, error: expect.stringContaining('4 MB') });
     expect(d.guardarImportacion).not.toHaveBeenCalled();
   });
 

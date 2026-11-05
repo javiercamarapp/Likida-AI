@@ -16,7 +16,7 @@ export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La
 
 export function SeccionPrimerMes({ primerMes, ver, accion }: { primerMes: PrimerMesFila | 'no_disponible'; ver: VerComo; accion: AccionDoc }) {
   if (primerMes === 'no_disponible') {
-    return <p role="note" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>El modo primer mes todavía no está habilitado en la base (falta aplicar la migración 0938).</p>;
+    return <p role="note" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>El modo primer mes todavía no está disponible en tu cuenta. Avísale a Likida y lo habilita.</p>;
   }
   return (
     <FormaAccion accion={accion} className="space-y-3 card p-3.5">

@@ -585,14 +585,23 @@ function EstadoCabecera({ d }: { d: DetalleDesglose }) {
   );
 }
 
-function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde: string }> }) {
+/** CT-A12-09: «operador sin alta» tiene tres causas distintas y cada una se arregla distinto; la ayuda sigue a `detalle.motivo`. */
+export function ayudaExcepcion(tipo: TipoExcepcion, detalle: Record<string, unknown> = {}): string {
+  if (tipo === 'operador_no_encontrado') {
+    if (detalle.motivo === 'baja') return 'Este operador está dado de baja en Likida: reactívalo (o corrige su número de empleado) y el desglose se procesa en la siguiente lectura.';
+    if (detalle.motivo === 'ambiguo') return 'El número de empleado, el teléfono o el id apuntan a más de un operador, o a operadores distintos: no se sabe a quién entregárselo. Corrige el duplicado en Operadores; no lo des de alta otra vez.';
+  }
+  return EXCEPCION[tipo]?.ayuda ?? '';
+}
+
+function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde: string; detalle?: Record<string, unknown> }> }) {
   return (
     <ul className="space-y-1.5">
       {items.map((x, i) => (
         <li key={`${x.tipo}-${i}`} className="text-[12px]">
           <span className="font-medium">{EXCEPCION[x.tipo].titulo}</span>
           <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.desde)}</span>
-          <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{EXCEPCION[x.tipo].ayuda}</span>
+          <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{ayudaExcepcion(x.tipo, x.detalle)}</span>
         </li>
       ))}
     </ul>
@@ -762,7 +771,7 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
                 <span className="font-medium">{EXCEPCION[x.tipo]?.titulo ?? x.tipo}</span>
                 <span style={{ color: 'var(--muted)' }}> · bitácora {bitacora}</span>
                 <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.primeraVez)}</span>
-                <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{EXCEPCION[x.tipo]?.ayuda ?? ''}</span>
+                <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{ayudaExcepcion(x.tipo, x.detalle)}</span>
               </li>
             );
           })}

@@ -48,7 +48,7 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
         </p>
       ) : !disponible ? (
         <EstadoVacio icono={<Send width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          La entrega al contador aún no está disponible en este entorno (falta aplicar la migración 0531).
+          La entrega al contador aún no está disponible en tu cuenta. Avísale a Likida y la habilita.
           Mientras tanto las aprobadas se descargan en CSV arriba.
         </EstadoVacio>
       ) : (
@@ -161,7 +161,7 @@ export function SeccionRecepcion({ recepciones, conteo, acciones }: {
         un ZIP se abre con límites de tamaño y un archivo sospechoso se rechaza y se anota aquí con el motivo.
       </p>
       {recepciones === null || conteo === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudo leer lo recibido. Recarga la página; si se repite, avísale a Likida (en un entorno sin la migración 0530 aplicada es lo esperado).</p>
+        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudo leer lo recibido. Recarga la página; si se repite, avísale a Likida.</p>
       ) : recepciones.length === 0 ? (
         <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           Todavía no llega ningún archivo por correo. Cuando un proveedor mande una factura a tu dirección, aparece aquí.

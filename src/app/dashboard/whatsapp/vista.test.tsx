@@ -76,3 +76,22 @@ describe('la guía de arranque del chofer', () => {
     expect(ilegible).toContain('No pude contar a tus operadores');
   });
 });
+
+describe('CT-A345-19: la guía por perfil', () => {
+  const base = { numero: CONFIGURADO, nombreFlota: 'X', enlace, qrSvg: null, operadores: null };
+
+  it('sin perfil conserva el flujo de siempre: fotos de tickets, «LISTO» y liquidación por el chat', () => {
+    const html = pintar(base);
+    expect(html).toContain('Escribe «LISTO» y le llega su liquidación');
+    expect(html).toContain('manda las fotos de sus tickets');
+  });
+
+  it('con cinco_agentes NO promete tickets ni liquidación por el chat, y dice de qué depende que el chofer reciba avisos', () => {
+    const html = pintar({ ...base, perfil: 'cinco_agentes' });
+    expect(html).not.toContain('le llega su liquidación');
+    expect(html).not.toContain('manda las fotos de sus tickets');
+    expect(html).toContain('no aplican a tu cuenta');
+    expect(html).toContain('solo salen si el Agente de Conductores está habilitado');
+  });
+});
+

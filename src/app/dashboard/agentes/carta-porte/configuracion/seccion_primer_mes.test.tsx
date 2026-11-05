@@ -11,7 +11,7 @@ describe('SeccionPrimerMes (OLA1-A3)', () => {
   });
   it('sin la migración lo dice en vez de ofrecer una forma que fallaría', () => {
     const html = renderToStaticMarkup(<SeccionPrimerMes primerMes="no_disponible" ver={{}} accion={accion} />);
-    expect(html).toContain('migración 0938');
+    expect(html).toContain('todavía no está disponible en tu cuenta');
     expect(html).not.toContain('<form');
   });
 });

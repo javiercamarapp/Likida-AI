@@ -112,7 +112,8 @@ describe('resolverOperadorDestino', () => {
 
   it('un número de empleado repetido (varios choferes) pide usar el id, no elige uno', async () => {
     respuestas = [{ data: [opFila(), opFila({ id: '9b2504e0-4f89-41d3-9a0c-0305e82c3302' })], error: null }];
-    await expect(repo.resolverOperadorDestino('t-1', { id: null, telefono: null, numeroEmpleado: 'E-1' })).rejects.toThrow(/más de un operador/);
+    // CT-A12-09: es una clase propia (OperadorAmbiguo), no un DatoInvalido genérico que se lea como «no existe».
+    await expect(repo.resolverOperadorDestino('t-1', { id: null, telefono: null, numeroEmpleado: 'E-1' })).rejects.toMatchObject({ name: 'OperadorAmbiguo', message: expect.stringMatching(/más de un operador/) });
   });
 
   it('si UNA de las formas no encuentra a nadie, no se entrega por las otras', async () => {

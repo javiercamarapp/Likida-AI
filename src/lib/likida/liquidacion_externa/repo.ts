@@ -13,7 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir } from '../pg';
-import { DatoInvalido, OperadorDeBaja } from '../errores';
+import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
 import { PATRON_FOLIO } from '../orquestador/escalamiento';
@@ -363,10 +363,10 @@ export async function resolverOperadorDestino(
   // Intersección: el chofer que cumple TODAS las formas mandadas.
   const comunes = [...conjuntos[0]].filter((id) => conjuntos.every((c) => c.has(id)));
   if (comunes.length === 0) {
-    throw new DatoInvalido('Los datos del operador no coinciden entre sí: `id`, `telefono` y `numeroEmpleado` apuntan a choferes distintos. No se entrega la liquidación a quien no se sabe.');
+    throw new OperadorAmbiguo('Los datos del operador no coinciden entre sí: `id`, `telefono` y `numeroEmpleado` apuntan a choferes distintos. No se entrega la liquidación a quien no se sabe.');
   }
   if (comunes.length > 1) {
-    throw new DatoInvalido('Esos datos identifican a más de un operador de tu flota. Usa `operador.id`, que es único.');
+    throw new OperadorAmbiguo('Esos datos identifican a más de un operador de tu flota. Usa `operador.id`, que es único.');
   }
   const operador = resultados.flat().find((o) => o.id === comunes[0]);
   if (!operador) throw noEncontrado();

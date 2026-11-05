@@ -85,7 +85,7 @@ export function FormaImportar({ accion, grupos }: { accion: AccionGrupos; grupos
           </select>
         </label>
         <label>
-          <span className={ETIQUETA}>Archivo del chat (.txt o .zip, hasta 9 MB)</span>
+          <span className={ETIQUETA}>Archivo del chat (.txt o .zip, hasta 4 MB)</span>
           <input type="file" name="archivo" required accept=".txt,.zip,text/plain,application/zip" className="w-full pt-1.5" />
           <span className={AYUDA} style={{ color: 'var(--faint)' }}>En WhatsApp: el grupo → Exportar chat → Sin multimedia.</span>
         </label>

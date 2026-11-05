@@ -76,7 +76,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
 
       {p.estado === 'no_disponible' && (
         <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
-          Los convenios todavía no están disponibles en tu cuenta: falta aplicar la actualización de la base (0580). Mientras tanto los viajes se despachan como siempre, sin instrucciones.
+          Los convenios todavía no están disponibles en tu cuenta; avísale a Likida y los habilita. Mientras tanto los viajes se despachan como siempre, sin instrucciones.
         </p>
       )}
       {p.estado === 'error' && (
@@ -214,7 +214,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
         </section>
       ) : (
         <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
-          La edición de convenios en pantalla todavía no está disponible en tu cuenta: falta aplicar la actualización de la base (0656). Mientras tanto puedes importar el archivo.
+          La edición de convenios en pantalla todavía no está disponible en tu cuenta; avísale a Likida y la habilita. Mientras tanto puedes importar el archivo.
         </p>
       ))}
 

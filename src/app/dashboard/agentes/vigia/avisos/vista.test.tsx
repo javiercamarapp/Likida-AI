@@ -192,3 +192,14 @@ describe('navegación', () => {
     expect(h).toContain('href="/dashboard/agentes/vigia/avisos"');
   });
 });
+
+// CT-A345-03: mientras el armado automático esté por conectar, la bandeja no promete que los avisos «aparecerán».
+describe('Avisos de viaje: armado automático por conectar (CT-A345-03)', () => {
+  it('dice que el armado automático está por conectar y el vacío no promete que aparecerán', () => {
+    const html = pintar([]);
+    expect(html).toContain('data-testid="por-conectar"');
+    expect(html).toContain('por conectar');
+    expect(html).not.toContain('aparecerán aquí');
+  });
+});
+

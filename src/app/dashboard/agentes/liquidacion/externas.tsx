@@ -91,7 +91,7 @@ const MENSAJES: Record<MensajeExterno, { texto: string; tono: 'ok' | 'bad' }> = 
   reaviso_parcial: { texto: 'El aviso salió a una parte de los designados; el resto se reintenta solo.', tono: 'ok' },
   reaviso_pendiente: { texto: 'WhatsApp no aceptó el aviso (¿la plantilla de avisos sigue sin aprobar?). Se reintenta solo; la tarea para una persona ya está abierta en el asistente.', tono: 'bad' },
   reaviso_ya: { texto: 'Ese aviso ya había salido: no se mandó otra vez.', tono: 'ok' },
-  reaviso_en_curso: { texto: 'Otra persona o el cron lo está mandando en este momento. Revisa en un minuto.', tono: 'ok' },
+  reaviso_en_curso: { texto: 'Otra persona o el envío automático lo está mandando en este momento. Revisa en un minuto.', tono: 'ok' },
   canal_correo: { texto: 'Esta flota recibe las liquidaciones por correo: no se manda nada por WhatsApp desde aquí.', tono: 'bad' },
   copia_enviada: { texto: 'Listo: la copia salió hacia el jefe de flota.', tono: 'ok' },
   copia_ya: { texto: 'La copia ya se había enviado: no se mandó otra vez.', tono: 'ok' },

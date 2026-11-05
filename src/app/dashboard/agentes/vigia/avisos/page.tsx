@@ -17,6 +17,7 @@ import {
   agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, TOPE_AVISOS_BANDEJA, paraEntrega, validarDatoManual,
   type AvisoBandeja,
 } from '@/lib/likida/vigia/aviso/bandeja';
+import { AVISO_AUTOMATICO_CONECTADO } from '@/lib/likida/vigia/aviso/conexion';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaAvisosVigia, type ResultadoAviso } from './vista';
 import { VistaConfiguracionAviso, type ConfigPantalla, type OpcionesConfigPantalla, type ResultadoConfig } from './configuracion';
@@ -67,6 +68,9 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     const cfg = await crearRepoAviso().leerConfig(a.tenantId);
     if (!cfg || !cfg.habilitado) return fallo('El aviso de viaje está apagado: enciéndelo antes de confirmar.');
     if (!(await repo.aprobar(a.tenantId, id, 'pendiente_confirmacion', a.userId, ahora.toISOString()))) return fallo(CARRERA);
+    if (!AVISO_AUTOMATICO_CONECTADO) {
+      return bien('Confirmado, pero el envío automático está por conectar: este aviso NO sale solo. Para mandarlo, ábrelo, cópialo y usa «Copiar y marcar enviado».');
+    }
     return bien('Confirmado. Sale en la siguiente revisión automática (máximo 5 minutos), dentro del horario de envío y solo si el cliente autorizó mensajes por WhatsApp.');
   }
 
@@ -118,6 +122,7 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     if (!v.ok) return fallo(v.error);
     const r = await repo.guardarDatoManual(a.tenantId, av.filaId, a.userId, v.valor);
     if (r === 'fila_ajena') return fallo('No encuentro ese servicio en tu flota.');
+    if (!AVISO_AUTOMATICO_CONECTADO) return bien('Datos guardados. Se usarán cuando el armado automático de avisos esté conectado; hoy no se rehace ningún aviso solo.');
     return bien('Datos guardados. El aviso se rehace con ellos en la siguiente revisión automática; revísalo entonces antes de confirmar.');
   }
 
@@ -370,6 +375,7 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
       );
     }
   }
+  if (!AVISO_AUTOMATICO_CONECTADO) return bien('Configuración guardada. Los avisos la usarán cuando el armado automático esté conectado; hoy no se arma ningún aviso solo.');
   return bien('Configuración guardada. Los avisos nuevos la usan desde la siguiente revisión automática (máximo 5 minutos).');
 }
 

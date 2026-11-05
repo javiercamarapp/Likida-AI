@@ -120,23 +120,60 @@ export function filasDesdeMatriz(matriz: unknown[][], catalogoForzado?: string):
   return { catalogo, filas: [...filas.values()], rechazos };
 }
 
-/** Lee un .xls/.xlsx/.csv local. Falla con un mensaje llano si el archivo no existe. */
-export function leerArchivoCatalogo(ruta: string, catalogoForzado?: string): ResultadoLectura {
+function abrirLibro(ruta: string) {
   if (!ruta) throw new ErrorImportacion('Falta el archivo. Uso: npx tsx scripts/importar-catalogo-sat.ts <archivo.xls|.xlsx|.csv>');
   if (!existsSync(ruta)) throw new ErrorImportacion(`No existe el archivo «${ruta}». Revisa la ruta; el importador solo lee archivos locales.`);
-  let libro;
   try {
     // Un CSV se decodifica como UTF-8 a mano: leído como buffer, xlsx lo toma por Latin-1 y rompe los acentos.
-    libro = /\.csv$/i.test(ruta)
+    return /\.csv$/i.test(ruta)
       ? leerLibro(readFileSync(ruta, 'utf8').replace(/^\uFEFF/, ''), { type: 'string', cellDates: true })
       : leerLibro(readFileSync(ruta), { type: 'buffer', cellDates: true });
   } catch {
     throw new ErrorImportacion(`No pude leer «${ruta}» como hoja de cálculo o CSV.`);
   }
+}
+
+type Libro = ReturnType<typeof abrirLibro>;
+const matrizDeHoja = (libro: Libro, nombre: string): unknown[][] =>
+  xlsxUtils.sheet_to_json(libro.Sheets[nombre], { header: 1, raw: false, defval: '', dateNF: 'yyyy-mm-dd' }) as unknown[][];
+
+/** Lee la PRIMERA hoja de un .xls/.xlsx/.csv local (o la que sea con `--catalogo`). Falla con un mensaje llano si el archivo no existe. */
+export function leerArchivoCatalogo(ruta: string, catalogoForzado?: string): ResultadoLectura {
+  const libro = abrirLibro(ruta);
   const hoja = libro.Sheets[libro.SheetNames[0]];
   if (!hoja) throw new ErrorImportacion(`El archivo «${ruta}» no tiene hojas.`);
-  const matriz = xlsxUtils.sheet_to_json(hoja, { header: 1, raw: false, defval: '', dateNF: 'yyyy-mm-dd' }) as unknown[][];
-  return filasDesdeMatriz(matriz, catalogoForzado);
+  return filasDesdeMatriz(matrizDeHoja(libro, libro.SheetNames[0]), catalogoForzado);
+}
+
+export interface LecturaLibro {
+  /** Un resultado por hoja que trae un encabezado `c_…` (el libro oficial del SAT trae una hoja por catálogo). */
+  catalogos: ResultadoLectura[];
+  /** Hojas que NO se cargaron (portada, notas, sin encabezado `c_…`): se listan para que no se pierdan en silencio. */
+  hojasOmitidas: string[];
+}
+
+/**
+ * CT-A345-04: el libro oficial del SAT trae un catálogo por hoja y antes solo se leía la primera. Aquí se recorren TODAS
+ * las hojas; con `catalogoForzado` se conserva el comportamiento de siempre (una sola hoja, la primera).
+ */
+export function leerLibroCatalogos(ruta: string, catalogoForzado?: string): LecturaLibro {
+  if (catalogoForzado) return { catalogos: [leerArchivoCatalogo(ruta, catalogoForzado)], hojasOmitidas: [] };
+  const libro = abrirLibro(ruta);
+  if (libro.SheetNames.length === 0) throw new ErrorImportacion(`El archivo «${ruta}» no tiene hojas.`);
+  const catalogos: ResultadoLectura[] = [];
+  const hojasOmitidas: string[] = [];
+  for (const nombre of libro.SheetNames) {
+    const matriz = matrizDeHoja(libro, nombre);
+    if (!matriz.some((f) => /^c_/i.test(String(f?.[0] ?? '').trim()))) { hojasOmitidas.push(nombre); continue; }
+    catalogos.push(filasDesdeMatriz(matriz));
+  }
+  if (catalogos.length === 0) {
+    throw new ErrorImportacion(
+      'No encontré en ninguna hoja el encabezado del catálogo (una primera columna llamada c_Algo, como c_ClaveProdServCP). ' +
+        'Indica el catálogo con --catalogo c_NombreDelCatalogo.',
+    );
+  }
+  return { catalogos, hojasOmitidas };
 }
 
 /** Carga por lotes de TAMANO_LOTE. Devuelve cuántas filas envió. */
@@ -182,11 +219,14 @@ async function principal(argv: string[]): Promise<number> {
   const catalogo = i >= 0 ? argv[i + 1] : undefined;
   try {
     // Se valida el archivo ANTES de pedir credenciales: un archivo que no existe es el error más común.
-    const lectura = leerArchivoCatalogo(ruta ?? '', catalogo);
+    const libro = leerLibroCatalogos(ruta ?? '', catalogo);
     const destino = await destinoSupabase();
-    const cargadas = await cargarCatalogo(lectura.filas, destino);
-    console.log(`${lectura.catalogo}: ${cargadas} filas cargadas, ${lectura.rechazos.length} rechazadas`);
-    for (const r of lectura.rechazos) console.log(`  fila ${r.fila}: ${r.motivo}`);
+    for (const lectura of libro.catalogos) {
+      const cargadas = await cargarCatalogo(lectura.filas, destino);
+      console.log(`${lectura.catalogo}: ${cargadas} filas cargadas, ${lectura.rechazos.length} rechazadas`);
+      for (const r of lectura.rechazos) console.log(`  fila ${r.fila}: ${r.motivo}`);
+    }
+    if (libro.hojasOmitidas.length > 0) console.log(`Hojas sin encabezado c_… (no se cargaron): ${libro.hojasOmitidas.join(', ')}`);
     return 0;
   } catch (e) {
     console.error(e instanceof ErrorImportacion ? e.message : `Error inesperado: ${(e as Error).message}`);

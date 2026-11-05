@@ -22,7 +22,7 @@ import { Bloque, EsqTabla, vigilar } from '../../bloque';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
 import { mapaReubicaciones } from '@/lib/likida/conductor/reporte_llegada';
 import { csvReubicaciones, reubicacionesPorCliente, reubicacionesPorViaje } from '@/lib/likida/conductor/reubicaciones';
-import { leerConfigConductor, leerDatosConstancia, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerRutasAutorizadas, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
+import { leerAgenteChoferHabilitado, leerConfigConductor, leerDatosConstancia, leerEventosReporte, leerEntradaInsights, leerDatosPreflight, leerEpisodiosParaTablero, leerRutasAutorizadas, leerSalidasTms, leerTransitoViajes, leerViajesConCartaPorte } from '@/lib/likida/conductor/repo';
 import { evaluarPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { BannerPreflight } from './configuracion/preflight';
 import { leerCatalogosFiltro, leerDatosTablero, leerIndicadores, listarSitios, type FiltrosTablero } from '@/lib/likida/conductor/repo_validacion';
@@ -152,13 +152,13 @@ export default async function PaginaAgenteConductores({
   // ordenado por antigüedad del aviso — el más urgente primero — con
   // `count: 'exact'`.
   const pCola: Promise<ColaConductores> = vigilar(
-    Promise.all([viajesEsperandoAceptarPaginados(tenantId, ahora, { porPagina: 20 }), pSinAvisar])
-      .then(([pagina, sinAvisar]) => {
+    Promise.all([viajesEsperandoAceptarPaginados(tenantId, ahora, { porPagina: 20 }), pSinAvisar, leerAgenteChoferHabilitado(tenantId)])
+      .then(([pagina, sinAvisar, compuerta]) => {
         const esperan: EsperaAceptar[] = pagina.filas.map((v) => ({
           id: v.id, folio: v.folio, operadorNombre: v.operadorNombre,
           horasDesdeAviso: v.horasDesdeAviso, avisos: v.avisosEnviados,
         }));
-        return { esperan, totalEsperan: pagina.total, sinAvisar, error: pagina.error, truncada: pagina.truncada };
+        return { esperan, totalEsperan: pagina.total, sinAvisar, compuerta: compuerta.razon, error: pagina.error, truncada: pagina.truncada };
       }));
 
   // ── 0385: EL TABLERO DE HITOS ─────────────────────────────────────────
