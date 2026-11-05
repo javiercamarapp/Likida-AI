@@ -11,7 +11,7 @@ vi.mock('next/navigation', () => ({ redirect: vi.fn((u: string) => { throw new E
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/errores', () => ({ mensajeParaPantalla: (_e: unknown, que: string) => `No se pudo ${que}` }));
 const revisar = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/likida/vigia/sin_atender_aviso/acciones', () => ({ revisarSinAtender: revisar, VISTA_PREVIA_PANTALLA: 160 }));
+vi.mock('@/lib/likida/vigia/sin_atender_aviso/acciones', () => ({ revisarSinAtender: revisar, VISTA_PREVIA_PANTALLA: 80 }));
 vi.mock('@/lib/likida/vigia/sin_atender_aviso/interruptor', () => ({ resumenHabilitado: vi.fn(async () => ({ ok: false, motivo: 'bandera_apagada' })) }));
 vi.mock('./acciones', () => ({ revisarSinAtenderAccion: vi.fn(), enviarResumenAccion: vi.fn() }));
 
@@ -40,7 +40,7 @@ describe('la página «sin atender»', () => {
   it('el tenant sale de resolverTenantEfectivo (no del parámetro) y la lectura no lleva ajustes', async () => {
     const p = await props({ tenant: 'otro' });
     expect(resolverEfectivo).toHaveBeenCalledWith('/dashboard/agentes/vigia/sin-atender', { tenant: 'otro' });
-    expect(revisar).toHaveBeenCalledWith('t-sesion', {}, 160);
+    expect(revisar).toHaveBeenCalledWith('t-sesion', {}, 80);
     expect(p.gruposRevisados).toBe(2);
     expect(p.error).toBeNull();
   });

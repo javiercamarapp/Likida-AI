@@ -47,7 +47,8 @@ export const depsSinAtenderReales: DepsSinAtender = {
   ahora: () => Date.now(),
 };
 
-export const VISTA_PREVIA_PANTALLA = 160;
+// Igual al tope del motor (MAX_VISTA_PREVIA = 80): un valor mayor vuelve inválida la configuración.
+export const VISTA_PREVIA_PANTALLA = 80;
 
 export interface Revision {
   resultado: ResultadoSinAtender;
