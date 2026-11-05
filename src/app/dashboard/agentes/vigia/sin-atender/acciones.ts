@@ -5,7 +5,7 @@ import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { appUrl } from '@/lib/env';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
-import { enviarResumenPanel, revisarPanel, type EstadoRevisionUI, type ResultadoEnvioUI } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
+import { enviarResumenPanel, revisarPanel, type ContextoSinAtender, type EstadoRevisionUI, type ResultadoEnvioUI } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Acciones de servidor A NIVEL DE MÓDULO: vuelven a resolver sesión, rol y flota desde la cookie y la flota pintada firmada;
@@ -15,12 +15,14 @@ import { enviarResumenPanel, revisarPanel, type EstadoRevisionUI, type Resultado
 const RUTA = '/dashboard/agentes/vigia/sin-atender';
 const SIN_ACCESO = 'No tienes acceso a esta pantalla.';
 
-async function contexto(fd: FormData) {
+type ResultadoContexto = { readonly error: string } | { readonly ctx: ContextoSinAtender };
+
+async function contexto(fd: FormData): Promise<ResultadoContexto> {
   const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
-  if (!s) return { error: MENSAJE_FLOTA_CAMBIO } as const;
-  if (!puedeVerRuta(s.rol, RUTA)) return { error: SIN_ACCESO } as const;
-  const email = await emailDeUsuario(s.userId).catch(() => null);
-  return { ctx: { tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email, liga: `${appUrl()}${RUTA}` } } as const;
+  if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: SIN_ACCESO };
+  const email = (await emailDeUsuario(s.userId).catch(() => null)) ?? null;
+  return { ctx: { tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email, liga: `${appUrl()}${RUTA}` } };
 }
 
 export async function revisarSinAtenderAccion(_previo: EstadoRevisionUI, fd: FormData): Promise<EstadoRevisionUI> {

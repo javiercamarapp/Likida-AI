@@ -27,11 +27,11 @@ describe('resumen por correo', () => {
     expect(enviar).not.toHaveBeenCalled();
   });
   it('encendido: manda un aviso seguro, sin texto de mensajes y con clave estable por tenant/turno/fecha', async () => {
-    const enviar = vi.fn(async () => ({ ok: true as const, destinatarios: 1 }));
+    const enviar = vi.fn(async (_a: import('@/lib/likida/avisos_correo').AvisoCorreo) => ({ ok: true as const, destinatarios: 1 }));
     const a = alerta({ vistaPrevia: 'TEXTO SECRETO DEL CLIENTE' });
     const r = await enviarResumenSinAtender(base([a]), { enviar, habilitado: encendido });
     expect(r.ok).toBe(true);
-    const aviso = enviar.mock.calls[0]![0] as import('@/lib/likida/avisos_correo').AvisoCorreo;
+    const aviso = enviar.mock.calls[0]![0];
     expect(aviso.tenantId).toBe(TENANT_A);
     expect(aviso.asunto).toBe(ASUNTO_RESUMEN);
     expect(asuntoEsSeguro(aviso.asunto)).toBe(true);
