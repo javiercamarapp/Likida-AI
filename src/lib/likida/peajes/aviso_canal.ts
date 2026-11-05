@@ -12,7 +12,8 @@ import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina'
 // CORREO (ronda 4): el segundo canal vive en `aviso_correo.ts` y reutiliza el transporte de la Liquidación. La selección es
 //   EXPLÍCITA (`canalesAvisoPeajes`): WhatsApp y correo, en ese orden; cada flota recibe por los que tengan destinatario
 //   configurado (WhatsApp: teléfono; correo: `correo_avisos` activo con destinatarios). `enviarPorCanales` cuenta como enviado
-//   si ALGUNO lo aceptó; el sello de «avisar una sola vez» (`peaje_aviso_enviado`) no depende del canal.
+//   si ALGUNO lo aceptó; el sello de «avisar una sola vez» (`peaje_aviso_enviado`) no depende del canal:
+//   si WhatsApp acepta y el correo falla, el sello se confirma y el correo no se reintenta (límite conocido; ver aviso_correo.ts).
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface AvisoPeajes {

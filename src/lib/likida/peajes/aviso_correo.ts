@@ -17,6 +17,10 @@ import type { AvisoPeajes, CanalAvisoPeajes } from './aviso_canal';
 //
 // FAIL-CERRADO: sin configuración, apagado, o sin ningún destinatario válido, el canal no tiene a quién mandarle y NO envía
 // (el barrido lo cuenta como «sin destinatario»/omitido). Resend sin configurar tampoco cuenta como enviado.
+// SEMÁNTICA «ALGUNO» (documentada): `enviarPorCanales` cuenta el aviso como enviado si ALGÚN canal lo aceptó, y entonces se confirma el sello
+// (único por tipo+clave, sin canal). Si WhatsApp acepta y el correo falla, el correo NO se reintenta. Si una flota contrata el correo como
+// canal principal, hay que sellar por canal (cambia `peaje_aviso_enviado`: requeriría migración, fuera de esta ronda).
+// FECHA DE CORTE: vive en `correo_avisos.noEnviarAntes` pero el barrido la aplica a TODOS los canales; es obligatoria para encender el correo.
 // Idempotencia: un correo por destinatario con `Idempotency-Key` = tipo + flota + clave del aviso (periodo/umbral) + destinatario;
 // el reintento tras un corte ambiguo repite la misma llave y Resend no lo duplica. El sello `peaje_aviso_enviado` del barrido
 // evita además el reenvío entre corridas.
@@ -26,6 +30,8 @@ export const MAX_DESTINATARIOS_CORREO_AVISOS = 5;
 /** Intentos por destinatario dentro de UNA pasada del cron (el cron vuelve a pasar cada ~15 min con el sello soltado). */
 export const MAX_INTENTOS_CORREO_AVISO = 3;
 const ESPERA_ENTRE_INTENTOS_MS = [1_000, 3_000];
+/** Presupuesto total de tiempo por aviso (todos los destinatarios): el peor caso sin tope sería ~95 s y el cron tiene su propio reloj. */
+export const PRESUPUESTO_AVISO_CORREO_MS = 25_000;
 const MAX_ASUNTO = 120;
 
 export interface ConfigCorreoAvisos {
@@ -71,13 +77,20 @@ export function validarCorreoAvisos(entrada: unknown): ValidadoCorreoAvisos {
   }
   const activo = e.activo === true;
   if (activo && destinatarios.length === 0) return { ok: false, motivo: 'Para encender el correo indica al menos un destinatario.' };
+  // Sin corte, el primer barrido reenviaría todo el historial de la ventana (WhatsApp nunca selló esos avisos): no se puede encender así.
+  if (activo && corte === null) return { ok: false, motivo: 'Para encender el correo indica la fecha de corte (AAAA-MM-DD): no se avisa de archivos anteriores.' };
   return { ok: true, valor: { activo, destinatarios, asunto: limpiarAsunto(e.asunto), noEnviarAntes: corte as string | null } };
 }
 
 /** Lo guardado en la base, leído con tolerancia: una fila corrupta NO enciende nada (cae a apagado). */
 export function correoAvisosEfectivo(guardado: unknown): ConfigCorreoAvisos {
   const v = validarCorreoAvisos(guardado);
-  return v.ok ? v.valor : { ...CONFIG_CORREO_AVISOS_DEFAULT };
+  if (v.ok) return v.valor;
+  // Fail-cerrado también con el corte: si el resto de la fila está corrupta, el correo queda apagado pero la fecha de corte
+  // (que filtra TODOS los canales) se conserva si es válida, en vez de perderse y dejar pasar el historial.
+  const crudo = typeof guardado === 'object' && guardado !== null && !Array.isArray(guardado) ? (guardado as Record<string, unknown>).noEnviarAntes : null;
+  const corte = typeof crudo === 'string' && RE_FECHA.test(crudo) && !Number.isNaN(Date.parse(`${crudo}T00:00:00Z`)) ? crudo : null;
+  return { ...CONFIG_CORREO_AVISOS_DEFAULT, noEnviarAntes: corte };
 }
 
 /** El asunto: el de la flota o uno sobrio por tipo. Nunca lleva importes. */
@@ -99,7 +112,7 @@ export function armarCorreoAviso(aviso: AvisoPeajes, asunto: string): Correo {
     asunto,
     avance: aviso.resumen || 'Aviso de Peajes',
     titulo: 'Aviso de Peajes',
-    parrafos: [cuerpo === '' ? SIN_DATOS : cuerpo, 'Aviso automático. Es una señal para revisar; no afirma que ningún cobro sea indebido.'],
+    parrafos: [!/\p{L}{3,}/u.test(cuerpo) || cuerpo.length < 20 ? SIN_DATOS : cuerpo, 'Aviso automático. Es una señal para revisar; no afirma que ningún cobro sea indebido.'],
     boton: { texto: 'Abrir Peajes', href: aviso.liga },
   };
 }
@@ -118,13 +131,19 @@ export interface DepsCanalCorreoPeajes {
   leerConfig: (tenantId: string) => Promise<ConfigCorreoAvisos>;
   enviar?: EnvioCorreoPuerto;
   esperar?: (ms: number) => Promise<void>;
+  /** Reloj en ms (para probar el presupuesto de tiempo). */
+  reloj?: () => number;
+  presupuestoMs?: number;
 }
 
 /** El canal de correo. Un correo por destinatario; `true` solo si TODOS lo aceptaron (los que ya salieron no se duplican al reintentar). */
 export function canalCorreoPeajes(deps: DepsCanalCorreoPeajes): CanalAvisoPeajes {
   const enviar = deps.enviar ?? ((para, correo, op) => enviarCorreo(para, correo, op));
   const esperar = deps.esperar ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  const reloj = deps.reloj ?? (() => Date.now());
+  const presupuesto = deps.presupuestoMs ?? PRESUPUESTO_AVISO_CORREO_MS;
   const configs = new Map<string, ConfigCorreoAvisos>();
+  let avisadoSinConfigurar = false;
   return {
     nombre: 'correo',
     async destinatario(tenantId) {
@@ -138,17 +157,26 @@ export function canalCorreoPeajes(deps: DepsCanalCorreoPeajes): CanalAvisoPeajes
       if (!cfg.activo) return false;
       const correo = armarCorreoAviso(aviso, asuntoAviso(cfg, aviso.tipo));
       let todos = true;
+      const inicio = reloj();
       for (const dest of destinatarios.split(',').map((d) => d.trim()).filter(Boolean)) {
         const llave = llaveAvisoCorreo(aviso, dest);
         let aceptado = false;
         for (let intento = 1; intento <= MAX_INTENTOS_CORREO_AVISO && !aceptado; intento++) {
+          // Sin tiempo: el destinatario queda pendiente (se suelta el sello y el siguiente barrido repite las mismas llaves).
+          if (reloj() - inicio >= presupuesto) break;
           const r = await enviar(dest, correo, { sobrio: true, ...(llave ? { idempotencyKey: llave } : {}) });
           if (r.ok) { aceptado = true; break; }
           const ambiguo = r.motivo === 'red' && !r.previoAConexion;
           // Reintento acotado: solo lo transitorio; un corte ambiguo solo se repite con llave (si no, podría duplicar).
           const reintentable = (r.motivo === 'rechazado' && esTransitorio(r.status)) || (r.motivo === 'red' && (!ambiguo || llave !== null));
+          // Resend sin configurar no cambia entre intentos ni entre destinatarios: se avisa UNA vez por proceso, sin ruido por barrido.
+          if (r.motivo === 'sin_configurar') {
+            if (!avisadoSinConfigurar) { avisadoSinConfigurar = true; logger.warn('peajes.aviso_correo_sin_configurar', { tenant: aviso.tenantId }); }
+            break;
+          }
           logger.warn('peajes.aviso_correo_fallo', { tenant: aviso.tenantId, tipo: aviso.tipo, para: enmascararCorreo(dest), motivo: r.motivo, intento, reintentable });
           if (!reintentable || intento >= MAX_INTENTOS_CORREO_AVISO) break;
+          if (reloj() - inicio + (ESPERA_ENTRE_INTENTOS_MS[intento - 1] ?? 3_000) >= presupuesto) break;
           await esperar(ESPERA_ENTRE_INTENTOS_MS[intento - 1] ?? 3_000);
         }
         if (!aceptado) todos = false;

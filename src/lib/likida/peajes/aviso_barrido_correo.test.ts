@@ -50,6 +50,16 @@ describe('barrido con correo', () => {
     expect(recibidos.every((a) => !(a.clave ?? '').startsWith('dViejo'))).toBe(true);
     expect(r.fallidas).toBe(0);
   });
+  it('con corte definido, un archivo sin periodoHasta NO pasa el filtro (no reenviar historial); sin corte sí', async () => {
+    const sinFin = [{ id: 'dSinFin', periodoDesde: '2026-07-01', periodoHasta: null }, { id: 'dNuevo', periodoDesde: '2026-10-01', periodoHasta: '2026-10-10' }] as never;
+    const con = armar({ corteAvisos: async () => '2026-10-01', desgloses: async () => sinFin });
+    await barrerAvisosPeajes(con.deps);
+    expect(con.deps.candidatosDeDesglose).toHaveBeenCalledTimes(1);
+    expect(con.deps.candidatosDeDesglose).toHaveBeenCalledWith('t1', 'dNuevo');
+    const sin = armar({ desgloses: async () => sinFin });
+    await barrerAvisosPeajes(sin.deps);
+    expect(sin.deps.candidatosDeDesglose).toHaveBeenCalledTimes(2);
+  });
   it('si la fecha de corte no se puede leer, la flota se cuenta fallida y no avisa (fail-cerrado)', async () => {
     const { deps, recibidos } = armar({ corteAvisos: async () => { throw new Error('base caída'); } });
     const r = await barrerAvisosPeajes(deps);

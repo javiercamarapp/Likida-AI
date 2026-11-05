@@ -18,13 +18,13 @@ describe('configuración del correo de avisos (umbrales.correo_avisos)', () => {
     expect(r.ok).toBe(true);
     expect((await R.leerCorreoAvisos(T)).destinatarios).toEqual(['ana@flota.mx']);
     expect((await R.leerCorreoAvisos('tenant-2')).activo).toBe(false);
-    const mala = await R.guardarCorreoAvisos('tenant-3', { activo: true, destinatarios: [] });
+    const mala = await R.guardarCorreoAvisos('tenant-3', { activo: true, destinatarios: [], noEnviarAntes: '2026-10-01' });
     expect(mala.ok).toBe(false);
     expect((db.tablas.peaje_atipico_config ?? []).filter((f) => f.tenant_id === 'tenant-3')).toHaveLength(0);
   });
   it('conserva plazo, interruptores y teléfono, y al revés', async () => {
     await R.guardarConfigAvisos(T, { plazo: { meses: 5 }, interruptores: { aviso_plazo: true } });
-    await R.guardarCorreoAvisos(T, { activo: true, destinatarios: ['ana@flota.mx'] });
+    await R.guardarCorreoAvisos(T, { activo: true, destinatarios: ['ana@flota.mx'], noEnviarAntes: '2026-10-01' });
     let c = await R.leerConfigPeajes(T);
     expect(c.avisos.plazo.meses).toBe(5);
     expect(c.avisos.interruptores.aviso_plazo).toBe(true);

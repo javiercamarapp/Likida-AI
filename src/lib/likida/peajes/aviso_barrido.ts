@@ -146,7 +146,7 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
         // Fecha de corte: los archivos cuyo periodo terminó antes NO se avisan (solo el plazo; la cobertura del recordatorio usa todos).
         let corte: string | null = null;
         if (deps.corteAvisos) { try { corte = await deps.corteAvisos(f.tenantId); } catch (e) { logger.error('cron.peajes.avisos_corte_fallo', { tenant: f.tenantId, codigo: codigoDeError(e) }); throw e; } }
-        const ordenados = [...desgloses].reverse().filter((d) => !corte || !d.periodoHasta || d.periodoHasta >= corte);
+        const ordenados = [...desgloses].reverse().filter((d) => !corte || (d.periodoHasta != null && d.periodoHasta >= corte));
         let evaluados = 0;
         for (const d of ordenados.slice(0, MAX_DESGLOSES_PLAZO_POR_FLOTA)) {
           // Con el reloj vencido se corta, pero siempre se evalúa al menos el más viejo.

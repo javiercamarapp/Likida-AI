@@ -13,7 +13,7 @@ const aviso: AvisoPeajes = {
   tenantId: 't1', tipo: 'plazo', resumen: 'cobros por vencer', liga: 'https://app.likida.ai/dashboard/agentes/peajes', clave: 'd1:30:2026-10-25',
   texto: '⏰ Peajes: 2 cobros sin reclamar ($500.00 en total) vence en 10 días. Es una señal para revisar, no afirma que el cobro sea indebido. Revísalo: https://app.likida.ai/dashboard/agentes/peajes',
 };
-const ENCENDIDO: ConfigCorreoAvisos = { activo: true, destinatarios: ['ana@flota.mx', 'beto@flota.mx'], asunto: null, noEnviarAntes: null };
+const ENCENDIDO: ConfigCorreoAvisos = { activo: true, destinatarios: ['ana@flota.mx', 'beto@flota.mx'], asunto: null, noEnviarAntes: '2026-10-01' };
 const sinEspera = async () => {};
 
 const armar = (cfg: ConfigCorreoAvisos | null, respuestas: Array<Record<string, unknown>> = []) => {
@@ -97,7 +97,38 @@ describe('canalCorreoPeajes', () => {
   });
 });
 
+describe('presupuesto de tiempo y ruido', () => {
+  it('con el presupuesto agotado no se siguen enviando intentos ni destinatarios (queda fallido y el sello se suelta)', async () => {
+    let t = 0;
+    const enviar = vi.fn(async () => { t += 20_000; return { ok: false, motivo: 'rechazado', status: 503 } as never; });
+    const canal = M.canalCorreoPeajes({ leerConfig: async () => ENCENDIDO, enviar, esperar: sinEspera, reloj: () => t, presupuestoMs: 25_000 });
+    expect(await enviarPorCanales([canal], aviso)).toBe('fallido');
+    // 1.er intento (t=20 s) + espera de 1 s aún cabe; el 2.º llega a 40 s y corta: nunca los 3 intentos x 2 destinatarios.
+    expect(enviar.mock.calls.length).toBeLessThan(6);
+    expect(enviar.mock.calls.length).toBeLessThanOrEqual(2);
+  });
+  it('Resend sin configurar: un solo warn por proceso aunque pasen varios avisos', async () => {
+    const { logger } = await import('@/lib/logger');
+    const { canal } = armar(ENCENDIDO, Array.from({ length: 6 }, () => ({ ok: false, motivo: 'sin_configurar' })));
+    await enviarPorCanales([canal], aviso);
+    await enviarPorCanales([canal], aviso);
+    const sinConf = (logger.warn as unknown as { mock: { calls: unknown[][] } }).mock.calls.filter((c) => c[0] === 'peajes.aviso_correo_sin_configurar');
+    expect(sinConf).toHaveLength(1);
+  });
+  it('WhatsApp acepta y el correo falla: cuenta «enviado» (semántica «alguno», documentada) y el correo no se reintenta', async () => {
+    const wa = { nombre: 'whatsapp', destinatario: async () => '5215500000000', enviar: vi.fn(async () => true) };
+    const { canal, enviar } = armar(ENCENDIDO, Array.from({ length: 8 }, () => ({ ok: false, motivo: 'rechazado', status: 422 })));
+    expect(await enviarPorCanales(canalesAvisoPeajes({ whatsapp: wa, correo: canal }), aviso)).toBe('enviado');
+    expect(wa.enviar).toHaveBeenCalledTimes(1);
+    expect(enviar).toHaveBeenCalledTimes(2); // un intento por destinatario, sin reintentos (422)
+  });
+});
+
 describe('armarCorreoAviso', () => {
+  it('datos parciales (solo emoji/puntuación o texto trunco): «sin datos», no un correo a medias', () => {
+    expect(M.armarCorreoAviso({ ...aviso, texto: `⏰ Peajes: ${aviso.liga}` }, 'A').parrafos[0]).toMatch(/Sin datos/);
+    expect(M.armarCorreoAviso({ ...aviso, texto: '⏰ 123 ...' }, 'A').parrafos[0]).toMatch(/Sin datos/);
+  });
   it('sin datos: dice «sin datos», no acusa ni inventa', () => {
     const c = M.armarCorreoAviso({ ...aviso, texto: '  ' }, 'Asunto');
     expect(c.parrafos[0]).toMatch(/Sin datos/);
@@ -117,9 +148,19 @@ describe('validarCorreoAvisos / correoAvisosEfectivo', () => {
     expect(M.correoAvisosEfectivo(undefined)).toEqual(M.CONFIG_CORREO_AVISOS_DEFAULT);
     expect(M.correoAvisosEfectivo({ activo: true, destinatarios: ['no-es-correo'] }).activo).toBe(false);
     expect(M.correoAvisosEfectivo('basura').activo).toBe(false);
+    // Una config encendida sin corte (guardada a mano) cae a apagado.
+    expect(M.correoAvisosEfectivo({ activo: true, destinatarios: ['a@b.mx'] }).activo).toBe(false);
+  });
+  it('fila corrupta: el correo se apaga pero la fecha de corte válida se conserva (no se pierde el filtro de historial)', () => {
+    expect(M.correoAvisosEfectivo({ activo: true, destinatarios: ['no-es-correo'], noEnviarAntes: '2026-10-01' })).toEqual({ ...M.CONFIG_CORREO_AVISOS_DEFAULT, noEnviarAntes: '2026-10-01' });
+    expect(M.correoAvisosEfectivo({ activo: 'si', noEnviarAntes: 'mañana' }).noEnviarAntes).toBeNull();
   });
   it('rechaza lo inválido con mensaje llano y no encendido sin destinatarios', () => {
-    expect(M.validarCorreoAvisos({ activo: true, destinatarios: [] })).toMatchObject({ ok: false });
+    expect(M.validarCorreoAvisos({ activo: true, destinatarios: [], noEnviarAntes: '2026-10-01' })).toMatchObject({ ok: false });
+    // Encender sin fecha de corte reenviaría el historial: se rechaza (apagado sin corte sí se acepta).
+    expect(M.validarCorreoAvisos({ activo: true, destinatarios: ['a@b.mx'] })).toMatchObject({ ok: false });
+    expect(M.validarCorreoAvisos({ activo: true, destinatarios: ['a@b.mx'], noEnviarAntes: null })).toMatchObject({ ok: false });
+    expect(M.validarCorreoAvisos({ activo: false, destinatarios: ['a@b.mx'] })).toMatchObject({ ok: true });
     expect(M.validarCorreoAvisos({ destinatarios: ['x'] })).toMatchObject({ ok: false });
     expect(M.validarCorreoAvisos({ destinatarios: ['a@b.mx'], noEnviarAntes: '15/10/2026' })).toMatchObject({ ok: false });
     expect(M.validarCorreoAvisos({ activo: true, destinatarios: Array.from({ length: 6 }, (_, i) => `u${i}@b.mx`) })).toMatchObject({ ok: false });
