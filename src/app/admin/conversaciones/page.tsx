@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import {
@@ -231,3 +232,5 @@ function PaginadorConversaciones({ q, pagina, paginas }: { q: string; pagina: nu
     </div>
   );
 }
+
+export const metadata: Metadata = { title: 'Conversaciones' };

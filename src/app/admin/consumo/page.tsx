@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { Cpu, DollarSign, Bot, Activity } from 'lucide-react';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -327,3 +328,5 @@ export default async function ConsumoPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Consumo de IA' };

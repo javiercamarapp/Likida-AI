@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { Code2, ExternalLink } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -241,3 +242,5 @@ export default async function DevPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Desarrollo' };

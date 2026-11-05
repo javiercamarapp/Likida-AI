@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -507,3 +508,5 @@ export default async function FlotasPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Flotas / Clientes' };

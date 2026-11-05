@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { ShieldCheck, FileWarning, CheckCircle2, CircleAlert } from 'lucide-react';
 import { EstadoVacio, StatCard, StatusPill, type Estado } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -217,3 +218,5 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
   const vence = pendientes.filter((p) => p.venceEn <= corte).length;
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }
+
+export const metadata: Metadata = { title: 'Compliance & Datos' };

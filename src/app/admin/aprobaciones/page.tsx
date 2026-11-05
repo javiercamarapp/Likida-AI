@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { ListChecks, Send, Zap } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -207,3 +208,5 @@ export default async function PaginaAprobaciones() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Aprobaciones' };

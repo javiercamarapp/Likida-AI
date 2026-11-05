@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -242,3 +243,5 @@ function TablaCampos({ v, responsable, titulo }: { v: ViajeCcp; responsable: 'cl
     </div>
   );
 }
+
+export const metadata: Metadata = { title: 'Borrador de Carta Porte' };

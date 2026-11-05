@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { notFound } from 'next/navigation';
 import { Bug } from 'lucide-react';
@@ -95,3 +96,5 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
     />
   );
 }
+
+export const metadata: Metadata = { title: 'Corrida de QA' };

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireVendedor } from '@/lib/auth/guard';
 import { PanelVendedor } from './panel-vendedor';
 
@@ -26,3 +27,5 @@ export default async function VendedorPage({
   const [s, sp] = await Promise.all([requireVendedor(), searchParams]);
   return <PanelVendedor userId={s.userId} nombre={s.nombre} rol={s.rol} col={sp.col} pag={sp.pag} />;
 }
+
+export const metadata: Metadata = { title: 'Mis prospectos · Vendedores · Likida' };

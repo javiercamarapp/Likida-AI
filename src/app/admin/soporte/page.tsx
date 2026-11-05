@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { LifeBuoy, AlertTriangle, Timer, CheckCircle2, UserCheck } from 'lucide-react';
@@ -411,3 +412,5 @@ export default async function SoportePage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Soporte' };

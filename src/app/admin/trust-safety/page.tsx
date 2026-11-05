@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ShieldAlert } from 'lucide-react';
 import { StatusPill, EstadoError, EstadoVacio, type Estado } from '../ui/kit';
@@ -224,3 +225,5 @@ export default async function TrustSafetyPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Trust & Safety' };

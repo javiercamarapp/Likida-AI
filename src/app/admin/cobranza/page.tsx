@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Receipt } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -206,3 +207,5 @@ function Cifra({ etiqueta, valor, nota, alerta }: { etiqueta: string; valor: str
     </div>
   );
 }
+
+export const metadata: Metadata = { title: 'Cobranza' };

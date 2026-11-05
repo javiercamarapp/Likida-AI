@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { GitCommitHorizontal } from 'lucide-react';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
@@ -120,3 +121,5 @@ export default async function ActividadCodigoPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Actividad de código' };

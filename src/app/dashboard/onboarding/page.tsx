@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -163,3 +164,5 @@ export default async function OnboardingFlotaPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Configuración inicial' };

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -321,3 +322,5 @@ export default async function PaginaRevision({
     />
   );
 }
+
+export const metadata: Metadata = { title: 'Revisión de documento' };

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { Fragment } from 'react';
 import Link from 'next/link';
 import { ListTree, ArrowLeft } from 'lucide-react';
@@ -230,3 +231,5 @@ function Paginador({ agente, estado, tenant, pagina, paginas }: {
     </div>
   );
 }
+
+export const metadata: Metadata = { title: 'Corridas' };

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { Calculator, DollarSign, CheckCircle2 } from 'lucide-react';
@@ -62,3 +63,5 @@ export default async function AgenteCuadrePage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Agente de Cuadre' };

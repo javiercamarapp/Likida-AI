@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd, mxn } from '@/lib/utils';
@@ -508,3 +509,5 @@ export default async function CostosFacturacionPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Costos & Facturación' };

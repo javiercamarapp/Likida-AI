@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getMrr } from '@/lib/admin/negocio';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
@@ -89,3 +90,5 @@ export default async function EjecutivoPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Ejecutivo / Board' };
