@@ -46,6 +46,7 @@ import { exigirAal2SiHayFactor, MSG_STEP_UP, MSG_MFA_NO_VERIFICABLE } from '@/li
 import { CATALOGO_ACCIONES } from '@/lib/agents/copiloto-acciones';
 import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -170,7 +171,7 @@ export async function POST(req: Request) {
     if (defAccion?.gateo === 'doble') {
       const paso = await exigirAal2SiHayFactor(await supabaseServer());
       if (!paso.ok) {
-        void registrarEventoSeguridad({ origen: 'copiloto', tipo: 'step_up_rechazado', severidad: 'info', actor: sesion.userId, detalle: { accion: accionId, motivo: paso.motivo } });
+        await esperarRegistro(registrarEventoSeguridad({ origen: 'copiloto', tipo: 'step_up_rechazado', severidad: 'info', actor: sesion.userId, detalle: { accion: accionId, motivo: paso.motivo } }));
         // `no_verificable` (B14): Supabase Auth no contestó — se rechaza igual
         // (fallar cerrado), pero se le dice al usuario que reintente, no que
         // verifique un código que quizá no tiene.
@@ -188,7 +189,7 @@ export async function POST(req: Request) {
       // ya no autoriza nada (409) — y en ambos se dice qué hacer. El 409 es
       // señal de T&S: replay, otro actor o args cambiados.
       if (reclamo.codigo !== 'motivo') {
-        void registrarEventoSeguridad({ origen: 'copiloto', tipo: 'intent_invalido', actor: sesion.userId, detalle: { accion: accionId, codigo: reclamo.codigo } });
+        await esperarRegistro(registrarEventoSeguridad({ origen: 'copiloto', tipo: 'intent_invalido', actor: sesion.userId, detalle: { accion: accionId, codigo: reclamo.codigo } }));
       }
       return NextResponse.json({ error: reclamo.error }, { status: reclamo.codigo === 'motivo' ? 400 : 409 });
     }

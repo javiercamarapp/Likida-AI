@@ -16,6 +16,7 @@ import { registrarCorrida } from '@/lib/likida/agentes/corridas';
 import { sanitizarTexto } from '@/lib/likida/intake/sanitizar';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { registrarFirmaCorreoInvalida } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -192,7 +193,7 @@ export async function POST(req: Request) {
     // tiempo" le enseñaría a quien lo intenta cómo ajustar su siguiente prueba.
     logger.warn('correo_entrante.firma', { motivo: firma.motivo });
     // CT-SEG-11: la firma que no verifica deja evento (best-effort, nunca el cuerpo ni la firma).
-    void registrarFirmaCorreoInvalida(req, firma.motivo);
+    await esperarRegistro(registrarFirmaCorreoInvalida(req, firma.motivo));
     return new NextResponse(mensajeDeRechazo(), { status: 401 });
   }
 

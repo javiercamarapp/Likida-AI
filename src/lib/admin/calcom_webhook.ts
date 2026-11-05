@@ -20,10 +20,12 @@ import { instanteRFC3339 } from '@/lib/formato';
 import { NextResponse } from 'next/server';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { logger } from '@/lib/logger';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { calcomConfig, secretoCalcomConfigurado, verificarFirmaCalcom } from './calcom';
 
 const MAX_BODY = 256 * 1024;
+const LIMITE_CALCOM_POR_MIN = 120;
 const EVENTOS_SOPORTADOS = new Set([
   'BOOKING_CREATED',
   'BOOKING_REQUESTED',
@@ -133,6 +135,13 @@ function instanteFirmado(evt: CalcomEvent): string | null {
  * `POST` y `calcom.ts` lo llama para la entrega local (mismo Request+HMAC,
  * misma validación, mismo resultado). Ver la cabecera del archivo. */
 export async function procesarWebhookCalcom(req: Request): Promise<Response> {
+  // Ronda 4 (seguridad): techo por IP ANTES de leer el cuerpo ni verificar el HMAC (hasta 256 KB de CPU para quien sondee la ruta
+  // pública). Va aquí y no en un envoltorio porque `route.ts` debe re-exportar ESTA función tal cual. La entrega local (`calcom.ts`)
+  // comparte la cubeta «desconocida» con las peticiones sin cabecera de IP: su volumen (dev/pruebas) queda muy por debajo del techo.
+  // `fallaCerrado: false`: si Redis cae se degrada al Map local en vez de perder reservas firmadas.
+  if (!(await rateLimit(`calcom-webhook:ip:${clientIp(req)}`, LIMITE_CALCOM_POR_MIN, 60_000, { fallaCerrado: false }))) {
+    return new NextResponse('Demasiadas peticiones', { status: 429, headers: { 'Retry-After': '60' } });
+  }
   const config = calcomConfig();
   if (!secretoCalcomConfigurado(config.webhookSecret)) {
     return new NextResponse('Cal.com webhook no configurado de forma segura', { status: 503 });

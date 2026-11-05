@@ -9,11 +9,13 @@ import { estadoVerificacion, type RegistroVerificaciones } from './verificacion'
 export interface ManifiestoFixtures { portales: Record<string, { origen?: string; grabado?: { fecha: string; archivo: string } }> }
 
 const lista = (s: string | readonly string[]): string[] => (typeof s === 'string' ? [s] : [...s]);
-// OJO: dentro de un code span el backslash es LITERAL (los selectores CSS llevan `\:`), asi que NO se escapa; solo `|`, que la
-// tabla GFM si interpreta, y la comilla invertida, que cerraria el span. Es UNA sola pasada con funcion de reemplazo (no una
-// cadena de .replace): el resultado es identico al anterior, y CodeQL js/incomplete-sanitization (alerta 276, falso positivo:
-// escapar el backslash alteraria el runbook) deja de ver un escape de `|` sin escape de `\`.
-const cod = (s: string) => `\`${s.replace(/[`|]/g, (c) => (c === '`' ? "'" : '\\|'))}\``;
+// OJO: dentro de un code span el backslash es LITERAL (los selectores CSS llevan `\:`), asi que en general NO se escapa. Solo se
+// neutralizan `|`, que la tabla GFM si interpreta, y la comilla invertida, que cerraria el span. Es UNA sola pasada con funcion de
+// reemplazo. CASO HOSTIL: el divisor de celdas de GFM trata `\` + siguiente caracter como un par, asi que un selector que ya trae
+// `\|` producia `\\|` (par `\\` + `|` suelto) y rompia la fila de la tabla. Por eso la racha de backslashes que precede a un `|` se
+// DUPLICA antes de anteponerle el escape: el `|` siempre queda escapado. Sin `|` delante, los backslashes se dejan tal cual
+// (`\:` sigue saliendo `\:`) y el resto del render no cambia.
+export const cod = (s: string): string => `\`${s.replace(/(\\*)([`|])/g, (_m, bs: string, c: string) => (c === '`' ? `${bs}'` : `${bs}${bs}\\|`))}\``;
 
 export function renderizarDocVerificacion(guiones: readonly GuionPortal[], registro: RegistroVerificaciones, manifiesto: ManifiestoFixtures): string {
   const filas = guiones.map((g) => {

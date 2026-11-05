@@ -5,6 +5,7 @@ import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { exportarFlota, offboardingActivo } from '@/lib/likida/offboarding/exportar';
 import { registrarAccesoSuperadmin } from '@/lib/seguridad/acceso_superadmin';
 import { logger } from '@/lib/logger';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -33,9 +34,9 @@ export async function POST(req: Request) {
 
   try {
     const r = await exportarFlota(tenantId, sesion.userId);
-    void registrarAccesoSuperadmin({
+    await esperarRegistro(registrarAccesoSuperadmin({
       actor: sesion.userId, tenantId, tipo: 'descarga', ruta: '/api/admin/offboarding', detalle: { completo: r.ok },
-    });
+    }));
     if (!r.ok) return NextResponse.json({ error: r.motivo, manifiesto: r.paquete?.manifiesto ?? null }, { status: 409 });
     return NextResponse.json({
       exportacionId: r.exportacionId,
