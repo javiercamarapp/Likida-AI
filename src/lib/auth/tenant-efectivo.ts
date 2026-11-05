@@ -28,6 +28,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { registrarPaginaNegada } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 import { registrarAccesoSuperadmin } from '@/lib/seguridad/acceso_superadmin';
 import { hoyMx } from '@/lib/formato';
 import type { SessionTenant } from './session';
@@ -184,8 +185,8 @@ export async function resolverTenantEfectivo(
   // para un rol real el sufijo sale vacío. Y no hay bucle: el destino es
   // `inicioDe(rolEfectivo)`, que por construcción ese rol sí puede ver.
   if (!puedeVerRuta(sesion.rol, destino)) {
-    // CT-SEG-11: la pantalla negada por rol deja fila de cobertura (best-effort, no espera).
-    void registrarPaginaNegada({ ruta: destino, rol: sesion.rol, causa: 'rol', tenantId: sesionReal.tenantId, userId: sesionReal.userId });
+    // CT-SEG-11: la pantalla negada por rol deja fila de cobertura (se espera con tope corto; fail-closed aunque falle).
+    await esperarRegistro(registrarPaginaNegada({ ruta: destino, rol: sesion.rol, causa: 'rol', tenantId: sesionReal.tenantId, userId: sesionReal.userId }));
     redirect(`${inicioDe(sesion.rol)}${sufijoPrevisualizacion(sesionReal.rol === 'superadmin', sp)}`);
   }
 
