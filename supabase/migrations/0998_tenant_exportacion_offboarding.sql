@@ -60,5 +60,7 @@ create trigger tenant_exportacion_transicion
 alter table public.tenant_exportacion enable row level security;
 revoke all on table public.tenant_exportacion from public, anon, authenticated;
 grant select, insert, update on table public.tenant_exportacion to service_role;
+-- Los privilegios por omision del esquema ya dan todo a service_role: una constancia no se borra.
+revoke delete, truncate on table public.tenant_exportacion from service_role;
 
 commit;

@@ -56,6 +56,8 @@ create trigger superadmin_acceso_solo_agregar
 alter table public.superadmin_acceso enable row level security;
 revoke all on table public.superadmin_acceso from public, anon, authenticated;
 grant select, insert on table public.superadmin_acceso to service_role;
+-- Los privilegios por omision del esquema ya dan todo a service_role: se quitan los que romperian el solo-agregar.
+revoke update, delete, truncate on table public.superadmin_acceso from service_role;
 
 create or replace function public.purgar_superadmin_acceso(p_dias integer default 365)
 returns integer
