@@ -14,7 +14,7 @@ function tipoDe(c: CampoMapeo): Obj {
   if (t === 'numero') return { type: 'number', 'x-supuesto': true };
   if (t === 'booleano') return { type: 'boolean', 'x-supuesto': true };
   if (t === 'fecha_local') {
-    const d = typeof c === 'string' ? {} : c;
+    const d: { formato?: string; zona?: string } = typeof c === 'string' ? {} : c;
     return { type: 'string', description: `Fecha sin zona${d.formato ? `, formato ${d.formato}` : ''}${d.zona ? `, zona ${d.zona}` : ''} (SUPUESTO).`, 'x-supuesto': true };
   }
   return { type: 'string', 'x-supuesto': true };
