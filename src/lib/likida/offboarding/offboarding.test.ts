@@ -19,6 +19,7 @@ describe('mapa de datos por agente', () => {
   });
   it('cada tabla existe en las migraciones y trae columna de flota (o es tenant)', () => {
     const sql = readdirSync('supabase/migrations').filter((f) => f.endsWith('.sql'))
+      // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee las migraciones del propio repo
       .map((f) => readFileSync(`supabase/migrations/${f}`, 'utf8')).join('\n');
     for (const t of tablasExportables()) {
       expect(new RegExp(`create table (if not exists )?(public\\.)?${t}\\b`, 'i').test(sql), t).toBe(true);
