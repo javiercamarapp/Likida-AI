@@ -83,17 +83,26 @@ export default defineConfig({
       name: 'escritorio',
       use: { ...devices['Desktop Chrome'] },
       dependencies: ['preparar'],
-      testIgnore: [/preparar\.nav\.ts/, /movil\.nav\.ts/],
+      testIgnore: [/preparar\.nav\.ts/, /movil\.nav\.ts/, /webkit-smoke\.nav\.ts/],
     },
     {
       // Teléfono REAL de catálogo (Pixel 7: 412×915, DPR 2.625, táctil, UA
-      // móvil) — no una ventana de escritorio encogida. El único navegador
-      // disponible es Chromium (el mismo del smoke), así que la vista iOS
-      // (WebKit) queda declarada como hueco, no fingida.
+      // móvil) — no una ventana de escritorio encogida. La vista iOS (WebKit)
+      // la cubre el proyecto nocturno `webkit-iphone` (abajo), no este.
       name: 'movil',
       use: { ...devices['Pixel 7'] },
       dependencies: ['preparar'],
       testMatch: /movil\.nav\.ts/,
     },
+    // WebKit (iPhone 14) NOCTURNO: solo existe con WEBKIT=1 (workflow e2e-webkit-nocturno.yml). En PR no se instala WebKit, así que el
+    // proyecto ni se declara. Ver webkit-smoke.nav.ts.
+    ...(process.env.WEBKIT === '1'
+      ? [{
+          name: 'webkit-iphone',
+          use: { ...devices['iPhone 14'] },
+          dependencies: ['preparar'],
+          testMatch: /webkit-smoke\.nav\.ts/,
+        }]
+      : []),
   ],
 });
