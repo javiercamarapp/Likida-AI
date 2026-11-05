@@ -31,6 +31,9 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import { resolverTenantEfectivo, type TenantEfectivo } from './tenant-efectivo';
 import { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA, DIGEST_FLOTA_CAMBIO } from './flota_cambio';
 import { getSessionTenant } from './session';
+import { exigirEscrituraPermitida } from './ver_como';
+
+export { VerComoSoloLecturaError, MENSAJE_VER_COMO_SOLO_LECTURA } from './ver_como';
 
 export { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA };
 /** Una pantalla abierta más de esto ya no puede escribir sin recargar. */
@@ -84,7 +87,10 @@ export async function resolverTenantAtadoAccion(
   tenantRenderizado: string,
 ): Promise<TenantEfectivo | null> {
   const s = await resolverTenantEfectivo(destino, sp);
-  return s.tenantId === tenantRenderizado ? s : null;
+  if (s.tenantId !== tenantRenderizado) return null;
+  // F9: «ver como» de un superadmin sobre una flota real es de solo lectura (palanca apagada por omisión).
+  exigirEscrituraPermitida(s);
+  return s;
 }
 
 /** La flota cambió bajo los pies de la pantalla: la acción se niega y NO escribe nada (MX-002). */
@@ -146,5 +152,7 @@ export async function resolverTenantAtadoFirmado(
   // Superadmin: sin la flota firmada que vio, o con otra distinta a la que se resuelve, no se escribe.
   if (!pintada) return null;
   const s = await resolverTenantEfectivo(destino, { tenant: pintada });
-  return s.tenantId === pintada ? s : null;
+  if (s.tenantId !== pintada) return null;
+  exigirEscrituraPermitida(s);
+  return s;
 }

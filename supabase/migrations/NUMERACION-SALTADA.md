@@ -109,6 +109,8 @@ Fuera de estos rangos, un hueco sobre 0949 es error. El siguiente rango libre em
 | `0985`-`0989` | F5: cofre v2 |
 | `0990`-`0999` | F5: olas 12 a 14 |
 
+F9 (enterprise, código): usa `0997` (bitácora de acceso del superadmin) y `0998` (constancia de exportación de flota); `0999` queda libre. Se aplican a mano, una por una, con respaldo.
+
 Bitacoras (`~/likida-bitacoras`) tiene numeracion propia desde 0111 y no usa estos rangos. F0, F3, F4 y F6 no deben crear migraciones; si una fase necesita un rango nuevo, se pide desde 1000 y se anota aqui.
 
 ## Aplicadas en la base y fuera del repo

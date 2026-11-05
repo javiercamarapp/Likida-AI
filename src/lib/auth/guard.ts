@@ -27,6 +27,7 @@ import { tenantDemo } from './tenant-demo';
 import { leerSeleccionFlota } from './admin-context';
 import { mfaSuperadminObligatorio } from './mfa';
 import { veredictoMfaDeSesion } from './superadmin-mfa';
+import { veredictoStepUp } from './stepup';
 import { logger } from '@/lib/logger';
 import { registrarMfaFallido, registrarPaginaNegada } from '@/lib/seguridad/registro_acceso';
 import { getSessionTenant, type SessionTenant } from './session';
@@ -83,6 +84,19 @@ async function exigirMfaSuperadmin(destino: string): Promise<void> {
 }
 
 
+/**
+ * F9 (CT-SEG-05): MFA con tope de sesión para dueño y contador. Apagado por omisión (decisión D8): con la palanca apagada no hace
+ * ninguna llamada. Mi perfil queda exento (ahí se inscribe y verifica el factor). Mismo rebote y vocabulario que el del superadmin.
+ */
+async function exigirMfaTenant(rol: string, destino: string): Promise<void> {
+  if (destino.startsWith(RUTA_MFA)) return;
+  const veredicto = await veredictoStepUp(rol);
+  if (veredicto === 'ok') return;
+  logger.warn('mfa.escalonado_exigido', { veredicto, destino, rol });
+  await esperarRegistro(registrarMfaFallido({ veredicto, destino, via: 'pagina' }));
+  redirect(`${RUTA_MFA}?exige=${veredicto}`);
+}
+
 export async function requireSessionTenant(
   destino: string,
   /**
@@ -118,6 +132,7 @@ export async function requireSessionTenant(
   const destinoCompleto = querystring ? `${destino}${querystring}` : destino;
   if (!s) redirect(`/login?next=${encodeURIComponent(destinoCompleto)}`);
   if (s.rol === 'superadmin') await exigirMfaSuperadmin(destino);
+  else await exigirMfaTenant(s.rol, destino);
   if (!s.tenantId) {
     if (s.rol === 'superadmin') {
       // "Ver como" (previsualización auditada): la base sigue siendo la demo

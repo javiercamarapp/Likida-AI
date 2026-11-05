@@ -1,4 +1,5 @@
 import { mensajeDeBaja } from '@/lib/auth/mensaje_baja';
+import { exigirStepUpAccion } from '@/lib/auth/stepup';
 import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -222,6 +223,8 @@ export default async function UsuariosPage({
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'cambio_rol', { tenantId: s.tenantId, userId: s.userId });
+    if (pasoMfa) return { ok: false, error: pasoMfa };
     try {
       const r = await cambiarRolUsuario(s.tenantId, String(fd.get('id') ?? ''), String(fd.get('rol') ?? ''), { id: s.userId });
       revalidatePath(RUTA);

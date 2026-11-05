@@ -5,6 +5,14 @@
     {
       "tabla": "public.llm_alerta_tope",
       "motivo": "CHECK llm_alerta_tope_nivel_check (nivel smallint in (80, 100)): la siembra automatica no deduce los literales de un IN sobre smallint (320 intentos). Tabla solo service_role (RLS sin politicas, grants revocados a anon/authenticated). Cubierta por la fase estatica (RLS y grants) y por supabase/tests/0990_llm_alerta_tope_persistida.sql, que incluye el rechazo a authenticated."
+    },
+    {
+      "tabla": "public.superadmin_acceso",
+      "motivo": "F9/0997: tabla de solo agregar solo service_role (RLS sin politicas, grants revocados a anon/authenticated); CHECK de ruta con regex negado (!~ '[?#]') que la siembra automatica no deduce. Cubierta por la fase estatica (RLS y grants) y por supabase/tests/0997_superadmin_acceso_bitacora.sql."
+    },
+    {
+      "tabla": "public.tenant_exportacion",
+      "motivo": "F9/0998: constancia de offboarding solo service_role (RLS sin politicas); CHECK de huella con regex ^[0-9a-f]{64}$ que la siembra automatica no deduce. Cubierta por la fase estatica y por supabase/tests/0998_tenant_exportacion_offboarding.sql."
     }
   ]
 }
