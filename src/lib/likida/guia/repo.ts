@@ -79,10 +79,18 @@ export async function insertarEventos(db: SupabaseClient, ctx: ContextoEvento, l
 }
 
 /** ¿Hay al menos una fila de esta flota en `tabla` (con filtros de igualdad opcionales)? `null` = no se pudo leer (nunca se confunde con «no»). Solo lectura. */
-export async function existeFilaDeTenant(db: SupabaseClient, tabla: string, tenantId: string, filtro: Record<string, string> = {}): Promise<boolean | null> {
+export interface VigenciaFila {
+  /** Columnas que deben ser NULL (p. ej. `revocada_en`). */
+  nulas?: string[];
+  /** Columna de vencimiento: NULL (no vence) o posterior a `ahora` (ISO). */
+  noVencidaEn?: { columna: string; ahora: string };
+}
+export async function existeFilaDeTenant(db: SupabaseClient, tabla: string, tenantId: string, filtro: Record<string, string> = {}, vigencia: VigenciaFila = {}): Promise<boolean | null> {
   try {
     let q = db.from(tabla).select('tenant_id').eq('tenant_id', tenantId);
     for (const [k, v] of Object.entries(filtro)) q = q.eq(k, v);
+    for (const c of vigencia.nulas ?? []) q = q.is(c, null);
+    if (vigencia.noVencidaEn) q = q.or(`${vigencia.noVencidaEn.columna}.is.null,${vigencia.noVencidaEn.columna}.gt.${vigencia.noVencidaEn.ahora}`);
     // orden-no-importa: es un EXISTS (basta una fila cualquiera de la flota); el resultado es solo si hay o no hay.
     const { data, error } = await q.limit(1);
     return error ? null : (data?.length ?? 0) > 0;

@@ -17,6 +17,8 @@ function dbFalso(tablas: Record<string, unknown[] | 'error'>, filtros: Array<[st
       const q = {
         select: () => q,
         eq: (c: string, v: unknown) => { filtros.push([t, c, v]); return q; },
+        is: (c: string, v: unknown) => { filtros.push([t, `${c}:is`, v]); return q; },
+        or: (v: string) => { filtros.push([t, 'or', v]); return q; },
         limit: async () => (tablas[t] === 'error' ? { data: null, error: { message: 'x' } } : { data: tablas[t] ?? [], error: null }),
       };
       return q;
@@ -68,6 +70,13 @@ describe('leerSenalesGuia', () => {
     expect(filtros).toContainEqual(['cp_documento', 'tenant_id', 't1']);
     expect(filtros).toContainEqual(['cp_documento', 'estado', 'aprobado']);
     expect(filtros.filter(([, c]) => c === 'tenant_id')).toHaveLength(2);
+  });
+  it('llave_emitida ignora las llaves revocadas o vencidas', async () => {
+    const filtros: Array<[string, string, unknown]> = [];
+    await leerSenalesGuia(['llave_emitida'], 't1', 'dueno_ca', dep(dbFalso({ tenant_api_key: [{ tenant_id: 't1' }] }, filtros)));
+    expect(filtros).toContainEqual(['tenant_api_key', 'revocada_en:is', null]);
+    const or = filtros.find(([, c]) => c === 'or');
+    expect(String(or?.[2])).toMatch(/^expira_en\.is\.null,expira_en\.gt\.\d{4}-\d{2}-\d{2}T/);
   });
   it('una señal no permitida para la pista, desconocida o sin lector devuelve sin_dato (sin tocar la base)', async () => {
     const filtros: Array<[string, string, unknown]> = [];

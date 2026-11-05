@@ -61,16 +61,17 @@ export function senalesDeAsistente(s: SenalesAsistente): Partial<Record<IdSenal,
 }
 
 /** Tablas con una consulta EXISTS por tenant ya verificada contra las migraciones. Filtros extra: solo columnas que existen. */
-const TABLAS: Partial<Record<IdSenal, { tabla: string; filtro?: Record<string, string> }>> = {
+const TABLAS: Partial<Record<IdSenal, { tabla: string; filtro?: Record<string, string>; vigente?: { nulas?: string[]; vence?: string } }>> = {
   documento_aprobado: { tabla: 'cp_documento', filtro: { estado: 'aprobado' } },
   programa_vigia: { tabla: 'programa_despacho_carga' },
-  llave_emitida: { tabla: 'tenant_api_key' },
+  // Una llave revocada (`revocada_en`) o vencida (`expira_en`, 0294) ya no cuenta como «emitida».
+  llave_emitida: { tabla: 'tenant_api_key', vigente: { nulas: ['revocada_en'], vence: 'expira_en' } },
 };
 
 async function existeFila(db: SupabaseClient, tenantId: string, id: IdSenal): Promise<ResultadoSenal> {
   const t = TABLAS[id];
   if (!t) return SIN_DATO;
-  const r = await existeFilaDeTenant(db, t.tabla, tenantId, t.filtro);
+  const r = await existeFilaDeTenant(db, t.tabla, tenantId, t.filtro, { nulas: t.vigente?.nulas, ...(t.vigente?.vence ? { noVencidaEn: { columna: t.vigente.vence, ahora: new Date().toISOString() } } : {}) });
   return r === null ? SIN_DATO : { estado: r ? 'si' : 'no' };
 }
 
