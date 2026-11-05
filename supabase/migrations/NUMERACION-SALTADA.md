@@ -92,6 +92,7 @@ Reescrito en F0 (CT-BAS-10, 3-nov-2026): la lista anterior declaraba 10 números
 | `0926` | Igual que 0924. |
 | `0934` | Hueco histórico: sin archivo en el repo ni en la base (medido por script el 3-nov-2026). Origen no registrado; consistente con numeración reservada por lotes o renumeración durante trabajo en paralelo. No se rellena. |
 | `0941`-`0944` | Reservados y NO usados en la ola 10 (28-oct-2026, hallazgo H759 de la verificación del PR #759): el carril A (liquidación) usó `0940` y el carril B (peajes) arrancó su rango en `0945` (rango A2 ola 10: 0945-0949), dejando cuatro números intermedios sin archivo. Verificado: ninguna rama remota usa 0941-0944. Si se llenaran después, `supabase db push` rechazaría versiones menores que la última aplicada (haría falta `--include-all`) y la compuerta de despliegue las tomaría por migraciones fuera de orden: no se reutilizan. |
+| `0957`-`0969` | Saltados en F2 ola 11 (4-nov-2026, rama `f2/banco-tenant`): 0957-0959 son la reserva de F1 que no se usó y 0960-0969 los bloques A y B de la ola 11, que se cerraron sin migración propia; la primera migración de la ola es la `0970` (tenant interno del presupuesto de IA del superadmin) y la `0971` la siguiente (eventos de página negada y MFA). Sin archivo en el repo ni en la base. No se rellenan: un SQL con número en este rango se aplicaría en producción fuera de orden, después de la `0971`. |
 
 ## Rangos reservados por fase
 
