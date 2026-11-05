@@ -54,6 +54,7 @@ import { cifrar, cofreConfigurado } from '../conectores/cofre';
 import { partirUrlSftp, leerHuellas, normalizarLlave } from '../conectores/tabla_propia/sftp';
 import type { HallazgoAtipico, ConfigAtipicos } from './atipicos';
 import { validarConfigAvisos, configAvisosEfectiva, type ConfigAvisos } from './config_avisos';
+import { validarCorreoAvisos, correoAvisosEfectivo, type ConfigCorreoAvisos } from './aviso_correo';
 import { validarMargenLejos, margenLejosEfectivo } from './gps_umbral';
 import { validarConfigAtipicos, configAtipicosEfectiva, umbralesDePantalla, sinSenalesApagadas, esEstadoAtipico, puedeCambiarEstado, exigeRevisor, type EstadoAtipico } from './atipicos_config';
 import { matrizDeCsv } from './csv';
@@ -2064,6 +2065,30 @@ export async function guardarConfigAvisos(tenantId: string, entrada: unknown): P
   const ok = await escribirFila(tenantId, {
     activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), config_peajes: v.valor },
   }, 'peajes.config_peajes_avisos');
+  return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
+}
+
+/**
+ * El correo de los avisos de la flota (`umbrales.correo_avisos`): encendido, destinatarios, asunto y fecha de corte. Sin fila o con un
+ * valor corrupto = apagado y sin destinatarios (no envía). Lanza ante error de base: un error no se lee como «apagado».
+ */
+export async function leerCorreoAvisos(tenantId: string): Promise<ConfigCorreoAvisos> {
+  const fila = await leerFila(tenantId, 'peajes.config_peajes_correo_leer');
+  return correoAvisosEfectivo(fila?.umbrales.correo_avisos);
+}
+
+/** Guarda el correo de los avisos. Se valida ANTES de escribir; conserva el resto de la configuración (umbrales, plazo, teléfono, interruptores). */
+export async function guardarCorreoAvisos(tenantId: string, entrada: unknown): Promise<ResultadoConfigPeajes<ConfigCorreoAvisos>> {
+  const v = validarCorreoAvisos(entrada);
+  if (!v.ok) return { ok: false, motivo: v.motivo };
+  let previa: FilaCfg | null;
+  try { previa = await leerFila(tenantId, 'peajes.config_peajes_correo_previa'); } catch (e) {
+    logger.error('peajes.config_peajes_correo_previa', { tenant: tenantId, err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, motivo: NO_SE_PUDO_CONFIG };
+  }
+  const ok = await escribirFila(tenantId, {
+    activo: previa?.activo === true, umbrales: { ...(previa?.umbrales ?? {}), correo_avisos: v.valor },
+  }, 'peajes.config_peajes_correo');
   return ok ? { ok: true, valor: v.valor } : { ok: false, motivo: NO_SE_PUDO_CONFIG };
 }
 
