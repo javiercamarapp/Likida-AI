@@ -42,3 +42,16 @@ export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/vendedores/tablero.tsx': { R1: 3, R2: 0, R3: 1 },
   'app/vendedor/layout.tsx': { R1: 1, R2: 0, R3: 0 },
 };
+
+// R6 · botones/enlaces con pinta de botón sin altura definida (h-*, min-h-*, size-*, py-*, rv-*, card), solo en app/admin. También solo BAJA.
+export const BASE_SIN_ALTURA: Record<string, number> = {
+  'app/admin/mapa-prospectos/calles.tsx': 1,
+  'app/admin/mapa-prospectos/cerebro.tsx': 6,
+  'app/admin/mi-perfil/avatar-uploader.tsx': 1,
+  'app/admin/qa/banco-verdad.tsx': 3,
+  'app/admin/qa/lanzar-form.tsx': 3,
+  'app/admin/sidebar-nav.tsx': 1,
+  'app/admin/tu-turno/boton_envio.tsx': 1,
+  'app/admin/ui/confirmar.tsx': 1,
+  'app/admin/vendedores/tablero.tsx': 3,
+};

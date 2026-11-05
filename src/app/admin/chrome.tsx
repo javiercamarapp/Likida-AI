@@ -82,7 +82,7 @@ export default function AdminChrome({
               {cerrarSesion && (
                 <form action={cerrarSesion} className="hidden lg:block shrink-0 sb-texto">
                   <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión"
-                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--badbg)]"
+                    className="relative w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--badbg)] after:content-[''] after:absolute after:left-1/2 after:top-1/2 after:-translate-x-1/2 after:-translate-y-1/2 after:size-11"
                     style={{ color: 'var(--bad)' }}>
                     <LogOut width={14} height={14} strokeWidth={1.75} />
                   </button>

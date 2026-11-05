@@ -26,4 +26,18 @@ describe('/admin: skin fino (K3)', () => {
     expect(s).toContain('font-semibold');
     expect(s).not.toMatch(/background:\s*'var\(--marca\)'/);
   });
+  it('el botón de cerrar sesión (32x32) tiene zona táctil de 44 px', () => {
+    const c = leer('chrome.tsx');
+    expect(c).toMatch(/aria-label="Cerrar sesión"[\s\S]{0,400}relative[\s\S]{0,400}after:size-11/);
+  });
+  it('tokens.css no cambia nada fuera de un marco data-ui="v2" (el fondo global solo con :has)', () => {
+    const t = readFileSync(join(__dirname, '../ui-v2/tokens.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    const sueltos = [...t.matchAll(/(?:^|\})\s*([^{}@]+)\{/g)].map((m) => m[1].trim()).filter((s) => s && !s.includes('data-ui="v2"'));
+    expect(sueltos).toEqual([]);
+  });
+  it('/login no usa data-ui="v2" ni carga tokens.css', () => {
+    const l = readFileSync(join(__dirname, '../login/page.tsx'), 'utf8') + readFileSync(join(__dirname, '../login/vista-login.tsx'), 'utf8');
+    expect(l).not.toContain('data-ui="v2"');
+    expect(l).not.toContain('tokens.css');
+  });
 });
