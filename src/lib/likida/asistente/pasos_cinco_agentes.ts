@@ -199,7 +199,7 @@ function pasoTms(s: SenalesAsistente): Borrador {
   else if (viaApi === 'en_curso') estado = 'en_curso';
   else estado = 'pendiente';
 
-  const evid = archivo === 'listo' ? medido('Llegó al menos un archivo de muestra.') : viaApi === 'listo' ? medido('La prueba de la conexión salió bien.') : ninguna();
+  const evid = archivo === 'listo' ? medido('Llegó al menos un archivo de muestra.') : viaApi === 'listo' ? medido('La prueba de acceso a la API salió bien; lo que se lee de tu sistema aún no está confirmado.') : ninguna();
   return {
     id: 'tms', titulo: 'Tu sistema de transporte',
     resumen: 'De dónde salen los viajes: por archivo hoy; la conexión directa está por conectar hasta que tu área de sistemas entregue su API.',
