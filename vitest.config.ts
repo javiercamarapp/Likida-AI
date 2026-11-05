@@ -131,6 +131,16 @@ export default defineConfig({
         statements: 83,
         branches: 73,
         functions: 86,
+        // F8 / CT-CAL-08 · UMBRALES POR ARCHIVO DE DINERO Y FISCAL. El global (86/83/73/86) deja que un módulo que mueve dinero baje sin
+        // que nadie lo vea mientras el promedio aguanta. Medido el 4-nov-2026 con SOLO las pruebas de cada carpeta (el piso real de
+        // la suite completa es igual o más alto, nunca menor): fiscal.ts 94.9/93.2/86.0/96.5, carta_porte_cfdi.ts 99.0/96.8/91.3/100,
+        // liquidacion/{acreditable,deducibilidad,estadias_papel,omitidos,id}.ts 100/100/88-100/100, formato.ts 80.8/78.0/83.6/73.5
+        // (líneas/sentencias/ramas/funciones). Cada umbral va ~2 puntos bajo lo medido. Vitest cuenta estos archivos también en el global.
+        // Subirlos al mejorar la cobertura; bajarlos exige explicar por qué en el PR.
+        'src/lib/likida/fiscal.ts': { lines: 92, statements: 90, branches: 83, functions: 94 },
+        'src/lib/likida/carta_porte_cfdi.ts': { lines: 97, statements: 94, branches: 88, functions: 98 },
+        'src/lib/likida/liquidacion/{acreditable,deducibilidad,estadias_papel,omitidos,id}.ts': { lines: 98, statements: 98, branches: 85, functions: 98 },
+        'src/lib/formato.ts': { lines: 78, statements: 75, branches: 80, functions: 70 },
       },
     },
   },
