@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
-const { enviarResumenPanel, revisarPanel, recortarPorCorte } = await import('./acciones');
+const { TZ_MX } = await import('@/lib/formato');
+const { enviarResumenPanel, revisarPanel, recortarPorCorte, resumenSinAtenderDeGrupo } = await import('./acciones');
 type Deps = import('./acciones').DepsSinAtender;
 const { alerta, resultado, crudos, TENANT_A, TENANT_B, CLIENTE_A, AHORA_DIA, AHORA_NOCHE } = await import('./fixtures');
 
@@ -85,7 +86,7 @@ describe('enviar el resumen (acción)', () => {
     expect((d.bitacora as ReturnType<typeof vi.fn>).mock.calls[0]![0].tenantId).toBe(TENANT_A);
   });
   it('la fecha de corte descarta conversaciones anteriores', () => {
-    const r = recortarPorCorte(resultado([alerta({ desde: '2026-10-01T16:00:00.000Z', clave: 'vieja' }), alerta({ chatId: 'g2', clave: 'nueva' })]), 'America/Mexico_City', '2026-11-01');
+    const r = recortarPorCorte(resultado([alerta({ desde: '2026-10-01T16:00:00.000Z', clave: 'vieja' }), alerta({ chatId: 'g2', clave: 'nueva' })]), TZ_MX, '2026-11-01');
     expect(r.alertas.map((a) => a.clave)).toEqual(['nueva']);
     expect(r.resumen.alertas).toBe(1);
   });
@@ -111,5 +112,24 @@ describe('revisar (acción)', () => {
   it('nombres de equipo que no coinciden con nadie: avisa', async () => {
     const r = await revisarPanel(ctx(), form({ equipo: 'Operador 1' }), deps());
     expect(r?.ok && r.notas.join(' ')).toContain('Ningún mensaje coincide');
+  });
+});
+
+describe('revisión tras importar un chat', () => {
+  it('cuenta solo las alertas del grupo importado, con el equipo declarado y el tenant de la sesión', async () => {
+    let equipoVisto: readonly string[] | undefined;
+    const d = deps({
+      detectar: (_c, cfg) => { equipoVisto = cfg.equipoHashes; return resultado([alerta({ chatId: 'g1', nivel: 'alta' }), alerta({ chatId: 'g1', nivel: 'normal', clave: 'otra' }), alerta({ chatId: 'g2', clave: 'ajena' })]); },
+    });
+    const r = await resumenSinAtenderDeGrupo(TENANT_A, 'g1', ['Operador 1'], d);
+    expect(r).toEqual({ alertas: 2, altas: 1 });
+    expect(equipoVisto).toHaveLength(1);
+    expect(d.llamadas.leerChats).toEqual([TENANT_A]);
+    expect(d.enviar).not.toHaveBeenCalled();
+    expect(d.bitacora).not.toHaveBeenCalled();
+  });
+  it('si no se puede revisar devuelve null, nunca lanza', async () => {
+    expect(await resumenSinAtenderDeGrupo(TENANT_A, 'g1', [], deps({ leerChats: async () => null }))).toBeNull();
+    expect(await resumenSinAtenderDeGrupo(TENANT_A, 'g1', [], deps({ leerChats: async () => { throw new Error('boom'); } }))).toBeNull();
   });
 });

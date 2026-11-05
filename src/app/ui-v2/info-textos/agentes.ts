@@ -493,7 +493,7 @@ export const INFO_AGENTES = {
   ),
   'vigia_sin_atender.correo': V(
     'Resumen por correo', 'Correo con las conversaciones sin atender para la gente que corresponde al turno.',
-    'Arma un correo con el grupo, la prioridad, el tiempo sin respuesta y el motivo; no lleva el texto de los mensajes. Va a servicio al cliente y a los directores del turno actual; el dueño solo si hay una alerta alta en un grupo crítico. Si mandas el mismo resumen dos veces, no se duplica.',
+    'Arma un correo con el grupo, la prioridad, el tiempo sin respuesta y el motivo; no lleva el texto de los mensajes. Va a servicio al cliente y a los directores del turno actual; el dueño solo si hay una alerta alta en un grupo crítico. Mandarlo dos veces seguidas en el mismo turno normalmente no lo duplica, pero no está garantizado: pulsa el botón una sola vez.',
     'Correos de servicio al cliente y de la lista de directores del Vigía, con su turno y los festivos de tu flota. Solo sale cuando quien administra pulsa el botón y el envío está encendido.',
   ),
 

@@ -63,4 +63,17 @@ describe('resumen por correo', () => {
     for (const x of p) expect(x.length).toBeLessThanOrEqual(MAX_PARRAFO);
     expect(p[p.length - 1]).toContain('Y 3 más en la pantalla');
   });
+  it('con nombres de 60 letras y 5 motivos el «Y N más» cuadra con las líneas que de verdad salieron', () => {
+    for (const n of [12, 15, 40]) {
+      const muchas = Array.from({ length: n }, (_, i) => alerta({ chatId: `g${i}`, chatNombre: 'N'.repeat(60), critico: true, clave: `c${i}`, motivos: ['espera_sobre_umbral', 'insistencia', 'urgencia', 'pregunta', 'palabra_clave'] }));
+      const p = parrafosDelResumen(resultado(muchas));
+      expect(p.length).toBeLessThanOrEqual(MAX_PARRAFOS);
+      for (const x of p) expect(x.length).toBeLessThanOrEqual(MAX_PARRAFO);
+      const salieron = p.slice(1, -1).join('\n').split('\n').length;
+      const resto = n - salieron;
+      const pie = p[p.length - 1]!;
+      if (resto > 0) expect(pie).toContain(`Y ${resto} más en la pantalla`);
+      else expect(pie).not.toContain('más en la pantalla');
+    }
+  });
 });

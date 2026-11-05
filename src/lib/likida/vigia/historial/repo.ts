@@ -258,7 +258,8 @@ export async function retirarRespuestaRapida(tenantId: string, id: string): Prom
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Mensajes recientes que se leen por grupo (suficiente para ver el final del chat; el resto es historia). */
-export const MENSAJES_POR_GRUPO_SIN_ATENDER = 2000;
+/** El tope REAL de filas por petición del proyecto es `max_rows = 1000` (supabase/config.toml): pedir más se recortaría en silencio. */
+export const MENSAJES_POR_GRUPO_SIN_ATENDER = 1000;
 /** Grupos que se revisan en una pasada; los demás se cuentan en `gruposOmitidos`. */
 export const MAX_GRUPOS_SIN_ATENDER = 50;
 
@@ -276,32 +277,28 @@ export async function leerChatsParaSinAtender(tenantId: string): Promise<{ chats
   const todos = (g.data ?? []) as Fila[];
   const grupos = todos.slice(0, MAX_GRUPOS_SIN_ATENDER);
   if (grupos.length === 0) return { chats: [], gruposOmitidos: 0 };
-  const imp = await acotada(db.from('vigia_historial_import').select('grupo_id, created_at').eq('tenant_id', tenantId)
-    .in('grupo_id', grupos.map((x) => String(x.id))).order('created_at', { ascending: false }).order('id').limit(5000), 'vigia.sin_atender_imports');
-  if (esSinTabla(imp.error)) return null;
-  if (imp.error) throw new Error(`vigia.sin_atender_imports: ${imp.error.message}`);
-  const ultimaSubida = new Map<string, number>();
-  for (const f of (imp.data ?? []) as Fila[]) {
-    const id = String(f.grupo_id);
-    const t = Date.parse(String(f.created_at));
-    if (Number.isFinite(t) && !ultimaSubida.has(id)) ultimaSubida.set(id, t);
-  }
   const chats: ChatLeido[] = [];
   const LOTE_GRUPOS = 5;
   for (let i = 0; i < grupos.length; i += LOTE_GRUPOS) {
     const lote = grupos.slice(i, i + LOTE_GRUPOS);
     const leidos = await Promise.all(lote.map(async (x) => {
+      // La subida más reciente de ESTE grupo (una fila): con todas las subidas de la flota en una sola petición, el tope de filas
+      // (max_rows = 1000) dejaba grupos sin su «foto» y la antigüedad se medía contra el último mensaje.
+      const sub = await acotada(db.from('vigia_historial_import').select('created_at').eq('tenant_id', tenantId).eq('grupo_id', String(x.id))
+        .order('created_at', { ascending: false }).order('id').limit(1), 'vigia.sin_atender_imports');
+      if (esSinTabla(sub.error)) return null;
+      if (sub.error) throw new Error(`vigia.sin_atender_imports: ${sub.error.message}`);
       const r = await acotada(db.from('vigia_historial_mensaje').select('enviado_en, rol, autor_hash, texto').eq('tenant_id', tenantId).eq('grupo_id', String(x.id))
         .order('enviado_en', { ascending: false }).order('id', { ascending: false }).limit(MENSAJES_POR_GRUPO_SIN_ATENDER), 'vigia.sin_atender_mensajes');
       if (esSinTabla(r.error)) return null;
       if (r.error) throw new Error(`vigia.sin_atender_mensajes: ${r.error.message}`);
-      return { x, filas: (r.data ?? []) as Fila[] };
+      return { x, filas: (r.data ?? []) as Fila[], subida: Date.parse(String(((sub.data ?? []) as Fila[])[0]?.created_at ?? '')) };
     }));
     for (const l of leidos) {
       if (l === null) return null;
       const mensajes = l.filas.map((f) => ({ enviadoEn: String(f.enviado_en), rol: f.rol === 'equipo' ? ('equipo' as const) : ('cliente' as const), autorHash: String(f.autor_hash), texto: String(f.texto) })).reverse();
       const ultimoMensaje = mensajes.reduce((m, f) => Math.max(m, Date.parse(f.enviadoEn) || 0), 0);
-      const foto = Math.max(ultimoMensaje, ultimaSubida.get(String(l.x.id)) ?? 0);
+      const foto = Math.max(ultimoMensaje, Number.isFinite(l.subida) ? l.subida : 0);
       chats.push({
         clienteId: String(l.x.cliente_id),
         chat: { chatId: String(l.x.id), nombre: String(l.x.nombre), critico: l.x.critico === true, mensajes, ...(foto > 0 ? { fotoMs: foto } : {}) },

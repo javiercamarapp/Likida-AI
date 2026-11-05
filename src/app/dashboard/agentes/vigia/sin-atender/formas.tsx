@@ -47,13 +47,13 @@ export function FormaRevision({ revisar, enviar, flota, puedeEnviar, inicial }: 
         </div>
         <label className="block">
           <span className={ETIQUETA}>Nombres de tu equipo, como salen en el chat (separados por coma)</span>
-          <input name="equipo" className="w-full" />
-          <span className={AYUDA} style={{ color: 'var(--muted)' }}>Sirve para corregir quién es del equipo sin volver a subir el chat.</span>
+          <input name="equipo" className="w-full" aria-describedby="sin-atender-equipo" />
+          <span id="sin-atender-equipo" className={AYUDA} style={{ color: 'var(--muted)' }}>Sirve para corregir quién es del equipo sin volver a subir el chat.</span>
         </label>
         {puedeEnviar && (
           <label className="block sm:w-1/2">
             <span className={ETIQUETA}>Fecha de corte para el resumen por correo (AAAA-MM-DD)</span>
-            <input name="fechaCorte" inputMode="numeric" placeholder="2026-01-31" className="w-full" aria-describedby="sin-atender-corte" />
+            <input name="fechaCorte" inputMode="numeric" placeholder="AAAA-MM-DD" className="w-full" aria-describedby="sin-atender-corte" />
             <span id="sin-atender-corte" className={AYUDA} style={{ color: 'var(--muted)' }}>No se avisa de conversaciones anteriores a este día.</span>
           </label>
         )}
@@ -61,7 +61,7 @@ export function FormaRevision({ revisar, enviar, flota, puedeEnviar, inicial }: 
           <Boton Icono={Search} secundario>Revisar con estos ajustes</Boton>
           {puedeEnviar && <Boton Icono={Mail} formAction={despacharEnvio}>Enviar resumen por correo</Boton>}
         </div>
-        {envio && <AvisoResultado estado={envio} />}
+        <div aria-live="polite">{envio && <AvisoResultado estado={envio} />}</div>
       </form>
       {revision === null ? inicial : revision.ok ? (
         <div className="space-y-2" aria-live="polite">

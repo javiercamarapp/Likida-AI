@@ -26,6 +26,7 @@ export interface DepsResumen {
 
 export const ASUNTO_RESUMEN = 'Vigía: conversaciones sin atender';
 const TOPE_LINEAS = 12;
+const MAX_BLOQUES = 3;
 const ETIQUETA_MOTIVO: Record<MotivoSinAtender, string> = {
   espera_sobre_umbral: 'plazo vencido', insistencia: 'el cliente insiste', urgencia: 'urgente', pregunta: 'pregunta', palabra_clave: 'tema importante',
 };
@@ -39,17 +40,23 @@ const horas = (min: number): string => (min < 60 ? `${min} min` : `${Math.floor(
 export function parrafosDelResumen(r: ResultadoSinAtender): string[] {
   const { resumen } = r;
   const encabezado = `Hay ${resumen.alertas} conversaciones sin atender en ${resumen.chatsConAlerta} grupos (${resumen.altas} de prioridad alta). Se midió contra la hora de la última exportación de cada chat, no contra este momento.`;
-  const lineas = r.alertas.slice(0, TOPE_LINEAS).map((a) =>
-    `${a.nivel === 'alta' ? 'Alta' : 'Normal'} · ${a.chatNombre.slice(0, 60)}${a.critico ? ' (crítico)' : ''} · ${horas(a.antiguedadMin)} sin respuesta · ${a.motivos.map((m) => ETIQUETA_MOTIVO[m]).join(', ')}`);
+  // Se empacan las líneas en a lo más MAX_BLOQUES bloques; lo que no cabe se cuenta como «resto» (nunca se descarta en silencio).
   const bloques: string[] = [];
   let actual = '';
-  for (const l of lineas) {
-    if (actual !== '' && actual.length + l.length + 1 > MAX_PARRAFO) { bloques.push(actual); actual = l; } else actual = actual === '' ? l : `${actual}\n${l}`;
+  let incluidas = 0;
+  for (const a of r.alertas.slice(0, TOPE_LINEAS)) {
+    const l = `${a.nivel === 'alta' ? 'Alta' : 'Normal'} · ${a.chatNombre.slice(0, 60)}${a.critico ? ' (crítico)' : ''} · ${horas(a.antiguedadMin)} sin respuesta · ${a.motivos.map((m) => ETIQUETA_MOTIVO[m]).join(', ')}`.slice(0, MAX_PARRAFO);
+    if (actual !== '' && actual.length + l.length + 1 > MAX_PARRAFO) {
+      if (bloques.length + 1 >= MAX_BLOQUES) break;
+      bloques.push(actual);
+      actual = l;
+    } else actual = actual === '' ? l : `${actual}\n${l}`;
+    incluidas++;
   }
   if (actual) bloques.push(actual);
-  const resto = r.alertas.length - lineas.length;
+  const resto = r.alertas.length - incluidas;
   const pie = `${resto > 0 ? `Y ${resto} más en la pantalla. ` : ''}Este aviso sale de chats exportados que se subieron a Likida: no hay conexión en tiempo real. Los mensajes no se incluyen; ábrelos en la pantalla.`;
-  return [encabezado, ...bloques.slice(0, 3), pie];
+  return [encabezado, ...bloques, pie];
 }
 
 export async function enviarResumenSinAtender(e: EntradaResumenCorreo, deps: DepsResumen = {}): Promise<ResultadoEnvioResumen> {

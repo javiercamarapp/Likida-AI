@@ -84,6 +84,24 @@ export async function revisarSinAtender(tenantId: string, solicitud: SolicitudSi
   };
 }
 
+export interface ResumenGrupoSinAtender { alertas: number; altas: number }
+
+/**
+ * Tras subir un chat: corre el detector (sin guardar nada, sin texto de mensajes) y cuenta lo que quedó sin atender EN ESE grupo.
+ * Devuelve null si no se pudo revisar (la importación ya está guardada: un fallo aquí nunca la deshace).
+ */
+export async function resumenSinAtenderDeGrupo(tenantId: string, grupoId: string, equipoNombres: readonly string[], d: DepsSinAtender = depsSinAtenderReales): Promise<ResumenGrupoSinAtender | null> {
+  try {
+    const r = await revisarSinAtender(tenantId, { equipoNombres: [...equipoNombres] }, 0, d);
+    if (!r.ok) return null;
+    const delGrupo = r.revision.resultado.alertas.filter((a) => a.chatId === grupoId);
+    return { alertas: delGrupo.length, altas: delGrupo.filter((a) => a.nivel === 'alta').length };
+  } catch (e) {
+    logger.warn('vigia.sin_atender_tras_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
+}
+
 export type EstadoRevisionUI =
   | null
   | { ok: true; resultado: ResultadoSinAtender; notas: string[] }
@@ -157,7 +175,7 @@ export async function enviarResumenPanel(ctx: ContextoSinAtender, fd: FormData, 
       detalle: { enviado: envio.ok, motivo: envio.ok ? null : envio.motivo, alertas: resultado.alertas.length, destinatarios: destinatarios.length, turno, fechaLocal, corte: s.valor.fechaCorte },
     });
     if (!envio.ok) return no(envio.motivo);
-    return { ok: true, mensaje: `Resumen enviado a ${envio.destinatarios} ${envio.destinatarios === 1 ? 'persona' : 'personas'} (turno ${turno === 'dia' ? 'de día' : turno === 'noche' ? 'de noche' : 'de festivo o fin de semana'}). Si lo mandas otra vez con las mismas conversaciones, no se duplica.` };
+    return { ok: true, mensaje: `Resumen enviado a ${envio.destinatarios} ${envio.destinatarios === 1 ? 'persona' : 'personas'} (turno ${turno === 'dia' ? 'de día' : turno === 'noche' ? 'de noche' : 'de festivo o fin de semana'}). Si lo repites en el mismo turno y el mismo día con las mismas conversaciones, el proveedor normalmente no lo duplica (no está garantizado); no lo mandes más de una vez.` };
   } catch (e) {
     logger.error('vigia.sin_atender_enviar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'mandar el resumen') };
