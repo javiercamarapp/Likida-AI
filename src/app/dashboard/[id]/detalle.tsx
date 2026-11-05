@@ -274,10 +274,10 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                   <table className="w-full border-collapse">
                     <thead>
                       <tr style={{ background: 'var(--canvas)' }}>
-                        <th className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Diésel elegible</th>
-                        <th className={TH} style={{ color: 'var(--muted)' }}>IEPS de diésel</th>
-                        <th className={TH} style={{ color: 'var(--muted)' }}>IVA acreditable</th>
-                        <th className={`${TH} rounded-r-lg`} style={{ color: 'var(--muted)' }}>Peaje 50 %</th>
+                        <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Diésel elegible</th>
+                        <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>IEPS de diésel</th>
+                        <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>IVA acreditable</th>
+                        <th scope="col" className={`${TH} rounded-r-lg`} style={{ color: 'var(--muted)' }}>Peaje 50 %</th>
                       </tr>
                     </thead>
                     <tbody>

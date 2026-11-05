@@ -49,12 +49,12 @@ function TablaLatencia({ filas, etiqueta, notas }: { filas: FilaLatencia[]; etiq
       <table className="w-full text-sm">
         <thead>
           <tr style={{ color: 'var(--muted)' }} className="text-left">
-            <th className="px-3 py-2 font-medium">{etiqueta}</th>
-            <th className="px-3 py-2 font-medium text-right">Muestras</th>
-            <th className="px-3 py-2 font-medium text-right">p50</th>
-            <th className="px-3 py-2 font-medium text-right">p95</th>
-            <th className="px-3 py-2 font-medium text-right">Máx.</th>
-            <th className="px-3 py-2 font-medium text-right">Fallos</th>
+            <th scope="col" className="px-3 py-2 font-medium">{etiqueta}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Muestras</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">p50</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">p95</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Máx.</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Fallos</th>
           </tr>
         </thead>
         <tbody>
@@ -184,13 +184,13 @@ export default async function ObservabilidadPage({
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-3 py-2 font-medium">Agente</th>
-                      <th className="px-3 py-2 font-medium">Flota</th>
-                      <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium">Tareas</th>
-                      <th className="px-3 py-2 font-medium">Duración</th>
-                      <th className="px-3 py-2 font-medium">Inicio</th>
-                      <th className="px-3 py-2 font-medium text-right">Traza</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Agente</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Estado</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Tareas</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Duración</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Inicio</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Traza</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -256,12 +256,12 @@ export default async function ObservabilidadPage({
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-3 py-2 font-medium">Cuándo</th>
-                      <th className="px-3 py-2 font-medium">Acción</th>
-                      <th className="px-3 py-2 font-medium">Quién</th>
-                      <th className="px-3 py-2 font-medium">Flota</th>
-                      <th className="px-3 py-2 font-medium">Entidad</th>
-                      <th className="px-3 py-2 font-medium">Detalle</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Cuándo</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Acción</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Quién</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Entidad</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Detalle</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -412,12 +412,12 @@ export default async function ObservabilidadPage({
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-3 py-2 font-medium">Fase</th>
-                      <th className="px-3 py-2 font-medium text-right">Medidas</th>
-                      <th className="px-3 py-2 font-medium text-right">Sin duración</th>
-                      <th className="px-3 py-2 font-medium text-right">p50</th>
-                      <th className="px-3 py-2 font-medium text-right">p95</th>
-                      <th className="px-3 py-2 font-medium text-right">Máx.</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Fase</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Medidas</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Sin duración</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">p50</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">p95</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Máx.</th>
                     </tr>
                   </thead>
                   <tbody>

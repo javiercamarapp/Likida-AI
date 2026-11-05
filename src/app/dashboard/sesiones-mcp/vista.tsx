@@ -27,13 +27,13 @@ function rotuloCliente(c: ClienteMcpConectado): string {
 export function TablaClientesMcp({ clientes }: { clientes: ClienteMcpConectado[] }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[12px]">
+      <table aria-label="Sesiones MCP conectadas" className="w-full text-[12px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th className="px-3 py-2 font-medium">Cliente</th>
-            <th className="px-3 py-2 font-medium">Conectado</th>
-            <th className="px-3 py-2 font-medium">Último uso</th>
-            <th className="px-3 py-2 font-medium">Vence</th>
+            <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+            <th scope="col" className="px-3 py-2 font-medium">Conectado</th>
+            <th scope="col" className="px-3 py-2 font-medium">Último uso</th>
+            <th scope="col" className="px-3 py-2 font-medium">Vence</th>
           </tr>
         </thead>
         <tbody>

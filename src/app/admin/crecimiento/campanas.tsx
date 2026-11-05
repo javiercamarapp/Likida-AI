@@ -53,11 +53,11 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
         <table className="w-full text-[12.5px]">
           <thead>
             <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
-              <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Campaña</th>
-              <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Presupuesto</th>
-              <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Gasto real</th>
-              <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>CPL real vs objetivo</th>
-              <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Estado</th>
+              <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Campaña</th>
+              <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Presupuesto</th>
+              <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Gasto real</th>
+              <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>CPL real vs objetivo</th>
+              <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Estado</th>
             </tr>
           </thead>
           <tbody>

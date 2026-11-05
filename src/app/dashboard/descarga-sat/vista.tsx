@@ -332,14 +332,14 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
             )}
           </TituloSeccion>
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table aria-label="Descargas del SAT por periodo" className="w-full text-[12px]">
               <thead>
                 <tr style={{ color: 'var(--muted)' }}>
-                  <th className="text-left font-medium py-1">Periodo</th>
-                  <th className="text-left font-medium py-1">Buzón</th>
-                  <th className="text-left font-medium py-1">Estado</th>
-                  <th className="text-right font-medium py-1">CFDI nuevos</th>
-                  <th className="text-left font-medium py-1 pl-3">Lo que dijo el SAT</th>
+                  <th scope="col" className="text-left font-medium py-1">Periodo</th>
+                  <th scope="col" className="text-left font-medium py-1">Buzón</th>
+                  <th scope="col" className="text-left font-medium py-1">Estado</th>
+                  <th scope="col" className="text-right font-medium py-1">CFDI nuevos</th>
+                  <th scope="col" className="text-left font-medium py-1 pl-3">Lo que dijo el SAT</th>
                 </tr>
               </thead>
               <tbody>

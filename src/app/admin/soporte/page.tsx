@@ -353,14 +353,14 @@ export default async function SoportePage({
                     <table className="w-full text-sm">
                       <thead>
                         <tr style={{ color: 'var(--muted)' }} className="text-left">
-                          <th className="px-4 py-2 font-medium">Asunto</th>
-                          <th className="px-4 py-2 font-medium">Flota</th>
-                          <th className="px-4 py-2 font-medium">Categoría</th>
-                          <th className="px-4 py-2 font-medium">Prioridad</th>
-                          <th className="px-4 py-2 font-medium">Estado</th>
-                          <th className="px-4 py-2 font-medium">Tomado por</th>
-                          <th className="px-4 py-2 font-medium">Abierto</th>
-                          <th className="px-4 py-2 font-medium text-right">SLA</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Asunto</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Flota</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Categoría</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Prioridad</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Estado</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Tomado por</th>
+                          <th scope="col" className="px-4 py-2 font-medium">Abierto</th>
+                          <th scope="col" className="px-4 py-2 font-medium text-right">SLA</th>
                         </tr>
                       </thead>
                       <tbody>

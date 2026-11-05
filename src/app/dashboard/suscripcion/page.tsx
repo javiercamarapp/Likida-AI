@@ -488,13 +488,13 @@ export default async function SuscripcionPage({
             </div>
           ) : (
             <div className="overflow-x-auto mt-3">
-              <table className="w-full text-sm">
+              <table aria-label="Pagos por periodo y monto" className="w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th className="py-2.5 pr-4 font-medium">Periodo</th>
-                    <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
-                    <th className="py-2.5 pr-4 font-medium">Estado</th>
-                    <th className="py-2.5 font-medium">CFDI</th>
+                    <th scope="col" className="py-2.5 pr-4 font-medium">Periodo</th>
+                    <th scope="col" className="py-2.5 pr-4 font-medium text-right">Monto</th>
+                    <th scope="col" className="py-2.5 pr-4 font-medium">Estado</th>
+                    <th scope="col" className="py-2.5 font-medium">CFDI</th>
                   </tr>
                 </thead>
                 <tbody>

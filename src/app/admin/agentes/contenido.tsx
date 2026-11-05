@@ -227,17 +227,17 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { acc
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-4 py-2 font-medium">Agente</th>
-                      <th className="px-4 py-2 font-medium">Departamento</th>
-                      <th className="px-4 py-2 font-medium">Estado</th>
-                      <th className="px-4 py-2 font-medium">Disparador</th>
-                      <th className="px-4 py-2 font-medium">Última corrida</th>
-                      <th className="px-4 py-2 font-medium">Kill switch</th>
-                      <th className="px-4 py-2 font-medium">Modelo</th>
-                      <th className="px-4 py-2 font-medium text-right">Éxito 30d</th>
-                      <th className="px-4 py-2 font-medium text-right">Costo 30d</th>
-                      <th className="px-4 py-2 font-medium text-right">Presupuesto</th>
-                      <th className="px-4 py-2 font-medium">Insumos</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Agente</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Departamento</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Estado</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Disparador</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Última corrida</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Kill switch</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Modelo</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Éxito 30d</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Costo 30d</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Presupuesto</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Insumos</th>
                     </tr>
                   </thead>
                   <tbody>{agentes.map(filaAgente)}</tbody>

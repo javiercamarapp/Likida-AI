@@ -66,7 +66,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-[12px]">
-                  <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th className="py-1 pr-3">Cliente</th><th className="pr-3">Grupo</th><th className="pr-3">Crítico</th><th className="pr-3">Histórico</th><th /></tr></thead>
+                  <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th scope="col" className="py-1 pr-3">Cliente</th><th scope="col" className="pr-3">Grupo</th><th scope="col" className="pr-3">Crítico</th><th scope="col" className="pr-3">Histórico</th><th scope="col" /></tr></thead>
                   <tbody>
                     {grupos.map((g) => (
                       <tr key={g.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
@@ -196,7 +196,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                   <TituloRecuadro nivel="h3" info="vigia_historial.temas" className="mb-1.5">Temas y tendencia</TituloRecuadro>
                   <div className="overflow-x-auto">
                     <table className="w-full text-[12px]">
-                      <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th className="py-1 pr-3">Tema</th><th className="pr-3">Mensajes</th><th className="pr-3">Últimas 4 semanas</th><th className="pr-3">4 anteriores</th><th>Cambio</th></tr></thead>
+                      <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th scope="col" className="py-1 pr-3">Tema</th><th scope="col" className="pr-3">Mensajes</th><th scope="col" className="pr-3">Últimas 4 semanas</th><th scope="col" className="pr-3">4 anteriores</th><th scope="col">Cambio</th></tr></thead>
                       <tbody>
                         {reporte.tendencias.map((t) => (
                           <tr key={t.tema} className="border-t" style={{ borderColor: 'var(--line)' }}>

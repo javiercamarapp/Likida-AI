@@ -149,14 +149,14 @@ function Tablero({ r }: { r: ResumenImportacion }) {
           <table className="w-full text-[12px]" aria-label="Cajas por estatus y por día">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th className="font-medium py-1 pr-3">Día</th>
-                <th className="font-medium py-1 pr-3 text-right">Cajas</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.patio}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.pend_cruce}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.en_ruta}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.listo}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.pend_requisito}</th>
-                <th className="font-medium py-1 text-right">Sin estatus</th>
+                <th scope="col" className="font-medium py-1 pr-3">Día</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">Cajas</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.patio}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.pend_cruce}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.en_ruta}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.listo}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.pend_requisito}</th>
+                <th scope="col" className="font-medium py-1 text-right">Sin estatus</th>
               </tr>
             </thead>
             <tbody>

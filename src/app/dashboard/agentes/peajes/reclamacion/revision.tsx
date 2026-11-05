@@ -55,15 +55,15 @@ function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: Can
   return (
     <>
       <div className="overflow-x-auto">
-        <table className="w-full text-[12px]">
+        <table aria-label="Cruces de caseta en revisión" className="w-full text-[12px]">
           <thead>
             <tr className="text-left" style={{ color: 'var(--faint)' }}>
-              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
-              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
-              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
-              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Clase</th>
-              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Importe</th>
-              <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Qué pasó · qué significa · qué hacer</th>
+              <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
+              <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
+              <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
+              <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Clase</th>
+              <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Importe</th>
+              <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Qué pasó · qué significa · qué hacer</th>
             </tr>
           </thead>
           <tbody>

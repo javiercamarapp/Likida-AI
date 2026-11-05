@@ -102,12 +102,12 @@ export default async function CapacidadForecastPage() {
                   <table className="w-full text-[12.5px]">
                     <thead>
                       <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                        <th className="py-1.5 pr-4 font-medium">Viajes/día</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Mensajes WA/día</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Pico msg/min</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Llamadas LLM/día</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Costo IA/día</th>
-                        <th className="py-1.5 font-medium text-right">Storage/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium">Viajes/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Mensajes WA/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Pico msg/min</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Llamadas LLM/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Costo IA/día</th>
+                        <th scope="col" className="py-1.5 font-medium text-right">Storage/día</th>
                       </tr>
                     </thead>
                     <tbody>

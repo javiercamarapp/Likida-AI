@@ -353,11 +353,11 @@ export default async function CostosFacturacionPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th className="py-2.5 pr-4 font-medium">Flota</th>
-                        <th className="py-2.5 pr-4 font-medium">Periodo</th>
-                        <th className="py-2.5 pr-4 font-medium">Referencia</th>
-                        <th className="py-2.5 pr-4 font-medium text-right">Total a transferir</th>
-                        <th className="py-2.5 font-medium">Marcar pagada</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Flota</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Periodo</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Referencia</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium text-right">Total a transferir</th>
+                        <th scope="col" className="py-2.5 font-medium">Marcar pagada</th>
                       </tr>
                     </thead>
                     <tbody>

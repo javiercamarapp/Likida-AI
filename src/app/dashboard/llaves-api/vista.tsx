@@ -32,16 +32,16 @@ export function ListaLlaves({ llaves, revocarLlave }: {
 
   return (
     <div className="card overflow-x-auto">
-      <table className="w-full text-[12px]">
+      <table aria-label="Llaves de API" className="w-full text-[12px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th className="px-3 py-2 font-medium">Pista</th>
-            <th className="px-3 py-2 font-medium">Nombre</th>
-            <th className="px-3 py-2 font-medium">Área</th>
-            <th className="px-3 py-2 font-medium">Creada</th>
-            <th className="px-3 py-2 font-medium">Vence</th>
-            <th className="px-3 py-2 font-medium">Último uso</th>
-            <th className="px-3 py-2 font-medium" />
+            <th scope="col" className="px-3 py-2 font-medium">Pista</th>
+            <th scope="col" className="px-3 py-2 font-medium">Nombre</th>
+            <th scope="col" className="px-3 py-2 font-medium">Área</th>
+            <th scope="col" className="px-3 py-2 font-medium">Creada</th>
+            <th scope="col" className="px-3 py-2 font-medium">Vence</th>
+            <th scope="col" className="px-3 py-2 font-medium">Último uso</th>
+            <th scope="col" className="px-3 py-2 font-medium" />
           </tr>
         </thead>
         <tbody>

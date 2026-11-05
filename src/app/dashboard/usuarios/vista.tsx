@@ -76,14 +76,14 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
               </div>
             ) : (
               <div className="overflow-x-auto mt-1 pb-2">
-                <table className="w-full text-sm">
+                <table aria-label="Usuarios y su rol" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-5 py-2.5 font-medium">Nombre</th>
-                      <th className="px-5 py-2.5 font-medium">Rol</th>
-                      <th className="px-5 py-2.5 font-medium">Qué puede hacer</th>
-                      <th className="px-5 py-2.5 font-medium">WhatsApp</th>
-                      {puedeInvitar && <th className="px-5 py-2.5 font-medium">Acciones</th>}
+                      <th scope="col" className="px-5 py-2.5 font-medium">Nombre</th>
+                      <th scope="col" className="px-5 py-2.5 font-medium">Rol</th>
+                      <th scope="col" className="px-5 py-2.5 font-medium">Qué puede hacer</th>
+                      <th scope="col" className="px-5 py-2.5 font-medium">WhatsApp</th>
+                      {puedeInvitar && <th scope="col" className="px-5 py-2.5 font-medium">Acciones</th>}
                     </tr>
                   </thead>
                   <tbody>

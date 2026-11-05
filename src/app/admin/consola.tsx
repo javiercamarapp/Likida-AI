@@ -355,11 +355,11 @@ export async function ConsolaAdmin({
                   <table className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th className="px-2 py-1.5 font-medium">Corrida</th>
-                        <th className="px-2 py-1.5 font-medium">Estado</th>
-                        <th className="px-2 py-1.5 font-medium">Cuándo</th>
-                        <th className="px-2 py-1.5 font-medium">Tareas</th>
-                        <th className="px-2 py-1.5 font-medium">Flota</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Corrida</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Estado</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Cuándo</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Tareas</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Flota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -544,11 +544,11 @@ export async function ConsolaAdmin({
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-4 py-2 font-medium">Flota</th>
-                      <th className="px-4 py-2 font-medium">Plan</th>
-                      <th className="px-4 py-2 font-medium text-right">Viajes</th>
-                      <th className="px-4 py-2 font-medium text-right">Costo de IA (histórico)</th>
-                      <th className="px-4 py-2 font-medium text-right"></th>
+                      <th scope="col" className="px-4 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Plan</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Viajes</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Costo de IA (histórico)</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right"></th>
                     </tr>
                   </thead>
                   <tbody>

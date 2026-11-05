@@ -97,13 +97,13 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
             <table className="w-full text-sm" style={{ minWidth: 640 }}>
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                  <th className="px-4 py-2.5">Agente</th>
-                  <th className="px-4 py-2.5">Flota</th>
-                  <th className="px-4 py-2.5">Estado</th>
-                  <th className="px-4 py-2.5">Inicio</th>
-                  <th className="px-4 py-2.5">Duración</th>
-                  <th className="px-4 py-2.5">Tareas</th>
-                  <th className="px-4 py-2.5">Gasto</th>
+                  <th scope="col" className="px-4 py-2.5">Agente</th>
+                  <th scope="col" className="px-4 py-2.5">Flota</th>
+                  <th scope="col" className="px-4 py-2.5">Estado</th>
+                  <th scope="col" className="px-4 py-2.5">Inicio</th>
+                  <th scope="col" className="px-4 py-2.5">Duración</th>
+                  <th scope="col" className="px-4 py-2.5">Tareas</th>
+                  <th scope="col" className="px-4 py-2.5">Gasto</th>
                 </tr>
               </thead>
               <tbody>

@@ -193,16 +193,16 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Clientes y su RFC" className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th className="px-3 py-2 font-medium">Cliente</th>
-                <th className="px-3 py-2 font-medium">RFC</th>
-                <th className="px-3 py-2 font-medium">Crédito</th>
-                <th className="px-3 py-2 font-medium text-right">Viajes</th>
-                <th className="px-3 py-2 font-medium text-right">Ingreso</th>
-                <th className="px-3 py-2 font-medium text-right">Por cobrar</th>
-                <th className="px-3 py-2 font-medium text-right">Tarifas</th>
+                <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+                <th scope="col" className="px-3 py-2 font-medium">RFC</th>
+                <th scope="col" className="px-3 py-2 font-medium">Crédito</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Viajes</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Ingreso</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Por cobrar</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Tarifas</th>
               </tr>
             </thead>
             <tbody>
@@ -409,15 +409,15 @@ function BloqueTarifas({
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Rutas por cliente" className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th className="px-3 py-2 font-medium">Cliente</th>
-                <th className="px-3 py-2 font-medium">Ruta</th>
-                <th className="px-3 py-2 font-medium">Cómo se cobra</th>
-                <th className="px-3 py-2 font-medium text-right">Precio</th>
-                <th className="px-3 py-2 font-medium">Vigencia</th>
-                <th className="px-3 py-2 font-medium">Estado</th>
+                <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+                <th scope="col" className="px-3 py-2 font-medium">Ruta</th>
+                <th scope="col" className="px-3 py-2 font-medium">Cómo se cobra</th>
+                <th scope="col" className="px-3 py-2 font-medium text-right">Precio</th>
+                <th scope="col" className="px-3 py-2 font-medium">Vigencia</th>
+                <th scope="col" className="px-3 py-2 font-medium">Estado</th>
               </tr>
             </thead>
             <tbody>
@@ -570,14 +570,14 @@ function BloqueSinIngreso({ panel }: { panel: PanelClientes }) {
       </p>
 
       <div className="card overflow-x-auto">
-        <table className="w-full text-[12px]">
+        <table aria-label="Viajes por ruta del cliente" className="w-full text-[12px]">
           <thead>
             <tr className="text-left" style={{ color: 'var(--muted)' }}>
-              <th className="px-3 py-2 font-medium">Viaje</th>
-              <th className="px-3 py-2 font-medium">Ruta</th>
-              <th className="px-3 py-2 font-medium">Cliente</th>
-              <th className="px-3 py-2 font-medium">Tarifa que aplicaría</th>
-              <th className="px-3 py-2 font-medium text-right">Cotizaría</th>
+              <th scope="col" className="px-3 py-2 font-medium">Viaje</th>
+              <th scope="col" className="px-3 py-2 font-medium">Ruta</th>
+              <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+              <th scope="col" className="px-3 py-2 font-medium">Tarifa que aplicaría</th>
+              <th scope="col" className="px-3 py-2 font-medium text-right">Cotizaría</th>
             </tr>
           </thead>
           <tbody>

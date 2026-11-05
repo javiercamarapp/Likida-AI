@@ -156,14 +156,14 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
           {reporte.cruces.length > 0 && (
             <section className="card p-4">
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table aria-label="Cruces de caseta en reclamación" className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Monto</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">{candidato ? 'Por qué es candidato' : 'Por qué se reclama'}</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Monto</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">{candidato ? 'Por qué es candidato' : 'Por qué se reclama'}</th>
                     </tr>
                   </thead>
                   <tbody>

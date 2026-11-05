@@ -153,12 +153,12 @@ export default async function PoliticasPage({
             <section className="px-5 pb-5">
               <FormaConAviso accion={accionGuardar} boton="Guardar política" columnas="md:grid-cols-1">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table aria-label="Topes por comprobante (MXN)" className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th className="py-2.5 pr-4 font-medium">Concepto</th>
-                        <th className="py-2.5 pr-4 font-medium">Tope por comprobante (MXN)</th>
-                        <th className="py-2.5 font-medium">Exige factura (CFDI)</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Concepto</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Tope por comprobante (MXN)</th>
+                        <th scope="col" className="py-2.5 font-medium">Exige factura (CFDI)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -213,12 +213,12 @@ export default async function PoliticasPage({
             </div>
           ) : (
             <div className="overflow-x-auto mt-1 pb-2">
-              <table className="w-full text-sm">
+              <table aria-label="Topes por comprobante por concepto" className="w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th className="px-5 py-2.5 font-medium">Concepto</th>
-                    <th className="px-5 py-2.5 font-medium text-right">Tope por comprobante</th>
-                    <th className="px-5 py-2.5 font-medium">Exige factura (CFDI)</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Concepto</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium text-right">Tope por comprobante</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Exige factura (CFDI)</th>
                   </tr>
                 </thead>
                 <tbody>

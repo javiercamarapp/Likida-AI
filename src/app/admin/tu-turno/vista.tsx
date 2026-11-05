@@ -269,11 +269,11 @@ export function VistaTuTurno({
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-left text-xs" style={{ color: 'var(--muted)' }}>
-                  <th className="py-1.5 pr-3 font-medium">Rutina</th>
-                  <th className="py-1.5 pr-3 font-medium">Horario</th>
-                  <th className="py-1.5 pr-3 font-medium">Última corrida</th>
-                  <th className="py-1.5 pr-3 font-medium">Veredicto</th>
-                  <th className="py-1.5" />
+                  <th scope="col" className="py-1.5 pr-3 font-medium">Rutina</th>
+                  <th scope="col" className="py-1.5 pr-3 font-medium">Horario</th>
+                  <th scope="col" className="py-1.5 pr-3 font-medium">Última corrida</th>
+                  <th scope="col" className="py-1.5 pr-3 font-medium">Veredicto</th>
+                  <th scope="col" className="py-1.5" />
                 </tr>
               </thead>
               <tbody>

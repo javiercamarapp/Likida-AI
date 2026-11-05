@@ -116,11 +116,11 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                  <th className="py-1 pr-3 font-medium">Campo</th>
-                  <th className="py-1 pr-3 font-medium">✅</th>
-                  <th className="py-1 pr-3 font-medium">❌</th>
-                  <th className="py-1 pr-3 font-medium">sin medir</th>
-                  <th className="py-1 font-medium">Exactitud</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Campo</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">✅</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">❌</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">sin medir</th>
+                  <th scope="col" className="py-1 font-medium">Exactitud</th>
                 </tr>
               </thead>
               <tbody>

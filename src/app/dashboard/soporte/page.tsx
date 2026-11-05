@@ -234,15 +234,15 @@ export default async function SoportePage({
 
           <div className="glass-panel overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table aria-label="Solicitudes de soporte" className="w-full text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                    <th className="text-left font-medium px-5 py-3">Asunto</th>
-                    <th className="text-left font-medium px-5 py-3">Categoría</th>
-                    <th className="text-left font-medium px-5 py-3">Prioridad</th>
-                    <th className="text-left font-medium px-5 py-3">Estado</th>
-                    <th className="text-left font-medium px-5 py-3">Abierto</th>
-                    <th className="text-right font-medium px-5 py-3">SLA</th>
+                    <th scope="col" className="text-left font-medium px-5 py-3">Asunto</th>
+                    <th scope="col" className="text-left font-medium px-5 py-3">Categoría</th>
+                    <th scope="col" className="text-left font-medium px-5 py-3">Prioridad</th>
+                    <th scope="col" className="text-left font-medium px-5 py-3">Estado</th>
+                    <th scope="col" className="text-left font-medium px-5 py-3">Abierto</th>
+                    <th scope="col" className="text-right font-medium px-5 py-3">SLA</th>
                   </tr>
                 </thead>
                 <tbody>

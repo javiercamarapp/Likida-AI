@@ -128,15 +128,15 @@ export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufi
   const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-3 py-1.5';
   return (
     <div className="overflow-x-auto">
-      <table className="w-full border-collapse">
+      <table aria-label="Viajes recientes con su operador" className="w-full border-collapse">
         <thead>
           <tr className="sticky top-0 z-10" style={{ background: 'var(--canvas)' }}>
-            <th className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Viaje</th>
-            <th className={TH} style={{ color: 'var(--muted)' }}>Operador</th>
-            <th className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Anticipo</th>
-            <th className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
-            <th className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
-            <th className={`${TH} rounded-r-lg text-right`} style={{ color: 'var(--muted)' }}>Acción</th>
+            <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Viaje</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Operador</th>
+            <th scope="col" className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Anticipo</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
+            <th scope="col" className={`${TH} rounded-r-lg text-right`} style={{ color: 'var(--muted)' }}>Acción</th>
           </tr>
         </thead>
         <tbody>

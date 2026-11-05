@@ -33,14 +33,14 @@ function colorDe(region: string | null): string {
  *  rompía el centrado (reporte del 12-ago: la leyenda se iba hasta abajo). */
 export function TopRutas({ rutas }: { rutas: RutaConRegion[] }) {
   return (
-    <table className="w-full text-sm">
+    <table aria-label="Rutas con más viajes" className="w-full text-sm">
       <thead>
         <tr className="text-left" style={{ color: 'var(--muted)' }}>
-          <th className="font-medium pb-2 pr-3 w-6">#</th>
-          <th className="font-medium pb-2 pr-3">Ruta</th>
-          <th className="font-medium pb-2 pr-3 text-right">Monto</th>
-          <th className="font-medium pb-2 pr-3 text-right">%</th>
-          <th className="font-medium pb-2">Región</th>
+          <th scope="col" className="font-medium pb-2 pr-3 w-6">#</th>
+          <th scope="col" className="font-medium pb-2 pr-3">Ruta</th>
+          <th scope="col" className="font-medium pb-2 pr-3 text-right">Monto</th>
+          <th scope="col" className="font-medium pb-2 pr-3 text-right">%</th>
+          <th scope="col" className="font-medium pb-2">Región</th>
         </tr>
       </thead>
       <tbody>

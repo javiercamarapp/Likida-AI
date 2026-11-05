@@ -188,16 +188,16 @@ export function VistaOperadores({
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table aria-label="Operadores y su teléfono" className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Teléfono</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Patio</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Viajes</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Licencia</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
-                  {puedeEditar && <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2" />}
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Teléfono</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Patio</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Viajes</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Licencia</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
+                  {puedeEditar && <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2" />}
                 </tr>
               </thead>
               <tbody>
