@@ -102,9 +102,9 @@ export function GloboTour({ snap, lado = 'der', centrada = false, refGlobo, onSi
       ) : null}
 
       <EstadoDelPaso snap={snap} onDeclarar={onDeclarar} />
-      {snap.navegando ? <p className="rv-onb__nota" role="status">Te llevo a la página de este paso…</p> : null}
+      {snap.navegando ? <p className="rv-onb__nota">Te llevo a la página de este paso…</p> : null}
       {snap.anclaLista === false ? (
-        <p className="rv-onb__nota" role="status">No veo este elemento en la pantalla ahora; sigue la explicación de aquí.</p>
+        <p className="rv-onb__nota">No veo este elemento en la pantalla ahora; sigue la explicación de aquí.</p>
       ) : null}
       {accion && !esIr && snap.anclaLista ? (
         <p className="rv-onb__nota">

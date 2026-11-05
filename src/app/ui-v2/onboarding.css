@@ -111,7 +111,7 @@
 .rv-onb__estado { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; padding: 6px 10px; border-radius: 8px; background: var(--canvas); border: 1px solid var(--line); font-size: 12px; line-height: 1.5; color: var(--ink2, var(--ink)); }
 .rv-onb__estado > span { display: inline-flex; align-items: center; gap: 6px; }
 .rv-onb__hecho { font-weight: 600; color: var(--ink); }
-.rv-onb__estado .rv-onb__enlace { min-height: 24px; }
+.rv-onb__estado .rv-onb__enlace { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
 
 .rv-onb-check { flex: none; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .rv-onb-check__aro { stroke: var(--line2, var(--line)); }
