@@ -5,7 +5,7 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard', useSearchPa
 
 const {
   FICHAS_CINCO_AGENTES, InsightDeAgente, insightMasSevero, leerInsightsPorAgente, agentesInsightVisibles, resumirInsights, leerInsightsResumen,
-  TEXTO_VACIO_RESUMEN, TEXTO_ERROR_RESUMEN, TEXTO_PROXIMAMENTE_RESUMEN,
+  TEXTO_VACIO_RESUMEN, TEXTO_ERROR_RESUMEN, TEXTO_PROXIMAMENTE_RESUMEN, TEXTO_SIN_LECTOR_RESUMEN, LECTORES_INSIGHTS,
 } = await import('./inicio-cinco-agentes');
 import type { Insight, AgenteInsight, Severidad } from '@/lib/likida/insights/tipos';
 
@@ -46,6 +46,16 @@ describe('InsightDeAgente', () => {
     expect(h).toContain('data-estado="vacio"');
     expect(TEXTO_VACIO_RESUMEN).not.toMatch(/\d/);
     expect(h).not.toContain('data-insight="');
+  });
+  it('sin lector registrado NO dice «todavía no hay datos»: dice que la tarjeta no interpreta ese agente y manda a su pantalla', () => {
+    const h = pintar([], { sinLector: true });
+    expect(h).toContain(TEXTO_SIN_LECTOR_RESUMEN);
+    expect(h).toContain('data-estado="sin_lector"');
+    expect(h).not.toContain('Todavía no hay datos');
+    expect(h).toContain('Abrir Agente X');
+  });
+  it('el registro de lectores está vacío hoy: por eso la tarjeta real no puede afirmar «sin datos» (CT-A12-05)', () => {
+    expect(Object.keys(LECTORES_INSIGHTS)).toEqual([]);
   });
   it('lectura fallida se confiesa, no se vuelve un vacío', () => {
     const h = pintar(null);

@@ -110,14 +110,21 @@ export async function leerInsightsResumen(
 
 export const TEXTO_VACIO_RESUMEN = 'Todavía no hay datos para interpretar. Cuando llegue el primer archivo, aquí verás qué pasó y qué hacer.';
 export const TEXTO_ERROR_RESUMEN = 'No pudimos preparar la interpretación de este agente. Vuelve a cargar en un momento.';
+/**
+ * CT-A12-05 / MX-030: mientras un agente no tenga lector registrado en `LECTORES_INSIGHTS`, «Todavía no hay datos» sería falso:
+ * no es que no haya datos, es que esta tarjeta no lee ninguno. Se dice, y se manda a la pantalla del agente, que sí los tiene.
+ */
+export const TEXTO_SIN_LECTOR_RESUMEN = 'Esta tarjeta todavía no interpreta los datos de este agente, así que que aquí no aparezca nada no significa que no haya pendientes. Abre el agente para ver su estado.';
 export const TEXTO_PROXIMAMENTE_RESUMEN = 'Todavía no está activo en tu cuenta, por eso aquí no hay nada que interpretar.';
 
 /** Qué se ve bajo cada agente: su insight más severo, el vacío llano, el error o «próximamente». */
 export function InsightDeAgente({
-  insights, proximamente = false, href, nombre, sufijo = '',
+  insights, proximamente = false, sinLector = false, href, nombre, sufijo = '',
 }: {
   insights: readonly Insight[] | null | undefined;
   proximamente?: boolean;
+  /** El agente no tiene lector en `LECTORES_INSIGHTS`: un vacío no quiere decir «sin datos». */
+  sinLector?: boolean;
   href: string;
   nombre: string;
   sufijo?: string;
@@ -129,6 +136,8 @@ export function InsightDeAgente({
         <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="proximamente">{TEXTO_PROXIMAMENTE_RESUMEN}</p>
       ) : insights == null ? (
         <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }} data-estado="error">{TEXTO_ERROR_RESUMEN}</p>
+      ) : principal === null && sinLector ? (
+        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="sin_lector">{TEXTO_SIN_LECTOR_RESUMEN}</p>
       ) : principal === null ? (
         <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="vacio">{TEXTO_VACIO_RESUMEN}</p>
       ) : (
@@ -202,7 +211,7 @@ export async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { fic
         </div>
       </div>
     </Link>
-    <InsightDeAgente insights={insights[ficha.insight]} proximamente={!!proximamente} href={ficha.href} nombre={ficha.nombre} sufijo={sufijo} />
+    <InsightDeAgente insights={insights[ficha.insight]} proximamente={!!proximamente} sinLector={!LECTORES_INSIGHTS[ficha.insight]} href={ficha.href} nombre={ficha.nombre} sufijo={sufijo} />
     </div>
   );
 }
