@@ -14,6 +14,7 @@ const escrituras: Array<Record<string, unknown>> = [];
 const estadoSesion = vi.hoisted(() => ({ tenantId: '22222222-2222-2222-2222-222222222222' as string | null }));
 const estadoCrm = vi.hoisted(() => ({ valor: 'nuevo' }));
 const presupuestos = vi.hoisted(() => [] as unknown[][]);
+const llamadasPresupuesto = vi.hoisted(() => [] as unknown[][]);
 /** BE-29: cuando está puesto, el `update` de la ficha falla. */
 let errorAlGuardar: { message: string } | null = null;
 
@@ -40,11 +41,11 @@ vi.mock('@/lib/supabase/admin', () => ({
 }));
 const estadoInterno = vi.hoisted(() => ({
   resultado: { ok: false, motivo: 'sin_tenant_interno', mensaje: 'sin tenant interno de prueba' } as
-    { ok: true; tenantId: string; origen: 'sesion' | 'interno' } | { ok: false; motivo: string; mensaje: string },
+    { ok: true; tenantId: string; origen: 'interno' } | { ok: false; motivo: string; mensaje: string },
 }));
 // MX-004: sin flota elegida el presupuesto sale del tenant interno; aqui se simula lo que resuelve el ayudante.
 vi.mock('@/lib/admin/tenant_presupuesto_superadmin', () => ({
-  tenantDePresupuestoSuperadmin: (t: string | null) => Promise.resolve(t ? { ok: true, tenantId: t, origen: 'sesion' } : estadoInterno.resultado),
+  tenantDePresupuestoSuperadmin: (...args: unknown[]) => { llamadasPresupuesto.push(args); return Promise.resolve(estadoInterno.resultado); },
 }));
 vi.mock('@/lib/llm/budget', () => ({
   createLlmBudget: (...args: unknown[]) => { presupuestos.push(args); return { prueba: true }; },
@@ -88,8 +89,9 @@ beforeEach(() => {
   estadoCrm.valor = 'nuevo';
   salidaModelo = null;
   presupuestos.length = 0;
+  llamadasPresupuesto.length = 0;
   estadoSesion.tenantId = '22222222-2222-2222-2222-222222222222';
-  estadoInterno.resultado = { ok: false, motivo: 'sin_tenant_interno', mensaje: 'sin tenant interno de prueba' };
+  estadoInterno.resultado = { ok: true, tenantId: '99999999-9999-4999-8999-999999999999', origen: 'interno' };
   process.env.NEXT_PUBLIC_APP_URL = 'https://app.likida.ai';
 });
 
@@ -142,8 +144,8 @@ describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () =>
     expect(escrituras).toHaveLength(1);
   });
 
-  it('falla cerrado antes de llamar al modelo cuando no hay flota ni tenant interno, y dice por que', async () => {
-    estadoSesion.tenantId = null;
+  it('falla cerrado antes de llamar al modelo cuando no hay tenant interno, y dice por que', async () => {
+    estadoInterno.resultado = { ok: false, motivo: 'sin_tenant_interno', mensaje: 'sin tenant interno de prueba' };
 
     const r = await postear();
     const j = await r.json() as { codigo: string; motivo: string; error: string };
@@ -158,7 +160,6 @@ describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () =>
 
   it('MX-004: el superadmin global (sin flota) redacta y el gasto se carga al tenant interno', async () => {
     estadoSesion.tenantId = null;
-    estadoInterno.resultado = { ok: true, tenantId: '99999999-9999-4999-8999-999999999999', origen: 'interno' };
 
     const r = await postear();
 
@@ -168,10 +169,14 @@ describe('POST /api/admin/mapa-prospectos/mensaje — la persona no sale', () =>
     expect(llamadas).toHaveLength(1);
   });
 
-  it('con flota elegida el gasto sigue yendo a esa flota', async () => {
+  it('MX-004: con una flota de cliente elegida por cookie el gasto NO se le cobra: sigue yendo al tenant interno', async () => {
+    estadoSesion.tenantId = '22222222-2222-2222-2222-222222222222';
     const r = await postear();
     expect(r.status).toBe(200);
-    expect(presupuestos[0][0]).toBe('22222222-2222-2222-2222-222222222222');
+    expect(presupuestos[0][0]).toBe('99999999-9999-4999-8999-999999999999');
+    expect(presupuestos[0][0]).not.toBe('22222222-2222-2222-2222-222222222222');
+    // El ayudante ni siquiera recibe la flota de la sesión.
+    expect(llamadasPresupuesto).toEqual([[]]);
   });
 
   it('ni el nombre, ni el correo, ni el teléfono del decisor llegan al modelo', async () => {

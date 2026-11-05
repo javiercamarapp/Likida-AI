@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-// MX-004: el presupuesto de IA del superadmin global sale de la flota elegida o del tenant interno; sin ninguno, falla cerrado.
+// MX-004: el presupuesto de IA del superadmin sale SIEMPRE del tenant interno; sin él, falla cerrado.
 const estado = vi.hoisted(() => ({
   resultado: { data: [] as unknown[] | null, error: null as { code?: string; message?: string } | null },
   consultas: [] as Array<{ tabla: string; columnas: string; col: string; val: unknown; limite: number }>,
@@ -22,21 +22,15 @@ beforeEach(() => {
 });
 
 describe('tenantDePresupuestoSuperadmin (MX-004)', () => {
-  it('con flota elegida paga esa flota y no consulta nada', async () => {
-    const r = await tenantDePresupuestoSuperadmin(' 22222222-2222-2222-2222-222222222222 ');
-    expect(r).toEqual({ ok: true, tenantId: '22222222-2222-2222-2222-222222222222', origen: 'sesion' });
-    expect(estado.consultas).toHaveLength(0);
-  });
-
-  it('sin flota paga el tenant interno de Likida (tenant.interno = true)', async () => {
+  it('paga el tenant interno de Likida (tenant.interno = true)', async () => {
     estado.resultado = { data: [{ id: ID }], error: null };
-    const r = await tenantDePresupuestoSuperadmin(null);
+    const r = await tenantDePresupuestoSuperadmin();
     expect(r).toEqual({ ok: true, tenantId: ID, origen: 'interno' });
     expect(estado.consultas).toEqual([{ tabla: 'tenant', columnas: 'id', col: 'interno', val: true, limite: 2 }]);
   });
 
-  it('sin flota ni tenant interno falla cerrado con el motivo que la pantalla muestra', async () => {
-    const r = await tenantDePresupuestoSuperadmin(undefined);
+  it('sin tenant interno falla cerrado con el motivo que la pantalla muestra', async () => {
+    const r = await tenantDePresupuestoSuperadmin();
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.motivo).toBe('sin_tenant_interno');
@@ -46,7 +40,7 @@ describe('tenantDePresupuestoSuperadmin (MX-004)', () => {
 
   it('la columna ausente (migración 0970 sin aplicar) se dice tal cual, no como falla del modelo', async () => {
     estado.resultado = { data: null, error: { code: '42703', message: 'column tenant.interno does not exist' } };
-    const r = await tenantDePresupuestoSuperadmin('');
+    const r = await tenantDePresupuestoSuperadmin();
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.motivo).toBe('migracion_pendiente');
@@ -56,14 +50,14 @@ describe('tenantDePresupuestoSuperadmin (MX-004)', () => {
 
   it('un error de lectura cualquiera falla cerrado (nunca cae en un presupuesto global)', async () => {
     estado.resultado = { data: null, error: { code: '57014', message: 'timeout' } };
-    const r = await tenantDePresupuestoSuperadmin(null);
+    const r = await tenantDePresupuestoSuperadmin();
     expect(r).toMatchObject({ ok: false, motivo: 'error_lectura' });
   });
 
   it('dos internos o un id inválido también fallan cerrado', async () => {
     estado.resultado = { data: [{ id: ID }, { id: '44444444-4444-4444-8444-444444444444' }], error: null };
-    expect(await tenantDePresupuestoSuperadmin(null)).toMatchObject({ ok: false, motivo: 'varios_internos' });
+    expect(await tenantDePresupuestoSuperadmin()).toMatchObject({ ok: false, motivo: 'varios_internos' });
     estado.resultado = { data: [{ id: 'no-es-uuid' }], error: null };
-    expect(await tenantDePresupuestoSuperadmin(null)).toMatchObject({ ok: false, motivo: 'error_lectura' });
+    expect(await tenantDePresupuestoSuperadmin()).toMatchObject({ ok: false, motivo: 'error_lectura' });
   });
 });

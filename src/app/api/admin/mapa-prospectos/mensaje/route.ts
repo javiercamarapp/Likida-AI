@@ -9,9 +9,9 @@ import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 //
 // Modelo: rol `marketing` de models.ts (hoy gpt-5.6-luna, ~$0.10/M — stack
 // 100% USA, regla legal). El costo por mensaje es ~décimas de centavo y se
-// registra en el ledger transaccional de presupuesto de la flota elegida
-// por la sesión superadmin o, sin flota, del tenant interno de Likida (MX-004,
-// migración 0970). Sin ninguno no se llama al proveedor: el control de gasto
+// registra en el ledger transaccional de presupuesto del tenant interno de
+// Likida (MX-004, migración 0970), NUNCA el de la flota que el superadmin tenga
+// elegida por cookie. Sin tenant interno no se llama al proveedor: el control de gasto
 // falla cerrado y nunca cae en un presupuesto global implícito.
 // ═══════════════════════════════════════════════════════════════════════════
 import { NextResponse } from 'next/server';
@@ -67,9 +67,9 @@ export async function POST(req: Request) {
 
   const { error, sesion } = await sesionSuperadmin();
   if (error) return error;
-  // MX-004: el superadmin global no tiene flota (tenantId null por diseño). El presupuesto sale de la flota elegida si la hay y,
-  // si no, del tenant interno de Likida (migración 0970); sin ninguno falla cerrado y la pantalla muestra el motivo exacto.
-  const presupuesto = await tenantDePresupuestoSuperadmin(sesion.tenantId);
+  // MX-004: el gasto de IA del Cerebro de prospectos es de Likida. Sale SIEMPRE del tenant interno (migración 0970), no de la flota
+  // que el superadmin tenga elegida por cookie; sin tenant interno falla cerrado y la pantalla muestra el motivo exacto.
+  const presupuesto = await tenantDePresupuestoSuperadmin();
   if (!presupuesto.ok) {
     logger.warn('cerebro.presupuesto_sin_tenant', { userId: sesion.userId, motivo: presupuesto.motivo });
     return NextResponse.json({
