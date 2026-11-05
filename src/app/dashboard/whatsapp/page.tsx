@@ -10,6 +10,7 @@ import { getOperadoresConteos } from '@/lib/likida/administracion';
 import { DIAS_AVISO } from '@/lib/likida/vigencias';
 import { hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { VistaArranqueWhatsApp, type DatosArranque } from './vista';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'WhatsApp del operador' };
@@ -58,9 +59,12 @@ export default async function PaginaArranqueWhatsApp({
     if (conteos) operadores = { activos: conteos.activos, pendientesDeInvitar: await contarPendientes(tenantId, { tipo: 'flota' }) };
   } catch { operadores = null; }
 
+  // Falla cerrado: si el perfil no se puede leer, `perfilDeTenant` asume el restrictivo y la guía no promete el flujo clásico.
+  const perfil = await perfilDeTenant(tenantId);
+
   return (
     <VistaArranqueWhatsApp
-      datos={{ numero, nombreFlota, enlace, qrSvg: qr, operadores }}
+      datos={{ numero, nombreFlota, enlace, qrSvg: qr, operadores, perfil }}
       hrefOperadores={`/dashboard/operadores${sufijo}`}
       hrefAyuda={`/dashboard/soporte${sufijo}`}
     />
