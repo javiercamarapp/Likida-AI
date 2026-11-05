@@ -3,7 +3,9 @@
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, escribirMarcaSesion, leerMarcaSesion, onboardingDesactivado, type AlmacenEstado, type EstadoOnboarding } from '@/app/ui-v2/onboarding/estado';
+import { cosmeticoDeServidor, fusionarParches, hayEstadoLocal, parcheDeImportacion } from '@/app/ui-v2/onboarding/estado_remoto';
 import { pistaDeRuta } from '@/app/ui-v2/onboarding/pista';
+import type { EstadoGuia, EventoGuiaEntrante, InvitacionGuia, ParcheEstadoGuia } from '@/lib/likida/guia/tipos';
 import { pantallasDeRecorrido } from '@/app/ui-v2/onboarding/recorrido-util';
 import type { Modo, PistaContextual as PistaDatos } from '@/app/ui-v2/onboarding/tipos';
 import { CapaTour } from './capa';
@@ -12,7 +14,7 @@ import { crearAnfitrionDom } from './anfitrion-dom';
 import { InvitacionRecorrido } from './invitacion';
 import { PistaContextual } from './pista';
 import { leerGuardado, type EstadoGuardado } from './persistencia';
-import type { Anfitrion, Recorrido } from './tipos';
+import type { Anfitrion, EventoControlador, LecturaSenal, Recorrido } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TourProvider: el layout lo monta UNA vez dentro del chrome v2.
@@ -26,6 +28,10 @@ import type { Anfitrion, Recorrido } from './tipos';
 
 /** Lo que cuenta como «algo abierto encima»: diálogo nativo, menú/popover, avisos (alert y status de la región de avisos). */
 const SUPERPUESTO = 'dialog[open], .rv-pop, .pointer-events-none.fixed [role="alert"] > *, .pointer-events-none.fixed [role="status"] > *';
+
+/** Lo que el proveedor necesita de la respuesta de `guardarEstadoGuia` (las demás llaves se ignoran). */
+export interface RespuestaGuardarRemoto { ok: boolean; version?: number; actual?: { version: number } }
+const SIN_DATO: LecturaSenal = { estado: 'sin_dato' };
 
 export interface ProgresoTour { estado: EstadoGuardado; indice: number; total: number }
 export interface MetaRecorrido { id: string; titulo: string }
@@ -51,7 +57,7 @@ interface Api {
 }
 const Contexto = createContext<Api | null>(null);
 
-export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPermitidas, principal = null, asistente = null, pistas = {}, invitacion = false, children }: {
+export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPermitidas, principal = null, asistente = null, pistas = {}, invitacion = false, estadoServidor = null, guardarRemoto, leerSenales, registrarEventos, children }: {
   recorridos: Recorrido[];
   ambito: string;
   soloLectura?: boolean;
@@ -61,6 +67,14 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
   pistas?: Record<string, PistaDatos>;
   /** Interruptor de servidor (`ONBOARDING_INVITACION=1`): sin él la invitación de primer ingreso NO se muestra; Guía, recorridos y pistas siguen. */
   invitacion?: boolean;
+  /** Estado de la guía leído en el servidor para ESTA persona y flota (`version` 0 = todavía sin fila). `null` = no disponible: la guía sigue con su respaldo local. */
+  estadoServidor?: { estado: EstadoGuia; version: number } | null;
+  /** Escribe el estado en servidor (server action `guardarEstadoGuia`). Con «ver como» no se usa. */
+  guardarRemoto?: (parche: ParcheEstadoGuia, versionEsperada: number) => Promise<RespuestaGuardarRemoto>;
+  /** Lee señales medidas por el servidor (server action `leerSenalesDeLaGuia`). Sin ella los pasos «hacer» quedan en «sin dato». */
+  leerSenales?: (ids: string[]) => Promise<Record<string, LecturaSenal>>;
+  /** Envía eventos de aprendizaje sin PII (server action `registrarEventosGuia`; el servidor decide si los guarda). */
+  registrarEventos?: (lote: EventoGuiaEntrante[]) => Promise<unknown>;
   children: ReactNode;
 }) {
   const router = useRouter();
@@ -85,13 +99,75 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
 
   const avisar = useCallback(() => { for (const o of [...oyentes.current]) o(); }, []);
 
+  const leerSenalesRef = useRef(leerSenales);
+  useEffect(() => { leerSenalesRef.current = leerSenales; }, [leerSenales]);
+
   const host = useCallback((): Anfitrion => {
     hostRef.current ??= crearAnfitrionDom({
       navegar: (r) => routerRef.current.push(r),
       rutaActual: () => rutaRef.current ?? window.location.pathname,
+      leerSenal: async (id) => {
+        try { return (await leerSenalesRef.current?.([id]))?.[id] ?? SIN_DATO; } catch { return SIN_DATO; }
+      },
     });
     return hostRef.current;
   }, []);
+
+  // ── Estado en servidor (SPEC 2.4): escritura con debounce de 800 ms, control optimista por versión (un reintento) y sin bloquear nunca.
+  // `localStorage` queda como caché y para el caso sin red. Con «ver como» o sin estado de servidor no se escribe nada.
+  const versionRef = useRef(estadoServidor?.version ?? 0);
+  const ofertasRef = useRef(estadoServidor?.estado.ofertas ?? 0);
+  const invitacionRef = useRef<InvitacionGuia>(estadoServidor?.estado.invitacion ?? 'pendiente');
+  const pendienteRef = useRef<ParcheEstadoGuia | null>(null);
+  const temporizadorRef = useRef<number | null>(null);
+  const inicios = useRef(new Map<string, string>());
+  const remotoActivo = !soloLectura && Boolean(guardarRemoto) && estadoServidor !== null;
+
+  const enviarRemoto = useCallback(async () => {
+    const parche = pendienteRef.current;
+    pendienteRef.current = null;
+    temporizadorRef.current = null;
+    if (!parche || !guardarRemoto) return;
+    try {
+      for (let intento = 0; intento < 2; intento++) {
+        const r = await guardarRemoto(parche, versionRef.current);
+        if (r.ok) { if (typeof r.version === 'number') versionRef.current = r.version; return; }
+        if (r.actual) versionRef.current = r.actual.version; else return; // solo el choque de versión se reintenta
+      }
+    } catch { /* sin red: el avance sigue en este navegador */ }
+  }, [guardarRemoto]);
+
+  const encolarRemoto = useCallback((parche: ParcheEstadoGuia) => {
+    if (!remotoActivo) return;
+    pendienteRef.current = pendienteRef.current ? fusionarParches(pendienteRef.current, parche) : parche;
+    if (temporizadorRef.current !== null) window.clearTimeout(temporizadorRef.current);
+    temporizadorRef.current = window.setTimeout(() => { void enviarRemoto(); }, 800);
+  }, [remotoActivo, enviarRemoto]);
+
+  // Al ocultar la pestaña se envía lo pendiente al instante (mejor esfuerzo).
+  useEffect(() => {
+    const alOcultar = () => { if (document.visibilityState === 'hidden' && pendienteRef.current) { if (temporizadorRef.current !== null) window.clearTimeout(temporizadorRef.current); void enviarRemoto(); } };
+    document.addEventListener('visibilitychange', alOcultar);
+    return () => document.removeEventListener('visibilitychange', alOcultar);
+  }, [enviarRemoto]);
+
+  // Eventos de aprendizaje: lotes de hasta 20 cada 4 s. El servidor decide si los guarda (interruptor de código) y los limita.
+  const eventosRef = useRef<EventoGuiaEntrante[]>([]);
+  const temporizadorEventos = useRef<number | null>(null);
+  const encolarEvento = useCallback((e: EventoGuiaEntrante) => {
+    if (soloLectura || !registrarEventos) return;
+    eventosRef.current.push(e);
+    if (temporizadorEventos.current !== null) return;
+    temporizadorEventos.current = window.setTimeout(() => {
+      temporizadorEventos.current = null;
+      const lote = eventosRef.current.splice(0, 20);
+      if (lote.length > 0) void registrarEventos(lote).catch(() => undefined);
+    }, 4000);
+  }, [soloLectura, registrarEventos]);
+
+  // Lo que el arranque necesita sin volver a leer el estado cada vez que el servidor reenvía el mismo objeto.
+  const arranque = useRef({ estadoServidor, soloLectura, encolarRemoto });
+  useEffect(() => { arranque.current = { estadoServidor, soloLectura, encolarRemoto }; }, [estadoServidor, soloLectura, encolarRemoto]);
 
   // Estado: se lee ya montado (localStorage no existe en el servidor).
   useEffect(() => {
@@ -99,15 +175,29 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     setApagado(onboardingDesactivado(alm));
     almacenEstado.current = crearEstadoLocal(ambito, alm);
     const leido = almacenEstado.current.leer();
+    const { estadoServidor: srv, soloLectura: lectura, encolarRemoto: encolar } = arranque.current;
+    if (srv && srv.version > 0) {
+      // El servidor manda; el navegador solo guarda una copia para la próxima vez sin red.
+      setEst(almacenEstado.current.guardar(cosmeticoDeServidor(srv.estado)));
+      return;
+    }
+    if (srv && hayEstadoLocal(leido) && !lectura) encolar(parcheDeImportacion(leido)); // migración única desde local
     setEst(!leido.visto && leerMarcaSesion() ? { ...leido, visto: true } : leido);
   }, [ambito, host]);
 
-  const guardarEst = useCallback((parche: Partial<EstadoOnboarding>) => {
+  const guardarEst = useCallback((parche: Partial<EstadoOnboarding>, remoto?: ParcheEstadoGuia) => {
     if (soloLectura || !almacenEstado.current) return;
     setEst(almacenEstado.current.guardar(parche));
     if (parche.visto || parche.descartado) escribirMarcaSesion();
-  }, [soloLectura]);
+    if (remoto) {
+      if (remoto.invitacion) invitacionRef.current = remoto.invitacion;
+      if (typeof remoto.ofertas === 'number') ofertasRef.current = remoto.ofertas;
+      encolarRemoto(remoto);
+    }
+  }, [soloLectura, encolarRemoto]);
 
+  // El avance de cada recorrido (paso, hechos, omitidos, confirmados) se guarda en servidor; el evento anónimo va aparte.
+  const alEventoRef = useRef<(id: string, e: EventoControlador) => void>(() => undefined);
   const controlador = useCallback((id: string): ControladorTour | null => {
     const previo = controladores.current.get(id);
     if (previo) return previo;
@@ -117,10 +207,24 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
       ambito,
       soloLectura,
       puedeVerRuta: rutasPermitidas ? (ruta) => rutasPermitidas.some((p) => rutaCoincide(ruta, p)) : undefined,
+      alEvento: (e) => alEventoRef.current(id, e),
     });
     controladores.current.set(id, c);
     return c;
   }, [recorridos, host, ambito, soloLectura, rutasPermitidas]);
+
+  useEffect(() => {
+    alEventoRef.current = (id, e) => {
+      const c = controladores.current.get(id);
+      const r = recorridos.find((x) => x.id === id);
+      if (!c || !r) return;
+      const inicio = inicios.current.get(id) ?? estadoServidor?.estado.recorridos[id]?.inicio ?? new Date().toISOString();
+      inicios.current.set(id, inicio);
+      const { hechos, confirmados, omitidos } = c.resultados();
+      encolarRemoto({ recorridos: { [id]: { paso: e.pasoId, hechos, omitidos, confirmados, inicio, fin: null, version: r.version } } });
+      encolarEvento({ tipo: e.tipo, recorrido: id, pasoId: e.pasoId, canal: window.innerWidth < 768 ? 'movil' : 'escritorio', reducido: c.instantanea().reducirMovimiento });
+    };
+  }, [recorridos, encolarRemoto, encolarEvento, estadoServidor]);
 
   const abrir = useCallback((id: string, como: 'iniciar' | 'reanudar' | 'reiniciar' | { pantalla: string }) => {
     const c = controlador(id);
@@ -133,17 +237,30 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     else if (como === 'iniciar') c.iniciar();
     else c.irAPantalla(como.pantalla);
     // Elegir cualquier recorrido cuenta como «ya se le ofreció»: la invitación no vuelve.
-    guardarEst({ visto: true, ...(id.endsWith('.corto') ? { modo: 'corto' as Modo } : id.endsWith('.completo') ? { modo: 'completo' as Modo } : {}) });
-  }, [controlador, guardarEst]);
+    const modo: Modo | undefined = id.endsWith('.corto') ? 'corto' : id.endsWith('.completo') ? 'completo' : undefined;
+    guardarEst({ visto: true, ...(modo ? { modo } : {}) }, { ...(invitacionRef.current === 'descartada' ? {} : { invitacion: 'vista' as const }), ...(modo ? { modo } : {}) });
+    encolarEvento({ tipo: como === 'reanudar' ? 'retomar' : como === 'reiniciar' ? 'repeticion' : 'guia_inicio', recorrido: id, canal: window.innerWidth < 768 ? 'movil' : 'escritorio', reducido: c.instantanea().reducirMovimiento });
+  }, [controlador, guardarEst, encolarEvento]);
 
   // Al cerrarse el recorrido activo, se suelta la capa y se avisa a los lanzadores.
   useEffect(() => {
     if (!activo) return;
     return activo.suscribir(() => {
-      if (activo.instantanea().fase !== 'activo') { activoRef.current = null; setActivo(null); }
+      const fase = activo.instantanea().fase;
+      if (fase !== 'activo') {
+        if (fase === 'terminado') {
+          const id = activo.recorrido.id;
+          const { hechos, confirmados, omitidos } = activo.resultados();
+          const inicio = inicios.current.get(id) ?? new Date().toISOString();
+          const ultimo = activo.recorrido.pasos[activo.recorrido.pasos.length - 1]?.id ?? '';
+          encolarRemoto({ recorridos: { [id]: { paso: ultimo, hechos, omitidos, confirmados, inicio, fin: new Date().toISOString(), version: activo.recorrido.version } } });
+          encolarEvento({ tipo: 'guia_terminada', recorrido: id, canal: window.innerWidth < 768 ? 'movil' : 'escritorio', reducido: activo.instantanea().reducirMovimiento });
+        }
+        activoRef.current = null; setActivo(null);
+      }
       avisar();
     });
-  }, [activo, avisar]);
+  }, [activo, avisar, encolarRemoto, encolarEvento]);
 
   useEffect(() => () => { for (const c of controladores.current.values()) c.destruir(); controladores.current.clear(); }, []);
 
@@ -165,7 +282,7 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     agentes,
     principal,
     asistente,
-    noVolver: () => guardarEst({ descartado: true, visto: true }),
+    noVolver: () => guardarEst({ descartado: true, visto: true }, { invitacion: 'descartada' }),
     nuevo: est !== null && !est.visto && !est.descartado && !soloLectura,
     suscribirProgreso: (fn) => { oyentes.current.add(fn); return () => { oyentes.current.delete(fn); }; },
     claveProgreso: (id) => {
@@ -184,8 +301,13 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     if (!pendiente) return;
     const medir = () => setSuperpuesto(Boolean(document.querySelector(SUPERPUESTO)) || document.documentElement.hasAttribute('data-overlay-abierto'));
     medir();
-    const id = window.setInterval(medir, 400);
-    return () => window.clearInterval(id);
+    // Sin intervalo perpetuo (SPEC 2.5): se mide solo cuando el documento cambia, una vez por cuadro.
+    let agendado = false;
+    const agendar = () => { if (agendado) return; agendado = true; requestAnimationFrame(() => { agendado = false; medir(); }); };
+    const observador = new MutationObserver(agendar);
+    observador.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['open', 'class'] });
+    observador.observe(document.documentElement, { attributes: true, attributeFilter: ['data-overlay-abierto'] });
+    return () => observador.disconnect();
   }, [pendiente, pathname]);
 
   const opciones = { soloLectura, desactivado: apagado };
@@ -196,7 +318,7 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
   const rutaInvitacion = useRef<string | null>(null);
   useEffect(() => {
     if (invitar && rutaInvitacion.current === null) rutaInvitacion.current = pathname ?? '';
-    else if (rutaInvitacion.current !== null && (pathname ?? '') !== rutaInvitacion.current) { rutaInvitacion.current = null; guardarEst({ visto: true }); }
+    else if (rutaInvitacion.current !== null && (pathname ?? '') !== rutaInvitacion.current) { rutaInvitacion.current = null; guardarEst({ visto: true }, { invitacion: 'ahora_no', ofertas: ofertasRef.current + 1 }); }
   }, [invitar, pathname, guardarEst]);
   const principalCompleto = recorridos.find((r) => r.id === `${principal}.completo`);
 
@@ -213,15 +335,17 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
               titulo={(principalCompleto?.titulo ?? 'Recorrido').replace(/^Recorrido: /, '')}
               asistente={asistente?.nombre ?? null}
               onElegir={(modo) => abrir(`${principal}.${modo}`, 'reiniciar')}
-              onAhoraNo={() => guardarEst({ visto: true })}
-              onNoVolver={() => guardarEst({ descartado: true, visto: true })}
+              onAhoraNo={() => guardarEst({ visto: true }, { invitacion: 'ahora_no', ofertas: ofertasRef.current + 1 })}
+              onNoVolver={() => guardarEst({ descartado: true, visto: true }, { invitacion: 'descartada' })}
             />
           ) : null}
           {mostrarPista && pista ? (
             <PistaContextual
               titulo={pista.titulo} texto={pista.texto} ilu={pista.ilu} desde={pista.desde}
-              onEntendido={() => guardarEst({ pistas: [...(est?.pistas ?? []), pista.ruta] })}
-              onNoVolver={() => guardarEst({ descartado: true })}
+              onEntendido={() => { const pistasNuevas = [...(est?.pistas ?? []), pista.ruta]; guardarEst({ pistas: pistasNuevas }, { pistas: pistasNuevas }); }}
+              // «No volver» de UNA pista descarta esa pista (en todos los equipos), no la invitación al recorrido: la invitación se apaga solo
+              // con su propio «No volver a mostrar» o desde el menú de la Guía.
+              onNoVolver={() => { const pistasNuevas = [...(est?.pistas ?? []), pista.ruta]; guardarEst({ pistas: pistasNuevas }, { pistas: pistasNuevas }); }}
             />
           ) : null}
         </div>

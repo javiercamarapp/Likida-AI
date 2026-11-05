@@ -1,5 +1,6 @@
 import { borrarGuardado, guardar, leerGuardado } from './persistencia';
-import type { Anfitrion, ElementoTour, Fase, Instantanea, PasoTour, Recorrido } from './tipos';
+import { AVANCE_TRAS_HECHO_MS, resolverBase, resolverSondeo, retardoDeSondeo, TIEMPO_LIMITE_POR_OMISION_MS } from './espera';
+import type { Anfitrion, Avance, ElementoTour, EstadoEspera, EventoControlador, Fase, Instantanea, LecturaSenal, PasoTour, Recorrido } from './tipos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONTROLADOR DEL RECORRIDO. Máquina de estados sin React ni DOM.
@@ -21,6 +22,8 @@ export interface OpcionesControlador {
   puedeVerRuta?: (ruta: string) => boolean;
   /** Cuánto esperar a que aparezca el ancla tras llegar (ms). */
   esperaAnclaMs?: number;
+  /** Aviso de cada hecho de aprendizaje (visto, hecho por señal, confirmado, ya hecho, omitido, sin dato). Sin PII: solo el id del paso. */
+  alEvento?: (e: EventoControlador) => void;
 }
 
 export const rutaCoincide = (actual: string, objetivo: string): boolean => {
@@ -43,6 +46,13 @@ export class ControladorTour {
   private snap: Instantanea;
   /** Se invalida en cada cambio de paso: las esperas viejas no hacen nada. */
   private gen = 0;
+  // ── pasos `hacer`/`practicar` ──
+  private espera: EstadoEspera | null = null;
+  private base: LecturaSenal | null = null;
+  private intento = 0;
+  private readonly hechos = new Set<string>();
+  private readonly confirmados = new Set<string>();
+  private readonly omitidos = new Set<string>();
 
   constructor(
     recorrido: Recorrido,
@@ -80,6 +90,7 @@ export class ControladorTour {
   }
   siguiente(): void {
     if (this.fase !== 'activo') return;
+    this.cerrarPasoActual();
     if (this.indice >= this.pasos.length - 1) { this.terminar(); return; }
     this.ir(this.indice + 1);
   }
@@ -101,6 +112,7 @@ export class ControladorTour {
   }
   terminar(): void {
     if (this.fase !== 'activo') return;
+    this.cerrarPasoActual();
     this.persistir('terminado'); // antes de cerrar: ver el comentario en saltar()
     this.cerrar('terminado');
   }
@@ -108,6 +120,25 @@ export class ControladorTour {
   reiniciar(): void {
     if (!this.op.soloLectura) borrarGuardado(this.host.almacen, this.op.ambito, this.recorrido.id);
     this.iniciar(0);
+  }
+  /** «Ya lo hice»: solo cuando el paso lo permite (tiempo agotado, señal ilegible o acción que no se puede medir). Queda `confirmado por ti`, nunca medido. */
+  declarar(): void {
+    if (this.fase !== 'activo' || !this.espera || !this.espera.declarable) return;
+    if (this.espera.estado === 'hecho' || this.espera.estado === 'ya_hecho') return;
+    this.marcarHecho('confirmado');
+  }
+  /** Relee la señal una vez (al volver el foco a la pestaña o tras una acción de la persona sobre el ancla). No crea otro temporizador. */
+  sondear(): void {
+    const paso = this.pasos[this.indice];
+    if (this.fase !== 'activo' || !this.espera || !paso?.deteccion || paso.deteccion.via !== 'senal') return;
+    if (this.espera.estado !== 'esperando' && !(this.espera.estado === 'sin_dato' && this.base)) return;
+    const g = this.gen;
+    this.armarLimite(g, paso);
+    void this.leerYResolver(g, paso.deteccion.senal, paso.deteccion.modo);
+  }
+  /** Lo que la persona logró en este recorrido (para guardar el avance en servidor). */
+  resultados() {
+    return { hechos: [...this.hechos], confirmados: [...this.confirmados], omitidos: [...this.omitidos] };
   }
   destruir(): void {
     this.gen++;
@@ -149,8 +180,12 @@ export class ControladorTour {
     this.elemento = null;
     this.anclaLista = null;
     this.navegando = false;
+    this.espera = null;
+    this.base = null;
+    this.intento = 0;
     this.persistir('en_curso');
     const paso = this.pasos[i];
+    this.emitir('paso_visto', paso.id);
     if (paso.ruta && !rutaCoincide(this.host.rutaActual(), paso.ruta)) {
       this.navegando = true;
       this.notificar();
@@ -201,7 +236,16 @@ export class ControladorTour {
   }
 
   private armarAvance(paso: PasoTour, el: ElementoTour | null): void {
-    const av = paso.avance;
+    this.armarEspera(paso);
+    // Una acción de la persona sobre el elemento hace que se relea la señal (el servidor tarda un instante en reflejarla).
+    if (el && paso.deteccion?.via === 'senal') {
+      const g0 = this.gen;
+      for (const ev of ['click', 'change', 'submit'] as const) {
+        this.limpiezas.push(el.escuchar(ev, () => { this.limpiezas.push(this.host.programar(() => { if (g0 === this.gen) this.sondear(); }, 1200)); }));
+      }
+    }
+    const dom = paso.deteccion?.via === 'dom' ? paso.deteccion : null;
+    const av: Avance | undefined = paso.avance ?? (dom ? { tipo: 'accion', evento: dom.evento, ancla: dom.ancla } : undefined);
     if (!av || av.tipo !== 'accion') return;
     const objetivo = av.ancla ? this.host.buscarAncla(av.ancla) : el;
     if (!objetivo) return;
@@ -212,7 +256,104 @@ export class ControladorTour {
     }));
   }
 
+  // ── espera de una acción real (pasos `hacer`/`practicar`) ─────────────────
+  private armarEspera(paso: PasoTour): void {
+    if ((paso.tipo !== 'hacer' && paso.tipo !== 'practicar') || !paso.deteccion || this.espera) return;
+    const d = paso.deteccion;
+    if (d.via === 'declarada') { this.espera = { estado: 'esperando', evidencia: null, declarable: true }; return; }
+    if (d.via !== 'senal') return;
+    if (!this.host.leerSenal) {
+      this.espera = { estado: 'sin_dato', evidencia: null, declarable: true };
+      this.emitir('paso_sin_dato', paso.id);
+      return;
+    }
+    this.espera = { estado: 'leyendo', evidencia: null, declarable: false };
+    const g = this.gen;
+    void this.leer(d.senal).then((base) => {
+      if (g !== this.gen || this.espera?.estado !== 'leyendo') return;
+      this.base = base;
+      const r = resolverBase(base);
+      if (r === 'ya_hecho') {
+        this.espera = { estado: 'ya_hecho', evidencia: 'medido', declarable: false };
+        this.hechos.add(paso.id);
+        this.emitir('paso_ya_hecho', paso.id);
+      } else if (r === 'sin_dato') {
+        this.espera = { estado: 'sin_dato', evidencia: null, declarable: true };
+        this.emitir('paso_sin_dato', paso.id);
+      } else {
+        this.espera = { estado: 'esperando', evidencia: null, declarable: false };
+        this.armarLimite(g, paso);
+        this.programarSondeo(g, d.senal, d.modo);
+      }
+      this.notificar();
+    });
+  }
+
+  private async leer(id: string): Promise<LecturaSenal> {
+    try { return (await this.host.leerSenal?.(id)) ?? { estado: 'sin_dato' }; } catch { return { estado: 'sin_dato' }; }
+  }
+
+  /** Una lectura y su resolución. Devuelve true si el paso quedó hecho. */
+  private async leerYResolver(g: number, senal: string, modo: 'cambia' | 'existe'): Promise<boolean> {
+    const ahora = await this.leer(senal);
+    if (g !== this.gen || !this.base || !this.espera) return false;
+    if (this.espera.estado !== 'esperando' && this.espera.estado !== 'sin_dato') return false;
+    if (resolverSondeo(this.base, ahora, modo) !== 'hecho') return false;
+    this.marcarHecho('medido');
+    return true;
+  }
+
+  /** Sondeo a 3, 6 y 10 s y luego cada 15 s; termina solo cuando el paso deja de esperar (nunca un intervalo perpetuo). */
+  private programarSondeo(g: number, senal: string, modo: 'cambia' | 'existe'): void {
+    this.limpiezas.push(this.host.programar(() => {
+      if (g !== this.gen || this.espera?.estado !== 'esperando') return;
+      void this.leerYResolver(g, senal, modo).then((hecho) => {
+        if (!hecho && g === this.gen && this.espera?.estado === 'esperando') this.programarSondeo(g, senal, modo);
+      });
+    }, retardoDeSondeo(this.intento++)));
+  }
+
+  private cancelarLimite: (() => void) | null = null;
+  private armarLimite(g: number, paso: PasoTour): void {
+    this.cancelarLimite?.();
+    const cancelar = this.host.programar(() => {
+      if (g !== this.gen || this.espera?.estado !== 'esperando') return;
+      this.espera = { estado: 'sin_dato', evidencia: null, declarable: true };
+      this.emitir('paso_sin_dato', paso.id);
+      this.notificar();
+    }, paso.tiempoLimiteMs ?? TIEMPO_LIMITE_POR_OMISION_MS);
+    this.cancelarLimite = cancelar;
+    this.limpiezas.push(cancelar);
+  }
+
+  private marcarHecho(evidencia: 'medido' | 'confirmado'): void {
+    const paso = this.pasos[this.indice];
+    if (!paso) return;
+    this.espera = { estado: 'hecho', evidencia, declarable: false };
+    (evidencia === 'medido' ? this.hechos : this.confirmados).add(paso.id);
+    this.emitir(evidencia === 'medido' ? 'paso_hecho_senal' : 'paso_hecho_confirmado', paso.id);
+    this.notificar();
+    const g = this.gen;
+    // La etiqueta pasa a «Hecho» y el paso avanza solo tras un instante.
+    this.limpiezas.push(this.host.programar(() => { if (g === this.gen) this.siguiente(); }, AVANCE_TRAS_HECHO_MS));
+  }
+
+  /** Quien avanza antes de que se cumpla un paso `hacer` lo deja `omitido`: no cuenta como aprendido. */
+  private cerrarPasoActual(): void {
+    const paso = this.pasos[this.indice];
+    if (!paso || (paso.tipo !== 'hacer' && paso.tipo !== 'practicar') || !this.espera) return;
+    if (this.espera.estado === 'hecho' || this.espera.estado === 'ya_hecho') return;
+    this.omitidos.add(paso.id);
+    this.emitir('paso_omitido', paso.id);
+  }
+
+  private emitir(tipo: EventoControlador['tipo'], pasoId: string): void {
+    if (this.op.soloLectura) return;
+    try { this.op.alEvento?.({ tipo, pasoId, ms: null }); } catch { /* la medición nunca rompe el recorrido */ }
+  }
+
   private soltar(): void {
+    this.cancelarLimite = null;
     for (const l of this.limpiezas.splice(0)) l();
   }
 
@@ -221,6 +362,7 @@ export class ControladorTour {
     this.soltar();
     this.elemento = null;
     this.navegando = false;
+    this.espera = null;
     this.fase = fase;
     this.notificar();
   }
@@ -251,6 +393,7 @@ export class ControladorTour {
       reducirMovimiento: this.host.reducirMovimiento(),
       esPrimero: this.indice === 0,
       esUltimo: this.indice === this.pasos.length - 1,
+      ...(this.fase === 'activo' && this.espera ? { espera: this.espera } : {}),
     };
   }
 

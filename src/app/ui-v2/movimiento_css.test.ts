@@ -63,7 +63,8 @@ describe.each(ARCHIVOS)('movimiento en %s', (archivo) => {
         // Excepciones EXPLÍCITAS del recorrido (onboarding.css), con las duraciones exactas de la guía de Vexa por decisión de Javier: el
         // pulso del anillo (1.6 s, solo 2 iteraciones, no infinito), la flecha de la etiqueta (0.9 s, 2 iteraciones), el trazo de las
         // ilustraciones (0.9 s, una vez) y el aviso «Ahora: …» (1.9 s, una vez). Todas son opacidad/transform y todas viven bajo no-preference.
-        if (/rv-onb-(pulso|flecha|traza|banner)/.test(decl) && [1600, 900, 1900].includes(ms)) continue;
+        // El cursor del gesto (OB-1) dura 1,4 s y se repite 2 veces (menos de 3 s en total: no necesita pausa, WCAG 2.2.2).
+        if (/rv-onb-(pulso|flecha|traza|banner|gesto)/.test(decl) && [1600, 900, 1900, 1400].includes(ms)) continue;
         expect(ms, m[0]).toBeLessThanOrEqual(700);
       }
     }

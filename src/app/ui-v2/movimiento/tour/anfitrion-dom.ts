@@ -1,5 +1,5 @@
 import { ANCLAS_DERIVADAS } from '@/app/ui-v2/onboarding/anclas';
-import type { Anfitrion, ElementoTour, EventoAccion, Rect } from './tipos';
+import type { Anfitrion, ElementoTour, EventoAccion, LecturaSenal, Rect } from './tipos';
 
 // Anfitrión real: toca document/window. Es el único archivo del motor que lo hace.
 
@@ -53,7 +53,7 @@ function almacenLocal() {
   }
 }
 
-export function crearAnfitrionDom(extra: { navegar: (ruta: string) => void; rutaActual: () => string }): Anfitrion {
+export function crearAnfitrionDom(extra: { navegar: (ruta: string) => void; rutaActual: () => string; leerSenal?: (id: string) => Promise<LecturaSenal> }): Anfitrion {
   return {
     buscarAncla(nombre) {
       // `data-onboarding` es el atributo canónico; `data-tour` (menú y anclas anteriores) sigue valiendo; las derivadas son estructura común.
@@ -74,5 +74,6 @@ export function crearAnfitrionDom(extra: { navegar: (ruta: string) => void; ruta
       return () => window.clearTimeout(id);
     },
     almacen: almacenLocal(),
+    leerSenal: extra.leerSenal,
   };
 }
