@@ -1,5 +1,6 @@
 // Reglas de un hilo abierto: motivos, nivel y umbral aplicado.
 import type { ItemAbierto } from './hilos';
+import { minutosEnHorario } from './horario';
 import type { ConfigSinAtender, MotivoSinAtender, NivelAlerta } from './tipos';
 
 export interface Evaluacion {
@@ -29,7 +30,9 @@ export function hayInsistencia(items: readonly ItemAbierto[], n: number, ventana
 export function evaluarHilo(items: readonly ItemAbierto[], critico: boolean, config: ConfigSinAtender, fotoMs: number): Evaluacion | null {
   if (items.length === 0) return null;
   const desdeMs = items[0].ms;
-  const antiguedadMin = Math.max(0, Math.floor((fotoMs - desdeMs) / 60_000));
+  const antiguedadMin = config.horarioAtencion
+    ? minutosEnHorario(desdeMs, fotoMs, config.horarioAtencion, config.zona, config.festivos)
+    : Math.max(0, Math.floor((fotoMs - desdeMs) / 60_000));
   const urgencia = items.some((i) => i.urgente);
   const clave = items.some((i) => i.clave);
   const preguntas = items.filter((i) => i.pregunta).length;

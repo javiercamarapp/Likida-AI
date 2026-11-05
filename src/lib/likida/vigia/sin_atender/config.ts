@@ -1,6 +1,6 @@
 // Configuración del motor «sin atender»: defaults, acotado (nunca lanza) y validación estricta (mensaje llano).
 import { ZONA_POR_OMISION, NOCHE_POR_OMISION, esFechaValida } from '../turnos';
-import type { ConfigSinAtender } from './tipos';
+import type { ConfigSinAtender, HorarioAtencion } from './tipos';
 
 export const MAX_PALABRAS = 30;
 export const MAX_LARGO_PALABRA = 40;
@@ -50,6 +50,15 @@ function listaTexto(v: unknown, max: number, largo: number): string[] {
   return salida;
 }
 
+const horarioValido = (h: unknown): h is HorarioAtencion => {
+  if (!h || typeof h !== 'object' || Array.isArray(h)) return false;
+  const x = h as { desdeHora?: unknown; hastaHora?: unknown; diasHabiles?: unknown };
+  if (!horaValida(x.desdeHora) || !esEntero(x.hastaHora) || x.hastaHora < 1 || x.hastaHora > 24 || x.hastaHora <= x.desdeHora) return false;
+  if (x.diasHabiles === undefined) return true;
+  return Array.isArray(x.diasHabiles) && x.diasHabiles.length > 0 && x.diasHabiles.every((d) => esEntero(d) && d >= 0 && d <= 6);
+};
+const MENSAJE_HORARIO = 'El horario de atención necesita hora de apertura (0-23), hora de cierre mayor (1-24) y días hábiles de 0 a 6.';
+
 /** Completa y acota (nunca lanza). `avisos` lista lo que se corrigió, en texto llano. */
 export function normalizarConfigSinAtender(entrada: Partial<ConfigSinAtender> | null | undefined): { config: ConfigSinAtender; avisos: string[] } {
   const avisos: string[] = [];
@@ -97,6 +106,14 @@ export function normalizarConfigSinAtender(entrada: Partial<ConfigSinAtender> | 
     else avisos.push('La ventana de noche no es válida; se usó de 20:00 a 07:00.');
   }
 
+  let horarioAtencion: HorarioAtencion | undefined;
+  if (e.horarioAtencion !== undefined && e.horarioAtencion !== null) {
+    if (horarioValido(e.horarioAtencion)) {
+      const h = e.horarioAtencion;
+      horarioAtencion = h.diasHabiles ? { desdeHora: h.desdeHora, hastaHora: h.hastaHora, diasHabiles: [...new Set(h.diasHabiles)].sort((a, b) => a - b) } : { desdeHora: h.desdeHora, hastaHora: h.hastaHora };
+    } else avisos.push('El horario de atención no es válido; se ignoró y la espera cuenta minutos corridos.');
+  }
+
   const hashes = Array.isArray(e.equipoHashes)
     ? [...new Set((e.equipoHashes as unknown[]).filter((h): h is string => typeof h === 'string').map((h) => h.trim().toLowerCase()).filter((h) => /^[0-9a-f]{6,64}$/.test(h)))].slice(0, MAX_EQUIPO_HASHES)
     : [];
@@ -112,6 +129,7 @@ export function normalizarConfigSinAtender(entrada: Partial<ConfigSinAtender> | 
       umbralMin, umbralCriticoMin, umbralUrgenteMin, insistenciaMin, insistenciaVentanaMin,
       palabrasUrgentes, palabrasClave, equipoHashes: hashes, ventanaRespuestaMin, zona, festivos, noche,
       maxAlertasPorChat, vistaPreviaMax,
+      ...(horarioAtencion ? { horarioAtencion } : {}),
     },
     avisos,
   };
@@ -158,6 +176,7 @@ export function validarConfigSinAtender(entrada: unknown): { ok: true; valor: Co
     const n = e.noche as { desdeHora?: unknown; hastaHora?: unknown } | null;
     if (!n || typeof n !== 'object' || !horaValida(n.desdeHora) || !horaValida(n.hastaHora)) return { ok: false, error: 'La ventana de noche necesita horas enteras de 0 a 23.' };
   }
+  if (e.horarioAtencion !== undefined && e.horarioAtencion !== null && !horarioValido(e.horarioAtencion)) return { ok: false, error: MENSAJE_HORARIO };
   const { config } = normalizarConfigSinAtender(e as Partial<ConfigSinAtender>);
   return { ok: true, valor: config };
 }

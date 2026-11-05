@@ -34,14 +34,27 @@ function claveDe(chatId: string, desdeMs: number, nivel: string): string {
 /** Un chat sin ningún mensaje del equipo no permite saber quién atiende: el motor no alerta (falla cerrado). */
 export function chatSinEquipoConocido(chat: ChatEntrada, config: ConfigSinAtender): boolean {
   const { mensajes } = prepararMensajes(chat.mensajes, config.equipoHashes);
-  return !mensajes.some((m) => m.rol === 'equipo');
+  return mensajes.length > 0 && !mensajes.some((m) => m.rol === 'equipo');
+}
+
+/** Desglose por chat/grupo a partir de las alertas (helper puro; no cambia el contrato). Ordenado por la más antigua. */
+export function resumenPorChat(alertas: readonly AlertaSinAtender[]): { chatId: string; chatNombre: string; alertas: number; altas: number; masAntiguaMin: number }[] {
+  const mapa = new Map<string, { chatId: string; chatNombre: string; alertas: number; altas: number; masAntiguaMin: number }>();
+  for (const a of alertas) {
+    const f = mapa.get(a.chatId) ?? { chatId: a.chatId, chatNombre: a.chatNombre, alertas: 0, altas: 0, masAntiguaMin: 0 };
+    f.alertas += 1;
+    if (a.nivel === 'alta') f.altas += 1;
+    f.masAntiguaMin = Math.max(f.masAntiguaMin, a.antiguedadMin);
+    mapa.set(a.chatId, f);
+  }
+  return [...mapa.values()].sort((x, y) => y.masAntiguaMin - x.masAntiguaMin || (x.chatId < y.chatId ? -1 : x.chatId > y.chatId ? 1 : 0));
 }
 
 /** Un chat. `ahoraMs` es el reloj; `chat.fotoMs` (si viene) manda para medir antigüedad. */
-export function detectarSinAtenderChat(chat: ChatEntrada, config: ConfigSinAtender, ahoraMs: number): { alertas: AlertaSinAtender[]; ignorados: number; mensajesAnalizados: number; descartados: number } {
+export function detectarSinAtenderChat(chat: ChatEntrada, config: ConfigSinAtender, ahoraMs: number): { alertas: AlertaSinAtender[]; ignorados: number; mensajesAnalizados: number; descartados: number; sinEquipo: boolean } {
   const { mensajes, descartados } = prepararMensajes(chat.mensajes, config.equipoHashes);
   const seg = segmentarHilos(mensajes, config.ventanaRespuestaMin, { urgentes: compilarPalabras(config.palabrasUrgentes), clave: compilarPalabras(config.palabrasClave) });
-  const base = { ignorados: seg.ignorados, mensajesAnalizados: mensajes.length, descartados };
+  const base = { ignorados: seg.ignorados, mensajesAnalizados: mensajes.length, descartados, sinEquipo: mensajes.length > 0 && !seg.hayEquipo };
   if (!seg.hayEquipo) return { alertas: [], ...base };
 
   const fotoMs = reloj(typeof chat.fotoMs === 'number' && Number.isFinite(chat.fotoMs) ? chat.fotoMs : ahoraMs);
@@ -79,10 +92,12 @@ export function detectarSinAtender(chats: readonly ChatEntrada[], config: Config
   const ahora = reloj(ahoraMs);
   const todas: AlertaSinAtender[] = [];
   let ignorados = 0; let analizados = 0; let descartados = 0; let conAlerta = 0;
+  const sinEquipoIds: string[] = [];
   for (const chat of chats) {
     const r = detectarSinAtenderChat(chat, config, ahora);
     ignorados += r.ignorados; analizados += r.mensajesAnalizados; descartados += r.descartados;
     if (r.alertas.length) conAlerta += 1;
+    if (r.sinEquipo) sinEquipoIds.push(chat.chatId);
     todas.push(...r.alertas);
   }
   const alertas = ordenarAlertas(todas);
@@ -99,6 +114,7 @@ export function detectarSinAtender(chats: readonly ChatEntrada[], config: Config
     resumen: {
       chatsRevisados: chats.length, chatsConAlerta: conAlerta, alertas: alertas.length, altas, normales: alertas.length - altas,
       ignorados, mensajesAnalizados: analizados, descartados, masAntiguaMin: masAntigua, porTurno,
+      chatsSinEquipo: sinEquipoIds.length, chatsSinEquipoIds: [...sinEquipoIds].sort(),
     },
   };
 }

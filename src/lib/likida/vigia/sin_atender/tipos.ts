@@ -34,6 +34,19 @@ export const MOTIVOS_SIN_ATENDER = ['espera_sobre_umbral', 'insistencia', 'urgen
 export type MotivoSinAtender = (typeof MOTIVOS_SIN_ATENDER)[number];
 export type NivelAlerta = 'alta' | 'normal';
 
+/**
+ * Ampliación aditiva y opcional del contrato (ronda 5, tras revisión). Horario en que el equipo atiende, en hora local de `zona`.
+ * Los minutos de espera fuera de horario, en días no hábiles o en `festivos` no cuentan.
+ */
+export interface HorarioAtencion {
+  /** Hora de apertura, entero 0-23. */
+  desdeHora: number;
+  /** Hora de cierre, entero 1-24, mayor que desdeHora (no cruza la medianoche). */
+  hastaHora: number;
+  /** Días hábiles, 0 = domingo ... 6 = sábado. Omitido => todos los días. */
+  diasHabiles?: readonly number[];
+}
+
 export interface ConfigSinAtender {
   /** Minutos sin respuesta para avisar (grupo normal). 1-1440. Default 30 (igual que vigia_config.slaRespuestaMin). El 5 y el 10 hablados NO son reglas fijadas. */
   umbralMin: number;
@@ -59,6 +72,8 @@ export interface ConfigSinAtender {
   festivos: readonly string[];
   /** Ventana de noche (hora local). Default { desdeHora: 20, hastaHora: 7 } (turnos.ts NOCHE_POR_OMISION). */
   noche: { desdeHora: number; hastaHora: number };
+  /** OPCIONAL. Apagado por omisión: sin él la antigüedad son minutos corridos. Con él, antiguedadMin cuenta solo minutos dentro del horario. */
+  horarioAtencion?: HorarioAtencion;
   /** Tope de alertas por chat. Default 3. */
   maxAlertasPorChat: number;
   /** Largo maximo de vistaPrevia. 0 (default) => vistaPrevia siempre null. La pantalla pasa 160; el correo NUNCA la usa. */
@@ -77,7 +92,7 @@ export interface AlertaSinAtender {
   ultimoEn: string;
   /** ISO de la foto contra la que se midio. */
   fotoEn: string;
-  /** Minutos enteros entre desde y la foto (>= 0). */
+  /** Minutos enteros entre desde y la foto (>= 0). Con horarioAtencion, solo los que caen dentro del horario. */
   antiguedadMin: number;
   /** Umbral que se aplico a este hilo. */
   umbralAplicadoMin: number;
@@ -105,6 +120,14 @@ export interface ResumenSinAtender {
   /** Mensajes descartados por fecha ilegible o duplicados exactos. */
   descartados: number;
   masAntiguaMin: number | null;
+  /**
+   * OPCIONAL (lo llena detectarSinAtender). Chats con mensajes pero sin ningún mensaje del equipo: no se puede saber quién
+   * atiende, el motor no alerta y la pantalla/correo deben decir «sin equipo identificado», no «sin pendientes».
+   */
+  chatsSinEquipo?: number;
+  /** OPCIONAL. Ids (opacos, sin texto) de esos chats, ordenados. */
+  chatsSinEquipoIds?: readonly string[];
+  /** El desglose por cliente/grupo lo calcula quien consume: agrupar `alertas` por `chatId` (ver resumenPorChat). */
   porTurno: Record<TurnoActual, number>;
 }
 
