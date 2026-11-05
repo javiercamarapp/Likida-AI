@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+/* eslint-disable security/detect-non-literal-fs-filename -- recorre el código fuente del propio repo; las rutas salen de readdirSync, no de una entrada externa */
 import { rutaPermitidaEnPerfil, RUTAS_STAND_BY_PERFIL_CINCO_AGENTES, claveRutaPerfil } from '@/lib/auth/visibilidad';
 
 // ═══════════════════════════════════════════════════════════════════════════

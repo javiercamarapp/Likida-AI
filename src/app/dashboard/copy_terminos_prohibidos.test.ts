@@ -3,6 +3,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import ts from 'typescript';
 
+/* eslint-disable security/detect-non-literal-fs-filename -- recorre el código fuente del propio repo; las rutas salen de readdirSync, no de una entrada externa */
+
 // ═══════════════════════════════════════════════════════════════════════════
 // PT-08 (F2): test de copy de términos prohibidos en las pantallas del cliente.
 //
@@ -22,7 +24,9 @@ const RAIZ = process.cwd();
 const CARPETAS = ['src/app/dashboard', 'src/app/ui-v2'];
 
 export const TERMINOS_PROHIBIDOS: ReadonlyArray<readonly [RegExp, string]> = [
-  [/\bmigraci[oó]n(es)?\s+(n[uú]m(ero)?\.?\s*)?0\d{3}\b/i, 'migración por número'],
+  [/\bmigraci[oó]n\s+0\d{3}\b/i, 'migración por número'],
+  [/\bmigraciones\s+0\d{3}\b/i, 'migraciones por número'],
+  [/\bmigraci[oó]n\s+n[uú]m\S*\s+0\d{3}\b/i, 'migración número NNNN'],
   [/\bmig\.\s*0\d{3}\b/i, 'migración por número (mig. NNNN)'],
   [/falta(n)? aplicar/i, 'falta aplicar (migración pendiente en pantalla)'],
   [/\bvariables? de entorno\b/i, 'variable de entorno'],
