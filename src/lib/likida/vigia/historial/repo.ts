@@ -249,3 +249,61 @@ export async function retirarRespuestaRapida(tenantId: string, id: string): Prom
   if (r.error) throw new Error(`vigia.retirar_respuesta_rapida: ${r.error.message}`);
   return ((r.data ?? []) as Fila[]).length > 0;
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RONDA 5 — «SIN ATENDER»: los chats importados, UNO POR GRUPO, listos para el detector.
+// A diferencia de `leerMensajesHistorial` (que mezcla grupos), aquí cada mensaje conserva su grupo: la respuesta del equipo en un
+// chat no puede tapar el pendiente de otro. Filtra por `tenant_id`, acotada, `null` = la base aún no tiene las tablas.
+// El texto NO se registra en ningún log.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Mensajes recientes que se leen por grupo (suficiente para ver el final del chat; el resto es historia). */
+/** El tope REAL de filas por petición del proyecto es `max_rows = 1000` (supabase/config.toml): pedir más se recortaría en silencio. */
+export const MENSAJES_POR_GRUPO_SIN_ATENDER = 1000;
+/** Grupos que se revisan en una pasada; los demás se cuentan en `gruposOmitidos`. */
+export const MAX_GRUPOS_SIN_ATENDER = 50;
+
+export interface ChatLeido {
+  chat: ChatEntradaSinAtender;
+  clienteId: string;
+}
+export type ChatEntradaSinAtender = import('../sin_atender/tipos').ChatEntrada;
+
+export async function leerChatsParaSinAtender(tenantId: string): Promise<{ chats: ChatLeido[]; gruposOmitidos: number } | null> {
+  const db = supabaseAdmin();
+  const g = await acotada(db.from('vigia_grupo').select('id, cliente_id, nombre, critico').eq('tenant_id', tenantId).order('nombre').order('id').limit(500), 'vigia.sin_atender_grupos');
+  if (esSinTabla(g.error)) return null;
+  if (g.error) throw new Error(`vigia.sin_atender_grupos: ${g.error.message}`);
+  const todos = (g.data ?? []) as Fila[];
+  const grupos = todos.slice(0, MAX_GRUPOS_SIN_ATENDER);
+  if (grupos.length === 0) return { chats: [], gruposOmitidos: 0 };
+  const chats: ChatLeido[] = [];
+  const LOTE_GRUPOS = 5;
+  for (let i = 0; i < grupos.length; i += LOTE_GRUPOS) {
+    const lote = grupos.slice(i, i + LOTE_GRUPOS);
+    const leidos = await Promise.all(lote.map(async (x) => {
+      // La subida más reciente de ESTE grupo (una fila): con todas las subidas de la flota en una sola petición, el tope de filas
+      // (max_rows = 1000) dejaba grupos sin su «foto» y la antigüedad se medía contra el último mensaje.
+      const sub = await acotada(db.from('vigia_historial_import').select('created_at').eq('tenant_id', tenantId).eq('grupo_id', String(x.id))
+        .order('created_at', { ascending: false }).order('id').limit(1), 'vigia.sin_atender_imports');
+      if (esSinTabla(sub.error)) return null;
+      if (sub.error) throw new Error(`vigia.sin_atender_imports: ${sub.error.message}`);
+      const r = await acotada(db.from('vigia_historial_mensaje').select('enviado_en, rol, autor_hash, texto').eq('tenant_id', tenantId).eq('grupo_id', String(x.id))
+        .order('enviado_en', { ascending: false }).order('id', { ascending: false }).limit(MENSAJES_POR_GRUPO_SIN_ATENDER), 'vigia.sin_atender_mensajes');
+      if (esSinTabla(r.error)) return null;
+      if (r.error) throw new Error(`vigia.sin_atender_mensajes: ${r.error.message}`);
+      return { x, filas: (r.data ?? []) as Fila[], subida: Date.parse(String(((sub.data ?? []) as Fila[])[0]?.created_at ?? '')) };
+    }));
+    for (const l of leidos) {
+      if (l === null) return null;
+      const mensajes = l.filas.map((f) => ({ enviadoEn: String(f.enviado_en), rol: f.rol === 'equipo' ? ('equipo' as const) : ('cliente' as const), autorHash: String(f.autor_hash), texto: String(f.texto) })).reverse();
+      const ultimoMensaje = mensajes.reduce((m, f) => Math.max(m, Date.parse(f.enviadoEn) || 0), 0);
+      const foto = Math.max(ultimoMensaje, Number.isFinite(l.subida) ? l.subida : 0);
+      chats.push({
+        clienteId: String(l.x.cliente_id),
+        chat: { chatId: String(l.x.id), nombre: String(l.x.nombre), critico: l.x.critico === true, mensajes, ...(foto > 0 ? { fotoMs: foto } : {}) },
+      });
+    }
+  }
+  return { chats, gruposOmitidos: todos.length - grupos.length };
+}

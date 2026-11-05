@@ -7,6 +7,7 @@ import { leerExportWhatsapp, MAX_MENSAJES_IMPORTACION, salDeFlota, type MensajeH
 import { esZip, textoDeZip } from './zip_lector';
 import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
 import { validarRespuestaRapida } from '../respuestas_rapidas';
+import { resumenSinAtenderDeGrupo, type ResumenGrupoSinAtender } from '../sin_atender_aviso/acciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DE LA PANTALLA «GRUPOS E HISTÓRICO» DEL VIGÍA — con puertos para probarlas.
@@ -16,7 +17,7 @@ import { validarRespuestaRapida } from '../respuestas_rapidas';
 // sesión, nunca del formulario. La bitácora lleva ids y conteos: nunca nombres de personas, teléfonos ni texto del chat.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type ResultadoGrupos = { ok: true; mensaje: string } | { ok: false; error: string };
+export type ResultadoGrupos = { ok: true; mensaje: string; sinAtender?: ResumenGrupoSinAtender } | { ok: false; error: string };
 
 export interface ContextoGrupos { tenantId: string; rol: string; usuarioId: string | null; email: string | null }
 
@@ -27,9 +28,12 @@ export interface DepsGrupos {
   guardarImportacion: typeof guardarImportacion;
   borrarGrupo: typeof borrarGrupo;
   bitacora: typeof anotarBitacora;
+  /** Opcional: revisa lo sin atender del grupo recién subido. Sin él, la importación responde como antes. */
+  sinAtenderDeGrupo?: (tenantId: string, grupoId: string, equipo: readonly string[]) => Promise<ResumenGrupoSinAtender | null>;
 }
 export const depsGruposReales: DepsGrupos = {
   crearGrupo, marcarCritico: marcarGrupoCritico, grupoDeFlota, guardarImportacion, borrarGrupo, bitacora: anotarBitacora,
+  sinAtenderDeGrupo: (t, g, e) => resumenSinAtenderDeGrupo(t, g, e),
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -149,7 +153,9 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
     const notas = [`${lectura.mensajes.length} mensajes de ${lectura.autores} personas`];
     if (lectura.descartados > 0) notas.push(`${lectura.descartados} líneas de sistema o multimedia omitidas`);
     if (lectura.fechasInvalidas > 0) notas.push(`${lectura.fechasInvalidas} con fecha ilegible`);
-    return { ok: true, mensaje: `Histórico guardado en «${grupo.nombre}»: ${notas.join(' · ')}. Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; pero el texto de los mensajes se conserva tal cual, así que puede incluir nombres, placas o licencias que se hayan dicho en el chat (se purga a los 180 días).` };
+    const sinAtender = d.sinAtenderDeGrupo ? await d.sinAtenderDeGrupo(ctx.tenantId, grupoId, equipo).catch(() => null) : null;
+    const revision = sinAtender === null ? '' : sinAtender.alertas === 0 ? ' Revisión de sin atender: este grupo no tiene conversaciones pendientes de respuesta con las reglas de tu flota (se midió contra la hora de la exportación).' : ` Revisión de sin atender: ${sinAtender.alertas} ${sinAtender.alertas === 1 ? 'conversación' : 'conversaciones'} de este grupo sin atender (${sinAtender.altas} de prioridad alta). Ábrelas en «Conversaciones sin atender».`;
+    return { ok: true, ...(sinAtender ? { sinAtender } : {}), mensaje: `Histórico guardado en «${grupo.nombre}»: ${notas.join(' · ')}. Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; pero el texto de los mensajes se conserva tal cual, así que puede incluir nombres, placas o licencias que se hayan dicho en el chat (se purga a los 180 días).${revision}` };
   } catch (e) {
     logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'guardar el histórico') };

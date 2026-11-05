@@ -1369,3 +1369,43 @@ export async function suprimirContactoVigia(tenantId: string, contactoId: string
   return { mensajes: num(d.mensajes), conversaciones: num(d.conversaciones) };
 }
 
+
+// ── Ronda 5: a quién le llega el resumen de «sin atender» (solo lectura, solo correo) ────────────────
+
+export interface DestinatariosResumenCrudos {
+  /** Contactos activos de servicio al cliente con correo; `clienteId` null = para todos los clientes. */
+  servicio: Array<{ nombre: string; correo: string; clienteId: string | null }>;
+  /** Directores de nivel 1 y 2 con correo, CON su turno (el recorte por turno lo hace quien arma el envío). */
+  nivel1: Array<{ nombre: string; correo: string; turno: ReturnType<typeof aTurnoDirector> }>;
+  nivel2: Array<{ nombre: string; correo: string; turno: ReturnType<typeof aTurnoDirector> }>;
+  zona: string;
+  festivos: string[];
+}
+
+/**
+ * Lo necesario para decidir a quién va el resumen por correo: la lista de servicio al cliente, los directores con su turno, la zona
+ * horaria y los festivos de la flota. NO recorta por turno (el llamador pasa el momento del envío). Sin las tablas (base sin migrar)
+ * las listas salen vacías: sin destinatarios no se envía nada. Todo filtra por `tenant_id`.
+ */
+export async function leerDestinatariosResumen(tenantId: string): Promise<DestinatariosResumenCrudos> {
+  const db = supabaseAdmin();
+  const consulta = (columnas: string) => acotada(db.from('vigia_director').select(columnas).eq('tenant_id', tenantId).in('nivel', [1, 2])
+    .order('created_at').order('id').limit(40), 'vigia.destinatarios_resumen_directores');
+  let d = await consulta('id, nivel, nombre, correo, turno');
+  if (d.error && sinColumna(d.error)) d = await consulta('id, nivel, nombre, correo');
+  if (d.error && !sinMigrar(d.error)) throw new Error(`vigia.destinatarios_resumen_directores: ${d.error.message}`);
+  const s = await acotada(db.from('vigia_servicio_cliente').select('id, nombre, correo, cliente_id').eq('tenant_id', tenantId).eq('activo', true)
+    .not('correo', 'is', null).order('created_at').order('id').limit(MAX_SERVICIO_CLIENTE), 'vigia.destinatarios_resumen_servicio');
+  if (s.error && !sinMigrar(s.error)) throw new Error(`vigia.destinatarios_resumen_servicio: ${s.error.message}`);
+  const { zona, festivos } = await contextoDeTurnos(tenantId);
+  const filas = (d.error ? [] : (d.data ?? [])) as unknown as Fila[];
+  const aPersona = (f: Fila) => ({ nombre: String(f.nombre ?? ''), correo: String(f.correo ?? ''), turno: aTurnoDirector(f.turno) });
+  const conCorreo = filas.filter((f) => str(f.correo));
+  return {
+    servicio: ((s.error ? [] : (s.data ?? [])) as Fila[]).filter((f) => str(f.correo))
+      .map((f) => ({ nombre: String(f.nombre ?? ''), correo: String(f.correo), clienteId: str(f.cliente_id) })),
+    nivel1: conCorreo.filter((f) => num(f.nivel) === 1).map(aPersona),
+    nivel2: conCorreo.filter((f) => num(f.nivel) === 2).map(aPersona),
+    zona, festivos,
+  };
+}
