@@ -23,13 +23,22 @@ export function offboardingActivo(env: Record<string, string | undefined> = proc
 
 type Cliente = ReturnType<typeof supabaseAdmin>;
 
+// Columnas de orden estable por tabla: todas tienen `id` salvo estas dos, cuya llave primaria es otra (0936 y 0937).
+export const ORDEN_POR_TABLA: Record<string, string[]> = {
+  peaje_regla_flota: ['tenant_id'],
+  peaje_aviso_enviado: ['tenant_id', 'tipo', 'clave'],
+};
+export function columnasOrden(tabla: string): string[] { return ORDEN_POR_TABLA[tabla] ?? ['id']; }
+
 async function leerTabla(sb: Cliente, tabla: string, tenantId: string): Promise<LecturaTabla> {
   const filas: Array<Record<string, unknown>> = [];
   for (let desde = 0; desde < TOPE_FILAS_POR_TABLA; desde += PAGINA) {
     const q = tabla === 'tenant'
       ? sb.from(tabla).select('*').eq('id', tenantId)
       : sb.from(tabla).select('*').eq('tenant_id', tenantId);
-    const { data, error } = await q.order('id', { ascending: true }).range(desde, desde + PAGINA - 1);
+    let ordenada = q;
+    for (const c of columnasOrden(tabla)) ordenada = ordenada.order(c, { ascending: true });
+    const { data, error } = await ordenada.range(desde, desde + PAGINA - 1);
     if (error) return { tabla, error: error.message };
     const pag = (data ?? []) as Array<Record<string, unknown>>;
     filas.push(...pag);

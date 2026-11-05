@@ -13,8 +13,9 @@ export const dynamic = 'force-dynamic';
 // EXPORTACIÓN DE UNA FLOTA (offboarding) — F9, CT-DAT-16. Solo superadmin (con su segundo factor), mismo sitio, y tras la palanca
 // `LIKIDA_OFFBOARDING_EXPORTACION=activo` (apagada por omisión; 404 mientras lo esté, para no anunciar la ruta). Devuelve el paquete
 // (archivos JSON Lines + manifiesto + huella) y deja la constancia en `tenant_exportacion` (0998). NO borra ni anonimiza nada.
-// El tope por tabla (50,000 filas) mantiene la respuesta dentro de lo que una función serverless sostiene; si una tabla lo rebasa, el
-// paquete sale incompleto y se dice, en vez de entregarse a medias en silencio.
+// El tope por tabla (50,000 filas) evita lecturas sin fin; si una tabla lo rebasa, el paquete sale incompleto y se dice, en vez de
+// entregarse a medias en silencio. OJO: la respuesta es un solo JSON y una flota mediana puede rebasar el límite de cuerpo de respuesta de
+// Vercel (4.5 MB). Antes de encender la palanca en producción hay que entregar el paquete por Storage con URL firmada o por streaming.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function POST(req: Request) {

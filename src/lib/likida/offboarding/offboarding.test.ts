@@ -72,20 +72,23 @@ describe('paquete verificable', () => {
 
 function sbFalso(opciones: { falla?: string; paginas?: number; insertError?: boolean }) {
   const insertados: unknown[] = [];
+  const ordenes: Record<string, string[]> = {};
   return {
     insertados,
+    ordenes,
     sb: {
       from: (tabla: string) => ({
         select: () => ({
           eq: () => ({
-            order: () => ({
-              range: async (desde: number) => {
+            order: function orden(col: string) {
+              (ordenes[tabla] ??= []).push(col);
+              return { order: orden, range: async (desde: number) => {
                 if (opciones.falla === tabla) return { data: null, error: { message: 'no existe' } };
                 const llenas = opciones.paginas ?? 0;
                 const n = desde / PAGINA < llenas ? PAGINA : 2;
                 return { data: Array.from({ length: n }, (_, i) => ({ id: `${tabla}-${desde + i}` })), error: null };
-              },
-            }),
+              } };
+            },
           }),
         }),
         insert: (fila: unknown) => ({
@@ -98,6 +101,13 @@ function sbFalso(opciones: { falla?: string; paginas?: number; insertError?: boo
 const ON = { LIKIDA_OFFBOARDING_EXPORTACION: 'activo' };
 
 describe('exportarFlota', () => {
+  it('ordena por la llave primaria real: peaje_regla_flota y peaje_aviso_enviado no tienen columna id', async () => {
+    const { sb, ordenes } = sbFalso({});
+    await exportarFlota(T, 'u', { sb, env: ON });
+    expect(ordenes.peaje_regla_flota).toEqual(['tenant_id']);
+    expect(ordenes.peaje_aviso_enviado).toEqual(['tenant_id', 'tipo', 'clave']);
+    expect(ordenes.viaje).toEqual(['id']);
+  });
   it('apagada por omisión', async () => {
     expect(offboardingActivo({})).toBe(false);
     const r = await exportarFlota(T, 'u', { env: {} });
