@@ -94,8 +94,8 @@ declare
     'qa_corrida', 'qa_corrida_foto', 'qa_corrida_paso', 'qa_foto',
     'qa_foto_lectura', 'regla_aviso', 'regla_disparo', 'regla_vigilancia',
     'rep_emitido', 'reporte_direccion', 'rutina_mantenimiento', 'sat_cfdi_descargado',
-    'sat_cfdi_resolucion', 'sat_descarga_config', 'sat_descarga_solicitud', 'sat_paquete_xml', 'sitio_evento',
-    'tms_ingesta', 'tms_mapeo', 'tms_sincronizacion', 'vacante',
+    'sat_cfdi_resolucion', 'sat_descarga_config', 'sat_descarga_solicitud', 'sat_paquete_xml', 'sitio_evento', 'superadmin_acceso',
+    'tenant_exportacion', 'tms_ingesta', 'tms_mapeo', 'tms_sincronizacion', 'vacante',
     'viaje_lock', 'viaje_mercancia', 'wa_conversacion', 'wa_drenado_cadena',
     'wa_meta_receipt', 'wa_outbox', 'wa_ventana_contacto',
     'bitacora_auditoria'

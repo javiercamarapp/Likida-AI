@@ -7,6 +7,7 @@ import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
 import { esRolNomina } from './roles';
 import { exigirStepUpAccion } from './stepup';
+import { registrarAccesoSuperadmin } from '@/lib/seguridad/acceso_superadmin';
 import { esExporteDeDinero, registrarExporteDinero, registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -125,6 +126,12 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
   if (esExporteDeDinero(new URL(url).pathname)) {
     const pasoMfa = await exigirStepUpAccion(s.rol, 'exporte_dinero', { tenantId, userId: s.userId });
     if (pasoMfa) return { ok: false, status: 403, motivo: pasoMfa };
+  }
+
+  // F9 (CT-ENT-01): lectura/descarga de un superadmin sobre una flota real, en la bitácora 0997 (apagada por omisión, best-effort).
+  if (s.rol === 'superadmin' && tenantId !== tenantDemo()) {
+    const ruta = new URL(url).pathname;
+    void registrarAccesoSuperadmin({ actor: s.userId, tenantId, tipo: ruta.startsWith('/api/export/') ? 'descarga' : 'lectura', ruta });
   }
 
   // CT-SEG-11: quién descargó dinero. Solo registra las rutas de exporte de dinero; autorizada la descarga, no terminada.

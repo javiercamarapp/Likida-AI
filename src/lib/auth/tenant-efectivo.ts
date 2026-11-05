@@ -28,6 +28,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { registrarPaginaNegada } from '@/lib/seguridad/registro_acceso';
+import { registrarAccesoSuperadmin } from '@/lib/seguridad/acceso_superadmin';
 import { hoyMx } from '@/lib/formato';
 import type { SessionTenant } from './session';
 
@@ -213,6 +214,7 @@ export async function resolverTenantEfectivo(
     // cliente. Ver `firmarImpersonacion` para el dedup y el porqué de que
     // un fallo del registro nunca tumbe esta página.
     await firmarImpersonacion(sesionReal.userId, t.id as string);
+    void registrarAccesoSuperadmin({ actor: sesionReal.userId, tenantId: t.id as string, tipo: 'ver_como', ruta: destino });
   }
 
   // ¿LA FLOTA ELEGIDA EN EL SELECTOR? — superadmin SIN params de preview y
@@ -234,6 +236,7 @@ export async function resolverTenantEfectivo(
     if (t) {
       tenantNombre = t.nombre as string;
       await firmarImpersonacion(sesionReal.userId, tenantId);
+      void registrarAccesoSuperadmin({ actor: sesionReal.userId, tenantId, tipo: 'ver_como', ruta: destino });
     } else if (!error) {
       // Igual que abajo: solo un "no" COMPROBADO marca la flota inexistente.
       tenantExiste = false;
