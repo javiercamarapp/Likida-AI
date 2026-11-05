@@ -176,6 +176,7 @@ describe('/admin/trust-safety — la lista de pendientes sale de la cobertura me
 
   it('el fuente de la pantalla no vuelve a afirmar cobertura que no se mide', () => {
     // Solo texto: comentarios fuera. Las frases son las que la auditoría marcó como falsas (CT-SEG-11) y sus variantes.
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee el fuente de la propia pantalla
     const codigo = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
     for (const prohibida of [/est[aá]n cableados/i, /silencio (aqu[ií] )?es bueno/i, /cobertura (total|completa)(?! ni)/i, /protegid[oa]s? contra/i, /sin riesgo/i, /todo (est[aá] )?bajo control/i]) {
       expect(codigo, String(prohibida)).not.toMatch(prohibida);
