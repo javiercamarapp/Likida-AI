@@ -9,6 +9,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { dominioBuzon } from '@/lib/correo/buzon';
 import { direccionCp, generarTokenCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { validarConfigExport } from '@/lib/likida/carta_porte_docs/exportacion';
+import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
+import { estadoConexionTms } from '@/lib/likida/carta_porte_docs/tms_puerto';
 import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
 import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
@@ -87,9 +89,11 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const dominio = dominioBuzon();
     const linaje = await repo.linajeDeDocumentos(tenantId, lista.filas.map((d) => d.id));
     const envios = await repo.estadoEnvioPorDocumento(tenantId, lista.filas.filter((d) => d.estado === 'aprobado').map((d) => d.id));
+    // Solo se consulta al proveedor si hay envíos que rotular; una vez por carga de la bandeja.
+    const sinConexion = Object.keys(envios).length > 0 ? estadoConexionTms(await salidaDeFlota(tenantId)) === 'por_conectar' : false;
     const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
-      filas: lista.filas, total: lista.total, envios, ...asignacion,
+      filas: lista.filas, total: lista.total, envios, ...(sinConexion ? { sinConexion: true } : {}), ...asignacion,
       linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones, ventana.total), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,

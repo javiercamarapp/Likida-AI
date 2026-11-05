@@ -39,6 +39,14 @@ export const FILTROS_ENVIO: ReadonlyArray<{ clave: FiltroEnvio; rotulo: string }
   { clave: 'todos', rotulo: 'Todos' }, { clave: 'sin_envio', rotulo: 'Sin envío' }, { clave: 'en_curso', rotulo: 'En curso' },
   { clave: 'enviado', rotulo: 'Enviados' }, { clave: 'rechazado_tms', rotulo: 'Rechazados por el TMS' }, { clave: 'subido_a_mano', rotulo: 'Subidos a mano' },
 ];
+/** Con la flota sin conector, «en curso» sería falso: nada sale solo. La bandeja lo rotula «Por conectar». */
+export const ROTULO_POR_CONECTAR = 'Por conectar';
+export function filtrosEnvio(sinConexion: boolean | undefined): ReadonlyArray<{ clave: FiltroEnvio; rotulo: string }> {
+  return sinConexion ? FILTROS_ENVIO.map((f) => (f.clave === 'en_curso' ? { ...f, rotulo: ROTULO_POR_CONECTAR } : f)) : FILTROS_ENVIO;
+}
+export function rotuloEnvio(e: EstadoEnvioTms, sinConexion: boolean | undefined): string {
+  return sinConexion && ROTULO_ENVIO[e] === 'En curso' ? ROTULO_POR_CONECTAR : ROTULO_ENVIO[e];
+}
 export function filtroEnvioDe(crudo: string | undefined): FiltroEnvio {
   return FILTROS_ENVIO.some((f) => f.clave === crudo) ? (crudo as FiltroEnvio) : 'todos';
 }
@@ -60,6 +68,8 @@ export interface DatosDocumentos {
   filas: DocumentoFila[];
   /** Estado del envío al TMS por id de documento aprobado (sin clave = sin envío). */
   envios?: Record<string, EstadoEnvioTms>;
+  /** La flota no tiene conector del sistema del cliente: los envíos «en curso» están por conectar (se suben a mano). */
+  sinConexion?: boolean;
   /** Por id de documento. Vacío/ausente = nada se partió (o la base aún no tiene la 0670). */
   linaje?: Record<string, LinajeVista>;
   /**
@@ -223,7 +233,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
             ]} />
         )}
         <FiltroOpciones etiqueta="Envío al TMS" valor={filtroEnvio} porDefecto="todos" ariaLabel="Filtrar por estado de envío al TMS"
-          opciones={FILTROS_ENVIO.map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
+          opciones={filtrosEnvio(datos.sinConexion).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
       </BarraFiltros>
       {orden.length === 0 ? (
         <EstadoVacio icono={<FileInput width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -275,9 +285,9 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
                         <span style={{ color: 'var(--bad)' }}>{d.ultimoError ?? 'No se pudo leer.'}</span>
                       ) : d.estado === 'aprobado' ? (
                         perfilRestringido ? (
-                          <span style={{ color: 'var(--muted)' }}>Envío al TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span>
+                          <span style={{ color: 'var(--muted)' }}>Envío al TMS: {datos.envios?.[d.id] ? rotuloEnvio(datos.envios[d.id], datos.sinConexion) : 'sin envío'}</span>
                         ) : (
-                          <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}<span style={{ color: 'var(--muted)' }}> · TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span></span>
+                          <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}<span style={{ color: 'var(--muted)' }}> · TMS: {datos.envios?.[d.id] ? rotuloEnvio(datos.envios[d.id], datos.sinConexion) : 'sin envío'}</span></span>
                         )
                       ) : d.estado === 'rechazado' ? (
                         <span style={{ color: 'var(--muted)' }}>{d.rechazoMotivo}</span>
