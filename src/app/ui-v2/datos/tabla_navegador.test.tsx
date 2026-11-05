@@ -29,10 +29,18 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { TablaTeclado } from '${join(RAIZ, 'datos/tabla-teclado').replace(/\\/g, '/')}';
 const html = ${JSON.stringify(ESTATICO)};
+// CAUSA RAÍZ de la prueba de flechas inestable: la tabla (HTML) aparece en el commit, pero los escuchadores de teclado de
+// TablaTeclado se instalan en un useEffect PASIVO, que corre después. Bajo carga la prueba pulsaba ↓ entre las dos cosas y el
+// foco no se movía. Los efectos de hermanos corren EN ORDEN de árbol: este marcador va DESPUÉS de TablaTeclado, así que cuando
+// existe [data-teclado-listo] los escuchadores ya están puestos. La prueba espera esa condición, no un tiempo.
+function Listo() { React.useEffect(() => { document.body.setAttribute('data-teclado-listo', '1'); }, []); return null; }
 createRoot(document.getElementById('raiz')!).render(
-  <TablaTeclado seleccion={{ singular: 'seleccionada', plural: 'seleccionadas' }}>
-    <div dangerouslySetInnerHTML={{ __html: html }} />
-  </TablaTeclado>
+  <>
+    <TablaTeclado seleccion={{ singular: 'seleccionada', plural: 'seleccionadas' }}>
+      <div dangerouslySetInnerHTML={{ __html: html }} />
+    </TablaTeclado>
+    <Listo />
+  </>
 );
 `;
 let browser: Browser | null = null;
@@ -58,6 +66,7 @@ async function abrir(ancho = 1440, extra: { reducedMotion?: 'reduce' | 'no-prefe
   await p.setContent(`<!doctype html><html><head><style>${css()}</style></head><body><div data-ui="v2" style="padding:16px"><form id="masiva"></form><div id="raiz"></div></div></body></html>`);
   await p.addScriptTag({ content: bundle });
   await p.waitForSelector('table.rv-tl');
+  await p.waitForSelector('body[data-teclado-listo]', { state: 'attached' }); // escuchadores de teclado ya instalados (ver ENTRADA)
   return p;
 }
 

@@ -5,7 +5,10 @@ import { build } from 'vite';
 import { type Browser, type Page } from 'playwright';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-vi.setConfig({ testTimeout: 30_000 }); // Chromium bajo una Mac cargada
+// Chromium bajo una Mac cargada: con load average > 50 (varios carriles de agentes a la vez) arrancar Chromium y atender cada paso de
+// Playwright tarda varias veces lo normal. Los pasos de Playwright ya esperan por condición (waitForSelector/waitForFunction); lo que se
+// amplía es solo el TOPE de pared de Vitest (30 s → 90 s), no la espera de ninguna aserción. No se salta ni se acorta nada.
+vi.setConfig({ testTimeout: 90_000, hookTimeout: 240_000 });
 import { lanzarNavegador, SIN_NAVEGADOR } from '../navegador_prueba';
 
 // COMPORTAMIENTO REAL (Chromium) de las piezas comunes de L7: teclado, aria, foco y estilos calculados. Monta React de verdad.
@@ -76,7 +79,7 @@ beforeAll(async () => {
     bundle = salida.output.find((o) => o.type === 'chunk')!.code!;
   } finally { rmSync(entrada, { force: true }); }
   browser = await lanzarNavegador();
-}, 90_000);
+}, 240_000); // build de Vite + lanzar Chromium; mismo motivo que testTimeout arriba
 afterAll(async () => { await browser?.close(); });
 
 async function abrir(ancho = 1280, extra: { forcedColors?: 'active' } = {}, urlReal = false): Promise<Page> {

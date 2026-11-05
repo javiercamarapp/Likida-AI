@@ -29,21 +29,37 @@ describe('pendientesDeHistorial: igual que la definición literal', () => {
   });
 });
 
+/**
+ * Tiempo de CPU del proceso (user+system) que consume `fn`, en ms. Causa raíz de la inestabilidad: la prueba medía el reloj de pared
+ * (`Date.now()`), así que con la Mac cargada (load average > 50 con otros carriles corriendo) el planificador le quitaba el
+ * procesador y el mismo código pasaba de ~2 s a 20-70 s sin que el algoritmo cambiara. El tiempo de CPU no cuenta esas esperas;
+ * un O(n²) de verdad (60 000 mensajes ≈ 1.8·10⁹ comparaciones) sigue gastando CPU de sobra. Cada archivo corre en su propio
+ * proceso (pool de forks), así que la cifra es de esta prueba. Se toma el mínimo de las corridas para descartar un GC aislado.
+ */
+const cpuMs = (veces: number, fn: () => void): number => {
+  let mejor = Infinity;
+  for (let i = 0; i < veces; i++) {
+    const antes = process.cpuUsage();
+    fn();
+    const d = process.cpuUsage(antes);
+    mejor = Math.min(mejor, (d.user + d.system) / 1000);
+  }
+  return mejor;
+};
+
 describe('escala: decenas de miles de mensajes', () => {
   const grande: EntradaPendientes[] = Array.from({ length: 60_000 }, (_, i) => msg(i, 'cliente', `¿Dónde va el viaje ${i}?`));
 
   it('pendientesDeHistorial no es cuadrático (nadie del equipo contesta)', () => {
-    const t0 = Date.now();
-    const r = pendientesDeHistorial(grande);
-    expect(r.pendientes.length).toBe(60_000);
-    expect(Date.now() - t0).toBeLessThan(4_000);
-  }, 15_000);
+    let n = 0;
+    expect(cpuMs(2, () => { n = pendientesDeHistorial(grande).pendientes.length; })).toBeLessThan(4_000);
+    expect(n).toBe(60_000);
+  }, 180_000); // el tope de Vitest es de PARED y sí sufre la carga: holgado a propósito; el umbral real es el de CPU
 
   it('analizarHistorial no es cuadrático (preguntas casi todas distintas y nadie del equipo contesta)', () => {
     const distintas: EntradaPendientes[] = Array.from({ length: 40_000 }, (_, i) => msg(i, 'cliente', `¿Cuándo llega la unidad ${i} con carga de producto${i} a bodega${i}?`));
-    const t0 = Date.now();
-    const rep = analizarHistorial(distintas);
-    expect(rep.tiempos.sinRespuesta).toBeGreaterThan(0);
-    expect(Date.now() - t0).toBeLessThan(15_000);
-  }, 30_000);
+    let sinRespuesta = 0;
+    expect(cpuMs(1, () => { sinRespuesta = analizarHistorial(distintas).tiempos.sinRespuesta; })).toBeLessThan(15_000);
+    expect(sinRespuesta).toBeGreaterThan(0);
+  }, 300_000); // ídem
 });
