@@ -77,3 +77,29 @@ En este orden, parando primero lo que lee:
 - No usa cuentas personales.
 - No se prueba contra producción primero.
 - No publica credenciales ni respuestas crudas en bitácoras: los errores son frases propias.
+
+## 7. Contrato del adaptador (F4: listo para conectar; todo SUPUESTO)
+
+Estado: **ninguna parte de este contrato está confirmada por el cliente.** Existe para que, el día que llegue su especificación, conectar sea corregir un archivo y no escribir código. El modo API viene **apagado**.
+
+**Un solo archivo de contrato:** `src/lib/likida/conectores/tms/contrato.supuesto.json` (login y token, detección de sesión caída, paginación por recurso, fecha de corte, modos api/archivos/push, texto) más los mapeos JSON que nombra (`mapeos/viajes|peajes|posiciones|liquidaciones.supuesto.json`: rutas, nombres de campo y formatos de fecha). `contrato.ts` lo valida (falla cerrado con el motivo) y arma `crearAdaptadorTms(contrato, { http, base, credenciales })`. La URL base y las credenciales NO viven en el contrato: salen del cofre por flota.
+
+**Qué cubre el adaptador (probado con dobles en `contrato.test.ts`, 0 red):**
+
+| Tema | Comportamiento |
+| --- | --- |
+| Login | un POST de login; el token vive solo en memoria; las demás peticiones son GET |
+| Sesión caída | 401, o 200 con HTML de login, o 200 con JSON «token expirado»: UN re-login (compartido) y UN reintento; si falla de nuevo, se detiene como «credencial» |
+| Paginación | por página, cursor u offset según el contrato; fusible con punto de reanudación |
+| Orden inestable | filas repetidas entre páginas se dejan una vez (clave); `huella` distingue nueva / omitida / actualizada, sin depender del orden |
+| 429 | espera `Retry-After` (tope 30 s), hasta 3 reintentos; no provoca re-login |
+| Mojibake | `Ã³` se repara a `ó` en respuestas, archivos y lotes push (solo si toda la cadena vuelve a ser UTF-8 válido) |
+| Fecha de corte | la ventana se recorta al corte; lo anterior que el origen mande de más se descarta y se cuenta; sin corte, se avisa |
+| Modo archivos | exportaciones CSV/JSON por los MISMOS mapeos y lectores (`entradasDeArchivos` + `sesionDeExportaciones`) |
+| Modo push | lote firmado (HMAC-SHA256 de `marca.cuerpo`), marca anti-repetición, llave de idempotencia, tamaño máximo, mismo mapeo y corte. Apagado y **sin endpoint publicado**: solo la lógica de recepción |
+
+**OpenAPI del contrato:** `docs/operacion/conexion-tms-openapi.json` (OpenAPI 3.1, cada operación con `x-supuesto: true`) se DERIVA del contrato con `contrato_openapi.ts`; una prueba exige que coincida. Se entrega al cliente para que lo corrija. No hay ruta HTTP: cada `route.ts` nuevo obliga a revisión en el inventario de rutas, y este documento no lo justifica.
+
+**Regenerar el OpenAPI** tras tocar el contrato o un mapeo: `TMS_OPENAPI_ACTUALIZAR=1 npx vitest run src/lib/likida/conectores/tms/contrato_openapi.test.ts` y revisar el diff.
+
+**Cuando llegue la especificación real:** corregir `contrato.supuesto.json` y los mapeos, cambiar `estado` a `CONFIRMADO` solo con evidencia, correr la suite de contrato contra el servicio de prueba y recién entonces encender el modo API (decisión de la persona responsable). Migraciones: este cambio no necesita ninguna (rango 0985-0989 sin usar).

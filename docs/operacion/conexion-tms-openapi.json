@@ -1,0 +1,780 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Contrato SUPUESTO del adaptador TMS de Likida",
+    "version": "0.1.0-supuesto",
+    "description": "Lo que Likida ASUME del sistema de transporte del cliente. NO es su especificación: cada ruta, campo, formato y límite debe confirmarse o corregirse. Nada de esto describe una conexión existente. Solo lectura (más el login). Texto en UTF-8; si llega con mojibake, Likida lo repara."
+  },
+  "servers": [
+    {
+      "url": "https://SUPUESTO-base-url-del-tms",
+      "description": "Por conectar: la dirección real viene de la credencial de la flota."
+    }
+  ],
+  "security": [
+    {
+      "sesion": []
+    }
+  ],
+  "paths": {
+    "/api/login": {
+      "post": {
+        "summary": "Login de cuenta de servicio (SUPUESTO)",
+        "description": "Cuerpo: usuario, clave. El token vuelve en «token» y se manda en «Authorization» con prefijo «Bearer ».",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "usuario": {
+                    "type": "string"
+                  },
+                  "clave": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Token."
+          },
+          "401": {
+            "description": "Credencial rechazada: Likida se detiene y alerta, no insiste."
+          }
+        },
+        "x-supuesto": true
+      }
+    },
+    "/api/viajes": {
+      "get": {
+        "summary": "viajes (SUPUESTO)",
+        "description": "Clave externa (idempotencia): despacho_ref + unidadEco + salida_en. Obligatorios: despacho_ref, unidadEco, salida_en. Solo lectura.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "tam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          }
+        ],
+        "security": [
+          {
+            "sesion": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filas. Una respuesta 200 con HTML o con un error de sesión se trata como sesión caída (un solo re-login).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "Icident": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "unidad": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Fecha Salida": {
+                                "type": "string",
+                                "description": "Fecha sin zona, formato yyyy-MM-dd HH:mm:ss, zona America/Mexico_City (SUPUESTO).",
+                                "x-supuesto": true
+                              },
+                              "Fecha Llegada": {
+                                "type": "string",
+                                "description": "Fecha sin zona, formato yyyy-MM-dd HH:mm:ss, zona America/Mexico_City (SUPUESTO).",
+                                "x-supuesto": true
+                              },
+                              "origen": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "destino": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "estatus": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "operador": {
+                                "type": "string",
+                                "x-supuesto": true
+                              }
+                            },
+                            "x-supuesto": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión vencida o inválida: Likida hace UN re-login y UN reintento; si vuelve a fallar, se detiene."
+          },
+          "429": {
+            "description": "Límite de tasa. Se espera `Retry-After` (segundos o fecha; tope 30 s) y se reintenta hasta 3 veces."
+          }
+        },
+        "x-supuesto": true,
+        "x-paginacion": {
+          "tipo": "pagina",
+          "tamano": 100
+        },
+        "x-orden-estable": false
+      }
+    },
+    "/api/peajes": {
+      "get": {
+        "summary": "peajes (SUPUESTO)",
+        "description": "Clave externa (idempotencia): unidad + caseta + cruce_en. Obligatorios: unidad, caseta, importe, cruce_en. Solo lectura.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "tam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          }
+        ],
+        "security": [
+          {
+            "sesion": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filas. Una respuesta 200 con HTML o con un error de sesión se trata como sesión caída (un solo re-login).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "TAG": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Unidad": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Caseta": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Clase": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Importe": {
+                                "type": "number",
+                                "x-supuesto": true
+                              },
+                              "Fecha": {
+                                "type": "string",
+                                "description": "Fecha sin zona, formato yyyy-MM-dd HH:mm:ss, zona America/Mexico_City (SUPUESTO).",
+                                "x-supuesto": true
+                              },
+                              "Icident": {
+                                "type": "string",
+                                "x-supuesto": true
+                              }
+                            },
+                            "x-supuesto": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión vencida o inválida: Likida hace UN re-login y UN reintento; si vuelve a fallar, se detiene."
+          },
+          "429": {
+            "description": "Límite de tasa. Se espera `Retry-After` (segundos o fecha; tope 30 s) y se reintenta hasta 3 veces."
+          }
+        },
+        "x-supuesto": true,
+        "x-paginacion": {
+          "tipo": "pagina",
+          "tamano": 100
+        },
+        "x-orden-estable": false
+      }
+    },
+    "/api/posiciones": {
+      "get": {
+        "summary": "posiciones (SUPUESTO)",
+        "description": "Clave externa (idempotencia): deviceId + medidaEn. Obligatorios: deviceId, lat, lng, medidaEn. Solo lectura.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "tam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          }
+        ],
+        "security": [
+          {
+            "sesion": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filas. Una respuesta 200 con HTML o con un error de sesión se trata como sesión caída (un solo re-login).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "Icident": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "unidad": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "latitud": {
+                                "type": "number",
+                                "x-supuesto": true
+                              },
+                              "longitud": {
+                                "type": "number",
+                                "x-supuesto": true
+                              },
+                              "fecha": {
+                                "type": "string",
+                                "description": "Fecha sin zona, zona America/Mexico_City (SUPUESTO).",
+                                "x-supuesto": true
+                              },
+                              "velocidad": {
+                                "type": "number",
+                                "x-supuesto": true
+                              },
+                              "rumbo": {
+                                "type": "number",
+                                "x-supuesto": true
+                              }
+                            },
+                            "x-supuesto": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión vencida o inválida: Likida hace UN re-login y UN reintento; si vuelve a fallar, se detiene."
+          },
+          "429": {
+            "description": "Límite de tasa. Se espera `Retry-After` (segundos o fecha; tope 30 s) y se reintenta hasta 3 veces."
+          }
+        },
+        "x-supuesto": true,
+        "x-paginacion": {
+          "tipo": "pagina",
+          "tamano": 100
+        },
+        "x-orden-estable": false
+      }
+    },
+    "/api/nomina-bitacora": {
+      "get": {
+        "summary": "liquidaciones / nomina (SUPUESTO)",
+        "description": "Clave externa (idempotencia): id. Obligatorios: id, bitacora, operador_id, concepto_id, desde, hasta. Solo lectura.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "tam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          }
+        ],
+        "security": [
+          {
+            "sesion": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filas. Una respuesta 200 con HTML o con un error de sesión se trata como sesión caída (un solo re-login).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ID": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Poliza": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Bitacora": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "OperadorID": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "ConceptoID": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Cargo": {
+                                "type": "number",
+                                "x-supuesto": true
+                              },
+                              "Abono": {
+                                "type": "number",
+                                "x-supuesto": true
+                              },
+                              "Desglose": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "FechaInicio": {
+                                "type": "string",
+                                "description": "Fecha sin zona, formato yyyy-MM-dd HH:mm:ss, zona America/Mexico_City (SUPUESTO).",
+                                "x-supuesto": true
+                              },
+                              "FechaFin": {
+                                "type": "string",
+                                "description": "Fecha sin zona, formato yyyy-MM-dd HH:mm:ss, zona America/Mexico_City (SUPUESTO).",
+                                "x-supuesto": true
+                              }
+                            },
+                            "x-supuesto": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión vencida o inválida: Likida hace UN re-login y UN reintento; si vuelve a fallar, se detiene."
+          },
+          "429": {
+            "description": "Límite de tasa. Se espera `Retry-After` (segundos o fecha; tope 30 s) y se reintenta hasta 3 veces."
+          }
+        },
+        "x-supuesto": true,
+        "x-paginacion": {
+          "tipo": "pagina",
+          "tamano": 100
+        },
+        "x-orden-estable": false
+      }
+    },
+    "/api/operadores": {
+      "get": {
+        "summary": "liquidaciones / operadores (SUPUESTO)",
+        "description": "Clave externa (idempotencia): id. Obligatorios: id. Solo lectura.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "tam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          }
+        ],
+        "security": [
+          {
+            "sesion": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filas. Una respuesta 200 con HTML o con un error de sesión se trata como sesión caída (un solo re-login).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ID": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "NumeroEmpleado": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Telefono": {
+                                "type": "string",
+                                "x-supuesto": true
+                              }
+                            },
+                            "x-supuesto": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión vencida o inválida: Likida hace UN re-login y UN reintento; si vuelve a fallar, se detiene."
+          },
+          "429": {
+            "description": "Límite de tasa. Se espera `Retry-After` (segundos o fecha; tope 30 s) y se reintenta hasta 3 veces."
+          }
+        },
+        "x-supuesto": true,
+        "x-paginacion": {
+          "tipo": "pagina",
+          "tamano": 100
+        },
+        "x-orden-estable": false
+      }
+    },
+    "/api/conceptos-nomina": {
+      "get": {
+        "summary": "liquidaciones / conceptos (SUPUESTO)",
+        "description": "Clave externa (idempotencia): id. Obligatorios: id, descripcion. Solo lectura.",
+        "parameters": [
+          {
+            "name": "desde",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "hasta",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "pagina",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          },
+          {
+            "name": "tam",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "x-supuesto": true
+          }
+        ],
+        "security": [
+          {
+            "sesion": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filas. Una respuesta 200 con HTML o con un error de sesión se trata como sesión caída (un solo re-login).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "ID": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Clave": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Descripcion": {
+                                "type": "string",
+                                "x-supuesto": true
+                              },
+                              "Oculto": {
+                                "type": "boolean",
+                                "x-supuesto": true
+                              }
+                            },
+                            "x-supuesto": true
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Sesión vencida o inválida: Likida hace UN re-login y UN reintento; si vuelve a fallar, se detiene."
+          },
+          "429": {
+            "description": "Límite de tasa. Se espera `Retry-After` (segundos o fecha; tope 30 s) y se reintenta hasta 3 veces."
+          }
+        },
+        "x-supuesto": true,
+        "x-paginacion": {
+          "tipo": "pagina",
+          "tamano": 100
+        },
+        "x-orden-estable": false
+      }
+    }
+  },
+  "webhooks": {
+    "loteFirmado": {
+      "post": {
+        "summary": "Modo push (alternativa, apagado): el cliente empuja lotes firmados",
+        "description": "Encabezados: x-likida-marca (segundos epoch; tolerancia 300 s), x-likida-firma (HMAC-SHA256 hex de «marca.cuerpo»), idempotency-key. Máximo 5242880 bytes. Respuestas: 200, 400 sin llave, 401 firma, 403 marca, 409 repetido, 413 tamaño, 422 cuerpo, 503 apagado. Sin endpoint publicado.",
+        "responses": {
+          "200": {
+            "description": "Lote recibido."
+          }
+        },
+        "x-supuesto": true
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sesion": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "Authorization",
+        "description": "Token obtenido con el login (SUPUESTO)."
+      }
+    }
+  },
+  "x-estado": "SUPUESTO",
+  "x-fecha-de-corte": "sin fijar",
+  "x-modos": {
+    "api": false,
+    "archivos": true,
+    "push": false
+  }
+}
