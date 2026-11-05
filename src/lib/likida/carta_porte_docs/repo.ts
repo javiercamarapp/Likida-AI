@@ -289,7 +289,13 @@ export async function cargarCatalogoSat(catalogo: string, claves: string[]): Pro
  * CT-A345-04: cuántas filas hay de cada catálogo SAT que consulta la validación (una cuenta `head` por catálogo, en paralelo).
  * `null` = no se pudo leer alguno: la pantalla lo dice, nunca pinta un cero que se lea como «catálogo vacío».
  */
+const TTL_CONTEO_CATALOGOS_MS = 5 * 60_000;
+let cacheConteoCatalogos: { clave: string; hasta: number; valor: Record<string, number> } | null = null;
+
 export async function contarCatalogosSat(catalogos: readonly string[]): Promise<Record<string, number> | null> {
+  // Los catálogos grandes (c_CodigoPostal, c_Colonia) hacen cara la cuenta exacta; cambian solo al importar, así que se reusa unos minutos.
+  const clave = catalogos.join('|');
+  if (cacheConteoCatalogos && cacheConteoCatalogos.clave === clave && cacheConteoCatalogos.hasta > Date.now()) return cacheConteoCatalogos.valor;
   try {
     const cuentas = await Promise.all(catalogos.map(async (catalogo) => {
       const r = await acotada(supabaseAdmin().from('cp_sat_catalogo').select('clave', { count: 'exact', head: true }).eq('catalogo', catalogo), 'cpdocs.catalogo_sat_conteo');
@@ -297,7 +303,9 @@ export async function contarCatalogosSat(catalogos: readonly string[]): Promise<
       if (error || typeof count !== 'number') throw new Error('catalogo_sat_conteo');
       return [catalogo, count] as const;
     }));
-    return Object.fromEntries(cuentas);
+    const valor = Object.fromEntries(cuentas);
+    cacheConteoCatalogos = { clave, hasta: Date.now() + TTL_CONTEO_CATALOGOS_MS, valor };
+    return valor;
   } catch {
     return null;
   }

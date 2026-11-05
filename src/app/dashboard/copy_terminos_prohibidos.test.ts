@@ -48,7 +48,9 @@ function archivos(dir: string): string[] {
   for (const nombre of readdirSync(dir)) {
     const ruta = join(dir, nombre);
     if (statSync(ruta).isDirectory()) { salida.push(...archivos(ruta)); continue; }
-    if (/\.tsx$/.test(nombre) && !/\.test\./.test(nombre)) salida.push(ruta);
+    if (/\.test\./.test(nombre)) continue;
+    // Además de los .tsx, los .ts que alimentan texto al cliente: los textos de ayuda y los mensajes de las acciones de servidor.
+    if (/\.tsx$/.test(nombre) || (/\.ts$/.test(nombre) && (/(^|[\\/])info-textos[\\/]/.test(ruta) || /^acciones/.test(nombre)))) salida.push(ruta);
   }
   return salida;
 }
@@ -57,7 +59,7 @@ const ATRIBUTOS_DE_TEXTO = new Set(['title', 'aria-label', 'alt', 'placeholder']
 
 /** Los textos que un cliente puede leer en un `.tsx`: nunca comentarios, nunca imports, nunca tipos. */
 export function textosVisibles(codigo: string, nombre = 'x.tsx'): string[] {
-  const sf = ts.createSourceFile(nombre, codigo, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const sf = ts.createSourceFile(nombre, codigo, ts.ScriptTarget.Latest, true, nombre.endsWith('.ts') ? ts.ScriptKind.TS : ts.ScriptKind.TSX);
   const textos: string[] = [];
   const visitar = (n: ts.Node): void => {
     if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n) || ts.isTypeNode(n) || ts.isInterfaceDeclaration(n) || ts.isTypeAliasDeclaration(n)) return;
