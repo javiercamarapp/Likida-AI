@@ -250,5 +250,5 @@ async function anotarDescartes(tenantId: string, emailId: string, descartes: Rea
   await anotarBitacora({
     tenantId, actor: 'sistema', accion: 'cp_correo.descartes', entidad: 'cp_correo', entidadId: emailId,
     detalle: { total: descartes.length, por_motivo: porMotivo, extensiones: [...extensiones].sort().slice(0, 20) },
-  }, { evento: 'cp_correo.descartes_sin_bitacora', contexto: { emailId, tenantId } });
+  }, { evento: 'cp_correo.descartes_sin_bitacora', contexto: { emailId, tenantId }, unica: true });
 }

@@ -179,6 +179,14 @@ describe('atenderCorreoCartaPorte', () => {
       expect(JSON.stringify(a[0])).not.toMatch(/macro|oficio|escaneo|todo\.zip/);
     });
 
+    it('el mismo correo reenviado con cuerpo corto pide la anotación idempotente por emailId (sin filas duplicadas)', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.' }, deps());
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.' }, deps());
+      const llamadas = vi.mocked(anotarBitacora).mock.calls.filter((c) => c[0].accion === 'cp_correo.descartes');
+      expect(llamadas).toHaveLength(2);
+      for (const [e, o] of llamadas) { expect(e.entidadId).toBe('em-1'); expect(o).toMatchObject({ unica: true }); }
+    });
+
     it('un cuerpo de menos de 80 caracteres sin adjuntos deja rastro «cuerpo_corto»', async () => {
       await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Embarque CG-5521 sale mañana.' }, deps());
       expect(anotado()[0]).toMatchObject({ detalle: { por_motivo: { cuerpo_corto: 1 } } });
