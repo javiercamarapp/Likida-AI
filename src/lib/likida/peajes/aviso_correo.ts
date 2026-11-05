@@ -114,6 +114,7 @@ export function armarCorreoAviso(aviso: AvisoPeajes, asunto: string): Correo {
     titulo: 'Aviso de Peajes',
     parrafos: [!/\p{L}{3,}/u.test(cuerpo) || cuerpo.length < 20 ? SIN_DATOS : cuerpo, 'Aviso automático. Es una señal para revisar; no afirma que ningún cobro sea indebido.'],
     boton: { texto: 'Abrir Peajes', href: aviso.liga },
+    porQueLoRecibes: 'Recibes este aviso porque tu flota tiene activados los avisos de Peajes en Likida y tu correo figura como destinatario.',
   };
 }
 

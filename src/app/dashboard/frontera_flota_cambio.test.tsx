@@ -53,7 +53,7 @@ describe('frontera FlotaCambioError — comportamiento de extremo a extremo (MX-
   it('una acción atada con la cookie en otra flota LANZA FlotaCambioError con el digest de la casa', async () => {
     const e = await errorRealDeUnaAccionAtada();
     expect(e).toBeInstanceOf(FlotaCambioError);
-    expect((e as FlotaCambioError).digest).toBe(DIGEST_FLOTA_CAMBIO);
+    expect((e as { digest?: string }).digest).toBe(DIGEST_FLOTA_CAMBIO);
   });
 
   it('control: con la cookie en la MISMA flota la acción no lanza', async () => {
