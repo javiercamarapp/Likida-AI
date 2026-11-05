@@ -126,7 +126,7 @@ describe('accesibilidad del globo', () => {
   it('«Ya lo hice» mide 44 px siempre (no solo en móvil) y las notas no duplican role=status', () => {
     const base = CSS.split('@media')[0];
     expect(base).toMatch(/\.rv-onb__estado \.rv-onb__enlace \{[^}]*min-height: 44px/);
-    const h = html(<GloboTour snap={{ ...snap({ estado: 'esperando', evidencia: null, declarable: false }), navegando: true, anclaLista: false }} />);
+    const h = html(<GloboTour snap={{ ...snap({ estado: 'esperando', evidencia: null, declarable: false }), navegando: true, anclaLista: false }} onSiguiente={noop} onAtras={noop} onSaltar={noop} />);
     expect(h).toContain('Te llevo a la página');
     expect(h.match(/role="status"/g) ?? []).toHaveLength(1); // solo el estado del paso; las notas son texto
   });
