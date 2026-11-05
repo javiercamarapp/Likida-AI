@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { LogOut } from 'lucide-react';
 import { requireVendedor } from '@/lib/auth/guard';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -6,6 +7,9 @@ import Fondo from '../fondo';
 import { Logo } from '../logo';
 
 export const dynamic = 'force-dynamic';
+
+// Plantilla del título de pestaña de /vendedor (cada page.tsx aporta su nombre).
+export const metadata: Metadata = { title: { default: 'Vendedores · Likida', template: '%s · Vendedores · Likida' } };
 
 /**
  * El chrome de /vendedor — MÍNIMO a propósito: una barra con logo, quién

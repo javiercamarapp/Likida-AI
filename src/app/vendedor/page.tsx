@@ -28,4 +28,4 @@ export default async function VendedorPage({
   return <PanelVendedor userId={s.userId} nombre={s.nombre} rol={s.rol} col={sp.col} pag={sp.pag} />;
 }
 
-export const metadata: Metadata = { title: 'Mis prospectos · Vendedores · Likida' };
+export const metadata: Metadata = { title: 'Mis prospectos' };
