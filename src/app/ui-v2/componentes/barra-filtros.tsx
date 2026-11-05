@@ -56,7 +56,7 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
         <label className="rv-fl rv-fl--buscar">
           <Search aria-hidden="true" strokeWidth={1.75} />
           <span className="rv-sr">{busqueda.etiqueta ?? 'Buscar'}</span>
-          <input data-anillo="envolvente" type="search" className="border-0 bg-transparent" value={busqueda.valor} placeholder={busqueda.placeholder ?? 'Buscar'} onChange={(e) => busqueda.onCambio(e.target.value)} />
+          <input type="search" className="border-0 bg-transparent" value={busqueda.valor} placeholder={busqueda.placeholder ?? 'Buscar'} onChange={(e) => busqueda.onCambio(e.target.value)} data-anillo="envolvente" />
         </label>
       ) : null}
       <div className="rv-filtros__chips">

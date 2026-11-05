@@ -369,12 +369,12 @@ export function ChatEntrevista({
           </span>
         </div>
       )}
-      <input data-anillo="envolvente"
+      <input
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'}
         aria-label="Pregunta sobre tu operación"
-        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
+        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed" data-anillo="envolvente"
       />
       <div className="flex items-center justify-between mt-3 relative">
         <button type="button" onClick={() => setRecomendar((v) => !v)}

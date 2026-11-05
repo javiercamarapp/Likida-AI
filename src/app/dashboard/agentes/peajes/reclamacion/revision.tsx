@@ -275,7 +275,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
         {lista.length > 0 ? (
           <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto="" opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
         ) : (
-          <FiltroCampo etiqueta="Mes"><input data-anillo="envolvente" className="border-0 bg-transparent" name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required /></FiltroCampo>
+          <FiltroCampo etiqueta="Mes"><input className="border-0 bg-transparent" name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required data-anillo="envolvente" /></FiltroCampo>
         )}
         <FiltroOpciones nombre="meses" etiqueta="Ventana" valor={dosMeses ? '2' : '1'} porDefecto="1"
           opciones={[{ valor: '1', rotulo: 'Un mes' }, { valor: '2', rotulo: 'Dos meses juntos' }]} />

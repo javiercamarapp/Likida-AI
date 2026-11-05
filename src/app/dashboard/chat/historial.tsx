@@ -68,7 +68,7 @@ function CuerpoHistorial({ convs, activa, errorCarga, onNuevo, onAbrir, onCerrar
       <label className="rv-chat__hist-buscar">
         <Search width={14} height={14} strokeWidth={2} aria-hidden="true" />
         <span className="rv-sr">Buscar chats</span>
-        <input data-anillo="envolvente" type="search" className="bg-transparent border-0" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar chats" aria-label="Buscar chats" />
+        <input type="search" className="bg-transparent border-0" value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar chats" aria-label="Buscar chats" data-anillo="envolvente" />
       </label>
       {errorCarga && <p className="rv-chat__hist-error" role="alert">{errorCarga}</p>}
       <div className="rv-chat__hist-lista">

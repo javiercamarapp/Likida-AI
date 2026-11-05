@@ -117,7 +117,7 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
         <noscript>
           <label className="rv-fl rv-fl--nativo" data-activo={activo ? '' : undefined}>
             <span className="rv-fl__etq">{etiqueta}</span>
-            <select data-anillo="envolvente" name={nombre} defaultValue={valor} aria-label={ariaLabel ?? etiqueta} disabled={deshabilitado} className="border-0 bg-transparent">
+            <select name={nombre} defaultValue={valor} aria-label={ariaLabel ?? etiqueta} disabled={deshabilitado} className="border-0 bg-transparent" data-anillo="envolvente">
               {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
             </select>
           </label>
@@ -152,8 +152,8 @@ export function FiltroOpciones({ etiqueta, opciones, valor, porDefecto = '', nom
       <Popover abierto={abierto} onCerrar={cerrar} ancla={ancla} etiqueta={etiqueta} alineacion="inicio" className="rv-fl__pop">
         <div className="rv-fl__lista" onKeyDown={alTeclearLista}>
           {conBuscador ? (
-            <input data-anillo="envolvente" type="search" className="rv-fl__buscar border-0 bg-transparent" value={consulta} onChange={(e) => setConsulta(e.target.value)}
-              placeholder="Buscar…" aria-label={`Buscar en ${etiqueta}`} data-autofocus="" autoComplete="off" />
+            <input type="search" className="rv-fl__buscar border-0 bg-transparent" value={consulta} onChange={(e) => setConsulta(e.target.value)}
+              placeholder="Buscar…" aria-label={`Buscar en ${etiqueta}`} data-autofocus="" autoComplete="off" data-anillo="envolvente" />
           ) : null}
           <div ref={lista} id={idLista} role="listbox" aria-label={etiqueta} className="rv-fl__opciones">
           {visibles.length === 0 ? <p className="rv-fl__nada">Sin coincidencias</p> : null}
@@ -213,7 +213,7 @@ export function FiltroBusqueda({ nombre, valor, placeholder = 'Buscar', etiqueta
     <label className={cx('rv-fl rv-fl--buscar', className)}>
       <Search aria-hidden="true" strokeWidth={1.75} />
       <span className="rv-sr">{etiqueta}</span>
-      <input data-anillo="envolvente" type="search" name={nombre} defaultValue={valor ?? ''} placeholder={placeholder} maxLength={maxLength} className="border-0 bg-transparent" />
+      <input type="search" name={nombre} defaultValue={valor ?? ''} placeholder={placeholder} maxLength={maxLength} className="border-0 bg-transparent" data-anillo="envolvente" />
     </label>
   );
 }
@@ -248,14 +248,14 @@ export function FiltroFecha({ nombre, etiqueta, valor, min, max, autoEnvio = tru
   return (
     <label className={cx('rv-fl rv-fl--fecha', className)} data-activo={valor ? '' : undefined}>
       <span className="rv-fl__etq">{etiqueta}</span>
-      <input data-anillo="envolvente"
+      <input
         type="date" name={nombre} defaultValue={inicial} min={min} max={max} className="border-0 bg-transparent"
         onKeyDown={(e) => {
           if (e.key === 'Enter') { e.preventDefault(); enviar(e.currentTarget); }
           else if (e.key.length === 1 || e.key === 'Backspace' || e.key === 'Delete') tecleando.current = true;
         }}
         onChange={(e) => { if (!tecleando.current) enviar(e.currentTarget); }}
-        onBlur={(e) => enviar(e.currentTarget)}
+        onBlur={(e) => enviar(e.currentTarget)} data-anillo="envolvente"
       />
     </label>
   );
