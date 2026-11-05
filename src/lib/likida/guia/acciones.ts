@@ -4,7 +4,8 @@ import { getSessionTenant } from '@/lib/auth/session';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { leerSenalesAsistente } from '../asistente/senales';
-import { actorSeudonimo, deduplicar, GUIA_EVENTOS, MAX_EVENTOS_POR_LOTE, normalizarEvento, TOPE_EVENTOS_POR_MINUTO } from './eventos';
+import { GUIA_EVENTOS } from './eventos';
+import { procesarLoteEventos, type VentanaEventos } from './lote_eventos';
 import { pistaGuiaDe } from './pista';
 import { guardarEstado, insertarEventos, leerEstado, type EscrituraEstado, type LecturaEstado } from './repo';
 import { leerSenalesGuia } from './senales';
@@ -41,29 +42,15 @@ export async function leerSenalesDeLaGuia(ids: string[]): Promise<Record<string,
 }
 
 // Tope por usuario y minuto: en memoria de la instancia (best effort; el tope duro es el tamaño del lote y el CHECK de la tabla).
-const ventana = new Map<string, { desde: number; n: number }>();
+const ventana: VentanaEventos = new Map();
 
 /** Registra un lote de eventos sin PII. Apagado por GUIA_EVENTOS hasta que el aviso de privacidad lo mencione (D-OB-8). */
 export async function registrarEventosGuia(lote: unknown[]): Promise<{ ok: boolean; guardados: number }> {
-  if (!GUIA_EVENTOS || !Array.isArray(lote)) return { ok: false, guardados: 0 };
-  const s = await getSessionTenant();
-  const secreto = process.env.LIKIDA_FLOTA_COOKIE_LLAVE;
-  if (!s || !s.tenantId || !secreto || s.rol === 'superadmin') return { ok: false, guardados: 0 };
-
-  const ahora = Date.now();
-  const w = ventana.get(s.userId);
-  const actual = !w || ahora - w.desde > 60_000 ? { desde: ahora, n: 0 } : w;
-  const cupo = TOPE_EVENTOS_POR_MINUTO - actual.n;
-  if (cupo <= 0) return { ok: false, guardados: 0 };
-
-  const normalizados = lote.slice(0, Math.min(MAX_EVENTOS_POR_LOTE, cupo)).map(normalizarEvento).filter((e): e is NonNullable<typeof e> => e !== null);
-  const limpios = deduplicar(normalizados, new Set());
-  actual.n += limpios.length;
-  ventana.set(s.userId, actual);
-
-  const perfil = await perfilDeTenant(s.tenantId).catch(() => null);
-  const guardados = await insertarEventos(supabaseAdmin(), {
-    tenantId: s.tenantId, actor: actorSeudonimo(secreto, s.userId), pista: pistaGuiaDe(s.rol, perfil) ?? 'sin_pista', rol: s.rol, perfil: perfil ?? null,
-  }, limpios);
-  return { ok: guardados > 0, guardados };
+  if (!GUIA_EVENTOS) return { ok: false, guardados: 0 };
+  const sesion = await getSessionTenant();
+  const perfil = sesion?.tenantId ? await perfilDeTenant(sesion.tenantId).catch(() => null) : null;
+  return procesarLoteEventos({
+    activo: GUIA_EVENTOS, lote, sesion, secreto: process.env.LIKIDA_FLOTA_COOKIE_LLAVE, perfil: perfil ?? null, ahora: Date.now(), ventana,
+    guardar: (ctx, l) => insertarEventos(supabaseAdmin(), ctx, l),
+  });
 }

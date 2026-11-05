@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { SenalesAsistente } from '../asistente/pasos_cinco_agentes';
+import { existeFilaDeTenant } from './repo';
 import { IDS_SENAL, type IdSenal, type PistaGuia, type ResultadoSenal } from './tipos';
 
 // Registro de señales de la guía (SPEC 2.3). Una señal es una lectura ACOTADA POR TENANT de algo que la persona hizo; cada una cae a
@@ -69,15 +70,8 @@ const TABLAS: Partial<Record<IdSenal, { tabla: string; filtro?: Record<string, s
 async function existeFila(db: SupabaseClient, tenantId: string, id: IdSenal): Promise<ResultadoSenal> {
   const t = TABLAS[id];
   if (!t) return SIN_DATO;
-  try {
-    let q = db.from(t.tabla).select('tenant_id').eq('tenant_id', tenantId);
-    for (const [k, v] of Object.entries(t.filtro ?? {})) q = q.eq(k, v);
-    const { data, error } = await q.limit(1);
-    if (error) return SIN_DATO;
-    return { estado: (data?.length ?? 0) > 0 ? 'si' : 'no' };
-  } catch {
-    return SIN_DATO;
-  }
+  const r = await existeFilaDeTenant(db, t.tabla, tenantId, t.filtro);
+  return r === null ? SIN_DATO : { estado: r ? 'si' : 'no' };
 }
 
 export interface DependenciasSenales {

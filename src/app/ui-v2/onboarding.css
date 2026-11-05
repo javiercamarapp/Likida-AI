@@ -128,7 +128,8 @@
 
 /* Cursor del gesto: vive dentro de la capa y toma la posición del elemento resaltado. Sin movimiento queda quieto en su esquina inferior derecha. */
 .rv-onb-cursor {
-  --cx: calc(var(--tour-x, 0px) + var(--tour-w, 0px) * .5); --cy: calc(var(--tour-y, 0px) + var(--tour-h, 0px) * .5);
+  --cx: calc(var(--tour-x, 0px) + var(--tour-w, 0px) * .5);
+  --cy: calc(var(--tour-y, 0px) + var(--tour-h, 0px) * .5);
   position: absolute; left: 0; top: 0; width: 26px; height: 26px; pointer-events: none; translate: var(--cx) var(--cy);
 }
 .rv-onb-capa[data-sin-foco] .rv-onb-cursor { display: none; }
