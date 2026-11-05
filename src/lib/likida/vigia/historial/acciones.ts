@@ -35,8 +35,11 @@ export const depsGruposReales: DepsGrupos = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIN_PERMISO: ResultadoGrupos = { ok: false, error: 'Solo el dueño de la flota administra los grupos y el histórico de sus clientes.' };
 
-/** El archivo más grande que se acepta desde el formulario (el límite de las acciones de servidor es 10 MB). */
-export const MAX_ARCHIVO_BYTES = 9 * 1024 * 1024;
+/**
+ * El archivo más grande que se acepta desde el formulario: 4 MB, el tope REAL de la plataforma (Vercel Functions corta en 4.5 MB;
+ * el `bodySizeLimit` de 10 MB de Next no lo alarga). Prometer 9 MB hacía que un chat de 6 MB muriera sin mensaje (CT-A345-21).
+ */
+export const MAX_ARCHIVO_BYTES = 4 * 1024 * 1024;
 
 const texto = (fd: FormData, k: string): string => String(fd.get(k) ?? '').trim();
 
@@ -104,7 +107,7 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
   const equipo = nombresDelEquipo(String(fd.get('equipo') ?? ''));
   if (equipo.length === 0) return { ok: false, error: 'Escribe los nombres de tu equipo tal como salen en el chat (separados por coma). Sin eso no se puede distinguir lo que contestó tu gente de lo que escribió el cliente.' };
   if (!archivo || archivo.bytes.length === 0) return { ok: false, error: 'Adjunta el archivo del chat exportado (.txt o .zip).' };
-  if (archivo.bytes.length > MAX_ARCHIVO_BYTES) return { ok: false, error: 'El archivo pesa más de 9 MB. Exporta el chat «sin multimedia» o divídelo por periodos.' };
+  if (archivo.bytes.length > MAX_ARCHIVO_BYTES) return { ok: false, error: 'El archivo pesa más de 4 MB. Exporta el chat «sin multimedia» o divídelo por periodos.' };
 
   let crudo: string;
   if (esZip(archivo.bytes)) {
