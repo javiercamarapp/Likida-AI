@@ -61,7 +61,8 @@ vi.mock('@/lib/supabase/admin', () => ({
     },
   }),
 }));
-vi.mock('@/lib/ratelimit', () => ({ bodyExcede: vi.fn(() => false) }));
+const rateLimit = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => true));
+vi.mock('@/lib/ratelimit', () => ({ bodyExcede: vi.fn(() => false), rateLimit: (...a: unknown[]) => rateLimit(...a), clientIp: () => 'ip-prueba' }));
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn() } }));
 
 const { POST } = await import('./route');
@@ -352,5 +353,20 @@ describe('POST /api/webhook/calcom — frontera de la transacción 0323', () => 
     });
     expect((await postear(cuerpo)).status).toBe(413);
     expect(db.rpcCalls).toHaveLength(0);
+  });
+});
+
+describe('límite de tasa por IP (ronda 4)', () => {
+  it('sobre el techo responde 429 ANTES de leer el cuerpo ni verificar la firma; el límite degrada (no falla cerrado) si Redis cae', async () => {
+    const { POST: post } = await import('./route');
+    rateLimit.mockResolvedValueOnce(false);
+    let lecturas = 0;
+    const req = new Request('https://app.likida.ai/api/webhook/calcom', { method: 'POST', body: '{}' });
+    Object.defineProperty(req, 'text', { value: () => { lecturas++; return Promise.resolve('{}'); } });
+    const res = await post(req);
+    expect(res.status).toBe(429);
+    expect(res.headers.get('retry-after')).toBe('60');
+    expect(lecturas).toBe(0);
+    expect(rateLimit).toHaveBeenLastCalledWith('calcom-webhook:ip:ip-prueba', 120, 60_000, { fallaCerrado: false });
   });
 });
