@@ -268,7 +268,7 @@ describe('A37-S13-07: los rótulos dicen lo que se cuenta', () => {
 
 // CT-A345-18 (F2): «sin aviso» con la compuerta apagada no es rezago; con la compuerta ilegible no se asume nada.
 describe('Conductores — «sin aviso» según la compuerta del agente (CT-A345-18)', () => {
-  const base = { esperan: [], totalEsperan: 0, sinAvisar: 3, error: null } as const;
+  const base: ColaConductores = { esperan: [], totalEsperan: 0, sinAvisar: 3, error: null };
   const texto = async (c: ColaConductores) => (await pintar(c)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
 
   it('compuerta apagada: lo dice y no manda a Despacho como si fuera un rezago', async () => {

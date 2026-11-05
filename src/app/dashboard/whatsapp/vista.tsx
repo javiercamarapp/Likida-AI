@@ -31,11 +31,11 @@ const PASOS_CHOFER = [
  * CT-A345-19: bajo el perfil `cinco_agentes` el chat del chofer NO recibe fotos de tickets para liquidar ni entrega la
  * liquidación por «LISTO»: esas promesas son del flujo clásico y aquí serían falsas. Se dice qué sí hace el chat.
  */
-export const PASOS_CHOFER_CINCO_AGENTES = [
+export const PASOS_CHOFER_CINCO_AGENTES: ReadonlyArray<readonly [string, string]> = [
   PASOS_CHOFER[0], PASOS_CHOFER[1], PASOS_CHOFER[2],
   ['Recibe los avisos de su viaje y responde por el mismo chat', 'Los avisos solo salen si el Agente de Conductores está habilitado en tu cuenta; si no, el chofer no recibe nada de Likida aunque esté dado de alta. Confirma el viaje, manda su ubicación y las fotos que se le pidan para el hito que está reportando.'],
   ['«LISTO» y la liquidación por este chat no aplican a tu cuenta', 'Tu cuenta no recibe comprobantes ni cierra liquidaciones por este WhatsApp. Si el chofer manda un ticket o escribe «LISTO», el bot le contesta que entregue sus papeles en tu oficina.'],
-] as const;
+];
 
 /**
  * LA GUÍA DE ARRANQUE DEL CHOFER (W2 «producto»). Responde la pregunta que ninguna
@@ -115,7 +115,7 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
       <section aria-labelledby="titulo-flujo" className="card p-4">
         <TituloRecuadro id="titulo-flujo" info="whatsapp.flujo" className="mb-3">Qué pasa con cada chofer</TituloRecuadro>
         <ol className="space-y-3">
-          {(datos.perfil === 'cinco_agentes' ? PASOS_CHOFER_CINCO_AGENTES : PASOS_CHOFER).map(([titulo, detalle], i) => (
+          {((datos.perfil === 'cinco_agentes' ? PASOS_CHOFER_CINCO_AGENTES : PASOS_CHOFER) as ReadonlyArray<readonly [string, string]>).map(([titulo, detalle], i) => (
             <li key={titulo} className="flex items-start gap-3">
               <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
                 style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>{i + 1}</span>
