@@ -215,8 +215,10 @@ export async function anotarBitacora(
   const contexto = { ...(opciones.contexto ?? {}), accion: entrada.accion };
   try {
     if (opciones.unica) {
-      let consulta = supabaseAdmin().from('bitacora_auditoria').select('id').eq('accion', entrada.accion).eq('entidad', entrada.entidad).eq('entidad_id', entrada.entidadId);
-      consulta = entrada.tenantId === null ? consulta.is('tenant_id', null) : consulta.eq('tenant_id', entrada.tenantId);
+      // El filtro de tenant va dentro de cada cadena (lo exige el guardián de consultas de supabaseAdmin).
+      const consulta = entrada.tenantId === null
+        ? supabaseAdmin().from('bitacora_auditoria').select('id').is('tenant_id', null).eq('accion', entrada.accion).eq('entidad', entrada.entidad).eq('entidad_id', entrada.entidadId)
+        : supabaseAdmin().from('bitacora_auditoria').select('id').eq('tenant_id', entrada.tenantId).eq('accion', entrada.accion).eq('entidad', entrada.entidad).eq('entidad_id', entrada.entidadId);
       const previa = await acotada(consulta.limit(1), 'bitacora.existe');
       // Si la consulta falla se anota igual: un duplicado es mejor que perder el rastro.
       if (!previa.error && (previa.data?.length ?? 0) > 0) return true;

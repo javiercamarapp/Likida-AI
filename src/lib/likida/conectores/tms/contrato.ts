@@ -353,7 +353,7 @@ function esTextoUrl(t: string): boolean {
 
 /** Bytes (cada carácter ≤ 0xFF) leídos como UTF-8 estricto; `null` si no lo son. */
 function bytesUtf8(cs: string): string | null {
-  const bytes = Array.from(cs, (c) => c.codePointAt(0) as number);
+  const bytes = [...cs].map((c) => c.codePointAt(0) as number);
   if (bytes.some((b) => b > 0xff)) return null;
   try { return new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes)); } catch { return null; }
 }

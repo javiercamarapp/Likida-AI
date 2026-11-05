@@ -669,7 +669,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 333;
 // F2 «resto de superficie» (CT-A345-04): 2,474 → 2,475 (+1, medido; 0 archivos nuevos). `carta_porte_docs/repo.ts#contarCatalogosSat`: conteo `head` por catálogo SAT de la
 // tabla global `cp_sat_catalogo` para avisar en pantalla cuando está vacía; por `acotada`, sin datos de flota (la tabla no lleva `tenant_id`) y sin lanzar (devuelve null).
 // Integración todo (F2+F9): suma de los tramos, 2,474 + 1 (F2) + 4 (F9, ver el techo de archivos) = 2,479.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_479;
+// Integración R4 (robustez): 2,479 → 2,481 (+2, medido; 0 archivos nuevos). `bitacora_escritura.ts#anotarBitacora` con `unica`: consulta previa por (tenant, acción, entidad, entidadId) en
+// `bitacora_auditoria` para que un reintento no duplique el descarte de correo; dos cadenas (una con `tenant_id is null`, otra con `eq tenant_id`, para que el filtro quede dentro de cada cadena), por `acotada` y con `limit(1)`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_481;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
