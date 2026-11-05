@@ -29,7 +29,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { resolverTenantEfectivo, type TenantEfectivo } from './tenant-efectivo';
-import { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA } from './flota_cambio';
+import { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA, DIGEST_FLOTA_CAMBIO } from './flota_cambio';
 import { getSessionTenant } from './session';
 
 export { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA };
@@ -89,6 +89,8 @@ export async function resolverTenantAtadoAccion(
 
 /** La flota cambió bajo los pies de la pantalla: la acción se niega y NO escribe nada (MX-002). */
 export class FlotaCambioError extends Error {
+  /** Next conserva un `digest` ya puesto al serializar el error al cliente; el mensaje y el nombre no sobreviven en producción. */
+  readonly digest = DIGEST_FLOTA_CAMBIO;
   constructor() {
     super(MENSAJE_FLOTA_CAMBIO);
     this.name = 'FlotaCambioError';

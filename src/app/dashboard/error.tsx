@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Kicker, Pildora, TituloEditorial, serifEditorial } from '../editorial';
+import { MENSAJE_FLOTA_CAMBIO, esErrorFlotaCambio } from '@/lib/auth/flota_cambio';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Error boundary del segmento dashboard: un fallo de red/render NO deja
@@ -47,6 +48,33 @@ export default function DashboardError({
       }),
     );
   }, [error]);
+
+  // MX-002: la flota cambió bajo los pies de la pantalla (otra pestaña eligió otra) y la acción se negó sin escribir nada. No es un
+  // fallo del panel: se dice qué pasó y la salida es recargar, no «Reintentar» (que repetiría la misma flota vieja).
+  if (esErrorFlotaCambio(error)) {
+    return (
+      <div
+        className={`${serifEditorial.variable} min-h-screen flex flex-col justify-between px-8 py-8 md:px-14 md:py-12`}
+        style={{ background: 'var(--bg)' }}
+        role="alert"
+      >
+        <div />
+        <div className="max-w-3xl">
+          <Kicker>Cambiaste de flota</Kicker>
+          <TituloEditorial>Recarga la página.</TituloEditorial>
+          <p className="mt-6 max-w-lg" style={{ color: 'var(--muted)', fontSize: 'clamp(16px, 1.3vw, 18.5px)', lineHeight: 1.65 }}>
+            {MENSAJE_FLOTA_CAMBIO}
+          </p>
+          <div className="mt-9 flex flex-wrap items-center gap-3">
+            <Pildora onClick={() => window.location.reload()}>Recargar</Pildora>
+          </div>
+        </div>
+        <p className="text-xs" style={{ color: 'var(--faint, var(--muted))' }}>
+          Likida · Liquidación de viajes por WhatsApp
+        </p>
+      </div>
+    );
+  }
 
   // El MISMO lenguaje que el 404 (revisado el 17-ago-2026 contra la landing
   // nueva): kicker en mono, titular en serif, píldoras de tinta. Las piezas
