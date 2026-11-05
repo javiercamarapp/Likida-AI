@@ -22,11 +22,10 @@
 // que un silencio) y se deja en el log.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { supabaseAdmin } from '@/lib/supabase/admin';
-import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { OrigenTopeTenant } from './budget';
+import { rpcRegistrarAlertaTope, rpcUsoLlmDiaPorFlota } from './repo';
 
 export type NivelTope = 80 | 100;
 export const NIVEL_AVISO_TEMPRANO: NivelTope = 80;
@@ -42,10 +41,6 @@ export function nivelesCruzados(usoUsd: number, topeUsd: number): NivelTope[] {
   return out;
 }
 
-type RpcCliente = {
-  rpc?: (name: string, args?: Record<string, unknown>) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
-};
-
 /**
  * Registra el aviso en la base. `true` = ESTA llamada es la que debe avisar;
  * `false` = otra instancia ya lo hizo hoy; `null` = no se pudo saber (se avisa).
@@ -54,12 +49,9 @@ export async function registrarAlertaTope(
   tenantId: string, dia: string, nivel: NivelTope, usoUsd: number, topeUsd: number, origen: OrigenTopeTenant | string,
 ): Promise<boolean | null> {
   try {
-    const admin = supabaseAdmin() as unknown as RpcCliente;
-    if (typeof admin.rpc !== 'function') return null;
-    const { data, error } = await acotada(admin.rpc('registrar_alerta_tope_llm', {
-      p_tenant_id: tenantId, p_dia: dia, p_nivel: nivel,
-      p_uso_usd: Number(Math.max(0, usoUsd).toFixed(6)), p_tope_usd: Number(topeUsd.toFixed(6)), p_origen: origen,
-    }), 'registrarAlertaTope');
+    const r = await rpcRegistrarAlertaTope(tenantId, dia, nivel, usoUsd, topeUsd, origen);
+    if (r === null) return null;
+    const { data, error } = r;
     if (error) {
       logger.warn('presupuesto_llm.alerta_tope_no_registrada', { tenantId, nivel, err: error.message });
       return null;
@@ -121,10 +113,10 @@ export async function revisarTopesIa(
 ): Promise<ResultadoRevisionTopes> {
   const resultado: ResultadoRevisionTopes = { flotas: 0, avisos: [] };
   try {
-    const admin = supabaseAdmin() as unknown as RpcCliente;
-    if (typeof admin.rpc !== 'function') return { ...resultado, error: 'cliente sin rpc' };
     const dia = hoyMx();
-    const { data, error } = await acotada(admin.rpc('uso_llm_dia_por_flota', { p_dia: dia }), 'usoLlmDiaPorFlota');
+    const r = await rpcUsoLlmDiaPorFlota(dia);
+    if (r === null) return { ...resultado, error: 'cliente sin rpc' };
+    const { data, error } = r;
     if (error) {
       logger.error('presupuesto_llm.barrido_tope_fallo', { err: error.message });
       return { ...resultado, error: error.message };

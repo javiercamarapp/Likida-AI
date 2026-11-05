@@ -317,7 +317,9 @@ import { join, relative } from 'node:path';
 // LOTE B DE F1 (CT-SEG-07/11/17/25/27, integracion sobre el lote A): +3 archivos (326 -> 329, medido con el guardian), todos de seguridad y con `supabaseAdmin()` sin Storage:
 // `likida/identidad_telefono.ts` (una RPC `resolver_identidad_telefono`, la llave de WhatsApp), `seguridad/avisos.ts` (las RPC `reclamar_avisos_seguridad` y `anonimizar_red_evento_seguridad`)
 // y `seguridad/cobertura.ts` (conteo `head` de `evento_seguridad`). `auth/tenant-atado.ts` se quedo FUERA del conteo: su `Buffer.from(` era un falso positivo del regex y ahora usa TextEncoder.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 329;
+// F5 L5A (CT-IA-01, 0990): +1 archivo (329 -> 330), `llm/repo.ts`: las dos RPC de las alertas de tope de IA (`registrar_alerta_tope_llm` y `uso_llm_dia_por_flota`), por `acotada`.
+// Es el `repo.ts` propio del modulo `llm` (la frontera de este guardia solo exime el de la raiz); funcionalidad nueva, no codigo migrado. Un techo de integracion es la SUMA de los tramos.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 330;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -654,7 +656,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 329;
 // `likida/administracion.ts` +2 (las lecturas de `app_user` y `vigia_contacto` de `comprobarTelefonoLibre`, X-01, junto a la de `operador` que ya vivia ahi);
 // `conductor/repo.ts` +1 (la RPC `guardar_conductor_config_y_contactos`, que guarda configuracion y contactos en una sola transaccion); `seguridad/eventos.ts` +2 (las variantes
 // `registrar_evento_seguridad_red` y la rama sin red de la misma RPC). Todas por `acotada`/`supabaseAdmin()` y ancladas a `tenant_id` donde aplica. Funcionalidad nueva, no codigo migrado.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_465;
+// F5 L5A (CT-IA-01, 0990): 2,465 -> 2,467 (+2): `llm/repo.ts` (ver el techo de archivos), las dos RPC de las alertas de tope de IA. Funcionalidad nueva.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_467;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
