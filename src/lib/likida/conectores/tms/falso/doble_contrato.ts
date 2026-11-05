@@ -45,7 +45,7 @@ const aMsUtc = (v: string): number => Date.parse(v.replace(' ', 'T') + 'Z') + 6 
 export const HTML_LOGIN_DOBLE = '<!doctype html><html><body><form action="/login"><input name="usuario"></form></body></html>';
 
 export function aMojibake(valor: unknown): unknown {
-  if (typeof valor === 'string') return Buffer.from(valor, 'utf8').toString('latin1');
+  if (typeof valor === 'string') return new TextDecoder('windows-1252').decode(new TextEncoder().encode(valor));
   if (Array.isArray(valor)) return valor.map(aMojibake);
   if (valor !== null && typeof valor === 'object') return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, aMojibake(v)]));
   return valor;
@@ -117,7 +117,7 @@ export function crearDobleTms(o: OpcionesDoble): DobleTms {
 
 /** `n` viajes crudos con la forma del mapeo SUPUESTO: uno por día de octubre de 2026, salida 08:00 hora de México. */
 export function viajesCrudos(n: number): Record<string, unknown>[] {
-  return Array.from({ length: n }, (_, i) => ({
+  return [...Array(n).keys()].map((i) => ({
     Icident: `IC-${100 + i}`, unidad: `U-${i % 3}`,
     'Fecha Salida': `2026-10-${String(i + 1).padStart(2, '0')} 08:00:00`, 'Fecha Llegada': `2026-10-${String(i + 1).padStart(2, '0')} 18:00:00`,
     origen: 'Origen A', destino: 'Destino B', estatus: 'cerrado', operador: 'Operador Sintético',

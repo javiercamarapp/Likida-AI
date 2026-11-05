@@ -282,7 +282,7 @@ export function repararMojibake(texto: string): string {
     else return texto; // un carácter que no cabe en un byte: el texto es otra cosa, no mojibake
   }
   try {
-    const arreglado = new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(bytes));
+    const arreglado = new TextDecoder('utf-8', { fatal: true }).decode(new Uint8Array(bytes));
     return arreglado.length < texto.length ? arreglado : texto;
   } catch {
     return texto;
@@ -519,6 +519,14 @@ export function firmarPush(secreto: string, marca: string, cuerpo: string): stri
   return createHmac('sha256', secreto).update(`${marca}.${cuerpo}`).digest('hex');
 }
 
+/** Hexadecimal → bytes, o null si no es hexadecimal válido (sin `Buffer.from`). */
+function hexABytes(h: string): Uint8Array | null {
+  if (h.length === 0 || h.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(h)) return null;
+  const sal = new Uint8Array(h.length / 2);
+  for (let i = 0; i < sal.length; i += 1) sal[i] = parseInt(h.slice(i * 2, i * 2 + 2), 16);
+  return sal;
+}
+
 /**
  * Recibe UN lote empujado: verifica el modo, el tamaño, la firma (tiempo constante), la marca (anti-replay) y la
  * llave de idempotencia; luego lo pasa por el MISMO mapeo y por el corte. Pura: no persiste nada (quien llama guarda
@@ -534,10 +542,9 @@ export function recibirPush(c: ContratoTms, s: SolicitudPush): ResultadoPush {
   const firma = s.encabezados[p.encabezado_firma] ?? '';
   const llave = (s.encabezados[p.encabezado_idempotencia] ?? '').trim();
   if (marca === '' || firma === '') return { ok: false, estado: 401, motivo: 'Faltan la firma o la marca de tiempo.' };
-  const esperada = Buffer.from(firmarPush(s.secreto, marca, s.cuerpo), 'hex');
-  let recibida: Buffer;
-  try { recibida = Buffer.from(firma, 'hex'); } catch { return { ok: false, estado: 401, motivo: 'La firma no es válida.' }; }
-  if (recibida.length !== esperada.length || !timingSafeEqual(recibida, esperada)) return { ok: false, estado: 401, motivo: 'La firma no es válida.' };
+  const esperada = hexABytes(firmarPush(s.secreto, marca, s.cuerpo)) as Uint8Array;
+  const recibida = hexABytes(firma);
+  if (recibida === null || recibida.length !== esperada.length || !timingSafeEqual(recibida, esperada)) return { ok: false, estado: 401, motivo: 'La firma no es válida.' };
 
   const marcaMs = /^\d{1,13}$/.test(marca) ? Number(marca) * (marca.length <= 10 ? 1000 : 1) : NaN;
   if (!Number.isFinite(marcaMs) || Math.abs(s.ahora - marcaMs) > p.tolerancia_marca_s * 1000) {
