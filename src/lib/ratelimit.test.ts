@@ -96,7 +96,8 @@ describe('rateLimit registra el bloqueo en evento_seguridad', () => {
     expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(false);
     expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(true);
     expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(false);
-    await vi.waitFor(() => expect(registrar).toHaveBeenCalledTimes(1));
+    // Espera por CONDICIÓN (el registro es un import dinámico en segundo plano: bajo carga tarda más de 1 s, el default de waitFor).
+    await vi.waitFor(() => expect(registrar).toHaveBeenCalledTimes(1), { timeout: 10_000 });
     expect(registrar).toHaveBeenCalledWith('lead'); // la IP no sale de aquí
     vi.doUnmock('@/lib/seguridad/registro_acceso');
   });
@@ -109,19 +110,27 @@ describe('rateLimit registra el bloqueo en evento_seguridad', () => {
     reiniciar();
     expect(await rl('login:email:1.2.3.4', 1, 60_000)).toBe(true);
     expect(await rl('login:email:1.2.3.4', 1, 60_000)).toBe(false);
-    await new Promise((r) => setTimeout(r, 20));
-    expect(registrar).not.toHaveBeenCalled();
+    // Antes: setTimeout fijo de 20 ms y un «no se llamó» que pasaba en vacío si el import tardaba más. Ahora un bloqueo CONTROL
+    // (categoría «lead») prueba que el registro en segundo plano ya corrió; solo entonces se afirma que «login» no se registró.
+    expect(await rl('lead:control', 1, 60_000)).toBe(true);
+    expect(await rl('lead:control', 1, 60_000)).toBe(false);
+    await vi.waitFor(() => expect(registrar).toHaveBeenCalledWith('lead'), { timeout: 10_000 });
+    expect(registrar).not.toHaveBeenCalledWith('login');
+    expect(registrar).toHaveBeenCalledTimes(1);
     vi.doUnmock('@/lib/seguridad/registro_acceso');
   });
 
   it('un registro que falla jamás cambia la decisión del límite', async () => {
     vi.resetModules();
-    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: async () => { throw new Error('base caída'); } }));
+    const intentos = vi.fn(async (_categoria: string) => { throw new Error('base caída'); });
+    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: intentos }));
     const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
     reiniciar();
     expect(await rl('mcp:x', 1, 60_000)).toBe(true);
     expect(await rl('mcp:x', 1, 60_000)).toBe(false);
-    await new Promise((r) => setTimeout(r, 20));
+    // Espera por condición (no 20 ms fijos): el intento de registro, que lanza, ya ocurrió y no cambió la decisión.
+    await vi.waitFor(() => expect(intentos).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(await rl('mcp:x', 1, 60_000)).toBe(false);
     vi.doUnmock('@/lib/seguridad/registro_acceso');
   });
 });

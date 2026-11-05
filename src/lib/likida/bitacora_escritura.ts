@@ -170,6 +170,13 @@ export interface OpcionesBitacora {
   evento?: string;
   /** Campos extra para ese log (p. ej. `{ interruptor: nombre }`). */
   contexto?: Record<string, unknown>;
+  /**
+   * Idempotente por (tenant, acción, entidad, entidadId): si ya hay una fila igual no se inserta otra y se devuelve `true`.
+   * Para eventos que un reintento (p. ej. el webhook de Resend reenviando el mismo emailId) volvería a anotar.
+   * `bitacora_auditoria` no tiene índice único para esa llave, así que es consulta previa (no atómica: dos reintentos
+   * simultáneos podrían duplicar; ver «pendientes» del informe r4/robustez para el índice recomendado).
+   */
+  unica?: boolean;
 }
 
 /** La fila tal como va a la tabla. Exportado para que las pruebas la tipen. */
@@ -207,6 +214,13 @@ export async function anotarBitacora(
   const evento = opciones.evento ?? 'bitacora.no_escribio';
   const contexto = { ...(opciones.contexto ?? {}), accion: entrada.accion };
   try {
+    if (opciones.unica) {
+      let consulta = supabaseAdmin().from('bitacora_auditoria').select('id').eq('accion', entrada.accion).eq('entidad', entrada.entidad).eq('entidad_id', entrada.entidadId);
+      consulta = entrada.tenantId === null ? consulta.is('tenant_id', null) : consulta.eq('tenant_id', entrada.tenantId);
+      const previa = await acotada(consulta.limit(1), 'bitacora.existe');
+      // Si la consulta falla se anota igual: un duplicado es mejor que perder el rastro.
+      if (!previa.error && (previa.data?.length ?? 0) > 0) return true;
+    }
     const { error } = await acotada(supabaseAdmin().from('bitacora_auditoria').insert(filaBitacora(entrada)), 'bitacora.insert');
     if (error) {
       logger.warn(evento, { ...contexto, err: error.message });

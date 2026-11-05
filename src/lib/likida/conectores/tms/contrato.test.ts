@@ -11,7 +11,7 @@ vi.mock('../../presupuesto', async (importOriginal) => ({ ...(await importOrigin
 import { sesionDeExportaciones } from './archivo';
 import {
   CONTRATO_TMS_SUPUESTO, MAPEOS_REGISTRADOS, cargarContrato, conTextoReparado, corteUtc, crearAdaptadorTms, detectorSesionCaida,
-  entradasDeArchivos, esRespuestaHtml, filtrarPorCorte, firmarPush, paginacionDe, recibirPush, repararBytes, repararMojibake,
+  entradasDeArchivos, esRespuestaHtml, filtrarPorCorte, firmarPush, paginacionDe, recibirPush, analizarMojibake, repararBytes, repararMojibake, contarTextosEnRevision,
   validarContrato, ventanaConCorte, type ContratoTms,
 } from './contrato';
 import { aMojibake, crearDobleTms, viajesCrudos, HTML_LOGIN_DOBLE, type OpcionesDoble } from './falso/doble_contrato';
@@ -326,6 +326,54 @@ describe('mojibake', () => {
   });
   it('no toca texto sano', () => {
     for (const t of ['Ñandú', 'camión', 'Sin acentos', 'Ã sola', '']) expect(repararMojibake(t)).toBe(t);
+  });
+  it('repara comillas, guiones y eñes de Windows-1252 («â€œ», «â€“», «Ã‘»)', () => {
+    expect(repararMojibake('â€œHolaâ€\u009d')).toBe('“Hola”');
+    expect(repararMojibake('Pago â€“ enero')).toBe('Pago – enero');
+    expect(repararMojibake('MUÃ‘OZ')).toBe('MUÑOZ');
+  });
+  it('repara doble codificación y secuencias de escape que traen los bytes de un UTF-8 mal leído', () => {
+    expect(repararMojibake('CamiÃ\u0083Â³n')).toBe('Camión');
+    expect(repararMojibake(String.raw`Direcci\u00c3\u00b3n`)).toBe('Dirección');
+    expect(repararMojibake(String.raw`Pe\u00c3\u00b1a \u00c3\u0089xito`)).toBe('Peña Éxito');
+    expect(repararMojibake('Direcci&#195;&#179;n')).toBe('Dirección');
+    expect(repararMojibake('Pe&#xC3;&#xB1;a')).toBe('Peña');
+    expect(repararMojibake('Direcci%C3%B3n')).toBe('Dirección');
+    expect(repararMojibake('%E2%80%9CHola%E2%80%9D')).toBe('“Hola”');
+  });
+  it('lo que NO es mojibake no se toca: escapes sueltos, ASCII codificado, porcentajes y entidades normales', () => {
+    for (const t of [String.raw`Direcci\u00f3n`, String.raw`\u0041\u0042`, '100%', 'Ahorro 50%C', 'a%20b%20c', '&amp; &lt;b&gt; &#65;&#66;', 'S&#233;', 'Ñandú — “comillas” ©']) {
+      expect(repararMojibake(t)).toBe(t);
+      expect(analizarMojibake(t).estado).toBe('limpio');
+    }
+  });
+  it('porcentaje: no toca reservados de URL ni URLs/consultas con porcentaje válido', () => {
+    for (const t of ['%C3%A9%2F', 'ruta%C3%A9%26x', 'https://x.com/?q=Direcci%C3%B3n&u=%C3%A9', 'a=Direcci%C3%B3n&b=1']) {
+      expect(repararMojibake(t)).toBe(t);
+      expect(analizarMojibake(t).estado).toBe('limpio');
+    }
+    expect(repararMojibake('Direcci%C3%B3n')).toBe('Dirección');
+  });
+  it('ante la duda marca revisión y deja el texto como llegó (no adivina)', () => {
+    for (const t of [String.raw`Pe\u00c3\u00c3a`, String.raw`Nombre \u00c3\u0028`, 'RazÃ³n y Pe\u00c3a', 'roto \uFFFD aquí']) {
+      const r = analizarMojibake(t);
+      expect(r.estado).toBe('revision');
+    }
+    expect(analizarMojibake(String.raw`Nombre \u00c3\u0028`).texto).toBe(String.raw`Nombre \u00c3\u0028`);
+  });
+  it('repararMojibake cuenta los textos que quedan en revisión', () => {
+    const antes = contarTextosEnRevision();
+    repararMojibake('roto \uFFFD aquí');
+    repararMojibake('Camión');
+    expect(contarTextosEnRevision()).toBe(antes + 1);
+  });
+  it('estados: limpio, reparado', () => {
+    expect(analizarMojibake('Camión')).toEqual({ texto: 'Camión', estado: 'limpio' });
+    expect(analizarMojibake('CamiÃ³n')).toEqual({ texto: 'Camión', estado: 'reparado' });
+  });
+  it('conTextoReparado arregla un JSON cuyos textos traen los escapes literales', async () => {
+    const http = conTextoReparado(async () => ({ estado: 200, cuerpo: JSON.stringify({ a: 'Direcci\\u00c3\\u00b3n' }) }));
+    expect(JSON.parse((await http({ url: BASE, metodo: 'GET' })).cuerpo)).toEqual({ a: 'Dirección' });
   });
   it('conTextoReparado arregla el JSON de la respuesta y deja intacto lo que no es JSON', async () => {
     const http = conTextoReparado(async () => ({ estado: 200, cuerpo: JSON.stringify({ a: 'CamiÃ³n' }) }));
