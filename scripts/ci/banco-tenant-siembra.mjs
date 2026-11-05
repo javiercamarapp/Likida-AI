@@ -460,7 +460,10 @@ export const BASES_EXPLICITAS = {
   },
 };
 
-/** Sentencia SQL que carga las bases explicitas en ci_banco.bases (tabla, lado, columna, valor). */
+/**
+ * Sentencia SQL que carga las bases explicitas en ci_banco.bases (tabla, lado, columna, valor).
+ * @param {Record<string, { a?: Record<string, string>, b?: Record<string, string> }>} [bases]
+ */
 export function sqlBases(bases = BASES_EXPLICITAS) {
   const filas = [];
   for (const [tabla, lados] of Object.entries(bases)) {

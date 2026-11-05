@@ -116,9 +116,11 @@ function sumarDias(dia: string, dias: number): string {
  * vuelve a resolver la sesión y a gatear por su cuenta.
  */
 export async function PanelBandeja({
-  searchParams, datos, bandeja, busqueda, prefill,
+  searchParams, tenantId, datos, bandeja, busqueda, prefill,
 }: {
   searchParams: Params;
+  /** La flota que esta pantalla pinta: la acción de abajo solo escribe en ella (MX-002). */
+  tenantId: string;
   datos: VistaDescargaSat;
   bandeja: PaginaBandeja;
   busqueda: ResultadoBusquedaGastos | null;
@@ -421,6 +423,7 @@ export async function VistaBandejaSat({ searchParams, tenantExiste = true }: {
   return (
     <PanelBandeja
       searchParams={searchParams}
+      tenantId={tenantId}
       datos={datos}
       bandeja={bandeja}
       busqueda={busqueda}

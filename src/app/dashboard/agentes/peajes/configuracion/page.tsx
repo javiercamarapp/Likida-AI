@@ -64,7 +64,7 @@ async function puertaConfig(sp: { vista?: string; tenant?: string; rol?: string 
 }
 
 /** Puerta extra de las acciones de STAND-BY (geocercas, cursos): una flota con perfil `cinco_agentes` no las ejecuta aunque llegue un POST directo. */
-async function puertaStandBy(tenantId: string, parte: 'gps' | 'cursos'): Promise<string | null> {
+async function puertaStandBy(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string, parte: 'gps' | 'cursos'): Promise<string | null> {
   const no = await puertaConfig(sp, tenantId);
   if (no) return no;
   return (await superficiePeajesDeTenant(tenantId))[parte] ? null : MOTIVO_STAND_BY_PERFIL;
@@ -278,7 +278,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Geocercas ──
   async function accionGuardarGeocerca(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'gps');
+    const no = await puertaStandBy(sp, tenantId, 'gps');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const num = (k: string) => parsearImporteMx(String(fd.get(k) ?? ''));
     const r = await guardarGeocerca(tenantId, {
@@ -289,7 +289,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionEstadoGeocerca(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'gps');
+    const no = await puertaStandBy(sp, tenantId, 'gps');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activa = String(fd.get('activa')) === 'true';
     return volverConfig(sufijo, (await cambiarEstadoGeocerca(tenantId, String(fd.get('geocerca') ?? ''), activa)) ? (activa ? 'Geocerca activada.' : 'Geocerca desactivada.') : 'error:No se pudo cambiar la geocerca.');
@@ -298,7 +298,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Cursos (rutas autorizadas) ──
   async function accionImportarCursos(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'cursos');
+    const no = await puertaStandBy(sp, tenantId, 'cursos');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
@@ -306,14 +306,14 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionImportarCursosDeTabla() {
     'use server';
-    const no = await puertaStandBy(tenantId, 'cursos');
+    const no = await puertaStandBy(sp, tenantId, 'cursos');
     if (no) return volverConfig(sufijo, `error:${no}`);
-    const sesion = await resolverTenantAtadoOLanza(RUTA, SP, tenantId);
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     return volverConfig(sufijo, resumenCursos(await importarCursosDeTablaPropia({ tenantId, rol: sesion.rol })));
   }
   async function accionEstadoCurso(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'cursos');
+    const no = await puertaStandBy(sp, tenantId, 'cursos');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activo = String(fd.get('activo')) === 'true';
     return volverConfig(sufijo, (await cambiarEstadoCurso(tenantId, String(fd.get('curso') ?? ''), activo)) ? (activo ? 'Curso activado.' : 'Curso desactivado: ya no se evalúa en el reporte de reclamación.') : 'error:No se pudo cambiar el curso.');
@@ -379,7 +379,7 @@ export default async function PaginaConfiguracionPeajes({
     const pedido = String(fd.get('origen') ?? 'declarada');
     // «inferida» no se carga a mano: la produce el sistema; el formulario solo ofrece declarada o proveedor.
     const origen: OrigenTarifa = (ORIGENES_TARIFA as readonly string[]).includes(pedido) && pedido !== 'inferida' ? (pedido as OrigenTarifa) : 'declarada';
-    const sesion = await resolverTenantAtadoOLanza(RUTA, SP, tenantId);
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     // A37-A2-26: con origen «proveedor» las tarifas nacen confirmadas; quien sube el archivo es quien las confirma.
     const quien = sesion.nombre?.trim() || 'usuario de la flota';
     const r = await importarTarifasArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer, origen, quien);
@@ -390,7 +390,7 @@ export default async function PaginaConfiguracionPeajes({
     'use server';
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
-    const sesion = await resolverTenantAtadoOLanza(RUTA, SP, tenantId);
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     const quien = sesion.nombre?.trim() || 'usuario de la flota';
     const r = await confirmarTarifa(tenantId, String(fd.get('tarifa') ?? ''), quien);
     return volverConfig(sufijo, r.ok ? (r.yaConfirmada ? 'Esa tarifa ya estaba confirmada.' : 'Tarifa confirmada: desde ahora puede convertir un candidato en cobro con monto reclamable.') : `error:${r.motivo}`);
