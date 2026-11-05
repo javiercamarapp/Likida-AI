@@ -11,9 +11,22 @@ destinatario, `ALERTA_WA` definido en Vercel y monitor externo independiente de 
 
 | Sev. | Definición | Ejemplos reales del repo | Quién la detecta |
 |---|---|---|---|
-| **S1** | El sistema **miente o ejecuta de más**: una cifra falsa afirmada, un mensaje o CFDI que no debía salir, dinero mal calculado, datos de una flota vistos por otra. | Liquidación cerrada con monto equivocado; WhatsApp a quien no correspondía; fuga entre flotas. | Una persona o Sentry. **No se deriva de la bandeja**: la guardia lo declara y no finge detectarlo. |
-| **S2** | **Una función dejó de operar, pero nada miente**; o un plazo legal está por vencer. | Corrida de agente en fallo; fuente ciega de la guardia; ticket con SLA vencido; ARCO a menos de 5 días del plazo (LFPDPPP art. 31); `/api/health` en `degraded`; llave de IA caída (`llm.credencial_caida`); tope de IA al 100 % (`presupuesto_ia.tope_tenant`). | La guardia (`/api/cron/guardia`, cada 5 min) y `salud-produccion`. |
-| **S3** | Espera una decisión humana; **el sistema opera**. | Ticket dentro de SLA; ARCO dentro de plazo; talachas, facturas de proveedor o liquidaciones por revisar; tope de IA al 80 % (`presupuesto_ia.tope_80`). | La bandeja `/admin/escalaciones`. |
+| **S1** | El sistema **miente o ejecuta de más**: una cifra falsa afirmada, un mensaje o CFDI que no debía salir, dinero mal calculado, datos de una flota vistos por otra. | Liquidación cerrada con monto equivocado; WhatsApp a quien no correspondía; fuga entre flotas. | Una persona o Sentry. **Ningún código lo detecta**: `guardia.ts` no deriva S1 de la bandeja y lo declara en vez de fingir. |
+| **S2** | **Una función dejó de operar, pero nada miente**; o un plazo legal está por vencer. | Corrida de agente en fallo; fuente ciega de la bandeja; ticket con SLA vencido; ARCO a menos de 5 días del plazo (LFPDPPP art. 31); `/api/health` en `degraded`; llave de IA caída (`llm.credencial_caida`); tope de IA al 100 % (`presupuesto_ia.tope_tenant`). | Bandeja (corrida en fallo, fuente ciega, SLA vencido, ARCO): `guardia.ts` la clasifica y `/api/cron/guardia` (cada 5 min) manda un correo por `ALERTA_EMAIL` por cada S1/S2 **nuevo**. `/api/health` `degraded`: `salud-produccion`. Llave de IA y tope de IA: **no pasan por la clasificación de la guardia**; son correos directos de `alertarOperador` (ver nota abajo). |
+| **S3** | Espera una decisión humana; **el sistema opera**. | Ticket dentro de SLA; ARCO dentro de plazo; talachas, facturas de proveedor o liquidaciones por revisar; tope de IA al 80 % (`presupuesto_ia.tope_80`). | La bandeja `/admin/escalaciones`: se ve al abrirla y **no manda correo**. Excepción: el tope de IA al 80 % no está en la bandeja, solo llega como correo de `alertarOperador`. |
+
+**Qué manda correo y qué no, según el código.** Todo aviso al operador es un correo de `alertarOperador` a `ALERTA_EMAIL` (con
+tope de un correo por evento por hora; sin `ALERTA_EMAIL` no sale nada y solo queda en el log). El segundo canal, `ALERTA_WA` (WhatsApp, solo
+dinero y `guardia.*`), existe en el código pero hoy no está definido en Vercel (sección 7). Quién lo dispara:
+
+- `/api/cron/guardia` (cada 5 min) clasifica la bandeja y manda `guardia.incidente_nuevo` solo por S1/S2 nuevos o fuentes ciegas
+  nuevas; además `guardia.base_inalcanzable`, `guardia.base_volvio` y `guardia.app_sin_respuesta`. Un incidente solo se da por
+  «visto» si el correo salió; si no salió, se reintenta en la siguiente pasada.
+- `llm.credencial_caida` lo manda `src/lib/llm/credencial.ts` al primer 401/402/403 de una llamada al modelo (no la guardia). La
+  sonda de llave (que también avisa si falta `OPENROUTER_API_KEY`) y el barrido de topes de IA (`presupuesto_ia.tope_80` y
+  `presupuesto_ia.tope_tenant`) solo corren si `IA_GOBIERNO=encendido`, colgados del cron de la guardia, una pasada de cada tres
+  (~15 min). El aviso de tope se registra en la base una vez por flota, día y nivel; si el correo no sale, la marca se libera y el
+  siguiente barrido lo reintenta.
 
 Regla de duda: ante la duda entre S1 y S2, es **S1** hasta demostrar que ningún dato falso salió. Un guardia que se calla es peor
 que no tener guardia (la fuente ciega es S2 por sí misma).
