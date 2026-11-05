@@ -54,6 +54,14 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
                 {gruposOmitidos > 0 ? ` Quedaron fuera ${numero(gruposOmitidos)} grupos por el tope de revisión.` : ''}
               </p>
             )}
+            {(r?.chatsSinEquipo ?? 0) > 0 && (
+              <p className="text-[12px]" role="note" style={{ color: 'var(--muted)' }}>
+                {numero(r?.chatsSinEquipo ?? 0)} {r?.chatsSinEquipo === 1 ? 'grupo no tiene' : 'grupos no tienen'} a nadie de tu equipo identificado: revisa que los nombres del equipo estén escritos igual que en el chat, porque si no, no se puede saber qué quedó sin atender.
+              </p>
+            )}
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+              Los mensajes que solo traen una foto, un audio o un archivo, sin texto, no se cuentan como pendientes.
+            </p>
             <FormaRevision revisar={acciones.revisar} enviar={acciones.enviar} flota={flota} puedeEnviar={puedeEnviar} inicial={<TablaSinAtender alertas={resultado?.alertas ?? []} />} />
           </Seccion>
 
