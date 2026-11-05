@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { EstadoError } from '../../ui-v2/componentes';
+import { EstadoError, Boton } from '../../ui-v2/componentes';
+import { MENSAJE_FLOTA_CAMBIO, esErrorFlotaCambio } from '@/lib/auth/flota_cambio';
 
 // Boundary de los agentes del dashboard (CT-CAL-06): un fallo en la pantalla de UN agente se queda en el agente. Se pinta dentro del
 // chrome del panel (el de /dashboard es de pantalla completa) con el mismo contrato que él: el digest en pantalla, seleccionable, y
@@ -12,6 +13,18 @@ export default function AgentesError({ error, reset }: { error: Error & { digest
       logger.error('panel.agentes.boundary', { digest: error.digest ?? 'sin-digest', err: error.name }),
     );
   }, [error]);
+  // MX-002: este boundary está MÁS CERCA que el de /dashboard, así que es quien atrapa el FlotaCambioError de las acciones de los
+  // agentes (p. ej. decidir un candidato de peajes). «Reintentar» repetiría la misma flota vieja: se dice qué pasó y la salida es recargar.
+  if (esErrorFlotaCambio(error)) {
+    return (
+      <EstadoError
+        titulo="Cambiaste de flota"
+        accion={<Boton tamano="sm" onClick={() => window.location.reload()}>Recargar</Boton>}
+      >
+        {MENSAJE_FLOTA_CAMBIO}
+      </EstadoError>
+    );
+  }
   return (
     <>
       <EstadoError titulo="No se pudo cargar este agente" onReintentar={reset}>
