@@ -68,15 +68,34 @@ describe('regla de foco visible por intención (R4)', () => {
 
   function camposMarcables(codigo: string, nombre: string) {
     const sf = ts.createSourceFile(nombre, codigo, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    // Constantes de cadena del mismo archivo (`const inputCss = '...'`): un className que llega por identificador o plantilla
+    // se expande a su texto, para que la regla no dependa de que la clase esté escrita literalmente en el JSX.
+    const constantes = new Map<string, string>();
+    const reunir = (n: ts.Node): void => {
+      if (ts.isVariableDeclaration(n) && ts.isIdentifier(n.name) && n.initializer
+        && (ts.isStringLiteral(n.initializer) || ts.isNoSubstitutionTemplateLiteral(n.initializer))) {
+        constantes.set(n.name.text, n.initializer.text);
+      }
+      ts.forEachChild(n, reunir);
+    };
+    reunir(sf);
+    const expandir = (t: string): string => {
+      let out = t;
+      for (let i = 0; i < 3; i++) for (const [k, v] of constantes) out = out.replace(new RegExp(`\\b${k}\\b`, 'g'), ` '${v}' `);
+      return out;
+    };
     const hallados: { linea: number; transparente: boolean; ocultoVisual: boolean; anillo: boolean; foco: boolean }[] = [];
     const visitar = (n: ts.Node): void => {
       if ((ts.isJsxOpeningElement(n) || ts.isJsxSelfClosingElement(n)) && ['input', 'select', 'textarea'].includes(n.tagName.getText())) {
         const attrs = n.attributes.properties.filter(ts.isJsxAttribute);
         const cn = attrs.find((a) => a.name.getText() === 'className');
-        const t = cn?.initializer ? quitaFile(cn.initializer.getText()) : '';
+        const t = cn?.initializer ? quitaFile(expandir(cn.initializer.getText())) : '';
         hallados.push({
           linea: sf.getLineAndCharacterOfPosition(n.getStart()).line + 1,
-          transparente: /(^|[\s'"])(bg-transparent|border-0)(?=[\s'"])/.test(t),
+          // Transparente y SIN borde propio: el anillo debe pintarlo el contenedor. Un campo transparente pero con borde
+          // visible (`hairline`, `border`) sí lleva el anillo del campo y no necesita el atributo.
+          transparente: /(^|[\s'"])border-0(?=[\s'"])/.test(t)
+            || (/(^|[\s'"])bg-transparent(?=[\s'"])/.test(t) && !/(^|[\s'"])(hairline|border|border-[a-z]+)(?=[\s'"])/.test(t)),
           ocultoVisual: /(^|[\s'"])sr-only(?=[\s'"])/.test(t),
           anillo: attrs.some((a) => a.name.getText() === 'data-anillo'),
           foco: attrs.some((a) => a.name.getText() === 'data-foco'),
@@ -102,6 +121,13 @@ describe('regla de foco visible por intención (R4)', () => {
     expect(transparentes).toBeGreaterThanOrEqual(10);
     expect(ocultos).toBeGreaterThanOrEqual(3);
     expect(sinMarca).toEqual([]);
+  });
+
+  it('resuelve className por constante del mismo archivo y no exige atributo a un campo transparente con borde visible', () => {
+    const sinBorde = camposMarcables("const css = 'px-2 bg-transparent border-0'; export const A = () => <input className={`${css} w-full`} />;", 'x.tsx');
+    expect(sinBorde[0].transparente && !sinBorde[0].anillo).toBe(true);
+    const conBorde = camposMarcables("const css = 'hairline rounded-lg bg-transparent'; export const A = () => <input className={`${css} w-full`} />;", 'x.tsx');
+    expect(conBorde[0].transparente).toBe(false);
   });
 
   it('control negativo: el detector marca un campo transparente sin atributo', () => {
