@@ -657,7 +657,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 330;
 // `conductor/repo.ts` +1 (la RPC `guardar_conductor_config_y_contactos`, que guarda configuracion y contactos en una sola transaccion); `seguridad/eventos.ts` +2 (las variantes
 // `registrar_evento_seguridad_red` y la rama sin red de la misma RPC). Todas por `acotada`/`supabaseAdmin()` y ancladas a `tenant_id` donde aplica. Funcionalidad nueva, no codigo migrado.
 // F5 L5A (CT-IA-01, 0990): 2,465 -> 2,467 (+2): `llm/repo.ts` (ver el techo de archivos), las dos RPC de las alertas de tope de IA. Funcionalidad nueva.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_467;
+// F3 (CT-IA-01): 2,467 -> 2,468 (+1): `llm/repo.ts` `rpcLiberarAlertaTope`, el delete de la marca de `llm_alerta_tope` (anclado a tenant_id/dia/nivel) cuando el aviso no salió.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_468;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

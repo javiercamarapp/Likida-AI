@@ -5,7 +5,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const rpc = vi.hoisted(() => vi.fn());
 const alertar = vi.hoisted(() => vi.fn(async () => true));
 const warn = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ rpc }) }));
+const borrados = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+const borrarError = vi.hoisted(() => ({ msg: null as string | null }));
+const desde = vi.hoisted(() => (tabla: string) => ({
+  delete: () => {
+    const filtro: Record<string, unknown> = { tabla };
+    const q = { eq: (c: string, v: unknown) => { filtro[c] = v; if (Object.keys(filtro).length === 4) { borrados.push(filtro); return Promise.resolve({ data: null, error: borrarError.msg ? { message: borrarError.msg } : null }); } return q; } };
+    return q;
+  },
+}));
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ rpc, from: desde }) }));
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn, error: vi.fn() } }));
 vi.mock('@/lib/observability/alerta', () => ({ alertarOperador: alertar }));
@@ -16,7 +25,7 @@ import { nivelesCruzados, registrarAlertaTope, avisarTopePersistido, revisarTope
 const A = '99000000-0000-4000-8000-0000000000a1';
 const B = '99000000-0000-4000-8000-0000000000b1';
 
-beforeEach(() => { rpc.mockReset(); alertar.mockClear(); warn.mockClear(); });
+beforeEach(() => { rpc.mockReset(); alertar.mockClear(); warn.mockClear(); borrados.length = 0; borrarError.msg = null; });
 
 describe('nivelesCruzados (pura)', () => {
   it('bajo el 80 % no hay nada; 80 % exacto da [80]; 100 % exacto da [80, 100]', () => {
@@ -64,10 +73,42 @@ describe('registrarAlertaTope / avisarTopePersistido', () => {
     expect(await registrarAlertaTope(A, '2026-11-04', 80, 4, 5, 'piso')).toBeNull();
   });
 
-  it('un aviso que revienta NO lanza (no puede tapar el error de presupuesto)', async () => {
+  it('un aviso que revienta NO lanza (no puede tapar el error de presupuesto) y libera la marca para reintentar', async () => {
     rpc.mockResolvedValue({ data: true, error: null });
     alertar.mockRejectedValueOnce(new Error('correo caído'));
-    await expect(avisarTopePersistido({ tenantId: A, nivel: 100, usoUsd: 5, topeUsd: 5, origen: 'piso' })).resolves.toBe(true);
+    await expect(avisarTopePersistido({ tenantId: A, nivel: 100, usoUsd: 5, topeUsd: 5, origen: 'piso' })).resolves.toBe(false);
+    expect(borrados).toEqual([{ tabla: 'llm_alerta_tope', tenant_id: A, dia: '2026-11-04', nivel: 100 }]);
+  });
+
+  it('si el aviso NO salió (alertarOperador false: sin ALERTA_EMAIL o correo caído) devuelve false y libera la marca; el siguiente intento avisa', async () => {
+    rpc.mockResolvedValue({ data: true, error: null });
+    alertar.mockResolvedValueOnce(false);
+    expect(await avisarTopePersistido({ tenantId: A, nivel: 80, usoUsd: 4.2, topeUsd: 5, origen: 'piso' })).toBe(false);
+    expect(borrados).toEqual([{ tabla: 'llm_alerta_tope', tenant_id: A, dia: '2026-11-04', nivel: 80 }]);
+    expect(await avisarTopePersistido({ tenantId: A, nivel: 80, usoUsd: 4.3, topeUsd: 5, origen: 'piso' })).toBe(true);
+    expect(alertar).toHaveBeenCalledTimes(2);
+    expect(borrados).toHaveLength(1);
+  });
+
+  it('un aviso que salió NO libera la marca', async () => {
+    rpc.mockResolvedValue({ data: true, error: null });
+    await avisarTopePersistido({ tenantId: A, nivel: 80, usoUsd: 4.2, topeUsd: 5, origen: 'piso' });
+    expect(borrados).toEqual([]);
+  });
+
+  it('con la base muda (null) y aviso fallido no hay marca propia que soltar', async () => {
+    rpc.mockResolvedValue({ data: null, error: { message: 'timeout' } });
+    alertar.mockResolvedValueOnce(false);
+    expect(await avisarTopePersistido({ tenantId: A, nivel: 80, usoUsd: 4, topeUsd: 5, origen: 'piso' })).toBe(false);
+    expect(borrados).toEqual([]);
+  });
+
+  it('si liberar la marca falla, no lanza y lo deja en el log', async () => {
+    rpc.mockResolvedValue({ data: true, error: null });
+    alertar.mockResolvedValueOnce(false);
+    borrarError.msg = 'sin permiso';
+    await expect(avisarTopePersistido({ tenantId: A, nivel: 100, usoUsd: 5, topeUsd: 5, origen: 'piso' })).resolves.toBe(false);
+    expect(warn).toHaveBeenCalledWith('presupuesto_llm.alerta_tope_no_liberada', expect.objectContaining({ err: 'sin permiso' }));
   });
 });
 

@@ -17,6 +17,7 @@
 //     que compara el gasto del día de cada flota con su techo y avisa al 80 y
 //     al 100. Sin tocar el camino caliente de cada llamada al modelo.
 //
+// Si el aviso NO sale (sin ALERTA_EMAIL, correo caído), la marca se libera y el siguiente barrido reintenta.
 // NUNCA lanza: un aviso que no sale no puede tapar el error de presupuesto.
 // Si la base no contesta al registrar, se AVISA igual (mejor un aviso repetido
 // que un silencio) y se deja en el log.
@@ -25,7 +26,7 @@
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
 import type { OrigenTopeTenant } from './budget';
-import { rpcRegistrarAlertaTope, rpcUsoLlmDiaPorFlota } from './repo';
+import { rpcLiberarAlertaTope, rpcRegistrarAlertaTope, rpcUsoLlmDiaPorFlota } from './repo';
 
 export type NivelTope = 80 | 100;
 export const NIVEL_AVISO_TEMPRANO: NivelTope = 80;
@@ -80,26 +81,47 @@ export interface AvisoTope {
   proposito?: string; dia?: string; pedidoUsd?: number;
 }
 
-/** Avisa (una vez por flota/día/nivel, entre TODAS las instancias). Devuelve si esta llamada avisó. */
+/** Suelta la marca del día para que el siguiente barrido reintente. NUNCA lanza. */
+async function liberarAlertaTope(tenantId: string, dia: string, nivel: NivelTope): Promise<void> {
+  try {
+    const r = await rpcLiberarAlertaTope(tenantId, dia, nivel);
+    if (r?.error) logger.warn('presupuesto_llm.alerta_tope_no_liberada', { tenantId, nivel, err: r.error.message });
+  } catch (e) {
+    logger.warn('presupuesto_llm.alerta_tope_no_liberada', { tenantId, nivel, err: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Avisa (una vez por flota/día/nivel, entre TODAS las instancias). Devuelve si el aviso SALIÓ.
+ * La marca de la base se pone antes de enviar (es lo que hace atómica la deduplicación); si el envío no sale
+ * (`alertarOperador` devuelve false: sin ALERTA_EMAIL, correo caído, piso por hora) o revienta, la marca se
+ * libera para que el barrido de 15 min lo reintente en vez de dar la alerta por entregada.
+ */
 export async function avisarTopePersistido(a: AvisoTope): Promise<boolean> {
   const dia = a.dia ?? hoyMx();
   const primero = await registrarAlertaTope(a.tenantId, dia, a.nivel, a.usoUsd, a.topeUsd, a.origen);
   if (primero === false) return false;
+  let salio = false;
   try {
     const { alertarOperador } = await import('@/lib/observability/alerta');
     const t = TEXTO_NIVEL[a.nivel];
-    await alertarOperador(t.evento, {
+    salio = await alertarOperador(t.evento, {
       tenantId: a.tenantId, dia, nivel: `${a.nivel} %`,
       ...(a.proposito ? { proposito: a.proposito } : {}),
       ...(a.pedidoUsd !== undefined ? { pedidoUsd: a.pedidoUsd } : {}),
       usoUsd: Number(a.usoUsd.toFixed(4)), topeUsd: a.topeUsd, origenTope: a.origen,
       ...(primero === null ? { dedupBase: 'no verificada: la base no contestó, puede repetirse' } : {}),
       msg: t.msg,
-    });
+    }) === true;
   } catch (e) {
     logger.warn('presupuesto_llm.alerta_tope_fallo', { tenantId: a.tenantId, err: e instanceof Error ? e.message : String(e) });
   }
-  return true;
+  if (!salio) {
+    logger.warn('presupuesto_llm.alerta_tope_sin_salir', { tenantId: a.tenantId, nivel: a.nivel, reintenta: primero === true });
+    // Solo hay marca que soltar si ESTA llamada la puso; con `null` (base muda) no se sabe y no hay nada seguro que borrar.
+    if (primero === true) await liberarAlertaTope(a.tenantId, dia, a.nivel);
+  }
+  return salio;
 }
 
 export interface ResultadoRevisionTopes { flotas: number; avisos: Array<{ tenantId: string; nivel: NivelTope }>; error?: string }

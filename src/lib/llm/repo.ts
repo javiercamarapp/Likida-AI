@@ -21,6 +21,18 @@ export async function rpcRegistrarAlertaTope(
   }), 'registrarAlertaTope');
 }
 
+/**
+ * Libera la marca de `llm_alerta_tope` cuando el aviso NO salió, para que el siguiente barrido pueda reintentarlo.
+ * `service_role` tiene `delete` sobre la tabla (0990). `null` = el cliente no tiene `from`.
+ */
+export async function rpcLiberarAlertaTope(tenantId: string, dia: string, nivel: 80 | 100): Promise<RespuestaRpc | null> {
+  const admin = supabaseAdmin() as unknown as {
+    from?: (t: string) => { delete: () => { eq: (c: string, v: unknown) => { eq: (c: string, v: unknown) => { eq: (c: string, v: unknown) => PromiseLike<RespuestaRpc> } } } };
+  };
+  if (typeof admin.from !== 'function') return null;
+  return acotada(admin.from('llm_alerta_tope').delete().eq('tenant_id', tenantId).eq('dia', dia).eq('nivel', nivel), 'liberarAlertaTope');
+}
+
 /** `uso_llm_dia_por_flota`: filas `{ tenant_id, usado_usd }` del día MX. `null` = el cliente no tiene RPC. */
 export async function rpcUsoLlmDiaPorFlota(dia: string): Promise<RespuestaRpc | null> {
   const admin = supabaseAdmin() as unknown as RpcCliente;

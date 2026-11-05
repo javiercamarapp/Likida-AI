@@ -402,10 +402,12 @@ async function avisarTopeTenant(budget: LlmBudget, pedidoUsd: number): Promise<v
     // el Map de arriba solo ahorra la ida a la base en los cientos de rebotes que siguen al primero.
     // Import dinámico: `alerta_tope` arrastra el correo, y este módulo lo importan 18 sitios (y sus pruebas).
     const { avisarTopePersistido } = await import('./alerta_tope');
-    await avisarTopePersistido({
+    const salio = await avisarTopePersistido({
       tenantId: budget.tenantId, nivel: 100, dia, usoUsd: budget.maxTenantDailyUsd, topeUsd: budget.maxTenantDailyUsd,
       origen: budget.origenTope ?? 'piso', proposito: budget.proposito, pedidoUsd,
     });
+    // Un aviso que no salió (y cuya marca en la base ya se liberó) no se da por dado en esta instancia: el próximo rebote reintenta.
+    if (!salio && alertadoTopeTenant.get(budget.tenantId) === dia) alertadoTopeTenant.delete(budget.tenantId);
   } catch (e) {
     logger.warn('presupuesto_llm.alerta_tope_fallo', { tenantId: budget.tenantId, err: e instanceof Error ? e.message : String(e) });
   }
