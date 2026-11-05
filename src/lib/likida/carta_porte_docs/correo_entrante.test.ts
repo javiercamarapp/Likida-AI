@@ -9,6 +9,7 @@ import {
 import { llmFalso, lecturaBoreal } from './llm_falso.fixture';
 import { correoTexto, defectuosos, excelAtlas, pdfBoreal, xmlCartaPorte } from './documentos_sinteticos.fixture';
 import * as repo from './repo';
+import { anotarBitacora } from '../bitacora_escritura';
 
 const DOM = 'mail.likida.test';
 const TOKEN_A = 'abcdefghjkmnpqrstvwxyz23';
@@ -161,6 +162,45 @@ describe('atenderCorreoCartaPorte', () => {
   it('A37-S31-03: un correo sin omisiones no deja aviso', async () => {
     await atenderCorreoCartaPorte(TOKEN_A, { ...base, attachments: [{ id: 'a1', filename: 'ok.pdf' }] }, deps({ a1: await pdfBoreal() }));
     expect(estado.eventos.some((e) => e.tipo === 'aviso_oficina')).toBe(false);
+  });
+
+  describe('CT-A345-09: nada se descarta sin rastro', () => {
+    const anotado = () => vi.mocked(anotarBitacora).mock.calls.map((c) => c[0]).filter((e) => e.accion === 'cp_correo.descartes');
+    beforeEach(() => { vi.mocked(anotarBitacora).mockClear(); });
+
+    it('xlsm, zip, docx, tif y heic no se leen pero dejan UNA anotación con motivo y extensiones (sin nombres de archivo)', async () => {
+      const nombres = ['macro.xlsm', 'todo.zip', 'oficio.docx', 'escaneo.tif', 'foto.heic'];
+      const r = await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.', attachments: nombres.map((n, i) => ({ id: `x${i}`, filename: n })) }, deps());
+      expect(r).toMatchObject({ status: 200, cuerpo: { ignorado: 'sin_contenido', descartados: 6 } }); // 5 extensiones + cuerpo corto
+      expect(estado.docs.size).toBe(0);
+      const a = anotado();
+      expect(a).toHaveLength(1);
+      expect(a[0]).toMatchObject({ tenantId: A, entidad: 'cp_correo', entidadId: 'em-1', detalle: { total: 6, por_motivo: { extension_no_admitida: 5, cuerpo_corto: 1 }, extensiones: ['docx', 'heic', 'tif', 'xlsm', 'zip'] } });
+      expect(JSON.stringify(a[0])).not.toMatch(/macro|oficio|escaneo|todo\.zip/);
+    });
+
+    it('un cuerpo de menos de 80 caracteres sin adjuntos deja rastro «cuerpo_corto»', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Embarque CG-5521 sale mañana.' }, deps());
+      expect(anotado()[0]).toMatchObject({ detalle: { por_motivo: { cuerpo_corto: 1 } } });
+    });
+
+    it('un adjunto con extensión válida pero ilegible o gigante también deja rastro, y el que sí se leyó entra', async () => {
+      const grande = new Uint8Array(MAX_ADJUNTO_BYTES + 1).fill(37);
+      const r = await atenderCorreoCartaPorte(TOKEN_A, { ...base, attachments: [{ id: 'g', filename: 'enorme.pdf' }, { id: 'e', filename: 'virus.pdf' }, { id: 'b', filename: 'ok.pdf' }, { id: 'n', filename: 'raro.xlsm' }] },
+        deps({ g: grande, e: defectuosos.ejecutable, b: await pdfBoreal() }));
+      expect(r).toMatchObject({ status: 200, cuerpo: { recibidos: 1, descartados: 3 } });
+      expect(anotado()[0]).toMatchObject({ detalle: { total: 3, por_motivo: { demasiado_grande: 1, formato_no_legible: 1, extension_no_admitida: 1 } } });
+    });
+
+    it('un adjunto sin identificador (no se puede bajar) deja rastro', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.', attachments: [{ filename: 'sin-id.pdf' }] }, deps());
+      expect(anotado()[0]).toMatchObject({ detalle: { por_motivo: { sin_identificador: 1, cuerpo_corto: 1 } } });
+    });
+
+    it('un correo limpio no anota nada', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, attachments: [{ id: 'a1', filename: 'ok.pdf' }] }, deps({ a1: await pdfBoreal() }));
+      expect(anotado()).toHaveLength(0);
+    });
   });
 
   it('con el agente apagado: 503 (para que vuelva) y sin consumir el email_id', async () => {
