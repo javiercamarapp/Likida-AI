@@ -21,11 +21,11 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { TZ_MX } from '@/lib/formato';
 import { acotada } from '../../presupuesto';
 import { coordenadaValida } from '../posiciones_comun';
 import { asentarLecturas, type Lectura, type ResultadoSync } from '../sincronizar_gps';
 import { llaveEconomico } from '../tabla_propia/validar';
+import mapeoSupuesto from './mapeos/posiciones.supuesto.json';
 import type { MapeoTms } from './mapeo';
 import { paginar, type OpcionesPaginar, type PuntoReanudo } from './paginar';
 import type { SesionTms } from './sesion';
@@ -34,26 +34,8 @@ import type { FilaRechazadaTms, LectorTms, LecturaTms } from './tipos';
 /** Valor de `posicion.proveedor` y de `gps_proveedor` para lo que entra por la API de lectura del TMS. */
 export const PROVEEDOR_TMS_POSICIONES = 'tms_api_lectura';
 
-/** SUPUESTO: forma hipotética de la tabla de posiciones combinada. Se confirma al llegar la documentación. */
-export const MAPEO_POSICIONES_SUPUESTO: MapeoTms = {
-  recurso: 'posiciones',
-  ruta: '/api/posiciones',
-  metodo: 'GET',
-  params: { desde: 'desde', hasta: 'hasta', pagina: 'pagina', tam: 'tam' },
-  raiz: 'data.items',
-  campos: {
-    // El crudo no garantiza que SIEMPRE traiga despacho (15ed3efd, abierto): por eso no es obligatorio.
-    despacho_ref: { fuente: 'Icident', transformar: 'texto' },
-    deviceId: { fuente: 'unidad', transformar: 'texto' },
-    lat: { fuente: 'latitud', transformar: 'numero' },
-    lng: { fuente: 'longitud', transformar: 'numero' },
-    medidaEn: { fuente: 'fecha', transformar: 'fecha_local', zona: TZ_MX },
-    velocidad: { fuente: 'velocidad', transformar: 'numero' },
-    rumbo: { fuente: 'rumbo', transformar: 'numero' },
-  },
-  clave_externa: ['deviceId', 'medidaEn'],
-  obligatorios: ['deviceId', 'lat', 'lng', 'medidaEn'],
-};
+/** SUPUESTO: forma hipotética de la tabla de posiciones combinada. Se confirma al llegar la documentación. Vive en `mapeos/posiciones.supuesto.json`. */
+export const MAPEO_POSICIONES_SUPUESTO = mapeoSupuesto as unknown as MapeoTms;
 
 /** Una lectura lista para `asentarLecturas`, más la referencia de despacho si el origen la trajo. */
 export interface PosicionTms extends Lectura {

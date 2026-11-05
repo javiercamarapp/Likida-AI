@@ -1,0 +1,70 @@
+{
+  "_aviso": "SUPUESTO. Este archivo es EL contrato del adaptador del sistema de transporte (TMS): rutas, nombres de campo, paginacion, autenticacion y deteccion de sesion caida viven aqui y en los mapeos JSON que referencia. Nada de esto esta confirmado por el cliente: ninguna ruta, campo, formato ni limite proviene de su documentacion. Cuando el cliente entregue su especificacion se corrige ESTE archivo y los mapeos, no el codigo. Mientras tanto no existe conexion real: el adaptador queda apagado por omision.",
+  "estado": "SUPUESTO",
+  "version": "0.1.0-supuesto",
+  "texto": {
+    "codificacion": "utf-8",
+    "reparar_mojibake": true
+  },
+  "auth": {
+    "login": {
+      "ruta": "/api/login",
+      "cuerpo": { "usuario": "{usuario}", "clave": "{clave}" },
+      "campo_token": "token",
+      "encabezado": "Authorization",
+      "prefijo": "Bearer "
+    },
+    "sesion_caida": {
+      "estados": [401],
+      "html_con_200": true,
+      "marcadores_html": ["<form", "type=\"pass", "type='pass", "iniciar sesion", "inicio de sesion"],
+      "json": [
+        { "ruta": "error", "contiene": ["token", "sesion", "expirad", "vencid"] },
+        { "ruta": "message", "contiene": ["token", "sesion", "expirad", "vencid"] }
+      ]
+    }
+  },
+  "corte": {
+    "fecha": null,
+    "zona": "America/Mexico_City",
+    "nota": "La fecha de corte la fija la flota (aaaa-mm-dd, hora local de la zona). Sin fijar, no se filtra nada y se avisa. Lo anterior al corte no se importa ni se pide."
+  },
+  "recursos": {
+    "viajes": {
+      "mapeo": "mapeos/viajes.supuesto.json",
+      "paginacion": { "tipo": "pagina", "tamano": 100 },
+      "orden_estable": false,
+      "campo_corte": "salida_en"
+    },
+    "peajes": {
+      "mapeo": "mapeos/peajes.supuesto.json",
+      "paginacion": { "tipo": "pagina", "tamano": 100 },
+      "orden_estable": false,
+      "campo_corte": "cruce_en"
+    },
+    "posiciones": {
+      "mapeo": "mapeos/posiciones.supuesto.json",
+      "paginacion": { "tipo": "pagina", "tamano": 100 },
+      "orden_estable": false,
+      "campo_corte": "medidaEn"
+    },
+    "liquidaciones": {
+      "mapeo": "mapeos/liquidaciones.supuesto.json",
+      "paginacion": { "tipo": "pagina", "tamano": 100 },
+      "orden_estable": false
+    }
+  },
+  "modos": {
+    "api": { "activo": false, "nota": "Apagado por omision hasta que el cliente entregue su especificacion y una cuenta de servicio de solo lectura." },
+    "archivos": { "activo": false, "formatos": ["csv", "json"], "nota": "Apagado hasta que el cliente confirme. Plan B: exportaciones del cliente pasadas por los MISMOS mapeos." },
+    "push": {
+      "activo": false,
+      "encabezado_firma": "x-likida-firma",
+      "encabezado_marca": "x-likida-marca",
+      "encabezado_idempotencia": "idempotency-key",
+      "tolerancia_marca_s": 300,
+      "max_bytes": 5242880,
+      "nota": "Plan C: el cliente empuja lotes firmados (HMAC-SHA256 sobre marca.llave.cuerpo). Sin endpoint publicado: solo la logica de recepcion."
+    }
+  }
+}
