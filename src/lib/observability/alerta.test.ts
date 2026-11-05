@@ -292,6 +292,22 @@ describe('alertarHuecoConfiguracion — el piso es de días, no de una hora', ()
     expect(enviarCorreo).toHaveBeenCalledTimes(2);
   });
 
+  it('CT-DAT-12: 660 pings de /api/health = UNA sola ida a Redis por llave y piso (no una por ping)', async () => {
+    vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
+    vi.stubEnv('UPSTASH_REDIS_REST_URL', 'https://redis.example');
+    vi.stubEnv('UPSTASH_REDIS_REST_TOKEN', 'tok');
+    const fetchMock = vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ result: 'OK' }) }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { alertarHuecoConfiguracion } = await cargar();
+    const motivo = 'falta LIKIDA_SAT_PROVEEDOR en el servidor.';
+    for (let i = 0; i < 660; i++) await alertarHuecoConfiguracion('cron.config_ausente:descarga-sat', motivo, { cron: 'descarga-sat' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(enviarCorreo).toHaveBeenCalledTimes(1);
+    // Otro hueco (otra llave) sí pregunta: el atajo es por llave, no global.
+    await alertarHuecoConfiguracion('cron.config_ausente:peajes', 'falta otra variable', {});
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
   it('el asunto dice «Configuración pendiente», nunca «Falló»: no es una falla (23-oct-2026)', async () => {
     vi.stubEnv('ALERTA_EMAIL', 'javier@likida.ai');
     const { alertarHuecoConfiguracion } = await cargar();

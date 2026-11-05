@@ -12,8 +12,10 @@
 //
 // Memoria por proceso a propósito: sin tabla ni migración. En serverless cada
 // instancia aprende por su cuenta, y eso basta para no apilar timeouts.
-// Módulo PURO (sin imports): lo prueban sin red.
+// Sin red ni efectos propios (solo importa `credencial.ts`, que tampoco los tiene al cargarse): lo prueban sin red.
 // ═══════════════════════════════════════════════════════════════════════════
+
+import { credencialVerificar, credencialFallo, credencialExito, _reiniciarCredencial } from './credencial';
 
 export const UMBRAL_FALLOS = 3;
 export const VENTANA_MS = 60_000;
@@ -52,6 +54,7 @@ export function esTimeoutDeProveedor(err: unknown): boolean {
 
 /** Lanza si el rol está abierto. Llamar ANTES de reservar presupuesto. */
 export function breakerVerificar(rol: string, ahora: number = Date.now()): void {
+  credencialVerificar(ahora); // CT-IA-05: llave caída = ni una petición a la red
   const s = estados.get(rol);
   if (s && s.abiertoHasta > ahora) throw new CircuitoLlmAbiertoError(rol, s.abiertoHasta - ahora);
 }
@@ -74,12 +77,14 @@ export async function conBreaker<T>(rol: string, fn: () => PromiseLike<T>): Prom
   try {
     const r = await fn();
     breakerExito(rol);
+    credencialExito();
     return r;
   } catch (e) {
     breakerFallo(rol, e);
+    credencialFallo(e, rol); // CT-IA-05: aviso al primer 401/402/403, circuito si se repite
     throw e;
   }
 }
 
 /** Solo para pruebas. */
-export function _reiniciarBreaker(): void { estados.clear(); }
+export function _reiniciarBreaker(): void { estados.clear(); _reiniciarCredencial(); }

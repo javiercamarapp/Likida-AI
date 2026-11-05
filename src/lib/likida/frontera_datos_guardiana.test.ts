@@ -319,7 +319,9 @@ import { join, relative } from 'node:path';
 // y `seguridad/cobertura.ts` (conteo `head` de `evento_seguridad`). `auth/tenant-atado.ts` se quedo FUERA del conteo: su `Buffer.from(` era un falso positivo del regex y ahora usa TextEncoder.
 // 4-nov-2026, guía de onboarding (0983/0984): +1 archivo (329 → 330), `lib/likida/guia/repo.ts`: el ÚNICO acceso a datos de la guía (estado por usuario y flota,
 // interruptor de invitación, eventos sin PII y el EXISTS de las señales). Tablas deny-all solo service_role; toda consulta lleva `user_id`/`tenant_id` de la SESIÓN. No cabe en el `repo.ts` raíz.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 330;
+// F5 L5A (CT-IA-01, 0990): +1 archivo (330 -> 331), `llm/repo.ts`: las dos RPC de las alertas de tope de IA (`registrar_alerta_tope_llm` y `uso_llm_dia_por_flota`), por `acotada`.
+// Es el `repo.ts` propio del modulo `llm` (la frontera de este guardia solo exime el de la raiz); funcionalidad nueva, no codigo migrado. Un techo de integracion es la SUMA de los tramos.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 331;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -658,7 +660,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 330;
 // `registrar_evento_seguridad_red` y la rama sin red de la misma RPC). Todas por `acotada`/`supabaseAdmin()` y ancladas a `tenant_id` donde aplica. Funcionalidad nueva, no codigo migrado.
 // 4-nov-2026, guía de onboarding: +6 llamadas (2,465 → 2,471), todas en `lib/likida/guia/repo.ts`: leer y escribir `onboarding_estado` (select, insert, update con versión, relectura),
 // el interruptor `onboarding_tenant`, el lote de `onboarding_evento` y el EXISTS de las señales. Medido con el barrido real de esta prueba.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_471;
+// F5 L5A (CT-IA-01, 0990): 2,465 -> 2,467 (+2): `llm/repo.ts` (ver el techo de archivos), las dos RPC de las alertas de tope de IA. Funcionalidad nueva.
+// F3 (CT-IA-01): 2,467 -> 2,468 (+1): `llm/repo.ts` `rpcLiberarAlertaTope`, el delete de la marca de `llm_alerta_tope` (anclado a tenant_id/dia/nivel) cuando el aviso no salió.
+// Integracion F2+F3+F5: suma de los tramos, 2,465 + 6 (guia) + 3 (llm) = 2,474.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_474;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
