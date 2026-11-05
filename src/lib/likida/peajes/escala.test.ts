@@ -153,6 +153,11 @@ const T = '11111111-1111-4111-8111-111111111111';
  *  medido (67.3s), nunca se baja lo medido local. */
 const PRESUPUESTO = { importar: 150_000, conciliar: 100_000, revisar: 100_000, vincular: 45_000, cruzar: 90_000 };
 const MB = 1024 * 1024;
+/** CPU del proceso (user+system) en ms, en lugar del reloj de pared. Causa raíz del umbral inestable: con la máquina o el runner
+ *  compartido cargado el planificador le quita el procesador a la prueba y la misma importación pasa de ~30 s a 60-70 s sin que el
+ *  algoritmo cambie (ver los 67.3 s del comentario de arriba). El tiempo de CPU no cuenta esas esperas; un algoritmo cuadrático
+ *  sigue gastando CPU de sobra. Cada archivo corre en su proceso (forks), así que la cifra es de esta prueba. */
+const cpuAhoraMs = (): number => { const u = process.cpuUsage(); return (u.user + u.system) / 1000; };
 
 beforeEach(() => { db = crearDbFalsa(); });
 
@@ -167,9 +172,9 @@ describe('escala del tope (60 000 líneas)', () => {
     expect(esperado.cruces).toBe(60_000);
 
     const rss0 = process.memoryUsage().rss;
-    let t = performance.now();
+    let t = cpuAhoraMs();
     const imp = await desglose.importarDesglose(T, { nombre: 'estado_sintetico_01_a_10.xlsx', buffer, proveedor: 'proveedor_sintetico' });
-    const msImportar = performance.now() - t;
+    const msImportar = cpuAhoraMs() - t;
     expect(imp.ok).toBe(true);
     if (!imp.ok) return;
     expect(imp.totalLineas).toBe(60_000);
@@ -182,14 +187,14 @@ describe('escala del tope (60 000 líneas)', () => {
     expect(inserts.length).toBe(60);
     expect(db.tablas.desglose_peaje_linea).toHaveLength(60_000);
 
-    t = performance.now();
+    t = cpuAhoraMs();
     const cruce = await desglose.conciliarDesglose(T, imp.desgloseId, 'manual');
-    const msConciliar = performance.now() - t;
+    const msConciliar = cpuAhoraMs() - t;
     expect(cruce.total).toBe(60_000);
 
-    t = performance.now();
+    t = cpuAhoraMs();
     const rev = await revisionDeDesglose(T, imp.desgloseId);
-    const msRevisar = performance.now() - t;
+    const msRevisar = cpuAhoraMs() - t;
     expect(rev).not.toBeNull();
 
     const rssMb = (process.memoryUsage().rss - rss0) / MB;
@@ -214,9 +219,9 @@ describe('escala del tope (60 000 líneas)', () => {
       gastos.push({ id: `g${i}`, tenant_id: T, concepto: 'caseta', viaje_id: `v${i}`, monto: 50 + i * 0.01, fecha });
     }
     db = crearDbFalsa({ desglose_peaje: [{ id: 'd1', tenant_id: T, proveedor: 'p' }], desglose_peaje_linea: lineas, gasto: gastos });
-    const t = performance.now();
+    const t = cpuAhoraMs();
     const r = await desglose.conciliarDesglose(T, 'd1', 'manual');
-    const ms = performance.now() - t;
+    const ms = cpuAhoraMs() - t;
     const escrituras = db.llamadas.filter((c) => c.tabla === 'desglose_peaje_linea' && (c.op === 'update' || c.op === 'upsert')).length;
     console.log(`ESCALA60k conciliar-con-vinculos=${Math.round(ms)}ms escrituras=${escrituras} cuadra=${r.cuadra}`);
     expect(r.total).toBe(n);
@@ -262,9 +267,9 @@ describe('el cruce contra gastos a escala (puro, sin base)', () => {
   it('60 000 líneas contra ~45 000 gastos de caseta (dos meses) cruzan dentro del presupuesto', () => {
     const { lineas, gastos } = carga(60_000, 60, 0);
     expect(gastos.length).toBeGreaterThan(40_000);
-    const t = performance.now();
+    const t = cpuAhoraMs();
     const r = desglose.cruzarLineasDesglose(lineas, gastos);
-    const ms = performance.now() - t;
+    const ms = cpuAhoraMs() - t;
     const cuadra = r.filter((x) => x.estatus === 'cuadra').length;
     console.log(`ESCALA60k cruzar=${Math.round(ms)}ms gastos=${gastos.length} cuadra=${cuadra}`);
     expect(r).toHaveLength(60_000);
@@ -298,9 +303,9 @@ describe('el vínculo cruce↔viaje a 65 000 (puro, sin base)', () => {
       const dia = String(2 + 3 * Math.floor(i / 59)).padStart(2, '0');
       return { id: `v${i}`, folio: null, icident: null, unidadNumero: u < 30 ? String(100 + u) : `TC${2000 + u}`, inicio: `2026-03-${dia}`, fin: `2026-03-${dia}`, origen: null, destino: null };
     });
-    const t = performance.now();
+    const t = cpuAhoraMs();
     const v = vincularPorIcident(cruces, viajes, [], { margenDias: 1 });
-    const ms = performance.now() - t;
+    const ms = cpuAhoraMs() - t;
     const por = (e: string) => v.filter((x) => x.estado === e).length;
     console.log(`ESCALA65k vincular=${Math.round(ms)}ms ligados=${por('ligado')} ambiguos=${por('ambiguo')} sin_viaje=${por('sin_viaje')} sin_unidad=${por('sin_unidad')}`);
     expect(v).toHaveLength(65_000);
