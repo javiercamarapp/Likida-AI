@@ -105,7 +105,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
                     ? { background: 'var(--marca)', color: 'var(--marca-fg)', borderColor: 'var(--marca)' }
                     : { background: 'var(--surface)', color: 'var(--muted)' }}>
                   <input type="checkbox" name="dias" value={d.iso} checked={puesto}
-                    onChange={() => alternarDia(d.iso)} className="sr-only" />
+                    onChange={() => alternarDia(d.iso)} className="sr-only" data-foco="etiqueta" />
                   {d.rotulo}
                 </label>
               );

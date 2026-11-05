@@ -127,7 +127,7 @@ export function ComboCatalogo({
   return (
     <div className={enBarra ? 'rv-fl__combo' : undefined}>
       <input type="hidden" name={name} value={id ?? ''} />
-      <input
+      <input data-anillo={enBarra ? 'envolvente' : undefined}
         ref={entrada}
         id={campoId}
         type="text"

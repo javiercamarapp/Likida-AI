@@ -149,7 +149,7 @@ function CajaBusqueda({ q }: { q: string }) {
   return (
     <form className="card p-3 flex items-center gap-2" method="GET">
       <Search width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} className="shrink-0" />
-      <input
+      <input data-anillo="envolvente"
         type="text" name="q" defaultValue={q} placeholder="Buscar por teléfono…"
         className="flex-1 bg-transparent text-sm outline-none"
         style={{ color: 'var(--ink)' }}

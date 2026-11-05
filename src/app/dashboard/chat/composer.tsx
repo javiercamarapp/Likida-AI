@@ -72,7 +72,7 @@ export default function Composer({ valor, onCambio, onEnviar, onDetener, generan
         </span>
       )}
       <label htmlFor="chat-pregunta" className="rv-sr">Pregunta sobre tu operación</label>
-      <textarea id="chat-pregunta" ref={campo} rows={1} className="bg-transparent border-0" value={valor} maxLength={MAX_PREGUNTA} onChange={(e) => onCambio(e.target.value)} onKeyDown={tecla}
+      <textarea data-anillo="envolvente" id="chat-pregunta" ref={campo} rows={1} className="bg-transparent border-0" value={valor} maxLength={MAX_PREGUNTA} onChange={(e) => onCambio(e.target.value)} onKeyDown={tecla}
         placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'} />
       <Adjuntar ocupado={ocupado} onArchivo={onArchivo} anclaRef={clip} />
       {valor.length >= Math.floor(MAX_PREGUNTA * 0.8) && <span className="rv-chat__cuenta" aria-live="polite">{valor.length}/{MAX_PREGUNTA}</span>}

@@ -526,7 +526,7 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
       className="relative w-full rounded-2xl px-4 pt-3.5 pb-3 transition-shadow focus-within:shadow-lg"
       style={{ background: 'var(--surface)', border: '1px solid var(--line)', boxShadow: 'var(--shadow-card)' }}
     >
-      <input
+      <input data-anillo="envolvente"
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         placeholder="Pregunta sobre la compañía, o pide una acción…"
@@ -629,7 +629,7 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
     <>
       <div className="hairline flex items-center gap-2 px-3 py-2 rounded-full" style={{ background: 'var(--canvas)' }}>
         <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
-        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+        <input data-anillo="envolvente" value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar chats" aria-label="Buscar chats"
           className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
       </div>

@@ -369,7 +369,7 @@ export function ChatEntrevista({
           </span>
         </div>
       )}
-      <input
+      <input data-anillo="envolvente"
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
         placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'}
