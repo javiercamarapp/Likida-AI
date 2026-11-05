@@ -285,6 +285,24 @@ export async function cargarCatalogoSat(catalogo: string, claves: string[]): Pro
   }
 }
 
+/**
+ * CT-A345-04: cuántas filas hay de cada catálogo SAT que consulta la validación (una cuenta `head` por catálogo, en paralelo).
+ * `null` = no se pudo leer alguno: la pantalla lo dice, nunca pinta un cero que se lea como «catálogo vacío».
+ */
+export async function contarCatalogosSat(catalogos: readonly string[]): Promise<Record<string, number> | null> {
+  try {
+    const cuentas = await Promise.all(catalogos.map(async (catalogo) => {
+      const r = await acotada(supabaseAdmin().from('cp_sat_catalogo').select('clave', { count: 'exact', head: true }).eq('catalogo', catalogo), 'cpdocs.catalogo_sat_conteo');
+      const { count, error } = r as unknown as { count: number | null; error: unknown };
+      if (error || typeof count !== 'number') throw new Error('catalogo_sat_conteo');
+      return [catalogo, count] as const;
+    }));
+    return Object.fromEntries(cuentas);
+  } catch {
+    return null;
+  }
+}
+
 export type TipoEvento =
   | 'recibido' | 'duplicado_recibido' | 'extraccion_iniciada' | 'extraccion_ok' | 'extraccion_fallida' | 'escalada' | 'revision_abierta'
   | 'campo_corregido' | 'aprobado' | 'rechazado' | 'reabierto' | 'salida_viaje' | 'exportado' | 'perfil_aprendido' | 'purgado'
