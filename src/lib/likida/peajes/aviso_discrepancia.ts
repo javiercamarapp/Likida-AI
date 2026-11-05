@@ -1,3 +1,4 @@
+import { superficiePeajesDeTenant } from './superficie_perfil';
 import { logger } from '@/lib/logger';
 import { quedoEnCola } from './aviso_en_cola';
 import { appUrl } from '@/lib/env';
@@ -44,6 +45,12 @@ export interface DepsAvisoDiscrepancia {
   destinatario: (tenantId: string) => Promise<string | null>;
   ultimaPosicion: (tenantId: string, desgloseId: string, indice: number) => Promise<PosicionConocida | null>;
   avisar: typeof avisarOficina;
+  /**
+   * CT-A12-22: ¿esta flota ve la evidencia GPS (`superficiePeajes.gps`)? Bajo el perfil `cinco_agentes` es stand-by: el aviso NO
+   * debe mandar coordenadas que la pantalla de la flota no enseña. Falla cerrado en la implementación real; ausente = permitido
+   * (las pruebas que no lo declaran conservan el comportamiento de siempre).
+   */
+  gpsPermitido?: (tenantId: string) => Promise<boolean>;
 }
 
 /**
@@ -78,6 +85,7 @@ const depsPorOmision: DepsAvisoDiscrepancia = {
   destinatario: almacenAvisoAtipicos.destinatario,
   ultimaPosicion: ultimaPosicionDeLinea,
   avisar: avisarOficina,
+  gpsPermitido: async (tenantId) => (await superficiePeajesDeTenant(tenantId)).gps,
 };
 
 export interface ResumenAvisoDiscrepancia {
@@ -106,6 +114,11 @@ export async function avisarDiscrepanciasDesglose(
     r.evaluados = criticos.length;
 
     const tel = await deps.destinatario(tenantId);
+    // CT-A12-22: una sola lectura de la superficie por desglose; si falla, falla cerrado (sin coordenadas).
+    let verGps = true;
+    if (deps.gpsPermitido) {
+      try { verGps = await deps.gpsPermitido(tenantId); } catch { verGps = false; }
+    }
     let cortado = false; // Meta rechazó un envío: no se insiste con el resto del desglose.
     for (const [i, c] of criticos.entries()) {
       if (i >= TOPE_AVISOS_DISCREPANCIA) break;
@@ -113,7 +126,7 @@ export async function avisarDiscrepanciasDesglose(
       const entrada = discrepanciaDeCandidato(c);
       if (!entrada) continue; // no debería pasar (ya se filtró por categoría), pero el tipo lo permite.
       let posicion: PosicionConocida | null = null;
-      try { posicion = await deps.ultimaPosicion(tenantId, desgloseId, c.indice); } catch (e) {
+      if (verGps) try { posicion = await deps.ultimaPosicion(tenantId, desgloseId, c.indice); } catch (e) {
         logger.warn('peajes.discrepancia_posicion_error', { tenant: tenantId, desglose: desgloseId, err: e instanceof Error ? e.message : String(e) });
       }
       const armado = armarReporteDiscrepancia(entrada, posicion, tel);
