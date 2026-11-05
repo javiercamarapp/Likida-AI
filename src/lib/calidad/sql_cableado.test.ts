@@ -12,9 +12,9 @@ const workflow = readFileSync(join(RAIZ, '.github', 'workflows', 'ci-postgres.ym
 const pruebas = readdirSync(DIR).filter((f) => /^\d{4}_.*\.(sql|sh)$/.test(f));
 
 const SIN_CABLEAR: Record<string, string> = {
-  '0336_capacidad_r5_red.sql': 'CI (5-nov-2026) falla con «R5-01: primer viaje del dia operativo actual no reabrio/convergio»: la prueba quedó atrás de la 0336 vigente. Pendiente: revisar si es la prueba o la función (L8B)',
+  '0336_capacidad_r5_red.sql': 'CI (4-nov-2026, hora local) falla con «R5-01: primer viaje del dia operativo actual no reabrio/convergio»: la prueba quedó atrás de la 0336 vigente. NO está descartada una regresión real de la función (calcular_input_version_jornada / jornada_dia): la prueba depende del reloj audit_0336_reloj y el push fallido fue pasada la medianoche UTC. Pendiente con dueño en L8B: correr contra la base de integ/f2-f5 con el reloj fijado a otra hora para separar defecto de prueba de defecto de función',
   '0336_capacidad_r5_concurrencia.sh': 'depende del mismo escenario que 0336_capacidad_r5_red.sql; se cablea junto con ella',
-  '0337_gps_r5_red.sql': 'no se cableó tras el fallo de 0336 r5 (misma ronda, sin evidencia de que corra limpia); revisar junto con 0336',
+  '0337_gps_r5_red.sql': 'no se cableó tras el fallo de 0336 r5 (misma ronda, no se intentó correrla, no hay evidencia de que pase ni de que falle); revisar junto con 0336',
   '0337_gps_r5_concurrencia.sh': 'usa mktemp en /private/tmp (macOS); en el runner Linux no existe. Pendiente portarlo a $TMPDIR',
 };
 

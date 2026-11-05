@@ -66,7 +66,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-[12px]">
-                  <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th scope="col" className="py-1 pr-3">Cliente</th><th scope="col" className="pr-3">Grupo</th><th scope="col" className="pr-3">Crítico</th><th scope="col" className="pr-3">Histórico</th><th scope="col" /></tr></thead>
+                  <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th scope="col" className="py-1 pr-3">Cliente</th><th scope="col" className="pr-3">Grupo</th><th scope="col" className="pr-3">Crítico</th><th scope="col" className="pr-3">Histórico</th><th scope="col"><span className="sr-only">Acciones</span></th></tr></thead>
                   <tbody>
                     {grupos.map((g) => (
                       <tr key={g.id} className="border-t" style={{ borderColor: 'var(--line)' }}>

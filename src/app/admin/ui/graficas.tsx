@@ -383,7 +383,7 @@ export function Heatmap({
       <table className="border-collapse">
         <thead>
           <tr>
-            <th scope="col" />
+            <th scope="col"><span className="sr-only">Acciones</span></th>
             {columnas.map((c) => (
               <th scope="col" key={c} className="text-[10px] font-normal px-1 pb-1" style={{ color: 'var(--faint)' }}>{c}</th>
             ))}

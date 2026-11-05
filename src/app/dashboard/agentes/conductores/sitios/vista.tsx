@@ -75,7 +75,7 @@ export function VistaSitios(p: PropsVistaSitios) {
               <thead>
                 <tr className="text-left etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
                   <th scope="col" className="py-1.5 pr-3">Nombre</th><th scope="col" className="pr-3">Tipo</th><th scope="col" className="pr-3">Código</th>
-                  <th scope="col" className="pr-3">Centro (lat, lng)</th><th scope="col" className="pr-3 text-right">Radio</th><th scope="col" className="pr-3">Cliente</th><th scope="col" className="pr-3">Origen del dato</th><th scope="col" />
+                  <th scope="col" className="pr-3">Centro (lat, lng)</th><th scope="col" className="pr-3 text-right">Radio</th><th scope="col" className="pr-3">Cliente</th><th scope="col" className="pr-3">Origen del dato</th><th scope="col"><span className="sr-only">Acciones</span></th>
                 </tr>
               </thead>
               <tbody>

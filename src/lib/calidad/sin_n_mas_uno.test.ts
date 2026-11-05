@@ -6,6 +6,8 @@ import { archivosFuente, leer, RAIZ, rel } from './escanear-fuentes';
 // 4-nov-2026: 0 casos en src/app/dashboard y src/app/vendedor (los bucles con await-consulta viven en crons y /admin/qa, que no son
 // pantallas de uso diario). Esta guarda impide que aparezca el primero; si una pantalla necesita iterar, que traiga las filas con
 // un `.in('id', ids)` o una RPC agregada y arme el mapa en memoria.
+// LIMITACIÓN: es una heurística, no una garantía. Mira una ventana fija de 14 líneas desde el bucle: un await de consulta más allá,
+// o una consulta dentro de una función auxiliar llamada en el bucle, no se detecta. Solo cubre dashboard y vendedor.
 const esBucle = (l: string) => /^\s*for\b/.test(l) && /\bof\b/.test(l) || l.includes('.map(async') || /\.map\(\s+async/.test(l);
 const CONSULTA_AWAIT = /await\s+[\w$.]*?(\.from\(|\.rpc\(|\bsb\.(?!auth\b)|\badmin\.|supabase\w*\.)/;
 
