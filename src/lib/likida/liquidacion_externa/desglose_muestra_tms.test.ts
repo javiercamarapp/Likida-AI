@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   centavosDeMontoMuestra, convertirBitacoraMuestra, convertirMuestraJoseLuis, listaDeMuestra, EnvoltorioInvalido,
   resolverOperadorPorNombre, CONTRATOS_DESGLOSE_TMS, NO_DISPONIBLE_MUESTRA,
-} from './desglose_muestra_jose_luis';
-import { BITACORA_MUESTRA, NETO_MUESTRA_CENTAVOS, PADRON_MUESTRA } from './desglose_muestra_jose_luis.fixture';
+} from './desglose_muestra_tms';
+import { BITACORA_MUESTRA, NETO_MUESTRA_CENTAVOS, PADRON_MUESTRA } from './desglose_muestra_tms.fixture';
 import { aplicarRenombres, RENOMBRE_EJEMPLO, netoEnCentavos } from './desglose_reglas';
 import { aLiquidacionExterna } from './desglose_contrato';
 
@@ -11,7 +11,7 @@ const padron = PADRON_MUESTRA;
 const conv = (o: Record<string, unknown>) => convertirBitacoraMuestra({ ...BITACORA_MUESTRA, ...o }, { padron });
 const codigos = (r: { revision: Array<{ codigo: string }> }) => r.revision.map((m) => m.codigo);
 
-describe('muestra-jose-luis · caso feliz', () => {
+describe('muestra-tms · caso feliz', () => {
   it('convierte, resuelve el operador por nombre y cuadra al centavo', () => {
     const r = conv({});
     expect(r.revision).toEqual([]);
@@ -46,11 +46,11 @@ describe('muestra-jose-luis · caso feliz', () => {
   });
 
   it('el registro de contratos conserva el supuesto y añade la muestra', () => {
-    expect(Object.keys(CONTRATOS_DESGLOSE_TMS)).toEqual(['supuesto', 'muestra-jose-luis']);
+    expect(Object.keys(CONTRATOS_DESGLOSE_TMS)).toEqual(['supuesto', 'muestra-tms']);
   });
 });
 
-describe('muestra-jose-luis · casos límite de la bitácora', () => {
+describe('muestra-tms · casos límite de la bitácora', () => {
   it('arreglos vacíos o todo en cero ⇒ revisión sin renglones', () => {
     expect(codigos(conv({ Percepciones: [], Deducciones: [] }))).toEqual(['sin_renglones']);
     const r = conv({ Percepciones: [{ Descripcion: 'Sueldo', Monto: 0 }], Deducciones: [] });
@@ -121,7 +121,7 @@ describe('muestra-jose-luis · casos límite de la bitácora', () => {
   });
 });
 
-describe('muestra-jose-luis · montos sin errores de coma flotante', () => {
+describe('muestra-tms · montos sin errores de coma flotante', () => {
   it('convierte exacto', () => {
     const oks: Array<[number, number]> = [[0.1, 10], [0.07, 7], [1500.5, 150050], [4000, 400000], [1.15, 115], [19.99, 1999], [8.2, 820], [1234567.89, 123456789]];
     for (const [n, c] of oks) expect(centavosDeMontoMuestra(n)).toEqual({ ok: true, centavos: c });
@@ -134,7 +134,7 @@ describe('muestra-jose-luis · montos sin errores de coma flotante', () => {
   });
 });
 
-describe('muestra-jose-luis · envoltorio configurable', () => {
+describe('muestra-tms · envoltorio configurable', () => {
   const una = BITACORA_MUESTRA;
   it('arreglo directo y {data:[...]} dan lo mismo en modo auto', () => {
     const a = convertirMuestraJoseLuis([una], { padron });

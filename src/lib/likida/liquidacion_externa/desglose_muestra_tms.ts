@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// CONTRATO ADICIONAL 'muestra-jose-luis' (5-nov-2026): la estructura REAL de muestra del API de liquidaciones del TMS,
+// CONTRATO ADICIONAL 'muestra-tms' (5-nov-2026): la estructura REAL de muestra del API de liquidaciones del TMS,
 // un objeto por bitácora. NO reemplaza al contrato supuesto (`desglose_tms_supuesto.ts` / `desglose_mapeo_tms.ts`): convive
 // con él y se elige por nombre (`CONTRATOS_DESGLOSE_TMS`).
 //
@@ -8,13 +8,13 @@
 //     "Percepciones": [ { "Descripcion": "", "Monto": 0.00 } ],
 //     "Deducciones":  [ { "Descripcion": "", "Monto": 0.00 } ] }
 //
-// Procedencia: pegada por Javier el 5-nov; se INFIERE que es de José Luis (sistemas de Innovativos). No hay envoltorio,
+// Procedencia: pegada por Javier el 5-nov; se INFIERE que es del equipo de sistemas del cliente (sistemas del cliente). No hay envoltorio,
 // paginación, zona horaria ni autenticación confirmados: esta pieza es PURA (sin red, sin base, sin credenciales) y solo
 // convierte lo que ya se leyó. Cableado a la ruta/lector: pendiente de confirmar esos datos (ver informe de la ronda).
 //
 // ── Reglas (nada se inventa) ────────────────────────────────────────────────
 //   · Lo que la muestra NO trae queda «no disponible» (`noDisponible`): nº de liquidación, nº de pago, póliza, terminal,
-//     nº de empleado, tipo de operador, ID de concepto, correo/WhatsApp, marca «enviado», neto de origen. Ninguno se rellena.
+//     nº de empleado, tipo de operador, ID de concepto, correo/mensajería, marca «enviado», neto de origen. Ninguno se rellena.
 //     Los que las guardas existentes ya vigilan siguen su camino normal: póliza nula ⇒ excepción `sin_poliza` (no se
 //     envía); tipo de operador ausente ⇒ `tipo_sin_regla` (retenido) — ver `desglose_recibir.ts` / `desglose_reglas.ts`.
 //   · El operador viene solo por NOMBRE. Se resuelve contra el padrón INYECTADO por coincidencia exacta normalizada
@@ -27,7 +27,7 @@
 //   · Cuadre: la muestra no trae neto de origen, así que Σ percepciones − Σ deducciones se calcula en CENTAVOS y el
 //     chequeo posterior (`aLiquidacionExterna`) es tautológico (`totalOrigen: 'calculado'`). No demuestra que el TMS lo
 //     calculó igual; la UI debe decirlo así. Un neto negativo lo retiene la guarda existente `neto_negativo`.
-//   · Fechas: `yyyy-MM-dd HH:mm:ss` SIN zona se interpreta como hora de America/Mexico_City. El periodo del desglose son
+//   · Fechas: `yyyy-MM-dd HH:mm:ss` SIN zona se interpreta como hora de México (zona del TMS). El periodo del desglose son
 //     los días locales de inicio y fin. Fecha ilegible, imposible o `Termina` < `Inicia` ⇒ revisión.
 //   · Conceptos: texto libre. Se reconocen con `normalizarConcepto` y un catálogo de alias (abajo). Descripción desconocida
 //     ⇒ el renglón SE CONSERVA y la bitácora pasa a revisión (`concepto_desconocido`); un concepto conocido del lado
@@ -36,27 +36,28 @@
 //     indique) o ambos (`auto`).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { TZ_MX, hoyMx } from '../../formato';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { aInstanteMx } from '../peajes/formatos';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora } from './desglose_contrato';
 import { leerRuta, normalizarUnidad } from './desglose_mapeo_tms';
 import { normalizarConcepto } from './desglose_reglas';
 
-export const CONTRATO_MUESTRA_JOSE_LUIS = 'muestra-jose-luis';
-export const ZONA_MUESTRA_JOSE_LUIS = 'America/Mexico_City';
-const SISTEMA_ORIGEN_MUESTRA = 'tms-muestra-jose-luis';
+export const CONTRATO_MUESTRA_TMS = 'muestra-tms';
+export const ZONA_MUESTRA_TMS = TZ_MX;
+const SISTEMA_ORIGEN_MUESTRA = 'tms-muestra-tms';
 
 /** Lo que este contrato NO trae y por tanto queda marcado «no disponible» en cada resultado. */
 export const NO_DISPONIBLE_MUESTRA = [
   'numeroLiquidacion', 'numeroPago', 'poliza', 'terminal', 'numeroEmpleado', 'tipoOperador', 'idConcepto',
-  'correoOperador', 'whatsappOperador', 'enviadoOrigen', 'neto',
+  'correoOperador', 'mensajeriaOperador', 'enviadoOrigen', 'neto',
 ] as const;
 
 /** Registro de contratos de desglose del TMS que el software sabe leer. Elegir uno es configuración, no código. */
 export const CONTRATOS_DESGLOSE_TMS = {
   supuesto: { id: 'supuesto', estado: 'SUPUESTO-API', fuente: 'desglose_tms_supuesto.ts + desglose_mapeo_tms.ts' },
-  [CONTRATO_MUESTRA_JOSE_LUIS]: {
-    id: CONTRATO_MUESTRA_JOSE_LUIS, estado: 'MUESTRA-REAL (inferida de José Luis, 5-nov-2026)', fuente: 'desglose_muestra_jose_luis.ts',
+  [CONTRATO_MUESTRA_TMS]: {
+    id: CONTRATO_MUESTRA_TMS, estado: 'MUESTRA-REAL (inferida del equipo de sistemas del cliente)', fuente: 'desglose_muestra_tms.ts',
   },
 } as const;
 
@@ -183,7 +184,7 @@ function instanteMx(v: unknown): string | null {
 
 /** Día local de México (AAAA-MM-DD) de un instante ISO. */
 function diaMx(iso: string): string {
-  return new Intl.DateTimeFormat('en-CA', { timeZone: ZONA_MUESTRA_JOSE_LUIS, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+  return hoyMx(new Date(iso));
 }
 
 // ── Operador: nombre contra padrón ──────────────────────────────────────────

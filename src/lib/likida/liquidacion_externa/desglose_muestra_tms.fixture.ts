@@ -1,6 +1,6 @@
-// Muestra SINTÉTICA en la forma real de 'muestra-jose-luis' (5-nov-2026). Valores claramente ficticios: este repo es público.
+// Muestra SINTÉTICA en la forma real de 'muestra-tms' (5-nov-2026). Valores claramente ficticios: este repo es público.
 
-import type { PadronOperadores } from './desglose_muestra_jose_luis';
+import type { PadronOperadores } from './desglose_muestra_tms';
 
 export const BITACORA_MUESTRA = {
   BitacoraID: 900001,
