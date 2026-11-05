@@ -17,7 +17,7 @@
     "sesion_caida": {
       "estados": [401],
       "html_con_200": true,
-      "marcadores_html": ["<form", "iniciar sesion", "inicio de sesion", "login"],
+      "marcadores_html": ["<form", "type=\"pass", "type='pass", "iniciar sesion", "inicio de sesion"],
       "json": [
         { "ruta": "error", "contiene": ["token", "sesion", "expirad", "vencid"] },
         { "ruta": "message", "contiene": ["token", "sesion", "expirad", "vencid"] }
@@ -56,7 +56,7 @@
   },
   "modos": {
     "api": { "activo": false, "nota": "Apagado por omision hasta que el cliente entregue su especificacion y una cuenta de servicio de solo lectura." },
-    "archivos": { "activo": true, "formatos": ["csv", "json"], "nota": "Plan B: exportaciones del cliente pasadas por los MISMOS mapeos." },
+    "archivos": { "activo": false, "formatos": ["csv", "json"], "nota": "Apagado hasta que el cliente confirme. Plan B: exportaciones del cliente pasadas por los MISMOS mapeos." },
     "push": {
       "activo": false,
       "encabezado_firma": "x-likida-firma",
@@ -64,7 +64,7 @@
       "encabezado_idempotencia": "idempotency-key",
       "tolerancia_marca_s": 300,
       "max_bytes": 5242880,
-      "nota": "Plan C: el cliente empuja lotes firmados (HMAC-SHA256 sobre marca.cuerpo). Sin endpoint publicado: solo la logica de recepcion."
+      "nota": "Plan C: el cliente empuja lotes firmados (HMAC-SHA256 sobre marca.llave.cuerpo). Sin endpoint publicado: solo la logica de recepcion."
     }
   }
 }

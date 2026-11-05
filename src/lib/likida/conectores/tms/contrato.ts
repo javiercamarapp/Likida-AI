@@ -231,7 +231,7 @@ export function esRespuestaHtml(r: RespuestaHttp): boolean {
 /**
  * Función para `SesionTms.detectaVencido`. El 401 lo maneja la sesión; aquí se reconoce lo que NO es 401:
  *  · un código listado en `estados` (p. ej. 419/440 de algunos frameworks);
- *  · un 2xx cuyo cuerpo es HTML con alguno de los marcadores del contrato (la página de login servida con 200);
+ *  · un 2xx cuyo cuerpo es HTML con al menos dos de los marcadores del contrato (la página de login servida con 200);
  *  · un 2xx con JSON cuyo texto en `ruta` contiene alguno de los fragmentos (p. ej. {"error":"Token expirado"}).
  * Un HTML sin marcadores no se toma por sesión caída (es otro formato: lo rechaza el mapeo con su motivo).
  */
@@ -244,7 +244,8 @@ export function detectorSesionCaida(c: ContratoTms): (r: RespuestaHttp) => boole
     if (r.estado < 200 || r.estado >= 300) return false;
     if (s.html_con_200 && esRespuestaHtml(r)) {
       const cuerpo = normalizar(r.cuerpo.slice(0, 20_000));
-      return marcadores.some((m) => cuerpo.includes(m));
+      // Un solo marcador es demasiado genérico (cualquier formulario o menú con «login»): se exigen al menos dos.
+      return marcadores.filter((m) => cuerpo.includes(m)).length >= Math.min(2, marcadores.length);
     }
     if (s.json.length === 0) return false;
     let j: unknown;
@@ -508,15 +509,17 @@ export interface SolicitudPush {
   /** Almacén de llaves de idempotencia ya vistas (el que llama lo persiste). */
   vistas: ReadonlySet<string>;
   registro?: Readonly<Record<string, unknown>>;
+  /** Fecha de corte propia de la flota (aaaa-mm-dd); sin ella rige la del contrato, igual que en el modo API. */
+  fechaCorte?: string | null;
 }
 
 export type ResultadoPush =
   | { ok: true; estado: 200; filas: unknown[]; rechazadas: FilaRechazadaTms[]; llave: string; avisos: string[]; anterioresAlCorte: number }
   | { ok: false; estado: 400 | 401 | 403 | 409 | 413 | 422 | 503; motivo: string };
 
-/** Firma esperada: HMAC-SHA256 hexadecimal de «marca.cuerpo». La usa el emisor del cliente y las pruebas. */
-export function firmarPush(secreto: string, marca: string, cuerpo: string): string {
-  return createHmac('sha256', secreto).update(`${marca}.${cuerpo}`).digest('hex');
+/** Firma esperada: HMAC-SHA256 hexadecimal de «marca.llave.cuerpo» (la llave de idempotencia va firmada: no se puede repetir un lote con otra llave). La usa el emisor del cliente y las pruebas. */
+export function firmarPush(secreto: string, marca: string, llave: string, cuerpo: string): string {
+  return createHmac('sha256', secreto).update(`${marca}.${llave}.${cuerpo}`).digest('hex');
 }
 
 /** Hexadecimal → bytes, o null si no es hexadecimal válido (sin `Buffer.from`). */
@@ -542,7 +545,7 @@ export function recibirPush(c: ContratoTms, s: SolicitudPush): ResultadoPush {
   const firma = s.encabezados[p.encabezado_firma] ?? '';
   const llave = (s.encabezados[p.encabezado_idempotencia] ?? '').trim();
   if (marca === '' || firma === '') return { ok: false, estado: 401, motivo: 'Faltan la firma o la marca de tiempo.' };
-  const esperada = hexABytes(firmarPush(s.secreto, marca, s.cuerpo)) as Uint8Array;
+  const esperada = hexABytes(firmarPush(s.secreto, marca, llave, s.cuerpo)) as Uint8Array;
   const recibida = hexABytes(firma);
   if (recibida === null || recibida.length !== esperada.length || !timingSafeEqual(recibida, esperada)) return { ok: false, estado: 401, motivo: 'La firma no es válida.' };
 
@@ -563,7 +566,7 @@ export function recibirPush(c: ContratoTms, s: SolicitudPush): ResultadoPush {
   const m = aplicarMapeo(mapeo, Array.isArray(crudo) && mapeo.raiz !== '' ? envolverEnRaiz(crudo, mapeo.raiz) : crudo);
   if (m.error) return { ok: false, estado: 422, motivo: m.error };
   const campo = FECHA_DE[s.recurso];
-  const corte = corteUtc(c);
+  const corte = corteUtc(c, s.fechaCorte === undefined ? c.corte.fecha : s.fechaCorte);
   const f = filtrarPorCorte(m.filas.map((x) => x.fila), (x) => (x as Record<string, string | undefined>)[campo], corte);
   const avisos = corte === null ? ['SUPUESTO: no hay fecha de corte fijada; no se filtra nada por fecha.'] : [];
   return { ok: true, estado: 200, filas: f.filas, rechazadas: m.rechazadas, llave, avisos, anterioresAlCorte: f.anteriores };

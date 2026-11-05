@@ -89,9 +89,9 @@ export function openapiDeContrato(c: ContratoTms, registro: Readonly<Record<stri
     webhooks: {
       loteFirmado: {
         post: {
-          summary: 'Modo push (alternativa, apagado): el cliente empuja lotes firmados',
-          description: `Encabezados: ${c.modos.push.encabezado_marca} (segundos epoch; tolerancia ${c.modos.push.tolerancia_marca_s} s), ${c.modos.push.encabezado_firma} (HMAC-SHA256 hex de «marca.cuerpo»), ${c.modos.push.encabezado_idempotencia}. Máximo ${c.modos.push.max_bytes} bytes. Respuestas: 200, 400 sin llave, 401 firma, 403 marca, 409 repetido, 413 tamaño, 422 cuerpo, 503 apagado. Sin endpoint publicado.`,
-          responses: { '200': { description: 'Lote recibido.' } },
+          summary: 'Modo push (alternativa, apagado y SIN endpoint): el cliente empuja lotes firmados',
+          description: `Encabezados: ${c.modos.push.encabezado_marca} (segundos epoch; tolerancia ${c.modos.push.tolerancia_marca_s} s), ${c.modos.push.encabezado_firma} (HMAC-SHA256 hex de «marca.llave.cuerpo»), ${c.modos.push.encabezado_idempotencia}. Máximo ${c.modos.push.max_bytes} bytes. Respuestas: 200, 400 sin llave, 401 firma, 403 marca, 409 repetido, 413 tamaño, 422 cuerpo, 503 apagado. Sin endpoint publicado.`,
+          responses: { '200': { description: 'SUPUESTO, sin endpoint publicado: respuesta que daría la lógica de recepción.' } },
           'x-supuesto': true,
         },
       },

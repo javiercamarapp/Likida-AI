@@ -42,7 +42,7 @@ export interface DobleTms {
 const CAMPOS_FECHA = ['Fecha Salida', 'Fecha', 'fecha'];
 const aMsUtc = (v: string): number => Date.parse(v.replace(' ', 'T') + 'Z') + 6 * 3_600_000; // hora de Ciudad de México (UTC-6)
 
-export const HTML_LOGIN_DOBLE = '<!doctype html><html><body><form action="/login"><input name="usuario"></form></body></html>';
+export const HTML_LOGIN_DOBLE = '<!doctype html><html><body><form action="/login"><input name="usuario"><input name="clave" type="password"></form></body></html>';
 
 export function aMojibake(valor: unknown): unknown {
   if (typeof valor === 'string') return new TextDecoder('windows-1252').decode(new TextEncoder().encode(valor));

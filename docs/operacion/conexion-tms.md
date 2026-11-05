@@ -93,13 +93,13 @@ Estado: **ninguna parte de este contrato está confirmada por el cliente.** Exis
 | Paginación | por página, cursor u offset según el contrato; fusible con punto de reanudación |
 | Orden inestable | filas repetidas entre páginas se dejan una vez (clave); `huella` distingue nueva / omitida / actualizada, sin depender del orden |
 | 429 | espera `Retry-After` (tope 30 s), hasta 3 reintentos; no provoca re-login |
-| Mojibake | `Ã³` se repara a `ó` en respuestas, archivos y lotes push (solo si toda la cadena vuelve a ser UTF-8 válido) |
+| Mojibake | `Ã³` se repara a `ó` en respuestas, archivos y lotes push (solo si toda la cadena vuelve a ser UTF-8 válido). Límite: un origen que serialice con escapes (`\u00c3\u00b3`) no se detecta ni se repara; se vería en los datos al probar con el servicio real |
 | Fecha de corte | la ventana se recorta al corte; lo anterior que el origen mande de más se descarta y se cuenta; sin corte, se avisa |
-| Modo archivos | exportaciones CSV/JSON por los MISMOS mapeos y lectores (`entradasDeArchivos` + `sesionDeExportaciones`) |
-| Modo push | lote firmado (HMAC-SHA256 de `marca.cuerpo`), marca anti-repetición, llave de idempotencia, tamaño máximo, mismo mapeo y corte. Apagado y **sin endpoint publicado**: solo la lógica de recepción |
+| Modo archivos | apagado por omisión (como los demás modos) hasta que el cliente confirme; exportaciones CSV/JSON por los MISMOS mapeos y lectores (`entradasDeArchivos` + `sesionDeExportaciones`) |
+| Modo push | lote firmado (HMAC-SHA256 de `marca.llave.cuerpo`, con la llave de idempotencia firmada), marca anti-repetición, llave de idempotencia, tamaño máximo, mismo mapeo y corte. Apagado y **sin endpoint publicado**: solo la lógica de recepción |
 
 **OpenAPI del contrato:** `docs/operacion/conexion-tms-openapi.json` (OpenAPI 3.1, cada operación con `x-supuesto: true`) se DERIVA del contrato con `contrato_openapi.ts`; una prueba exige que coincida. Se entrega al cliente para que lo corrija. No hay ruta HTTP: cada `route.ts` nuevo obliga a revisión en el inventario de rutas, y este documento no lo justifica.
 
 **Regenerar el OpenAPI** tras tocar el contrato o un mapeo: `TMS_OPENAPI_ACTUALIZAR=1 npx vitest run src/lib/likida/conectores/tms/contrato_openapi.test.ts` y revisar el diff.
 
-**Cuando llegue la especificación real:** corregir `contrato.supuesto.json` y los mapeos, cambiar `estado` a `CONFIRMADO` solo con evidencia, correr la suite de contrato contra el servicio de prueba y recién entonces encender el modo API (decisión de la persona responsable). Migraciones: este cambio no necesita ninguna (rango 0985-0989 sin usar).
+**Cuando llegue la especificación real:** corregir `contrato.supuesto.json` y los mapeos, cambiar `estado` a `CONFIRMADO` solo con evidencia, correr la suite de contrato contra el servicio de prueba y recién entonces encender el modo API (decisión de la persona responsable). Migraciones: este cambio no necesita ninguna (el rango 0985-0989 está reservado a F5 «cofre v2»; este cambio no lo toca).

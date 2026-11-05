@@ -749,11 +749,11 @@
   "webhooks": {
     "loteFirmado": {
       "post": {
-        "summary": "Modo push (alternativa, apagado): el cliente empuja lotes firmados",
-        "description": "Encabezados: x-likida-marca (segundos epoch; tolerancia 300 s), x-likida-firma (HMAC-SHA256 hex de «marca.cuerpo»), idempotency-key. Máximo 5242880 bytes. Respuestas: 200, 400 sin llave, 401 firma, 403 marca, 409 repetido, 413 tamaño, 422 cuerpo, 503 apagado. Sin endpoint publicado.",
+        "summary": "Modo push (alternativa, apagado y SIN endpoint): el cliente empuja lotes firmados",
+        "description": "Encabezados: x-likida-marca (segundos epoch; tolerancia 300 s), x-likida-firma (HMAC-SHA256 hex de «marca.llave.cuerpo»), idempotency-key. Máximo 5242880 bytes. Respuestas: 200, 400 sin llave, 401 firma, 403 marca, 409 repetido, 413 tamaño, 422 cuerpo, 503 apagado. Sin endpoint publicado.",
         "responses": {
           "200": {
-            "description": "Lote recibido."
+            "description": "SUPUESTO, sin endpoint publicado: respuesta que daría la lógica de recepción."
           }
         },
         "x-supuesto": true
@@ -774,7 +774,7 @@
   "x-fecha-de-corte": "sin fijar",
   "x-modos": {
     "api": false,
-    "archivos": true,
+    "archivos": false,
     "push": false
   }
 }

@@ -27,7 +27,7 @@ describe('OpenAPI del contrato SUPUESTO', () => {
   it('no afirma conexión real ni lleva una URL real', () => {
     expect(JSON.stringify(doc)).not.toMatch(/https:\/\/(?!SUPUESTO)/);
     expect(doc['x-estado']).toBe('SUPUESTO');
-    expect(doc['x-modos']).toEqual({ api: false, archivos: true, push: false });
+    expect(doc['x-modos']).toEqual({ api: false, archivos: false, push: false });
   });
   it('es determinista', () => {
     expect(JSON.stringify(openapiDeContrato(CONTRATO_TMS_SUPUESTO))).toBe(JSON.stringify(doc));

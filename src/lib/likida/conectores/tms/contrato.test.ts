@@ -51,10 +51,10 @@ describe('contrato SUPUESTO: validación', () => {
     expect(validarContrato(CONTRATO_TMS_SUPUESTO)).toEqual([]);
     expect(CONTRATO_TMS_SUPUESTO.estado).toBe('SUPUESTO');
   });
-  it('el modo API y el push vienen apagados; el de archivos es el plan B activo', () => {
+  it('el modo API y el push vienen apagados; el de archivos (plan B) también, hasta que el cliente confirme', () => {
     expect(CONTRATO_TMS_SUPUESTO.modos.api.activo).toBe(false);
     expect(CONTRATO_TMS_SUPUESTO.modos.push.activo).toBe(false);
-    expect(CONTRATO_TMS_SUPUESTO.modos.archivos.activo).toBe(true);
+    expect(CONTRATO_TMS_SUPUESTO.modos.archivos.activo).toBe(false);
   });
   it('no lleva una URL real ni secretos: la base viene de la credencial del cofre', () => {
     const texto = JSON.stringify(CONTRATO_TMS_SUPUESTO);
@@ -142,6 +142,11 @@ describe('contrato SUPUESTO: login y re-login único', () => {
     const r = await adaptador.leer('viajes', VENTANA);
     expect(r.filas).toHaveLength(12);
     expect(doble.logins).toBe(2);
+  });
+  it('un HTML con un formulario cualquiera y la palabra «login» en el menú NO es sesión caída', () => {
+    const det = detectorSesionCaida(CONTRATO_TMS_SUPUESTO);
+    const cuerpo = '<html><body><a href="/login">login</a><form action="/buscar"><input name="q"></form></body></html>';
+    expect(det({ estado: 200, cuerpo, encabezados: { 'content-type': 'text/html' } })).toBe(false);
   });
   it('un HTML sin marcadores de login (p. ej. mantenimiento) NO dispara re-login: falla de formato', async () => {
     const { doble, adaptador } = montar({ respuestaFija: { tipo: 'text/html', cuerpo: '<html><body>Mantenimiento programado</body></html>' } });
@@ -446,13 +451,14 @@ describe('datos hostiles', () => {
 
 describe('modo archivos (plan B)', () => {
   const ENC = 'Icident,unidad,Fecha Salida,Fecha Llegada,origen,destino,estatus,operador';
+  const ARCHIVOS = contratoCon((x) => { x.modos.archivos.activo = true; });
   const csv = (filas: string[]) => [ENC, ...filas].join('\n');
   const FILAS = [
     'IC-1,U-1,2026-10-10 08:00:00,2026-10-10 18:00:00,Origen,Mérida,cerrado,José Núñez',
     'IC-2,U-2,2026-10-11 08:00:00,2026-10-11 18:00:00,Origen,Oaxaca,cerrado,María Peña',
   ];
   const leer = async (buffer: Uint8Array) => {
-    const { entradas } = entradasDeArchivos(CONTRATO_TMS_SUPUESTO, [{ recurso: 'viajes', buffer, formato: 'csv' }]);
+    const { entradas } = entradasDeArchivos(ARCHIVOS, [{ recurso: 'viajes', buffer, formato: 'csv' }]);
     const { sesion } = sesionDeExportaciones(entradas);
     return leerViajes(sesion, VENTANA);
   };
@@ -480,14 +486,13 @@ describe('modo archivos (plan B)', () => {
     expect(r.filas[0].operadorNombre).toBe('José Núñez');
   });
   it('rechaza un formato que el contrato no admite', () => {
-    const c = contratoCon((x) => { x.modos.archivos.formatos = ['csv']; });
+    const c = contratoCon((x) => { x.modos.archivos.activo = true; x.modos.archivos.formatos = ['csv']; });
     const r = entradasDeArchivos(c, [{ recurso: 'viajes', buffer: new Uint8Array([123, 125]), formato: 'json' }]);
     expect(r.entradas).toHaveLength(0);
     expect(r.rechazados[0]).toMatch(/formato json/);
   });
-  it('con el modo archivos apagado no entra nada', () => {
-    const c = contratoCon((x) => { x.modos.archivos.activo = false; });
-    const r = entradasDeArchivos(c, [{ recurso: 'viajes', buffer: new Uint8Array([1]), formato: 'csv' }]);
+  it('apagado por omisión en el contrato supuesto: no entra nada', () => {
+    const r = entradasDeArchivos(CONTRATO_TMS_SUPUESTO, [{ recurso: 'viajes', buffer: new Uint8Array([1]), formato: 'csv' }]);
     expect(r.entradas).toHaveLength(0);
     expect(r.rechazados[0]).toMatch(/apagado/);
   });
@@ -502,7 +507,7 @@ describe('modo push (plan C)', () => {
     const marca = String(Math.floor((extra.marcaMs ?? AHORA) / 1000));
     return {
       recurso: 'viajes' as const, cuerpo, secreto: extra.secreto ?? SECRETO, ahora: extra.ahora ?? AHORA, vistas: extra.vistas ?? new Set<string>(),
-      encabezados: { 'x-likida-marca': marca, 'x-likida-firma': firmarPush(SECRETO, marca, cuerpo), 'idempotency-key': 'lote-1', ...(extra.encabezados ?? {}) },
+      encabezados: { 'x-likida-marca': marca, 'x-likida-firma': firmarPush(SECRETO, marca, 'lote-1', cuerpo), 'idempotency-key': 'lote-1', ...(extra.encabezados ?? {}) },
     };
   }
   it('apagado por omisión: 503 y no procesa nada', () => {
@@ -549,9 +554,22 @@ describe('modo push (plan C)', () => {
     const r = recibirPush(PUSH, solicitud(cuerpoDe(), { vistas: new Set(['lote-1']) }));
     expect(!r.ok && r.estado).toBe(409);
   });
+  it('misma firma y cuerpo pero OTRA llave de idempotencia → 401 (la llave va firmada)', () => {
+    const base = solicitud(cuerpoDe());
+    const r = recibirPush(PUSH, { ...base, encabezados: { ...base.encabezados, 'idempotency-key': 'lote-2' } });
+    expect(!r.ok && r.estado).toBe(401);
+  });
+  it('la fecha de corte de la flota rige también en push', () => {
+    const base = solicitud(cuerpoDe(3));
+    const sin = recibirPush(PUSH, base);
+    const lejos = recibirPush(PUSH, { ...base, fechaCorte: '2099-01-01' });
+    expect(sin.ok && lejos.ok).toBe(true);
+    expect(lejos.ok && lejos.filas.length).toBe(0);
+    expect(lejos.ok && lejos.anterioresAlCorte).toBe(3);
+  });
   it('sin llave de idempotencia → 400', () => {
     const marca = String(Math.floor(AHORA / 1000)); const cuerpo = cuerpoDe();
-    const r = recibirPush(PUSH, { recurso: 'viajes', cuerpo, secreto: SECRETO, ahora: AHORA, vistas: new Set(), encabezados: { 'x-likida-marca': marca, 'x-likida-firma': firmarPush(SECRETO, marca, cuerpo) } });
+    const r = recibirPush(PUSH, { recurso: 'viajes', cuerpo, secreto: SECRETO, ahora: AHORA, vistas: new Set(), encabezados: { 'x-likida-marca': marca, 'x-likida-firma': firmarPush(SECRETO, marca, '', cuerpo) } });
     expect(!r.ok && r.estado).toBe(400);
   });
   it('lote demasiado grande → 413', () => {
