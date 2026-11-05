@@ -150,10 +150,10 @@ export default async function TrustSafetyPage() {
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }}>
-                        <th className="py-2 pr-3 font-medium">Fuente</th>
-                        <th className="py-2 pr-3 font-medium">Estado</th>
-                        <th className="py-2 pr-3 font-medium">Filas · 30 días</th>
-                        <th className="py-2 font-medium">Dónde vive o qué falta</th>
+                        <th scope="col" className="py-2 pr-3 font-medium">Fuente</th>
+                        <th scope="col" className="py-2 pr-3 font-medium">Estado</th>
+                        <th scope="col" className="py-2 pr-3 font-medium">Filas · 30 días</th>
+                        <th scope="col" className="py-2 font-medium">Dónde vive o qué falta</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -186,11 +186,11 @@ export default async function TrustSafetyPage() {
                   <table className="w-full text-left text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }}>
-                        <th className="py-2 pr-3 font-medium">Cuándo</th>
-                        <th className="py-2 pr-3 font-medium">Qué y de dónde</th>
-                        <th className="py-2 pr-3 font-medium">Severidad</th>
-                        <th className="py-2 pr-3 font-medium">Actor</th>
-                        <th className="py-2 font-medium">Flota</th>
+                        <th scope="col" className="py-2 pr-3 font-medium">Cuándo</th>
+                        <th scope="col" className="py-2 pr-3 font-medium">Qué y de dónde</th>
+                        <th scope="col" className="py-2 pr-3 font-medium">Severidad</th>
+                        <th scope="col" className="py-2 pr-3 font-medium">Actor</th>
+                        <th scope="col" className="py-2 font-medium">Flota</th>
                       </tr>
                     </thead>
                     <tbody>

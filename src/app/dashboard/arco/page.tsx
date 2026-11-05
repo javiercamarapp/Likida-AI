@@ -216,15 +216,15 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
             </EstadoVacio>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table aria-label="Solicitudes de derechos ARCO" className="w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th className="px-3 py-2.5 font-medium">Recibida</th>
-                    <th className="px-3 py-2.5 font-medium">Derecho</th>
-                    <th className="px-3 py-2.5 font-medium">Titular</th>
-                    <th className="px-3 py-2.5 font-medium">Vence</th>
-                    <th className="px-3 py-2.5 font-medium">Estado</th>
-                    <th className="px-3 py-2.5 font-medium">Respuesta</th>
+                    <th scope="col" className="px-3 py-2.5 font-medium">Recibida</th>
+                    <th scope="col" className="px-3 py-2.5 font-medium">Derecho</th>
+                    <th scope="col" className="px-3 py-2.5 font-medium">Titular</th>
+                    <th scope="col" className="px-3 py-2.5 font-medium">Vence</th>
+                    <th scope="col" className="px-3 py-2.5 font-medium">Estado</th>
+                    <th scope="col" className="px-3 py-2.5 font-medium">Respuesta</th>
                   </tr>
                 </thead>
                 <tbody>

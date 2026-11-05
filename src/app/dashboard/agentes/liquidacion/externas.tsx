@@ -227,7 +227,7 @@ export async function SeccionExternas(p: ExternasProps) {
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   <Th>Folio</Th><Th>Operador</Th><Th>Periodo</Th><Th derecha>Total (de tu sistema)</Th>
-                  <Th>Estado</Th><Th>Respuesta del chofer</Th><Th>Enviada</Th><th className="pb-2" />
+                  <Th>Estado</Th><Th>Respuesta del chofer</Th><Th>Enviada</Th><th scope="col" className="pb-2" />
                 </tr>
               </thead>
               <tbody>

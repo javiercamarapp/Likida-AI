@@ -248,7 +248,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
           <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
+                {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th scope="col" key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
               </tr>
             </thead>
             <tbody>

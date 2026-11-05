@@ -98,12 +98,12 @@ export default async function PaginaBorradorCcp({
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="py-1 pr-3 font-medium">Descripción</th>
-                  <th className="py-1 pr-3 font-medium">Clave SAT</th>
-                  <th className="py-1 pr-3 font-medium">Cantidad</th>
-                  <th className="py-1 pr-3 font-medium">Unidad</th>
-                  <th className="py-1 pr-3 font-medium">Peso (kg)</th>
-                  <th className="py-1 font-medium">Peligroso</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Descripción</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Clave SAT</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Cantidad</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Unidad</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Peso (kg)</th>
+                  <th scope="col" className="py-1 font-medium">Peligroso</th>
                 </tr>
               </thead>
               <tbody>

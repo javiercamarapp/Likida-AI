@@ -203,10 +203,10 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
           <table className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th className="font-medium py-1 pr-3">Día</th>
-                <th className="font-medium py-1 pr-3 text-right">Filas</th>
-                <th className="font-medium py-1 pr-3 text-right">Sin caja</th>
-                <th className="font-medium py-1 text-right">Con aviso</th>
+                <th scope="col" className="font-medium py-1 pr-3">Día</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">Filas</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">Sin caja</th>
+                <th scope="col" className="font-medium py-1 text-right">Con aviso</th>
               </tr>
             </thead>
             <tbody>

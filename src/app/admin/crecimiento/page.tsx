@@ -180,10 +180,10 @@ export default async function CrecimientoPage() {
                 <table className="w-full text-[12.5px]">
                   <thead>
                     <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Fuente</th>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Leads</th>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Último</th>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo por lead</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Fuente</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Leads</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Último</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo por lead</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -295,9 +295,9 @@ export default async function CrecimientoPage() {
                   <table className="w-full text-[12.5px]">
                     <thead>
                       <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
-                        <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Cohorte (mes de alta)</th>
-                        <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Flotas</th>
-                        <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flotas con uso, mes a mes</th>
+                        <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Cohorte (mes de alta)</th>
+                        <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Flotas</th>
+                        <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flotas con uso, mes a mes</th>
                       </tr>
                     </thead>
                     <tbody>

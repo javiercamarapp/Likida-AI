@@ -204,14 +204,14 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
               </p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table aria-label="Unidades y su último reporte" className="w-full text-[12px]">
                   <thead>
                     <tr style={{ color: 'var(--faint)' }} className="text-left">
-                      <th className="py-2 font-medium">Unidad</th>
-                      <th className="py-2 font-medium">Reportó</th>
-                      <th className="py-2 font-medium">Origen del dato</th>
-                      <th className="py-2 font-medium text-right">Velocidad</th>
-                      <th className="py-2 font-medium text-right">Coordenadas</th>
+                      <th scope="col" className="py-2 font-medium">Unidad</th>
+                      <th scope="col" className="py-2 font-medium">Reportó</th>
+                      <th scope="col" className="py-2 font-medium">Origen del dato</th>
+                      <th scope="col" className="py-2 font-medium text-right">Velocidad</th>
+                      <th scope="col" className="py-2 font-medium text-right">Coordenadas</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -81,14 +81,14 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
               <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Aún no se ha enviado ningún lote.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table aria-label="Buzones de proveedores" className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Creado</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Facturas</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-4 text-right">Total</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Creado</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Facturas</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-4 text-right">Total</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -180,13 +180,13 @@ export function SeccionRecepcion({ recepciones, conteo, acciones }: {
             {conteo.porEstado.rechazada > 0 && <span style={{ color: 'var(--bad)' }}>{numero(conteo.porEstado.rechazada)} rechazados por seguridad</span>}
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table aria-label="Archivos recibidos en el buzón" className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Archivo</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Qué pasó</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Archivo</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Qué pasó</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody>

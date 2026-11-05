@@ -74,8 +74,8 @@ export function VistaSitios(p: PropsVistaSitios) {
             <table className="w-full text-[12px]">
               <thead>
                 <tr className="text-left etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
-                  <th className="py-1.5 pr-3">Nombre</th><th className="pr-3">Tipo</th><th className="pr-3">Código</th>
-                  <th className="pr-3">Centro (lat, lng)</th><th className="pr-3 text-right">Radio</th><th className="pr-3">Cliente</th><th className="pr-3">Origen del dato</th><th />
+                  <th scope="col" className="py-1.5 pr-3">Nombre</th><th scope="col" className="pr-3">Tipo</th><th scope="col" className="pr-3">Código</th>
+                  <th scope="col" className="pr-3">Centro (lat, lng)</th><th scope="col" className="pr-3 text-right">Radio</th><th scope="col" className="pr-3">Cliente</th><th scope="col" className="pr-3">Origen del dato</th><th scope="col"><span className="sr-only">Acciones</span></th>
                 </tr>
               </thead>
               <tbody>
@@ -161,7 +161,7 @@ export function VistaSitios(p: PropsVistaSitios) {
               <table className="w-full text-[12px]">
                 <thead>
                   <tr className="text-left etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
-                    <th className="py-1.5 pr-3">Texto</th><th className="pr-3">Lado</th><th className="pr-3 text-right">Viajes</th>{p.puedeEditar && <th>Qué es</th>}
+                    <th scope="col" className="py-1.5 pr-3">Texto</th><th scope="col" className="pr-3">Lado</th><th scope="col" className="pr-3 text-right">Viajes</th>{p.puedeEditar && <th scope="col">Qué es</th>}
                   </tr>
                 </thead>
                 <tbody>

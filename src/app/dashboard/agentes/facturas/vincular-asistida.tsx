@@ -9,6 +9,7 @@ import {
   type ResultadoVincular, type EstadoVinculacionPantalla,
 } from './acciones-vinculacion';
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
+import { horaMx } from '@/lib/formato';
 
 // ════════════════════════════════════════════════════════════════════════════
 // «VINCULAR» — el paso humano del CAPTCHA/MFA, con pantalla en el producto (0540).
@@ -90,7 +91,7 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
         <li>Cuando estés dentro, la ventana se cierra sola y aquí aparece «vinculado».</li>
       </ol>
       <p className="text-[11px] mt-2" style={{ color: 'var(--warn)' }}>
-        El código se muestra solo ahora, sirve una vez y caduca a las {new Date(res.expiraEn).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}. No lo compartas.
+        El código se muestra solo ahora, sirve una vez y caduca a las {horaMx(res.expiraEn)}. No lo compartas.
       </p>
       <p className="text-[11px] mt-1" role="status" style={{ color: 'var(--muted)' }}>{ROTULO[vivo] ?? ''}</p>
       <div className="mt-2">

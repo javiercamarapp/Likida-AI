@@ -62,15 +62,15 @@ export function VistaHuerfanos({ pendientes, hayViajesVivos, buscarViaje, totalP
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table aria-label="Mensajes recibidos sin viaje asociado" className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Comprobante</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Por qué está aquí</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right pr-1">Resolver</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Comprobante</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Por qué está aquí</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right pr-1">Resolver</th>
                 </tr>
               </thead>
               <tbody>

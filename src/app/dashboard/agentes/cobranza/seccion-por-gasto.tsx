@@ -75,7 +75,7 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   {['Viaje', 'Gasto', 'Qué falta', 'Chofer', 'Días', 'Siguiente aviso'].map((t, i) => (
-                    <th key={t} className={`etiqueta-mono text-[11px] uppercase font-normal pb-2 ${i >= 4 ? 'text-right' : ''}`}>{t}</th>
+                    <th scope="col" key={t} className={`etiqueta-mono text-[11px] uppercase font-normal pb-2 ${i >= 4 ? 'text-right' : ''}`}>{t}</th>
                   ))}
                 </tr>
               </thead>

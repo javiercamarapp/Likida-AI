@@ -352,10 +352,10 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
         <table className="w-full text-xs">
           <thead>
             <tr className="text-left" style={{ color: 'var(--muted)' }}>
-              <th className="py-1 pr-3 font-medium">Campo</th>
-              <th className="py-1 pr-3 font-medium">Esperado (la persona)</th>
-              <th className="py-1 pr-3 font-medium">Leído (el OCR)</th>
-              <th className="py-1 font-medium">Veredicto</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Campo</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Esperado (la persona)</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Leído (el OCR)</th>
+              <th scope="col" className="py-1 font-medium">Veredicto</th>
             </tr>
           </thead>
           <tbody>

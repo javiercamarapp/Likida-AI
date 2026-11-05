@@ -122,12 +122,12 @@ export function PantallaQa({
                 <table className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-4 py-2 font-medium">Corrida</th>
-                      <th className="px-4 py-2 font-medium">Escenario</th>
-                      <th className="px-4 py-2 font-medium">Lanzada</th>
-                      <th className="px-4 py-2 font-medium">Estado</th>
-                      <th className="px-4 py-2 font-medium text-right">Veredicto</th>
-                      <th className="px-4 py-2 font-medium text-right">Costo real</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Corrida</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Escenario</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Lanzada</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Estado</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Veredicto</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Costo real</th>
                     </tr>
                   </thead>
                   <tbody>

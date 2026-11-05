@@ -235,16 +235,16 @@ export function VistaDespacho({
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-[13px]">
+              <table aria-label="Viajes por despachar" className="w-full text-[13px]">
                 <thead>
                   <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
-                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Ruta</th>
-                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
-                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Unidad</th>
-                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Inicio</th>
-                    <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Aviso</th>
-                    <th className="pb-2" />
+                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
+                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Ruta</th>
+                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Unidad</th>
+                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Inicio</th>
+                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Aviso</th>
+                    <th scope="col" className="pb-2" />
                   </tr>
                 </thead>
                 <tbody>
