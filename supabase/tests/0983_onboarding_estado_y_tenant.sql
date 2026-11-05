@@ -61,8 +61,11 @@ begin
   if n <> 0 then raise exception '0983(5): el estado de la flota borrada debia irse en cascada (quedan %)', n; end if;
   select count(*) into n from public.onboarding_tenant where tenant_id = ta;
   if n <> 0 then raise exception '0983(5): el interruptor de la flota borrada debia irse en cascada'; end if;
+  -- Borrar la flota A borra tambien a su usuario (app_user cascada) y con el su fila de la flota B; la fila del usuario de B se conserva.
   select count(*) into n from public.onboarding_estado where tenant_id = tb;
-  if n <> 2 then raise exception '0983(5): la otra flota debia conservar sus 2 filas, tiene %', n; end if;
+  if n <> 1 then raise exception '0983(5): la otra flota debia conservar la fila de su propio usuario, tiene %', n; end if;
+  select count(*) into n from public.onboarding_estado where user_id = ub and tenant_id = tb;
+  if n <> 1 then raise exception '0983(5): la fila del usuario de la flota B debia sobrevivir'; end if;
 
   -- 6. Seguridad: RLS prendida, sin politicas, sin privilegios para anon/authenticated y con CRUD para service_role.
   select bool_and(c.relrowsecurity) into rls from pg_class c where c.oid in ('public.onboarding_estado'::regclass, 'public.onboarding_tenant'::regclass);
