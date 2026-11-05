@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation';
+import { exigirStepUpAccion } from '@/lib/auth/stepup';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
@@ -65,6 +66,8 @@ export default async function PaginaLlavesApi({
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota emite llaves de API.' };
     }
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'llave_api', { tenantId: s.tenantId, userId: s.userId });
+    if (pasoMfa) return { ok: false, error: pasoMfa };
 
     try {
       const llave = await crearLlaveApi(s.tenantId, {
@@ -97,6 +100,8 @@ export default async function PaginaLlavesApi({
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota revoca llaves de API.' };
     }
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'llave_api', { tenantId: s.tenantId, userId: s.userId });
+    if (pasoMfa) return { ok: false, error: pasoMfa };
 
     try {
       await revocarLlaveApi(s.tenantId, String(fd.get('id') ?? '').trim(), s.userId);

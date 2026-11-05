@@ -6,7 +6,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
 import { esRolNomina } from './roles';
-import { registrarExporteDinero, registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
+import { exigirStepUpAccion } from './stepup';
+import { esExporteDeDinero, registrarExporteDinero, registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ FLOTA HABLA UNA RUTA DE API.
@@ -118,6 +119,12 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
   // ruta nueva que nadie clasifique se niega. Sin perfil no hace nada.
   if (await apiDenegadaPorPerfil(tenantId, new URL(url).pathname)) {
     return { ok: false, status: 403, motivo: MOTIVO_PERFIL_API };
+  }
+
+  // F9 (CT-SEG-05): los exportes de dinero exigen segundo factor reciente a dueño y contador (bandera apagada por omisión, D8).
+  if (esExporteDeDinero(new URL(url).pathname)) {
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'exporte_dinero', { tenantId, userId: s.userId });
+    if (pasoMfa) return { ok: false, status: 403, motivo: pasoMfa };
   }
 
   // CT-SEG-11: quién descargó dinero. Solo registra las rutas de exporte de dinero; autorizada la descarga, no terminada.
