@@ -26,6 +26,7 @@ vi.mock('@/lib/seguridad/eventos', () => ({
 const coberturaEventosSeguridad = vi.fn();
 vi.mock('@/lib/seguridad/cobertura', () => ({ coberturaEventosSeguridad: (...a: unknown[]) => coberturaEventosSeguridad(...a) }));
 
+import { readFileSync } from 'node:fs';
 import TrustSafetyPage from './page';
 
 const fuente = (sobre: Record<string, unknown> = {}) => ({
@@ -117,7 +118,8 @@ describe('/admin/trust-safety — la cobertura REAL, medida (CT-SEG-11)', () => 
     expect(html).toMatch(/Emite/);
     expect(html).toContain('12');
     expect(html).toContain('Rate limits que bloquean');
-    expect(html).toMatch(/No emite/);
+    expect(html).toMatch(/Pendiente/);
+    expect(html).not.toMatch(/No emite/);
     expect(html).toContain('mfa.ts decide pero no registra');
     expect(html).toContain('1 de 3 fuentes emiten');
   });
@@ -136,5 +138,49 @@ describe('/admin/trust-safety — la cobertura REAL, medida (CT-SEG-11)', () => 
     const html = renderToStaticMarkup(await TrustSafetyPage());
     expect(html).toContain('No se pudo medir la cobertura');
     expect(html).not.toContain('Login fallido');
+  });
+});
+
+describe('/admin/trust-safety — la lista de pendientes sale de la cobertura medida, no de texto fijo (R4)', () => {
+  const vacios = () => {
+    getEventosSeguridad.mockResolvedValue([]);
+    resumenEventosSeguridad.mockResolvedValue({ total: 0, d30: { alta: 0, media: 0, info: 0 } });
+  };
+
+  it('lo pendiente se rotula «Pendiente» y se lista con su título; lo que emite NO aparece como pendiente', async () => {
+    vacios();
+    coberturaEventosSeguridad.mockResolvedValue([
+      fuente({ id: 'rate_limit', titulo: 'Rate limits que bloquean', emite: true, filas30d: 4 }),
+      fuente({ id: 'inyeccion_prompt', titulo: 'Inyección de prompt detectada', emite: false, filas30d: 0 }),
+    ]);
+    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const bloque = html.slice(html.indexOf('Qué se registra y qué está pendiente'));
+    expect(bloque).toContain('Pendiente, hoy no se registra');
+    expect(bloque).toContain('Inyección de prompt detectada');
+    expect(bloque).not.toContain('Rate limits que bloquean');
+  });
+
+  it('si toda fuente declarada emite, NO se vende como cobertura total', async () => {
+    vacios();
+    coberturaEventosSeguridad.mockResolvedValue([fuente()]);
+    const html = renderToStaticMarkup(await TrustSafetyPage());
+    expect(html).toContain('Todas las fuentes declaradas emiten');
+    expect(html).toContain('lo no listado arriba no está medido');
+  });
+
+  it('«Emite» se explica como «hay código que escribe la señal», no como detección completa', async () => {
+    vacios();
+    const html = renderToStaticMarkup(await TrustSafetyPage());
+    expect(html).toContain('no significa que la detección sea completa');
+  });
+
+  it('el fuente de la pantalla no vuelve a afirmar cobertura que no se mide', () => {
+    // Solo texto: comentarios fuera. Las frases son las que la auditoría marcó como falsas (CT-SEG-11) y sus variantes.
+    const codigo = readFileSync(new URL('./page.tsx', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+    for (const prohibida of [/est[aá]n cableados/i, /silencio (aqu[ií] )?es bueno/i, /cobertura (total|completa)(?! ni)/i, /protegid[oa]s? contra/i, /sin riesgo/i, /todo (est[aá] )?bajo control/i]) {
+      expect(codigo, String(prohibida)).not.toMatch(prohibida);
+    }
+    // Y no lista a mano qué fuentes faltan: eso sale de la cobertura medida (si no, envejece como el texto de CT-SEG-11).
+    expect(codigo).not.toMatch(/entre ellas rate limits/i);
   });
 });

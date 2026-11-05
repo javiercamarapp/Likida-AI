@@ -89,7 +89,7 @@ function FilaCobertura({ f }: { f: CoberturaFuente }) {
   return (
     <tr className="hairline-t">
       <td className="py-2 pr-3 align-top text-sm">{f.titulo}</td>
-      <td className="py-2 pr-3 align-top"><StatusPill estado={f.emite ? 'ok' : 'bad'}>{f.emite ? 'Emite' : 'No emite'}</StatusPill></td>
+      <td className="py-2 pr-3 align-top"><StatusPill estado={f.emite ? 'ok' : 'warn'}>{f.emite ? 'Emite' : 'Pendiente'}</StatusPill></td>
       <td className="py-2 pr-3 align-top text-sm tabular whitespace-nowrap">{f.emite && f.filas30d === 0 ? <span style={{ color: 'var(--muted)' }}>{medida}</span> : medida}</td>
       <td className="py-2 align-top text-xs" style={{ color: 'var(--muted)' }}>{f.donde}</td>
     </tr>
@@ -133,7 +133,7 @@ export default async function TrustSafetyPage() {
 
           {/* ── La cobertura REAL, medida ── */}
           <section className="card p-4">
-            <TituloSeccion>Cobertura: qué fuentes escriben aquí y cuáles no</TituloSeccion>
+            <TituloSeccion>Cobertura: qué fuentes escriben aquí y cuáles están pendientes</TituloSeccion>
             {cobertura === null ? (
               <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
                 No se pudo medir la cobertura — la base no contestó. Eso no significa que haya cobertura completa ni vacía: significa que ahora mismo no se sabe.
@@ -141,8 +141,8 @@ export default async function TrustSafetyPage() {
             ) : (
               <>
                 <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                  {cobertura.filter((f) => f.emite).length} de {cobertura.length} fuentes emiten. Las filas son señales ya agrupadas
-                  (una ráfaga de la misma señal es una fila con su conteo), no intentos. Los exportes de dinero se anotan al
+                  {cobertura.filter((f) => f.emite).length} de {cobertura.length} fuentes emiten. Las demás están pendientes: hoy no escriben nada aquí.
+                  Las filas son señales ya agrupadas (una ráfaga de la misma señal es una fila con su conteo), no intentos. Los exportes de dinero se anotan al
                   autorizar la descarga, no al terminar. Una fuente que emite y marca «0 en 30 días» es silencio real o una
                   fuente rota: no se distingue.
                 </p>
@@ -167,7 +167,7 @@ export default async function TrustSafetyPage() {
 
           {/* ── La lista ── */}
           <section className="card p-4">
-            <TituloSeccion>Lo que los detectores atraparon</TituloSeccion>
+            <TituloSeccion>Eventos registrados</TituloSeccion>
             {eventos === null ? (
               <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
                 No se pudieron leer los eventos — que no es lo mismo que «no hay eventos».
@@ -176,7 +176,7 @@ export default async function TrustSafetyPage() {
               <div className="mt-2">
                 <EstadoVacio icono={<ShieldAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   Ningún evento registrado. Eso NO prueba que no haya pasado nada: solo cubre lo que las
-                  fuentes de la sección de cobertura emiten, y varias no emiten. Una fuente que emite y marca
+                  fuentes de la sección de cobertura emiten; las pendientes no escriben nada. Una fuente que emite y marca
                   cero puede ser silencio real o una fuente rota; este panel no las distingue.
                 </EstadoVacio>
               </div>
@@ -207,17 +207,36 @@ export default async function TrustSafetyPage() {
             )}
           </section>
 
-          {/* ── Lo que este panel NO afirma — la mitad honesta se conserva ── */}
+          {/* ── Lo que este panel NO afirma — la lista de pendientes sale de la MISMA cobertura medida, no de texto fijo ── */}
           <div className="card p-4">
-            <TituloSeccion>Qué se detecta y qué no</TituloSeccion>
+            <TituloSeccion>Qué se registra y qué está pendiente</TituloSeccion>
             <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-              Lo que sí hay: las fuentes marcadas «Emite» en la cobertura de arriba (evento_seguridad, 0133 y 0954).
-              Lo que NO hay: las marcadas «No emite» — entre ellas rate limits, firma del correo entrante, inyección de
-              prompt, lectura de datos personales y segundo factor — ni un pipeline dedicado de detección de jailbreaks
-              o de fugas de PII. La mitigación anti-inyección del Agente de Cuadre vive en su prompt
-              (<code className="font-mono">src/lib/agents/prompts.ts</code>) y en la guardia determinista de cifras —
-              eso es mitigación, no detección, y este panel no afirma seguridad que no se midió. Los avisos por
-              correo de severidad alta están apagados hasta que Javier encienda <code className="font-mono">SEGURIDAD_AVISOS</code>.
+              «Emite» significa solo que existe código que escribe esa señal en <code className="font-mono">evento_seguridad</code>
+              (una prueba lo ata al árbol de código); no significa que la detección sea completa ni que haya sido probada
+              contra un ataque real. Este panel no es un sistema de detección de intrusiones y no afirma seguridad que no se midió.
+            </p>
+            {cobertura === null ? (
+              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                Sin la medición de cobertura no se puede listar qué está pendiente ahora mismo.
+              </p>
+            ) : cobertura.filter((f) => !f.emite).length === 0 ? (
+              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                Todas las fuentes declaradas emiten. Eso no cubre lo que nadie ha declarado: lo no listado arriba no está medido.
+              </p>
+            ) : (
+              <>
+                <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>Pendiente, hoy no se registra:</p>
+                <ul className="text-xs mt-1 list-disc pl-5 space-y-0.5" style={{ color: 'var(--muted)' }}>
+                  {cobertura.filter((f) => !f.emite).map((f) => <li key={f.id}>{f.titulo}</li>)}
+                </ul>
+              </>
+            )}
+            <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+              Tampoco hay un pipeline dedicado de detección de jailbreaks ni de fugas de datos personales. La mitigación
+              anti-inyección del Agente de Cuadre vive en su prompt (<code className="font-mono">src/lib/agents/prompts.ts</code>) y
+              en la guardia determinista de cifras (<code className="font-mono">src/lib/likida/cuadre/guardia.ts</code>): eso es
+              mitigación, no detección. Los avisos por correo de severidad alta se envían solo si está encendida la variable{' '}
+              <code className="font-mono">SEGURIDAD_AVISOS</code>; viene apagada por omisión y este panel no mide si lo está en producción.
             </p>
           </div>
         </div>
