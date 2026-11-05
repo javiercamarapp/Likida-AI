@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContextoEvento } from './repo';
-import { procesarLoteEventos, type EntradaLote } from './lote_eventos';
+import { MAX_CLAVES_VENTANA, consumirCupoPorMinuto, podarVentana, procesarLoteEventos, type EntradaLote } from './lote_eventos';
 import type { EventoNormalizado } from './eventos';
 
 const ev = (extra: Record<string, unknown> = {}) => ({ tipo: 'guia_inicio', canal: 'movil', ...extra });
@@ -52,5 +52,24 @@ describe('procesarLoteEventos', () => {
     const r = entrada({ sesion: { userId: 'u', tenantId: 't', rol: 'rol_raro' } });
     await procesarLoteEventos(r.e);
     expect(r.guardados[0].ctx.pista).toBe('sin_pista');
+  });
+});
+
+describe('acotado del Map en memoria', () => {
+  it('poda las ventanas vencidas y, si sigue grande, las más antiguas', () => {
+    const v: EntradaLote['ventana'] = new Map();
+    for (let i = 0; i < MAX_CLAVES_VENTANA + 50; i++) v.set(`u${i}`, { desde: 1000, n: 1 });
+    podarVentana(v, 1000 + 61_000);
+    expect(v.size).toBe(0);
+    for (let i = 0; i < MAX_CLAVES_VENTANA + 50; i++) v.set(`u${i}`, { desde: 5000, n: 1 });
+    podarVentana(v, 5001);
+    expect(v.size).toBe(MAX_CLAVES_VENTANA);
+    expect(v.has('u0')).toBe(false);
+    expect(v.has(`u${MAX_CLAVES_VENTANA + 49}`)).toBe(true);
+  });
+  it('consumirCupoPorMinuto respeta el tope y se reinicia pasado el minuto', () => {
+    const v: EntradaLote['ventana'] = new Map();
+    expect([1, 2, 3].map(() => consumirCupoPorMinuto(v, 'a', 0, 2))).toEqual([true, true, false]);
+    expect(consumirCupoPorMinuto(v, 'a', 61_000, 2)).toBe(true);
   });
 });

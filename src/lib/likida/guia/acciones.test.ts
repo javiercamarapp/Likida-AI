@@ -80,3 +80,14 @@ describe('registrarEventosGuia', () => {
     expect(await registrarEventosGuia('x' as never)).toEqual({ ok: false, guardados: 0 });
   });
 });
+
+describe('tope por minuto de guardarEstadoGuia', () => {
+  it('tras 60 escrituras en el minuto, la siguiente se rechaza sin tocar la base; otro usuario no se ve afectado', async () => {
+    sesion.valor = { userId: 'u-tope', tenantId: 't1', rol: 'flota_admin' };
+    for (let i = 0; i < 60; i++) expect(await guardarEstadoGuia({ modo: 'corto' }, 1)).toMatchObject({ ok: true });
+    expect(await guardarEstadoGuia({ modo: 'corto' }, 1)).toEqual({ ok: false, motivo: 'limite' });
+    expect(guardado.llamadas).toHaveLength(60);
+    sesion.valor = { userId: 'u-otro', tenantId: 't1', rol: 'flota_admin' };
+    expect(await guardarEstadoGuia({ modo: 'corto' }, 1)).toMatchObject({ ok: true });
+  });
+});

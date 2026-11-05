@@ -5,7 +5,7 @@ import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { leerSenalesAsistente } from '../asistente/senales';
 import { GUIA_EVENTOS } from './eventos';
-import { procesarLoteEventos, type VentanaEventos } from './lote_eventos';
+import { consumirCupoPorMinuto, procesarLoteEventos, type VentanaEventos } from './lote_eventos';
 import { pistaGuiaDe } from './pista';
 import { guardarEstado, insertarEventos, leerEstado, type EscrituraEstado, type LecturaEstado } from './repo';
 import { leerSenalesGuia } from './senales';
@@ -15,7 +15,7 @@ import type { ParcheEstadoGuia, ResultadoSenal } from './tipos';
 // «Ver como» (superadmin) es de solo lectura: no escribe estado ni eventos. Todo falla cerrado y sin lanzar al cliente.
 
 export type RespuestaLeer = LecturaEstado | { ok: false; motivo: 'sin_sesion' };
-export type RespuestaGuardar = EscrituraEstado | { ok: false; motivo: 'sin_sesion' } | { ok: true; omitido: 'solo_lectura' };
+export type RespuestaGuardar = EscrituraEstado | { ok: false; motivo: 'sin_sesion' | 'limite' } | { ok: true; omitido: 'solo_lectura' };
 
 export async function leerEstadoGuia(): Promise<RespuestaLeer> {
   const s = await getSessionTenant();
@@ -23,11 +23,16 @@ export async function leerEstadoGuia(): Promise<RespuestaLeer> {
   return leerEstado(supabaseAdmin(), s.userId, s.tenantId);
 }
 
+// Tope por usuario y minuto de escrituras de estado (en memoria de la instancia, acotado; el tope duro es el control de versión).
+const TOPE_ESTADO_POR_MINUTO = 60;
+const ventanaEstado: VentanaEventos = new Map();
+
 export async function guardarEstadoGuia(parche: ParcheEstadoGuia, versionEsperada: number): Promise<RespuestaGuardar> {
   const s = await getSessionTenant();
   if (!s || !s.tenantId) return { ok: false, motivo: 'sin_sesion' };
   if (s.rol === 'superadmin') return { ok: true, omitido: 'solo_lectura' };
   if (!Number.isInteger(versionEsperada) || versionEsperada < 0) return { ok: false, motivo: 'version' };
+  if (!consumirCupoPorMinuto(ventanaEstado, s.userId, Date.now(), TOPE_ESTADO_POR_MINUTO)) return { ok: false, motivo: 'limite' };
   return guardarEstado(supabaseAdmin(), s.userId, s.tenantId, parche, versionEsperada);
 }
 

@@ -7,6 +7,27 @@ import type { ContextoEvento } from './repo';
 
 export type VentanaEventos = Map<string, { desde: number; n: number }>;
 
+export const MAX_CLAVES_VENTANA = 2000;
+
+/** Acota el Map en memoria: quita las ventanas ya vencidas y, si aun así pasa de `max`, las más antiguas (orden de inserción). */
+export function podarVentana(v: VentanaEventos, ahora: number, max = MAX_CLAVES_VENTANA): void {
+  if (v.size <= max) return;
+  for (const [k, w] of v) if (ahora - w.desde > 60_000) v.delete(k);
+  for (const k of v.keys()) { if (v.size <= max) break; v.delete(k); }
+}
+
+/** Tope por clave y minuto (ventana fija). Devuelve false cuando la clave ya gastó su cupo; poda el Map. */
+export function consumirCupoPorMinuto(v: VentanaEventos, clave: string, ahora: number, tope: number): boolean {
+  const w = v.get(clave);
+  const actual = !w || ahora - w.desde > 60_000 ? { desde: ahora, n: 0 } : w;
+  if (actual.n >= tope) return false;
+  actual.n += 1;
+  v.delete(clave); // reinserta al final: el orden del Map sigue siendo «más reciente al último»
+  v.set(clave, actual);
+  podarVentana(v, ahora);
+  return true;
+}
+
 export interface EntradaLote {
   activo: boolean;
   lote: unknown;
@@ -35,7 +56,9 @@ export async function procesarLoteEventos(e: EntradaLote): Promise<{ ok: boolean
     new Set(),
   );
   actual.n += limpios.length;
+  e.ventana.delete(s.userId);
   e.ventana.set(s.userId, actual);
+  podarVentana(e.ventana, e.ahora);
 
   const guardados = await e.guardar({
     tenantId: s.tenantId, actor: actorSeudonimo(e.secreto, s.userId), pista: pistaGuiaDe(s.rol, e.perfil) ?? 'sin_pista', rol: s.rol, perfil: e.perfil,
