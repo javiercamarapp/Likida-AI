@@ -9,6 +9,7 @@ import { logger } from '@/lib/logger';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { hoyMx } from '@/lib/formato';
 import { desgloseDeFacturaStripe } from '@/lib/saas/iva';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 
 // ── EL TECHO DEL CUERPO (auditoría prod, DAT-40) ──────────────────────────
 //
@@ -69,7 +70,7 @@ export async function POST(req: NextRequest) {
   // `stringify` antes de esto cambia bytes y la firma deja de validar.
   if (!verificarFirmaStripe(crudo, req.headers.get('stripe-signature'))) {
     logger.warn('stripe.webhook.firma_invalida', {});
-    void registrarEventoSeguridad({ origen: 'stripe_webhook', tipo: 'firma_invalida', severidad: 'alta' });
+    await esperarRegistro(registrarEventoSeguridad({ origen: 'stripe_webhook', tipo: 'firma_invalida', severidad: 'alta' }));
     return new NextResponse('Firma inválida', { status: 401 });
   }
 
@@ -93,10 +94,10 @@ export async function POST(req: NextRequest) {
   // reenvía desde ahí.
   if (!eventoEnModoDeLaLlave(evt.livemode)) {
     logger.error('stripe.webhook.modo_no_coincide', { id: evt.id, tipo: evt.type, livemode: evt.livemode ?? null });
-    void registrarEventoSeguridad({
+    await esperarRegistro(registrarEventoSeguridad({
       origen: 'stripe_webhook', tipo: 'otro', severidad: 'alta',
       detalle: { que: 'modo_no_coincide', tipoEvento: evt.type, livemode: evt.livemode ?? null },
-    });
+    }));
     return new NextResponse('Modo (test/live) del evento distinto al de la llave configurada', { status: 400 });
   }
 

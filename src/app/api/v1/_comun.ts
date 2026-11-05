@@ -46,6 +46,7 @@ import { puedeVerArea, type Area } from '@/lib/auth/visibilidad';
 import { LecturaIncompleta } from '@/lib/likida/pg';
 import { vieneDeNuestroSitio, escribe } from '@/lib/auth/csrf';
 import { registrarLlaveInvalida, registrarApiNegada } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 
 // ── El formato de error ────────────────────────────────────────────────────
 
@@ -216,7 +217,7 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
     }
     if (!l.ok) {
       // CT-SEG-11: una llave que no abre (401) deja fila con la red de la petición; un 503 de infraestructura no es un intento.
-      if (l.status === 401) void registrarLlaveInvalida(req, l.motivo);
+      if (l.status === 401) await esperarRegistro(registrarLlaveInvalida(req, l.motivo));
       const codigo: CodigoError = l.status === 401 ? 'no_autenticado' : 'dependencia_no_disponible';
       return { ok: false, respuesta: errorApi(codigo, l.motivo) };
     }
@@ -233,7 +234,7 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
     }
     if (!areaDeLlaveAlcanza(l.area, area)) {
       logger.warn('v1.llave_area', { area_llave: l.area, area });
-      void registrarApiNegada({ tenantId: l.tenantId, pathname: new URL(req.url).pathname, causa: 'area_llave' });
+      await esperarRegistro(registrarApiNegada({ tenantId: l.tenantId, pathname: new URL(req.url).pathname, causa: 'area_llave' }));
       return { ok: false, respuesta: errorApi('sin_permiso', 'Esta llave no tiene acceso a esa parte de la flota.') };
     }
     return { ok: true, tenantId: l.tenantId, rol: `llave:${l.area}`, llaveId: l.llaveId };
@@ -286,7 +287,7 @@ export async function abrir(req: Request, area: Area): Promise<Acceso> {
 
   if (!puedeVerArea(t.rol, area)) {
     logger.warn('v1.area_sin_permiso', { rol: t.rol, area });
-    void registrarApiNegada({ tenantId: t.tenantId, pathname: new URL(req.url).pathname, causa: 'area_rol' });
+    await esperarRegistro(registrarApiNegada({ tenantId: t.tenantId, pathname: new URL(req.url).pathname, causa: 'area_rol' }));
     return {
       ok: false,
       respuesta: errorApi('sin_permiso', area === 'dinero'

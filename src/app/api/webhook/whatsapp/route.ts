@@ -16,6 +16,7 @@ import { registrarEntrantesWhatsApp } from '@/lib/likida/wa_ventana';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { avisadosDeApagado, VENTANA_AVISO_APAGADO_MS } from './avisos_apagado';
 import { medirRuta } from '@/lib/observability/latencia';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 import {
   guardarEventosPendientes, pendientesYaConocidos, reclamarPendiente, pendienteYaSellado,
   marcarPendienteProcesado, anotarFalloPendiente, devolverIntentoPendiente,
@@ -145,7 +146,7 @@ async function manejarPOST(req: NextRequest) {
   const raw = await leerCuerpoAcotado(req, MAX_BODY);
   if (raw === null) return new NextResponse('Payload too large', { status: 413 }); // por si falta content-length
   if (!verifySignature(raw, req.headers.get('x-hub-signature-256'))) {
-    void registrarEventoSeguridad({ origen: 'wa_webhook', tipo: 'firma_invalida', severidad: 'alta' });
+    await esperarRegistro(registrarEventoSeguridad({ origen: 'wa_webhook', tipo: 'firma_invalida', severidad: 'alta' }));
     return new NextResponse('Invalid signature', { status: 401 });
   }
 

@@ -11,6 +11,7 @@ import { puertaDeEntrada } from '@/lib/auth/visibilidad';
 import { aParametro, motivoDeIntercambio, motivoSinCode } from '@/lib/auth/motivo_login';
 import { reenviarEnlaceCaducado } from '@/lib/auth/reenvio_enlace';
 import { registrarLoginFallido } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 
 export async function GET(req: NextRequest) {
   const code = req.nextUrl.searchParams.get('code');
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
   }
 
   // CT-SEG-11: llegó un code (o un error_code) y NO hubo sesión: queda fila con el motivo y la red; una visita sin ninguno de los dos no.
-  if (code || req.nextUrl.searchParams.get('error_code')) void registrarLoginFallido({ motivo: `callback_${motivo}` });
+  if (code || req.nextUrl.searchParams.get('error_code')) await esperarRegistro(registrarLoginFallido({ motivo: `callback_${motivo}` }));
 
   // Enlace ya usado o caducado: antes de mandar a la persona a teclear su
   // correo otra vez, se intenta reenviarle uno nuevo solo (los frenos —uno
