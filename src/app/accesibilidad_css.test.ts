@@ -121,7 +121,7 @@ describe('regla de foco visible por intención (R4)', () => {
     expect(transparentes).toBeGreaterThanOrEqual(10);
     expect(ocultos).toBeGreaterThanOrEqual(3);
     expect(sinMarca).toEqual([]);
-  });
+  }, 60_000); // recorre todo src/: bajo carga del CI superaba el límite de 5 s
 
   it('resuelve className por constante del mismo archivo y no exige atributo a un campo transparente con borde visible', () => {
     const sinBorde = camposMarcables("const css = 'px-2 bg-transparent border-0'; export const A = () => <input className={`${css} w-full`} />;", 'x.tsx');

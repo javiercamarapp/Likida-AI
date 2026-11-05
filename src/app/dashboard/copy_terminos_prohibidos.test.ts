@@ -104,7 +104,7 @@ describe('PT-08 — copy de las pantallas del cliente sin términos prohibidos',
     }
     expect(revisados).toBeGreaterThan(100);
     expect(todas).toEqual([]);
-  });
+  }, 60_000); // recorre todo src/: bajo carga del CI superaba el límite de 5 s
 
   it('src/lib/likida/errores.ts (el texto de error que ve quien llenó el formulario) también pasa la prueba de copy', () => {
     for (const rel of ARCHIVOS_EXTRA) {
