@@ -15,6 +15,7 @@ declare
   tb constant uuid := '98300000-0000-4000-8000-0000000000b1';
   ua constant uuid := '98300000-0000-4000-8000-0000000000a2';
   ub constant uuid := '98300000-0000-4000-8000-0000000000b2';
+  tc constant uuid := '98300000-0000-4000-8000-0000000000c1';
   n int; v int; rls boolean; priv boolean; grants_anon int;
 begin
   -- 1. Fila nueva: estado vacio y version 1 por omision.
@@ -54,18 +55,20 @@ begin
     raise exception '0983(4): pedidos de mas de 16 KiB debia rebotar';
   exception when check_violation then null; end;
 
-  -- 5. Borrar la flota arrastra su estado y su interruptor; la otra flota no se toca.
-  insert into public.onboarding_estado (user_id, tenant_id) values (ub, tb);
-  delete from public.tenant where id = ta;
-  select count(*) into n from public.onboarding_estado where tenant_id = ta;
+  -- 5. Borrar una flota arrastra su estado y su interruptor; las filas de otras flotas (incluso del mismo usuario) no se tocan.
+  --    Se usa una flota SIN usuarios para no depender de los candados de borrado de app_user.
+  insert into public.tenant (id, nombre) values (tc, 'Flota C 0983');
+  insert into public.onboarding_estado (user_id, tenant_id) values (ub, tc), (ub, tb);
+  insert into public.onboarding_tenant (tenant_id) values (tc);
+  delete from public.tenant where id = tc;
+  select count(*) into n from public.onboarding_estado where tenant_id = tc;
   if n <> 0 then raise exception '0983(5): el estado de la flota borrada debia irse en cascada (quedan %)', n; end if;
-  select count(*) into n from public.onboarding_tenant where tenant_id = ta;
+  select count(*) into n from public.onboarding_tenant where tenant_id = tc;
   if n <> 0 then raise exception '0983(5): el interruptor de la flota borrada debia irse en cascada'; end if;
-  -- Borrar la flota A borra tambien a su usuario (app_user cascada) y con el su fila de la flota B; la fila del usuario de B se conserva.
-  select count(*) into n from public.onboarding_estado where tenant_id = tb;
-  if n <> 1 then raise exception '0983(5): la otra flota debia conservar la fila de su propio usuario, tiene %', n; end if;
   select count(*) into n from public.onboarding_estado where user_id = ub and tenant_id = tb;
-  if n <> 1 then raise exception '0983(5): la fila del usuario de la flota B debia sobrevivir'; end if;
+  if n <> 1 then raise exception '0983(5): la fila del mismo usuario en otra flota debia sobrevivir, hay %', n; end if;
+  select count(*) into n from public.onboarding_tenant where tenant_id = ta;
+  if n <> 1 then raise exception '0983(5): el interruptor de otra flota debia sobrevivir'; end if;
 
   -- 6. Seguridad: RLS prendida, sin politicas, sin privilegios para anon/authenticated y con CRUD para service_role.
   select bool_and(c.relrowsecurity) into rls from pg_class c where c.oid in ('public.onboarding_estado'::regclass, 'public.onboarding_tenant'::regclass);
