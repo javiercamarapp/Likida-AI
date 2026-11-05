@@ -343,7 +343,9 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
             <PistaContextual
               titulo={pista.titulo} texto={pista.texto} ilu={pista.ilu} desde={pista.desde}
               onEntendido={() => { const pistasNuevas = [...(est?.pistas ?? []), pista.ruta]; guardarEst({ pistas: pistasNuevas }, { pistas: pistasNuevas }); }}
-              onNoVolver={() => guardarEst({ descartado: true }, { invitacion: 'descartada' })}
+              // «No volver» de UNA pista descarta esa pista (en todos los equipos), no la invitación al recorrido: la invitación se apaga solo
+              // con su propio «No volver a mostrar» o desde el menú de la Guía.
+              onNoVolver={() => { const pistasNuevas = [...(est?.pistas ?? []), pista.ruta]; guardarEst({ pistas: pistasNuevas }, { pistas: pistasNuevas }); }}
             />
           ) : null}
         </div>
