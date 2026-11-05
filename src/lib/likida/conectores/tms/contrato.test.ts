@@ -11,7 +11,7 @@ vi.mock('../../presupuesto', async (importOriginal) => ({ ...(await importOrigin
 import { sesionDeExportaciones } from './archivo';
 import {
   CONTRATO_TMS_SUPUESTO, MAPEOS_REGISTRADOS, cargarContrato, conTextoReparado, corteUtc, crearAdaptadorTms, detectorSesionCaida,
-  entradasDeArchivos, esRespuestaHtml, filtrarPorCorte, firmarPush, paginacionDe, recibirPush, analizarMojibake, repararBytes, repararMojibake,
+  entradasDeArchivos, esRespuestaHtml, filtrarPorCorte, firmarPush, paginacionDe, recibirPush, analizarMojibake, repararBytes, repararMojibake, contarTextosEnRevision,
   validarContrato, ventanaConCorte, type ContratoTms,
 } from './contrato';
 import { aMojibake, crearDobleTms, viajesCrudos, HTML_LOGIN_DOBLE, type OpcionesDoble } from './falso/doble_contrato';
@@ -347,12 +347,25 @@ describe('mojibake', () => {
       expect(analizarMojibake(t).estado).toBe('limpio');
     }
   });
+  it('porcentaje: no toca reservados de URL ni URLs/consultas con porcentaje válido', () => {
+    for (const t of ['%C3%A9%2F', 'ruta%C3%A9%26x', 'https://x.com/?q=Direcci%C3%B3n&u=%C3%A9', 'a=Direcci%C3%B3n&b=1']) {
+      expect(repararMojibake(t)).toBe(t);
+      expect(analizarMojibake(t).estado).toBe('limpio');
+    }
+    expect(repararMojibake('Direcci%C3%B3n')).toBe('Dirección');
+  });
   it('ante la duda marca revisión y deja el texto como llegó (no adivina)', () => {
     for (const t of [String.raw`Pe\u00c3\u00c3a`, String.raw`Nombre \u00c3\u0028`, 'RazÃ³n y Pe\u00c3a', 'roto \uFFFD aquí']) {
       const r = analizarMojibake(t);
       expect(r.estado).toBe('revision');
     }
     expect(analizarMojibake(String.raw`Nombre \u00c3\u0028`).texto).toBe(String.raw`Nombre \u00c3\u0028`);
+  });
+  it('repararMojibake cuenta los textos que quedan en revisión', () => {
+    const antes = contarTextosEnRevision();
+    repararMojibake('roto \uFFFD aquí');
+    repararMojibake('Camión');
+    expect(contarTextosEnRevision()).toBe(antes + 1);
   });
   it('estados: limpio, reparado', () => {
     expect(analizarMojibake('Camión')).toEqual({ texto: 'Camión', estado: 'limpio' });

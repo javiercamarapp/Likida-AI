@@ -33,8 +33,8 @@ describe('pendientesDeHistorial: igual que la definición literal', () => {
  * Tiempo de CPU del proceso (user+system) que consume `fn`, en ms. Causa raíz de la inestabilidad: la prueba medía el reloj de pared
  * (`Date.now()`), así que con la Mac cargada (load average > 50 con otros carriles corriendo) el planificador le quitaba el
  * procesador y el mismo código pasaba de ~2 s a 20-70 s sin que el algoritmo cambiara. El tiempo de CPU no cuenta esas esperas;
- * un O(n²) de verdad (60 000 mensajes ≈ 1.8·10⁹ comparaciones) sigue gastando CPU de sobra. Cada archivo corre en su propio
- * proceso (pool de forks), así que la cifra es de esta prueba. Se toma el mínimo de las corridas para descartar un GC aislado.
+ * un O(n²) de verdad (60 000 mensajes ≈ 1.8·10⁹ comparaciones) sigue gastando CPU de sobra. Vitest 4 usa por omisión el pool de forks (vitest.config.ts no lo
+ * cambia), así que cada archivo corre en su propio proceso y la cifra es de esta prueba. Se toma el mínimo de las corridas para descartar un GC aislado.
  */
 const cpuMs = (veces: number, fn: () => void): number => {
   let mejor = Infinity;

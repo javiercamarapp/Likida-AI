@@ -324,6 +324,9 @@ export function analizarMojibake(texto: string): { texto: string; estado: Estado
       const decodificada = chars.join('');
       // «%C3%A9» es UTF-8 bien codificado para URL: sus bytes se leen directo. Los demás escapes llevan el mojibake ya hecho.
       const porcentaje = toks.every((x) => x[0] === '%');
+      // Un porcentaje solo se decodifica si TODOS sus bytes son altos (>= 0x80): un «%2F», «%26», «%3D», «%23», «%3F» o «%25» en la
+      // racha es un reservado de URL y decodificarlo cambiaría su significado. Tampoco se toca texto con forma de URL o de query.
+      if (porcentaje && (esTextoUrl(t) || toks.some((x) => parseInt(x.slice(1), 16) < 0x80))) return racha;
       const arreglada = porcentaje ? bytesUtf8(decodificada) : unPasoLatin1(decodificada);
       if (arreglada === null || arreglada === decodificada) { if (SOSPECHA.test(decodificada) || /[\u00c2\u00c3]/.test(decodificada) || porcentaje) dudas = true; return racha; }
       tocado = true;
@@ -343,6 +346,11 @@ export function analizarMojibake(texto: string): { texto: string; estado: Estado
   return { texto: t, estado: tocado ? 'reparado' : 'limpio' };
 }
 
+/** Texto con forma de URL o de cadena de consulta: su porcentaje es codificación válida (a veces firmada) y no se reescribe. */
+function esTextoUrl(t: string): boolean {
+  return /https?:\/\//i.test(t) || /[?&][^\s=&]+=/.test(t);
+}
+
 /** Bytes (cada carácter ≤ 0xFF) leídos como UTF-8 estricto; `null` si no lo son. */
 function bytesUtf8(cs: string): string | null {
   const bytes = Array.from(cs, (c) => c.codePointAt(0) as number);
@@ -356,7 +364,15 @@ function bytesUtf8(cs: string): string | null {
  * tal cual (nunca inventa) — `analizarMojibake` dice cuál es cuál para mandarlo a revisión humana.
  */
 export function repararMojibake(texto: string): string {
-  return analizarMojibake(texto).texto;
+  const r = analizarMojibake(texto);
+  if (r.estado === 'revision') textosEnRevision++;
+  return r.texto;
+}
+
+let textosEnRevision = 0;
+/** Cuántos textos han salido en estado `revision` en este proceso (dañados pero no reparables). Seguimiento mínimo hasta que exista una bandeja de revisión. */
+export function contarTextosEnRevision(): number {
+  return textosEnRevision;
 }
 
 /** Repara cada texto de un valor JSON (valores, no llaves). Devuelve el mismo objeto si nada cambió. */
