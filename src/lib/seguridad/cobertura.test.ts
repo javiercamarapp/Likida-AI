@@ -62,12 +62,13 @@ describe('el registro de fuentes dice la verdad sobre el código', () => {
     expect(new Set(FUENTES_SEGURIDAD.map((f) => f.id)).size).toBe(FUENTES_SEGURIDAD.length);
     for (const f of FUENTES_SEGURIDAD) expect(f.donde.length, f.id).toBeGreaterThan(5);
   });
-  it('declara honestamente lo que falta: rate limit, correo entrante, inyección y lecturas de datos personales NO emiten', () => {
+  it('declara honestamente lo que sigue sin emitir: inyección de prompt, lecturas de datos personales y mutaciones sin actor', () => {
     const noEmiten = FUENTES_SEGURIDAD.filter((f) => !f.emite).map((f) => f.id);
-    expect(noEmiten).toEqual(expect.arrayContaining(['rate_limit', 'correo_firma', 'inyeccion_prompt', 'lectura_datos_personales']));
+    expect(noEmiten).toEqual(expect.arrayContaining(['inyeccion_prompt', 'lectura_datos_personales', 'mutaciones_sin_actor']));
+    expect(noEmiten).not.toEqual(expect.arrayContaining(['rate_limit', 'correo_firma', 'pagina_negada', 'mfa_fallido']));
   });
-  it('las cinco fuentes de CT-SEG-11 están declaradas como emisoras', () => {
-    for (const id of ['login_fallido', 'llave_invalida', 'api_negada', 'exporte_dinero', 'cambio_rol']) {
+  it('las nueve fuentes de CT-SEG-11 (cinco de F1, cuatro de F2) están declaradas como emisoras', () => {
+    for (const id of ['login_fallido', 'llave_invalida', 'api_negada', 'exporte_dinero', 'cambio_rol', 'correo_firma', 'rate_limit', 'pagina_negada', 'mfa_fallido']) {
       expect(FUENTES_SEGURIDAD.find((f) => f.id === id)?.emite, id).toBe(true);
     }
   });

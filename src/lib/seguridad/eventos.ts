@@ -21,10 +21,12 @@ export type TipoSeguridad =
   | 'inyeccion_prompt' | 'acceso_denegado' | 'cifra_sin_respaldo'
   | 'payload_excesivo' | 'otro'
   // 0954:
-  | 'login_fallido' | 'llave_invalida' | 'api_negada' | 'exporte_dinero' | 'cambio_rol';
+  | 'login_fallido' | 'llave_invalida' | 'api_negada' | 'exporte_dinero' | 'cambio_rol'
+  // 0971:
+  | 'pagina_negada' | 'mfa_fallido';
 
-/** Los tipos y orígenes que nacen en la 0954: contra una base sin migrar rebotan por el check y se degradan a `otro`. */
-const TIPOS_0954: ReadonlySet<string> = new Set(['login_fallido', 'llave_invalida', 'api_negada', 'exporte_dinero', 'cambio_rol']);
+/** Los tipos y orígenes que nacen en la 0954 (y, para `pagina_negada` y `mfa_fallido`, en la 0971): contra una base sin migrar rebotan por el check y se degradan a `otro`. */
+const TIPOS_0954: ReadonlySet<string> = new Set(['login_fallido', 'llave_invalida', 'api_negada', 'exporte_dinero', 'cambio_rol', 'pagina_negada', 'mfa_fallido']);
 const ORIGENES_0954: ReadonlySet<string> = new Set(['export']);
 
 export interface EventoSeguridad {

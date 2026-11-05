@@ -178,6 +178,7 @@ export async function leerTenantsInternos(): Promise<{ data: Array<{ id: unknown
     .from('tenant')
     .select('id')
     .eq('interno', true)
+    .order('id', { ascending: true })
     .limit(2), 'leerTenantsInternos');
   return { data: (data ?? null) as Array<{ id: unknown }> | null, error: error ? { code: (error as { code?: string }).code, message: error.message } : null };
 }

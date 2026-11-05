@@ -45,6 +45,12 @@ vi.mock('@/lib/auth/session', async (orig) => ({
   getSessionTenant: (...a: unknown[]) => getSessionTenant(...a),
 }));
 vi.mock('@/lib/auth/admin-context', () => ({ leerSeleccionFlota: async () => null }));
+// CT-SEG-11: las pantallas negadas dejan evento de seguridad (rpc); aquí se mide que las ACCIONES no escriban, así que ese registro es un no-op.
+vi.mock('@/lib/seguridad/registro_acceso', () => ({
+  registrarPaginaNegada: async () => {}, registrarMfaFallido: async () => {}, registrarApiNegada: async () => {}, registrarRateLimit: async () => {},
+  registrarExporteDinero: async () => {}, registrarLoginFallido: async () => {}, registrarLlaveInvalida: async () => {}, registrarCambioRol: async () => {},
+  registrarFirmaCorreoInvalida: async () => {},
+}));
 vi.mock('@/lib/auth/superadmin-mfa', () => ({ veredictoMfaDeSesion: async () => 'ok' }));
 
 // ── Base falsa: registra TODA escritura; las lecturas devuelven vacío salvo el perfil ──

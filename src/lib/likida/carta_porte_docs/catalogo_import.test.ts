@@ -309,7 +309,8 @@ const sesion = vi.hoisted(() => ({ actual: { tenantId: 't-sesion', userId: 'u-se
 const consultas = vi.hoisted(() => ({ tenants: [] as string[], tablas: [] as string[], upserts: 0, clientes: [] as Array<{ id: string; nombre: string }> }));
 const resolver = vi.hoisted(() => vi.fn());
 
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: resolver }));
+// MX-002: la acción resuelve con la flota PINTADA y firmada (campo oculto `flota_pintada`), no con el «ver como» del formulario.
+vi.mock('@/lib/auth/tenant-atado', () => ({ resolverTenantAtadoFirmado: resolver, CAMPO_FLOTA_PINTADA: 'flota_pintada', MENSAJE_FLOTA_CAMBIO: 'La flota que estás viendo cambió.' }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: vi.fn(async () => true) }));
 vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: vi.fn(async () => true) }));
@@ -354,13 +355,13 @@ describe('importarCatalogoCsv (acción de servidor)', () => {
 
   it('usa SIEMPRE la flota de la sesión: un tenant en el formulario no cambia nada, y las lecturas van filtradas', async () => {
     const { importarCatalogoCsv } = await import('@/app/dashboard/agentes/carta-porte/catalogo/actions');
-    const r = await importarCatalogoCsv(null, formulario(TRES_SKU, { tenant: 'otra-flota', intencion: 'previsualizar' }));
+    const r = await importarCatalogoCsv(null, formulario(TRES_SKU, { tenant: 'otra-flota', flota_pintada: 'firma-pintada', intencion: 'previsualizar' }));
     expect(r).toMatchObject({ ok: true, aplicado: false, nuevas: 3, tipo: 'producto' });
     expect(consultas.tenants.length).toBeGreaterThan(0);
     expect(new Set(consultas.tenants)).toEqual(new Set(['t-sesion']));
     expect(consultas.upserts).toBe(0);
     // La puerta recibe el «ver como» firmado del formulario; es ella la que decide si vale.
-    expect(resolver).toHaveBeenCalledWith('/dashboard/agentes/carta-porte', expect.objectContaining({ tenant: 'otra-flota' }));
+    expect(resolver).toHaveBeenCalledWith('/dashboard/agentes/carta-porte', 'firma-pintada');
   });
 
   it('confirmar escribe con upsert; un archivo vacío, un tipo desconocido y un cliente ajeno se rechazan con mensaje', async () => {

@@ -108,3 +108,43 @@ describe('nunca lanza', () => {
     await expect(mod.registrarLoginFallido({ motivo: 'x' })).resolves.toBeUndefined();
   });
 });
+
+describe('CT-SEG-11 F2: rate limit, firma de correo, página negada y segundo factor', () => {
+  it('registrarRateLimit guarda solo la categoría de la llave (info, origen ratelimit)', async () => {
+    await mod.registrarRateLimit('lead');
+    expect(registrar.mock.calls[0][0]).toMatchObject({ origen: 'ratelimit', tipo: 'rate_limit', severidad: 'info', detalle: { categoria: 'lead' } });
+  });
+
+  it('registrarFirmaCorreoInvalida guarda el motivo corto y la red; jamás la firma ni el cuerpo', async () => {
+    const req = new Request('https://app.likida.ai/api/correo/entrante', {
+      method: 'POST', body: '{"secreto":"x"}',
+      headers: { 'svix-signature': 'v1,FIRMA-SECRETA', 'x-real-ip': '203.0.113.9', 'user-agent': 'scanner/1' },
+    });
+    await mod.registrarFirmaCorreoInvalida(req, 'firma_invalida');
+    const ev = registrar.mock.calls[0][0];
+    expect(ev).toMatchObject({ origen: 'correo_webhook', tipo: 'firma_invalida', severidad: 'media', detalle: { motivo: 'firma_invalida' } });
+    expect(JSON.stringify(ev)).not.toMatch(/FIRMA-SECRETA|secreto/);
+    expect((ev.red as { ipHash: string }).ipHash).toMatch(/^[0-9a-f]{32}$/);
+  });
+
+  it('registrarPaginaNegada guarda la ruta SIN query, el rol y la causa (info)', async () => {
+    await mod.registrarPaginaNegada({ ruta: '/dashboard/clientes?tenant=zzz', rol: 'encargado', causa: 'rol', tenantId: 't1', userId: 'u1' });
+    const ev = registrar.mock.calls[0][0];
+    expect(ev).toMatchObject({ origen: 'auth', tipo: 'pagina_negada', severidad: 'info', tenantId: 't1', actor: 'u1' });
+    expect(ev.detalle).toEqual({ ruta: '/dashboard/clientes', rol: 'encargado', causa: 'rol' });
+  });
+
+  it('registrarMfaFallido guarda el veredicto, el destino sin query y la vía (media)', async () => {
+    await mod.registrarMfaFallido({ veredicto: 'sin_factor', destino: '/admin?x=1', via: 'pagina', userId: 'u1' });
+    const ev = registrar.mock.calls[0][0];
+    expect(ev).toMatchObject({ origen: 'auth', tipo: 'mfa_fallido', severidad: 'media', actor: 'u1' });
+    expect(ev.detalle).toEqual({ veredicto: 'sin_factor', destino: '/admin', via: 'pagina' });
+  });
+
+  it('ninguna lanza fuera de una petición (sin cabeceras)', async () => {
+    cabeceras = new Error('fuera de request');
+    await expect(mod.registrarRateLimit('mcp')).resolves.toBeUndefined();
+    await expect(mod.registrarPaginaNegada({ ruta: '/x', rol: 'r', causa: 'perfil' })).resolves.toBeUndefined();
+    await expect(mod.registrarMfaFallido({ veredicto: 'no_verificable', destino: '/admin', via: 'api' })).resolves.toBeUndefined();
+  });
+});

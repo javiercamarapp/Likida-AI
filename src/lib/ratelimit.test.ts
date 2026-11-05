@@ -81,3 +81,47 @@ describe('rateLimit: una inundacion de llaves no reabre una llave agotada', () =
     expect(await rateLimit(k, 10, 300_000)).toBe(false);
   });
 });
+
+// CT-SEG-11 (F2): un límite que BLOQUEA deja constancia (solo la categoría, con freno por categoría), y uno que deja pasar no.
+describe('rateLimit registra el bloqueo en evento_seguridad', () => {
+  it('bloquear llama al registro con la CATEGORÍA (nunca la llave completa) y una sola vez por minuto y categoría', async () => {
+    const registrar = vi.fn(async (_categoria: string) => {});
+    vi.resetModules();
+    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: registrar }));
+    const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
+    reiniciar();
+    expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(true);
+    expect(registrar).not.toHaveBeenCalled(); // pasar no deja evento
+    expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(false);
+    expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(false);
+    expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(true);
+    expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(false);
+    await vi.waitFor(() => expect(registrar).toHaveBeenCalledTimes(1));
+    expect(registrar).toHaveBeenCalledWith('lead'); // la IP no sale de aquí
+    vi.doUnmock('@/lib/seguridad/registro_acceso');
+  });
+
+  it('el límite de /login no se duplica aquí (deja su propio login_fallido)', async () => {
+    const registrar = vi.fn(async (_categoria: string) => {});
+    vi.resetModules();
+    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: registrar }));
+    const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
+    reiniciar();
+    expect(await rl('login:email:1.2.3.4', 1, 60_000)).toBe(true);
+    expect(await rl('login:email:1.2.3.4', 1, 60_000)).toBe(false);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(registrar).not.toHaveBeenCalled();
+    vi.doUnmock('@/lib/seguridad/registro_acceso');
+  });
+
+  it('un registro que falla jamás cambia la decisión del límite', async () => {
+    vi.resetModules();
+    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: async () => { throw new Error('base caída'); } }));
+    const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
+    reiniciar();
+    expect(await rl('mcp:x', 1, 60_000)).toBe(true);
+    expect(await rl('mcp:x', 1, 60_000)).toBe(false);
+    await new Promise((r) => setTimeout(r, 20));
+    vi.doUnmock('@/lib/seguridad/registro_acceso');
+  });
+});

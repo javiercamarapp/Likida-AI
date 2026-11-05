@@ -104,3 +104,55 @@ export async function registrarCambioRol(a: { tenantId: string; actorId: string;
     });
   });
 }
+
+/**
+ * Un límite de tasa que BLOQUEÓ (CT-SEG-11, F2). Solo la categoría de la llave (`lead`, `mcp`, `peajes`…): la llave completa trae IPs,
+ * correos o teléfonos. La emite `rateLimit()` con sus propios frenos (uno por categoría por minuto y por instancia). Informativa.
+ */
+export async function registrarRateLimit(categoria: string): Promise<void> {
+  return seguro(async () => {
+    await registrarEventoSeguridad({
+      origen: 'ratelimit', tipo: 'rate_limit', severidad: 'info',
+      detalle: { categoria },
+      red: await redDeSolicitudActual(),
+    });
+  });
+}
+
+/**
+ * Un correo entrante cuya firma (Svix/Resend) no verificó. Se guarda el MOTIVO corto, nunca la firma ni el cuerpo. Media y no alta: el
+ * endpoint es público y cualquier escáner lo toca; avisar por correo cada sondeo sería ruido, no cobertura.
+ */
+export async function registrarFirmaCorreoInvalida(req: Request, motivo: string): Promise<void> {
+  return seguro(async () => {
+    await registrarEventoSeguridad({
+      origen: 'correo_webhook', tipo: 'firma_invalida', severidad: 'media',
+      detalle: { motivo },
+      red: redDeCabeceras(req.headers),
+    });
+  });
+}
+
+/** Una página del panel negada por rol o por perfil (redirige sin más). Informativa: es cobertura de quién toca lo que no le toca. */
+export async function registrarPaginaNegada(a: { ruta: string; rol: string; causa: 'rol' | 'perfil' | 'superadmin' | 'vendedor'; tenantId?: string | null; userId?: string | null }): Promise<void> {
+  return seguro(async () => {
+    await registrarEventoSeguridad({
+      origen: 'auth', tipo: 'pagina_negada', severidad: 'info',
+      tenantId: a.tenantId ?? null, actor: a.userId ?? null,
+      detalle: { ruta: a.ruta.split('?')[0], rol: a.rol, causa: a.causa },
+      red: await redDeSolicitudActual(),
+    });
+  });
+}
+
+/** El segundo factor de un superadmin no está al día (sin factor, sin verificar, o no se pudo preguntar). El veredicto dice cuál. */
+export async function registrarMfaFallido(a: { veredicto: string; destino: string; via: 'pagina' | 'api'; userId?: string | null }): Promise<void> {
+  return seguro(async () => {
+    await registrarEventoSeguridad({
+      origen: 'auth', tipo: 'mfa_fallido', severidad: 'media',
+      actor: a.userId ?? null,
+      detalle: { veredicto: a.veredicto, destino: a.destino.split('?')[0], via: a.via },
+      red: await redDeSolicitudActual(),
+    });
+  });
+}
