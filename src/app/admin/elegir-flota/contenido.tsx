@@ -45,7 +45,7 @@ export function ElegirFlotaContenido({
         <input type="hidden" name="flota" value={esDemo ? 'demo' : f.id} />
         <input type="hidden" name="next" value={next} />
         <button type="submit"
-          className="card w-full text-left p-4 flex items-center gap-3 transition-shadow hover:shadow-lg"
+          className="card w-full text-left p-4 flex items-center gap-3 transition-colors hover:border-[var(--muted)]"
           style={esDemo ? { borderStyle: 'dashed' } : undefined}>
           <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
             style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>

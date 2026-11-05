@@ -65,7 +65,7 @@ export default async function PlaygroundPage() {
                 { Icono: MessagesSquare, nombre: 'Agente de WhatsApp', href: '/admin/agente-whatsapp' },
               ].map(({ Icono, nombre, href }) => (
                 <Link key={nombre} href={href}
-                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <Icono width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
                   <span className="text-[13px] font-medium truncate">{nombre}</span>

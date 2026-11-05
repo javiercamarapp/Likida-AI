@@ -23,7 +23,7 @@ function Boton({ icono, texto, textoPendiente }: { icono: React.ReactNode; texto
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="h-8 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {icono}
       {pending ? textoPendiente : texto}

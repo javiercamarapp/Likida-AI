@@ -214,7 +214,7 @@ export default async function DevPage() {
             <TituloSeccion>Repositorio</TituloSeccion>
             <div className="mt-2">
               <a href={REPO_URL} target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)' }}>
                 <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
                 <div className="min-w-0">

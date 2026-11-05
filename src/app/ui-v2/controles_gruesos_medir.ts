@@ -35,3 +35,15 @@ export function clasesGruesas(src: string): number {
 export function constantesDuplicadas(src: string): number {
   return [...src.matchAll(/\bconst (?:CAMPO|CSS_BOTON|CSS_INPUT|BTN_[A-Z_]+|BOTON[A-Z_]*|CLASE_BOTON)\s*=/g)].length;
 }
+
+/** R5 · `hover:` huérfano: variante sin utilidad detrás (`hover:"`, `hover: `), resto de una clase borrada a medias. */
+export function hoverHuerfano(src: string): number {
+  return [...src.matchAll(/(?<![\w-])hover:(?=[\s"'`}]|$)/g)].length;
+}
+
+/** R6 · botón o enlace con pinta de botón sin altura definida (h-*, min-h-*, size-*, py-* o clase rv-/clasesBoton). */
+export function controlesSinAltura(src: string): number {
+  const botones = etiquetas(src, 'button');
+  const enlaces = etiquetas(src, '(?:Link|a)').filter((t) => /\b(?:border|bg-|rounded)/.test(t));
+  return [...botones, ...enlaces].filter((t) => !/\b(?:h-|min-h-|size-|py-)|\brv-|\bcard\b|clasesBoton\(|\.\.\.props|\{\.\.\.resto\}/.test(t)).length;
+}

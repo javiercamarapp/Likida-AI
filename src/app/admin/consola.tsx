@@ -288,7 +288,7 @@ export async function ConsolaAdmin({
                 const actividad = fase ? porFase.get(fase) : undefined;
                 return (
                   <Link key={it.href} href={it.href}
-                    className="hairline rounded-lg px-3 py-2.5 flex items-start gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                    className="hairline rounded-lg px-3 py-1.5 flex items-start gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                     style={{ background: 'var(--surface)' }}>
                     <it.Icono width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
                     <div className="min-w-0 flex-1">
@@ -387,7 +387,7 @@ export async function ConsolaAdmin({
               <TituloSeccion>Servicio al cliente</TituloSeccion>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                 <Link href="/admin/conversaciones"
-                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <MessageCircle width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
                   <div className="min-w-0">
@@ -399,7 +399,7 @@ export async function ConsolaAdmin({
                   <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
                 </Link>
                 <Link href="/admin/soporte"
-                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <LifeBuoy width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
                   <div className="min-w-0">

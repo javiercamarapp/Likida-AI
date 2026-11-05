@@ -2,8 +2,8 @@
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { BASE_CONTROLES, type ConteoControles } from './controles_gruesos_base';
-import { botonesCrudos, clasesGruesas, constantesDuplicadas } from './controles_gruesos_medir';
+import { BASE_CONTROLES, BASE_SIN_ALTURA, type ConteoControles } from './controles_gruesos_base';
+import { botonesCrudos, clasesGruesas, constantesDuplicadas, controlesSinAltura, hoverHuerfano } from './controles_gruesos_medir';
 import { EXCEPCIONES } from './controles_excepciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -89,6 +89,38 @@ describe('controles gruesos: trinquete (la base solo baja)', () => {
   });
   it('las excepciones llevan razón', () => {
     for (const [k, e] of Object.entries(EXCEPCIONES)) expect(e.razon.length, k).toBeGreaterThan(15);
+  });
+});
+
+// ── R5/R6: `hover:` huérfano y controles sin altura ───────────────────────────────────────────────────────────────────
+const sinAltura = new Map<string, number>();
+const huerfanos: string[] = [];
+for (const a of ALCANCE) {
+  for (const f of tsx(join(SRC, a))) {
+    const ruta = relative(SRC, f);
+    const src = readFileSync(f, 'utf8');
+    if (hoverHuerfano(src) > 0) huerfanos.push(ruta);
+    if (ruta.startsWith('app/admin/') && !excepcion(ruta)) { const n = controlesSinAltura(src); if (n > 0) sinAltura.set(ruta, n); }
+  }
+}
+describe('R5/R6 · hover huérfano y controles sin altura', () => {
+  it('el detector ve lo que debe', () => {
+    expect(hoverHuerfano('className="card transition-shadow hover:"')).toBe(1);
+    expect(hoverHuerfano('className="md:hover: p-2"')).toBe(1);
+    expect(hoverHuerfano('className="hover:opacity-70 hover:bg-[var(--x)]"')).toBe(0);
+    expect(controlesSinAltura('<button type="submit" className="px-4 rounded-lg">x</button>')).toBe(1);
+    expect(controlesSinAltura('<button className="h-8 px-4">x</button><button className="rv-btn">y</button><button className="w-8 h-8">z</button>')).toBe(0);
+    expect(controlesSinAltura('<Link href="/x" className="relative w-9 rounded-lg hairline">x</Link>')).toBe(1);
+    expect(controlesSinAltura('<Link href="/x" className="relative h-8 w-8 rounded-lg">x</Link>')).toBe(0);
+  });
+  it('ningún archivo trae `hover:` sin utilidad detrás', () => {
+    expect(huerfanos).toEqual([]);
+  });
+  it('en /admin ningún botón ni enlace-botón nuevo queda sin altura (la base solo baja)', () => {
+    const fallos: string[] = [];
+    for (const [ruta, n] of sinAltura) if (n > (BASE_SIN_ALTURA[ruta] ?? 0)) fallos.push(`${ruta}: sin altura = ${n} (tope ${BASE_SIN_ALTURA[ruta] ?? 0})`);
+    expect(fallos).toEqual([]);
+    expect(Object.keys(BASE_SIN_ALTURA).filter((r) => !sinAltura.has(r))).toEqual([]);
   });
 });
 

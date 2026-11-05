@@ -228,7 +228,7 @@ export default async function TrazaCorridaPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
               {c.tenantId !== null && (
                 <Link href={`/dashboard?tenant=${c.tenantId}&rol=flota_admin`}
-                  className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
                     <ExternalLink width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
@@ -240,7 +240,7 @@ export default async function TrazaCorridaPage({
                 </Link>
               )}
               <Link href="/admin/conversaciones"
-                className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)' }}>
                 <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
                   <MessageCircle width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />

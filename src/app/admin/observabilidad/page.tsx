@@ -294,7 +294,7 @@ export default async function ObservabilidadPage({
                   por decreto. Lo único que se puede afirmar desde aquí es si hay
                   DSN — "configurado", nunca "conectado". */}
               <a href="https://sentry.io" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)' }}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
@@ -308,7 +308,7 @@ export default async function ObservabilidadPage({
                 <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Se enlaza en vez de reconstruirse.</div>
               </a>
               <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)' }}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
