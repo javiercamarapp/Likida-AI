@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { supabaseServer } from '@/lib/supabase/server';
 import { logger } from '@/lib/logger';
 
@@ -61,7 +62,7 @@ export interface SessionTenant {
  * que ver con su login. Dos intentos, no un loop: si el segundo también
  * truena, el problema ya no es un bache — sigue fallando cerrado.
  */
-export async function getSessionTenant(): Promise<SessionTenant | null> {
+async function leerSessionTenant(): Promise<SessionTenant | null> {
   for (let intento = 0; intento < 2; intento++) {
     try {
       const sb = await supabaseServer();
@@ -129,3 +130,12 @@ export async function getSessionTenant(): Promise<SessionTenant | null> {
   }
   return null; // inalcanzable — el for siempre retorna o cae al catch final
 }
+
+/**
+ * LA SESIÓN SE LEE UNA VEZ POR PETICIÓN (F8, MX-085 / PT-14). El layout de /dashboard, `requireSessionTenant` de la página y
+ * `tenant-atado` la pedían cada uno por su cuenta: por render del tablero eran 3 `auth.getUser()` (una ida a GoTrue cada uno) y 3
+ * lecturas de `app_user`, todas con el MISMO resultado. `cache()` de React la memoriza durante UNA petición de servidor (y se
+ * descarta al terminar), así que no hay riesgo de servir la sesión de otra persona ni una vencida; fuera de un render de React
+ * (pruebas, scripts) es un paso directo. Medido en `session_cache.test.ts`: 3 llamadas → 1 `getUser`, antes 3.
+ */
+export const getSessionTenant = cache(leerSessionTenant);
