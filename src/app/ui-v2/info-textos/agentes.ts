@@ -484,6 +484,19 @@ export const INFO_AGENTES = {
     'Confirma, edita o descarta cada aviso pendiente.',
   ),
 
+  // ═══ Vigía · conversaciones sin atender ═════════════════════════════════
+  'vigia_sin_atender.lista': V(
+    'Conversaciones sin atender', 'Mensajes de clientes en los chats exportados que el equipo no ha contestado.',
+    'Sin modelo de IA: junta los mensajes seguidos del cliente que ningún mensaje del equipo siguió y los compara con el plazo de la flota (más corto para clientes críticos y para lo urgente). Pone prioridad alta si hay urgencia, un tema importante o una pregunta con el plazo vencido. Los tiempos se miden contra la hora de la exportación, no contra hoy.',
+    'Chats exportados que subiste a los grupos de tu flota (los mensajes más recientes de cada uno). No es en tiempo real: llega tan tarde como subas el chat.',
+    'Contesta primero las de prioridad alta y sube un chat nuevo para refrescar la lista.',
+  ),
+  'vigia_sin_atender.correo': V(
+    'Resumen por correo', 'Correo con las conversaciones sin atender para la gente que corresponde al turno.',
+    'Arma un correo con el grupo, la prioridad, el tiempo sin respuesta y el motivo; no lleva el texto de los mensajes. Va a servicio al cliente y a los directores del turno actual; el dueño solo si hay una alerta alta en un grupo crítico. Si mandas el mismo resumen dos veces, no se duplica.',
+    'Correos de servicio al cliente y de la lista de directores del Vigía, con su turno y los festivos de tu flota. Solo sale cuando quien administra pulsa el botón y el envío está encendido.',
+  ),
+
   // ═══ Vigía · grupos e histórico ═════════════════════════════════════════
   'vigia_historial.grupos': V(
     'Grupos', 'Grupos de WhatsApp de tus clientes, con su marca de crítico y su histórico.',

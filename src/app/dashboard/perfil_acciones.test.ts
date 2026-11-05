@@ -44,6 +44,7 @@ const ARCHIVOS: Record<string, Clase> = {
   'agentes/vigia/page.tsx': 'permitido',
   // «Próximamente» (fase 1): permitidas en la lista del perfil, pero su puerta las manda al anuncio antes de tocar un dato.
   'agentes/vigia/avisos/page.tsx': 'permitido',
+  'agentes/vigia/sin-atender/acciones.ts': 'permitido',   // ronda 5: revisar y mandar el resumen de «sin atender»; misma ruta del Vigía
   'agentes/vigia/importacion/page.tsx': 'permitido',
   'agentes/vigia/programa/page.tsx': 'permitido',
   'agentes/conductores/configuracion/page.tsx': 'permitido',

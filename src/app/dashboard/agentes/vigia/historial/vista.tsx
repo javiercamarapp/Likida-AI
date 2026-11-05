@@ -91,6 +91,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
               {grupos.length > 0 && (
                 <Seccion id="importar" titulo="Subir el chat exportado" info="vigia_historial.importar">
                   <FormaImportar accion={acciones.importar} grupos={grupos.map((g) => ({ id: g.id, nombre: g.nombre, cliente: g.clienteNombre }))} />
+                  <p className="text-[12px]"><Link href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className="underline">Después de subir un chat, revisa las conversaciones sin atender</Link>.</p>
                 </Seccion>
               )}
             </>

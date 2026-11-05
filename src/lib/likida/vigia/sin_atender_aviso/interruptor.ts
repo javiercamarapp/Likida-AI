@@ -7,7 +7,7 @@ import { leerInterruptor, type LecturaInterruptor, type NombreInterruptor } from
 export const BANDERA_RESUMEN = 'LIKIDA_VIGIA_SIN_ATENDER_CORREO';
 
 export function banderaResumenEncendida(): boolean {
-  return envPuesta(BANDERA_RESUMEN) && String(process.env[BANDERA_RESUMEN]).trim().toLowerCase() === 'si';
+  return envPuesta('LIKIDA_VIGIA_SIN_ATENDER_CORREO') && String(process.env.LIKIDA_VIGIA_SIN_ATENDER_CORREO).trim().toLowerCase() === 'si';
 }
 
 export type EstadoResumen = { ok: true } | { ok: false; motivo: 'interruptor_apagado' | 'bandera_apagada' };

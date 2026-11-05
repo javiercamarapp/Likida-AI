@@ -6,7 +6,6 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { crearRepoVigia, leerDestinatariosResumen, type DestinatariosResumenCrudos } from '../repo';
 import { leerChatsParaSinAtender, type ChatLeido } from '../historial/repo';
 import { hashAutor, salDeFlota } from '../historial/export_whatsapp';
-import { turnoActual } from '../turnos';
 import { configEfectiva, puertoConfigSinAtenderReal, solicitudDeFormulario, type PlazosFlota, type PuertoConfigSinAtender, type SolicitudSinAtender } from './config_pantalla';
 import { destinatariosDelResumen } from './destinatarios';
 import { enviarResumenSinAtender, type MotivoNoEnviadoResumen } from './correo';
