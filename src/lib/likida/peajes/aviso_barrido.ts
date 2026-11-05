@@ -7,7 +7,8 @@ import { recordarArchivoDecenal, type DepsRecordatorio, type DesgloseCobertura, 
 import { candidatosDePlazo } from './candidatos_plazo';
 import { esCategoriaInterna } from './reglas_cobro';
 import { sumarMeses } from './periodo';
-import { enviarPorCanales, canalWhatsAppPeajes, type CanalAvisoPeajes } from './aviso_canal';
+import { enviarPorCanales, canalWhatsAppPeajes, canalesAvisoPeajes, type CanalAvisoPeajes } from './aviso_canal';
+import { canalCorreoPeajes } from './aviso_correo';
 import type { FlotaConAvisos, DesgloseParaAvisos, TipoAvisoPeajes } from './repo';
 import type { CandidatoPlazo } from './plazo_reclamo';
 
@@ -49,6 +50,8 @@ export interface DepsBarrido {
    */
   confirmar?: (tenantId: string, tipo: TipoAvisoPeajes, clave: string) => Promise<void>;
   canales: readonly CanalAvisoPeajes[];
+  /** Fecha de corte de la flota (AAAA-MM-DD): no se avisa del plazo de archivos cuyo periodo terminó antes (no reenviar historial). Opcional. */
+  corteAvisos?: (tenantId: string) => Promise<string | null>;
   liga: () => string;
   ahora: () => Date;
 }
@@ -125,7 +128,7 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
           telefono: destinatario,
           enviar: async (_tel, texto) => {
             const ok = (await enviarPorCanales(deps.canales, {
-              tenantId: f.tenantId, tipo: 'recordatorio_archivo', texto, resumen: 'falta el archivo de cobros de la decena', liga: deps.liga(),
+              tenantId: f.tenantId, tipo: 'recordatorio_archivo', texto, resumen: 'falta el archivo de cobros de la decena', liga: deps.liga(), clave: claveR,
             })) === 'enviado';
             // Un fallo al confirmar NO convierte el envío en fallido (ya salió): la reserva vence y, peor caso, el aviso se repite una vez.
             if (ok && deps.confirmar) { try { await deps.confirmar(f.tenantId, 'recordatorio_archivo', claveR); } catch (e) { logger.error('cron.peajes.avisos_confirmar_fallo', { tenant: f.tenantId, codigo: codigoDeError(e) }); } }
@@ -140,7 +143,10 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
       if (f.avisos.interruptores.aviso_plazo && desgloses.length > 0) {
         const candidatos: CandidatoPlazo[] = [];
         // A2P-01: del MÁS VIEJO al más nuevo (el repositorio los entrega del más nuevo al más viejo): el plazo más cercano va primero.
-        const ordenados = [...desgloses].reverse();
+        // Fecha de corte: los archivos cuyo periodo terminó antes NO se avisan (solo el plazo; la cobertura del recordatorio usa todos).
+        let corte: string | null = null;
+        if (deps.corteAvisos) { try { corte = await deps.corteAvisos(f.tenantId); } catch (e) { logger.error('cron.peajes.avisos_corte_fallo', { tenant: f.tenantId, codigo: codigoDeError(e) }); throw e; } }
+        const ordenados = [...desgloses].reverse().filter((d) => !corte || !d.periodoHasta || d.periodoHasta >= corte);
         let evaluados = 0;
         for (const d of ordenados.slice(0, MAX_DESGLOSES_PLAZO_POR_FLOTA)) {
           // Con el reloj vencido se corta, pero siempre se evalúa al menos el más viejo.
@@ -162,7 +168,7 @@ export async function barrerAvisosPeajes(deps: DepsBarrido, opciones: { limiteFl
           telefono: destinatario,
           enviar: async (_tel, texto) => {
             const ok = (await enviarPorCanales(deps.canales, {
-              tenantId: f.tenantId, tipo: 'plazo', texto, resumen: 'cobros sin reclamar por vencer su plazo', liga: deps.liga(),
+              tenantId: f.tenantId, tipo: 'plazo', texto, resumen: 'cobros sin reclamar por vencer su plazo', liga: deps.liga(), clave: claveP,
             })) === 'enviado';
             if (ok && deps.confirmar) { try { await deps.confirmar(f.tenantId, 'plazo', claveP); } catch (e) { logger.error('cron.peajes.avisos_confirmar_fallo', { tenant: f.tenantId, codigo: codigoDeError(e) }); } }
             return ok;
@@ -193,7 +199,7 @@ function contarRecordatorio(r: ResumenBarridoAvisos, estado: EstadoRecordatorio)
   else if (estado === 'ya_recordado') r.recordatorios.yaRecordados++;
 }
 
-/** El cableado de producción: lee de la base, manda por WhatsApp. (Importa el repo de forma diferida: el módulo de arriba es puro.) */
+/** El cableado de producción: lee de la base, manda por WhatsApp y por correo (el que la flota tenga configurado). (Importa el repo de forma diferida: el módulo de arriba es puro.) */
 export async function depsBarridoReales(): Promise<DepsBarrido> {
   const repo = await import('./repo');
   const { listarReclamos, listarDecisionesCandidatos, revisionDeDesglose, leerConfigPeajes } = repo;
@@ -223,7 +229,11 @@ export async function depsBarridoReales(): Promise<DepsBarrido> {
     reservar: repo.reservarAvisoPeajes,
     liberar: repo.liberarAvisoPeajes,
     confirmar: repo.confirmarAvisoPeajes,
-    canales: [canalWhatsAppPeajes(telefonoPorFlota)],
+    canales: canalesAvisoPeajes({
+      whatsapp: canalWhatsAppPeajes(telefonoPorFlota),
+      correo: canalCorreoPeajes({ leerConfig: repo.leerCorreoAvisos }),
+    }),
+    corteAvisos: async (tenantId) => (await repo.leerCorreoAvisos(tenantId)).noEnviarAntes,
     liga: () => `${appUrl()}/dashboard/agentes/peajes`,
     ahora: () => new Date(),
   };
