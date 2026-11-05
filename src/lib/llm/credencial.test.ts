@@ -149,6 +149,11 @@ describe('sondearLlave (GET /key, sin costo)', () => {
     expect((await sondearLlave(f(resp(200)), undefined)).estado).toBe('sin_llave');
     await flush();
     expect(alertar).toHaveBeenCalledTimes(1);
+    const [, det] = alertar.mock.calls[0] as unknown as [string, { clase: string; status: number; msg: string }];
+    expect(det.clase).toBe('sin_llave');
+    expect(det.msg).toContain('Falta OPENROUTER_API_KEY');
+    expect(det.msg).not.toContain('rechazó');
+    expect(det.msg).not.toContain('401');
     expect((await sondearLlave(f(new Error('ENOTFOUND')), 'k')).estado).toBe('inalcanzable');
     expect((await sondearLlave(f(resp(503)), 'k')).estado).toBe('inalcanzable');
     expect(estadoCredencial().abierto).toBe(false);

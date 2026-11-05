@@ -51,6 +51,9 @@ const TEXTO: Record<ClaseCredencial, string> = {
   sin_permiso: 'OpenRouter negó la petición (403). Puede ser un modelo no permitido o moderación; si se repite en todas las llamadas, revisa la llave.',
 };
 
+/** La sonda no encontró llave: no hubo petición ni 401 de OpenRouter, así que no se reutiliza el texto de `llave_invalida`. */
+const TEXTO_SIN_LLAVE = 'Falta OPENROUTER_API_KEY en el entorno: no hay llave que probar. Toda la IA está caída: el cuadre degrada y las fotos esperan. Configura la variable en Vercel.';
+
 export class CredencialLlmCaidaError extends Error {
   /** Para que `esFalloDeCredencial` lo trate como lo que es: un 401/402 del proveedor. */
   status: number;
@@ -87,11 +90,11 @@ export function credencialExito(): void {
 }
 
 /** Aviso al operador, sin esperar y sin lanzar. Import dinámico: `alerta.ts` arrastra el correo. */
-function avisar(clase: ClaseCredencial, status: number, origen: string): void {
+function avisar(clase: ClaseCredencial | 'sin_llave', status: number, origen: string): void {
   void (async () => {
     try {
       const { alertarOperador } = await import('@/lib/observability/alerta');
-      await alertarOperador('llm.credencial_caida', { clase, status, origen, msg: TEXTO[clase] });
+      await alertarOperador('llm.credencial_caida', { clase, status, origen, msg: clase === 'sin_llave' ? TEXTO_SIN_LLAVE : TEXTO[clase] });
     } catch { /* el aviso nunca tumba la llamada */ }
   })();
 }
@@ -120,7 +123,7 @@ export interface ResultadoSonda { estado: EstadoLlave; status?: number; restante
 export async function sondearLlave(
   fetchFn: typeof fetch = fetch, llave: string | undefined = process.env.OPENROUTER_API_KEY, ahora: number = Date.now(),
 ): Promise<ResultadoSonda> {
-  if (!llave) { avisar('llave_invalida', 0, 'sonda:sin_llave'); return { estado: 'sin_llave' }; }
+  if (!llave) { avisar('sin_llave', 0, 'sonda:sin_llave'); return { estado: 'sin_llave' }; }
   try {
     const r = await fetchFn('https://openrouter.ai/api/v1/key', {
       method: 'GET', headers: { Authorization: `Bearer ${llave}` }, signal: AbortSignal.timeout(8_000),
