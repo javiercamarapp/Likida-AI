@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { ArrowLeft } from 'lucide-react';
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
@@ -19,7 +20,7 @@ import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
  */
 
 export interface PersonaVista { id: string; nombre: string }
-export interface VerComo { tenant?: string; rol?: string; vista?: string }
+export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesConfiguracion { guardar: AccionDoc; probar: AccionDoc }
 
 const ESTILO = { background: 'var(--surface)' } as const;
@@ -59,6 +60,7 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+      {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
 
       <fieldset className="space-y-3">
         <legend className="text-[13px] font-medium mb-2">Cómo sale la plantilla</legend>
@@ -142,6 +144,7 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
           {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
           {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
           {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+          {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
           <BotonEnvio variante="secundario" etiqueta="Probar conexión" pendiente="Probando…" />
         </FormaAccion>
       )}

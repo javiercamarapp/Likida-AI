@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Camera, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import {
   listarMesaAsistencia, tomarControlMesa, resolverDesdeMesa, reescalarDesdeMesa,
@@ -25,8 +26,8 @@ const RUTA = '/dashboard/asistencia';
  * 'use server' a propósito (A37-S16-07): declarada dentro del componente con 'use server' era un endpoint invocable por POST
  * directo que devolvía el tenantId y el userId de la sesión; así es solo una función interna de las acciones.
  */
-async function gate(sp: { tenant?: string; rol?: string; vista?: string }): Promise<{ tenantId: string; userId: string } | { error: string }> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function gate(sp: { tenant?: string; rol?: string; vista?: string }, tenantId: string): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede intervenir desde la mesa de control.' };
   return { tenantId: s.tenantId, userId: s.userId };
 }
@@ -70,7 +71,7 @@ export default async function PaginaMesaControl({
 
   async function tomarControl(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await tomarControlMesa(g.tenantId, String(fd.get('id') ?? ''), g.userId);
     if ('error' in r) { logger.warn('mesa.tomar_control', { detalle: r.error }); return { error: r.error }; }
@@ -80,7 +81,7 @@ export default async function PaginaMesaControl({
 
   async function reescalar(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await reescalarDesdeMesa(
       g.tenantId, String(fd.get('id') ?? ''), g.userId, Number(fd.get('nivel')),
@@ -92,7 +93,7 @@ export default async function PaginaMesaControl({
 
   async function resolver(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await resolverDesdeMesa(
       g.tenantId, String(fd.get('id') ?? ''), g.userId, String(fd.get('nota') ?? ''),

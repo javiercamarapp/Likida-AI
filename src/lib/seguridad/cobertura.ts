@@ -39,13 +39,15 @@ export const FUENTES_SEGURIDAD: readonly FuenteSeguridad[] = [
   { id: 'exporte_dinero', titulo: 'Exporte de dinero autorizado (liquidaciones, póliza, facturas de proveedor, peajes)', par: { origen: 'export', tipo: 'exporte_dinero' }, emite: true, donde: 'src/lib/auth/tenant-api.ts (puerta común de /api/export; se anota al autorizar, no al terminar)' },
   { id: 'cambio_rol', titulo: 'Cambio de rol de un usuario del equipo', par: { origen: 'auth', tipo: 'cambio_rol' }, emite: true, donde: 'src/lib/auth/usuarios_escritura.ts' },
 
+  // CT-SEG-11 (F2, 0971):
+  { id: 'correo_firma', titulo: 'Webhook de correo entrante: firma inválida', par: { origen: 'correo_webhook', tipo: 'firma_invalida' }, emite: true, donde: 'src/app/api/correo/entrante/route.ts (vía registro_acceso.ts; solo el motivo corto, nunca la firma ni el cuerpo)' },
+  { id: 'rate_limit', titulo: 'Rate limits que bloquean (excepto el de /login, que deja su login_fallido)', par: { origen: 'ratelimit', tipo: 'rate_limit' }, emite: true, donde: 'src/lib/ratelimit.ts (a lo más un registro por categoría por minuto y por instancia; solo la categoría de la llave)' },
+  { id: 'pagina_negada', titulo: 'Páginas del panel negadas por rol, por perfil de la flota o por no ser superadmin/vendedor', par: { origen: 'auth', tipo: 'pagina_negada' }, emite: true, donde: 'src/lib/auth/guard.ts, src/lib/auth/tenant-efectivo.ts y src/lib/auth/perfil_tenant.ts (vía registro_acceso.ts)' },
+  { id: 'mfa_fallido', titulo: 'Segundo factor del superadmin sin inscribir, sin verificar o no verificable', par: { origen: 'auth', tipo: 'mfa_fallido' }, emite: true, donde: 'src/lib/auth/guard.ts (páginas), src/lib/auth/tenant-api.ts y src/app/api/dashboard/chat/tenant.ts (APIs), vía registro_acceso.ts' },
+
   // ── Las que NO emiten (y se dice) ─────────────────────────────────────────
-  { id: 'correo_firma', titulo: 'Webhook de correo entrante: firma inválida', par: { origen: 'correo_webhook', tipo: 'firma_invalida' }, emite: false, donde: 'El tipo existe en la tabla pero ningún webhook de correo lo escribe.' },
-  { id: 'rate_limit', titulo: 'Rate limits que bloquean (excepto el de /login)', par: { origen: 'ratelimit', tipo: 'rate_limit' }, emite: false, donde: 'src/lib/ratelimit.ts bloquea y no registra; el 429 de /v1 y de las demás rutas no deja evento.' },
   { id: 'inyeccion_prompt', titulo: 'Inyección de prompt detectada', par: { origen: 'chat', tipo: 'inyeccion_prompt' }, emite: false, donde: 'No hay detector que escriba este tipo: la mitigación vive en el prompt del Agente de Cuadre y en la guardia de cifras.' },
   { id: 'lectura_datos_personales', titulo: 'Lectura y exporte de datos personales (ARCO, conversaciones, "ver como" de superadmin)', par: null, emite: false, donde: 'Sin registro de acceso a datos personales (MX-013): solo se registran los exportes de dinero.' },
-  { id: 'denegacion_de_pagina', titulo: 'Páginas del panel negadas por rol o perfil', par: null, emite: false, donde: 'src/lib/auth/guard.ts redirige sin registrar; solo las APIs (api_negada) dejan evento.' },
-  { id: 'mfa_fallido', titulo: 'Segundo factor fallido o saltado', par: null, emite: false, donde: 'src/lib/auth/mfa.ts decide pero no registra.' },
   { id: 'mutaciones_sin_actor', titulo: 'Mutaciones de panel sin bitácora ni actor (MX-012)', par: null, emite: false, donde: 'Varias server actions escriben sin anotar quién; evento_seguridad no las cubre.' },
 ];
 

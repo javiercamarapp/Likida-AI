@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeEditarCatalogoOperativo } from '@/lib/auth/permisos';
 import {
@@ -192,7 +193,7 @@ export default async function PaginaOperadores({
 
   async function guardarOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
     if (!puedeEditarCatalogoOperativo(s.rol)) {
       return { ok: false, error: 'Tu rol no puede corregir los datos de un operador.' };
@@ -262,7 +263,7 @@ export default async function PaginaOperadores({
   /** El alta de UN operador (la guía de arranque mandaba aquí y solo se editaba). */
   async function altaOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
     if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: 'Tu rol no puede dar de alta operadores.' };
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
@@ -297,7 +298,7 @@ export default async function PaginaOperadores({
       error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
       muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
     });
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return vacio('Tu rol no puede ver el registro de operadores.');
     if (!puedeEditarCatalogoOperativo(s.rol)) return vacio('Tu rol no puede dar de alta operadores.');
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
@@ -310,7 +311,7 @@ export default async function PaginaOperadores({
   /** Las invitaciones por WhatsApp: a uno, a los pendientes, o reintento de los fallidos. */
   async function invitar(_previo: ResultadoInvitar, fd: FormData): Promise<ResultadoInvitar> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
     if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: 'Tu rol no puede invitar operadores.' };
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);

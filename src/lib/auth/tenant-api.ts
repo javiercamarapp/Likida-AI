@@ -6,7 +6,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
 import { esRolNomina } from './roles';
-import { registrarExporteDinero } from '@/lib/seguridad/registro_acceso';
+import { registrarExporteDinero, registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ FLOTA HABLA UNA RUTA DE API.
@@ -66,6 +66,8 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
     const veredicto = await veredictoMfaSuperadmin(await supabaseServer());
     if (veredicto !== 'ok') {
       logger.warn('mfa.superadmin_exigido_api', { veredicto });
+      // CT-SEG-11: el segundo factor que no está al día deja evento (best-effort, no espera).
+      void registrarMfaFallido({ veredicto, destino: new URL(url).pathname, via: 'api', userId: s.userId });
       return { ok: false, status: 403, motivo: 'Verifica tu segundo factor para continuar.' };
     }
   }

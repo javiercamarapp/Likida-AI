@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { EstadoError } from '../estados';
 import { logger } from '@/lib/logger';
@@ -56,8 +57,8 @@ const RUTA = '/dashboard/reglas';
  *  una server action solo puede capturar valores serializables, y
  *  `server_actions_sin_closures.test.ts` falla si se cierra sobre una función
  *  local (bug real de producción: 204 errores en Sentry). */
-async function sesionConPermiso(sp: { vista?: string; tenant?: string; rol?: string } | undefined) {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function sesionConPermiso(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string) {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA) || !puedeVerArea(s.rol, 'dinero')) return null;
   return s;
 }
@@ -108,7 +109,7 @@ export default async function PaginaReglas({
 
   async function accionInterpretar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await sesionConPermiso(sp);
+    const s = await sesionConPermiso(sp, tenantId);
     if (!s) return NEGADO;
 
     const texto = String(fd.get('texto') ?? '');
@@ -132,7 +133,7 @@ export default async function PaginaReglas({
 
   async function accionAMano(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await sesionConPermiso(sp);
+    const s = await sesionConPermiso(sp, tenantId);
     if (!s) return NEGADO;
 
     const plantilla = String(fd.get('plantilla') ?? '');
@@ -155,7 +156,7 @@ export default async function PaginaReglas({
 
   async function accionConfirmar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await sesionConPermiso(sp);
+    const s = await sesionConPermiso(sp, tenantId);
     if (!s) return NEGADO;
     const r = await confirmarRegla(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
@@ -165,7 +166,7 @@ export default async function PaginaReglas({
 
   async function accionPausar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await sesionConPermiso(sp);
+    const s = await sesionConPermiso(sp, tenantId);
     if (!s) return NEGADO;
     const r = await alternarPausa(s.tenantId, String(fd.get('id') ?? ''), true, { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
@@ -175,7 +176,7 @@ export default async function PaginaReglas({
 
   async function accionReanudar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await sesionConPermiso(sp);
+    const s = await sesionConPermiso(sp, tenantId);
     if (!s) return NEGADO;
     const r = await alternarPausa(s.tenantId, String(fd.get('id') ?? ''), false, { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
@@ -185,7 +186,7 @@ export default async function PaginaReglas({
 
   async function accionBorrar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await sesionConPermiso(sp);
+    const s = await sesionConPermiso(sp, tenantId);
     if (!s) return NEGADO;
     const r = await borrarRegla(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
@@ -195,7 +196,7 @@ export default async function PaginaReglas({
 
   async function accionFrecuencia(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await sesionConPermiso(sp);
+    const s = await sesionConPermiso(sp, tenantId);
     if (!s) return NEGADO;
     const r = await actualizarFrecuencia(s.tenantId, String(fd.get('id') ?? ''), {
       maxAvisosDia: fd.get('maxAvisosDia'), minHorasEntreAvisos: fd.get('minHorasEntreAvisos'),

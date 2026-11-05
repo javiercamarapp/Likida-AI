@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { getLiquidacionesDeViajes } from '@/lib/likida/analytics';
@@ -100,7 +100,7 @@ export default async function PaginaViajes({
     'use server';
     // Se repite ADENTRO (patrón del repo): POST directo posible. Importar
     // CREA viajes — el gate es el de asignar, no solo el de ver.
-    const sesion = await requireSessionTenant('/dashboard/viajes');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/viajes', sp, tenantId);
     if (!puedeAsignar(sesion.rol)) return { error: 'Tu rol no puede crear viajes.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este registro no es de tu flota.' };
 

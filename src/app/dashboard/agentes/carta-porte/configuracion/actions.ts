@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoFirmado, CAMPO_FLOTA_PINTADA, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -31,15 +31,12 @@ const CAMPOS: ReadonlyArray<keyof CamposTexto> = [
   'destinatarioAlertaUsuario', 'destinatarioRevisionUsuario', 'destinatarioRevisionCorreo', 'siTmsDesconocido', 'distanciaFormato',
 ];
 
-const verComo = (fd: FormData) => ({
-  tenant: typeof fd.get('tenant') === 'string' ? String(fd.get('tenant')) : undefined,
-  rol: typeof fd.get('rol') === 'string' ? String(fd.get('rol')) : undefined,
-  vista: typeof fd.get('vista') === 'string' ? String(fd.get('vista')) : undefined,
-});
-
 /** Guarda la configuración COMPLETA que manda el formulario. Campos: los de `CAMPOS` (texto). */
 export async function guardarConfiguracionSalida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: SIN_PERMISO };
   try {
     if (!(await rateLimit(`cp-salida-config:${s.tenantId}`, 20, 60_000))) return { ok: false, error: 'Demasiados cambios en poco tiempo. Espera un minuto.' };
@@ -67,7 +64,10 @@ export async function guardarConfiguracionSalida(_previo: ResultadoAccion, fd: F
 
 /** «Probar conexión»: llama a `probar()` del conector de PS. Sin conector probable no hace nada. Deja bitácora sin detalle del TMS. */
 export async function probarConexionSalida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: SIN_PERMISO };
   try {
     if (!(await rateLimit(`cp-salida-probar:${s.tenantId}`, 6, 60_000))) return { ok: false, error: 'Demasiadas pruebas en poco tiempo. Espera un minuto.' };
@@ -87,7 +87,10 @@ export async function probarConexionSalida(_previo: ResultadoAccion, fd: FormDat
 
 /** Guarda el modo «primer mes» (fecha límite y revisores por departamento). Campos: `hasta` (AAAA-MM-DD o vacío) y `revisores` (un renglón por revisor). */
 export async function guardarPrimerMesAccion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: SIN_PERMISO };
   try {
     if (!(await rateLimit(`cp-primer-mes:${s.tenantId}`, 20, 60_000))) return { ok: false, error: 'Demasiados cambios en poco tiempo. Espera un minuto.' };

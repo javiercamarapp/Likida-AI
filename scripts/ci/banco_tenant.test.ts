@@ -71,7 +71,7 @@ describe('allowlist del banco multi-tenant', () => {
     expect(r.errores).toEqual([]);
     expect(r.vencidas).toEqual([]);
     expect(real.esquemas_expuestos).toContain('public');
-    expect(real.cobertura_minima_siembra).toBeGreaterThanOrEqual(0.85);
+    expect(real.cobertura_minima_siembra).toBeGreaterThanOrEqual(0.97);
     // is_operador()/get_user_operador_id() las borra la 0086: sus excepciones no pueden volver sin recrear las funciones.
     expect(real.entradas.map((e: { objeto: string }) => e.objeto).filter((o: string) => /operador/.test(o))).toEqual([]);
   });
@@ -150,6 +150,16 @@ describe('armado del SQL por fase', () => {
     const sql = armarSql('dinamica', { esquemas: ['public'], candidatos: [{ tabla: 'public.t', columna: 'c', ord: 0, va: 'x', vb: 'x' }] });
     expect(sql.indexOf('create table ci_banco.candidatos')).toBeLessThan(sql.indexOf('insert into ci_banco.candidatos'));
     expect(sql.indexOf('insert into ci_banco.candidatos')).toBeLessThan(sql.indexOf('SIEMBRA'));
+  });
+
+  it('la fase dinamica prueba el telefono del chofer (operador_telefono_forma) despues de sembrar, y carga las bases explicitas', () => {
+    const sql = armarSql('dinamica', { esquemas: ['public'] });
+    expect(sql.indexOf('SIEMBRA')).toBeLessThan(sql.indexOf('BANCO:OPERADOR'));
+    expect(sql).toMatch(/operador_telefono_forma/);
+    expect(sql).toMatch(/insert into ci_banco\.bases/);
+    expect(ARCHIVOS_POR_FASE.estatica).not.toContain('25_operador_telefono_rol.sql');
+    expect(ARCHIVOS_POR_FASE.canario).toContain('25_operador_telefono_rol.sql');
+    expect(armarSql('estatica', { esquemas: ['public'] })).not.toMatch(/insert into ci_banco\.bases/);
   });
 
   it('rechaza una fase desconocida y esquemas con caracteres peligrosos', () => {

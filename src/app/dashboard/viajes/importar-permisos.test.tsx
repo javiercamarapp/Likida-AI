@@ -13,7 +13,8 @@ const m = vi.hoisted(() => ({
   })),
 }));
 vi.mock('next/navigation', () => ({ redirect: () => { throw new Error('REDIRECT'); }, useRouter: () => ({ refresh: vi.fn() }) }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't1', rol: m.rol }) }));
+// MX-002: la acción vuelve a resolver la flota por `resolverTenantEfectivo` y exige que sea la que la pantalla pintó.
+vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: m.tenant, rol: m.rol, userId: 'u1' }) }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => m.permitir }));
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => ({ tenantId: m.tenant, rol: m.rol, userId: 'u1' }) }));
 vi.mock('@/lib/likida/analytics', () => ({ getLiquidacionesDeViajes: async () => [] }));
@@ -58,9 +59,9 @@ describe('importación: el rol vivo autoriza también las columnas del archivo',
     await expect(p.importar(null, archivo([['folio', 'anticipo'], ['IMP-1', 900]]))).resolves.toHaveProperty('error');
     expect(m.importar).not.toHaveBeenCalled();
   });
-  it('el permiso financiero no reemplaza el tenant de la sesión', async () => {
+  it('el permiso financiero no reemplaza el tenant de la sesión: otra flota que la pintada no importa nada', async () => {
     m.rol = 'flota_admin'; const p = await props(); m.tenant = 'ajeno';
-    await expect(p.importar(null, archivo(OPERATIVA))).resolves.toHaveProperty('error'); expect(m.importar).not.toHaveBeenCalled();
+    await expect(p.importar(null, archivo(OPERATIVA))).rejects.toThrow(/cambió desde que abriste/); expect(m.importar).not.toHaveBeenCalled();
   });
   it('el parser sin opciones conserva su contrato para llamadores existentes', () => {
     expect(interpretarFilasViajes([['folio', 'anticipo'], ['IMP-1', 900]]).viajes[0].anticipo).toBe(900);

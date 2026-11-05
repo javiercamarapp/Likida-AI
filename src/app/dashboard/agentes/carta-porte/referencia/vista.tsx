@@ -1,11 +1,12 @@
 import { ArrowLeft } from 'lucide-react';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { numero } from '@/lib/formato';
 import type { ClienteRef, Tablero } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { REFERENCIA_MAX } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import { Aviso, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
-export interface VerComo { tenant?: string; rol?: string; vista?: string }
+export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 
 function Ocultos({ ver }: { ver: VerComo }) {
   return (
@@ -13,6 +14,7 @@ function Ocultos({ ver }: { ver: VerComo }) {
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+      {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
     </>
   );
 }

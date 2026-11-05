@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoFirmado, CAMPO_FLOTA_PINTADA, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -20,7 +20,7 @@ import type { ResultadoAccion } from '@/app/dashboard/carta-porte/documentos/for
 //
 // Server action A NIVEL DE MÓDULO (no cierra sobre nada del componente). Vuelve a resolver sesión, rol y flota
 // desde la cookie: JAMÁS acepta un tenant_id del formulario; los campos `tenant`/`vista`/`rol` que viajan son el
-// mismo «ver como» firmado que ya trae la URL del superadmin, y `resolverTenantEfectivo` los valida.
+// mismo «ver como» firmado que ya trae la URL del superadmin, y `resolverTenantAtadoFirmado` ata la flota firmada.
 // La ruta que gatea es la del agente (clasificada en el perfil cinco_agentes); la pantalla del catálogo (T-A3-22)
 // hereda esta acción.
 // ═══════════════════════════════════════════════════════════════════════════
@@ -37,12 +37,10 @@ const esTipo = (v: string): v is TipoPlantilla => (TIPOS_PLANTILLA as readonly s
  * solo si ninguna fila trae error). Campos: `tipo` (producto | parte | cliente_numero) y `archivo` (el CSV).
  */
 export async function importarCatalogoCsv(_previo: EstadoImportacion, fd: FormData): Promise<EstadoImportacion> {
-  const sp = {
-    tenant: typeof fd.get('tenant') === 'string' ? String(fd.get('tenant')) : undefined,
-    rol: typeof fd.get('rol') === 'string' ? String(fd.get('rol')) : undefined,
-    vista: typeof fd.get('vista') === 'string' ? String(fd.get('vista')) : undefined,
-  };
-  const s = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede administrar el catálogo de Carta Porte.' };
   try {
     const tipo = String(fd.get('tipo') ?? '');
@@ -80,12 +78,10 @@ export async function importarCatalogoCsv(_previo: EstadoImportacion, fd: FormDa
  * (`validarRegistro`), y el cliente tiene que ser de la flota de la sesión. Deja bitácora con solo el tipo y el modo.
  */
 export async function guardarFilaCatalogo(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const sp = {
-    tenant: typeof fd.get('tenant') === 'string' ? String(fd.get('tenant')) : undefined,
-    rol: typeof fd.get('rol') === 'string' ? String(fd.get('rol')) : undefined,
-    vista: typeof fd.get('vista') === 'string' ? String(fd.get('vista')) : undefined,
-  };
-  const s = await resolverTenantEfectivo(RUTA_CATALOGO, sp);
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA_CATALOGO, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA_CATALOGO)) return { ok: false, error: 'Tu rol no puede administrar el catálogo de Carta Porte.' };
   try {
     const tipo = String(fd.get('tipo') ?? '');

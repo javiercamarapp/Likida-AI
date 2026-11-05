@@ -10,7 +10,7 @@ const d = vi.hoisted(() => ({
 vi.mock('next/link', () => ({ default: () => null }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/auth/guard', () => ({ exigirVerRuta: async () => undefined, requireSessionTenant: async () => d.real }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => d.efectiva }));
+vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ ...d.efectiva, rolReal: d.real.rol }) }));
 vi.mock('@/lib/likida/comercial', () => ({
   getTickets: async () => [], abrirTicket: (...a: unknown[]) => d.abrir(...a),
   CATEGORIAS_TICKET: ['otro'], PRIORIDADES_TICKET: ['media'],

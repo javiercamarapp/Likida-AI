@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeEditarCatalogoOperativo } from '@/lib/auth/permisos';
 import {
@@ -146,7 +147,7 @@ export default async function PaginaUnidades({
 
   async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
     if (!puedeEditarCatalogoOperativo(s.rol)) {
       return { ok: false, error: 'Tu rol no puede dar de alta ni editar unidades.' };
@@ -241,7 +242,7 @@ export default async function PaginaUnidades({
    */
   async function cambiarEstado(_previo: ResultadoEstado, fd: FormData): Promise<ResultadoEstado> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
     if (!puedeEditarCatalogoOperativo(s.rol)) {
       return { ok: false, error: 'Tu rol no puede cambiar el estado de una unidad.' };
@@ -279,7 +280,7 @@ export default async function PaginaUnidades({
       error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
       muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
     });
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return vacio('Tu rol no puede ver las unidades.');
     if (!puedeEditarCatalogoOperativo(s.rol)) return vacio('Tu rol no puede dar de alta unidades.');
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);

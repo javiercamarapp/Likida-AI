@@ -288,7 +288,7 @@ export function fallaCerradoPorDefault(): boolean {
  * intento contra Redis falla, cae al Map local — ver la cabecera del archivo
  * para la justificación completa de esa degradación.
  */
-export async function rateLimit(key: string, limit: number, windowMs: number, opciones: OpcionesRateLimit = {}): Promise<boolean> {
+async function decidirRateLimit(key: string, limit: number, windowMs: number, opciones: OpcionesRateLimit): Promise<boolean> {
   avisarBackend();
 
   if (redisConfigurado()) {
@@ -306,10 +306,41 @@ export async function rateLimit(key: string, limit: number, windowMs: number, op
   return limiteLocal(key, limit, windowMs);
 }
 
+// CT-SEG-11 (F2): un límite que bloquea deja constancia en `evento_seguridad` (origen `ratelimit`, tipo `rate_limit`), con la CATEGORÍA
+// de la llave y nada más (la llave trae IPs, correos o teléfonos). Dos frenos para que registrar no sea un amplificador del ataque
+// que se vigila: (1) a lo más UN registro por categoría por minuto y por instancia; (2) la RPC agrupa la misma señal y acota las
+// filas distintas. El límite de /login ya deja su propio `login_fallido` y no se duplica aquí.
+const AVISO_BLOQUEO_MS = 60_000;
+const CATEGORIAS_SIN_EVENTO: ReadonlySet<string> = new Set(['login']);
+const ultimoBloqueoAvisado = new Map<string, number>();
+
+function notificarBloqueo(key: string): void {
+  try {
+    const cat = categoria(key);
+    if (CATEGORIAS_SIN_EVENTO.has(cat)) return;
+    const ahora = Date.now();
+    const previo = ultimoBloqueoAvisado.get(cat);
+    if (previo !== undefined && ahora - previo < AVISO_BLOQUEO_MS) return;
+    if (ultimoBloqueoAvisado.size > 200) ultimoBloqueoAvisado.clear();
+    ultimoBloqueoAvisado.set(cat, ahora);
+    // Import dinámico: ratelimit.ts no puede depender de Supabase ni de next/server en su carga (lo importa casi todo).
+    void import('@/lib/seguridad/registro_acceso').then((m) => m.registrarRateLimit(cat)).catch(() => { /* best-effort total */ });
+  } catch { /* vigilar no puede tumbar lo vigilado */ }
+}
+
+/** `true` si la petición cabe en el límite. Ver `decidirRateLimit` (arriba) para el backend, y `notificarBloqueo` para el registro de bloqueos. */
+export async function rateLimit(key: string, limit: number, windowMs: number, opciones: OpcionesRateLimit = {}): Promise<boolean> {
+  const permitido = await decidirRateLimit(key, limit, windowMs, opciones);
+  if (!permitido) notificarBloqueo(key);
+  return permitido;
+}
+
+
 /** Solo para pruebas: el Map y el aviso de arranque son de módulo y se
  *  comparten entre casos. */
 export function reiniciarLimites(): void {
   buckets.clear();
+  ultimoBloqueoAvisado.clear();
   avisadoBackend = false;
 }
 

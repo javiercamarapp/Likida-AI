@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { Fuel, Building2 } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
@@ -95,7 +96,7 @@ export default async function ConfiguracionPage({
     'use server';
     // Re-gateo ADENTRO: el rol de arriba es del render, no de esta llamada, y
     // una server action es alcanzable sin pasar por la página.
-    const s = await resolverTenantEfectivo('/dashboard/configuracion', sp);
+    const s = await resolverTenantAtadoOLanza('/dashboard/configuracion', sp, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/configuracion')) {
       return { ok: false, error: 'Tu rol no puede cambiar la configuración de la flota.' };
     }
@@ -133,7 +134,7 @@ export default async function ConfiguracionPage({
     // Re-gateo ADENTRO, igual que la acción de arriba: una server action es
     // alcanzable sin pasar por la página, y esto toca la validación fiscal de
     // TODOS los CFDI de gasto de la flota.
-    const s = await resolverTenantEfectivo('/dashboard/configuracion', sp);
+    const s = await resolverTenantAtadoOLanza('/dashboard/configuracion', sp, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/configuracion')) {
       return { error: 'Tu rol no puede cambiar la configuración de la flota.' };
     }

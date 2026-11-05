@@ -28,8 +28,30 @@ import { leerSeleccionFlota } from './admin-context';
 import { mfaSuperadminObligatorio } from './mfa';
 import { veredictoMfaDeSesion } from './superadmin-mfa';
 import { logger } from '@/lib/logger';
+import { registrarMfaFallido, registrarPaginaNegada } from '@/lib/seguridad/registro_acceso';
 import { getSessionTenant, type SessionTenant } from './session';
 import { exigirRutaDePerfil } from './perfil_tenant';
+
+/**
+ * Tope de espera por el registro de un evento justo antes de un `redirect()`. `redirect()` lanza y corta la ejecución: un `void`
+ * suelto dejaba el INSERT del evento a merced de que el runtime serverless no congelara la función al responder (CT-SEG-11:
+ * se perdían filas de página negada y de MFA fallido). Los escritores de `registro_acceso` ya cuelgan su promesa de `after()` de
+ * Next; esto añade la espera explícita —con tope corto, para que un Supabase lento no retrase el rebote— y deja el
+ * `after()` como red si el tope vence.
+ */
+export const TOPE_REGISTRO_ANTES_DE_REDIRECT_MS = 800;
+
+async function esperarRegistro(registro: Promise<void> | void): Promise<void> {
+  let reloj: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve(registro).catch(() => {}),
+      new Promise<void>((resolver) => { reloj = setTimeout(resolver, TOPE_REGISTRO_ANTES_DE_REDIRECT_MS); }),
+    ]);
+  } finally {
+    if (reloj) clearTimeout(reloj);
+  }
+}
 
 /**
  * DÓNDE SE INSCRIBE EL SEGUNDO FACTOR. Es la única pantalla EXENTA de la
@@ -55,6 +77,8 @@ async function exigirMfaSuperadmin(destino: string): Promise<void> {
   const veredicto = await veredictoMfaDeSesion({ rol: 'superadmin' });
   if (veredicto === 'ok') return;
   logger.warn('mfa.superadmin_exigido', { veredicto, destino });
+  // CT-SEG-11: el segundo factor que no está al día deja evento (best-effort; se espera con tope corto antes del redirect).
+  await esperarRegistro(registrarMfaFallido({ veredicto, destino, via: 'pagina' }));
   redirect(`${RUTA_MFA}?exige=${veredicto}`);
 }
 
@@ -151,7 +175,10 @@ export async function requireSessionTenant(
 export async function requireSuperadmin(): Promise<SessionTenant> {
   const s = await getSessionTenant();
   if (!s) redirect(`/login?next=${encodeURIComponent('/admin')}`);
-  if (s.rol !== 'superadmin') redirect('/dashboard');
+  if (s.rol !== 'superadmin') {
+    await esperarRegistro(registrarPaginaNegada({ ruta: '/admin', rol: s.rol, causa: 'superadmin', tenantId: s.tenantId, userId: s.userId }));
+    redirect('/dashboard');
+  }
   // SEG-3: la consola de negocio es justo lo que un phishing con enlace
   // mágico buscaría. Obligatorio por default en producción.
   await exigirMfaSuperadmin('/admin');
@@ -174,6 +201,7 @@ export async function requireVendedor(): Promise<SessionTenant> {
   if (!s) redirect(`/login?next=${encodeURIComponent('/vendedor')}`);
   if (s.rol !== 'vendedor' && s.rol !== 'superadmin') {
     const { inicioDe } = await import('./visibilidad');
+    await esperarRegistro(registrarPaginaNegada({ ruta: '/vendedor', rol: s.rol, causa: 'vendedor', tenantId: s.tenantId, userId: s.userId }));
     redirect(inicioDe(s.rol));
   }
   if (s.rol === 'superadmin') await exigirMfaSuperadmin('/vendedor');
@@ -192,6 +220,9 @@ export async function requireVendedor(): Promise<SessionTenant> {
 export async function exigirVerRuta(destino: string): Promise<SessionTenant> {
   const { puedeVerRuta, inicioDe } = await import('./visibilidad');
   const s = await requireSessionTenant(destino);
-  if (!puedeVerRuta(s.rol, destino)) redirect(inicioDe(s.rol));
+  if (!puedeVerRuta(s.rol, destino)) {
+    await esperarRegistro(registrarPaginaNegada({ ruta: destino, rol: s.rol, causa: 'rol', tenantId: s.tenantId, userId: s.userId }));
+    redirect(inicioDe(s.rol));
+  }
   return s;
 }

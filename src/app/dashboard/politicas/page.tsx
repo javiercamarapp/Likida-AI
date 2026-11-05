@@ -5,6 +5,7 @@ import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { StatusPill } from '../../admin/ui/kit';
@@ -94,7 +95,7 @@ export default async function PoliticasPage({
     // `?tenant=` y la cookie del selector se resuelven igual al pintar y al
     // guardar. Antes la action leía solo la sesión y, con `?vista=demo`,
     // escribía la política de la demo en la flota elegida en el selector.
-    const s = await resolverTenantEfectivo('/dashboard/politicas', sp);
+    const s = await resolverTenantAtadoOLanza('/dashboard/politicas', sp, tenantId);
     if (!puedeAdministrar(s.rol)) {
       return { error: 'Tu rol no puede editar la política de gastos.' };
     }

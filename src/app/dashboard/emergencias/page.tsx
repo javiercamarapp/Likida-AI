@@ -3,6 +3,7 @@ import { revalidatePath } from 'next/cache';
 import { ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
@@ -29,8 +30,8 @@ type ParamsPagina = { tenant?: string; rol?: string; vista?: string };
 // CT-SEG-22: `gate` es un AYUDANTE interno, no una accion (sin `'use server'`: Next la expondria como invocable desde el
 // navegador). Vive a NIVEL DE MODULO y recibe `sp` por parametro: si fuera una funcion local del componente, las acciones
 // inline la capturarian por closure y Next no puede serializarla (incidente de /despacho, 24-ago-2026).
-async function gate(sp: ParamsPagina): Promise<{ tenantId: string; userId: string } | { error: string }> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function gate(sp: ParamsPagina, tenantId: string): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar el directorio de emergencia.' };
   return { tenantId: s.tenantId, userId: s.userId };
 }
@@ -100,7 +101,7 @@ export default async function PaginaEmergencias({
 
   async function altaProveedor(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     try {
       await crearProveedorEmergencia(g.tenantId, {
@@ -121,7 +122,7 @@ export default async function PaginaEmergencias({
 
   async function verificarProveedor(fd: FormData): Promise<void> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return;
     try {
       await marcarProveedorVerificado(g.tenantId, String(fd.get('id') ?? ''), g.userId);
@@ -133,7 +134,7 @@ export default async function PaginaEmergencias({
 
   async function borrarProveedor(fd: FormData): Promise<void> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return;
     try {
       await borrarProveedorEmergencia(g.tenantId, String(fd.get('id') ?? ''));
@@ -145,7 +146,7 @@ export default async function PaginaEmergencias({
 
   async function guardarPolizaAction(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     try {
       await guardarPoliza(g.tenantId, {
@@ -163,7 +164,7 @@ export default async function PaginaEmergencias({
 
   async function altaContacto(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     try {
       await crearContactoEmergencia(g.tenantId, {
@@ -182,7 +183,7 @@ export default async function PaginaEmergencias({
 
   async function borrarContacto(fd: FormData): Promise<void> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return;
     try {
       await borrarContactoEmergencia(g.tenantId, String(fd.get('id') ?? ''));

@@ -424,6 +424,60 @@ export function sqlCandidatos(filas) {
   as x(tabla text, columna text, ord int, va text, vb text);`;
 }
 
+// ── Bases explicitas (F2, CT-SEG): tablas con CHECK acoplados ───────────────────────────────────────────────────────────
+// La busqueda de candidatos no las halla porque el valor valido de una columna anulable (NULL, o la combinacion coherente de
+// dos columnas) esta al FINAL de su lista y la primera columna varia mas rapido: 600 intentos no alcanzan. Aqui se declara, por
+// tabla, SOLO lo que la siembra generica (valores por tipo en las columnas NOT NULL sin default) no deduce. Las demas columnas
+// anulables quedan NULL, que es lo que esos CHECK piden. Cada valor sale de la migracion citada. `a`/`b` = flota A / flota B
+// (distintos donde hay unico global: el telefono de operador es unico entre flotas mientras el operador este activo).
+// Convencion de valores: la misma de los candidatos ('@N' = NULL, '=<sql>' = expresion cruda, otro = literal).
+const HEX64_A = 'a'.repeat(64);
+const HEX64_B = 'b'.repeat(64);
+export const BASES_EXPLICITAS = {
+  // 0290/0932 operador_telefono_forma (10-15 digitos), 0460 invitacion_coherente y 0462 fallo_coherente (todo NULL = pendiente).
+  'public.operador': { a: { telefono: '529990000001' }, b: { telefono: '529990000002' } },
+  // 0050/0480: radio entre 25 y 100000 y tipo de pareja con el catalogo por omision ('peajes'): punto_interes vale en ambos.
+  'public.geocerca': { a: { tipo: 'punto_interes', radio_m: '100' }, b: { tipo: 'punto_interes', radio_m: '100' } },
+  // 0053/0291: tipo del dominio ARCO y titular presente (operador_id o titular_ref).
+  'public.solicitud_arco': { a: { tipo: 'acceso', titular_ref: 'banco-titular-a' }, b: { tipo: 'acceso', titular_ref: 'banco-titular-b' } },
+  // 0098: huella SHA-256 en hex (64) y status 200/201.
+  'public.api_idempotencia': { a: { huella: HEX64_A, status: '200' }, b: { huella: HEX64_B, status: '200' } },
+  // 0105/0181: el tenant solo se llena en un prospecto cerrado, y cerrado <=> con fecha de cierre.
+  'public.prospecto': { a: { estado: 'cerrado', cerrado_en: '=now()' }, b: { estado: 'cerrado', cerrado_en: '=now()' } },
+  // 0229: plantilla del catalogo cerrado; estado 'pendiente' (por omision) no exige confirmacion.
+  'public.regla_vigilancia': { a: { plantilla: 'estadia_mayor_a' }, b: { plantilla: 'estadia_mayor_a' } },
+  // 0380: tipo de hito del dominio; estado 'esperado' (por omision) no exige recibido_en ni fuente.
+  'public.viaje_hito': { a: { tipo: 'llegada_carga' }, b: { tipo: 'llegada_carga' } },
+  // 0420/0791: canal y formato del dominio, sha256 en hex (64) y bytes entre 1 y 12582912.
+  'public.cp_documento': {
+    a: { canal: 'manual', formato: 'pdf_texto', bytes: '1000', sha256: HEX64_A },
+    b: { canal: 'manual', formato: 'pdf_texto', bytes: '1000', sha256: HEX64_B },
+  },
+  // 0787/0788/0933: rol del dominio y correo con forma (unico por liquidacion, generacion, rol y correo).
+  'public.liquidacion_entrega_correo': {
+    a: { rol: 'operador', correo: 'banco-a@ejemplo.test' },
+    b: { rol: 'operador', correo: 'banco-b@ejemplo.test' },
+  },
+};
+
+/**
+ * Sentencia SQL que carga las bases explicitas en ci_banco.bases (tabla, lado, columna, valor).
+ * @param {Record<string, { a?: Record<string, string>, b?: Record<string, string> }>} [bases]
+ */
+export function sqlBases(bases = BASES_EXPLICITAS) {
+  const filas = [];
+  for (const [tabla, lados] of Object.entries(bases)) {
+    for (const [lado, n] of [['a', 1], ['b', 2]]) {
+      for (const [columna, valor] of Object.entries(lados[lado] ?? {})) filas.push({ tabla, lado: n, columna, valor });
+    }
+  }
+  if (!filas.length) return '';
+  const json = JSON.stringify(filas);
+  if (json.includes('$base$')) throw new Error('una base trae el delimitador $base$');
+  return `insert into ci_banco.bases select * from jsonb_to_recordset($base$${json}$base$::jsonb)
+  as x(tabla text, lado int, columna text, valor text);`;
+}
+
 // ── Tablas que de verdad no se pueden sembrar (con motivo) y cobertura ─────────────────────────────────────────────────
 export function validarNoSembrables(lista) {
   const errores = [];

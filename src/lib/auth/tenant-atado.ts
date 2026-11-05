@@ -29,7 +29,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { resolverTenantEfectivo, type TenantEfectivo } from './tenant-efectivo';
-import { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA } from './flota_cambio';
+import { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA, DIGEST_FLOTA_CAMBIO } from './flota_cambio';
 import { getSessionTenant } from './session';
 
 export { MENSAJE_FLOTA_CAMBIO, CAMPO_FLOTA_PINTADA };
@@ -85,6 +85,32 @@ export async function resolverTenantAtadoAccion(
 ): Promise<TenantEfectivo | null> {
   const s = await resolverTenantEfectivo(destino, sp);
   return s.tenantId === tenantRenderizado ? s : null;
+}
+
+/** La flota cambió bajo los pies de la pantalla: la acción se niega y NO escribe nada (MX-002). */
+export class FlotaCambioError extends Error {
+  /** Next conserva un `digest` ya puesto al serializar el error al cliente; el mensaje y el nombre no sobreviven en producción. */
+  readonly digest = DIGEST_FLOTA_CAMBIO;
+  constructor() {
+    super(MENSAJE_FLOTA_CAMBIO);
+    this.name = 'FlotaCambioError';
+  }
+}
+
+/**
+ * Forma 1 para acciones que no tienen una forma propia de decir «no» (devuelven resultados de tipos muy distintos o `void`):
+ * igual que `resolverTenantAtadoAccion`, pero LANZA `FlotaCambioError` en vez de devolver `null`. La acción no llega a escribir:
+ * el lanzamiento corta antes de cualquier efecto. Es el caso raro (un superadmin con dos pestañas en flotas distintas); para el
+ * resto de los roles la atadura es trivial y nunca se dispara.
+ */
+export async function resolverTenantAtadoOLanza(
+  destino: string,
+  sp: Sp,
+  tenantRenderizado: string,
+): Promise<TenantEfectivo> {
+  const s = await resolverTenantAtadoAccion(destino, sp, tenantRenderizado);
+  if (!s) throw new FlotaCambioError();
+  return s;
 }
 
 /**

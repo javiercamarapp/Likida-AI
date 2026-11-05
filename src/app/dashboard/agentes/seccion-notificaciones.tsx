@@ -1,5 +1,5 @@
 import { Bell } from 'lucide-react';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { correoConfigurado, enviarCorreo } from '@/lib/correo/enviar';
 import { avisoDePrueba } from '@/lib/correo/avisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -55,8 +55,10 @@ async function leerUsuarios(tenantId: string, agenteId: string): Promise<Lectura
   }
 }
 
-export async function SeccionNotificaciones({ tenantId, agenteId }: {
+export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
   tenantId: string;
+  /** Los `?tenant=`/`?vista=`/`?rol=` de la página: las acciones los reusan para atarse a la flota pintada (MX-002). */
+  sp?: { vista?: string; tenant?: string; rol?: string };
   agenteId: AgenteId;
 }) {
   const agente = agentePorId(agenteId);
@@ -86,7 +88,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId }: {
     const objetivo = agentePorId(agenteId);
     if (!objetivo) return { error: 'Ese agente no existe.' };
 
-    const sesion = await requireSessionTenant(objetivo.ruta);
+    const sesion = await resolverTenantAtadoOLanza(objetivo.ruta, sp, tenantId);
     const negado = puedeConfigurarAvisos(sesion, tenantId, objetivo);
     if (negado) {
       logger.warn('notificaciones.acceso_negado', { tenantId, agente: objetivo.id, rol: sesion.rol });
@@ -142,7 +144,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId }: {
 
     // EL MISMO GATEO QUE `guardar`, y por la misma razón: la action es
     // alcanzable por POST directo sin pasar por el render.
-    const sesion = await requireSessionTenant(objetivo.ruta);
+    const sesion = await resolverTenantAtadoOLanza(objetivo.ruta, sp, tenantId);
     const negado = puedeConfigurarAvisos(sesion, tenantId, objetivo);
     if (negado) {
       logger.warn('notificaciones.prueba_negada', { tenantId, agente: objetivo.id, rol: sesion.rol });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { useActionState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Download, Plus, Upload } from 'lucide-react';
@@ -25,7 +26,7 @@ import { Aviso as AvisoV2, BarraFiltros, BotonEnlace, MarcoPagina, TituloRecuadr
 
 export interface ClienteVista { id: string; nombre: string }
 export interface CatalogoVista extends FilasCatalogo { truncado: boolean }
-export interface VerComo { tenant?: string; rol?: string; vista?: string }
+export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesCatalogo {
   guardarFila: AccionDoc;
   importar: (previo: EstadoImportacion, fd: FormData) => Promise<EstadoImportacion>;
@@ -51,6 +52,7 @@ function Ocultos({ ver }: { ver: VerComo }) {
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+      {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
     </>
   );
 }

@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { CloudDownload, FileQuestion } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { estadoDescargaSat } from '@/lib/likida/sat_descarga';
@@ -115,9 +116,11 @@ function sumarDias(dia: string, dias: number): string {
  * vuelve a resolver la sesión y a gatear por su cuenta.
  */
 export async function PanelBandeja({
-  searchParams, datos, bandeja, busqueda, prefill,
+  searchParams, tenantId, datos, bandeja, busqueda, prefill,
 }: {
   searchParams: Params;
+  /** La flota que esta pantalla pinta: la acción de abajo solo escribe en ella (MX-002). */
+  tenantId: string;
   datos: VistaDescargaSat;
   bandeja: PaginaBandeja;
   busqueda: ResultadoBusquedaGastos | null;
@@ -144,7 +147,7 @@ export async function PanelBandeja({
    */
   async function resolver(_p: ResultadoFila, fd: FormData): Promise<ResultadoFila> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat/bandeja', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat/bandeja', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat/bandeja') || !puedeVerArea(s.rol, 'dinero')) {
       return { error: 'Tu rol no puede resolver comprobantes del SAT: esto mueve dinero deducible de la flota.' };
     }
@@ -420,6 +423,7 @@ export async function VistaBandejaSat({ searchParams, tenantExiste = true }: {
   return (
     <PanelBandeja
       searchParams={searchParams}
+      tenantId={tenantId}
       datos={datos}
       bandeja={bandeja}
       busqueda={busqueda}

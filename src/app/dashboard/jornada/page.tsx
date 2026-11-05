@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar, puedeEditarCatalogoOperativo } from '@/lib/auth/permisos';
 import { alcanceDePatio, dentroDelAlcance, exigirDentroDelAlcance, type AlcancePatio } from '@/lib/auth/patio';
@@ -55,10 +56,10 @@ type ParamsPuerta = { vista?: string; tenant?: string; rol?: string };
  * cazó aquí.
  */
 async function puerta(
-  sp: ParamsPuerta,
+  sp: ParamsPuerta, tenantId: string,
   nivel: 'correccion' | 'politica' = 'correccion',
 ): Promise<{ tenantId: string; userId: string; alcance: AlcancePatio } | ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no ve el registro de jornada.' };
   if (nivel === 'politica') {
     // Los UMBRALES de la flota son configuración de la cuenta: solo el dueño.
@@ -156,7 +157,7 @@ export default async function PaginaJornada({
 }) {
   const sp = await searchParams;
   // El `userId` del render NO se saca aquí A PROPÓSITO: cada server action
-  // vuelve a resolver la sesión con `puerta(sp)` y firma con ESE id. Arrastrar
+  // vuelve a resolver la sesión con `puerta(sp, tenantId)` y firma con ESE id. Arrastrar
   // el del render sería firmar una corrección con el usuario que pintó la
   // pantalla, que puede no ser el que la envió — y aquí la firma es lo que hace
   // que la anotación valga.
@@ -253,7 +254,7 @@ export default async function PaginaJornada({
 
   async function anularMarca(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const p = await puerta(sp);
+    const p = await puerta(sp, tenantId);
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) {
@@ -290,7 +291,7 @@ export default async function PaginaJornada({
 
   async function capturarMarca(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const p = await puerta(sp);
+    const p = await puerta(sp, tenantId);
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) {
@@ -354,7 +355,7 @@ export default async function PaginaJornada({
 
   async function cerrarElDia(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const p = await puerta(sp);
+    const p = await puerta(sp, tenantId);
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) return { ok: false, error: 'No pude confirmar tu correo, y el cierre lleva firma. Vuelve a intentarlo.' };
@@ -381,7 +382,7 @@ export default async function PaginaJornada({
 
   async function declararPolitica(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const p = await puerta(sp, 'politica');
+    const p = await puerta(sp, tenantId, 'politica');
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) return { ok: false, error: 'No pude confirmar tu correo, y declarar un umbral lleva firma. Vuelve a intentarlo.' };
@@ -423,7 +424,7 @@ export default async function PaginaJornada({
     'use server';
     // Quién recibe los avisos de una flota es configuración de la cuenta: la misma puerta que los umbrales (solo quien
     // administra). Se re-resuelve la sesión aquí; el rol del render no decide nada.
-    const p = await puerta(sp, 'politica');
+    const p = await puerta(sp, tenantId, 'politica');
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) return { ok: false, error: 'No pude confirmar tu correo, y configurar la alerta lleva firma. Vuelve a intentarlo.' };

@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import {
   getEstadoCartaPorte, validarDeclaracion, declararCcp,
@@ -46,7 +47,7 @@ export default async function PaginaCartaPorte({
 
   async function declarar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede declarar rutas.' };
     try {
       const d = validarDeclaracion({
@@ -63,7 +64,7 @@ export default async function PaginaCartaPorte({
 
   async function agregarMercancia(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede capturar mercancía.' };
     try {
       const m = validarMercancia({
@@ -84,7 +85,7 @@ export default async function PaginaCartaPorte({
 
   async function quitarMercancia(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede capturar mercancía.' };
     try {
       await borrarMercancia(s.tenantId, String(fd.get('mercanciaId') ?? ''), { id: s.userId });
@@ -97,7 +98,7 @@ export default async function PaginaCartaPorte({
 
   async function datosCliente(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede capturar estos datos.' };
     try {
       const d = validarDatosCliente({

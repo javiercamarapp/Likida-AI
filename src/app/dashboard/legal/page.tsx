@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -44,8 +45,8 @@ const MANDATO_NO_DISPONIBLE = 'El mandato de autofacturación no está disponibl
  * `tenantId` sale de la sesión, no del formulario. La base vuelve a validar
  * pertenencia y rol (0443).
  */
-async function sesionDeDueno(sp: { vista?: string; tenant?: string; rol?: string }) {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function sesionDeDueno(sp: { vista?: string; tenant?: string; rol?: string }, tenantId: string) {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol) || s.rol === 'superadmin') return null;
   return s;
 }
@@ -61,7 +62,7 @@ export default async function PaginaLegal({
 
   async function accionAceptarVigentes(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeDueno(sp);
+    const s = await sesionDeDueno(sp, tenantId);
     if (!s) return { error: SOLO_DUENO };
     const r1 = await registrarAceptacion(s.tenantId, s.userId, 'terminos');
     if (!r1.ok) return { error: r1.motivo ?? 'No se pudo registrar la aceptación.' };
@@ -73,7 +74,7 @@ export default async function PaginaLegal({
 
   async function accionOtorgarMandato(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeDueno(sp);
+    const s = await sesionDeDueno(sp, tenantId);
     if (!s) return { error: SOLO_DUENO };
     if (await perfilDeTenant(s.tenantId)) return { error: MANDATO_NO_DISPONIBLE };
     const r = await registrarAceptacion(s.tenantId, s.userId, 'mandato_autofacturacion');
@@ -84,7 +85,7 @@ export default async function PaginaLegal({
 
   async function accionRetirarMandato(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeDueno(sp);
+    const s = await sesionDeDueno(sp, tenantId);
     if (!s) return { error: SOLO_DUENO };
     const r = await revocarMandato(s.tenantId, s.userId);
     if (!r.ok) return { error: r.motivo ?? 'No se pudo retirar el mandato.' };
@@ -94,7 +95,7 @@ export default async function PaginaLegal({
 
   async function accionGuardarDatos(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeDueno(sp);
+    const s = await sesionDeDueno(sp, tenantId);
     if (!s) return { error: SOLO_DUENO };
     // El tenant sale de la SESIÓN; del formulario solo vienen los tres textos.
     const r = await guardarDatosResponsable(s.tenantId, {

@@ -380,7 +380,7 @@ export default async function PaginaAgenteLiquidacion({
         }
         notificaciones={
           <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
-            <SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />
+            <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="liquidacion" />
           </Bloque>
         }
       />
@@ -639,7 +639,7 @@ export default async function PaginaAgenteLiquidacion({
           {/* Notificaciones hace SUS propias lecturas (config del canal,
               usuarios avisables): en su propio boundary no retiene a nadie. */}
           <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
-            <SeccionNotificaciones tenantId={tenantId} agenteId="liquidacion" />
+            <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="liquidacion" />
           </Bloque>
         </>
       }

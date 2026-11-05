@@ -36,7 +36,7 @@ vi.mock('./mfa', async (original) => ({
 vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
 
 const registrarExporteDinero = vi.fn(async (..._a: unknown[]) => {});
-vi.mock('@/lib/seguridad/registro_acceso', () => ({ registrarExporteDinero: (...a: unknown[]) => registrarExporteDinero(...a) }));
+vi.mock('@/lib/seguridad/registro_acceso', () => ({ registrarExporteDinero: (...a: unknown[]) => registrarExporteDinero(...a), registrarMfaFallido: vi.fn() }));
 
 const { resolverTenantApi, resolverTenantPedido } = await import('./tenant-api');
 
