@@ -1,4 +1,4 @@
-import type { PasoGuia } from '@/lib/likida/guia/tipos';
+import type { PasoGuia, ResultadoSenal } from '@/lib/likida/guia/tipos';
 
 // GUION · Puesta en marcha del dueño con los cinco agentes (pista D5, SPEC-ONBOARDING-GUIA 3 y 6.2).
 // BORRADOR PARA REVISIÓN: todos los pasos nacen con `aprobado: false` y NO se publican hasta que Javier los apruebe en
@@ -12,7 +12,7 @@ export const PASOS_PM: readonly PasoGuia[] = [
   {
     ...base, id: 'PM1-01', ancla: null, tipo: 'orientar', visual: { tipo: 'ilu', id: 'lista' }, deteccion: { via: 'ninguna' },
     titulo: 'Tu puesta en marcha, paso a paso',
-    texto: 'Cada paso se marca solo cuando Likida ve que lo hiciste. Lo que no puede medir lo confirmas tú y queda rotulado.',
+    texto: 'Likida marca solo lo que puede comprobar. Lo que no puede medir lo confirmas tú y queda rotulado.',
     ayuda: 'Puedes salir cuando quieras y volver desde la Guía: retomas en el último paso que no hiciste, en cualquier equipo.',
   },
   {
@@ -60,7 +60,21 @@ export const PASOS_PM: readonly PasoGuia[] = [
   },
   {
     ...base, id: 'PM9-99', ancla: null, tipo: 'cierre', visual: { tipo: 'ilu', id: 'celebrar' }, deteccion: { via: 'ninguna' },
-    titulo: 'Listo: tu operación está conectada',
+    // Texto por omisión = el honesto: no afirma una conexión que nadie comprobó. `cierreDePuestaEnMarcha` da el de «conectada».
+    titulo: 'Lo tuyo está listo; falta conectar el sistema',
     texto: 'Lo que Likida pudo medir quedó marcado como hecho; lo que confirmaste tú, como confirmado. Vuelve aquí cuando quieras.',
   },
 ];
+
+/** Cierre cuando la conexión sí está comprobada (prueba de conexión del TMS en `si` Y datos llegando). */
+export const CIERRE_CONECTADO = { titulo: 'Listo: tu operación está conectada' } as const;
+
+/**
+ * Título del cierre según lo que MIDE el servidor. «Conectada» solo con `tms_probada` y `archivos_recibidos` ambas en `si`:
+ * omitida, `no` o `sin_dato` en cualquiera cae al texto que dice que falta la conexión.
+ */
+export function cierreDePuestaEnMarcha(senales: Partial<Record<'tms_probada' | 'archivos_recibidos', ResultadoSenal>>): { titulo: string; texto: string } {
+  const cierre = PASOS_PM[PASOS_PM.length - 1];
+  const conectada = senales.tms_probada?.estado === 'si' && senales.archivos_recibidos?.estado === 'si';
+  return { titulo: conectada ? CIERRE_CONECTADO.titulo : cierre.titulo, texto: cierre.texto };
+}

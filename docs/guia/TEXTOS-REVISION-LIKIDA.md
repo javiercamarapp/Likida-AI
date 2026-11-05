@@ -6,7 +6,7 @@ Generado desde el guion (`src/app/ui-v2/onboarding/guion/`). No se edita a mano:
 | id | pista | pantalla | campo | límite | texto actual | longitud | estado | texto propuesto por Javier | notas |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `PM1-01.titulo` | dueno_ca | /dashboard/puesta-en-marcha | titulo | 48 | Tu puesta en marcha, paso a paso | 32 | borrador |  |  |
-| `PM1-01.texto` | dueno_ca | /dashboard/puesta-en-marcha | texto | 180 | Cada paso se marca solo cuando Likida ve que lo hiciste. Lo que no puede medir lo confirmas tú y queda rotulado. | 112 | borrador |  |  |
+| `PM1-01.texto` | dueno_ca | /dashboard/puesta-en-marcha | texto | 180 | Likida marca solo lo que puede comprobar. Lo que no puede medir lo confirmas tú y queda rotulado. | 97 | borrador |  |  |
 | `PM1-01.ayuda` | dueno_ca | /dashboard/puesta-en-marcha | ayuda | 400 | Puedes salir cuando quieras y volver desde la Guía: retomas en el último paso que no hiciste, en cualquier equipo. | 114 | borrador |  |  |
 | `PM2-01.titulo` | dueno_ca | /dashboard/puesta-en-marcha | titulo | 48 | Invita a quien coordina tu operación | 36 | borrador |  |  |
 | `PM2-01.texto` | dueno_ca | /dashboard/puesta-en-marcha | texto | 180 | Esa persona ve viajes, mapa y documentos, pero no el dinero. Invítala desde Usuarios. | 85 | borrador |  |  |
@@ -27,5 +27,5 @@ Generado desde el guion (`src/app/ui-v2/onboarding/guion/`). No se edita a mano:
 | `PM7-01.titulo` | dueno_ca | /dashboard/puesta-en-marcha | titulo | 48 | Haz un simulacro con datos de muestra | 37 | borrador |  |  |
 | `PM7-01.texto` | dueno_ca | /dashboard/puesta-en-marcha | texto | 180 | Mándate un desglose de muestra y revisa cómo lo ve tu operador. Likida todavía no lo puede medir: lo confirmas tú. | 114 | borrador |  |  |
 | `PM7-01.accion` | dueno_ca | /dashboard/puesta-en-marcha | accion | 80 | Aprieta aquí → Ya lo hice y funcionó | 36 | borrador |  |  |
-| `PM9-99.titulo` | dueno_ca | /dashboard/puesta-en-marcha | titulo | 48 | Listo: tu operación está conectada | 34 | borrador |  |  |
+| `PM9-99.titulo` | dueno_ca | /dashboard/puesta-en-marcha | titulo | 48 | Lo tuyo está listo; falta conectar el sistema | 45 | borrador |  |  |
 | `PM9-99.texto` | dueno_ca | /dashboard/puesta-en-marcha | texto | 180 | Lo que Likida pudo medir quedó marcado como hecho; lo que confirmaste tú, como confirmado. Vuelve aquí cuando quieras. | 118 | borrador |  |  |

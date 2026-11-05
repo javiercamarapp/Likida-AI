@@ -7,7 +7,7 @@ import { MAX_AYUDA_GUIA, MAX_TEXTO_GUIA, MAX_TITULO_GUIA, IDS_SENAL, type PasoGu
 import { puedeLeerSenal, REGISTRO_SENALES } from '@/lib/likida/guia/senales';
 import { NOMBRES_ILU } from '@/app/ui-v2/movimiento/tour/ilustraciones';
 import { GUION, publicables, recorridoDeGuion } from './index';
-import { PASOS_PM } from './pm';
+import { PASOS_PM, cierreDePuestaEnMarcha } from './pm';
 import { textosParaRevision } from './textos_revision';
 
 const TODOS: PasoGuia[] = Object.values(GUION).flat();
@@ -102,5 +102,21 @@ describe('archivo de revisión de textos', () => {
     expect(md).toContain('| `PM2-01.titulo` | dueno_ca |');
     expect(md).toContain('| 48 |');
     expect(md.match(/\| borrador \|/g)?.length).toBeGreaterThan(10);
+  });
+});
+
+describe('honestidad del cierre', () => {
+  const si = { estado: 'si' as const };
+  it('PM1 no promete que todo se marque solo', () => {
+    expect(PASOS_PM[0].texto).not.toMatch(/se marca solo cuando Likida ve/);
+  });
+  it('«conectada» solo con la conexión probada Y datos llegando; omitida o sin dato dice que falta', () => {
+    expect(cierreDePuestaEnMarcha({ tms_probada: si, archivos_recibidos: si }).titulo).toBe('Listo: tu operación está conectada');
+    for (const s of [{}, { tms_probada: { estado: 'sin_dato' as const } }, { tms_probada: si }, { tms_probada: { estado: 'no' as const }, archivos_recibidos: si }, { archivos_recibidos: si }]) {
+      expect(cierreDePuestaEnMarcha(s).titulo, JSON.stringify(s)).toBe('Lo tuyo está listo; falta conectar el sistema');
+    }
+  });
+  it('el título por omisión del paso de cierre no afirma la conexión', () => {
+    expect(PASOS_PM.find((p) => p.id === 'PM9-99')?.titulo).not.toMatch(/conectada/);
   });
 });
