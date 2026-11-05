@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- recorre el árbol del repo con rutas propias (nada viene de entrada externa) */
 // Utilidades de escaneo de fuentes para las pruebas de arquitectura de F8 (calidad). Solo lectura, sin dependencias.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';

@@ -6,14 +6,14 @@ import { archivosFuente, leer, RAIZ, rel } from './escanear-fuentes';
 // 4-nov-2026: 0 casos en src/app/dashboard y src/app/vendedor (los bucles con await-consulta viven en crons y /admin/qa, que no son
 // pantallas de uso diario). Esta guarda impide que aparezca el primero; si una pantalla necesita iterar, que traiga las filas con
 // un `.in('id', ids)` o una RPC agregada y arme el mapa en memoria.
-const BUCLE = /^\s*for\s*(await\s*)?\(.*\bof\b|\.map\(\s*async/;
+const esBucle = (l: string) => /^\s*for\b/.test(l) && /\bof\b/.test(l) || l.includes('.map(async') || /\.map\(\s+async/.test(l);
 const CONSULTA_AWAIT = /await\s+[\w$.]*?(\.from\(|\.rpc\(|\bsb\.(?!auth\b)|\badmin\.|supabase\w*\.)/;
 
 export function bucleConConsulta(fuente: string, ventana = 14): number[] {
   const lineas = fuente.split('\n');
   const hallazgos: number[] = [];
   lineas.forEach((l, i) => {
-    if (BUCLE.test(l) && CONSULTA_AWAIT.test(lineas.slice(i, i + ventana).join('\n'))) hallazgos.push(i + 1);
+    if (esBucle(l) && CONSULTA_AWAIT.test(lineas.slice(i, i + ventana).join('\n'))) hallazgos.push(i + 1);
   });
   return hallazgos;
 }
