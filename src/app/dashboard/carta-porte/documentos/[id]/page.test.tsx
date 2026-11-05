@@ -262,7 +262,7 @@ it('perfil restringido: la página pasa perfilRestringido, sin operadores, y el 
   const props = (await montar()).props as unknown as { perfilRestringido: boolean; operadores: unknown[]; envio: { estado: string; motivo: string | null; proximaRevision: string | null } | null };
   expect(props.perfilRestringido).toBe(true);
   expect(props.operadores).toEqual([]);
-  expect(props.envio).toEqual({ estado: 'rechazado_tms', motivo: 'hoja Mercancias, fila 22, campo Cantidad', proximaRevision: '2026-10-20T15:00:00.000Z' });
+  expect(props.envio).toEqual({ estado: 'rechazado_tms', motivo: 'hoja Mercancias, fila 22, campo Cantidad', proximaRevision: '2026-10-20T15:00:00.000Z', sinConexion: true });
 });
 
 it('sin perfil la página no cambia: perfilRestringido falso y «viaje» sigue funcionando como siempre', async () => {
@@ -278,7 +278,7 @@ it('A37-A3-18: un documento aprobado SIN envío se puede preparar desde su panta
   expect((p.props as unknown as { envio: unknown }).envio).toBeNull();
   expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '4', intencion: 'preparar_envio' }))).toMatchObject({ ok: false, error: expect.stringMatching(/Otra persona cambió/) });
   expect(estado.envios).toHaveLength(0);
-  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/Envío preparado/) });
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/por conectar/) });
   expect(estado.envios).toHaveLength(1);
   expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/ya estaba/) });
   expect(estado.envios).toHaveLength(1);

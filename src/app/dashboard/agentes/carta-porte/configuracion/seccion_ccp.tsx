@@ -43,11 +43,11 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
         <h2 className="text-[16px] font-semibold flex items-center gap-2"><MailCheck width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--muted)' }} /> CCP timbrados recibidos</h2>
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Cuando el sistema del cliente timbra la carta porte y avisa a Likida, el PDF y el XML se guardan aquí. Si encendes la respuesta, se le manda el CCP al cliente;
-          la primera vez por cliente (o si el remitente no se reconoce) necesita tu confirmación.
+          la primera vez por cliente (o si el remitente no se reconoce) necesita tu confirmación. El aviso automático desde el sistema del cliente está por conectar.
         </p>
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
           Para que un aviso se asocie a un envío, el envío debe tener la referencia del sistema del cliente: se captura al marcar la plantilla como «subida a mano»
-          o la guarda el envío automático. Un aviso sin referencia conocida se rechaza.
+          o la guardará el envío automático cuando esté conectado (hoy está por conectar). Un aviso sin referencia conocida se rechaza.
         </p>
       </header>
       {activa === 'sin_migracion' || filas === 'sin_migracion' ? (

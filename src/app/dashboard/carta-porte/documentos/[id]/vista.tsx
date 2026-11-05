@@ -54,12 +54,18 @@ function color(sev: 'bloqueo' | 'confirmar' | 'aviso'): string {
 }
 
 /** El envío al TMS tal como lo ve la pantalla: el estado más la fecha del próximo reintento y la ubicación del rechazo (nunca valores). */
-export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null; /** La flota sale por el simulador (T-A3-42): todo se rotula «Simulado». */ simulado?: boolean }
+export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null; /** La flota sale por el simulador (T-A3-42): todo se rotula «Simulado». */ simulado?: boolean; /** La flota NO tiene conectado el sistema del cliente (no existe adaptador): nada sale solo, se sube a mano. */ sinConexion?: boolean; /** Existe conector pero no se pudo consultar ahora (no es «por conectar»). */ salidaNoDisponible?: boolean }
 
 /** Lo que dice la tarjeta «Envío al sistema del cliente» en lenguaje llano. Sin envío = todavía no se ha enviado nada. */
+export const FRASE_ENVIO_NO_DISPONIBLE = 'No pudimos consultar la conexión con el sistema del cliente. Reintenta en unos minutos o descarga la plantilla y súbela a mano.';
+export const FRASE_ENVIO_POR_CONECTAR = 'Por conectar: el envío automático al sistema del cliente todavía no existe. Descarga la plantilla y súbela a mano.';
+
 export function fraseEnvio(e: EnvioVista | null): string {
   if (!e || e.estado === 'descartado') return 'Aún no se ha enviado nada.';
   const cuando = e.proximaRevision ? fechaHoraMx(e.proximaRevision) : null;
+  // Sin conexión real con el sistema del cliente (y sin simulador) ninguna de las fases «en camino» es cierta: no hay quien envíe.
+  if (e.sinConexion && !e.simulado && ['pendiente_prechequeo', 'listo', 'enviando', 'pendiente_reque', 'error_transitorio'].includes(e.estado)) return FRASE_ENVIO_POR_CONECTAR;
+  if (e.salidaNoDisponible && !e.simulado && ['pendiente_prechequeo', 'listo', 'enviando', 'pendiente_reque', 'error_transitorio'].includes(e.estado)) return FRASE_ENVIO_NO_DISPONIBLE;
   switch (e.estado) {
     case 'pendiente_prechequeo': case 'listo': return 'Listo para enviar.';
     case 'enviando': return 'Enviándose al sistema del cliente…';
