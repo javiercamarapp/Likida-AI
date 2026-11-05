@@ -97,7 +97,7 @@ export function DocumentosCliente({ clientes, documentos, accionAlta, accionBaja
   if (documentos === null) {
     return (
       <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
-        No se pudo leer el catálogo de documentos ahora mismo (o falta aplicar la migración 0809); intenta de nuevo en un momento.
+        No se pudo leer el catálogo de documentos ahora mismo; intenta de nuevo en un momento. Si se repite, avísale a Likida.
       </p>
     );
   }

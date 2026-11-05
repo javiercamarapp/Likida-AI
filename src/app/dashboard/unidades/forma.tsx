@@ -211,7 +211,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
             // asentar una lectura de verdad, y su fecha es el único dato que
             // distingue «está entrando» de «entró alguna vez».
             ? `El GPS está entrando: la última posición de esta unidad llegó el ${gpsVistoEn.slice(0, 10)}.`
-            : 'Todavía no ha llegado una sola posición de esta unidad. El cron de rastreo corre cada 5 minutos y solo trae lo de las unidades ligadas.'}
+            : 'Todavía no ha llegado una sola posición de esta unidad. El rastreo se actualiza cada 5 minutos y solo trae lo de las unidades ligadas.'}
         </p>
       </fieldset>
 

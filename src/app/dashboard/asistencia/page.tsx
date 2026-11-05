@@ -188,7 +188,7 @@ export default async function PaginaMesaControl({
                     titulo="Registra el nivel en el expediente (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto."
                   />
                   <span className="block text-[11px] mt-1 max-w-[16rem] text-right" style={{ color: 'var(--muted)' }}>
-                    Solo lo anota: no manda ningún aviso a la dirección y el cron ya no repite los niveles anteriores.
+                    Solo lo anota: no manda ningún aviso a la dirección y el aviso automático ya no repite los niveles anteriores.
                   </span>
                 </div>
               )}

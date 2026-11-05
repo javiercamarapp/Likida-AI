@@ -35,7 +35,7 @@ describe('SeccionEntrega', () => {
 
   it('base sin la 0531: dice qué falta en vez de ofrecer un formulario que no puede guardar', () => {
     const html = entrega({ disponible: false });
-    expect(html).toContain('migración 0531');
+    expect(html).toContain('aún no está disponible en tu cuenta');
     expect(html).not.toContain('<form');
   });
 

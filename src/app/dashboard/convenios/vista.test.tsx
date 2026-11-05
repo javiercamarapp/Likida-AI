@@ -57,7 +57,7 @@ describe('la pantalla de convenios', () => {
   it('lista vacía, base sin migrar y lectura caída se distinguen (no «sin convenios» mudo)', () => {
     expect(pintar({ convenios: [] })).toContain('Todavía no hay convenios');
     const sin = pintar({ convenios: null, estado: 'no_disponible' });
-    expect(sin).toContain('falta aplicar la actualización de la base (0580)');
+    expect(sin).toContain('avísale a Likida y los habilita');
     expect(sin).not.toContain('Todavía no hay convenios');
     expect(pintar({ convenios: null, estado: 'error' })).toContain('No se pudieron leer los convenios');
   });
@@ -147,7 +147,7 @@ describe('el alta y la edición en pantalla', () => {
     const html = con({ convenios: [C({ version: null })] });
     expect(html).not.toContain('Editar convenio e instrucciones');
     expect(html).not.toContain('aria-label="Nuevo convenio"');
-    expect(html).toContain('falta aplicar la actualización de la base (0656)');
+    expect(html).toContain('avísale a Likida y la habilita');
     expect(html).toContain('Importar desde CSV o Excel');
   });
 

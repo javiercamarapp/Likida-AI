@@ -57,7 +57,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
       </Aviso>
 
       {grupos === null ? (
-        <Aviso tono="error">La base de datos todavía no tiene las tablas de grupos (falta aplicar la migración 0484). Mientras tanto no hay nada que mostrar aquí.</Aviso>
+        <Aviso tono="error">Los grupos de clientes todavía no están disponibles en tu cuenta, por eso aquí no hay nada que mostrar. Avísale a Likida.</Aviso>
       ) : (
         <>
           <Seccion id="grupos" titulo="Grupos" info="vigia_historial.grupos">
@@ -100,7 +100,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           {!standby && <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas" info="vigia_historial.rapidas">
             {rapidas === null ? (
-              <Aviso tono="error">La base de datos todavía no tiene las respuestas rápidas (falta aplicar la migración 0647). Mientras tanto el Vigía contesta como siempre.</Aviso>
+              <Aviso tono="error">Las respuestas rápidas todavía no están disponibles en tu cuenta. Mientras tanto el Vigía contesta como siempre.</Aviso>
             ) : (
               <>
                 <p className="text-[12px]" style={{ color: 'var(--muted)' }}>

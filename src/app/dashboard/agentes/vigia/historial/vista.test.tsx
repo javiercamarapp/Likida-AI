@@ -14,7 +14,7 @@ const pintar = (p?: Partial<Parameters<typeof VistaHistorialVigia>[0]>) => rende
 describe('grupos e histórico del Vigía (pantalla)', () => {
   it('base sin la 0484: lo dice y no enseña un «no hay grupos» que parezca verdad', () => {
     const html = pintar({ grupos: null });
-    expect(html).toContain('migración 0484');
+    expect(html).toContain('Los grupos de clientes todavía no están disponibles');
     expect(html).not.toContain('Aún no hay grupos');
   });
 
@@ -88,7 +88,7 @@ describe('grupos e histórico del Vigía (pantalla)', () => {
 
     it('base sin la 0647: lo dice y no ofrece aprobar (no hay dónde guardar)', () => {
       const html = pintar({ grupos: [], reporte, rapidas: null });
-      expect(html).toContain('migración 0647');
+      expect(html).toContain('respuestas rápidas todavía no están disponibles');
       expect(html).not.toContain('Aprobar como respuesta rápida');
       expect(html).not.toContain('Aún no hay respuestas rápidas aprobadas');
     });

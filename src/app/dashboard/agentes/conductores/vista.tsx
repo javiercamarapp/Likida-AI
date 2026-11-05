@@ -480,7 +480,7 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
           <FilaFuente etiqueta="Episodios sin señal" valor={numero(ex.sinSenal.valor)} cifra={ex.sinSenal} />
           <FilaFuente etiqueta="Primer aviso / segundo / jefe" valor={`${numero(insights.escalera.aviso1.valor)} / ${numero(insights.escalera.aviso2.valor)} / ${numero(insights.escalera.jefe.valor)}`} cifra={insights.escalera.aviso1} />
           {discrepancias !== null && (
-            <FilaFuente etiqueta="Chofer vs GPS sin coincidir" valor={numero(discrepancias)} cifra={{ rotulo: 'medido', fuente: 'viaje_hito.interpretacion (validación de ubicación)' }} />
+            <FilaFuente etiqueta="Chofer vs GPS sin coincidir" valor={numero(discrepancias)} cifra={{ rotulo: 'medido', fuente: 'validación de ubicación de cada hito' }} />
           )}
         </ul>
         {recortada && <p className="mt-2 text-[12px]" style={{ color: 'var(--warn)' }}>La lectura llegó a su tope: las cifras cubren solo lo más reciente del periodo.</p>}
