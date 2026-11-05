@@ -171,7 +171,7 @@ function VisualRespuesta({ v }: { v: Visual }) {
     // FE-19: la tabla que devuelve el copiloto es de ancho DESCONOCIDO (la
     // arma una consulta): scrollea dentro de la tarjeta o estira la página.
     <div className="card p-1.5 mt-2 overflow-x-auto">
-      <table className="w-full border-collapse text-[13px]">
+      <table aria-label="Datos de la respuesta del copiloto" className="w-full border-collapse text-[13px]">
         <tbody>
           {v.filas.map(([k, val]) => (
             <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>

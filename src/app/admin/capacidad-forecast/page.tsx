@@ -100,7 +100,7 @@ export default async function CapacidadForecastPage() {
                     : <>Sin liquidaciones en 30d — el costo por viaje no se puede medir y el escenario lo deja en blanco.</>}
                 </p>
                 <div className="overflow-x-auto mt-3">
-                  <table className="w-full text-[12.5px]">
+                  <table aria-label="Proyección de capacidad por escenario" className="w-full text-[12.5px]">
                     <thead>
                       <tr className="text-left" style={{ color: 'var(--muted)' }}>
                         <th scope="col" className="py-1.5 pr-4 font-medium">Viajes/día</th>

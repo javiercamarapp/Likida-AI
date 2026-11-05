@@ -172,7 +172,7 @@ export default async function TrazaCorridaPage({
               <div className="mt-3">
                 <div className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>Resumen de la corrida</div>
                 <div className="overflow-x-auto">
-                  <table className="text-sm">
+                  <table aria-label="Resumen de la corrida" className="text-sm">
                     <tbody>
                       {Object.entries(c.resumen).map(([k, v]) => (
                         <tr key={k}>

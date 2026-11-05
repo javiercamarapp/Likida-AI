@@ -351,7 +351,7 @@ export default async function CostosFacturacionPage() {
                       viejas no aparecen aquí.
                     </p>
                   )}
-                  <table className="w-full text-sm">
+                  <table aria-label="Facturas por cobrar" className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
                         <th scope="col" className="py-2.5 pr-4 font-medium">Flota</th>

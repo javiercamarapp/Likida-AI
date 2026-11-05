@@ -245,7 +245,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Documentos de carta porte recibidos" className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th scope="col" key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}

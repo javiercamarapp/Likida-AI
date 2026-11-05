@@ -255,7 +255,7 @@ function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: Calid
     <div className="card p-4">
       <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
       {filas.length === 0 ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
-        <table className="w-full text-[12px]">
+        <table aria-label={titulo} className="w-full text-[12px]">
           <thead><tr style={{ color: 'var(--faint)' }}><th scope="col" className="text-left font-normal">Grupo</th><th scope="col" className="text-right font-normal">Aprobados</th><th scope="col" className="text-right font-normal">Sin tocar</th></tr></thead>
           <tbody>
             {filas.map((g) => (

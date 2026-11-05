@@ -113,7 +113,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
 
           {/* ── El desglose por campo ─────────────────────────────────────── */}
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
+            <table aria-label="Exactitud por campo" className="w-full text-xs">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--muted)' }}>
                   <th scope="col" className="py-1 pr-3 font-medium">Campo</th>
@@ -197,7 +197,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
                           <span style={{ color: 'var(--faint)' }}>foto sin firma ahora mismo</span>
                         )}
                       </div>
-                      <table className="w-full">
+                      <table aria-label="Campos medidos de la foto" className="w-full">
                         <tbody>
                           {f.medicion.campos.map((c) => <FilaCampo key={c.clave} c={c} />)}
                         </tbody>

@@ -351,7 +351,7 @@ export default async function SoportePage({
                     <TituloSeccion>La cola — lo más urgente primero, sin-SLA al final</TituloSeccion>
                   </div>
                   <div className="overflow-x-auto mt-1">
-                    <table className="w-full text-sm">
+                    <table aria-label="Cola de soporte" className="w-full text-sm">
                       <thead>
                         <tr style={{ color: 'var(--muted)' }} className="text-left">
                           <th scope="col" className="px-4 py-2 font-medium">Asunto</th>

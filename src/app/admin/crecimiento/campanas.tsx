@@ -50,7 +50,7 @@ export function ControlCampanas({ campanas, integracion, leadsAds, pausar, refre
         // FE-19: cinco columnas con nombre de campaña libre y cuatro cifras —
         // scrollea dentro de su bloque, no estira la página.
         <div className="overflow-x-auto mt-2">
-        <table className="w-full text-[12.5px]">
+        <table aria-label="Campañas" className="w-full text-[12.5px]">
           <thead>
             <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
               <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Campaña</th>

@@ -223,7 +223,7 @@ export async function SeccionExternas(p: ExternasProps) {
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table aria-label="Liquidaciones externas" className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   <Th>Folio</Th><Th>Operador</Th><Th>Periodo</Th><Th derecha>Total (de tu sistema)</Th>

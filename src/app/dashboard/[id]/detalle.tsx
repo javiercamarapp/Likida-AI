@@ -271,7 +271,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               <section className="card p-4">
                 <TituloRecuadro info="liquidacion_detalle.acreditable" className="mb-2">Acreditable / recuperable</TituloRecuadro>
                 <div className="overflow-x-auto -mx-1">
-                  <table className="w-full border-collapse">
+                  <table aria-label="Acreditable y recuperable" className="w-full border-collapse">
                     <thead>
                       <tr style={{ background: 'var(--canvas)' }}>
                         <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Diésel elegible</th>
@@ -385,7 +385,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               </p>
             ) : (
               <div className="overflow-x-auto -mx-1">
-                <table className="w-full border-collapse text-[13px]">
+                <table aria-label="Renglones registrados del viaje" className="w-full border-collapse text-[13px]">
                   <thead>
                     <tr style={{ background: 'var(--canvas)' }}>
                       <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Concepto</th>

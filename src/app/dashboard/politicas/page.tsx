@@ -254,7 +254,7 @@ export default async function PoliticasPage({
                   celular la fila se corta sin forma de deslizar para leer
                   el resto. Mismo patrón que las dos tablas de arriba. */}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table aria-label="Reglas por ruta" className="w-full text-sm">
                   <tbody>
                     {porRuta.map((p) => (
                       <tr key={`${p.concepto}-${p.ruta}`} className="border-t" style={{ borderColor: 'var(--line)' }}>

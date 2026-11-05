@@ -119,7 +119,7 @@ export function PantallaQa({
                 <TituloSeccion>Historial de corridas — más nuevas primero</TituloSeccion>
               </div>
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Historial de corridas" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
                       <th scope="col" className="px-4 py-2 font-medium">Corrida</th>

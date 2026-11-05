@@ -209,7 +209,7 @@ export function VistaJornada({
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table aria-label="Jornadas por día y operador" className="w-full text-[12px]">
               <thead>
                 <tr style={{ color: 'var(--muted)' }} className="text-left">
                   <Th>Día</Th>
@@ -369,7 +369,7 @@ export function SeccionSemanas({ semanas, truncada }: { semanas: SemanaEvaluada[
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Veredicto semanal por operador" className="w-full text-[12px]">
             <thead>
               <tr style={{ color: 'var(--muted)' }} className="text-left">
                 <Th>Operador</Th>
@@ -557,7 +557,7 @@ export function AlertaTopeSeccion({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Alertas de jornada emitidas" className="w-full text-[12px]">
             <thead>
               <tr style={{ color: 'var(--muted)' }} className="text-left">
                 <Th>Cuándo</Th><Th>Operador y día</Th><Th>Nivel</Th><Th>Horas contra tope</Th><Th>Estado</Th><Th>Encargado</Th><Th>Operador</Th>

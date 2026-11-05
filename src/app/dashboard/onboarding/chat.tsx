@@ -96,7 +96,7 @@ function VisualRespuesta({ v }: { v: Visual }) {
   }
   return (
     <div className="card p-1.5 mt-2 overflow-x-auto">
-      <table className="w-full border-collapse text-[13px]">
+      <table aria-label="Datos de la respuesta del asistente" className="w-full border-collapse text-[13px]">
         <tbody>
           {v.filas.map(([k, val]) => (
             <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>

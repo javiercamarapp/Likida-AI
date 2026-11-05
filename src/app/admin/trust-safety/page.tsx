@@ -147,7 +147,7 @@ export default async function TrustSafetyPage() {
                   fuente rota: no se distingue.
                 </p>
                 <div className="overflow-x-auto mt-2">
-                  <table className="w-full text-left text-sm">
+                  <table aria-label="Cobertura por fuente de seguridad" className="w-full text-left text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }}>
                         <th scope="col" className="py-2 pr-3 font-medium">Fuente</th>
@@ -183,7 +183,7 @@ export default async function TrustSafetyPage() {
             ) : (
               <>
                 <div className="overflow-x-auto mt-2">
-                  <table className="w-full text-left text-sm">
+                  <table aria-label="Eventos de seguridad registrados" className="w-full text-left text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }}>
                         <th scope="col" className="py-2 pr-3 font-medium">Cuándo</th>

@@ -380,7 +380,7 @@ export function Heatmap({
 
   return (
     <div className="overflow-x-auto">
-      <table className="border-collapse">
+      <table aria-label="Mapa de calor" className="border-collapse">
         <thead>
           <tr>
             <th scope="col"><span className="sr-only">Acciones</span></th>

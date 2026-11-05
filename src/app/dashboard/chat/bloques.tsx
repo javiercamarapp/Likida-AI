@@ -38,7 +38,7 @@ export default function BloqueRespuesta({ v, indice }: { v: Visual; indice: numb
     // FE-19: la tabla que devuelve el asistente es de ancho DESCONOCIDO (la arma una consulta): scrollea dentro de la tarjeta.
     <section className="card rv-chat__bloque rv-chat__bloque--tabla" data-i={Math.min(indice, 3)} data-tipo="tabla">
       <div className="rv-chat__tabla" tabIndex={0} role="region" aria-label="Tabla de la respuesta">
-        <table data-densa>
+        <table aria-label="Datos de la respuesta del asistente" data-densa>
           <tbody>
             {v.filas.map(([k, val]) => (
               <tr key={k}>
