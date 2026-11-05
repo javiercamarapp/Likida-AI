@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, costoIaPorDiaDesde } from '@/lib/admin/negocio';
 import { getUnidadesMedidas, escenarioDe, ESCENARIOS_VIAJES_DIA, SUPUESTOS_CAPACIDAD, LIMITES_NOMINALES } from '@/lib/admin/capacidad';
@@ -146,3 +147,5 @@ export default async function CapacidadForecastPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Capacidad & Forecast' };

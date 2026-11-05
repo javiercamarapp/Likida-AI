@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { sentryActivo } from '@/lib/observability/sentry';
 import { usd } from '@/lib/utils';
@@ -445,3 +446,5 @@ export default async function ObservabilidadPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Observabilidad' };

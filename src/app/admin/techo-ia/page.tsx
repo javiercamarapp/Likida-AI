@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { Gauge } from 'lucide-react';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
@@ -151,3 +152,5 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Techo de IA' };

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ConsolaAdmin } from './consola';
 
@@ -19,3 +20,5 @@ export default async function Admin({
   const [{ nombre }, sp] = await Promise.all([requireSuperadmin(), searchParams]);
   return <ConsolaAdmin nombre={nombre ?? null} sp={sp} />;
 }
+
+export const metadata: Metadata = { title: 'Resumen' };

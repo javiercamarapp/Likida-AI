@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { ClipboardCheck, FlaskConical, Bot, ScanEye } from 'lucide-react';
@@ -298,3 +299,5 @@ export default async function CalidadEvalsPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Calidad & Evals' };

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getEquipo } from '@/lib/admin/negocio';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
@@ -125,3 +126,5 @@ export default async function EquipoPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Equipo' };

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { provisionarUsuario, type RolAppUser } from '@/lib/auth/provisionar';
 import { descifrarErrorProvision } from '@/lib/auth/invitar';
@@ -134,3 +135,5 @@ export default async function NuevoUsuario() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Nuevo usuario' };

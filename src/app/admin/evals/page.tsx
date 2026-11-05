@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { Bug } from 'lucide-react';
@@ -258,3 +259,5 @@ export default async function Evals({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Evals' };

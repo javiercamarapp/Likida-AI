@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
@@ -150,3 +151,5 @@ export default async function MiPerfilPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Mi perfil' };

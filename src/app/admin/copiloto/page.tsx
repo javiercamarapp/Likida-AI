@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Copiloto from '../copiloto';
 
@@ -22,3 +23,5 @@ export default async function PaginaCopiloto() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Copiloto' };

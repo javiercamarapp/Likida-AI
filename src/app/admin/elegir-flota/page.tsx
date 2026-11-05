@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
@@ -85,3 +86,5 @@ export default async function ElegirFlotaPage({
     />
   );
 }
+
+export const metadata: Metadata = { title: 'Elegir flota' };

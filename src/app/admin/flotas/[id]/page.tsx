@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { getFichaCliente } from '@/lib/admin/ficha-cliente';
@@ -97,3 +98,5 @@ export default async function PaginaFicha({ params }: { params: Promise<{ id: st
 
   return <Ficha360 f={ficha} interruptoresPipeline={interruptoresPipeline} accionInterruptorPipeline={accionInterruptorPipeline} agenteChofer={agenteChofer} accionAgenteChofer={accionAgenteChofer} />;
 }
+
+export const metadata: Metadata = { title: 'Flota' };

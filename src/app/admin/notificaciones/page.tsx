@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getConversacionesActivas, contarConversacionesActivas } from '@/lib/admin/negocio';
 import { getBandejaEscalaciones, type ConteosEscalaciones } from '@/lib/admin/escalaciones';
@@ -63,3 +64,5 @@ export default async function NotificacionesPage() {
     </div>
   );
 }
+
+export const metadata: Metadata = { title: 'Notificaciones' };
