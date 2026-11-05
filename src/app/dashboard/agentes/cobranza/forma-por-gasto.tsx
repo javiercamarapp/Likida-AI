@@ -105,7 +105,7 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
                   style={puesto
                     ? { background: 'var(--marca)', color: 'var(--marca-fg)', borderColor: 'var(--marca)' }
                     : { background: 'var(--surface)', color: 'var(--muted)' }}>
-                  <input type="checkbox" name="conceptosCfdi" value={c} checked={puesto} onChange={() => alternar(c)} className="sr-only" />
+                  <input type="checkbox" name="conceptosCfdi" value={c} checked={puesto} onChange={() => alternar(c)} className="sr-only" data-foco="etiqueta" />
                   {ROTULO_CONCEPTO_COBRANZA[c] ?? c}
                 </label>
               );

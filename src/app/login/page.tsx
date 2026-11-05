@@ -15,6 +15,8 @@ import './login.css';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = { title: 'Entrar — Likida' };
+
 // ── LAS DOS VOCES QUE EL SOFTWARE NO TENÍA ────────────────────────────────
 //
 // `layout.tsx` carga Inter, Inter Tight e IBM Plex Mono para TODA la app. Son

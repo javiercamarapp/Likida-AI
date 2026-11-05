@@ -95,7 +95,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
             </TituloSeccion>
           </div>
           <div className="overflow-x-auto rounded-xl border" style={{ borderColor: 'var(--line)', background: 'var(--surface)' }}>
-            <table className="w-full text-sm" style={{ minWidth: 640 }}>
+            <table aria-label="Corridas de agentes" className="w-full text-sm" style={{ minWidth: 640 }}>
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
                   <th scope="col" className="px-4 py-2.5">Agente</th>

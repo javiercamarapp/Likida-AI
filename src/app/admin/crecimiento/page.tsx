@@ -177,7 +177,7 @@ export default async function CrecimientoPage() {
                 <TituloSeccion>Costo por lead, por fuente</TituloSeccion>
                 {/* FE-19: scrollea dentro de su tarjeta, no estira la página. */}
                 <div className="overflow-x-auto mt-2">
-                <table className="w-full text-[12.5px]">
+                <table aria-label="Costo por lead, por fuente" className="w-full text-[12.5px]">
                   <thead>
                     <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                       <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Fuente</th>
@@ -292,7 +292,7 @@ export default async function CrecimientoPage() {
                 </p>
               ) : (
                 <div className="overflow-x-auto mt-2">
-                  <table className="w-full text-[12.5px]">
+                  <table aria-label="Cohortes por mes de alta" className="w-full text-[12.5px]">
                     <thead>
                       <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                         <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Cohorte (mes de alta)</th>

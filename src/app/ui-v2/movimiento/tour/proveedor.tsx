@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { crearEstadoLocal, debeInvitar, debeMostrarPista, ESTADO_VACIO, escribirMarcaSesion, leerMarcaSesion, onboardingDesactivado, type AlmacenEstado, type EstadoOnboarding } from '@/app/ui-v2/onboarding/estado';
+import { crearEstadoLocal, debeInvitar, debeMostrarPista, descarteDeInvitacion, descarteDePista, ESTADO_VACIO, escribirMarcaSesion, leerMarcaSesion, onboardingDesactivado, type AlmacenEstado, type EstadoOnboarding } from '@/app/ui-v2/onboarding/estado';
 import { cosmeticoDeServidor, fusionarParches, hayEstadoLocal, parcheDeImportacion } from '@/app/ui-v2/onboarding/estado_remoto';
 import { pistaDeRuta } from '@/app/ui-v2/onboarding/pista';
 import type { EstadoGuia, EventoGuiaEntrante, InvitacionGuia, ParcheEstadoGuia } from '@/lib/likida/guia/tipos';
@@ -282,7 +282,7 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     agentes,
     principal,
     asistente,
-    noVolver: () => guardarEst({ descartado: true, visto: true }, { invitacion: 'descartada' }),
+    noVolver: () => { const d = descarteDeInvitacion(); guardarEst(d.local, d.remoto); },
     nuevo: est !== null && !est.visto && !est.descartado && !soloLectura,
     suscribirProgreso: (fn) => { oyentes.current.add(fn); return () => { oyentes.current.delete(fn); }; },
     claveProgreso: (id) => {
@@ -336,16 +336,16 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
               asistente={asistente?.nombre ?? null}
               onElegir={(modo) => abrir(`${principal}.${modo}`, 'reiniciar')}
               onAhoraNo={() => guardarEst({ visto: true }, { invitacion: 'ahora_no', ofertas: ofertasRef.current + 1 })}
-              onNoVolver={() => guardarEst({ descartado: true, visto: true }, { invitacion: 'descartada' })}
+              onNoVolver={() => { const d = descarteDeInvitacion(); guardarEst(d.local, d.remoto); }}
             />
           ) : null}
           {mostrarPista && pista ? (
             <PistaContextual
               titulo={pista.titulo} texto={pista.texto} ilu={pista.ilu} desde={pista.desde}
-              onEntendido={() => { const pistasNuevas = [...(est?.pistas ?? []), pista.ruta]; guardarEst({ pistas: pistasNuevas }, { pistas: pistasNuevas }); }}
+              onEntendido={() => { const d = descarteDePista(est?.pistas ?? [], pista.ruta); guardarEst(d.local, d.remoto); }}
               // «No volver» de UNA pista descarta esa pista (en todos los equipos), no la invitación al recorrido: la invitación se apaga solo
               // con su propio «No volver a mostrar» o desde el menú de la Guía.
-              onNoVolver={() => { const pistasNuevas = [...(est?.pistas ?? []), pista.ruta]; guardarEst({ pistas: pistasNuevas }, { pistas: pistasNuevas }); }}
+              onNoVolver={() => { const d = descarteDePista(est?.pistas ?? [], pista.ruta); guardarEst(d.local, d.remoto); }}
             />
           ) : null}
         </div>

@@ -352,7 +352,7 @@ export async function ConsolaAdmin({
               </div>
               {corridasRecientes.length > 0 && (
                 <div className="mt-3 overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table aria-label="Corridas recientes" className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
                         <th scope="col" className="px-2 py-1.5 font-medium">Corrida</th>
@@ -541,7 +541,7 @@ export async function ConsolaAdmin({
               <div className="px-4 py-3 text-sm" style={{ color: 'var(--muted)' }}>Sin flotas dadas de alta todavía.</div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Flotas con plan, viajes y costo de IA" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
                       <th scope="col" className="px-4 py-2 font-medium">Flota</th>

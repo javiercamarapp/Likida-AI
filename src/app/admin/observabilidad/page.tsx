@@ -47,7 +47,7 @@ function msLegible(ms: number | null): string {
 function TablaLatencia({ filas, etiqueta, notas }: { filas: FilaLatencia[]; etiqueta: string; notas?: (nombre: string) => string | null }) {
   return (
     <div className="overflow-x-auto mt-1">
-      <table className="w-full text-sm">
+      <table aria-label={`Latencia por ${etiqueta.toLowerCase()}`} className="w-full text-sm">
         <thead>
           <tr style={{ color: 'var(--muted)' }} className="text-left">
             <th scope="col" className="px-3 py-2 font-medium">{etiqueta}</th>
@@ -182,7 +182,7 @@ export default async function ObservabilidadPage({
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Corridas de agentes" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
                       <th scope="col" className="px-3 py-2 font-medium">Agente</th>
@@ -254,7 +254,7 @@ export default async function ObservabilidadPage({
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Acciones registradas" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
                       <th scope="col" className="px-3 py-2 font-medium">Cuándo</th>
@@ -410,7 +410,7 @@ export default async function ObservabilidadPage({
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Duración por fase" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
                       <th scope="col" className="px-3 py-2 font-medium">Fase</th>

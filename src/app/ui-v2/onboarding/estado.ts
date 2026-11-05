@@ -81,6 +81,17 @@ export function debeMostrarPista(e: EstadoOnboarding, ruta: string, opciones: { 
   return !e.descartado && !e.pistas.includes(ruta) && !opciones.desactivado && !opciones.soloLectura;
 }
 
+// ── Qué se guarda al pulsar «No volver a mostrar» (R4: puro, para poder probarlo sin DOM) ─────────────────────────────────────
+// Dos botones con el MISMO rótulo y efectos distintos. En una PISTA descarta solo esa pista (en todos los equipos), jamás la
+// invitación al recorrido; en la INVITACIÓN apaga la invitación y las pistas. `local` va al navegador; `remoto` al servidor.
+export function descarteDePista(pistasActuales: readonly string[], ruta: string): { local: Partial<EstadoOnboarding>; remoto: { pistas: string[] } } {
+  const pistas = pistasActuales.includes(ruta) ? [...pistasActuales] : [...pistasActuales, ruta];
+  return { local: { pistas }, remoto: { pistas } };
+}
+export function descarteDeInvitacion(): { local: Partial<EstadoOnboarding>; remoto: { invitacion: 'descartada' } } {
+  return { local: { descartado: true, visto: true }, remoto: { invitacion: 'descartada' } };
+}
+
 // ── Marca de sesión: con localStorage bloqueado (modo privado, datos del sitio bloqueados) la invitación NO debe reaparecer en cada
 // recarga. «Ya se le ofreció» se guarda en sessionStorage y, donde existe la Cookie Store API, en una cookie de SESIÓN (sin
 // caducidad, solo un 1) que LEE EL SERVIDOR (dashboard/layout.tsx): el navegador nunca lee cookies (premisa de supabase/cookies.test.ts). ──

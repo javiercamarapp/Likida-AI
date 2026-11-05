@@ -95,7 +95,7 @@ export default async function PaginaBorradorCcp({
         ) : (
           // FE-34: sin overflow-x-auto, seis columnas desbordan en 390 px.
           <div className="overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table aria-label="Mercancías del borrador de carta porte" className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   <th scope="col" className="py-1 pr-3 font-medium">Descripción</th>
@@ -224,7 +224,7 @@ function TablaCampos({ v, responsable, titulo }: { v: ViajeCcp; responsable: 'cl
   return (
     <div>
       <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-1.5" style={{ color: 'var(--muted)' }}>{titulo}</h3>
-      <table className="w-full text-[11px]">
+      <table aria-label={titulo} className="w-full text-[11px]">
         <tbody>
           {campos.map((c) => (
             <tr key={c.clave} className="align-top">

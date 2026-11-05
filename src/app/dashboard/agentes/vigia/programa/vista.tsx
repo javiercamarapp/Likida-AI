@@ -200,7 +200,7 @@ function Resultado({ resumen: r }: { resumen: ResumenPrograma }) {
       <div className="space-y-1.5">
         <TituloRecuadro nivel="h3" info="vigia_programa.por_dia">Por día</TituloRecuadro>
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Por día" className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
                 <th scope="col" className="font-medium py-1 pr-3">Día</th>

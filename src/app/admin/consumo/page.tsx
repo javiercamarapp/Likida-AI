@@ -117,7 +117,7 @@ export default async function ConsumoPage() {
             // fila ancha estira el layout y el scroll horizontal aparece en
             // toda la página — la regla de "wide content" del repo.
             <div className="overflow-x-auto mt-2">
-            <table className="w-full text-[12.5px]">
+            <table aria-label="Consumo por agente en 30 días" className="w-full text-[12.5px]">
               <thead>
                 <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                   <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Agente</th>
@@ -171,7 +171,7 @@ export default async function ConsumoPage() {
               </p>
             ) : (
               <div className="overflow-x-auto mt-2">
-                <table className="w-full text-[12.5px]">
+                <table aria-label="Costo de IA por flota" className="w-full text-[12.5px]">
                   <thead>
                     <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                       <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flota</th>
@@ -213,7 +213,7 @@ export default async function ConsumoPage() {
                   <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>Hoy nadie ha gastado todavía (día de México).</p>
                 ) : (
                   <div className="overflow-x-auto mt-2">
-                    <table className="w-full text-[12.5px]">
+                    <table aria-label="Gasto de hoy por flota y propósito" className="w-full text-[12.5px]">
                       <thead>
                         <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                           <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flota</th>

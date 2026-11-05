@@ -108,7 +108,7 @@ export default async function CompliancePage() {
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Solicitudes de derechos de los titulares" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
                       <th scope="col" className="px-3 py-2 font-medium">Recibida</th>

@@ -152,7 +152,7 @@ export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline, 
                   // FE-19: scrollea dentro de la tarjeta — un periodo largo o
                   // una cifra de muchos dígitos no puede estirar la página.
                   <div className="overflow-x-auto">
-                  <table className="w-full text-[12px]">
+                  <table aria-label="Facturas SaaS de la flota" className="w-full text-[12px]">
                     <tbody>
                       {f.facturasSaas.map((x) => (
                         <tr key={x.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
@@ -182,7 +182,7 @@ export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline, 
                   // FE-19: mismo criterio — el asunto de un ticket es texto
                   // libre y ya viene truncado, pero el pill puede desbordar.
                   <div className="overflow-x-auto">
-                  <table className="w-full text-[12px]">
+                  <table aria-label="Tickets de la flota" className="w-full text-[12px]">
                     <tbody>
                       {f.tickets.slice(0, 5).map((x) => (
                         <tr key={x.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>

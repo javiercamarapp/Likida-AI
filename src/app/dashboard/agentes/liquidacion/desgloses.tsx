@@ -307,7 +307,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table aria-label="Bitácoras esperando póliza" className="w-full text-[13px]">
               <thead><tr className="text-left" style={{ color: 'var(--faint)' }}><Th>Bitácora</Th><Th>Esperando desde</Th><Th>Última revisión</Th></tr></thead>
               <tbody>
                 {sinPoliza.map((s) => (
@@ -334,7 +334,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table aria-label="Desgloses de liquidación" className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   <Th>Bitácora</Th><Th>Operador</Th><Th>Periodo</Th><Th derecha>Neto (de tu sistema)</Th>
@@ -511,7 +511,7 @@ function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglon
       {renglones.length === 0 ? (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin renglones.</p>
       ) : (
-        <table className="w-full text-[13px]">
+        <table aria-label={titulo} className="w-full text-[13px]">
           <tbody>
             {renglones.map((r, i) => (
               <tr key={i} className="border-t" style={{ borderColor: 'var(--line2)' }}>
@@ -675,7 +675,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
             {d.retenido ? 'Aún no se manda a nadie: el desglose está retenido.' : 'Este desglose no tiene correos programados.'}
           </p>
         ) : (
-          <table className="w-full text-[13px]">
+          <table aria-label="Destinatarios del desglose" className="w-full text-[13px]">
             <thead><tr className="text-left" style={{ color: 'var(--faint)' }}><Th>Quién</Th><Th>Correo</Th><Th>Estado</Th><Th>Cuándo</Th></tr></thead>
             <tbody>
               {d.destinatarios.map((x, i) => {

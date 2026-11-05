@@ -96,7 +96,7 @@ function VisualRespuesta({ v }: { v: Visual }) {
   }
   return (
     <div className="card p-1.5 mt-2 overflow-x-auto">
-      <table className="w-full border-collapse text-[13px]">
+      <table aria-label="Datos de la respuesta del asistente" className="w-full border-collapse text-[13px]">
         <tbody>
           {v.filas.map(([k, val]) => (
             <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
@@ -374,7 +374,7 @@ export function ChatEntrevista({
         onChange={(e) => setTexto(e.target.value)}
         placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'}
         aria-label="Pregunta sobre tu operación"
-        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
+        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed" data-anillo="envolvente"
       />
       <div className="flex items-center justify-between mt-3 relative">
         <button type="button" onClick={() => setRecomendar((v) => !v)}

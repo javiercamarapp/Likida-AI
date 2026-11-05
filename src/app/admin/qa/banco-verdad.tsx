@@ -349,7 +349,7 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table aria-label="Campo esperado contra campo leído por el OCR" className="w-full text-xs">
           <thead>
             <tr className="text-left" style={{ color: 'var(--muted)' }}>
               <th scope="col" className="py-1 pr-3 font-medium">Campo</th>

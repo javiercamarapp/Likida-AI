@@ -204,7 +204,7 @@ function Forma({ accion, gastos, folio, yaFirmadaPorElMotor }: {
               ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
               : { ...ESTILO_CONTROL }}>
             <input type="radio" name="accion" value={o.id} checked={elegida === o.id}
-              onChange={() => setElegida(o.id)} className="sr-only" />
+              onChange={() => setElegida(o.id)} className="sr-only" data-foco="etiqueta" />
             {o.icono}{o.rotulo}
           </label>
         ))}

@@ -152,7 +152,7 @@ function CajaBusqueda({ q }: { q: string }) {
       <input
         type="text" name="q" defaultValue={q} placeholder="Buscar por teléfono…"
         className="flex-1 bg-transparent text-sm outline-none"
-        style={{ color: 'var(--ink)' }}
+        style={{ color: 'var(--ink)' }} data-anillo="envolvente"
       />
       <button type="submit" className="text-xs px-2.5 py-1.5 rounded-lg hairline" style={{ color: 'var(--muted)' }}>
         Buscar

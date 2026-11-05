@@ -147,7 +147,7 @@ export default async function EscalacionesPage() {
                 <TituloSeccion>La cola — lo más vencido o más viejo primero</TituloSeccion>
               </div>
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Cola de escalaciones" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
                       <th scope="col" className="px-4 py-2 font-medium">Qué espera</th>

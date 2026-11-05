@@ -72,7 +72,7 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
               : b.tipo === 'serie' ? <Serie key={i} b={b} />
               : (
                 <div key={i} className="card p-1.5 overflow-x-auto">
-                  <table className="w-full border-collapse text-[12px]"><tbody>
+                  <table aria-label="Datos de la respuesta" className="w-full border-collapse text-[12px]"><tbody>
                     {b.filas.map(([k, v]) => <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}><td className="px-2 py-1" style={{ color: 'var(--muted)' }}>{k}</td><td className="px-2 py-1 text-right">{v}</td></tr>)}
                   </tbody></table>
                 </div>

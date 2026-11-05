@@ -205,7 +205,7 @@ export default async function CalidadEvalsPage() {
                 </div>
                 {corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) && (
                   <div className="overflow-x-auto mt-2">
-                    <table className="w-full text-[12.5px]">
+                    <table aria-label="Agentes con tropiezos en la evaluación" className="w-full text-[12.5px]">
                       <thead>
                         <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                           <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Agente con tropiezos</th>

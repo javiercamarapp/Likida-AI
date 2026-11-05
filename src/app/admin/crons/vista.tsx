@@ -273,7 +273,7 @@ export function VistaCrons({ latidos }: { latidos: Record<CronId, LatidoDetallad
           <section className="card p-4">
             <TituloSeccion>Uno por uno</TituloSeccion>
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
+              <table aria-label="Relojes del sistema, uno por uno" className="w-full text-left text-sm">
                 <thead>
                   <tr style={{ color: 'var(--muted)' }}>
                     <th scope="col" className="py-2 pr-3 font-medium">Reloj</th>

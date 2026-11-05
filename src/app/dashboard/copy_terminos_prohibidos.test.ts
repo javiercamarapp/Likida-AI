@@ -22,6 +22,9 @@ import ts from 'typescript';
 
 const RAIZ = process.cwd();
 const CARPETAS = ['src/app/dashboard', 'src/app/ui-v2'];
+// Archivos sueltos FUERA de esas carpetas cuyo texto también llega al cliente: `mensajeParaPantalla` y los
+// mensajes de `DatoInvalido` se enseñan tal cual a quien llenó el formulario (R4).
+const ARCHIVOS_EXTRA = ['src/lib/likida/errores.ts'];
 
 export const TERMINOS_PROHIBIDOS: ReadonlyArray<readonly [RegExp, string]> = [
   [/\bmigraci[oó]n\s+0\d{3}\b/i, 'migración por número'],
@@ -101,6 +104,15 @@ describe('PT-08 — copy de las pantallas del cliente sin términos prohibidos',
     }
     expect(revisados).toBeGreaterThan(100);
     expect(todas).toEqual([]);
+  });
+
+  it('src/lib/likida/errores.ts (el texto de error que ve quien llenó el formulario) también pasa la prueba de copy', () => {
+    for (const rel of ARCHIVOS_EXTRA) {
+      const archivo = join(RAIZ, rel);
+      // La prueba debe VER textos reales del archivo; si no, estaría verificando un archivo vacío.
+      expect(textosVisibles(readFileSync(archivo, 'utf8'), archivo).length).toBeGreaterThan(0);
+      expect(violaciones(readFileSync(archivo, 'utf8'), archivo).map((v) => `${rel} → ${v}`)).toEqual([]);
+    }
   });
 
   it('el detector atrapa jerga interna (control negativo) y no marca comentarios ni encabezados de CSV', () => {
