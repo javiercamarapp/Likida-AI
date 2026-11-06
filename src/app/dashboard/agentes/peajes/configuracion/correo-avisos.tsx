@@ -39,7 +39,7 @@ export function SeccionCorreoAvisos({ datos }: { datos: CorreoAvisosVista }) {
           <form action={acciones.guardar} className="space-y-3" id="correo-avisos-guardar">
             <label className="block">
               <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Correos que reciben el aviso (uno por línea, hasta {MAX_DESTINATARIOS_CORREO_AVISOS})</span>
-              <textarea name="correo_destinatarios" defaultValue={config.destinatarios.join('\n')} rows={4} maxLength={2000}
+              <textarea name="correo_destinatarios" defaultValue={config.destinatarios.join('\n')} rows={4} maxLength={4000}
                 placeholder="nombre@empresa.com" className="w-full max-w-[420px] mt-0.5" style={ESTILO_INPUT} />
             </label>
             <label className="block">
