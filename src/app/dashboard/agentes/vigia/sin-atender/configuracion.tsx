@@ -66,7 +66,7 @@ export function FormaConfiguracion({ guardar, flota, guardada, configLeida }: {
         <label><span className={ETIQUETA}>Mensajes seguidos sin respuesta que cuentan como insistencia (0 la apaga)</span><input name="insistenciaMin" inputMode="numeric" defaultValue={guardada.insistenciaMin} className="w-full" /></label>
         <label><span className={ETIQUETA}>Plazo de lo urgente (min)</span><input name="umbralUrgenteMin" inputMode="numeric" defaultValue={guardada.umbralUrgenteMin} className="w-full" /></label>
         <label><span className={ETIQUETA}>Palabras que marcan urgencia (separadas por coma)</span><input name="palabrasUrgentes" defaultValue={guardada.palabrasUrgentes.join(', ')} className="w-full" /></label>
-        <label><span className={ETIQUETA}>Palabras de temas importantes (separadas por coma)</span><input name="palabrasClave" defaultValue={guardada.palabrasClave.join(', ')} placeholder="embarque" className="w-full" /></label>
+        <label><span className={ETIQUETA}>Palabras de temas importantes (separadas por coma; si las dejas vacías se usan «embarque» y «embarques»)</span><input name="palabrasClave" defaultValue={guardada.palabrasClave.join(', ')} placeholder="embarque" className="w-full" /></label>
       </div>
       <label className="block">
         <span className={ETIQUETA}>Nombres de tu equipo, como salen en el chat (separados por coma)</span>
