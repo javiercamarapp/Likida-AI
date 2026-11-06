@@ -211,6 +211,27 @@ export async function registrarRevisionesMuestra(
   return n;
 }
 
+export interface DepsCierreRevision {
+  resolverExcepciones: (tenantId: string, claveExterna: string, tipo: TipoExcepcion, ahora: Date) => Promise<number>;
+  ahora: () => Date;
+}
+
+/**
+ * Una bitácora corregida que ahora SÍ pasó la validación (sin revisión) cierra las excepciones de revisión que abrió su entrega
+ * anterior bajo la misma clave. Un fallo al cerrar no tumba la recepción (la bitácora ya entró): se devuelve cuántas se cerraron.
+ */
+export async function cerrarRevisionesResueltas(
+  tenantId: string, claves: readonly string[], d: DepsCierreRevision,
+): Promise<number> {
+  let n = 0;
+  for (const clave of claves) {
+    for (const tipo of ['operador_no_encontrado', 'mapeo_invalido'] as const) {
+      try { n += await d.resolverExcepciones(tenantId, clave, tipo, d.ahora()); } catch { /* no bloquea; la excepción queda abierta */ }
+    }
+  }
+  return n;
+}
+
 /** Lo que la respuesta de la ruta cuenta de cada revisión: índice, bitácora y motivos genéricos (sin valores personales). */
 export function resumenRevisiones(revisiones: readonly RevisionMuestra[]): Array<{ indice: number; bitacora: string | null; motivos: Array<{ codigo: CodigoRevision; campo: string }> }> {
   return revisiones.map((r) => ({ indice: r.indice, bitacora: r.bitacora, motivos: r.motivos.map((m) => ({ codigo: m.codigo, campo: m.campo })) }));

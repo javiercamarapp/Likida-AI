@@ -38,10 +38,10 @@ import { logger } from '@/lib/logger';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import { leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
-import { DesgloseEnConflicto, abrirExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
+import { DesgloseEnConflicto, abrirExcepcion, listarExcepciones, resolverExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { claveDeBitacora, claveDeLiquidacion } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import {
-  esFormatoMuestraTms, muestraTmsHabilitada, prepararMuestraTms, registrarRevisionesMuestra, resumenRevisiones, SISTEMA_ORIGEN_MUESTRA_TMS,
+  cerrarRevisionesResueltas, esFormatoMuestraTms, muestraTmsHabilitada, prepararMuestraTms, registrarRevisionesMuestra, resumenRevisiones, SISTEMA_ORIGEN_MUESTRA_TMS,
 } from '@/lib/likida/liquidacion_externa/desglose_muestra_recepcion';
 
 export const runtime = 'nodejs';
@@ -127,6 +127,7 @@ export async function POST(req: Request) {
   let preparado: Preparado;
   let sistemaOrigen = SISTEMA_ORIGEN;
   let enRevision: NonNullable<RespuestaDesgloses['enRevision']> | undefined;
+  let clavesMuestraLimpias: string[] = [];
   try {
     if (esFormatoMuestraTms(cuerpo.cuerpo)) {
       // Formato «muestra-tms» (SUPUESTO hasta la especificación oficial): apagado por defecto y falla cerrado.
@@ -139,6 +140,7 @@ export async function POST(req: Request) {
       await registrarRevisionesMuestra(acceso.tenantId, m.revisiones, (b) => claveDeBitacora(undefined, b), { abrirExcepcion, ahora: () => new Date() });
       preparado = { ok: true, desgloses: m.desgloses, correccion: null };
       sistemaOrigen = SISTEMA_ORIGEN_MUESTRA_TMS;
+      clavesMuestraLimpias = m.desgloses.map((d) => claveDeBitacora(undefined, d.bitacora));
       enRevision = resumenRevisiones(m.revisiones);
     } else {
       preparado = preparar(cuerpo.cuerpo);
@@ -147,6 +149,21 @@ export async function POST(req: Request) {
     return traducirFalla('v1.liquidaciones_externas.desgloses.post', acceso.tenantId, e);
   }
   if (!preparado.ok) return preparado.respuesta;
+
+  if (clavesMuestraLimpias.length > 0) {
+    try {
+      await cerrarRevisionesResueltas(acceso.tenantId, clavesMuestraLimpias, {
+        ahora: () => new Date(),
+        resolverExcepciones: async (t, clave, tipo, ahora) => {
+          const l = await listarExcepciones(t, { clave, tipo });
+          if (!l.ok) return 0;
+          let n = 0;
+          for (const e of l.valor) if (await resolverExcepcion(t, e.id, ahora)) n += 1;
+          return n;
+        },
+      });
+    } catch (e) { logger.warn('v1.desgloses.muestra_cierre_revisiones', { err: e instanceof Error ? e.message : String(e) }); }
+  }
 
   const salida: RespuestaDesgloses = { recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [] };
   if (enRevision !== undefined) salida.enRevision = enRevision;

@@ -142,3 +142,20 @@ describe('registrar revisiones en la bandeja existente', () => {
     expect(JSON.stringify(resumenRevisiones(r.revisiones))).not.toMatch(/Ficticio/);
   });
 });
+
+describe('cerrarRevisionesResueltas', () => {
+  it('cierra operador_no_encontrado y mapeo_invalido de cada clave limpia, y un fallo no tumba el resto', async () => {
+    const { cerrarRevisionesResueltas } = await import('./desglose_muestra_recepcion');
+    const llamadas: string[] = [];
+    const n = await cerrarRevisionesResueltas('t-1', ['BIT-1', 'BIT-2'], {
+      ahora: () => new Date('2026-01-01T00:00:00Z'),
+      resolverExcepciones: async (t, clave, tipo) => {
+        llamadas.push(`${t}:${clave}:${tipo}`);
+        if (clave === 'BIT-1' && tipo === 'mapeo_invalido') throw new Error('falla');
+        return 1;
+      },
+    });
+    expect(llamadas).toEqual(['t-1:BIT-1:operador_no_encontrado', 't-1:BIT-1:mapeo_invalido', 't-1:BIT-2:operador_no_encontrado', 't-1:BIT-2:mapeo_invalido']);
+    expect(n).toBe(3);
+  });
+});

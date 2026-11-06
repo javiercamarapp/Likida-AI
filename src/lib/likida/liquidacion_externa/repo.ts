@@ -376,8 +376,6 @@ export async function resolverOperadorDestino(
   return operador;
 }
 
-/** Los viajes de Likida que coinciden con los folios del cliente. Vacío no es
- *  error: el viaje puede vivir solo en su TMS. */
 /**
  * Padrón de la flota para resolver al operador por NOMBRE (contrato «muestra-tms», SUPUESTO hasta la especificación oficial).
  * Trae a TODOS los operadores del tenant (activos y de baja) para que una homonimia con alguien de baja también se vea:
@@ -393,6 +391,8 @@ export async function leerPadronOperadores(tenantId: string): Promise<Array<{ nu
     ? [{ numeroEmpleado: typeof f.numero_empleado === 'string' ? f.numero_empleado.trim() : '', nombre: f.nombre }] : []));
 }
 
+/** Los viajes de Likida que coinciden con los folios del cliente. Vacío no es
+ *  error: el viaje puede vivir solo en su TMS. */
 export async function resolverViajeIds(tenantId: string, folios: string[]): Promise<string[]> {
   if (folios.length === 0) return [];
   const res = await acotada(supabaseAdmin().from('viaje')
