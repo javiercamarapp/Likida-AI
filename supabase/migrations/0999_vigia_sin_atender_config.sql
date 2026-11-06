@@ -20,6 +20,8 @@
 -- ADITIVA E IDEMPOTENTE. No crea funciones (nada que fijar en search_path).
 -- ═══════════════════════════════════════════════════════════════════════════
 
+begin;
+
 create table if not exists public.vigia_sin_atender_config (
   tenant_id                  uuid primary key references public.tenant(id) on delete cascade,
   horario_atencion           jsonb,
@@ -63,3 +65,5 @@ create policy tenant_lee on public.vigia_sin_atender_config for select
   using ((tenant_id = any(get_user_tenant_ids()) and ve_atencion_cliente()) or is_superadmin());
 revoke all on table public.vigia_sin_atender_config from public, anon, authenticated;
 grant select, insert, update, delete on table public.vigia_sin_atender_config to service_role;
+
+commit;
