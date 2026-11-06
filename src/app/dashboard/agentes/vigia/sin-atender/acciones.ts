@@ -5,11 +5,11 @@ import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { appUrl } from '@/lib/env';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
-import { enviarResumenPanel, revisarPanel, type ContextoSinAtender, type EstadoRevisionUI, type ResultadoEnvioUI } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
+import { enviarResumenPanel, guardarConfigPanel, revisarPanel, type ContextoSinAtender, type EstadoRevisionUI, type ResultadoEnvioUI, type ResultadoGuardadoUI } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Acciones de servidor A NIVEL DE MÓDULO: vuelven a resolver sesión, rol y flota desde la cookie y la flota pintada firmada;
-// JAMÁS aceptan un tenant del formulario. Revisar no guarda nada; mandar el resumen lo decide la lógica (solo administración).
+// JAMÁS aceptan un tenant del formulario. Revisar no guarda nada; mandar el resumen y guardar la configuración los decide la lógica (solo administración).
 // ═══════════════════════════════════════════════════════════════════════════
 
 const RUTA = '/dashboard/agentes/vigia/sin-atender';
@@ -35,4 +35,10 @@ export async function enviarResumenAccion(_previo: ResultadoEnvioUI | null, fd: 
   const c = await contexto(fd);
   if ('error' in c) return { ok: false, error: c.error };
   return enviarResumenPanel(c.ctx, fd);
+}
+
+export async function guardarConfigAccion(_previo: ResultadoGuardadoUI | null, fd: FormData): Promise<ResultadoGuardadoUI> {
+  const c = await contexto(fd);
+  if ('error' in c) return { ok: false, error: c.error };
+  return guardarConfigPanel(c.ctx, fd);
 }

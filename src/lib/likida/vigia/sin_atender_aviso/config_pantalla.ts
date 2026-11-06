@@ -1,13 +1,13 @@
-// Configuración efectiva de «sin atender»: defaults del motor <- plazos de la flota (vigia_config) <- almacén opcional <- solicitud.
-// El almacén por flota NO existe todavía (haría falta una tabla nueva): la implementación real devuelve null y todo lo que el
-// usuario ajusta vale solo para esa revisión. Puro: no toca base.
-import { CONFIG_SIN_ATENDER_POR_OMISION, validarConfigSinAtender, type ConfigSinAtender } from './motor';
+// Configuración efectiva de «sin atender»: defaults del motor <- plazos de la flota (vigia_config) <- lo que la flota dejó guardado (0999) <- solicitud.
+// Lo guardado por flota vive en una tabla de una fila (SIN FILA = todo apagado). Este archivo es PURO: no toca base; el puerto real se arma en acciones.ts.
+import { CONFIG_SIN_ATENDER_POR_OMISION, aParcialDelMotor, validarConfigGuardada, validarConfigSinAtender, type ConfigGuardadaSinAtender, type ConfigSinAtender } from './motor';
 
 export interface PuertoConfigSinAtender {
-  leer(tenantId: string): Promise<Partial<ConfigSinAtender> | null>;
+  /** La configuración guardada de ESA flota. null / sin fila = todo apagado. Lanza si la base no responde (no se confunde con «apagado»). */
+  leer(tenantId: string): Promise<ConfigGuardadaSinAtender | null>;
+  /** Guarda lo ya validado. El tenant sale de la sesión. */
+  guardar(tenantId: string, userId: string | null, valor: ConfigGuardadaSinAtender): Promise<{ ok: true } | { ok: false; error: string }>;
 }
-/** Sin almacén por flota: siempre null (los valores de arranque + los plazos de la flota mandan). */
-export const puertoConfigSinAtenderReal: PuertoConfigSinAtender = { leer: async () => null };
 
 export interface PlazosFlota { slaRespuestaMin: number; slaCriticoMin: number }
 
@@ -52,7 +52,7 @@ export function solicitudDeFormulario(fd: FormData): { ok: true; valor: Solicitu
 
 export interface EntradaConfigEfectiva {
   plazos: PlazosFlota | null;
-  guardada: Partial<ConfigSinAtender> | null;
+  guardada: ConfigGuardadaSinAtender | null;
   solicitud: SolicitudSinAtender;
   equipoHashes: readonly string[];
   zona: string;
@@ -65,7 +65,7 @@ export function configEfectiva(e: EntradaConfigEfectiva): { ok: true; config: Co
   const base: Record<string, unknown> = {
     ...CONFIG_SIN_ATENDER_POR_OMISION,
     ...(e.plazos ? { umbralMin: e.plazos.slaRespuestaMin, umbralCriticoMin: e.plazos.slaCriticoMin } : {}),
-    ...(e.guardada ?? {}),
+    ...(e.guardada ? aParcialDelMotor(e.guardada) : {}),
   };
   for (const k of ['umbralMin', 'umbralCriticoMin', 'umbralUrgenteMin', 'insistenciaMin', 'insistenciaVentanaMin', 'palabrasUrgentes', 'palabrasClave'] as const) {
     if (s[k] !== undefined) base[k] = s[k];
@@ -76,4 +76,46 @@ export function configEfectiva(e: EntradaConfigEfectiva): { ok: true; config: Co
   base.vistaPreviaMax = e.vistaPreviaMax;
   const r = validarConfigSinAtender(base);
   return r.ok ? { ok: true, config: r.valor } : { ok: false, error: r.error };
+}
+
+/** Une los nombres guardados con los escritos para esta revisión (sin repetir, sin importar mayúsculas). */
+export function equipoDeLaRevision(guardados: readonly string[], escritos: readonly string[]): string[] {
+  const vistos = new Set<string>();
+  const salida: string[] = [];
+  for (const n of [...guardados, ...escritos]) {
+    const k = n.trim().toLowerCase();
+    if (k === '' || vistos.has(k)) continue;
+    vistos.add(k);
+    salida.push(n.trim());
+  }
+  return salida;
+}
+
+/** Lee el formulario de «Configuración de tu flota». Se manda el estado COMPLETO: una casilla sin marcar es «apagado». Campo vacío = valor de arranque. */
+export function configGuardadaDeFormulario(fd: FormData): { ok: true; valor: ConfigGuardadaSinAtender } | { ok: false; error: string } {
+  const numero = (campo: string, nombre: string, defecto: number): number | { error: string } => {
+    const t = String(fd.get(campo) ?? '').trim();
+    if (t === '') return defecto;
+    return /^\d{1,5}$/.test(t) ? Number(t) : { error: `${nombre} debe ser un número entero.` };
+  };
+  const insistenciaMin = numero('insistenciaMin', 'Las veces que insiste el cliente', 2);
+  if (typeof insistenciaMin !== 'number') return { ok: false, error: insistenciaMin.error };
+  const umbralUrgenteMin = numero('umbralUrgenteMin', 'El plazo de lo urgente', 10);
+  if (typeof umbralUrgenteMin !== 'number') return { ok: false, error: umbralUrgenteMin.error };
+  let horarioAtencion: ConfigGuardadaSinAtender['horarioAtencion'] = null;
+  if (fd.get('horarioActivo') === 'on') {
+    const desde = numero('desdeHora', 'La hora de apertura', Number.NaN);
+    const hasta = numero('hastaHora', 'La hora de cierre', Number.NaN);
+    if (typeof desde !== 'number') return { ok: false, error: desde.error };
+    if (typeof hasta !== 'number') return { ok: false, error: hasta.error };
+    if (Number.isNaN(desde) || Number.isNaN(hasta)) return { ok: false, error: 'Escribe la hora de apertura y la de cierre del horario de atención.' };
+    const dias = fd.getAll('diaHabil').map((d) => String(d)).filter((d) => /^[0-6]$/.test(d)).map(Number);
+    horarioAtencion = dias.length > 0 && dias.length < 7 ? { desdeHora: desde, hastaHora: hasta, diasHabiles: dias } : { desdeHora: desde, hastaHora: hasta };
+    if (fd.getAll('diaHabil').length > 0 && dias.length === 0) return { ok: false, error: 'Elige al menos un día hábil del horario de atención.' };
+  }
+  const lista = (campo: string): string[] => String(fd.get(campo) ?? '').split(/[,\n;]/).map((x) => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  return validarConfigGuardada({
+    horarioAtencion, palabrasClave: lista('palabrasClave'), palabrasUrgentes: lista('palabrasUrgentes'), equipoNombres: lista('equipo'),
+    insistenciaMin, umbralUrgenteMin, resumenCorreoHabilitado: fd.get('resumenCorreo') === 'on',
+  });
 }

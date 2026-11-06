@@ -491,10 +491,16 @@ export const INFO_AGENTES = {
     'Chats exportados que subiste a los grupos de tu flota (los mensajes más recientes de cada uno). No es en tiempo real: llega tan tarde como subas el chat.',
     'Contesta primero las de prioridad alta y sube un chat nuevo para refrescar la lista.',
   ),
+  'vigia_sin_atender.config': V(
+    'Configuración de tu flota', 'Lo que dejas fijo para la revisión de conversaciones sin atender de tu flota.',
+    'Guarda el horario de atención (la espera fuera de él no cuenta), las palabras que marcan urgencia o un tema importante, los nombres de tu equipo, cuántos mensajes seguidos cuentan como insistencia, el plazo de lo urgente y si tu flota permite el resumen por correo. Sin nada guardado, todo está apagado: la espera cuenta minutos corridos y no se manda ningún correo.',
+    'Lo que escribe quien administra la flota; no lee chats ni guarda mensajes. Los nombres del equipo se guardan tal como los escribes.',
+    'Revisa que los nombres del equipo estén escritos igual que en el chat y vuelve a revisar la lista.',
+  ),
   'vigia_sin_atender.correo': V(
     'Resumen por correo', 'Correo con las conversaciones sin atender para la gente que corresponde al turno.',
     'Arma un correo con el grupo, la prioridad, el tiempo sin respuesta y el motivo; no lleva el texto de los mensajes. Va a servicio al cliente y a los directores del turno actual; el dueño solo si hay una alerta alta en un grupo crítico. Mandarlo dos veces seguidas en el mismo turno normalmente no lo duplica, pero no está garantizado: pulsa el botón una sola vez.',
-    'Correos de servicio al cliente y de la lista de directores del Vigía, con su turno y los festivos de tu flota. Solo sale cuando quien administra pulsa el botón y el envío está encendido.',
+    'Correos de servicio al cliente y de la lista de directores del Vigía, con su turno y los festivos de tu flota. Solo sale cuando quien administra pulsa el botón y el envío está encendido en la plataforma y para tu flota.',
   ),
 
   // ═══ Vigía · grupos e histórico ═════════════════════════════════════════
