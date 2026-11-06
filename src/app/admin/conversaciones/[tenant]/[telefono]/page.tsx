@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -96,3 +97,5 @@ export default async function ConversacionPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Conversación' };

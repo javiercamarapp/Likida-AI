@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoFirmado, CAMPO_FLOTA_PINTADA, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -21,15 +21,12 @@ const RUTA = '/dashboard/agentes/carta-porte';
 const RUTA_REFERENCIA = '/dashboard/agentes/carta-porte/referencia';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const verComo = (fd: FormData) => ({
-  tenant: typeof fd.get('tenant') === 'string' ? String(fd.get('tenant')) : undefined,
-  rol: typeof fd.get('rol') === 'string' ? String(fd.get('rol')) : undefined,
-  vista: typeof fd.get('vista') === 'string' ? String(fd.get('vista')) : undefined,
-});
-
 /** Captura (o borra, si va vacía) la referencia de UN viaje de la flota de la sesión. */
 export async function capturarReferencia(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede capturar referencias de Carta Porte.' };
   try {
     const viajeId = String(fd.get('viajeId') ?? '');
@@ -49,7 +46,10 @@ export async function capturarReferencia(_previo: ResultadoAccion, fd: FormData)
 
 /** Enciende o apaga «este cliente exige referencia». */
 export async function cambiarExigencia(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede cambiar esta regla.' };
   try {
     const clienteId = String(fd.get('clienteId') ?? '');

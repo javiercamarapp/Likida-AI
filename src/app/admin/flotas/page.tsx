@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -212,15 +213,15 @@ export default async function FlotasPage() {
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Flotas dadas de alta" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-4 py-2 font-medium">Flota</th>
-                      <th className="px-4 py-2 font-medium">Plan</th>
-                      <th className="px-4 py-2 font-medium text-right">Viajes</th>
-                      <th className="px-4 py-2 font-medium text-right">Costo de IA (histórico)</th>
-                      <th className="px-4 py-2 font-medium">Facilidad 15% (RFA 2.9)</th>
-                      <th className="px-4 py-2 font-medium text-right"></th>
+                      <th scope="col" className="px-4 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Plan</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Viajes</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Costo de IA (histórico)</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Facilidad 15% (RFA 2.9)</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -507,3 +508,5 @@ export default async function FlotasPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Flotas / Clientes' };

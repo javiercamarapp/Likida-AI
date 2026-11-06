@@ -175,7 +175,7 @@ export async function main(mode, reference, sha, extra, env = process.env) {
     if (result.status !== 0) throw new Error('Smoke de navegador remoto falló (salida reservada para evitar secretos)');
     if (mode === 'smoke-production') {
       const health = await fetch(`${candidate.url}/api/health`, {
-        headers: { Cookie: `${cookie.name}=${cookie.value}` }, redirect: 'error', signal: AbortSignal.timeout(30_000),
+        headers: { Cookie: `${cookie.name}=${cookie.value}`, ...(process.env.HEALTH_TOKEN ? { 'x-health-token': process.env.HEALTH_TOKEN } : {}) }, redirect: 'error', signal: AbortSignal.timeout(30_000),
       });
       const body = await health.json();
       if (!health.ok || body.ok !== true || body.version !== sha.slice(0, 7) || body.migracion?.atras !== 0) throw new Error('Health de Production no está sano/en el SHA esperado');

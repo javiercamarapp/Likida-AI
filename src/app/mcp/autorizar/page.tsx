@@ -34,6 +34,8 @@ import { perfilRestringido } from '@/lib/auth/perfil_tenant';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = { title: 'Autorizar conexión — Likida' };
+
 interface ParamsAutorizar {
   client_id: string;
   redirect_uri: string;

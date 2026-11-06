@@ -281,7 +281,10 @@ import { join, relative, sep } from 'node:path';
 //   el cuerpo; la flota sale de la credencial (un `tenant_id` en el cuerpo es 400); estricta (≤ 500 contactos, ≤ 400 KB, campos cerrados);
 //   solo toca `correo` y `coordinador_id` de operadores que YA existen (nunca crea ni toca `telefono`); idempotente; la respuesta jamás repite
 //   un correo. Prueba: `v1/liquidaciones-externas/contactos/route.test.ts`.
-const RUTAS_APP_REVISADAS = 114;
+// 114 → 115 (F9, CT-DAT-16): `api/admin/offboarding/route.ts` — exportación de una flota. Su puerta: 404 mientras la palanca
+//   `LIKIDA_OFFBOARDING_EXPORTACION` esté apagada (por omisión); luego `sesionSuperadmin()` (rol + segundo factor), mismo sitio, `tenantId` uuid
+//   validado; solo lee y deja constancia en `tenant_exportacion`. Prueba: `admin/offboarding/route.test.ts`.
+const RUTAS_APP_REVISADAS = 115;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

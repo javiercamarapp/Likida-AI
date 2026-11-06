@@ -4,6 +4,8 @@ import { envPuesta } from '@/lib/env';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
 
+export const metadata = { title: 'Sin acceso — Likida' };
+
 // El 403 de la casa sobre el marco público único (L9a): la CAUSA dicha en claro (la cuenta no está vinculada a una flota, o se
 // entró con otro correo) y la SALIDA a la vista (cerrar sesión e ingresar con otra cuenta, o escribir a ayuda).
 //

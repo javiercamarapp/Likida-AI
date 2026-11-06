@@ -173,12 +173,12 @@ it('un rol sin área rechaza TODAS las intenciones aunque se invoque la acción 
   expect(estado.eventos.some((e) => e.tipo === 'aprobado' || e.tipo === 'rechazado')).toBe(false);
 });
 
-it('la acción usa el tenant de la SESIÓN: con otra flota el documento «no está en tu flota»', async () => {
+it('MX-002: si la flota de la sesión ya no es la que la pantalla pintó, la acción se niega y no toca el documento', async () => {
   sembrarDoc();
   const p = await montar();
   sesion = { ...sesion, tenantId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
-  const r = await p.props.acciones.revisar(null, fd({ documentoId: ID, version: ver(), intencion: 'guardar', 'c:origen_cp': '99999' }));
-  expect(r).toMatchObject({ ok: false, error: expect.stringMatching(/no está en tu flota/) });
+  await expect(p.props.acciones.revisar(null, fd({ documentoId: ID, version: ver(), intencion: 'guardar', 'c:origen_cp': '99999' })))
+    .rejects.toThrow(/cambió desde que abriste/);
   expect(estado.docs.get(ID)!.extraccion!.campos.origen_cp.valor).toBe('44100');
 });
 
@@ -262,7 +262,7 @@ it('perfil restringido: la página pasa perfilRestringido, sin operadores, y el 
   const props = (await montar()).props as unknown as { perfilRestringido: boolean; operadores: unknown[]; envio: { estado: string; motivo: string | null; proximaRevision: string | null } | null };
   expect(props.perfilRestringido).toBe(true);
   expect(props.operadores).toEqual([]);
-  expect(props.envio).toEqual({ estado: 'rechazado_tms', motivo: 'hoja Mercancias, fila 22, campo Cantidad', proximaRevision: '2026-10-20T15:00:00.000Z' });
+  expect(props.envio).toEqual({ estado: 'rechazado_tms', motivo: 'hoja Mercancias, fila 22, campo Cantidad', proximaRevision: '2026-10-20T15:00:00.000Z', sinConexion: true });
 });
 
 it('sin perfil la página no cambia: perfilRestringido falso y «viaje» sigue funcionando como siempre', async () => {
@@ -278,7 +278,7 @@ it('A37-A3-18: un documento aprobado SIN envío se puede preparar desde su panta
   expect((p.props as unknown as { envio: unknown }).envio).toBeNull();
   expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '4', intencion: 'preparar_envio' }))).toMatchObject({ ok: false, error: expect.stringMatching(/Otra persona cambió/) });
   expect(estado.envios).toHaveLength(0);
-  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/Envío preparado/) });
+  expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/por conectar/) });
   expect(estado.envios).toHaveLength(1);
   expect(await p.props.acciones.revisar(null, fd({ documentoId: ID, version: '5', intencion: 'preparar_envio' }))).toMatchObject({ ok: true, mensaje: expect.stringMatching(/ya estaba/) });
   expect(estado.envios).toHaveLength(1);

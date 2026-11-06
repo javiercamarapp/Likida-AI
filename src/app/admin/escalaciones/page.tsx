@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import {
@@ -146,15 +147,15 @@ export default async function EscalacionesPage() {
                 <TituloSeccion>La cola — lo más vencido o más viejo primero</TituloSeccion>
               </div>
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Cola de escalaciones" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-4 py-2 font-medium">Qué espera</th>
-                      <th className="px-4 py-2 font-medium">Fuente</th>
-                      <th className="px-4 py-2 font-medium">Flota</th>
-                      <th className="px-4 py-2 font-medium">Desde</th>
-                      <th className="px-4 py-2 font-medium">Vence</th>
-                      <th className="px-4 py-2 font-medium text-right">Se resuelve en</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Qué espera</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Fuente</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Desde</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Vence</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Se resuelve en</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -217,3 +218,5 @@ export default async function EscalacionesPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Escalaciones' };

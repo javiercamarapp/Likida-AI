@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
   getResumenNegocio, getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES,
@@ -106,3 +107,5 @@ export default async function AgenteWhatsappPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Agente de WhatsApp' };

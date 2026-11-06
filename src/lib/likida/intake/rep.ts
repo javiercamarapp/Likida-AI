@@ -31,7 +31,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { saveCfdiXmlRaw } from '../repo';
-import { formaPagoSat } from './cfdi_xml';
+import { formaPagoSat, xmlDeclaraDtd } from './cfdi_xml';
 import { hoyMx } from '@/lib/formato';
 
 export interface RepDoctoRelacionado {
@@ -98,6 +98,7 @@ const num = (v: unknown): number | undefined => {
  * quien lo mandó. Demo-safe: nunca lanza.
  */
 export function parseRepXml(xml: string): RepXmlData | null {
+  if (xmlDeclaraDtd(xml)) return null; // CT-SEG-19: un REP tampoco lleva DTD
   try {
     const doc = parser.parse(xml) as Record<string, unknown>;
     if (!doc?.Comprobante || typeof doc.Comprobante !== 'object') return null;

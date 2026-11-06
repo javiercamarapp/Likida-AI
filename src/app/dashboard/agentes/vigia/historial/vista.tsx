@@ -57,7 +57,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
       </Aviso>
 
       {grupos === null ? (
-        <Aviso tono="error">La base de datos todavía no tiene las tablas de grupos (falta aplicar la migración 0484). Mientras tanto no hay nada que mostrar aquí.</Aviso>
+        <Aviso tono="error">Los grupos de clientes todavía no están disponibles en tu cuenta, por eso aquí no hay nada que mostrar. Avísale a Likida.</Aviso>
       ) : (
         <>
           <Seccion id="grupos" titulo="Grupos" info="vigia_historial.grupos">
@@ -65,8 +65,8 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay grupos. Agrega el primero abajo.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
-                  <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th className="py-1 pr-3">Cliente</th><th className="pr-3">Grupo</th><th className="pr-3">Crítico</th><th className="pr-3">Histórico</th><th /></tr></thead>
+                <table aria-label="Grupos del Vigía" className="w-full text-[12px]">
+                  <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th scope="col" className="py-1 pr-3">Cliente</th><th scope="col" className="pr-3">Grupo</th><th scope="col" className="pr-3">Crítico</th><th scope="col" className="pr-3">Histórico</th><th scope="col"><span className="sr-only">Acciones</span></th></tr></thead>
                   <tbody>
                     {grupos.map((g) => (
                       <tr key={g.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
@@ -91,6 +91,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
               {grupos.length > 0 && (
                 <Seccion id="importar" titulo="Subir el chat exportado" info="vigia_historial.importar">
                   <FormaImportar accion={acciones.importar} grupos={grupos.map((g) => ({ id: g.id, nombre: g.nombre, cliente: g.clienteNombre }))} />
+                  <p className="text-[12px]"><Link href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className="underline">Después de subir un chat, revisa las conversaciones sin atender</Link>.</p>
                 </Seccion>
               )}
             </>
@@ -100,7 +101,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           {!standby && <Seccion id="rapidas" titulo="Respuestas rápidas aprobadas" info="vigia_historial.rapidas">
             {rapidas === null ? (
-              <Aviso tono="error">La base de datos todavía no tiene las respuestas rápidas (falta aplicar la migración 0647). Mientras tanto el Vigía contesta como siempre.</Aviso>
+              <Aviso tono="error">Las respuestas rápidas todavía no están disponibles en tu cuenta. Mientras tanto el Vigía contesta como siempre.</Aviso>
             ) : (
               <>
                 <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
@@ -195,8 +196,8 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                 <div>
                   <TituloRecuadro nivel="h3" info="vigia_historial.temas" className="mb-1.5">Temas y tendencia</TituloRecuadro>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-[12px]">
-                      <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th className="py-1 pr-3">Tema</th><th className="pr-3">Mensajes</th><th className="pr-3">Últimas 4 semanas</th><th className="pr-3">4 anteriores</th><th>Cambio</th></tr></thead>
+                    <table aria-label="Temas y tendencia" className="w-full text-[12px]">
+                      <thead><tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}><th scope="col" className="py-1 pr-3">Tema</th><th scope="col" className="pr-3">Mensajes</th><th scope="col" className="pr-3">Últimas 4 semanas</th><th scope="col" className="pr-3">4 anteriores</th><th scope="col">Cambio</th></tr></thead>
                       <tbody>
                         {reporte.tendencias.map((t) => (
                           <tr key={t.tema} className="border-t" style={{ borderColor: 'var(--line)' }}>

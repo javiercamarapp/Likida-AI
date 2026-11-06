@@ -38,14 +38,14 @@ export function FichaCorridas({ corridas }: { corridas: CorridaRegistrada[] | nu
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Corridas recientes del agente" className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th className="px-2 py-1.5 font-medium">Fecha</th>
-                <th className="px-2 py-1.5 font-medium">Estado</th>
-                <th className="px-2 py-1.5 font-medium text-right">Tareas</th>
-                <th className="px-2 py-1.5 font-medium text-right">Duración</th>
-                <th className="px-2 py-1.5 font-medium">Disparo</th>
+                <th scope="col" className="px-2 py-1.5 font-medium">Fecha</th>
+                <th scope="col" className="px-2 py-1.5 font-medium">Estado</th>
+                <th scope="col" className="px-2 py-1.5 font-medium text-right">Tareas</th>
+                <th scope="col" className="px-2 py-1.5 font-medium text-right">Duración</th>
+                <th scope="col" className="px-2 py-1.5 font-medium">Disparo</th>
               </tr>
             </thead>
             <tbody>

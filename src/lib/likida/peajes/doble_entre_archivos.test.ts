@@ -117,13 +117,18 @@ describe('revisarDobleEntreArchivos', () => {
       // la mitad de las actuales repite una previa; la otra mitad cambia el importe (no coincide)
       act.push({ indice: i, unidad: null, clase: 5, ...base, monto: i % 2 === 0 ? base.monto : base.monto + 0.5 });
     }
-    const t0 = performance.now();
+    // CT-BAS-14: CPU del proceso (user+system), no reloj de pared: con la Mac en swap la pared midió 10 s para un algoritmo de ~1 s.
+    // El techo de 5 s sigue siendo el mismo y sigue delatando una degradación cuadrática.
+    const c0 = process.cpuUsage();
     const r = revisarDobleEntreArchivos(act, [archivoA(prev)], OP);
-    const ms = performance.now() - t0;
+    const c = process.cpuUsage(c0);
+    const ms = (c.user + c.system) / 1000;
     expect(r.candidatos).toHaveLength(N / 2);
     expect(r.tardiosLegitimos).toHaveLength(N / 2);
     // Documentado: ~1 s (964 ms medido) en esta Mac; el techo de 5 s solo protege contra una degradación cuadrática.
     console.info(`T-A2-38: ${N} + ${N} líneas en ${ms.toFixed(0)} ms`);
     expect(ms).toBeLessThan(5000);
-  });
+    // El límite de vitest (5 s de pared por prueba) sí es de pared: con la Mac saturada la prueba entera (generar 120 000 líneas
+    // + el algoritmo) lo rebasaba aunque la CPU consumida fuera ~2.5 s. Se le da holgura de pared; la cota real es la de CPU.
+  }, 60_000);
 });

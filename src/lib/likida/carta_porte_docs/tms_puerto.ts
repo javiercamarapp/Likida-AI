@@ -116,3 +116,9 @@ export const SALIDA_NO_DISPONIBLE: SalidaTms = {
 
 /** ¿Esta salida NO puede subir nada ahora (sin conector, o el proveedor falló)? Para las pantallas: ambas bloquean activar el modo API. */
 export function sinConexionUtil(p: SalidaTms): boolean { return p === SIN_TMS || p === SALIDA_NO_DISPONIBLE; }
+
+/** Las pantallas distinguen dos verdades: `por_conectar` (no existe conector: solo entonces se dice «todavía no existe») y
+ *  `no_disponible` (el conector existe pero no se pudo consultar: «reintenta»). `null` = hay conexión (real o simulada). */
+export function estadoConexionTms(p: SalidaTms): 'por_conectar' | 'no_disponible' | null {
+  return p === SIN_TMS ? 'por_conectar' : p === SALIDA_NO_DISPONIBLE ? 'no_disponible' : null;
+}

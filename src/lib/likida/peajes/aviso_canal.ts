@@ -9,11 +9,11 @@ import { avisarOficina, parametrosAvisoOficina } from '@/lib/meta/aviso_oficina'
 // `aviso_operacion_v1` fuera). El destinatario es el teléfono que la flota capturó en «A quién se avisa»
 // (el mismo de los cruces atípicos); sin él no se manda nada.
 //
-// ► DÓNDE ENGANCHAR EL CORREO (lo construye el carril A3 como módulo genérico): agregar un segundo
-//   `CanalAvisoPeajes` a `CANALES_AVISO_PEAJES` que reciba el mismo `AvisoPeajes` (tipo, texto, resumen, liga).
-//   `enviarPorCanales` ya entrega el aviso a todos los canales configurados y cuenta como enviado si ALGUNO lo
-//   aceptó; el sello de «avisar una sola vez» (`peaje_aviso_enviado`) no depende del canal. El destinatario de correo
-//   tendrá que salir de la configuración de la flota (hoy solo existe el teléfono).
+// CORREO (ronda 4): el segundo canal vive en `aviso_correo.ts` y reutiliza el transporte de la Liquidación. La selección es
+//   EXPLÍCITA (`canalesAvisoPeajes`): WhatsApp y correo, en ese orden; cada flota recibe por los que tengan destinatario
+//   configurado (WhatsApp: teléfono; correo: `correo_avisos` activo con destinatarios). `enviarPorCanales` cuenta como enviado
+//   si ALGUNO lo aceptó; el sello de «avisar una sola vez» (`peaje_aviso_enviado`) no depende del canal:
+//   si WhatsApp acepta y el correo falla, el sello se confirma y el correo no se reintenta (límite conocido; ver aviso_correo.ts).
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface AvisoPeajes {
@@ -25,6 +25,8 @@ export interface AvisoPeajes {
   resumen: string;
   /** Liga a la pantalla de peajes. */
   liga: string;
+  /** La clave del sello del aviso (archivo+umbral o decena): base de la idempotencia por destinatario del correo. */
+  clave?: string;
 }
 
 export interface CanalAvisoPeajes {
@@ -51,6 +53,11 @@ export function canalWhatsAppPeajes(telefonoPorFlota: (tenantId: string) => Prom
       return r.ok;
     },
   };
+}
+
+/** Los canales de los avisos de peajes, en orden fijo y a la vista: WhatsApp, luego correo. Un canal sin destinatario en la flota no envía. */
+export function canalesAvisoPeajes(c: { whatsapp: CanalAvisoPeajes; correo: CanalAvisoPeajes }): CanalAvisoPeajes[] {
+  return [c.whatsapp, c.correo];
 }
 
 /** Manda el aviso por todos los canales que tengan destinatario. `false` si ninguno lo aceptó o no había a quién. */

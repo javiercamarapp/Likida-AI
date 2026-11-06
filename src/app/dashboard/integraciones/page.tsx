@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { sufijoTenant } from '../sufijo';
 
@@ -28,3 +29,5 @@ export default async function PaginaIntegraciones({
 }) {
   redirect(`/dashboard/conexiones${sufijoTenant(await searchParams)}`);
 }
+
+export const metadata: Metadata = { title: 'Integraciones' };

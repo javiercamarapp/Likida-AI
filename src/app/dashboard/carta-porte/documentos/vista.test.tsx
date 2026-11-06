@@ -6,7 +6,8 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh() {}, push() {} 
 vi.mock('next/link', () => ({ default: ({ href, children, ...r }: { href: string; children: React.ReactNode }) => <a href={href} {...r}>{children}</a> }));
 
 import { VistaDocumentos, filtroEnvioDe, pasaFiltroEnvio, type DatosDocumentos } from './vista';
-import { VistaRevision } from './[id]/vista';
+import { VistaRevision, fraseEnvio, FRASE_ENVIO_POR_CONECTAR, FRASE_ENVIO_NO_DISPONIBLE } from './[id]/vista';
+import { mensajeEnvioPreparado } from '@/lib/likida/carta_porte_docs/mensajes_envio';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
 import { revisionDe } from '@/lib/likida/carta_porte_docs/presentacion';
 import { validarExtraccion } from '@/lib/likida/carta_porte_docs/validacion';
@@ -102,6 +103,13 @@ describe('VistaDocumentos', () => {
     expect(con).toContain('cliente.com');
     expect(con).not.toMatch(/Activar buzón/);
     expect(html(<VistaDocumentos datos={datos([], { buzon: { direccion: null, activo: true, remitentes: [], dominioConfigurado: false } })} acciones={todas} />)).toMatch(/dominio de correo de Likida no está configurado/);
+  });
+
+  it('S-06: buzón activo con la lista de remitentes vacía avisa que no recibe nada (y con lista no lo avisa)', () => {
+    const vacio = html(<VistaDocumentos datos={datos([], { buzon: { direccion: 'cp-abc@mail.likida.ai', activo: true, remitentes: [], dominioConfigurado: true } })} acciones={todas} />);
+    expect(vacio).toContain('Sin remitentes autorizados');
+    const con = html(<VistaDocumentos datos={datos([], { buzon: { direccion: 'cp-abc@mail.likida.ai', activo: true, remitentes: ['cliente.com'], dominioConfigurado: true } })} acciones={todas} />);
+    expect(con).not.toContain('Sin remitentes autorizados');
   });
 
   it('perfiles con su historial de versiones y «volver a esta»', () => {
@@ -460,7 +468,7 @@ describe('VistaDocumentos · perfil restringido', () => {
   const a = doc({ id: 'a1', estado: 'aprobado', nombreArchivo: 'uno.xlsx', viajeId: null });
   it('la bandeja habla del envío al TMS y no de viajes; sin perfil, igual que siempre', () => {
     const con = html(<VistaDocumentos datos={datos([a], { envios: { a1: 'listo' } })} acciones={ninguna} perfilRestringido />);
-    expect(con).toMatch(/Envío al TMS: En curso/);
+    expect(con).toMatch(/TMS: En curso/);
     expect(con).not.toMatch(/Sin viaje todavía|Con viaje/);
     const sin = html(<VistaDocumentos datos={datos([a], { envios: { a1: 'listo' } })} acciones={ninguna} />);
     expect(sin).toMatch(/Sin viaje todavía/);
@@ -571,5 +579,57 @@ describe('T-A3-63: lo inferido y lo poco seguro se resaltan al lado del document
     expect(h).not.toContain('data-marca=');
     expect(h).not.toContain('resumen-marcas');
     expect(h).not.toContain('data-linea-resaltada');
+  });
+});
+
+describe('F2 superficie honesta: sin conexión real con el sistema del cliente', () => {
+  it('ninguna fase «en camino» se afirma cuando no existe adaptador', () => {
+    for (const estado of ['pendiente_prechequeo', 'listo', 'enviando', 'pendiente_reque', 'error_transitorio'] as const) {
+      const f = fraseEnvio({ estado, sinConexion: true });
+      expect(f, estado).toBe(FRASE_ENVIO_POR_CONECTAR);
+      expect(f).not.toMatch(/Enviándose|reintentará|Listo para enviar/);
+    }
+  });
+  it('lo simulado y lo real conservan su frase; el rechazo y lo subido a mano no se tocan', () => {
+    expect(fraseEnvio({ estado: 'enviado', simulado: true, sinConexion: true })).toMatch(/simulado/);
+    expect(fraseEnvio({ estado: 'listo', simulado: true, sinConexion: true })).toMatch(/Listo para enviar/);
+    expect(fraseEnvio({ estado: 'subido_a_mano', sinConexion: true })).toBe('Subido a mano.');
+  });
+  it('el mensaje de «preparar envío» no promete un envío automático que no existe', () => {
+    expect(mensajeEnvioPreparado(true, 'por_conectar')).toMatch(/por conectar/);
+    expect(mensajeEnvioPreparado(true, 'por_conectar')).not.toMatch(/lo enviará/);
+    expect(mensajeEnvioPreparado(true, null)).toMatch(/lo enviará al TMS/);
+  });
+  it('proveedor caído (SALIDA_NO_DISPONIBLE): ni «por conectar» ni «todavía no existe»; dice que no se pudo consultar', () => {
+    for (const estado of ['pendiente_prechequeo', 'listo', 'enviando', 'pendiente_reque', 'error_transitorio'] as const) {
+      const f = fraseEnvio({ estado, salidaNoDisponible: true });
+      expect(f, estado).toBe(FRASE_ENVIO_NO_DISPONIBLE);
+      expect(f).toMatch(/No pudimos consultar la conexión/);
+      expect(f).not.toMatch(/Por conectar|todavía no existe/);
+    }
+    const m = mensajeEnvioPreparado(true, 'no_disponible');
+    expect(m).toMatch(/no pudimos consultar la conexión/);
+    expect(m).not.toMatch(/por conectar|todavía no/);
+  });
+  const montarAprobado = (envio: React.ComponentProps<typeof VistaRevision>['envio']) => {
+    const d = doc({ estado: 'aprobado', aprobadoEn: 'x', viajeId: 'v1' });
+    return html(<VistaRevision doc={d} revision={revisionDe(d)} original={{ tipo: 'texto', texto: 'Folio | ATL-20481' }} operadores={[]} eventos={[]} acciones={{ revisar: accion }} envio={envio} perfilRestringido />);
+  };
+  it('VistaRevision renderiza «por conectar» con sinConexion y el texto de reintento con SALIDA_NO_DISPONIBLE', () => {
+    const porConectar = montarAprobado({ estado: 'listo', sinConexion: true });
+    expect(porConectar).toContain('Por conectar');
+    expect(porConectar).not.toMatch(/Listo para enviar|No pudimos consultar/);
+    const caida = montarAprobado({ estado: 'listo', salidaNoDisponible: true });
+    expect(caida).toMatch(/No pudimos consultar la conexión/);
+    expect(caida).not.toMatch(/Por conectar|todavía no existe|Listo para enviar/);
+  });
+  it('bandeja: sin conexión «En curso» se rotula «Por conectar»; con conexión no cambia', () => {
+    const a = doc({ id: 'a', estado: 'aprobado', aprobadoEn: 'x' });
+    const envios = { a: 'listo' as const };
+    const sin = html(<VistaDocumentos datos={datos([a], { envios, sinConexion: true })} acciones={ninguna} filtroEnvio="todos" />);
+    expect(sin).toContain('TMS: Por conectar');
+    expect(sin).not.toContain('En curso');
+    const con = html(<VistaDocumentos datos={datos([a], { envios })} acciones={ninguna} filtroEnvio="todos" />);
+    expect(con).toContain('TMS: En curso');
   });
 });

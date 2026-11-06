@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar, puedeExportar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -55,7 +56,7 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
 
   async function accionGuardar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
     const campo = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string) : '');
     const categorias = fd.getAll('ins_categoria'), textos = fd.getAll('ins_texto'), momentos = fd.getAll('ins_momento'), lugares = fd.getAll('ins_lugar');
@@ -75,7 +76,7 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
 
   async function accionCorregir(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
     const campo = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string) : '');
     const r = await corregirConvenioDelViajeDelPanel({ tenantId: s.tenantId, rol: s.rol }, { viajeId: campo('viajeId'), convenioId: campo('convenioId'), reenviar: campo('reenviar') === 'si' });
@@ -85,7 +86,7 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
 
   async function accionImportar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
     const archivo = fd.get('archivo');
     let bytes: ArrayBuffer | null = null;
@@ -101,7 +102,7 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
 
   async function accionEstado(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return;
     await archivarConvenioDelPanel({ tenantId: s.tenantId, rol: s.rol }, String(fd.get('id') ?? ''), fd.get('activo') === 'si');
     revalidatePath(RUTA);

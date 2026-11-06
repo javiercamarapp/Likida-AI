@@ -9,9 +9,7 @@ export interface ClasesCobroVista {
   acciones: { guardarReglasFlota: Accion };
 }
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 /**
@@ -41,7 +39,7 @@ export function SeccionClasesCobro({ datos }: { datos: ClasesCobroVista }) {
             <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Clases válidas del utilitario</span>
             <input name="clases_utilitario" defaultValue={reglas.clasesUtilitario.join(', ')} maxLength={60} placeholder="Vacío = no se evalúa"
               aria-label="Clases de cobro válidas para unidades utilitario, separadas por comas"
-              className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} />
+              className="w-[220px] mt-0.5" style={ESTILO_INPUT} />
             <span className="block text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
               Por ejemplo <span className="cifra-mono">1, 2</span>. Vacío: a los utilitarios no se les evalúa la clase y la revisión lo dice. El tipo de cada unidad sale del
               catálogo de TAGs (tracto o utilitario); un TAG sin tipo sigue marcándose como candidato.
@@ -58,7 +56,7 @@ export function SeccionClasesCobro({ datos }: { datos: ClasesCobroVista }) {
               <span><span className="font-medium">Solo en las casetas declaradas por pasada</span>: en las demás, la clase 1 se marca como candidato. Declara las casetas por pasada en el catálogo de casetas o en «Reglas de cobro».</span>
             </label>
           </fieldset>
-          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Guardar clases</button>
+          <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar clases</button>
         </form>
       )}
     </section>

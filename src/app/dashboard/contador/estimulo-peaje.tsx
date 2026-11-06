@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { Landmark } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import {
   calificaEstimuloPeaje,
@@ -56,7 +57,8 @@ export async function EstimuloPeaje({
 
   async function accion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/contador', searchParams);
+    const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
       return { error: 'Tu rol no puede declarar la elegibilidad del estímulo de peaje.' };
     }

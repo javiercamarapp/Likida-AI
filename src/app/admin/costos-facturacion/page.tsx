@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd, mxn } from '@/lib/utils';
@@ -350,14 +351,14 @@ export default async function CostosFacturacionPage() {
                       viejas no aparecen aquí.
                     </p>
                   )}
-                  <table className="w-full text-sm">
+                  <table aria-label="Facturas por cobrar" className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th className="py-2.5 pr-4 font-medium">Flota</th>
-                        <th className="py-2.5 pr-4 font-medium">Periodo</th>
-                        <th className="py-2.5 pr-4 font-medium">Referencia</th>
-                        <th className="py-2.5 pr-4 font-medium text-right">Total a transferir</th>
-                        <th className="py-2.5 font-medium">Marcar pagada</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Flota</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Periodo</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Referencia</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium text-right">Total a transferir</th>
+                        <th scope="col" className="py-2.5 font-medium">Marcar pagada</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -508,3 +509,5 @@ export default async function CostosFacturacionPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Costos & Facturación' };

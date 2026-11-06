@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { Gauge } from 'lucide-react';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
@@ -89,7 +90,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
               <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>Todavía no hay flotas dadas de alta.</p>
             ) : (
               <div className="overflow-x-auto mt-2">
-                <table className="w-full text-[12.5px]">
+                <table aria-label="Techo de gasto de IA por flota" className="w-full text-[12.5px]">
                   <thead>
                     <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
                       <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flota</th>
@@ -151,3 +152,5 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Techo de IA' };

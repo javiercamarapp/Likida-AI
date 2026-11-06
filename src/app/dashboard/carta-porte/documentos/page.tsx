@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { rateLimit } from '@/lib/ratelimit';
@@ -9,6 +10,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { dominioBuzon } from '@/lib/correo/buzon';
 import { direccionCp, generarTokenCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { validarConfigExport } from '@/lib/likida/carta_porte_docs/exportacion';
+import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
+import { estadoConexionTms } from '@/lib/likida/carta_porte_docs/tms_puerto';
 import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
 import { leerConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
 import { calcularMetricas } from '@/lib/likida/carta_porte_docs/metricas';
@@ -39,9 +42,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * cuerpo del componente y usada dentro de un `'use server'` se captura por closure y Next no puede serializarla.
  */
 async function sesionDeAccion(
-  sp: { tenant?: string; rol?: string; vista?: string }, opts: { configuracion?: boolean } = {},
+  sp: { tenant?: string; rol?: string; vista?: string }, tenantId: string, opts: { configuracion?: boolean } = {},
 ): Promise<{ tenantId: string; userId: string } | { error: string }> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: la flota que se pintó es la que escribe.
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
   // A37-S16-03: la configuración (buzón, remitentes, formatos de exportación, versión del perfil que lee los documentos de cada
   // cliente) es del dueño de la cuenta, no de quien solo ve la ruta (el encargado). Mismo criterio que /dashboard/arco.
@@ -87,9 +91,11 @@ async function cargarDatos(tenantId: string): Promise<DatosDocumentos | null> {
     const dominio = dominioBuzon();
     const linaje = await repo.linajeDeDocumentos(tenantId, lista.filas.map((d) => d.id));
     const envios = await repo.estadoEnvioPorDocumento(tenantId, lista.filas.filter((d) => d.estado === 'aprobado').map((d) => d.id));
+    // Solo se consulta al proveedor si hay envíos que rotular; una vez por carga de la bandeja.
+    const sinConexion = Object.keys(envios).length > 0 ? estadoConexionTms(await salidaDeFlota(tenantId)) === 'por_conectar' : false;
     const asignacion = await cargarAsignacion(tenantId, lista.filas.map((d) => d.id));
     return {
-      filas: lista.filas, total: lista.total, envios, ...asignacion,
+      filas: lista.filas, total: lista.total, envios, ...(sinConexion ? { sinConexion: true } : {}), ...asignacion,
       linaje: Object.fromEntries([...linaje].map(([id, l]) => [id, { rol: l.rol, indice: l.indice, total: l.total, clave: l.clave }])), metricas: calcularMetricas(recientes, correcciones, ventana.total), clientes,
       perfiles: perfiles.map((p, i) => ({ id: p.id, nombre: p.nombre, formato: p.formato, versionActiva: p.versionActiva, mapeos: p.activa.mapeos.length, versiones: versiones[i].map((v) => ({ version: v.version, nota: v.nota, mapeos: v.mapeos })) })),
       buzon: buzon ? { direccion: direccionCp(buzon.token, dominio), activo: buzon.activo, remitentes: buzon.remitentesPermitidos, dominioConfigurado: dominio !== null } : null,
@@ -120,7 +126,7 @@ export default async function PaginaDocumentos({
 
   async function subir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, tenantId);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiados documentos en poco tiempo. Espera un minuto.' };
@@ -146,7 +152,7 @@ export default async function PaginaDocumentos({
 
   async function procesar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp);
+    const s = await sesionDeAccion(sp, tenantId);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('documentoId') ?? '');
@@ -164,7 +170,7 @@ export default async function PaginaDocumentos({
 
   async function activarBuzon(): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       await repo.crearBuzon(s.tenantId, generarTokenCp());
@@ -177,7 +183,7 @@ export default async function PaginaDocumentos({
 
   async function guardarRemitentes(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const lista = String(fd.get('remitentes') ?? '').split(/\r?\n/).map((x) => x.trim().toLowerCase()).filter(Boolean);
@@ -186,7 +192,7 @@ export default async function PaginaDocumentos({
       if (mala) return { ok: false, error: `«${mala.slice(0, 60)}» no parece un correo ni un dominio.` };
       await repo.configurarBuzon(s.tenantId, { remitentesPermitidos: [...new Set(lista)] });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: lista.length === 0 ? 'Sin lista: se aceptan correos de cualquier remitente (todos pasan por revisión).' : `Guardados ${lista.length} remitentes.` };
+      return { ok: true, mensaje: lista.length === 0 ? 'Sin lista: el buzón no recibe ningún correo hasta que agregues al menos un correo o dominio de tus clientes.' : `Guardados ${lista.length} remitentes.` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar los remitentes') };
     }
@@ -194,7 +200,7 @@ export default async function PaginaDocumentos({
 
   async function guardarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const nombre = String(fd.get('nombre') ?? '').trim();
@@ -215,7 +221,7 @@ export default async function PaginaDocumentos({
 
   async function borrarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('id') ?? '');
@@ -230,7 +236,7 @@ export default async function PaginaDocumentos({
 
   async function volverVersion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, { configuracion: true });
+    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const perfilId = String(fd.get('perfilId') ?? '');

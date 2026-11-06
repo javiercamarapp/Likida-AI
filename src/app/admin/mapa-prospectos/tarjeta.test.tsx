@@ -91,3 +91,18 @@ describe('la tarjeta del Cerebro con los textos fuera del listado', () => {
     expect(renderToStaticMarkup(<Detalle p={detalle} />)).not.toContain('Redactar con IA');
   });
 });
+
+// MX-004: el error o el aviso de «no se guardó» del Mensaje IA se ve en la tarjeta, no se traga.
+describe('el aviso del Mensaje IA en la tarjeta (MX-004)', () => {
+  const conAviso = (avisoIa: { texto: string; error: boolean } | null) =>
+    renderToStaticMarkup(<TarjetaProspecto p={base} nuevo={false} onAfinar={() => undefined} avisoIa={avisoIa} />);
+
+  it('sin aviso no pinta alerta', () => {
+    expect(conAviso(null)).not.toContain('role="alert"');
+  });
+  it('un error del servidor se pinta como alerta con su texto', () => {
+    const html = conAviso({ texto: 'El redactor requiere un tenant explicito.', error: true });
+    expect(html).toContain('role="alert"');
+    expect(html).toContain('El redactor requiere un tenant explicito.');
+  });
+});

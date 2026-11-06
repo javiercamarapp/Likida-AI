@@ -1,8 +1,11 @@
+import { mensajeDeBaja } from '@/lib/auth/mensaje_baja';
+import { exigirStepUpAccion } from '@/lib/auth/stepup';
 import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantEfectivo, type TenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
@@ -103,8 +106,11 @@ function contextoDeInvitacion(s: { rol: string; rolReal?: string }, perfil: stri
  */
 async function puertaAdministrar(
   sp: { vista?: string; tenant?: string; rol?: string },
+  tenantPintado: string,
 ): Promise<{ s: TenantEfectivo } | { error: string }> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: roles y bajas escriben SOLO en la flota que esta pantalla pintó (otra pestaña pudo cambiar la cookie).
+  const s = await resolverTenantAtadoAccion(RUTA, sp, tenantPintado);
+  if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver el equipo de la flota.' };
   if (!puedeAdministrar(s.rol)) return { error: 'Solo el dueño de la flota administra a su equipo.' };
   return { s };
@@ -149,7 +155,7 @@ export default async function UsuariosPage({
 
   async function invitarUsuario(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
 
@@ -214,13 +220,18 @@ export default async function UsuariosPage({
 
   async function cambiarRol(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'cambio_rol', { tenantId: s.tenantId, userId: s.userId });
+    if (pasoMfa) return { ok: false, error: pasoMfa };
     try {
       const r = await cambiarRolUsuario(s.tenantId, String(fd.get('id') ?? ''), String(fd.get('rol') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `Rol cambiado: de ${nombreDeRol(r.de)} a ${nombreDeRol(r.a)}. Aplica en su siguiente clic.` };
+      const llaves = r.llavesApiSinRevocar
+        ? ' ATENCIÓN: NO se pudieron revocar sus llaves de API de Administración y siguen vivas: revócalas a mano.'
+        : (r.llavesApiRevocadas?.length ? ` Se revocaron sus llaves de API de Administración: ${r.llavesApiRevocadas.join(', ')}.` : '');
+      return { ok: true, mensaje: `Rol cambiado: de ${nombreDeRol(r.de)} a ${nombreDeRol(r.a)}. Aplica en su siguiente clic.${llaves}` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'cambiar el rol') };
     }
@@ -228,15 +239,13 @@ export default async function UsuariosPage({
 
   async function darDeBaja(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
       const r = await desactivarUsuario(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return r.sesionRevocada
-        ? { ok: true, mensaje: 'Cuenta dada de baja: ya no entra al panel y su sesión quedó revocada.' }
-        : { ok: true, mensaje: 'Cuenta dada de baja: ya no entra al panel. La revocación de su sesión en el servicio de autenticación NO se pudo confirmar — quedó registrado; avísale a Likida si se repite.' };
+      return mensajeDeBaja(r);
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'dar de baja la cuenta') };
     }
@@ -244,7 +253,7 @@ export default async function UsuariosPage({
 
   async function cerrarSesiones(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
@@ -259,7 +268,7 @@ export default async function UsuariosPage({
 
   async function reactivar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
@@ -275,7 +284,7 @@ export default async function UsuariosPage({
 
   async function reenviar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const p = await puertaAdministrar(sp);
+    const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     if (!(await rateLimit(`invitar:${s.tenantId}`, TOPE_INVITACIONES_HORA, 3_600_000))) {

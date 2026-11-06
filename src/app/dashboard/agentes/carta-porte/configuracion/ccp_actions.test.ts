@@ -5,7 +5,8 @@ const sesion = { actual: { tenantId: 't-sesion', userId: 'u-sesion', rol: 'flota
 const { resolver, bitacora, fijar, leer, confirmar } = vi.hoisted(() => ({
   resolver: vi.fn(), bitacora: vi.fn(async () => true), fijar: vi.fn(), leer: vi.fn(), confirmar: vi.fn(),
 }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: resolver }));
+// MX-002: la acción resuelve con la flota PINTADA y firmada (campo oculto `flota_pintada`), no con el «ver como» del formulario.
+vi.mock('@/lib/auth/tenant-atado', () => ({ resolverTenantAtadoFirmado: resolver, CAMPO_FLOTA_PINTADA: 'flota_pintada', MENSAJE_FLOTA_CAMBIO: 'La flota que estás viendo cambió.' }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: vi.fn(async () => true) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));

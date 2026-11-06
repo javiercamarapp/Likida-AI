@@ -59,6 +59,10 @@ export interface ColaConductores {
   /** Vivos SIN aviso — el fallo silencioso que se enseña. `null` = no se
    *  pudo contar, y entonces no se pinta la frase. */
   sinAvisar: number | null;
+  /** CT-A345-18: la compuerta `agente_chofer_habilitado` de la flota. Si NO está habilitada, «sin aviso» no es un
+   *  rezago: es que el agente tiene prohibido escribirle al chofer. Ausente = el origen no la manda (se dice «no se
+   *  pudo comprobar», nunca se asume rezago). */
+  compuerta?: 'habilitado' | 'apagado' | 'compuerta_ilegible';
   /** FE-6: `viajesEsperandoAceptarPaginados` no lanza — un fallo viaja aquí,
    *  para que la sección lo diga en vez de pintar "nadie debe respuesta". */
   error: string | null;
@@ -224,7 +228,7 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
 export async function BloqueCola({ cola, sufijo }: {
   cola: Promise<ColaConductores>; sufijo: string;
 }) {
-  const { esperan, totalEsperan, sinAvisar, error, truncada = false } = await cola;
+  const { esperan, totalEsperan, sinAvisar, error, truncada = false, compuerta } = await cola;
   return (
     /* La cola honesta de aceptación */
     <section className="card p-4 flex flex-col">
@@ -269,9 +273,13 @@ export async function BloqueCola({ cola, sufijo }: {
         </p>
       )}
       {sinAvisar !== null && sinAvisar > 0 && (
-        <p className="text-[12px] mt-3 pt-2.5 border-t" style={{ color: 'var(--warn)', borderColor: 'var(--line2)' }}>
-          {numero(sinAvisar)} viaje{sinAvisar === 1 ? '' : 's'} en curso SIN aviso —
-          el botón Avisar vive en <Link href={`/dashboard/despacho${sufijo}`} className="underline">Despacho</Link>.
+        <p className="text-[12px] mt-3 pt-2.5 border-t" style={{ color: 'var(--warn)', borderColor: 'var(--line2)' }} data-sin-aviso={compuerta ?? 'sin_dato'}>
+          {numero(sinAvisar)} viaje{sinAvisar === 1 ? '' : 's'} en curso sin aviso al operador.{' '}
+          {compuerta === 'habilitado'
+            ? <>El aviso sale desde <Link href={`/dashboard/despacho${sufijo}`} className="underline">Despacho</Link>.</>
+            : compuerta === 'apagado'
+              ? 'El Agente de Conductores todavía no está habilitado en tu cuenta, por eso no avisa a los operadores: no es un rezago. Likida lo habilita cuando termina la puesta en marcha.'
+              : 'No pudimos comprobar si el Agente de Conductores está habilitado en tu cuenta; no lo damos por activo.'}
         </p>
       )}
       {/* FE-B1: aquí no hay "Siguiente" que quede muerto (esta pantalla no
@@ -472,7 +480,7 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
           <FilaFuente etiqueta="Episodios sin señal" valor={numero(ex.sinSenal.valor)} cifra={ex.sinSenal} />
           <FilaFuente etiqueta="Primer aviso / segundo / jefe" valor={`${numero(insights.escalera.aviso1.valor)} / ${numero(insights.escalera.aviso2.valor)} / ${numero(insights.escalera.jefe.valor)}`} cifra={insights.escalera.aviso1} />
           {discrepancias !== null && (
-            <FilaFuente etiqueta="Chofer vs GPS sin coincidir" valor={numero(discrepancias)} cifra={{ rotulo: 'medido', fuente: 'viaje_hito.interpretacion (validación de ubicación)' }} />
+            <FilaFuente etiqueta="Chofer vs GPS sin coincidir" valor={numero(discrepancias)} cifra={{ rotulo: 'medido', fuente: 'validación de ubicación de cada hito' }} />
           )}
         </ul>
         {recortada && <p className="mt-2 text-[12px]" style={{ color: 'var(--warn)' }}>La lectura llegó a su tope: las cifras cubren solo lo más reciente del periodo.</p>}

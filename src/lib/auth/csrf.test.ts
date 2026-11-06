@@ -52,6 +52,22 @@ describe('vieneDeNuestroSitio', () => {
   });
 });
 
+describe('CT-SEG-17 · Referer cuando no hay Sec-Fetch ni Origin (navegador viejo)', () => {
+  it('Referer de otro sitio NO pasa', () => {
+    expect(vieneDeNuestroSitio(pedir({ host: 'app.likida.ai', referer: 'https://malo.example/pagina' }))).toBe(false);
+  });
+  it('Referer de nuestro host pasa', () => {
+    expect(vieneDeNuestroSitio(pedir({ host: 'app.likida.ai', referer: 'https://app.likida.ai/dashboard/x' }))).toBe(true);
+  });
+  it('Referer ilegible no pasa', () => {
+    expect(vieneDeNuestroSitio(pedir({ host: 'app.likida.ai', referer: 'no-es-url' }))).toBe(false);
+  });
+  it('Sec-Fetch-Site y Origin siguen mandando sobre el Referer', () => {
+    expect(vieneDeNuestroSitio(pedir({ 'sec-fetch-site': 'same-origin', host: 'app.likida.ai', referer: 'https://malo.example/' }))).toBe(true);
+    expect(vieneDeNuestroSitio(pedir({ origin: 'https://app.likida.ai', host: 'app.likida.ai', referer: 'https://malo.example/' }))).toBe(true);
+  });
+});
+
 describe('escribe', () => {
   it('solo los métodos que cambian algo', () => {
     expect(['POST', 'PUT', 'PATCH', 'DELETE'].every(escribe)).toBe(true);

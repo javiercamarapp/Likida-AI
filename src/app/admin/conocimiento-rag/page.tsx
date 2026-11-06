@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { BookOpen } from 'lucide-react';
 import { BarraPagina } from '../../dashboard/resumen-visual';
@@ -57,3 +58,5 @@ export default async function ConocimientoRagPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Conocimiento / RAG' };

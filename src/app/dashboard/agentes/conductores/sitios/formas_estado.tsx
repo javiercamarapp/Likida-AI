@@ -13,7 +13,7 @@ export function FormaEstadoSitio({ accion, id, activa }: { accion: AccionSitio; 
     <form action={enviar} className="inline-flex flex-col gap-1">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="activa" value={activa ? 'no' : 'si'} />
-      <button type="submit" className="underline text-left" style={{ color: 'var(--muted)' }}>{activa ? 'Archivar' : 'Reactivar'}</button>
+      <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>{activa ? 'Archivar' : 'Reactivar'}</button>
       {estado && !estado.ok && <Aviso r={estado} />}
     </form>
   );

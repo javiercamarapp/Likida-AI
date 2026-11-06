@@ -63,9 +63,7 @@ export const TEXTO_PRIVACIDAD =
   + 'La licencia, su vigencia y el teléfono del operador son datos personales de un tercero: solo salen si la dueña de la flota '
   + 'los habilita aquí, y el cambio queda registrado con su nombre y la fecha.';
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
-const BOTON = 'hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]';
 
 function Aviso({ children }: { children: React.ReactNode }) {
   return (
@@ -78,7 +76,7 @@ function Aviso({ children }: { children: React.ReactNode }) {
 function Guardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className={`rv-btn rv-btn--secondary ${BOTON}`}>
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary">
       <Save width={14} height={14} strokeWidth={1.75} aria-hidden />Guardar configuración
     </button>
   );
@@ -175,14 +173,14 @@ export function VistaConfiguracionAviso({
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
                     <label className={ETIQUETA} htmlFor="cfg-modo">Modo</label>
-                    <select id="cfg-modo" name={sdEnvio ? undefined : 'modo'} defaultValue={config.modo} disabled={sdEnvio} className={CAMPO}>
+                    <select id="cfg-modo" name={sdEnvio ? undefined : 'modo'} defaultValue={config.modo} disabled={sdEnvio} className="w-full">
                       <option value="confirmar">Confirmar cada aviso (recomendado)</option>
                       <option value="autonomo">Autónomo (solo clientes con avisos confirmados sin cambios)</option>
                     </select>
                   </div>
                   <div>
                     <label className={ETIQUETA} htmlFor="cfg-canal">Canal por defecto</label>
-                    <select id="cfg-canal" name={sdEnvio ? undefined : 'canal'} defaultValue={config.canalDefault} disabled={sdEnvio} className={CAMPO}>
+                    <select id="cfg-canal" name={sdEnvio ? undefined : 'canal'} defaultValue={config.canalDefault} disabled={sdEnvio} className="w-full">
                       <option value="ejecutivo_copia">Copia para el ejecutivo (tú lo mandas)</option>
                       <option value="cliente_1a1">WhatsApp directo al cliente</option>
                     </select>
@@ -191,11 +189,11 @@ export function VistaConfiguracionAviso({
                 <div className="grid sm:grid-cols-2 gap-3">
                   <div>
                     <label className={ETIQUETA} htmlFor="cfg-desde">Enviar desde (hora)</label>
-                    <input id="cfg-desde" name="ventana_desde" type="time" defaultValue={config.ventana?.desde ?? ''} disabled={sd} className={CAMPO} />
+                    <input id="cfg-desde" name="ventana_desde" type="time" defaultValue={config.ventana?.desde ?? ''} disabled={sd} className="w-full" />
                   </div>
                   <div>
                     <label className={ETIQUETA} htmlFor="cfg-hasta">Enviar hasta (hora)</label>
-                    <input id="cfg-hasta" name="ventana_hasta" type="time" defaultValue={config.ventana?.hasta ?? ''} disabled={sd} className={CAMPO} />
+                    <input id="cfg-hasta" name="ventana_hasta" type="time" defaultValue={config.ventana?.hasta ?? ''} disabled={sd} className="w-full" />
                   </div>
                 </div>
                 <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Fuera de ese horario el aviso espera. Vacío = a cualquier hora. Si el fin es menor que el inicio, el horario cruza la medianoche.</p>
@@ -222,7 +220,7 @@ export function VistaConfiguracionAviso({
                   <label className={ETIQUETA} htmlFor="cfg-horas">Horas antes de la cita (vacío = en cuanto esté listo)</label>
                   <input
                     id="cfg-horas" name="horas_antes" type="number" inputMode="numeric" step={1}
-                    min={lim.horasAntes.min} max={lim.horasAntes.max} defaultValue={config.horasAntesCita ?? ''} disabled={sd} className={CAMPO}
+                    min={lim.horasAntes.min} max={lim.horasAntes.max} defaultValue={config.horasAntesCita ?? ''} disabled={sd} className="w-full"
                   />
                 </div>
                 <div>
@@ -237,14 +235,14 @@ export function VistaConfiguracionAviso({
                     <label className={ETIQUETA} htmlFor="cfg-debounce">Minutos de calma antes de reenviar ({lim.debounce.min} a {lim.debounce.max})</label>
                     <input
                       id="cfg-debounce" name="debounce_min" type="number" inputMode="numeric" step={1} required
-                      min={lim.debounce.min} max={lim.debounce.max} defaultValue={config.debounceMin} disabled={sd} className={CAMPO}
+                      min={lim.debounce.min} max={lim.debounce.max} defaultValue={config.debounceMin} disabled={sd} className="w-full"
                     />
                   </div>
                   <div>
                     <label className={ETIQUETA} htmlFor="cfg-reenvios">Máximo de reenvíos por servicio ({lim.reenvios.min} a {lim.reenvios.max})</label>
                     <input
                       id="cfg-reenvios" name="max_reenvios" type="number" inputMode="numeric" step={1} required
-                      min={lim.reenvios.min} max={lim.reenvios.max} defaultValue={config.maxReenvios} disabled={sd} className={CAMPO}
+                      min={lim.reenvios.min} max={lim.reenvios.max} defaultValue={config.maxReenvios} disabled={sd} className="w-full"
                     />
                   </div>
                 </div>

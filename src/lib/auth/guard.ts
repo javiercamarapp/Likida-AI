@@ -27,9 +27,15 @@ import { tenantDemo } from './tenant-demo';
 import { leerSeleccionFlota } from './admin-context';
 import { mfaSuperadminObligatorio } from './mfa';
 import { veredictoMfaDeSesion } from './superadmin-mfa';
+import { veredictoStepUp } from './stepup';
 import { logger } from '@/lib/logger';
+import { registrarMfaFallido, registrarPaginaNegada } from '@/lib/seguridad/registro_acceso';
 import { getSessionTenant, type SessionTenant } from './session';
 import { exigirRutaDePerfil } from './perfil_tenant';
+import { esperarRegistro, TOPE_REGISTRO_ANTES_DE_REDIRECT_MS } from '@/lib/seguridad/esperar_registro';
+
+// La espera acotada vive en seguridad/esperar_registro (compartida con perfil_tenant y tenant-efectivo); se reexporta el tope.
+export { TOPE_REGISTRO_ANTES_DE_REDIRECT_MS };
 
 /**
  * DÓNDE SE INSCRIBE EL SEGUNDO FACTOR. Es la única pantalla EXENTA de la
@@ -55,9 +61,24 @@ async function exigirMfaSuperadmin(destino: string): Promise<void> {
   const veredicto = await veredictoMfaDeSesion({ rol: 'superadmin' });
   if (veredicto === 'ok') return;
   logger.warn('mfa.superadmin_exigido', { veredicto, destino });
+  // CT-SEG-11: el segundo factor que no está al día deja evento (best-effort; se espera con tope corto antes del redirect).
+  await esperarRegistro(registrarMfaFallido({ veredicto, destino, via: 'pagina' }));
   redirect(`${RUTA_MFA}?exige=${veredicto}`);
 }
 
+
+/**
+ * F9 (CT-SEG-05): MFA con tope de sesión para dueño y contador. Apagado por omisión (decisión D8): con la palanca apagada no hace
+ * ninguna llamada. Mi perfil queda exento (ahí se inscribe y verifica el factor). Mismo rebote y vocabulario que el del superadmin.
+ */
+async function exigirMfaTenant(rol: string, destino: string): Promise<void> {
+  if (destino.startsWith(RUTA_MFA)) return;
+  const veredicto = await veredictoStepUp(rol);
+  if (veredicto === 'ok') return;
+  logger.warn('mfa.escalonado_exigido', { veredicto, destino, rol });
+  await esperarRegistro(registrarMfaFallido({ veredicto, destino, via: 'pagina' }));
+  redirect(`${RUTA_MFA}?exige=${veredicto}`);
+}
 
 export async function requireSessionTenant(
   destino: string,
@@ -94,6 +115,7 @@ export async function requireSessionTenant(
   const destinoCompleto = querystring ? `${destino}${querystring}` : destino;
   if (!s) redirect(`/login?next=${encodeURIComponent(destinoCompleto)}`);
   if (s.rol === 'superadmin') await exigirMfaSuperadmin(destino);
+  else await exigirMfaTenant(s.rol, destino);
   if (!s.tenantId) {
     if (s.rol === 'superadmin') {
       // "Ver como" (previsualización auditada): la base sigue siendo la demo
@@ -151,7 +173,10 @@ export async function requireSessionTenant(
 export async function requireSuperadmin(): Promise<SessionTenant> {
   const s = await getSessionTenant();
   if (!s) redirect(`/login?next=${encodeURIComponent('/admin')}`);
-  if (s.rol !== 'superadmin') redirect('/dashboard');
+  if (s.rol !== 'superadmin') {
+    await esperarRegistro(registrarPaginaNegada({ ruta: '/admin', rol: s.rol, causa: 'superadmin', tenantId: s.tenantId, userId: s.userId }));
+    redirect('/dashboard');
+  }
   // SEG-3: la consola de negocio es justo lo que un phishing con enlace
   // mágico buscaría. Obligatorio por default en producción.
   await exigirMfaSuperadmin('/admin');
@@ -174,6 +199,7 @@ export async function requireVendedor(): Promise<SessionTenant> {
   if (!s) redirect(`/login?next=${encodeURIComponent('/vendedor')}`);
   if (s.rol !== 'vendedor' && s.rol !== 'superadmin') {
     const { inicioDe } = await import('./visibilidad');
+    await esperarRegistro(registrarPaginaNegada({ ruta: '/vendedor', rol: s.rol, causa: 'vendedor', tenantId: s.tenantId, userId: s.userId }));
     redirect(inicioDe(s.rol));
   }
   if (s.rol === 'superadmin') await exigirMfaSuperadmin('/vendedor');
@@ -192,6 +218,9 @@ export async function requireVendedor(): Promise<SessionTenant> {
 export async function exigirVerRuta(destino: string): Promise<SessionTenant> {
   const { puedeVerRuta, inicioDe } = await import('./visibilidad');
   const s = await requireSessionTenant(destino);
-  if (!puedeVerRuta(s.rol, destino)) redirect(inicioDe(s.rol));
+  if (!puedeVerRuta(s.rol, destino)) {
+    await esperarRegistro(registrarPaginaNegada({ ruta: destino, rol: s.rol, causa: 'rol', tenantId: s.tenantId, userId: s.userId }));
+    redirect(inicioDe(s.rol));
+  }
   return s;
 }

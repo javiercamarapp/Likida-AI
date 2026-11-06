@@ -55,7 +55,11 @@ vi.mock('@/lib/ratelimit', () => ({
 }));
 
 const { GET } = await import('./route');
-const peticion = () => new Request('https://app.likida.ai/api/health') as never;
+// CT-SEG-12: el detalle completo exige HEALTH_TOKEN; el resto de este archivo mide el detalle, asi que manda el token.
+const TOKEN = 'token-de-health-de-prueba-0123456789';
+process.env.HEALTH_TOKEN = TOKEN;
+const peticion = () => new Request('https://app.likida.ai/api/health', { headers: { 'x-health-token': TOKEN } }) as never;
+const peticionAnonima = () => new Request('https://app.likida.ai/api/health') as never;
 
 describe('/api/health', () => {
   it('sin latidos todavía: degraded y el cuerpo solo trae pulso (nada de negocio)', async () => {
@@ -602,5 +606,44 @@ describe('H759-9: apagado por interruptor con antigüedad', () => {
     expect(c.checks.crons).toBe('apagado');
     expect(c.checks).not.toHaveProperty('apagadoDias');
     expect(alertarHuecoConfiguracion).not.toHaveBeenCalled();
+  });
+});
+
+// CT-SEG-12: el GET anonimo ya no lista migraciones ni crons ni dispara consultas con service role.
+describe('/api/health sin token (CT-SEG-12)', () => {
+  beforeEach(() => { latidos = []; permitido = true; dbFalla = false; alertarOperador.mockClear(); });
+
+  it('el anonimo recibe solo pulso: sin migracion, sin checks de crons, sin tocar la base ni alertar', async () => {
+    const r = await GET(peticionAnonima());
+    const c = await r.json();
+    expect(r.status).toBe(200);
+    expect(Object.keys(c).sort()).toEqual(['acceso', 'hora', 'ok', 'status', 'version']);
+    expect(c.acceso).toBe('publico');
+    expect(JSON.stringify(c)).not.toMatch(/migracion|aplicados|crons|atras|adelante/);
+    expect(alertarOperador).not.toHaveBeenCalled();
+    expect(r.headers.get('cache-control')).toBe('no-store');
+  });
+
+  it('un token equivocado se trata como anonimo', async () => {
+    const r = await GET(new Request('https://app.likida.ai/api/health', { headers: { 'x-health-token': 'otro-token-distinto-0123456789' } }) as never);
+    const c = await r.json();
+    expect(c.migracion).toBeUndefined();
+    expect(c.acceso).toBe('publico');
+  });
+
+  it('sin HEALTH_TOKEN configurado en el servidor nadie obtiene el detalle, ni mandando una cabecera vacia', async () => {
+    const guardado = process.env.HEALTH_TOKEN;
+    delete process.env.HEALTH_TOKEN;
+    try {
+      const r = await GET(new Request('https://app.likida.ai/api/health', { headers: { 'x-health-token': '', authorization: 'Bearer ' } }) as never);
+      expect((await r.json()).migracion).toBeUndefined();
+    } finally { process.env.HEALTH_TOKEN = guardado; }
+  });
+
+  it('el token por Authorization: Bearer tambien abre el detalle', async () => {
+    const r = await GET(new Request('https://app.likida.ai/api/health', { headers: { authorization: `Bearer ${TOKEN}` } }) as never);
+    const c = await r.json();
+    expect(c.migracion).toBeDefined();
+    expect(c.checks).toBeDefined();
   });
 });

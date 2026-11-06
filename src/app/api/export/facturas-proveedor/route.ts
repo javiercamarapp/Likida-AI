@@ -8,6 +8,7 @@ import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { LecturaIncompleta } from '@/lib/likida/pg';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 
 export const runtime = 'nodejs';
 // BE-19 (auditoría 24): sin esto el tope lo pone el default de la plataforma
@@ -32,11 +33,29 @@ const FORMATOS: Record<string, FormatoExport> = {
  * dinero) Y la del verbo (puedeExportar) — la lección documentada del IDOR:
  * se acota el tenant y se olvida el rol.
  *
- * Después de generar el CSV se marca `exportada_en` (anti-doble-import) y se
- * anota la corrida del agente. Los dos son POSTERIORES al archivo y jamás lo
- * tumban: si el marcado falla, el archivo sale y la corrida lo dice.
+ * CT-SEG-17: el GET es PURO — entrega el archivo y no escribe nada (cabecera
+ * `X-Likida-Marcado: no`). Lo que cambia estado cuelga de POST: después de
+ * generar el CSV se marca `exportada_en` (anti-doble-import) y se anota la
+ * corrida del agente. Los dos son POSTERIORES al archivo y jamás lo tumban:
+ * si el marcado falla, el archivo sale y la corrida lo dice. El botón del
+ * panel es un formulario POST; un enlace de otro sitio ya no marca nada.
  */
 export async function GET(req: Request) {
+  return exportar(req, false);
+}
+
+export async function POST(req: Request) {
+  return exportar(req, true);
+}
+
+async function exportar(req: Request, escribe: boolean) {
+  // CSRF por navegación: un link, redirección o formulario de otro sitio llevaría la cookie de la sesión.
+  // `vieneDeNuestroSitio` deja pasar el panel (same-origin) y rechaza cross-site/same-site.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('export.proveedor_origen_ajeno', { sitio: req.headers.get('sec-fetch-site'), origen: req.headers.get('origin') });
+    return new NextResponse('Esta descarga solo se puede pedir desde el sitio de Likida.', { status: 403 });
+  }
+
   if (!(await rateLimit(`export-prov:${clientIp(req)}`, 10, 60_000))) {
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }
@@ -76,7 +95,8 @@ export async function GET(req: Request) {
     const cuerpo = toCsv(filas);
 
     // El archivo ya existe: lo que sigue anota, no decide.
-    const marca = await marcarExportadas(t.tenantId, ids);
+    // GET puro: no se marca. `marca` queda como «nada que anotar» y no se avisa nada falso dentro del archivo.
+    const marca = escribe ? await marcarExportadas(t.tenantId, ids) : { error: undefined, marcadas: ids.length };
     // AUDITORÍA 24, BE-8: el aviso vivía SOLO en `agente_corrida`. Quien
     // descarga el CSV no abre la bitácora del agente: veía un 200 con archivo
     // y lo importaba al ERP; como `exportada_en` seguía NULL, las mismas
@@ -89,7 +109,7 @@ export async function GET(req: Request) {
         'Van a reaparecer en la bandeja como «sin exportar»: NO las vuelvas a importar al ERP sin revisar antes cuáles ya entraron.\n' +
         cuerpo
       : cuerpo;
-    await registrarCorrida(t.tenantId, 'proveedores', {
+    if (escribe) await registrarCorrida(t.tenantId, 'proveedores', {
       inicio,
       fin: new Date(),
       estado: marca.error ? 'parcial' : 'ok',
@@ -108,6 +128,8 @@ export async function GET(req: Request) {
         // El genérico conserva su nombre de siempre: hay quien ya lo descarga.
         'Content-Disposition': `attachment; filename="${formato === 'generico' ? 'facturas_proveedor_likida.csv' : `facturas_proveedor_${formato}_likida.csv`}"`,
         'Cache-Control': 'no-store',
+        // Declara si esta respuesta dejó las facturas marcadas como exportadas (solo POST).
+        'X-Likida-Marcado': escribe ? 'si' : 'no',
       },
     });
   } catch (e) {

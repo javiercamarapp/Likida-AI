@@ -26,7 +26,8 @@
 //     orígenes distintos, y la landing no tiene por qué escribir aquí.
 //  2. Si no viene, se mira `Origin` contra el host de la propia petición.
 //     Cubre a los navegadores que aún no mandan `Sec-Fetch-*`.
-//  3. Si no viene NINGUNO de los dos, pasa. No es un agujero: un ataque CSRF
+//  2b. Si tampoco hay `Origin` pero SI hay `Referer`, el `Referer` debe ser de nuestro host (CT-SEG-17).
+//  3. Si no viene NINGUNO de los tres, pasa. No es un agujero: un ataque CSRF
 //     ES un navegador, y un navegador siempre manda `Origin` en un POST
 //     cross-site. Sin ninguna de las dos cabeceras quien llama es `curl`, un
 //     TMS o un cron — que no tiene cookies de nadie y, si trae credencial, es
@@ -60,7 +61,17 @@ export function vieneDeNuestroSitio(req: Request): boolean {
   if (sfs) return sfs === 'same-origin' || sfs === 'none';
 
   const origen = req.headers.get('origin');
-  if (!origen) return true; // no es un navegador; ver la cabecera del archivo
+  if (!origen) {
+    // CT-SEG-17: un navegador viejo (sin Sec-Fetch) que navega desde otro sitio no manda Origin en un GET, pero SI suele mandar
+    // `Referer`. Si viene y es de otro host, no la pidio nuestra pagina. Sin Referer tampoco (curl, TMS, cron) pasa, como antes.
+    const referer = req.headers.get('referer');
+    if (referer) {
+      const propioR = hostPropio(req);
+      const deReferer = hostDeOrigen(referer);
+      return propioR !== null && deReferer !== null && propioR === deReferer;
+    }
+    return true; // no es un navegador; ver la cabecera del archivo
+  }
 
   const propio = hostPropio(req);
   const deOrigen = hostDeOrigen(origen);

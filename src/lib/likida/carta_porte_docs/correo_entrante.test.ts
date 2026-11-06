@@ -9,6 +9,7 @@ import {
 import { llmFalso, lecturaBoreal } from './llm_falso.fixture';
 import { correoTexto, defectuosos, excelAtlas, pdfBoreal, xmlCartaPorte } from './documentos_sinteticos.fixture';
 import * as repo from './repo';
+import { anotarBitacora } from '../bitacora_escritura';
 
 const DOM = 'mail.likida.test';
 const TOKEN_A = 'abcdefghjkmnpqrstvwxyz23';
@@ -74,6 +75,8 @@ describe('la dirección del buzón', () => {
 
 describe('atenderCorreoCartaPorte', () => {
   const base = { emailId: 'em-1', from: 'Logística <logistica@cliente.example>', subject: 'Embarque CG-5521' };
+  // S-06: un buzón SIN lista de remitentes ya no acepta a nadie; estas pruebas ejercen el camino de un buzón con la lista del cliente.
+  beforeEach(async () => { await repo.configurarBuzon(A, { remitentesPermitidos: ['cliente.example'] }); await repo.configurarBuzon(B, { remitentesPermitidos: ['cliente.example'] }); });
 
   it('buzón desconocido o apagado: 200 sin hacer nada', async () => {
     expect(await atenderCorreoCartaPorte('x'.repeat(24), { ...base, text: correoTexto() }, deps())).toMatchObject({ status: 200, cuerpo: { ignorado: 'buzon_desconocido' } });
@@ -161,6 +164,53 @@ describe('atenderCorreoCartaPorte', () => {
     expect(estado.eventos.some((e) => e.tipo === 'aviso_oficina')).toBe(false);
   });
 
+  describe('CT-A345-09: nada se descarta sin rastro', () => {
+    const anotado = () => vi.mocked(anotarBitacora).mock.calls.map((c) => c[0]).filter((e) => e.accion === 'cp_correo.descartes');
+    beforeEach(() => { vi.mocked(anotarBitacora).mockClear(); });
+
+    it('xlsm, zip, docx, tif y heic no se leen pero dejan UNA anotación con motivo y extensiones (sin nombres de archivo)', async () => {
+      const nombres = ['macro.xlsm', 'todo.zip', 'oficio.docx', 'escaneo.tif', 'foto.heic'];
+      const r = await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.', attachments: nombres.map((n, i) => ({ id: `x${i}`, filename: n })) }, deps());
+      expect(r).toMatchObject({ status: 200, cuerpo: { ignorado: 'sin_contenido', descartados: 6 } }); // 5 extensiones + cuerpo corto
+      expect(estado.docs.size).toBe(0);
+      const a = anotado();
+      expect(a).toHaveLength(1);
+      expect(a[0]).toMatchObject({ tenantId: A, entidad: 'cp_correo', entidadId: 'em-1', detalle: { total: 6, por_motivo: { extension_no_admitida: 5, cuerpo_corto: 1 }, extensiones: ['docx', 'heic', 'tif', 'xlsm', 'zip'] } });
+      expect(JSON.stringify(a[0])).not.toMatch(/macro|oficio|escaneo|todo\.zip/);
+    });
+
+    it('el mismo correo reenviado con cuerpo corto pide la anotación idempotente por emailId (sin filas duplicadas)', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.' }, deps());
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.' }, deps());
+      const llamadas = vi.mocked(anotarBitacora).mock.calls.filter((c) => c[0].accion === 'cp_correo.descartes');
+      expect(llamadas).toHaveLength(2);
+      for (const [e, o] of llamadas) { expect(e.entidadId).toBe('em-1'); expect(o).toMatchObject({ unica: true }); }
+    });
+
+    it('un cuerpo de menos de 80 caracteres sin adjuntos deja rastro «cuerpo_corto»', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Embarque CG-5521 sale mañana.' }, deps());
+      expect(anotado()[0]).toMatchObject({ detalle: { por_motivo: { cuerpo_corto: 1 } } });
+    });
+
+    it('un adjunto con extensión válida pero ilegible o gigante también deja rastro, y el que sí se leyó entra', async () => {
+      const grande = new Uint8Array(MAX_ADJUNTO_BYTES + 1).fill(37);
+      const r = await atenderCorreoCartaPorte(TOKEN_A, { ...base, attachments: [{ id: 'g', filename: 'enorme.pdf' }, { id: 'e', filename: 'virus.pdf' }, { id: 'b', filename: 'ok.pdf' }, { id: 'n', filename: 'raro.xlsm' }] },
+        deps({ g: grande, e: defectuosos.ejecutable, b: await pdfBoreal() }));
+      expect(r).toMatchObject({ status: 200, cuerpo: { recibidos: 1, descartados: 3 } });
+      expect(anotado()[0]).toMatchObject({ detalle: { total: 3, por_motivo: { demasiado_grande: 1, formato_no_legible: 1, extension_no_admitida: 1 } } });
+    });
+
+    it('un adjunto sin identificador (no se puede bajar) deja rastro', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: 'Gracias.', attachments: [{ filename: 'sin-id.pdf' }] }, deps());
+      expect(anotado()[0]).toMatchObject({ detalle: { por_motivo: { sin_identificador: 1, cuerpo_corto: 1 } } });
+    });
+
+    it('un correo limpio no anota nada', async () => {
+      await atenderCorreoCartaPorte(TOKEN_A, { ...base, attachments: [{ id: 'a1', filename: 'ok.pdf' }] }, deps({ a1: await pdfBoreal() }));
+      expect(anotado()).toHaveLength(0);
+    });
+  });
+
   it('con el agente apagado: 503 (para que vuelva) y sin consumir el email_id', async () => {
     const r = await atenderCorreoCartaPorte(TOKEN_A, { ...base, text: correoTexto() }, deps({}, { apagado: async () => true }));
     expect(r.status).toBe(503);
@@ -211,4 +261,17 @@ describe('atenderCorreoCartaPorte', () => {
     expect(d.descargas).toHaveLength(10);
   });
   void lecturaAtlas;
+});
+
+describe('S-06 / CT-SEG-06: la lista de remitentes vacía no acepta a cualquiera', () => {
+  it('buzón activo con lista vacía: 200 sin_remitentes_autorizados, sin descargar ni reclamar el correo', async () => {
+    // Fixture por omisión: crearBuzon deja la lista vacía (igual que la base real).
+    await repo.configurarBuzon(A, { remitentesPermitidos: [] });
+    const d = deps({ a1: await pdfBoreal() });
+    const r = await atenderCorreoCartaPorte(TOKEN_A, { emailId: 'em-vacio', from: 'cualquiera@x.com', subject: 'Embarque', attachments: [{ id: 'a1', filename: 'a.pdf' }] }, d);
+    expect(r).toMatchObject({ status: 200, cuerpo: { ok: true, ignorado: 'sin_remitentes_autorizados' } });
+    expect(d.descargas).toEqual([]);
+    expect(estado.correos.size).toBe(0);
+    expect(estado.docs.size).toBe(0);
+  });
 });

@@ -17,7 +17,9 @@ export const MODOS: readonly Modo[] = ['corto', 'completo'];
 /** Ilustraciones del marco de la tarjeta (SVG de línea, monocromas). */
 export type Ilu =
   | 'barras' | 'linea' | 'chat' | 'nodos' | 'tarjetas' | 'escudo' | 'mapa' | 'importar' | 'corte' | 'campana' | 'lista' | 'equipo'
-  | 'panel' | 'cierre';
+  | 'panel' | 'cierre'
+  // Guía que enseña a hacer (OB-1): una por cosa que la persona hace con sus manos.
+  | 'conectar' | 'documento' | 'correo' | 'llave' | 'celebrar' | 'reloj';
 
 /** Lo que el rol debe poder hacer para que exista el paso `accion` de una pantalla. Sale de `lib/auth/permisos.ts`, nunca se copia. */
 export type Permiso = 'asignar' | 'administrar' | 'timbrar' | 'catalogo' | 'firmar' | 'exportar' | 'dinero';

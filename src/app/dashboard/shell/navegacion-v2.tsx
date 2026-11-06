@@ -23,6 +23,7 @@ import MenuCuenta from './menu-cuenta';
 
 export { iniciales, anclaDe, avanceDe } from './nav-utiles';
 import { iniciales, anclaDe, avanceDe } from './nav-utiles';
+import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 type Insignias = Record<string, string> | undefined;
 
@@ -47,7 +48,7 @@ function Fila({ item, sufijo, activo, perfil, insignia, alNavegar, claseExtra }:
         data-tour={`nav-${anclaDe(item.href)}`}
         onClick={alNavegar}
       >
-        <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={1.75} aria-hidden />
+        <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
         <span className="rv-item__txt">{item.nombre}</span>
         {modulo && <span className="rv-chip" aria-hidden>Próximamente</span>}
         {!modulo && n > 0 && <span className="rv-contador" aria-label={`${n} pendientes`}>{n > 99 ? '99+' : n}</span>}
@@ -115,7 +116,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
               <button type="button" id={idT} className="rv-grupo__t rv-grupo__tog" aria-expanded={esta} aria-controls={`${idT}-c`}
                 onClick={() => setAbierta(esta ? null : g.id)}>
                 {g.titulo}
-                <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={1.75} aria-hidden />
+                <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
               </button>
             </h2>
             <div id={`${idT}-c`} className="rv-grupo__cuerpo" role="region" aria-labelledby={idT}>

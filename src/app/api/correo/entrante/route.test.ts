@@ -60,6 +60,9 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 let limitar: (clave: string) => boolean = () => true;
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: async (clave: string) => limitar(clave), clientIp: () => '1.2.3.4' }));
+// CT-SEG-11: la firma que no verifica deja evento de seguridad; el doble solo registra que se llamó (y con qué motivo).
+const firmasInvalidas: string[] = [];
+vi.mock('@/lib/seguridad/registro_acceso', () => ({ registrarFirmaCorreoInvalida: async (_req: Request, motivo: string) => { firmasInvalidas.push(motivo); } }));
 // La INGESTA (xml/pdf/zip, `buzon/ingesta.ts`) tiene su propia prueba E2E con dobles; aquí se prueba el
 // WEBHOOK (firma, flota por destinatario, descarga con topes, claim del correo). El doble clasifica por
 // contenido, como lo haría la ingesta de verdad: un CFDI se guarda, un archivo desconocido se ignora, y
@@ -208,6 +211,15 @@ describe('la firma se verifica ANTES de leer nada del cuerpo', () => {
     const r = await POST(pedir(evento()));
     expect(r.status).toBe(401);
     expect(tablasTocadas).toEqual([]);
+  });
+
+  it('CT-SEG-11: cada rechazo por firma deja evento con el MOTIVO corto y una firma válida no deja ninguno', async () => {
+    firmasInvalidas.length = 0;
+    await POST(pedir(evento(), { firmar: false }));
+    expect(firmasInvalidas).toEqual(['faltan_cabeceras']);
+    firmasInvalidas.length = 0;
+    await POST(pedir(evento()));
+    expect(firmasInvalidas).toEqual([]);
   });
 
   it('el cuerpo del rechazo NO dice qué falló', async () => {

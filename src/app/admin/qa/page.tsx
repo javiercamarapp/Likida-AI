@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import {
@@ -72,3 +73,5 @@ export default async function QaPage() {
     />
   );
 }
+
+export const metadata: Metadata = { title: 'QA autónomo' };

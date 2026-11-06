@@ -44,11 +44,17 @@ beforeEach(() => {
 });
 
 describe('POST /v1/ccp-timbrado', () => {
-  it('pide el área operacion y, sin credencial, no lee el cuerpo ni toca nada', async () => {
+  it('escrituras_piden_administracion: la escritura que manda correo exige el área administracion, nunca operacion', async () => {
+    await postear(CUERPO());
+    expect(abrir).toHaveBeenCalledWith(expect.anything(), 'administracion');
+    expect(abrir).not.toHaveBeenCalledWith(expect.anything(), 'operacion');
+  });
+
+  it('pide el área administracion y, sin credencial, no lee el cuerpo ni toca nada', async () => {
     abrir.mockResolvedValueOnce({ ok: false, respuesta: Response.json({ error: { codigo: 'no_autenticado', mensaje: 'x' } }, { status: 401 }) });
     const r = await postear(CUERPO());
     expect(r.status).toBe(401);
-    expect(abrir).toHaveBeenCalledWith(expect.anything(), 'operacion');
+    expect(abrir).toHaveBeenCalledWith(expect.anything(), 'administracion');
     expect(doble.e.archivos.size).toBe(0);
   });
 

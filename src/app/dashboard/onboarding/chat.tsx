@@ -96,7 +96,7 @@ function VisualRespuesta({ v }: { v: Visual }) {
   }
   return (
     <div className="card p-1.5 mt-2 overflow-x-auto">
-      <table className="w-full border-collapse text-[13px]">
+      <table aria-label="Datos de la respuesta del asistente" className="w-full border-collapse text-[13px]">
         <tbody>
           {v.filas.map(([k, val]) => (
             <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
@@ -363,7 +363,7 @@ export function ChatEntrevista({
             <FileText width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
             <span className="max-w-[260px] truncate">{documento.nombre}</span>
             <button type="button" aria-label="Quitar archivo" onClick={() => setDocumento(null)}
-              className="w-5 h-5 rounded-full inline-flex items-center justify-center transition-colors hover:bg-[var(--line2)]">
+              className="rv-icono-boton">
               <X width={12} height={12} strokeWidth={2} />
             </button>
           </span>
@@ -374,11 +374,11 @@ export function ChatEntrevista({
         onChange={(e) => setTexto(e.target.value)}
         placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'}
         aria-label="Pregunta sobre tu operación"
-        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
+        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed" data-anillo="envolvente"
       />
       <div className="flex items-center justify-between mt-3 relative">
         <button type="button" onClick={() => setRecomendar((v) => !v)}
-          className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-85"
+          className="rv-btn rv-btn--primary rv-btn--sm"
           style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           <Search width={11} height={11} strokeWidth={2.25} />
           Consulta
@@ -393,7 +393,7 @@ export function ChatEntrevista({
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
           <button ref={botonClip} type="button" aria-label="Adjuntar comprobante" title="Adjuntar comprobante"
             onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado}
-            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)] disabled:opacity-50"
+            className="rv-icono-boton"
             style={{ color: 'var(--ink2)' }}>
             <Paperclip width={14} height={14} strokeWidth={2} />
           </button>
@@ -401,7 +401,7 @@ export function ChatEntrevista({
             type="submit"
             aria-label="Enviar"
             disabled={!puedeEnviar}
-            className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-opacity disabled:cursor-default"
+            className="rv-icono-boton"
             style={{
               background: 'var(--marca)',
               color: 'var(--marca-fg)',
@@ -441,7 +441,7 @@ export function ChatEntrevista({
           key={c.valor}
           type="button"
           onClick={() => preguntar(c.valor, c.etiqueta)}
-          className="text-xs px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-70"
+          className="rv-chip"
           style={{ color: 'var(--ink2)', background: 'var(--surface)' }}
         >
           {c.etiqueta}

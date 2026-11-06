@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -72,7 +73,7 @@ export default async function PaginaClientes({
    */
   async function buscarClienteAccion(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) throw new Error('Tu rol no puede ver la cartera de clientes.');
     if (tipo !== 'cliente') throw new Error('Catálogo desconocido.');
     return buscarCatalogo(s.tenantId, 'cliente', typeof q === 'string' ? q : '');
@@ -97,7 +98,7 @@ export default async function PaginaClientes({
 
   async function guardarCliente(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver la cartera de clientes.' };
     if (!puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota da de alta clientes y fija tarifas.' };
@@ -140,7 +141,7 @@ export default async function PaginaClientes({
 
   async function guardarTarifa(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver la cartera de clientes.' };
     if (!puedeAdministrar(s.rol)) {
       return { ok: false, error: 'Solo el dueño de la flota da de alta clientes y fija tarifas.' };

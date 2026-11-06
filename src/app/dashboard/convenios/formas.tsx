@@ -14,14 +14,13 @@ import { Aviso, type ResultadoSitio } from '../agentes/conductores/sitios/formas
 
 export type AccionConvenio = (previo: ResultadoSitio, fd: FormData) => Promise<ResultadoSitio>;
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 function BotonImportar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Upload width={14} height={14} strokeWidth={1.75} />{pending ? 'Importando…' : 'Importar'}
     </button>
@@ -34,7 +33,7 @@ export function FormaImportarConvenios({ accion }: { accion: AccionConvenio }) {
     <form action={enviar} className="space-y-3" aria-label="Importar convenios desde CSV o Excel" encType="multipart/form-data">
       <CampoArchivo name="archivo" etiqueta="Archivo CSV o Excel (.xlsx)" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={5} spellCheck={false} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`}
+        <textarea name="csv" rows={5} spellCheck={false} className="w-full h-auto py-2 font-mono text-[12px]"
           placeholder={'cliente,convenio,categoria,instruccion,momento,lugar\nCliente Uno,Ruta norte,puerta,Puerta 3 lado poniente,ambos,destino'} />
       </label>
       <div className="flex items-center gap-3 flex-wrap"><BotonImportar /></div>
@@ -54,13 +53,13 @@ export function FormaCorregirConvenio({ accion, viajeId, folio, actual, opciones
     <form action={enviar} className="flex items-end gap-2 flex-wrap" aria-label={`Corregir el convenio del viaje ${folio}`}>
       <input type="hidden" name="viajeId" value={viajeId} />
       <label className="block min-w-0"><span className={ETIQUETA}>Convenio del viaje</span>
-        <select name="convenioId" defaultValue={actual ?? ''} className={`${CAMPO} max-w-[260px]`}>
+        <select name="convenioId" defaultValue={actual ?? ''} className="w-full max-w-[260px]">
           <option value="">Sin convenio (no mandar instrucciones)</option>
           {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
         </select>
       </label>
       <Casilla name="reenviar" value="si" defaultChecked etiqueta="Mandar de nuevo las instrucciones al operador" />
-      <button type="submit" disabled={pendiente} className="rv-btn rv-btn--secondary h-9 px-3 rounded-lg text-[12px] font-medium hairline disabled:opacity-50" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+      <button type="submit" disabled={pendiente} className="rv-btn rv-btn--secondary" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
         {pendiente ? 'Guardando…' : 'Corregir convenio'}
       </button>
       <div className="basis-full"><Aviso r={estado} /></div>
@@ -105,7 +104,7 @@ function BotonGuardar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : texto}
     </button>
@@ -149,42 +148,42 @@ export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionC
           <div><span className={ETIQUETA}>Cliente</span><p className="text-[13px] h-9 flex items-center">{convenio.cliente}</p></div>
         ) : (
           <label className="block"><span className={ETIQUETA}>Cliente</span>
-            <select name="clienteId" value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} className={CAMPO} required>
+            <select name="clienteId" value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} className="w-full" required>
               <option value="">Elige un cliente…</option>
               {catalogos.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
           </label>
         )}
         <label className="block"><span className={ETIQUETA}>Nombre del convenio (la ruta)</span>
-          <input name="nombre" value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} required className={CAMPO} placeholder="Ruta norte" />
+          <input name="nombre" value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} required className="w-full" placeholder="Ruta norte" />
         </label>
         <label className="block"><span className={ETIQUETA}>Origen (punto A)</span>
-          <input name="origen" value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} className={CAMPO} />
+          <input name="origen" value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} className="w-full" />
         </label>
         <label className="block"><span className={ETIQUETA}>Destino (punto B)</span>
-          <input name="destino" value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} className={CAMPO} />
+          <input name="destino" value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} className="w-full" />
         </label>
         <label className="block"><span className={ETIQUETA}>Sitio de carga (catálogo de sitios)</span>
-          <select name="sitioOrigenId" value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)} className={CAMPO}>
+          <select name="sitioOrigenId" value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)} className="w-full">
             <option value="">Sin sitio</option>
             {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
           </select>
         </label>
         <label className="block"><span className={ETIQUETA}>Sitio de descarga (catálogo de sitios)</span>
-          <select name="sitioDestinoId" value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)} className={CAMPO}>
+          <select name="sitioDestinoId" value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)} className="w-full">
             <option value="">Sin sitio</option>
             {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
           </select>
         </label>
         <label className="block"><span className={ETIQUETA}>Vigente desde</span>
-          <input type="date" name="vigenteDesde" value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} className={CAMPO} />
+          <input type="date" name="vigenteDesde" value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} className="w-full" />
         </label>
         <label className="block"><span className={ETIQUETA}>Vigente hasta</span>
-          <input type="date" name="vigenteHasta" value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} className={CAMPO} />
+          <input type="date" name="vigenteHasta" value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} className="w-full" />
         </label>
       </div>
       <label className="block"><span className={ETIQUETA}>Notas internas (no se mandan al operador)</span>
-        <textarea name="notas" rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} className={`${CAMPO} h-auto py-2`} />
+        <textarea name="notas" rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} className="w-full h-auto py-2" />
       </label>
 
       <fieldset className="space-y-2">
@@ -192,33 +191,33 @@ export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionC
         {filas.map((f, n) => (
           <div key={n} className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_170px_150px_auto] items-end">
             <label className="block"><span className="sr-only">Tema de la instrucción {n + 1}</span>
-              <select name="ins_categoria" value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)} className={CAMPO}>
+              <select name="ins_categoria" value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)} className="w-full">
                 {CATEGORIAS.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
               </select>
             </label>
             <label className="block"><span className="sr-only">Texto de la instrucción {n + 1}</span>
-              <input name="ins_texto" value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} className={CAMPO} placeholder="Puerta 3, lado poniente" />
+              <input name="ins_texto" value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} className="w-full" placeholder="Puerta 3, lado poniente" />
             </label>
             <label className="block"><span className="sr-only">Cuándo se manda la instrucción {n + 1}</span>
-              <select name="ins_momento" value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)} className={CAMPO}>
+              <select name="ins_momento" value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)} className="w-full">
                 {MOMENTOS.map((m) => <option key={m} value={m}>{MOMENTO_OPCION[m]}</option>)}
               </select>
             </label>
             <label className="block"><span className="sr-only">A qué planta aplica la instrucción {n + 1}</span>
-              <select name="ins_lugar" value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)} className={CAMPO}>
+              <select name="ins_lugar" value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)} className="w-full">
                 {LUGARES.map((l) => <option key={l} value={l}>{LUGAR_OPCION[l]}</option>)}
               </select>
             </label>
             <Tooltip texto="Quitar esta instrucción del convenio">
               <button type="button" onClick={() => setFilas((fs) => (fs.length === 1 ? [{ ...FILA_NUEVA }] : fs.filter((_, i) => i !== n)))}
-                aria-label={`Quitar la instrucción ${n + 1}`} className="h-9 w-9 inline-flex items-center justify-center rounded-lg hairline" style={{ color: 'var(--muted)' }}>
+                aria-label={`Quitar la instrucción ${n + 1}`} className="rv-icono-boton" style={{ color: 'var(--muted)' }}>
                 <Icono icono={Trash2} tam={14} />
               </button>
             </Tooltip>
           </div>
         ))}
         <button type="button" disabled={filas.length >= MAX_INSTRUCCIONES_POR_CONVENIO} onClick={() => setFilas((fs) => [...fs, { ...FILA_NUEVA }])}
-          className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] inline-flex items-center gap-1.5 hairline disabled:opacity-50" style={{ color: 'var(--ink)' }}>
+          className="rv-btn rv-btn--secondary" style={{ color: 'var(--ink)' }}>
           <Plus width={13} height={13} strokeWidth={1.75} />Agregar instrucción
         </button>
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Las filas sin texto se ignoran. Las que quites de la lista se borran del convenio al guardar.</p>

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { firmarFlotaPintada } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import * as repo from '@/lib/likida/carta_porte_docs/repo';
 import { CONFIG_SALIDA_ARRANQUE } from '@/lib/likida/carta_porte_docs/salida_config';
@@ -30,7 +31,9 @@ export default async function PaginaConfiguracionSalida({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
+  // MX-002: la flota que pinta esta pantalla, firmada, viaja en un campo oculto; las acciones escriben solo en ella.
+  const flotaPintada = firmarFlotaPintada(tenantId, userId);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   const fila = await repo.leerSalidaConfig(tenantId);
@@ -59,7 +62,7 @@ export default async function PaginaConfiguracionSalida({
       personas={personas.map((p) => ({ id: p.id, nombre: p.nombre ?? p.email }))}
       conector={{ hay: hayConector, puedeProbar: hayConector && esProbable(puerto) }}
       sufijo={sufijoTenant(sp)}
-      ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}) }}
+      ver={{ ...(sp.tenant ? { tenant: sp.tenant } : {}), ...(sp.rol ? { rol: sp.rol } : {}), ...(sp.vista ? { vista: sp.vista } : {}), ...(flotaPintada ? { flota: flotaPintada } : {}) }}
       acciones={{ guardar: guardarConfiguracionSalida, probar: probarConexionSalida }}
       ccp={ccp}
       primerMes={primerMes}

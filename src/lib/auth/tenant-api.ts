@@ -6,6 +6,9 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from './mfa';
 import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
 import { esRolNomina } from './roles';
+import { exigirStepUpAccion } from './stepup';
+import { registrarAccesoSuperadmin } from '@/lib/seguridad/acceso_superadmin';
+import { esExporteDeDinero, registrarExporteDinero, registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ FLOTA HABLA UNA RUTA DE API.
@@ -65,6 +68,8 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
     const veredicto = await veredictoMfaSuperadmin(await supabaseServer());
     if (veredicto !== 'ok') {
       logger.warn('mfa.superadmin_exigido_api', { veredicto });
+      // CT-SEG-11: el segundo factor que no está al día deja evento (best-effort, no espera).
+      void registrarMfaFallido({ veredicto, destino: new URL(url).pathname, via: 'api', userId: s.userId });
       return { ok: false, status: 403, motivo: 'Verifica tu segundo factor para continuar.' };
     }
   }
@@ -116,6 +121,21 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
   if (await apiDenegadaPorPerfil(tenantId, new URL(url).pathname)) {
     return { ok: false, status: 403, motivo: MOTIVO_PERFIL_API };
   }
+
+  // F9 (CT-SEG-05): los exportes de dinero exigen segundo factor reciente a dueño y contador (bandera apagada por omisión, D8).
+  if (esExporteDeDinero(new URL(url).pathname)) {
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'exporte_dinero', { tenantId, userId: s.userId });
+    if (pasoMfa) return { ok: false, status: 403, motivo: pasoMfa };
+  }
+
+  // F9 (CT-ENT-01): lectura/descarga de un superadmin sobre una flota real, en la bitácora 0997 (apagada por omisión, best-effort).
+  if (s.rol === 'superadmin' && tenantId !== tenantDemo()) {
+    const ruta = new URL(url).pathname;
+    void registrarAccesoSuperadmin({ actor: s.userId, tenantId, tipo: ruta.startsWith('/api/export/') ? 'descarga' : 'lectura', ruta });
+  }
+
+  // CT-SEG-11: quién descargó dinero. Solo registra las rutas de exporte de dinero; autorizada la descarga, no terminada.
+  void registrarExporteDinero({ url, tenantId, rol: s.rol, userId: s.userId });
 
   return { ok: true, tenantId, rol: s.rol };
 }

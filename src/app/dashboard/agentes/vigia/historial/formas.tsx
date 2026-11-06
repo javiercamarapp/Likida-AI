@@ -8,14 +8,13 @@ import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-res
 export type ResultadoGrupos = ResultadoUI;
 export type AccionGrupos = (previo: ResultadoGrupos, fd: FormData) => Promise<ResultadoGrupos>;
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 const AYUDA = 'text-[11px] mt-1';
 
 function Enviar({ children, Icono, peligro }: { children: React.ReactNode; Icono: typeof Save; peligro?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className={`rv-btn ${peligro ? 'rv-btn--danger' : 'rv-btn--secondary'} hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]`} style={peligro ? { color: 'var(--bad)' } : undefined}>
+    <button type="submit" disabled={pending} className={`rv-btn ${peligro ? 'rv-btn--danger' : 'rv-btn--secondary'}`} style={peligro ? { color: 'var(--bad)' } : undefined}>
       <Icono width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Un momento…' : children}
     </button>
   );
@@ -28,14 +27,14 @@ export function FormaAltaGrupo({ accion, clientes }: { accion: AccionGrupos; cli
       <div className="grid sm:grid-cols-2 gap-3">
         <label>
           <span className={ETIQUETA}>Cliente</span>
-          <select name="clienteId" required defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select name="clienteId" required defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="" disabled>Elige un cliente…</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </label>
         <label>
           <span className={ETIQUETA}>Nombre del grupo (como se ve en WhatsApp)</span>
-          <input name="nombre" required maxLength={120} className={CAMPO} />
+          <input name="nombre" required maxLength={120} className="w-full" />
         </label>
       </div>
       <label className="flex items-start gap-2 text-[12px]">
@@ -54,7 +53,7 @@ export function FilaCritico({ accion, grupoId, critico }: { accion: AccionGrupos
     <form action={despachar} className="inline-flex items-center gap-2">
       <input type="hidden" name="grupoId" value={grupoId} />
       <input type="hidden" name="critico" value={critico ? 'no' : 'si'} />
-      <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-md px-2 h-7 text-[11px] hover:bg-[var(--canvas)]">{critico ? 'Quitar crítico' : 'Marcar crítico'}</button>
+      <button type="submit" className="rv-btn rv-btn--secondary">{critico ? 'Quitar crítico' : 'Marcar crítico'}</button>
       <AvisoResultado estado={estado} />
     </form>
   );
@@ -65,7 +64,7 @@ export function FilaBorrar({ accion, grupoId }: { accion: AccionGrupos; grupoId:
   return (
     <form action={despachar} className="inline-flex items-center gap-2">
       <input type="hidden" name="grupoId" value={grupoId} />
-      <button type="submit" className="rv-btn rv-btn--danger rounded-md px-2 h-7 text-[11px] inline-flex items-center gap-1 hover:bg-[var(--canvas)]" style={{ color: 'var(--bad)' }} aria-label="Borrar el grupo y todo su histórico">
+      <button type="submit" className="rv-btn rv-btn--danger" style={{ color: 'var(--bad)' }} aria-label="Borrar el grupo y todo su histórico">
         <Trash2 width={12} height={12} strokeWidth={1.75} aria-hidden />Borrar
       </button>
       <AvisoResultado estado={estado} />
@@ -80,20 +79,20 @@ export function FormaImportar({ accion, grupos }: { accion: AccionGrupos; grupos
       <div className="grid sm:grid-cols-2 gap-3">
         <label>
           <span className={ETIQUETA}>Grupo</span>
-          <select name="grupoId" required defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+          <select name="grupoId" required defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="" disabled>Elige un grupo…</option>
             {grupos.map((g) => <option key={g.id} value={g.id}>{g.cliente ? `${g.cliente} · ` : ''}{g.nombre}</option>)}
           </select>
         </label>
         <label>
-          <span className={ETIQUETA}>Archivo del chat (.txt o .zip, hasta 9 MB)</span>
-          <input type="file" name="archivo" required accept=".txt,.zip,text/plain,application/zip" className={`${CAMPO} pt-1.5`} />
+          <span className={ETIQUETA}>Archivo del chat (.txt o .zip, hasta 4 MB)</span>
+          <input type="file" name="archivo" required accept=".txt,.zip,text/plain,application/zip" className="w-full pt-1.5" />
           <span className={AYUDA} style={{ color: 'var(--faint)' }}>En WhatsApp: el grupo → Exportar chat → Sin multimedia.</span>
         </label>
       </div>
       <label className="block">
         <span className={ETIQUETA}>Nombres de TU equipo en ese chat (separados por coma)</span>
-        <input name="equipo" required placeholder="Ana Servicio, Luis Tráfico" className={CAMPO} />
+        <input name="equipo" required placeholder="Ana Servicio, Luis Tráfico" className="w-full" />
         <span className={AYUDA} style={{ color: 'var(--faint)' }}>Tal como salen en el chat. Todo otro nombre se cuenta como cliente. Los nombres no se guardan, solo un código que no se puede revertir; los teléfonos y correos escritos en los mensajes se tapan.</span>
       </label>
       <Enviar Icono={Upload}>Subir histórico</Enviar>
@@ -127,7 +126,7 @@ export function FilaRetirarRapida({ accion, respuestaId }: { accion: AccionGrupo
   return (
     <form action={despachar} className="inline-flex items-center gap-2">
       <input type="hidden" name="respuestaId" value={respuestaId} />
-      <button type="submit" className="rv-btn rv-btn--danger rounded-md px-2 h-7 text-[11px] inline-flex items-center gap-1 hover:bg-[var(--canvas)]" style={{ color: 'var(--bad)' }} aria-label="Retirar esta respuesta rápida">
+      <button type="submit" className="rv-btn rv-btn--danger" style={{ color: 'var(--bad)' }} aria-label="Retirar esta respuesta rápida">
         <Trash2 width={12} height={12} strokeWidth={1.75} aria-hidden />Retirar
       </button>
       <AvisoResultado estado={estado} />

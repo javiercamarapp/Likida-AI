@@ -45,6 +45,12 @@ vi.mock('@/lib/auth/session', async (orig) => ({
   getSessionTenant: (...a: unknown[]) => getSessionTenant(...a),
 }));
 vi.mock('@/lib/auth/admin-context', () => ({ leerSeleccionFlota: async () => null }));
+// CT-SEG-11: las pantallas negadas dejan evento de seguridad (rpc); aquí se mide que las ACCIONES no escriban, así que ese registro es un no-op.
+vi.mock('@/lib/seguridad/registro_acceso', () => ({
+  registrarPaginaNegada: async () => {}, registrarMfaFallido: async () => {}, registrarApiNegada: async () => {}, registrarRateLimit: async () => {},
+  registrarExporteDinero: async () => {}, registrarLoginFallido: async () => {}, registrarLlaveInvalida: async () => {}, registrarCambioRol: async () => {},
+  registrarFirmaCorreoInvalida: async () => {},
+}));
 vi.mock('@/lib/auth/superadmin-mfa', () => ({ veredictoMfaDeSesion: async () => 'ok' }));
 
 // ── Base falsa: registra TODA escritura; las lecturas devuelven vacío salvo el perfil ──
@@ -112,7 +118,7 @@ const ENCONTRADOS = ZONAS.flatMap((z) => archivos(join(SRC, z))).sort();
  * la pantalla) y aquí se DERIVA de la ruta que el archivo pasa a su puerta, para
  * no duplicar la lista: se exige que sea coherente con el perfil real.
  */
-const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
+const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|resolverTenantAtadoOLanza|resolverTenantAtadoFirmado|requireSessionTenant|exigirVerRuta)\(\s*([^,)]+)/g;
 const PUERTA_SUPERADMIN = /\b(requireSuperadmin|ejecutarComoSuperadmin)\b/;
 const PUERTA_VENDEDOR = /\b(requireVendedor|ejecutarComoVendedor)\b/;
 
@@ -184,7 +190,7 @@ describe('(a) escaneo de las server actions de dashboard, admin y vendedor', () 
     if (SIN_DATOS.has(a)) return expect(clase).toBe('sin_datos');
     // El aviso por agente gatea con la ruta del agente (argumento dinámico `objetivo.ruta`): no hay literal que clasificar aquí;
     // perfil_acciones.test.ts de /dashboard exige ese argumento exacto y el catálogo de agentes lo cubre.
-    if (a === 'dashboard/agentes/seccion-notificaciones.tsx') return expect(readFileSync(join(SRC, a), 'utf8')).toMatch(/requireSessionTenant\(\s*objetivo\.ruta/);
+    if (a === 'dashboard/agentes/seccion-notificaciones.tsx') return expect(readFileSync(join(SRC, a), 'utf8')).toMatch(/resolverTenantAtadoOLanza\(\s*objetivo\.ruta/);
     expect(['perfil_permitido', 'perfil_standby']).toContain(clase);
   });
 

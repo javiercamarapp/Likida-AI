@@ -3,6 +3,7 @@ import { suprimirCorreoConfirmado } from '@/lib/likida/agentes/enviador';
 import { borrarDatosPersonaPorBajaPorCorreo } from '@/lib/correo/respuesta_campana';
 import { esc } from '@/lib/correo/plantilla';
 import { logger } from '@/lib/logger';
+import { rateLimit, clientIp } from '@/lib/ratelimit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,6 +57,21 @@ function paginaError(status: number, mensaje: string): Response {
   );
 }
 
+/**
+ * Techo por IP (ronda 4, seguridad). Ruta pública: el token es un HMAC, así que un sondeo solo cuesta CPU, pero el POST válido toca la
+ * base. Generoso A PROPÓSITO (el one-click de Gmail sale de IPs compartidas y una baja es un derecho, LFPDPPP art. 16): un 429 hace que
+ * el cliente de correo reintente. `fallaCerrado: false`: si Redis cae no se bloquean bajas, se degrada al Map local.
+ */
+const LIMITE_BAJA_POR_MIN = 120;
+async function dentroDelLimite(req: Request): Promise<boolean> {
+  return rateLimit(`correo-baja:ip:${clientIp(req)}`, LIMITE_BAJA_POR_MIN, 60_000, { fallaCerrado: false });
+}
+function demasiadas(): Response {
+  const r = paginaError(429, 'Demasiadas peticiones. Vuelve a intentar en un minuto.');
+  r.headers.set('Retry-After', '60');
+  return r;
+}
+
 function leerParametros(req: Request): { correo: string | null; token: string | null } {
   const url = new URL(req.url);
   return { correo: url.searchParams.get('e'), token: url.searchParams.get('t') };
@@ -65,6 +81,7 @@ function leerParametros(req: Request): { correo: string | null; token: string | 
  *  archivo): un escáner de correo corporativo que prefetchea el enlace no
  *  puede dar de baja a nadie por sí solo. */
 export async function GET(req: Request) {
+  if (!(await dentroDelLimite(req))) return demasiadas();
   const { correo, token } = leerParametros(req);
   if (!correo || !token || !verificarBaja(correo, token)) {
     return paginaError(400, 'Este enlace de baja no es válido o ya expiró. Si quieres dejar de recibir correos, responde a cualquiera de ellos con la palabra BAJA.');
@@ -80,6 +97,7 @@ export async function GET(req: Request) {
  *  Gmail/Yahoo (RFC 8058, sin visitar la página) y el formulario de la
  *  tarjeta de arriba (un humano que confirmó). */
 export async function POST(req: Request) {
+  if (!(await dentroDelLimite(req))) return demasiadas();
   const { correo, token } = leerParametros(req);
   if (!correo || !token || !verificarBaja(correo, token)) {
     return paginaError(400, 'Este enlace de baja no es válido.');

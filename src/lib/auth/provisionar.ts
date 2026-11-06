@@ -14,11 +14,31 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
+import { digitosTelefono } from '@/lib/likida/telefono_variantes';
 import { esCorreoYaRegistrado } from './invitar';
 
 /** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
  *  7-ago-2026). `vendedor` (0105) es rol de LIKIDA: siempre con tenantId
  *  null, como superadmin — su panel es /vendedor, no /dashboard. */
+/**
+ * CT-SEG-04: ¿este correo tiene una cuenta de acceso (fila en `app_user`)? Lo usa el hook de correo de Auth para NO mandar
+ * correo de marca —remitente y logo de Likida, con un enlace de un solo uso— a direcciones que nadie dio de alta. La
+ * comparacion es en minusculas (Auth y `app_user.email` guardan minusculas, A37-S24-06). LANZA si la base no responde: quien
+ * llama decide (el hook falla cerrado y ruidoso, nunca lo confunde con "no existe").
+ */
+export async function existeCuentaDeAcceso(correo: string): Promise<boolean> {
+  const email = correo.trim().toLowerCase();
+  if (!email) return false;
+  return await existeFilaAppUser(supabaseAdmin(), email);
+}
+
+/** UNA sola consulta a `app_user` por correo, compartida con el alta (`provisionarUsuario`) para no sumar acceso directo a datos. */
+async function existeFilaAppUser(admin: ReturnType<typeof supabaseAdmin>, email: string): Promise<boolean> {
+  const { data, error } = await admin.from('app_user').select('id').eq('email', email).maybeSingle();
+  if (error) throw new Error(error.message);
+  return data != null;
+}
+
 export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado' | 'vendedor' | 'nomina';
 
 /**
@@ -84,7 +104,7 @@ export const ROL_BADGE: Record<RolAppUser, string> = {
  * al bot sin un UPDATE a mano.
  */
 function normalizarTelefonoOficina(crudo: string): string {
-  const soloDigitos = crudo.replace(/[^\d]/g, '');
+  const soloDigitos = digitosTelefono(crudo);
   if (soloDigitos.length < 10) {
     throw new Error(`El teléfono "${crudo}" tiene ${soloDigitos.length} dígitos; un número mexicano necesita 10 más la lada 52.`);
   }
@@ -189,13 +209,7 @@ export async function provisionarUsuario(
     // hay ninguna fila `app_user` es el caso huérfano de Google: se completa
     // el alta de verdad enlazando la fila nueva al `id` de Auth que YA
     // EXISTE, en vez de dejarla abandonada.
-    const { data: existente, error: errExistente } = await admin
-      .from('app_user')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
-    if (errExistente) throw new Error(errExistente.message);
-    if (existente) throw new Error(error.message);
+    if (await existeFilaAppUser(admin, email)) throw new Error(error.message);
 
     const resuelto = await resolverAuthExistentePorCorreo(admin, email);
     if (!resuelto) throw new Error(error.message);

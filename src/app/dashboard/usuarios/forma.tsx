@@ -14,7 +14,6 @@ import { BotonConfirmar } from '../../admin/ui/confirmar';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -22,7 +21,7 @@ function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <UserPlus width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Invitando…' : 'Invitar'}
@@ -55,7 +54,7 @@ export function FormaInvitar({ accion, roles }: {
           <label htmlFor="inv-email" className={ETIQUETA}>Correo</label>
           <input id="inv-email" name="email" type="email" required maxLength={160}
             placeholder="contralor@tuflota.mx"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Es su llave de entrada: en el panel teclea este correo y le llega un
             enlace mágico — no hay contraseña que inventarle.
@@ -66,7 +65,7 @@ export function FormaInvitar({ accion, roles }: {
           <label htmlFor="inv-nombre" className={ETIQUETA}>Nombre (opcional)</label>
           <input id="inv-nombre" name="nombre" type="text" maxLength={120}
             placeholder="Como quieres verlo en la lista"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
@@ -75,7 +74,7 @@ export function FormaInvitar({ accion, roles }: {
               esta pantalla (D6). Arrancar en `flota_admin` repartiría control
               total de la cuenta por pura inercia del que no cambia el select. */}
           <select id="inv-rol" name="rol" required defaultValue="contador"
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
+            className="w-full" style={{ background: 'var(--surface)' }}>
             {roles.map((r) => (
               <option key={r.valor} value={r.valor}>{r.rotulo}</option>
             ))}
@@ -96,7 +95,7 @@ export function FormaInvitar({ accion, roles }: {
           <label htmlFor="inv-telefono" className={ETIQUETA}>WhatsApp (opcional)</label>
           <input id="inv-telefono" name="telefono" type="text" maxLength={20}
             placeholder="10 dígitos" inputMode="tel"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Para que el bot la reconozca cuando escriba por WhatsApp (avisos
             contestables, despacho por chat). Sin número, el bot no la reconoce.
@@ -127,7 +126,7 @@ function BotonChico({ etiqueta, ocupado, tono = 'neutral' }: {
     : { color: 'var(--ink)', background: 'var(--surface)' };
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85 disabled:opacity-50 whitespace-nowrap"
+      className="rv-btn rv-btn--secondary whitespace-nowrap"
       style={estilo}>
       {pending ? ocupado : etiqueta}
     </button>

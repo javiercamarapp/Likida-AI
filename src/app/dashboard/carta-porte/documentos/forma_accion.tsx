@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { TriangleAlert, CheckCircle2 } from 'lucide-react';
+import { clasesBoton } from '@/app/ui-v2/componentes';
 import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 
 export type ResultadoAccion = { ok: true; mensaje: string; detalles?: string[] } | { ok: false; error: string } | null;
@@ -56,19 +57,18 @@ export function BotonEnvio({ etiqueta, pendiente = 'Procesando…', intencion, v
         etiqueta={pending ? pendiente : etiqueta} deshabilitado={pending} icono={icono}
         titulo={confirmar.titulo} descripcion={confirmar.descripcion} etiquetaConfirmar={confirmar.etiquetaConfirmar}
         nombreConfirmar={intencion ? 'intencion' : undefined} valorConfirmar={intencion}
-        className={`h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 ${variante === 'primario' ? '' : 'hairline'}`}
+        className={clasesBoton(variante === 'primario' ? 'primary' : 'secondary')}
         style={{ background: c.bg, color: c.fg }}
       />
     );
   }
   return (
     <button type="submit" name={intencion ? 'intencion' : undefined} value={intencion} disabled={pending}
-      className={`h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50 ${variante === 'primario' ? '' : 'hairline'}`}
+      className={clasesBoton(variante === 'primario' ? 'primary' : 'secondary')}
       style={{ background: c.bg, color: c.fg }}>
       {icono}{pending ? pendiente : etiqueta}
     </button>
   );
 }
 
-export const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 export const ETIQUETA = 'block text-[11px] font-medium mb-1.5';

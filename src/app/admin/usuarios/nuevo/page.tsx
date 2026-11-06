@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { provisionarUsuario, type RolAppUser } from '@/lib/auth/provisionar';
 import { descifrarErrorProvision } from '@/lib/auth/invitar';
@@ -94,18 +95,18 @@ export default async function NuevoUsuario() {
             <FormaConAviso accion={crear} boton="Crear usuario" columnas="md:grid-cols-1">
               <div>
                 <label className="text-sm font-medium block mb-1.5">Flota</label>
-                <select name="tenantId" required className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
+                <select name="tenantId" required className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
                   {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-sm font-medium block mb-1.5">Correo</label>
                 <input name="email" type="email" required placeholder="persona@flota.com"
-                  className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+                  className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
               </div>
               <div>
                 <label className="text-sm font-medium block mb-1.5">Nombre (opcional)</label>
-                <input name="nombre" type="text" className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+                <input name="nombre" type="text" className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
               </div>
               <div>
                 {/* D5 (auditoría 4): la columna existía (0059), el matcher de
@@ -113,14 +114,14 @@ export default async function NuevoUsuario() {
                     podía escribirle al bot sin un UPDATE a mano. */}
                 <label className="text-sm font-medium block mb-1.5">WhatsApp (opcional)</label>
                 <input name="telefono" type="text" placeholder="10 dígitos"
-                  className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+                  className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
                 <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
                   Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat).
                 </p>
               </div>
               <div>
                 <label className="text-sm font-medium block mb-1.5">Rol</label>
-                <select name="rol" required defaultValue="flota_admin" className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
+                <select name="rol" required defaultValue="flota_admin" className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
                   {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
                 </select>
               </div>
@@ -134,3 +135,5 @@ export default async function NuevoUsuario() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Nuevo usuario' };

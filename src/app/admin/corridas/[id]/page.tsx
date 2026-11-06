@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -171,7 +172,7 @@ export default async function TrazaCorridaPage({
               <div className="mt-3">
                 <div className="text-xs font-medium mb-1" style={{ color: 'var(--muted)' }}>Resumen de la corrida</div>
                 <div className="overflow-x-auto">
-                  <table className="text-sm">
+                  <table aria-label="Resumen de la corrida" className="text-sm">
                     <tbody>
                       {Object.entries(c.resumen).map(([k, v]) => (
                         <tr key={k}>
@@ -228,7 +229,7 @@ export default async function TrazaCorridaPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
               {c.tenantId !== null && (
                 <Link href={`/dashboard?tenant=${c.tenantId}&rol=flota_admin`}
-                  className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
                     <ExternalLink width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
@@ -240,7 +241,7 @@ export default async function TrazaCorridaPage({
                 </Link>
               )}
               <Link href="/admin/conversaciones"
-                className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)' }}>
                 <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
                   <MessageCircle width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
@@ -257,3 +258,5 @@ export default async function TrazaCorridaPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Corrida' };

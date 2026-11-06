@@ -6,7 +6,8 @@ const U = 'dddddddd-dddd-4ddd-8ddd-dddddddddd02';
 const AJENO = 'dddddddd-dddd-4ddd-8ddd-dddddddddd99';
 const sesion = { actual: { tenantId: 't-sesion', userId: 'u-sesion', rol: 'flota_admin' } };
 const { resolver, bitacora, puerto } = vi.hoisted(() => ({ resolver: vi.fn(), bitacora: vi.fn(async () => true), puerto: { actual: null as unknown } }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: resolver }));
+// MX-002: la acción resuelve con la flota PINTADA y firmada (campo oculto `flota_pintada`), no con el «ver como» del formulario.
+vi.mock('@/lib/auth/tenant-atado', () => ({ resolverTenantAtadoFirmado: resolver, CAMPO_FLOTA_PINTADA: 'flota_pintada', MENSAJE_FLOTA_CAMBIO: 'La flota que estás viendo cambió.' }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: vi.fn(async () => true) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -44,9 +45,9 @@ describe('guardarConfiguracionSalida', () => {
   });
 
   it('gatea con la ruta de la configuración y guarda con el tenant de la sesión, no con el del formulario; deja bitácora', async () => {
-    const r = await guardarConfiguracionSalida(null, forma({ reintentosMax: '4', frecuenciaMin: '30', destinatarioAlertaCorreo: 'avisos@ejemplo.test', tenant_id: AJENO, tenant: AJENO }));
+    const r = await guardarConfiguracionSalida(null, forma({ reintentosMax: '4', frecuenciaMin: '30', destinatarioAlertaCorreo: 'avisos@ejemplo.test', tenant_id: AJENO, tenant: AJENO, flota_pintada: 'firma-pintada' }));
     expect(r).toEqual({ ok: true, mensaje: 'Configuración guardada.' });
-    expect(resolver).toHaveBeenCalledWith('/dashboard/agentes/carta-porte/configuracion', expect.objectContaining({ tenant: AJENO }));
+    expect(resolver).toHaveBeenCalledWith('/dashboard/agentes/carta-porte/configuracion', 'firma-pintada');
     expect([...estado.salidaConfigs.keys()]).toEqual(['t-sesion']);
     expect(estado.salidaConfigs.get('t-sesion')).toMatchObject({ reintentosMax: 4, frecuenciaMin: 30, destinatarioAlertaCorreo: 'avisos@ejemplo.test', modo: 'descarga' });
     expect(bitacora).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 't-sesion', accion: 'ccp.salida_config_guardada', detalle: { campos: expect.arrayContaining(['reintentosMax', 'frecuenciaMin', 'destinatarioAlertaCorreo']) } }), expect.anything());

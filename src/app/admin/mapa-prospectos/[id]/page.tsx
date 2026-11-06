@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getDetalleProspecto } from '@/lib/admin/prospectos-mapa';
@@ -17,3 +18,5 @@ export default async function PaginaDetalleProspecto({ params }: { params: Promi
   if (!p) notFound();
   return <Detalle p={p} />;
 }
+
+export const metadata: Metadata = { title: 'Prospecto' };

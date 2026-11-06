@@ -206,10 +206,11 @@ describe('detectarAtipicos — propiedades', () => {
       }
     }
     expect(filas).toHaveLength(60_000);
-    const t0 = Date.now();
+    // CT-BAS-14: CPU del proceso, no reloj de pared (la espera por swap no es del algoritmo).
+    const c0 = process.cpuUsage();
     const r = detectarAtipicos(filas, { ida_y_vuelta_madrugada: { activa: true } }, [NORTE, SUR]);
-    const ms = Date.now() - t0;
+    const c = process.cpuUsage(c0);
     expect(r.filasOmitidas).toBe(0);
-    expect(ms).toBeLessThan(5000);
+    expect((c.user + c.system) / 1000).toBeLessThan(5000);
   });
 });

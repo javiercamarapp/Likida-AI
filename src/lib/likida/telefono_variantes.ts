@@ -24,9 +24,21 @@
  * Meta manda el `wa_id` sin signo (`521111111101`). Con la igualdad exacta que
  * había, NINGUNO de los operadores de demostración habría resuelto nunca.
  */
+/**
+ * Solo digitos, SIN los prefijos de marcacion que no son parte del numero (F1B; misma regla que `telefono_canonico`
+ * de la 0950): `00` internacional («0052…»), `044`/`045` (celular local/nacional) y `01` (larga distancia). Sin esto
+ * «044 999 111 0001» daba `0449991110001`: no chocaba con el mismo numero de otra flota ni lo resolvia el bot.
+ */
+export function digitosTelefono(crudo: string): string {
+  const d = crudo.replace(/[^\d]/g, '');
+  if (/^00521?\d{10}$/.test(d)) return d.slice(2);
+  if (/^0(?:44|45|1)\d{10}$/.test(d)) return d.slice(d.length - 10);
+  return d;
+}
+
 export function variantesTelefono(telefono: string): string[] {
-  const limpio = telefono.replace(/[^\d]/g, '');
-  const nums = new Set<string>([limpio]);
+  const limpio = digitosTelefono(telefono);
+  const nums = new Set<string>([limpio, telefono.replace(/[^\d]/g, '')]);
   // 52 + 1 + 10 dígitos → también sin el 1.
   const con1 = /^521(\d{10})$/.exec(limpio);
   if (con1) nums.add(`52${con1[1]}`);

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { HeartPulse, ExternalLink, ArrowRight } from 'lucide-react';
@@ -322,3 +323,5 @@ export default async function SaludSistemaPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Salud del sistema' };

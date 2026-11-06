@@ -7,11 +7,12 @@
 // FLOTA sale del token del DESTINATARIO —24 caracteres al azar— y nunca del
 // remitente: el `from` se falsifica en dos líneas; el token no se adivina.
 //
-// Si la flota declaró los remitentes que sí pueden mandar, un correo de fuera de
-// esa lista NO entra (200 «remitente_no_permitido»): a diferencia de un documento
-// de carta porte, este archivo se cruza solo y puede disparar un aviso a la
-// oficina, así que no se deja que cualquiera con la dirección filtrada alimente
-// la conciliación. Sin lista, la dirección ES la credencial (rotable).
+// Un correo de fuera de la lista de remitentes de la flota NO entra (200
+// «remitente_no_permitido»): a diferencia de un documento de carta porte, este
+// archivo se cruza solo y puede disparar un aviso a la oficina, así que no se
+// deja que cualquiera con la dirección filtrada alimente la conciliación. SIN
+// lista tampoco entra nadie (200 «sin_remitentes_autorizados», S-06): el token
+// más un From declarado no bastan como credencial.
 //
 // Cada adjunto Excel/CSV/PDF se encola con `recibirArchivoPeaje(…, 'correo')`:
 // la huella sha256 hace inocuo el «al menos una vez» de Resend. El cron
@@ -26,7 +27,7 @@ import { logger } from '@/lib/logger';
 import { esTokenValido } from '@/lib/correo/buzon';
 import { estaApagado } from '../interruptores';
 import { reclamarCorreo, finalizarCorreo } from '../carta_porte_docs/repo';
-import { remitenteReconocido } from '@/lib/correo/remitente';
+import { remitenteReconocido, SIN_REMITENTES_AUTORIZADOS } from '@/lib/correo/remitente';
 import type { CorreoEntrante, DescargaAdjunto } from '../carta_porte_docs/correo_entrante';
 import { buzonCorreoPeajesPorToken } from './datos';
 import { registrarCorrida } from '../agentes/corridas';
@@ -89,10 +90,17 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
   if (!buzon.activo) return { status: 200, cuerpo: { ok: true, ignorado: 'buzon_apagado' } };
   const tenantId = buzon.tenantId;
 
+  // S-06 / CT-SEG-06: SIN lista de remitentes no se acepta a nadie (antes: «la dirección ES la credencial»). Falla cerrado ANTES
+  // de bajar adjuntos o reclamar el correo; 200 porque reintentar no lo arregla (lo arregla la flota en Configuración).
+  if (buzon.remitentes.length === 0) {
+    logger.warn('peajes_correo.sin_remitentes_autorizados', { emailId: correo.emailId, tenantId });
+    return { status: 200, cuerpo: { ok: true, ignorado: SIN_REMITENTES_AUTORIZADOS } };
+  }
+
   const adjuntos = (correo.attachments ?? []).filter((a) => a.id && EXT_ADJUNTO.test(a.filename ?? '')).slice(0, MAX_ADJUNTOS_PEAJES);
   if (adjuntos.length === 0) return { status: 200, cuerpo: { ok: true, ignorado: 'sin_adjuntos' } };
 
-  if (buzon.remitentes.length > 0 && remitenteReconocido(correo.from, buzon.remitentes) !== true) {
+  if (remitenteReconocido(correo.from, buzon.remitentes) !== true) {
     // El remitente no se loguea completo: es un dato personal y el `email_id` alcanza para rastrearlo en Resend.
     logger.warn('peajes_correo.remitente_no_permitido', { emailId: correo.emailId, tenantId });
     return { status: 200, cuerpo: { ok: true, ignorado: 'remitente_no_permitido' } };

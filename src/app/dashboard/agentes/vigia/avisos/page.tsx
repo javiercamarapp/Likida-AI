@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { ahoraMs } from '@/lib/saludo';
@@ -16,6 +17,7 @@ import {
   agruparPorDia, armarTarjeta, crearDepsCopia, crearRepoBandeja, DIAS_BANDEJA, MAX_TEXTO_AVISO, TOPE_AVISOS_BANDEJA, paraEntrega, validarDatoManual,
   type AvisoBandeja,
 } from '@/lib/likida/vigia/aviso/bandeja';
+import { AVISO_AUTOMATICO_CONECTADO } from '@/lib/likida/vigia/aviso/conexion';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaAvisosVigia, type ResultadoAviso } from './vista';
 import { VistaConfiguracionAviso, type ConfigPantalla, type OpcionesConfigPantalla, type ResultadoConfig } from './configuracion';
@@ -44,8 +46,8 @@ const CARRERA = 'Otra persona ya cambió este aviso. Recarga la pantalla para ve
  * no es serializable; aquí `sp` entra por parámetro y lo único que la acción captura son strings. El tenant sale de la
  * SESIÓN, nunca del formulario: ninguna acción lee un `tenant_id` del cliente.
  */
-async function actor(sp: Busqueda) {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function actor(sp: Busqueda, tenantId: string) {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA) || !DECIDE.includes(s.rol)) return null;
   return { tenantId: s.tenantId, userId: s.userId };
 }
@@ -66,6 +68,9 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     const cfg = await crearRepoAviso().leerConfig(a.tenantId);
     if (!cfg || !cfg.habilitado) return fallo('El aviso de viaje está apagado: enciéndelo antes de confirmar.');
     if (!(await repo.aprobar(a.tenantId, id, 'pendiente_confirmacion', a.userId, ahora.toISOString()))) return fallo(CARRERA);
+    if (!AVISO_AUTOMATICO_CONECTADO) {
+      return bien('Confirmado, pero el envío automático está por conectar: este aviso NO sale solo. Para mandarlo, ábrelo, cópialo y usa «Copiar y marcar enviado».');
+    }
     return bien('Confirmado. Sale en la siguiente revisión automática (máximo 5 minutos), dentro del horario de envío y solo si el cliente autorizó mensajes por WhatsApp.');
   }
 
@@ -117,6 +122,7 @@ async function ejecutar(a: { tenantId: string; userId: string }, fd: FormData): 
     if (!v.ok) return fallo(v.error);
     const r = await repo.guardarDatoManual(a.tenantId, av.filaId, a.userId, v.valor);
     if (r === 'fila_ajena') return fallo('No encuentro ese servicio en tu flota.');
+    if (!AVISO_AUTOMATICO_CONECTADO) return bien('Datos guardados. Se usarán cuando el armado automático de avisos esté conectado; hoy no se rehace ningún aviso solo.');
     return bien('Datos guardados. El aviso se rehace con ellos en la siguiente revisión automática; revísalo entonces antes de confirmar.');
   }
 
@@ -320,8 +326,8 @@ const DUENA = 'flota_admin';
 const falloCfg = (error: string): ResultadoConfig => ({ ok: false, error });
 
 /** Vuelve a resolver la sesión y devuelve al actor con su rol (dueño o encargado). El tenant sale de la SESIÓN. */
-async function actorConfig(sp: Busqueda) {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function actorConfig(sp: Busqueda, tenantId: string) {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA) || !DECIDE.includes(s.rol)) return null;
   return { tenantId: s.tenantId, userId: s.userId, rol: s.rol };
 }
@@ -340,7 +346,7 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
   if (cambios.config.length === 0 && cambios.operador.length === 0) return bien('No hay cambios que guardar: la configuración ya estaba así.');
 
   // ── A37-S15-05: ENCENDER, MODO Y CANAL SON DE LA DUEÑA ─────────────────────
-  // La configuración del Vigía (../page.tsx, `actor(sp, 'administra')`) exige `flota_admin` y le cierra el autoenvío al
+  // La configuración del Vigía (../page.tsx, `actor(sp, tenantId, 'administra')`) exige `flota_admin` y le cierra el autoenvío al
   // perfil `cinco_agentes`; aquí el encargado podía guardar modo autónomo + WhatsApp directo + encendido sin ese candado.
   // Se relee el rol de la SESIÓN (nunca del formulario) y se compara contra lo ya guardado: el encargado sigue ajustando
   // horarios, secciones y reenvíos, pero no estos tres. Autónomo, además, se cierra bajo el perfil restringido.
@@ -369,6 +375,7 @@ async function ejecutarConfig(a: { tenantId: string; userId: string; rol: string
       );
     }
   }
+  if (!AVISO_AUTOMATICO_CONECTADO) return bien('Configuración guardada. Los avisos la usarán cuando el armado automático esté conectado; hoy no se arma ningún aviso solo.');
   return bien('Configuración guardada. Los avisos nuevos la usan desde la siguiente revisión automática (máximo 5 minutos).');
 }
 
@@ -386,7 +393,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
 
   async function guardarConfiguracion(_p: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
-    const a = await actorConfig(sp);
+    const a = await actorConfig(sp, tenantId);
     if (!a) return falloCfg('Solo el dueño o el encargado de la flota cambia la configuración del aviso.');
     try {
       const r = await ejecutarConfig(a, fd);
@@ -452,7 +459,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
 
   async function decidir(_p: ResultadoAviso, fd: FormData): Promise<ResultadoAviso> {
     'use server';
-    const a = await actor(sp);
+    const a = await actor(sp, tenantId);
     if (!a) return fallo('Solo el dueño o el encargado de la flota decide sobre los avisos.');
     try {
       const r = await ejecutar(a, fd);

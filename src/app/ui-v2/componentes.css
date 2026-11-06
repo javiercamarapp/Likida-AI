@@ -178,7 +178,7 @@
   position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: auto; min-height: 32px; padding: 6px 12px;
   font: 600 13px/1.25 var(--font-sans-ui, inherit); letter-spacing: 0; text-decoration: none; text-align: center;
-  border: 1px solid var(--input); border-radius: 8px;
+  border: var(--borde-w, 1px) solid var(--btn-borde-sec); border-radius: 8px;
   background: var(--surface); color: var(--ink); box-shadow: none; cursor: pointer;
 }
 [data-ui="v2"] .rv-btn::after {
@@ -190,15 +190,18 @@
 /* Lee --btn-bg/--btn-fg/--btn-borde/--btn-hover (los fija el shell o tokens.css); tenue neutro. */
 [data-ui="v2"] .rv-btn--primary { background: var(--btn-bg); border-color: var(--btn-borde); color: var(--btn-fg); }
 [data-ui="v2"] .rv-btn--primary:hover { background: var(--btn-hover); color: var(--btn-fg); border-color: var(--btn-borde); }
+/* Suave: la acción principal de un cajón («Aplicar») y las acciones tipo «activar». Lee el trío --accion-cajon-* (neutro por omisión; el azul de Rovaq vive en tokens.css). */
+[data-ui="v2"] .rv-btn--suave { background: var(--accion-cajon-bg); border-color: var(--accion-cajon-borde); color: var(--accion-cajon-fg); }
+[data-ui="v2"] .rv-btn--suave:hover { background: var(--accion-cajon-hover); color: var(--accion-cajon-fg); border-color: var(--accion-cajon-borde); }
 [data-ui="v2"] .rv-btn--ghost { background: transparent; border-color: transparent; }
 [data-ui="v2"] .rv-btn--ghost:hover { background: var(--infobg); color: var(--info); border-color: transparent; }
 [data-ui="v2"] :is(.rv-btn--danger, .rv-btn--danger-soft) { background: var(--badbg); border-color: color-mix(in srgb, var(--bad) 28%, transparent); color: var(--bad); }
 [data-ui="v2"] :is(.rv-btn--danger, .rv-btn--danger-soft):hover { background: color-mix(in srgb, var(--bad) 14%, var(--badbg)); border-color: var(--bad); }
 [data-ui="v2"] .rv-btn--sm { min-height: 32px; padding: 4px 10px; }
 /* Botón en celda de tabla: 28 (el único tamaño por debajo de 32; el área de toque de 44 sigue en ::after). */
-[data-ui="v2"] :is(table, .rv-tabla) .rv-btn { min-height: 28px; padding: 3px 10px; }
+[data-ui="v2"] :is(table, .rv-tabla) .rv-btn { min-height: var(--ctl-h-sm, 28px); padding: 3px 10px; }
 /* Pulsado: secundario y fantasma se asientan sobre el lienzo; el primario toma el tono de su hover. */
-[data-ui="v2"] .rv-btn:not(.rv-btn--primary, .rv-btn--danger, .rv-btn--danger-soft):active:not(:disabled):not([aria-disabled="true"]) { background: var(--canvas); color: var(--ink); }
+[data-ui="v2"] .rv-btn:not(.rv-btn--primary, .rv-btn--suave, .rv-btn--danger, .rv-btn--danger-soft):active:not(:disabled):not([aria-disabled="true"]) { background: var(--canvas); color: var(--ink); }
 [data-ui="v2"] .rv-btn--primary:active:not(:disabled):not([aria-disabled="true"]) { background: var(--btn-hover); color: var(--btn-fg); }
 [data-ui="v2"] .rv-btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; }
 [data-ui="v2"] .rv-btn:disabled,
@@ -368,9 +371,10 @@
    Los tokens de marca (--btn-*, --chart-*) los define el shell en tokens.css: aquí NO se repiten.
    Activo = gris suave con texto y borde de tinta: usa el par tinte/tinta del matiz 8 (tinta), que ya mide AA en claro y oscuro. */
 /* Chip activo (filtros, segmentados): gris suave, texto y borde de tinta. */
-[data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { background: var(--chip-activo-bg); color: var(--chip-activo-fg); border-color: var(--chip-activo-fg); font-weight: 600; }
+[data-ui="v2"] .rv-chip[aria-pressed="true"], [data-ui="v2"] .rv-chip[data-activo] { background: var(--seg-activo-bg); color: var(--seg-activo-fg); border-color: var(--seg-activo-borde); font-weight: 600; }
 [data-ui="v2"] button.rv-chip { cursor: pointer; font-family: inherit; }
-[data-ui="v2"] button.rv-chip:hover:not([aria-pressed="true"]) { background: var(--canvas); }
+[data-ui="v2"] button.rv-chip:hover:not([aria-pressed="true"]) { background: var(--ui-soft); }
+[data-ui="v2"] button.rv-chip[aria-pressed="true"]:hover { background: var(--seg-activo-hover); }
 [data-ui="v2"] button.rv-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 /* ═══ B4 · InfoTip (ⓘ) y su explicación unificada ═══ */
@@ -378,7 +382,7 @@
 [data-ui="v2"] .rv-info::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 [data-ui="v2"] .rv-info:hover, [data-ui="v2"] .rv-info[aria-expanded="true"] { background: var(--canvas); color: var(--ink); }
 [data-ui="v2"] .rv-info:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-info svg { width: 16px; height: 16px; }
+[data-ui="v2"] .rv-info svg { width: var(--ico-sm, 14px); height: var(--ico-sm, 14px); }
 [data-ui="v2"] .rv-pop--info { width: 280px; padding: 10px 12px; }
 [data-ui="v2"] .rv-infotexto { display: grid; gap: 8px; margin: 0; font-size: 12px; line-height: 1.45; }
 [data-ui="v2"] .rv-infotexto dt { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink); }
@@ -404,7 +408,7 @@
 [data-ui="v2"] .rv-kpi__cab .rv-info { margin: -4px -6px -4px auto; }
 
 /* ═══ LF · Filtros de barra (como Vexa): UNA fila baja, controles de 32 px, radio 8, borde fino, 12 px / 500, activo = tinta (nunca azul) ═══ */
-[data-ui="v2"] .rv-filtros { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: 40px; min-width: 0; padding: 4px 2px; background: var(--bg); }
+[data-ui="v2"] .rv-filtros { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: var(--ctl-h, 32px); min-width: 0; padding: 2px; background: var(--bg); }
 [data-ui="v2"] :is(.card, .rv-tarjeta) .rv-filtros,
 [data-ui="v2"] .rv-filtros--en-linea { position: static; min-height: 32px; padding: 0; background: transparent; }
 [data-ui="v2"] .rv-filtros__chips { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 4px; margin: -4px; }
@@ -415,23 +419,24 @@
 [data-ui="v2"] .rv-filtros__fuentes { font-size: var(--t-small); color: var(--muted); white-space: nowrap; }
 [data-ui="v2"] .rv-filtros__avanzados { display: grid; gap: 8px; min-width: 260px; }
 [data-ui="v2"] .rv-fl {
-  position: relative; display: inline-flex; align-items: center; gap: 6px; flex: none; height: 32px; min-height: 32px; max-width: 100%; padding: 0 10px;
-  border: 1px solid var(--line2); border-radius: 8px; background: var(--surface); color: var(--ink);
+  position: relative; display: inline-flex; align-items: center; gap: 6px; flex: none; height: var(--ctl-h, 32px); min-height: var(--ctl-h, 32px); max-width: 100%; padding: 0 10px;
+  border: var(--borde-w, 1px) solid var(--btn-borde-sec); border-radius: 8px; background: var(--surface); color: var(--ink);
   font: 500 var(--t-small)/1.25 var(--font-sans-ui, inherit); white-space: nowrap; cursor: pointer; text-decoration: none; box-shadow: none;
 }
 [data-ui="v2"] .rv-fl::after { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 100%; height: 44px; }
 [data-ui="v2"] .rv-fl[hidden] { display: none; }
 [data-ui="v2"] .rv-fl:hover { background: var(--canvas); }
 [data-ui="v2"] .rv-fl:focus-visible, [data-ui="v2"] .rv-fl:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-fl[data-activo], [data-ui="v2"] .rv-fl[aria-pressed="true"] { background: var(--chip-activo-bg); border-color: var(--chip-activo-fg); color: var(--chip-activo-fg); }
+[data-ui="v2"] .rv-fl[data-activo], [data-ui="v2"] .rv-fl[aria-pressed="true"] { background: var(--seg-activo-bg); border-color: var(--seg-activo-borde); color: var(--seg-activo-fg); }
+[data-ui="v2"] .rv-fl[data-activo]:hover, [data-ui="v2"] .rv-fl[aria-pressed="true"]:hover { background: var(--seg-activo-hover); }
 [data-ui="v2"] .rv-fl:disabled { cursor: not-allowed; border-style: dashed; color: var(--ink2); background: var(--surface); }
 [data-ui="v2"] .rv-fl svg { width: 14px; height: 14px; flex: none; }
 [data-ui="v2"] .rv-fl__etq { color: var(--muted); }
 [data-ui="v2"] .rv-fl[data-activo] .rv-fl__etq, [data-ui="v2"] .rv-fl[aria-pressed="true"] .rv-fl__etq { color: inherit; }
 [data-ui="v2"] .rv-fl__val { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; }
 [data-ui="v2"] .rv-fl__flecha { width: 12px; height: 12px; color: var(--muted); }
-[data-ui="v2"] .rv-fl__n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--chip-activo-fg); color: var(--surface); font-size: var(--t-micro); font-weight: 600; }
-[data-ui="v2"] .rv-fl--chip { border-radius: 999px; }
+[data-ui="v2"] .rv-fl__n { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--ink); color: var(--surface); font-size: var(--t-micro); font-weight: 600; }
+[data-ui="v2"] .rv-fl--chip { padding: 0 12px; border-radius: var(--r-pill, 999px); font-weight: 500; }
 [data-ui="v2"] .rv-fl--buscar { cursor: text; width: 220px; flex: 0 1 220px; min-width: 140px; }
 [data-ui="v2"] .rv-fl--buscar svg { color: var(--muted); }
 [data-ui="v2"] .rv-fl--buscar input, [data-ui="v2"] .rv-fl--fecha input, [data-ui="v2"] .rv-fl--campo input, [data-ui="v2"] .rv-fl--nativo select {
@@ -444,8 +449,8 @@
 [data-ui="v2"] .rv-fl--fecha input::-webkit-calendar-picker-indicator { opacity: .6; cursor: pointer; }
 [data-ui="v2"] .rv-fl--nativo select { cursor: pointer; max-width: 16rem; }
 [data-ui="v2"] .rv-fl--interruptor .rv-fl__tilde { width: 14px; height: 14px; padding: 1px; border: 1px solid var(--line2); border-radius: 4px; color: transparent; background: var(--surface); }
-[data-ui="v2"] .rv-fl--interruptor:has(input:checked) { background: var(--chip-activo-bg); border-color: var(--chip-activo-fg); }
-[data-ui="v2"] .rv-fl--interruptor:has(input:checked) .rv-fl__tilde { color: var(--surface); background: var(--chip-activo-fg); border-color: var(--chip-activo-fg); }
+[data-ui="v2"] .rv-fl--interruptor:has(input:checked) { background: var(--seg-activo-bg); border-color: var(--seg-activo-borde); }
+[data-ui="v2"] .rv-fl--interruptor:has(input:checked) .rv-fl__tilde { color: var(--surface); background: var(--ink); border-color: var(--ink); }
 [data-ui="v2"] .rv-fl--interruptor:has(input:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; }
 /* Popover de opciones */
 [data-ui="v2"] .rv-fl__pop { padding: 4px; min-width: 180px; max-width: min(320px, 92vw); }
@@ -456,7 +461,7 @@
 [data-ui="v2"] .rv-fl__op { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0 10px 0 6px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); font: 500 var(--t-small)/1.25 var(--font-sans-ui, inherit); text-align: left; cursor: pointer; }
 [data-ui="v2"] .rv-fl__op:hover, [data-ui="v2"] .rv-fl__op:focus-visible { background: var(--canvas); outline: 0; }
 [data-ui="v2"] .rv-fl__op:focus-visible { box-shadow: inset 0 0 0 2px var(--ink); }
-[data-ui="v2"] .rv-fl__op[aria-selected="true"] { background: var(--chip-activo-bg); }
+[data-ui="v2"] .rv-fl__op[aria-selected="true"] { background: var(--seg-activo-bg); }
 [data-ui="v2"] .rv-fl__marca { display: inline-grid; place-items: center; width: 16px; height: 16px; flex: none; }
 [data-ui="v2"] .rv-fl__marca svg { width: 14px; height: 14px; }
 [data-ui="v2"] .rv-fl__rotulo { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

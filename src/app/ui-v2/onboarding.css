@@ -107,12 +107,64 @@
 .rv-guia-pantallas .rv-menu__item[aria-current="step"] { background: var(--canvas); font-weight: 600; }
 .rv-guia__punto { position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 2px var(--surface); }
 
+/* ── Pasos que piden hacer algo: estado medido, marca de hecho, anillo de avance, cursor del gesto, aviso de logro y vacío guiado. ── */
+.rv-onb__estado { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 10px; padding: 6px 10px; border-radius: 8px; background: var(--canvas); border: 1px solid var(--line); font-size: 12px; line-height: 1.5; color: var(--ink2, var(--ink)); }
+.rv-onb__estado > span { display: inline-flex; align-items: center; gap: 6px; }
+.rv-onb__hecho { font-weight: 600; color: var(--ink); }
+.rv-onb__estado .rv-onb__enlace { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
+
+.rv-onb-check { flex: none; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.rv-onb-check__aro { stroke: var(--line2, var(--line)); }
+.rv-onb-check__marca { stroke-dasharray: 1; stroke-dashoffset: 0; }
+.rv-onb-etiqueta[data-estado="hecho"] .rv-onb-check { stroke: var(--surface); }
+.rv-onb-etiqueta[data-estado="hecho"] .rv-onb-check__aro { stroke: transparent; }
+
+.rv-onb-anillo { position: relative; display: inline-grid; place-items: center; line-height: 1; }
+.rv-onb-anillo svg { display: block; }
+.rv-onb-anillo__pista, .rv-onb-anillo__valor { fill: none; stroke-width: 3.2; }
+.rv-onb-anillo__pista { stroke: var(--line2, var(--line)); }
+.rv-onb-anillo__valor { stroke: var(--ink); stroke-linecap: round; }
+.rv-onb-anillo__n { position: absolute; inset: 0; display: grid; place-items: center; font-size: 11px; font-weight: 600; color: var(--ink); font-family: var(--font-mono), ui-monospace, monospace; letter-spacing: -.02em; }
+
+/* Cursor del gesto: vive dentro de la capa y toma la posición del elemento resaltado. Sin movimiento queda quieto en su esquina inferior derecha. */
+.rv-onb-cursor {
+  --cx: calc(var(--tour-x, 0px) + var(--tour-w, 0px) * .5);
+  --cy: calc(var(--tour-y, 0px) + var(--tour-h, 0px) * .5);
+  position: absolute; left: 0; top: 0; width: 26px; height: 26px; pointer-events: none; translate: var(--cx) var(--cy);
+}
+.rv-onb-capa[data-sin-foco] .rv-onb-cursor { display: none; }
+.rv-onb-cursor__flecha { fill: var(--ink); stroke: var(--surface); stroke-width: 1.6; stroke-linejoin: round; }
+.rv-onb-cursor__toque { position: absolute; left: 3px; top: 1px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--ink); opacity: 0; }
+.rv-onb-cursor[data-gesto="escribir"] .rv-onb-cursor__flecha { fill: var(--surface); stroke: var(--ink); }
+
+/* Aviso de logro: siempre visible y con texto; la animación solo lo hace entrar. */
+.rv-onb-celebra {
+  display: flex; align-items: center; gap: 10px; box-sizing: border-box; max-width: 420px; padding: 10px 14px; border-radius: 12px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); box-shadow: var(--shadow-pop, none);
+}
+.rv-onb-celebra__cuerpo { flex: 1; min-width: 0; }
+.rv-onb-celebra__titulo { margin: 0; font-size: 14px; line-height: 1.4; font-weight: 600; }
+.rv-onb-celebra__texto { margin: 2px 0 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+
+/* Estado vacío que enseña: qué falta, en qué pasos se llena y quién lo hace. */
+.rv-onb-vacio { display: grid; justify-items: start; gap: 6px; box-sizing: border-box; max-width: 520px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); }
+.rv-onb-vacio__marco { display: grid; place-items: center; width: 100%; height: 72px; margin: 0 0 4px; border-radius: 8px; background: var(--canvas); overflow: hidden; }
+.rv-onb-vacio__marco .rv-onb-ilu { height: 60px; }
+.rv-onb-vacio__titulo { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 600; }
+.rv-onb-vacio__texto { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+.rv-onb-vacio__pasos { margin: 4px 0 2px; padding-left: 20px; font-size: 13px; line-height: 1.6; color: var(--ink2, var(--ink)); }
+.rv-onb-vacio__accion { margin-top: 6px; }
+
 /* ── Alto contraste forzado ── */
 @media (forced-colors: active) {
   .rv-onb, .rv-onb-inv, .rv-onb-pista { border-color: CanvasText; }
   .rv-onb-foco { box-shadow: none; outline: 3px solid Highlight; outline-offset: 3px; }
   .rv-onb-etiqueta__in, .rv-onb-banner { border: 1px solid CanvasText; background: Canvas; color: CanvasText; }
   .rv-onb-ilu * { stroke: CanvasText; }
+  .rv-onb-check, .rv-onb-check__marca, .rv-onb-anillo__valor, .rv-onb-cursor__flecha { stroke: CanvasText; }
+  .rv-onb-anillo__pista, .rv-onb-check__aro { stroke: GrayText; }
+  .rv-onb-cursor__flecha { fill: CanvasText; }
+  .rv-onb__estado, .rv-onb-celebra, .rv-onb-vacio { border-color: CanvasText; }
 }
 
 /* ── Móvil: hoja anclada abajo, por encima de la barra inferior (nunca la tapa). ── */
@@ -125,6 +177,9 @@
   .rv-onb[data-tipo="cierre"] .rv-onb__marco { height: 80px; }
   .rv-onb__ruta li:not([data-actual]) { display: none; }
   .rv-onb__ruta li + li::before { content: none; }
+  .rv-onb__estado .rv-onb__enlace, .rv-onb-celebra .rv-btn, .rv-onb-vacio .rv-btn { min-height: 44px; }
+  .rv-onb-celebra .rv-btn, .rv-onb-vacio .rv-btn { height: 44px; }
+  .rv-onb-celebra { max-width: none; }
   .rv-onb .rv-btn, .rv-onb-inv .rv-btn, .rv-onb-pista .rv-btn { min-height: 44px; height: 44px; }
   .rv-onb-etiqueta { display: none; }
 }
@@ -157,4 +212,31 @@
   .rv-onb__marco .d4 { animation-delay: 440ms; }
   .rv-onb__marco .d5 { animation-delay: 560ms; }
   .rv-onb__marco .d6 { animation-delay: 680ms; }
+  /* Marca de hecho: se dibuja en 380 ms. */
+  .rv-onb-check__marca { animation: rv-onb-traza 380ms ease-out both; }
+  .rv-onb-check__aro { animation: rv-onb-pop 380ms cubic-bezier(.2, .9, .3, 1) both; transform-box: fill-box; transform-origin: center; }
+  /* Anillo de avance: el trazo crece al cambiar. */
+  .rv-onb-anillo__valor { transition: stroke-dasharray 380ms cubic-bezier(.2, .8, .2, 1); }
+  /* Cursor del gesto: llega, aprieta y se queda; 2 repeticiones de 1,4 s (menos de 3 s: no necesita pausa). */
+  .rv-onb-cursor { animation: rv-onb-gesto 1400ms cubic-bezier(.2, .8, .2, 1) 2 both; }
+  .rv-onb-cursor__toque { animation: rv-onb-gesto-toque 1400ms ease-out 2 both; }
+  @keyframes rv-onb-gesto {
+    0% { translate: calc(var(--cx) + 84px) calc(var(--cy) + 64px); opacity: 0; }
+    14% { opacity: 1; }
+    55% { translate: var(--cx) var(--cy); }
+    65% { translate: var(--cx) var(--cy); scale: .88; }
+    75%, 100% { translate: var(--cx) var(--cy); scale: 1; opacity: 1; }
+  }
+  @keyframes rv-onb-gesto-toque { 0%, 60% { opacity: 0; transform: scale(.6); } 66% { opacity: .8; } 100% { opacity: 0; transform: scale(1.5); } }
+  /* Aviso de logro y vacío guiado: entran suaves. */
+  .rv-onb-celebra { animation: rv-onb-entra 260ms ease-out both; }
+  .rv-onb-vacio__marco .ilu-traza { animation: rv-onb-traza 900ms ease-out both; }
+  .rv-onb-vacio__marco .ilu-barra { animation: rv-onb-barra 650ms cubic-bezier(.2, .8, .2, 1) both; }
+  .rv-onb-vacio__marco .ilu-pop { animation: rv-onb-pop 450ms cubic-bezier(.2, .9, .3, 1) both; }
+  .rv-onb-vacio__marco .ilu-entra { animation: rv-onb-sube 520ms cubic-bezier(.2, .8, .2, 1) both; }
+  .rv-onb-vacio__marco .d1 { animation-delay: 80ms; }
+  .rv-onb-vacio__marco .d2 { animation-delay: 200ms; }
+  .rv-onb-vacio__marco .d3 { animation-delay: 320ms; }
+  .rv-onb-vacio__marco .d4 { animation-delay: 440ms; }
+  .rv-onb-vacio__marco .d5 { animation-delay: 560ms; }
 }

@@ -2,11 +2,12 @@ import Link from 'next/link';
 import { FileInput, TriangleAlert, Mail, MessageCircle, Upload, Download, RotateCcw, Layers } from 'lucide-react';
 import { EstadoVacio, EstadoError } from '../../estados';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
+import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
-import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
+import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
 import { BarraFiltros, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
@@ -38,6 +39,14 @@ export const FILTROS_ENVIO: ReadonlyArray<{ clave: FiltroEnvio; rotulo: string }
   { clave: 'todos', rotulo: 'Todos' }, { clave: 'sin_envio', rotulo: 'Sin envío' }, { clave: 'en_curso', rotulo: 'En curso' },
   { clave: 'enviado', rotulo: 'Enviados' }, { clave: 'rechazado_tms', rotulo: 'Rechazados por el TMS' }, { clave: 'subido_a_mano', rotulo: 'Subidos a mano' },
 ];
+/** Con la flota sin conector, «en curso» sería falso: nada sale solo. La bandeja lo rotula «Por conectar». */
+export const ROTULO_POR_CONECTAR = 'Por conectar';
+export function filtrosEnvio(sinConexion: boolean | undefined): ReadonlyArray<{ clave: FiltroEnvio; rotulo: string }> {
+  return sinConexion ? FILTROS_ENVIO.map((f) => (f.clave === 'en_curso' ? { ...f, rotulo: ROTULO_POR_CONECTAR } : f)) : FILTROS_ENVIO;
+}
+export function rotuloEnvio(e: EstadoEnvioTms, sinConexion: boolean | undefined): string {
+  return sinConexion && ROTULO_ENVIO[e] === 'En curso' ? ROTULO_POR_CONECTAR : ROTULO_ENVIO[e];
+}
 export function filtroEnvioDe(crudo: string | undefined): FiltroEnvio {
   return FILTROS_ENVIO.some((f) => f.clave === crudo) ? (crudo as FiltroEnvio) : 'todos';
 }
@@ -59,6 +68,8 @@ export interface DatosDocumentos {
   filas: DocumentoFila[];
   /** Estado del envío al TMS por id de documento aprobado (sin clave = sin envío). */
   envios?: Record<string, EstadoEnvioTms>;
+  /** La flota no tiene conector del sistema del cliente: los envíos «en curso» están por conectar (se suben a mano). */
+  sinConexion?: boolean;
   /** Por id de documento. Vacío/ausente = nada se partió (o la base aún no tiene la 0670). */
   linaje?: Record<string, LinajeVista>;
   /**
@@ -187,11 +198,11 @@ function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="cp-archivo" className={ETIQUETA}>Archivo (PDF, foto, Excel, CSV, XML o correo .eml — hasta 9 MB)</label>
-            <input id="cp-archivo" name="archivo" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt" className={`${CAMPO} py-1.5 h-auto`} style={{ background: 'var(--surface)' }} />
+            <input id="cp-archivo" name="archivo" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt" className="w-full py-1.5 h-auto" style={{ background: 'var(--surface)' }} />
           </div>
           <div>
             <label htmlFor="cp-cliente" className={ETIQUETA}>¿De qué cliente es? (ayuda a reconocer su formato)</label>
-            <select id="cp-cliente" name="clienteId" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+            <select id="cp-cliente" name="clienteId" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
               <option value="">Sin indicar</option>
               {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
             </select>
@@ -222,7 +233,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
             ]} />
         )}
         <FiltroOpciones etiqueta="Envío al TMS" valor={filtroEnvio} porDefecto="todos" ariaLabel="Filtrar por estado de envío al TMS"
-          opciones={FILTROS_ENVIO.map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
+          opciones={filtrosEnvio(datos.sinConexion).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
       </BarraFiltros>
       {orden.length === 0 ? (
         <EstadoVacio icono={<FileInput width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
@@ -234,10 +245,10 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         </EstadoVacio>
       ) : (
         <div className="card overflow-x-auto">
-          <table className="w-full text-[12px]">
+          <table aria-label="Documentos de carta porte recibidos" className="w-full text-[12px]">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
+                {['Estado', 'Archivo', 'Formato · canal', 'Lo que falta', ...(conAsignacion ? ['Asignado a'] : []), 'Recibido', ''].map((h) => <th scope="col" key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -274,9 +285,9 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
                         <span style={{ color: 'var(--bad)' }}>{d.ultimoError ?? 'No se pudo leer.'}</span>
                       ) : d.estado === 'aprobado' ? (
                         perfilRestringido ? (
-                          <span style={{ color: 'var(--muted)' }}>Envío al TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span>
+                          <span style={{ color: 'var(--muted)' }}>Envío al TMS: {datos.envios?.[d.id] ? rotuloEnvio(datos.envios[d.id], datos.sinConexion) : 'sin envío'}</span>
                         ) : (
-                          <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}<span style={{ color: 'var(--muted)' }}> · TMS: {datos.envios?.[d.id] ? ROTULO_ENVIO[datos.envios[d.id]] : 'sin envío'}</span></span>
+                          <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? 'Con viaje' : 'Sin viaje todavía'}<span style={{ color: 'var(--muted)' }}> · TMS: {datos.envios?.[d.id] ? rotuloEnvio(datos.envios[d.id], datos.sinConexion) : 'sin envío'}</span></span>
                         )
                       ) : d.estado === 'rechazado' ? (
                         <span style={{ color: 'var(--muted)' }}>{d.rechazoMotivo}</span>
@@ -342,10 +353,13 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
                 {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
               </p>
             )}
+            {buzon.activo && buzon.remitentes.length === 0 && (
+              <p className="text-[12px] px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>{AVISO_SIN_REMITENTES}</p>
+            )}
             {acciones.guardarRemitentes && (
               <FormaAccion accion={acciones.guardarRemitentes}>
-                <label htmlFor="cp-remitentes" className={ETIQUETA}>Remitentes de tus clientes (uno por línea: correo o dominio). Vacío = cualquiera.</label>
-                <textarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')} className={`${CAMPO} h-auto py-2`} style={{ background: 'var(--surface)' }} />
+                <label htmlFor="cp-remitentes" className={ETIQUETA}>Remitentes de tus clientes (uno por línea: correo o dominio). Sin al menos uno, el buzón no recibe correos.</label>
+                <textarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')} className="w-full h-auto py-2" style={{ background: 'var(--surface)' }} />
                 <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Un correo de otro remitente entra igual, marcado «remitente no reconocido» para que lo revises.</p>
                 <BotonEnvio variante="secundario" etiqueta="Guardar remitentes" />
               </FormaAccion>
@@ -447,18 +461,18 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="cp-exp-nombre" className={ETIQUETA}>Nombre (si ya existe, se reemplaza)</label>
-                <input id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Cliente demo" className={CAMPO} style={{ background: 'var(--surface)' }} />
+                <input id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Cliente demo" className="w-full" style={{ background: 'var(--surface)' }} />
               </div>
               <div>
                 <label htmlFor="cp-exp-formato" className={ETIQUETA}>Formato</label>
-                <select id="cp-exp-formato" name="formato" defaultValue="csv" className={CAMPO} style={{ background: 'var(--surface)' }}>
+                <select id="cp-exp-formato" name="formato" defaultValue="csv" className="w-full" style={{ background: 'var(--surface)' }}>
                   <option value="csv">CSV</option><option value="json">JSON</option>
                 </select>
               </div>
             </div>
             <div>
               <label htmlFor="cp-exp-config" className={ETIQUETA}>Mapeo (JSON)</label>
-              <textarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`} style={{ background: 'var(--surface)' }} />
+              <textarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} className="w-full h-auto py-2 font-mono text-[12px]" style={{ background: 'var(--surface)' }} />
               <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
                 Campos: los del complemento (<code>origen_cp</code>, <code>destino_rfc</code>…), de mercancía (<code>mercancia.peso_kg</code>…) y de sistema
                 (<code>documento.id</code>, <code>documento.archivo</code>, <code>documento.viaje_folio</code>…). <code>porMercancia: false</code> = una fila por documento.

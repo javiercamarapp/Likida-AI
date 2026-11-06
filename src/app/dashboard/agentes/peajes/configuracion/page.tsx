@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from '../../../sufijo';
 import { avisoAgentePeajesApagado } from '../apagado';
@@ -56,16 +56,16 @@ function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 
 
 /** La puerta común de TODA action de esta página (nivel de módulo: una acción no puede capturar ayudantes del componente). */
-async function puertaConfig(tenantId: string, area: 'dinero' | 'administracion' = 'dinero'): Promise<string | null> {
-  const sesion = await requireSessionTenant(RUTA);
+async function puertaConfig(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string, area: 'dinero' | 'administracion' = 'dinero'): Promise<string | null> {
+  const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerArea(sesion.rol, area)) return 'Tu rol no puede hacer esto.';
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta configuración no es de tu flota.';
   return null;
 }
 
 /** Puerta extra de las acciones de STAND-BY (geocercas, cursos): una flota con perfil `cinco_agentes` no las ejecuta aunque llegue un POST directo. */
-async function puertaStandBy(tenantId: string, parte: 'gps' | 'cursos'): Promise<string | null> {
-  const no = await puertaConfig(tenantId);
+async function puertaStandBy(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string, parte: 'gps' | 'cursos'): Promise<string | null> {
+  const no = await puertaConfig(sp, tenantId);
   if (no) return no;
   return (await superficiePeajesDeTenant(tenantId))[parte] ? null : MOTIVO_STAND_BY_PERFIL;
 }
@@ -157,25 +157,25 @@ export default async function PaginaConfiguracionPeajes({
   // ── Buzón ──
   async function accionActivarBuzon() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await activarBuzon(tenantId)) ? 'Buzón activado. Copia la llave y configúrala en el sistema que manda el archivo.' : 'error:No se pudo activar el buzón. Inténtalo de nuevo.');
   }
   async function accionDesactivarBuzon() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await desactivarBuzon(tenantId)) ? 'Buzón desactivado: el endpoint rechaza todo envío de esta flota.' : 'error:No se pudo desactivar. Inténtalo de nuevo.');
   }
   async function accionRotarLlave() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await rotarLlaveBuzon(tenantId)) ? 'Llave rotada: la anterior dejó de servir. Configura la nueva donde se firma el envío.' : 'error:No se pudo rotar la llave (¿el buzón está activado?).');
   }
   async function accionReintentarArchivo(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const id = String(fd.get('archivo') ?? '');
     return volverConfig(sufijo, (await reintentarArchivoPeaje(tenantId, id, String(fd.get('proveedor') ?? ''))) ? 'El archivo volvió a la cola: el siguiente ciclo (≤ 15 min) lo procesa.' : 'error:Ese archivo no se puede reintentar (solo los fallidos que conservan su contenido).');
@@ -184,32 +184,32 @@ export default async function PaginaConfiguracionPeajes({
   // ── Recepción por correo y pull (0563) ──
   async function accionActivarCorreo() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await activarCorreoPeajes(tenantId)) ? 'Correo activado. Comparte la dirección solo con quien manda los cortes.' : 'error:No se pudo activar el correo. Inténtalo de nuevo.');
   }
   async function accionDesactivarCorreo() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await desactivarCorreoPeajes(tenantId)) ? 'Correo apagado: lo que llegue a la dirección se ignora.' : 'error:No se pudo apagar el correo.');
   }
   async function accionRotarCorreo() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await rotarCorreoPeajes(tenantId)) ? 'Dirección cambiada: la anterior dejó de servir. Avísale a quien manda los cortes.' : 'error:No se pudo cambiar la dirección (¿el correo está activado?).');
   }
   async function accionGuardarRemitentes(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarRemitentesPeajes(tenantId, String(fd.get('remitentes') ?? '').split(/[\n,;]+/));
-    return volverConfig(sufijo, r.ok ? (r.guardados === 0 ? 'Sin lista: entra el correo de cualquiera que tenga la dirección.' : `${r.guardados} remitente(s) permitidos.`) : `error:${r.motivo}`);
+    return volverConfig(sufijo, r.ok ? (r.guardados === 0 ? 'Sin lista: el buzón no recibe ningún correo hasta que agregues al menos un remitente.' : `${r.guardados} remitente(s) permitidos.`) : `error:${r.motivo}`);
   }
   async function accionGuardarPull(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarPullPeajes(tenantId, {
       url: String(fd.get('url') ?? ''), token: String(fd.get('token') ?? ''), intervaloMin: Number(String(fd.get('intervalo') ?? '').trim()),
@@ -218,13 +218,13 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionApagarPull() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await apagarPullPeajes(tenantId)) ? 'Consulta automática apagada.' : 'error:No se pudo apagar.');
   }
   async function accionBorrarCredencialPull() {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await borrarCredencialPull(tenantId)) ? 'Token borrado.' : 'error:No se pudo borrar el token.');
   }
@@ -232,7 +232,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── TAGs ──
   async function accionAltaTag(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await altaTag(tenantId, {
       tag: String(fd.get('tag') ?? ''), unidadId: String(fd.get('unidad') ?? ''), proveedor: String(fd.get('proveedor') ?? ''),
@@ -241,14 +241,14 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionBajaTag(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await bajaTag(tenantId, String(fd.get('tag') ?? ''), { fecha: fd.get('fecha'), motivo: fd.get('motivo') });
     return volverConfig(sufijo, r.ok ? 'TAG dado de baja: queda en el historial con su fecha y motivo.' : `error:${r.motivo}`);
   }
   async function accionImportarTags(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
@@ -259,7 +259,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Casetas ──
   async function accionImportarCasetas(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
@@ -269,7 +269,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionEstadoCaseta(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activa = String(fd.get('activa')) === 'true';
     return volverConfig(sufijo, (await cambiarEstadoCaseta(tenantId, String(fd.get('caseta') ?? ''), activa)) ? (activa ? 'Caseta activada.' : 'Caseta desactivada: ya no se usa en el cruce.') : 'error:No se pudo cambiar la caseta.');
@@ -278,7 +278,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Geocercas ──
   async function accionGuardarGeocerca(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'gps');
+    const no = await puertaStandBy(sp, tenantId, 'gps');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const num = (k: string) => parsearImporteMx(String(fd.get(k) ?? ''));
     const r = await guardarGeocerca(tenantId, {
@@ -289,7 +289,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionEstadoGeocerca(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'gps');
+    const no = await puertaStandBy(sp, tenantId, 'gps');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activa = String(fd.get('activa')) === 'true';
     return volverConfig(sufijo, (await cambiarEstadoGeocerca(tenantId, String(fd.get('geocerca') ?? ''), activa)) ? (activa ? 'Geocerca activada.' : 'Geocerca desactivada.') : 'error:No se pudo cambiar la geocerca.');
@@ -298,7 +298,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Cursos (rutas autorizadas) ──
   async function accionImportarCursos(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'cursos');
+    const no = await puertaStandBy(sp, tenantId, 'cursos');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
@@ -306,14 +306,14 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionImportarCursosDeTabla() {
     'use server';
-    const no = await puertaStandBy(tenantId, 'cursos');
+    const no = await puertaStandBy(sp, tenantId, 'cursos');
     if (no) return volverConfig(sufijo, `error:${no}`);
-    const sesion = await requireSessionTenant(RUTA);
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     return volverConfig(sufijo, resumenCursos(await importarCursosDeTablaPropia({ tenantId, rol: sesion.rol })));
   }
   async function accionEstadoCurso(fd: FormData) {
     'use server';
-    const no = await puertaStandBy(tenantId, 'cursos');
+    const no = await puertaStandBy(sp, tenantId, 'cursos');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activo = String(fd.get('activo')) === 'true';
     return volverConfig(sufijo, (await cambiarEstadoCurso(tenantId, String(fd.get('curso') ?? ''), activo)) ? (activo ? 'Curso activado.' : 'Curso desactivado: ya no se evalúa en el reporte de reclamación.') : 'error:No se pudo cambiar el curso.');
@@ -322,7 +322,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Reglas de cobro (revisión de cobros) ──
   async function accionGuardarReglaCaseta(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const clases = parsearClases(String(fd.get('clases') ?? ''));
     if (clases === null) return volverConfig(sufijo, 'error:Las clases se escriben como números separados por comas (por ejemplo 1, 6).');
@@ -333,7 +333,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionCargarCoordenadas(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
@@ -344,27 +344,27 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionAltaBajaTag(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await altaBajaDeTag(tenantId, { tag: String(fd.get('tag') ?? ''), bajaEn: String(fd.get('baja_en') ?? ''), motivo: String(fd.get('motivo') ?? '') || null });
     return volverConfig(sufijo, r.ok ? 'TAG dado de baja. Cualquier cruce posterior a esa fecha se marcará como candidato.' : `error:${r.motivo}`);
   }
   async function accionQuitarBajaTag(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await quitarBajaDeTag(tenantId, String(fd.get('baja') ?? ''))) ? 'Baja del TAG quitada.' : 'error:No se pudo quitar la baja.');
   }
   async function accionGuardarExcepcionUnidad(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarExcepcionUnidad(tenantId, { caseta: String(fd.get('caseta') ?? ''), unidad: String(fd.get('unidad') ?? ''), nota: String(fd.get('nota') ?? '') || null });
     return volverConfig(sufijo, r.ok ? 'Excepción guardada. Esa unidad ya no se marca al cruzar esa caseta.' : `error:${r.motivo}`);
   }
   async function accionQuitarExcepcionUnidad(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await quitarExcepcionUnidad(tenantId, String(fd.get('excepcion') ?? ''))) ? 'Excepción quitada.' : 'error:No se pudo quitar la excepción.');
   }
@@ -372,14 +372,14 @@ export default async function PaginaConfiguracionPeajes({
   // ── Tarifario ──
   async function accionImportarTarifas(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
     const pedido = String(fd.get('origen') ?? 'declarada');
     // «inferida» no se carga a mano: la produce el sistema; el formulario solo ofrece declarada o proveedor.
     const origen: OrigenTarifa = (ORIGENES_TARIFA as readonly string[]).includes(pedido) && pedido !== 'inferida' ? (pedido as OrigenTarifa) : 'declarada';
-    const sesion = await requireSessionTenant(RUTA);
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     // A37-A2-26: con origen «proveedor» las tarifas nacen confirmadas; quien sube el archivo es quien las confirma.
     const quien = sesion.nombre?.trim() || 'usuario de la flota';
     const r = await importarTarifasArchivo(tenantId, (a as { nombre: string }).nombre, (a as { buffer: Uint8Array }).buffer, origen, quien);
@@ -388,16 +388,16 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionConfirmarTarifa(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
-    const sesion = await requireSessionTenant(RUTA);
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     const quien = sesion.nombre?.trim() || 'usuario de la flota';
     const r = await confirmarTarifa(tenantId, String(fd.get('tarifa') ?? ''), quien);
     return volverConfig(sufijo, r.ok ? (r.yaConfirmada ? 'Esa tarifa ya estaba confirmada.' : 'Tarifa confirmada: desde ahora puede convertir un candidato en cobro con monto reclamable.') : `error:${r.motivo}`);
   }
   async function accionSugerirPasada() {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     let ultimo: Awaited<ReturnType<typeof listarDesgloses>>;
     try { ultimo = await listarDesgloses(tenantId, 1); } catch { return volverConfig(sufijo, 'error:No se pudo leer el último desglose. Inténtalo de nuevo.'); }
@@ -414,7 +414,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Umbrales, plazo y avisos ──
   async function accionGuardarUmbrales(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const n = (k: string) => parsearImporteMx(String(fd.get(k) ?? ''));
     const marcado = (k: string) => String(fd.get(k) ?? '') === '1';
@@ -430,7 +430,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionGuardarAvisos(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const dias = parsearDiasAviso(String(fd.get('aviso_dias') ?? ''));
     if (dias === null) return volverConfig(sufijo, 'error:Los días de aviso se escriben como números enteros separados por comas (por ejemplo 30, 7).');
@@ -444,7 +444,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionGuardarDestinatario(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarDestinatarioAtipicos(tenantId, String(fd.get('telefono') ?? ''));
     return volverConfig(sufijo, r.ok ? (r.telefono ? 'Destinatario guardado.' : 'Sin destinatario: los avisos solo se verán en pantalla.') : `error:${r.motivo}`);
@@ -453,7 +453,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Cruce de cobros con viajes (T-A2-21): el interruptor por flota ──
   async function accionGuardarCruceViajes(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId, 'administracion');
+    const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activo = String(fd.get('activo') ?? '') === '1';
     if (!(await guardarVinculosActivo(tenantId, activo))) return volverConfig(sufijo, 'error:No se pudo guardar el interruptor. Inténtalo de nuevo.');
@@ -471,7 +471,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Unidades inmovilizadas (T-A2-36) ──
   async function accionCargarInmovilizadas(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
     if (typeof a === 'string') return volverConfig(sufijo, `error:${a}`);
@@ -480,7 +480,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionQuitarInmovilizada(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await quitarInmovilizada(tenantId, String(fd.get('ventana') ?? ''))) ? 'Ventana quitada.' : 'error:No se pudo quitar la ventana (¿ya no existía?).');
   }
@@ -488,7 +488,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Clases del cobro por flota: utilitarios y clase 1 (0936) ──
   async function accionGuardarReglasFlota(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarReglasFlota(tenantId, { clasesUtilitario: String(fd.get('clases_utilitario') ?? ''), clase1: String(fd.get('clase_uno') ?? '') });
     return volverConfig(sufijo, r.ok ? 'Clases guardadas. La revisión de cobros las usa en cuanto abras un desglose.' : `error:${r.motivo}`);
@@ -497,7 +497,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const campo = (k: string) => String(fd.get(k) ?? '').trim();
     const r = await guardarMapeo(tenantId, campo('proveedor'), {
@@ -508,7 +508,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionBorrarMapeo(fd: FormData) {
     'use server';
-    const no = await puertaConfig(tenantId);
+    const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await borrarMapeo(tenantId, String(fd.get('mapeo') ?? ''))) ? 'Mapeo eliminado.' : 'error:No se pudo eliminar el mapeo.');
   }

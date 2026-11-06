@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
@@ -36,3 +37,5 @@ export default async function PaginaProximamente({
 
   return <Proximamente contenido={contenido} hrefResumen={`/dashboard${sufijo}`} />;
 }
+
+export const metadata: Metadata = { title: 'Próximamente' };

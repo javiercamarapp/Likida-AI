@@ -22,18 +22,17 @@ import { numero } from '@/lib/formato';
 
 const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
 
-/** Activo = pill SÓLIDA en tinta (16-ago-2026, ref. shadcn-dashboard) —
- *  el MISMO cambio que su gemelo dashboard/sidebar-nav.tsx, a la vez. */
+/** Activo = fondo gris suave + peso 600, sin barra ni pastilla negra (K3, SPEC-CONTROLES-FINOS 2.7: el mismo activo neutro del marco v2). */
 function claseItem(activo: boolean): string {
   return activo
-    ? `${ITEM} font-medium`
+    ? `${ITEM} font-semibold`
     : `${ITEM} hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]`;
 }
 function estiloItem(activo: boolean) {
-  return activo ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : undefined;
+  return activo ? { background: 'var(--nav-activo-bg)', color: 'var(--nav-activo-fg)' } : undefined;
 }
 function estiloIcono(activo: boolean) {
-  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--marca-fg)' : 'var(--muted)' } as const;
+  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--nav-activo-fg)' : 'var(--muted)' } as const;
 }
 function idSeccion(titulo: string): string {
   return `nav-seccion-${titulo.toLowerCase().split(' ').join('-')}`;
@@ -132,13 +131,13 @@ export function SidebarAbajoAdmin({ usoIa }: {
       )}
       {usoIa === undefined && (
         <Link href="/admin/costos-facturacion" aria-label="Costos de IA"
-          className="hairline flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
+          className="hairline flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded-lg text-[12px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
           style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
           <span className="sb-texto truncate">Costos de IA</span><span aria-hidden="true">→</span>
         </Link>
       )}
       <Link href="/admin/dev" title="Entrar a los paneles de los otros roles (vive en Dev desde el 17-ago)"
-        className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-full text-[12.5px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
+        className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-lg text-[12px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
         style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
         <ArrowLeftRight width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
         <span className="sb-texto truncate">Ver los otros paneles</span>

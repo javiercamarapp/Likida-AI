@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { ShieldCheck, FileWarning, CheckCircle2, CircleAlert } from 'lucide-react';
 import { EstadoVacio, StatCard, StatusPill, type Estado } from '../ui/kit';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
@@ -107,16 +108,16 @@ export default async function CompliancePage() {
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Solicitudes de derechos de los titulares" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-3 py-2 font-medium">Recibida</th>
-                      <th className="px-3 py-2 font-medium">Flota</th>
-                      <th className="px-3 py-2 font-medium">Derecho</th>
-                      <th className="px-3 py-2 font-medium">Titular</th>
-                      <th className="px-3 py-2 font-medium">Vence</th>
-                      <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium">Resolución</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Recibida</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Derecho</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Titular</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Vence</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Estado</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Resolución</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -217,3 +218,5 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
   const vence = pendientes.filter((p) => p.venceEn <= corte).length;
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }
+
+export const metadata: Metadata = { title: 'Compliance & Datos' };

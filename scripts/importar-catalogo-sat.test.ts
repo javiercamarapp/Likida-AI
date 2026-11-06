@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync } from 'node:fs';
+import { utils as xlsxUtils, write as escribirLibro } from 'xlsx';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  cargarCatalogo, filasDesdeMatriz, importarCatalogo, leerArchivoCatalogo, normalizarFecha, ErrorImportacion,
+  cargarCatalogo, filasDesdeMatriz, importarCatalogo, leerArchivoCatalogo, leerLibroCatalogos, normalizarFecha, ErrorImportacion,
   TAMANO_LOTE, type DestinoCatalogo, type FilaCatalogo,
 } from './importar-catalogo-sat';
 
@@ -112,5 +113,41 @@ describe('importar-catalogo-sat', () => {
     expect(() => leerArchivoCatalogo('/no/existe/catalogo.xlsx')).toThrow(ErrorImportacion);
     expect(() => leerArchivoCatalogo('/no/existe/catalogo.xlsx')).toThrow(/No existe el archivo/);
     expect(() => leerArchivoCatalogo('')).toThrow(/Falta el archivo/);
+  });
+
+  // CT-A345-04: el libro oficial trae un catálogo por hoja.
+  describe('libro con varias hojas', () => {
+    function libro(hojas: Record<string, unknown[][]>): string {
+      const wb = xlsxUtils.book_new();
+      for (const [nombre, matriz] of Object.entries(hojas)) xlsxUtils.book_append_sheet(wb, xlsxUtils.aoa_to_sheet(matriz), nombre);
+      const dir = mkdtempSync(join(tmpdir(), 'sat-'));
+      const ruta = join(dir, 'catCartaPorte.xlsx');
+      writeFileSync(ruta, escribirLibro(wb, { type: 'buffer', bookType: 'xlsx' }));
+      return ruta;
+    }
+    const hojas = {
+      Portada: [['Catálogos de Carta Porte'], ['Versión sintética']],
+      c_Pais: [['Catálogos'], ['c_Pais', 'Descripción'], ['MEX', 'México'], ['USA', 'Estados Unidos']],
+      c_Estado: [['c_Estado', 'c_Pais', 'Descripción'], ['AGU', 'MEX', 'Aguascalientes'], ['BCN', 'MEX', 'Baja California'], ['', 'MEX', 'sin clave']],
+      c_ClaveUnidadPeso: [['c_ClaveUnidadPeso', 'Nombre'], ['KGM', 'Kilogramo']],
+    };
+
+    it('recorre TODAS las hojas c_*, no solo la primera, y lista la que se omitió', () => {
+      const l = leerLibroCatalogos(libro(hojas));
+      expect(l.catalogos.map((c) => c.catalogo)).toEqual(['c_Pais', 'c_Estado', 'c_ClaveUnidadPeso']);
+      expect(l.catalogos.map((c) => c.filas.length)).toEqual([2, 2, 1]);
+      expect(l.catalogos[1].rechazos).toEqual([{ fila: 4, motivo: 'clave vacía' }]);
+      expect(l.hojasOmitidas).toEqual(['Portada']);
+    });
+
+    it('un libro sin ninguna hoja c_* falla con mensaje llano en vez de cargar nada', () => {
+      expect(() => leerLibroCatalogos(libro({ Notas: [['nada'], ['aquí']] }))).toThrow(/No encontré en ninguna hoja/);
+    });
+
+    it('con --catalogo conserva el comportamiento de siempre: una hoja', () => {
+      const l = leerLibroCatalogos(libro({ Datos: [['MEX', 'México']] }), 'c_Pais');
+      expect(l.catalogos).toHaveLength(1);
+      expect(l.catalogos[0].catalogo).toBe('c_Pais');
+    });
   });
 });

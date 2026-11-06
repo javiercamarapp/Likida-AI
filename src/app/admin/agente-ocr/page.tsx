@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
@@ -179,3 +180,5 @@ export default async function AgenteOcrPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Agente OCR' };

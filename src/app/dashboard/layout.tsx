@@ -32,6 +32,10 @@ import { PulsoProducto } from './pulso-producto';
 import { AvisoLegalPendiente } from './aviso-legal';
 import { TourProvider } from '../ui-v2/movimiento/tour';
 import { onboardingDeLaSesion } from './recorridos';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { guardarEstadoGuia, leerSenalesDeLaGuia, registrarEventosGuia } from '@/lib/likida/guia/acciones';
+import { invitacionEncendida, leerEstado } from '@/lib/likida/guia/repo';
+import type { EstadoGuia } from '@/lib/likida/guia/tipos';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
 
 // Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
@@ -99,6 +103,18 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const avance = v2 && perfil && tenantDelMenu ? insigniaDeCookie(jarra.get(nombreCookieAvance(tenantDelMenu))?.value) : null;
   const onb = v2 ? onboardingDeLaSesion(sesion.rol, perfil) : null;
   const rutasDelRecorrido = (onb?.rutas ?? []).filter((r) => puedeVerRuta(sesion.rol, r, perfil));
+  // Estado de la guía por persona y flota (0983) e interruptor de la invitación por flota: una lectura por carga del panel. Si la tabla
+  // no existe todavía o la base falla, la guía sigue con su respaldo local y la invitación sigue el interruptor global. «Ver como» no lee ni escribe.
+  let estadoGuia: { estado: EstadoGuia; version: number } | null = null;
+  let invitacionDeLaFlota = false;
+  if (onb?.principal && tenantDelMenu && sesion.rol !== 'superadmin') {
+    try {
+      const db = supabaseAdmin();
+      const [leido, encendida] = await Promise.all([leerEstado(db, sesion.userId, tenantDelMenu), invitacionEncendida(db, tenantDelMenu)]);
+      if (leido.ok) estadoGuia = { estado: leido.estado, version: leido.version };
+      invitacionDeLaFlota = encendida;
+    } catch { /* respaldo local */ }
+  }
   const contenido = (
     <>
       {/* El pulso de producto (0251): un POST de fuego-y-olvido por cambio de
@@ -124,7 +140,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <TourProvider
       recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
       soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
-      principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas} invitacion={process.env.ONBOARDING_INVITACION === '1' && jarra.get('likida_onb_visto')?.value !== '1'}
+      principal={onb.principal} asistente={onb.asistente} pistas={onb.pistas} invitacion={(process.env.ONBOARDING_INVITACION === '1' || invitacionDeLaFlota) && jarra.get('likida_onb_visto')?.value !== '1'}
+      estadoServidor={estadoGuia} guardarRemoto={guardarEstadoGuia} leerSenales={leerSenalesDeLaGuia} registrarEventos={registrarEventosGuia}
     >
       {marco}
     </TourProvider>

@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
@@ -19,8 +19,8 @@ const RUTA = '/dashboard/agentes/liquidacion/configuracion';
 
 /** La puerta de TODA action: una action es un endpoint alcanzable por POST directo, no un botón.
  *  Cambiar a quién le llega el desglose es administrar (dueño), no solo ver dinero. */
-async function puerta(tenantId: string): Promise<{ por: string } | { error: string }> {
-  const sesion = await requireSessionTenant(RUTA);
+async function puerta(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<{ por: string } | { error: string }> {
+  const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo el dueño de la flota cambia la configuración de la entrega del desglose.' };
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta configuración no es de tu flota.' };
   return { por: sesion.userId };
@@ -71,7 +71,7 @@ export default async function PaginaConfiguracionLiquidacion({
 
   async function accionGuardar(fd: FormData) {
     'use server';
-    const p = await puerta(tenantId);
+    const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const f = leerFormularioConfig(fd);
     if (!f.ok) return volver(sufijo, `error:${f.error}`);

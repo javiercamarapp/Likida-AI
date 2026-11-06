@@ -86,11 +86,11 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ninguna parada con llegada registrada en ese periodo y con esos filtros.</p>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table aria-label="Estadías por viaje y chofer" className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
-                      <th className="py-1.5 pr-3">Viaje</th><th className="pr-3">Chofer</th><th className="pr-3">Parada</th><th className="pr-3">Llegada (hora del mensaje)</th>
-                      <th className="pr-3">Salida</th><th className="pr-3 text-right">Tiempo</th><th className="pr-3">Estado</th><th>Respaldo</th>
+                      <th scope="col" className="py-1.5 pr-3">Viaje</th><th scope="col" className="pr-3">Chofer</th><th scope="col" className="pr-3">Parada</th><th scope="col" className="pr-3">Llegada (hora del mensaje)</th>
+                      <th scope="col" className="pr-3">Salida</th><th scope="col" className="pr-3 text-right">Tiempo</th><th scope="col" className="pr-3">Estado</th><th scope="col">Respaldo</th>
                     </tr>
                   </thead>
                   <tbody>

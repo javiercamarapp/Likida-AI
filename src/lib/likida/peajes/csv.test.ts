@@ -42,9 +42,13 @@ describe('matrizDeCsvTexto', () => {
   });
   it('un archivo grande se lee rápido (100k celdas)', () => {
     const t = ['a,b,c,d,e'].concat(Array.from({ length: 20_000 }, (_, i) => `${i},x,y,z,w`)).join('\n');
-    const t0 = Date.now();
+    // CT-BAS-14: tiempo de CPU del proceso, no de pared. Con la Mac en swap el reloj de pared
+    // medía la espera por memoria, no el algoritmo; la CPU consumida sigue delatando un
+    // parser cuadrático (cientos de veces el costo lineal) sin depender de la carga ajena.
+    const c0 = process.cpuUsage();
     expect(matrizDeCsvTexto(t)).toHaveLength(20_001);
-    expect(Date.now() - t0).toBeLessThan(2_000);
+    const c = process.cpuUsage(c0);
+    expect((c.user + c.system) / 1000).toBeLessThan(2_000);
   });
 });
 

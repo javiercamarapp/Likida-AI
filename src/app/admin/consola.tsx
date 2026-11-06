@@ -288,7 +288,7 @@ export async function ConsolaAdmin({
                 const actividad = fase ? porFase.get(fase) : undefined;
                 return (
                   <Link key={it.href} href={it.href}
-                    className="hairline rounded-lg px-3 py-2.5 flex items-start gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                    className="hairline rounded-lg px-3 py-1.5 flex items-start gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                     style={{ background: 'var(--surface)' }}>
                     <it.Icono width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
                     <div className="min-w-0 flex-1">
@@ -352,14 +352,14 @@ export async function ConsolaAdmin({
               </div>
               {corridasRecientes.length > 0 && (
                 <div className="mt-3 overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table aria-label="Corridas recientes" className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th className="px-2 py-1.5 font-medium">Corrida</th>
-                        <th className="px-2 py-1.5 font-medium">Estado</th>
-                        <th className="px-2 py-1.5 font-medium">Cuándo</th>
-                        <th className="px-2 py-1.5 font-medium">Tareas</th>
-                        <th className="px-2 py-1.5 font-medium">Flota</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Corrida</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Estado</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Cuándo</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Tareas</th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Flota</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -387,7 +387,7 @@ export async function ConsolaAdmin({
               <TituloSeccion>Servicio al cliente</TituloSeccion>
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-1.5">
                 <Link href="/admin/conversaciones"
-                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <MessageCircle width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
                   <div className="min-w-0">
@@ -399,7 +399,7 @@ export async function ConsolaAdmin({
                   <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
                 </Link>
                 <Link href="/admin/soporte"
-                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <LifeBuoy width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
                   <div className="min-w-0">
@@ -541,14 +541,14 @@ export async function ConsolaAdmin({
               <div className="px-4 py-3 text-sm" style={{ color: 'var(--muted)' }}>Sin flotas dadas de alta todavía.</div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Flotas con plan, viajes y costo de IA" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-4 py-2 font-medium">Flota</th>
-                      <th className="px-4 py-2 font-medium">Plan</th>
-                      <th className="px-4 py-2 font-medium text-right">Viajes</th>
-                      <th className="px-4 py-2 font-medium text-right">Costo de IA (histórico)</th>
-                      <th className="px-4 py-2 font-medium text-right"></th>
+                      <th scope="col" className="px-4 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Plan</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Viajes</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right">Costo de IA (histórico)</th>
+                      <th scope="col" className="px-4 py-2 font-medium text-right"></th>
                     </tr>
                   </thead>
                   <tbody>

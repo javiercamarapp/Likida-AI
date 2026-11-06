@@ -67,6 +67,40 @@ const DIBUJOS: Record<Ilu, ReactNode> = {
     <path className="ilu-l" d="M24 30H136M56 30V82" />
     <rect className="ilu-fa ilu-barra d2" x="68" y="58" width="10" height="16" rx="2" /><rect className="ilu-fa ilu-barra d3" x="84" y="48" width="10" height="26" rx="2" /><rect className="ilu-fa ilu-barra d4" x="100" y="40" width="10" height="34" rx="2" />
   </>,
+  conectar: <>
+    <rect className="ilu-f ilu-entra d1" x="16" y="30" width="44" height="36" rx="6" />
+    <rect className="ilu-f ilu-entra d3" x="100" y="30" width="44" height="36" rx="6" />
+    <path className="ilu-l" d="M26 44H50M26 52H42M110 44H134M110 52H126" />
+    {T('M60 48H100')}
+    <circle className="ilu-fa ilu-pop d5" cx="80" cy="48" r="5" />
+  </>,
+  documento: <>
+    <path className="ilu-f ilu-entra d1" d="M52 12H100L116 28V84H52Z" />
+    <path className="ilu-l" d="M100 12V28H116M62 44H106M62 54H106M62 64H90" />
+    <circle className="ilu-fa ilu-pop d4" cx="108" cy="74" r="9" />
+    <path className="ilu-t ilu-grueso" d="M103 74L107 78L114 70" />
+  </>,
+  correo: <>
+    <rect className="ilu-f ilu-entra d1" x="30" y="24" width="100" height="56" rx="8" />
+    {T('M32 28L80 58L128 28')}
+    <path className="ilu-l" d="M30 78L64 50M130 78L96 50" />
+    <circle className="ilu-fa ilu-pop d5" cx="122" cy="26" r="5" />
+  </>,
+  llave: <>
+    <circle className="ilu-f ilu-bordea ilu-pop d1" cx="54" cy="48" r="18" />
+    <circle className="ilu-fa ilu-pop d2" cx="54" cy="48" r="5" />
+    {T('M72 48H128M110 48V62M122 48V58')}
+  </>,
+  celebrar: <>
+    <circle className="ilu-f" cx="80" cy="50" r="28" />
+    {T('M66 52L77 63L96 40', 'ilu-grueso')}
+    <path className="ilu-l ilu-entra d3" d="M80 10V18M40 24L46 30M120 24L114 30M24 56H32M128 56H136" />
+  </>,
+  reloj: <>
+    <circle className="ilu-f ilu-bordea" cx="80" cy="48" r="30" />
+    {T('M80 28V48L94 56')}
+    <circle className="ilu-fa ilu-pop d4" cx="80" cy="48" r="3" />
+  </>,
   cierre: <>
     <circle className="ilu-f" cx="80" cy="48" r="30" />
     {T('M64 50L76 62L98 38', 'ilu-grueso')}

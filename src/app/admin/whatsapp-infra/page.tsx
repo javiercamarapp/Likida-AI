@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
 import { Server, Smartphone, MessageCircle, ChevronDown, Info } from 'lucide-react';
@@ -153,3 +154,5 @@ export default async function WhatsappInfraPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'WhatsApp Infra' };

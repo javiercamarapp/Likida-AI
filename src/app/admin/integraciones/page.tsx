@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -195,3 +196,5 @@ export default async function IntegracionesPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Integraciones' };

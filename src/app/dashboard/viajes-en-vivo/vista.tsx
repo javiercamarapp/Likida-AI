@@ -161,7 +161,7 @@ export function TareasAbiertas({ tareas, accion, ocultos, aviso = null, errorLec
                   <form action={accion}>
                     {Object.entries(ocultos).map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
                     <input type="hidden" name="id" value={t.id} />
-                    <button type="submit" className="rv-btn rv-btn--secondary hairline rounded-lg px-2.5 h-7 text-[12px]">Marcar atendida</button>
+                    <button type="submit" className="rv-btn rv-btn--secondary">Marcar atendida</button>
                   </form>
                 )}
               </li>
@@ -214,11 +214,11 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       <Filtros f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />
 
       <div className="card overflow-x-auto">
-        <table className="w-full border-collapse text-left">
+        <table aria-label="Viajes en vivo y su estado" className="w-full border-collapse text-left">
           <thead>
             <tr className="etiqueta-mono text-[11px] uppercase border-b" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
-              <th className="px-3 py-2 font-normal">Viaje</th><th className="px-3 py-2 font-normal">Estado</th>
-              <th className="px-3 py-2 font-normal">Posición del tractor</th><th className="px-3 py-2 font-normal">Excepciones</th>
+              <th scope="col" className="px-3 py-2 font-normal">Viaje</th><th scope="col" className="px-3 py-2 font-normal">Estado</th>
+              <th scope="col" className="px-3 py-2 font-normal">Posición del tractor</th><th scope="col" className="px-3 py-2 font-normal">Excepciones</th>
             </tr>
           </thead>
           <tbody>

@@ -31,7 +31,7 @@ import { ViajesRecientes } from './viajes-recientes';
 import { StatCard, BannerInsight, VerMas } from '../admin/ui/kit';
 import { BarraAcciones, type ItemBusqueda, type BuscarViajes } from './barra-acciones';
 import { getViajesRegistro } from '@/lib/likida/viajes_registro';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { KpiPeriodo } from './kpi-periodo';
 import { MotorFiscalPeriodo } from './motor-fiscal-periodo';
 import { PanelPeriodo } from './panel-periodo';
@@ -84,9 +84,11 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * terminara.
  */
 export async function InicioContenido({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', avisoFiscalPospuesto = false,
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', avisoFiscalPospuesto = false, sp,
 }: {
   tenantId: string;
+  /** Los `?tenant=`/`?vista=`/`?rol=` de la página: la búsqueda los reusa para atarse a la flota pintada (MX-002). */
+  sp?: { vista?: string; tenant?: string; rol?: string };
   tenantNombre: string | null;
   nombre: string | null;
   /** El dueño eligió «lo confirmo con mi contador» y el perfil fiscal sigue sin
@@ -233,7 +235,7 @@ export async function InicioContenido({
    */
   async function buscarViajes(q: string): Promise<ItemBusqueda[]> {
     'use server';
-    const sesion = await requireSessionTenant('/dashboard');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard', sp, tenantId);
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) {
       throw new Error('Esa flota no es la tuya.');
     }

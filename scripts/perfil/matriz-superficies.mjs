@@ -50,8 +50,12 @@ const ACCIONES_SIN_DATOS = {
   'src/app/sin-acceso/page.tsx': 'callejón 403: solo cierra la sesión de quien la pide',
   'src/app/dashboard/layout.tsx': '`cerrarSesion`: solo cierra la sesión de quien la pide',
 };
+/** La guía de onboarding: acciones de la PROPIA persona, con usuario y flota tomados de la sesión (nunca del cliente). Es parte del perfil, no una fuga de él. */
+const ACCIONES_GUIA = {
+  'src/lib/likida/guia/acciones.ts': 'guía de onboarding: estado propio por (usuario, flota) de la sesión y señales de ESA flota acotadas por pista; «ver como» no escribe; sin datos de negocio ni de otra flota',
+};
 /** Las puertas que dejan a una acción del dashboard con la flota de la sesión (A37-S04-06). */
-const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|requireSessionTenant|requireSession|resolverTenantApi)\(/;
+const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|resolverTenantAtadoOLanza|resolverTenantAtadoFirmado|requireSessionTenant|requireSession|resolverTenantApi)\(/;
 /** Archivos de acciones que NO cuelgan de una página y gatean con una ruta distinta a su carpeta. */
 const ACCIONES_RUTA_EXPLICITA = {
   'src/app/dashboard/inicio-contenido.tsx': '/dashboard',                    // el Resumen de siempre; bajo el perfil no se monta
@@ -229,6 +233,7 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
           : { veredicto: NO_CLASIFICADO, nota: 'el chat no está negado por el perfil' };
         break;
       case "'use server'": {
+        if (ACCIONES_GUIA[e.archivo]) { r = { veredicto: 'permitido', nota: ACCIONES_GUIA[e.archivo] }; break; }
         if (ACCIONES_SIN_DATOS[e.archivo]) { r = { veredicto: 'permitido', nota: `sin datos de flota: ${ACCIONES_SIN_DATOS[e.archivo]}` }; break; }
         if (e.archivo.startsWith('src/app/admin/')) {
           r = /requireSuperadmin\(/.test(fuente('src/app/admin/layout.tsx'))

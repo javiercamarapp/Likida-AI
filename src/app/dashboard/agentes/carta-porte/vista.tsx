@@ -4,8 +4,10 @@ import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/carta_porte_docs/metricas';
 import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
+import { estadoCatalogosSat, type ConteoCatalogosSat } from '@/lib/likida/carta_porte_docs/catalogos_sat';
 import { EstadoError, EstadoVacio } from '../../estados';
 import { DireccionBuzon } from '../proveedores/controles';
+import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
@@ -26,7 +28,7 @@ export interface BuzonCartaPorteVista { direccion: string | null; activo: boolea
  */
 export const FRASE_SIN_GRUPOS = 'Los grupos de WhatsApp no se pueden leer: pide a tus clientes que escriban al correo o reenvíalos tú.';
 
-export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, sinCcp, nombresCliente = {}, diasVentana = 30 }: {
+export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, sinCcp, nombresCliente = {}, diasVentana = 30, catalogosSat }: {
   datos: EstadoCartaPorte | null;
   sufijo?: string;
   notificaciones?: React.ReactNode;
@@ -39,6 +41,8 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   /** id de cliente → nombre, solo para rotular. */
   nombresCliente?: Record<string, string>;
   diasVentana?: number;
+  /** CT-A345-04: filas cargadas por catálogo SAT. `undefined` = no se pide el aviso; `'no_leido'` = la lectura falló (no se finge «cargados»). */
+  catalogosSat?: ConteoCatalogosSat | 'no_leido';
 }) {
   const conteo = (n: 'si' | 'no' | 'falta_declarar') =>
     datos === null ? null : datos.viajes.filter((v) => v.decision.necesita === n).length;
@@ -54,6 +58,8 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
         afirma «no necesitas» por su cuenta, nunca inventa un dato del complemento y nunca timbra:
         prepara el borrador y lo valida contra lo que el PAC rechazaría seguro.
       </Aviso>
+
+      {catalogosSat !== undefined && <AvisoCatalogosSat catalogosSat={catalogosSat} />}
 
       {datos === null ? (
         <EstadoError mensaje="No se pudieron leer los viajes en curso. Sin lectura no se pintan conteos: un cero fingido aquí diría «todo en regla»." />
@@ -198,7 +204,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
               <p style={{ color: 'var(--muted)' }}>
                 {buzon.remitentes.length > 0
                   ? `Remitentes de tus clientes reconocidos: ${buzon.remitentes.join(', ')}. Uno distinto entra igual, marcado «remitente no reconocido».`
-                  : 'Remitentes reconocidos: cualquiera (puedes limitarlos a los correos de tus clientes en el panel).'}
+                  : AVISO_SIN_REMITENTES}
               </p>
             </>
           ) : (
@@ -249,8 +255,8 @@ function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: Calid
     <div className="card p-4">
       <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
       {filas.length === 0 ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
-        <table className="w-full text-[12px]">
-          <thead><tr style={{ color: 'var(--faint)' }}><th className="text-left font-normal">Grupo</th><th className="text-right font-normal">Aprobados</th><th className="text-right font-normal">Sin tocar</th></tr></thead>
+        <table aria-label={titulo} className="w-full text-[12px]">
+          <thead><tr style={{ color: 'var(--faint)' }}><th scope="col" className="text-left font-normal">Grupo</th><th scope="col" className="text-right font-normal">Aprobados</th><th scope="col" className="text-right font-normal">Sin tocar</th></tr></thead>
           <tbody>
             {filas.map((g) => (
               <tr key={g.clave}><td>{rotular(g.clave)}</td><td className="text-right cifra-mono">{numero(g.documentos)}</td><td className="text-right cifra-mono">{pctTxt(g.pctSinTocar)} ({numero(g.sinTocar)})</td></tr>
@@ -403,5 +409,31 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
         </div>
       ))}
     </section>
+  );
+}
+
+/**
+ * CT-A345-04: avisa cuando los catálogos del SAT no están cargados. Con un catálogo vacío la validación NO puede decir que
+ * una clave existe ni que no: degrada a «no se pudo verificar» y el PAC es quien valida al timbrar. Sin este aviso,
+ * un documento «sin fallas» se leería como «clave verificada».
+ */
+export const TEXTO_CATALOGOS_SAT_VACIOS = 'Los catálogos del SAT todavía no están cargados en Likida, así que las claves de estos catálogos no se verifican aquí: aparecen como «no se pudo verificar» y las valida tu PAC al timbrar. Un documento sin fallas no significa que sus claves estén verificadas.';
+export const TEXTO_CATALOGOS_SAT_NO_LEIDOS = 'No pudimos comprobar si los catálogos del SAT están cargados. No des por verificadas las claves de los documentos.';
+
+export function AvisoCatalogosSat({ catalogosSat }: { catalogosSat: ConteoCatalogosSat | 'no_leido' }) {
+  if (catalogosSat === 'no_leido') {
+    return <div data-catalogos-sat="no_leido"><Aviso tono="warn">{TEXTO_CATALOGOS_SAT_NO_LEIDOS}</Aviso></div>;
+  }
+  const { filas, vacios } = estadoCatalogosSat(catalogosSat);
+  if (vacios.length === 0) return null;
+  return (
+    <div data-catalogos-sat={vacios.length === filas.length ? 'vacios' : 'parcial'}>
+      <Aviso tono="warn">
+        {vacios.length === filas.length ? TEXTO_CATALOGOS_SAT_VACIOS : 'Faltan por cargar algunos catálogos del SAT: sus claves aparecen como «no se pudo verificar» y las valida tu PAC al timbrar.'}
+        <ul className="mt-1.5 text-[12px] space-y-0.5">
+          {filas.map((f) => <li key={f.catalogo}>{f.nombre}: {f.n === 0 ? 'sin cargar' : `${numero(f.n)} claves`}</li>)}
+        </ul>
+      </Aviso>
+    </div>
   );
 }

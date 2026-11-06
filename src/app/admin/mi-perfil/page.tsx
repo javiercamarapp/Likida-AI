@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
@@ -123,9 +124,9 @@ export default async function MiPerfilPage({
               <div>
                 <label className="text-sm font-medium block mb-1.5">Nombre</label>
                 <input name="nombre" type="text" defaultValue={s.nombre ?? ''} required
-                  className="w-full text-sm px-3.5 py-2.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
+                  className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
               </div>
-              <button type="submit" className="text-sm px-4 py-2.5 rounded-lg font-medium transition-opacity hover:opacity-85"
+              <button type="submit" className="text-sm px-4 py-1.5 rounded-lg font-medium transition-opacity hover:opacity-85"
                 style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                 Guardar nombre
               </button>
@@ -150,3 +151,5 @@ export default async function MiPerfilPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Mi perfil' };

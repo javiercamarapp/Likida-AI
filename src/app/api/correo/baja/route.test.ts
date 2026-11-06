@@ -129,3 +129,18 @@ describe('A37-S08-01 · «Listo» solo si la supresión quedó guardada', () => 
     expect(await r.text()).not.toContain('Listo');
   });
 });
+
+describe('límite de tasa por IP (ronda 4)', () => {
+  it('pasado el techo responde 429 con Retry-After y NO suprime nada (GET y POST)', async () => {
+    const { reiniciarLimites } = await import('@/lib/ratelimit');
+    reiniciarLimites();
+    suprimirCorreo.mockClear();
+    const mk = (m: string) => new Request('https://app.likida.ai/api/correo/baja?e=a%40b.mx&t=x', { method: m, headers: { 'x-forwarded-for': '203.0.113.9' } });
+    let ultimo: Response | null = null;
+    for (let i = 0; i < 125; i++) ultimo = i % 2 ? await GET(mk('GET')) : await POST(mk('POST'));
+    expect(ultimo!.status).toBe(429);
+    expect(ultimo!.headers.get('retry-after')).toBe('60');
+    expect(suprimirCorreo).not.toHaveBeenCalled();
+    reiniciarLimites();
+  });
+});

@@ -62,14 +62,13 @@ function dia(fecha: string): string {
 
 const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 const VACIO = 'Carga el programa del día para ver el estatus.';
 
 function Enviar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 disabled:opacity-60 hover:bg-[var(--canvas)]">
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary">
       <Upload width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Leyendo el archivo…' : 'Subir y ver el estatus'}
     </button>
   );
@@ -85,7 +84,7 @@ function DescargarCsv({ csv }: { csv: string }) {
     URL.revokeObjectURL(url);
   }
   return (
-    <button type="button" onClick={descargar} className="rv-btn rv-btn--secondary hairline rounded-lg px-3 h-9 text-[12px] inline-flex items-center gap-1.5 hover:bg-[var(--canvas)]">
+    <button type="button" onClick={descargar} className="rv-btn rv-btn--secondary">
       <Download width={14} height={14} strokeWidth={1.75} aria-hidden />Descargar CSV
     </button>
   );
@@ -99,11 +98,11 @@ function Forma({ accion }: { accion: AccionImportacion }) {
         <div className="grid sm:grid-cols-2 gap-3">
           <label>
             <span className={ETIQUETA}>Terminal</span>
-            <input name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" className={CAMPO} autoComplete="off" />
+            <input name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" className="w-full" autoComplete="off" />
           </label>
           <label>
             <span className={ETIQUETA}>Archivo del programa (CSV, hasta {TOPE_ARCHIVO_IMPORTACION_BYTES / (1024 * 1024)} MB)</span>
-            <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className={`${CAMPO} py-1.5 h-auto`} />
+            <input name="archivo" type="file" required accept=".csv,.txt,text/csv" className="w-full py-1.5 h-auto" />
           </label>
         </div>
         <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
@@ -150,14 +149,14 @@ function Tablero({ r }: { r: ResumenImportacion }) {
           <table className="w-full text-[12px]" aria-label="Cajas por estatus y por día">
             <thead>
               <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th className="font-medium py-1 pr-3">Día</th>
-                <th className="font-medium py-1 pr-3 text-right">Cajas</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.patio}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.pend_cruce}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.en_ruta}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.listo}</th>
-                <th className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.pend_requisito}</th>
-                <th className="font-medium py-1 text-right">Sin estatus</th>
+                <th scope="col" className="font-medium py-1 pr-3">Día</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">Cajas</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.patio}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.pend_cruce}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_ESTADO.en_ruta}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.listo}</th>
+                <th scope="col" className="font-medium py-1 pr-3 text-right">{ETIQUETA_DOCS.pend_requisito}</th>
+                <th scope="col" className="font-medium py-1 text-right">Sin estatus</th>
               </tr>
             </thead>
             <tbody>

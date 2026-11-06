@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { ArrowLeft } from 'lucide-react';
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
-import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import { SeccionCcp, type AccionesCcp } from './seccion_ccp';
 import { SeccionPrimerMes } from './seccion_primer_mes';
 import type { PrimerMesFila } from '@/lib/likida/carta_porte_docs/repo';
@@ -19,7 +20,7 @@ import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
  */
 
 export interface PersonaVista { id: string; nombre: string }
-export interface VerComo { tenant?: string; rol?: string; vista?: string }
+export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesConfiguracion { guardar: AccionDoc; probar: AccionDoc }
 
 const ESTILO = { background: 'var(--surface)' } as const;
@@ -41,14 +42,14 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
     <div>
       <label htmlFor={`cs-${id}`} className={ETIQUETA}>{rotulo}</label>
       <input id={`cs-${id}`} name={id} value={t[id]} onChange={poner(id)} autoComplete="off" spellCheck={false}
-        aria-invalid={errores[id] ? true : undefined} aria-describedby={errores[id] ? `cs-${id}-e` : undefined} className={CAMPO} style={ESTILO} {...props} />
+        aria-invalid={errores[id] ? true : undefined} aria-describedby={errores[id] ? `cs-${id}-e` : undefined} style={ESTILO} {...props} />
       <Error_ id={`cs-${id}-e`} mensaje={errores[id]} />
     </div>
   );
   const persona = (id: keyof CamposTexto, rotulo: string) => (
     <div>
       <label htmlFor={`cs-${id}`} className={ETIQUETA}>{rotulo}</label>
-      <select id={`cs-${id}`} name={id} value={t[id]} onChange={poner(id)} className={CAMPO} style={ESTILO}>
+      <select id={`cs-${id}`} name={id} value={t[id]} onChange={poner(id)} style={ESTILO}>
         <option value="">Nadie en particular</option>
         {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
       </select>
@@ -59,12 +60,13 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+      {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
 
       <fieldset className="space-y-3">
         <legend className="text-[13px] font-medium mb-2">Cómo sale la plantilla</legend>
         <div>
           <label htmlFor="cs-modo" className={ETIQUETA}>Modo de salida</label>
-          <select id="cs-modo" name="modo" value={t.modo} onChange={poner('modo')} className={CAMPO} style={ESTILO}>
+          <select id="cs-modo" name="modo" value={t.modo} onChange={poner('modo')} style={ESTILO}>
             <option value="descarga">Descarga (la subes tú al sistema del cliente)</option>
             <option value="api" disabled={apiBloqueado}>API (el agente la sube solo){apiBloqueado ? ' — todavía no disponible' : ''}</option>
           </select>
@@ -73,14 +75,14 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
         </div>
         <div>
           <label htmlFor="cs-plantilla" className={ETIQUETA}>Plantilla por defecto</label>
-          <select id="cs-plantilla" name="plantillaPorDefecto" value={t.plantillaPorDefecto} onChange={poner('plantillaPorDefecto')} className={CAMPO} style={ESTILO}>
+          <select id="cs-plantilla" name="plantillaPorDefecto" value={t.plantillaPorDefecto} onChange={poner('plantillaPorDefecto')} style={ESTILO}>
             <option value="normal">Normal</option>
             <option value="nueva">Nueva</option>
           </select>
         </div>
         <div>
           <label htmlFor="cs-distancia" className={ETIQUETA}>Formato de la distancia</label>
-          <select id="cs-distancia" name="distanciaFormato" value={t.distanciaFormato} onChange={poner('distanciaFormato')} className={CAMPO} style={ESTILO}>
+          <select id="cs-distancia" name="distanciaFormato" value={t.distanciaFormato} onChange={poner('distanciaFormato')} style={ESTILO}>
             <option value="texto_km">Texto con «km»</option>
             <option value="numero">Solo el número</option>
           </select>
@@ -97,7 +99,7 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
         </div>
         <div>
           <label htmlFor="cs-desconocido" className={ETIQUETA}>Si el sistema del cliente no puede decir si el requerimiento existe</label>
-          <select id="cs-desconocido" name="siTmsDesconocido" value={t.siTmsDesconocido} onChange={poner('siTmsDesconocido')} className={CAMPO} style={ESTILO}>
+          <select id="cs-desconocido" name="siTmsDesconocido" value={t.siTmsDesconocido} onChange={poner('siTmsDesconocido')} style={ESTILO}>
             <option value="retener">Retener y avisar</option>
             <option value="enviar">Enviar de todos modos</option>
           </select>
@@ -142,6 +144,7 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
           {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
           {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
           {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+          {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
           <BotonEnvio variante="secundario" etiqueta="Probar conexión" pendiente="Probando…" />
         </FormaAccion>
       )}

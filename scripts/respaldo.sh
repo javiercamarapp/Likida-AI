@@ -25,8 +25,8 @@ set -euo pipefail
 # A37-S04-02: el dump trae datos de TODAS las flotas (teléfonos, correos, datos
 # fiscales). Nada de carpetas sincronizadas con iCloud (Escritorio, Documentos)
 # ni permisos por omisión: umask 077 y carpeta 700. Si defines
-# RESPALDO_AGE_RECIPIENT (clave pública de `age`), el dump se cifra y el .sql
-# en claro se borra. CLI fijado a la misma versión que usa el despliegue.
+# RESPALDO_AGE_RECIPIENT (clave pública de `age`; OBLIGATORIA desde CT-SEG-16), el
+# dump se cifra y el .sql en claro se borra. CLI fijado a la misma versión que usa el despliegue.
 umask 077
 SUPABASE_CLI_VERSION="${SUPABASE_CLI_VERSION:-2.115.0}"
 DESTINO="${1:-$HOME/likida-respaldos/base}"
@@ -36,6 +36,17 @@ case "$DESTINO" in
     echo "✗ $DESTINO está en una carpeta sincronizada con iCloud; usa una ruta local (p. ej. ~/likida-respaldos/base)." >&2
     exit 2 ;;
 esac
+
+# CT-SEG-16: el cifrado es OBLIGATORIO. Antes, sin RESPALDO_AGE_RECIPIENT solo salia un aviso y el dump
+# (telefonos, correos y datos fiscales de TODAS las flotas) quedaba en claro. Se rechaza ANTES de volcar
+# nada, para no dejar un .sql en claro ni siquiera un instante.
+if [ -z "${RESPALDO_AGE_RECIPIENT:-}" ]; then
+  echo "✗ Falta RESPALDO_AGE_RECIPIENT (clave publica de age, 'age1...'). El respaldo no se hace sin cifrar." >&2
+  echo "  Genera una con 'age-keygen' (guarda la privada FUERA de este equipo) y exporta RESPALDO_AGE_RECIPIENT." >&2
+  exit 3
+fi
+command -v age >/dev/null || { echo "✗ RESPALDO_AGE_RECIPIENT definido pero falta 'age' (brew install age). No se vuelca nada." >&2; exit 3; }
+
 mkdir -p "$DESTINO"
 chmod 700 "$DESTINO"
 SELLO=$(date +%Y-%m-%d_%H%M)
@@ -53,13 +64,15 @@ if [ "$BYTES" -lt 2000 ]; then
 fi
 
 chmod 600 "$ARCHIVO"
-if [ -n "${RESPALDO_AGE_RECIPIENT:-}" ]; then
-  command -v age >/dev/null || { echo "✗ RESPALDO_AGE_RECIPIENT definido pero falta age." >&2; exit 1; }
-  age -r "$RESPALDO_AGE_RECIPIENT" -o "$ARCHIVO.age" "$ARCHIVO" && rm -f "$ARCHIVO"
+# El cifrado ya se exigio arriba; si age falla, el .sql en claro se borra igual (no se deja a medias).
+if age -r "$RESPALDO_AGE_RECIPIENT" -o "$ARCHIVO.age" "$ARCHIVO"; then
+  rm -f "$ARCHIVO"
   ARCHIVO="$ARCHIVO.age"
   echo "  (cifrado con age)"
 else
-  echo "  AVISO: sin cifrar (define RESPALDO_AGE_RECIPIENT para cifrar con age)." >&2
+  rm -f "$ARCHIVO" "$ARCHIVO.age"
+  echo "✗ age no pudo cifrar el respaldo; se borro el volcado en claro. Revisa RESPALDO_AGE_RECIPIENT." >&2
+  exit 1
 fi
 
 # Se conservan 14 días. Más que eso en el disco de una laptop es acumular sin

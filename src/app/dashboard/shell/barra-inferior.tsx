@@ -6,6 +6,7 @@ import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { hrefActivo } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import { destinosMovil } from './barra-inferior-destinos';
+import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
  * La barra inferior móvil (<768 px, ESTILO §11): píldora flotante de 64 px + área segura, hasta 4 destinos del rol y «Más», que abre
@@ -30,7 +31,7 @@ export default function BarraInferior({ rol, perfil, masAbierta, alAbrirMas }: {
           return (
             <li key={d.href}>
               <Link href={`${d.href}${sufijo}`} className="rv-nav-inf__item" aria-current={esActivo ? 'page' : undefined} title={d.nombre}>
-                <d.Icono className="rv-nav-inf__ico" width={22} height={22} strokeWidth={1.75} aria-hidden />
+                <d.Icono className="rv-nav-inf__ico" width={22} height={22} strokeWidth={TRAZO_ICONO} aria-hidden />
                 <span className="rv-nav-inf__txt">{d.etiqueta}</span>
               </Link>
             </li>
@@ -39,7 +40,7 @@ export default function BarraInferior({ rol, perfil, masAbierta, alAbrirMas }: {
         <li>
           <button type="button" className="rv-nav-inf__item" aria-label="Más: abrir el menú completo" aria-haspopup="dialog" aria-expanded={masAbierta}
             data-activo={!activoEnBarra && activo ? '' : undefined} data-tour="nav-mas" onClick={alAbrirMas}>
-            <Ellipsis className="rv-nav-inf__ico" width={22} height={22} strokeWidth={1.75} aria-hidden />
+            <Ellipsis className="rv-nav-inf__ico" width={22} height={22} strokeWidth={TRAZO_ICONO} aria-hidden />
             <span className="rv-nav-inf__txt">Más</span>
           </button>
         </li>

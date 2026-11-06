@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { construirCsp, nonceActivo, nuevoNonce, HASH_SCRIPT_TEMA } from './csp';
+import { construirCsp, nonceActivo, nuevoNonce, origenSupabase, HASH_SCRIPT_TEMA } from './csp';
+import nextConfig from '../../../next.config';
 
 describe('construirCsp', () => {
   it('sin nonce es la política pública de siempre (unsafe-inline), con las 11 directivas', () => {
@@ -59,5 +60,67 @@ describe('nonceActivo', () => {
     expect(nonceActivo({ LIKIDA_CSP_NONCE: '1' })).toBe(true);
     expect(nonceActivo({ LIKIDA_CSP_NONCE: '' })).toBe(true);
     expect(nonceActivo({ LIKIDA_CSP_NONCE: '0' })).toBe(false);
+  });
+});
+
+// CT-SEG-18 · La CSP acotada al proyecto de Supabase. Este bloque VIGILA que acotar no rompa Storage: la subida directa del
+// navegador (`uploadToSignedUrl`) es un fetch al proyecto y necesita connect-src; las fotos/video/audio, img-src y media-src.
+describe('CT-SEG-18 · CSP acotada al proyecto de Supabase', () => {
+  const env = { NEXT_PUBLIC_SUPABASE_URL: 'https://abcdwxyz.supabase.co' };
+  const dir = (csp: string, nombre: string) => csp.split('; ').find((d) => d.startsWith(nombre))!.split(' ').slice(1);
+
+  it('img-src, media-src y connect-src llevan el host exacto del proyecto y ningun comodin *.supabase.co', () => {
+    for (const n of [null, 'bm9uY2U=']) {
+      const csp = construirCsp(n, false, env);
+      expect(dir(csp, 'img-src')).toContain('https://abcdwxyz.supabase.co');
+      expect(dir(csp, 'media-src')).toContain('https://abcdwxyz.supabase.co');
+      expect(dir(csp, 'connect-src')).toEqual(["'self'", 'https://abcdwxyz.supabase.co']);
+      expect(csp).not.toContain('*.supabase.co');
+    }
+  });
+
+  it('connect-src admite el proyecto (subida directa a Storage) pero no abre https: ni comodines ni wss', () => {
+    const c = dir(construirCsp('bm9uY2U=', false, env), 'connect-src');
+    expect(c.some((o) => o === 'https:' || o === '*' || o.startsWith('wss:') || o.includes('*'))).toBe(false);
+  });
+
+  it('sin la variable o con una URL invalida cae al comodin de antes (no rompe imagenes ni subidas)', () => {
+    for (const e of [{}, { NEXT_PUBLIC_SUPABASE_URL: 'no es url' }, { NEXT_PUBLIC_SUPABASE_URL: 'http://evil.example' }]) {
+      const csp = construirCsp(null, false, e);
+      expect(dir(csp, 'img-src')).toContain('https://*.supabase.co');
+      expect(dir(csp, 'connect-src')).toContain('https://*.supabase.co');
+    }
+  });
+
+  it('origenSupabase: solo el origen (sin ruta), https siempre y http solo en localhost', () => {
+    expect(origenSupabase({ NEXT_PUBLIC_SUPABASE_URL: 'https://abcdwxyz.supabase.co/rest/v1/' })).toBe('https://abcdwxyz.supabase.co');
+    expect(origenSupabase({ NEXT_PUBLIC_SUPABASE_URL: 'http://127.0.0.1:54321' })).toBe('http://127.0.0.1:54321');
+    expect(origenSupabase({ NEXT_PUBLIC_SUPABASE_URL: 'http://otro.example' })).toBeNull();
+  });
+
+  it('COOP same-origin-allow-popups en todo y CORP same-origin solo en export y /v1; nunca COEP', async () => {
+    const reglas = await nextConfig.headers!();
+    const valor = (fuente: string, clave: string) => reglas.find((r) => r.source === fuente)?.headers.find((h) => h.key === clave)?.value;
+    expect(valor('/:path*', 'Cross-Origin-Opener-Policy')).toBe('same-origin-allow-popups');
+    expect(valor('/api/export/:path*', 'Cross-Origin-Resource-Policy')).toBe('same-origin');
+    expect(valor('/api/v1/:path*', 'Cross-Origin-Resource-Policy')).toBe('same-origin');
+    expect(reglas.some((r) => r.headers.some((h) => h.key === 'Cross-Origin-Embedder-Policy'))).toBe(false);
+  });
+});
+
+describe('Turnstile en la CSP (S-03)', () => {
+  const base = { NEXT_PUBLIC_SUPABASE_URL: 'https://abc.supabase.co' };
+  it('apagado: la politica no menciona a Cloudflare y frame-src sigue en none', () => {
+    const csp = construirCsp('n0nce', false, base);
+    expect(csp).not.toContain('cloudflare');
+    expect(csp).toContain("frame-src 'none'");
+  });
+  it('encendido: permite challenges.cloudflare.com en script-src, frame-src y connect-src', () => {
+    const csp = construirCsp('n0nce', false, { ...base, TURNSTILE_ACTIVO: '1' });
+    const dir = (n: string) => csp.split('; ').find((d) => d.startsWith(n))!;
+    expect(dir('script-src')).toContain('https://challenges.cloudflare.com');
+    expect(dir('frame-src')).toBe('frame-src https://challenges.cloudflare.com');
+    expect(dir('connect-src')).toContain('https://challenges.cloudflare.com');
+    expect(dir('img-src')).not.toContain('cloudflare');
   });
 });

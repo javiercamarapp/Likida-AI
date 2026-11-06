@@ -8,7 +8,7 @@ import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { lineasDelOriginal, marcaDeFila, resumenDeMarcas } from '@/lib/likida/carta_porte_docs/revision_formato';
 import { AvisosLectura } from './avisos_lectura';
-import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
+import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
 /**
  * LA REVISIÓN: el documento a la izquierda, lo que se leyó a la derecha, campo por campo.
@@ -54,12 +54,18 @@ function color(sev: 'bloqueo' | 'confirmar' | 'aviso'): string {
 }
 
 /** El envío al TMS tal como lo ve la pantalla: el estado más la fecha del próximo reintento y la ubicación del rechazo (nunca valores). */
-export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null; /** La flota sale por el simulador (T-A3-42): todo se rotula «Simulado». */ simulado?: boolean }
+export interface EnvioVista { estado: EstadoEnvioTms; proximaRevision?: string | null; motivo?: string | null; /** La flota sale por el simulador (T-A3-42): todo se rotula «Simulado». */ simulado?: boolean; /** La flota NO tiene conectado el sistema del cliente (no existe adaptador): nada sale solo, se sube a mano. */ sinConexion?: boolean; /** Existe conector pero no se pudo consultar ahora (no es «por conectar»). */ salidaNoDisponible?: boolean }
 
 /** Lo que dice la tarjeta «Envío al sistema del cliente» en lenguaje llano. Sin envío = todavía no se ha enviado nada. */
+export const FRASE_ENVIO_NO_DISPONIBLE = 'No pudimos consultar la conexión con el sistema del cliente. Reintenta en unos minutos o descarga la plantilla y súbela a mano.';
+export const FRASE_ENVIO_POR_CONECTAR = 'Por conectar: el envío automático al sistema del cliente todavía no existe. Descarga la plantilla y súbela a mano.';
+
 export function fraseEnvio(e: EnvioVista | null): string {
   if (!e || e.estado === 'descartado') return 'Aún no se ha enviado nada.';
   const cuando = e.proximaRevision ? fechaHoraMx(e.proximaRevision) : null;
+  // Sin conexión real con el sistema del cliente (y sin simulador) ninguna de las fases «en camino» es cierta: no hay quien envíe.
+  if (e.sinConexion && !e.simulado && ['pendiente_prechequeo', 'listo', 'enviando', 'pendiente_reque', 'error_transitorio'].includes(e.estado)) return FRASE_ENVIO_POR_CONECTAR;
+  if (e.salidaNoDisponible && !e.simulado && ['pendiente_prechequeo', 'listo', 'enviando', 'pendiente_reque', 'error_transitorio'].includes(e.estado)) return FRASE_ENVIO_NO_DISPONIBLE;
   switch (e.estado) {
     case 'pendiente_prechequeo': case 'listo': return 'Listo para enviar.';
     case 'enviando': return 'Enviándose al sistema del cliente…';
@@ -95,7 +101,7 @@ function Campo({ f, editable }: { f: FilaCampo; editable: boolean }) {
         </span>
       </div>
       <input id={id} name={f.nombre} defaultValue={f.valor} readOnly={!editable} autoComplete="off" spellCheck={false}
-        className={CAMPO} style={{ background: 'var(--surface)', ...(borde ? { borderColor: borde } : {}) }} aria-invalid={f.bloqueado || undefined} />
+        className="w-full" style={{ background: 'var(--surface)', ...(borde ? { borderColor: borde } : {}) }} aria-invalid={f.bloqueado || undefined} />
       {f.evidencia && <p className="text-[11px] truncate" style={{ color: 'var(--faint)' }} title={f.evidencia}>Evidencia: «{f.evidencia}»</p>}
       {marca.avisos.map((a) => <p key={a} className="text-[11px]" style={{ color: 'var(--warn)' }}>{a}</p>)}
       {f.notas.map((n) => <p key={n} className="text-[11px]" style={{ color: 'var(--muted)' }}>{n}</p>)}
@@ -197,7 +203,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
               <FormaAccion accion={acciones.reasignar} className="flex flex-wrap items-center gap-2">
                 <input type="hidden" name="documentoId" value={doc.id} />
                 <label className="sr-only" htmlFor="revisorId">Reasignar a</label>
-                <select id="revisorId" name="revisorId" defaultValue={revisor.actualId ?? ''} className={`${CAMPO} !w-auto`}>
+                <select id="revisorId" name="revisorId" defaultValue={revisor.actualId ?? ''} className="w-full !w-auto">
                   <option value="">Todos los revisores</option>
                   {revisor.opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
                 </select>
@@ -213,7 +219,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
               <input type="hidden" name="documentoId" value={doc.id} />
               <input type="hidden" name="version" value={doc.version} />
               <label className="sr-only" htmlFor="clienteDoc">Asignar cliente</label>
-              <select id="clienteDoc" name="clienteId" defaultValue={clientes.actualId ?? ''} className={`${CAMPO} !w-auto`}>
+              <select id="clienteDoc" name="clienteId" defaultValue={clientes.actualId ?? ''} className="w-full !w-auto">
                 <option value="">Sin cliente</option>
                 {clientes.opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
               </select>
@@ -321,11 +327,11 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                   <div className="flex flex-wrap items-end gap-2">
                     <div className="grow min-w-[220px]">
                       <label htmlFor="cp-rechazo" className={ETIQUETA}>Rechazar el documento (motivo)</label>
-                      <input id="cp-rechazo" name="motivo" maxLength={500} placeholder="No es un embarque nuestro / está duplicado…" className={CAMPO} style={{ background: 'var(--surface)' }} />
+                      <input id="cp-rechazo" name="motivo" maxLength={500} placeholder="No es un embarque nuestro / está duplicado…" className="w-full" style={{ background: 'var(--surface)' }} />
                     </div>
                     <div>
                       <label htmlFor="cp-rechazo-causa" className={ETIQUETA}>Causa</label>
-                      <select id="cp-rechazo-causa" name="causa" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+                      <select id="cp-rechazo-causa" name="causa" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
                         <option value="">Sin clasificar</option>
                         {(Object.keys(CAUSAS_RECHAZO) as CausaRechazo[]).filter((c) => c !== 'tms_rechazo').map((c) => <option key={c} value={c}>{CAUSAS_RECHAZO[c]}</option>)}
                       </select>
@@ -335,7 +341,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                   {!perfilRestringido && operadores.length > 0 && (
                     <div>
                       <label htmlFor="cp-operador" className={ETIQUETA}>Operador del viaje (solo si el documento no lo dice con claridad)</label>
-                      <select id="cp-operador" name="operadorId" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+                      <select id="cp-operador" name="operadorId" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
                         <option value="">El del documento</option>
                         {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
                       </select>
@@ -366,7 +372,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                         <div className="flex flex-wrap items-end gap-2">
                           <div className="grow min-w-[220px]">
                             <label htmlFor="cp-operador2" className={ETIQUETA}>Operador</label>
-                            <select id="cp-operador2" name="operadorId" defaultValue="" className={CAMPO} style={{ background: 'var(--surface)' }}>
+                            <select id="cp-operador2" name="operadorId" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
                               <option value="">El del documento</option>
                               {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
                             </select>
@@ -381,14 +387,14 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
                     <div className="space-y-2" aria-label="Modo manual">
                       <div className="flex flex-wrap items-center gap-2">
                         <a href={`/api/export/carta-porte-docs${sufijo ? `${sufijo}&` : '?'}formato=plantilla_tms&documento=${doc.id}`} download
-                          className="h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 hairline transition-opacity hover:opacity-85" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                          className="rv-btn rv-btn--secondary" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                           <Download width={14} height={14} strokeWidth={1.75} />Descargar plantilla del TMS
                         </a>
                         {envio?.estado !== 'subido_a_mano' && (
                           <>
                             <div>
                               <label htmlFor="referenciaTms" className={ETIQUETA}>Referencia que te dio el sistema del cliente (opcional)</label>
-                              <input id="referenciaTms" name="referenciaTms" maxLength={200} autoComplete="off" spellCheck={false} className={CAMPO} style={{ background: 'var(--surface)' }} />
+                              <input id="referenciaTms" name="referenciaTms" maxLength={200} autoComplete="off" spellCheck={false} className="w-full" style={{ background: 'var(--surface)' }} />
                               <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>Con ella Likida reconoce el aviso del CCP timbrado de esta carga; sin ella el aviso se rechaza.</p>
                             </div>
                             <BotonEnvio variante="secundario" intencion="subido_a_mano" etiqueta="Ya la subí a mano" pendiente="Marcando…" icono={<Check width={14} height={14} strokeWidth={1.75} />} />
@@ -464,7 +470,7 @@ function BannerCatalogo({ catalogo }: { catalogo: CatalogoBanner }) {
             </label>
             <div className="pl-5 max-w-xs">
               <label htmlFor={`cat-sku-${p.indice}`} className={ETIQUETA}>SKU del cliente (tal como aparece en el documento)</label>
-              <input id={`cat-sku-${p.indice}`} name={`cat_sku_${p.indice}`} defaultValue={p.skuSugerido} maxLength={80} autoComplete="off" spellCheck={false} className={CAMPO} style={{ background: 'var(--surface)' }} />
+              <input id={`cat-sku-${p.indice}`} name={`cat_sku_${p.indice}`} defaultValue={p.skuSugerido} maxLength={80} autoComplete="off" spellCheck={false} className="w-full" style={{ background: 'var(--surface)' }} />
             </div>
           </li>
         ))}

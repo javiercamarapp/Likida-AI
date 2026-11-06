@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -120,3 +121,5 @@ export default async function PaginaTuTurno({
     />
   );
 }
+
+export const metadata: Metadata = { title: 'Tu turno' };

@@ -267,6 +267,40 @@ export const CONFIG_CONDUCTOR_DEFAULT: Readonly<ConfigConductor> = Object.freeze
   lineaBaseRegistradaEn: null,
 });
 
+/**
+ * CT-A345-29 (TZ-03): la config por omisión de una flota según su perfil de tenant. Los defaults de siempre, salvo que bajo
+ * `cinco_agentes` la compuerta «unidad detenida» NACE ENCENDIDA: el cliente exige no escribirle al chofer con la unidad en marcha.
+ * `CONFIG_CONDUCTOR_DEFAULT` no cambia (sin perfil, apagada). Devuelve una copia que no comparte arreglos con el original.
+ */
+export function configPorOmisionDePerfil(perfil: 'cinco_agentes' | null): ConfigConductor {
+  return {
+    ...CONFIG_CONDUCTOR_DEFAULT,
+    solicitudesMin: [...CONFIG_CONDUCTOR_DEFAULT.solicitudesMin],
+    diasSemana: [...CONFIG_CONDUCTOR_DEFAULT.diasSemana],
+    ...(perfil === 'cinco_agentes' ? { compuertaMovimientoActiva: true } : {}),
+  };
+}
+
+/** Topes bajo `cinco_agentes` para que la compuerta «unidad detenida» no quede inocua (CT-A345-29): más allá de esto «en marcha» casi nunca se detecta. */
+export const TOPE_DETENIDA_METROS_CINCO_AGENTES = 300;
+export const TOPE_DETENIDA_VENTANA_MIN_CINCO_AGENTES = 15;
+
+/**
+ * CT-A345-29: el PISO de la compuerta de movimiento bajo `cinco_agentes`. La fila de la flota puede traer `sin_gps_permite = true`
+ * o umbrales altos (p. ej. 5,000 m): la compuerta figuraría «encendida» pero dejaría escribir con la unidad en marcha. Bajo ese
+ * perfil la compuerta rige encendida, sin permitir la falta de GPS y con umbrales acotados. Sin perfil no cambia nada.
+ */
+export function aplicarPisoDePerfil(c: ConfigConductor, perfil: 'cinco_agentes' | null): ConfigConductor {
+  if (perfil !== 'cinco_agentes') return c;
+  return {
+    ...c,
+    compuertaMovimientoActiva: true,
+    sinGpsPermite: false,
+    detenidaMetros: Math.min(c.detenidaMetros ?? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros ?? 150, TOPE_DETENIDA_METROS_CINCO_AGENTES),
+    detenidaVentanaMin: Math.min(c.detenidaVentanaMin ?? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin ?? 5, TOPE_DETENIDA_VENTANA_MIN_CINCO_AGENTES),
+  };
+}
+
 /** El tope de aplazamientos por hito: pasado esto «voy con retraso» ya no calla al agente. */
 export const MAX_POSPOSICIONES = 2;
 

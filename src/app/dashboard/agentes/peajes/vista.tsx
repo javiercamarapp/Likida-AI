@@ -135,7 +135,7 @@ export function VistaAgentePeajes({
         <section className="card p-4 flex flex-col">
           <div className="flex items-start justify-between gap-3 mb-1">
             <TituloRecuadro info="peajes.esperan_humano">Esperan a un humano</TituloRecuadro>
-            {(lineas?.length ?? 0) > 0 && (
+            {superficie.cfdiYTickets && (lineas?.length ?? 0) > 0 && (
               <Link href={`/dashboard/combustible-casetas${sufijo}`}
                 className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity shrink-0"
                 style={{ color: 'var(--marca)' }}>

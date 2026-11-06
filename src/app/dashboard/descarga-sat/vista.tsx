@@ -2,6 +2,7 @@ import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { estadoDescargaSat } from '@/lib/likida/sat_descarga';
@@ -84,7 +85,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
     'use server';
     // El rol del render NO es el de la acción: se re-gatea adentro, mismo
     // criterio que Políticas y el estímulo de peaje.
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: 'Tu rol no puede configurar la descarga del SAT.' };
     }
@@ -104,7 +105,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function verificar(): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: 'Tu rol no puede verificar la e.firma de la flota.' };
     }
@@ -121,7 +122,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function pedir(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
+    const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: 'Tu rol no puede pedir descargas al SAT.' };
     }
@@ -331,14 +332,14 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
             )}
           </TituloSeccion>
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table aria-label="Descargas del SAT por periodo" className="w-full text-[12px]">
               <thead>
                 <tr style={{ color: 'var(--muted)' }}>
-                  <th className="text-left font-medium py-1">Periodo</th>
-                  <th className="text-left font-medium py-1">Buzón</th>
-                  <th className="text-left font-medium py-1">Estado</th>
-                  <th className="text-right font-medium py-1">CFDI nuevos</th>
-                  <th className="text-left font-medium py-1 pl-3">Lo que dijo el SAT</th>
+                  <th scope="col" className="text-left font-medium py-1">Periodo</th>
+                  <th scope="col" className="text-left font-medium py-1">Buzón</th>
+                  <th scope="col" className="text-left font-medium py-1">Estado</th>
+                  <th scope="col" className="text-right font-medium py-1">CFDI nuevos</th>
+                  <th scope="col" className="text-left font-medium py-1 pl-3">Lo que dijo el SAT</th>
                 </tr>
               </thead>
               <tbody>

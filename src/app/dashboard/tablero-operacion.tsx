@@ -79,15 +79,15 @@ export function TablaCarga({ carga, sufijo = '' }: { carga: CargaOperador[]; suf
   const cargaMax = Math.max(1, ...carga.map((c) => c.enCurso));
   return (
     <div className="overflow-x-auto pb-2">
-      <table className="w-full text-sm">
+      <table aria-label="Carga por operador" className="w-full text-sm">
         <thead>
           <tr style={{ color: 'var(--muted)' }} className="text-left">
-            <th className="px-5 py-2.5 font-medium">Operador</th>
-            <th className="px-5 py-2.5 font-medium">Carga</th>
-            <th className="px-5 py-2.5 font-medium text-right">En curso</th>
-            <th className="px-5 py-2.5 font-medium text-right">Sin POD</th>
-            <th className="px-5 py-2.5 font-medium text-right">Incidencias</th>
-            <th className="px-5 py-2.5 font-medium">Estado</th>
+            <th scope="col" className="px-5 py-2.5 font-medium">Operador</th>
+            <th scope="col" className="px-5 py-2.5 font-medium">Carga</th>
+            <th scope="col" className="px-5 py-2.5 font-medium text-right">En curso</th>
+            <th scope="col" className="px-5 py-2.5 font-medium text-right">Sin POD</th>
+            <th scope="col" className="px-5 py-2.5 font-medium text-right">Incidencias</th>
+            <th scope="col" className="px-5 py-2.5 font-medium">Estado</th>
           </tr>
         </thead>
         <tbody>
@@ -156,13 +156,13 @@ export function TablaViajesOperacion({ viajes }: { viajes: FilaViajeOperacion[] 
   const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-5 py-1.5';
   return (
     <div className="overflow-x-auto pb-2">
-      <table className="w-full border-collapse">
+      <table aria-label="Viajes activos con su chofer" className="w-full border-collapse">
         <thead>
           <tr>
-            <th className={TH} style={{ color: 'var(--muted)' }}>Viaje</th>
-            <th className={TH} style={{ color: 'var(--muted)' }}>Chofer</th>
-            <th className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
-            <th className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Viaje</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Chofer</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
           </tr>
         </thead>
         <tbody>

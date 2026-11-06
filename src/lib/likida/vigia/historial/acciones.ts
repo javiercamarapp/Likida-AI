@@ -7,6 +7,7 @@ import { leerExportWhatsapp, MAX_MENSAJES_IMPORTACION, salDeFlota, type MensajeH
 import { esZip, textoDeZip } from './zip_lector';
 import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
 import { validarRespuestaRapida } from '../respuestas_rapidas';
+import { resumenSinAtenderDeGrupo, type ResumenGrupoSinAtender } from '../sin_atender_aviso/acciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DE LA PANTALLA «GRUPOS E HISTÓRICO» DEL VIGÍA — con puertos para probarlas.
@@ -16,7 +17,7 @@ import { validarRespuestaRapida } from '../respuestas_rapidas';
 // sesión, nunca del formulario. La bitácora lleva ids y conteos: nunca nombres de personas, teléfonos ni texto del chat.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type ResultadoGrupos = { ok: true; mensaje: string } | { ok: false; error: string };
+export type ResultadoGrupos = { ok: true; mensaje: string; sinAtender?: ResumenGrupoSinAtender } | { ok: false; error: string };
 
 export interface ContextoGrupos { tenantId: string; rol: string; usuarioId: string | null; email: string | null }
 
@@ -27,16 +28,22 @@ export interface DepsGrupos {
   guardarImportacion: typeof guardarImportacion;
   borrarGrupo: typeof borrarGrupo;
   bitacora: typeof anotarBitacora;
+  /** Opcional: revisa lo sin atender del grupo recién subido. Sin él, la importación responde como antes. */
+  sinAtenderDeGrupo?: (tenantId: string, grupoId: string, equipo: readonly string[]) => Promise<ResumenGrupoSinAtender | null>;
 }
 export const depsGruposReales: DepsGrupos = {
   crearGrupo, marcarCritico: marcarGrupoCritico, grupoDeFlota, guardarImportacion, borrarGrupo, bitacora: anotarBitacora,
+  sinAtenderDeGrupo: (t, g, e) => resumenSinAtenderDeGrupo(t, g, e),
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SIN_PERMISO: ResultadoGrupos = { ok: false, error: 'Solo el dueño de la flota administra los grupos y el histórico de sus clientes.' };
 
-/** El archivo más grande que se acepta desde el formulario (el límite de las acciones de servidor es 10 MB). */
-export const MAX_ARCHIVO_BYTES = 9 * 1024 * 1024;
+/**
+ * El archivo más grande que se acepta desde el formulario: 4 MB, el tope REAL de la plataforma (Vercel Functions corta en 4.5 MB;
+ * el `bodySizeLimit` de 10 MB de Next no lo alarga). Prometer 9 MB hacía que un chat de 6 MB muriera sin mensaje (CT-A345-21).
+ */
+export const MAX_ARCHIVO_BYTES = 4 * 1024 * 1024;
 
 const texto = (fd: FormData, k: string): string => String(fd.get(k) ?? '').trim();
 
@@ -104,7 +111,7 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
   const equipo = nombresDelEquipo(String(fd.get('equipo') ?? ''));
   if (equipo.length === 0) return { ok: false, error: 'Escribe los nombres de tu equipo tal como salen en el chat (separados por coma). Sin eso no se puede distinguir lo que contestó tu gente de lo que escribió el cliente.' };
   if (!archivo || archivo.bytes.length === 0) return { ok: false, error: 'Adjunta el archivo del chat exportado (.txt o .zip).' };
-  if (archivo.bytes.length > MAX_ARCHIVO_BYTES) return { ok: false, error: 'El archivo pesa más de 9 MB. Exporta el chat «sin multimedia» o divídelo por periodos.' };
+  if (archivo.bytes.length > MAX_ARCHIVO_BYTES) return { ok: false, error: 'El archivo pesa más de 4 MB. Exporta el chat «sin multimedia» o divídelo por periodos.' };
 
   let crudo: string;
   if (esZip(archivo.bytes)) {
@@ -146,7 +153,9 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
     const notas = [`${lectura.mensajes.length} mensajes de ${lectura.autores} personas`];
     if (lectura.descartados > 0) notas.push(`${lectura.descartados} líneas de sistema o multimedia omitidas`);
     if (lectura.fechasInvalidas > 0) notas.push(`${lectura.fechasInvalidas} con fecha ilegible`);
-    return { ok: true, mensaje: `Histórico guardado en «${grupo.nombre}»: ${notas.join(' · ')}. Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; pero el texto de los mensajes se conserva tal cual, así que puede incluir nombres, placas o licencias que se hayan dicho en el chat (se purga a los 180 días).` };
+    const sinAtender = d.sinAtenderDeGrupo ? await d.sinAtenderDeGrupo(ctx.tenantId, grupoId, equipo).catch(() => null) : null;
+    const revision = sinAtender === null ? '' : sinAtender.alertas === 0 ? ' Revisión de sin atender: este grupo no tiene conversaciones pendientes de respuesta con las reglas de tu flota (se midió contra la hora de la exportación).' : ` Revisión de sin atender: ${sinAtender.alertas} ${sinAtender.alertas === 1 ? 'conversación' : 'conversaciones'} de este grupo sin atender (${sinAtender.altas} de prioridad alta). Ábrelas en «Conversaciones sin atender».`;
+    return { ok: true, ...(sinAtender ? { sinAtender } : {}), mensaje: `Histórico guardado en «${grupo.nombre}»: ${notas.join(' · ')}. Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; pero el texto de los mensajes se conserva tal cual, así que puede incluir nombres, placas o licencias que se hayan dicho en el chat (se purga a los 180 días).${revision}` };
   } catch (e) {
     logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'guardar el histórico') };

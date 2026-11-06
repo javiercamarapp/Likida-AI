@@ -47,7 +47,7 @@ export function FilaAcciones({ huerfanoId, hayViajesVivos, sinMonto, buscarViaje
           <span className="text-[12px]" style={{ color: 'var(--muted)' }}>¿Descartarlo?</span>
           <BotonConfirmarDescarte />
           <button type="button" onClick={() => setConfirmando(false)}
-            className="rv-btn rv-btn--secondary hairline text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
+            className="rv-btn rv-btn--secondary"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             No
           </button>
@@ -75,7 +75,7 @@ export function FilaAcciones({ huerfanoId, hayViajesVivos, sinMonto, buscarViaje
               basta: no todos los lectores lo leen si no hay nombre accesible. */}
           <button type="button" onClick={() => setConfirmando(true)} title="Descartar el comprobante"
             aria-label="Descartar el comprobante"
-            className="hairline w-7 h-7 rounded-lg flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+            className="rv-icono-boton"
             style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
             <Trash2 width={13} height={13} strokeWidth={1.75} aria-hidden />
           </button>
@@ -98,7 +98,7 @@ function BotonAdjuntar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 shrink-0"
+      className="rv-btn rv-btn--primary shrink-0"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Link2 width={12} height={12} strokeWidth={2} />
       {pending ? 'Adjuntando…' : 'Adjuntar'}
@@ -112,7 +112,7 @@ function BotonConfirmarDescarte() {
     /* Texto rojo sobre su fondo tenue (tokens existentes) — no se inventa un
        token de contraste para un botón sólido rojo. */
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--danger inline-flex items-center gap-1 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--danger"
       style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
       <Trash2 width={12} height={12} strokeWidth={2} />
       {pending ? 'Descartando…' : 'Sí, descartar'}

@@ -17,14 +17,13 @@ import { mxn, numero, litros } from '@/lib/formato';
 export type ResultadoGuardar = { ok: true } | { ok: false; error: string } | null;
 export type AccionGuardar = (previo: ResultadoGuardar, fd: FormData) => Promise<ResultadoGuardar>;
 
-const CAMPO = 'w-full text-[13px] px-3 py-1.5 rounded-lg hairline cifra-mono';
 const ETIQUETA = 'etiqueta-mono text-[11px] uppercase block mb-1';
 
 function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="text-[13px] px-4 py-2.5 rounded-lg font-medium inline-flex items-center gap-2 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar ajustes'}
@@ -99,7 +98,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
             <div>
               <label htmlFor="aj-rend" className={ETIQUETA} style={{ color: 'var(--faint)' }}>Rendimiento (km/L)</label>
               <input id="aj-rend" name="rendimientoPorDefecto" value={v.rendimientoPorDefecto}
-                onChange={set('rendimientoPorDefecto')} className={CAMPO} style={{ background: 'var(--surface)' }} />
+                onChange={set('rendimientoPorDefecto')} className="w-full" style={{ background: 'var(--surface)' }} />
               <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
                 El de una unidad sin catálogo propio. Un tractocamión full anda entre 2 y 3.5.
               </p>
@@ -108,7 +107,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
             <div>
               <label htmlFor="aj-factor" className={ETIQUETA} style={{ color: 'var(--faint)' }}>Factor de carga</label>
               <input id="aj-factor" name="factorCarga" value={v.factorCarga}
-                onChange={set('factorCarga')} className={CAMPO} style={{ background: 'var(--surface)' }} />
+                onChange={set('factorCarga')} className="w-full" style={{ background: 'var(--surface)' }} />
               <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
                 Cuánto rinde cargado contra vacío (0.78 = rinde 78%). Siempre menor o igual a 1.
               </p>
@@ -117,7 +116,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
             <div>
               <label htmlFor="aj-diesel" className={ETIQUETA} style={{ color: 'var(--faint)' }}>Precio del diésel (MXN/L)</label>
               <input id="aj-diesel" name="precioDieselPorDefecto" value={v.precioDieselPorDefecto}
-                onChange={set('precioDieselPorDefecto')} className={CAMPO} style={{ background: 'var(--surface)' }} />
+                onChange={set('precioDieselPorDefecto')} className="w-full" style={{ background: 'var(--surface)' }} />
               <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
                 Se usa cuando el ticket no trae precio por litro.
               </p>
@@ -126,7 +125,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
             <div>
               <label htmlFor="aj-umbral" className={ETIQUETA} style={{ color: 'var(--faint)' }}>Umbral de desviación (%)</label>
               <input id="aj-umbral" name="umbralDesviacionPct" value={v.umbralDesviacionPct}
-                onChange={set('umbralDesviacionPct')} className={CAMPO} style={{ background: 'var(--surface)' }} />
+                onChange={set('umbralDesviacionPct')} className="w-full" style={{ background: 'var(--surface)' }} />
               <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
                 A partir de cuánta diferencia se marca un viaje para revisión.
               </p>

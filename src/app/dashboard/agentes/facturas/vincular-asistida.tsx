@@ -8,6 +8,8 @@ import {
   accionIniciarVinculacion, accionCancelarVinculacion, accionEstadoVinculacion,
   type ResultadoVincular, type EstadoVinculacionPantalla,
 } from './acciones-vinculacion';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
+import { horaMx } from '@/lib/formato';
 
 // ════════════════════════════════════════════════════════════════════════════
 // «VINCULAR» — el paso humano del CAPTCHA/MFA, con pantalla en el producto (0540).
@@ -24,7 +26,7 @@ const ROTULO: Record<string, string> = {
   reclamada: 'Código aceptado: entra al portal en la ventana que se abrió y resuelve el reto.',
 };
 
-export function VincularAsistida({ clave, nombre }: { clave: string; nombre: string }) {
+export function VincularAsistida({ clave, nombre, flota = null }: { clave: string; nombre: string; flota?: string | null }) {
   const router = useRouter();
   const { notificar } = useNotificar();
   const [res, iniciar, iniciando] = useActionState<ResultadoVincular | null, FormData>(accionIniciarVinculacion, null);
@@ -40,7 +42,7 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
     if (!hayCodigo) return;
     let vivo = true;
     const t = setInterval(async () => {
-      const e = await accionEstadoVinculacion(clave);
+      const e = await accionEstadoVinculacion(clave, flota);
       if (!vivo) return;
       setEstado(e);
       if (!e.ok) return;
@@ -53,14 +55,15 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
       }
     }, 4_000);
     return () => { vivo = false; clearInterval(t); };
-  }, [hayCodigo, clave, nombre, notificar, router]);
+  }, [hayCodigo, clave, nombre, flota, notificar, router]);
 
   if (!hayCodigo) {
     return (
       <form action={(fd) => { setCerrado(false); setEstado(null); iniciar(fd); }} className="inline">
         <input type="hidden" name="comercio" value={clave} />
+        {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
         <button type="submit" disabled={iniciando}
-          className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}>
+          className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>
           <MonitorSmartphone width={11} height={11} strokeWidth={2} />
           {iniciando ? 'Generando…' : 'Vincular con código'}
         </button>
@@ -78,7 +81,7 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
       </ol>
       <div className="flex items-center gap-2 mt-1.5">
         <code className="text-[11px] font-mono rounded px-2 py-1 break-all" style={{ background: 'var(--line2)' }} data-testid="comando-vinculacion">{res.comando}</code>
-        <button type="button" aria-label="Copiar comando" className="shrink-0 p-1 rounded hover:bg-[var(--line2)]"
+        <button type="button" aria-label="Copiar comando" className="rv-icono-boton"
           onClick={() => { void navigator.clipboard?.writeText(res.comando); notificar({ tono: 'info', mensaje: 'Comando copiado.' }); }}>
           <Copy width={12} height={12} strokeWidth={2} />
         </button>
@@ -88,14 +91,14 @@ export function VincularAsistida({ clave, nombre }: { clave: string; nombre: str
         <li>Cuando estés dentro, la ventana se cierra sola y aquí aparece «vinculado».</li>
       </ol>
       <p className="text-[11px] mt-2" style={{ color: 'var(--warn)' }}>
-        El código se muestra solo ahora, sirve una vez y caduca a las {new Date(res.expiraEn).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}. No lo compartas.
+        El código se muestra solo ahora, sirve una vez y caduca a las {horaMx(res.expiraEn)}. No lo compartas.
       </p>
       <p className="text-[11px] mt-1" role="status" style={{ color: 'var(--muted)' }}>{ROTULO[vivo] ?? ''}</p>
       <div className="mt-2">
         <button type="button" disabled={cancelando}
-          className="inline-flex items-center gap-1 text-[11px] underline disabled:opacity-50" style={{ color: 'var(--muted)' }}
+          className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}
           onClick={() => empezarCancelar(async () => {
-            const fd = new FormData(); fd.set('comercio', clave);
+            const fd = new FormData(); fd.set('comercio', clave); if (flota) fd.set(CAMPO_FLOTA_PINTADA, flota);
             const r = await accionCancelarVinculacion(null, fd);
             notificar(r.error ? { tono: 'error', mensaje: r.error } : { tono: 'info', mensaje: r.ok ?? 'Cancelada.' });
             setCerrado(true); router.refresh();

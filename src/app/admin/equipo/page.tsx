@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getEquipo } from '@/lib/admin/negocio';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
@@ -78,12 +79,12 @@ export default async function EquipoPage({
               <p className="px-4 pb-4 pt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin usuarios dados de alta todavía.</p>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Usuarios del equipo" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-4 py-2 font-medium">Nombre</th>
-                      <th className="px-4 py-2 font-medium">Rol</th>
-                      <th className="px-4 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Nombre</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Rol</th>
+                      <th scope="col" className="px-4 py-2 font-medium">Flota</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -125,3 +126,5 @@ export default async function EquipoPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Equipo' };

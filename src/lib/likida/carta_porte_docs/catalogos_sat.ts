@@ -25,6 +25,32 @@ export const CAT_PELIGROSO = 'c_MaterialPeligroso';
 export const CAT_CP = 'c_CodigoPostal';
 export const CAT_COLONIA = 'c_Colonia';
 
+/** Los catálogos que consulta la validación, con el nombre que lee el cliente. El orden es el de la pantalla. */
+export const CATALOGOS_SAT_VALIDACION: ReadonlyArray<{ catalogo: string; nombre: string }> = [
+  { catalogo: CAT_PRODUCTO, nombre: 'Productos y servicios' },
+  { catalogo: CAT_UNIDAD, nombre: 'Unidades de medida' },
+  { catalogo: CAT_EMBALAJE, nombre: 'Tipos de embalaje' },
+  { catalogo: CAT_FRACCION, nombre: 'Fracciones arancelarias' },
+  { catalogo: CAT_PELIGROSO, nombre: 'Materiales peligrosos' },
+  { catalogo: CAT_CP, nombre: 'Códigos postales' },
+  { catalogo: CAT_COLONIA, nombre: 'Colonias' },
+];
+
+/** CT-A345-04: cuántas filas tiene cada catálogo SAT (clave del catálogo → conteo). `null` = no se pudo leer. */
+export type ConteoCatalogosSat = Record<string, number>;
+
+export interface EstadoCatalogosSat {
+  filas: Array<{ catalogo: string; nombre: string; n: number }>;
+  /** Catálogos SIN ninguna fila: la validación de sus claves degrada a «no se pudo verificar». */
+  vacios: string[];
+}
+
+/** Pura: junta el conteo leído con la lista de catálogos que la validación consulta. Un catálogo ausente del conteo cuenta 0. */
+export function estadoCatalogosSat(conteo: ConteoCatalogosSat): EstadoCatalogosSat {
+  const filas = CATALOGOS_SAT_VALIDACION.map((c) => ({ ...c, n: Math.max(0, Math.trunc(conteo[c.catalogo] ?? 0)) }));
+  return { filas, vacios: filas.filter((f) => f.n === 0).map((f) => f.nombre) };
+}
+
 /** Datos extra de una fila del catálogo oficial (p. ej. de un código postal: c_Estado, c_Municipio, c_Localidad). */
 export type DatosSat = Record<string, string>;
 

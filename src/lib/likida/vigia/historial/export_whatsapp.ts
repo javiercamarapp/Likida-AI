@@ -84,7 +84,7 @@ export function salDeFlota(tenantId: string, secreto: string | undefined = proce
   return s.length >= 16 ? `${s}\u0000${tenantId}` : tenantId;
 }
 
-function hashAutor(sal: string, nombre: string): string {
+export function hashAutor(sal: string, nombre: string): string {
   return createHash('sha256').update(`${sal}\u0000${nombre.trim().toLowerCase()}`).digest('hex').slice(0, 12);
 }
 

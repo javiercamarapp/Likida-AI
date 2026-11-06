@@ -4,6 +4,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { logger } from '@/lib/logger';
+import { verificarTurnstile } from '@/lib/seguridad/turnstile';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL LEAD DE `/getdemo` — lo que impide que un prospecto se pierda por no
@@ -62,7 +63,7 @@ function cors(origen: string | null): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': origen,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Turnstile-Token',
     'Access-Control-Max-Age': '86400',
     Vary: 'Origin',
   };
@@ -166,6 +167,17 @@ export async function POST(req: Request) {
     body = JSON.parse(crudo) as Record<string, unknown>;
   } catch {
     return NextResponse.json({ error: 'JSON inválido' }, { status: 400, headers: cabeceras });
+  }
+
+  // S-03: Turnstile (APAGADO por omision; ver `lib/seguridad/turnstile.ts`). El token viaja en el JSON como
+  // `turnstile_token` o en la cabecera `x-turnstile-token`. La landing aun no lo manda, asi que esta superficie corre en
+  // OBSERVACION (verifica y registra) hasta que 'lead' se agregue a TURNSTILE_SUPERFICIES.
+  const turnstile = await verificarTurnstile({
+    token: texto(body.turnstile_token, 2100) ?? req.headers.get('x-turnstile-token'),
+    superficie: 'lead',
+  });
+  if (!turnstile.ok) {
+    return NextResponse.json({ error: 'verificacion_fallida' }, { status: 403, headers: cabeceras });
   }
 
   const empresa = texto(body.empresa, 200);

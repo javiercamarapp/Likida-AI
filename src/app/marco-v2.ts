@@ -16,15 +16,15 @@ export const ALTO_CABECERA_ESCRITORIO_PX = 44;
 export const ALTO_CABECERA_MOVIL_PX = 56;
 /** Alto de un ítem del menú. */
 export const ALTO_ITEM_PX = 32;
-/** Grosor de la barra de TINTA del ítem activo (fondo suave + barra; nunca bloque negro ni blanco). */
-export const GROSOR_SENAL_PX = 3;
+// El ítem activo ya no lleva barra (controles finos K2-2, SPEC D8): fondo gris suave + peso 600. Se retiró GROSOR_SENAL_PX.
 
 /** Techo del pie fijo del sidebar: UN solo bloque (Puesta en marcha <6/6 + tarjeta de cuenta). Notificaciones, tema, perfil y ayuda ya no se apilan ahí. */
 export const ALTO_PIE_MAX_PX = 100;
 /** Barra inferior móvil: alto de la píldora (más el área segura de abajo, mínimo 10 px de aire). */
 export const ALTO_BARRA_INFERIOR_PX = 64;
-/** Alto del logo (por ALTURA): sidebar 30, riel y cabecera móvil 28, carga 40. */
-export const ALTO_LOGO_PX = { sidebar: 30, riel: 28, movil: 28, carga: 40 } as const;
+/** Alto del logo (por ALTURA), fino como el de Rovaq: sidebar 22 (107 px de ancho), riel 24, cabecera móvil 22, carga 40.
+ *  Se cruza con `--logo-*` de tokens.css y lo lee el JSX (`sidebar-v2.tsx`, `cabecera-movil.tsx`): `shell_css.test.ts`. */
+export const ALTO_LOGO_PX = { sidebar: 22, riel: 24, movil: 22, carga: 40 } as const;
 /** Marco: padding y separación entre sidebar y columna de contenido. */
 export const MARCO_PX = 16;
 

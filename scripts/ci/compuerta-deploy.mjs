@@ -130,7 +130,8 @@ export function decidir({ asunto, codigo, prefijosCodigo = null, health }) {
   // (el health desplegado aún no publicaba el campo); hoy producción lo publica, y cualquier JSON 200/503 sin el campo
   // (CDN, página de mantenimiento) dejaba construir con la base atrás. `undefined` cae abajo y bloquea.
   if (!m || typeof m !== 'object' || typeof m.base !== 'string' || !/^\d{4}$/.test(m.base)) {
-    return bloquear(`la base no se pudo cotejar (${(m && m.motivo) || 'sin motivo'}).`);
+    const sinToken = health.acceso === 'publico' ? ' El health respondió en modo público: falta HEALTH_TOKEN (variable de entorno de Vercel y secreto HEALTH_TOKEN de GitHub) o no coincide con el del servidor.' : '';
+    return bloquear(`la base no se pudo cotejar (${(m && m.motivo) || 'sin motivo'}).${sinToken}`);
   }
 
   // ARQUITECTURA 25 (MEDIO): `base`/`codigo` son MÁXIMOS, y máximo-contra-máximo
@@ -193,7 +194,9 @@ export async function leerHealth(url, intentos = 3) {
   for (let i = 0; i < intentos; i++) {
     let r;
     try {
-      r = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: { 'user-agent': 'likida-compuerta-deploy' } });
+      // CT-SEG-12: el detalle (migracion) exige HEALTH_TOKEN; sin él el health solo trae el pulso y la compuerta bloquea.
+      const cab = { 'user-agent': 'likida-compuerta-deploy', ...(process.env.HEALTH_TOKEN ? { 'x-health-token': process.env.HEALTH_TOKEN } : {}) };
+      r = await fetch(url, { signal: AbortSignal.timeout(20_000), headers: cab });
     } catch (e) {
       console.log(`compuerta: ${url} no contestó (${e instanceof Error ? e.message : String(e)})`);
       if (i === intentos - 1) return null;

@@ -51,15 +51,15 @@ const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
     salientes.push({ url: u, body: JSON.parse(String(init?.body ?? '{}')) });
     return ok({ messages: [{ id: 'wamid.TEST' }] });
   }
-  if (u.startsWith('https://media.test/')) {
-    const id = u.slice('https://media.test/'.length);
+  if (u.startsWith('https://lookaside.fbsbx.com/')) {
+    const id = u.slice('https://lookaside.fbsbx.com/'.length);
     return media.has(id)
       ? new Response(media.get(id)!, { status: 200 })
       : new Response('no existe', { status: 404 });
   }
   // Metadatos del media: Meta devuelve la URL real de descarga.
   const id = u.split('/').pop()!;
-  return ok({ url: `https://media.test/${id}`, mime_type: 'text/xml' });
+  return ok({ url: `https://lookaside.fbsbx.com/${id}`, mime_type: 'text/xml' });
 });
 
 /** Los mensajes de texto que salieron hacia Meta, en orden. */

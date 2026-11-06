@@ -1,5 +1,36 @@
 # Aplicar en producción — orden, riesgos y qué se rompe si no
 
+> **ALTO: NUNCA `supabase db push` NI `supabase migration repair` contra producción (CT-BAS-08, 3-nov-2026).**
+> `supabase_migrations.schema_migrations` de producción mezcla DOS esquemas de versión (medido el
+> 3-nov-2026 con `select ... from supabase_migrations.schema_migrations`, solo lectura, 538 filas):
+> 281 filas con versión numérica de cuatro dígitos (`0001`–`0303`, aplicadas por el CLI) y 257 con
+> versión timestamp (`20260907040758` … `20261031221509`, de la 0304 a la 0949, aplicadas con
+> `apply_migration`/script una por una; el prefijo numérico solo vive en el NOMBRE de la fila).
+> `supabase db push` y `supabase migration list` cotejan por VERSIÓN, así que ven 0304–0949 como
+> «solo local» y los 257 timestamps como «solo remoto»: un `db push` intentaría **re-aplicar ~256
+> migraciones** (muchas no son idempotentes: `create or replace` que pisa guardas, `drop`/`create`,
+> `alter ... add constraint`) o exigiría `migration repair` para «reconciliar», que reescribe el
+> registro sin correr SQL. Ninguna de las dos cosas se hace por reflejo. Esto incluye los pasos
+> `db push` de `scripts/aplicar-migraciones-y-humos.sh` y del workflow
+> `deploy-preview-promote.yml` (jobs de aplicar migraciones y de `repair_migrations`): su
+> `--dry-run` listaría ~256 pendientes; si lo hace, se aborta, no se «arregla» con `--include-all`.
+> Evidencia: `likida-loop/cierre-total/audit/94-hueco-migraciones-repo-vs-base-y-repos-duplicados.md`
+> (M-01). La normalización de versiones, si algún día se quiere, es una decisión de Javier con
+> respaldo y escritura en la base; no es parte de aplicar una migración.
+
+> **Estado verificado el 3-nov-2026 (CT-BAS-16, solo lectura).** Cotejo por nombre de los 537 archivos de
+> `supabase/migrations/` contra `supabase_migrations.schema_migrations` de producción: **0 migraciones del repo sin
+> aplicar**, prefijo máximo 0949 en ambos lados, ningún prefijo repetido. Las secciones «Pendiente de aplicar» de
+> más abajo (0302/0303, 0790–0794, 0842, 0843–0848) son **históricas**: ya figuran aplicadas por nombre. Lo que ese
+> cotejo NO prueba es que el SQL aplicado sea idéntico al archivo ni que el esquema vivo tenga cada objeto (la tabla
+> registra, no prueba); para eso están `supabase/verificaciones.sql` y las baterías de aislamiento. Única
+> aplicada ausente del repo: `0351b_costo_fase_dominio_sintaxis_in` (ver `NUMERACION-SALTADA.md`).
+
+> **Despliegue 20 (1-nov-2026).** Sin migraciones nuevas (la base sigue en 0949). Trae las gráficas
+> interactivas (#793) y el onboarding por cobertura (#794). La invitación de primer ingreso del
+> onboarding queda APAGADA por omisión: se enciende con `ONBOARDING_INVITACION=1` en Vercel
+> (Production) cuando Javier lo decida; el menú «Guía», los recorridos y las pistas funcionan sin ella.
+
 > **Actualización 1-nov-2026.** La **0949** (rol `nomina`: solo amplía el dominio de
 > `app_user.rol`) quedó aplicada contra producción antes del despliegue 19 y verificada
 > con `pg_get_constraintdef` (el CHECK incluye `nomina`). `/api/health` reporta
@@ -16,14 +47,13 @@
 > orden de aplicación no es un detalle — sigue aplicando para la PRÓXIMA
 > tanda de migraciones.
 >
-> **El repo ya trae 0302 y 0303** (`5180c72`, 2-sep 16:06, cinco horas
+> **[Histórico, ya aplicadas: ver «Estado verificado» arriba.] El repo ya trae 0302 y 0303** (`5180c72`, 2-sep 16:06, cinco horas
 > después de esta actualización) — **sin la misma confirmación de arriba**:
 > nadie las cotejó todavía contra `schema_migrations` ni contra el esquema en
 > vivo. NO se dan por aplicadas aquí (auditoría 25, operabilidad ALTO: el job
 > `repair_migrations` llegó a marcarlas "applied" por bookkeeping sin correr
 > su SQL — un sello de goma que este documento no va a repetir). Antes del
-> siguiente `[deploy]`, aplícalas de verdad (`supabase db push`, o el job
-> "Producción — aplicar migraciones reales") y confirma con
+> siguiente `[deploy]`, aplícalas de verdad (una por una, ver «El procedimiento correcto»; NO `supabase db push`) y confirma con
 > `/api/health` → `migracion.base = "0303"`.
 
 > **AUDITORÍA 24, DAT-1 (ALTO), contexto histórico.** Producción iba en la
@@ -38,18 +68,36 @@
 > confirmaciones apagadas, `email_sent = 360`, MFA TOTP encendido). Empujarlo
 > sobrescribe la configuración de Auth del proyecto real: registro abierto,
 > enlaces mágicos a `localhost` y sin la cuota de correo de producción. Las
-> migraciones se aplican con `supabase db push` (o el job de aplicar
-> migraciones); la configuración de Auth se cambia solo desde el panel de
+> migraciones se aplican una por una (ver «El procedimiento correcto»); la configuración de Auth se cambia solo desde el panel de
 > Supabase. Ver `docs/conocimiento/DEPLOY.md` → «`supabase/config.toml` es solo local».
 
-## La regla corta
+## El procedimiento correcto: una por una, con respaldo y verificación
 
-```bash
-supabase db push
-```
+Se aplican **una a una, en orden numérico de archivo**, con respaldo previo y verificación
+después de cada una. Nunca con `supabase db push` (ver el aviso de arriba).
 
-Y **nada más**. `db push` aplica en orden de archivo, que es el orden correcto.
-El único camino que rompe cosas es pegar migraciones a mano en el SQL editor.
+1. **Respaldo** fresco y verificado antes de la primera: `node scripts/ci/supabase-preflight.mjs backup`
+   (o el respaldo nocturno verificado). Si la migración toca grants o funciones, guarda también la
+   reversa exacta (ver cada sección).
+2. **Confirmar el destino**: el `project-ref` del proyecto enlazado debe ser el de producción
+   (`supabase/.temp/project-ref` en el árbol enlazado) antes de ejecutar nada. El MCP de Supabase de
+   algunas sesiones apunta a OTRO proyecto: usa el CLI enlazado.
+3. **Aplicar una migración a la vez**, en orden de número, con el script de aplicación una por una
+   (`aplicar-migraciones.py`, fuera del repo, o su equivalente) o con
+   `supabase db query --linked -f supabase/migrations/NNNN_nombre.sql`. Si alguna sale con error,
+   se detiene la serie: no se sigue con la siguiente ni se repite «por si acaso» (ver abajo por qué
+   el orden no es un detalle).
+4. **Verificar tras cada una** contra la RPC `migraciones_aplicadas()` (0234): debe listar el nombre
+   `NNNN_nombre` recién aplicado. `node scripts/ci/verificar-migraciones-aplicadas.mjs` coteja el
+   CONJUNTO completo de prefijos del repo contra esa RPC (por nombre, que es lo que sí es fiable aquí)
+   y sale con 1 si falta o sobra alguno.
+5. **Sonda**: `/api/health` debe reportar `migracion.base` = el prefijo más alto aplicado y
+   `migracion.atras = 0`. La compuerta de `[deploy]` (`scripts/ci/compuerta-deploy.mjs`) hace el
+   mismo cotejo por conjunto; no construye si falta alguna.
+6. La batería de `supabase/verificaciones.sql` (ver «Después de aplicar») para lo que lee la base, no el archivo.
+
+Lo único que rompe cosas peor que un `db push` es pegar migraciones a mano en el SQL editor sin
+registrarlas: la base queda con objetos que `migraciones_aplicadas()` no conoce.
 
 ## Por qué el orden no es un detalle
 
@@ -125,7 +173,7 @@ select proconfig from pg_proc where proname = 'ejecutar_arco_cancelacion';
 
 ## Próxima tanda: Carta Porte, salida al TMS (0790 a 0794)
 
-> **Pendiente de aplicar. Este documento no la ejecuta.** Se aplica con `supabase db push` (orden de archivo), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el código nuevo.
+> **[Histórico: ya aplicada, verificado por nombre el 3-nov-2026.] Pendiente de aplicar cuando se escribió. Este documento no la ejecuta.** Se aplicaba una por una en orden de archivo (ver «El procedimiento correcto», NO `supabase db push`), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el código nuevo.
 
 Orden (el de archivo, que es el correcto):
 
@@ -145,9 +193,9 @@ Ya escrita: `0842_interruptor_carta_porte_salida_tms.sql` amplía la restricció
 
 ## Próxima tanda: 0843 a 0848 (actualización 21-oct-2026)
 
-> **Pendiente de aplicar. Este documento no la ejecuta.** Ya escritas y fusionadas a `master`, sin confirmar
-> todavía contra `schema_migrations` ni contra el esquema en vivo de producción. Se aplican con `supabase db push`
-> (orden de archivo), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el
+> **[Histórico: ya aplicadas, verificado por nombre el 3-nov-2026.] Pendiente de aplicar cuando se escribió. Este documento no la ejecuta.** Ya escritas y fusionadas a `master`, sin confirmar
+> todavía contra `schema_migrations` ni contra el esquema en vivo de producción. Se aplican una por una
+> en orden de archivo (NO `supabase db push`), con copia de seguridad previa y autorización, y siempre ANTES de un `[deploy]` que use el
 > código que las necesita.
 
 | # | Archivo | Qué es |

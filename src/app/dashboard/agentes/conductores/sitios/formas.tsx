@@ -18,7 +18,6 @@ export type ResultadoSitio =
   | null;
 export type AccionSitio = (previo: ResultadoSitio, fd: FormData) => Promise<ResultadoSitio>;
 
-const CAMPO = 'hairline rounded-lg px-2.5 h-9 text-[13px] outline-none focus:border-[var(--muted)] w-full';
 const ETIQUETA = 'block text-[11px] font-medium mb-1';
 
 const TIPO_TEXTO: Record<string, string> = { cliente: 'Cliente', planta: 'Planta', anden: 'Andén', patio: 'Patio', punto_interes: 'Punto de interés' };
@@ -28,7 +27,7 @@ function Boton({ texto, icono }: { texto: string; icono: 'guardar' | 'subir' }) 
   const Icono = icono === 'guardar' ? Save : Upload;
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Icono width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : texto}
     </button>
@@ -70,24 +69,24 @@ export function FormaSitio({ accion, inicial, clientes, padres }: {
     <form action={enviar} className="space-y-3" aria-label={inicial.id ? 'Editar sitio' : 'Nuevo sitio'}>
       {inicial.id && <input type="hidden" name="id" value={inicial.id} />}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <label><span className={ETIQUETA}>Nombre</span><input name="nombre" defaultValue={inicial.nombre} required maxLength={120} className={CAMPO} /></label>
+        <label><span className={ETIQUETA}>Nombre</span><input name="nombre" defaultValue={inicial.nombre} required maxLength={120} className="w-full" /></label>
         <label><span className={ETIQUETA}>Tipo</span>
-          <select name="tipo" defaultValue={inicial.tipo} className={CAMPO}>
+          <select name="tipo" defaultValue={inicial.tipo} className="w-full">
             {TIPOS_SITIO.map((t) => <option key={t} value={t}>{TIPO_TEXTO[t] ?? t}</option>)}
           </select>
         </label>
-        <label><span className={ETIQUETA}>Código en el sistema del cliente (opcional)</span><input name="codigo" defaultValue={inicial.codigo} maxLength={40} className={CAMPO} /></label>
-        <label><span className={ETIQUETA}>Latitud (grados decimales)</span><input name="lat" defaultValue={inicial.lat} required inputMode="decimal" placeholder="20.7200" className={CAMPO} /></label>
-        <label><span className={ETIQUETA}>Longitud (negativa en México)</span><input name="lng" defaultValue={inicial.lng} required inputMode="decimal" placeholder="-103.3900" className={CAMPO} /></label>
-        <label><span className={ETIQUETA}>Radio en metros (25 a 100,000)</span><input name="radio_m" defaultValue={inicial.radio_m} required inputMode="numeric" className={CAMPO} /></label>
-        <label className="sm:col-span-2 lg:col-span-3"><span className={ETIQUETA}>Dirección (solo referencia; no se usa para calcular coordenadas)</span><input name="direccion" defaultValue={inicial.direccion} maxLength={200} className={CAMPO} /></label>
+        <label><span className={ETIQUETA}>Código en el sistema del cliente (opcional)</span><input name="codigo" defaultValue={inicial.codigo} maxLength={40} className="w-full" /></label>
+        <label><span className={ETIQUETA}>Latitud (grados decimales)</span><input name="lat" defaultValue={inicial.lat} required inputMode="decimal" placeholder="20.7200" className="w-full" /></label>
+        <label><span className={ETIQUETA}>Longitud (negativa en México)</span><input name="lng" defaultValue={inicial.lng} required inputMode="decimal" placeholder="-103.3900" className="w-full" /></label>
+        <label><span className={ETIQUETA}>Radio en metros (25 a 100,000)</span><input name="radio_m" defaultValue={inicial.radio_m} required inputMode="numeric" className="w-full" /></label>
+        <label className="sm:col-span-2 lg:col-span-3"><span className={ETIQUETA}>Dirección (solo referencia; no se usa para calcular coordenadas)</span><input name="direccion" defaultValue={inicial.direccion} maxLength={200} className="w-full" /></label>
         <label><span className={ETIQUETA}>Cliente (opcional)</span>
-          <select name="cliente_id" defaultValue={inicial.cliente_id} className={CAMPO}>
+          <select name="cliente_id" defaultValue={inicial.cliente_id} className="w-full">
             <option value="">—</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </select>
         </label>
         <label><span className={ETIQUETA}>Pertenece a (opcional; un andén cuelga de su planta)</span>
-          <select name="padre_id" defaultValue={inicial.padre_id} className={CAMPO}>
+          <select name="padre_id" defaultValue={inicial.padre_id} className="w-full">
             <option value="">—</option>{padres.filter((p) => p.id !== inicial.id).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
           </select>
         </label>
@@ -106,11 +105,11 @@ export function FormaImportar({ accion }: { accion: AccionSitio }) {
         <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12px]" />
       </label>
       <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={5} spellCheck={false} className={`${CAMPO} h-auto py-2 font-mono text-[12px]`}
+        <textarea name="csv" rows={5} spellCheck={false} className="w-full h-auto py-2 font-mono text-[12px]"
           placeholder={'codigo,nombre,tipo,lat,lng,radio_m\nPL-ZAP,Planta Zapopan,planta,20.7200,-103.3900,300'} />
       </label>
       <label className="block max-w-[28ch]"><span className={ETIQUETA}>Radio por defecto en metros (solo si el archivo no trae la columna)</span>
-        <input name="radio_defecto" inputMode="numeric" placeholder="vacío = el archivo manda" className={CAMPO} />
+        <input name="radio_defecto" inputMode="numeric" placeholder="vacío = el archivo manda" className="w-full" />
       </label>
       <div className="flex items-center gap-3 flex-wrap"><Boton texto="Importar" icono="subir" /></div>
       <Aviso r={estado} />

@@ -1,6 +1,7 @@
 import { revalidatePath } from 'next/cache';
 import { FileSpreadsheet, Download } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { hoyMx, fechaMx } from '@/lib/formato';
@@ -117,7 +118,8 @@ export async function PerfilErp({
 
   async function confirmarContpaqi(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/contador', searchParams);
+    const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
       return { error: 'Tu rol no puede confirmar la plantilla de exportación contable.' };
     }
@@ -138,7 +140,8 @@ export async function PerfilErp({
 
   async function confirmarSapB1(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo('/dashboard/contador', searchParams);
+    const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
       return { error: 'Tu rol no puede confirmar la plantilla de exportación contable.' };
     }

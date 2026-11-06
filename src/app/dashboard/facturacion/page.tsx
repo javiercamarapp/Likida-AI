@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { clientesActivosCompletos } from '@/lib/likida/catalogo_selectores';
 import { getFacturacionClientes, type FacturacionClientes } from '@/lib/likida/facturacion_clientes';
@@ -101,7 +102,8 @@ export default async function PaginaFacturacion({
 
   async function guardarFactura(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede registrar facturas.' };
     try {
       const valores = validarFactura({
@@ -132,7 +134,8 @@ export default async function PaginaFacturacion({
 
   async function guardarPago(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede registrar pagos.' };
     try {
       const valores = validarPago({
@@ -152,7 +155,8 @@ export default async function PaginaFacturacion({
 
   async function sellarEmitida(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede marcar facturas como emitidas.' };
     try {
       // La SERIE no se manda aquí a propósito (RES-22, 0166). `marcarEmitida`
@@ -174,7 +178,8 @@ export default async function PaginaFacturacion({
 
   async function cancelar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
+    if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede cancelar facturas.' };
     try {
       await cancelarFactura(s.tenantId, String(fd.get('facturaId') ?? ''), { id: s.userId });

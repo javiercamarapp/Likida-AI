@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { importeDeNota } from '@/lib/likida/peajes/importe_nota';
 import { sufijoTenant } from '../../../sufijo';
 import { logger } from '@/lib/logger';
-import { requireSessionTenant } from '@/lib/auth/guard';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { hoyMx } from '@/lib/formato';
 import { reporteReclamacion } from '@/lib/likida/peajes/bitacora_conciliada';
@@ -34,8 +34,8 @@ const RUTA = '/dashboard/agentes/peajes/reclamacion';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** La puerta de cada acción: rol con acceso al área de dinero y, salvo superadmin, la flota de la propia sesión. */
-async function puertaReclamos(tenantId: string): Promise<string | null> {
-  const sesion = await requireSessionTenant(RUTA);
+async function puertaReclamos(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<string | null> {
+  const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede operar reclamos de peaje.';
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta flota no es la tuya.';
   return null;
@@ -73,7 +73,7 @@ export default async function PaginaReclamacionPeajes({
   // se captura por closure y Next no puede serializarla. Aquí solo se capturan cadenas (tenantId, sufijo).
   async function accionCrearReclamo(fd: FormData) {
     'use server';
-    const no = await puertaReclamos(tenantId);
+    const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
     const categoria = String(fd.get('categoria') ?? '');
@@ -86,14 +86,14 @@ export default async function PaginaReclamacionPeajes({
   }
   async function accionMarcarEnviado(fd: FormData) {
     'use server';
-    const no = await puertaReclamos(tenantId);
+    const no = await puertaReclamos(sp, tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
     const r = await marcarReclamoEnviado(tenantId, String(fd.get('reclamo') ?? ''), String(fd.get('enviado_en') ?? ''), String(fd.get('referencia') ?? '') || null);
     volverReclamos(sufijo, r.ok ? 'Reclamo marcado como enviado.' : `error:${r.motivo}`);
   }
   async function accionRegistrarNota(fd: FormData) {
     'use server';
-    const no = await puertaReclamos(tenantId);
+    const no = await puertaReclamos(sp, tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
     const importe = importeDeNota(String(fd.get('monto') ?? ''));
     if (!importe.ok) volverReclamos(sufijo, `error:${importe.motivo}`);
@@ -105,7 +105,7 @@ export default async function PaginaReclamacionPeajes({
   }
   async function accionJustificarCruce(fd: FormData) {
     'use server';
-    const no = await puertaReclamos(tenantId);
+    const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
     if (!UUID.test(desgloseId)) volverReclamos(sufijo, 'error:Falta el desglose del cruce.');
@@ -118,7 +118,7 @@ export default async function PaginaReclamacionPeajes({
     'use server';
     // La puerta con perfil se repite AQUÍ (una action es un endpoint por POST directo): si el perfil de la flota niega la ruta,
     // `requireSessionTenant` rebota antes de tocar un dato. El borde del formulario la repite otra vez (defensa en profundidad).
-    const no = await puertaReclamos(tenantId);
+    const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined, String(fd.get('retorno') ?? ''));
     const r = await ejecutarAccionDeFormulario(tenantId, fd);
@@ -127,7 +127,7 @@ export default async function PaginaReclamacionPeajes({
   // T-A2-24: el margen «lejos de la caseta» de la flota (el cliente fijará 200 o 500 m). Repite su puerta ADENTRO y valida antes de escribir.
   async function accionGuardarMargen(fd: FormData) {
     'use server';
-    const no = await puertaReclamos(tenantId);
+    const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     const volver = UUID.test(desgloseId) ? desgloseId : undefined;
     if (no) volverReclamos(sufijo, `error:${no}`, volver);
@@ -137,7 +137,7 @@ export default async function PaginaReclamacionPeajes({
   }
   async function accionRechazar(fd: FormData) {
     'use server';
-    const no = await puertaReclamos(tenantId);
+    const no = await puertaReclamos(sp, tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
     const res = await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''));
     volverReclamos(sufijo,

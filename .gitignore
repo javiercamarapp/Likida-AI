@@ -140,3 +140,14 @@ likida-respaldos/
 
 pruebas-navegador/.reporte-v2/
 pruebas-navegador/.artefactos-v2/
+
+# CT-SEG-24: material criptografico y credenciales de registro. El repo es
+# publico; un .pem/.key/.p12/.cer o un .npmrc con token no debe poder entrar
+# con un `git add -A` distraido. Un fixture legitimo se agrega con `git add -f`
+# y se registra en .gitleaks.toml. (scripts/ci/certs/*.crt, ya rastreado, es un
+# certificado raiz PUBLICO y no cae en estos patrones.)
+*.key
+*.pem
+*.p12
+*.cer
+.npmrc

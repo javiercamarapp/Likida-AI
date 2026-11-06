@@ -38,11 +38,26 @@ it('ya no dice que el dunning es «por venir»: explica que corre y que produce 
   expect(h).not.toContain('cuando exista el dunning');
 });
 
+// MX-003: la pantalla no puede prometer un «edita y manda» que no existe.
+it('no promete que Javier «edita y manda» desde Aprobaciones: dice que solo aprueba y que el envio no se registra', async () => {
+  const h = await html();
+  expect(h).not.toContain('edita y manda');
+  expect(h).toContain('solo aprueba o rechaza');
+  expect(h).toContain('enviadas');
+});
+
+it('MX-003: una factura con 4 toques alcanzados cuenta UN toque sin propuesta, no cuatro', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ ...factura, periodoInicio: '2026-01-01' }], total: 1 });
+  const h = await html();
+  const m = h.match(/Toques sin propuesta<\/div><div[^>]*>(\d+)</);
+  expect(m?.[1]).toBe('1');
+});
+
 it('muestra el estado real: factura, toques alcanzados y toques sin propuesta', async () => {
   const h = await html();
   expect(h).toContain('Flota Demo');
-  expect(h).toContain('D-3 · sin propuesta');
-  expect(h).toContain('D+7 · sin propuesta');
+  expect(h).toContain('D-3 · sin propuesta (el agente solo propone el toque más alto)');
+  expect(h).toContain('D+7 · sin propuesta<');
   expect(h).toContain('Nunca ha corrido');
 });
 

@@ -47,6 +47,7 @@ jobs:
       - name: Verificar salud del deployment restaurado
         env:
           URL: ${{ inputs.deployment_url }}
+          HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
         run: |
           set -euo pipefail
           # A36-R07-02: sin `--fail`. Volver a un deployment anterior deja la base
@@ -54,7 +55,7 @@ jobs:
           # reporta como `degraded` con HTTP 503: con `--fail` el rollback
           # exitoso salía en rojo justo en el caso para el que existe. curl
           # sigue reintentando 5xx; lo que decide es el cuerpo, abajo.
-          respuesta=$(curl --silent --show-error --retry 5 --retry-all-errors --max-time 15 "$URL/api/health")
+          respuesta=$(curl --silent --show-error --retry 5 --retry-all-errors --max-time 15 -H "x-health-token: ${HEALTH_TOKEN:-}" "$URL/api/health")
           # Aceptable: status=ok, o degraded SOLO por migraciones adelante (la base
           # nunca atrás del código) con db ok y crons sin degradar. Cualquier otra
           # cosa (db caída, base atrás, crons vencidos) sigue siendo fallo.

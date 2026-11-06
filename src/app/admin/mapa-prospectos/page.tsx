@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getDatosMapa } from '@/lib/admin/prospectos-mapa';
 import { Cerebro } from './cerebro';
@@ -25,3 +26,5 @@ export default async function PaginaMapaProspectos() {
     </div>
   );
 }
+
+export const metadata: Metadata = { title: 'Cerebro de ventas' };

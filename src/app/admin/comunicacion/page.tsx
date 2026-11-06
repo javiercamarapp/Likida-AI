@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { Megaphone } from 'lucide-react';
@@ -51,3 +52,5 @@ export default async function ComunicacionPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Comunicación' };

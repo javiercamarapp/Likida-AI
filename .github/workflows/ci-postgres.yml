@@ -196,6 +196,11 @@ jobs:
       # Devuelve a la base efímera los privilegios que había ANTES de la 0947 (producción los tiene revocados): la batería de abajo
       # (verificaciones.sql, set role authenticated, supabase/tests) sigue viendo el mismo estado de grants que las migraciones previas
       # dejaron y prueba RLS como capa independiente. Corre DESPUÉS de capa 0, que demuestra el estado real.
+      # X-02 banco multi-tenant, fase estatica: politicas, funciones SECURITY DEFINER y vistas bajo los grants REALES (antes de
+      # restituir los previos, que tambien devuelven las ACL de funciones). Ver supabase/tests/banco_tenant/LEEME.md.
+      - name: Banco multi-tenant — fase estática (políticas, funciones, vistas)
+        run: node scripts/ci/banco-tenant.mjs --fase=estatica
+
       - name: Grants previos a la 0947 (solo base efímera)
         run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/ci/grants_previos_0947_restaurar.sql
 
@@ -258,6 +263,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0843_peajes_sftp.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0844_gasto_aviso_sin_robot.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0845_jornada_alerta_enviado_candado.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0950_telefono_identidad.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0846_equipo_candado_ultimo_dueno.sql
           PGUSER=postgres bash supabase/tests/0846_equipo_candado_ultimo_dueno_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0775_peajes_revision_cobros.sql
@@ -282,6 +288,12 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0502_jornada_alerta_tope.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0380_conductor_hitos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0385_conductor_validacion_sitios.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0956_conductor_config_y_contactos_atomico.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0970_tenant_interno_presupuesto_superadmin.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0971_evento_seguridad_pagina_negada_y_mfa.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0983_onboarding_estado_y_tenant.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0984_onboarding_evento.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0784_cron_latido_tms.sql
           PGUSER=postgres bash supabase/tests/0385_conductor_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0480_geocerca_catalogos.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0400_vigia_cliente.sql
@@ -357,6 +369,10 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0681_evento_seguridad_agrupar.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0682_techo_ia_tenant.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0683_evento_seguridad_desborde_robusto.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0955_evento_seguridad_red.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0990_llm_alerta_tope_persistida.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0997_superadmin_acceso_bitacora.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0998_tenant_exportacion_offboarding.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0673_vigia_directores_correo.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0677_vigia_directores_solo_dueno.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0678_peaje_curso_respeta_baja.sql
@@ -461,3 +477,17 @@ jobs:
           ec=${PIPESTATUS[0]}
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           exit $ec
+
+      # X-02 banco multi-tenant, fase dinámica: dos flotas sembradas, lectura/UPDATE como authenticated y lectura como anon,
+      # con los grants previos restituidos (RLS como capa independiente). Y el canario: objetos abiertos a propósito que el
+      # banco DEBE detectar (si no, el banco está ciego).
+      - name: Banco multi-tenant — fase dinámica (flota A contra flota B)
+        run: |
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          BANCO_TENANT_SALIDA="$RUNNER_TEMP/banco-dinamica.json" node scripts/ci/banco-tenant.mjs --fase=dinamica | tee -a "$GITHUB_STEP_SUMMARY"
+          ec=${PIPESTATUS[0]}
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          exit $ec
+
+      - name: Banco multi-tenant — canario (el banco detecta lo abierto a propósito)
+        run: node scripts/ci/banco-tenant.mjs --fase=canario

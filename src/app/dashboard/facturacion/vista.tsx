@@ -222,9 +222,9 @@ function TablaCubetas({ datos }: { datos: FacturacionClientes }) {
         </caption>
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th className="px-3 py-2 font-medium">Cubeta</th>
-            <th className="px-3 py-2 font-medium text-right">Facturas</th>
-            <th className="px-3 py-2 font-medium text-right">Saldo</th>
+            <th scope="col" className="px-3 py-2 font-medium">Cubeta</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Facturas</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Saldo</th>
           </tr>
         </thead>
         <tbody>
@@ -266,15 +266,15 @@ function TablaClientes({ clientes }: { clientes: ClienteCartera[] }) {
         </caption>
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th className="px-3 py-2 font-medium">Cliente</th>
-            <th className="px-3 py-2 font-medium text-right">Facturado</th>
-            <th className="px-3 py-2 font-medium text-right">Cobrado</th>
-            <th className="px-3 py-2 font-medium text-right">Por cobrar</th>
-            <th className="px-3 py-2 font-medium text-right">Corriente</th>
-            <th className="px-3 py-2 font-medium text-right">1-30</th>
-            <th className="px-3 py-2 font-medium text-right">31-60</th>
-            <th className="px-3 py-2 font-medium text-right">+60</th>
-            <th className="px-3 py-2 font-medium text-right">Sin fecha</th>
+            <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Facturado</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Cobrado</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Por cobrar</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Corriente</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">1-30</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">31-60</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">+60</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Sin fecha</th>
           </tr>
         </thead>
         <tbody>
@@ -330,15 +330,15 @@ function TablaFacturas({ facturas, captura }: { facturas: RenglonCartera[]; capt
         </caption>
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th className="px-3 py-2 font-medium">Folio</th>
-            <th className="px-3 py-2 font-medium">Cliente</th>
-            <th className="px-3 py-2 font-medium">Fecha</th>
-            <th className="px-3 py-2 font-medium text-right">Total</th>
-            <th className="px-3 py-2 font-medium text-right">Pagado</th>
-            <th className="px-3 py-2 font-medium text-right">Saldo</th>
-            <th className="px-3 py-2 font-medium">Vence</th>
-            <th className="px-3 py-2 font-medium">Antigüedad</th>
-            {captura && <th className="px-3 py-2 font-medium">Acciones</th>}
+            <th scope="col" className="px-3 py-2 font-medium">Folio</th>
+            <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+            <th scope="col" className="px-3 py-2 font-medium">Fecha</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Total</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Pagado</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Saldo</th>
+            <th scope="col" className="px-3 py-2 font-medium">Vence</th>
+            <th scope="col" className="px-3 py-2 font-medium">Antigüedad</th>
+            {captura && <th scope="col" className="px-3 py-2 font-medium">Acciones</th>}
           </tr>
         </thead>
         <tbody>
@@ -499,15 +499,15 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
           )}
 
           <div className="card overflow-x-auto">
-            <table className="w-full text-[12px]">
+            <table aria-label="Viajes por facturar" className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                  <th className="px-3 py-2 font-medium">Viaje</th>
-                  <th className="px-3 py-2 font-medium">Ruta</th>
-                  <th className="px-3 py-2 font-medium">Cliente</th>
-                  <th className="px-3 py-2 font-medium">Liquidado</th>
-                  <th className="px-3 py-2 font-medium text-right">Sin facturar</th>
-                  <th className="px-3 py-2 font-medium text-right">Ingreso</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Viaje</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Ruta</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+                  <th scope="col" className="px-3 py-2 font-medium">Liquidado</th>
+                  <th scope="col" className="px-3 py-2 font-medium text-right">Sin facturar</th>
+                  <th scope="col" className="px-3 py-2 font-medium text-right">Ingreso</th>
                 </tr>
               </thead>
               <tbody>
@@ -651,14 +651,14 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
               </div>
 
               <div className="card overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table aria-label="Viajes facturados por cliente" className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}>
-                      <th className="px-3 py-2 font-medium">Viaje</th>
-                      <th className="px-3 py-2 font-medium">Cliente</th>
-                      <th className="px-3 py-2 font-medium">Hallazgo</th>
-                      <th className="px-3 py-2 font-medium text-right">En juego</th>
-                      <th className="px-3 py-2 font-medium">La nota, citable</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Viaje</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Hallazgo</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">En juego</th>
+                      <th scope="col" className="px-3 py-2 font-medium">La nota, citable</th>
                     </tr>
                   </thead>
                   <tbody>

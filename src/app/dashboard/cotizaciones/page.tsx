@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAsignar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
@@ -64,7 +65,7 @@ export default async function PaginaCotizaciones({
 
   async function guardarConfig(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede declarar costos.' };
     try {
       await guardarConfigCotizador(s.tenantId, {
@@ -84,7 +85,7 @@ export default async function PaginaCotizaciones({
 
   async function cotizar(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede cotizar.' };
     try {
       await crearCotizacion(s.tenantId, {
@@ -112,7 +113,7 @@ export default async function PaginaCotizaciones({
   // `ResultadoAccion`, como el resto de las forms del panel.
   async function accionEnviada(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar cotizaciones.' };
     try {
       await marcarEnviada(s.tenantId, String(fd.get('id') ?? ''));
@@ -125,7 +126,7 @@ export default async function PaginaCotizaciones({
 
   async function accionPerdida(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede editar cotizaciones.' };
     const como = String(fd.get('como')) === 'vencida' ? 'vencida' : 'perdida';
     try {
@@ -139,7 +140,7 @@ export default async function PaginaCotizaciones({
 
   async function accionConvertir(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     // A37-S17-10: crear un viaje es una escritura OPERATIVA (aparece en «viajes
     // sin asignar» del tráfico): lleva el mismo permiso que despachar, no solo el
     // área dinero con la que se ve el cotizador.

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, costoIaPorDiaDesde } from '@/lib/admin/negocio';
 import { getUnidadesMedidas, escenarioDe, ESCENARIOS_VIAJES_DIA, SUPUESTOS_CAPACIDAD, LIMITES_NOMINALES } from '@/lib/admin/capacidad';
@@ -99,15 +100,15 @@ export default async function CapacidadForecastPage() {
                     : <>Sin liquidaciones en 30d — el costo por viaje no se puede medir y el escenario lo deja en blanco.</>}
                 </p>
                 <div className="overflow-x-auto mt-3">
-                  <table className="w-full text-[12.5px]">
+                  <table aria-label="Proyección de capacidad por escenario" className="w-full text-[12.5px]">
                     <thead>
                       <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                        <th className="py-1.5 pr-4 font-medium">Viajes/día</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Mensajes WA/día</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Pico msg/min</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Llamadas LLM/día</th>
-                        <th className="py-1.5 pr-4 font-medium text-right">Costo IA/día</th>
-                        <th className="py-1.5 font-medium text-right">Storage/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium">Viajes/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Mensajes WA/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Pico msg/min</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Llamadas LLM/día</th>
+                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Costo IA/día</th>
+                        <th scope="col" className="py-1.5 font-medium text-right">Storage/día</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -146,3 +147,5 @@ export default async function CapacidadForecastPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Capacidad & Forecast' };

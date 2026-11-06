@@ -15,6 +15,8 @@ export interface DatosArranque {
   qrSvg: string | null;
   /** Cuántos operadores activos hay y cuántos esperan invitación; null = no se pudo contar. */
   operadores: { activos: number; pendientesDeInvitar: number } | null;
+  /** CT-A345-19: el perfil de la flota. Con `cinco_agentes` la guía NO describe el flujo clásico (fotos de tickets, «LISTO», liquidación por el chat). */
+  perfil?: 'cinco_agentes' | null;
 }
 
 const PASOS_CHOFER = [
@@ -24,6 +26,16 @@ const PASOS_CHOFER = [
   ['Recibe su viaje y manda las fotos de sus tickets', 'Cuando le asignas un viaje le avisa por WhatsApp. Cada foto de ticket o comprobante se lee, se clasifica y se cuelga del viaje.'],
   ['Escribe «LISTO» y le llega su liquidación', 'Al cerrar el viaje, el motor cuadra gastos contra anticipo y política, y le entrega la liquidación en PDF por el mismo chat.'],
 ] as const;
+
+/**
+ * CT-A345-19: bajo el perfil `cinco_agentes` el chat del chofer NO recibe fotos de tickets para liquidar ni entrega la
+ * liquidación por «LISTO»: esas promesas son del flujo clásico y aquí serían falsas. Se dice qué sí hace el chat.
+ */
+export const PASOS_CHOFER_CINCO_AGENTES: ReadonlyArray<readonly [string, string]> = [
+  PASOS_CHOFER[0], PASOS_CHOFER[1], PASOS_CHOFER[2],
+  ['Recibe los avisos de su viaje y responde por el mismo chat', 'Los avisos solo salen si el Agente de Conductores está habilitado en tu cuenta; si no, el chofer no recibe nada de Likida aunque esté dado de alta. Confirma el viaje, manda su ubicación y las fotos que se le pidan para el hito que está reportando.'],
+  ['«LISTO» y la liquidación por este chat no aplican a tu cuenta', 'Tu cuenta no recibe comprobantes ni cierra liquidaciones por este WhatsApp. Si el chofer manda un ticket o escribe «LISTO», el bot le contesta que entregue sus papeles en tu oficina.'],
+];
 
 /**
  * LA GUÍA DE ARRANQUE DEL CHOFER (W2 «producto»). Responde la pregunta que ninguna
@@ -103,7 +115,7 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
       <section aria-labelledby="titulo-flujo" className="card p-4">
         <TituloRecuadro id="titulo-flujo" info="whatsapp.flujo" className="mb-3">Qué pasa con cada chofer</TituloRecuadro>
         <ol className="space-y-3">
-          {PASOS_CHOFER.map(([titulo, detalle], i) => (
+          {((datos.perfil === 'cinco_agentes' ? PASOS_CHOFER_CINCO_AGENTES : PASOS_CHOFER) as ReadonlyArray<readonly [string, string]>).map(([titulo, detalle], i) => (
             <li key={titulo} className="flex items-start gap-3">
               <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
                 style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>{i + 1}</span>

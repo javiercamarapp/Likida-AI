@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
@@ -66,3 +67,5 @@ export default async function PaginaChat({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Preguntar a la IA' };

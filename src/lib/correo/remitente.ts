@@ -40,3 +40,14 @@ export function remitenteReconocido(remitente: string | null | undefined, permit
   const dominio = correo.slice(correo.lastIndexOf('@') + 1);
   return permitidos.some((p) => { const x = p.trim().toLowerCase(); return x === correo || x === dominio || x === `@${dominio}`; });
 }
+
+/**
+ * S-06 / CT-SEG-06: motivo con el que un buzón de entrada ignora un correo cuando la flota NO declaró ningún remitente.
+ * Un buzón autenticado solo por token + From declarado, con la lista vacía, aceptaba a cualquiera que conociera la
+ * dirección; ahora la lista vacía falla CERRADO (200: reintentar no lo arregla, lo arregla la flota en el panel).
+ */
+export const SIN_REMITENTES_AUTORIZADOS = 'sin_remitentes_autorizados';
+
+/** Texto del panel cuando el buzón está encendido y la lista de remitentes está vacía. */
+export const AVISO_SIN_REMITENTES =
+  'Sin remitentes autorizados: el buzón no recibe ningún correo hasta que agregues al menos un correo o dominio de tus clientes.';

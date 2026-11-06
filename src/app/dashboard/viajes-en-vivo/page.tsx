@@ -1,8 +1,10 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar, puedeAsignar } from '@/lib/auth/permisos';
+import { apiDenegadaPorPerfil } from '@/lib/auth/perfil_tenant';
 import { fuentes } from '@/lib/likida/orquestador/fuentes';
 import '@/lib/likida/orquestador/fuentes_reales';
 import { rolPuedeLeerTarea } from '@/lib/likida/orquestador/permisos';
@@ -57,10 +59,12 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
   if (sp.tenant) ocultos.tenant = sp.tenant;
   if (sp.rol) ocultos.rol = sp.rol;
   const puedeAtender = puedeAsignar(rol);
+  // MX-006: la caja habla con /api/dashboard/chat; bajo un perfil que lo niega (cinco_agentes) ese POST da 403, asi que no se monta.
+  const conChat = !(await apiDenegadaPorPerfil(tenantId, '/api/dashboard/chat'));
 
   async function atender(fd: FormData): Promise<void> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     // Dos candados: la ruta y la acción (una acción de servidor es un endpoint, no un botón).
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return;
     const id = String(fd.get('id') ?? '');
@@ -90,7 +94,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         accionUrl={RUTA}
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
-        pregunta={<PreguntaAlAsistente tenantParam={sp.tenant ?? null} />}
+        pregunta={conChat ? <PreguntaAlAsistente tenantParam={sp.tenant ?? null} /> : null}
         tareas={<TareasAbiertas tareas={tareas} errorLectura={tareasConError} aviso={sp.atencion ?? null} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
         // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.
         notificaciones={puedeAdministrar(rol) ? (
