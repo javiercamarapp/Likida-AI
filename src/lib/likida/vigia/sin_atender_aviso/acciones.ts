@@ -209,13 +209,18 @@ export async function guardarConfigPanel(ctx: ContextoSinAtender, fd: FormData, 
     const r = await d.puertoConfig.guardar(ctx.tenantId, ctx.usuarioId, c.valor);
     if (!r.ok) return { ok: false, error: r.error };
     const v: ConfigGuardadaSinAtender = c.valor;
-    await d.bitacora({
-      tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.sin_atender_config', entidad: 'vigia_historial', entidadId: ctx.tenantId,
-      detalle: {
-        horario: v.horarioAtencion !== null, palabrasClave: v.palabrasClave.length, palabrasUrgentes: v.palabrasUrgentes.length, equipo: v.equipoNombres.length,
-        insistenciaMin: v.insistenciaMin, umbralUrgenteMin: v.umbralUrgenteMin, resumenCorreo: v.resumenCorreoHabilitado,
-      },
-    });
+    // La configuración ya quedó guardada: si la bitácora falla no se reporta como fallo de guardado.
+    try {
+      await d.bitacora({
+        tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.sin_atender_config', entidad: 'vigia_historial', entidadId: ctx.tenantId,
+        detalle: {
+          horario: v.horarioAtencion !== null, palabrasClave: v.palabrasClave.length, palabrasUrgentes: v.palabrasUrgentes.length, equipo: v.equipoNombres.length,
+          insistenciaMin: v.insistenciaMin, umbralUrgenteMin: v.umbralUrgenteMin, resumenCorreo: v.resumenCorreoHabilitado,
+        },
+      });
+    } catch (e) {
+      logger.error('vigia.sin_atender_config_bitacora_fallo', { err: e instanceof Error ? e.message : String(e) });
+    }
     return { ok: true, mensaje: 'Configuración guardada. Se usa en cada revisión de tu flota; los chats que ya subiste no se tocan.' };
   } catch (e) {
     logger.error('vigia.sin_atender_config_guardar_fallo', { err: e instanceof Error ? e.message : String(e) });

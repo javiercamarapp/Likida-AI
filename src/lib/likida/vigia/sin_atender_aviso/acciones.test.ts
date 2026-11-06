@@ -9,6 +9,7 @@ const { resumenHabilitadoParaFlota } = await import('./interruptor');
 const { copiaConfigGuardadaPorOmision } = await import('../sin_atender/config_guardada');
 const { salDeFlota, hashAutor } = await import('../historial/export_whatsapp');
 type Deps = import('./acciones').DepsSinAtender;
+const { detectarSinAtender } = await import('../sin_atender/detectar');
 const { alerta, resultado, crudos, TENANT_A, TENANT_B, CLIENTE_A, AHORA_DIA, AHORA_NOCHE } = await import('./fixtures');
 
 const ctx = (rol = 'flota_admin', tenantId = TENANT_A) => ({ tenantId, rol, usuarioId: 'u1', email: 'u@ejemplo.test', liga: 'https://app.ejemplo.test/x' });
@@ -175,6 +176,11 @@ describe('guardar la configuración de la flota (acción)', () => {
     expect(r).toMatchObject({ ok: false });
     expect(d.bitacora).not.toHaveBeenCalled();
   });
+  it('si la bitácora falla después de guardar, devuelve ok (ya quedó guardado)', async () => {
+    const d = deps({ bitacora: vi.fn(async () => { throw new Error('boom'); }) as never });
+    expect(await guardarConfigPanel(ctx(), formaGuardar(), d)).toMatchObject({ ok: true });
+    expect(d.puertoConfig.guardar).toHaveBeenCalledTimes(1);
+  });
   it('si la base falla no lanza: explica', async () => {
     const d = deps({ puertoConfig: { leer: async () => null, guardar: async () => { throw new Error('boom'); } } });
     expect(await guardarConfigPanel(ctx(), formaGuardar(), d)).toMatchObject({ ok: false });
@@ -191,6 +197,24 @@ describe('la revisión usa lo guardado por la flota', () => {
     expect(visto).toMatchObject({ horarioAtencion: { desdeHora: 8, hastaHora: 18 }, palabrasClave: ['retraso'], insistenciaMin: 4, umbralUrgenteMin: 20 });
     const sal = salDeFlota(TENANT_A);
     expect([...visto!.equipoHashes].sort()).toEqual([hashAutor(sal, 'Operador 1'), hashAutor(sal, 'Operador 2')].sort());
+  });
+  it('de punta a punta con el detector real: la espera de la noche no cuenta con el horario guardado', async () => {
+    // Mensaje del cliente miércoles 22:00 (hora de México); el equipo había contestado antes. Plazo de 30 min.
+    const chat = { chatId: 'g1', nombre: 'Grupo A', critico: false, mensajes: [
+      { enviadoEn: '2026-11-05T03:00:00.000Z', rol: 'equipo' as const, autorHash: 'h-equipo', texto: 'listo' },
+      { enviadoEn: '2026-11-05T04:00:00.000Z', rol: 'cliente' as const, autorHash: 'h-cliente', texto: 'necesito el estatus del viaje' },
+    ] };
+    const leerChats = async () => ({ chats: [{ clienteId: CLIENTE_A, chat }], gruposOmitidos: 0 });
+    const conHorario = { ...copiaConfigGuardadaPorOmision(), horarioAtencion: { desdeHora: 8, hastaHora: 18 } };
+    const al = (ahora: number, guardada: typeof conHorario | null) => revisarSinAtender(TENANT_A, {}, 0, deps({ leerChats, detectar: detectarSinAtender, ahora: () => ahora, puertoConfig: { leer: async () => guardada, guardar: vi.fn() as never } }));
+    const ocho10 = Date.parse('2026-11-05T14:10:00Z'); // jueves 08:10 México: 10 min de oficina
+    const nueve10 = Date.parse('2026-11-05T15:10:00Z'); // jueves 09:10 México: 70 min de oficina
+    const sin = await al(ocho10, null);
+    const con8 = await al(ocho10, conHorario);
+    const con9 = await al(nueve10, conHorario);
+    expect(sin.ok && sin.revision.resultado.alertas).toHaveLength(1); // sin horario: 610 min corridos, alerta
+    expect(con8.ok && con8.revision.resultado.alertas).toHaveLength(0); // con horario: solo 10 min dentro del horario
+    expect(con9.ok && con9.revision.resultado.alertas).toHaveLength(1); // ya pasó el plazo dentro del horario
   });
   it('lee lo guardado de la flota de la sesión y no de otra', async () => {
     const leer = vi.fn(async () => null);
