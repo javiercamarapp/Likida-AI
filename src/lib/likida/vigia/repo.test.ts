@@ -1113,3 +1113,52 @@ describe('T-A4-31 · turno y festivos: escritura', () => {
     expect(await listarFestivos(T1)).toEqual([]);
   });
 });
+
+describe('0999: la configuración de «sin atender» por flota', () => {
+  const FILA = { horario_atencion: { desdeHora: 8, hastaHora: 18 }, palabras_clave: ['retraso'], palabras_urgentes: [], equipo_nombres: ['Operador 1'], insistencia_min: 4, umbral_urgente_min: 20, resumen_correo_habilitado: true };
+  const valor = { horarioAtencion: { desdeHora: 8, hastaHora: 18 }, palabrasClave: ['retraso'], palabrasUrgentes: [], equipoNombres: ['Operador 1'], insistenciaMin: 4, umbralUrgenteMin: 20, resumenCorreoHabilitado: true };
+
+  it('lee SOLO la fila de la flota pedida (filtra por tenant_id) y la mapea', async () => {
+    respuesta = () => ({ data: FILA, error: null });
+    const c = await repoMod.leerConfigSinAtender(T1);
+    expect(c).toMatchObject({ horarioAtencion: { desdeHora: 8, hastaHora: 18 }, equipoNombres: ['Operador 1'], insistenciaMin: 4, resumenCorreoHabilitado: true });
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0]!.tabla).toBe('vigia_sin_atender_config');
+    expect(tiene(llamadas[0]!, 'eq', 'tenant_id', T1)).toBe(true);
+  });
+  it('sin fila: todo apagado (falla cerrado)', async () => {
+    respuesta = () => ({ data: null, error: null });
+    expect(await repoMod.leerConfigSinAtender(T1)).toMatchObject({ horarioAtencion: null, equipoNombres: [], resumenCorreoHabilitado: false, insistenciaMin: 2 });
+  });
+  it.each(['42P01', 'PGRST205'])('tabla ausente (%s): valores de arranque en vez de error', async (code) => {
+    respuesta = () => ({ data: null, error: { message: 'no existe la relación', code } });
+    expect(await repoMod.leerConfigSinAtender(T1)).toMatchObject({ horarioAtencion: null, resumenCorreoHabilitado: false });
+  });
+  it('cualquier otro error LANZA: «no pude preguntar» no es «apagado»', async () => {
+    respuesta = () => ({ data: null, error: { message: 'caída', code: '57014' } });
+    await expect(repoMod.leerConfigSinAtender(T1)).rejects.toThrow(/sin_atender_config_leer/);
+  });
+  it('guarda con upsert por flota, con el tenant y el usuario que se le pasan, y sin tocar otra flota', async () => {
+    respuesta = () => ({ data: null, error: null });
+    const r = await repoMod.guardarConfigSinAtender(T1, 'u-1', valor);
+    expect(r).toEqual({ ok: true, valor: { tenantId: T1 } });
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0]).toMatchObject({ tabla: 'vigia_sin_atender_config', op: 'upsert' });
+    expect(llamadas[0]!.valores).toMatchObject({ tenant_id: T1, updated_by: 'u-1', insistencia_min: 4, umbral_urgente_min: 20, resumen_correo_habilitado: true, equipo_nombres: ['Operador 1'], horario_atencion: { desdeHora: 8, hastaHora: 18 } });
+  });
+  it('guardar con la tabla ausente: mensaje llano, no lanza', async () => {
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42P01' } });
+    const r = await repoMod.guardarConfigSinAtender(T1, null, valor);
+    expect(r.ok).toBe(false);
+  });
+  it('guardar con otro error lanza', async () => {
+    respuesta = () => ({ data: null, error: { message: 'caída', code: '57014' } });
+    await expect(repoMod.guardarConfigSinAtender(T1, null, valor)).rejects.toThrow(/sin_atender_config_guardar/);
+  });
+  it('aislamiento: dos flotas leen cada una con su propio filtro', async () => {
+    respuesta = () => ({ data: null, error: null });
+    await repoMod.leerConfigSinAtender(T1);
+    await repoMod.leerConfigSinAtender(T2);
+    expect(llamadas.map((l) => l.filtros.find(([o, c]) => o === 'eq' && c === 'tenant_id')?.[2])).toEqual([T1, T2]);
+  });
+});
