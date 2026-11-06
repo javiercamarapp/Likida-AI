@@ -18,7 +18,7 @@ import {
   leerConfigEntradas, activarCorreoPeajes, desactivarCorreoPeajes, rotarCorreoPeajes, guardarRemitentesPeajes,
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   listarTarifas, confirmarTarifa, importarTarifasArchivo,
-  leerConfigPeajes, guardarUmbralesPeajes, guardarConfigAvisos,
+  leerConfigPeajes, leerCorreoAvisos, guardarUmbralesPeajes, guardarConfigAvisos,
   leerVinculosActivo, guardarVinculosActivo, resumenFuenteViajes, vincularDesglose,
   listarInmovilizadas, importarInmovilizadasArchivo, quitarInmovilizada,
   leerReglasFlota, guardarReglasFlota,
@@ -39,6 +39,8 @@ import { direccionPj } from '@/lib/likida/peajes/correo_entrante';
 import { dominioBuzon } from '@/lib/correo/buzon';
 import { parsearImporteMx } from '@/lib/formato';
 import { superficiePeajesDeTenant, MOTIVO_STAND_BY_PERFIL } from '@/lib/likida/peajes/superficie_perfil';
+import { guardarCorreoAvisosDeFormulario, enviarPruebaDeFormulario } from './acciones-correo-avisos';
+import { correoConfigurado } from '@/lib/correo/enviar';
 import { VistaConfiguracionPeajes } from './vista';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Configuración del conciliador de peajes' };
@@ -128,13 +130,14 @@ export default async function PaginaConfiguracionPeajes({
 
   const superficie = await superficiePeajesDeTenant(tenantId);
   const secreto = secretoMaestro();
-  const [vinculosActivo, fuenteViajes, inmovilizadas, reglasFlota, tarifas, configPeajes, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
+  const [vinculosActivo, fuenteViajes, inmovilizadas, reglasFlota, tarifas, configPeajes, correoAvisos, reglasCasetas, tagsBaja, excepcionesUnidad, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, buzon, archivos, entradas] = await Promise.all([
     safe(() => leerVinculosActivo(tenantId)),
     safe(() => resumenFuenteViajes(tenantId)),
     safe(() => listarInmovilizadas(tenantId)),
     safe(() => leerReglasFlota(tenantId)),
     safe(() => listarTarifas(tenantId)),
     safe(() => leerConfigPeajes(tenantId)),
+    safe(() => leerCorreoAvisos(tenantId)),
     safe(() => listarReglasCasetas(tenantId)),
     safe(() => listarTagsBaja(tenantId)),
     safe(() => listarExcepcionesUnidad(tenantId)),
@@ -227,6 +230,20 @@ export default async function PaginaConfiguracionPeajes({
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await borrarCredencialPull(tenantId)) ? 'Token borrado.' : 'error:No se pudo borrar el token.');
+  }
+
+  // ── Avisos de peajes por correo ──
+  async function accionGuardarCorreoAvisos(fd: FormData) {
+    'use server';
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
+    const r = await guardarCorreoAvisosDeFormulario(sesion, tenantId, fd);
+    return volverConfig(sufijo, r.ok ? r.mensaje : `error:${r.error}`);
+  }
+  async function accionEnviarPruebaCorreoAvisos() {
+    'use server';
+    const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
+    const r = await enviarPruebaDeFormulario(sesion, tenantId);
+    return volverConfig(sufijo, r.ok ? r.mensaje : `error:${r.error}`);
   }
 
   // ── TAGs ──
@@ -554,6 +571,10 @@ export default async function PaginaConfiguracionPeajes({
       umbralesAvisos={{
         config: configPeajes, puedeAdministrar,
         acciones: { guardarUmbrales: accionGuardarUmbrales, guardarAvisos: accionGuardarAvisos, guardarDestinatario: accionGuardarDestinatario },
+      }}
+      correoAvisos={{
+        config: correoAvisos, puedeAdministrar, servicioActivo: correoConfigurado(),
+        acciones: { guardar: accionGuardarCorreoAvisos, enviarPrueba: accionEnviarPruebaCorreoAvisos },
       }}
       acciones={{
         activarCorreo: accionActivarCorreo, desactivarCorreo: accionDesactivarCorreo, rotarCorreo: accionRotarCorreo, guardarRemitentes: accionGuardarRemitentes,

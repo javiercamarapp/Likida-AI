@@ -12,7 +12,7 @@ import type { AvisoPeajes, CanalAvisoPeajes } from './aviso_canal';
 // (`EnvioCorreoPuerto` / `enviarCorreo` de Resend y el enmascarado de `entrega_correo.ts`): no hay otra infraestructura de correo.
 //
 // CONFIGURACIÓN (sin migración): jsonb `peaje_atipico_config.umbrales.correo_avisos` de la flota —
-//   { activo: boolean, destinatarios: string[] (≤5), asunto: string|null, noEnviarAntes: 'AAAA-MM-DD'|null }
+//   { activo: boolean, destinatarios: string[] (≤10), asunto: string|null, noEnviarAntes: 'AAAA-MM-DD'|null }
 // Lo lee/escribe `repo.ts` (`leerCorreoAvisos` / `guardarCorreoAvisos`) con las reglas de este archivo.
 //
 // FAIL-CERRADO: sin configuración, apagado, o sin ningún destinatario válido, el canal no tiene a quién mandarle y NO envía
@@ -26,7 +26,7 @@ import type { AvisoPeajes, CanalAvisoPeajes } from './aviso_canal';
 // evita además el reenvío entre corridas.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export const MAX_DESTINATARIOS_CORREO_AVISOS = 5;
+export const MAX_DESTINATARIOS_CORREO_AVISOS = 10;
 /** Intentos por destinatario dentro de UNA pasada del cron (el cron vuelve a pasar cada ~15 min con el sello soltado). */
 export const MAX_INTENTOS_CORREO_AVISO = 3;
 const ESPERA_ENTRE_INTENTOS_MS = [1_000, 3_000];
@@ -47,6 +47,13 @@ export const CONFIG_CORREO_AVISOS_DEFAULT: ConfigCorreoAvisos = { activo: false,
 
 const RE_CORREO = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]{2,}$/;
 const RE_FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+/** AAAA-MM-DD que existe en el calendario (rechaza 2026-02-30, que `Date.parse` corre al 2 de marzo). */
+const esFechaReal = (f: string): boolean => {
+  if (!RE_FECHA.test(f)) return false;
+  const t = Date.parse(`${f}T00:00:00Z`);
+  return !Number.isNaN(t) && new Date(t).toISOString().slice(0, 10) === f;
+};
 
 const limpiarAsunto = (s: unknown): string | null => {
   if (typeof s !== 'string') return null;
@@ -72,7 +79,7 @@ export function validarCorreoAvisos(entrada: unknown): ValidadoCorreoAvisos {
   }
   if (destinatarios.length > MAX_DESTINATARIOS_CORREO_AVISOS) return { ok: false, motivo: `Máximo ${MAX_DESTINATARIOS_CORREO_AVISOS} destinatarios.` };
   const corte = e.noEnviarAntes == null || e.noEnviarAntes === '' ? null : e.noEnviarAntes;
-  if (corte !== null && !(typeof corte === 'string' && RE_FECHA.test(corte) && !Number.isNaN(Date.parse(`${corte}T00:00:00Z`)))) {
+  if (corte !== null && !(typeof corte === 'string' && esFechaReal(corte))) {
     return { ok: false, motivo: 'La fecha de corte debe ser AAAA-MM-DD.' };
   }
   const activo = e.activo === true;
@@ -89,7 +96,7 @@ export function correoAvisosEfectivo(guardado: unknown): ConfigCorreoAvisos {
   // Fail-cerrado también con el corte: si el resto de la fila está corrupta, el correo queda apagado pero la fecha de corte
   // (que filtra TODOS los canales) se conserva si es válida, en vez de perderse y dejar pasar el historial.
   const crudo = typeof guardado === 'object' && guardado !== null && !Array.isArray(guardado) ? (guardado as Record<string, unknown>).noEnviarAntes : null;
-  const corte = typeof crudo === 'string' && RE_FECHA.test(crudo) && !Number.isNaN(Date.parse(`${crudo}T00:00:00Z`)) ? crudo : null;
+  const corte = typeof crudo === 'string' && esFechaReal(crudo) ? crudo : null;
   return { ...CONFIG_CORREO_AVISOS_DEFAULT, noEnviarAntes: corte };
 }
 
