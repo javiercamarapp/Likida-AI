@@ -12,6 +12,17 @@ const base = (alertas = [alerta()]) => ({ tenantId: TENANT_A, resultado: resulta
 const encendido = async () => ({ ok: true as const });
 
 describe('resumen por correo', () => {
+  it('sin interruptores inyectados falla cerrado (bandera de plataforma ausente) y no llama al proveedor', async () => {
+    const enviar = vi.fn();
+    const antes = process.env.LIKIDA_VIGIA_SIN_ATENDER_CORREO;
+    delete process.env.LIKIDA_VIGIA_SIN_ATENDER_CORREO;
+    try {
+      expect(await enviarResumenSinAtender(base(), { enviar })).toEqual({ ok: false, motivo: 'bandera_apagada' });
+    } finally {
+      if (antes !== undefined) process.env.LIKIDA_VIGIA_SIN_ATENDER_CORREO = antes;
+    }
+    expect(enviar).not.toHaveBeenCalled();
+  });
   it('apagado: no llama al proveedor y dice por qué', async () => {
     const enviar = vi.fn();
     for (const motivo of ['bandera_apagada', 'interruptor_apagado'] as const) {

@@ -34,6 +34,7 @@ import {
   datosUnidadVisibles, etapaDeViaje, ultimoHitoDe, type DatosUnidadCrudos, type DatosUnidadViaje, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
 } from './estatus_viaje';
 import { camposVisibles } from './aviso/privacidad';
+import { copiaConfigGuardadaPorOmision, normalizarFilaConfig, type ConfigGuardadaSinAtender } from './sin_atender/config_guardada';
 import { normalizarAlias } from './aviso/equivalencias';
 import { estatusViaje as estatusDelConductor } from '../conductor/servicios';
 import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaje';
@@ -1408,4 +1409,41 @@ export async function leerDestinatariosResumen(tenantId: string): Promise<Destin
     nivel2: conCorreo.filter((f) => num(f.nivel) === 2).map(aPersona),
     zona, festivos,
   };
+}
+
+
+// ── Ronda 6 / 0999: la configuración de «sin atender» por flota ──────────────────────────────────────
+
+const COLUMNAS_CONFIG_SIN_ATENDER = 'horario_atencion, palabras_clave, palabras_urgentes, equipo_nombres, insistencia_min, umbral_urgente_min, resumen_correo_habilitado';
+
+/**
+ * Lo que la flota dejó guardado para «sin atender». SIN FILA, o con la tabla ausente (base sin la 0999: 42P01 / PGRST205), devuelve los valores
+ * de arranque apagados (sin horario, sin equipo, resumen por correo apagado): falla cerrado. Cualquier otro error de la base LANZA, porque
+ * «no pude preguntar» no es «está apagado». Filtra por `tenant_id`.
+ */
+export async function leerConfigSinAtender(tenantId: string): Promise<ConfigGuardadaSinAtender> {
+  const r = await acotada(supabaseAdmin().from('vigia_sin_atender_config').select(COLUMNAS_CONFIG_SIN_ATENDER).eq('tenant_id', tenantId).maybeSingle(), 'vigia.sin_atender_config_leer');
+  if (r.error) {
+    if (sinMigrar(r.error)) return copiaConfigGuardadaPorOmision();
+    throw new Error(`vigia.sin_atender_config_leer: ${r.error.message}`);
+  }
+  return r.data ? normalizarFilaConfig(r.data) : copiaConfigGuardadaPorOmision();
+}
+
+/**
+ * Guarda (upsert por flota) la configuración YA VALIDADA con `validarConfigGuardada`. `ok:false` con mensaje llano si la base aún no tiene la tabla.
+ * El tenant sale de la sesión de quien llama, nunca de un formulario.
+ */
+export async function guardarConfigSinAtender(tenantId: string, userId: string | null, v: ConfigGuardadaSinAtender): Promise<Validacion<{ tenantId: string }>> {
+  const fila = {
+    tenant_id: tenantId, horario_atencion: v.horarioAtencion, palabras_clave: v.palabrasClave, palabras_urgentes: v.palabrasUrgentes, equipo_nombres: v.equipoNombres,
+    insistencia_min: v.insistenciaMin, umbral_urgente_min: v.umbralUrgenteMin, resumen_correo_habilitado: v.resumenCorreoHabilitado,
+    updated_at: new Date().toISOString(), updated_by: userId,
+  };
+  const r = await acotada(supabaseAdmin().from('vigia_sin_atender_config').upsert(fila, { onConflict: 'tenant_id' }), 'vigia.sin_atender_config_guardar');
+  if (r.error) {
+    if (sinMigrar(r.error)) return { ok: false, error: 'La configuración de esta pantalla todavía no está disponible en tu cuenta. Avísale a Likida.' };
+    throw new Error(`vigia.sin_atender_config_guardar: ${r.error.message}`);
+  }
+  return { ok: true, valor: { tenantId } };
 }

@@ -55,7 +55,7 @@ export const MAPA_DATOS_AGENTE: Readonly<Record<ModuloPerfil, EntradaMapa>> = {
   },
   vigia: {
     agente: 'vigia', nombre: 'A4 · Vigía de servicio al cliente',
-    tablas: ['vigia_evento', 'vigia_aviso', 'vigia_dato_viaje_manual'],
+    tablas: ['vigia_evento', 'vigia_aviso', 'vigia_dato_viaje_manual', 'vigia_sin_atender_config'],
     categorias: ['identidad_operador', 'comunicaciones', 'operativo'],
     subencargados: ['Meta (WhatsApp)', 'Resend', 'Supabase', 'Vercel'],
   },
