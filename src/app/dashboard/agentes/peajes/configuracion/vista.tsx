@@ -11,6 +11,7 @@ import { SeccionEntradas, type AccionesEntradas, type EntradasVista } from './en
 import { SeccionReglasCobro, type ReglasCobroVista } from './reglas-cobro';
 import { SeccionTarifario, type TarifarioVista } from './tarifario';
 import { SeccionUmbralesAvisos, type UmbralesAvisosVista } from './umbrales-avisos';
+import { SeccionCorreoAvisos, type CorreoAvisosVista } from './correo-avisos';
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
@@ -59,7 +60,7 @@ const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' }
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 export function VistaConfiguracionPeajes({
-  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, cruceViajes, inmovilizadas, clasesCobro, superficie,
+  sufijo, aviso, error, agenteApagado, tags, unidades, casetas, geocercas, cursos, convenios, mapeos, archivos, tiposGeocerca, buzon, entradas, acciones, reglasCobro, tarifario, umbralesAvisos, correoAvisos, cruceViajes, inmovilizadas, clasesCobro, superficie,
 }: {
   sufijo: string;
   aviso: string | null;
@@ -83,6 +84,8 @@ export function VistaConfiguracionPeajes({
   tarifario?: TarifarioVista;
   /** Umbrales de atípicos, plazo de reclamo, avisos e interruptores. Opcional. */
   umbralesAvisos?: UmbralesAvisosVista;
+  /** Correo de los avisos: destinatarios, fecha de corte, interruptor y prueba. Opcional. */
+  correoAvisos?: CorreoAvisosVista;
   /** Interruptor del cruce cobro ↔ viaje (por Icident). Opcional. */
   cruceViajes?: CruceViajesVista;
   /** Ventanas de unidades inmovilizadas (carga y borrado). Opcional. */
@@ -105,6 +108,7 @@ export function VistaConfiguracionPeajes({
       {clasesCobro && <SeccionClasesCobro datos={clasesCobro} />}
       {tarifario && <SeccionTarifario datos={tarifario} />}
       {umbralesAvisos && <SeccionUmbralesAvisos datos={umbralesAvisos} />}
+      {correoAvisos && <SeccionCorreoAvisos datos={correoAvisos} />}
       {cruceViajes && <SeccionCruceViajes datos={cruceViajes} />}
       {inmovilizadas && <SeccionInmovilizadas datos={inmovilizadas} />}
       <SeccionTags tags={tags} unidades={unidades} acciones={acciones} />

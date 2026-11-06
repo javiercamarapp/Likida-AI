@@ -3,7 +3,10 @@ import type { ResultadoSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/m
 import type { DestinatarioResumen } from '@/lib/likida/vigia/sin_atender_aviso/destinatarios';
 import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
+import type { ConfigGuardadaSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/motor';
 import { FormaRevision, type AccionEnviar, type AccionRevisar } from './formas';
+import { FormaConfiguracion, type AccionGuardarConfig } from './configuracion';
+import { textoHorario } from './texto_horario';
 import { TablaSinAtender, duracion } from './tabla';
 
 function Seccion({ id, titulo, info, children }: { id: string; titulo: string; info: InfoClave; children: React.ReactNode }) {
@@ -17,7 +20,7 @@ function Seccion({ id, titulo, info, children }: { id: string; titulo: string; i
 
 const ORIGEN = { servicio: 'Servicio al cliente', nivel1: 'Nivel 1', nivel2: 'Nivel 2 (solo si hay una alerta alta en un grupo crítico)' } as const;
 
-export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gruposOmitidos, destinatarios, correoEncendido, puedeEnviar, flota, acciones }: {
+export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gruposOmitidos, destinatarios, correoEncendido, puedeEnviar, flota, guardada, configLeida, acciones }: {
   sufijo: string;
   /** Si no se pudo leer, el motivo en palabras llanas: no se enseña un vacío que parezca «todo atendido». */
   error: string | null;
@@ -28,9 +31,14 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
   correoEncendido: boolean;
   puedeEnviar: boolean;
   flota?: string;
-  acciones: { revisar: AccionRevisar; enviar: AccionEnviar };
+  /** Lo que la flota dejó guardado (todo apagado si no hay nada). */
+  guardada: ConfigGuardadaSinAtender;
+  /** false = no se pudo leer lo guardado. */
+  configLeida: boolean;
+  acciones: { revisar: AccionRevisar; enviar: AccionEnviar; guardar: AccionGuardarConfig };
 }) {
   const r = resultado?.resumen;
+  const horario = textoHorario(guardada.horarioAtencion);
   return (
     <MarcoPagina
       titulo="Conversaciones sin atender"
@@ -60,16 +68,29 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
               </p>
             )}
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+              {horario !== null
+                ? `Horario de atención activo ${horario}: la espera fuera de ese horario no cuenta para el tiempo sin respuesta.`
+                : 'Sin horario de atención guardado: el tiempo sin respuesta cuenta minutos corridos, también de noche y en fin de semana.'}
+            </p>
+            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
               Los mensajes que solo traen una foto, un audio o un archivo, sin texto, no se cuentan como pendientes.
             </p>
             <FormaRevision revisar={acciones.revisar} enviar={acciones.enviar} flota={flota} puedeEnviar={puedeEnviar} inicial={<TablaSinAtender alertas={resultado?.alertas ?? []} />} />
           </Seccion>
 
+          {puedeEnviar && (
+            <Seccion id="sin-atender-config" titulo="Configuración de tu flota" info="vigia_sin_atender.config">
+              <FormaConfiguracion guardar={acciones.guardar} flota={flota} guardada={guardada} configLeida={configLeida} />
+            </Seccion>
+          )}
+
           <Seccion id="sin-atender-correo" titulo="Resumen por correo" info="vigia_sin_atender.correo">
             <p className="text-[12px]">
-              {correoEncendido
-                ? 'El envío por correo está encendido. Se manda solo cuando alguien lo pide con el botón; no sale nada automático.'
-                : 'El envío por correo está apagado: puedes revisar la lista, pero no se manda nada. Pídele a Likida que lo encienda.'}
+              {!correoEncendido
+                ? 'El envío por correo está apagado: puedes revisar la lista, pero no se manda nada. Pídele a Likida que lo encienda.'
+                : guardada.resumenCorreoHabilitado
+                  ? 'El envío por correo está encendido para tu flota. Se manda solo cuando alguien lo pide con el botón; no sale nada automático.'
+                  : 'El resumen por correo está apagado para tu flota: quien administra puede encenderlo en «Configuración de tu flota». Mientras tanto no se manda nada.'}
             </p>
             {destinatarios.length === 0 ? (
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>

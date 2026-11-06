@@ -3,20 +3,21 @@ import { diaEnZona } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { crearRepoVigia, leerDestinatariosResumen, type DestinatariosResumenCrudos } from '../repo';
+import { crearRepoVigia, guardarConfigSinAtender, leerConfigSinAtender, leerDestinatariosResumen, type DestinatariosResumenCrudos } from '../repo';
 import { leerChatsParaSinAtender, type ChatLeido } from '../historial/repo';
 import { hashAutor, salDeFlota } from '../historial/export_whatsapp';
-import { configEfectiva, puertoConfigSinAtenderReal, solicitudDeFormulario, type PlazosFlota, type PuertoConfigSinAtender, type SolicitudSinAtender } from './config_pantalla';
+import { configEfectiva, configGuardadaDeFormulario, equipoDeLaRevision, solicitudDeFormulario, type PlazosFlota, type PuertoConfigSinAtender, type SolicitudSinAtender } from './config_pantalla';
 import { destinatariosDelResumen } from './destinatarios';
 import { enviarResumenSinAtender, type MotivoNoEnviadoResumen } from './correo';
-import { resumenHabilitado, type EstadoResumen } from './interruptor';
-import { detectarSinAtender, type ConfigSinAtender, type ResultadoSinAtender } from './motor';
+import { resumenHabilitadoParaFlota, type EstadoResumen } from './interruptor';
+import { detectarSinAtender, type ConfigGuardadaSinAtender, type ConfigSinAtender, type ResultadoSinAtender } from './motor';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DE LA PANTALLA «SIN ATENDER» — con puertos para probarlas.
-// Revisar no guarda nada: cada revisión usa los plazos de la flota más lo que se escribe en el formulario. Enviar el resumen es de
-// quien administra la flota, solo por clic, y se asienta en la bitácora con conteos (jamás texto de mensajes). El tenant sale de
-// la sesión, nunca del formulario.
+// Revisar no guarda nada: cada revisión usa los plazos de la flota, lo que la flota dejó guardado (0999: horario de atención, palabras,
+// equipo, insistencia) y lo que se escribe en el formulario de la prueba. Guardar la configuración y enviar el resumen son de quien
+// administra la flota; el resumen sale solo por clic, con TODAS las capas encendidas (plataforma y flota), y ambos se asientan en la
+// bitácora con conteos (jamás texto de mensajes ni nombres). El tenant sale de la sesión, nunca del formulario.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface ContextoSinAtender { tenantId: string; rol: string; usuarioId: string | null; email: string | null; liga: string }
@@ -27,11 +28,20 @@ export interface DepsSinAtender {
   leerDestinatarios: (tenantId: string) => Promise<DestinatariosResumenCrudos>;
   puertoConfig: PuertoConfigSinAtender;
   detectar: typeof detectarSinAtender;
-  habilitado: () => Promise<EstadoResumen>;
+  /** Plataforma (bandera e interruptores) Y el interruptor propio de la flota. Apagado ante cualquier duda. */
+  habilitado: (tenantId: string) => Promise<EstadoResumen>;
   enviar: typeof enviarResumenSinAtender;
   bitacora: typeof anotarBitacora;
   ahora: () => number;
 }
+export const puertoConfigSinAtenderReal: PuertoConfigSinAtender = {
+  leer: (tenantId) => leerConfigSinAtender(tenantId),
+  guardar: async (tenantId, userId, valor) => {
+    const r = await guardarConfigSinAtender(tenantId, userId, valor);
+    return r.ok ? { ok: true } : { ok: false, error: r.error };
+  },
+};
+
 export const depsSinAtenderReales: DepsSinAtender = {
   leerChats: leerChatsParaSinAtender,
   leerPlazos: async (t) => {
@@ -41,7 +51,7 @@ export const depsSinAtenderReales: DepsSinAtender = {
   leerDestinatarios: leerDestinatariosResumen,
   puertoConfig: puertoConfigSinAtenderReal,
   detectar: detectarSinAtender,
-  habilitado: () => resumenHabilitado(),
+  habilitado: (t) => resumenHabilitadoParaFlota(t, async (id) => (await leerConfigSinAtender(id)).resumenCorreoHabilitado),
   enviar: enviarResumenSinAtender,
   bitacora: anotarBitacora,
   ahora: () => Date.now(),
@@ -69,7 +79,8 @@ export async function revisarSinAtender(tenantId: string, solicitud: SolicitudSi
   if (leidos === null) return { ok: false, sinDatos: true, error: 'Los grupos e históricos de clientes todavía no están disponibles en tu cuenta. Avísale a Likida.' };
   const [plazos, guardada, crudos] = await Promise.all([d.leerPlazos(tenantId), d.puertoConfig.leer(tenantId), d.leerDestinatarios(tenantId)]);
   const sal = salDeFlota(tenantId);
-  const equipoHashes = (solicitud.equipoNombres ?? []).map((n) => hashAutor(sal, n));
+  // El equipo es el guardado de la flota MÁS los nombres escritos para esta revisión.
+  const equipoHashes = equipoDeLaRevision(guardada?.equipoNombres ?? [], solicitud.equipoNombres ?? []).map((n) => hashAutor(sal, n));
   const cfg = configEfectiva({ plazos, guardada, solicitud, equipoHashes, zona: crudos.zona, festivos: crudos.festivos, vistaPreviaMax });
   if (!cfg.ok) return { ok: false, error: cfg.error };
   const ahora = d.ahora();
@@ -142,6 +153,7 @@ export function recortarPorCorte(r: ResultadoSinAtender, zona: string, corte: st
 
 const TEXTO_MOTIVO: Record<MotivoNoEnviadoResumen, string> = {
   interruptor_apagado: 'El envío del resumen está apagado en la plataforma. No se mandó nada.',
+  flota_apagada: 'El resumen por correo está apagado para tu flota. Quien administra puede encenderlo en «Configuración de tu flota»; no se mandó nada.',
   bandera_apagada: 'El resumen por correo todavía no está encendido para tu cuenta. Pídele a Likida que lo encienda; no se mandó nada.',
   sin_alertas: 'No hay conversaciones sin atender en la revisión (con esa fecha de corte): no se mandó nada.',
   sin_destinatarios: 'No hay a quién mandárselo: agrega correos en servicio al cliente o en la lista de directores del Vigía. No se mandó nada.',
@@ -161,7 +173,7 @@ export async function enviarResumenPanel(ctx: ContextoSinAtender, fd: FormData, 
   if (!s.ok) return { ok: false, error: s.error };
   if (!s.valor.fechaCorte) return no('sin_fecha_corte');
   try {
-    const estado = await d.habilitado();
+    const estado = await d.habilitado(ctx.tenantId);
     if (!estado.ok) return no(estado.motivo);
     const r = await revisarSinAtender(ctx.tenantId, s.valor, 0, d);
     if (!r.ok) return { ok: false, error: r.error };
@@ -170,7 +182,7 @@ export async function enviarResumenPanel(ctx: ContextoSinAtender, fd: FormData, 
     const ahora = new Date(d.ahora());
     const { destinatarios, turno } = destinatariosDelResumen({ crudos: rev.crudos, alertas: resultado.alertas, clienteDeChat: rev.clienteDeChat, ahora });
     const fechaLocal = diaEnZona(ahora, rev.crudos.zona);
-    const envio = await d.enviar({ tenantId: ctx.tenantId, resultado, destinatarios, liga: ctx.liga, turno, fechaLocal }, { habilitado: d.habilitado });
+    const envio = await d.enviar({ tenantId: ctx.tenantId, resultado, destinatarios, liga: ctx.liga, turno, fechaLocal }, { habilitado: () => d.habilitado(ctx.tenantId) });
     await d.bitacora({
       tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.sin_atender_resumen', entidad: 'vigia_historial', entidadId: ctx.tenantId,
       detalle: { enviado: envio.ok, motivo: envio.ok ? null : envio.motivo, alertas: resultado.alertas.length, destinatarios: destinatarios.length, turno, fechaLocal, corte: s.valor.fechaCorte },
@@ -180,5 +192,38 @@ export async function enviarResumenPanel(ctx: ContextoSinAtender, fd: FormData, 
   } catch (e) {
     logger.error('vigia.sin_atender_enviar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'mandar el resumen') };
+  }
+}
+
+export type ResultadoGuardadoUI = { ok: true; mensaje: string } | { ok: false; error: string };
+
+/**
+ * «Guardar configuración»: SOLO administración. Guarda horario de atención, palabras, equipo, insistencia y el interruptor del resumen por correo de ESTA flota
+ * (el tenant sale de la sesión). Se asienta en la bitácora con conteos: ni nombres ni texto de mensajes. No manda nada ni lee chats.
+ */
+export async function guardarConfigPanel(ctx: ContextoSinAtender, fd: FormData, d: DepsSinAtender = depsSinAtenderReales): Promise<ResultadoGuardadoUI> {
+  if (!puedeAdministrar(ctx.rol)) return { ok: false, error: 'Solo quien administra la flota puede guardar esta configuración.' };
+  const c = configGuardadaDeFormulario(fd);
+  if (!c.ok) return { ok: false, error: c.error };
+  try {
+    const r = await d.puertoConfig.guardar(ctx.tenantId, ctx.usuarioId, c.valor);
+    if (!r.ok) return { ok: false, error: r.error };
+    const v: ConfigGuardadaSinAtender = c.valor;
+    // La configuración ya quedó guardada: si la bitácora falla no se reporta como fallo de guardado.
+    try {
+      await d.bitacora({
+        tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.sin_atender_config', entidad: 'vigia_historial', entidadId: ctx.tenantId,
+        detalle: {
+          horario: v.horarioAtencion !== null, palabrasClave: v.palabrasClave.length, palabrasUrgentes: v.palabrasUrgentes.length, equipo: v.equipoNombres.length,
+          insistenciaMin: v.insistenciaMin, umbralUrgenteMin: v.umbralUrgenteMin, resumenCorreo: v.resumenCorreoHabilitado,
+        },
+      });
+    } catch (e) {
+      logger.error('vigia.sin_atender_config_bitacora_fallo', { err: e instanceof Error ? e.message : String(e) });
+    }
+    return { ok: true, mensaje: 'Configuración guardada. Se usa en cada revisión de tu flota; los chats que ya subiste no se tocan.' };
+  } catch (e) {
+    logger.error('vigia.sin_atender_config_guardar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'guardar la configuración') };
   }
 }

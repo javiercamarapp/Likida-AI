@@ -50,14 +50,14 @@ function listaTexto(v: unknown, max: number, largo: number): string[] {
   return salida;
 }
 
-const horarioValido = (h: unknown): h is HorarioAtencion => {
+export const horarioValido = (h: unknown): h is HorarioAtencion => {
   if (!h || typeof h !== 'object' || Array.isArray(h)) return false;
   const x = h as { desdeHora?: unknown; hastaHora?: unknown; diasHabiles?: unknown };
   if (!horaValida(x.desdeHora) || !esEntero(x.hastaHora) || x.hastaHora < 1 || x.hastaHora > 24 || x.hastaHora <= x.desdeHora) return false;
   if (x.diasHabiles === undefined) return true;
   return Array.isArray(x.diasHabiles) && x.diasHabiles.length > 0 && x.diasHabiles.every((d) => esEntero(d) && d >= 0 && d <= 6);
 };
-const MENSAJE_HORARIO = 'El horario de atención necesita hora de apertura (0-23), hora de cierre mayor (1-24) y días hábiles de 0 a 6.';
+export const MENSAJE_HORARIO = 'El horario de atención necesita hora de apertura (0-23), hora de cierre mayor (1-24) y días hábiles de 0 a 6.';
 
 /** Completa y acota (nunca lanza). `avisos` lista lo que se corrigió, en texto llano. */
 export function normalizarConfigSinAtender(entrada: Partial<ConfigSinAtender> | null | undefined): { config: ConfigSinAtender; avisos: string[] } {

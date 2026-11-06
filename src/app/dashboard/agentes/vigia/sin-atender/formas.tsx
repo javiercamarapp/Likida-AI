@@ -23,7 +23,7 @@ function Boton({ children, Icono, secundario, formAction }: { children: React.Re
   );
 }
 
-/** Los ajustes de esta revisión y, debajo, su resultado. Lo que se escribe NO se guarda: vale para esta revisión y para el resumen que se mande desde aquí. */
+/** Los ajustes de esta revisión y, debajo, su resultado. Lo que se escribe aquí es una PRUEBA: vale para esta revisión y para el resumen que se mande desde aquí, y se suma a lo guardado en la configuración de la flota. */
 export function FormaRevision({ revisar, enviar, flota, puedeEnviar, inicial }: {
   revisar: AccionRevisar; enviar: AccionEnviar; flota?: string; puedeEnviar: boolean; inicial: React.ReactNode;
 }) {
@@ -33,7 +33,7 @@ export function FormaRevision({ revisar, enviar, flota, puedeEnviar, inicial }: 
     <div className="space-y-4">
       <form action={despacharRevision} className="space-y-3" aria-describedby="sin-atender-aviso-prueba">
         {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
-        <p id="sin-atender-aviso-prueba" className={AYUDA} style={{ color: 'var(--muted)' }}>Lo que escribas aquí no se guarda: vale solo para esta revisión. Los campos vacíos usan los plazos de tu flota.</p>
+        <p id="sin-atender-aviso-prueba" className={AYUDA} style={{ color: 'var(--muted)' }}>Lo que escribas aquí es solo una prueba y no se guarda: vale para esta revisión. Los campos vacíos usan lo que dejó guardado tu flota o, si no hay nada, sus plazos.</p>
         <div className="grid sm:grid-cols-3 gap-3">
           <label><span className={ETIQUETA}>Plazo normal (min)</span><input name="umbralMin" inputMode="numeric" className="w-full" /></label>
           <label><span className={ETIQUETA}>Plazo de clientes críticos (min)</span><input name="umbralCriticoMin" inputMode="numeric" className="w-full" /></label>
@@ -48,7 +48,7 @@ export function FormaRevision({ revisar, enviar, flota, puedeEnviar, inicial }: 
         <label className="block">
           <span className={ETIQUETA}>Nombres de tu equipo, como salen en el chat (separados por coma)</span>
           <input name="equipo" className="w-full" aria-describedby="sin-atender-equipo" />
-          <span id="sin-atender-equipo" className={AYUDA} style={{ color: 'var(--muted)' }}>Sirve para corregir quién es del equipo sin volver a subir el chat.</span>
+          <span id="sin-atender-equipo" className={AYUDA} style={{ color: 'var(--muted)' }}>Se suman a los nombres que tu flota ya guardó. Sirve para corregir quién es del equipo sin volver a subir el chat.</span>
         </label>
         {puedeEnviar && (
           <label className="block sm:w-1/2">

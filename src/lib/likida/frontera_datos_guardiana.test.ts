@@ -673,7 +673,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 333;
 // `bitacora_auditoria` para que un reintento no duplique el descarte de correo; dos cadenas (una con `tenant_id is null`, otra con `eq tenant_id`, para que el filtro quede dentro de cada cadena), por `acotada` y con `limit(1)`.
 // Ronda 5 (Vigía «sin atender»): 2,481 → 2,486 (+5, medido; 0 archivos nuevos). Lecturas de solo consulta en los repos del Vigía que ya existían: `historial/repo.ts#leerChatsParaSinAtender` (grupos, importaciones y
 // mensajes por grupo) y `repo.ts#leerDestinatariosResumen` (directores y servicio al cliente con correo). Todas con `tenant_id`, por `acotada`, con `limit` y `order('id')`; ninguna escribe.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_486;
+// Ronda 6 (Vigía «sin atender», carril config, migración 0999): 2,486 → 2,488 (+2, medido con el guardián; 0 archivos nuevos). `vigia/repo.ts#leerConfigSinAtender` (una lectura de la fila de la flota
+// en `vigia_sin_atender_config`, filtrada por `tenant_id`, que tolera la tabla ausente) y `#guardarConfigSinAtender` (el upsert por flota de esa misma fila). Las dos por `acotada`; la configuración
+// por flota (horario, palabras, equipo, insistencia y el interruptor del correo) no tenía dónde vivir y es de la misma familia de tablas que `vigia_config`. Funcionalidad nueva, no código migrado.
+// Ronda 6 (carril tms-muestra): +1 sobre config (2,488 → 2,489, medido tras integrar; 0 archivos nuevos). `liquidacion_externa/repo.ts#leerPadronOperadores`: lectura de solo consulta (nombre y número de empleado) del padrón del tenant
+// para resolver al operador por NOMBRE en el formato «muestra-tms»; con `tenant_id`, por `acotada`, completa y demostrada con `traerTodo` y `order('id')`. No escribe.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_489;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

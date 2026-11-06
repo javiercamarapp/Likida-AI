@@ -4,12 +4,13 @@ import { firmarFlotaPintada } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
+import { CONFIG_GUARDADA_POR_OMISION, type ConfigGuardadaSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/motor';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { revisarSinAtender, VISTA_PREVIA_PANTALLA } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
+import { depsSinAtenderReales, revisarSinAtender, VISTA_PREVIA_PANTALLA } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
 import { destinatariosDelResumen } from '@/lib/likida/vigia/sin_atender_aviso/destinatarios';
 import { resumenHabilitado } from '@/lib/likida/vigia/sin_atender_aviso/interruptor';
 import { sufijoTenant } from '../../../sufijo';
-import { enviarResumenAccion, revisarSinAtenderAccion } from './acciones';
+import { enviarResumenAccion, guardarConfigAccion, revisarSinAtenderAccion } from './acciones';
 import { VistaSinAtender } from './vista';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Conversaciones sin atender' };
@@ -47,12 +48,22 @@ export default async function PaginaSinAtender({ searchParams }: { searchParams:
     error = mensajeParaPantalla(e, 'revisar las conversaciones');
   }
   const correoEncendido = (await resumenHabilitado()).ok;
+  // Lo que la flota dejó guardado. Si no se pudo leer, se dice (no se enseña «apagado» como si fuera lo guardado).
+  let guardada: ConfigGuardadaSinAtender = { ...CONFIG_GUARDADA_POR_OMISION, palabrasClave: [], palabrasUrgentes: [], equipoNombres: [] };
+  let configLeida = true;
+  try {
+    guardada = (await depsSinAtenderReales.puertoConfig.leer(tenantId)) ?? guardada;
+  } catch (e) {
+    configLeida = false;
+    logger.warn('vigia.sin_atender_config_no_leida', { err: e instanceof Error ? e.message : String(e) });
+  }
 
   return (
     <VistaSinAtender
       sufijo={sufijoTenant(sp)} error={error} resultado={resultado} gruposRevisados={gruposRevisados} gruposOmitidos={gruposOmitidos}
       destinatarios={destinatarios} correoEncendido={correoEncendido} puedeEnviar={puedeAdministrar(rol)} flota={flota ?? undefined}
-      acciones={{ revisar: revisarSinAtenderAccion, enviar: enviarResumenAccion }}
+      guardada={guardada} configLeida={configLeida}
+      acciones={{ revisar: revisarSinAtenderAccion, enviar: enviarResumenAccion, guardar: guardarConfigAccion }}
     />
   );
 }

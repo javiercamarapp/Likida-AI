@@ -11,14 +11,15 @@ vi.mock('next/navigation', () => ({ redirect: vi.fn((u: string) => { throw new E
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/errores', () => ({ mensajeParaPantalla: (_e: unknown, que: string) => `No se pudo ${que}` }));
 const revisar = vi.hoisted(() => vi.fn());
-vi.mock('@/lib/likida/vigia/sin_atender_aviso/acciones', () => ({ revisarSinAtender: revisar, VISTA_PREVIA_PANTALLA: 80 }));
+const leerConfig = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/likida/vigia/sin_atender_aviso/acciones', () => ({ revisarSinAtender: revisar, VISTA_PREVIA_PANTALLA: 80, depsSinAtenderReales: { puertoConfig: { leer: leerConfig } } }));
 vi.mock('@/lib/likida/vigia/sin_atender_aviso/interruptor', () => ({ resumenHabilitado: vi.fn(async () => ({ ok: false, motivo: 'bandera_apagada' })) }));
-vi.mock('./acciones', () => ({ revisarSinAtenderAccion: vi.fn(), enviarResumenAccion: vi.fn() }));
+vi.mock('./acciones', () => ({ revisarSinAtenderAccion: vi.fn(), enviarResumenAccion: vi.fn(), guardarConfigAccion: vi.fn() }));
 
 const Pagina = (await import('./page')).default;
 const { crudos, resultado, alerta } = await import('@/lib/likida/vigia/sin_atender_aviso/fixtures');
 
-type Props = { error: string | null; resultado: unknown; puedeEnviar: boolean; correoEncendido: boolean; gruposRevisados: number; sufijo: string };
+type Props = { guardada: { equipoNombres: string[]; resumenCorreoHabilitado: boolean }; configLeida: boolean; error: string | null; resultado: unknown; puedeEnviar: boolean; correoEncendido: boolean; gruposRevisados: number; sufijo: string };
 async function props(sp: Record<string, string> = {}): Promise<Props> {
   return ((await Pagina({ searchParams: Promise.resolve(sp) })) as ReactElement<Props>).props;
 }
@@ -28,6 +29,7 @@ beforeEach(() => {
   sesion = { tenantId: 't-sesion', rol: 'flota_admin', userId: 'u-sesion' };
   resolverEfectivo.mockImplementation(async () => sesion);
   puedeVerRuta.mockReturnValue(true);
+  leerConfig.mockResolvedValue(null);
   revisar.mockResolvedValue({ ok: true, revision: { resultado: resultado([alerta()]), gruposRevisados: 2, gruposOmitidos: 0, clienteDeChat: new Map(), crudos: crudos() } });
 });
 
@@ -56,5 +58,18 @@ describe('la página «sin atender»', () => {
     const p = await props();
     expect(p.error).toBe('No se pudo revisar las conversaciones');
     expect(p.resultado).toBeNull();
+  });
+  it('lee lo guardado de la flota de la sesión; sin fila o con la base caída la pantalla no lanza', async () => {
+    leerConfig.mockResolvedValue({ equipoNombres: ['Operador 1'], resumenCorreoHabilitado: true });
+    const p = await props({ tenant: 'otro' });
+    expect(leerConfig).toHaveBeenCalledWith('t-sesion');
+    expect(p.guardada).toMatchObject({ equipoNombres: ['Operador 1'], resumenCorreoHabilitado: true });
+    expect(p.configLeida).toBe(true);
+    leerConfig.mockResolvedValue(null);
+    expect((await props()).guardada).toMatchObject({ equipoNombres: [], resumenCorreoHabilitado: false });
+    leerConfig.mockRejectedValue(new Error('caída'));
+    const mal = await props();
+    expect(mal.configLeida).toBe(false);
+    expect(mal.guardada.resumenCorreoHabilitado).toBe(false);
   });
 });

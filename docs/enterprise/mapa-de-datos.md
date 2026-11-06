@@ -8,5 +8,5 @@
 | A1 · Liquidación | `viaje`, `gasto`, `liquidacion` | financiero, fiscal, comunicaciones | Meta (WhatsApp), OpenRouter (OCR y cuadre), Supabase, Vercel | - |
 | A2 · Peajes | `peaje_curso`, `peaje_regla_flota`, `peaje_aviso_enviado` | financiero, operativo | Supabase, Vercel, Resend | - |
 | A3 · Carta Porte | `cp_documento`, `cp_documento_evento` | fiscal, operativo | Supabase, Vercel, PAC (proveedor de timbrado) | El PAC contratado por cada flota no está identificado en el código: depende de la configuración de la flota. |
-| A4 · Vigía de servicio al cliente | `vigia_evento`, `vigia_aviso`, `vigia_dato_viaje_manual` | identidad_operador, comunicaciones, operativo | Meta (WhatsApp), Resend, Supabase, Vercel | - |
+| A4 · Vigía de servicio al cliente | `vigia_evento`, `vigia_aviso`, `vigia_dato_viaje_manual`, `vigia_sin_atender_config` | identidad_operador, comunicaciones, operativo | Meta (WhatsApp), Resend, Supabase, Vercel | - |
 | A5 · Conductores y jornada | `operador`, `jornada_dia`, `jornada_asiento`, `posicion` | identidad_operador, jornada_laboral, ubicacion | Meta (WhatsApp), Supabase, Vercel, Proveedor de GPS de la flota | El proveedor de GPS depende del conector que la flota active; no hay uno fijo. |
