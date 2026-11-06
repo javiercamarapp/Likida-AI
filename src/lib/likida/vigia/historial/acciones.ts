@@ -108,11 +108,14 @@ type ArchivoProcesado =
   | { ok: true; grupoNombre: string; mensajes: number; autores: number; notas: string[]; adjuntosSinTexto: number; sinAtender: ResumenGrupoSinAtender | null }
   | { ok: false; error: string; duplicado?: true };
 
+type Lectura = ReturnType<typeof leerExportWhatsapp>;
+type ArchivoPreparado = { ok: true; crudo: string; lectura: Lectura } | { ok: false; error: string };
+
 /**
- * El núcleo de importar UN chat a UN grupo ya elegido: lo comparten la subida de un archivo y la de varios. El permiso y el
- * equipo ya se comprobaron arriba; aquí van el tope, el zip, la lectura, la huella y el guardado.
+ * Valida y lee UN archivo SIN tocar la base (tope, zip, lectura, equipo): así el lote no crea un grupo para un archivo que luego
+ * resulta ilegible. No usa el grupo, solo el equipo y la sal de la flota.
  */
-async function procesarArchivo(ctx: ContextoGrupos, grupoId: string, equipo: readonly string[], archivo: ArchivoSubido | null, d: DepsGrupos): Promise<ArchivoProcesado> {
+function prepararArchivo(tenantId: string, equipo: readonly string[], archivo: ArchivoSubido | null): ArchivoPreparado {
   if (!archivo || archivo.bytes.length === 0) return { ok: false, error: 'Adjunta el archivo del chat exportado (.txt o .zip).' };
   if (archivo.bytes.length > MAX_ARCHIVO_BYTES) return { ok: false, error: 'El archivo pesa más de 4 MB. Exporta el chat «sin multimedia» o divídelo por periodos.' };
 
@@ -127,25 +130,31 @@ async function procesarArchivo(ctx: ContextoGrupos, grupoId: string, equipo: rea
     return { ok: false, error: 'El archivo debe ser el .txt de «Exportar chat» o el .zip que lo trae.' };
   }
 
+  const lectura = leerExportWhatsapp(crudo, { equipo, sal: salDeFlota(tenantId) });
+  if (lectura.mensajes.length === 0) {
+    return { ok: false, error: 'No pude leer ningún mensaje en ese archivo. Revisa que sea el chat exportado de WhatsApp (en iPhone o Android) y no una captura ni otro documento.' };
+  }
+  // A37-S58-02: un chat más largo que el tope NO se guarda cortado (las FAQs, los tiempos de respuesta y los pendientes se
+  // calcularían sobre un periodo viejo y se presentarían como el chat completo).
+  if (lectura.truncado) {
+    return { ok: false, error: `Ese chat tiene más de ${MAX_MENSAJES_IMPORTACION} mensajes y no se guardó: se habría cortado y los números saldrían de un periodo viejo. Exporta un periodo más corto (por ejemplo los últimos meses) y súbelo.` };
+  }
+  const hayCliente = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'cliente');
+  const hayEquipo = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'equipo');
+  if (!hayCliente || !hayEquipo) {
+    return { ok: false, error: hayEquipo
+      ? 'Todos los mensajes salieron como de tu equipo: revisa que los nombres que escribiste sean solo los de tu gente.'
+      : 'Ningún mensaje coincide con los nombres de tu equipo: escríbelos exactamente como salen en el chat.' };
+  }
+  return { ok: true, crudo, lectura };
+}
+
+/** Guarda un chat ya validado en UN grupo ya elegido: lo comparten la subida de un archivo y la de varios. */
+async function guardarPreparado(ctx: ContextoGrupos, grupoId: string, equipo: readonly string[], p: { crudo: string; lectura: Lectura }, d: DepsGrupos): Promise<ArchivoProcesado> {
+  const { crudo, lectura } = p;
   try {
     const grupo = await d.grupoDeFlota(ctx.tenantId, grupoId);
     if (!grupo) return { ok: false, error: 'No encuentro ese grupo en tu flota.' };
-    const lectura = leerExportWhatsapp(crudo, { equipo, sal: salDeFlota(ctx.tenantId) });
-    if (lectura.mensajes.length === 0) {
-      return { ok: false, error: 'No pude leer ningún mensaje en ese archivo. Revisa que sea el chat exportado de WhatsApp (en iPhone o Android) y no una captura ni otro documento.' };
-    }
-    // A37-S58-02: un chat más largo que el tope NO se guarda cortado (las FAQs, los tiempos de respuesta y los pendientes se
-    // calcularían sobre un periodo viejo y se presentarían como el chat completo).
-    if (lectura.truncado) {
-      return { ok: false, error: `Ese chat tiene más de ${MAX_MENSAJES_IMPORTACION} mensajes y no se guardó: se habría cortado y los números saldrían de un periodo viejo. Exporta un periodo más corto (por ejemplo los últimos meses) y súbelo.` };
-    }
-    const hayCliente = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'cliente');
-    const hayEquipo = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'equipo');
-    if (!hayCliente || !hayEquipo) {
-      return { ok: false, error: hayEquipo
-        ? 'Todos los mensajes salieron como de tu equipo: revisa que los nombres que escribiste sean solo los de tu gente.'
-        : 'Ningún mensaje coincide con los nombres de tu equipo: escríbelos exactamente como salen en el chat.' };
-    }
     const sha256 = createHash('sha256').update(crudo).digest('hex');
     const r = await d.guardarImportacion(ctx.tenantId, { grupoId, sha256, usuarioId: ctx.usuarioId, mensajes: lectura.mensajes });
     if (!r.ok) return { ok: false, duplicado: true, error: 'Ese mismo chat ya se había subido a este grupo: no se duplicó nada.' };
@@ -164,6 +173,17 @@ async function procesarArchivo(ctx: ContextoGrupos, grupoId: string, equipo: rea
     logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'guardar el histórico') };
   }
+}
+
+/** Valida y guarda UN archivo en un grupo ya elegido (la subida de un solo chat). */
+async function procesarArchivo(ctx: ContextoGrupos, grupoId: string, equipo: readonly string[], archivo: ArchivoSubido | null, d: DepsGrupos): Promise<ArchivoProcesado> {
+  let p: ArchivoPreparado;
+  try { p = prepararArchivo(ctx.tenantId, equipo, archivo); } catch (e) {
+    logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'leer el archivo') };
+  }
+  if (!p.ok) return p;
+  return guardarPreparado(ctx, grupoId, equipo, p, d);
 }
 
 function revisionSinAtender(sinAtender: ResumenGrupoSinAtender | null): string {
@@ -236,7 +256,16 @@ export async function importarLotePanel(ctx: ContextoGrupos, fd: FormData, entra
     if (nombreGrupo === '' || nombreGrupo.length > 120) { fila('error', 'Escribe el nombre del grupo para este archivo (hasta 120 letras).'); continue; }
     if (archivo.bytes.length === 0) { fila('error', 'El archivo está vacío.'); continue; }
 
+    // El archivo se valida ANTES de crear nada: un zip corrupto o un chat ilegible no deja un grupo vacío creado.
+    let prep: ArchivoPreparado;
+    try { prep = prepararArchivo(ctx.tenantId, equipo, archivo); } catch (e) {
+      logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
+      fila('error', mensajeParaPantalla(e, 'leer el archivo')); continue;
+    }
+    if (!prep.ok) { fila('error', prep.error); continue; }
+
     let grupoId: string | null = null;
+    let grupoNuevo = false;
     const hallados = porNombre.get(claveNombre(nombreGrupo)) ?? [];
     if (hallados.length > 1) { fila('error', 'Hay más de un grupo con ese nombre en tu flota: cámbialo en «Grupos» para distinguirlos, o súbelo por separado.'); continue; }
     if (hallados.length === 1) grupoId = hallados[0].id;
@@ -245,6 +274,7 @@ export async function importarLotePanel(ctx: ContextoGrupos, fd: FormData, entra
         const c = await d.crearGrupo(ctx.tenantId, { clienteId: clienteRaw, nombre: nombreGrupo, critico: false });
         if (!c.ok) { fila('error', c.error); continue; }
         grupoId = c.id;
+        grupoNuevo = true;
         porNombre.set(claveNombre(nombreGrupo), [{ id: c.id, nombre: nombreGrupo }]);
         await d.bitacora({ tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.grupo_creado', entidad: 'vigia_grupo', entidadId: c.id, detalle: { critico: false, desdeLote: true } });
       } catch (e) {
@@ -253,8 +283,8 @@ export async function importarLotePanel(ctx: ContextoGrupos, fd: FormData, entra
       }
     } else { fila('error', 'No hay un grupo con ese nombre en tu flota. Escribe el nombre de uno existente, o elige el cliente para que se cree.'); continue; }
 
-    const r = await procesarArchivo(ctx, grupoId, equipo, archivo, d);
-    if (r.ok) fila('importado', `${r.notas.join(' · ')}.${revisionSinAtender(r.sinAtender)}`, { mensajes: r.mensajes, adjuntosSinTexto: r.adjuntosSinTexto, ...(r.sinAtender ? { sinAtender: r.sinAtender } : {}) });
+    const r = await guardarPreparado(ctx, grupoId, equipo, prep, d);
+    if (r.ok) fila('importado', `${grupoNuevo ? 'Grupo nuevo creado con ese nombre (si fue un error de escritura, bórralo en «Grupos»). ' : ''}${r.notas.join(' · ')}.${revisionSinAtender(r.sinAtender)}`, { grupoNuevo, mensajes: r.mensajes, adjuntosSinTexto: r.adjuntosSinTexto, ...(r.sinAtender ? { sinAtender: r.sinAtender } : {}) });
     else fila(r.duplicado ? 'duplicado' : 'error', r.error);
   }
 

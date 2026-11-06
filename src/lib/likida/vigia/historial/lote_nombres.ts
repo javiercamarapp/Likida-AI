@@ -30,6 +30,8 @@ export interface ResultadoArchivoLote {
   /** Texto en español para la pantalla: lo que pasó con este archivo. */
   detalle: string;
   mensajes?: number;
+  /** El grupo no existía y se creó con ese nombre al importar. */
+  grupoNuevo?: boolean;
   /** Adjuntos sin texto contados en ESTE archivo (solo se cuentan al importar; no se guardan). */
   adjuntosSinTexto?: number;
   sinAtender?: ResumenGrupoSinAtender;

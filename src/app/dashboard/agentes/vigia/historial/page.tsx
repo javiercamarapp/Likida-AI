@@ -11,7 +11,7 @@ import { crearRepoVigia } from '@/lib/likida/vigia/repo';
 import { analizarHistorial } from '@/lib/likida/vigia/historial/analisis';
 import { pendientesDeHistorial } from '@/lib/likida/vigia/historial/pendientes';
 import { leerClientesParaGrupo, leerGrupos, leerMensajesHistorial, leerRespuestasRapidas } from '@/lib/likida/vigia/historial/repo';
-import { altaGrupoPanel, aprobarRespuestaRapidaPanel, borrarGrupoPanel, criticoGrupoPanel, importarLotePanel, retirarRespuestaRapidaPanel } from '@/lib/likida/vigia/historial/acciones';
+import { altaGrupoPanel, aprobarRespuestaRapidaPanel, borrarGrupoPanel, criticoGrupoPanel, importarLotePanel, retirarRespuestaRapidaPanel, type EntradaLote } from '@/lib/likida/vigia/historial/acciones';
 import { sufijoTenant } from '../../../sufijo';
 import { VistaHistorialVigia } from './vista';
 import type { ResultadoGrupos } from './formas';
@@ -109,9 +109,14 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
     const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: 'No tienes acceso a esta pantalla.' };
     // Un campo vacío del navegador (sin archivo elegido) llega como File sin nombre ni bytes: no cuenta como archivo.
-    const subidos = fd.getAll('archivo').filter((f): f is File => f instanceof File && (f.size > 0 || f.name !== ''));
-    const nombres = fd.getAll('grupoNombre').map((n) => String(n));
-    const entradas = await Promise.all(subidos.map(async (f, i) => ({ archivo: { nombre: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }, grupoNombre: nombres[i] ?? '' })));
+    // El nombre del grupo viaja con el índice de SU archivo (grupoNombre_0, grupoNombre_1...): un hueco no desalinea los demás.
+    const entradas: EntradaLote[] = [];
+    const todos = fd.getAll('archivo');
+    for (let i = 0; i < todos.length; i++) {
+      const f = todos[i];
+      if (!(f instanceof File) || (f.size === 0 && f.name === '')) continue;
+      entradas.push({ archivo: { nombre: f.name, bytes: new Uint8Array(await f.arrayBuffer()) }, grupoNombre: String(fd.get(`grupoNombre_${i}`) ?? '') });
+    }
     const r = await importarLotePanel(c, fd, entradas);
     if (r.ok) revalidatePath(RUTA);
     return r;

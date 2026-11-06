@@ -48,6 +48,23 @@ const entrada = (nombre: string, bytes: Uint8Array, grupoNombre = '') => ({ arch
 const EQ = fd({ equipo: 'Ana Servicio' });
 
 describe('importarLotePanel', () => {
+  it('zip corrupto con cliente elegido y grupo inexistente: NO crea el grupo ni la bitácora', async () => {
+    const d = deps();
+    const r = await importarLotePanel(dueno, fd({ equipo: 'Ana Servicio', clienteId: C }), [entrada('roto.zip', new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4, 5, 6]), 'Grupo Nuevo')], d);
+    expect(r.ok).toBe(false);
+    expect(d.crearGrupo).not.toHaveBeenCalled();
+    expect(d.bitacora).not.toHaveBeenCalled();
+    expect(d.guardarImportacion).not.toHaveBeenCalled();
+  });
+
+  it('grupo creado desde el lote: el resultado avisa que es nuevo', async () => {
+    const d = deps();
+    const r = await importarLotePanel(dueno, fd({ equipo: 'Ana Servicio', clienteId: C }), [entrada('x.txt', enc(CHAT_A), 'Grupo Nuevo')], d);
+    if (!r.ok) throw new Error('x');
+    expect(r.archivos[0].grupoNuevo).toBe(true);
+    expect(r.archivos[0].detalle).toContain('Grupo nuevo creado');
+  });
+
   it('lote mixto (.txt y .zip): importa cada uno en su grupo y responde por archivo', async () => {
     const d = deps();
     const r = await importarLotePanel(dueno, EQ, [

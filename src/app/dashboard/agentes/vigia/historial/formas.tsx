@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { Save, Upload, Trash2, Check } from 'lucide-react';
 import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-resultado';
 import { BotonEnlace } from '@/app/ui-v2/componentes';
-import { AVISO_SOLO_TEXTO, nombreGrupoDeArchivo, MAX_ARCHIVOS_LOTE, textoAdjuntosSinTexto, type ResultadoLote } from '@/lib/likida/vigia/historial/lote_nombres';
+import { AVISO_SOLO_TEXTO, nombreGrupoDeArchivo, MAX_ARCHIVOS_LOTE, type ResultadoLote } from '@/lib/likida/vigia/historial/lote_nombres';
 
 export type ResultadoGrupos = ResultadoUI;
 export type AccionGrupos = (previo: ResultadoGrupos, fd: FormData) => Promise<ResultadoGrupos>;
@@ -106,7 +106,7 @@ export function FormaImportar({ accion, grupos, clientes, sufijo }: {
           {nombres.map((n, i) => (
             <label key={`${n.archivo}-${i}`} className="block">
               <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{n.archivo}</span>
-              <input name="grupoNombre" value={n.grupo} maxLength={120} required list="grupos-existentes" aria-label={`Nombre del grupo para ${n.archivo}`} onChange={(e) => setNombres((prev) => prev.map((x, j) => (j === i ? { ...x, grupo: e.target.value } : x)))} className="w-full" />
+              <input name={`grupoNombre_${i}`} value={n.grupo} maxLength={120} required list="grupos-existentes" aria-label={`Nombre del grupo para ${n.archivo}`} onChange={(e) => setNombres((prev) => prev.map((x, j) => (j === i ? { ...x, grupo: e.target.value } : x)))} className="w-full" />
             </label>
           ))}
           <datalist id="grupos-existentes">{grupos.map((g) => <option key={g.id} value={g.nombre} />)}</datalist>
@@ -132,7 +132,6 @@ export function FormaImportar({ accion, grupos, clientes, sufijo }: {
           {estado.archivos.map((r, i) => (
             <li key={`${r.archivo}-${i}`} className="hairline rounded-lg px-2.5 py-1.5">
               <strong>{ROTULO_ESTADO[r.estado]}</strong>: {r.archivo} → «{r.grupo}». {r.detalle}
-              {r.adjuntosSinTexto && r.adjuntosSinTexto > 0 ? <span className="block" style={{ color: 'var(--muted)' }}>{textoAdjuntosSinTexto(r.adjuntosSinTexto)}.</span> : null}
             </li>
           ))}
         </ul>

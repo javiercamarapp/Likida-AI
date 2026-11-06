@@ -61,6 +61,9 @@ const ENCABEZADO_ANDROID = new RegExp(String.raw`^${FECHA},?\s+${HORA}\s+-\s+(.*
 const MEDIO_OMITIDO = /^(imagen|video|audio|sticker|gif|documento|contacto|ubicacion) omitid[oa]s?$/;
 const FRASES_SISTEMA = ['multimedia omitido', 'media omitted', 'se elimino este mensaje', 'eliminaste este mensaje', 'este mensaje fue eliminado', 'mensaje eliminado'];
 
+/** Android con multimedia: «IMG-20260912-WA0001.jpg (archivo adjunto)» / «(file attached)». */
+const ADJUNTO_ANDROID = /\((archivo adjunto|file attached)\)$/;
+
 function normalizarMedio(texto: string): string {
   return texto.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[<>.]/g, '').trim();
 }
@@ -68,13 +71,13 @@ function normalizarMedio(texto: string): string {
 /** Un adjunto omitido de la exportación (no es texto y no se revisa). Distinto de una llamada o un mensaje borrado. */
 function esAdjuntoOmitido(texto: string): boolean {
   const n = normalizarMedio(texto);
-  return n.startsWith('adjunto:') || MEDIO_OMITIDO.test(n) || n === 'multimedia omitido' || n === 'media omitted';
+  return n.startsWith('adjunto:') || ADJUNTO_ANDROID.test(n) || MEDIO_OMITIDO.test(n) || n === 'multimedia omitido' || n === 'media omitted';
 }
 
 /** Lo que WhatsApp pone donde iría un archivo o un mensaje borrado: no es texto del chat. Sin expresiones anidadas. */
 function esMultimedia(texto: string): boolean {
   const n = normalizarMedio(texto);
-  if (n.startsWith('adjunto:')) return true;
+  if (n.startsWith('adjunto:') || ADJUNTO_ANDROID.test(n)) return true;
   if (n.startsWith('llamada perdida') || n.startsWith('llamada de voz') || n.startsWith('llamada de video') || n.startsWith('videollamada perdida')) return true;
   return MEDIO_OMITIDO.test(n) || FRASES_SISTEMA.includes(n);
 }

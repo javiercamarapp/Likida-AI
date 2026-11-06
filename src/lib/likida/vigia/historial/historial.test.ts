@@ -79,6 +79,13 @@ describe('leerExportWhatsapp', () => {
     expect(r.mensajes.map((m) => m.texto)).toEqual(['Ya salió la unidad']);
   });
 
+  it('cuenta los adjuntos de Android con «(archivo adjunto)» y «(file attached)» y no los guarda como texto', () => {
+    const txt = ['12/09/2026 10:00 - Cliente Uno: IMG-20260912-WA0001.jpg (archivo adjunto)', '12/09/2026 10:01 - Cliente Uno: PTT-20260912-WA0002.opus (file attached)', '12/09/2026 10:02 - Ana Servicio: Ya salió la unidad'].join('\n');
+    const r = leerExportWhatsapp(txt, OPC);
+    expect(r.adjuntosOmitidos).toBe(2);
+    expect(r.mensajes.map((m) => m.texto)).toEqual(['Ya salió la unidad']);
+  });
+
   it('sin adjuntos el conteo es cero', () => {
     expect(leerExportWhatsapp('12/09/2026 10:00 - Cliente Uno: hola', OPC).adjuntosOmitidos).toBe(0);
   });
