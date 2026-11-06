@@ -24,6 +24,7 @@ export function SeccionCorreoAvisos({ datos }: { datos: CorreoAvisosVista }) {
   const { config, puedeAdministrar, servicioActivo, acciones } = datos;
   return (
     <section className="card p-4" id="correo-avisos">
+      {/* sin-info: título de la sección de correo de la página de configuración, que no usa el marco con ⓘ */}
       <h2 className="font-display text-[15px] font-semibold mb-1">Avisos de Peajes por correo</h2>
       <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
         A qué correos llega el aviso de cobros sin reclamar cerca de su plazo y el del archivo que falta. Viene <b>apagado</b>: mientras no lo enciendas no se manda
