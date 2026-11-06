@@ -8,7 +8,7 @@
 //     "Percepciones": [ { "Descripcion": "", "Monto": 0.00 } ],
 //     "Deducciones":  [ { "Descripcion": "", "Monto": 0.00 } ] }
 //
-// Procedencia: pegada por Javier el 5-nov; se INFIERE que es del equipo de sistemas del cliente (sistemas del cliente). No hay envoltorio,
+// Procedencia: recibida el 5-nov-2026; se INFIERE que es del equipo de sistemas del cliente. No hay envoltorio,
 // paginación, zona horaria ni autenticación confirmados: esta pieza es PURA (sin red, sin base, sin credenciales) y solo
 // convierte lo que ya se leyó. Cableado a la ruta/lector: pendiente de confirmar esos datos (ver informe de la ronda).
 //
@@ -64,8 +64,8 @@ export const CONTRATOS_DESGLOSE_TMS = {
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
 export type CodigoRevision =
-  | 'fila_invalida' | 'bitacora_invalida' | 'operador_vacio' | 'operador_sin_padron' | 'operador_no_encontrado' | 'operador_homonimo'
-  | 'unidad_invalida' | 'fecha_invalida' | 'fechas_invertidas'
+  | 'fila_invalida' | 'bitacora_invalida' | 'operador_vacio' | 'operador_sin_padron' | 'operador_no_encontrado' | 'operador_homonimo' | 'operador_sin_numero'
+  | 'unidad_invalida' | 'fecha_invalida' | 'fechas_invertidas' | 'bitacora_repetida'
   | 'estructura_invalida' | 'sin_renglones' | 'descripcion_vacia'
   | 'monto_nulo' | 'monto_no_numerico' | 'monto_negativo' | 'monto_decimales' | 'monto_excesivo'
   | 'concepto_desconocido' | 'concepto_lado_inesperado' | 'contrato_interno';
@@ -84,7 +84,7 @@ export interface OperadorPadron {
 
 export type PadronOperadores = ReadonlyArray<OperadorPadron>;
 
-export interface ConfigMuestraJoseLuis {
+export interface ConfigMuestraTms {
   /**
    * `arreglo`: el cuerpo ES la lista. `envuelto`: la lista vive en `rutaLista`. `auto` (defecto): lo que venga; un objeto suelto
    * con `BitacoraID` cuenta como una sola bitácora.
@@ -196,7 +196,7 @@ export function normalizarNombre(s: string): string {
 
 type Resolucion =
   | { ok: true; operador: OperadorPadron }
-  | { ok: false; codigo: 'operador_sin_padron' | 'operador_no_encontrado' | 'operador_homonimo' };
+  | { ok: false; codigo: 'operador_sin_padron' | 'operador_no_encontrado' | 'operador_homonimo' | 'operador_sin_numero' };
 
 export function resolverOperadorPorNombre(nombre: string, padron: PadronOperadores | undefined): Resolucion {
   if (padron === undefined) return { ok: false, codigo: 'operador_sin_padron' };
@@ -206,6 +206,8 @@ export function resolverOperadorPorNombre(nombre: string, padron: PadronOperador
   const numeros = new Set(coinciden.map((o) => o.numeroEmpleado.trim()));
   if (numeros.size === 0) return { ok: false, codigo: 'operador_no_encontrado' };
   if (numeros.size > 1) return { ok: false, codigo: 'operador_homonimo' };
+  // Una única persona, pero sin número de empleado en el padrón: no hay con qué armar el desglose (no se inventa).
+  if (coinciden[0].numeroEmpleado.trim() === '') return { ok: false, codigo: 'operador_sin_numero' };
   return { ok: true, operador: coinciden[0] };
 }
 
@@ -226,7 +228,7 @@ function bitacoraIdDe(v: unknown): string | null {
 }
 
 /** Convierte UNA bitácora de la muestra. Nunca lanza por datos malos: los reporta en `revision`. */
-export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestraJoseLuis, 'padron'> = {}): ResultadoBitacoraMuestra {
+export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestraTms, 'padron'> = {}): ResultadoBitacoraMuestra {
   const revision: MotivoRevision[] = [];
   const ignorados: Array<{ donde: string; motivo: string }> = [];
   const categorias: Array<{ donde: string; categoria: string }> = [];
@@ -314,7 +316,8 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
     else motivo(r.codigo, 'Operador', r.codigo === 'operador_homonimo'
       ? 'Más de una persona del padrón coincide con ese nombre; no se adivina: revisión humana.'
       : r.codigo === 'operador_sin_padron' ? 'No hay padrón de operadores contra el cual resolver el nombre.'
-        : 'Ningún operador del padrón coincide con ese nombre.');
+        : r.codigo === 'operador_sin_numero' ? 'El operador del padrón que coincide no tiene número de empleado; hay que capturarlo.'
+          : 'Ningún operador del padrón coincide con ese nombre.');
   }
 
   // ¿Hay lo mínimo para armar un desglose interno válido?
@@ -347,7 +350,7 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
 // ── La lista completa ───────────────────────────────────────────────────────
 
 /** Saca la lista de bitácoras del cuerpo según el envoltorio configurado. Lanza `EnvoltorioInvalido` si no coincide. */
-export function listaDeMuestra(cuerpo: unknown, config: Pick<ConfigMuestraJoseLuis, 'envoltorio' | 'rutaLista'> = {}): unknown[] {
+export function listaDeMuestra(cuerpo: unknown, config: Pick<ConfigMuestraTms, 'envoltorio' | 'rutaLista'> = {}): unknown[] {
   const modo = config.envoltorio ?? 'auto';
   const ruta = config.rutaLista ?? 'data';
   if (Array.isArray(cuerpo)) {
@@ -373,7 +376,7 @@ export interface ResultadoMuestra {
 }
 
 /** Convierte la respuesta completa. Una bitácora mala no tumba a las demás. */
-export function convertirMuestraJoseLuis(cuerpo: unknown, config: ConfigMuestraJoseLuis = {}): ResultadoMuestra {
+export function convertirMuestraTms(cuerpo: unknown, config: ConfigMuestraTms = {}): ResultadoMuestra {
   const resultados = listaDeMuestra(cuerpo, config).map((f) => convertirBitacoraMuestra(f, config));
   return {
     resultados,

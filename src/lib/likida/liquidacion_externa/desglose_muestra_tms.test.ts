@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  centavosDeMontoMuestra, convertirBitacoraMuestra, convertirMuestraJoseLuis, listaDeMuestra, EnvoltorioInvalido,
+  centavosDeMontoMuestra, convertirBitacoraMuestra, convertirMuestraTms, listaDeMuestra, EnvoltorioInvalido,
   resolverOperadorPorNombre, CONTRATOS_DESGLOSE_TMS, NO_DISPONIBLE_MUESTRA,
 } from './desglose_muestra_tms';
 import { BITACORA_MUESTRA, NETO_MUESTRA_CENTAVOS, PADRON_MUESTRA } from './desglose_muestra_tms.fixture';
@@ -137,8 +137,8 @@ describe('muestra-tms · montos sin errores de coma flotante', () => {
 describe('muestra-tms · envoltorio configurable', () => {
   const una = BITACORA_MUESTRA;
   it('arreglo directo y {data:[...]} dan lo mismo en modo auto', () => {
-    const a = convertirMuestraJoseLuis([una], { padron });
-    const b = convertirMuestraJoseLuis({ data: [una] }, { padron });
+    const a = convertirMuestraTms([una], { padron });
+    const b = convertirMuestraTms({ data: [una] }, { padron });
     expect(a.listas).toEqual(b.listas);
     expect(a.listas).toHaveLength(1);
   });
@@ -151,7 +151,7 @@ describe('muestra-tms · envoltorio configurable', () => {
     expect(() => listaDeMuestra('x')).toThrow(EnvoltorioInvalido);
   });
   it('una bitácora mala no tumba a las demás y se separa a revisión', () => {
-    const r = convertirMuestraJoseLuis({ data: [una, { ...una, BitacoraID: 0 }, 7] }, { padron });
+    const r = convertirMuestraTms({ data: [una, { ...una, BitacoraID: 0 }, 7] }, { padron });
     expect(r.listas).toHaveLength(1);
     expect(r.enRevision.map((x) => x.revision[0].codigo)).toEqual(['bitacora_invalida', 'fila_invalida']);
   });

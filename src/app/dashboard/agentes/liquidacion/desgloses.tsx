@@ -589,6 +589,9 @@ function EstadoCabecera({ d }: { d: DetalleDesglose }) {
 export function ayudaExcepcion(tipo: TipoExcepcion, detalle: Record<string, unknown> = {}): string {
   if (tipo === 'operador_no_encontrado') {
     if (detalle.motivo === 'baja') return 'Este operador está dado de baja en Likida: reactívalo (o corrige su número de empleado) y el desglose se procesa en la siguiente lectura.';
+    // Formato por nombre (supuesto hasta la especificación oficial): el sistema de tu empresa manda al operador solo por nombre.
+    if (detalle.motivo === 'nombre_ambiguo') return 'El sistema de tu empresa manda al operador solo por nombre y hay más de un operador con ese nombre en Likida: no se sabe a quién corresponde, así que no se recibió. Distingue los nombres en Operadores y vuelve a mandar la bitácora.';
+    if (detalle.motivo === 'nombre_sin_alta') return 'El sistema de tu empresa manda al operador solo por nombre y ninguno de Operadores coincide (o al que coincide le falta el número de empleado): no se recibió. Revisa que esté escrito igual y con su número de empleado, y vuelve a mandar la bitácora.';
     if (detalle.motivo === 'ambiguo') return 'El número de empleado, el teléfono o el id apuntan a más de un operador, o a operadores distintos: no se sabe a quién entregárselo. Corrige el duplicado en Operadores; no lo des de alta otra vez.';
   }
   return EXCEPCION[tipo]?.ayuda ?? '';

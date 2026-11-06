@@ -12,7 +12,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { exigir } from '../pg';
+import { exigir, traerTodo } from '../pg';
 import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
@@ -378,6 +378,21 @@ export async function resolverOperadorDestino(
 
 /** Los viajes de Likida que coinciden con los folios del cliente. Vacío no es
  *  error: el viaje puede vivir solo en su TMS. */
+/**
+ * Padrón de la flota para resolver al operador por NOMBRE (contrato «muestra-tms», SUPUESTO hasta la especificación oficial).
+ * Trae a TODOS los operadores del tenant (activos y de baja) para que una homonimia con alguien de baja también se vea:
+ * resolver «único» sobre un padrón recortado sería adivinar. Lectura completa y demostrada (`traerTodo`) o lanza. Solo nombre y
+ * número de empleado; nada de teléfonos ni correos. Quien aún no tiene número viaja con `''` (cuenta para la homonimia).
+ */
+export async function leerPadronOperadores(tenantId: string): Promise<Array<{ numeroEmpleado: string; nombre: string }>> {
+  const filas = await traerTodo<{ numero_empleado: string | null; nombre: string | null }>(
+    (a, b) => acotada(supabaseAdmin().from('operador').select('numero_empleado, nombre', { count: 'exact' })
+      .eq('tenant_id', tenantId).order('id').range(a, b), 'liqext.padron_operadores') as never,
+    'liqext.padron_operadores');
+  return filas.flatMap((f) => (typeof f.nombre === 'string' && f.nombre.trim() !== ''
+    ? [{ numeroEmpleado: typeof f.numero_empleado === 'string' ? f.numero_empleado.trim() : '', nombre: f.nombre }] : []));
+}
+
 export async function resolverViajeIds(tenantId: string, folios: string[]): Promise<string[]> {
   if (folios.length === 0) return [];
   const res = await acotada(supabaseAdmin().from('viaje')

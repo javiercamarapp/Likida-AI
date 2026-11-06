@@ -15,6 +15,11 @@
 //   · una guarda que retiene        → queda pendiente, sin entregas, con su excepción;
 //   · operador que no existe        → excepción `operador_no_encontrado`.
 //
+// FORMATO ADICIONAL «muestra-tms» (CONTRATO SUPUESTO hasta recibir la especificación oficial del sistema de transporte del cliente):
+// `{ "formato": "muestra-tms", "version": 1, "bitacoras": [ … ] }` o una bitácora suelta con `BitacoraID`. APAGADO por defecto y
+// falla cerrado (403). El operador llega por NOMBRE y se resuelve contra los operadores del tenant: ausente o ambiguo ⇒ la bitácora
+// queda EN REVISIÓN (bandeja de excepciones, `datos.enRevision`) y no se recibe ni se envía. Ver `desglose_muestra_recepcion.ts`.
+//
 // ESTA RUTA NO ENTREGA: solo recibe y programa. Los correos los manda `procesarEntregasCorreo` (cron).
 //
 // Respuesta `{ datos: { recibidas, idempotentes, retenidas, excepciones: [{ clave, motivo }] } }`.
@@ -31,9 +36,13 @@ import { leerCuerpo, traducirFalla, CampoInvalido } from '../../_escritura';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora } from '@/lib/likida/liquidacion_externa/desglose_contrato';
+import { leerPadronOperadores } from '@/lib/likida/liquidacion_externa/repo';
 import { recibirDesglose } from '@/lib/likida/liquidacion_externa/desglose_recibir';
-import { DesgloseEnConflicto } from '@/lib/likida/liquidacion_externa/repo_correo';
+import { DesgloseEnConflicto, abrirExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { claveDeBitacora, claveDeLiquidacion } from '@/lib/likida/liquidacion_externa/desglose_contrato';
+import {
+  esFormatoMuestraTms, muestraTmsHabilitada, prepararMuestraTms, registrarRevisionesMuestra, resumenRevisiones, SISTEMA_ORIGEN_MUESTRA_TMS,
+} from '@/lib/likida/liquidacion_externa/desglose_muestra_recepcion';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -51,6 +60,8 @@ export interface RespuestaDesgloses {
   idempotentes: number;
   retenidas: number;
   excepciones: Array<{ clave: string; motivo: string }>;
+  /** SOLO con el formato `muestra-tms` (SUPUESTO): bitácoras que NO se recibieron y esperan revisión humana, con motivos genéricos. */
+  enRevision?: Array<{ indice: number; bitacora: string | null; motivos: Array<{ codigo: string; campo: string }> }>;
 }
 
 type Preparado = { ok: true; desgloses: DesgloseBitacora[]; correccion: { motivo: string } | null } | { ok: false; respuesta: NextResponse };
@@ -114,20 +125,37 @@ export async function POST(req: Request) {
   if (!cuerpo.ok) return cuerpo.respuesta;
 
   let preparado: Preparado;
+  let sistemaOrigen = SISTEMA_ORIGEN;
+  let enRevision: NonNullable<RespuestaDesgloses['enRevision']> | undefined;
   try {
-    preparado = preparar(cuerpo.cuerpo);
+    if (esFormatoMuestraTms(cuerpo.cuerpo)) {
+      // Formato «muestra-tms» (SUPUESTO hasta la especificación oficial): apagado por defecto y falla cerrado.
+      const hab = await muestraTmsHabilitada(acceso.tenantId);
+      if (!hab.ok) {
+        return errorApi('sin_permiso', 'Este formato de entrega todavía no está habilitado para tu flota. Usa el contrato de desgloses vigente o pide que lo activen.');
+      }
+      const m = prepararMuestraTms(cuerpo.cuerpo, await leerPadronOperadores(acceso.tenantId));
+      if (!m.ok) return errorApi('parametro_invalido', m.mensaje);
+      await registrarRevisionesMuestra(acceso.tenantId, m.revisiones, (b) => claveDeBitacora(undefined, b), { abrirExcepcion, ahora: () => new Date() });
+      preparado = { ok: true, desgloses: m.desgloses, correccion: null };
+      sistemaOrigen = SISTEMA_ORIGEN_MUESTRA_TMS;
+      enRevision = resumenRevisiones(m.revisiones);
+    } else {
+      preparado = preparar(cuerpo.cuerpo);
+    }
   } catch (e) {
     return traducirFalla('v1.liquidaciones_externas.desgloses.post', acceso.tenantId, e);
   }
   if (!preparado.ok) return preparado.respuesta;
 
   const salida: RespuestaDesgloses = { recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [] };
+  if (enRevision !== undefined) salida.enRevision = enRevision;
   try {
     for (const d of preparado.desgloses) {
       let r: Awaited<ReturnType<typeof recibirDesglose>>;
       try {
         r = await recibirDesglose(acceso.tenantId, d, undefined, {
-          sistemaOrigen: SISTEMA_ORIGEN,
+          sistemaOrigen,
           ...(preparado.correccion ? { correccion: { motivo: preparado.correccion.motivo, actor: String(acceso.rol) } } : {}),
         });
       } catch (e) {
