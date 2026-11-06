@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { enviarAvisoCorreo, MAX_PARRAFO, type AvisoCorreo } from '@/lib/likida/avisos_correo';
 import type { TurnoActual } from '../turnos';
-import { resumenHabilitado, type EstadoResumen } from './interruptor';
+import { resumenHabilitadoParaFlota, type EstadoResumen } from './interruptor';
 import type { AlertaSinAtender, MotivoSinAtender, ResultadoSinAtender } from './motor';
 import type { DestinatarioResumen } from './destinatarios';
 
@@ -63,7 +63,11 @@ export async function enviarResumenSinAtender(e: EntradaResumenCorreo, deps: Dep
   try {
     if (e.resultado.alertas.length === 0) return { ok: false, motivo: 'sin_alertas' };
     if (e.destinatarios.length === 0) return { ok: false, motivo: 'sin_destinatarios' };
-    const estado = await (deps.habilitado ?? resumenHabilitado)();
+    // Sin `habilitado` inyectado se comprueban TODAS las capas, incluido el interruptor propio de la flota (falla cerrado).
+    const estado = await (deps.habilitado ?? (async () => {
+      const { leerConfigSinAtender } = await import('../repo');
+      return resumenHabilitadoParaFlota(e.tenantId, async (id) => (await leerConfigSinAtender(id)).resumenCorreoHabilitado);
+    }))();
     if (!estado.ok) return { ok: false, motivo: estado.motivo };
     const clave = claveDelResumen(e.turno, e.fechaLocal, e.resultado.alertas);
     const aviso: AvisoCorreo = {
