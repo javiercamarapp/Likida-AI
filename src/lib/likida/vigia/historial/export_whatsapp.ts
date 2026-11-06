@@ -36,6 +36,12 @@ export interface ResultadoExport {
   /** Cuántos mensajes no pudieron leerse como fecha válida. */
   fechasInvalidas: number;
   formato: 'ios' | 'android' | 'desconocido';
+  /**
+   * Cuántos mensajes eran SOLO un adjunto omitido (foto, audio, video, documento, sticker, contacto o ubicación). Es un conteo
+   * calculado al leer: no se guarda ni se lee su contenido (el archivo ni viene en la exportación «sin multimedia»).
+   * Las llamadas perdidas y los mensajes borrados no son adjuntos y no entran aquí.
+   */
+  adjuntosOmitidos: number;
   /** `true` = el archivo traía más de MAX_MENSAJES_IMPORTACION mensajes y se dejó de leer: lo leído es solo el principio del chat. */
   truncado: boolean;
 }
@@ -55,10 +61,23 @@ const ENCABEZADO_ANDROID = new RegExp(String.raw`^${FECHA},?\s+${HORA}\s+-\s+(.*
 const MEDIO_OMITIDO = /^(imagen|video|audio|sticker|gif|documento|contacto|ubicacion) omitid[oa]s?$/;
 const FRASES_SISTEMA = ['multimedia omitido', 'media omitted', 'se elimino este mensaje', 'eliminaste este mensaje', 'este mensaje fue eliminado', 'mensaje eliminado'];
 
+/** Android con multimedia: «IMG-20260912-WA0001.jpg (archivo adjunto)» / «(file attached)». */
+const ADJUNTO_ANDROID = /\((archivo adjunto|file attached)\)$/;
+
+function normalizarMedio(texto: string): string {
+  return texto.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[<>.]/g, '').trim();
+}
+
+/** Un adjunto omitido de la exportación (no es texto y no se revisa). Distinto de una llamada o un mensaje borrado. */
+function esAdjuntoOmitido(texto: string): boolean {
+  const n = normalizarMedio(texto);
+  return n.startsWith('adjunto:') || ADJUNTO_ANDROID.test(n) || MEDIO_OMITIDO.test(n) || n === 'multimedia omitido' || n === 'media omitted';
+}
+
 /** Lo que WhatsApp pone donde iría un archivo o un mensaje borrado: no es texto del chat. Sin expresiones anidadas. */
 function esMultimedia(texto: string): boolean {
-  const n = texto.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[<>.]/g, '').trim();
-  if (n.startsWith('adjunto:')) return true;
+  const n = normalizarMedio(texto);
+  if (n.startsWith('adjunto:') || ADJUNTO_ANDROID.test(n)) return true;
   if (n.startsWith('llamada perdida') || n.startsWith('llamada de voz') || n.startsWith('llamada de video') || n.startsWith('videollamada perdida')) return true;
   return MEDIO_OMITIDO.test(n) || FRASES_SISTEMA.includes(n);
 }
@@ -132,7 +151,7 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
 
   const mensajes: MensajeHistorial[] = [];
   const autores = new Set<string>();
-  let descartados = 0; let fechasInvalidas = 0;
+  let descartados = 0; let fechasInvalidas = 0; let adjuntosOmitidos = 0;
   let truncado = false;
   let actual: { enviadoEn: string; autor: string; texto: string } | null = null;
 
@@ -140,7 +159,10 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
     if (!actual) return;
     // Se acota ANTES de tapar: las expresiones de tapado corren sobre a lo más MAX_TEXTO_MENSAJE caracteres (entrada de un tercero).
     const texto = taparDatosPersonales(actual.texto.trim().slice(0, MAX_TEXTO_MENSAJE));
-    if (!texto || esMultimedia(texto)) descartados += 1;
+    if (!texto || esMultimedia(texto)) {
+      descartados += 1;
+      if (texto && esAdjuntoOmitido(texto)) adjuntosOmitidos += 1;
+    }
     else {
       autores.add(actual.autor);
       mensajes.push({
@@ -171,5 +193,5 @@ export function leerExportWhatsapp(crudo: string, opciones: { equipo: readonly s
     }
   }
   cerrar();
-  return { mensajes, descartados, autores: autores.size, fechasInvalidas, formato, truncado };
+  return { mensajes, descartados, autores: autores.size, fechasInvalidas, formato, adjuntosOmitidos, truncado };
 }

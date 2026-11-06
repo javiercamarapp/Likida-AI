@@ -5,7 +5,11 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { leerExportWhatsapp, MAX_MENSAJES_IMPORTACION, salDeFlota, type MensajeHistorial } from './export_whatsapp';
 import { esZip, textoDeZip } from './zip_lector';
-import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
+import { AVISO_SOLO_TEXTO, claveNombre, MAX_ARCHIVOS_LOTE, nombreGrupoDeArchivo, textoAdjuntosSinTexto, type EstadoArchivoLote, type ResultadoArchivoLote, type ResultadoLote } from './lote_nombres';
+
+export { AVISO_SOLO_TEXTO, MAX_ARCHIVOS_LOTE, textoAdjuntosSinTexto };
+export type { EstadoArchivoLote, ResultadoArchivoLote, ResultadoLote };
+import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, leerGrupos, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
 import { validarRespuestaRapida } from '../respuestas_rapidas';
 import { resumenSinAtenderDeGrupo, type ResumenGrupoSinAtender } from '../sin_atender_aviso/acciones';
 
@@ -100,16 +104,18 @@ export function nombresDelEquipo(crudo: string): string[] {
 
 export interface ArchivoSubido { nombre: string; bytes: Uint8Array }
 
+type ArchivoProcesado =
+  | { ok: true; grupoNombre: string; mensajes: number; autores: number; notas: string[]; adjuntosSinTexto: number; sinAtender: ResumenGrupoSinAtender | null }
+  | { ok: false; error: string; duplicado?: true };
+
+type Lectura = ReturnType<typeof leerExportWhatsapp>;
+type ArchivoPreparado = { ok: true; crudo: string; lectura: Lectura } | { ok: false; error: string };
+
 /**
- * Importa el chat exportado de un grupo. El equipo se declara POR NOMBRE (como sale en el chat): todo otro autor es cliente; si
- * no se declara ninguno, se rechaza (sin saber quién es la flota, «respuestas del equipo» y «tiempos de respuesta» serían inventados).
+ * Valida y lee UN archivo SIN tocar la base (tope, zip, lectura, equipo): así el lote no crea un grupo para un archivo que luego
+ * resulta ilegible. No usa el grupo, solo el equipo y la sal de la flota.
  */
-export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, archivo: ArchivoSubido | null, d: DepsGrupos = depsGruposReales): Promise<ResultadoGrupos> {
-  if (!puedeAdministrar(ctx.rol)) return SIN_PERMISO;
-  const grupoId = texto(fd, 'grupoId');
-  if (!UUID.test(grupoId)) return { ok: false, error: 'Elige el grupo al que pertenece el chat.' };
-  const equipo = nombresDelEquipo(String(fd.get('equipo') ?? ''));
-  if (equipo.length === 0) return { ok: false, error: 'Escribe los nombres de tu equipo tal como salen en el chat (separados por coma). Sin eso no se puede distinguir lo que contestó tu gente de lo que escribió el cliente.' };
+function prepararArchivo(tenantId: string, equipo: readonly string[], archivo: ArchivoSubido | null): ArchivoPreparado {
   if (!archivo || archivo.bytes.length === 0) return { ok: false, error: 'Adjunta el archivo del chat exportado (.txt o .zip).' };
   if (archivo.bytes.length > MAX_ARCHIVO_BYTES) return { ok: false, error: 'El archivo pesa más de 4 MB. Exporta el chat «sin multimedia» o divídelo por periodos.' };
 
@@ -124,42 +130,173 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
     return { ok: false, error: 'El archivo debe ser el .txt de «Exportar chat» o el .zip que lo trae.' };
   }
 
+  const lectura = leerExportWhatsapp(crudo, { equipo, sal: salDeFlota(tenantId) });
+  if (lectura.mensajes.length === 0) {
+    return { ok: false, error: 'No pude leer ningún mensaje en ese archivo. Revisa que sea el chat exportado de WhatsApp (en iPhone o Android) y no una captura ni otro documento.' };
+  }
+  // A37-S58-02: un chat más largo que el tope NO se guarda cortado (las FAQs, los tiempos de respuesta y los pendientes se
+  // calcularían sobre un periodo viejo y se presentarían como el chat completo).
+  if (lectura.truncado) {
+    return { ok: false, error: `Ese chat tiene más de ${MAX_MENSAJES_IMPORTACION} mensajes y no se guardó: se habría cortado y los números saldrían de un periodo viejo. Exporta un periodo más corto (por ejemplo los últimos meses) y súbelo.` };
+  }
+  const hayCliente = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'cliente');
+  const hayEquipo = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'equipo');
+  if (!hayCliente || !hayEquipo) {
+    return { ok: false, error: hayEquipo
+      ? 'Todos los mensajes salieron como de tu equipo: revisa que los nombres que escribiste sean solo los de tu gente.'
+      : 'Ningún mensaje coincide con los nombres de tu equipo: escríbelos exactamente como salen en el chat.' };
+  }
+  return { ok: true, crudo, lectura };
+}
+
+/** Guarda un chat ya validado en UN grupo ya elegido: lo comparten la subida de un archivo y la de varios. */
+async function guardarPreparado(ctx: ContextoGrupos, grupoId: string, equipo: readonly string[], p: { crudo: string; lectura: Lectura }, d: DepsGrupos): Promise<ArchivoProcesado> {
+  const { crudo, lectura } = p;
   try {
     const grupo = await d.grupoDeFlota(ctx.tenantId, grupoId);
     if (!grupo) return { ok: false, error: 'No encuentro ese grupo en tu flota.' };
-    const lectura = leerExportWhatsapp(crudo, { equipo, sal: salDeFlota(ctx.tenantId) });
-    if (lectura.mensajes.length === 0) {
-      return { ok: false, error: 'No pude leer ningún mensaje en ese archivo. Revisa que sea el chat exportado de WhatsApp (en iPhone o Android) y no una captura ni otro documento.' };
-    }
-    // A37-S58-02: un chat más largo que el tope NO se guarda cortado (las FAQs, los tiempos de respuesta y los pendientes se
-    // calcularían sobre un periodo viejo y se presentarían como el chat completo).
-    if (lectura.truncado) {
-      return { ok: false, error: `Ese chat tiene más de ${MAX_MENSAJES_IMPORTACION} mensajes y no se guardó: se habría cortado y los números saldrían de un periodo viejo. Exporta un periodo más corto (por ejemplo los últimos meses) y súbelo.` };
-    }
-    const hayCliente = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'cliente');
-    const hayEquipo = lectura.mensajes.some((m: MensajeHistorial) => m.rol === 'equipo');
-    if (!hayCliente || !hayEquipo) {
-      return { ok: false, error: hayEquipo
-        ? 'Todos los mensajes salieron como de tu equipo: revisa que los nombres que escribiste sean solo los de tu gente.'
-        : 'Ningún mensaje coincide con los nombres de tu equipo: escríbelos exactamente como salen en el chat.' };
-    }
     const sha256 = createHash('sha256').update(crudo).digest('hex');
     const r = await d.guardarImportacion(ctx.tenantId, { grupoId, sha256, usuarioId: ctx.usuarioId, mensajes: lectura.mensajes });
-    if (!r.ok) return { ok: false, error: 'Ese mismo chat ya se había subido a este grupo: no se duplicó nada.' };
+    if (!r.ok) return { ok: false, duplicado: true, error: 'Ese mismo chat ya se había subido a este grupo: no se duplicó nada.' };
+    // El conteo de adjuntos va a la bitácora (solo el número) y a la respuesta; no hay columna donde guardarlo ni hace falta.
     await d.bitacora({
       tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.historial_importado', entidad: 'vigia_historial', entidadId: r.id,
-      detalle: { grupo: grupoId, mensajes: lectura.mensajes.length, descartados: lectura.descartados, autores: lectura.autores, fechasInvalidas: lectura.fechasInvalidas },
+      detalle: { grupo: grupoId, mensajes: lectura.mensajes.length, descartados: lectura.descartados, autores: lectura.autores, fechasInvalidas: lectura.fechasInvalidas, adjuntosSinTexto: lectura.adjuntosOmitidos },
     });
     const notas = [`${lectura.mensajes.length} mensajes de ${lectura.autores} personas`];
     if (lectura.descartados > 0) notas.push(`${lectura.descartados} líneas de sistema o multimedia omitidas`);
     if (lectura.fechasInvalidas > 0) notas.push(`${lectura.fechasInvalidas} con fecha ilegible`);
+    if (lectura.adjuntosOmitidos > 0) notas.push(textoAdjuntosSinTexto(lectura.adjuntosOmitidos));
     const sinAtender = d.sinAtenderDeGrupo ? await d.sinAtenderDeGrupo(ctx.tenantId, grupoId, equipo).catch(() => null) : null;
-    const revision = sinAtender === null ? '' : sinAtender.alertas === 0 ? ' Revisión de sin atender: este grupo no tiene conversaciones pendientes de respuesta con las reglas de tu flota (se midió contra la hora de la exportación).' : ` Revisión de sin atender: ${sinAtender.alertas} ${sinAtender.alertas === 1 ? 'conversación' : 'conversaciones'} de este grupo sin atender (${sinAtender.altas} de prioridad alta). Ábrelas en «Conversaciones sin atender».`;
-    return { ok: true, ...(sinAtender ? { sinAtender } : {}), mensaje: `Histórico guardado en «${grupo.nombre}»: ${notas.join(' · ')}. Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; pero el texto de los mensajes se conserva tal cual, así que puede incluir nombres, placas o licencias que se hayan dicho en el chat (se purga a los 180 días).${revision}` };
+    return { ok: true, grupoNombre: grupo.nombre, mensajes: lectura.mensajes.length, autores: lectura.autores, notas, adjuntosSinTexto: lectura.adjuntosOmitidos, sinAtender };
   } catch (e) {
     logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return { ok: false, error: mensajeParaPantalla(e, 'guardar el histórico') };
   }
+}
+
+/** Valida y guarda UN archivo en un grupo ya elegido (la subida de un solo chat). */
+async function procesarArchivo(ctx: ContextoGrupos, grupoId: string, equipo: readonly string[], archivo: ArchivoSubido | null, d: DepsGrupos): Promise<ArchivoProcesado> {
+  let p: ArchivoPreparado;
+  try { p = prepararArchivo(ctx.tenantId, equipo, archivo); } catch (e) {
+    logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'leer el archivo') };
+  }
+  if (!p.ok) return p;
+  return guardarPreparado(ctx, grupoId, equipo, p, d);
+}
+
+function revisionSinAtender(sinAtender: ResumenGrupoSinAtender | null): string {
+  if (sinAtender === null) return '';
+  if (sinAtender.alertas === 0) return ' Revisión de sin atender: este grupo no tiene conversaciones pendientes de respuesta con las reglas de tu flota (se midió contra la hora de la exportación).';
+  return ` Revisión de sin atender: ${sinAtender.alertas} ${sinAtender.alertas === 1 ? 'conversación' : 'conversaciones'} de este grupo sin atender (${sinAtender.altas} de prioridad alta). Ábrelas en «Conversaciones sin atender».`;
+}
+
+/**
+ * Importa el chat exportado de un grupo. El equipo se declara POR NOMBRE (como sale en el chat): todo otro autor es cliente; si
+ * no se declara ninguno, se rechaza (sin saber quién es la flota, «respuestas del equipo» y «tiempos de respuesta» serían inventados).
+ */
+export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, archivo: ArchivoSubido | null, d: DepsGrupos = depsGruposReales): Promise<ResultadoGrupos> {
+  if (!puedeAdministrar(ctx.rol)) return SIN_PERMISO;
+  const grupoId = texto(fd, 'grupoId');
+  if (!UUID.test(grupoId)) return { ok: false, error: 'Elige el grupo al que pertenece el chat.' };
+  const equipo = nombresDelEquipo(String(fd.get('equipo') ?? ''));
+  if (equipo.length === 0) return { ok: false, error: 'Escribe los nombres de tu equipo tal como salen en el chat (separados por coma). Sin eso no se puede distinguir lo que contestó tu gente de lo que escribió el cliente.' };
+  const r = await procesarArchivo(ctx, grupoId, equipo, archivo, d);
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, ...(r.sinAtender ? { sinAtender: r.sinAtender } : {}), mensaje: `Histórico guardado en «${r.grupoNombre}»: ${r.notas.join(' · ')}. Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; pero el texto de los mensajes se conserva tal cual, así que puede incluir nombres, placas o licencias que se hayan dicho en el chat (se purga a los 180 días).${revisionSinAtender(r.sinAtender)}` };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// VARIOS CHATS A LA VEZ. Un solo campo de nombres del equipo para todo el lote y un nombre de grupo por archivo (por omisión el
+// del archivo). Cada archivo se procesa solo, uno tras otro, y responde por separado: uno que falle no tira a los demás.
+//
+// El grupo se busca por NOMBRE entre los de la flota (sin importar mayúsculas ni acentos). Si no existe y se eligió un cliente
+// para el lote, se crea (no crítico); si no hay cliente, ese archivo se rechaza con el motivo. Nunca se busca fuera del tenant
+// de la sesión.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Tope del peso TOTAL del lote: el cuerpo de una petición no pasa de 4.5 MB en la plataforma (igual que el tope por archivo). */
+export const MAX_LOTE_BYTES = MAX_ARCHIVO_BYTES;
+
+export interface DepsLote extends DepsGrupos {
+  /** Los grupos de la flota (para buscar por nombre). `null` = la lectura no estuvo disponible. */
+  gruposDeFlota: (tenantId: string) => Promise<Array<{ id: string; nombre: string; clienteId: string }> | null>;
+}
+export const depsLoteReales: DepsLote = { ...depsGruposReales, gruposDeFlota: (t) => leerGrupos(t) };
+
+export interface EntradaLote { archivo: ArchivoSubido; grupoNombre: string }
+
+export async function importarLotePanel(ctx: ContextoGrupos, fd: FormData, entradas: readonly EntradaLote[], d: DepsLote = depsLoteReales): Promise<ResultadoLote> {
+  if (!puedeAdministrar(ctx.rol)) return SIN_PERMISO;
+  const equipo = nombresDelEquipo(String(fd.get('equipo') ?? ''));
+  if (equipo.length === 0) return { ok: false, error: 'Escribe los nombres de tu equipo tal como salen en el chat (separados por coma). Sin eso no se puede distinguir lo que contestó tu gente de lo que escribió el cliente.' };
+  const clienteRaw = texto(fd, 'clienteId');
+  if (clienteRaw !== '' && !UUID.test(clienteRaw)) return { ok: false, error: 'Cliente no válido.' };
+  if (entradas.length === 0) return { ok: false, error: 'Adjunta al menos un archivo del chat exportado (.txt o .zip).' };
+  if (entradas.length > MAX_ARCHIVOS_LOTE) return { ok: false, error: `Son demasiados archivos: sube hasta ${MAX_ARCHIVOS_LOTE} por envío.` };
+  const total = entradas.reduce((n, e) => n + e.archivo.bytes.length, 0);
+  if (total > MAX_LOTE_BYTES) return { ok: false, error: 'Los archivos juntos pesan más de 4 MB, el máximo por envío. Súbelos en dos o más envíos, o exporta los chats «sin multimedia».' };
+
+  let grupos: Array<{ id: string; nombre: string; clienteId: string }> | null;
+  try {
+    grupos = await d.gruposDeFlota(ctx.tenantId);
+  } catch (e) {
+    logger.error('vigia.historial_lote_grupos_fallo', { err: e instanceof Error ? e.message : String(e) });
+    return { ok: false, error: mensajeParaPantalla(e, 'leer los grupos') };
+  }
+  if (grupos === null) return { ok: false, error: 'Los grupos de clientes todavía no están disponibles en tu cuenta.' };
+  const porNombre = new Map<string, Array<{ id: string; nombre: string }>>();
+  for (const g of grupos) { const k = claveNombre(g.nombre); porNombre.set(k, [...(porNombre.get(k) ?? []), g]); }
+
+  const resultados: ResultadoArchivoLote[] = [];
+  for (const { archivo, grupoNombre: nombreCrudo } of entradas) {
+    const nombreGrupo = nombreCrudo.replace(/\s+/g, ' ').trim() || nombreGrupoDeArchivo(archivo.nombre);
+    const fila = (estado: EstadoArchivoLote, detalle: string, extra: Partial<ResultadoArchivoLote> = {}): void => { resultados.push({ archivo: archivo.nombre, grupo: nombreGrupo, estado, detalle, ...extra }); };
+    if (nombreGrupo === '' || nombreGrupo.length > 120) { fila('error', 'Escribe el nombre del grupo para este archivo (hasta 120 letras).'); continue; }
+    if (archivo.bytes.length === 0) { fila('error', 'El archivo está vacío.'); continue; }
+
+    // El archivo se valida ANTES de crear nada: un zip corrupto o un chat ilegible no deja un grupo vacío creado.
+    let prep: ArchivoPreparado;
+    try { prep = prepararArchivo(ctx.tenantId, equipo, archivo); } catch (e) {
+      logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
+      fila('error', mensajeParaPantalla(e, 'leer el archivo')); continue;
+    }
+    if (!prep.ok) { fila('error', prep.error); continue; }
+
+    let grupoId: string | null = null;
+    let grupoNuevo = false;
+    const hallados = porNombre.get(claveNombre(nombreGrupo)) ?? [];
+    if (hallados.length > 1) { fila('error', 'Hay más de un grupo con ese nombre en tu flota: cámbialo en «Grupos» para distinguirlos, o súbelo por separado.'); continue; }
+    if (hallados.length === 1) grupoId = hallados[0].id;
+    else if (clienteRaw !== '') {
+      try {
+        const c = await d.crearGrupo(ctx.tenantId, { clienteId: clienteRaw, nombre: nombreGrupo, critico: false });
+        if (!c.ok) { fila('error', c.error); continue; }
+        grupoId = c.id;
+        grupoNuevo = true;
+        porNombre.set(claveNombre(nombreGrupo), [{ id: c.id, nombre: nombreGrupo }]);
+        await d.bitacora({ tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.grupo_creado', entidad: 'vigia_grupo', entidadId: c.id, detalle: { critico: false, desdeLote: true } });
+      } catch (e) {
+        logger.error('vigia.historial_lote_alta_fallo', { err: e instanceof Error ? e.message : String(e) });
+        fila('error', mensajeParaPantalla(e, 'agregar el grupo')); continue;
+      }
+    } else { fila('error', 'No hay un grupo con ese nombre en tu flota. Escribe el nombre de uno existente, o elige el cliente para que se cree.'); continue; }
+
+    const r = await guardarPreparado(ctx, grupoId, equipo, prep, d);
+    if (r.ok) fila('importado', `${grupoNuevo ? 'Grupo nuevo creado con ese nombre (si fue un error de escritura, bórralo en «Grupos»). ' : ''}${r.notas.join(' · ')}.${revisionSinAtender(r.sinAtender)}`, { grupoNuevo, mensajes: r.mensajes, adjuntosSinTexto: r.adjuntosSinTexto, ...(r.sinAtender ? { sinAtender: r.sinAtender } : {}) });
+    else fila(r.duplicado ? 'duplicado' : 'error', r.error);
+  }
+
+  const importados = resultados.filter((r) => r.estado === 'importado').length;
+  const duplicados = resultados.filter((r) => r.estado === 'duplicado').length;
+  const errores = resultados.filter((r) => r.estado === 'error').length;
+  const partes = [`${importados} ${importados === 1 ? 'importado' : 'importados'}`];
+  if (duplicados > 0) partes.push(`${duplicados} ya ${duplicados === 1 ? 'estaba subido' : 'estaban subidos'}`);
+  if (errores > 0) partes.push(`${errores} con error`);
+  const mensaje = `Listo: ${partes.join(' · ')}. ${AVISO_SOLO_TEXTO} Se tapan teléfonos y correos y el nombre de cada autor se guarda solo como huella; el texto de los mensajes se conserva tal cual (se purga a los 180 días).`;
+  if (importados === 0 && duplicados === 0) return { ok: false, error: `No se importó ningún archivo (${errores} con error). Revisa el motivo de cada uno.`, archivos: resultados };
+  return { ok: true, mensaje, archivos: resultados, importados, hayImportados: importados > 0 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
