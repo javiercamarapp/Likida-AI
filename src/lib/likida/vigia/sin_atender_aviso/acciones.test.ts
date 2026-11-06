@@ -150,7 +150,8 @@ describe('guardar la configuración de la flota (acción)', () => {
   });
   it('rangos inválidos: se rechaza con mensaje llano y no se guarda', async () => {
     const d = deps();
-    for (const malo of [{ insistenciaMin: '99' }, { umbralUrgenteMin: '0' }, { umbralUrgenteMin: '2000' }, { insistenciaMin: 'x' }]) {
+    const malos: Array<Record<string, string>> = [{ insistenciaMin: '99' }, { umbralUrgenteMin: '0' }, { umbralUrgenteMin: '2000' }, { insistenciaMin: 'x' }];
+    for (const malo of malos) {
       expect((await guardarConfigPanel(ctx(), formaGuardar(malo), d)).ok).toBe(false);
     }
     expect(d.puertoConfig.guardar).not.toHaveBeenCalled();

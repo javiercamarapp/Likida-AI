@@ -41,7 +41,7 @@ export const depsGruposReales: DepsGrupos = {
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const SIN_PERMISO: ResultadoGrupos = { ok: false, error: 'Solo el dueño de la flota administra los grupos y el histórico de sus clientes.' };
+const SIN_PERMISO = { ok: false as const, error: 'Solo el dueño de la flota administra los grupos y el histórico de sus clientes.' };
 
 /**
  * El archivo más grande que se acepta desde el formulario: 4 MB, el tope REAL de la plataforma (Vercel Functions corta en 4.5 MB;
