@@ -75,5 +75,5 @@ export async function enviarPruebaCorreoAvisos(tenantId: string, deps: DepsPrueb
   }
   if (enviados === 0) return { ok: false, mensaje: 'No se pudo mandar la prueba. Revisa que las direcciones estén bien escritas e inténtalo en unos minutos.' };
   const resto = fallidos.length > 0 ? ` No se pudo mandar a: ${fallidos.join(', ')}.` : '';
-  return { ok: true, enviados, mensaje: `Prueba enviada a ${enviados} ${enviados === 1 ? 'dirección' : 'direcciones'}. Revisa la bandeja (y la carpeta de no deseados).${resto}` };
+  return { ok: true, enviados, mensaje: `Prueba enviada a ${enviados} ${enviados === 1 ? 'dirección' : 'direcciones'}. Revisa la bandeja (y la carpeta de no deseados). Si ya pediste una prueba hace menos de 10 minutos, no se manda otra: espera unos minutos para repetirla.${resto}` };
 }

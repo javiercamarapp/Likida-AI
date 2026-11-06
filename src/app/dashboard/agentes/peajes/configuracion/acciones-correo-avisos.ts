@@ -36,7 +36,7 @@ export async function guardarCorreoAvisosDeFormulario(sesion: SesionCorreo, tena
   const activo = String(fd.get('correo_activo') ?? '') === '1';
   const r = await guardarCorreoAvisos(tenantId, {
     activo,
-    destinatarios: destinatariosDeTexto(String(fd.get('correo_destinatarios') ?? '').slice(0, 2_000)),
+    destinatarios: destinatariosDeTexto(String(fd.get('correo_destinatarios') ?? '').slice(0, 4_000)),
     noEnviarAntes: String(fd.get('correo_corte') ?? '').trim() || null,
     asunto: previa.asunto,
   });

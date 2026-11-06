@@ -38,7 +38,17 @@ describe('guardar los avisos por correo', () => {
     const r = await A.guardarCorreoAvisosDeFormulario(admin, T, fd({ correo_destinatarios: 'ana@flota.test\nesto-no-es-correo', correo_corte: '2026-10-01' }));
     expect(r).toMatchObject({ ok: false });
     expect((r as { error: string }).error).toContain('no parece un correo válido');
+    // No repite lo tecleado (el motivo viaja en la URL de retorno) y señala qué dirección revisar.
+    expect((r as { error: string }).error).not.toContain('esto-no-es-correo');
+    expect((r as { error: string }).error).toContain('dirección 2');
     expect(db.tablas.peaje_atipico_config ?? []).toHaveLength(0);
+  });
+
+  it('10 direcciones largas con saltos CRLF caben sin truncar la última', async () => {
+    const largas = Array.from({ length: 10 }, (_, i) => `${'x'.repeat(60)}${i}@flota-con-dominio-largo.test`);
+    const r = await A.guardarCorreoAvisosDeFormulario(admin, T, fd({ correo_destinatarios: largas.join('\r\n') }));
+    expect(r).toMatchObject({ ok: true });
+    expect((await R.leerCorreoAvisos(T)).destinatarios).toEqual(largas);
   });
 
   it('el límite es de 10 destinatarios: 10 pasan, 11 no', async () => {
@@ -98,6 +108,8 @@ describe('enviar correo de prueba', () => {
     const enviar = vi.fn(async () => ok);
     const r = await A.enviarPruebaDeFormulario(admin, T, { enviar, configurado: () => true, ahora: () => 1_800_000_000_000 });
     expect(r).toMatchObject({ ok: true });
+    // El éxito no promete un correo nuevo si la prueba se repite dentro de la ventana de la llave.
+    expect((r as { mensaje: string }).mensaje).toContain('hace menos de 10 minutos, no se manda otra');
     expect(enviar).toHaveBeenCalledTimes(2);
     const [para1, correo, op1] = enviar.mock.calls[0] as unknown as [string, { asunto: string; parrafos: string[] }, { sobrio: boolean; idempotencyKey: string }];
     expect(para1).toBe('ana@flota.test');

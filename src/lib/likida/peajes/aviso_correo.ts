@@ -72,9 +72,10 @@ export function validarCorreoAvisos(entrada: unknown): ValidadoCorreoAvisos {
   const crudos = e.destinatarios === undefined ? [] : e.destinatarios;
   if (!Array.isArray(crudos)) return { ok: false, motivo: 'Los destinatarios deben ser una lista de correos.' };
   const destinatarios: string[] = [];
-  for (const d of crudos) {
+  for (const [i, d] of crudos.entries()) {
     const c = typeof d === 'string' ? d.trim() : '';
-    if (!RE_CORREO.test(c)) return { ok: false, motivo: `«${typeof d === 'string' ? d.slice(0, 60) : ''}» no parece un correo válido.` };
+    // Sin repetir lo tecleado: el motivo viaja en la URL de retorno y no debe dejar un correo en el historial.
+    if (!RE_CORREO.test(c)) return { ok: false, motivo: `Revisa la dirección ${i + 1} de la lista: no parece un correo válido.` };
     if (!destinatarios.some((x) => x.toLowerCase() === c.toLowerCase())) destinatarios.push(c);
   }
   if (destinatarios.length > MAX_DESTINATARIOS_CORREO_AVISOS) return { ok: false, motivo: `Máximo ${MAX_DESTINATARIOS_CORREO_AVISOS} destinatarios.` };
