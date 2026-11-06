@@ -1,9 +1,11 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save, Upload, Trash2, Check } from 'lucide-react';
 import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-resultado';
+import { BotonEnlace } from '@/app/ui-v2/componentes';
+import { AVISO_SOLO_TEXTO, nombreGrupoDeArchivo, MAX_ARCHIVOS_LOTE, textoAdjuntosSinTexto, type ResultadoLote } from '@/lib/likida/vigia/historial/lote_nombres';
 
 export type ResultadoGrupos = ResultadoUI;
 export type AccionGrupos = (previo: ResultadoGrupos, fd: FormData) => Promise<ResultadoGrupos>;
@@ -72,31 +74,72 @@ export function FilaBorrar({ accion, grupoId }: { accion: AccionGrupos; grupoId:
   );
 }
 
-export function FormaImportar({ accion, grupos }: { accion: AccionGrupos; grupos: Array<{ id: string; nombre: string; cliente: string | null }> }) {
+export type AccionLote = (previo: ResultadoLote | null, fd: FormData) => Promise<ResultadoLote | null>;
+
+const ROTULO_ESTADO = { importado: 'Importado', duplicado: 'Ya estaba subido', error: 'No se importó' } as const;
+
+/** Subir varios chats exportados a la vez: un solo campo de equipo y un nombre de grupo (editable) por archivo. */
+export function FormaImportar({ accion, grupos, clientes, sufijo }: {
+  accion: AccionLote;
+  grupos: Array<{ id: string; nombre: string; cliente: string | null }>;
+  clientes: Array<{ id: string; nombre: string }>;
+  sufijo: string;
+}) {
   const [estado, despachar] = useActionState(accion, null);
+  const [nombres, setNombres] = useState<Array<{ archivo: string; grupo: string }>>([]);
+  const alElegir = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const lista = e.target.files;
+    const elegidos: Array<{ archivo: string; grupo: string }> = [];
+    for (let i = 0; lista && i < lista.length; i++) elegidos.push({ archivo: lista[i].name, grupo: nombreGrupoDeArchivo(lista[i].name) });
+    setNombres(elegidos);
+  };
   return (
     <form action={despachar} className="space-y-3">
-      <div className="grid sm:grid-cols-2 gap-3">
-        <label>
-          <span className={ETIQUETA}>Grupo</span>
-          <select name="grupoId" required defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
-            <option value="" disabled>Elige un grupo…</option>
-            {grupos.map((g) => <option key={g.id} value={g.id}>{g.cliente ? `${g.cliente} · ` : ''}{g.nombre}</option>)}
-          </select>
-        </label>
-        <label>
-          <span className={ETIQUETA}>Archivo del chat (.txt o .zip, hasta 4 MB)</span>
-          <input type="file" name="archivo" required accept=".txt,.zip,text/plain,application/zip" className="w-full pt-1.5" />
-          <span className={AYUDA} style={{ color: 'var(--faint)' }}>En WhatsApp: el grupo → Exportar chat → Sin multimedia.</span>
-        </label>
-      </div>
       <label className="block">
-        <span className={ETIQUETA}>Nombres de TU equipo en ese chat (separados por coma)</span>
+        <span className={ETIQUETA}>Archivos de los chats (.txt o .zip; todos juntos pesan hasta 4 MB y hasta {MAX_ARCHIVOS_LOTE} archivos)</span>
+        <input type="file" name="archivo" multiple required accept=".txt,.zip,text/plain,application/zip" onChange={alElegir} className="w-full pt-1.5" />
+        <span className={AYUDA} style={{ color: 'var(--faint)' }}>En WhatsApp: el grupo → Exportar chat → Sin multimedia. Puedes elegir varios archivos a la vez.</span>
+      </label>
+      {nombres.length > 0 && (
+        <fieldset className="space-y-2">
+          <legend className={ETIQUETA}>Grupo de cada archivo (por omisión, el nombre del archivo; corrígelo si no coincide)</legend>
+          {nombres.map((n, i) => (
+            <label key={`${n.archivo}-${i}`} className="block">
+              <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{n.archivo}</span>
+              <input name="grupoNombre" value={n.grupo} maxLength={120} required list="grupos-existentes" aria-label={`Nombre del grupo para ${n.archivo}`} onChange={(e) => setNombres((prev) => prev.map((x, j) => (j === i ? { ...x, grupo: e.target.value } : x)))} className="w-full" />
+            </label>
+          ))}
+          <datalist id="grupos-existentes">{grupos.map((g) => <option key={g.id} value={g.nombre} />)}</datalist>
+        </fieldset>
+      )}
+      <label className="block">
+        <span className={ETIQUETA}>Si un grupo todavía no existe, créalo para este cliente (opcional)</span>
+        <select name="clienteId" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
+          <option value="">No crear grupos: solo usar los que ya existen</option>
+          {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+        </select>
+      </label>
+      <label className="block">
+        <span className={ETIQUETA}>Nombres de TU equipo en esos chats (separados por coma; valen para todos los archivos)</span>
         <input name="equipo" required placeholder="Ana Servicio, Luis Tráfico" className="w-full" />
         <span className={AYUDA} style={{ color: 'var(--faint)' }}>Tal como salen en el chat. Todo otro nombre se cuenta como cliente. Los nombres no se guardan, solo un código que no se puede revertir; los teléfonos y correos escritos en los mensajes se tapan.</span>
       </label>
+      <p className={AYUDA} style={{ color: 'var(--muted)' }}>{AVISO_SOLO_TEXTO}</p>
       <Enviar Icono={Upload}>Subir histórico</Enviar>
       <AvisoResultado estado={estado} />
+      {estado?.archivos && estado.archivos.length > 0 && (
+        <ul aria-label="Resultado por archivo" className="space-y-1.5 text-[12px]">
+          {estado.archivos.map((r, i) => (
+            <li key={`${r.archivo}-${i}`} className="hairline rounded-lg px-2.5 py-1.5">
+              <strong>{ROTULO_ESTADO[r.estado]}</strong>: {r.archivo} → «{r.grupo}». {r.detalle}
+              {r.adjuntosSinTexto && r.adjuntosSinTexto > 0 ? <span className="block" style={{ color: 'var(--muted)' }}>{textoAdjuntosSinTexto(r.adjuntosSinTexto)}.</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      {estado?.ok && estado.hayImportados && (
+        <BotonEnlace href={`/dashboard/agentes/vigia/sin-atender${sufijo}`}>Ver conversaciones sin atender</BotonEnlace>
+      )}
     </form>
   );
 }

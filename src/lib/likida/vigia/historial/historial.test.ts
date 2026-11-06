@@ -67,6 +67,22 @@ describe('leerExportWhatsapp', () => {
     expect(r.descartados).toBe(4);
   });
 
+  it('cuenta los adjuntos omitidos (iOS y Android, español e inglés) sin contar llamadas ni mensajes borrados', () => {
+    const txt = [
+      '[12/09/2026, 10:00:00] Cliente Uno: \u200e<adjunto: 00000012-PHOTO-2026-09-12.jpg>', '[12/09/2026, 10:01:00] Cliente Uno: audio omitido',
+      '12/09/2026 10:02 - Cliente Uno: <Multimedia omitido>', '12/09/2026 10:03 - Cliente Uno: <Media omitted>', '12/09/2026 10:04 - Cliente Uno: documento omitido',
+      '12/09/2026 10:05 - Cliente Uno: Llamada perdida', '12/09/2026 10:06 - Cliente Uno: Se eliminó este mensaje', '12/09/2026 10:07 - Ana Servicio: Ya salió la unidad',
+    ].join('\n');
+    const r = leerExportWhatsapp(txt, OPC);
+    expect(r.adjuntosOmitidos).toBe(5);
+    expect(r.descartados).toBe(7);
+    expect(r.mensajes.map((m) => m.texto)).toEqual(['Ya salió la unidad']);
+  });
+
+  it('sin adjuntos el conteo es cero', () => {
+    expect(leerExportWhatsapp('12/09/2026 10:00 - Cliente Uno: hola', OPC).adjuntosOmitidos).toBe(0);
+  });
+
   it('un renglón de 1 MB sin separadores se procesa rápido (acotado antes de tapar)', () => {
     const t0 = Date.now();
     const r = leerExportWhatsapp(`12/09/2026 10:00 - A: ${'1234567890'.repeat(100_000)}`, { equipo: [], sal: 's' });

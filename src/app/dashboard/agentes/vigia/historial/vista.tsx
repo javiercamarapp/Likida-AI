@@ -5,11 +5,11 @@ import type { GrupoVigia } from '@/lib/likida/vigia/historial/repo';
 import type { ReporteHistorial } from '@/lib/likida/vigia/historial/analisis';
 import type { ResultadoPendientes } from '@/lib/likida/vigia/historial/pendientes';
 import type { RespuestaRapidaFila } from '@/lib/likida/vigia/historial/repo';
-import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos } from './formas';
+import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos, type AccionLote } from './formas';
 import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
-export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionGrupos; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
+export interface AccionesGrupos { alta: AccionGrupos; critico: AccionGrupos; borrar: AccionGrupos; importar: AccionLote; aprobarRapida: AccionGrupos; retirarRapida: AccionGrupos }
 
 function Seccion({ id, titulo, info, children }: { id: string; titulo: string; info: InfoClave; children: React.ReactNode }) {
   return (
@@ -90,7 +90,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
               <Seccion id="alta" titulo="Agregar un grupo" info="vigia_historial.alta"><FormaAltaGrupo accion={acciones.alta} clientes={clientes} /></Seccion>
               {grupos.length > 0 && (
                 <Seccion id="importar" titulo="Subir el chat exportado" info="vigia_historial.importar">
-                  <FormaImportar accion={acciones.importar} grupos={grupos.map((g) => ({ id: g.id, nombre: g.nombre, cliente: g.clienteNombre }))} />
+                  <FormaImportar accion={acciones.importar} grupos={grupos.map((g) => ({ id: g.id, nombre: g.nombre, cliente: g.clienteNombre }))} clientes={clientes} sufijo={sufijo} />
                   <p className="text-[12px]"><Link href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className="underline">Después de subir un chat, revisa las conversaciones sin atender</Link>.</p>
                 </Seccion>
               )}
