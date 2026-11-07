@@ -100,6 +100,23 @@ describe('leerExportWhatsapp', () => {
   it('tapa teléfonos largos pero no números cortos como un folio de 5 dígitos', () => {
     expect(taparDatosPersonales('folio 12345 y 55-1234-5678')).toBe('folio 12345 y [tel]');
   });
+
+  it('R7-A5: los correos legítimos se siguen tapando (con subdominios, signos y varios en un mensaje)', () => {
+    expect(taparDatosPersonales('escríbeme a ana.perez+flota@correo.empresa.com.mx o a luis_8@x.mx gracias')).toBe('escríbeme a [correo] o a [correo] gracias');
+    expect(taparDatosPersonales('contacto: a@b.co.')).toBe('contacto: [correo]');
+    expect(taparDatosPersonales(`${'u'.repeat(64)}@dominio.com`)).toBe('[correo]');
+    expect(taparDatosPersonales('sin arroba ni nada, solo texto')).toBe('sin arroba ni nada, solo texto');
+    expect(taparDatosPersonales('arroba@sola sin punto')).toBe('arroba@sola sin punto');
+  });
+
+  it('R7-A5: una cadena hostil sin espacios (`aaa…@aaa…`) no vuelve cuadrática la búsqueda de correos', () => {
+    // Con la expresión anterior (`+` sin tope) 20,000 letras costaban ~250 ms por llamada; acotada, unos pocos ms. El umbral deja ~15x de margen.
+    for (const hostil of ['a'.repeat(10_000) + '@' + 'a'.repeat(10_000), '@'.repeat(1) + 'a'.repeat(20_000), 'x@' + 'a'.repeat(20_000)]) {
+      const t0 = performance.now();
+      taparDatosPersonales(hostil);
+      expect(performance.now() - t0).toBeLessThan(60);
+    }
+  });
 });
 
 function zipDe(nombre: string, contenido: string, metodo: 0 | 8 = 8): Buffer {
