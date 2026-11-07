@@ -34,7 +34,7 @@
 //
 // SUPUESTO (BLOQUEO EXTERNO: la documentación del login del cliente no existe): el login es
 // `POST <base_url><ruta_login>` con `{usuario, clave}` y el token viene en `token` (el mismo supuesto de
-// `ficha.ts`). Cuando llegue la documentación se corrige en `loginDe`.
+// `ficha.ts`). Cuando llegue la documentación se corrige en `loginDe` (hoy en `acceso.ts`).
 // ═══════════════════════════════════════════════════════════════════════════
 import { alertarOperador } from '@/lib/observability/alerta';
 import { logger } from '@/lib/logger';

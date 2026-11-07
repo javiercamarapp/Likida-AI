@@ -38,7 +38,8 @@ no se pudo verificar se dice en la sección 6.
 - **TMS `parcial` o flota atrasada.** Leer `detalle` del latido `tms`: `credencialRechazada` = pedir credencial nueva a la flota y
   capturarla en `/dashboard/conexiones`; `conError`/`parciales` = ver `logger` `cron.tms.parcial` (sin datos del cliente). Para
   detener UNA flota sin perder la credencial: `tms_mapeo.activo = false` de sus filas (no existe interruptor por flota; ver
-  `conexion-tms.md`, sección de reversión). El conector solo LEE.
+  `conexion-tms.md` §5 «Cómo se revierte la conexión completa», punto 3, y §8.3). El conector solo LEE. Antes de activar un mapeo
+  nuevo, la prueba en seco de `conexion-tms.md` §8.2.
 - **Correo de liquidación fallido.** Abrir el desglose de la liquidación: la entrega `fallida` trae `ultimo_error`. «Agotó 5
   intentos» con 429/5xx/red = problema de Resend o de red: esperar y que una persona reenvíe desde el desglose. «Sin confirmar» =
   puede haber salido ya; **no reenviar a ciegas**, una persona confirma con el destinatario (un doble envío de pago no se arregla).
@@ -77,9 +78,9 @@ otros (la lista completa es `INTERRUPTORES`). Frenos temporales: `cobranza:recha
 | Qué | Cómo se apaga |
 |---|---|
 | Todos los crons de agentes | Interruptor `global` |
-| Entrega del desglose por correo y reintentos de liquidación | Interruptor `agente:liquidacion` (el cron `liquidaciones-externas` también respeta `global`) |
-| Sincronizador TMS (cron `tms`) | Solo `global`; por flota: `tms_mapeo.activo = false` o desactivar la credencial en `/dashboard/conexiones` (irreversible: hay que recapturar) |
-| Vigía de servicio al cliente por flota | `vigia_config.habilitado = false` |
+| Entrega del desglose por correo y reintentos de liquidación | Interruptor `agente:liquidacion`. Verificado en `src/app/api/cron/liquidaciones-externas/route.ts`: el cron consulta primero `global` y después `agente:liquidacion`; con cualquiera apagado salta (latido `saltado`) y con cualquiera ilegible no corre (500, latido `fallo`) |
+| Sincronizador TMS (cron `tms`) | Solo `global`; por flota: `tms_mapeo.activo = false` o desactivar la credencial en `/dashboard/conexiones` (irreversible: hay que recapturar). Detalle en `conexion-tms.md` §8.3 |
+| Vigía de servicio al cliente por flota | Tabla `vigia_config`, columna `habilitado` (migración 0400; `false` por omisión y sin fila = apagado) puesta en `false` |
 | Aviso proactivo de viaje del Vigía | `vigia_aviso_config.habilitado = false` (`vigia-aviso-rollback.md`) |
 | Resumen/correo de «sin atender» del Vigía | Variable `LIKIDA_VIGIA_SIN_ATENDER_CORREO` distinta de `si` (solo `si` lo enciende) |
 | Pulido de redacción del Vigía | `LIKIDA_VIGIA_PULIR` distinto de `si` (apagado por omisión) |
