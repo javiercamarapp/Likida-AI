@@ -11,8 +11,9 @@ import { estadoMfa, type VeredictoMfaSuperadmin } from './mfa';
 // siendo la única vigente). Se enciende con `LIKIDA_TOTP_ESCALONADO=obligatorio`.
 //
 // QUÉ HACE ENCENDIDO. Para el dueño (`flota_admin`) y el contador:
-//   · las cuatro acciones de riesgo —emitir CFDI, llaves de API, cambio de
-//     roles y exportes de dinero— exigen: factor TOTP inscrito, sesión en AAL2
+//   · las cinco acciones de riesgo —emitir CFDI, llaves de API, cambio de
+//     roles, exportes de dinero y cambio de RFC / paso a producción del
+//     timbrado (`perfil_fiscal`)— exigen: factor TOTP inscrito, sesión en AAL2
 //     y que ese AAL2 sea RECIENTE (tope de sesión);
 //   · el panel entero (`requireSessionTenant`) exige lo mismo con el mismo
 //     tope, salvo Mi perfil (donde se inscribe/verifica el factor).
@@ -28,9 +29,9 @@ import { estadoMfa, type VeredictoMfaSuperadmin } from './mfa';
 // FALLAR CERRADO: si no se pudo preguntar (Supabase Auth caído), no pasa.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type AccionRiesgo = 'emitir_cfdi' | 'llave_api' | 'cambio_rol' | 'exporte_dinero';
+export type AccionRiesgo = 'emitir_cfdi' | 'llave_api' | 'cambio_rol' | 'exporte_dinero' | 'perfil_fiscal';
 
-export const ACCIONES_RIESGO: readonly AccionRiesgo[] = ['emitir_cfdi', 'llave_api', 'cambio_rol', 'exporte_dinero'];
+export const ACCIONES_RIESGO: readonly AccionRiesgo[] = ['emitir_cfdi', 'llave_api', 'cambio_rol', 'exporte_dinero', 'perfil_fiscal'];
 
 /** Roles a los que alcanza el escalonado. El superadmin tiene su propia puerta (`mfaSuperadminObligatorio`). */
 const ROLES_ESCALONADOS: ReadonlySet<string> = new Set(['flota_admin', 'contador']);
@@ -116,6 +117,7 @@ export const MSG_STEP_UP_ESCALONADO: Record<AccionRiesgo, string> = {
   llave_api: 'Emitir o revocar llaves de API exige tu segundo factor.',
   cambio_rol: 'Cambiar roles del equipo exige tu segundo factor.',
   exporte_dinero: 'Descargar exportes de dinero exige tu segundo factor.',
+  perfil_fiscal: 'Cambiar el RFC o pasar el timbrado a producción exige tu segundo factor.',
 };
 
 const COLA: Record<Exclude<VeredictoMfaSuperadmin, 'ok'>, string> = {
@@ -171,4 +173,20 @@ export async function exigirStepUpAccion(
     } catch { /* best-effort total */ }
   })();
   return mensajeStepUp(accion, v);
+}
+
+/**
+ * PURA (R7-A3). ¿Guardar este perfil fiscal pide segundo factor? Sí cuando el RFC cambia (o no había uno) o cuando el ambiente pasa
+ * a PRODUCCIÓN desde cualquier otro estado. Si no se pudo leer el perfil vigente (`actual === undefined`) se cierra: no se puede probar
+ * que no sea un cambio. Cambiar razón social, régimen, CP o serie, o volver a sandbox, no es la escalada que cubre esta guarda.
+ */
+export function cambioFiscalExigeStepUp(
+  actual: { rfc?: string | null; modo?: string | null } | null | undefined,
+  nuevo: { rfc: string | null; modo: string },
+): boolean {
+  if (actual === undefined) return true;
+  const rfcAntes = (actual?.rfc ?? '').trim().toUpperCase();
+  const rfcDespues = (nuevo.rfc ?? '').trim().toUpperCase();
+  if (rfcAntes !== rfcDespues) return true;
+  return nuevo.modo === 'produccion' && actual?.modo !== 'produccion';
 }

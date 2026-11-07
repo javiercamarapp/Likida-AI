@@ -4,6 +4,7 @@ import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d, Shiel
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { exigirStepUpAccion } from '@/lib/auth/stepup';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { estadoDescargaSat } from '@/lib/likida/sat_descarga';
 import { leerDescargaSat, TOPE_SOLICITUDES, type VistaDescargaSat } from '@/lib/likida/sat_descarga/lectura';
@@ -88,6 +89,14 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
       return { error: 'Tu rol no puede configurar la descarga del SAT.' };
+    }
+    // R7-A3: declarar OTRO RFC para el buzón del SAT (o el primero) exige segundo factor reciente. Se compara contra lo guardado ahora;
+    // si no se pudo leer, se cierra. Pausar/reanudar o ajustar el aviso con el mismo RFC no lo pide.
+    // `leerDescargaSat` no lanza: marca `incompleta` cuando alguna lectura falló (no se prueba que el RFC sea el mismo → cierra).
+    const vigente = await leerDescargaSat(s.tenantId);
+    if (vigente.incompleta || (vigente.config?.rfc ?? '').trim().toUpperCase() !== t(fd.get('rfc')).toUpperCase()) {
+      const pasoMfa = await exigirStepUpAccion(s.rol, 'perfil_fiscal', { tenantId: s.tenantId, userId: s.userId });
+      if (pasoMfa) return { error: pasoMfa };
     }
     try {
       await guardarConfigDescarga(s.tenantId, {
