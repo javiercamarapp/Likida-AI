@@ -43,12 +43,26 @@ export async function clientesActivosCompletos(tenantId: string): Promise<Client
   }));
 }
 
-/** TODAS las geocercas activas de la flota, por nombre. LANZA si la lectura no se puede completar. */
+/**
+ * TODOS los SITIOS DEL CLIENTE activos de la flota, por nombre. LANZA si la
+ * lectura no se puede completar.
+ *
+ * A39-ARQ-03: va acotada a `catalogo = 'conductor'`. La 0480 separó los dos
+ * catálogos de `geocerca` y los declaró inmutables: `'conductor'` son los
+ * sitios (cliente, planta, andén, patio, punto de interés) y `'peajes'` son
+ * las casetas y los puntos de ruta. Esta función alimenta el desplegable
+ * «Sitio del cliente» del pacto de detención (`estadias.tsx:137`), su único
+ * consumidor; sin el predicado ofrecía casetas de peaje, y una estadía pactada
+ * contra una caseta a 40 km del patio del cliente no abre episodio nunca: la
+ * pantalla factura $0.00 afirmando que midió. La separación ya se respetaba en
+ * la otra dirección (`peajes/repo.ts:754` se niega a tocar un sitio del
+ * conductor); esta era la única puerta sin la reja.
+ */
 export async function geocercasActivasCompletas(tenantId: string): Promise<GeocercaSelector[]> {
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('geocerca')
       .select('id, nombre', conteo(d))
-      .eq('tenant_id', tenantId).eq('activa', true)
+      .eq('tenant_id', tenantId).eq('activa', true).eq('catalogo', 'conductor')
       .order('nombre').order('id').range(d, h), 'selectores.geocercas'),
     'selectores.geocercas',
   );

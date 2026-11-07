@@ -228,6 +228,40 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
 }
 
 /**
+ * A41-AG-01: POR QUÉ FALLÓ, mirando las DOS puertas y no una.
+ *
+ * La auditoría 24 cerró el fallo que viaja DENTRO del NDJSON (`{t:'error'}`
+ * con `resp.ok` en 200). Pero `/api/dashboard/chat/route.ts` tiene además
+ * ocho retornos con ESTADO: 401 «sin sesion», 403 «sin acceso», 429
+ * «Demasiadas preguntas seguidas», 400 «cuerpo inválido», 503… y ninguno
+ * lleva `t:'error'`. Mirando sólo `t` esos ocho daban `motivo = null`, así
+ * que `respuestaLocal` devolvía `responder()` intacto y `fallo` se quedaba
+ * sin poner: la pregunta 11 del minuto contestaba «Tu tasa de cuadre es 50%»
+ * con su dona, armada con los KPIs de la carga de la página, sin aviso y sin
+ * Reintentar. Una cifra vieja presentada como lectura nueva es exactamente lo
+ * que este producto no hace.
+ *
+ * Devuelve el motivo a declarar, o `null` si de verdad no hubo fallo. El
+ * cuerpo del servidor manda cuando trae texto; si no, se dice el estado, que
+ * es poco pero es verdad.
+ */
+export function motivoDeFallo(
+  resp: { ok: boolean; status: number },
+  d: Record<string, unknown> | null,
+): string | null {
+  if (d && d.t === 'error' && typeof d.error === 'string') return d.error;
+  // A44-AG-01: un 200 SIN payload no es una respuesta buena, es una VACÍA. El
+  // NDJSON que se corta antes de `fin`/`error` deja `d` en null con `resp.ok`,
+  // y callarlo entregaba la respuesta de reserva —armada con los KPIs de la
+  // carga de la página— sin aviso y sin Reintentar (`use-analista.ts:293`
+  // cuelga `fallo` de que haya motivo). El otro cliente del MISMO endpoint ya
+  // lo trata como fallo: `viajes-en-vivo/respuesta.ts:59`.
+  if (resp.ok) return d === null ? 'El analista no alcanzó a contestar: la respuesta llegó incompleta' : null;
+  if (d && typeof d.error === 'string' && d.error.trim() !== '') return d.error;
+  return `El analista no pudo contestar (error ${resp.status})`;
+}
+
+/**
  * H4 (auditoría 24): el respondedor local de palabras clave es el
  * "paracaídas" de `responder()` — corre con lo que YA está en la página
  * (`kpis`/`acred`), no con una lectura fresca de la operación. Cuando el

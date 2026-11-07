@@ -125,6 +125,27 @@ export interface ElegibilidadEstimuloPeaje {
  */
 export function calificaEstimuloPeaje(perfilCrudo: unknown): ElegibilidadEstimuloPeaje {
   const perfil = leerPerfil(perfilCrudo);
+  // FIS-34-1: un «no» DECLARADO a la Red Nacional cierra, y cierra primero.
+  // La LIF 2026 art. 20-A fr. I concede el estímulo por el uso de la Red
+  // Nacional de Autopistas de Cuota. Likida no VERIFICA que las casetas lo
+  // sean —`PREGUNTA_ESTIMULO_PEAJE` lo dice en voz alta— pero esto no es
+  // verificar: es leer lo que la flota ya declaró. Se preguntaba, se guardaba,
+  // se imprimía en el resumen, y aquí no lo leía nadie: un «no» salía
+  // `elegible: true` y el PDF imprimía «Estímulo de peaje 50%».
+  // Va ANTES del tri-estado a propósito: una negativa declarada basta para
+  // negar, aunque falten los otros dos campos. `undefined` no cierra —falta de
+  // declaración se sigue tratando como antes— y `decidir()` mantiene el candado
+  // de siempre: un valor inferido o un default no deciden.
+  if (decidir(perfil.casetasRedNacional) === false) return { elegible: false };
+  // A40-FIS-01: y la dedicación exclusiva cierra igual, por la misma razón.
+  // La fr. V cuelga el «exclusivamente» del CONTRIBUYENTE («personas
+  // contribuyentes QUE SE DEDIQUEN exclusivamente al transporte terrestre
+  // público y privado, de carga o pasaje»), no del vehículo como la fr. IV del
+  // IEPS — así está transcrito y verificado en `normas/lif-2026-20-A.yaml`.
+  // El campo se preguntaba (`onboarding/forma.tsx:108`, cuya ayuda dice en voz
+  // alta que es la válvula «del estímulo de peaje»), se guardaba, lo leía
+  // `facilidad15Declarada` para la OTRA norma, y aquí no lo leía nadie.
+  if (decidir(perfil.dedicacionExclusivaCarga) === false) return { elegible: false };
   const ingresos = decidir(perfil.ingresosAnualesMxn);
   const menoresA300M = ingresos !== undefined ? ingresos < 300_000_000 : decidir(perfil.ingresosMenoresA300M);
   const parteRelacionada = decidir(perfil.parteRelacionada);

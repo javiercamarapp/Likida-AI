@@ -137,6 +137,23 @@ describe('sentry — opcional y silencioso', () => {
     expect((limpio.contexts.trace as Record<string, unknown>).trace_id).toBe('abc');
   });
 
+  it('A45-OP-01: el id de la liquidación sobrevive; un evento de {liquidacion, err} no pierde su extra entero', () => {
+    // `liquidacion_externa/acuse.ts:63` y `revision.ts:542` mandan EXACTAMENTE
+    // esta forma. `err` es texto libre y queda fuera a propósito; si
+    // `liquidacion` tampoco pasara, `extraSeguro` devuelve `undefined` y el
+    // evento llega a Sentry sin una sola llave con que saber cuál liquidación
+    // falló. Mismo trato que el folio fiscal de la auditoría 22.
+    const limpio = sanitizarEventoSentry({
+      extra: { liquidacion: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', err: 'timeout al escribir' },
+    }) as { extra?: Record<string, unknown> };
+    expect(limpio.extra).toBeDefined();
+    expect(limpio.extra?.liquidacion).toBeTruthy();
+    expect(limpio.extra?.err).toBeUndefined();
+    for (const k of ['liquidacion', 'liquidacionId', 'liqId']) {
+      expect(LLAVES_EXTRA_SEGURAS.has(k)).toBe(true);
+    }
+  });
+
   it('LLAVES_EXTRA_SEGURAS no incluye llaves de texto libre (err/error/message/motivo)', () => {
     for (const libre of ['err', 'error', 'message', 'motivo']) {
       expect(LLAVES_EXTRA_SEGURAS.has(libre)).toBe(false);

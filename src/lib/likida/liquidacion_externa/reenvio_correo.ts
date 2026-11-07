@@ -41,7 +41,7 @@ export interface OpcionesReenvio {
 
 export type MotivoRechazo =
   | 'sin_permiso' | 'no_encontrada' | 'correo_invalido' | 'correo_nuevo_no_aplica' | 'en_curso' | 'limite_diario'
-  | 'sin_destinatarios' | 'sin_archivo' | 'no_disponible';
+  | 'sin_destinatarios' | 'sin_archivo' | 'no_disponible' | 'omitido_por_corte';
 
 export type ResultadoReenvio =
   | { estado: 'reenviado'; generacion: number; entregas: number; roles: RolDestinatario[]; avisos: string[] }
@@ -117,6 +117,16 @@ export async function reenviarDesglose(
   const config = await deps.leerConfig(tenantId);
   if (entregas === null || config === null) {
     return rechazo('no_disponible', 'No pude leer las entregas por correo de este desglose. Intenta de nuevo en unos minutos.');
+  }
+
+  // A40-BE-03: la fecha de corte se revalida AQUÍ, igual que en `liberarEnvio` (`liberar_envio.ts:107`). Las dos puertas mandan el mismo
+  // correo al operador, y hasta ahora solo una miraba el corte. El hueco no es el histórico ya marcado —ése trae `retenidaMotivo` y se
+  // rechaza más abajo—: es el anterior al corte SIN marcar, y hay dos caminos para llegar ahí (el corte se fija o se corrige después de
+  // recibir el desglose, y la barrida de omisión se rinde al tope de filas). Por eso `liberarEnvio` tiene dos disyuntos y no uno: la
+  // marca no es confiable. Se compara `periodoHasta < noEnviarAntes`, con el mismo criterio no inclusivo de `liberar_envio` y
+  // `motivoDeOmision` (`desglose_recibir.ts:142`).
+  if (config.noEnviarAntes !== null && liq.periodoHasta < config.noEnviarAntes) {
+    return rechazo('omitido_por_corte', 'Este desglose es anterior a la fecha de corte de tu flota: no se reenvía desde aquí.');
   }
 
   // Tope diario: cada reenvío es una generación con `disparo` distinto de `auto` creada hoy (día de México).
