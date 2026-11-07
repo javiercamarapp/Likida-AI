@@ -141,6 +141,26 @@ describe('la corrida', () => {
     expect(alertarOperador).toHaveBeenCalledWith('cron.liquidaciones_externas.pull_atascado', expect.objectContaining({ flotas: 1, error: 'TmsCredenciales: x' }));
   });
 
+  it('el correo de liquidación que agotó reintentos (fallida) o quedó sin confirmar ALERTA al operador, solo con conteos; reintentar/sin configurar no alertan', async () => {
+    const base = { tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos: { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 } };
+    const correoOk = { reclamadas: 3, enviadas: 3, reintentar: 0, fallidas: 0, sinConfigurar: 0, fueraDeVentana: 0, apagada: 0, sinConfirmar: 0, errores: 0 };
+    for (const extra of [{ reintentar: 1 }, { sinConfigurar: 1 }, { errores: 1 }]) {
+      alertarOperador.mockClear();
+      procesar.mockResolvedValueOnce({ ...base, correo: { ...correoOk, ...extra } });
+      await llamar();
+      expect(alertarOperador).not.toHaveBeenCalled();
+    }
+    for (const extra of [{ fallidas: 2 }, { sinConfirmar: 1 }]) {
+      alertarOperador.mockClear();
+      procesar.mockResolvedValueOnce({ ...base, correo: { ...correoOk, ...extra } });
+      await llamar();
+      expect(alertarOperador).toHaveBeenCalledTimes(1);
+      const [evento, detalle] = alertarOperador.mock.calls[0] as [string, Record<string, unknown>];
+      expect(evento).toBe('cron.liquidaciones_externas.correo_fallido');
+      expect(Object.keys(detalle).sort()).toEqual(['fallidas', 'reclamadas', 'sinConfirmar']);
+    }
+  });
+
   it('un pull con error pero NO atascado no alerta', async () => {
     const avisos = { tomados: 0, enviados: 0, reintentar: 0, fallidos: 0, en_curso: 0 };
     procesar.mockResolvedValueOnce({ tomadas: 0, en_cola: 0, enviadas: 0, reintentar: 0, fallidas: 0, sin_cambio: 0, avisos, pull: { flotas: 1, leidas: 0, importadas: 0, excepciones: 0, errores: 1, error: 'TmsLimite: x' } });
