@@ -8,7 +8,7 @@ import { apiDenegadaPorPerfil, MOTIVO_PERFIL_API } from './perfil_tenant';
 import { esRolNomina } from './roles';
 import { exigirStepUpAccion } from './stepup';
 import { registrarAccesoSuperadmin } from '@/lib/seguridad/acceso_superadmin';
-import { esExporteDeDinero, registrarExporteDinero, registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
+import { exporteExigeStepUp, registrarExporteDinero, registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // DE QUÉ FLOTA HABLA UNA RUTA DE API.
@@ -123,7 +123,7 @@ export async function resolverTenantApi(url: string): Promise<ResultadoTenantApi
   }
 
   // F9 (CT-SEG-05): los exportes de dinero exigen segundo factor reciente a dueño y contador (bandera apagada por omisión, D8).
-  if (esExporteDeDinero(new URL(url).pathname)) {
+  if (exporteExigeStepUp(url)) {
     const pasoMfa = await exigirStepUpAccion(s.rol, 'exporte_dinero', { tenantId, userId: s.userId });
     if (pasoMfa) return { ok: false, status: 403, motivo: pasoMfa };
   }
