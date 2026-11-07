@@ -7,7 +7,7 @@ import { resumenHabilitadoParaFlota, type EstadoResumen } from './interruptor';
 import type { AlertaSinAtender, MotivoSinAtender, ResultadoSinAtender } from './motor';
 import type { DestinatarioResumen } from './destinatarios';
 
-export type MotivoNoEnviadoResumen = 'interruptor_apagado' | 'bandera_apagada' | 'flota_apagada' | 'sin_alertas' | 'sin_destinatarios' | 'sin_configurar' | 'rechazado' | 'red' | 'sin_permiso' | 'sin_fecha_corte';
+export type MotivoNoEnviadoResumen = 'interruptor_apagado' | 'bandera_apagada' | 'flota_apagada' | 'sin_alertas' | 'sin_destinatarios' | 'sin_configurar' | 'rechazado' | 'red' | 'sin_permiso' | 'sin_fecha_corte' | 'enfriamiento';
 export type ResultadoEnvioResumen = { ok: true; destinatarios: number; alertas: number; clave: string } | { ok: false; motivo: MotivoNoEnviadoResumen };
 
 export interface EntradaResumenCorreo {

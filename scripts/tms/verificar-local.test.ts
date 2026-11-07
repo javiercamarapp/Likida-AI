@@ -65,4 +65,27 @@ describe('verificar-local.mjs', () => {
   it('un argumento desconocido da el uso (2)', () => {
     expect(correr(['--real']).codigo).toBe(2);
   });
+
+  it('R7-B1 · --en-seco --falso: prueba en seco contra el sintético, limpia (0), solo nombres y conteos', () => {
+    const r = correr(['--en-seco', '--falso']);
+    expect(r.codigo).toBe(0);
+    expect(r.stdout).toContain('RESULTADO: limpio');
+    expect(r.stdout).toContain('[liquidaciones.nomina] limpio; leídas 20');
+    expect(r.salida).not.toMatch(/clave-sintetica|usuario-sintetico|tms\.ejemplo|Operador|tok-sintetico/);
+  }, 120_000);
+
+  it('R7-B1 · --en-seco sin archivo de mapeos (y sin --falso) da el uso (2) y no llama a nadie', () => {
+    const r = correr(['--en-seco']);
+    expect(r.codigo).toBe(2);
+    expect(r.salida).toContain('Uso:');
+  });
+
+  it('R7-B1 · --en-seco con un archivo de mapeos que no es JSON se niega (2) sin imprimir su contenido', () => {
+    const cred = archivoCredenciales('seco.env', 'base_url=https://secreto.invalid\nusuario=u-secreto\nclave=c-secreta\n', 0o600);
+    const mapeos = archivoCredenciales('mapeos-malos.json', 'esto no es json SENTINELA', 0o600);
+    const r = correr(['--en-seco', mapeos], { TMS_CREDENCIALES_ARCHIVO: cred });
+    expect(r.codigo).toBe(2);
+    expect(r.salida).toContain('archivo de mapeos');
+    expect(r.salida).not.toMatch(/SENTINELA|secreto|secreta/);
+  });
 });

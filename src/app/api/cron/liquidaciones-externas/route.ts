@@ -107,6 +107,12 @@ export async function GET(req: Request) {
     if (atascadas.length > 0) {
       await alertarOperador('cron.liquidaciones_externas.pull_atascado', { flotas: atascadas.length, tenants: atascadas.slice(0, 20), error: r.pull?.error ?? 'error' });
     }
+    // El correo de la liquidación que AGOTÓ sus reintentos (`fallida`) o quedó «sin confirmar» (decisión humana) no tiene otra
+    // señal visible: el latido `parcial` se pisa en la pasada siguiente (5 min) y las filas `fallida` solo se ven abriendo el
+    // desglose. Un aviso por hora (piso de `alertarOperador`), SOLO conteos: ni correos, ni flotas, ni importes.
+    if (c && (c.fallidas > 0 || c.sinConfirmar > 0)) {
+      await alertarOperador('cron.liquidaciones_externas.correo_fallido', { fallidas: c.fallidas, sinConfirmar: c.sinConfirmar, reclamadas: c.reclamadas });
+    }
     return NextResponse.json({ corrio: true, ...r });
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e);

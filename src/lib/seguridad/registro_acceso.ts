@@ -41,6 +41,24 @@ export function esExporteDeDinero(pathname: string): boolean {
   return EXPORTE_DINERO.test(pathname);
 }
 
+// Segunda lista (R7-A2), SOLO para exigir el segundo factor (`exporte_dinero` de stepup.ts); la bitácora de arriba sigue con la suya, así
+// que ampliar una no ensucia la otra. Son los exportes de dinero MÁS los que, sin estar en la bitácora, también entregan cifras:
+//   · /api/export/pdf/[id]: el PDF de la liquidación (lo que se le paga a cada operador).
+//   · /api/export/convenios?tipo=completo: tarifas y requisitos de cobro. Los tipos `instrucciones`, `texto` y `plantilla` no traen
+//     dinero (la ruta ni lo lee de la base), así que NO piden el paso.
+// /api/export/jornada queda FUERA a propósito: es el registro de jornada del art. 132 LFT (horas, no pesos; ver la nota de su ruta).
+const EXPORTE_PDF_LIQUIDACION = /^\/api\/export\/pdf\/[^/]+\/?$/;
+const EXPORTE_CONVENIOS = /^\/api\/export\/convenios\/?$/;
+
+/** ¿Esta descarga exige segundo factor reciente a dueño y contador? Recibe la URL completa porque `convenios` depende de `?tipo=`. */
+export function exporteExigeStepUp(url: string): boolean {
+  let u: URL;
+  try { u = new URL(url); } catch { return false; }
+  if (esExporteDeDinero(u.pathname) || EXPORTE_PDF_LIQUIDACION.test(u.pathname)) return true;
+  if (EXPORTE_CONVENIOS.test(u.pathname)) return (u.searchParams.get('tipo')?.trim() ?? '') === 'completo';
+  return false;
+}
+
 /**
  * Se registra cuando la puerta común AUTORIZA la descarga (no cuando termina: una descarga autorizada que luego da 409 también
  * quedó intentada). Solo la ruta, nunca el query (que trae los filtros pedidos y a veces el `?tenant=` de un superadmin).

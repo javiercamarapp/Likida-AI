@@ -231,3 +231,34 @@ describe('resolverTenantApi: segundo factor escalonado en exportes de dinero', (
     }
   });
 });
+
+// R7-A2: el PDF de liquidación y las tarifas de convenios también piden el segundo factor (la bitácora conserva su lista).
+describe('resolverTenantApi: segundo factor en PDF de liquidación y convenios completos (R7-A2)', () => {
+  const sbSinFactor = { auth: { mfa: {
+    listFactors: async () => ({ data: { totp: [] }, error: null }),
+    getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1' }, error: null }),
+  } } };
+  const PDF = 'https://x/api/export/pdf/11111111-1111-4111-8111-111111111111';
+  async function conPalanca<T>(f: () => Promise<T>): Promise<T> {
+    vi.stubEnv('LIKIDA_TOTP_ESCALONADO', 'obligatorio');
+    const srv = await import('@/lib/supabase/server');
+    vi.spyOn(srv, 'supabaseServer').mockResolvedValue(sbSinFactor as never);
+    getSessionTenant.mockResolvedValue({ tenantId: 't-sesion', rol: 'contador', userId: 'u-1', nombre: 'X' });
+    try { return await f(); } finally { vi.unstubAllEnvs(); vi.restoreAllMocks(); }
+  }
+  it.each([PDF, 'https://x/api/export/convenios?tipo=completo'])('encendido y sin factor: 403 en %s', async (u) => {
+    const r = await conPalanca(() => resolverTenantApi(u));
+    expect(r.ok).toBe(false);
+    if (!r.ok) { expect(r.status).toBe(403); expect(r.motivo).toMatch(/segundo factor/); }
+  });
+  it.each([
+    'https://x/api/export/convenios', 'https://x/api/export/convenios?tipo=instrucciones', 'https://x/api/export/convenios?tipo=texto',
+    'https://x/api/export/convenios?tipo=plantilla', 'https://x/api/export/jornada',
+  ])('encendido y sin factor: %s sigue abierta', async (u) => {
+    expect((await conPalanca(() => resolverTenantApi(u))).ok).toBe(true);
+  });
+  it('apagado (por omisión) el PDF se descarga como siempre', async () => {
+    getSessionTenant.mockResolvedValue({ tenantId: 't-sesion', rol: 'contador', userId: 'u-1', nombre: 'X' });
+    expect((await resolverTenantApi(PDF)).ok).toBe(true);
+  });
+});

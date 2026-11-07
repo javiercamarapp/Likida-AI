@@ -86,10 +86,14 @@ function limpiar(s: string): string {
   return s.replace(INVISIBLES, '').replace(ESPACIOS_RAROS, ' ').replace(/\r/g, '');
 }
 
+// Correos con cada tramo ACOTADO (R7-A5): con `+` sin tope, un mensaje de ~1,500 letras sin espacios (`aaa…a@aaa…a`) hacía cuadrática la
+// búsqueda (~1.5 ms por mensaje; un zip grande, decenas de segundos de CPU). Los topes siguen los límites del correo (usuario 64, dominio
+// 255, etiqueta final 63): ningún correo legítimo los rebasa.
+const CORREO = /[^\s@]{1,64}@[^\s@]{1,255}\.[^\s@]{1,63}/g;
+
 /** Tapa teléfonos (7+ dígitos con separadores; una fecha aaaa-mm-dd no lo es) y correos del texto. */
 export function taparDatosPersonales(texto: string): string {
-  return texto
-    .replace(/[^\s@]+@[^\s@]+\.[^\s@]+/g, '[correo]')
+  return (texto.includes('@') ? texto.replace(CORREO, '[correo]') : texto)
     .replace(/[\d+][\d\s().-]{6,}\d/g, (m) => (m.replace(/\D/g, '').length >= 7 && !/^\d{4}-\d{1,2}-\d{1,2}$/.test(m) ? '[tel]' : m));
 }
 

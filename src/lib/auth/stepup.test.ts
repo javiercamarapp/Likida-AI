@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   exigirStepUpAccion, rolConStepUp, topeSesionMfaMin, totpEscalonadoActivo, veredictoEscalonado, veredictoStepUp,
-  ACCIONES_RIESGO, TOPE_SESION_MIN_POR_OMISION,
+  ACCIONES_RIESGO, TOPE_SESION_MIN_POR_OMISION, cambioFiscalExigeStepUp, rolAsignableExigeStepUp,
 } from './stepup';
 
 const ON = { LIKIDA_TOTP_ESCALONADO: 'obligatorio' };
@@ -87,5 +87,33 @@ describe('veredictoStepUp / exigirStepUpAccion', () => {
   it('Supabase roto o lanzando: falla cerrado', async () => {
     expect(await exigirStepUpAccion('contador', 'exporte_dinero', {}, { env: ON, sbDe: sbCon({ roto: true }) })).toMatch(/No pude comprobarlo/);
     expect(await exigirStepUpAccion('contador', 'exporte_dinero', {}, { env: ON, sbDe: async () => { throw new Error('x'); } })).toMatch(/No pude comprobarlo/);
+  });
+});
+
+describe('cambioFiscalExigeStepUp (pura, R7-A3)', () => {
+  const vigente = { rfc: 'AAA010101AAA', modo: 'sandbox' };
+  it('RFC distinto, o ninguno previo, lo exige', () => {
+    expect(cambioFiscalExigeStepUp(vigente, { rfc: 'BBB020202BBB', modo: 'sandbox' })).toBe(true);
+    expect(cambioFiscalExigeStepUp(null, { rfc: 'AAA010101AAA', modo: 'sandbox' })).toBe(true);
+    expect(cambioFiscalExigeStepUp({ rfc: null, modo: 'sandbox' }, { rfc: 'AAA010101AAA', modo: 'sandbox' })).toBe(true);
+  });
+  it('pasar a producción lo exige; seguir en producción o volver a sandbox no', () => {
+    expect(cambioFiscalExigeStepUp(vigente, { rfc: 'aaa010101aaa', modo: 'produccion' })).toBe(true);
+    expect(cambioFiscalExigeStepUp({ ...vigente, modo: 'produccion' }, { rfc: 'AAA010101AAA', modo: 'produccion' })).toBe(false);
+    expect(cambioFiscalExigeStepUp({ ...vigente, modo: 'produccion' }, { rfc: 'AAA010101AAA', modo: 'sandbox' })).toBe(false);
+  });
+  it('mismo RFC (sin importar mayúsculas) y mismo ambiente: no', () => {
+    expect(cambioFiscalExigeStepUp(vigente, { rfc: ' aaa010101aaa ', modo: 'sandbox' })).toBe(false);
+  });
+  it('perfil vigente ilegible (undefined): cierra', () => {
+    expect(cambioFiscalExigeStepUp(undefined, { rfc: 'AAA010101AAA', modo: 'sandbox' })).toBe(true);
+  });
+});
+
+describe('rolAsignableExigeStepUp (R7-A1)', () => {
+  it('dueño y contador sí; encargado, nomina y vacío no', () => {
+    expect(rolAsignableExigeStepUp('flota_admin')).toBe(true);
+    expect(rolAsignableExigeStepUp('contador')).toBe(true);
+    for (const r of ['encargado', 'nomina', 'superadmin', '', null, undefined]) expect(rolAsignableExigeStepUp(r)).toBe(false);
   });
 });

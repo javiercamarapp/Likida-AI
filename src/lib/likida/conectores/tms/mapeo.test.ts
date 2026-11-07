@@ -39,7 +39,7 @@ describe('transformaciones', () => {
     expect(aNumero('189,50')).toEqual({ ok: 189.5 });
     expect(aNumero('1,234.50')).toEqual({ ok: 1234.5 });
     expect(aNumero('1.234,50')).toEqual({ ok: 1234.5 });
-    expect(aNumero('1,234')).toEqual({ ok: 1234 });
+    expect('error' in aNumero('1,234')).toBe(true); // R7-B2: ambiguo igual que «1.234»; declarado se lee exacto (abajo)
     expect(aNumero('$ 2,000.00')).toEqual({ ok: 2000 });
     expect(aNumero('-45,5')).toEqual({ ok: -45.5 });
     expect(aNumero(12)).toEqual({ ok: 12 });
@@ -239,4 +239,56 @@ describe('fixture sintético por recurso', () => {
       expect(r.filas).toHaveLength(3);
     });
   }
+});
+
+describe('R7-B2 · tolerancia del mapeo ante una respuesta distinta a la esperada', () => {
+  const m = base({
+    recurso: 'liquidaciones', raiz: '', obligatorios: ['folio', 'cargo'], clave_externa: ['folio'],
+    campos: { folio: 'id', cargo: { fuente: 'monto', transformar: 'numero' }, nota: 'nota' },
+  });
+
+  it('campos extra en la respuesta se ignoran: la fila entra y el extra no aparece en la salida', () => {
+    const r = aplicarMapeo(m, [{ id: 'a', monto: 10, nota: 'x', campo_nuevo: 'y', otro: { anidado: 1 } }]);
+    expect(r.rechazadas).toEqual([]);
+    expect(r.filas[0].fila).toEqual({ folio: 'a', cargo: 10, nota: 'x' });
+  });
+
+  it('un requerido faltante falla CERRADO y el motivo nombra la fuente y el destino; nunca se rellena con cero', () => {
+    const r = aplicarMapeo(m, [{ id: 'a', nota: 'x' }, { id: 'b', monto: null }, { id: 'c', monto: '  ' }, { id: 'd', monto: 0 }]);
+    expect(r.filas.map((f) => f.fila)).toEqual([{ folio: 'd', cargo: 0 }]); // el 0 real del origen sí es un dato
+    expect(r.rechazadas.map((x) => x.motivo)).toEqual([
+      'falta «monto» (obligatorio para «cargo»)', 'falta «monto» (obligatorio para «cargo»)', 'falta «monto» (obligatorio para «cargo»)']);
+  });
+
+  it('un opcional ausente queda ausente (no se inventa un 0 ni un texto vacío)', () => {
+    const r = aplicarMapeo(m, [{ id: 'a', monto: 5 }]);
+    expect(r.filas[0].fila).not.toHaveProperty('nota');
+  });
+
+  it('importes en texto: coma o punto decimal solo se convierten si no hay duda o si el mapeo lo declara', () => {
+    const con = (decimal?: '.' | ',') => base({
+      recurso: 'liquidaciones', raiz: '', obligatorios: ['folio', 'cargo'], clave_externa: ['folio'],
+      campos: { folio: 'id', cargo: { fuente: 'monto', transformar: 'numero', ...(decimal ? { decimal } : {}) } },
+    });
+    const leer = (mapeo: MapeoTms, monto: unknown) => aplicarMapeo(mapeo, [{ id: 'a', monto }]);
+    // sin declarar: ambiguos rechazados (la fila no entra); no ambiguos entran
+    for (const dudoso of ['1.234', '1,234', '0,500', '12.500']) expect(leer(con(), dudoso).filas, dudoso).toEqual([]);
+    expect(leer(con(), '1.234')).toMatchObject({ rechazadas: [{ indice: 0 }] });
+    expect(leer(con(), '189,50').filas[0].fila).toEqual({ folio: 'a', cargo: 189.5 });
+    expect(leer(con(), '1,234.50').filas[0].fila).toEqual({ folio: 'a', cargo: 1234.5 });
+    expect(leer(con(), 1234).filas[0].fila).toEqual({ folio: 'a', cargo: 1234 }); // número JSON: sin duda
+    // declarado: se lee como se declaró
+    expect(leer(con('.'), '1.234').filas[0].fila).toEqual({ folio: 'a', cargo: 1.234 });
+    expect(leer(con('.'), '1,234').filas[0].fila).toEqual({ folio: 'a', cargo: 1234 });
+    expect(leer(con(','), '1,234').filas[0].fila).toEqual({ folio: 'a', cargo: 1.234 });
+    expect(leer(con(','), '1.234,50').filas[0].fila).toEqual({ folio: 'a', cargo: 1234.5 });
+    // declarado pero la forma contradice la declaración: se rechaza
+    expect(leer(con('.'), '1.234,50').filas).toEqual([]);
+  });
+
+  it('un texto no numérico en un importe se rechaza (no se convierte en 0 ni NaN)', () => {
+    const r = aplicarMapeo(m, [{ id: 'a', monto: 'abc' }, { id: 'b', monto: '' }]);
+    expect(r.filas).toEqual([]);
+    expect(r.rechazadas).toHaveLength(2);
+  });
 });
