@@ -2,6 +2,7 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { diaEnZona } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
+import { rateLimit } from '@/lib/ratelimit';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { crearRepoVigia, guardarConfigSinAtender, leerConfigSinAtender, leerDestinatariosResumen, type DestinatariosResumenCrudos } from '../repo';
 import { leerChatsParaSinAtender, type ChatLeido } from '../historial/repo';
@@ -31,6 +32,8 @@ export interface DepsSinAtender {
   /** Plataforma (bandera e interruptores) Y el interruptor propio de la flota. Apagado ante cualquier duda. */
   habilitado: (tenantId: string) => Promise<EstadoResumen>;
   enviar: typeof enviarResumenSinAtender;
+  /** Enfriamiento por flota del envío manual (R7-A6): `true` si toca mandar, `false` si ya se mandó (o se intentó) hace poco. */
+  permitirEnvio: (tenantId: string) => Promise<boolean>;
   bitacora: typeof anotarBitacora;
   ahora: () => number;
 }
@@ -41,6 +44,13 @@ export const puertoConfigSinAtenderReal: PuertoConfigSinAtender = {
     return r.ok ? { ok: true } : { ok: false, error: r.error };
   },
 };
+
+/**
+ * Enfriamiento del «Enviar resumen por correo» por flota: 10 minutos, la misma ventana que la prueba de correo de Peajes. La clave de
+ * idempotencia del correo cambia con el contenido (turno, día y alertas), así que sin esto un administrador podía reenviar sin parar
+ * mientras cambiaba una alerta. Cuenta intentos que llegaron a mandar (con alertas y destinatarios), no revisiones en vacío.
+ */
+export const ENFRIAMIENTO_RESUMEN_MS = 10 * 60_000;
 
 export const depsSinAtenderReales: DepsSinAtender = {
   leerChats: leerChatsParaSinAtender,
@@ -53,6 +63,7 @@ export const depsSinAtenderReales: DepsSinAtender = {
   detectar: detectarSinAtender,
   habilitado: (t) => resumenHabilitadoParaFlota(t, async (id) => (await leerConfigSinAtender(id)).resumenCorreoHabilitado),
   enviar: enviarResumenSinAtender,
+  permitirEnvio: (t) => rateLimit(`vigia-resumen:${t}`, 1, ENFRIAMIENTO_RESUMEN_MS),
   bitacora: anotarBitacora,
   ahora: () => Date.now(),
 };
@@ -174,6 +185,7 @@ const TEXTO_MOTIVO: Record<MotivoNoEnviadoResumen, string> = {
   rechazado: 'El proveedor de correo rechazó el envío. Intenta de nuevo en unos minutos.',
   red: 'No se pudo conectar con el proveedor de correo. Intenta de nuevo en unos minutos.',
   sin_permiso: 'Solo quien administra la flota puede mandar el resumen por correo.',
+  enfriamiento: 'Ya se mandó un resumen de esta flota hace menos de 10 minutos. Espera unos minutos para volver a mandarlo; no se mandó nada.',
   sin_fecha_corte: 'Indica la fecha de corte (AAAA-MM-DD): no se avisa de conversaciones anteriores a ese día.',
 };
 export type ResultadoEnvioUI = { ok: true; mensaje: string } | { ok: false; error: string };
@@ -195,6 +207,8 @@ export async function enviarResumenPanel(ctx: ContextoSinAtender, fd: FormData, 
     const ahora = new Date(d.ahora());
     const { destinatarios, turno } = destinatariosDelResumen({ crudos: rev.crudos, alertas: resultado.alertas, clienteDeChat: rev.clienteDeChat, ahora });
     const fechaLocal = diaEnZona(ahora, rev.crudos.zona);
+    // Solo se cobra el enfriamiento cuando de verdad habría correo: sin alertas o sin destinatarios `enviar` no manda nada.
+    if (resultado.alertas.length > 0 && destinatarios.length > 0 && !(await d.permitirEnvio(ctx.tenantId))) return no('enfriamiento');
     const envio = await d.enviar({ tenantId: ctx.tenantId, resultado, destinatarios, liga: ctx.liga, turno, fechaLocal }, { habilitado: () => d.habilitado(ctx.tenantId) });
     await d.bitacora({
       tenantId: ctx.tenantId, actor: { id: ctx.usuarioId, email: ctx.email }, accion: 'vigia.sin_atender_resumen', entidad: 'vigia_historial', entidadId: ctx.tenantId,
