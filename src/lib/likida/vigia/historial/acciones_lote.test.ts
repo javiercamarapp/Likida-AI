@@ -47,6 +47,40 @@ function deps(sobre: Partial<Deps> = {}): Deps & { bitacora: ReturnType<typeof v
 const entrada = (nombre: string, bytes: Uint8Array, grupoNombre = '') => ({ archivo: { nombre, bytes }, grupoNombre });
 const EQ = fd({ equipo: 'Ana Servicio' });
 
+describe('importarLotePanel: la revisión de sin atender no crece con el número de archivos (R7-A4)', () => {
+  it('un lote de varios archivos revisa UNA vez, al final, y el resultado por archivo trae su resumen', async () => {
+    const sinAtenderDeGrupos = vi.fn(async (_t: string, ids: readonly string[]) => new Map(ids.map((id) => [id, { alertas: id === G1 ? 3 : 0, altas: id === G1 ? 1 : 0 }])));
+    const sinAtenderDeGrupo = vi.fn(async () => ({ alertas: 99, altas: 99 }));
+    const d = deps({ sinAtenderDeGrupos, sinAtenderDeGrupo });
+    const r = await importarLotePanel(dueno, EQ, [
+      entrada('a.txt', enc(CHAT_A), 'Operación Cliente A'),
+      entrada('b.txt', enc(CHAT_B), 'Grupo Dos'),
+      entrada('c.txt', enc(chat('Cliente Tres')), 'Operación Cliente A'),
+    ], d);
+    if (!r.ok) throw new Error('x');
+    expect(sinAtenderDeGrupo).not.toHaveBeenCalled(); // ya no una vez por archivo
+    expect(sinAtenderDeGrupos).toHaveBeenCalledTimes(1);
+    expect(sinAtenderDeGrupos.mock.calls[0][0]).toBe('t1');
+    expect([...sinAtenderDeGrupos.mock.calls[0][1]].sort()).toEqual([G1, G1, G2].sort());
+    expect(r.archivos.map((a) => a.sinAtender)).toEqual([{ alertas: 3, altas: 1 }, { alertas: 0, altas: 0 }, { alertas: 3, altas: 1 }]);
+    expect(r.archivos[0].detalle).toContain('3 conversaciones');
+    expect(r.archivos[1].detalle).toContain('no tiene conversaciones pendientes');
+  });
+  it('si la revisión final falla o no existe, los archivos quedan importados sin resumen (nunca se deshace)', async () => {
+    const d = deps({ sinAtenderDeGrupos: async () => { throw new Error('boom'); } });
+    const r = await importarLotePanel(dueno, EQ, [entrada('a.txt', enc(CHAT_A), 'Operación Cliente A')], d);
+    expect(r).toMatchObject({ ok: true, importados: 1 });
+    if (!r.ok) throw new Error('x');
+    expect(r.archivos[0].sinAtender).toBeUndefined();
+    expect(r.archivos[0].detalle).not.toContain('Revisión de sin atender');
+  });
+  it('un lote sin ningún archivo importado no revisa nada', async () => {
+    const sinAtenderDeGrupos = vi.fn(async () => new Map());
+    await importarLotePanel(dueno, EQ, [entrada('x.txt', enc('no es un chat'), 'Grupo Dos')], deps({ sinAtenderDeGrupos }));
+    expect(sinAtenderDeGrupos).not.toHaveBeenCalled();
+  });
+});
+
 describe('importarLotePanel', () => {
   it('zip corrupto con cliente elegido y grupo inexistente: NO crea el grupo ni la bitácora', async () => {
     const d = deps();

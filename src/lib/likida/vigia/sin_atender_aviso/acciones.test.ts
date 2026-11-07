@@ -4,7 +4,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { TZ_MX } = await import('@/lib/formato');
-const { enviarResumenPanel, guardarConfigPanel, revisarPanel, revisarSinAtender, recortarPorCorte, resumenSinAtenderDeGrupo } = await import('./acciones');
+const { enviarResumenPanel, guardarConfigPanel, revisarPanel, revisarSinAtender, recortarPorCorte, resumenSinAtenderDeGrupo, resumenSinAtenderDeGrupos } = await import('./acciones');
 const { resumenHabilitadoParaFlota } = await import('./interruptor');
 const { copiaConfigGuardadaPorOmision } = await import('../sin_atender/config_guardada');
 const { salDeFlota, hashAutor } = await import('../historial/export_whatsapp');
@@ -131,6 +131,12 @@ describe('revisión tras importar un chat', () => {
     expect(d.llamadas.leerChats).toEqual([TENANT_A]);
     expect(d.enviar).not.toHaveBeenCalled();
     expect(d.bitacora).not.toHaveBeenCalled();
+  });
+  it('varios grupos: UNA sola lectura de la flota sin importar cuántos grupos se pidan (R7-A4)', async () => {
+    const d = deps({ detectar: () => resultado([alerta({ chatId: 'g1', nivel: 'alta' }), alerta({ chatId: 'g2', clave: 'b' }), alerta({ chatId: 'g9', clave: 'c' })]) });
+    const r = await resumenSinAtenderDeGrupos(TENANT_A, ['g1', 'g2', 'g3', 'g1'], ['Operador 1'], d);
+    expect(d.llamadas.leerChats).toEqual([TENANT_A]);
+    expect([...r!.entries()]).toEqual([['g1', { alertas: 1, altas: 1 }], ['g2', { alertas: 1, altas: 0 }], ['g3', { alertas: 0, altas: 0 }]]);
   });
   it('si no se puede revisar devuelve null, nunca lanza', async () => {
     expect(await resumenSinAtenderDeGrupo(TENANT_A, 'g1', [], deps({ leerChats: async () => null }))).toBeNull();

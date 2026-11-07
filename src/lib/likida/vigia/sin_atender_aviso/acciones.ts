@@ -103,11 +103,24 @@ export interface ResumenGrupoSinAtender { alertas: number; altas: number }
  * Devuelve null si no se pudo revisar (la importación ya está guardada: un fallo aquí nunca la deshace).
  */
 export async function resumenSinAtenderDeGrupo(tenantId: string, grupoId: string, equipoNombres: readonly string[], d: DepsSinAtender = depsSinAtenderReales): Promise<ResumenGrupoSinAtender | null> {
+  const r = await resumenSinAtenderDeGrupos(tenantId, [grupoId], equipoNombres, d);
+  return r?.get(grupoId) ?? null;
+}
+
+/**
+ * Lo mismo para VARIOS grupos con UNA sola revisión (una lectura de los históricos de la flota, no una por grupo): es lo que usa la
+ * subida por lote al final, en lugar de releer todo el histórico tras cada archivo (R7-A4). null si no se pudo revisar.
+ */
+export async function resumenSinAtenderDeGrupos(tenantId: string, grupoIds: readonly string[], equipoNombres: readonly string[], d: DepsSinAtender = depsSinAtenderReales): Promise<Map<string, ResumenGrupoSinAtender> | null> {
   try {
     const r = await revisarSinAtender(tenantId, { equipoNombres: [...equipoNombres] }, 0, d);
     if (!r.ok) return null;
-    const delGrupo = r.revision.resultado.alertas.filter((a) => a.chatId === grupoId);
-    return { alertas: delGrupo.length, altas: delGrupo.filter((a) => a.nivel === 'alta').length };
+    const porGrupo = new Map<string, ResumenGrupoSinAtender>();
+    for (const id of new Set(grupoIds)) {
+      const delGrupo = r.revision.resultado.alertas.filter((a) => a.chatId === id);
+      porGrupo.set(id, { alertas: delGrupo.length, altas: delGrupo.filter((a) => a.nivel === 'alta').length });
+    }
+    return porGrupo;
   } catch (e) {
     logger.warn('vigia.sin_atender_tras_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
     return null;
