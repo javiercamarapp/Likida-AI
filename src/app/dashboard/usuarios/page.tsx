@@ -1,5 +1,5 @@
 import { mensajeDeBaja } from '@/lib/auth/mensaje_baja';
-import { exigirStepUpAccion } from '@/lib/auth/stepup';
+import { exigirStepUpAccion, rolAsignableExigeStepUp } from '@/lib/auth/stepup';
 import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -184,6 +184,13 @@ export default async function UsuariosPage({
       return { ok: false, error: mensajeParaPantalla(e, 'invitar al usuario') };
     }
 
+    // Invitar con rol de dueño o contador es repartir acceso a dinero: mismo segundo factor reciente que `cambiarRol`
+    // (R7-A1). Va ANTES de crear nada y su texto no depende del correo, así que no abre un oráculo.
+    if (rolAsignableExigeStepUp(v.rol)) {
+      const pasoMfa = await exigirStepUpAccion(s.rol, 'cambio_rol', { tenantId: s.tenantId, userId: s.userId });
+      if (pasoMfa) return { ok: false, error: pasoMfa };
+    }
+
     // A37-S21-02: las dos ramas (alta nueva con correo / correo que ya tenía
     // cuenta, sin correo) contestan el MISMO texto y tardan al menos lo mismo
     // (`conPisoDeTiempo`, como el login): ni el mensaje ni el reloj distinguen
@@ -271,6 +278,9 @@ export default async function UsuariosPage({
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
+    // Reactivar devuelve el acceso con el rol que la cuenta tenía (puede ser dueño o contador): mismo paso que `cambiarRol` (R7-A1).
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'cambio_rol', { tenantId: s.tenantId, userId: s.userId });
+    if (pasoMfa) return { ok: false, error: pasoMfa };
     try {
       const r = await reactivarUsuario(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
       revalidatePath(RUTA);

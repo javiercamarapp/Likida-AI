@@ -55,6 +55,14 @@ export function rolConStepUp(rol: string | null | undefined): boolean {
   return !!rol && ROLES_ESCALONADOS.has(rol);
 }
 
+/**
+ * Roles cuya ASIGNACIÓN (invitar con ese rol) es una escalada de privilegio: dueño y contador ven y mueven dinero. Un encargado o
+ * `nomina` no. Cambiar el rol de alguien y reactivar una cuenta (que recupera el rol que tenía) exigen el paso sin mirar el rol.
+ */
+export function rolAsignableExigeStepUp(rolDestino: string | null | undefined): boolean {
+  return rolDestino === 'flota_admin' || rolDestino === 'contador';
+}
+
 export interface InstantaneaMfa {
   legible: boolean;
   inscrito: boolean;
