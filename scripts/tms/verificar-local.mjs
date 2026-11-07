@@ -5,6 +5,12 @@
 //   node scripts/tms/verificar-local.mjs --falso      ensayo contra el servidor sintético en memoria (sin red)
 //   TMS_CREDENCIALES_ARCHIVO=/ruta/.env.tms node scripts/tms/verificar-local.mjs
 //
+// PRUEBA EN SECO del mapeo (R7-B1): lee ≤20 registros por mapeo con la credencial del archivo, los normaliza con el mapeo y dice por NOMBRE
+// qué falta o no cuadra. No escribe nada y no imprime valores. El archivo de mapeos es un JSON `{ "viajes": {…}, "peajes": {…},
+// "posiciones": {…}, "liquidaciones": { "nomina": {…}, "operadores": {…}, "conceptos": {…} } }` (lo mismo que va en `tms_mapeo.mapeo`).
+//   node scripts/tms/verificar-local.mjs --en-seco --falso                              ensayo contra el servidor sintético
+//   TMS_CREDENCIALES_ARCHIVO=/ruta/.env.tms node scripts/tms/verificar-local.mjs --en-seco /ruta/mapeos.json
+//
 // El archivo de credenciales (líneas CLAVE=valor: base_url, usuario, clave, ruta_login opcional) vive FUERA del repo y
 // debe tener modo 600; con cualquier otro modo el script se niega a leerlo. Con `TMS_REPORTE_ARCHIVO=/ruta.md` escribe
 // además un reporte de solo conteos. Ventana de lectura real: `TMS_DESDE` / `TMS_HASTA` (ISO UTC; por omisión 1 año).
@@ -107,8 +113,11 @@ const sumar = (conceptos, tipo, aCentavos) =>
 async function main() {
   const args = process.argv.slice(2);
   const falso = args.includes('--falso');
-  const desconocido = args.find((a) => a !== '--falso');
-  if (desconocido) salir(2, 'Uso: node scripts/tms/verificar-local.mjs [--falso]');
+  const iSeco = args.indexOf('--en-seco');
+  const enSeco = iSeco >= 0;
+  const archivoMapeos = enSeco && args[iSeco + 1] && !args[iSeco + 1].startsWith('--') ? args[iSeco + 1] : undefined;
+  const desconocido = args.find((a, i) => a !== '--falso' && a !== '--en-seco' && !(enSeco && i === iSeco + 1 && a === archivoMapeos));
+  if (desconocido || (enSeco && !falso && !archivoMapeos)) salir(2, 'Uso: node scripts/tms/verificar-local.mjs [--falso] | --en-seco --falso | --en-seco <mapeos.json>');
 
   const mod = (ruta) => import(pathToFileURL(resolve(RAIZ, 'src/lib/likida', ruta)).href);
   const { SesionTms } = await mod('conectores/tms/sesion.ts');
@@ -131,6 +140,17 @@ async function main() {
     ventana = { desde, hasta };
   }
   base = valores.base_url;
+
+  if (enSeco) {
+    const { pruebaEnSecoTms, lineasDeReporteEnSeco } = await mod('conectores/tms/prueba_en_seco.ts');
+    let mapeos;
+    if (falso) mapeos = { liquidaciones: MAPEO_LIQUIDACIONES_SUPUESTO };
+    else {
+      try { mapeos = JSON.parse(readFileSync(resolve(archivoMapeos), 'utf8')); } catch { salir(2, 'No se pudo leer el archivo de mapeos como JSON. No se llamó a nadie.'); }
+    }
+    const reporte = await pruebaEnSecoTms({ valores, mapeos, http, ...(falso ? { ahora: () => 1_000_000, dormir: async () => undefined } : {}) });
+    salir(reporte.limpio ? 0 : 1, ...lineasDeReporteEnSeco(reporte));
+  }
 
   // 1) probar(): login + una lectura de bajo costo. Solo la bandera.
   const prueba = await probarTmsApiLectura(valores, http);

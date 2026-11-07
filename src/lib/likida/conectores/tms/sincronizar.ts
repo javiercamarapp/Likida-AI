@@ -53,7 +53,6 @@ import { recibirArchivoPeaje } from '../../peajes/ingesta';
 import { toCsv } from '../../export';
 import { leerCredencial, marcarProbada } from '../credenciales';
 import type { Capacidad, Http, ValoresCredencial } from '../tipos';
-import { RUTA_LOGIN_POR_DEFECTO } from './ficha';
 import { estadoDeFila, huella, type EstadoFila } from './huella';
 import { validarMapeo, type MapeoTms } from './mapeo';
 import type { PuntoReanudo } from './paginar';
@@ -69,8 +68,8 @@ import { leerViajes, type FilaViajeTms } from './viajes';
 export const CAPACIDAD_QUE_EJECUTA: Capacidad = 'leer_viajes';
 export const CONECTOR_TMS = 'tms_api_lectura';
 
-export const RECURSOS_SINCRONIZABLES = ['liquidaciones', 'peajes', 'viajes', 'posiciones'] as const;
-export type RecursoSincronizable = (typeof RECURSOS_SINCRONIZABLES)[number];
+export { RECURSOS_SINCRONIZABLES, type RecursoSincronizable } from './acceso';
+import { RECURSOS_SINCRONIZABLES, loginDe, urlBaseHttps, type RecursoSincronizable } from './acceso';
 
 /** Primera corrida de una flota: cuántos días hacia atrás se lee. */
 export const VENTANA_INICIAL_DIAS = 2;
@@ -214,23 +213,7 @@ const vacioResumen = (recurso: RecursoSincronizable, estado: EstadoRecurso): Res
   recurso, estado, leidas: 0, nuevas: 0, omitidas: 0, entregadas: 0, rechazadas: 0, pendientes: 0, conflictos: 0, backlog: false,
 });
 
-export function urlBaseHttps(v: string | undefined): string | null {
-  try {
-    const u = new URL((v ?? '').trim());
-    return u.protocol === 'https:' ? u.origin + u.pathname.replace(/\/+$/, '') : null;
-  } catch {
-    return null;
-  }
-}
-
-/** SUPUESTO: la forma del login. Se corrige aquí cuando llegue la documentación del cliente. */
-export function loginDe(v: ValoresCredencial): { ruta: string; cuerpo: Record<string, string>; campo_token: string } {
-  return {
-    ruta: (v.ruta_login ?? '').trim() || RUTA_LOGIN_POR_DEFECTO,
-    cuerpo: { usuario: '{usuario}', clave: '{clave}' },
-    campo_token: 'token',
-  };
-}
+export { urlBaseHttps, loginDe } from './acceso';
 
 interface ContextoFlota {
   peticiones: number;
