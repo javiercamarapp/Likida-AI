@@ -428,15 +428,15 @@ const ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> = {
 function TablaLiqs({ filas, sufijo, conVer }: { filas: LiqRow[]; sufijo: string; conVer?: boolean }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-[13px]">
+      <table aria-label="Viajes de la liquidación" className="w-full text-[13px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--faint)' }}>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Comprobado</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Diferencia</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estatus</th>
-            {conVer && <th className="pb-2" />}
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Comprobado</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Diferencia</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estatus</th>
+            {conVer && <th scope="col" className="pb-2" />}
           </tr>
         </thead>
         <tbody>

@@ -48,11 +48,12 @@ vi.mock('../contactos', () => ({
 const repoMod = await import('./repo');
 const { crearRepoVigia, estatusViajeReal, aConfig, aContacto, validarConfig, telefonoDeAllowlist, altaContactoVigia, bajaManualContacto, suprimirContactoVigia, cargarTablero, guardarDirectorVigia, quitarDirectorVigia, guardarConfigVigia, validarServicio, guardarServicioVigia, quitarServicioVigia, fijarTurnoDirector, listarFestivos, guardarFestivo } = repoMod;
 const { T1, T2, CLIENTE_A, VIAJE_1 } = await import('./datos.fixture');
+const { reiniciarCachePerfil } = await import('@/lib/auth/perfil_tenant');
 
 const tiene = (l: Llamada, op: string, col: string, valor?: unknown) =>
   l.filtros.some(([o, c, v]) => o === op && c === col && (valor === undefined || JSON.stringify(v) === JSON.stringify(valor)));
 
-beforeEach(() => { llamadas = []; respuesta = () => ({ data: [], error: null }); });
+beforeEach(() => { llamadas = []; reiniciarCachePerfil(); respuesta = () => ({ data: [], error: null }); });
 
 describe('AISLAMIENTO: toda consulta a una tabla con tenant filtra por él', () => {
   const TABLAS_CON_TENANT = ['vigia_config', 'vigia_contacto', 'vigia_conversacion', 'vigia_mensaje', 'vigia_evento', 'viaje', 'posicion', 'pod', 'factura_emitida', 'cliente', 'app_user', 'tenant', 'vigia_director', 'vigia_aviso_correo', 'vigia_servicio_cliente'];
@@ -233,6 +234,21 @@ describe('mapeos y config', () => {
     respuesta = () => ({ data: null, error: null });
     const c = await crearRepoVigia().config(T1);
     expect(c).toMatchObject({ tenantId: T1, habilitado: false, modoAprobacion: 'siempre' });
+  });
+  // CT-A345-23 (IN4-23): el autoenvio esta bloqueado solo al GUARDAR; una fila que llegue con `autoenviar_bajo_riesgo` por otra via
+  // (SQL a mano, API, copia) se autoenviaria. Bajo `cinco_agentes` la lectura la fuerza a `siempre`.
+  it('CT-A345-23: con perfil cinco_agentes una fila en autoenviar_bajo_riesgo se lee como «siempre»; sin perfil se respeta', async () => {
+    const fila = { tenant_id: T1, habilitado: true, modo_aprobacion: 'autoenviar_bajo_riesgo', autoenviar_min_aprobaciones: 3 };
+    respuesta = (l) => (l.tabla === 'tenant_perfil' ? { data: { perfil: 'cinco_agentes' }, error: null } : { data: fila, error: null });
+    expect(await crearRepoVigia().config(T1)).toMatchObject({ habilitado: true, modoAprobacion: 'siempre', autoenviarMinAprobaciones: 3 });
+    reiniciarCachePerfil();
+    respuesta = (l) => (l.tabla === 'tenant_perfil' ? { data: null, error: null } : { data: fila, error: null });
+    expect(await crearRepoVigia().config(T1)).toMatchObject({ modoAprobacion: 'autoenviar_bajo_riesgo' });
+  });
+  it('CT-A345-23: si el perfil no se puede leer, se asume el restrictivo y el autoenvio tampoco sale', async () => {
+    const fila = { tenant_id: T1, habilitado: true, modo_aprobacion: 'autoenviar_bajo_riesgo' };
+    respuesta = (l) => (l.tabla === 'tenant_perfil' ? { data: null, error: { message: 'caída' } } : { data: fila, error: null });
+    expect((await crearRepoVigia().config(T1)).modoAprobacion).toBe('siempre');
   });
   it('un error de la base al leer config LANZA (no se lee como «apagado por defecto» ni «encendido»)', async () => {
     respuesta = () => ({ data: null, error: { message: 'caída' } });
@@ -1095,5 +1111,54 @@ describe('T-A4-31 · turno y festivos: escritura', () => {
     expect(tiene(llamadas[0], 'eq', 'tenant_id', T1)).toBe(true);
     respuesta = () => ({ data: null, error: { message: 'x', code: '42P01' } });
     expect(await listarFestivos(T1)).toEqual([]);
+  });
+});
+
+describe('0999: la configuración de «sin atender» por flota', () => {
+  const FILA = { horario_atencion: { desdeHora: 8, hastaHora: 18 }, palabras_clave: ['retraso'], palabras_urgentes: [], equipo_nombres: ['Operador 1'], insistencia_min: 4, umbral_urgente_min: 20, resumen_correo_habilitado: true };
+  const valor = { horarioAtencion: { desdeHora: 8, hastaHora: 18 }, palabrasClave: ['retraso'], palabrasUrgentes: [], equipoNombres: ['Operador 1'], insistenciaMin: 4, umbralUrgenteMin: 20, resumenCorreoHabilitado: true };
+
+  it('lee SOLO la fila de la flota pedida (filtra por tenant_id) y la mapea', async () => {
+    respuesta = () => ({ data: FILA, error: null });
+    const c = await repoMod.leerConfigSinAtender(T1);
+    expect(c).toMatchObject({ horarioAtencion: { desdeHora: 8, hastaHora: 18 }, equipoNombres: ['Operador 1'], insistenciaMin: 4, resumenCorreoHabilitado: true });
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0]!.tabla).toBe('vigia_sin_atender_config');
+    expect(tiene(llamadas[0]!, 'eq', 'tenant_id', T1)).toBe(true);
+  });
+  it('sin fila: todo apagado (falla cerrado)', async () => {
+    respuesta = () => ({ data: null, error: null });
+    expect(await repoMod.leerConfigSinAtender(T1)).toMatchObject({ horarioAtencion: null, equipoNombres: [], resumenCorreoHabilitado: false, insistenciaMin: 2 });
+  });
+  it.each(['42P01', 'PGRST205'])('tabla ausente (%s): valores de arranque en vez de error', async (code) => {
+    respuesta = () => ({ data: null, error: { message: 'no existe la relación', code } });
+    expect(await repoMod.leerConfigSinAtender(T1)).toMatchObject({ horarioAtencion: null, resumenCorreoHabilitado: false });
+  });
+  it('cualquier otro error LANZA: «no pude preguntar» no es «apagado»', async () => {
+    respuesta = () => ({ data: null, error: { message: 'caída', code: '57014' } });
+    await expect(repoMod.leerConfigSinAtender(T1)).rejects.toThrow(/sin_atender_config_leer/);
+  });
+  it('guarda con upsert por flota, con el tenant y el usuario que se le pasan, y sin tocar otra flota', async () => {
+    respuesta = () => ({ data: null, error: null });
+    const r = await repoMod.guardarConfigSinAtender(T1, 'u-1', valor);
+    expect(r).toEqual({ ok: true, valor: { tenantId: T1 } });
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0]).toMatchObject({ tabla: 'vigia_sin_atender_config', op: 'upsert' });
+    expect(llamadas[0]!.valores).toMatchObject({ tenant_id: T1, updated_by: 'u-1', insistencia_min: 4, umbral_urgente_min: 20, resumen_correo_habilitado: true, equipo_nombres: ['Operador 1'], horario_atencion: { desdeHora: 8, hastaHora: 18 } });
+  });
+  it('guardar con la tabla ausente: mensaje llano, no lanza', async () => {
+    respuesta = () => ({ data: null, error: { message: 'x', code: '42P01' } });
+    const r = await repoMod.guardarConfigSinAtender(T1, null, valor);
+    expect(r.ok).toBe(false);
+  });
+  it('guardar con otro error lanza', async () => {
+    respuesta = () => ({ data: null, error: { message: 'caída', code: '57014' } });
+    await expect(repoMod.guardarConfigSinAtender(T1, null, valor)).rejects.toThrow(/sin_atender_config_guardar/);
+  });
+  it('aislamiento: dos flotas leen cada una con su propio filtro', async () => {
+    respuesta = () => ({ data: null, error: null });
+    await repoMod.leerConfigSinAtender(T1);
+    await repoMod.leerConfigSinAtender(T2);
+    expect(llamadas.map((l) => l.filtros.find(([o, c]) => o === 'eq' && c === 'tenant_id')?.[2])).toEqual([T1, T2]);
   });
 });

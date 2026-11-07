@@ -2,7 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {}, push: () => {}, replace: () => {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
 
-import { VistaAgenteCartaPorte, FRASE_SIN_GRUPOS, type BuzonCartaPorteVista } from './vista';
+import { VistaAgenteCartaPorte, FRASE_SIN_GRUPOS, TEXTO_CATALOGOS_SAT_VACIOS, TEXTO_CATALOGOS_SAT_NO_LEIDOS, type BuzonCartaPorteVista } from './vista';
+import { CATALOGOS_SAT_VALIDACION, estadoCatalogosSat } from '@/lib/likida/carta_porte_docs/catalogos_sat';
 
 const BUZON: BuzonCartaPorteVista = { direccion: 'cp-abc123@correo.ejemplo.test', activo: true, remitentes: ['cliente.ejemplo.test'], dominioConfigurado: true };
 const pintar = (buzon?: BuzonCartaPorteVista | null | 'no_leido') =>
@@ -32,10 +33,12 @@ describe('Agente de Carta Porte: «Cómo mandarme documentos»', () => {
     expect(sinLaFrase(pintar('no_leido'))).not.toMatch(/grupo/i);
   });
 
-  it('muestra los remitentes reconocidos (remitentes_permitidos) o dice que es cualquiera', () => {
+  it('muestra los remitentes reconocidos (remitentes_permitidos) o dice que sin lista el buzón no recibe nada (S-06)', () => {
     expect(pintar(BUZON)).toContain('cliente.ejemplo.test');
     expect(pintar(BUZON)).toContain('remitente no reconocido');
-    expect(pintar({ ...BUZON, remitentes: [] })).toContain('Remitentes reconocidos: cualquiera');
+    const vacio = pintar({ ...BUZON, remitentes: [] });
+    expect(vacio).toContain('Sin remitentes autorizados');
+    expect(vacio).not.toContain('cualquiera');
   });
 
   it('sin buzón activado: estado vacío con la llamada a activarlo en el panel, y ninguna dirección inventada', () => {
@@ -182,5 +185,40 @@ describe('Agente de Carta Porte: «Viajes salidos sin Carta Porte» (T-A3-66)', 
 
   it('sin la prop no pinta el bloque', () => {
     expect(pintarSin()).not.toContain('Viajes salidos sin Carta Porte');
+  });
+});
+
+describe('Carta Porte: aviso de catálogos SAT sin cargar (CT-A345-04)', () => {
+  const html = (c?: Record<string, number> | 'no_leido') => renderToStaticMarkup(<VistaAgenteCartaPorte datos={null} {...(c === undefined ? {} : { catalogosSat: c })} />);
+  const todosEn = (n: number) => Object.fromEntries(CATALOGOS_SAT_VALIDACION.map((c) => [c.catalogo, n]));
+
+  it('con todos los catálogos vacíos lo dice, con el conteo por catálogo, y aclara que «sin fallas» no es «verificado»', () => {
+    const h = html({});
+    expect(h).toContain('Los catálogos del SAT todavía no están cargados en Likida');
+    expect(TEXTO_CATALOGOS_SAT_VACIOS).toContain('no significa que sus claves estén verificadas');
+    expect(h).toContain('data-catalogos-sat="vacios"');
+    for (const c of CATALOGOS_SAT_VALIDACION) expect(h).toContain(`${c.nombre}: sin cargar`);
+  });
+
+  it('con algunos vacíos nombra cuáles faltan y cuántas claves tiene el resto', () => {
+    const h = html({ ...todosEn(10), c_Colonia: 0 });
+    expect(h).toContain('data-catalogos-sat="parcial"');
+    expect(h).toContain('Colonias: sin cargar');
+    expect(h).toContain('Códigos postales: 10 claves');
+  });
+
+  it('con todos cargados no pinta aviso', () => {
+    expect(html(todosEn(5))).not.toContain('data-catalogos-sat');
+    expect(estadoCatalogosSat(todosEn(5)).vacios).toEqual([]);
+  });
+
+  it('lectura caída: lo confiesa y no finge ni cargados ni vacíos', () => {
+    const h = html('no_leido');
+    expect(h).toContain(TEXTO_CATALOGOS_SAT_NO_LEIDOS);
+    expect(h).toContain('data-catalogos-sat="no_leido"');
+  });
+
+  it('sin la prop no pinta nada (otros orígenes de la vista no cambian)', () => {
+    expect(html()).not.toContain('data-catalogos-sat');
   });
 });

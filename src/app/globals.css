@@ -396,9 +396,9 @@ html, body {
    invisible, así que con teclado no se ve nada — `→`/`Tab` mueve la
    selección a ciegas y Enter firma la opción equivocada. Regla genérica y
    aditiva (no toca ningún `outline: none` porque no hay ninguno): cuando
-   el input directo del label tiene `:focus-visible`, el anillo se pinta en
+   el input directo del label (marcado `data-foco="etiqueta"`, R4: antes dependía de la clase `.sr-only` de Tailwind) tiene `:focus-visible`, el anillo se pinta en
    el label completo, mismo color y grosor que `.sb-aside` arriba. */
-label:has(> input.sr-only:focus-visible) {
+label:has(> input[data-foco="etiqueta"]:focus-visible) {
   outline: 3px solid var(--accent, var(--marca));
   outline-offset: 2px;
 }
@@ -490,4 +490,25 @@ label:has(> input.sr-only:focus-visible) {
 @media (max-width: 640px) {
   .rotulos-diagrama text { font-size: 13px; letter-spacing: 0.7px; }
   .rotulos-diagrama .rotulo-opcional { display: none; }
+}
+
+/* ── Accesibilidad de respaldo (F8, CT-PAR-11) ──────────────────────────────
+   1. FOCO VISIBLE en los campos de la v1: ~20 campos de /admin y /dashboard llevan `outline-none` de Tailwind (especificidad
+      0,1,0) y ningún reemplazo, así que con el teclado no se veía dónde estaba el foco (WCAG 2.4.7). Este selector (0,1,1) gana a
+      esa utilidad. Se EXCLUYEN los campos que la v2 deja sin anillo a propósito (compuestos, sin borde) y los que no son un cuadro de
+      texto; en la v2 `[data-ui="v2"] …:focus-visible` (0,3,0 o más) manda sobre esto.
+      R4: la exclusión ya NO depende de nombres de clase de Tailwind (`.bg-transparent`, `.border-0`, `.sr-only`). Un campo que
+      pinta su anillo en el contenedor (chat, barra de filtros, combo en barra) se declara con `data-anillo="envolvente"`; los
+      campos ocultos a la vista (`.sr-only`: casillas y radios) ya salen por su `type` y, de ser otro tipo, un contorno recortado
+      por el propio `.sr-only` no se ve. Una prueba (accesibilidad_css.test.ts) obliga a marcar todo campo transparente sin borde.
+   2. MOVIMIENTO: las utilidades de Tailwind que no pasan por un @keyframes propio (pulse/bounce/ping) se apagan con
+      prefers-reduced-motion. `animate-spin` se conserva: es el indicador de «trabajando», esencial (WCAG 2.2.2). */
+input:not([data-anillo="envolvente"], [type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]):focus-visible,
+select:not([data-anillo="envolvente"]):focus-visible,
+textarea:not([data-anillo="envolvente"]):focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse, .animate-bounce, .animate-ping { animation: none; }
 }

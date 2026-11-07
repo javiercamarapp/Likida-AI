@@ -14,10 +14,8 @@ import { numero, hoyMx } from '@/lib/formato';
 import { ventanaLitrosElegibles } from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { supabaseAdmin } from '@/lib/supabase/admin';
-import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { ChartCard, StatusPill } from '../../admin/ui/kit';
 import { EstadoVacio } from '../estados';
 import { HBars } from '../../admin/ui/graficas';
@@ -65,19 +63,14 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 async function tenantYUsuarioDelAction(
   sufijo: string,
   sp: { vista?: string; tenant?: string },
+  tenantId: string,
 ) {
-  // FE-32: sin `sp` aquí, un superadmin en `?vista=demo`/`?tenant=` resolvía
-  // esta acción contra SU tenant elegido en /admin/elegir-flota (o el
-  // selector), distinto del que `resolverTenantEfectivo` usó para LEER la
-  // página — la acción fallaba cerrado con "Esa línea ya no existe" en vez
-  // de resolver la línea que el superadmin de verdad está viendo.
-  const s = await requireSessionTenant('/dashboard/combustible-casetas', sp);
+  // MX-002: la línea se resuelve en la flota que la página PINTÓ (`tenantId` del render, por closure), no en la de la cookie
+  // de selección (compartida entre pestañas). `resolverTenantEfectivo` ya valida `?tenant=` (inexistente = 404) y firma la
+  // impersonación; `resolverTenantAtadoOLanza` exige además que caiga en la flota pintada.
+  const s = await resolverTenantAtadoOLanza('/dashboard/combustible-casetas', sp, tenantId);
   if (!puedeVerRuta(s.rol, '/dashboard/combustible-casetas')) {
     redirect(`/dashboard/combustible-casetas${sufijo}`);
-  }
-  if (s.rol === 'superadmin' && sp.tenant) {
-    const t = await resolverTenantPedido(supabaseAdmin(), s.tenantId, sp.tenant);
-    return { tenantId: t, userId: s.userId };
   }
   return { tenantId: s.tenantId, userId: s.userId };
 }
@@ -164,7 +157,7 @@ export default async function CombustibleCasetasPage({
 
   async function accionResolverLinea(formData: FormData) {
     'use server';
-    const { tenantId: t, userId } = await tenantYUsuarioDelAction(sufijo, sp);
+    const { tenantId: t, userId } = await tenantYUsuarioDelAction(sufijo, sp, tenantId);
     const lineaId = String(formData.get('lineaId') ?? '');
     const eleccion = String(formData.get('eleccion') ?? '');
     const volver = (ok: string): never => redirect(`/dashboard/combustible-casetas${sufijo ? `${sufijo}&` : '?'}ok=${ok}`);

@@ -83,3 +83,14 @@ describe('telefonoE164Mx', () => {
     expect(telefonoE164Mx('15556596430')).toBe('15556596430'); // no es de México: no se toca
   });
 });
+
+import { digitosTelefono } from './telefono_variantes';
+describe('F1B: prefijos de marcacion 044/045/01/0052 no crean un numero distinto', () => {
+  it.each(['044 999 111 0001', '045 999 111 0001', '01 999 111 0001', '0052 999 111 0001', '00521 999 111 0001'])('%s', (crudo) => {
+    expect(['9991110001', '529991110001', '5219991110001']).toContain(digitosTelefono(crudo));
+    expect(variantesTelefono(crudo)).toContain('529991110001');
+  });
+  it('un numero normal no cambia', () => {
+    expect(digitosTelefono('+52 1 999 111 0001')).toBe('5219991110001');
+  });
+});

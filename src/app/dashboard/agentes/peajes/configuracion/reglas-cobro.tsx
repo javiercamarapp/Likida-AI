@@ -19,11 +19,8 @@ export interface ReglasCobroVista {
   acciones: AccionesReglasCobro;
 }
 
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 /** Casetas que se pintan a la vez (el catálogo trae ~115; con reglas primero). */
@@ -65,13 +62,13 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
               <label className="flex items-center gap-1.5 ml-auto">
                 <span className="text-[11px]" style={{ color: 'var(--muted)' }}>Clases válidas extra</span>
                 <input name="clases" defaultValue={c.clasesPermitidas.join(', ')} placeholder="1" maxLength={60} aria-label={`Clases válidas extra en ${c.nombre}`}
-                  className={`${CSS_INPUT} w-[80px]`} style={ESTILO_INPUT} />
+                  className="w-[80px]" style={ESTILO_INPUT} />
               </label>
               <label className="flex items-center gap-1.5">
                 <input type="checkbox" name="no_cruzar" value="1" defaultChecked={c.noCruzar} aria-label={`${c.nombre} no debe cruzarse`} />
                 <span className="text-[11px]">No debe cruzarse</span>
               </label>
-              <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Guardar</button>
+              <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Guardar</button>
             </form>
           ))}
           {ordenadas.length > MAX_CASETAS_VISIBLES && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se muestran {MAX_CASETAS_VISIBLES} de {ordenadas.length}.</p>}
@@ -100,7 +97,7 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
                   {e.nota && <span style={{ color: 'var(--muted)' }}>· {e.nota}</span>}
                   <form action={acciones.quitarExcepcionUnidad} className="ml-auto">
                     <input type="hidden" name="excepcion" value={e.id} />
-                    <button type="submit" aria-label={`Quitar la excepción de ${e.unidad}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
+                    <button type="submit" aria-label={`Quitar la excepción de ${e.unidad}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
                   </form>
                 </div>
               ))}
@@ -111,14 +108,14 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
           ) : (
             <form action={acciones.guardarExcepcionUnidad} className="flex items-end gap-2 flex-wrap">
               <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Caseta</span>
-                <select name="caseta" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT}>
+                <select name="caseta" required className="mt-0.5" style={ESTILO_INPUT}>
                   {prohibidas.map((c) => <option key={c.id} value={c.nombre}>{c.nombre}</option>)}
                 </select></label>
               <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Unidad</span>
-                <input name="unidad" required maxLength={40} placeholder="TC9001" className={`${CSS_INPUT} w-[120px] mt-0.5`} style={ESTILO_INPUT} /></label>
+                <input name="unidad" required maxLength={40} placeholder="TC9001" className="w-[120px] mt-0.5" style={ESTILO_INPUT} /></label>
               <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Nota (opc.)</span>
-                <input name="nota" maxLength={300} placeholder="Atiende rescates" className={`${CSS_INPUT} w-[200px] mt-0.5`} style={ESTILO_INPUT} /></label>
-              <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Exceptuar unidad</button>
+                <input name="nota" maxLength={300} placeholder="Atiende rescates" className="w-[200px] mt-0.5" style={ESTILO_INPUT} /></label>
+              <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Exceptuar unidad</button>
             </form>
           )}
         </div>
@@ -127,7 +124,7 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
       <form action={acciones.cargarCoordenadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap mb-4">
         <input type="file" name="archivo" accept=".csv,.tsv" required aria-label="CSV de coordenadas de casetas"
           className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer" style={{ color: 'var(--muted)' }} />
-        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar coordenadas</button>
+        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> Cargar coordenadas</button>
         <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Opcional. CSV <span className="cifra-mono">nombre; lat; lng; fuente</span>. Sin coordenadas la revisión funciona igual; solo no se detectan saltos imposibles entre casetas lejanas. No se inventan.</span>
       </form>
 
@@ -145,7 +142,7 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
               {b.motivo && <span style={{ color: 'var(--muted)' }}>· {b.motivo}</span>}
               <form action={acciones.quitarBajaTag} className="ml-auto">
                 <input type="hidden" name="baja" value={b.id} />
-                <button type="submit" aria-label={`Quitar la baja de ${b.tagOriginal ?? b.tag}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
+                <button type="submit" aria-label={`Quitar la baja de ${b.tagOriginal ?? b.tag}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} /></button>
               </form>
             </div>
           ))}
@@ -153,12 +150,12 @@ export function SeccionReglasCobro({ datos }: { datos: ReglasCobroVista }) {
       )}
       <form action={acciones.altaBajaTag} className="flex items-end gap-2 flex-wrap">
         <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>TAG</span>
-          <input name="tag" required maxLength={60} placeholder="IMDM 12345678" className={`${CSS_INPUT} w-[160px] mt-0.5`} style={ESTILO_INPUT} /></label>
+          <input name="tag" required maxLength={60} placeholder="IMDM 12345678" className="w-[160px] mt-0.5" style={ESTILO_INPUT} /></label>
         <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Último día vigente</span>
-          <input type="date" name="baja_en" required className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
+          <input type="date" name="baja_en" required className="mt-0.5" style={ESTILO_INPUT} /></label>
         <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Motivo (opc.)</span>
-          <input name="motivo" maxLength={300} placeholder="Unidad siniestrada" className={`${CSS_INPUT} w-[200px] mt-0.5`} style={ESTILO_INPUT} /></label>
-        <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>Dar de baja</button>
+          <input name="motivo" maxLength={300} placeholder="Unidad siniestrada" className="w-[200px] mt-0.5" style={ESTILO_INPUT} /></label>
+        <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Dar de baja</button>
       </form>
       <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>Cualquier cruce posterior a esa fecha se marca como candidato. Dar de baja el mismo TAG otra vez cambia su fecha.</p>
     </section>

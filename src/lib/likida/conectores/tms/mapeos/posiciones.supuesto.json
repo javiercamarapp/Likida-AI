@@ -1,0 +1,53 @@
+{
+  "recurso": "posiciones",
+  "ruta": "/api/posiciones",
+  "metodo": "GET",
+  "params": {
+    "desde": "desde",
+    "hasta": "hasta",
+    "pagina": "pagina",
+    "tam": "tam"
+  },
+  "raiz": "data.items",
+  "campos": {
+    "despacho_ref": {
+      "fuente": "Icident",
+      "transformar": "texto"
+    },
+    "deviceId": {
+      "fuente": "unidad",
+      "transformar": "texto"
+    },
+    "lat": {
+      "fuente": "latitud",
+      "transformar": "numero"
+    },
+    "lng": {
+      "fuente": "longitud",
+      "transformar": "numero"
+    },
+    "medidaEn": {
+      "fuente": "fecha",
+      "transformar": "fecha_local",
+      "zona": "America/Mexico_City"
+    },
+    "velocidad": {
+      "fuente": "velocidad",
+      "transformar": "numero"
+    },
+    "rumbo": {
+      "fuente": "rumbo",
+      "transformar": "numero"
+    }
+  },
+  "clave_externa": [
+    "deviceId",
+    "medidaEn"
+  ],
+  "obligatorios": [
+    "deviceId",
+    "lat",
+    "lng",
+    "medidaEn"
+  ]
+}

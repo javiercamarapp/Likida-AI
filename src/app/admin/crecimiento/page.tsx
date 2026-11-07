@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -176,13 +177,13 @@ export default async function CrecimientoPage() {
                 <TituloSeccion>Costo por lead, por fuente</TituloSeccion>
                 {/* FE-19: scrollea dentro de su tarjeta, no estira la página. */}
                 <div className="overflow-x-auto mt-2">
-                <table className="w-full text-[12.5px]">
+                <table aria-label="Costo por lead, por fuente" className="w-full text-[12.5px]">
                   <thead>
                     <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Fuente</th>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Leads</th>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Último</th>
-                      <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo por lead</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Fuente</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Leads</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Último</th>
+                      <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Costo por lead</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -291,12 +292,12 @@ export default async function CrecimientoPage() {
                 </p>
               ) : (
                 <div className="overflow-x-auto mt-2">
-                  <table className="w-full text-[12.5px]">
+                  <table aria-label="Cohortes por mes de alta" className="w-full text-[12.5px]">
                     <thead>
                       <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
-                        <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Cohorte (mes de alta)</th>
-                        <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Flotas</th>
-                        <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flotas con uso, mes a mes</th>
+                        <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Cohorte (mes de alta)</th>
+                        <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Flotas</th>
+                        <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Flotas con uso, mes a mes</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -388,3 +389,5 @@ export default async function CrecimientoPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Crecimiento' };

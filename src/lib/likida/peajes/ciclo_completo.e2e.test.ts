@@ -101,8 +101,8 @@ const posiciones = [
 function base(): Record<string, Fila[]> {
   return {
     peaje_ingesta_config: [
-      { tenant_id: T, rotacion: 1, activa: false, correo_token: TOKEN, correo_activo: true, remitentes_permitidos: [], pull_activo: false, pull_proximo_en: '2000-01-01T00:00:00Z' },
-      { tenant_id: T2, rotacion: 1, activa: false, correo_token: TOKEN2, correo_activo: true, remitentes_permitidos: [], pull_activo: false, pull_proximo_en: '2000-01-01T00:00:00Z' },
+      { tenant_id: T, rotacion: 1, activa: false, correo_token: TOKEN, correo_activo: true, remitentes_permitidos: ['pase.example'], pull_activo: false, pull_proximo_en: '2000-01-01T00:00:00Z' },
+      { tenant_id: T2, rotacion: 1, activa: false, correo_token: TOKEN2, correo_activo: true, remitentes_permitidos: ['pase.example'], pull_activo: false, pull_proximo_en: '2000-01-01T00:00:00Z' },
     ],
     peaje_ingesta_archivo: [],
     unidad: [

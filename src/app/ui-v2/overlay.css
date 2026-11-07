@@ -25,7 +25,7 @@ html[data-overlay-abierto] { overflow: hidden; }
   border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); overflow: hidden;
 }
 .rv-ov__grabber { display: none; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--line2, var(--line)); touch-action: none; cursor: grab; }
-.rv-ov__cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.rv-ov__cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--borde-reposo, var(--line)); }
 .rv-ov__textos { min-width: 0; }
 .rv-ov__titulo { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; letter-spacing: 0; }
 .rv-ov__desc { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
@@ -34,13 +34,17 @@ html[data-overlay-abierto] { overflow: hidden; }
   background: transparent; color: var(--muted); cursor: pointer;
 }
 .rv-ov__cerrar::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
-.rv-ov__cerrar:hover { background: var(--canvas); color: var(--ink); }
+.rv-ov__cerrar:hover { background: var(--ui-soft, var(--canvas)); color: var(--ink); }
 .rv-ov__cerrar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .rv-ov__cuerpo { padding: 16px; overflow-y: auto; overscroll-behavior: contain; flex: 1 1 auto; font-size: 13px; line-height: 1.5; }
 .rv-ov__cuerpo:empty { display: none; }
 .rv-ov__cuerpo[data-sin-padding] { padding: 0; }
-.rv-ov__pie { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); flex: none; }
-.rv-ov__marca { display: flex; justify-content: center; flex: none; padding: 9px 0 11px; border-top: 1px solid var(--line); opacity: .6; color: var(--ink); }
+.rv-ov__pie { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--borde-reposo, var(--line)); flex: none; }
+.rv-ov__marca { display: flex; justify-content: center; flex: none; padding: 9px 0 11px; border-top: 1px solid var(--borde-reposo, var(--line)); opacity: .6; color: var(--ink); }
+/* Franja de marca: logo horizontal de 64 px de ancho (Rovaq); la altura sigue la proporcion del viewBox. */
+.rv-ov__marca svg { width: 64px; height: auto; }
+/* Controles del encabezado y del pie: 28 px (Rovaq, --ov-btn-sm); el boton chico del kit mide 32 fuera de los overlays. */
+[data-ui="v2"] .rv-ov .rv-btn--sm { min-height: var(--ov-btn-sm, 28px); }
 
 /* Drawer: a la derecha en escritorio, 8 px de margen. `data-ancho` (PanelLateral) manda sobre `data-tamano`. */
 .rv-ov--drawer { margin: 8px 8px 8px auto; height: calc(100dvh - 16px); width: min(calc(100vw - 16px), 420px); }
@@ -86,10 +90,10 @@ html[data-overlay-abierto] { overflow: hidden; }
 }
 
 /* ── Popover y menú: filas de 32, radio 12, borde 1 px, --shadow-pop, entrada 140 ms ── */
-.rv-pop { box-sizing: border-box; position: fixed; z-index: 60; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px; background: var(--surface); color: var(--ink); border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); }
+.rv-pop { box-sizing: border-box; position: fixed; z-index: 60; min-width: 200px; max-width: calc(100vw - 16px); padding: 4px; background: var(--surface); color: var(--ink); border: 1px solid var(--borde-reposo, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); }
 .rv-menu { display: grid; gap: 0; }
-.rv-menu__item { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--font-sans-ui, inherit); text-align: left; text-decoration: none; cursor: pointer; }
-.rv-menu__item:hover { background: var(--canvas); }
+.rv-menu__item { display: flex; align-items: center; gap: 8px; min-height: var(--ctl-h, 32px); padding: 6px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: 500 13px/1.25 var(--font-sans-ui, inherit); text-align: left; text-decoration: none; cursor: pointer; }
+.rv-menu__item:hover { background: var(--ui-soft, var(--canvas)); }
 .rv-menu__item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-menu__item[data-peligro] { color: var(--bad); }
 .rv-menu__item[aria-disabled="true"] { color: var(--muted); cursor: not-allowed; }
@@ -103,12 +107,12 @@ html[data-overlay-abierto] { overflow: hidden; }
   .rv-pop { animation: rv-ov-fondo 140ms var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; }
 }
 
-/* ── Tooltip de superficie (Vexa): tarjeta blanca de 160–280 px por contenido, radio 12, sombra literal de Vexa, 12/500/1.4. Siempre en el DOM
+/* ── Tooltip corto (controles finos §2.6): pastilla de tokens (--tip-bg/--tip-fg/--tip-borde; la tarjeta blanca de Rovaq son 3 variables), radio --r-tip 8, padding 6x10, 12/500/1.4, ancho por contenido hasta 280. Siempre en el DOM
    (oculto) para aria-describedby; el motor la coloca con `colocarPanel`. ── */
 .rv-tip { position: relative; display: inline-flex; max-width: 100%; }
 .rv-tip__texto { display: inline-flex; align-items: center; border-radius: 8px; cursor: help; }
 .rv-tip__texto:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.rv-pop--tip { top: 0; left: 0; display: grid; gap: 3px; box-sizing: border-box; width: max-content; min-width: 160px; max-width: min(280px, calc(100vw - 32px)); padding: 10px 12px; border-radius: 12px; box-shadow: 0 1px 2px #0e0e100a, 0 8px 24px -8px #0e0e1029; font-size: var(--t-small); font-weight: 500; line-height: 1.4; font-family: var(--font-sans-ui, inherit); text-align: left; white-space: normal; overflow-wrap: break-word; font-variant-numeric: tabular-nums; visibility: hidden; opacity: 0; animation: none; }
+.rv-pop--tip { top: 0; left: 0; display: grid; gap: 3px; box-sizing: border-box; width: max-content; max-width: min(280px, calc(100vw - 32px)); padding: 6px 10px; border-radius: var(--r-tip, 8px); background: var(--tip-bg, #2a2a2f); color: var(--tip-fg, #f4f4f5); border-color: var(--tip-borde, transparent); box-shadow: 0 1px 2px #0e0e100a, 0 8px 24px -8px #0e0e1029; font-size: var(--t-small); font-weight: 500; line-height: 1.4; font-family: var(--font-sans-ui, inherit); text-align: left; white-space: normal; overflow-wrap: break-word; font-variant-numeric: tabular-nums; visibility: hidden; opacity: 0; animation: none; }
 .rv-pop--tip[data-abierto] { visibility: visible; opacity: 1; }
 /* Puente de hover: cubre el hueco de 6 px entre disparador y burbuja (arriba o abajo) para que cruzar con el puntero no la cierre. */
 .rv-pop--tip::before, .rv-pop--tip::after { content: ""; position: absolute; left: 0; right: 0; height: 10px; }
@@ -144,6 +148,7 @@ html[data-overlay-abierto] { overflow: hidden; }
 .rv-historial { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 
 /* ── Tooltip de gráfica (TooltipGrafica): misma burbuja, sin puente de hover, sin eventos; en móvil la lectura va en la cinta fija. ── */
-.rv-pop--grafica { pointer-events: none; }
+.rv-pop--grafica { pointer-events: none; min-width: 160px; padding: 10px 12px; border-radius: 12px; background: var(--surface); color: var(--ink); border-color: var(--borde-reposo, var(--line)); }
+/* La lectura de una grafica lleva colores de dato en tinta: conserva la tarjeta blanca de siempre (la pastilla oscura es del Tooltip corto). */
 .rv-pop--grafica::before, .rv-pop--grafica::after { content: none; }
 @media (max-width: 819px) { .rv-pop--grafica { display: none; } }

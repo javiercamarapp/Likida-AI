@@ -191,7 +191,9 @@ describe('Confirmar y enviar', () => {
     expect(r?.ok).toBe(true);
     expect(bandeja.aprobar).toHaveBeenCalledWith('t-sesion', ID, 'pendiente_confirmacion', 'u-sesion', expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
     expect(entregarAviso).not.toHaveBeenCalled();
-    expect(r && r.ok && r.mensaje).toMatch(/siguiente revisión automática/);
+    // CT-A345-03: el envío automático está por conectar, así que la confirmación NO promete que salga sola.
+    expect(r && r.ok && r.mensaje).toMatch(/por conectar.*NO sale solo/);
+    expect(r && r.ok && r.mensaje).not.toMatch(/siguiente revisión automática/);
     expect(revalidatePath).toHaveBeenCalledWith('/dashboard/agentes/vigia/avisos');
   });
   it('solo aplica a un aviso de WhatsApp directo que espera confirmación', async () => {

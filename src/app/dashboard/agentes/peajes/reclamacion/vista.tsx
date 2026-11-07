@@ -16,7 +16,6 @@ import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componente
 
 export type EstadoReclamacion = 'sin_desglose' | 'no_existe' | 'error' | 'ok';
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
 /** Lo que la pantalla suma a la reclamación con GPS: la revisión de cobros del archivo, el cierre mensual y el seguimiento. Todo opcional. */
@@ -119,10 +118,10 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
               </div>
             </div>
             {!candidato && <div className="flex flex-wrap gap-2 mt-3">
-              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>
+              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>
                 <FileDown width={13} height={13} strokeWidth={2} /> Excel
               </a>
-              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=pdf${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+              <a href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=pdf${ctx}`} className="rv-btn rv-btn--secondary" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
                 <FileDown width={13} height={13} strokeWidth={2} /> PDF
               </a>
             </div>}
@@ -134,7 +133,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
                   <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Margen de distancia a la caseta (m)</span>
                   <input name="margen" type="number" inputMode="numeric" min={100} max={5000} step={1} defaultValue={candidato.margenLejosM} className="rounded-lg hairline px-2 py-1 w-28" />
                 </label>
-                <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_BOTON} hairline`} style={{ background: 'var(--surface)', color: 'var(--ink)' }}>Guardar margen</button>
+                <button type="submit" className="rv-btn rv-btn--secondary" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>Guardar margen</button>
                 <span style={{ color: 'var(--muted)' }}>Un cruce se marca como candidato si la unidad pasó a más de ese margen (sumado al radio de la caseta). Por omisión 1,000 m; fíjalo en 200 o 500 m cuando se decida.</span>
               </form>
             )}
@@ -157,14 +156,14 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
           {reporte.cruces.length > 0 && (
             <section className="card p-4">
               <div className="overflow-x-auto">
-                <table className="w-full text-[12px]">
+                <table aria-label="Cruces de caseta en reclamación" className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Monto</th>
-                      <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">{candidato ? 'Por qué es candidato' : 'Por qué se reclama'}</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Monto</th>
+                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">{candidato ? 'Por qué es candidato' : 'Por qué se reclama'}</th>
                     </tr>
                   </thead>
                   <tbody>

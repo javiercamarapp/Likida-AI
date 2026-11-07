@@ -277,11 +277,11 @@ export async function ConsolaVendedores({
               </div>
             ) : (
               <div className="overflow-x-auto mt-2">
-                <table className="w-full border-collapse">
+                <table aria-label="Prospectos por vendedor y estado" className="w-full border-collapse">
                   <thead>
                     <tr style={{ background: 'var(--canvas)' }}>
                       {['Vendedor', 'Asignados', ...ESTADOS_PROSPECTO.map((e) => e.rotulo), 'Conversión'].map((h, i, todos) => (
-                        <th key={h} className={`etiqueta-mono text-[10px] font-medium uppercase px-3 py-1.5 ${i === 0 ? 'text-left rounded-l-lg' : 'text-right'} ${i === todos.length - 1 ? 'rounded-r-lg' : ''}`}
+                        <th scope="col" key={h} className={`etiqueta-mono text-[10px] font-medium uppercase px-3 py-1.5 ${i === 0 ? 'text-left rounded-l-lg' : 'text-right'} ${i === todos.length - 1 ? 'rounded-r-lg' : ''}`}
                           style={{ color: 'var(--muted)' }}>
                           {h}
                         </th>

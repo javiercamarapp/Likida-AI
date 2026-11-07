@@ -38,8 +38,9 @@ vi.mock('@/lib/supabase/admin', () => ({
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: (q: unknown) => q }));
 
 import {
-  crearContactoEmergencia, crearProveedorEmergencia, guardarPoliza, telefonoValido,
+  crearContactoEmergencia, crearProveedorEmergencia, guardarPoliza, telefonoValido, TIPOS_PROVEEDOR,
 } from './emergencias';
+import { DatoInvalido } from './errores';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -116,3 +117,55 @@ describe('guardarPoliza — el 800 es EL dato', () => {
     expect(insertado).toHaveBeenCalledWith('flota_poliza', expect.objectContaining({ telefono_siniestros: '8002888500' }));
   });
 });
+
+// MX-005: toda validacion de captura es un DatoInvalido (mensaje para quien llena el
+// formulario), no un Error generico que la pantalla trata como falla del sistema.
+describe('las validaciones de captura lanzan DatoInvalido (MX-005)', () => {
+  const prov = { tipo: 'grua', nombre: 'X', telefono: '5219991234567' };
+  const poliza = { aseguradora: 'Qualitas', numeroPoliza: 'P-1', telefonoSiniestros: '8002888500' };
+  const contacto = { operadorId: 'op-1', nombre: 'María', telefono: '5219991234567' };
+
+  const casos: Array<[string, () => Promise<unknown>, () => void]> = [
+    ['tipo inexistente', () => crearProveedorEmergencia('t-1', { ...prov, tipo: 'drone' }), () => {}],
+    ['proveedor sin nombre', () => crearProveedorEmergencia('t-1', { ...prov, nombre: '' }), () => {}],
+    ['proveedor con telefono corto', () => crearProveedorEmergencia('t-1', { ...prov, telefono: '123' }), () => {}],
+    ['posicion no numerica', () => crearProveedorEmergencia('t-1', { ...prov, lat: 'abc' as unknown as number, lng: 1 }), () => {}],
+    ['radio fuera de rango', () => crearProveedorEmergencia('t-1', { ...prov, radioKm: 5000 }), () => {}],
+    ['solo latitud', () => crearProveedorEmergencia('t-1', { ...prov, lat: 19.4 }), () => {}],
+    ['posicion fuera del mapa', () => crearProveedorEmergencia('t-1', { ...prov, lat: 999, lng: 999 }), () => {}],
+    ['poliza sin aseguradora', () => guardarPoliza('t-1', { ...poliza, aseguradora: '' }), () => {}],
+    ['poliza sin numero', () => guardarPoliza('t-1', { ...poliza, numeroPoliza: '' }), () => {}],
+    ['poliza con 800 corto', () => guardarPoliza('t-1', { ...poliza, telefonoSiniestros: '800' }), () => {}],
+    ['operador de otra flota', async () => { operadorExiste = false; return crearContactoEmergencia('t-1', contacto); }, () => {}],
+    ['contacto sin nombre', () => crearContactoEmergencia('t-1', { ...contacto, nombre: '' }), () => {}],
+    ['contacto con telefono corto', () => crearContactoEmergencia('t-1', { ...contacto, telefono: '12' }), () => {}],
+  ];
+
+  it.each(casos)('%s', async (_n, accion) => {
+    await expect(accion()).rejects.toBeInstanceOf(DatoInvalido);
+  });
+});
+
+describe('MX-005 · fecha y notas validadas antes del INSERT', () => {
+  const base = { aseguradora: 'Qualitas', numeroPoliza: 'P-1', telefonoSiniestros: '8002001234' };
+
+  it('una vigencia que no es AAAA-MM-DD real se rechaza como DatoInvalido y no llega al insert', async () => {
+    for (const v of ['31/12/2026', '2026-02-31', 'manana', '2026-13-01']) {
+      await expect(guardarPoliza('t1', { ...base, vigenciaHasta: v })).rejects.toBeInstanceOf(DatoInvalido);
+    }
+    expect(insertado).not.toHaveBeenCalled();
+  });
+
+  it('una vigencia valida y una vacia siguen entrando', async () => {
+    await guardarPoliza('t1', { ...base, vigenciaHasta: '2026-12-31' });
+    await guardarPoliza('t1', { ...base, vigenciaHasta: '' });
+    expect(insertado).toHaveBeenCalledTimes(2);
+  });
+
+  it('notas de proveedor con mas de 500 caracteres se rechazan', async () => {
+    await expect(crearProveedorEmergencia('t1', { tipo: TIPO_OK(), nombre: 'Grua', telefono: '5512345678', notas: 'x'.repeat(501) }))
+      .rejects.toBeInstanceOf(DatoInvalido);
+    expect(insertado).not.toHaveBeenCalled();
+  });
+});
+function TIPO_OK(): string { return TIPOS_PROVEEDOR[0]; }

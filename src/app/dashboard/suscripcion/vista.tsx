@@ -135,7 +135,7 @@ export function InstruccionesTransferencia({
   return (
     // FE-19: scrollea dentro de la tarjeta, no estira la página.
     <div className="card p-4 overflow-x-auto">
-      <table className="w-full text-sm">
+      <table aria-label="Datos para la transferencia" className="w-full text-sm">
         <tbody>
           {filas.map(([k, v, mono]) => (
             <tr key={k} className="border-b last:border-0" style={{ borderColor: 'var(--line)' }}>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
-import { mxn, litros } from '@/lib/formato';
+import { mxn, litros, horaMx } from '@/lib/formato';
 import {
   FASES_PENSANDO, motivoDeFallo, respuestaDeBloques, respuestaLocal,
   type PasoTraza, type Respuesta,
@@ -23,7 +23,7 @@ export type Conversacion = { id: string; titulo: string; actualizadoEn: string }
 const TIEMPO_MAXIMO_MS = 75_000;
 let contador = 0;
 const nuevoId = () => `t-${Date.now().toString(36)}-${++contador}`;
-const hora = () => new Date().toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+const hora = () => horaMx(new Date().toISOString());
 
 /** Lee un archivo del navegador como data URL (misma lectura que antes). */
 function leerDataUrl(archivo: File): Promise<string> {

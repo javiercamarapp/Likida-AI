@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { renderizarDocVerificacion } from './doc_verificacion';
+import { renderizarDocVerificacion, cod } from './doc_verificacion';
 import { GUIONES } from '../facturacion/adaptadores/portales';
 import { REGISTRO_VERIFICACIONES } from './registro_verificaciones';
 import { huellaDeGuion, sha256Texto } from './verificacion';
@@ -21,5 +21,32 @@ describe('docs/operacion/verificacion-portales.md', () => {
     expect(doc).toContain('1 de 21 guiones verificados');
     expect(doc).toContain('verificado 2026-10-02 (prevuelo, por Javier)');
     expect(renderizarDocVerificacion(GUIONES, { [g.comercio]: { ...e, huellaGuion: 'a'.repeat(64) } }, manifiesto)).toContain('OBSOLETO');
+  });
+});
+
+describe('cod: escape de celdas GFM con entradas hostiles', () => {
+  // Reproduce el divisor de celdas de GFM: `\` + siguiente caracter es un par; un `|` fuera de par parte la celda.
+  const pipesSueltos = (celda: string): number => {
+    let n = 0;
+    for (let i = 0; i < celda.length; i++) {
+      if (celda[i] === '\\') { i++; continue; }
+      if (celda[i] === '|') n++;
+    }
+    return n;
+  };
+  it('mantiene intactos los selectores CSS con `\\:` (el runbook no cambia)', () => {
+    expect(cod('#a\\:b')).toBe('`#a\\:b`');
+  });
+  it('escapa `|` simple y cambia la comilla invertida', () => {
+    expect(cod('a|b')).toBe('`a\\|b`');
+    expect(cod('a`b')).toBe("`a'b`");
+  });
+  it('un backslash antes de `|` ya no deja el pipe suelto', () => {
+    for (const hostil of ['a\\|b', 'a\\\\|b', 'a\\\\\\|b', '\\|', '|', '||', '\\`|', 'x\\\\\\\\|`|\\|']) {
+      expect(pipesSueltos(cod(hostil)), hostil).toBe(0);
+    }
+  });
+  it('no deja comillas invertidas que cierren el span', () => {
+    expect(cod('``a`|`').slice(1, -1)).not.toContain('`');
   });
 });

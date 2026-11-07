@@ -49,6 +49,8 @@ vi.mock('@/lib/meta/client', async (orig) => ({
 
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
+// CT-SEG-11: el rate limit que bloquea deja evento (con `after`); este archivo cuenta los `after` de la ruta, así que ese registro es un no-op.
+vi.mock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: async () => {} }));
 vi.mock('@/lib/observability/sentry', () => ({ flushObservabilidad: vi.fn(async () => {}) }));
 
 // El webhook consulta el interruptor global antes de despachar (mig. 0110,

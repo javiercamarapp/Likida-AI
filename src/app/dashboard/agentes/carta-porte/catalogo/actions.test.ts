@@ -12,7 +12,8 @@ const { resolver, bitacora, puerto } = vi.hoisted(() => ({
     clientes: vi.fn(), existentes: vi.fn(), aplicarLote: vi.fn(),
   },
 }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: resolver }));
+// MX-002: la acción resuelve con la flota PINTADA y firmada (campo oculto `flota_pintada`), no con el «ver como» del formulario.
+vi.mock('@/lib/auth/tenant-atado', () => ({ resolverTenantAtadoFirmado: resolver, CAMPO_FLOTA_PINTADA: 'flota_pintada', MENSAJE_FLOTA_CAMBIO: 'La flota que estás viendo cambió.' }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: vi.fn(async () => true) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -34,6 +35,13 @@ beforeEach(() => {
 });
 
 describe('guardarFilaCatalogo', () => {
+  it('si la flota pintada ya no es la de la sesión (o no viene firmada), se niega y no toca la base', async () => {
+    resolver.mockImplementation(async () => null);
+    expect(await guardarFilaCatalogo(null, fd(PRODUCTO))).toEqual({ ok: false, error: 'La flota que estás viendo cambió.' });
+    expect(puerto.clientes).not.toHaveBeenCalled();
+    expect(puerto.aplicarLote).not.toHaveBeenCalled();
+  });
+
   it('un rol sin acceso a la operación es rechazado sin tocar la base', async () => {
     sesion.actual.rol = 'contador';
     expect(await guardarFilaCatalogo(null, fd(PRODUCTO))).toEqual({ ok: false, error: 'Tu rol no puede administrar el catálogo de Carta Porte.' });
@@ -42,9 +50,9 @@ describe('guardarFilaCatalogo', () => {
   });
 
   it('gatea con la ruta del catálogo y escribe SIEMPRE con el tenant y el usuario de la sesión, nunca los del formulario', async () => {
-    const r = await guardarFilaCatalogo(null, fd({ ...PRODUCTO, tenant_id: 'otra-flota', tenant: 'otra-flota', actor: 'otro' }));
+    const r = await guardarFilaCatalogo(null, fd({ ...PRODUCTO, tenant_id: 'otra-flota', tenant: 'otra-flota', actor: 'otro', flota_pintada: 'firma-pintada' }));
     expect(r).toEqual({ ok: true, mensaje: 'Agregado al catálogo.' });
-    expect(resolver).toHaveBeenCalledWith('/dashboard/agentes/carta-porte/catalogo', expect.objectContaining({ tenant: 'otra-flota' }));
+    expect(resolver).toHaveBeenCalledWith('/dashboard/agentes/carta-porte/catalogo', 'firma-pintada');
     expect(puerto.clientes).toHaveBeenCalledWith('t-sesion');
     expect(puerto.aplicarLote).toHaveBeenCalledWith('t-sesion', 'producto', [expect.objectContaining({ cliente_id: C1, sku: 'SKU-1', bienes_transp: '25172500', clave_unidad: 'H87' })], 'u-sesion');
   });

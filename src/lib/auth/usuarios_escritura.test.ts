@@ -53,6 +53,7 @@ function builder(tabla: string) {
   b.select = (cols: string, opts?: { head?: boolean }) => { r.select = cols; r.head = !!opts?.head; if (!r.op) r.op = 'select'; return b; };
   b.eq = (c: string, v: unknown) => { r.eq.push([c, v]); return b; };
   b.neq = (c: string, v: unknown) => { r.neq.push([c, v]); return b; };
+  b.is = (c: string, v: unknown) => { r.eq.push([`${c} is`, v]); return b; };
   b.maybeSingle = async () => contestar(tabla);
   b.then = (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
     Promise.resolve(contestar(tabla)).then(res, rej);
@@ -77,6 +78,8 @@ const enviarCorreo = vi.fn(async (..._a: unknown[]): Promise<unknown> => ({ ok: 
 vi.mock('@/lib/correo/enviar', () => ({ enviarCorreo: (...a: unknown[]) => enviarCorreo(...(a as [])) }));
 const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
 vi.mock('@/lib/logger', () => ({ logger }));
+const registrarCambioRol = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/seguridad/registro_acceso', () => ({ registrarCambioRol: (...a: unknown[]) => registrarCambioRol(...a) }));
 
 const {
   cambiarRolUsuario, desactivarUsuario, reactivarUsuario, reenviarAcceso, enviarCorreoDeAcceso, cerrarSesionesUsuario,
@@ -105,6 +108,7 @@ beforeEach(() => {
   enviarCorreo.mockClear();
   enviarCorreo.mockResolvedValue({ ok: true, id: 'm-1' });
   logger.error.mockClear();
+  registrarCambioRol.mockClear();
 });
 
 describe('cambiarRolUsuario', () => {
@@ -119,6 +123,38 @@ describe('cambiarRolUsuario', () => {
       expect.objectContaining({ tenantId: TENANT, accion: 'usuario.rol_cambiado', entidad: 'app_user', entidadId: U, detalle: { de: 'contador', a: 'encargado' } }),
       expect.anything(),
     );
+  });
+
+  it('CT-SEG-11: un cambio de rol hecho deja fila de seguridad (quién, a quién, de→a)', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    await cambiarRolUsuario(TENANT, U, 'encargado', ACTOR);
+    expect(registrarCambioRol).toHaveBeenCalledWith({ tenantId: TENANT, actorId: ACTOR.id, usuarioId: U, de: 'contador', a: 'encargado' });
+  });
+
+  it('CT-SEG-11: un cambio de rol RECHAZADO (último dueño) no deja fila de cambio', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    rpc.mockResolvedValueOnce({ data: 'ultimo_dueno', error: null });
+    await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).rejects.toBeInstanceOf(DatoInvalido);
+    expect(registrarCambioRol).not.toHaveBeenCalled();
+  });
+
+  it('CT-SEG-23: degradar a un dueno revoca sus llaves de area administracion vivas (no retiene privilegio)', async () => {
+    colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
+    colas.set('tenant_api_key', [{ data: [{ id: 'k1', nombre: 'TMS escritura' }], error: null }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    const r = await cambiarRolUsuario(TENANT, U, 'contador', ACTOR);
+    expect(r).toEqual({ de: 'flota_admin', a: 'contador', llavesApiRevocadas: ['TMS escritura'], llavesApiSinRevocar: false });
+    const u = updatesDe('tenant_api_key');
+    expect(u).toHaveLength(1);
+    expect(u[0].eq).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['creada_por', U], ['area', 'administracion'], ['revocada_en is', null]]));
+  });
+
+  it('CT-SEG-23: cambiar el rol de quien no es dueno no toca las llaves', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    await cambiarRolUsuario(TENANT, U, 'encargado', ACTOR);
+    expect(updatesDe('tenant_api_key')).toHaveLength(0);
   });
 
   it('rechaza roles fuera del catálogo (superadmin, operador, basura) ANTES de leer nada', async () => {
@@ -160,7 +196,7 @@ describe('cambiarRolUsuario', () => {
   it('con otro dueño activo sí se degrada', async () => {
     colas.set('app_user', [{ data: fila({ rol: 'flota_admin' }) }]);
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
-    await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).resolves.toEqual({ de: 'flota_admin', a: 'contador' });
+    await expect(cambiarRolUsuario(TENANT, U, 'contador', ACTOR)).resolves.toMatchObject({ de: 'flota_admin', a: 'contador' });
   });
 
   it('"conflicto" (el rol cambió mientras tanto) NO es éxito y no anota bitácora', async () => {
@@ -235,12 +271,12 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     colas.set('app_user', [{ data: fila() }]);
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
-    expect(r).toEqual({ sesionRevocada: true });
+    expect(r).toEqual({ sesionRevocada: true, llavesApiRevocadas: [], llavesApiSinRevocar: false });
     expect(rpc).toHaveBeenCalledWith('equipo_desactivar_usuario',
       { p_tenant: TENANT, p_usuario: U, p_rol_actual: 'contador', p_actor: OTRO });
     expect(updateUserById).toHaveBeenCalledWith(U, { ban_duration: BAN_PERMANENTE });
     expect(anotarBitacora).toHaveBeenCalledWith(
-      expect.objectContaining({ accion: 'usuario.desactivado', entidadId: U, detalle: { rol: 'contador', sesion_revocada: true } }),
+      expect.objectContaining({ accion: 'usuario.desactivado', entidadId: U, detalle: { rol: 'contador', sesion_revocada: true, llaves_api_revocadas: 0, llaves_api_sin_revocar: false } }),
       expect.anything(),
     );
   });
@@ -250,10 +286,39 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     updateUserById.mockResolvedValueOnce({ error: { message: 'auth caído' } });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
-    expect(r).toEqual({ sesionRevocada: false });
+    expect(r).toMatchObject({ sesionRevocada: false });
     expect(logger.error).toHaveBeenCalledWith('equipo.ban_fallo', expect.objectContaining({ usuario: U }));
     expect(anotarBitacora).toHaveBeenCalledWith(
       expect.objectContaining({ detalle: expect.objectContaining({ sesion_revocada: false }) }), expect.anything(),
+    );
+  });
+
+  it('CT-SEG-23: la baja revoca las llaves de API VIVAS que esa persona creó, ancladas a la flota, y lo informa', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    colas.set('tenant_api_key', [{ data: [{ id: 'k1', nombre: 'TMS propio' }, { id: 'k2', nombre: 'Tablero' }], error: null }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    const r = await desactivarUsuario(TENANT, U, ACTOR);
+    expect(r.llavesApiRevocadas).toEqual(['TMS propio', 'Tablero']);
+    expect(r.llavesApiSinRevocar).toBe(false);
+    const u = updatesDe('tenant_api_key');
+    expect(u).toHaveLength(1);
+    expect(u[0].payload).toEqual({ revocada_en: expect.any(String) });
+    expect(u[0].eq).toEqual(expect.arrayContaining([['tenant_id', TENANT], ['creada_por', U], ['revocada_en is', null]]));
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ detalle: expect.objectContaining({ llaves_api_revocadas: 2 }) }), expect.anything(),
+    );
+  });
+
+  it('CT-SEG-23: si no se pueden revocar las llaves, la baja queda y se DICE (llavesApiSinRevocar) en resultado, log y bitácora', async () => {
+    colas.set('app_user', [{ data: fila() }]);
+    colas.set('tenant_api_key', [{ data: null, error: { message: 'base caída' } }]);
+    rpc.mockResolvedValueOnce({ data: 'ok', error: null });
+    const r = await desactivarUsuario(TENANT, U, ACTOR);
+    expect(r.llavesApiSinRevocar).toBe(true);
+    expect(r.llavesApiRevocadas).toEqual([]);
+    expect(logger.error).toHaveBeenCalledWith('equipo.llaves_api_fallo', expect.objectContaining({ usuario: U }));
+    expect(anotarBitacora).toHaveBeenCalledWith(
+      expect.objectContaining({ detalle: expect.objectContaining({ llaves_api_sin_revocar: true }) }), expect.anything(),
     );
   });
 
@@ -337,7 +402,7 @@ describe('desactivarUsuario — la baja en tres capas', () => {
     rpc.mockResolvedValueOnce({ data: 'ok', error: null });
     rpc.mockResolvedValueOnce({ data: null, error: { message: 'rpc caída' } });
     const r = await desactivarUsuario(TENANT, U, ACTOR);
-    expect(r).toEqual({ sesionRevocada: true });
+    expect(r).toMatchObject({ sesionRevocada: true });
     expect(logger.error).toHaveBeenCalledWith('equipo.mcp_revocar_fallo',
       expect.objectContaining({ usuario: U, err: 'rpc caída' }));
   });

@@ -57,6 +57,30 @@ describe('avisarDiscrepanciasDesglose', () => {
     expect(texto).toMatch(/seguridad/);
   });
 
+  it('CT-A12-22: sin la superficie GPS (cinco_agentes) el aviso sale SIN coordenadas y ni siquiera lee la posición', async () => {
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'w' }));
+    const ultimaPosicion = vi.fn(async () => POS);
+    const r = await avisarDiscrepanciasDesglose(T, DES, deps({ gpsPermitido: async () => false, ultimaPosicion, avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] }));
+    expect(r.enviados).toBe(1);
+    expect(ultimaPosicion).not.toHaveBeenCalled();
+    const texto = (avisar.mock.calls[0] as [string, string])[1];
+    expect(texto).not.toContain('19.43');
+    expect(texto).not.toContain('-99.13');
+    expect(texto).toContain('sin posición GPS disponible');
+  });
+
+  it('CT-A12-22: si la superficie no se puede leer, falla cerrado: sin coordenadas', async () => {
+    const ultimaPosicion = vi.fn(async () => POS);
+    await avisarDiscrepanciasDesglose(T, DES, deps({ gpsPermitido: async () => { throw new Error('perfil ilegible'); }, ultimaPosicion }));
+    expect(ultimaPosicion).not.toHaveBeenCalled();
+  });
+
+  it('CT-A12-22: con la superficie GPS (flota sin perfil) el aviso lleva la posición como siempre', async () => {
+    const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: true, via: 'texto' as const, id: 'w' }));
+    await avisarDiscrepanciasDesglose(T, DES, deps({ gpsPermitido: async () => true, avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] }));
+    expect((avisar.mock.calls[0] as [string, string])[1]).toContain('19.43, -99.13');
+  });
+
   it('A37-S51-04: un envío no-ok pero ENCOLADO en el outbox cuenta como enviado (no pendiente)', async () => {
     const avisar = vi.fn(async (_tel: string, _texto: string) => ({ ok: false as const, motivo: 'token vencido', codigo: 190, fueraDeVentana: false, reintentable: false, encolado: true }));
     const r = await avisarDiscrepanciasDesglose(T, DES, deps({ avisar: avisar as unknown as DepsAvisoDiscrepancia['avisar'] }));

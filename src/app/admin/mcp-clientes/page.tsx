@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { PlugZap } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarClientesPendientes, type ClienteParaRevision } from '@/lib/mcp/oauth';
@@ -90,3 +91,5 @@ export default async function McpClientesPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Clientes MCP' };

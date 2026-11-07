@@ -16,7 +16,7 @@ function Boton({ texto, pendiente, icono, destructivo, suave }: {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className={`inline-flex items-center gap-1.5 text-[12px] font-medium px-2.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50 ${suave ? 'hairline' : ''}`}
+      className={`rv-btn ${destructivo ? 'rv-btn--danger' : suave ? 'rv-btn--secondary' : 'rv-btn--primary'} rv-btn--sm`}
       style={destructivo ? { background: 'var(--badbg)', color: 'var(--bad)' }
         : suave ? { background: 'var(--surface)', color: 'var(--muted)' }
         : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>

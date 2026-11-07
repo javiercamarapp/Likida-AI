@@ -4,6 +4,7 @@ import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { resolverTenantApi } from '@/lib/auth/tenant-api';
 import { puedeExportar } from '@/lib/auth/permisos';
 import { puedeVerArea } from '@/lib/auth/visibilidad';
+import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { logger } from '@/lib/logger';
 
 export const runtime = 'nodejs';
@@ -31,6 +32,12 @@ export const maxDuration = 120;
 // es deliberada en `tools.ts` y aquí se respeta.
 // ═══════════════════════════════════════════════════════════════════════════
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  // CT-SEG-17: esta GET sella la descarga (`registrar_descarga_liquidacion`: contador y `primera_descarga_*`). Una navegacion
+  // desde otro sitio no la pidio el usuario.
+  if (!vieneDeNuestroSitio(req)) {
+    logger.warn('export.pdf.origen_ajeno', { sitio: req.headers.get('sec-fetch-site') });
+    return new NextResponse('Petición de otro sitio.', { status: 403 });
+  }
   if (!(await rateLimit(`export-pdf:${clientIp(req)}`, 30, 60_000))) {
     return new NextResponse('Demasiadas peticiones', { status: 429 });
   }

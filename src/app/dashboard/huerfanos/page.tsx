@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import {
   getHuerfanosDeFlota, traerHuerfanoPendiente, resolverHuerfanoDesdeOficina, addGasto,
@@ -51,8 +51,8 @@ async function viajeSigueVivo(tenantId: string, viajeId: string): Promise<boolea
 
 /** El gateo que ambas actions repiten adentro. Helper de módulo y no
  *  closure: una action solo captura VALORES serializables (tenantId). */
-async function exigirPermiso(tenantId: string): Promise<string | null> {
-  const sesion = await requireSessionTenant('/dashboard/huerfanos');
+async function exigirPermiso(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<string | null> {
+  const sesion = await resolverTenantAtadoOLanza('/dashboard/huerfanos', sp, tenantId);
   if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede resolver comprobantes.';
   if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta bandeja no es de tu flota.';
   return null;
@@ -110,7 +110,7 @@ export default async function PaginaHuerfanos({
 
   async function adjuntar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const negado = await exigirPermiso(tenantId);
+    const negado = await exigirPermiso(sp, tenantId);
     if (negado) return { error: negado };
 
     const huerfanoId = typeof fd.get('huerfanoId') === 'string' ? (fd.get('huerfanoId') as string).trim().slice(0, 64) : '';
@@ -160,7 +160,7 @@ export default async function PaginaHuerfanos({
 
   async function descartar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
-    const negado = await exigirPermiso(tenantId);
+    const negado = await exigirPermiso(sp, tenantId);
     if (negado) return { error: negado };
 
     const huerfanoId = typeof fd.get('huerfanoId') === 'string' ? (fd.get('huerfanoId') as string).trim().slice(0, 64) : '';
@@ -181,7 +181,7 @@ export default async function PaginaHuerfanos({
    */
   async function buscarViajeAccion(q: string): Promise<OpcionViaje[]> {
     'use server';
-    const negado = await exigirPermiso(tenantId);
+    const negado = await exigirPermiso(sp, tenantId);
     if (negado) throw new Error(negado);
     try {
       return await buscarViajesVivos(tenantId, typeof q === 'string' ? q : '');

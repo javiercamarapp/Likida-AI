@@ -123,7 +123,7 @@ RANGO_APLICADO="$(printf '%s\n' "$SALIDA_VERIFICADOR" | sed -n 's/^base: //p' | 
 # Puramente informativo: no detiene el script si el health todavía no trae el
 # campo (versión anterior a esta ronda) o si es el deploy anterior a migrar.
 if command -v curl >/dev/null 2>&1; then
-  SALUD="$(curl -fsS --max-time 10 https://app.likida.ai/api/health 2>/dev/null || true)"
+  SALUD="$(curl -fsS --max-time 10 -H "x-health-token: ${HEALTH_TOKEN:-}" https://app.likida.ai/api/health 2>/dev/null || true)"
   if [ -n "$SALUD" ]; then
     echo "═══ 2b/3 · /api/health: migracion.atras y migracion.adelante ═══"
     printf '%s\n' "$SALUD" | node -e "

@@ -113,7 +113,7 @@ describe('sin perfil, A1 se comporta como siempre', () => {
 });
 
 describe('las server actions de A1 llegan a una puerta que aplica el perfil', () => {
-  const PUERTA = /\b(resolverTenantEfectivo|requireSessionTenant|exigirVerRuta)\(/;
+  const PUERTA = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|resolverTenantAtadoOLanza|resolverTenantAtadoFirmado|requireSessionTenant|exigirVerRuta)\(/;
   const ARCHIVOS = [
     'src/app/dashboard/agentes/liquidacion/page.tsx',
     'src/app/dashboard/agentes/liquidacion/formato/page.tsx',

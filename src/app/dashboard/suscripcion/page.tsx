@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { CreditCard, ExternalLink, TriangleAlert, FileText, Landmark } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -41,12 +42,14 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * cerrarlo del render.
  */
 async function tenantDelAction(
-  sp?: { vista?: string; tenant?: string; rol?: string },
+  sp: { vista?: string; tenant?: string; rol?: string } | undefined,
+  tenantId: string,
 ): Promise<{ t: string; email: string | null; rol: string }> {
   // A37-S20-02: el MISMO resolutor que la página (con `sp`), no la sesión
   // sola: con `?vista=demo` la página enseñaba la demo y la action contrataba
   // plan o guardaba datos fiscales en la flota de la cookie del selector.
-  const s = await resolverTenantEfectivo('/dashboard/suscripcion', sp);
+  // MX-002: la flota que se pintó es la que contrata y guarda (la de la cookie del selector puede ser otra en otra pestaña).
+  const s = await resolverTenantAtadoOLanza('/dashboard/suscripcion', sp, tenantId);
   const t = s.tenantId;
   // H26 (auditoría 24): sin comprobar `error`, una lectura caída de
   // `app_user` se veía IGUAL que un usuario sin correo — y `accionContratar`
@@ -156,7 +159,7 @@ export default async function SuscripcionPage({
     try {
       // H26: `tenantDelAction` ahora lanza si falla la lectura del correo —
       // dentro del try se convierte en un aviso, no en la pantalla caída.
-      const { t, email, rol: r } = await tenantDelAction(sp);
+      const { t, email, rol: r } = await tenantDelAction(sp, tenantId);
       if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede contratar o cambiar de plan.' };
       const f = await getDatosFiscales(t);
       if (!estanCompletos(f)) {
@@ -204,7 +207,7 @@ export default async function SuscripcionPage({
   /** Guarda con qué datos se le va a facturar a esta flota. */
   async function accionFiscales(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t, rol: r } = await tenantDelAction(sp);
+    const { t, rol: r } = await tenantDelAction(sp, tenantId);
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede cambiar los datos fiscales.' };
     try {
       await guardarDatosFiscales(t, {
@@ -233,7 +236,7 @@ export default async function SuscripcionPage({
 
   async function accionPortal(): Promise<ResultadoAccion> {
     'use server';
-    const { t, rol: r } = await tenantDelAction(sp);
+    const { t, rol: r } = await tenantDelAction(sp, tenantId);
     if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede administrar el cobro.' };
 
     let destino: string;
@@ -485,13 +488,13 @@ export default async function SuscripcionPage({
             </div>
           ) : (
             <div className="overflow-x-auto mt-3">
-              <table className="w-full text-sm">
+              <table aria-label="Pagos por periodo y monto" className="w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th className="py-2.5 pr-4 font-medium">Periodo</th>
-                    <th className="py-2.5 pr-4 font-medium text-right">Monto</th>
-                    <th className="py-2.5 pr-4 font-medium">Estado</th>
-                    <th className="py-2.5 font-medium">CFDI</th>
+                    <th scope="col" className="py-2.5 pr-4 font-medium">Periodo</th>
+                    <th scope="col" className="py-2.5 pr-4 font-medium text-right">Monto</th>
+                    <th scope="col" className="py-2.5 pr-4 font-medium">Estado</th>
+                    <th scope="col" className="py-2.5 font-medium">CFDI</th>
                   </tr>
                 </thead>
                 <tbody>

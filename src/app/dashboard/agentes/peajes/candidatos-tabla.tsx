@@ -16,11 +16,8 @@ import { ROTULO_CANDIDATO } from '@/lib/likida/peajes/reglas_cobro';
 
 export type AccionDecidir = (fd: FormData) => Promise<void>;
 
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 const ESTILO_CANDIDATO = { color: 'var(--warn)', background: 'var(--warnbg)' } as const;
 const COLOR_ESTADO: Record<EstadoCandidato, { color: string; background: string }> = {
@@ -66,7 +63,7 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
       {puedeReclamar && (
         <form action={decidir}>
           <Campos desglose={desglose} retorno={retorno} accion="reclamado" indice={f.indice} categoria={f.categoria} />
-          <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}>{ROTULO_ACCION.reclamado}</button>
+          <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>{ROTULO_ACCION.reclamado}</button>
         </form>
       )}
       {(['descartado', 'justificado'] as const).map((a) => (
@@ -74,8 +71,8 @@ function AccionesDeFila({ f, desglose, retorno, decidir }: { f: FilaCandidato; d
           <Campos desglose={desglose} retorno={retorno} accion={a} indice={f.indice} categoria={f.categoria} />
           <input name="motivo" required minLength={3} maxLength={300} placeholder={a === 'descartado' ? 'Por qué se descarta' : 'Por qué está justificado'}
             aria-label={`Motivo para ${a === 'descartado' ? 'descartar' : 'justificar'} el renglón ${f.indice + 1} (${etiquetaCategoriaFila(f.categoria)})`}
-            className={`${CSS_INPUT} w-[170px]`} style={ESTILO_INPUT} />
-          <button type="submit" className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>{ROTULO_ACCION[a]}</button>
+            className="w-[170px]" style={ESTILO_INPUT} />
+          <button type="submit" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>{ROTULO_ACCION[a]}</button>
         </form>
       ))}
     </div>
@@ -106,12 +103,12 @@ function Lote({ tabla, desglose, retorno, decidir, aplicables }: {
           <input type="hidden" name="f_hasta" value={f.hasta} />
           <input type="hidden" name="f_orden" value={f.orden} />
           {a === 'reclamado'
-            ? <label className="block"><Etiqueta>Enviado el (si ya lo enviaste)</Etiqueta><input type="date" name="enviado_en" className={`${CSS_INPUT} mt-0.5`} style={ESTILO_INPUT} /></label>
-            : <label className="block"><Etiqueta>Motivo</Etiqueta><input name="motivo" required minLength={3} maxLength={300} aria-label={`Motivo para ${a === 'descartado' ? 'descartar' : 'justificar'} en lote`} className={`${CSS_INPUT} w-[220px] mt-0.5`} style={ESTILO_INPUT} /></label>}
+            ? <label className="block"><Etiqueta>Enviado el (si ya lo enviaste)</Etiqueta><input type="date" name="enviado_en" className="mt-0.5" style={ESTILO_INPUT} /></label>
+            : <label className="block"><Etiqueta>Motivo</Etiqueta><input name="motivo" required minLength={3} maxLength={300} aria-label={`Motivo para ${a === 'descartado' ? 'descartar' : 'justificar'} en lote`} className="w-[220px] mt-0.5" style={ESTILO_INPUT} /></label>}
           <label className="flex items-center gap-1.5 text-[12px]">
             <input type="checkbox" name="confirmar" required /> Confirmo: {ROTULO_LOTE[a].toLowerCase()} {numero(aplicables[a])} {aplicables[a] === 1 ? 'cruce' : 'cruces'}
           </label>
-          <button type="submit" className={a === 'reclamado' ? CSS_BOTON : CSS_SECUNDARIO} style={a === 'reclamado' ? ESTILO_PRIMARIO : ESTILO_SECUNDARIO}>
+          <button type="submit" className={a === 'reclamado' ? 'rv-btn rv-btn--primary' : 'rv-btn rv-btn--secondary'} style={a === 'reclamado' ? ESTILO_PRIMARIO : ESTILO_SECUNDARIO}>
             {ROTULO_LOTE[a]} ({numero(aplicables[a])})
           </button>
         </form>
@@ -165,7 +162,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
             {ETIQUETA_ESTADO_CANDIDATO[e]} · {numero(tabla.porEstado[e].n)} · {mxn(tabla.porEstado[e].monto)}
           </span>
         ))}
-        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>
+        <a href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
           <FileDown width={13} height={13} strokeWidth={2} className="inline mr-1" /> Reporte para el portal del proveedor
         </a>
       </div>
@@ -177,8 +174,8 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
           opciones={[{ valor: '', rotulo: 'Todas' }, ...TODAS_LAS_CATEGORIAS.map((c) => ({ valor: c, rotulo: etiquetaCategoriaFila(c) }))]} />
         <FiltroOpciones nombre="estado" etiqueta="Estado" valor={f.estado}
           opciones={[{ valor: '', rotulo: 'Todos' }, ...ESTADOS_CANDIDATO.map((e) => ({ valor: e, rotulo: ETIQUETA_ESTADO_CANDIDATO[e] }))]} />
-        <FiltroCampo etiqueta="Unidad"><input className="border-0 bg-transparent" name="unidad" defaultValue={f.unidad} maxLength={60} /></FiltroCampo>
-        <FiltroCampo etiqueta="Caseta"><input className="border-0 bg-transparent" name="caseta" defaultValue={f.caseta} maxLength={60} /></FiltroCampo>
+        <FiltroCampo etiqueta="Unidad"><input className="border-0 bg-transparent" name="unidad" defaultValue={f.unidad} maxLength={60} data-anillo="envolvente" /></FiltroCampo>
+        <FiltroCampo etiqueta="Caseta"><input className="border-0 bg-transparent" name="caseta" defaultValue={f.caseta} maxLength={60} data-anillo="envolvente" /></FiltroCampo>
         <FiltroFecha nombre="desde" etiqueta="Desde" valor={f.desde} />
         <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={f.hasta} />
         <FiltroOpciones nombre="orden" etiqueta="Orden" valor={f.orden} porDefecto="monto_desc"
@@ -195,17 +192,17 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
             Mostrando {numero(desde)}–{numero(hasta)} de {numero(tabla.total)}. Las páginas son de {TAMANO_PAGINA}: el archivo completo viaja en el Excel.
           </p>
           <div className="overflow-x-auto mt-2">
-            <table className="w-full text-[12px]">
+            <table aria-label="Candidatos de peaje por fecha y categoría" className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Categoría</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Clase</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Importe</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Qué pasó</th>
-                  <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Acción</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha y hora</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Categoría</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Caseta</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">TAG / unidad</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Clase</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Importe</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Qué pasó</th>
+                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pl-3">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -237,9 +234,9 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
           </div>
           {tabla.paginas > 1 && (
             <nav aria-label="Páginas de candidatos" className="flex items-center gap-3 mt-3 text-[12px]">
-              {tabla.pagina > 1 ? <a href={enlace(tabla.pagina - 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>← Anterior</a> : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
+              {tabla.pagina > 1 ? <a href={enlace(tabla.pagina - 1)} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>← Anterior</a> : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
               <span>Página {numero(tabla.pagina)} de {numero(tabla.paginas)}</span>
-              {tabla.pagina < tabla.paginas ? <a href={enlace(tabla.pagina + 1)} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}>Siguiente →</a> : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}
+              {tabla.pagina < tabla.paginas ? <a href={enlace(tabla.pagina + 1)} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>Siguiente →</a> : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}
             </nav>
           )}
         </>

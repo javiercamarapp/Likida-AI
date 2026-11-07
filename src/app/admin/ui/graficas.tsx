@@ -380,12 +380,12 @@ export function Heatmap({
 
   return (
     <div className="overflow-x-auto">
-      <table className="border-collapse">
+      <table aria-label="Mapa de calor" className="border-collapse">
         <thead>
           <tr>
-            <th />
+            <th scope="col"><span className="sr-only">Acciones</span></th>
             {columnas.map((c) => (
-              <th key={c} className="text-[10px] font-normal px-1 pb-1" style={{ color: 'var(--faint)' }}>{c}</th>
+              <th scope="col" key={c} className="text-[10px] font-normal px-1 pb-1" style={{ color: 'var(--faint)' }}>{c}</th>
             ))}
           </tr>
         </thead>

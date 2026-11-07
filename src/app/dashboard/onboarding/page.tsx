@@ -1,6 +1,8 @@
+import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { CONECTORES } from '@/lib/likida/conectores/registro';
 import type { CategoriaConector } from '@/lib/likida/conectores/tipos';
@@ -53,7 +55,7 @@ export default async function OnboardingFlotaPage({
 
   async function accion(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const ses = await resolverTenantEfectivo('/dashboard/onboarding', sp);
+    const ses = await resolverTenantAtadoOLanza('/dashboard/onboarding', sp, s.tenantId);
     if (!puedeVerRuta(ses.rol, '/dashboard/onboarding')) {
       return { error: 'Tu rol no puede declarar el perfil de la flota.' };
     }
@@ -86,7 +88,7 @@ export default async function OnboardingFlotaPage({
    *  —el candado del Resumen es de él— y se vuelve a comprobar aquí adentro. */
   async function posponer(): Promise<void> {
     'use server';
-    const ses = await resolverTenantEfectivo('/dashboard/onboarding', sp);
+    const ses = await resolverTenantAtadoOLanza('/dashboard/onboarding', sp, s.tenantId);
     if (!puedeVerRuta(ses.rol, '/dashboard/onboarding') || !puedeAdministrar(ses.rol)) return;
     try {
       await guardarPerfilPatch(ses.tenantId, { [LLAVE_ONBOARDING_POSPUESTO]: new Date().toISOString() }, ses.userId);
@@ -144,7 +146,7 @@ export default async function OnboardingFlotaPage({
           {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
             <form action={posponer} className="px-5 pt-4 text-[12px]" style={{ color: 'var(--muted)' }}>
               ¿No tienes a la mano tus ingresos anuales o no sabes si eres parte relacionada?{' '}
-              <button type="submit" className="underline font-medium" style={{ color: 'var(--ink)' }}>Lo confirmo con mi contador</button>
+              <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--ink)' }}>Lo confirmo con mi contador</button>
               {' '}— el Resumen se abre con un aviso permanente: el estímulo de peaje queda en $0 hasta que lo declares.
             </form>
           )}
@@ -162,3 +164,5 @@ export default async function OnboardingFlotaPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Configuración inicial' };

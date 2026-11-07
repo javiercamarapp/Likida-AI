@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { alcanceDePatio } from '@/lib/auth/patio';
@@ -65,7 +66,7 @@ export default async function PaginaPatios({
 
   async function crear(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota crea patios.' };
     try {
@@ -80,7 +81,7 @@ export default async function PaginaPatios({
 
   async function editar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota edita patios.' };
     try {
@@ -96,7 +97,7 @@ export default async function PaginaPatios({
 
   async function eliminar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota borra patios.' };
     try {
@@ -110,7 +111,7 @@ export default async function PaginaPatios({
 
   async function asignarJefe(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota asigna patios a los jefes de tráfico.' };
     try {
@@ -130,7 +131,7 @@ export default async function PaginaPatios({
 
   async function asignarSinPatioAccion(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
     if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota reparte lo que quedó sin patio.' };
     const tabla = String(fd.get('tabla') ?? '');

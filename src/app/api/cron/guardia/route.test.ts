@@ -60,6 +60,13 @@ vi.mock('@/lib/observability/alerta', async () => {
   return { ...real, alertarOperador: (...a: unknown[]) => alertarOperador(...a) };
 });
 vi.mock('@/lib/observability/sentry', () => ({ codigoDeError: () => 'cod' }));
+let barrido: { estado: string; reclamados: number; enviados: number; fallidos: number } = { estado: 'apagado', reclamados: 0, enviados: 0, fallidos: 0 };
+const barrerAvisosSeguridad = vi.fn(async () => barrido);
+const anonimizarRedEventosSeguridad = vi.fn(async (): Promise<number | null> => 4);
+vi.mock('@/lib/seguridad/avisos', () => ({
+  barrerAvisosSeguridad: () => barrerAvisosSeguridad(),
+  anonimizarRedEventosSeguridad: () => anonimizarRedEventosSeguridad(),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { GET } = await import('./route');
@@ -72,6 +79,7 @@ beforeEach(() => {
   sondeo = { respondio: true, httpStatus: 200, status: 'ok', db: 'ok', crons: 'ok', migracionAlDia: true };
   latidos = { 'wa-pendientes': ok, 'wa-outbox': ok, 'buzon-entrega': ok };
   avisoSale = true; registrarLatido.mockClear(); registrarEstado.mockClear(); alertarOperador.mockClear(); purgarObservabilidad.mockClear();
+  barrido = { estado: 'apagado', reclamados: 0, enviados: 0, fallidos: 0 }; barrerAvisosSeguridad.mockClear(); anonimizarRedEventosSeguridad.mockClear(); anonimizarRedEventosSeguridad.mockResolvedValue(4);
   vi.useRealTimers();
 });
 
@@ -333,5 +341,40 @@ describe('la retención diaria', () => {
     const r = await llamar();
     expect((await j(r)).corrio).toBe(true);
     expect(registrarLatido).toHaveBeenLastCalledWith('guardia', 'parcial', expect.objectContaining({ mantenimiento: { error: 'timeout' } }));
+  });
+});
+
+describe('el barrido de seguridad (CT-SEG-11)', () => {
+  it('cada pasada corre el barrido; apagado no deja huella en el latido', async () => {
+    await llamar();
+    expect(barrerAvisosSeguridad).toHaveBeenCalledTimes(1);
+    const detalle = registrarLatido.mock.calls.at(-1)![2] as Record<string, unknown>;
+    expect(detalle).not.toHaveProperty('seguridad');
+  });
+  it('encendido: el resultado va al latido', async () => {
+    barrido = { estado: 'ok', reclamados: 2, enviados: 2, fallidos: 0 };
+    await llamar();
+    expect(registrarLatido).toHaveBeenLastCalledWith('guardia', 'ok', expect.objectContaining({ seguridad: { avisos: barrido } }));
+  });
+  it('un barrido en error vuelve el latido `parcial`, no tumba la guardia', async () => {
+    barrido = { estado: 'error', reclamados: 0, enviados: 0, fallidos: 0 };
+    const r = await llamar();
+    expect((await j(r)).corrio).toBe(true);
+    expect(registrarLatido).toHaveBeenLastCalledWith('guardia', 'parcial', expect.anything());
+  });
+  it('un barrido que LANZA tampoco tumba la guardia', async () => {
+    barrerAvisosSeguridad.mockRejectedValueOnce(new Error('boom'));
+    const r = await llamar();
+    expect((await j(r)).corrio).toBe(true);
+  });
+  it('la anonimización de la red corre SOLO en la ventana diaria y su cuenta va al latido', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-03T12:00:00Z'));
+    await llamar();
+    expect(anonimizarRedEventosSeguridad).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date('2026-10-03T09:02:00Z'));
+    await llamar();
+    expect(anonimizarRedEventosSeguridad).toHaveBeenCalledTimes(1);
+    expect(registrarLatido).toHaveBeenLastCalledWith('guardia', 'ok', expect.objectContaining({ seguridad: { avisos: barrido, redAnonimizada: 4 } }));
   });
 });

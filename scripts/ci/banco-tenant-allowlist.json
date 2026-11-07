@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "comentario": "Allowlist del banco multi-tenant (X-02). Permanentes: solo ayudantes de RLS (funcion_authenticated) con razon escrita. Temporales: hallazgo abierto con id, severidad y fecha_limite; vencida = el banco falla. Retiradas el 2026-11-04 (confirmado por la primera corrida de CI y por la migracion 0086): RLS-08, RLS-09, L1K-01 y L1K-02, porque public.is_operador() y public.get_user_operador_id() ya no existen (0086_retirar_rol_operador.sql las borra con DROP FUNCTION y ninguna migracion posterior las recrea); no hay superficie que registrar. Si alguien las vuelve a crear, la fase estatica las reporta como no listadas.",
+  "esquemas_expuestos": [
+    "public",
+    "graphql_public"
+  ],
+  "cobertura_minima_siembra": 0.97,
+  "entradas": [
+    {
+      "id": "RLS-01",
+      "tipo": "funcion_authenticated",
+      "objeto": "public.get_user_tenant_ids()",
+      "severidad": "info",
+      "justificacion": "Debe ser ejecutable por authenticated: devuelve los tenants del usuario de la sesion (auth.uid()); lo llaman las politicas RLS con el rol de quien consulta. No recibe tenant por parametro: no se puede apuntar a otra flota.",
+      "permanente": true
+    },
+    {
+      "id": "RLS-02",
+      "tipo": "funcion_authenticated",
+      "objeto": "public.is_superadmin()",
+      "severidad": "info",
+      "justificacion": "Debe ser ejecutable por authenticated: lo llaman las politicas RLS con el rol de quien consulta; se evalua contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
+      "permanente": true
+    },
+    {
+      "id": "RLS-03",
+      "tipo": "funcion_authenticated",
+      "objeto": "public.administra_flota()",
+      "severidad": "info",
+      "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS, evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
+      "permanente": true
+    },
+    {
+      "id": "RLS-04",
+      "tipo": "funcion_authenticated",
+      "objeto": "public.ve_finanzas()",
+      "severidad": "info",
+      "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS, evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
+      "permanente": true
+    },
+    {
+      "id": "RLS-05",
+      "tipo": "funcion_authenticated",
+      "objeto": "public.ve_operacion()",
+      "severidad": "info",
+      "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS, evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
+      "permanente": true
+    },
+    {
+      "id": "RLS-06",
+      "tipo": "funcion_authenticated",
+      "objeto": "public.ve_atencion_cliente()",
+      "severidad": "info",
+      "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS, evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
+      "permanente": true
+    },
+    {
+      "id": "RLS-07",
+      "tipo": "funcion_authenticated",
+      "objeto": "public.es_dueno_flota()",
+      "severidad": "info",
+      "justificacion": "Debe ser ejecutable por authenticated: ayudante de politicas RLS, evaluado contra auth.uid(). No recibe tenant por parametro: no se puede apuntar a otra flota.",
+      "permanente": true
+    }
+  ]
+}

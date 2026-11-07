@@ -143,7 +143,7 @@ export function ComboCatalogo({
         onFocus={() => { if (opciones.length === 0) pedir(texto); }}
         onChange={(e) => alEscribir(e.target.value)}
         className={enBarra ? 'border-0 bg-transparent' : className}
-        style={enBarra ? undefined : estilo}
+        style={enBarra ? undefined : estilo} data-anillo={enBarra ? 'envolvente' : undefined}
       />
       <datalist id={listaId}>
         {opciones.map((o) => <option key={o.id} value={o.etiqueta} />)}

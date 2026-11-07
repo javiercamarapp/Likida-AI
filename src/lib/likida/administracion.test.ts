@@ -262,8 +262,9 @@ describe('crearOperador', () => {
           ? { data: { id: 'o-nuevo' }, error: null }
           : { data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: false }], error: null },
       );
+      // L1H: el chequeo del teléfono mira también `app_user` y `vigia_contacto` (vacías aquí: solo hay un operador de baja).
       nodo.then = (r: (v: unknown) => unknown) => Promise.resolve(
-        { data: [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: false }], error: null },
+        { data: tabla === 'operador' ? [{ id: 'o-9', tenant_id: 'OTRA', nombre: 'Pedro', activo: false }] : [], error: null },
       ).then(r);
       return nodo;
     });
@@ -321,6 +322,8 @@ describe('crearOperador', () => {
           insert: (fila: Record<string, unknown>) => { guardado = fila; return cadena({ data: { id: 'o-1' }, error: null }); },
         };
       }
+      // L1H: `app_user` y `vigia_contacto` también se consultan (vacías) antes del insert.
+      if (tabla === 'app_user' || tabla === 'vigia_contacto') return { select: () => cadena({ data: [], error: null }) };
       return { insert: () => Promise.resolve({ error: null }) };
     });
 

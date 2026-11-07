@@ -307,7 +307,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table aria-label="Bitácoras esperando póliza" className="w-full text-[13px]">
               <thead><tr className="text-left" style={{ color: 'var(--faint)' }}><Th>Bitácora</Th><Th>Esperando desde</Th><Th>Última revisión</Th></tr></thead>
               <tbody>
                 {sinPoliza.map((s) => (
@@ -334,7 +334,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-[13px]">
+            <table aria-label="Desgloses de liquidación" className="w-full text-[13px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--faint)' }}>
                   <Th>Bitácora</Th><Th>Operador</Th><Th>Periodo</Th><Th derecha>Neto (de tu sistema)</Th>
@@ -511,7 +511,7 @@ function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglon
       {renglones.length === 0 ? (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin renglones.</p>
       ) : (
-        <table className="w-full text-[13px]">
+        <table aria-label={titulo} className="w-full text-[13px]">
           <tbody>
             {renglones.map((r, i) => (
               <tr key={i} className="border-t" style={{ borderColor: 'var(--line2)' }}>
@@ -526,7 +526,6 @@ function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglon
   );
 }
 
-const CLASE_BOTON = 'hairline h-8 rounded-lg px-3 text-[12px] font-medium transition-opacity hover:opacity-80 disabled:opacity-40';
 
 function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['reenviar'] }) {
   const sinArchivo = d.retenido !== null;
@@ -548,7 +547,7 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
             <BotonConfirmar
               etiqueta={o.etiqueta} titulo="Reenviar el desglose" etiquetaConfirmar="Sí, reenviar" tono="normal"
               descripcion={`Se volverá a mandar el desglose de la bitácora ${d.bitacora} ${o.que}. Queda registrado quién lo pidió.`}
-              deshabilitado={o.curso || sinArchivo} className={CLASE_BOTON}
+              deshabilitado={o.curso || sinArchivo} className="rv-btn rv-btn--secondary"
             />
           </form>
         ))}
@@ -568,7 +567,7 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
         <BotonConfirmar
           etiqueta="Corregir correo del operador y reenviar" titulo="Corregir el correo y reenviar" etiquetaConfirmar="Sí, corregir y reenviar" tono="normal"
           descripcion="Se guarda el correo nuevo en la ficha del operador y se le vuelve a mandar este desglose. Los próximos también irán a ese correo."
-          deshabilitado={d.enCurso.operador || sinArchivo} className={CLASE_BOTON}
+          deshabilitado={d.enCurso.operador || sinArchivo} className="rv-btn rv-btn--secondary"
         />
       </form>
     </div>
@@ -586,14 +585,26 @@ function EstadoCabecera({ d }: { d: DetalleDesglose }) {
   );
 }
 
-function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde: string }> }) {
+/** CT-A12-09: «operador sin alta» tiene tres causas distintas y cada una se arregla distinto; la ayuda sigue a `detalle.motivo`. */
+export function ayudaExcepcion(tipo: TipoExcepcion, detalle: Record<string, unknown> = {}): string {
+  if (tipo === 'operador_no_encontrado') {
+    if (detalle.motivo === 'baja') return 'Este operador está dado de baja en Likida: reactívalo (o corrige su número de empleado) y el desglose se procesa en la siguiente lectura.';
+    // Formato por nombre (supuesto hasta la especificación oficial): el sistema de tu empresa manda al operador solo por nombre.
+    if (detalle.motivo === 'nombre_ambiguo') return 'El sistema de tu empresa manda al operador solo por nombre y hay más de un operador con ese nombre en Likida: no se sabe a quién corresponde, así que no se recibió. Distingue los nombres en Operadores y vuelve a mandar la bitácora.';
+    if (detalle.motivo === 'nombre_sin_alta') return 'El sistema de tu empresa manda al operador solo por nombre y ninguno de Operadores coincide (o al que coincide le falta el número de empleado): no se recibió. Revisa que esté escrito igual y con su número de empleado, y vuelve a mandar la bitácora.';
+    if (detalle.motivo === 'ambiguo') return 'El número de empleado, el teléfono o el id apuntan a más de un operador, o a operadores distintos: no se sabe a quién entregárselo. Corrige el duplicado en Operadores; no lo des de alta otra vez.';
+  }
+  return EXCEPCION[tipo]?.ayuda ?? '';
+}
+
+function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde: string; detalle?: Record<string, unknown> }> }) {
   return (
     <ul className="space-y-1.5">
       {items.map((x, i) => (
         <li key={`${x.tipo}-${i}`} className="text-[12px]">
           <span className="font-medium">{EXCEPCION[x.tipo].titulo}</span>
           <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.desde)}</span>
-          <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{EXCEPCION[x.tipo].ayuda}</span>
+          <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{ayudaExcepcion(x.tipo, x.detalle)}</span>
         </li>
       ))}
     </ul>
@@ -648,7 +659,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
               <BotonConfirmar
                 etiqueta="Liberar envío" titulo="Liberar el envío" etiquetaConfirmar="Sí, liberar y enviar" tono="normal"
                 descripcion={`Se enviará el desglose de la bitácora ${d.bitacora} al operador, a su coordinador y a RH. Queda registrado quién lo liberó.`}
-                className={CLASE_BOTON}
+                className="rv-btn rv-btn--secondary"
               />
             </form>
           )}
@@ -667,7 +678,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
             {d.retenido ? 'Aún no se manda a nadie: el desglose está retenido.' : 'Este desglose no tiene correos programados.'}
           </p>
         ) : (
-          <table className="w-full text-[13px]">
+          <table aria-label="Destinatarios del desglose" className="w-full text-[13px]">
             <thead><tr className="text-left" style={{ color: 'var(--faint)' }}><Th>Quién</Th><Th>Correo</Th><Th>Estado</Th><Th>Cuándo</Th></tr></thead>
             <tbody>
               {d.destinatarios.map((x, i) => {
@@ -706,7 +717,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
         <h4 className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Archivo</h4>
         {d.descargaUrl ? (
           <>
-            <a href={d.descargaUrl} download={d.descargaNombre} className={`${CLASE_BOTON} inline-flex items-center`}>Descargar el Excel</a>
+            <a href={d.descargaUrl} download={d.descargaNombre} className="rv-btn rv-btn--secondary">Descargar el Excel</a>
             <span className="text-[11px] ml-2" style={{ color: 'var(--faint)' }}>{d.descargaNombre} · el enlace vale 24 horas</span>
           </>
         ) : (
@@ -763,7 +774,7 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
                 <span className="font-medium">{EXCEPCION[x.tipo]?.titulo ?? x.tipo}</span>
                 <span style={{ color: 'var(--muted)' }}> · bitácora {bitacora}</span>
                 <span style={{ color: 'var(--faint)' }}> · desde {fechaHoraMx(x.primeraVez)}</span>
-                <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{EXCEPCION[x.tipo]?.ayuda ?? ''}</span>
+                <span className="block text-[12px]" style={{ color: 'var(--muted)' }}>{ayudaExcepcion(x.tipo, x.detalle)}</span>
               </li>
             );
           })}

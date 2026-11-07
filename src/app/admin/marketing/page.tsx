@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { Clapperboard, Film, UserSquare2, ListChecks } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -295,3 +296,5 @@ export default async function EstudioMarketingPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Estudio de marketing' };

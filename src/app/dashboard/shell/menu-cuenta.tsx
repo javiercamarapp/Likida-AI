@@ -8,6 +8,7 @@ import { EnlaceCuenta } from '../enlace-cuenta';
 import { Popover, MenuList } from '../../ui-v2/componentes/overlay';
 import { anclaDe, indiceDeMenu } from './nav-utiles';
 import { OPCIONES_TEMA, useTema } from '../../selector-tema';
+import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
  * La tarjeta de cuenta del pie (alto 44): monograma, nombre, rol y «Salir» (icono en tinta, nunca rojo). Al pulsar la tarjeta se
@@ -38,12 +39,12 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
           <span className="rv-cuenta__nombre">{mostrarNombre}</span>
           <span className="rv-cuenta__rol">{rolEtiqueta}</span>
         </span>
-        <ChevronsUpDown className="rv-cuenta__chev" width={14} height={14} strokeWidth={1.75} aria-hidden />
+        <ChevronsUpDown className="rv-cuenta__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
       </button>
       {cerrarSesion && (
         <form action={cerrarSesion} className="rv-cuenta__salir">
           <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión" className="rv-icono-boton">
-            <LogOut width={16} height={16} strokeWidth={1.75} aria-hidden />
+            <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
           </button>
         </form>
       )}
@@ -65,7 +66,7 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
             )}
             {filas.map((it) => (
               <Link key={it.href} role="menuitem" tabIndex={-1} href={`${it.href}${sufijo}`} className="rv-menu__item" data-tour={`nav-${anclaDe(it.href)}`} onClick={alElegir}>
-                <span className="rv-menu__icono" aria-hidden><it.Icono width={16} height={16} strokeWidth={1.75} /></span>
+                <span className="rv-menu__icono" aria-hidden><it.Icono width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
                 <span>{it.nombre === 'Centro de ayuda' ? 'Ayuda' : it.nombre}</span>
               </Link>
             ))}
@@ -75,7 +76,7 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
               {OPCIONES_TEMA.map(({ valor, Icono, rotulo }) => (
                 <button key={valor} type="button" role="menuitemradio" aria-checked={tema === valor} tabIndex={-1} data-tema={valor} className="rv-menu__item"
                   aria-label={rotulo} onClick={() => elegir(valor)}>
-                  <span className="rv-menu__icono" aria-hidden><Icono width={16} height={16} strokeWidth={1.75} /></span>
+                  <span className="rv-menu__icono" aria-hidden><Icono width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
                   <span>{rotulo}</span>{tema === valor && <Check className="rv-cuenta-valor" width={14} height={14} strokeWidth={2} aria-hidden />}
                 </button>
               ))}
@@ -83,7 +84,7 @@ export default function MenuCuenta({ nombre, rol, rolEtiqueta, sufijo, filas, us
             {cerrarSesion && (
               <form action={cerrarSesion} className="rv-cuenta-salir-fila" role="none">
                 <button type="submit" role="menuitem" tabIndex={-1} className="rv-menu__item">
-                  <span className="rv-menu__icono" aria-hidden><LogOut width={16} height={16} strokeWidth={1.75} /></span>
+                  <span className="rv-menu__icono" aria-hidden><LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
                   <span>Cerrar sesión</span>
                 </button>
               </form>

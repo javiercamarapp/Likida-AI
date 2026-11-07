@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { FlaskConical, ScanText, Calculator, MessagesSquare, Gauge, Info, ArrowRight } from 'lucide-react';
@@ -65,7 +66,7 @@ export default async function PlaygroundPage() {
                 { Icono: MessagesSquare, nombre: 'Agente de WhatsApp', href: '/admin/agente-whatsapp' },
               ].map(({ Icono, nombre, href }) => (
                 <Link key={nombre} href={href}
-                  className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
+                  className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
                   style={{ background: 'var(--surface)' }}>
                   <Icono width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
                   <span className="text-[13px] font-medium truncate">{nombre}</span>
@@ -82,3 +83,5 @@ export default async function PlaygroundPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Playground' };

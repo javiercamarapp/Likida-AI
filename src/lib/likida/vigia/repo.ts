@@ -20,6 +20,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { envPuesta } from '@/lib/env';
 import { logger } from '@/lib/logger';
+import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { acotada } from '../presupuesto';
 import { IDS_POR_TANDA } from '../pg';
 import { telefonoDeUsuario, telefonoJefeDe } from '../contactos';
@@ -33,6 +34,7 @@ import {
   datosUnidadVisibles, etapaDeViaje, ultimoHitoDe, type DatosUnidadCrudos, type DatosUnidadViaje, type EstatusViaje, type ResumenViaje, type ServicioEstatusViaje,
 } from './estatus_viaje';
 import { camposVisibles } from './aviso/privacidad';
+import { copiaConfigGuardadaPorOmision, normalizarFilaConfig, type ConfigGuardadaSinAtender } from './sin_atender/config_guardada';
 import { normalizarAlias } from './aviso/equivalencias';
 import { estatusViaje as estatusDelConductor } from '../conductor/servicios';
 import type { EstatusViaje as EstatusConductor } from '../conductor/estatus_viaje';
@@ -540,7 +542,12 @@ export function crearRepoVigia(): RepoVigia {
     async config(tenantId) {
       const f = exigir('config', await acotada(supabaseAdmin().from('vigia_config')
         .select('*').eq('tenant_id', tenantId).maybeSingle(), 'vigia.config')) as Fila | null;
-      return f ? aConfig(f) : configApagada(tenantId);
+      if (!f) return configApagada(tenantId);
+      const c = aConfig(f);
+      // CT-A345-23 (IN4-23): el autoenvio se bloquea al GUARDAR bajo el perfil, pero una fila que llegue con `autoenviar_bajo_riesgo` por otra
+      // via se autoenviaria. Aqui, en la lectura que alimenta a toda la politica, se fuerza `siempre` (falla cerrado: perfil ilegible = restrictivo).
+      if (c.modoAprobacion !== 'siempre' && (await perfilDeTenant(tenantId)) === 'cinco_agentes') return { ...c, modoAprobacion: 'siempre' };
+      return c;
     },
 
     // Cruza flotas A PROPÓSITO: el webhook solo trae el número. Un número ACTIVO
@@ -1363,3 +1370,80 @@ export async function suprimirContactoVigia(tenantId: string, contactoId: string
   return { mensajes: num(d.mensajes), conversaciones: num(d.conversaciones) };
 }
 
+
+// ── Ronda 5: a quién le llega el resumen de «sin atender» (solo lectura, solo correo) ────────────────
+
+export interface DestinatariosResumenCrudos {
+  /** Contactos activos de servicio al cliente con correo; `clienteId` null = para todos los clientes. */
+  servicio: Array<{ nombre: string; correo: string; clienteId: string | null }>;
+  /** Directores de nivel 1 y 2 con correo, CON su turno (el recorte por turno lo hace quien arma el envío). */
+  nivel1: Array<{ nombre: string; correo: string; turno: ReturnType<typeof aTurnoDirector> }>;
+  nivel2: Array<{ nombre: string; correo: string; turno: ReturnType<typeof aTurnoDirector> }>;
+  zona: string;
+  festivos: string[];
+}
+
+/**
+ * Lo necesario para decidir a quién va el resumen por correo: la lista de servicio al cliente, los directores con su turno, la zona
+ * horaria y los festivos de la flota. NO recorta por turno (el llamador pasa el momento del envío). Sin las tablas (base sin migrar)
+ * las listas salen vacías: sin destinatarios no se envía nada. Todo filtra por `tenant_id`.
+ */
+export async function leerDestinatariosResumen(tenantId: string): Promise<DestinatariosResumenCrudos> {
+  const db = supabaseAdmin();
+  const consulta = (columnas: string) => acotada(db.from('vigia_director').select(columnas).eq('tenant_id', tenantId).in('nivel', [1, 2])
+    .order('created_at').order('id').limit(40), 'vigia.destinatarios_resumen_directores');
+  let d = await consulta('id, nivel, nombre, correo, turno');
+  if (d.error && sinColumna(d.error)) d = await consulta('id, nivel, nombre, correo');
+  if (d.error && !sinMigrar(d.error)) throw new Error(`vigia.destinatarios_resumen_directores: ${d.error.message}`);
+  const s = await acotada(db.from('vigia_servicio_cliente').select('id, nombre, correo, cliente_id').eq('tenant_id', tenantId).eq('activo', true)
+    .not('correo', 'is', null).order('created_at').order('id').limit(MAX_SERVICIO_CLIENTE), 'vigia.destinatarios_resumen_servicio');
+  if (s.error && !sinMigrar(s.error)) throw new Error(`vigia.destinatarios_resumen_servicio: ${s.error.message}`);
+  const { zona, festivos } = await contextoDeTurnos(tenantId);
+  const filas = (d.error ? [] : (d.data ?? [])) as unknown as Fila[];
+  const aPersona = (f: Fila) => ({ nombre: String(f.nombre ?? ''), correo: String(f.correo ?? ''), turno: aTurnoDirector(f.turno) });
+  const conCorreo = filas.filter((f) => str(f.correo));
+  return {
+    servicio: ((s.error ? [] : (s.data ?? [])) as Fila[]).filter((f) => str(f.correo))
+      .map((f) => ({ nombre: String(f.nombre ?? ''), correo: String(f.correo), clienteId: str(f.cliente_id) })),
+    nivel1: conCorreo.filter((f) => num(f.nivel) === 1).map(aPersona),
+    nivel2: conCorreo.filter((f) => num(f.nivel) === 2).map(aPersona),
+    zona, festivos,
+  };
+}
+
+
+// ── Ronda 6 / 0999: la configuración de «sin atender» por flota ──────────────────────────────────────
+
+const COLUMNAS_CONFIG_SIN_ATENDER = 'horario_atencion, palabras_clave, palabras_urgentes, equipo_nombres, insistencia_min, umbral_urgente_min, resumen_correo_habilitado';
+
+/**
+ * Lo que la flota dejó guardado para «sin atender». SIN FILA, o con la tabla ausente (base sin la 0999: 42P01 / PGRST205), devuelve los valores
+ * de arranque apagados (sin horario, sin equipo, resumen por correo apagado): falla cerrado. Cualquier otro error de la base LANZA, porque
+ * «no pude preguntar» no es «está apagado». Filtra por `tenant_id`.
+ */
+export async function leerConfigSinAtender(tenantId: string): Promise<ConfigGuardadaSinAtender> {
+  const r = await acotada(supabaseAdmin().from('vigia_sin_atender_config').select(COLUMNAS_CONFIG_SIN_ATENDER).eq('tenant_id', tenantId).maybeSingle(), 'vigia.sin_atender_config_leer');
+  if (r.error) {
+    if (sinMigrar(r.error)) return copiaConfigGuardadaPorOmision();
+    throw new Error(`vigia.sin_atender_config_leer: ${r.error.message}`);
+  }
+  return r.data ? normalizarFilaConfig(r.data) : copiaConfigGuardadaPorOmision();
+}
+
+/**
+ * Guarda (upsert por flota) la configuración YA VALIDADA con `validarConfigGuardada`. `ok:false` con mensaje llano si la base aún no tiene la tabla.
+ * El tenant sale de la sesión de quien llama, nunca de un formulario.
+ */
+export async function guardarConfigSinAtender(tenantId: string, userId: string | null, v: ConfigGuardadaSinAtender): Promise<Validacion<{ tenantId: string }>> {
+  const fila = {
+    tenant_id: tenantId, horario_atencion: v.horarioAtencion, palabras_clave: v.palabrasClave, palabras_urgentes: v.palabrasUrgentes, equipo_nombres: v.equipoNombres,
+    insistencia_min: v.insistenciaMin, umbral_urgente_min: v.umbralUrgenteMin, resumen_correo_habilitado: v.resumenCorreoHabilitado,
+    updated_at: new Date().toISOString(), updated_by: userId,
+  };
+  const r = await acotada(supabaseAdmin().from('vigia_sin_atender_config').upsert(fila, { onConflict: 'tenant_id' }), 'vigia.sin_atender_config_guardar');
+  if (r.error) {
+    if (sinMigrar(r.error)) return { ok: false, error: 'La configuración de esta pantalla todavía no está disponible en tu cuenta. Avísale a Likida.' };
+    throw new Error(`vigia.sin_atender_config_guardar: ${r.error.message}`);
+  }
+  return { ok: true, valor: { tenantId } };
+}

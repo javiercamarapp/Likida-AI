@@ -78,6 +78,8 @@ beforeEach(async () => {
   reset(); resetEnvios(); sembrarFlotas();
   process.env.RESEND_API_KEY = 'llave-sintetica';
   await repo.crearBuzon(A, TOKEN_A); await repo.crearBuzon(B, TOKEN_B);
+  // S-06: un buzón sin lista de remitentes no acepta a nadie; los correos de estas pruebas vienen de estos dominios del cliente.
+  await repo.configurarBuzon(A, { remitentesPermitidos: ['cliente.example', 'c.example'] }); await repo.configurarBuzon(B, { remitentesPermitidos: ['cliente.example', 'c.example'] });
 });
 
 const depsCorreo = (adjuntos: Record<string, Uint8Array | 'caida'>, over: Partial<DepsCorreo> = {}): DepsCorreo => ({

@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { Settings } from 'lucide-react';
@@ -65,3 +66,5 @@ export default async function ConfiguracionPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Configuración' };

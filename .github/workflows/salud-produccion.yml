@@ -69,13 +69,20 @@ jobs:
       # Desde la auditoría 24 (OP-P1) también se imprime `migracion`: una base
       # atrás del código ya viene como `degraded` con su motivo.
       - name: /api/health está healthy (un cron vencido falla; un hueco de config se anota)
+        env:
+          # CT-SEG-12: el detalle (crons, migracion) solo se entrega con HEALTH_TOKEN.
+          HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
         run: |
           set -u
-          cuerpo=$(curl -sS --max-time 20 -w '\n%{http_code}' https://app.likida.ai/api/health) || { echo "::error::/api/health no contestó"; exit 1; }
+          cuerpo=$(curl -sS --max-time 20 -H "x-health-token: ${HEALTH_TOKEN:-}" -w '\n%{http_code}' https://app.likida.ai/api/health) || { echo "::error::/api/health no contestó"; exit 1; }
           status=$(echo "$cuerpo" | tail -n1)
           json=$(echo "$cuerpo" | sed '$d')
           leer() { printf '%s' "$json" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{const j=JSON.parse(s);process.stdout.write(String(j$1??''))}catch{process.stdout.write('invalid')}})"; }
           estado=$(leer '.status')
+          if [ "$(leer '.acceso')" = "publico" ]; then
+            echo "::error::/api/health respondió en modo PÚBLICO (sin crons ni migracion): falta el secreto HEALTH_TOKEN en GitHub, o no coincide con HEALTH_TOKEN de Vercel. Un pulso sin detalle no prueba que los crons ni la base estén sanos."
+            exit 1
+          fi
           crons=$(leer '.checks?.crons')
           migracion=$(leer '.migracion?JSON.stringify(j.migracion):"sin campo"')
           echo "http=$status estado=$estado crons=$crons migracion=$migracion"
@@ -100,6 +107,7 @@ jobs:
         if: always() && github.event_name == 'push'
         env:
           ASUNTO: ${{ github.event.head_commit.message }}
+          HEALTH_TOKEN: ${{ secrets.HEALTH_TOKEN }}
         run: |
           set -u
           asunto=$(printf '%s' "$ASUNTO" | head -n1)

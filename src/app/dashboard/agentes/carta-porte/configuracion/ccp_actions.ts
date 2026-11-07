@@ -1,7 +1,7 @@
 'use server';
 
 import { revalidatePath } from 'next/cache';
-import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoFirmado, CAMPO_FLOTA_PINTADA, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { rateLimit } from '@/lib/ratelimit';
 import { logger } from '@/lib/logger';
@@ -19,12 +19,6 @@ const RUTA = '/dashboard/agentes/carta-porte/configuracion';
 const SIN_PERMISO = 'Tu rol no puede administrar la respuesta con el CCP timbrado.';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const verComo = (fd: FormData) => ({
-  tenant: typeof fd.get('tenant') === 'string' ? String(fd.get('tenant')) : undefined,
-  rol: typeof fd.get('rol') === 'string' ? String(fd.get('rol')) : undefined,
-  vista: typeof fd.get('vista') === 'string' ? String(fd.get('vista')) : undefined,
-});
-
 const FRASE_MOTIVO = {
   no_encontrada: 'Ese CCP no está en tu flota. Recarga la pantalla.',
   ya_respondida: 'Ya se le respondió al cliente con este CCP.',
@@ -35,7 +29,10 @@ const FRASE_MOTIVO = {
 
 /** Enciende o apaga la respuesta al cliente (`responder_ccp`). Por omisión está APAGADA. */
 export async function fijarRespuestaCcp(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: SIN_PERMISO };
   try {
     if (!(await rateLimit(`cp-ccp-activo:${s.tenantId}`, 20, 60_000))) return { ok: false, error: 'Demasiados cambios en poco tiempo. Espera un minuto.' };
@@ -56,7 +53,10 @@ export async function fijarRespuestaCcp(_previo: ResultadoAccion, fd: FormData):
 
 /** Confirma (y, si hace falta, corrige el destino de) un CCP recibido y responde al cliente. */
 export async function confirmarRespuestaCcp(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const s = await resolverTenantEfectivo(RUTA, verComo(fd));
+  // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
+  // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
+  const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
+  if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
   if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: SIN_PERMISO };
   try {
     if (!(await rateLimit(`cp-ccp-confirmar:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiadas confirmaciones en poco tiempo. Espera un minuto.' };

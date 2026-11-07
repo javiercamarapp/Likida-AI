@@ -23,7 +23,7 @@ const {
 
 const metaResp = (mimeType: string, fileSize?: number) => ({
   ok: true, status: 200,
-  json: async () => ({ url: 'https://lookaside.fb/x', mime_type: mimeType, ...(fileSize !== undefined ? { file_size: fileSize } : {}) }),
+  json: async () => ({ url: 'https://lookaside.fbsbx.com/x', mime_type: mimeType, ...(fileSize !== undefined ? { file_size: fileSize } : {}) }),
   text: async () => '',
 }) as unknown as Response;
 

@@ -58,7 +58,7 @@ const fetchSpy = vi.fn(async (url: string, init?: RequestInit) => {
     salientes.push({ url: u, body: JSON.parse(String(init?.body ?? '{}')) });
     return ok({ messages: [{ id: 'wamid.TEST' }] });
   }
-  return ok({ url: `https://media.test/x`, mime_type: 'text/xml' });
+  return ok({ url: `https://lookaside.fbsbx.com/x`, mime_type: 'text/xml' });
 });
 
 /** Los mensajes de texto que salieron hacia Meta, en orden. */

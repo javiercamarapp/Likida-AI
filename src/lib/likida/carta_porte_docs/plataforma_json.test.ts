@@ -149,7 +149,7 @@ function deps(adjuntos: Record<string, Uint8Array>): DepsCorreo & { descargas: s
 
 describe('correo con el JSON de la plataforma como adjunto sin extensión', () => {
   const base = { emailId: 'em-g', from: 'Portal <portal@cliente.example>', subject: 'CCP' };
-  beforeEach(async () => { reset(); sembrarFlotas(); process.env.RESEND_API_KEY = 're_test'; await repo.crearBuzon(A, TOKEN_A); void DOM; });
+  beforeEach(async () => { reset(); sembrarFlotas(); process.env.RESEND_API_KEY = 're_test'; await repo.crearBuzon(A, TOKEN_A); await repo.configurarBuzon(A, { remitentesPermitidos: ['cliente.example'] }); void DOM; });
 
   it('cuerpo corto + adjunto sin extensión que es JSON ⇒ CREA el documento (antes: sin_contenido)', async () => {
     const d = deps({ j1: enc(jsonPlataformaV3()) });

@@ -20,18 +20,19 @@ vi.mock('@/lib/likida/agentes/corridas', () => ({
 }));
 
 let marca: { error?: string; marcadas: number } = { marcadas: 3 };
+const exportar = vi.fn(async () => ({ filas: [{ uuid: 'u-1' }, { uuid: 'u-2' }, { uuid: 'u-3' }], ids: ['f-1', 'f-2', 'f-3'] }));
+const marcar = vi.fn(async () => marca);
 vi.mock('@/lib/likida/proveedores', () => ({
-  exportarAprobadas: async () => ({
-    filas: [{ uuid: 'u-1' }, { uuid: 'u-2' }, { uuid: 'u-3' }],
-    ids: ['f-1', 'f-2', 'f-3'],
-  }),
-  marcarExportadas: async () => marca,
+  exportarAprobadas: () => exportar(),
+  marcarExportadas: () => marcar(),
 }));
 
-const { GET } = await import('./route');
-const pedir = () => GET(new Request('https://app.likida.ai/api/export/facturas-proveedor'));
+const { GET, POST } = await import('./route');
+const URL_EXPORT = 'https://app.likida.ai/api/export/facturas-proveedor';
+// CT-SEG-17: marcar `exportada_en` y anotar la corrida es una ESCRITURA y ahora solo cuelga de POST.
+const pedir = () => POST(new Request(URL_EXPORT, { method: 'POST' }));
 
-beforeEach(() => { corrida.mockClear(); marca = { marcadas: 3 }; });
+beforeEach(() => { corrida.mockClear(); exportar.mockClear(); marcar.mockClear(); marca = { marcadas: 3 }; });
 
 describe('BE-8 — el CSV dice cuando no se pudo marcar lo exportado', () => {
   it('REPRO: marcado caído ⇒ la PRIMERA línea del archivo lo advierte y nombra cuántas', async () => {
@@ -64,5 +65,49 @@ describe('BE-8 — el CSV dice cuando no se pudo marcar lo exportado', () => {
     await pedir();
 
     expect(corrida).toHaveBeenCalledWith('t-1', 'proveedores', expect.objectContaining({ estado: 'parcial', tareasHechas: 1, tareasTotal: 3 }));
+  });
+});
+
+describe('CT-SEG-17 — el POST que marca estado solo lo pide nuestro propio sitio', () => {
+  const desde = (sitio: string) => POST(new Request(URL_EXPORT, { method: 'POST', headers: { 'sec-fetch-site': sitio } }));
+
+  it('una navegación cross-site o same-site es 403 y no exporta, no marca ni anota corrida', async () => {
+    exportar.mockClear(); marcar.mockClear();
+    for (const sitio of ['cross-site', 'same-site']) {
+      const r = await desde(sitio);
+      expect(r.status).toBe(403);
+    }
+    expect(exportar).not.toHaveBeenCalled();
+    expect(marcar).not.toHaveBeenCalled();
+    expect(corrida).not.toHaveBeenCalled();
+  });
+
+  it('el envío del formulario del panel (same-origin) sí descarga y marca', async () => {
+    expect((await desde('same-origin')).status).toBe(200);
+    expect(marcar).toHaveBeenCalledTimes(1);
+  });
+
+  it('un Origin ajeno sin Sec-Fetch-Site también se rechaza', async () => {
+    const r = await POST(new Request(URL_EXPORT, { method: 'POST', headers: { origin: 'https://malo.example' } }));
+    expect(r.status).toBe(403);
+  });
+});
+
+describe('CT-SEG-17 — el GET queda puro: entrega el archivo y no escribe nada', () => {
+  it('GET devuelve el CSV pero NO marca exportada_en ni anota corrida (lo hace solo POST)', async () => {
+    const r = await GET(new Request(URL_EXPORT));
+    expect(r.status).toBe(200);
+    expect(await r.text()).toContain('u-1');
+    expect(marcar).not.toHaveBeenCalled();
+    expect(corrida).not.toHaveBeenCalled();
+    expect(r.headers.get('x-likida-marcado')).toBe('no');
+  });
+
+  it('POST sí marca y anota la corrida, y lo declara', async () => {
+    const r = await pedir();
+    expect(r.status).toBe(200);
+    expect(marcar).toHaveBeenCalledTimes(1);
+    expect(corrida).toHaveBeenCalledTimes(1);
+    expect(r.headers.get('x-likida-marcado')).toBe('si');
   });
 });

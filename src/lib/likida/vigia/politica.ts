@@ -22,6 +22,7 @@
 // toque cuesta segundos; equivocarse hacia mandar solo puede costar un cliente.
 // ═══════════════════════════════════════════════════════════════════════════
 import type { Borrador } from './redactor';
+import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Clasificacion, ConfigVigia, Conversacion, Intencion } from './tipos';
 
 /** Las intenciones cuya respuesta puede salir sin aprobación (si todo lo demás cumple). */
@@ -39,6 +40,11 @@ export interface EntradaPolitica {
   clasificacion: Pick<Clasificacion, 'intencion' | 'confianza' | 'senales'>;
   borrador: Pick<Borrador, 'riesgo' | 'faltantes' | 'tareas' | 'requiereHumano' | 'origen'>;
   conversacion: Pick<Conversacion, 'control' | 'molestiaNivel' | 'escalamientoNivel'>;
+  /**
+   * CT-A345-23: perfil de la flota. Bajo `cinco_agentes` no existe el autoenvio: `autoenviar_bajo_riesgo` se trata como `siempre` aunque la fila
+   * de config diga otra cosa (defensa en profundidad: `repo.config` ya lo fuerza al leer). Ausente = sin perfil, el comportamiento de siempre.
+   */
+  perfil?: PerfilTenant | null;
   /** Cuántas respuestas de ESTA intención el gerente aprobó sin editar. */
   aprobacionesSinEditar: number;
 }
@@ -48,7 +54,7 @@ export function decidirEnvio(e: EntradaPolitica): DecisionEnvio {
   if (e.conversacion.control === 'humano') return { accion: 'ninguna', motivo: 'conversacion_en_manos_de_un_humano' };
   // 0798 «solo avisar»: el Vigía no le escribe al cliente (ni autoenvía ni deja borradores por aprobar); sigue clasificando y escalando.
   if (e.config.soloAvisar === true) return { accion: 'ninguna', motivo: 'solo_avisar' };
-  if (e.config.modoAprobacion !== 'autoenviar_bajo_riesgo') return { accion: 'aprobar', motivo: 'modo_siempre_aprobar' };
+  if (e.perfil === 'cinco_agentes' || e.config.modoAprobacion !== 'autoenviar_bajo_riesgo') return { accion: 'aprobar', motivo: 'modo_siempre_aprobar' };
 
   if (!INTENCIONES_AUTOENVIABLES.includes(e.clasificacion.intencion)) return { accion: 'aprobar', motivo: 'intencion_no_autoenviable' };
   if (e.clasificacion.senales.length > 0) return { accion: 'aprobar', motivo: 'clasificacion_con_senales' };

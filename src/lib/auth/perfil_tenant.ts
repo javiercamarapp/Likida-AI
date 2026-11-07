@@ -26,6 +26,8 @@ import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
+import { registrarApiNegada, registrarPaginaNegada } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 import {
   PERFILES_TENANT, rutaPermitidaEnPerfil, apiPermitidaEnPerfil, CRONS_PERFIL_CINCO_AGENTES,
   moduloProximamenteDeRuta, rutaProximamente, MODULOS_PROXIMAMENTE_PERFIL, inicioDe, puedeVerRuta,
@@ -227,6 +229,8 @@ export async function exigirRutaDePerfil(tenantId: string | null | undefined, de
     return;
   }
   logger.warn('perfil_tenant.ruta_negada', { tenantId, destino });
+  // CT-SEG-11: la pantalla negada por el perfil de la flota deja fila de cobertura (se espera con tope corto; fail-closed aunque falle).
+  await esperarRegistro(registrarPaginaNegada({ ruta: destino, rol: rol ?? 'desconocido', causa: 'perfil', tenantId }));
   redirect(rol ? inicioDe(rol, perfil) : '/dashboard');
 }
 
@@ -240,6 +244,8 @@ export async function apiDenegadaPorPerfil(tenantId: string | null | undefined, 
   if (!perfil) return false;
   if (apiPermitidaEnPerfil(perfil, pathname)) return false;
   logger.warn('perfil_tenant.api_negada', { tenantId, pathname });
+  // CT-SEG-11: una API negada por el perfil deja fila de cobertura en evento_seguridad (best-effort, no espera).
+  void registrarApiNegada({ tenantId, pathname, causa: 'perfil' });
   return true;
 }
 

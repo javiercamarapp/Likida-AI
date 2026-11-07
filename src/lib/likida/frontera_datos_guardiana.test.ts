@@ -314,7 +314,17 @@ import { join, relative } from 'node:path';
 // Auditoría 37, lote M-Z-resto-10 (A37-S07-06): +1 archivo (324 → 325), `lib/perfil/avatar_huerfanos.ts` — borra del bucket público `avatares` las extensiones viejas del MISMO usuario tras guardar el avatar nuevo; solo Storage (`storage.from('avatares').remove`), cero tablas.
 // LOTE A37 M-Z-resto-06 (A37-S43-07): +1 archivo (324 → 325), `facturacion/avisar.ts` — lee la bitácora de avisos del día (`bitacora_auditoria`, filtrada por `tenant_id`, `acotada`, con `.order('id')`) para no reenviar el mismo aviso.
 // INTEGRACION G4 (24-oct-2026, PRs #705-#724): z-resto-10 (avatar_huerfanos.ts) y z-resto-06 (facturacion/avisar.ts) declaraban cada una 324 → 325 sobre la misma base; el barrido real del arbol fusionado mide 326 archivos (techo = medido).
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
+// LOTE B DE F1 (CT-SEG-07/11/17/25/27, integracion sobre el lote A): +3 archivos (326 -> 329, medido con el guardian), todos de seguridad y con `supabaseAdmin()` sin Storage:
+// `likida/identidad_telefono.ts` (una RPC `resolver_identidad_telefono`, la llave de WhatsApp), `seguridad/avisos.ts` (las RPC `reclamar_avisos_seguridad` y `anonimizar_red_evento_seguridad`)
+// y `seguridad/cobertura.ts` (conteo `head` de `evento_seguridad`). `auth/tenant-atado.ts` se quedo FUERA del conteo: su `Buffer.from(` era un falso positivo del regex y ahora usa TextEncoder.
+// 4-nov-2026, guía de onboarding (0983/0984): +1 archivo (329 → 330), `lib/likida/guia/repo.ts`: el ÚNICO acceso a datos de la guía (estado por usuario y flota,
+// interruptor de invitación, eventos sin PII y el EXISTS de las señales). Tablas deny-all solo service_role; toda consulta lleva `user_id`/`tenant_id` de la SESIÓN. No cabe en el `repo.ts` raíz.
+// F5 L5A (CT-IA-01, 0990): +1 archivo (330 -> 331), `llm/repo.ts`: las dos RPC de las alertas de tope de IA (`registrar_alerta_tope_llm` y `uso_llm_dia_por_flota`), por `acotada`.
+// Es el `repo.ts` propio del modulo `llm` (la frontera de este guardia solo exime el de la raiz); funcionalidad nueva, no codigo migrado. Un techo de integracion es la SUMA de los tramos.
+// F9 (CT-ENT-01 y CT-DAT-16, migraciones 0997/0998): +2 archivos (331 -> 333) y +4 llamadas (2,474 -> 2,478), medidos con el guardián: `seguridad/acceso_superadmin.ts` (un
+// insert en `superadmin_acceso`, de solo agregar, best-effort) y `likida/offboarding/exportar.ts` (lectura paginada por `tenant_id` de las tablas del mapa de datos y el insert de la constancia
+// en `tenant_exportacion`). Los dos apagados por omisión. Funcionalidad nueva, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 333;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -643,7 +653,32 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 326;
 // ROL NOMINA (0949): 2,452 -> 2,455 (+3, medido con el guardian). `liquidacion_externa/repo.ts` `contarParaNomina`: tres `.from(` (desglose, entrega por correo y excepcion) que
 // solo cuentan (`count` con `head: true` sobre una columna identificadora, siempre con `tenant_id`, por `acotada`) para la vista de conteos del rol `nomina`, que NO puede pasar por
 // `listarDesgloses` (esa lectura trae `total_origen`) ni por `fichasDesgloses`. Funcionalidad nueva, no codigo migrado. Cubierta por conteos-nomina.test.tsx.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_455;
+// LOTE A DE F1 (CT-SEG-23): 2,455 -> 2,456 (+1, medido con el guardian). `auth/usuarios_escritura.ts` `revocarLlavesDe`: UN solo `.from('tenant_api_key').update(...)` anclado a `tenant_id` y a
+// `creada_por` (solo llaves vivas, por `acotada`) que revoca las llaves de API de quien se da de baja o deja de ser dueno. Se queda junto a `desactivarUsuario`/`cambiarRolUsuario` (el
+// resto de la baja ya escribe ahi con `supabaseAdmin()`): moverlo a likida/repo.ts acoplaria el modulo de equipo a ese repo y partiria la baja en dos capas sin quitar la consulta
+// directa. Funcionalidad nueva, no codigo migrado. Cubierta por usuarios_escritura.test.ts.
+// LOTE B DE F1: 2,456 -> 2,465 (+9, medido con el guardian): identidad_telefono.ts +1, seguridad/avisos.ts +2, seguridad/cobertura.ts +1 (archivos nuevos, ver el techo de archivos);
+// `likida/administracion.ts` +2 (las lecturas de `app_user` y `vigia_contacto` de `comprobarTelefonoLibre`, X-01, junto a la de `operador` que ya vivia ahi);
+// `conductor/repo.ts` +1 (la RPC `guardar_conductor_config_y_contactos`, que guarda configuracion y contactos en una sola transaccion); `seguridad/eventos.ts` +2 (las variantes
+// `registrar_evento_seguridad_red` y la rama sin red de la misma RPC). Todas por `acotada`/`supabaseAdmin()` y ancladas a `tenant_id` donde aplica. Funcionalidad nueva, no codigo migrado.
+// 4-nov-2026, guía de onboarding: +6 llamadas (2,465 → 2,471), todas en `lib/likida/guia/repo.ts`: leer y escribir `onboarding_estado` (select, insert, update con versión, relectura),
+// el interruptor `onboarding_tenant`, el lote de `onboarding_evento` y el EXISTS de las señales. Medido con el barrido real de esta prueba.
+// F5 L5A (CT-IA-01, 0990): 2,465 -> 2,467 (+2): `llm/repo.ts` (ver el techo de archivos), las dos RPC de las alertas de tope de IA. Funcionalidad nueva.
+// F3 (CT-IA-01): 2,467 -> 2,468 (+1): `llm/repo.ts` `rpcLiberarAlertaTope`, el delete de la marca de `llm_alerta_tope` (anclado a tenant_id/dia/nivel) cuando el aviso no salió.
+// Integracion F2+F3+F5: suma de los tramos, 2,465 + 6 (guia) + 3 (llm) = 2,474.
+// F2 «resto de superficie» (CT-A345-04): 2,474 → 2,475 (+1, medido; 0 archivos nuevos). `carta_porte_docs/repo.ts#contarCatalogosSat`: conteo `head` por catálogo SAT de la
+// tabla global `cp_sat_catalogo` para avisar en pantalla cuando está vacía; por `acotada`, sin datos de flota (la tabla no lleva `tenant_id`) y sin lanzar (devuelve null).
+// Integración todo (F2+F9): suma de los tramos, 2,474 + 1 (F2) + 4 (F9, ver el techo de archivos) = 2,479.
+// Integración R4 (robustez): 2,479 → 2,481 (+2, medido; 0 archivos nuevos). `bitacora_escritura.ts#anotarBitacora` con `unica`: consulta previa por (tenant, acción, entidad, entidadId) en
+// `bitacora_auditoria` para que un reintento no duplique el descarte de correo; dos cadenas (una con `tenant_id is null`, otra con `eq tenant_id`, para que el filtro quede dentro de cada cadena), por `acotada` y con `limit(1)`.
+// Ronda 5 (Vigía «sin atender»): 2,481 → 2,486 (+5, medido; 0 archivos nuevos). Lecturas de solo consulta en los repos del Vigía que ya existían: `historial/repo.ts#leerChatsParaSinAtender` (grupos, importaciones y
+// mensajes por grupo) y `repo.ts#leerDestinatariosResumen` (directores y servicio al cliente con correo). Todas con `tenant_id`, por `acotada`, con `limit` y `order('id')`; ninguna escribe.
+// Ronda 6 (Vigía «sin atender», carril config, migración 0999): 2,486 → 2,488 (+2, medido con el guardián; 0 archivos nuevos). `vigia/repo.ts#leerConfigSinAtender` (una lectura de la fila de la flota
+// en `vigia_sin_atender_config`, filtrada por `tenant_id`, que tolera la tabla ausente) y `#guardarConfigSinAtender` (el upsert por flota de esa misma fila). Las dos por `acotada`; la configuración
+// por flota (horario, palabras, equipo, insistencia y el interruptor del correo) no tenía dónde vivir y es de la misma familia de tablas que `vigia_config`. Funcionalidad nueva, no código migrado.
+// Ronda 6 (carril tms-muestra): +1 sobre config (2,488 → 2,489, medido tras integrar; 0 archivos nuevos). `liquidacion_externa/repo.ts#leerPadronOperadores`: lectura de solo consulta (nombre y número de empleado) del padrón del tenant
+// para resolver al operador por NOMBRE en el formato «muestra-tms»; con `tenant_id`, por `acotada`, completa y demostrada con `traerTodo` y `order('id')`. No escribe.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_489;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

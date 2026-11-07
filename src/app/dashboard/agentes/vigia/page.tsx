@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { vigilar } from '../../bloque';
@@ -40,8 +41,8 @@ const texto = (fd: FormData, k: string): string => String(fd.get(k) ?? '');
  * local no es serializable (`server_actions_sin_closures.test.ts`); aquí `sp` entra por
  * parámetro y lo único que las acciones capturan son strings.
  */
-async function actor(sp: { vista?: string; tenant?: string; rol?: string }, permiso: 'decide' | 'administra') {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function actor(sp: { vista?: string; tenant?: string; rol?: string }, tenantId: string, permiso: 'decide' | 'administra') {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   const rolOk = permiso === 'administra' ? s.rol === 'flota_admin' : DECIDE.includes(s.rol);
   if (!puedeVerRuta(s.rol, RUTA) || !rolOk) return null;
   return { tenantId: s.tenantId, userId: s.userId };
@@ -76,7 +77,7 @@ export default async function PaginaAgenteVigia({
 
   async function decidir(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
-    const a = await actor(sp, 'decide');
+    const a = await actor(sp, tenantId, 'decide');
     if (!a) return { ok: false, error: 'Solo el dueño o el encargado de la flota decide por los clientes.' };
     const id = texto(fd, 'id');
     if (!UUID.test(id)) return { ok: false, error: 'Mensaje no válido.' };
@@ -103,7 +104,7 @@ export default async function PaginaAgenteVigia({
 
   async function conversacion(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
-    const a = await actor(sp, 'decide');
+    const a = await actor(sp, tenantId, 'decide');
     if (!a) return { ok: false, error: 'Solo el dueño o el encargado de la flota decide por los clientes.' };
     const id = texto(fd, 'id');
     if (!UUID.test(id)) return { ok: false, error: 'Conversación no válida.' };
@@ -126,7 +127,7 @@ export default async function PaginaAgenteVigia({
 
   async function config(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
-    const a = await actor(sp, 'administra');
+    const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia la configuración del Vigía.' };
     const v = validarConfig({
       habilitado: fd.get('habilitado') === 'on', modoAprobacion: texto(fd, 'modoAprobacion'),
@@ -148,7 +149,7 @@ export default async function PaginaAgenteVigia({
 
   async function director(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
-    const a = await actor(sp, 'administra');
+    const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia a quién avisa el Vigía.' };
     const id = texto(fd, 'id');
     if (id && !UUID.test(id)) return { ok: false, error: 'Persona no válida.' };
@@ -175,7 +176,7 @@ export default async function PaginaAgenteVigia({
 
   async function servicio(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
-    const a = await actor(sp, 'administra');
+    const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia a quién avisa el Vigía.' };
     const id = texto(fd, 'id');
     if (id && !UUID.test(id)) return { ok: false, error: 'Persona no válida.' };
@@ -204,7 +205,7 @@ export default async function PaginaAgenteVigia({
 
   async function alta(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
-    const a = await actor(sp, 'administra');
+    const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: 'Solo el dueño de la flota autoriza clientes.' };
     const clienteId = texto(fd, 'clienteId');
     const gerente = texto(fd, 'gerenteUserId');
@@ -224,7 +225,7 @@ export default async function PaginaAgenteVigia({
 
   async function contacto(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
-    const a = await actor(sp, 'administra');
+    const a = await actor(sp, tenantId, 'administra');
     if (!a) return { ok: false, error: 'Solo el dueño de la flota administra a los contactos.' };
     const id = texto(fd, 'id');
     if (!UUID.test(id)) return { ok: false, error: 'Contacto no válido.' };

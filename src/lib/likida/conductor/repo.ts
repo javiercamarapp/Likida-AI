@@ -8,7 +8,7 @@ import {
   type Contacto, type FuenteHito, type HitoFila, type InterpretacionHito, type TipoHito,
 } from './tipos';
 import type { LegadoSello } from './maquina';
-import { CONFIG_CONDUCTOR_DEFAULT, COHORTES_PILOTO, validarConfigConductor, zonaOCdmx, type CohortePiloto, type ConfigConductor, type PerfilSeguimiento } from './config';
+import { CONFIG_CONDUCTOR_DEFAULT, COHORTES_PILOTO, aplicarPisoDePerfil, configPorOmisionDePerfil, validarConfigConductor, zonaOCdmx, type CohortePiloto, type ConfigConductor, type PerfilSeguimiento } from './config';
 import { MOTIVO_FUERA_DE_PERFIL, hitoEnPerfil } from './perfil';
 import { contieneDatoDeSeguridad } from './guardia_seguridad';
 import { aHitoApi, EVENTOS_FEED, detalleDeFeed, type EventoApi, type FiltrosHitos, type HitoApi, type CambioCitas } from './lectura';
@@ -526,29 +526,30 @@ export async function marcarEscalacionAtendida(tenantId: string, viajeId: string
 // módulo no tiene por qué costar siete.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const copiaDefaults = (): ConfigConductor => ({
-  ...CONFIG_CONDUCTOR_DEFAULT,
-  solicitudesMin: [...CONFIG_CONDUCTOR_DEFAULT.solicitudesMin],
-  diasSemana: [...CONFIG_CONDUCTOR_DEFAULT.diasSemana],
-});
-
 /** 0801: un umbral numérico de la fila, o su valor de partida si la columna no existe (base sin migrar). */
 const umbralOPartida = (v: unknown, partida: number): number => (v === undefined || v === null ? partida : Number(v));
 
 /** La config de una flota. Sin fila = defaults. LANZA si la base no contesta: «no pude leer» no es «defaults». */
 export async function leerConfigConductor(tenantId: string): Promise<ConfigConductor> {
-  const [res, zonaCruda] = await Promise.all([
+  const [res, zonaCruda, perfil] = await Promise.all([
     acotada(supabaseAdmin()
       .from('agente_conductor_config').select('*').eq('tenant_id', tenantId).maybeSingle(), 'conductor.config'),
     getZonaHorariaTenant(tenantId),
+    // CT-A345-29: ante un bache de lectura del perfil sin valor previo (instancia fria) se FALLA CERRADO ('restringir' = cinco_agentes): la
+    // compuerta de movimiento encendida solo exige unidad detenida; asumir «sin perfil» la apagaba y dejaba escribir con la unidad en marcha.
+    // Import dinamico (como en leerDatosPreflight): perfil_tenant arrastra next/navigation y este repo lo importa por cadena el script
+    // Node de verificar-local.mjs (sin Next), que no resuelve ese especificador.
+    import('@/lib/auth/perfil_tenant').then((m) => m.perfilDeTenant(tenantId, Date.now(), 'restringir')),
   ]);
+  const perfilEfectivo = perfil === 'cinco_agentes' ? 'cinco_agentes' : null;
+  const defaultsDelPerfil = (): ConfigConductor => configPorOmisionDePerfil(perfilEfectivo);
   const f = exigir(res as never, 'conductor.config') as Fila | null;
   // La zona es de la flota (tenant.zona_horaria), no de esta tabla. Inválida o ausente → la de México, con aviso (no truena el cron).
   const zonaHoraria = zonaOCdmx(zonaCruda);
   if (zonaCruda !== null && zonaCruda !== zonaHoraria) {
     logger.warn('conductor.zona_invalida', { tenant: tenantId, zona: String(zonaCruda).slice(0, 60) });
   }
-  if (!f) return { ...copiaDefaults(), agenteChoferHabilitado: false, zonaHoraria };
+  if (!f) return aplicarPisoDePerfil({ ...defaultsDelPerfil(), agenteChoferHabilitado: false, zonaHoraria }, perfilEfectivo);
   const v = validarConfigConductor({
     activo: f.activo as boolean,
     solicitudesMin: f.solicitudes_min as number[],
@@ -603,7 +604,9 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     ...(typeof f.cohorte_piloto === 'string' && (COHORTES_PILOTO as readonly string[]).includes(f.cohorte_piloto) ? { cohortePiloto: f.cohorte_piloto as CohortePiloto } : {}),
     // 0870 (A37-P-08): la compuerta «unidad detenida» se lee de la flota. La base sin migrar no trae las columnas → apagada y en sus
     // valores de partida (fail-closed: el comportamiento de siempre).
-    compuertaMovimientoActiva: f.compuerta_movimiento_activa === true,
+    // CT-A345-29: bajo `cinco_agentes` rige ENCENDIDA aunque la columna (NOT NULL default false) diga false o falte: no hay forma de
+    // distinguir «nunca se tocó» de «la apagaron», y el requisito del cliente (no escribir con la unidad en marcha) no es opcional.
+    compuertaMovimientoActiva: perfil === 'cinco_agentes' || f.compuerta_movimiento_activa === true,
     detenidaMetros: f.detenida_metros === undefined || f.detenida_metros === null ? CONFIG_CONDUCTOR_DEFAULT.detenidaMetros : Number(f.detenida_metros),
     detenidaVentanaMin: f.detenida_ventana_min === undefined || f.detenida_ventana_min === null ? CONFIG_CONDUCTOR_DEFAULT.detenidaVentanaMin : Number(f.detenida_ventana_min),
     sinGpsPermite: f.sin_gps_permite === true,
@@ -634,10 +637,10 @@ export async function leerConfigConductor(tenantId: string): Promise<ConfigCondu
     // con defaults, pero un `activo = false` explícito se respeta: encender por error un agente
     // que manda WhatsApp es peor que operar con la escalera de siempre.
     logger.error('conductor.config_invalida', { tenant: tenantId, err: v.error });
-    return { ...copiaDefaults(), activo: f.activo !== false, agenteChoferHabilitado: false, zonaHoraria };
+    return aplicarPisoDePerfil({ ...defaultsDelPerfil(), activo: f.activo !== false, agenteChoferHabilitado: false, zonaHoraria }, perfilEfectivo);
   }
   // 0859: el interruptor explícito del Agente 5. La base sin migrar no trae la columna → undefined → apagado.
-  return { ...v.ok, agenteChoferHabilitado: f.agente_chofer_habilitado === true };
+  return aplicarPisoDePerfil({ ...v.ok, agenteChoferHabilitado: f.agente_chofer_habilitado === true }, perfilEfectivo);
 }
 
 /**
@@ -1075,9 +1078,29 @@ export async function guardarConfigConductor(
     { mig: '0604', cols: { avisar_llegada_sin_confirmar: c.avisarLlegadaSinConfirmar, margen_acercamiento_m: c.margenAcercamientoM }, esDePartida: !c.avisarLlegadaSinConfirmar && c.margenAcercamientoM === CONFIG_CONDUCTOR_DEFAULT.margenAcercamientoM },
   ];
   let vigentes = grupos.slice();
-  let error: { message: string } | null = null;
+  let error: { message: string; code?: string } | null = null;
+  // MX-007 / API04-02 (0956): con contactos, config + contactos viajan en UNA transacción (RPC). Si la función aún no existe en la
+  // base (42883 / PGRST202) se sigue por el camino de varios pasos de siempre: el código nuevo funciona contra la base sin migrar.
+  let viaRpc = contactos !== undefined;
+  let rpcAplicada = false;
   for (;;) {
-    ({ error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert({ ...fila, ...Object.assign({}, ...vigentes.map((g) => g.cols)) }, { onConflict: 'tenant_id' }), 'v1.conductor_config'));
+    const columnas = { ...fila, ...Object.assign({}, ...vigentes.map((g) => g.cols)) };
+    if (viaRpc) {
+      ({ error } = await acotada(supabaseAdmin().rpc('guardar_conductor_config_y_contactos', {
+        p_tenant: tenantId, p_config: columnas,
+        p_contactos: (contactos ?? []).map((x) => ({ terminalId: x.terminalId, nivel: x.nivel, nombre: x.nombre, telefono: x.telefono })),
+      }) as unknown as PromiseLike<{ error: { message: string; code?: string } | null }>, 'v1.conductor_config'));
+      if (error && (error.code === '42883' || error.code === 'PGRST202')) {
+        logger.warn('conductor.config_sin_0956', { tenant: tenantId });
+        viaRpc = false;
+        continue;
+      }
+      // La FK compuesta de la terminal (23503) revirtió TODO dentro de la RPC: nada quedó a medias.
+      if (error && error.code === '23503') return 'terminal_ajena';
+      if (!error) rpcAplicada = true;
+    } else {
+      ({ error } = await acotada(supabaseAdmin().from('agente_conductor_config').upsert(columnas, { onConflict: 'tenant_id' }), 'v1.conductor_config'));
+    }
     const faltante = error ? vigentes.find((g) => Object.keys(g.cols).some((col) => error!.message.includes(col))) : undefined;
     if (!faltante) break;
     if (!faltante.esDePartida) {
@@ -1095,7 +1118,7 @@ export async function guardarConfigConductor(
     vigentes = vigentes.filter((g) => g !== faltante);
   }
   if (error) throw new Error(`v1.conductor_config: ${error.message}`);
-  if (contactos === undefined) return 'ok';
+  if (contactos === undefined || rpcAplicada) return 'ok';
 
   const previos = await acotada(supabaseAdmin().from('conductor_contacto_trafico').select('id, nivel, telefono, terminal_id').eq('tenant_id', tenantId).order('id').limit(500), 'v1.conductor_contactos');
   const filas = (exigir(previos as never, 'v1.conductor_contactos') ?? []) as unknown as Fila[];
@@ -1772,7 +1795,7 @@ export async function leerDatosPreflight(tenantId: string, ahora: Date = new Dat
     }
   }
   return {
-    config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null },
+    config: { activo: config.activo, perfilSeguimiento: config.perfilSeguimiento, solicitudesMin: config.solicitudesMin, cohortePiloto: config.cohortePiloto ?? null, compuertaMovimientoActiva: config.compuertaMovimientoActiva },
     zonaDeclarada, voluntarios: voluntarios.map((o) => ({ telefono: o.telefono })), viajes, posicionesPorUnidad, contactos,
     agenteChoferHabilitado: agenteChofer.razon,
     // A37-S36-07: sin lectura del perfil se asume el restrictivo (falla cerrado: se exigen más plantillas, no menos).

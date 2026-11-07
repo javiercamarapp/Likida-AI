@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { requireSessionTenant } from '@/lib/auth/guard';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import {
   getConciliacionConsolidado, getLineasPorConciliar, getDesglosesRecibidos, getAcreditables,
@@ -136,7 +136,7 @@ export default async function PaginaAgentePeajes({
   ): Promise<{ error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null> {
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
-    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede subir estados de cuenta.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     // El kill switch (0110), después de la puerta y antes de trabajar — el
@@ -177,7 +177,7 @@ export default async function PaginaAgentePeajes({
   async function importarYCruzarDesglose(_prev: EstadoImportar, fd: FormData): Promise<EstadoImportar> {
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
-    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede subir desgloses.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     const apagado = await avisoAgentePeajesApagado();
@@ -220,7 +220,7 @@ export default async function PaginaAgentePeajes({
    */
   async function declararPeriodoAhora(_prev: EstadoPeriodo, fd: FormData): Promise<EstadoPeriodo> {
     'use server';
-    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede declarar el periodo de un desglose.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     const apagado = await avisoAgentePeajesApagado();
@@ -245,7 +245,7 @@ export default async function PaginaAgentePeajes({
   async function conciliarDesgloseAhora(_prev: EstadoConciliar, fd: FormData): Promise<EstadoConciliar> {
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
-    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     const apagado = await avisoAgentePeajesApagado();
@@ -272,7 +272,7 @@ export default async function PaginaAgentePeajes({
    */
   async function anularDesgloseAhora(_prev: EstadoAnular, fd: FormData): Promise<EstadoAnular> {
     'use server';
-    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo quien administra la flota puede anular un desglose.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     const desgloseId = String(fd.get('desglose') ?? '').trim();
@@ -304,7 +304,7 @@ export default async function PaginaAgentePeajes({
   ): Promise<{ error?: string; resumen?: ResumenBarrido } | null> {
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
-    const sesion = await requireSessionTenant('/dashboard/agentes/peajes');
+    const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
     if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
     // Stand-by (barrido de la cola de tickets de caseta): igual, cortado en servidor.
@@ -377,7 +377,7 @@ export default async function PaginaAgentePeajes({
       notificaciones={
         <>
           <FichaCorridas corridas={corridas} />
-          <SeccionNotificaciones tenantId={tenantId} agenteId="peajes" />
+          <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="peajes" />
         </>
       }
     />

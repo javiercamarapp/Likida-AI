@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ConsolaVendedores } from './consola-vendedores';
 
@@ -23,3 +24,5 @@ export default async function VendedoresPage({
   const [{ nombre }, sp] = await Promise.all([requireSuperadmin(), searchParams]);
   return <ConsolaVendedores nombre={nombre} sp={sp} />;
 }
+
+export const metadata: Metadata = { title: 'Vendedores' };

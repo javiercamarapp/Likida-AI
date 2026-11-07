@@ -1,10 +1,11 @@
 'use client';
 
 import { MailCheck } from 'lucide-react';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import type { EstadoCcpTimbrado } from '@/lib/likida/carta_porte_docs/ccp_respuesta';
 import { fechaHoraMx } from '@/lib/formato';
-import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 
 /**
  * A37-A3-01 · «CCP timbrados recibidos»: el interruptor de la respuesta al cliente (apagado de arranque) y la lista de los CCP
@@ -12,7 +13,7 @@ import { BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../
  * persona lo confirme la primera vez; el correo lleva el PDF y el XML timbrados tal como llegaron.
  */
 
-export interface VerComo { tenant?: string; rol?: string; vista?: string }
+export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesCcp { fijar: AccionDoc; confirmar: AccionDoc }
 
 const ROTULO: Record<EstadoCcpTimbrado, string> = {
@@ -35,6 +36,7 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+      {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
     </>
   );
   return (
@@ -43,11 +45,11 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
         <h2 className="text-[16px] font-semibold flex items-center gap-2"><MailCheck width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--muted)' }} /> CCP timbrados recibidos</h2>
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Cuando el sistema del cliente timbra la carta porte y avisa a Likida, el PDF y el XML se guardan aquí. Si encendes la respuesta, se le manda el CCP al cliente;
-          la primera vez por cliente (o si el remitente no se reconoce) necesita tu confirmación.
+          la primera vez por cliente (o si el remitente no se reconoce) necesita tu confirmación. El aviso automático desde el sistema del cliente está por conectar.
         </p>
         <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
           Para que un aviso se asocie a un envío, el envío debe tener la referencia del sistema del cliente: se captura al marcar la plantilla como «subida a mano»
-          o la guarda el envío automático. Un aviso sin referencia conocida se rechaza.
+          o la guardará el envío automático cuando esté conectado (hoy está por conectar). Un aviso sin referencia conocida se rechaza.
         </p>
       </header>
       {activa === 'sin_migracion' || filas === 'sin_migracion' ? (
@@ -86,7 +88,7 @@ export function SeccionCcp({ activa, filas, ver, acciones }: {
                     {oculto}
                     <input type="hidden" name="ccpId" value={f.id} />
                     <label htmlFor={`d-${f.id}`} className={ETIQUETA}>Correo del cliente al que se le responde</label>
-                    <input id={`d-${f.id}`} name="destino" type="email" defaultValue={f.destinoCorreo ?? ''} autoComplete="off" className={CAMPO} style={ESTILO} />
+                    <input id={`d-${f.id}`} name="destino" type="email" defaultValue={f.destinoCorreo ?? ''} autoComplete="off" style={ESTILO} />
                     <BotonEnvio etiqueta="Confirmar y responder al cliente" pendiente="Enviando…" />
                   </FormaAccion>
                 )}

@@ -17,7 +17,6 @@ import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -25,7 +24,7 @@ function Boton({ etiqueta }: { etiqueta: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : etiqueta}
@@ -85,14 +84,14 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
           <label htmlFor={campo('nombre')} className={ETIQUETA}>Nombre o razón social</label>
           <input id={campo('nombre')} name="nombre" type="text" required maxLength={120}
             defaultValue={inicial.nombre} placeholder="Cementos del Bajío S.A. de C.V."
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('rfc')} className={ETIQUETA}>RFC</label>
           <input id={campo('rfc')} name="rfc" type="text" maxLength={13}
             defaultValue={inicial.rfc} placeholder="Opcional"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Se le revisa el dígito verificador. Es el RFC con el que le vas a facturar.
           </p>
@@ -102,7 +101,7 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
           <label htmlFor={campo('dias')} className={ETIQUETA}>Días de crédito</label>
           <input id={campo('dias')} name="diasCredito" type="number" min={0} max={365} step={1}
             defaultValue={inicial.diasCredito} placeholder="Déjalo vacío si no hay crédito pactado"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           {/* La distinción que sostiene la cobranza entera: vacío ≠ 0. */}
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Vacío = sin condiciones pactadas (sus facturas no llevan fecha de vencimiento).
@@ -114,21 +113,21 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
           <label htmlFor={campo('contacto')} className={ETIQUETA}>Contacto</label>
           <input id={campo('contacto')} name="contacto" type="text" maxLength={120}
             defaultValue={inicial.contacto} placeholder="Quién autoriza pagos"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('correo')} className={ETIQUETA}>Correo</label>
           <input id={campo('correo')} name="correo" type="email" maxLength={160}
             defaultValue={inicial.correo} placeholder="cuentasporpagar@empresa.com"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div className="sm:col-span-2">
           <label htmlFor={campo('telefono')} className={ETIQUETA}>Teléfono</label>
           <input id={campo('telefono')} name="telefono" type="text" maxLength={40}
             defaultValue={inicial.telefono} placeholder="477 123 4567 ext. 210"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
 
@@ -191,7 +190,7 @@ export function FormaTarifa({
             buscar={buscarCliente} aria-label="Cliente"
             etiquetaVacia="Tarifa de lista — aplica a cualquier cliente"
             valorInicial={inicial.clienteId || null} textoInicial={clienteNombre}
-            total={totalClientes} className={CAMPO} estilo={{ background: 'var(--surface)' }} />
+            total={totalClientes} className="w-full" estilo={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Una tarifa con cliente es negociada, y le gana a la de lista. Déjalo vacío para una
             tarifa de lista.
@@ -202,20 +201,20 @@ export function FormaTarifa({
           <label htmlFor={campo('origen')} className={ETIQUETA}>Origen</label>
           <input id={campo('origen')} name="origen" type="text" maxLength={120}
             defaultValue={inicial.origen} placeholder="Vacío = cualquiera"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('destino')} className={ETIQUETA}>Destino</label>
           <input id={campo('destino')} name="destino" type="text" maxLength={120}
             defaultValue={inicial.destino} placeholder="Vacío = cualquiera"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('modo')} className={ETIQUETA}>Cómo se cobra</label>
           <select id={campo('modo')} name="modo" defaultValue={inicial.modo}
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
+            className="w-full" style={{ background: 'var(--surface)' }}>
             {modos.map((m) => (
               <option key={m.valor} value={m.valor}>{m.rotulo}</option>
             ))}
@@ -229,7 +228,7 @@ export function FormaTarifa({
           <label htmlFor={campo('precio')} className={ETIQUETA}>Precio (MXN)</label>
           <input id={campo('precio')} name="precio" type="text" inputMode="decimal" required
             defaultValue={inicial.precio} placeholder="28,500.00"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             En la unidad que elegiste arriba. Solo pesos: Likida todavía no convierte moneda.
           </p>
@@ -239,14 +238,14 @@ export function FormaTarifa({
           <label htmlFor={campo('desde')} className={ETIQUETA}>Rige desde</label>
           <input id={campo('desde')} name="vigenteDesde" type="date" required
             defaultValue={inicial.vigenteDesde}
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
           <label htmlFor={campo('hasta')} className={ETIQUETA}>Rige hasta</label>
           <input id={campo('hasta')} name="vigenteHasta" type="date"
             defaultValue={inicial.vigenteHasta}
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Vacío = sin fecha de término. El último día pactado la tarifa todavía rige.
           </p>

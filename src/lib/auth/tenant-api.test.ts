@@ -35,6 +35,9 @@ vi.mock('./mfa', async (original) => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({}) }));
 
+const registrarExporteDinero = vi.fn(async (..._a: unknown[]) => {});
+vi.mock('@/lib/seguridad/registro_acceso', async (original) => ({ ...(await original<Record<string, unknown>>()), registrarExporteDinero: (...a: unknown[]) => registrarExporteDinero(...a), registrarMfaFallido: vi.fn() }));
+
 const { resolverTenantApi, resolverTenantPedido } = await import('./tenant-api');
 
 beforeEach(() => {
@@ -45,6 +48,22 @@ beforeEach(() => {
   leerSeleccionFlota.mockResolvedValue(null);
   veredictoMfa.mockResolvedValue('ok');
   vi.unstubAllEnvs();
+});
+
+describe('resolverTenantApi — registra quién descarga dinero (CT-SEG-11)', () => {
+  it('una descarga autorizada se anota con url, flota, rol y usuario', async () => {
+    registrarExporteDinero.mockClear();
+    const r = await resolverTenantApi('https://x/api/export/poliza?formato=sap_b1');
+    expect(r.ok).toBe(true);
+    expect(registrarExporteDinero).toHaveBeenCalledWith({ url: 'https://x/api/export/poliza?formato=sap_b1', tenantId: 't-sesion', rol: 'superadmin', userId: 'u-1' });
+  });
+  it('una puerta que NIEGA no anota el exporte (no hubo descarga autorizada)', async () => {
+    registrarExporteDinero.mockClear();
+    getSessionTenant.mockResolvedValueOnce(null as never);
+    const r = await resolverTenantApi('https://x/api/export/poliza');
+    expect(r.ok).toBe(false);
+    expect(registrarExporteDinero).not.toHaveBeenCalled();
+  });
 });
 
 describe('resolverTenantApi — la puerta del ?tenant= de las APIs', () => {
@@ -181,6 +200,34 @@ describe('resolverTenantApi — el rol nomina (0949) no tiene ninguna API de ses
       getSessionTenant.mockResolvedValue({ tenantId: 't-sesion', rol, userId: 'u-1', nombre: 'X' });
       const r = await resolverTenantApi('https://x/api/export/liquidaciones');
       expect(r).toEqual({ ok: true, tenantId: 't-sesion', rol });
+    }
+  });
+});
+
+// F9 (CT-SEG-05): TOTP escalonado en exportes de dinero. Apagado por omisión (D8).
+describe('resolverTenantApi: segundo factor escalonado en exportes de dinero', () => {
+  const sbSinFactor = { auth: { mfa: {
+    listFactors: async () => ({ data: { totp: [] }, error: null }),
+    getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: 'aal1' }, error: null }),
+  } } };
+  it('apagado: dueño sin factor descarga como siempre', async () => {
+    getSessionTenant.mockResolvedValue({ tenantId: 't-sesion', rol: 'flota_admin', userId: 'u-1', nombre: 'X' });
+    const r = await resolverTenantApi('https://x/api/export/liquidaciones');
+    expect(r.ok).toBe(true);
+  });
+  it('encendido: dueño sin factor recibe 403 en dinero, pero no en un exporte que no es de dinero', async () => {
+    vi.stubEnv('LIKIDA_TOTP_ESCALONADO', 'obligatorio');
+    const srv = await import('@/lib/supabase/server');
+    vi.spyOn(srv, 'supabaseServer').mockResolvedValue(sbSinFactor as never);
+    try {
+      getSessionTenant.mockResolvedValue({ tenantId: 't-sesion', rol: 'flota_admin', userId: 'u-1', nombre: 'X' });
+      const r = await resolverTenantApi('https://x/api/export/liquidaciones');
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.status).toBe(403);
+      expect((await resolverTenantApi('https://x/api/export/jornada')).ok).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+      vi.restoreAllMocks();
     }
   });
 });

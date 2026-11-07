@@ -105,7 +105,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
                     ? { background: 'var(--marca)', color: 'var(--marca-fg)', borderColor: 'var(--marca)' }
                     : { background: 'var(--surface)', color: 'var(--muted)' }}>
                   <input type="checkbox" name="dias" value={d.iso} checked={puesto}
-                    onChange={() => alternarDia(d.iso)} className="sr-only" />
+                    onChange={() => alternarDia(d.iso)} className="sr-only" data-foco="etiqueta" />
                   {d.rotulo}
                 </label>
               );
@@ -171,7 +171,7 @@ function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary text-[12px] font-medium px-3.5 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary px-3.5"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       {pending ? 'Guardando…' : 'Guardar estrategia'}
     </button>

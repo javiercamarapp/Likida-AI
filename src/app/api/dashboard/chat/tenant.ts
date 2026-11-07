@@ -10,6 +10,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { logger } from '@/lib/logger';
 import { mfaSuperadminObligatorio, veredictoMfaSuperadmin } from '@/lib/auth/mfa';
+import { registrarMfaFallido } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
 
 export async function tenantEfectivoChat(
   sesion: SessionTenant,
@@ -45,6 +47,8 @@ export async function tenantEfectivoChat(
       const veredicto = await veredictoMfaSuperadmin(await supabaseServer());
       if (veredicto !== 'ok') {
         logger.warn('mfa.superadmin_exigido_api', { veredicto, ruta: 'chat.tenant' });
+        // CT-SEG-11: el segundo factor que no está al día deja evento (best-effort, no espera).
+        await esperarRegistro(registrarMfaFallido({ veredicto, destino: '/api/dashboard/chat', via: 'api', userId: sesion.userId }));
         return null;
       }
     }

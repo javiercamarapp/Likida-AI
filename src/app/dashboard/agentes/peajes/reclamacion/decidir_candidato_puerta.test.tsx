@@ -10,7 +10,9 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 
 const requireSessionTenant = vi.fn();
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: (...a: unknown[]) => requireSessionTenant(...a) }));
-vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 'tenant-1', rol: 'flota_admin' }) }));
+// MX-002: la puerta de la acción es `resolverTenantAtadoOLanza` (= `resolverTenantEfectivo` + cotejo con la flota pintada); el doble
+// de la sesión sigue siendo `requireSessionTenant`, que es lo que cambia entre el render y la acción.
+vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: (...a: unknown[]) => requireSessionTenant(...a) }));
 vi.mock('@/lib/likida/peajes/superficie_perfil', () => ({ superficiePeajesDeTenant: async () => ({ gps: true }) }));
 vi.mock('@/lib/likida/peajes/revision_cobros', () => ({
   revisionDeDesglose: vi.fn(), cierreMensualDeFlota: vi.fn(), crearReclamoDeCategoria: vi.fn(), marcarReclamoEnviado: vi.fn(),
@@ -45,7 +47,7 @@ describe('accionDecidirCandidato: puerta de perfil propia', () => {
     const decidir = await accion();
     requireSessionTenant.mockImplementation(async () => { redirect('/dashboard'); });
     await expect(decidir(formulario())).rejects.toThrow('NEXT_REDIRECT');
-    expect(requireSessionTenant).toHaveBeenCalledWith('/dashboard/agentes/peajes/reclamacion');
+    expect(requireSessionTenant).toHaveBeenCalledWith('/dashboard/agentes/peajes/reclamacion', expect.anything());
     expect(ejecutarAccionDeFormulario).not.toHaveBeenCalled();
   });
 
@@ -59,7 +61,8 @@ describe('accionDecidirCandidato: puerta de perfil propia', () => {
   it('sesión de otra flota: no ejecuta', async () => {
     const decidir = await accion();
     requireSessionTenant.mockResolvedValue({ rol: 'flota_admin', tenantId: 'tenant-2' });
-    await expect(decidir(formulario())).rejects.toThrow('NEXT_REDIRECT');
+    // MX-002: la flota ya no es la que la pantalla pintó → la acción se niega (FlotaCambioError) antes de ejecutar nada.
+    await expect(decidir(formulario())).rejects.toThrow(/cambió desde que abriste/);
     expect(ejecutarAccionDeFormulario).not.toHaveBeenCalled();
   });
 

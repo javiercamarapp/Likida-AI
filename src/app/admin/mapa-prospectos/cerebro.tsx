@@ -19,6 +19,7 @@
 // mismas palabras del módulo que las calcula (CRITERIO_SCORES).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { leerRespuestaMensaje } from './respuesta_mensaje';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -226,7 +227,7 @@ function Reveal({ children, retraso = 0 }: { children: React.ReactNode; retraso?
   );
 }
 
-export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, plana }: {
+export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, plana, avisoIa }: {
   p: ProspectoMapa;
   /** Los textos largos de ESTE prospecto (FE-16): llegan por su cuenta, poco
    *  después de que la tarjeta se pinta. `undefined` = todavía en camino. */
@@ -236,6 +237,8 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
   /** true = tarjeta de sección (plana, sin blur ni sombra — abajo del mapa
    *  no hay país sobre el que flotar). */
   plana?: boolean;
+  /** Lo que el servidor dijo al pedir «Mensaje IA» (error o aviso de que no se guardó): se muestra, no se traga. */
+  avisoIa?: { texto: string; error: boolean } | null;
 }) {
   // El mensaje del agente experto MANDA sobre la plantilla: mientras no
   // llegue, el botón no se abre. Abrirlo con la plantilla mandaría el texto
@@ -327,6 +330,9 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
             </button>
           )}
         </div>
+      )}
+      {avisoIa && (
+        <p role="alert" className="text-[11px] mt-2" style={{ color: avisoIa.error ? '#b91c1c' : '#b45309' }}>{avisoIa.texto}</p>
       )}
     </article>
   );
@@ -543,17 +549,21 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
   // ── El agente experto en vivo: afinar el mensaje de UNA tarjeta ──────────
   const [afinando, setAfinando] = useState<string | null>(null);
+  const [avisosIa, setAvisosIa] = useState<Map<string, { texto: string; error: boolean }>>(new Map());
+  const ponerAviso = (id: string, a: { texto: string; error: boolean } | null) =>
+    setAvisosIa((antes) => { const n = new Map(antes); if (a) n.set(id, a); else n.delete(id); return n; });
   const afinar = async (id: string) => {
     setAfinando(id);
+    ponerAviso(id, null);
     try {
       const r = await fetch('/api/admin/mapa-prospectos/mensaje', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
-      });
-      if (!r.ok) return; // el botón sigue con la plantilla; el error ya quedó en el log del servidor
-      const m = (await r.json()) as Pick<TextosProspecto, 'mensajeWaIa' | 'correoAsuntoIa' | 'correoCuerpoIa'>
-        & Pick<ProspectoMapa, 'mensajesGeneradosEn'>;
+      }).then(leerRespuestaMensaje, () => ({ ok: false as const, error: 'No se pudo contactar al servidor. Revisa tu conexión.' }));
+      if (!r.ok) { ponerAviso(id, { texto: r.error, error: true }); return; } // el boton sigue con la plantilla
+      if (r.aviso) ponerAviso(id, { texto: r.aviso, error: false });
+      const m = r.datos;
       // El texto recién redactado entra al cache de textos (es lo que abre el
       // botón) y la fila del listado solo se entera de la MARCA.
       textosRef.current.set(id, {
@@ -1176,7 +1186,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               ) : (
                 <>
                   {listaSeleccion.slice(0, 60).map((p) => (
-                    <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
+                    <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} avisoIa={avisosIa.get(p.id) ?? null} />
                   ))}
                   {listaSeleccion.length > 60 && (
                     <p className="text-[11px] px-3.5 py-2 rounded-2xl backdrop-blur-sm"
@@ -1244,7 +1254,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <h3 className="etiqueta-mono text-[10px] font-medium uppercase mb-3" style={{ color: TENUE }}>Los 12 más cerrables del país</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {ordenados.slice(0, 12).map((p) => (
-              <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} />
+              <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} avisoIa={avisosIa.get(p.id) ?? null} />
             ))}
           </div>
         </section>

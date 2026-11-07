@@ -1,12 +1,17 @@
+import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { logger } from '@/lib/logger';
 import { DatoInvalido, mensajeParaPantalla } from '@/lib/likida/errores';
 import { aprobarDocumento, asignarCliente, abrirRevision, corregirCampos, crearViajeDeDocumento, eliminarDocumento, quitarRenglon, rechazarDocumento, reabrirDocumento, reintentarLectura } from '@/lib/likida/carta_porte_docs/bandeja';
 import { flotaBajoPerfil, marcarSubidoAMano, prepararEnvioTms, MENSAJE_FUNCION_NO_DISPONIBLE } from '@/lib/likida/carta_porte_docs/envio';
+import { salidaDeFlota } from '@/lib/likida/carta_porte_docs/worker_envios_deps';
+import { estadoConexionTms } from '@/lib/likida/carta_porte_docs/tms_puerto';
+import { mensajeEnvioPreparado } from '@/lib/likida/carta_porte_docs/mensajes_envio';
 import { esFlotaSimulada } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { puertoSupabase } from '@/lib/likida/carta_porte_docs/catalogo_puerto';
 import { proponerCatalogo, propuestaVacia, registrosDePropuesta, type LadoParte } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
@@ -87,6 +92,8 @@ export default async function PaginaRevision({
   ]);
   // El envío de la versión vigente (los descartados son de versiones viejas): de él depende qué botones del modo manual se ven.
   const envio = envios.find((e) => e.versionDoc === doc.version && e.estado !== 'descartado') ?? null;
+  // Una sola consulta al proveedor por render; de ella salen los dos rótulos (por conectar / no se pudo consultar).
+  const conexion = envio ? estadoConexionTms(await salidaDeFlota(tenantId)) : null;
   // De qué archivo nació este embarque (si nació de partir uno): su nombre para el enlace de regreso.
   const lin = linaje.get(id);
   const padre = lin?.rol === 'hijo' ? await repo.leerDocumento(tenantId, lin.padreId) : null;
@@ -121,7 +128,7 @@ export default async function PaginaRevision({
 
   async function reasignar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede reasignar documentos de Carta Porte.' };
     try {
       if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
@@ -137,7 +144,7 @@ export default async function PaginaRevision({
 
   async function asignarClienteAccion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' };
     try {
       if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
@@ -161,7 +168,7 @@ export default async function PaginaRevision({
   /** Una sola acción atiende todos los botones: `intencion` dice cuál se apretó. */
   async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA_PADRE, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' };
     try {
       const docId = String(fd.get('documentoId') ?? '');
@@ -252,7 +259,8 @@ export default async function PaginaRevision({
         if (d.version !== version) return { ok: false, error: 'Otra persona cambió este documento mientras lo revisabas. Recarga la pantalla y vuelve a intentarlo.' };
         const r = await prepararEnvioTms(s.tenantId, d, actor);
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
-        return r.ok ? { ok: true, mensaje: r.creado ? 'Envío preparado: el sistema lo enviará al TMS.' : 'El envío ya estaba preparado.' } : { ok: false, error: r.mensaje };
+        const conexion = estadoConexionTms(await salidaDeFlota(s.tenantId));
+        return r.ok ? { ok: true, mensaje: mensajeEnvioPreparado(r.creado, conexion) } : { ok: false, error: r.mensaje };
       }
       if (intencion === 'guardar_catalogo') {
         // Se recalcula con lo que hay en la base (no con lo que dice el navegador): del formulario solo salen qué filas se
@@ -304,7 +312,7 @@ export default async function PaginaRevision({
       clientes={clientes}
       revisor={revisor}
       sufijo={sufijoTenant(sp)}
-      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}) } : null}
+      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}), ...(conexion === 'por_conectar' ? { sinConexion: true } : {}), ...(conexion === 'no_disponible' ? { salidaNoDisponible: true } : {}) } : null}
       perfilRestringido={restringido}
       catalogo={catalogo}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
@@ -314,3 +322,5 @@ export default async function PaginaRevision({
     />
   );
 }
+
+export const metadata: Metadata = { title: 'Revisión de documento' };

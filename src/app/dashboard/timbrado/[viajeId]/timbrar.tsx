@@ -1,5 +1,7 @@
 import { revalidatePath } from 'next/cache';
+import { exigirStepUpAccion } from '@/lib/auth/stepup';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeTimbrar } from '@/lib/auth/permisos';
 import type { ViajeCcp } from '@/lib/likida/carta_porte_datos';
@@ -63,13 +65,17 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
   async function timbrar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     // El ÁREA y el VERBO, en ese orden y los dos: el rol del render no es el
     // de la acción, y ver la pantalla nunca fue permiso para emitir un CFDI.
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
     if (!puedeTimbrar(s.rol)) {
       return { error: 'Tu rol no puede timbrar: emitir un CFDI es del dueño de la flota o del contador.' };
     }
+    // F9 (CT-SEG-05): segundo factor escalonado, tras bandera apagada por omisión (D8).
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'emitir_cfdi', { tenantId: s.tenantId, userId: s.userId });
+    if (pasoMfa) return { error: pasoMfa };
     const metodo = String(fd.get('metodoPago')) === 'PUE' ? 'PUE' as const : 'PPD' as const;
     // Con PPD la forma ES 99 (Anexo 20) — el selector de forma solo aplica a PUE.
     const forma = metodo === 'PPD' ? '99' : (t(fd.get('formaPago')) ?? '');
@@ -111,7 +117,8 @@ export async function SeccionTimbrado({ v, searchParams }: {
   // Quien la libera DECLARA que verificó en el panel del PAC que no hay CFDI.
   async function liberarReserva(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
     if (!puedeTimbrar(s.rol)) {
       return { error: 'Tu rol no puede liberar el bloqueo: es del dueño de la flota o del contador.' };
@@ -130,9 +137,12 @@ export async function SeccionTimbrado({ v, searchParams }: {
   // 0541: CANCELAR el CFDI vía PAC. Mismas dos puertas (área + verbo) y bitácora.
   async function cancelarTimbre(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
     if (!puedeTimbrar(s.rol)) return { error: 'Tu rol no puede cancelar un CFDI: es del dueño de la flota o del contador.' };
+    const pasoMfa = await exigirStepUpAccion(s.rol, 'emitir_cfdi', { tenantId: s.tenantId, userId: s.userId });
+    if (pasoMfa) return { error: pasoMfa };
     const motivo = String(fd.get('motivo') ?? '') as MotivoCancelacion;
     try {
       const r = await solicitarCancelacionTimbre(s.tenantId, v.viajeId, { id: s.userId }, { motivo, folioSustitucion: t(fd.get('folioSustitucion')) });
@@ -146,7 +156,8 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
   async function confirmarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
     if (!puedeTimbrar(s.rol)) return { error: 'Tu rol no puede confirmar la cancelación: es del dueño de la flota o del contador.' };
     try {
@@ -161,7 +172,8 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
   async function guardarReceptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await resolverTenantEfectivo(RUTA, searchParams);
+    const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
+    if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
     // Mismo verbo que timbrar: la razón social, el régimen y el uso CFDI del
     // receptor VAN DENTRO del comprobante. Capturarlos es declarar, y quien

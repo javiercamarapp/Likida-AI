@@ -12,8 +12,8 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { exigir } from '../pg';
-import { DatoInvalido, OperadorDeBaja } from '../errores';
+import { exigir, traerTodo } from '../pg';
+import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
 import { PATRON_FOLIO } from '../orquestador/escalamiento';
@@ -363,10 +363,10 @@ export async function resolverOperadorDestino(
   // Intersección: el chofer que cumple TODAS las formas mandadas.
   const comunes = [...conjuntos[0]].filter((id) => conjuntos.every((c) => c.has(id)));
   if (comunes.length === 0) {
-    throw new DatoInvalido('Los datos del operador no coinciden entre sí: `id`, `telefono` y `numeroEmpleado` apuntan a choferes distintos. No se entrega la liquidación a quien no se sabe.');
+    throw new OperadorAmbiguo('Los datos del operador no coinciden entre sí: `id`, `telefono` y `numeroEmpleado` apuntan a choferes distintos. No se entrega la liquidación a quien no se sabe.');
   }
   if (comunes.length > 1) {
-    throw new DatoInvalido('Esos datos identifican a más de un operador de tu flota. Usa `operador.id`, que es único.');
+    throw new OperadorAmbiguo('Esos datos identifican a más de un operador de tu flota. Usa `operador.id`, que es único.');
   }
   const operador = resultados.flat().find((o) => o.id === comunes[0]);
   if (!operador) throw noEncontrado();
@@ -374,6 +374,21 @@ export async function resolverOperadorDestino(
     throw new OperadorDeBaja('Ese operador está dado de baja: no se le entrega una liquidación por WhatsApp. Reactívalo en Likida o corrige el operador.');
   }
   return operador;
+}
+
+/**
+ * Padrón de la flota para resolver al operador por NOMBRE (contrato «muestra-tms», SUPUESTO hasta la especificación oficial).
+ * Trae a TODOS los operadores del tenant (activos y de baja) para que una homonimia con alguien de baja también se vea:
+ * resolver «único» sobre un padrón recortado sería adivinar. Lectura completa y demostrada (`traerTodo`) o lanza. Solo nombre y
+ * número de empleado; nada de teléfonos ni correos. Quien aún no tiene número viaja con `''` (cuenta para la homonimia).
+ */
+export async function leerPadronOperadores(tenantId: string): Promise<Array<{ numeroEmpleado: string; nombre: string }>> {
+  const filas = await traerTodo<{ numero_empleado: string | null; nombre: string | null }>(
+    (a, b) => acotada(supabaseAdmin().from('operador').select('numero_empleado, nombre', { count: 'exact' })
+      .eq('tenant_id', tenantId).order('id').range(a, b), 'liqext.padron_operadores') as never,
+    'liqext.padron_operadores');
+  return filas.flatMap((f) => (typeof f.nombre === 'string' && f.nombre.trim() !== ''
+    ? [{ numeroEmpleado: typeof f.numero_empleado === 'string' ? f.numero_empleado.trim() : '', nombre: f.nombre }] : []));
 }
 
 /** Los viajes de Likida que coinciden con los folios del cliente. Vacío no es

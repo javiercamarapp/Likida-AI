@@ -80,7 +80,9 @@ const TARJETA = /\b\d{16}\b/;
 // permisivo en el dominio (acepta subdominios y TLD largos) porque un falso
 // negativo (un correo que se cuela sin redactar) es el error caro aquí, no un
 // falso positivo.
-const EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
+// F1B (ReDoS): sin el lookbehind el motor probaba CADA posicion de una cadena larga de «a.a.a.» hasta el final
+// (cuadratico: 32 KB tardaban ~1 s). Con el, el local-part solo empieza donde el caracter previo no es del local-part.
+const EMAIL = /(?<![A-Za-z0-9._%+-])\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
 
 // UNA sola pasada con las reglas alternadas, no varios `replace` encadenados.
 // Encadenar significa que la salida de una regla vuelve a ser entrada de la

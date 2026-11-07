@@ -12,6 +12,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { test, expect, type Page } from './apoyo/fixture';
+import { reiniciarGuiaDe } from './apoyo/guia';
 import { CORREOS, entrar } from './apoyo/sesion';
 
 test.skip(process.env.LIKIDA_UI_V2_FORZAR !== '1', 'solo corre con LIKIDA_UI_V2_FORZAR=1 en el servidor');
@@ -30,6 +31,7 @@ for (const rol of ROLES) {
     const ctx = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': rol.ip }, viewport: { width: 1440, height: 900 } });
     const page = await ctx.newPage();
     try {
+      reiniciarGuiaDe(rol.correo); // el avance vive en el servidor: cada prueba es un «primer ingreso»
       await entrar(page, rol.correo);
       await expect(page).toHaveURL(/\/dashboard/);
       await expect(invitacion(page)).toBeVisible();

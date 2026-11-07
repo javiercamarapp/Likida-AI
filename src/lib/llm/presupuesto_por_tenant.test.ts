@@ -17,7 +17,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const rpc = vi.hoisted(() => vi.fn());
 const tablas = vi.hoisted(() => new Map<string, { data: unknown; error: { message: string } | null }>());
-const alertar = vi.hoisted(() => vi.fn(async () => {}));
+const alertar = vi.hoisted(() => vi.fn(async () => true));
 const loggerError = vi.hoisted(() => vi.fn());
 const loggerInfo = vi.hoisted(() => vi.fn());
 

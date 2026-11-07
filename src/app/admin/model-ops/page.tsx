@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/formato';
@@ -128,3 +129,5 @@ export default async function ModelOpsPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Model Ops' };

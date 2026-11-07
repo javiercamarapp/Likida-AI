@@ -46,7 +46,7 @@ describe('descargas de media que fallan', () => {
 
   it('distingue el paso de metadatos del de contenido', async () => {
     const fetchMock = vi.fn()
-      .mockResolvedValueOnce(respuesta(true, 200, '{"url":"https://lookaside.fb/x","mime_type":"image/jpeg"}'))
+      .mockResolvedValueOnce(respuesta(true, 200, '{"url":"https://lookaside.fbsbx.com/x","mime_type":"image/jpeg"}'))
       .mockResolvedValueOnce(respuesta(false, 404, 'not found'));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -67,7 +67,7 @@ describe('descargas de media que fallan', () => {
   // El límite: una descarga que SÍ funciona no debe ensuciar el log de errores.
   it('una descarga correcta no grita', async () => {
     vi.stubGlobal('fetch', vi.fn()
-      .mockResolvedValueOnce(respuesta(true, 200, '{"url":"https://lookaside.fb/x","mime_type":"image/jpeg"}'))
+      .mockResolvedValueOnce(respuesta(true, 200, '{"url":"https://lookaside.fbsbx.com/x","mime_type":"image/jpeg"}'))
       .mockResolvedValueOnce(respuesta(true, 200, '')));
     await downloadMediaAsDataUrl('media-ok');
     expect(logger.error).not.toHaveBeenCalled();

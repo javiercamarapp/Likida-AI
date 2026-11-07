@@ -180,6 +180,9 @@ export const api: typeof Real = {
     for (const c of claves) { const d = t.get(c); if (d) salida.set(c, d); }
     return salida;
   },
+  async contarCatalogosSat(catalogos) {
+    return Object.fromEntries(catalogos.map((c) => [c, estado.catalogosSat.get(c)?.size ?? 0]));
+  },
   async documentosConFolio(tenantId, folio, exceptoId) {
     return [...estado.docs.values()]
       .filter((d) => d.tenantId === tenantId && d.id !== exceptoId && d.estado !== 'rechazado' && String(d.extraccion?.campos.folio_cliente?.valor ?? '').trim().toUpperCase() === folio.trim().toUpperCase())

@@ -101,7 +101,7 @@ describe('importarHistorialPanel', () => {
     expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), null, d)).toMatchObject({ ok: false });
     expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), archivo(CHAT, 'chat.pdf'), d)).toMatchObject({ ok: false });
     expect(await importarHistorialPanel(dueno, fd({ grupoId: 'no' , equipo: 'Ana' }), archivo(CHAT), d)).toMatchObject({ ok: false });
-    expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), { nombre: 'a.txt', bytes: new Uint8Array(MAX_ARCHIVO_BYTES + 1) }, d)).toMatchObject({ ok: false, error: expect.stringContaining('9 MB') });
+    expect(await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana' }), { nombre: 'a.txt', bytes: new Uint8Array(MAX_ARCHIVO_BYTES + 1) }, d)).toMatchObject({ ok: false, error: expect.stringContaining('4 MB') });
     expect(d.guardarImportacion).not.toHaveBeenCalled();
   });
 
@@ -122,5 +122,34 @@ describe('importarHistorialPanel', () => {
     const r = await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Ana Servicio' }), archivo(CHAT), caida);
     expect(r.ok).toBe(false);
     expect(JSON.stringify(r)).not.toContain('10.0.0.5');
+  });
+});
+
+describe('revisión de «sin atender» tras importar', () => {
+  const equipo = fd({ grupoId: G, equipo: 'Ana Servicio' });
+  it('suma al mensaje los conteos del grupo importado y los devuelve', async () => {
+    const sinAtenderDeGrupo = vi.fn(async () => ({ alertas: 2, altas: 1 }));
+    const d = deps({ sinAtenderDeGrupo });
+    const r = await importarHistorialPanel(dueno, equipo, archivo(CHAT), d);
+    expect(r).toMatchObject({ ok: true, sinAtender: { alertas: 2, altas: 1 } });
+    expect(r.ok && r.mensaje).toContain('2 conversaciones de este grupo sin atender (1 de prioridad alta)');
+    expect(sinAtenderDeGrupo).toHaveBeenCalledWith('t1', G, ['Ana Servicio']);
+  });
+  it('sin pendientes lo dice; sin revisión el mensaje queda como antes', async () => {
+    const cero = await importarHistorialPanel(dueno, equipo, archivo(CHAT), deps({ sinAtenderDeGrupo: async () => ({ alertas: 0, altas: 0 }) }));
+    expect(cero.ok && cero.mensaje).toContain('no tiene conversaciones pendientes');
+    const nada = await importarHistorialPanel(dueno, equipo, archivo(CHAT), deps({ sinAtenderDeGrupo: async () => null }));
+    expect(nada.ok && nada.mensaje).not.toContain('sin atender');
+  });
+  it('si la revisión lanza, la importación ya guardada sigue siendo un éxito', async () => {
+    const d = deps({ sinAtenderDeGrupo: async () => { throw new Error('boom'); } });
+    const r = await importarHistorialPanel(dueno, equipo, archivo(CHAT), d);
+    expect(r.ok).toBe(true);
+    expect(d.guardarImportacion).toHaveBeenCalledTimes(1);
+  });
+  it('un chat rechazado no dispara la revisión', async () => {
+    const sinAtenderDeGrupo = vi.fn();
+    await importarHistorialPanel(dueno, fd({ grupoId: G, equipo: 'Nadie' }), archivo(CHAT), deps({ sinAtenderDeGrupo }));
+    expect(sinAtenderDeGrupo).not.toHaveBeenCalled();
   });
 });

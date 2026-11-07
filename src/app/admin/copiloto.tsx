@@ -171,7 +171,7 @@ function VisualRespuesta({ v }: { v: Visual }) {
     // FE-19: la tabla que devuelve el copiloto es de ancho DESCONOCIDO (la
     // arma una consulta): scrollea dentro de la tarjeta o estira la página.
     <div className="card p-1.5 mt-2 overflow-x-auto">
-      <table className="w-full border-collapse text-[13px]">
+      <table aria-label="Datos de la respuesta del copiloto" className="w-full border-collapse text-[13px]">
         <tbody>
           {v.filas.map(([k, val]) => (
             <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
@@ -531,7 +531,7 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
         onChange={(e) => setTexto(e.target.value)}
         placeholder="Pregunta sobre la compañía, o pide una acción…"
         aria-label="Pregunta al copiloto"
-        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed"
+        className="w-full bg-transparent border-0 outline-none text-[15px] leading-relaxed" data-anillo="envolvente"
       />
       <div className="flex items-center justify-end mt-3">
         <button
@@ -631,7 +631,7 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
         <Search width={13} height={13} strokeWidth={2} style={{ color: 'var(--muted)' }} />
         <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar chats" aria-label="Buscar chats"
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" />
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px]" data-anillo="envolvente" />
       </div>
 
       <div className="etiqueta-mono text-[10px] uppercase px-1 pt-1" style={{ color: 'var(--faint)' }}>
@@ -709,7 +709,7 @@ export default function Copiloto({ variante = 'pagina' }: { variante?: 'pagina' 
         style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-card)' }}>
         <div className="flex items-center justify-between">
           <button type="button" onClick={nuevoChat}
-            className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
+            className="hairline flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]">
             <PencilLine width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
             Nuevo chat
           </button>

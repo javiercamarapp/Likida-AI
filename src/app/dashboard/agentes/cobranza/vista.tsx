@@ -194,14 +194,14 @@ function Leyenda({ children }: { children: React.ReactNode }) {
 function TablaCola({ filas }: { filas: FilaCola[] }) {
   return (
     <div className="overflow-x-auto mt-3">
-      <table className="w-full text-[13px]">
+      <table aria-label="Viajes en cobranza con su operador" className="w-full text-[13px]">
         <thead>
           <tr className="text-left" style={{ color: 'var(--faint)' }}>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Sin comprobar</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Tier que toca</th>
-            <th className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Contactos previos</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Sin comprobar</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Tier que toca</th>
+            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Contactos previos</th>
           </tr>
         </thead>
         <tbody>

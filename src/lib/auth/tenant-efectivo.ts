@@ -19,7 +19,7 @@
 //    a esta altura ese caso no existe. Por eso el viejo rebote `esRaiz` →
 //    /admin se retiró: su única razón era "no quedarse viendo la demo por
 //    accidente", y ya no hay accidente posible.
-import { redirect } from 'next/navigation';
+import { redirect, notFound } from 'next/navigation';
 import { requireSessionTenant } from './guard';
 import { tenantDemo } from './tenant-demo';
 import { puedeVerRuta, inicioDe, rolEfectivo } from './visibilidad';
@@ -27,6 +27,9 @@ import { exigirRutaDePerfil } from './perfil_tenant';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
+import { registrarPaginaNegada } from '@/lib/seguridad/registro_acceso';
+import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
+import { registrarAccesoSuperadmin } from '@/lib/seguridad/acceso_superadmin';
 import { hoyMx } from '@/lib/formato';
 import type { SessionTenant } from './session';
 
@@ -113,7 +116,7 @@ function diaMx(): string {
  * silencio; el costo es un upsert indexado en la carga de página que ya hizo
  * la consulta del tenant.
  */
-async function firmarImpersonacion(actorId: string, tenantId: string): Promise<void> {
+export async function firmarImpersonacion(actorId: string, tenantId: string): Promise<void> {
   try {
     const dia = diaMx();
     const { data, error } = await supabaseAdmin()
@@ -182,6 +185,8 @@ export async function resolverTenantEfectivo(
   // para un rol real el sufijo sale vacío. Y no hay bucle: el destino es
   // `inicioDe(rolEfectivo)`, que por construcción ese rol sí puede ver.
   if (!puedeVerRuta(sesion.rol, destino)) {
+    // CT-SEG-11: la pantalla negada por rol deja fila de cobertura (se espera con tope corto; fail-closed aunque falle).
+    await esperarRegistro(registrarPaginaNegada({ ruta: destino, rol: sesion.rol, causa: 'rol', tenantId: sesionReal.tenantId, userId: sesionReal.userId }));
     redirect(`${inicioDe(sesion.rol)}${sufijoPrevisualizacion(sesionReal.rol === 'superadmin', sp)}`);
   }
 
@@ -199,15 +204,18 @@ export async function resolverTenantEfectivo(
       logger.warn('tenant_efectivo.lectura_fallo', { tenant: sp.tenant, err: error.message });
       throw new Error(`No se pudo comprobar a qué flota apunta esta pantalla (${error.message}). Recarga en un momento.`);
     }
-    if (t) {
-      tenantId = t.id as string;
-      tenantNombre = t.nombre as string;
-      // Solo aquí: `?tenant=` que RESOLVIÓ a una flota real. `?vista=demo` no
-      // pasa por este if y no se firma — mirar la demo no es mirar a un
-      // cliente. Ver `firmarImpersonacion` para el dedup y el porqué de que
-      // un fallo del registro nunca tumbe esta página.
-      await firmarImpersonacion(sesionReal.userId, t.id as string);
-    }
+    // MX-002 / P06-21: un `?tenant=` que se comprobó que NO existe es 404, no un
+    // «me quedo con la flota de la sesión» (la cookie o la demo): ahí una acción
+    // escribía en una flota que el superadmin nunca pidió.
+    if (!t) notFound();
+    tenantId = t.id as string;
+    tenantNombre = t.nombre as string;
+    // Solo aquí: `?tenant=` que RESOLVIÓ a una flota real. `?vista=demo` no
+    // pasa por este if y no se firma — mirar la demo no es mirar a un
+    // cliente. Ver `firmarImpersonacion` para el dedup y el porqué de que
+    // un fallo del registro nunca tumbe esta página.
+    await firmarImpersonacion(sesionReal.userId, t.id as string);
+    void registrarAccesoSuperadmin({ actor: sesionReal.userId, tenantId: t.id as string, tipo: 'ver_como', ruta: destino });
   }
 
   // ¿LA FLOTA ELEGIDA EN EL SELECTOR? — superadmin SIN params de preview y
@@ -229,6 +237,7 @@ export async function resolverTenantEfectivo(
     if (t) {
       tenantNombre = t.nombre as string;
       await firmarImpersonacion(sesionReal.userId, tenantId);
+      void registrarAccesoSuperadmin({ actor: sesionReal.userId, tenantId, tipo: 'ver_como', ruta: destino });
     } else if (!error) {
       // Igual que abajo: solo un "no" COMPROBADO marca la flota inexistente.
       tenantExiste = false;
@@ -259,9 +268,7 @@ export async function resolverTenantEfectivo(
 }
 
 
-/** Lo que una pantalla le dice a quien guarda después de que la flota cambió bajo sus pies. */
-export const MENSAJE_FLOTA_CAMBIO =
-  'La flota que estás viendo cambió desde que abriste esta pantalla (otra pestaña eligió otra flota). No se guardó nada: recarga la página y vuelve a intentarlo.';
+export { MENSAJE_FLOTA_CAMBIO } from './flota_cambio';
 
 /**
  * A37-S13-02 — para las ACCIONES de servidor de una pantalla: igual que

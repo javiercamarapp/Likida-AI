@@ -357,12 +357,12 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
               </p>
             ) : (
               <div className="overflow-x-auto mt-2">
-                <table className="w-full text-sm">
+                <table aria-label="Veredicto por invariante" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-2 py-1.5 font-medium">Invariante</th>
-                      <th className="px-2 py-1.5 font-medium">Estado</th>
-                      <th className="px-2 py-1.5 font-medium">Severidad</th>
+                      <th scope="col" className="px-2 py-1.5 font-medium">Invariante</th>
+                      <th scope="col" className="px-2 py-1.5 font-medium">Estado</th>
+                      <th scope="col" className="px-2 py-1.5 font-medium">Severidad</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -60,7 +60,7 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
       {voluntarios === null && (
         <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
           <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          No se pudo leer la lista de operadores del piloto ahora mismo (o falta aplicar la migración 0800); intenta de nuevo en un momento.
+          No se pudo leer la lista de operadores del piloto ahora mismo; intenta de nuevo en un momento. Si se repite, avísale a Likida.
         </p>
       )}
       {voluntarios && accionAlta && accionBaja && (

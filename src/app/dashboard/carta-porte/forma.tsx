@@ -8,7 +8,6 @@ import { AvisoResultado } from '../../admin/ui/aviso-resultado';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -16,7 +15,7 @@ function Boton() {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? 'Guardando…' : 'Guardar declaración'}
@@ -50,7 +49,7 @@ export function FormaDeclaracion({ accion, viajeId, inicial }: {
           <label htmlFor={campo('federal')} className={ETIQUETA}>¿La ruta pisa carretera federal?</label>
           <select id={campo('federal')} name="pisaFederal"
             defaultValue={inicial.pisaFederal === null ? '' : inicial.pisaFederal ? 'si' : 'no'}
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
+            className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="">Sin declarar</option>
             <option value="si">Sí, pisa tramo federal</option>
             <option value="no">No — plena certeza de ruta local</option>
@@ -64,7 +63,7 @@ export function FormaDeclaracion({ accion, viajeId, inicial }: {
           <label htmlFor={campo('radio')} className={ETIQUETA}>Radio del tramo federal (km)</label>
           <input id={campo('radio')} name="radioKm" type="text" inputMode="decimal"
             defaultValue={inicial.radioKm ?? ''} placeholder="Solo si pisa federal y la unidad es hasta C2"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
             Es un RADIO entre origen inicial y destino final (con puntos intermedios), no kilómetros
             de odómetro. Con unidad hasta C2 y radio ≤ 30 km, el viaje se considera sin tramo federal
@@ -82,7 +81,7 @@ function BotonTexto({ rotulo, pendiente }: { rotulo: string; pendiente: string }
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <Save width={14} height={14} strokeWidth={1.75} />
       {pending ? pendiente : rotulo}
@@ -116,19 +115,19 @@ export function FormaDatosCliente({ accion, viajeId, inicial }: {
           <label htmlFor={campo('ocp')} className={ETIQUETA}>CP de origen</label>
           <input id={campo('ocp')} name="origenCp" type="text" inputMode="numeric" maxLength={5}
             defaultValue={inicial.origenCp ?? ''} placeholder="5 dígitos"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('oedo')} className={ETIQUETA}>Estado de origen</label>
           <input id={campo('oedo')} name="origenEstado" type="text" maxLength={60}
             defaultValue={inicial.origenEstado ?? ''} placeholder="p. ej. Nuevo León"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('internac')} className={ETIQUETA}>¿Transporte internacional?</label>
           <select id={campo('internac')} name="transpInternac"
             defaultValue={inicial.transpInternac === null ? '' : inicial.transpInternac ? 'si' : 'no'}
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
+            className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="">Sin declarar</option>
             <option value="no">No — nacional</option>
             <option value="si">Sí — cruza frontera</option>
@@ -138,19 +137,19 @@ export function FormaDatosCliente({ accion, viajeId, inicial }: {
           <label htmlFor={campo('dcp')} className={ETIQUETA}>CP de destino</label>
           <input id={campo('dcp')} name="destinoCp" type="text" inputMode="numeric" maxLength={5}
             defaultValue={inicial.destinoCp ?? ''} placeholder="5 dígitos"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('dedo')} className={ETIQUETA}>Estado de destino</label>
           <input id={campo('dedo')} name="destinoEstado" type="text" maxLength={60}
             defaultValue={inicial.destinoEstado ?? ''} placeholder="p. ej. Jalisco"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('rfc')} className={ETIQUETA}>RFC del destinatario</label>
           <input id={campo('rfc')} name="rfcDestinatario" type="text" maxLength={13}
             defaultValue={inicial.rfcDestinatario ?? ''} placeholder="12-13 caracteres"
-            className={`${CAMPO} cifra-mono uppercase`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono uppercase" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <p className={AYUDA} style={{ color: 'var(--faint)' }}>
@@ -180,36 +179,36 @@ export function FormaMercancia({ accion, viajeId }: { accion: AccionForma; viaje
           <label htmlFor={campo('desc')} className={ETIQUETA}>Descripción de la mercancía</label>
           <input id={campo('desc')} name="descripcion" type="text" maxLength={500}
             placeholder="p. ej. Cajas de aguacate hass calibre 48"
-            className={CAMPO} style={{ background: 'var(--surface)' }} />
+            className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('clave')} className={ETIQUETA}>Clave SAT (c_ClaveProdServCP)</label>
           <input id={campo('clave')} name="bienesTransp" type="text" inputMode="numeric" maxLength={8}
             placeholder="8 dígitos — la da tu cliente"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('cant')} className={ETIQUETA}>Cantidad</label>
           <input id={campo('cant')} name="cantidad" type="text" inputMode="decimal"
             placeholder="p. ej. 120"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('unidad')} className={ETIQUETA}>Clave de unidad</label>
           <input id={campo('unidad')} name="claveUnidad" type="text" maxLength={3}
             placeholder="KGM, H87, XBX…"
-            className={`${CAMPO} cifra-mono uppercase`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono uppercase" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('peso')} className={ETIQUETA}>Peso en kg (del renglón)</label>
           <input id={campo('peso')} name="pesoKg" type="text" inputMode="decimal"
             placeholder="p. ej. 1200"
-            className={`${CAMPO} cifra-mono`} style={{ background: 'var(--surface)' }} />
+            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
           <label htmlFor={campo('peligroso')} className={ETIQUETA}>¿Material peligroso?</label>
           <select id={campo('peligroso')} name="materialPeligroso" defaultValue=""
-            className={CAMPO} style={{ background: 'var(--surface)' }}>
+            className="w-full" style={{ background: 'var(--surface)' }}>
             <option value="">Sin declarar</option>
             <option value="no">No</option>
             <option value="si">Sí</option>
@@ -230,7 +229,7 @@ export function FormaMercancia({ accion, viajeId }: { accion: AccionForma; viaje
 function BotonQuitar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="text-[11px] underline decoration-dotted hover:opacity-75 disabled:opacity-50"
+    <button type="submit" disabled={pending} className="rv-btn rv-btn--ghost rv-btn--sm"
       style={{ color: 'var(--bad)' }}>
       {pending ? 'quitando…' : 'quitar'}
     </button>

@@ -181,7 +181,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {ESCENARIOS_QA.map((e) => (
           <button key={e.id} type="button" onClick={() => elegirEscenario(e.id)}
-            className="text-left hairline rounded-xl px-3 py-2.5 transition-colors"
+            className="text-left hairline rounded-lg px-3 py-1.5 transition-colors"
             style={escenario === e.id
               ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
               : { background: 'var(--surface)' }}>
@@ -335,7 +335,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       {/* ── Lanzar ─────────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 pt-1 border-t" style={{ borderColor: 'var(--line2)' }}>
         <button type="button" onClick={() => void lanzar()} disabled={Boolean(motivoBloqueo) || lanzando}
-          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-opacity disabled:opacity-40"
+          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40"
           style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           {lanzando ? <Loader2 width={14} height={14} strokeWidth={2} className="animate-spin" /> : <Play width={14} height={14} strokeWidth={2} />}
           {lanzando ? 'Lanzando…' : 'Lanzar corrida'}

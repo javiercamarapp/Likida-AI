@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { sentryActivo } from '@/lib/observability/sentry';
 import { usd } from '@/lib/utils';
@@ -46,15 +47,15 @@ function msLegible(ms: number | null): string {
 function TablaLatencia({ filas, etiqueta, notas }: { filas: FilaLatencia[]; etiqueta: string; notas?: (nombre: string) => string | null }) {
   return (
     <div className="overflow-x-auto mt-1">
-      <table className="w-full text-sm">
+      <table aria-label={`Latencia por ${etiqueta.toLowerCase()}`} className="w-full text-sm">
         <thead>
           <tr style={{ color: 'var(--muted)' }} className="text-left">
-            <th className="px-3 py-2 font-medium">{etiqueta}</th>
-            <th className="px-3 py-2 font-medium text-right">Muestras</th>
-            <th className="px-3 py-2 font-medium text-right">p50</th>
-            <th className="px-3 py-2 font-medium text-right">p95</th>
-            <th className="px-3 py-2 font-medium text-right">Máx.</th>
-            <th className="px-3 py-2 font-medium text-right">Fallos</th>
+            <th scope="col" className="px-3 py-2 font-medium">{etiqueta}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Muestras</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">p50</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">p95</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Máx.</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">Fallos</th>
           </tr>
         </thead>
         <tbody>
@@ -181,16 +182,16 @@ export default async function ObservabilidadPage({
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Corridas de agentes" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-3 py-2 font-medium">Agente</th>
-                      <th className="px-3 py-2 font-medium">Flota</th>
-                      <th className="px-3 py-2 font-medium">Estado</th>
-                      <th className="px-3 py-2 font-medium">Tareas</th>
-                      <th className="px-3 py-2 font-medium">Duración</th>
-                      <th className="px-3 py-2 font-medium">Inicio</th>
-                      <th className="px-3 py-2 font-medium text-right">Traza</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Agente</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Estado</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Tareas</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Duración</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Inicio</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Traza</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -253,15 +254,15 @@ export default async function ObservabilidadPage({
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Acciones registradas" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-3 py-2 font-medium">Cuándo</th>
-                      <th className="px-3 py-2 font-medium">Acción</th>
-                      <th className="px-3 py-2 font-medium">Quién</th>
-                      <th className="px-3 py-2 font-medium">Flota</th>
-                      <th className="px-3 py-2 font-medium">Entidad</th>
-                      <th className="px-3 py-2 font-medium">Detalle</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Cuándo</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Acción</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Quién</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Entidad</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Detalle</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -294,7 +295,7 @@ export default async function ObservabilidadPage({
                   por decreto. Lo único que se puede afirmar desde aquí es si hay
                   DSN — "configurado", nunca "conectado". */}
               <a href="https://sentry.io" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)' }}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
@@ -308,7 +309,7 @@ export default async function ObservabilidadPage({
                 <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Se enlaza en vez de reconstruirse.</div>
               </a>
               <a href="https://vercel.com/dashboard" target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-2.5 transition-colors hover:bg-[var(--canvas)]"
+                className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]"
                 style={{ background: 'var(--surface)' }}>
                 <div className="flex items-center justify-between gap-3">
                   <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
@@ -409,15 +410,15 @@ export default async function ObservabilidadPage({
               </div>
             ) : (
               <div className="overflow-x-auto mt-1">
-                <table className="w-full text-sm">
+                <table aria-label="Duración por fase" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-3 py-2 font-medium">Fase</th>
-                      <th className="px-3 py-2 font-medium text-right">Medidas</th>
-                      <th className="px-3 py-2 font-medium text-right">Sin duración</th>
-                      <th className="px-3 py-2 font-medium text-right">p50</th>
-                      <th className="px-3 py-2 font-medium text-right">p95</th>
-                      <th className="px-3 py-2 font-medium text-right">Máx.</th>
+                      <th scope="col" className="px-3 py-2 font-medium">Fase</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Medidas</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Sin duración</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">p50</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">p95</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">Máx.</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -445,3 +446,5 @@ export default async function ObservabilidadPage({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Observabilidad' };

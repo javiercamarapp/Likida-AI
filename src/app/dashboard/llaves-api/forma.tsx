@@ -18,7 +18,6 @@ export type ResultadoForma =
   | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const CAMPO = 'w-full hairline rounded-lg px-3 h-9 text-[13px] outline-none focus:border-[var(--muted)] transition-colors';
 const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
@@ -26,7 +25,7 @@ function Boton({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary h-9 px-4 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85 disabled:opacity-50"
+      className="rv-btn rv-btn--primary"
       style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
       <KeyRound width={14} height={14} strokeWidth={1.75} />
       {pending ? ocupado : etiqueta}
@@ -65,7 +64,7 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
             pueda leer y transcribir completa. */}
         <code className="cifra-mono text-[12px] break-all flex-1">{enClaro}</code>
         <button type="button" aria-label="Copiar la llave" onClick={copiar}
-          className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 transition-colors hover:bg-[var(--canvas)]"
+          className="rv-icono-boton"
           style={{ color: copiado ? 'var(--ok)' : 'var(--muted)' }}>
           {copiado ? <Check width={14} height={14} strokeWidth={2} /> : <Copy width={14} height={14} strokeWidth={2} />}
         </button>
@@ -102,7 +101,7 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
             <label htmlFor="llave-nombre" className={ETIQUETA}>Para qué sistema es</label>
             <input id="llave-nombre" name="nombre" type="text" required maxLength={80}
               placeholder="TMS propio, tablero de Tableau…"
-              className={CAMPO} style={{ background: 'var(--surface)' }} />
+              className="w-full" style={{ background: 'var(--surface)' }} />
             <p className={AYUDA} style={{ color: 'var(--faint)' }}>
               El nombre es lo que te va a dejar saber cuál revocar.
             </p>
@@ -111,7 +110,7 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
           <div>
             <label htmlFor="llave-area" className={ETIQUETA}>Área que puede leer</label>
             <select id="llave-area" name="area" defaultValue={areas[0]?.valor}
-              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              className="w-full" style={{ background: 'var(--surface)' }}>
               {areas.map((a) => (
                 <option key={a.valor} value={a.valor}>{a.rotulo}</option>
               ))}
@@ -125,7 +124,7 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
           <div>
             <label htmlFor="llave-vigencia" className={ETIQUETA}>Hasta cuándo vale</label>
             <select id="llave-vigencia" name="vigencia" defaultValue={vigenciaDefault}
-              className={CAMPO} style={{ background: 'var(--surface)' }}>
+              className="w-full" style={{ background: 'var(--surface)' }}>
               {vigencias.map((v) => (
                 <option key={v.valor} value={v.valor}>{v.rotulo}</option>
               ))}

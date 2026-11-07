@@ -14,7 +14,7 @@ const pintar = (p?: Partial<Parameters<typeof VistaHistorialVigia>[0]>) => rende
 describe('grupos e histórico del Vigía (pantalla)', () => {
   it('base sin la 0484: lo dice y no enseña un «no hay grupos» que parezca verdad', () => {
     const html = pintar({ grupos: null });
-    expect(html).toContain('migración 0484');
+    expect(html).toContain('Los grupos de clientes todavía no están disponibles');
     expect(html).not.toContain('Aún no hay grupos');
   });
 
@@ -32,6 +32,14 @@ describe('grupos e histórico del Vigía (pantalla)', () => {
     expect(html).toContain('Marcar crítico');
     expect(html).toContain('Sin subir');
     expect(html).toContain('Todavía no hay histórico subido');
+  });
+
+  it('la subida acepta varios archivos, pide un solo campo de equipo y avisa que solo se lee texto', () => {
+    const html = pintar({ grupos: [{ id: 'g1', clienteId: 'c1', clienteNombre: 'Cliente A', nombre: 'Operación A', critico: false, importaciones: 0, mensajes: 0, ultimaImportacion: null }] });
+    expect(html).toMatch(/<input[^>]*type="file"[^>]*multiple|<input[^>]*multiple[^>]*type="file"/);
+    expect(html.match(/name="equipo"/g)).toHaveLength(1);
+    expect(html).toContain('El sistema solo lee el texto de los mensajes');
+    expect(html).toContain('/dashboard/agentes/vigia/sin-atender');
   });
 
   it('quien no es dueño ve los grupos pero ningún formulario ni botón de cambio', () => {
@@ -88,7 +96,7 @@ describe('grupos e histórico del Vigía (pantalla)', () => {
 
     it('base sin la 0647: lo dice y no ofrece aprobar (no hay dónde guardar)', () => {
       const html = pintar({ grupos: [], reporte, rapidas: null });
-      expect(html).toContain('migración 0647');
+      expect(html).toContain('respuestas rápidas todavía no están disponibles');
       expect(html).not.toContain('Aprobar como respuesta rápida');
       expect(html).not.toContain('Aún no hay respuestas rápidas aprobadas');
     });

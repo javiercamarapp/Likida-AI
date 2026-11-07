@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -82,3 +83,5 @@ export default async function PaginaTimbradoViaje({
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Timbrar viaje' };

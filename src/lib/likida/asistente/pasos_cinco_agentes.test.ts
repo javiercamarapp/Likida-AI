@@ -58,6 +58,16 @@ describe('asistente de puesta en marcha (cinco_agentes)', () => {
     expect(f({ activa: true, probadaEn: '2026-10-28T10:00:00Z', ultimoError: null }).estado).toBe('listo');
   });
 
+  it('F2: la conexión directa se rotula «por conectar» y una prueba de acceso no afirma que se lean los desgloses', () => {
+    const f = (tms: SenalesAsistente['tms']) => por(armarPasosCincoAgentes({ ...vacias, tms }), 'tms');
+    const api = (p: ReturnType<typeof f>) => p.subpasos.find((x) => x.id === 'api')!;
+    expect(api(f('sin_credencial')).detalle).toMatch(/Por conectar/);
+    const probada = api(f({ activa: true, probadaEn: '2026-10-28T10:00:00Z', ultimoError: null })).detalle;
+    expect(probada).toMatch(/acceso/);
+    expect(probada).toMatch(/confirma con tu área de sistemas/);
+    expect(f('sin_credencial').resumen).toMatch(/por conectar/);
+  });
+
   it('el correo nunca es listo solo porque la plataforma lo configure: pide la prueba y la confirmación', () => {
     const cfg = { activa: true, usaCorreo: true, remitenteCapturado: true };
     const sin = por(armarPasosCincoAgentes({ ...vacias, correoDesglose: cfg }), 'correo');

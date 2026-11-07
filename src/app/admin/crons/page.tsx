@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { detalleLatidos } from '@/lib/admin/salud';
 import { logger } from '@/lib/logger';
@@ -25,3 +26,5 @@ export default async function CronsPage() {
 
   return <VistaCrons latidos={latidos} />;
 }
+
+export const metadata: Metadata = { title: 'Relojes' };

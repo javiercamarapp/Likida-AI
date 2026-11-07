@@ -35,7 +35,7 @@ vi.mock('@/lib/likida/vigia/historial/repo', () => ({
 const aprobarRespuestaRapidaPanel = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => ({ ok: true as const, mensaje: 'hecho' })));
 const retirarRespuestaRapidaPanel = vi.hoisted(() => vi.fn(async (..._a: unknown[]) => ({ ok: true as const, mensaje: 'hecho' })));
 vi.mock('@/lib/likida/vigia/historial/acciones', () => ({
-  altaGrupoPanel: vi.fn(), borrarGrupoPanel: vi.fn(), criticoGrupoPanel: vi.fn(), importarHistorialPanel: vi.fn(),
+  altaGrupoPanel: vi.fn(), borrarGrupoPanel: vi.fn(), criticoGrupoPanel: vi.fn(), importarHistorialPanel: vi.fn(), importarLotePanel: vi.fn(),
   aprobarRespuestaRapidaPanel, retirarRespuestaRapidaPanel,
 }));
 

@@ -69,3 +69,68 @@ describe('bodyExcede', () => {
     expect(bodyExcede(small, 1000)).toBe(false);
   });
 });
+
+// F1B (adversarial): inundar 6000 llaves de un solo golpe desalojaba la llave AGOTADA
+// (la poda ordenaba por caducidad) y reabria su cupo.
+describe('rateLimit: una inundacion de llaves no reabre una llave agotada', () => {
+  it('conserva el bloqueo de una llave con intentos acumulados', async () => {
+    const k = 'login:email:203.0.113.5';
+    for (let i = 0; i < 10; i++) expect(await rateLimit(k, 10, 300_000)).toBe(true);
+    expect(await rateLimit(k, 10, 300_000)).toBe(false);
+    for (let i = 0; i < 6000; i++) await rateLimit(`relleno:${i}`, 10, 300_000);
+    expect(await rateLimit(k, 10, 300_000)).toBe(false);
+  });
+});
+
+// CT-SEG-11 (F2): un límite que BLOQUEA deja constancia (solo la categoría, con freno por categoría), y uno que deja pasar no.
+describe('rateLimit registra el bloqueo en evento_seguridad', () => {
+  it('bloquear llama al registro con la CATEGORÍA (nunca la llave completa) y una sola vez por minuto y categoría', async () => {
+    const registrar = vi.fn(async (_categoria: string) => {});
+    vi.resetModules();
+    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: registrar }));
+    const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
+    reiniciar();
+    expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(true);
+    expect(registrar).not.toHaveBeenCalled(); // pasar no deja evento
+    expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(false);
+    expect(await rl('lead:203.0.113.7', 1, 60_000)).toBe(false);
+    expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(true);
+    expect(await rl('lead:198.51.100.2', 1, 60_000)).toBe(false);
+    // Espera por CONDICIÓN (el registro es un import dinámico en segundo plano: bajo carga tarda más de 1 s, el default de waitFor).
+    await vi.waitFor(() => expect(registrar).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(registrar).toHaveBeenCalledWith('lead'); // la IP no sale de aquí
+    vi.doUnmock('@/lib/seguridad/registro_acceso');
+  });
+
+  it('el límite de /login no se duplica aquí (deja su propio login_fallido)', async () => {
+    const registrar = vi.fn(async (_categoria: string) => {});
+    vi.resetModules();
+    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: registrar }));
+    const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
+    reiniciar();
+    expect(await rl('login:email:1.2.3.4', 1, 60_000)).toBe(true);
+    expect(await rl('login:email:1.2.3.4', 1, 60_000)).toBe(false);
+    // Antes: setTimeout fijo de 20 ms y un «no se llamó» que pasaba en vacío si el import tardaba más. Ahora un bloqueo CONTROL
+    // (categoría «lead») prueba que el registro en segundo plano ya corrió; solo entonces se afirma que «login» no se registró.
+    expect(await rl('lead:control', 1, 60_000)).toBe(true);
+    expect(await rl('lead:control', 1, 60_000)).toBe(false);
+    await vi.waitFor(() => expect(registrar).toHaveBeenCalledWith('lead'), { timeout: 10_000 });
+    expect(registrar).not.toHaveBeenCalledWith('login');
+    expect(registrar).toHaveBeenCalledTimes(1);
+    vi.doUnmock('@/lib/seguridad/registro_acceso');
+  });
+
+  it('un registro que falla jamás cambia la decisión del límite', async () => {
+    vi.resetModules();
+    const intentos = vi.fn(async (_categoria: string) => { throw new Error('base caída'); });
+    vi.doMock('@/lib/seguridad/registro_acceso', () => ({ registrarRateLimit: intentos }));
+    const { rateLimit: rl, reiniciarLimites: reiniciar } = await import('./ratelimit');
+    reiniciar();
+    expect(await rl('mcp:x', 1, 60_000)).toBe(true);
+    expect(await rl('mcp:x', 1, 60_000)).toBe(false);
+    // Espera por condición (no 20 ms fijos): el intento de registro, que lanza, ya ocurrió y no cambió la decisión.
+    await vi.waitFor(() => expect(intentos).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(await rl('mcp:x', 1, 60_000)).toBe(false);
+    vi.doUnmock('@/lib/seguridad/registro_acceso');
+  });
+});

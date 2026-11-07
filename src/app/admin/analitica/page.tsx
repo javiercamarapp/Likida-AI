@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { usd } from '@/lib/utils';
@@ -136,3 +137,5 @@ export default async function AnaliticaPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Analítica & Stats' };

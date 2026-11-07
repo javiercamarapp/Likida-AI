@@ -188,3 +188,12 @@ open node_modules/.cache/correo-vista-previa/magic-link.html
 La vista previa trae el logo como data-URI: es lo que ve quien autoriza la
 imagen incrustada. Mirar sirve — así se encontró que las plantillas salían con
 el logo apuntando a `localhost:3000`.
+
+## Solo se manda correo a quien tiene cuenta (CT-SEG-04)
+
+Desde F1 lote B el hook consulta `app_user` (por el correo ACTUAL de la cuenta, `user.email`, en minusculas) antes de armar el
+correo. Si no hay fila: responde `200 {}` —lo mismo que un envio— y NO sale nada; el log lleva `auth.correo.destino_sin_cuenta`
+sin la direccion. Si la consulta falla responde 500 (`auth.correo.consulta_cuenta_fallo`), nunca lo trata como "no existe".
+Efecto a tener presente: una persona dada de alta en Auth pero sin fila en `app_user` (signup abierto, cuenta huerfana de Google)
+ya no recibe enlace. Cerrar el signup abierto en el panel de Supabase (Authentication > Sign In / Providers > Allow new users
+to sign up = apagado) sigue siendo tarea de Javier: este codigo es la segunda barrera, no la primera.

@@ -121,5 +121,5 @@ export default async function DashboardInicio({
     return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;
   }
 
-  return <InicioContenido tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} avisoFiscalPospuesto={avisoFiscalPospuesto} />;
+  return <InicioContenido sp={sp} tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} avisoFiscalPospuesto={avisoFiscalPospuesto} />;
 }

@@ -3,6 +3,8 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import type { ControladorTour } from './controlador';
 import { rectFoco } from './geometria';
+import { CursorGesto } from './cursor-gesto';
+import { EtiquetaObjetivo } from './etiqueta-objetivo';
 import { GloboTour } from './globo';
 
 // La capa visual del recorrido (foco con atenuación, como la guía de Vexa): una capa que NO recibe clics —la persona puede usar el
@@ -83,6 +85,15 @@ export function CapaTour({ controlador }: { controlador: ControladorTour }) {
     return () => cancelAnimationFrame(cuadro);
   }, [controlador, hayElemento, pasoId]);
 
+  // Al volver a la pestaña (o a la ventana) se relee la señal del paso que espera una acción: la persona pudo hacerlo en otra pestaña.
+  useEffect(() => {
+    if (!activo || (paso?.tipo !== 'hacer' && paso?.tipo !== 'practicar')) return;
+    const alVolver = () => { if (document.visibilityState === 'visible') controlador.sondear(); };
+    document.addEventListener('visibilitychange', alVolver);
+    window.addEventListener('focus', alVolver);
+    return () => { document.removeEventListener('visibilitychange', alVolver); window.removeEventListener('focus', alVolver); };
+  }, [activo, controlador, paso?.tipo, pasoId]);
+
   // Foco: pasa al botón principal solo si estaba en la tarjeta, en el cuerpo o en el menú; nunca se le quita a quien escribe.
   useEffect(() => {
     if (!activo) return;
@@ -110,18 +121,19 @@ export function CapaTour({ controlador }: { controlador: ControladorTour }) {
   const nombreEl = paso.tipo === 'ir' ? paso.nombrePantalla : paso.accion?.objetivo;
   const conEtiqueta = hayElemento && Boolean(nombreEl) && (paso.tipo === 'ir' || paso.avance?.tipo === 'accion' || Boolean(paso.accion));
 
+  const cumplido = snap.espera?.estado === 'hecho' || snap.espera?.estado === 'ya_hecho';
+  const pideHacer = paso.tipo === 'hacer' || paso.tipo === 'practicar';
   return (
     <div className="rv-tour" data-ui="v2" data-reducido={snap.reducirMovimiento || undefined}>
       <div ref={capa} className="rv-onb-capa" data-sin-foco data-scrim={centrada || undefined} aria-hidden="true">
         <div className="rv-onb-foco" />
+        {hayElemento && (pideHacer || paso.tipo === 'ir') && !cumplido ? <CursorGesto key={pasoId} gesto={paso.deteccion?.via === 'dom' && paso.deteccion.evento === 'input' ? 'escribir' : 'clic'} /> : null}
       </div>
-      {conEtiqueta ? (
-        <div ref={etiqueta} className="rv-onb-etiqueta" aria-hidden="true">
-          <span className="rv-onb-etiqueta__in">
-            <svg className="rv-onb-etiqueta__flecha" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6" /></svg>
-            {paso.tipo === 'ir' || paso.avance?.tipo === 'accion' ? `Haz clic aquí: ${nombreEl}` : `Aquí: ${nombreEl}`}
-          </span>
-        </div>
+      {conEtiqueta && nombreEl ? (
+        <EtiquetaObjetivo
+          refEtiqueta={etiqueta} texto={nombreEl}
+          estado={cumplido ? 'hecho' : paso.tipo === 'ir' || pideHacer || paso.avance?.tipo === 'accion' ? 'accion' : 'aqui'}
+        />
       ) : null}
       {paso.tipo !== 'cierre' && paso.nombrePantalla ? <div key={snap.grupo} className="rv-onb-banner" aria-hidden="true">Ahora: {paso.nombrePantalla}</div> : null}
       <GloboTour
@@ -133,6 +145,7 @@ export function CapaTour({ controlador }: { controlador: ControladorTour }) {
         onSaltar={() => controlador.saltar()}
         onMasTarde={() => controlador.masTarde()}
         onIrAlElemento={() => controlador.elementoActual?.enfocar()}
+        onDeclarar={() => controlador.declarar()}
       />
     </div>
   );

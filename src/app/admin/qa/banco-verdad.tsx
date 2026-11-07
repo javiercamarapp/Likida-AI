@@ -187,7 +187,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
       {/* ── El botón ───────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 pb-1">
         <button type="button" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo) || corriendo}
-          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-xl transition-opacity disabled:opacity-40"
+          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40"
           style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
           {corriendo ? <Loader2 width={14} height={14} strokeWidth={2} className="animate-spin" /> : <ScanLine width={14} height={14} strokeWidth={2} />}
           {corriendo ? 'Corriendo el OCR real…' : `Correr el OCR contra ${seleccion.size} foto${seleccion.size === 1 ? '' : 's'}`}
@@ -349,13 +349,13 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table aria-label="Campo esperado contra campo leído por el OCR" className="w-full text-xs">
           <thead>
             <tr className="text-left" style={{ color: 'var(--muted)' }}>
-              <th className="py-1 pr-3 font-medium">Campo</th>
-              <th className="py-1 pr-3 font-medium">Esperado (la persona)</th>
-              <th className="py-1 pr-3 font-medium">Leído (el OCR)</th>
-              <th className="py-1 font-medium">Veredicto</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Campo</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Esperado (la persona)</th>
+              <th scope="col" className="py-1 pr-3 font-medium">Leído (el OCR)</th>
+              <th scope="col" className="py-1 font-medium">Veredicto</th>
             </tr>
           </thead>
           <tbody>

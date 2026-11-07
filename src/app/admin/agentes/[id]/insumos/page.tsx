@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Inbox } from 'lucide-react';
@@ -134,3 +135,5 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Insumos del agente' };

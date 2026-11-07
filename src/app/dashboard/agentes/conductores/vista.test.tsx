@@ -265,3 +265,31 @@ describe('A37-S13-07: los rótulos dicen lo que se cuenta', () => {
     expect(html).toContain('escalados y sin aceptar');
   });
 });
+
+// CT-A345-18 (F2): «sin aviso» con la compuerta apagada no es rezago; con la compuerta ilegible no se asume nada.
+describe('Conductores — «sin aviso» según la compuerta del agente (CT-A345-18)', () => {
+  const base: ColaConductores = { esperan: [], totalEsperan: 0, sinAvisar: 3, error: null };
+  const texto = async (c: ColaConductores) => (await pintar(c)).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
+
+  it('compuerta apagada: lo dice y no manda a Despacho como si fuera un rezago', async () => {
+    const t = await texto({ ...base, compuerta: 'apagado' });
+    expect(t).toContain('3 viajes en curso sin aviso al operador');
+    expect(t).toContain('todavía no está habilitado en tu cuenta');
+    expect(t).toContain('no es un rezago');
+    expect(t).not.toContain('Despacho');
+  });
+
+  it('compuerta habilitada: el aviso sale desde Despacho', async () => {
+    const t = await texto({ ...base, compuerta: 'habilitado' });
+    expect(t).toContain('Despacho');
+    expect(t).not.toContain('no es un rezago');
+  });
+
+  it('compuerta ilegible o sin dato: no la da por activa ni por apagada', async () => {
+    for (const compuerta of ['compuerta_ilegible', undefined] as const) {
+      const t = await texto({ ...base, compuerta });
+      expect(t).toContain('No pudimos comprobar');
+      expect(t).not.toContain('no es un rezago');
+    }
+  });
+});

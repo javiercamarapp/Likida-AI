@@ -102,6 +102,12 @@ un fallo de lectura no se pueda pintar como "$0.00".
 
 ## Respaldo y restauración (RES-8)
 
+> **VERIFICAR (CT-INF-19, 4-nov-2026).** Lo de abajo describe el estado del 4-ago-2026 y no se ha vuelto a medir contra el panel.
+> Cosas que cambiaron desde entonces y que este párrafo no recoge: el workflow `backup-storage.yml` corre diario (03:17 UTC) desde
+> el 23-oct y el dump se cifra con `age` (CT-SEG-16). Lo que **solo Javier puede confirmar en el panel de Supabase** y debe quedar
+> anotado aquí con fecha: (1) el plan actual (free o de pago), (2) el compute y el límite de conexiones, (3) si PITR está contratado
+> y su ventana. Hasta entonces, la afirmación «free, sin PITR» no debe repetirse en otros documentos como hecho vigente.
+
 **Este proyecto no tiene respaldo automático ni PITR.** Verificado contra la
 Management API el 4-ago-2026: el plan de Supabase es free y su propia
 documentación es explícita en que los proyectos free exportan por su cuenta. El
@@ -124,7 +130,8 @@ deja un respaldo que *parece* completo — es la forma más cara de este fallo.
 
 ```bash
 # La base — dump de datos, se comprueba que no venga vacío, 14 días en disco.
-bash scripts/respaldo.sh
+# CT-SEG-16: exige RESPALDO_AGE_RECIPIENT (clave pública age) y el binario `age`; sin ellos se rechaza antes de volcar.
+RESPALDO_AGE_RECIPIENT=age1... bash scripts/respaldo.sh
 
 # Storage — lista con la service role, baja lo que falte, compara CONTEOS y
 # deja MANIFIESTO.tsv (bucket, ruta, bytes, sha256). Es IDEMPOTENTE: correrlo
@@ -195,7 +202,7 @@ nueva, jamás contra producción**:
 Anota la fecha de la última prueba de restauración aquí abajo. Sin fecha, no se
 ha hecho.
 
-- Última prueba de restauración: **nunca** (22-ago-2026).
+- Última prueba de restauración: **nunca** (22-ago-2026). El guion y el acta para el ensayo están en `docs/operacion/restauracion-guion-y-acta.md`.
 
 ### La limpieza de Storage NO libera bytes por sí sola
 
@@ -248,7 +255,7 @@ falla si entra una ahí y no aquí):
 | `RESEND_EMAIL_DOMAIN` | La otra mitad de lo mismo: sin remitente verificado Resend rechaza el envío, con el mismo resultado silencioso. Media credencial es tan inútil como ninguna, así que las dos se vigilan por separado. |
 | `NEXT_PUBLIC_APP_URL` | El login arma sus redirects contra `https://app.likida.ai` (el fallback) y no contra el despliegue que los emitió: el magic link y el retorno de Google aterrizan en otro sitio, sin error. |
 | `LIKIDA_WHATSAPP_MSG_USD` | El costo por liquidación usa el default 0.008 — y esa cifra decide el precio del producto. |
-| `LIKIDA_FLOTA_COOKIE_LLAVE` | El superadmin no puede fijar una flota activa en `/admin` (la cookie no se firma ni se lee: fallar cerrado). Desde la auditoría 18 ya NO cae a la service role key. |
+| `LIKIDA_FLOTA_COOKIE_LLAVE` | El superadmin no puede fijar una flota activa en `/admin` (la cookie no se firma ni se lee: fallar cerrado). Desde la auditoría 18 ya NO cae a la service role key. **Prerrequisito del deploy de MX-002:** las acciones de módulo del dashboard (emisión real, lotes, límites, vinculación de portales, timbrado, cobranza, liquidación, llaves, usuarios) exigen al superadmin en ver-como el campo firmado con esta llave; sin ella el superadmin queda bloqueado en esas acciones (falla cerrado, mensaje «la flota cambió»), aunque `?tenant=` sea válido. Confirmar que existe en Vercel (Production) antes de desplegar. Un dueño o contador no la necesita. |
 | `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` | El límite de tasa cae al Map **por instancia**: 10 intentos de login por 5 min se vuelven 10 × (instancias abiertas en paralelo), y lo mismo el del webhook de WhatsApp, `/v1`, el formulario de leads y los exports. También es el piso de una hora de `alertarOperador`, que sin Redis se cuenta por instancia. **Verificado presente en producción el 22-ago-2026.** El estado vivo se lee en `GET /api/health` → `ratelimit: "redis" \| "memoria"`, y el arranque lo dice en `startup.ratelimit_backend`. |
 
 El gate de `/dashboard` no depende de ninguna variable de entorno: es la
@@ -521,3 +528,7 @@ curl -s https://app.likida.ai/api/health   # {"ok":true,"db":"ok","sentry":"conf
 Lee solo el asunto a propósito: con el mensaje completo, cualquier commit que
 *mencionara* la palabra en el cuerpo disparaba un build. Pasó el mismo día que
 se puso la regla.
+
+## Cambio de contrato: `GET /api/export/facturas-proveedor` (CT-SEG-17)
+
+El GET ya no marca `exportada_en` ni anota corrida (responde `X-Likida-Marcado: no`); el marcado pasa a `POST` en la misma URL. Antes del deploy, avisar a todo TMS, cron o integración que consuma ese GET: si siguen llamando solo GET re-exportarán las mismas facturas en cada corrida (riesgo de doble importación al ERP). El botón del panel ya usa el POST.

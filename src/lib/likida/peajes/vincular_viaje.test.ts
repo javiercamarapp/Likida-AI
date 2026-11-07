@@ -78,9 +78,11 @@ describe('vincularCruces (unidad + ventana)', () => {
     }
     const cs: CruceAVincular[] = [];
     for (let i = 0; i < 9000; i++) cs.push(cruce(i, `TC${1000 + (i % 45)}`, `2026-09-${String(1 + (i % 27)).padStart(2, '0')}`));
-    const t0 = performance.now();
+    // CT-BAS-14: CPU del proceso, no reloj de pared (la espera por swap no es del algoritmo).
+    const c0 = process.cpuUsage();
     const r = vincularCruces(cs, vs);
-    expect(performance.now() - t0).toBeLessThan(2000);
+    const c = process.cpuUsage(c0);
+    expect((c.user + c.system) / 1000).toBeLessThan(2000);
     expect(r).toHaveLength(9000);
   });
 });

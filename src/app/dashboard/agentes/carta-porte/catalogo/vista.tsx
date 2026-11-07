@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { useActionState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Download, Plus, Upload } from 'lucide-react';
@@ -8,7 +9,7 @@ import { numero as fmtNumero } from '@/lib/formato';
 import { llaveTexto } from '@/lib/likida/carta_porte_docs/catalogos';
 import { plantillaCsv, TIPOS_PLANTILLA, type Registro, type TipoPlantilla } from '@/lib/likida/carta_porte_docs/catalogo_import';
 import { COLUMNAS_CLAVE, ROTULO_COLUMNA, columnasDeFila, filtrarFilas, valoresDeFormulario, type FilasCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
-import { Aviso, BotonEnvio, CAMPO, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
+import { Aviso, BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import type { EstadoImportacion } from './actions';
 import { Aviso as AvisoV2, BarraFiltros, BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
@@ -25,7 +26,7 @@ import { Aviso as AvisoV2, BarraFiltros, BotonEnlace, MarcoPagina, TituloRecuadr
 
 export interface ClienteVista { id: string; nombre: string }
 export interface CatalogoVista extends FilasCatalogo { truncado: boolean }
-export interface VerComo { tenant?: string; rol?: string; vista?: string }
+export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesCatalogo {
   guardarFila: AccionDoc;
   importar: (previo: EstadoImportacion, fd: FormData) => Promise<EstadoImportacion>;
@@ -51,6 +52,7 @@ function Ocultos({ ver }: { ver: VerComo }) {
       {ver.tenant && <input type="hidden" name="tenant" value={ver.tenant} />}
       {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
+      {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
     </>
   );
 }
@@ -69,7 +71,7 @@ function Campos({ tipo, valores, claveBloqueada }: { tipo: TipoPlantilla; valore
           return (
             <div key={c}>
               <label htmlFor={id} className={ETIQUETA}>{rotulo}</label>
-              <select id={id} name={`c_${c}`} defaultValue={valores[c] || 'no'} className={CAMPO} style={{ background: 'var(--surface)' }}>
+              <select id={id} name={`c_${c}`} defaultValue={valores[c] || 'no'} style={{ background: 'var(--surface)' }}>
                 <option value="si">sí</option>
                 <option value="no">no</option>
               </select>
@@ -80,7 +82,7 @@ function Campos({ tipo, valores, claveBloqueada }: { tipo: TipoPlantilla; valore
           return (
             <div key={c}>
               <label htmlFor={id} className={ETIQUETA}>{rotulo}</label>
-              <select id={id} name={`c_${c}`} defaultValue={valores[c] || 'remitente'} disabled={bloqueada} className={CAMPO} style={{ background: 'var(--surface)' }}>
+              <select id={id} name={`c_${c}`} defaultValue={valores[c] || 'remitente'} disabled={bloqueada} style={{ background: 'var(--surface)' }}>
                 <option value="remitente">remitente</option>
                 <option value="destinatario">destinatario</option>
               </select>
@@ -92,7 +94,7 @@ function Campos({ tipo, valores, claveBloqueada }: { tipo: TipoPlantilla; valore
           <div key={c}>
             <label htmlFor={id} className={ETIQUETA}>{rotulo}</label>
             <input id={id} name={`c_${c}`} defaultValue={valores[c] ?? ''} readOnly={bloqueada} autoComplete="off" spellCheck={false}
-              className={CAMPO} style={{ background: 'var(--surface)' }} />
+              style={{ background: 'var(--surface)' }} />
           </div>
         );
       })}
@@ -206,7 +208,7 @@ function Importador({ ver, importar }: { ver: VerComo; importar: AccionesCatalog
         <div className="flex flex-wrap items-end gap-3">
           <div>
             <label htmlFor="cat-imp-tipo" className={ETIQUETA}>Qué vas a importar</label>
-            <select id="cat-imp-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as TipoPlantilla)} className={CAMPO} style={{ background: 'var(--surface)' }}>
+            <select id="cat-imp-tipo" value={tipo} onChange={(e) => setTipo(e.target.value as TipoPlantilla)} style={{ background: 'var(--surface)' }}>
               {TIPOS_PLANTILLA.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t]}</option>)}
             </select>
           </div>
@@ -273,7 +275,7 @@ export function VistaCatalogo({ clientes, clienteId, catalogo, lecturaFallida = 
             {clientes.length > 8 && (
               <div className="max-w-sm">
                 <label htmlFor="cat-buscar-cliente" className={ETIQUETA}>Buscar cliente</label>
-                <input id="cat-buscar-cliente" value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off" className={CAMPO} style={{ background: 'var(--surface)' }} />
+                <input id="cat-buscar-cliente" value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off" style={{ background: 'var(--surface)' }} />
               </div>
             )}
             <ul className="flex flex-wrap gap-2">

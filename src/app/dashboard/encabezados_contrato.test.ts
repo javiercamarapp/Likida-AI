@@ -27,7 +27,7 @@ const MIGRADAS = [
   'agentes/vigia/vista.tsx', 'agentes/peajes/vista.tsx', 'agentes/carta-porte/vista.tsx', 'agentes/proveedores/vista.tsx',
   'agentes/conductores/configuracion/vista.tsx', 'agentes/conductores/estadias/vista.tsx', 'agentes/conductores/sitios/vista.tsx',
   'agentes/liquidacion/configuracion/vista.tsx', 'agentes/liquidacion/formato/vista.tsx', 'agentes/peajes/configuracion/vista.tsx',
-  'agentes/peajes/reclamacion/vista.tsx', 'agentes/vigia/historial/vista.tsx', 'agentes/vigia/avisos/vista.tsx', 'agentes/vigia/importacion/vista.tsx', 'agentes/vigia/programa/vista.tsx', 'agentes/liquidacion/desgloses.tsx', 'agentes/carta-porte/catalogo/vista.tsx',
+  'agentes/peajes/reclamacion/vista.tsx', 'agentes/vigia/historial/vista.tsx', 'agentes/vigia/avisos/vista.tsx', 'agentes/vigia/sin-atender/vista.tsx', 'agentes/vigia/importacion/vista.tsx', 'agentes/vigia/programa/vista.tsx', 'agentes/liquidacion/desgloses.tsx', 'agentes/carta-porte/catalogo/vista.tsx',
   'agentes/carta-porte/referencia/vista.tsx', 'agentes/carta-porte/configuracion/vista.tsx', 'inicio-contenido.tsx', 'inicio-operacion.tsx',
   'contador/inicio-contador.tsx', '[id]/detalle.tsx', 'proximamente/proximamente.tsx', 'resumen-v2.tsx', 'puesta-en-marcha/vista.tsx',
 ];

@@ -3,6 +3,7 @@ import { MailCheck, OctagonAlert } from 'lucide-react';
 import { Logo, GlifoAdorno } from '../logo';
 import { LoginArtwork } from '@/components/login/artwork';
 import { BotonEnvio } from './boton-envio';
+import { TurnstileWidget } from './turnstile-widget';
 import { mensajeDeError } from '@/lib/auth/motivo_login';
 
 /**
@@ -86,6 +87,7 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
                 autoComplete="email"
                 className="login-campo"
               />
+              <TurnstileWidget />
               <BotonEnvio
                 className="login-btn login-btn-tinta"
                 reposo="Continuar con correo"

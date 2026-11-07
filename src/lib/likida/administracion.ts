@@ -388,6 +388,7 @@ export async function comprobarTelefonoLibre(
     .in('telefono', variantesTelefono(telefono))
     // `limit(20)` y no 2: con el filtro de activo hecho aquí, dos filas de baja
     // podían llenar el cupo y esconder a la activa que sí choca.
+    .order('id')
     .limit(20);
 
   if (errBusca) throw new Error(`comprobarTelefonoLibre: no se pudo comprobar el teléfono — ${errBusca.message}`);
@@ -402,6 +403,21 @@ export async function comprobarTelefonoLibre(
         : TELEFONO_NO_DISPONIBLE,
     );
   }
+  // F1 lote B, L1H (CT-SEG-07 / X-01): el bot resuelve el mismo número contra `app_user` (cuenta de oficina) y `vigia_contacto`
+  // (cliente del Vigía) además de `operador`. Un número activo ahí, en OTRA flota, también es un número que el bot no sabría a
+  // quién atribuir. Misma respuesta genérica (sin oráculo) y mismo fallo cerrado ante una lectura caída. La base lo impone
+  // (0951 `telefono_identidad_unica`); esto solo da el mensaje amable ANTES del insert. En la propia flota no bloquea.
+  const [cuentas, contactos] = await Promise.all([
+    admin.from('app_user').select('id, tenant_id, activo').in('telefono', variantesTelefono(telefono)).order('id').limit(20),
+    admin.from('vigia_contacto').select('id, tenant_id').in('telefono', variantesTelefono(telefono)).eq('estado', 'activo').order('id').limit(20),
+  ]);
+  if (cuentas.error) throw new Error(`comprobarTelefonoLibre: no se pudo comprobar el teléfono — ${cuentas.error.message}`);
+  if (contactos.error) throw new Error(`comprobarTelefonoLibre: no se pudo comprobar el teléfono — ${contactos.error.message}`);
+  const cuentaAjena = ((cuentas.data ?? []) as Array<{ tenant_id: string | null; activo?: boolean | null }>)
+    .some((c) => c.activo !== false && c.tenant_id !== tenantId);
+  const contactoAjeno = ((contactos.data ?? []) as Array<{ tenant_id: string | null }>).some((c) => c.tenant_id !== tenantId);
+  if (cuentaAjena || contactoAjeno) throw new DatoInvalido(TELEFONO_NO_DISPONIBLE);
+
   const propioDeBaja = filas.find((c) => c.tenant_id === tenantId);
   if (propioDeBaja) {
     throw new DatoInvalido(

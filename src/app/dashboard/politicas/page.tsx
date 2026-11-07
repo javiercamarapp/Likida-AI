@@ -5,6 +5,7 @@ import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
 import { mxn } from '@/lib/utils';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { StatusPill } from '../../admin/ui/kit';
@@ -94,7 +95,7 @@ export default async function PoliticasPage({
     // `?tenant=` y la cookie del selector se resuelven igual al pintar y al
     // guardar. Antes la action leía solo la sesión y, con `?vista=demo`,
     // escribía la política de la demo en la flota elegida en el selector.
-    const s = await resolverTenantEfectivo('/dashboard/politicas', sp);
+    const s = await resolverTenantAtadoOLanza('/dashboard/politicas', sp, tenantId);
     if (!puedeAdministrar(s.rol)) {
       return { error: 'Tu rol no puede editar la política de gastos.' };
     }
@@ -152,12 +153,12 @@ export default async function PoliticasPage({
             <section className="px-5 pb-5">
               <FormaConAviso accion={accionGuardar} boton="Guardar política" columnas="md:grid-cols-1">
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table aria-label="Topes por comprobante (MXN)" className="w-full text-sm">
                     <thead>
                       <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th className="py-2.5 pr-4 font-medium">Concepto</th>
-                        <th className="py-2.5 pr-4 font-medium">Tope por comprobante (MXN)</th>
-                        <th className="py-2.5 font-medium">Exige factura (CFDI)</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Concepto</th>
+                        <th scope="col" className="py-2.5 pr-4 font-medium">Tope por comprobante (MXN)</th>
+                        <th scope="col" className="py-2.5 font-medium">Exige factura (CFDI)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -212,12 +213,12 @@ export default async function PoliticasPage({
             </div>
           ) : (
             <div className="overflow-x-auto mt-1 pb-2">
-              <table className="w-full text-sm">
+              <table aria-label="Topes por comprobante por concepto" className="w-full text-sm">
                 <thead>
                   <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th className="px-5 py-2.5 font-medium">Concepto</th>
-                    <th className="px-5 py-2.5 font-medium text-right">Tope por comprobante</th>
-                    <th className="px-5 py-2.5 font-medium">Exige factura (CFDI)</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Concepto</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium text-right">Tope por comprobante</th>
+                    <th scope="col" className="px-5 py-2.5 font-medium">Exige factura (CFDI)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -253,7 +254,7 @@ export default async function PoliticasPage({
                   celular la fila se corta sin forma de deslizar para leer
                   el resto. Mismo patrón que las dos tablas de arriba. */}
               <div className="overflow-x-auto">
-                <table className="w-full text-sm">
+                <table aria-label="Reglas por ruta" className="w-full text-sm">
                   <tbody>
                     {porRuta.map((p) => (
                       <tr key={`${p.concepto}-${p.ruta}`} className="border-t" style={{ borderColor: 'var(--line)' }}>

@@ -9,11 +9,8 @@ type Accion = (fd: FormData) => Promise<void>;
 
 export interface AccionesFormato { subirMuestra: Accion; guardarAjustes: Accion; quitar: Accion; guardarTelefonos?: Accion }
 
-const CSS_INPUT = 'hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full';
 const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const CSS_BOTON = 'inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85';
 const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const CSS_SECUNDARIO = 'hairline text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]';
 const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
 
 function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
@@ -47,9 +44,9 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
         {puedeAdministrar ? (
           <form action={acciones.subirMuestra} encType="multipart/form-data" className="flex flex-wrap items-end gap-2">
             <Etiqueta t="Excel de muestra (.xlsx)">
-              <input type="file" name="archivo" accept=".xlsx,.xls,.ods,.csv" required className={CSS_INPUT} style={ESTILO_INPUT} />
+              <input type="file" name="archivo" accept=".xlsx,.xls,.ods,.csv" required className="w-full" style={ESTILO_INPUT} />
             </Etiqueta>
-            <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> {f ? 'Reemplazar muestra' : 'Subir muestra'}</button>
+            <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> {f ? 'Reemplazar muestra' : 'Subir muestra'}</button>
           </form>
         ) : (
           <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota sube la muestra y cambia el formato.</p>
@@ -71,16 +68,16 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
           <form action={acciones.guardarTelefonos} className="space-y-3">
             <div className="grid sm:grid-cols-2 gap-3">
               <Etiqueta t="Copia al jefe de flota (WhatsApp, hasta 3)">
-                <textarea name="copia" rows={2} defaultValue={(telefonos?.copia ?? []).join('\n')} placeholder="5512345678" className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                <textarea name="copia" rows={2} defaultValue={(telefonos?.copia ?? []).join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                 <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Reciben el resumen y la liga del documento de cada liquidación entregada. La copia lleva cifras: solo los números que pongas aquí.</span>
               </Etiqueta>
               <Etiqueta t="Aviso cuando un operador responde «No coincide» (hasta 3)">
-                <textarea name="discrepancia" rows={2} defaultValue={(telefonos?.discrepancia ?? []).join('\n')} placeholder="5512345678" className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                <textarea name="discrepancia" rows={2} defaultValue={(telefonos?.discrepancia ?? []).join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                 <span className="text-[11px]" style={{ color: 'var(--faint)' }}>La persona responsable de revisar discrepancias. Si lo dejas vacío, se avisa al jefe de la copia y, sin copia, a quien ve dinero.</span>
               </Etiqueta>
             </div>
             {puedeAdministrar && (
-              <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar teléfonos</button>
+              <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar teléfonos</button>
             )}
           </form>
         </section>
@@ -96,16 +93,16 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
             <form action={acciones.guardarAjustes} className="space-y-4">
               <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 <Etiqueta t="Título del documento">
-                  <input name="titulo" defaultValue={f.titulo ?? ''} maxLength={120} placeholder="(el nombre de tu flota)" className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                  <input name="titulo" defaultValue={f.titulo ?? ''} maxLength={120} placeholder="(el nombre de tu flota)" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                 </Etiqueta>
                 <Etiqueta t="Documento que viaja por WhatsApp">
-                  <select name="salida" defaultValue={f.salida} className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar}>
+                  <select name="salida" defaultValue={f.salida} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar}>
                     <option value="pdf">PDF</option>
                     <option value="xlsx">Excel</option>
                   </select>
                 </Etiqueta>
                 <Etiqueta t="Fechas">
-                  <select name="fechas" defaultValue={f.fechas} className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar}>
+                  <select name="fechas" defaultValue={f.fechas} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar}>
                     <option value="dmy">DD/MM/AAAA</option>
                     <option value="iso">AAAA-MM-DD</option>
                   </select>
@@ -113,7 +110,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
                 <Etiqueta t="Fila de total">
                   <span className="flex items-center gap-2">
                     <input type="checkbox" name="mostrarTotal" defaultChecked={f.total.mostrar} disabled={!puedeAdministrar} />
-                    <input name="etiquetaTotal" defaultValue={f.total.etiqueta} maxLength={80} className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                    <input name="etiquetaTotal" defaultValue={f.total.etiqueta} maxLength={80} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                   </span>
                 </Etiqueta>
               </div>
@@ -126,7 +123,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
                   <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
                     {f.datos.map((d, i) => (
                       <Etiqueta key={`${d.campo}-${i}`} t={`Se llena con: ${ETIQUETA_CAMPO_ENCABEZADO[d.campo]}`}>
-                        <input name={`dato_${i}`} defaultValue={d.etiqueta} maxLength={80} className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                        <input name={`dato_${i}`} defaultValue={d.etiqueta} maxLength={80} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                       </Etiqueta>
                     ))}
                   </div>
@@ -138,7 +135,7 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
                   {f.columnas.map((c, i) => (
                     <Etiqueta key={`${c.campo}-${i}`} t={`Se llena con: ${ETIQUETA_CAMPO_RENGLON[c.campo]}`}>
-                      <input name={`col_${i}`} defaultValue={c.encabezado} maxLength={80} className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                      <input name={`col_${i}`} defaultValue={c.encabezado} maxLength={80} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                     </Etiqueta>
                   ))}
                 </div>
@@ -146,19 +143,19 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
 
               <div className="grid sm:grid-cols-2 gap-3">
                 <Etiqueta t="Copia al jefe de flota (WhatsApp, hasta 3)">
-                  <textarea name="copia" rows={2} defaultValue={config.copiaTelefonos.join('\n')} placeholder="5512345678" className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                  <textarea name="copia" rows={2} defaultValue={config.copiaTelefonos.join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                   <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Reciben el resumen y la liga del documento de cada liquidación entregada. La copia lleva cifras: solo los números que pongas aquí.</span>
                 </Etiqueta>
                 <Etiqueta t="Aviso cuando un operador responde «No coincide» (hasta 3)">
-                  <textarea name="discrepancia" rows={2} defaultValue={config.discrepanciaTelefonos.join('\n')} placeholder="5512345678" className={CSS_INPUT} style={ESTILO_INPUT} disabled={!puedeAdministrar} />
+                  <textarea name="discrepancia" rows={2} defaultValue={config.discrepanciaTelefonos.join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
                   <span className="text-[11px]" style={{ color: 'var(--faint)' }}>La persona responsable de revisar discrepancias. Si lo dejas vacío, se avisa al jefe de la copia y, sin copia, a quien ve dinero.</span>
                 </Etiqueta>
               </div>
 
               {puedeAdministrar && (
                 <div className="flex flex-wrap gap-2">
-                  <button type="submit" className={`rv-btn rv-btn--primary ${CSS_BOTON}`} style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar cambios</button>
-                  <button type="submit" formAction={acciones.quitar} className={`rv-btn rv-btn--secondary ${CSS_SECUNDARIO}`} style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} className="inline mr-1" />Quitar el formato</button>
+                  <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar cambios</button>
+                  <button type="submit" formAction={acciones.quitar} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} className="inline mr-1" />Quitar el formato</button>
                 </div>
               )}
             </form>

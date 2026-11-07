@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import { ClipboardCheck, FlaskConical, Bot, ScanEye } from 'lucide-react';
@@ -204,13 +205,13 @@ export default async function CalidadEvalsPage() {
                 </div>
                 {corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) && (
                   <div className="overflow-x-auto mt-2">
-                    <table className="w-full text-[12.5px]">
+                    <table aria-label="Agentes con tropiezos en la evaluación" className="w-full text-[12.5px]">
                       <thead>
                         <tr className="text-left border-b" style={{ borderColor: 'var(--line)' }}>
-                          <th className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Agente con tropiezos</th>
-                          <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Ok</th>
-                          <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Parciales</th>
-                          <th className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Fallos</th>
+                          <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Agente con tropiezos</th>
+                          <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Ok</th>
+                          <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Parciales</th>
+                          <th scope="col" className="py-1.5 text-[11px] uppercase font-semibold text-right" style={{ color: 'var(--muted)' }}>Fallos</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -298,3 +299,5 @@ export default async function CalidadEvalsPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Calidad & Evals' };

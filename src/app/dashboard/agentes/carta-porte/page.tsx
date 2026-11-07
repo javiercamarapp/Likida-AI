@@ -8,6 +8,7 @@ import { dominioBuzon } from '@/lib/correo/buzon';
 import { direccionCp } from '@/lib/likida/carta_porte_docs/correo_entrante';
 import { flotaBajoPerfil } from '@/lib/likida/carta_porte_docs/envio';
 import * as repoDocs from '@/lib/likida/carta_porte_docs/repo';
+import { CATALOGOS_SAT_VALIDACION } from '@/lib/likida/carta_porte_docs/catalogos_sat';
 import { calcularInsights, type InsightsAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import { listarViajesSinCcp, evaluarDatosTms, type ListadoSinCcp } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { sufijoTenant } from '../../sufijo';
@@ -109,6 +110,9 @@ export default async function PaginaAgenteCartaPorte({
 
   const sinCcp = await leerSinCcp(tenantId);
 
+  // CT-A345-04: ¿están cargados los catálogos del SAT? `null` = no se pudo leer (la vista lo dice; no pinta ceros).
+  const catalogosSat = (await repoDocs.contarCatalogosSat(CATALOGOS_SAT_VALIDACION.map((c) => c.catalogo))) ?? 'no_leido';
+
   const pCorridas = ultimasCorridas(tenantId, 'carta_porte').catch(() => null);
 
   return (
@@ -118,6 +122,7 @@ export default async function PaginaAgenteCartaPorte({
       buzon={buzon}
       insights={insights}
       sinCcp={sinCcp}
+      catalogosSat={catalogosSat}
       nombresCliente={nombres}
       diasVentana={DIAS_INSIGHTS}
       notificaciones={
@@ -126,7 +131,7 @@ export default async function PaginaAgenteCartaPorte({
             <BloqueCorridas pCorridas={pCorridas} />
           </Bloque>
           <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
-            <SeccionNotificaciones tenantId={tenantId} agenteId="carta_porte" />
+            <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="carta_porte" />
           </Bloque>
         </>
       }

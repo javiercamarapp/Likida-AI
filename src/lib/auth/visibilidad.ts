@@ -192,6 +192,8 @@ const AREA_POR_RUTA: Record<string, Area> = {
   '/dashboard/agentes/vigia/importacion': 'operacion',
   // T-A4-22: la bandeja de avisos de viaje (confirmación humana antes de avisar al cliente). Operación, cero pesos; decide el dueño o el encargado (se comprueba en la acción).
   '/dashboard/agentes/vigia/avisos': 'operacion',
+  // Ronda 5: conversaciones sin atender a partir de los chats exportados (sin tiempo real). Operación, cero pesos; el resumen por correo lo manda quien administra (se comprueba en la acción).
+  '/dashboard/agentes/vigia/sin-atender': 'operacion',
   // El Agente de Carta Porte (Fases B-C, 25-ago-2026): mismo criterio que su
   // pantalla /dashboard/carta-porte — cero pesos, y la declaración de ruta es
   // del jefe de tráfico. La página del borrador
@@ -441,6 +443,7 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   '/dashboard/agentes/vigia/programa': 'vigia',
   '/dashboard/agentes/vigia/importacion': 'vigia',
   '/dashboard/agentes/vigia/avisos': 'vigia',
+  '/dashboard/agentes/vigia/sin-atender': 'vigia',
   // A5 · Conductor (comunicación con operadores, hitos, estadías y su mapa).
   '/dashboard/agentes/conductores': 'conductor',
   '/dashboard/agentes/conductores/sitios': 'conductor',

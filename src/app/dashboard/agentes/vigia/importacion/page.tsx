@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { logger } from '@/lib/logger';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -84,13 +85,13 @@ async function calcular(fd: FormData): Promise<ResultadoImportacion> {
  */
 export default async function PaginaImportacionVigia({ searchParams }: { searchParams: Promise<Busqueda> }) {
   const sp = await searchParams;
-  const { rol } = await resolverTenantEfectivo(RUTA, sp);
+  const { rol, tenantId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   async function calcularAccion(_p: ResultadoImportacion, fd: FormData): Promise<ResultadoImportacion> {
     'use server';
     // La sesión se vuelve a resolver aquí: la acción no confía en lo que decidió el render.
-    const s = await resolverTenantEfectivo(RUTA, sp);
+    const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return error('No tienes permiso para ver esta pantalla.');
     try {
       return await calcular(fd);

@@ -76,14 +76,14 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
               </div>
             ) : (
               <div className="overflow-x-auto mt-1 pb-2">
-                <table className="w-full text-sm">
+                <table aria-label="Usuarios y su rol" className="w-full text-sm">
                   <thead>
                     <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th className="px-5 py-2.5 font-medium">Nombre</th>
-                      <th className="px-5 py-2.5 font-medium">Rol</th>
-                      <th className="px-5 py-2.5 font-medium">Qué puede hacer</th>
-                      <th className="px-5 py-2.5 font-medium">WhatsApp</th>
-                      {puedeInvitar && <th className="px-5 py-2.5 font-medium">Acciones</th>}
+                      <th scope="col" className="px-5 py-2.5 font-medium">Nombre</th>
+                      <th scope="col" className="px-5 py-2.5 font-medium">Rol</th>
+                      <th scope="col" className="px-5 py-2.5 font-medium">Qué puede hacer</th>
+                      <th scope="col" className="px-5 py-2.5 font-medium">WhatsApp</th>
+                      {puedeInvitar && <th scope="col" className="px-5 py-2.5 font-medium">Acciones</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -126,8 +126,8 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
                 <div>
                   <p className="text-sm font-medium m-0">El aislamiento no depende de esconder botones</p>
                   <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-                    Cada consulta de este panel va filtrada por tu flota, y la base tiene RLS por tenant encima: aunque
-                    alguien pidiera datos de otra flota a mano, Postgres no se los devuelve. Una cuenta dada de baja
+                    Cada consulta de este panel va filtrada por tu flota, y la base separa los datos de cada flota por su cuenta: aunque
+                    alguien pidiera datos de otra flota a mano, la base no se los devuelve. Una cuenta dada de baja
                     deja de entrar en su siguiente clic y su sesión se revoca; cada cambio de rol, baja y reactivación
                     queda en la bitácora de auditoría con quién lo hizo.
                   </p>

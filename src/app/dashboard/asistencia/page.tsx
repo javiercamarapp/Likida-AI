@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { Camera, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import {
   listarMesaAsistencia, tomarControlMesa, resolverDesdeMesa, reescalarDesdeMesa,
@@ -25,8 +26,8 @@ const RUTA = '/dashboard/asistencia';
  * 'use server' a propósito (A37-S16-07): declarada dentro del componente con 'use server' era un endpoint invocable por POST
  * directo que devolvía el tenantId y el userId de la sesión; así es solo una función interna de las acciones.
  */
-async function gate(sp: { tenant?: string; rol?: string; vista?: string }): Promise<{ tenantId: string; userId: string } | { error: string }> {
-  const s = await resolverTenantEfectivo(RUTA, sp);
+async function gate(sp: { tenant?: string; rol?: string; vista?: string }, tenantId: string): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
   if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede intervenir desde la mesa de control.' };
   return { tenantId: s.tenantId, userId: s.userId };
 }
@@ -70,7 +71,7 @@ export default async function PaginaMesaControl({
 
   async function tomarControl(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await tomarControlMesa(g.tenantId, String(fd.get('id') ?? ''), g.userId);
     if ('error' in r) { logger.warn('mesa.tomar_control', { detalle: r.error }); return { error: r.error }; }
@@ -80,7 +81,7 @@ export default async function PaginaMesaControl({
 
   async function reescalar(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await reescalarDesdeMesa(
       g.tenantId, String(fd.get('id') ?? ''), g.userId, Number(fd.get('nivel')),
@@ -92,7 +93,7 @@ export default async function PaginaMesaControl({
 
   async function resolver(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const g = await gate(sp);
+    const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await resolverDesdeMesa(
       g.tenantId, String(fd.get('id') ?? ''), g.userId, String(fd.get('nota') ?? ''),
@@ -102,7 +103,6 @@ export default async function PaginaMesaControl({
     return { ok: r.ok };
   }
 
-  const BTN_CHICO = 'text-xs px-2.5 py-1 rounded-lg hairline';
   const criticas = leyoOk ? incidencias.filter((i) => i.prioridad === 'critica').length : null;
 
   // Una línea (≈90 caracteres): cuántas incidencias vivas hay y cuántas son críticas.
@@ -176,7 +176,7 @@ export default async function PaginaMesaControl({
             <span className="ml-auto flex gap-1.5 items-start shrink-0">
               {!inc.reconocidaEn && (
                 <BotonAccionMesa
-                  accion={tomarControl} campos={{ id: inc.id }} etiqueta="Tomar el control" clase={BTN_CHICO}
+                  accion={tomarControl} campos={{ id: inc.id }} etiqueta="Tomar el control"
                   titulo="Reconocerla desde la mesa: detiene el escalamiento automático y queda a tu nombre"
                 />
               )}
@@ -184,11 +184,11 @@ export default async function PaginaMesaControl({
                 <div className="flex flex-col items-end">
                   {/* A37-S16-05: el aviso NO puede ir solo en el `title` (en celular no existe). Se rotula con texto visible. */}
                   <BotonAccionMesa
-                    accion={reescalar} campos={{ id: inc.id, nivel: inc.nivelEscalado + 1 }} etiqueta={`Registrar nivel ${inc.nivelEscalado + 1} (no avisa)`} clase={BTN_CHICO}
+                    accion={reescalar} campos={{ id: inc.id, nivel: inc.nivelEscalado + 1 }} etiqueta={`Registrar nivel ${inc.nivelEscalado + 1} (no avisa)`}
                     titulo="Registra el nivel en el expediente (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto."
                   />
                   <span className="block text-[11px] mt-1 max-w-[16rem] text-right" style={{ color: 'var(--muted)' }}>
-                    Solo lo anota: no manda ningún aviso a la dirección y el cron ya no repite los niveles anteriores.
+                    Solo lo anota: no manda ningún aviso a la dirección y el aviso automático ya no repite los niveles anteriores.
                   </span>
                 </div>
               )}

@@ -13,7 +13,7 @@ vi.mock('../carta_porte_docs/repo', () => ({
   reclamarCorreo: async () => ({ resultado: 'claimed', token: 't' }),
   finalizarCorreo: async (_e: string, _t: string, ok: boolean) => { finalizados.push(ok); return finalizarOk; },
 }));
-vi.mock('./datos', () => ({ buzonCorreoPeajesPorToken: async () => ({ tenantId: 'T-1', activo: true, remitentes: [] }) }));
+vi.mock('./datos', () => ({ buzonCorreoPeajesPorToken: async () => ({ tenantId: 'T-1', activo: true, remitentes: ['b.test'] }) }));
 const recibidos: string[] = [];
 vi.mock('./ingesta', () => ({
   MAX_ARCHIVO_INGESTA_BYTES: 4 * 1024 * 1024,
@@ -23,7 +23,7 @@ vi.mock('./ingesta', () => ({
 process.env.RESEND_API_KEY = 'x';
 const { atenderCorreoPeajes } = await import('./correo_entrante');
 
-const correo = (adj: Array<[string, string]>) => ({ emailId: 'e1', from: 'a@b.c', attachments: adj.map(([filename, id]) => ({ id, filename })) }) as never;
+const correo = (adj: Array<[string, string]>) => ({ emailId: 'e1', from: 'a@b.test', attachments: adj.map(([filename, id]) => ({ id, filename })) }) as never;
 const TOKEN = 'a'.repeat(24);
 
 beforeEach(() => { corridas.length = 0; finalizados.length = 0; recibidos.length = 0; finalizarOk = true; });

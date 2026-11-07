@@ -66,6 +66,12 @@ vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => baseFalsa(
 
 const logWarn = vi.fn();
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: (...a: unknown[]) => logWarn(...a), error: vi.fn(), debug: vi.fn() } }));
+// CT-SEG-11: la pantalla negada ahora ESPERA su evento de seguridad (rpc) antes del redirect; aquí se mide que las ACCIONES no escriban datos
+// de negocio, así que ese registro es un no-op (mismo trato que en perfil_acciones.test.ts).
+vi.mock('@/lib/seguridad/registro_acceso', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  registrarPaginaNegada: async () => {}, registrarApiNegada: async () => {}, registrarMfaFallido: async () => {},
+}));
 vi.mock('@/lib/ratelimit', () => ({ rateLimit: async () => true, clientIp: () => '1.1.1.1' }));
 
 const redirect = vi.fn((_: string) => { throw new Error('NEXT_REDIRECT'); });
@@ -226,7 +232,8 @@ describe('(0) el inventario de rutas está clasificado a mano', () => {
     expect(RUTAS.filter((r) => r.raiz === 'v1').length).toBeGreaterThanOrEqual(13);
     expect(RUTAS.filter((r) => r.raiz === 'export').length).toBe(16);
     expect(V1.length).toBeGreaterThanOrEqual(25);
-    expect(EXPORT.length).toBe(16);
+    // 16 recursos; facturas-proveedor suma el POST que marca exportadas (CT-SEG-17: GET puro, POST escribe).
+    expect(EXPORT.length).toBe(17);
   });
 
   it('cada recurso de /v1 y /export está en una de las listas de esta prueba (una ruta nueva sin clasificar la pone en rojo)', () => {

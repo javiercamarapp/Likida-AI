@@ -9,6 +9,8 @@ import { Boton } from '../ui-v2/componentes/boton';
 
 export const dynamic = 'force-dynamic';
 
+export const metadata = { title: 'Tu cuenta — Likida' };
+
 export default async function Cuenta({
   searchParams,
 }: {

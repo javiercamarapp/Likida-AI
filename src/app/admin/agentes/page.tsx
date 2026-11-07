@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { validarDefinicion, darDeAltaAgente } from '@/lib/likida/agentes/definiciones';
@@ -69,3 +70,5 @@ export default async function PaginaAgentes() {
   await requireSuperadmin();
   return <PanelAgentesContenido accionAlta={accionAlta} accionPalanca={accionPalanca} />;
 }
+
+export const metadata: Metadata = { title: 'Panel de agentes' };

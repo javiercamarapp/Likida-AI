@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { GitCommitHorizontal } from 'lucide-react';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
@@ -99,7 +100,7 @@ export default async function ActividadCodigoPage() {
                   <TituloSeccion>Últimos commits</TituloSeccion>
                   {/* FE-19: un asunto de commit largo no estira la página. */}
                   <div className="overflow-x-auto mt-2">
-                  <table className="w-full text-[12.5px]">
+                  <table aria-label="Últimos commits" className="w-full text-[12.5px]">
                     <tbody>
                       {a.recientes.map((c) => (
                         <tr key={c.sha} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
@@ -120,3 +121,5 @@ export default async function ActividadCodigoPage() {
     </main>
   );
 }
+
+export const metadata: Metadata = { title: 'Actividad de código' };
