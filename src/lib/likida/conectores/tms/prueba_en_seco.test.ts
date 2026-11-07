@@ -207,3 +207,65 @@ describe('pruebaEnSecoDeFlota', () => {
     expect(r.limpio).toBe(true);
   });
 });
+
+describe('R7-B1 · desgloses por bitácora (la lectura del pull de liquidaciones-externas)', () => {
+  const AHORA = Date.parse('2026-10-15T18:00:00.000Z');
+  const dia = (n: number) => `2026-10-14T${String(8 + (n % 10)).padStart(2, '0')}:00:00.000Z`;
+  const fila = (n: number, extra: Record<string, unknown> = {}) => ({
+    bitacora: `B-${n}`, poliza: `P-${n}`, terminal: 'T1', operador_numero: 'E-1', operador: 'Operador Sintético', unidad: '526', tipo_operador: 'foraneo',
+    de: dia(n), a: '2026-10-14T20:00:00.000Z', dias: 6, enviado: false,
+    percepciones: [{ desglose: 'Sueldo', concepto: 'SUELDO', valor: 4000 }], deducciones: [{ desglose: 'Anticipo', concepto: 'ANTICIPO', valor: 1000 }],
+    ...extra,
+  });
+  const lista = (items: unknown[]) => ({ data: { items, total_paginas: 1 } });
+  const correr = (items: unknown[], extra: Partial<Parameters<typeof pruebaEnSecoTms>[0]> = {}) => {
+    const o = origen({ '/api/liquidaciones': lista(items) });
+    return pruebaEnSecoTms({ valores: VALORES, mapeos: {}, http: o.http, ahora: () => AHORA, desgloses: true, ...extra }).then((r) => ({ r, o }));
+  };
+
+  it('muestra sana: una página de ≤20, limpia', async () => {
+    const { r, o } = await correr(Array.from({ length: 40 }, (_, i) => fila(i)));
+    const d = r.mapeos.find((m) => m.mapeo === 'desgloses')!;
+    expect(d).toMatchObject({ estado: 'limpio', filasLeidas: 20, filasMapeables: 20, filasRechazadas: 0, camposInvalidos: [] });
+    expect(r.limpio).toBe(true);
+    const datos = o.peticiones.filter((p) => !p.url.endsWith('/api/login'));
+    expect(datos).toHaveLength(1);
+    expect(new URL(datos[0].url).searchParams.get('tam')).toBe('20');
+    expect(new URL(datos[0].url).searchParams.get('pagina')).toBe('1');
+  });
+
+  it('sin póliza NO es un hallazgo (la guarda sin_poliza la resuelve después); campos extra se listan por nombre', async () => {
+    const { r } = await correr([fila(1, { poliza: null, campo_nuevo: 'x' })]);
+    const d = r.mapeos.find((m) => m.mapeo === 'desgloses')!;
+    expect(d.estado).toBe('limpio');
+    expect(d.camposDesconocidos).toEqual([{ campo: 'campo_nuevo', filas: 1 }]);
+  });
+
+  it('un campo que el mapeo no puede leer se nombra (sin valores); fecha de cursor ilegible también', async () => {
+    const malas = [
+      fila(1, { operador_numero: null }), fila(2, { operador_numero: undefined }), fila(3, { de: SENTINELA_TEXTO }),
+    ];
+    const { r } = await correr(malas);
+    const d = r.mapeos.find((m) => m.mapeo === 'desgloses')!;
+    expect(d.estado).toBe('con_hallazgos');
+    expect(d.filasLeidas).toBe(3);
+    expect(d.filasRechazadas).toBe(3);
+    const nombres = d.camposInvalidos.map((c) => c.campo);
+    expect(nombres).toContain('desde'); // la fecha ilegible: se nombra el campo del contrato (`desde`), no su valor
+    expect(nombres).toContain('numeroEmpleado');
+    expect(JSON.stringify([r, logs])).not.toContain(SENTINELA_TEXTO);
+    expect(r.limpio).toBe(false);
+  });
+
+  it('una raíz de lista distinta se dice por nombre', async () => {
+    const o = origen({ '/api/liquidaciones': { otra: [] } });
+    const r = await pruebaEnSecoTms({ valores: VALORES, mapeos: {}, http: o.http, ahora: () => AHORA, desgloses: true });
+    expect(r.mapeos.find((m) => m.mapeo === 'desgloses')).toMatchObject({ estado: 'error', error: expect.stringContaining('data.items') });
+  });
+
+  it('desgloses=false (por omisión) no hace esa petición', async () => {
+    const o = origen({ '/api/liquidaciones': lista([fila(1)]) });
+    await pruebaEnSecoTms({ valores: VALORES, mapeos: {}, http: o.http, ahora: () => AHORA });
+    expect(o.peticiones.some((p) => p.url.includes('/api/liquidaciones'))).toBe(false);
+  });
+});

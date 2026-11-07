@@ -4,6 +4,8 @@
 import type { ValoresCredencial } from '../tipos';
 import { RUTA_LOGIN_POR_DEFECTO } from './ficha';
 
+export const CONECTOR_TMS = 'tms_api_lectura';
+
 export const RECURSOS_SINCRONIZABLES = ['liquidaciones', 'peajes', 'viajes', 'posiciones'] as const;
 export type RecursoSincronizable = (typeof RECURSOS_SINCRONIZABLES)[number];
 

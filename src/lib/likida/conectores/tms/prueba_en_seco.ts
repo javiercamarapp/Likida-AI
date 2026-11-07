@@ -24,6 +24,10 @@ import {
   aBooleano, aFechaLocal, aNumero, aplicarMapeo, leerRuta, parsearRuta, validarMapeo,
   type CampoDetallado, type MapeoTms, type Transformacion,
 } from './mapeo';
+import { CampoInvalido } from '@/lib/http/campos_cuerpo';
+import { CONFIG_API_DESGLOSE, type ConfigApiDesglose } from '../../liquidacion_externa/desglose_tms_supuesto';
+import { leerRuta as leerRutaDesglose, mapearBitacoraTms } from '../../liquidacion_externa/desglose_mapeo_tms';
+import { instanteDeCursor } from './lector_desgloses';
 import { SesionTms } from './sesion';
 import { loginDe, RECURSOS_SINCRONIZABLES, urlBaseHttps, type RecursoSincronizable } from './acceso';
 
@@ -73,6 +77,8 @@ export interface ReporteMapeoEnSeco {
   opcionalesAusentes: Array<{ campo: string; fuente: string; filas: number }>;
   camposDesconocidos: CampoDesconocido[];
   tiposQueNoCuadran: TipoQueNoCuadra[];
+  /** Solo `desgloses`: campos del contrato interno que el mapeo de desgloses no pudo leer de la fila (nombre del campo y filas). */
+  camposInvalidos: Array<{ campo: string; filas: number }>;
 }
 
 export interface ReporteEnSeco {
@@ -89,7 +95,7 @@ export interface ReporteEnSeco {
 
 const vacio = (mapeo: string, estado: EstadoMapeoEnSeco, extra: Partial<ReporteMapeoEnSeco> = {}): ReporteMapeoEnSeco => ({
   mapeo, estado, filasLeidas: 0, filasMapeables: 0, filasRechazadas: 0, clavesRepetidas: 0,
-  faltantesRequeridos: [], opcionalesAusentes: [], camposDesconocidos: [], tiposQueNoCuadran: [], ...extra,
+  faltantesRequeridos: [], opcionalesAusentes: [], camposDesconocidos: [], tiposQueNoCuadran: [], camposInvalidos: [], ...extra,
 });
 
 const corto = (s: string): string => s.slice(0, MAX_LARGO_NOMBRE);
@@ -204,6 +210,11 @@ export interface EntradaEnSeco {
   ahora?: () => number;
   dormir?: (ms: number) => Promise<void>;
   maxFilas?: number;
+  /**
+   * También prueba la lectura de DESGLOSES POR BITÁCORA que usa el pull de `liquidaciones-externas` (su forma vive en
+   * `liquidacion_externa/desglose_tms_supuesto.ts`, no en `tms_mapeo`). `true` = la configuración vigente; o una propia (pruebas/borrador).
+   */
+  desgloses?: boolean | ConfigApiDesglose;
 }
 
 const SUBMAPEOS_LIQUIDACIONES = ['nomina', 'operadores', 'conceptos'] as const;
@@ -273,6 +284,11 @@ export async function pruebaEnSecoTms(e: EntradaEnSeco): Promise<ReporteEnSeco> 
     mapeos.push(analizarMuestra(p.nombre, mapeo, crudo, maxFilas));
   }
 
+  if (accesoOk && e.desgloses) {
+    const cfg = e.desgloses === true ? CONFIG_API_DESGLOSE : e.desgloses;
+    mapeos.push(await probarDesgloses(sesion, cfg, desde, hasta, maxFilas));
+  }
+
   const hubo = mapeos.some((m) => m.estado !== 'sin_mapeo');
   const reporte: ReporteEnSeco = {
     accesoOk, maxFilas, peticiones, mapeos,
@@ -290,13 +306,71 @@ export async function pruebaEnSecoTms(e: EntradaEnSeco): Promise<ReporteEnSeco> 
   return reporte;
 }
 
+/** Las rutas (strings) de una configuración de desgloses: de ahí se sabe qué llaves de la fila se usan. */
+function rutasDeDesgloses(cfg: ConfigApiDesglose): string[] {
+  const out: string[] = [cfg.campoCursor];
+  const recorre = (o: unknown): void => {
+    for (const [k, v] of Object.entries(o as Record<string, unknown>)) {
+      if (k === 'tiposViatico') continue; // códigos de tipo, no rutas
+      if (typeof v === 'string') out.push(v);
+      else if (v !== null && typeof v === 'object' && !Array.isArray(v)) recorre(v);
+    }
+  };
+  recorre(cfg.mapeo);
+  return out;
+}
+
+/** UNA página de desgloses por bitácora con la configuración del pull; mismo reporte, sin valores. */
+async function probarDesgloses(sesion: SesionTms, cfg: ConfigApiDesglose, desde: string, hasta: string, maxFilas: number): Promise<ReporteMapeoEnSeco> {
+  const nombre = 'desgloses';
+  const r = await sesion.peticion({
+    ruta: cfg.ruta,
+    query: { [cfg.params.desde]: desde, [cfg.params.hasta]: hasta, [cfg.params.pagina]: 1, [cfg.params.tam]: Math.min(cfg.tamano, maxFilas) },
+  });
+  if (!r.ok) return vacio(nombre, 'error', { error: r.motivo.slice(0, 200) });
+  if (r.r.estado < 200 || r.r.estado >= 300) return vacio(nombre, 'error', { error: `el sistema contestó ${r.r.estado}, que no es lo esperado` });
+  const crudo = jsonCualquiera(r.r.cuerpo);
+  if (crudo === undefined) return vacio(nombre, 'error', { error: 'el sistema contestó 200 con un cuerpo que no es JSON' });
+  const lista = leerRutaDesglose(crudo, cfg.rutaItems);
+  if (!Array.isArray(lista)) return vacio(nombre, 'error', { error: `la respuesta no trae la lista en «${corto(cfg.rutaItems)}» (revisa «rutaItems»)` });
+  const muestra = lista.slice(0, maxFilas);
+
+  const usadas = new Set(rutasDeDesgloses(cfg).map((ruta) => ruta.split(/[.[]/)[0]));
+  const invalidos = new Map<string, number>();
+  const desconocidos = new Map<string, number>();
+  let buenas = 0;
+  for (const fila of muestra) {
+    if (esObjeto(fila)) for (const k of Object.keys(fila)) if (!usadas.has(k)) desconocidos.set(corto(k), (desconocidos.get(corto(k)) ?? 0) + 1);
+    if (instanteDeCursor(leerRutaDesglose(fila, cfg.campoCursor)) === null) {
+      invalidos.set(corto(cfg.campoCursor), (invalidos.get(corto(cfg.campoCursor)) ?? 0) + 1);
+      continue;
+    }
+    try {
+      mapearBitacoraTms(fila, cfg.mapeo);
+      buenas += 1;
+    } catch (err) {
+      // Solo el NOMBRE del campo: el mensaje del error puede citar el valor.
+      const campo = err instanceof CampoInvalido ? corto(err.campo) : '(error inesperado del mapeo)';
+      invalidos.set(campo, (invalidos.get(campo) ?? 0) + 1);
+    }
+  }
+  const rechazadas = muestra.length - buenas;
+  const reporte = vacio(nombre, muestra.length === 0 || rechazadas > 0 ? 'con_hallazgos' : 'limpio', {
+    filasLeidas: muestra.length, filasMapeables: buenas, filasRechazadas: rechazadas,
+    camposInvalidos: [...invalidos].map(([campo, filas]) => ({ campo, filas })).sort((a, b) => b.filas - a.filas || a.campo.localeCompare(b.campo)),
+    camposDesconocidos: [...desconocidos].map(([campo, filas]) => ({ campo, filas })).sort((a, b) => b.filas - a.filas || a.campo.localeCompare(b.campo)).slice(0, MAX_NOMBRES),
+  });
+  if (muestra.length === 0) reporte.error = 'la muestra vino vacía: no hay nada que comprobar (amplía la ventana o revisa los filtros del origen)';
+  return reporte;
+}
+
 /**
  * Con la credencial y el mapeo ACTIVO de una flota (o un `borrador` de mapeos que se quiere probar antes de activarlo). Solo lee.
  * `sin credencial` ⇒ reporte con `accesoOk: false`: nunca se inventa una.
  */
 export async function pruebaEnSecoDeFlota(
   tenantId: string,
-  opciones: { borrador?: EntradaEnSeco['mapeos']; maxFilas?: number } & Pick<EntradaEnSeco, 'http' | 'ahora' | 'dormir'> = {},
+  opciones: { borrador?: EntradaEnSeco['mapeos']; maxFilas?: number } & Pick<EntradaEnSeco, 'http' | 'ahora' | 'dormir' | 'desgloses'> = {},
   deps: {
     credencial?: (tenantId: string) => Promise<ValoresCredencial | null>;
     mapeosActivos?: (tenantId: string) => Promise<EntradaEnSeco['mapeos']>;
@@ -308,7 +382,7 @@ export async function pruebaEnSecoDeFlota(
   const valores = await leerCred(tenantId);
   if (valores === null) return { accesoOk: false, maxFilas, peticiones: 0, mapeos: [], limpio: false, error: 'la flota no tiene la credencial «tms_api_lectura» activa: no se llamó a nadie' };
   const mapeos = opciones.borrador ?? await leerMapeos(tenantId);
-  return pruebaEnSecoTms({ valores, mapeos, maxFilas, http: opciones.http, ahora: opciones.ahora, dormir: opciones.dormir });
+  return pruebaEnSecoTms({ valores, mapeos, maxFilas, http: opciones.http, ahora: opciones.ahora, dormir: opciones.dormir, desgloses: opciones.desgloses });
 }
 
 async function mapeosActivosReales(tenantId: string): Promise<EntradaEnSeco['mapeos']> {
@@ -329,6 +403,7 @@ export function lineasDeReporteEnSeco(r: ReporteEnSeco): string[] {
   for (const m of r.mapeos) {
     if (m.estado === 'sin_mapeo') { L.push(`[${m.mapeo}] sin mapeo: no se probó`); continue; }
     L.push(`[${m.mapeo}] ${m.estado}${m.error ? ` — ${m.error}` : ''}; leídas ${m.filasLeidas}, mapeables ${m.filasMapeables}, rechazadas ${m.filasRechazadas}${m.clavesRepetidas > 0 ? `, claves repetidas ${m.clavesRepetidas}` : ''}`);
+    for (const c of m.camposInvalidos) L.push(`  el mapeo no pudo leer «${c.campo}» en ${c.filas} fila(s)`);
     for (const f of m.faltantesRequeridos) L.push(`  falta requerido «${f.campo}» (fuente «${f.fuente}») en ${f.filas} fila(s)`);
     for (const t of m.tiposQueNoCuadran) L.push(`  tipo no cuadra en «${t.campo}» (fuente «${t.fuente}», se esperaba ${t.esperado}, llegó ${t.recibido}${t.ambiguo ? ', AMBIGUO: declara «decimal»' : ''}) en ${t.filas} fila(s)`);
     if (m.camposDesconocidos.length > 0) L.push(`  campos del origen que el mapeo no usa (se ignoran): ${m.camposDesconocidos.map((c) => c.campo).join(', ')}`);

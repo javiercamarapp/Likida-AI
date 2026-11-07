@@ -66,10 +66,10 @@ import { leerViajes, type FilaViajeTms } from './viajes';
 
 /** La capacidad que este módulo ejecuta (la saca de `CAPACIDADES_SIN_EJECUTOR`). */
 export const CAPACIDAD_QUE_EJECUTA: Capacidad = 'leer_viajes';
-export const CONECTOR_TMS = 'tms_api_lectura';
+export { CONECTOR_TMS } from './acceso';
 
 export { RECURSOS_SINCRONIZABLES, type RecursoSincronizable } from './acceso';
-import { RECURSOS_SINCRONIZABLES, loginDe, urlBaseHttps, type RecursoSincronizable } from './acceso';
+import { CONECTOR_TMS, RECURSOS_SINCRONIZABLES, loginDe, urlBaseHttps, type RecursoSincronizable } from './acceso';
 
 /** Primera corrida de una flota: cuántos días hacia atrás se lee. */
 export const VENTANA_INICIAL_DIAS = 2;

@@ -25,7 +25,7 @@ import { aInstanteMx } from '../../peajes/formatos';
 import { jsonObjeto } from '../posiciones_comun';
 import type { Http, ValoresCredencial } from '../tipos';
 import { SesionTms } from './sesion';
-import { loginDe, urlBaseHttps, CONECTOR_TMS } from './sincronizar';
+import { loginDe, urlBaseHttps, CONECTOR_TMS } from './acceso';
 
 const DIA_MS = 86_400_000;
 
