@@ -11,7 +11,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
+import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
+import { CamposSistema, CampoSelect, CampoTexto, Fieldset } from '@/app/ui-v2/componentes';
 
 /**
  * TIMBRADO (0226) — el perfil del EMISOR y el estado del PAC, en el panel del
@@ -105,12 +106,18 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
         <h2 className="font-display text-[15px] font-semibold">Timbrado (Carta Porte vía PAC)</h2>
       </header>
 
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-        {pac.configurado
-          ? `PAC conectado: ${pac.proveedor?.toUpperCase()} — ambiente ${pac.pareceSandbox ? 'de PRUEBAS (los timbres no amparan nada)' : 'de PRODUCCIÓN'}.`
-          : 'Sin PAC configurado: el timbrado está apagado. Se enciende con las variables LIKIDA_PAC_* en el servidor (contrato con el PAC + credenciales) — sin eso, Likida no timbra y jamás simula un timbre.'}
-        {' '}El CSD de la flota vive en la bóveda del PAC (se carga en SU portal), nunca en Likida.
-      </p>
+      {pac.configurado ? (
+        <CamposSistema etiqueta="Estado del PAC" campos={[
+          { etiqueta: 'PAC conectado', valor: String(pac.proveedor ?? '').toUpperCase() },
+          { etiqueta: 'Ambiente', valor: pac.pareceSandbox ? 'Pruebas' : 'Producción', nota: pac.pareceSandbox ? 'Los timbres no amparan nada.' : 'Timbres fiscales reales.' },
+          { etiqueta: 'CSD de la flota', valor: 'En la bóveda del PAC', nota: 'Se carga en SU portal, nunca en Likida.' },
+        ]} />
+      ) : (
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+          Sin PAC configurado: el timbrado está apagado. Se enciende desde la configuración del servidor (contrato con el PAC y sus credenciales) — sin eso, Likida no timbra y jamás simula un timbre.
+          {' '}El CSD de la flota vive en la bóveda del PAC (se carga en SU portal), nunca en Likida.
+        </p>
+      )}
 
       {/* 0227 (auditoría Fable c6-3): el camino del contador AL BOTÓN. Antes
           el único acceso al timbre era el borrador de Carta Porte, que es del
@@ -131,16 +138,24 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
           No se pudo leer el perfil guardado — reintenta antes de capturar encima.
         </p>
       ) : (
-        <FormaConAviso accion={guardar} boton="Declarar mi perfil fiscal" columnas="md:grid-cols-3">
-          <Campo nombre="rfc" etiqueta="RFC del emisor" valorInicial={String(perfil?.rfc ?? '')} placeholder="EKU9003173C9 (el de pruebas del SAT, en sandbox)" />
-          <Campo nombre="razonSocial" etiqueta="Razón social (exacta a la constancia)" valorInicial={String(perfil?.razon_social ?? '')} placeholder="ESCUELA KEMPER URGATE" />
-          <Campo nombre="regimenFiscal" etiqueta="Régimen fiscal (clave)" valorInicial={String(perfil?.regimen_fiscal ?? '')} placeholder="601" />
-          <Campo nombre="lugarExpedicion" etiqueta="CP de expedición" valorInicial={String(perfil?.lugar_expedicion ?? '')} placeholder="42501" />
-          <Campo nombre="serie" etiqueta="Serie (opcional)" valorInicial={String(perfil?.serie ?? '')} placeholder="CCP" />
-          <Selector nombre="modo" etiqueta="Ambiente" valorInicial={modoActual} opciones={[
-            { valor: 'sandbox', texto: 'Sandbox — timbres de prueba' },
-            { valor: 'produccion', texto: 'Producción — timbres fiscales reales' },
-          ]} />
+        <FormaConAviso accion={guardar} boton="Declarar mi perfil fiscal" columnas="md:grid-cols-1">
+          <Fieldset leyenda="Emisor">
+            <div className="rv-forma__rejilla">
+              <CampoTexto id="rfc" name="rfc" etiqueta="RFC del emisor" defaultValue={String(perfil?.rfc ?? '')} placeholder="EKU9003173C9 (el de pruebas del SAT, en sandbox)" />
+              <CampoTexto id="razonSocial" name="razonSocial" etiqueta="Razón social (exacta a la constancia)" defaultValue={String(perfil?.razon_social ?? '')} placeholder="ESCUELA KEMPER URGATE" />
+              <CampoTexto id="regimenFiscal" name="regimenFiscal" etiqueta="Régimen fiscal (clave)" defaultValue={String(perfil?.regimen_fiscal ?? '')} placeholder="601" />
+              <CampoTexto id="lugarExpedicion" name="lugarExpedicion" etiqueta="CP de expedición" defaultValue={String(perfil?.lugar_expedicion ?? '')} placeholder="42501" />
+            </div>
+          </Fieldset>
+          <Fieldset leyenda="Emisión">
+            <div className="rv-forma__rejilla">
+              <CampoTexto id="serie" name="serie" etiqueta="Serie (opcional)" defaultValue={String(perfil?.serie ?? '')} placeholder="CCP" />
+              <CampoSelect id="modo" name="modo" etiqueta="Ambiente" defaultValue={modoActual}>
+                <option value="sandbox">Sandbox — timbres de prueba</option>
+                <option value="produccion">Producción — timbres fiscales reales</option>
+              </CampoSelect>
+            </div>
+          </Fieldset>
         </FormaConAviso>
       )}
     </section>

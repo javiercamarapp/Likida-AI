@@ -7,8 +7,8 @@ import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
-import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
-import { BarraFiltros, CampoArchivo, CampoSelect, Disclosure, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import { BotonEnvio, FormaAccion, type AccionDoc } from './forma_accion';
+import { BarraFiltros, CamposSistema, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Disclosure, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
@@ -353,9 +353,9 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
             )}
             {acciones.guardarRemitentes && (
               <FormaAccion accion={acciones.guardarRemitentes}>
-                <label htmlFor="cp-remitentes" className={ETIQUETA}>Remitentes de tus clientes (uno por línea: correo o dominio). Sin al menos uno, el buzón no recibe correos.</label>
-                <textarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')} className="w-full h-auto py-2" style={{ background: 'var(--surface)' }} />
-                <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Un correo de otro remitente entra igual, marcado «remitente no reconocido» para que lo revises.</p>
+                <CampoTextarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')}
+                  etiqueta="Remitentes de tus clientes (uno por línea: correo o dominio). Sin al menos uno, el buzón no recibe correos."
+                  ayuda="Un correo de otro remitente entra igual, marcado «remitente no reconocido» para que lo revises." />
                 <BotonEnvio variante="secundario" etiqueta="Guardar remitentes" />
               </FormaAccion>
             )}
@@ -449,26 +449,21 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
       {acciones.guardarExport && (
         <Disclosure titulo="Declarar un formato destino">
           <FormaAccion accion={acciones.guardarExport} className="space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="cp-exp-nombre" className={ETIQUETA}>Nombre (si ya existe, se reemplaza)</label>
-                <input id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Cliente demo" className="w-full" style={{ background: 'var(--surface)' }} />
-              </div>
-              <div>
-                <label htmlFor="cp-exp-formato" className={ETIQUETA}>Formato</label>
-                <select id="cp-exp-formato" name="formato" defaultValue="csv" className="w-full" style={{ background: 'var(--surface)' }}>
-                  <option value="csv">CSV</option><option value="json">JSON</option>
-                </select>
-              </div>
+            <div className="rv-forma__rejilla">
+              <CampoTexto id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Cliente demo" etiqueta="Nombre (si ya existe, se reemplaza)" />
+              <CampoSelect id="cp-exp-formato" name="formato" defaultValue="csv" etiqueta="Formato">
+                <option value="csv">CSV</option><option value="json">JSON</option>
+              </CampoSelect>
             </div>
-            <div>
-              <label htmlFor="cp-exp-config" className={ETIQUETA}>Mapeo (JSON)</label>
-              <textarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} className="w-full h-auto py-2 font-mono text-[12px]" style={{ background: 'var(--surface)' }} />
-              <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-                Campos: los del complemento (<code>origen_cp</code>, <code>destino_rfc</code>…), de mercancía (<code>mercancia.peso_kg</code>…) y de sistema
-                (<code>documento.id</code>, <code>documento.archivo</code>, <code>documento.viaje_folio</code>…). <code>porMercancia: false</code> = una fila por documento.
-              </p>
-            </div>
+            <CampoTextarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} etiqueta="Mapeo (JSON)" claseControl="cifra-mono"
+              ayuda={<><code>porMercancia: false</code> = una fila por documento. Los campos que puedes citar están abajo, en «Campos del sistema».</>} />
+            <Disclosure variante="linea" titulo="Campos del sistema">
+              <CamposSistema etiqueta="Campos que se pueden citar en el mapeo" campos={[
+                { etiqueta: 'Del complemento', valor: <><code>origen_cp</code>, <code>destino_rfc</code>…</>, nota: 'Lo que se leyó del documento.' },
+                { etiqueta: 'De la mercancía', valor: <><code>mercancia.peso_kg</code>…</>, nota: 'Una fila por partida.' },
+                { etiqueta: 'Del sistema', valor: <><code>documento.id</code>, <code>documento.archivo</code>, <code>documento.viaje_folio</code>…</>, nota: 'Los pone Likida; no se capturan.' },
+              ]} />
+            </Disclosure>
             <BotonEnvio etiqueta="Guardar formato" />
           </FormaAccion>
           {configs.length > 0 && acciones.borrarExport && (

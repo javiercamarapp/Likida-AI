@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Inbox } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
-import { AvisoCompacto, CampoArchivo, CampoFecha, CampoSelect, CampoTexto, CampoTextarea, Disclosure, EstadoVacio, Tarjeta } from './index';
+import { AvisoCompacto, CamposSistema, CampoArchivo, CampoFecha, CampoSelect, CampoTexto, CampoTextarea, Disclosure, EstadoVacio, Tarjeta } from './index';
 
 const fuente = (f: string) => readFileSync(join(__dirname, f), 'utf8');
 const css = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8');
@@ -116,5 +116,17 @@ describe('R9 · las piezas nuevas no cruzan funciones servidor → cliente', () 
       expect(tipo, `${nombre}: ${tipo}`).not.toMatch(/=>|ComponentType|ElementType|LucideIcon|Function/);
     }
     expect(src).not.toMatch(/icono\??: LucideIcon/);
+  });
+});
+
+describe('R9b · CamposSistema', () => {
+  it('pinta valores de solo lectura en un <dl> sin controles de entrada, con nota opcional', () => {
+    const h = renderToStaticMarkup(<CamposSistema etiqueta="Topes" campos={[{ etiqueta: 'Tope diario', valor: '$750', nota: 'LISR' }, { etiqueta: 'Peaje', valor: '50%' }]} />);
+    expect(h).toContain('<dl');
+    expect(h).toContain('aria-label="Topes"');
+    expect(h).toContain('rv-sis__valor');
+    expect(h).toContain('LISR');
+    expect(h).not.toContain('<input');
+    expect(h.match(/rv-sis__nota/g)?.length).toBe(1);
   });
 });

@@ -14,12 +14,11 @@ import {
   type AceptacionFila,
 } from '@/lib/legal/aceptacion';
 import { guardarDatosResponsable, leerDatosResponsable, type CamposResponsable } from '@/lib/legal/datos_responsable';
-import { Campo } from '@/app/admin/ui/forma';
 import {
   ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
 import type { Metadata } from 'next';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { CampoTexto, Disclosure, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Términos y mandato' };
 
 
@@ -149,9 +148,11 @@ export default async function PaginaLegal({
               <EstadoError mensaje="No pude leer los datos de tu flota. No significa que estén vacíos: la consulta falló." />
             ) : esDueno ? (
               <FormaConAviso accion={accionGuardarDatos} boton="Guardar datos del responsable" columnas="md:grid-cols-1">
-                <Campo nombre="razonSocial" etiqueta="Razón social (como en tu RFC)" valorInicial={responsable.razonSocial ?? ''} />
-                <Campo nombre="domicilio" etiqueta="Domicilio fiscal" valorInicial={responsable.domicilio ?? ''} />
-                <Campo nombre="contactoPrivacidad" etiqueta="Contacto de privacidad (correo o teléfono)" valorInicial={responsable.contactoPrivacidad ?? ''} />
+                <div className="rv-forma__rejilla">
+                  <CampoTexto id="razonSocial" name="razonSocial" etiqueta="Razón social (como en tu RFC)" defaultValue={responsable.razonSocial ?? ''} />
+                  <CampoTexto id="contactoPrivacidad" name="contactoPrivacidad" etiqueta="Contacto de privacidad (correo o teléfono)" defaultValue={responsable.contactoPrivacidad ?? ''} />
+                </div>
+                <CampoTexto id="domicilio" name="domicilio" etiqueta="Domicilio fiscal" defaultValue={responsable.domicilio ?? ''} />
               </FormaConAviso>
             ) : (
               <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
@@ -177,13 +178,15 @@ export default async function PaginaLegal({
 
           <section className="space-y-2" aria-labelledby="h-mandato">
             <TituloRecuadro id="h-mandato" info="legal.mandato">Mandato de autofacturación</TituloRecuadro>
-            <blockquote className="text-[12px] border-l-2 pl-3" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
-              {MANDATO_AUTOFACTURACION.texto}
-            </blockquote>
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-              Versión {MANDATO_AUTOFACTURACION.version}. Sin este mandato Likida prepara las facturas pero no las emite.
-              El texto no ha pasado por revisión legal definitiva.
-            </p>
+            <Disclosure variante="linea" abierto={!mandato} titulo="Texto del mandato" resumen={`versión ${MANDATO_AUTOFACTURACION.version}`}>
+              <blockquote className="text-[12px] border-l-2 pl-3" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+                {MANDATO_AUTOFACTURACION.texto}
+              </blockquote>
+              <p className="mt-2 text-[11px]" style={{ color: 'var(--faint)' }}>
+                Versión {MANDATO_AUTOFACTURACION.version}. Sin este mandato Likida prepara las facturas pero no las emite.
+                El texto no ha pasado por revisión legal definitiva.
+              </p>
+            </Disclosure>
             {mandato ? (
               <>
                 <p className="text-[12px]" style={{ color: 'var(--ok)' }}>
