@@ -74,8 +74,8 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
         ) : null}
       </div>
       {/* R8: «Filtros» abre SIEMPRE el cajón unificado de 420 (antes un Popover en escritorio). */}
-      {avanzados ? (
-        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo="Filtros" tamano="m">
+      {avanzados && abierto ? (
+        <Drawer abierto onCerrar={() => setAbierto(false)} titulo="Filtros" tamano="m">
           <div id={idPanel} className="rv-filtros__avanzados">{avanzados}</div>
         </Drawer>
       ) : null}
