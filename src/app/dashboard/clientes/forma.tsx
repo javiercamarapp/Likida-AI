@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import { useFormStatus } from 'react-dom';
+import { Disclosure } from '@/app/ui-v2/componentes';
 import { Save } from 'lucide-react';
 import { Casilla } from '@/app/ui-v2/componentes';
 // SOLO TIPOS DE `clientes.ts`, y es una restricción real, no un gusto: ese
@@ -42,15 +43,7 @@ const Aviso = AvisoResultado;
  * de React vivos para no enseñar nada.
  */
 export function Plegable({ resumen, children }: { resumen: string; children: React.ReactNode }) {
-  return (
-    <details className="group">
-      <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-        style={{ color: 'var(--marca)' }}>
-        {resumen}
-      </summary>
-      <div className="pt-3">{children}</div>
-    </details>
-  );
+  return <Disclosure variante="linea" titulo={resumen}>{children}</Disclosure>;
 }
 
 // ── Cliente ────────────────────────────────────────────────────────────────

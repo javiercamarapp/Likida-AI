@@ -6,14 +6,18 @@ import { BotonEnlace, EstadoError as EstadoErrorV2, EstadoVacio as EstadoVacioV2
 // Los componentes del kit de /admin (`admin/ui/kit.tsx`) siguen siendo los de v1 y no se tocan.
 
 /** Vacío: título corto + la línea de siempre (children) + a lo sumo UNA acción. `icono` se acepta y se ignora (ya no hay ilustraciones). */
-export function EstadoVacio({ titulo = 'Sin datos todavía', children, accion }: {
+export function EstadoVacio({ titulo = 'Sin datos todavía', children, accion, pantalla, contenido }: {
   titulo?: string;
+  /** Dentro de su propia caja con borde (pantalla vacía) y sin estirarse a la altura del vecino. */
+  pantalla?: boolean;
+  /** Alto contenido (≤ 220 px), sin estirarse. */
+  contenido?: boolean;
   icono?: ReactNode;
   children: ReactNode;
   accion?: { href: string; texto: string };
 }) {
   return (
-    <EstadoVacioV2 titulo={titulo} accion={accion ? <BotonEnlace tamano="sm" href={accion.href}>{accion.texto}</BotonEnlace> : undefined}>
+    <EstadoVacioV2 titulo={titulo} pantalla={pantalla} contenido={contenido} accion={accion ? <BotonEnlace tamano="sm" href={accion.href}>{accion.texto}</BotonEnlace> : undefined}>
       {children}
     </EstadoVacioV2>
   );
