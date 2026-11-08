@@ -15,7 +15,7 @@ describe('MarcaIntegracion', () => {
   });
   it('cada logo es un solo <path> de viewBox 24 a 16x16 con el color oficial, sin recortar (trazado de simple-icons)', () => {
     for (const id of PEDIDOS.filter((x) => x !== 'csv')) {
-      const h = renderToStaticMarkup(<MarcaIntegracion id={id} />);
+      const h = renderToStaticMarkup(<MarcaIntegracion id={id as MarcaId} />);
       expect(h, id).toContain('viewBox="0 0 24 24"');
       expect(h, id).toContain('width="16" height="16"');
       expect(h.match(/<path/g), id).toHaveLength(1);
