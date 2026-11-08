@@ -29,7 +29,8 @@ export function EstadoVacio({ titulo, children, accion, pantalla, contenido, ico
     <div className="rv-vacio" role="status" data-pantalla={pantalla || undefined} data-contenido={contenido || undefined}>
       {icono ? <span className="rv-vacio__icono" aria-hidden="true"><Icono icono={icono} tam={20} /></span> : null}
       <h3 className="rv-vacio__titulo">{titulo}</h3>
-      {children ? <p className="rv-vacio__texto">{children}</p> : null}
+      {/* <div>, no <p>: los hijos pueden traer un <details> (explicación larga plegada) y el navegador cierra un <p> al verlo: hidratación rota (React #418). */}
+      {children ? <div className="rv-vacio__texto">{children}</div> : null}
       {accion ? <div className="rv-vacio__accion">{accion}</div> : null}
     </div>
   );
