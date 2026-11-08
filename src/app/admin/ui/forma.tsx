@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { AlertTriangle, Check } from 'lucide-react';
 import { BotonConfirmar } from './confirmar';
 
@@ -52,9 +53,12 @@ export function FormaConAviso({
   children,
   columnas = 'md:grid-cols-3',
   confirmar,
+  enLinea = false,
 }: {
   accion: AccionDeForma;
   boton: string;
+  /** R9: fila compacta de ~40 px para una celda de tabla: campos y botón en UNA línea (envuelve solo si no cabe) y el aviso debajo, sin la pila de grid. */
+  enLinea?: boolean;
   children: React.ReactNode;
   /** Clases de columnas del grid de campos. Una lista larga usa `md:grid-cols-1`. */
   columnas?: string;
@@ -62,6 +66,18 @@ export function FormaConAviso({
   confirmar?: { titulo: string; descripcion: React.ReactNode; etiquetaConfirmar: string };
 }) {
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
+
+  if (enLinea && !confirmar) {
+    return (
+      <form action={enviar} className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {children}
+          <Boton type="submit" variante="secondary" tamano="sm" disabled={pendiente}>{pendiente ? 'Guardando…' : boton}</Boton>
+        </div>
+        <Aviso estado={estado} />
+      </form>
+    );
+  }
 
   return (
     <form action={enviar} className="flex flex-col gap-3">

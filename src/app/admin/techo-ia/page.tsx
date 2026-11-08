@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { Gauge } from 'lucide-react';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
@@ -128,16 +129,11 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
                                 id={`techo-${f.tenantId}`} name="techoUsd" inputMode="decimal" autoComplete="off"
                                 defaultValue={f.declaradoUsd === null ? '' : String(f.declaradoUsd)}
                                 placeholder="sin declarar"
-                                className="w-24 rounded-md px-2 py-1 text-[12.5px] tabular"
-                                style={{ border: '1px solid var(--line)', background: 'var(--g1)' }}
+                                className="rv-ctl tabular" style={{ width: 112 }}
+                                title={f.declaradoUsd !== null ? 'Déjalo vacío y guarda para quitar la declaración.' : undefined}
                               />
-                              <button type="submit" className="rounded-md px-2.5 py-1 text-[12px] font-medium" style={{ border: '1px solid var(--line)' }}>
-                                {f.declaradoUsd === null ? 'Fijar' : 'Cambiar'}
-                              </button>
+                              <Boton type="submit" variante="secondary" tamano="sm">{f.declaradoUsd === null ? 'Fijar' : 'Cambiar'}</Boton>
                             </form>
-                            {f.declaradoUsd !== null && (
-                              <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>Déjalo vacío y guarda para quitar la declaración.</span>
-                            )}
                           </td>
                         </tr>
                       );
