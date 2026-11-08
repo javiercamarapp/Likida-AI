@@ -26,6 +26,7 @@ const FILAS = [
     mensaje_wa: MENSAJE_WA, mensaje_correo_asunto: 'ASUNTO-IA', mensaje_correo: 'CUERPO-IA',
     mensajes_generados_en: '2026-08-20T10:00:00.000Z',
     updated_at: '2026-08-21T10:00:00.000Z',
+    created_at: '2026-08-21T07:00:00.000Z',
     prospecto_toque: [{ creado_en: '2026-08-19T08:00:00.000Z' }],
     sitio_verificado: true, num_unidades: 40, similitud_icp_pct: 80, necesidad_pct: 75,
   },
@@ -38,6 +39,7 @@ const FILAS = [
     mensaje_wa: null, mensaje_correo_asunto: null, mensaje_correo: null,
     mensajes_generados_en: null,
     updated_at: '2026-08-22T09:00:00.000Z',
+    created_at: '2026-08-20T07:00:00.000Z',
     prospecto_toque: null,
     sitio_verificado: false, num_unidades: null, similitud_icp_pct: 10, necesidad_pct: 0,
   },
@@ -53,6 +55,7 @@ const FILAS = [
     mensaje_wa: null, mensaje_correo_asunto: null, mensaje_correo: null,
     mensajes_generados_en: null,
     updated_at: '2026-08-22T11:00:00.000Z',
+    created_at: '2026-08-19T07:00:00.000Z',
     prospecto_toque: null,
     sitio_verificado: false, num_unidades: null, similitud_icp_pct: 0, necesidad_pct: 0,
   },
@@ -94,6 +97,14 @@ function consulta() {
     ilike(_col: string, patron: string) { filtroIlike = patron; return b; },
     in(_col: string, ids: string[]) { filtroIds = ids; espia.ids.push(ids); return b; },
     order() { return b; },
+    // Carga completa por cursor: las 3 filas caben en una página; el orden es created_at desc, id asc.
+    limit(n: number) {
+      const f = [...vigentes()].sort((x, y) => (x.created_at < y.created_at ? 1 : x.created_at > y.created_at ? -1 : x.id < y.id ? -1 : 1));
+      return Promise.resolve({
+        data: f.slice(0, n), error: null,
+        count: pedirConteo ? f.length : undefined,
+      });
+    },
     range(d: number, h: number) {
       const f = vigentes();
       return Promise.resolve({
@@ -130,6 +141,8 @@ describe('la carga inicial es LIGERA — los textos largos no viajan', () => {
     // duplicados — lo que cambia es que se queda en el servidor.
     expect(cols).toContain('notas');
     expect(cols).toContain('updated_at');
+    // El cursor de la carga completa lee created_at, pero no viaja (ver el test del payload).
+    expect(cols).toContain('created_at');
     expect(cols).toContain('mensajes_generados_en');
   });
 
@@ -139,6 +152,9 @@ describe('la carga inicial es LIGERA — los textos largos no viajan', () => {
     expect(payload).not.toContain(NOTA_LARGA);
     expect(payload).not.toContain(MENSAJE_WA);
     expect(payload).not.toContain('CUERPO-IA');
+    // created_at es del cursor del servidor: ni la columna ni sus valores llegan al navegador.
+    expect(payload).not.toContain('created_at');
+    expect(payload).not.toContain('2026-08-21T07:00:00.000Z');
     // …y aun así el mapa sabe todo lo que pinta y filtra.
     const p = desempacar(datos.filas[0]);
     expect(p.empresa).toBe('Fletes del Norte');
