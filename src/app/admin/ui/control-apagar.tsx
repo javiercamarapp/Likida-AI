@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Boton } from '../../ui-v2/componentes/boton';
 
 /**
@@ -9,7 +9,20 @@ import { Boton } from '../../ui-v2/componentes/boton';
  * la 0110 va detrás): apagar una palanca sin nota es una bomba sin nota, y encender no necesita motivo.
  * Conserva los `name` de siempre (`id`, `operacion`, `motivo`). `enviar` es la acción de un `useActionState` del propio cliente.
  */
-export function ControlApagar({ id, apagado, pendiente, enviar, etiquetaMotivo = 'Motivo (obligatorio)' }: {
+export function ControlApagar(props: PropsControlApagar) {
+  // `key` por estado real: al cambiar (la acción terminó y la página se revalidó) el motivo vuelve a cerrarse sin efectos.
+  return <ControlApagarInterno key={String(props.apagado)} {...props} />;
+}
+
+interface PropsControlApagar {
+  id: string;
+  apagado: boolean;
+  pendiente: boolean;
+  enviar: (fd: FormData) => void;
+  etiquetaMotivo?: string;
+}
+
+function ControlApagarInterno({ id, apagado, pendiente, enviar, etiquetaMotivo = 'Motivo (obligatorio)' }: {
   id: string;
   apagado: boolean;
   pendiente: boolean;
@@ -17,8 +30,6 @@ export function ControlApagar({ id, apagado, pendiente, enviar, etiquetaMotivo =
   etiquetaMotivo?: string;
 }) {
   const [pidiendo, setPidiendo] = useState(false);
-  // Al cambiar el estado real de la palanca (la acción terminó y la página se revalidó) se cierra el motivo.
-  useEffect(() => { setPidiendo(false); }, [apagado]);
 
   return (
     <form action={enviar} className="flex flex-wrap items-center gap-1.5">

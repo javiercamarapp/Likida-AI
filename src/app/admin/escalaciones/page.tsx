@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { BotonEnlace } from '../../ui-v2/componentes/boton';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import Link from 'next/link';
 import {
   Inbox, ShieldCheck, Bot, Wrench, ReceiptText, LifeBuoy, ClipboardCheck,
   ArrowRight, AlertTriangle,
