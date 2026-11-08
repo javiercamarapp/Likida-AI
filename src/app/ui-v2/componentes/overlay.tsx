@@ -136,9 +136,10 @@ function Cabecera({ idTitulo, idDesc, titulo, descripcion, onCerrar }: {
   );
 }
 
-export type TamanoDrawer = 'm' | 'l' | 'xl'; // 420 / 480 / 640 px
+/** Ancho del cajón por TIPO: `m` 420 (estándar), `xl` 640 (paquetes y previas). `l` se conserva por compatibilidad y se pinta a 420. */
+export type TamanoDrawer = 'm' | 'l' | 'xl';
 
-/** `ancho` (320 / 420 / 560) es el ancho del PanelLateral; sin él rige `tamano` (420 / 480 / 640, compatibilidad). */
+/** `ancho` heredado del PanelLateral. Se pinta unificado: 320 y 420 miden 420; 560 mide 640. Sin él rige `tamano`. */
 export type AnchoPanel = 320 | 420 | 560;
 
 export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, tamano = 'm', ancho, cierraConFondo }: Base & { tamano?: TamanoDrawer; ancho?: AnchoPanel }) {
@@ -184,7 +185,7 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
         <div className="rv-ov__cuerpo">{children}</div>
         {pie ? <footer className="rv-ov__pie">{pie}</footer> : null}
         {/* Marca al pie del cajón (escritorio), como `.drawer-marca` de Vexa: logo oficial de Likida, sin recolorear (hereda la tinta). */}
-        <div className="rv-ov__marca" aria-hidden="true"><LogoV2 alto={14} decorativo /></div>
+        <div className="rv-ov__marca" aria-hidden="true"><LogoV2 alto={20} decorativo /></div>
       </div>
     </dialog>
   );

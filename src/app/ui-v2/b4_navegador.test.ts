@@ -162,11 +162,12 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · Tarjeta unificada', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · PanelLateral', () => {
-  for (const ancho of [320, 420, 560]) {
-    it(`ancho ${ancho} en escritorio`, async () => {
+  // Cajón unificado (R8): 320 y 420 miden 420 (estándar); 560 mide 640 (paquetes y previas).
+  for (const [ancho, medido] of [[320, 420], [420, 420], [560, 640]] as const) {
+    it(`ancho ${ancho} en escritorio mide ${medido}`, async () => {
       const p = await abrir();
       await p.click(`#abre-${ancho}`);
-      expect(await p.evaluate(() => Math.round(document.querySelector('dialog[open] .rv-ov__panel')!.getBoundingClientRect().width))).toBe(ancho);
+      expect(await p.evaluate(() => Math.round(document.querySelector('dialog[open] .rv-ov__panel')!.getBoundingClientRect().width))).toBe(medido);
       await p.close();
     });
   }
