@@ -80,9 +80,7 @@ it('sin llamadas registradas, lo dice — no una tabla vacía sin explicación',
   expect(html).toContain('Sin llamadas registradas todavía');
 });
 
-it('R9: Supabase, Resend y WhatsApp usan su marca original; Sentry y Vercel, icono genérico (sin trazado verificable)', async () => {
+it('R9c: Supabase, Resend, WhatsApp, Sentry y Vercel usan su marca original (trazados de simple-icons)', async () => {
   const html = renderToStaticMarkup(await IntegracionesPage());
-  for (const id of ['supabase', 'resend', 'whatsapp']) expect(html).toContain(`data-marca="${id}"`);
-  expect(html).not.toContain('data-marca="sentry"');
-  expect(html).not.toContain('data-marca="vercel"');
+  for (const id of ['supabase', 'resend', 'whatsapp', 'sentry', 'vercel']) expect(html).toContain(`data-marca="${id}"`);
 });
