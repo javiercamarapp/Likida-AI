@@ -62,7 +62,7 @@ export default async function ConsumoPage() {
 
         <div className="px-5 py-4 flex-1 space-y-2.5">
           {/* ── KPIs del gasto, con su tendencia real ─────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="kit-kpis">
             {r ? (
               <>
                 <StatCard icono={<DollarSign {...ICONO} />} etiqueta="Gastado en IA — histórico" valor={r.costoIaUsd} formato="usd"

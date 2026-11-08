@@ -58,7 +58,7 @@ export default async function ActividadCodigoPage() {
             const alto = 7 * (CELDA + GAP) + 4;
             return (
               <>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                <div className="kit-kpis">
                   <StatCard icono={<GitCommitHorizontal {...ICONO} />} etiqueta="Commits — últimas 52 semanas" valor={a.totalAnual} formato="entero" />
                   <StatCard icono={<GitCommitHorizontal {...ICONO} />} etiqueta="Esta semana" valor={a.semanas[a.semanas.length - 1]?.total ?? 0} formato="entero" />
                   <StatCard icono={<GitCommitHorizontal {...ICONO} />} etiqueta="La mejor semana" valor={mejorSemana?.total ?? 0} formato="entero"

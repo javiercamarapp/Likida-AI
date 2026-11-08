@@ -138,7 +138,7 @@ export async function ConsolaVendedores({
                 esto NO significa que no haya prospectos: significa que no se pudo leer.</p>
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2">
+            <div className="mt-2 kit-kpis">
               <StatCard icono={<Building2 {...ICONO} />} etiqueta="Prospectos en el pipeline" valor={totalProspectos} formato="entero" />
               <StatCard icono={<Activity {...ICONO} />} etiqueta="Prospectos con seguimiento" valor={vivos} formato="entero" />
               <StatCard icono={<CheckCircle2 {...ICONO} />} etiqueta="Ganados" valor={totales.won} formato="entero" />

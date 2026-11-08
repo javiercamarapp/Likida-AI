@@ -227,7 +227,7 @@ export default async function SoportePage({
           ) : (
             <>
               {/* ── KPIs — conteos reales de la cola cross-tenant ─────────── */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              <div className="kit-kpis">
                 <StatCard icono={<LifeBuoy {...ICONO} />}
                   etiqueta="Tickets abiertos — todas las flotas" valor={conteos.abiertos} formato="entero"
                   sinDato="no se pudo contar"

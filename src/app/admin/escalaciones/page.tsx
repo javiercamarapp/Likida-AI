@@ -96,7 +96,7 @@ export default async function EscalacionesPage() {
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
           {/* ── Un conteo por fuente — solo las que SÍ se leyeron ─────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <div className="kit-kpis">
             {legibles.map((f) => {
               const Icono = ICONO_FUENTE[f];
               return (

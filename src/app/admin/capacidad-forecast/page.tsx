@@ -52,7 +52,7 @@ export default async function CapacidadForecastPage() {
             </EstadoVacio>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="kit-kpis">
                 <StatCard icono={<DollarSign {...ICONO} />}
                   etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
                   valor={proyeccion.promedioDiario} formato="usd"

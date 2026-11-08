@@ -87,7 +87,7 @@ export function VistaTuTurno({
       )}
 
       {/* Cabecera con cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" aria-label="Lo que espera tu turno">
+      <div className="kit-kpis" aria-label="Lo que espera tu turno">
         <StatCard icono={<ImageIcon {...ICONO} />} etiqueta="Piezas para tu tap"
           valor={bus.errores.some((e) => /pieza/i.test(e)) ? null : bus.piezasPendientes.length} formato="entero"
           sinDato="No se pudo leer la cola de piezas"

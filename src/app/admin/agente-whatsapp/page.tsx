@@ -42,7 +42,7 @@ export default async function AgenteWhatsappPage() {
         <div className="px-5 py-5 flex-1 space-y-2.5">
           <p className="text-xs" style={{ color: 'var(--muted)' }}>La conversación completa con el operador — costo real, histórico</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="kit-kpis">
             <StatCard icono={<DollarSign {...ICONO_KPI} />}
               etiqueta="Gastado en WhatsApp" valor={whatsapp ? whatsapp.costoUsd : 0} formato="usd"
             />

@@ -80,7 +80,7 @@ export default async function WhatsappInfraPage() {
               esta tarjeta enseñaba el tamaño de la página —20— con una nota
               que confesaba el tope: una cifra de infraestructura que se topa
               en 20 no sirve para dimensionar infraestructura. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="kit-kpis">
             <StatCard icono={<MessageCircle {...ICONO_KPI} />}
               etiqueta="Conversaciones activas" valor={total} formato="entero"
               sinDato="no se pudo contar"

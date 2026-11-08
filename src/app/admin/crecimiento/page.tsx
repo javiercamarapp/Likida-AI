@@ -353,7 +353,7 @@ export default async function CrecimientoPage() {
             )}
           </ChartCard>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <div className="kit-kpis">
             <KpiTile
               icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"

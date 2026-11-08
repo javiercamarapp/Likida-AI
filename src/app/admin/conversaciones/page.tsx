@@ -91,7 +91,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
         <div className="px-5 py-5 flex-1 space-y-2.5">
           <CajaBusqueda q="" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className="kit-kpis">
             <KpiTile
               icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Conversaciones activas" valor={total} formato="entero"
