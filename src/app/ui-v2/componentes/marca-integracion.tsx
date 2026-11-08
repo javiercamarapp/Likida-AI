@@ -9,19 +9,19 @@ import { cx } from './clases';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Id de marca del contrato compartido. `generico` = icono genérico (sin marca). Los ids son los del `.data.ts` más `generico`. */
-export type MarcaId = 'hubspot' | 'zendesk' | 'whatsapp' | 'microsoft' | 'outlook' | 'excel' | 'csv' | 'sap' | 'google' | 'gmail' | 'resend' | 'supabase' | 'generico';
+export type MarcaId = 'hubspot' | 'zendesk' | 'whatsapp' | 'microsoft' | 'outlook' | 'excel' | 'csv' | 'sap' | 'google' | 'gmail' | 'resend' | 'supabase' | 'sentry' | 'vercel' | 'meta' | 'generico';
 /** Ids con marca (o icono genérico propio) en el `.data.ts`; `generico` no está ahí a propósito. */
 export const IDS_INTEGRACION = Object.keys(INTEGRACIONES) as IdIntegracion[];
 /** ¿Hay marca (o icono genérico propio) para este id? */
 export const esIntegracionConocida = (id: string): id is IdIntegracion => Object.prototype.hasOwnProperty.call(INTEGRACIONES, id);
 
 /**
- * Logo de una integración: HubSpot, Zendesk, WhatsApp, Microsoft, Outlook, Excel, CSV, SAP, Google, Gmail o Resend (`MarcaId`).
+ * Logo de una integración: HubSpot, Zendesk, WhatsApp, Microsoft, Outlook, Excel, CSV, SAP, Google, Gmail, Resend, Sentry, Vercel o Meta (`MarcaId`).
  *
  * - `id`: clave del logo. `'generico'` (o cualquier id sin marca) pinta el icono genérico `Plug`; nunca inventa una marca.
  * - `tam`: lado en px (16 por omisión; viewBox 24).
  * - Siempre DECORATIVO (`aria-hidden`): el nombre va escrito al lado (`ChipFuente`, tabla, etc.).
- * - En tema oscuro, las marcas cuyo color no contrasta 3:1 con la superficie (Zendesk, Resend, Microsoft) pasan a la tinta del tema.
+ * - En tema oscuro, las marcas cuyo color no contrasta 3:1 con la superficie (Zendesk, Resend, Microsoft, Sentry, Vercel) pasan a la tinta del tema.
  * - Sin props de función: sirve igual desde un componente de servidor.
  */
 export function MarcaIntegracion({ id, tam = 16, className }: { id: MarcaId; tam?: number; className?: string }) {

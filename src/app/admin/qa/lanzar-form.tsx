@@ -186,8 +186,8 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
               ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
               : { background: 'var(--surface)' }}>
             <div className="text-sm font-semibold">{e.nombre}</div>
-            <div className="text-xs mt-1 opacity-80">{e.descripcion}</div>
-            <div className="text-[10px] mt-1.5 font-mono opacity-70">
+            <div className="text-xs mt-1" style={escenario === e.id ? undefined : { color: 'var(--ink2)' }}>{e.descripcion}</div>
+            <div className="text-[11px] mt-1.5 font-mono" style={escenario === e.id ? undefined : { color: 'var(--muted)' }}>
               invariantes {e.invariantes.join(' · ')}
               {e.minFotos > 1 ? ` — mínimo ${e.minFotos} fotos` : ''}
             </div>
@@ -197,7 +197,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       {/* Lo que falta se dice, con número: el catálogo del diseño tiene 11 y
           el selector no los ofrece todos. Callarlo haría creer que esto es
           toda la cobertura que existe. */}
-      <p className="text-[11px] m-0" style={{ color: 'var(--faint)' }}>
+      <p className="text-[11px] m-0" style={{ color: 'var(--muted)' }}>
         {ESCENARIOS_QA.length} de los 11 escenarios del catálogo. Los {11 - ESCENARIOS_QA.length} restantes
         —y el oráculo #4, que necesita saber cuánto dice cada ticket— siguen pendientes.
       </p>
@@ -213,7 +213,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
           Fotos del viaje — {seleccion.size} seleccionada{seleccion.size === 1 ? '' : 's'}
           {carril === 'completo' ? ' · CARRIL COMPLETO' : ' · carril rápido'}
         </div>
-        <p className="text-[11px] -mt-1 mb-1.5 m-0" style={{ color: 'var(--faint)' }}>
+        <p className="text-[11px] -mt-1 mb-1.5 m-0" style={{ color: 'var(--muted)' }}>
           {carril === 'completo' ? (
             <>
               Sin tope de fotos. La corrida avanza en <strong>pasadas</strong> de hasta {Math.round(TECHO_PASADA_MS / 1000)} s
@@ -267,11 +267,11 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
                     // eslint-disable-next-line @next/next/no-img-element -- URL firmada de 60 s de un bucket privado: next/image no puede optimizarla (expira) y cachearla la rompería
                     <img src={f.url} alt={f.etiqueta} className="w-full h-16 object-cover" />
                   ) : (
-                    <div className="w-full h-16 flex items-center justify-center text-[10px] px-1" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
+                    <div className="w-full h-16 flex items-center justify-center text-[11px] px-1" style={{ background: 'var(--canvas)', color: 'var(--ink2)' }}>
                       sin firma
                     </div>
                   )}
-                  <div className="px-1 py-0.5 text-[9px] truncate" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
+                  <div className="px-1 py-0.5 text-[11px] truncate" style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
                     {activa ? '✓ ' : ''}{f.etiqueta}
                   </div>
                 </button>

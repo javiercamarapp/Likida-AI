@@ -1,4 +1,5 @@
-import { renderToStaticMarkup } from 'react-dom/server';
+import type { ReactElement } from 'react';
+import { renderToReadableStream } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 
 const ESTADOS_PERSISTIDOS = [
@@ -47,6 +48,13 @@ vi.mock('./acciones', () => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 
+/** R9c: la consola streamea por bloque (<Suspense>); se espera a que TODOS los bloques resuelvan antes de leer el HTML. */
+async function renderCompleto(el: ReactElement): Promise<string> {
+  const flujo = await renderToReadableStream(el);
+  await flujo.allReady;
+  return new Response(flujo).text();
+}
+
 const { ConsolaVendedores } = await import('./consola-vendedores');
 const { PanelVendedor } = await import('../../vendedor/panel-vendedor');
 
@@ -55,7 +63,7 @@ describe('FUNC-P1-01: ningún estado válido desaparece del embudo', () => {
     ['administrador', async () => ConsolaVendedores({ nombre: 'Admin', sp: {} })],
     ['vendedor', async () => PanelVendedor({ userId: 'v-1', nombre: 'Vendedor', rol: 'vendedor' })],
   ] as const)('%s ve los 11 estados canónicos y las filas históricas', async (_vista, construir) => {
-    const html = renderToStaticMarkup(await construir());
+    const html = await renderCompleto(await construir());
 
     for (const estado of ESTADOS_PERSISTIDOS) {
       expect(html, `${estado} debe conservar su tarjeta visible`).toContain(`Empresa ${estado}`);
