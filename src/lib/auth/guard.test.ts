@@ -392,6 +392,16 @@ describe('exigirVerRuta — el gate de pantalla por rol para los stubs', () => {
     expect(redirect).not.toHaveBeenCalled();
   });
 
+  it('superadmin sin flota elegida: con ?vista=demo entra (demo) y sin params va al selector', async () => {
+    const sup = { userId: 'u-s', tenantId: null, rol: 'superadmin', nombre: 'Javier' };
+    getSessionTenant.mockResolvedValue(sup);
+    leerSeleccionFlota.mockResolvedValue(null);
+    await expect(exigirVerRuta('/dashboard/soporte', { vista: 'demo', rol: 'flota_admin' })).resolves.toMatchObject({ rol: 'superadmin' });
+    expect(redirect).not.toHaveBeenCalled();
+    await expect(exigirVerRuta('/dashboard/soporte')).rejects.toThrow('NEXT_REDIRECT');
+    expect(redirect).toHaveBeenCalledWith(`/admin/elegir-flota?next=${encodeURIComponent('/dashboard/soporte')}`);
+  });
+
   it('sin sesión pasa por requireSessionTenant: /login con el destino', async () => {
     getSessionTenant.mockResolvedValue(null);
     await expect(exigirVerRuta('/dashboard/cobranza')).rejects.toThrow('NEXT_REDIRECT');

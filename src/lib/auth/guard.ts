@@ -215,9 +215,13 @@ export async function requireVendedor(): Promise<SessionTenant> {
  * que dejen de ser stubs, el gate ya está puesto en vez de ser algo que
  * alguien tenga que acordarse de agregar.
  */
-export async function exigirVerRuta(destino: string): Promise<SessionTenant> {
+export async function exigirVerRuta(
+  destino: string,
+  /** Los searchParams de previsualización (`?vista=demo`, `?tenant=`, `?rol=`): sin ellos un superadmin sin flota elegida rebota al selector aunque llegue con «ver como». */
+  sp?: { vista?: string; tenant?: string; rol?: string },
+): Promise<SessionTenant> {
   const { puedeVerRuta, inicioDe } = await import('./visibilidad');
-  const s = await requireSessionTenant(destino);
+  const s = await requireSessionTenant(destino, sp);
   if (!puedeVerRuta(s.rol, destino)) {
     await esperarRegistro(registrarPaginaNegada({ ruta: destino, rol: s.rol, causa: 'rol', tenantId: s.tenantId, userId: s.userId }));
     redirect(inicioDe(s.rol));
