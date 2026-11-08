@@ -484,7 +484,7 @@ export function MarginDivergingBars({
               <div className="absolute top-0 bottom-0 rounded-sm" style={{
                 [positivo ? 'left' : 'right']: '50%',
                 width: animar ? `${pct}%` : '0%',
-                background: positivo ? 'var(--chart-1)' : 'var(--chart-6)',
+                background: positivo ? 'var(--chart-1)' : 'var(--chart-6, var(--senal))',
                 transition: reducido ? 'none' : `width 480ms ${EASE} ${i * 70}ms`,
               }} />
             </div>
