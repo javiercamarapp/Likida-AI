@@ -914,6 +914,18 @@ export async function borrarMapeo(tenantId: string, id: string): Promise<boolean
 export interface ConfigBuzon { activa: boolean; rotacion: number }
 
 /** La configuración del buzón de la flota, o null si nunca se activó. Lanza ante error de base. */
+/** Una flota que todavía no activó el buzón no tiene fila: eso NO es una lectura fallida, es «desactivado» (rotación 1 al crearla). */
+export const BUZON_SIN_ACTIVAR: ConfigBuzon = { activa: false, rotacion: 1 };
+
+/**
+ * El estado del buzón para la pantalla: sin fila = `BUZON_SIN_ACTIVAR`; si la lectura FALLA, lanza (quien llama la distingue con
+ * su propio «no se pudo leer»). Antes la pantalla usaba `leerConfigBuzon` tal cual y leía `null` (sin fila) igual que `null` (error):
+ * toda flota sin buzón veía «No se pudo leer el estado del buzón» aunque la base estuviera sana.
+ */
+export async function leerEstadoBuzon(tenantId: string): Promise<ConfigBuzon> {
+  return (await leerConfigBuzon(tenantId)) ?? BUZON_SIN_ACTIVAR;
+}
+
 export async function leerConfigBuzon(tenantId: string): Promise<ConfigBuzon | null> {
   const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
     .select('rotacion, activa').eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_buzon');

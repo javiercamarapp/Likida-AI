@@ -14,7 +14,7 @@ import {
   listarGeocercas, guardarGeocerca, cambiarEstadoGeocerca, TIPOS_GEOCERCA,
   listarCursos, listarConveniosPorNombre, cambiarEstadoCurso,
   listarMapeos, guardarMapeo, borrarMapeo,
-  leerConfigBuzon, activarBuzon, desactivarBuzon, rotarLlaveBuzon, listarArchivosIngesta,
+  leerEstadoBuzon, activarBuzon, desactivarBuzon, rotarLlaveBuzon, listarArchivosIngesta,
   leerConfigEntradas, activarCorreoPeajes, desactivarCorreoPeajes, rotarCorreoPeajes, guardarRemitentesPeajes,
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   listarTarifas, confirmarTarifa, importarTarifasArchivo,
@@ -148,7 +148,7 @@ export default async function PaginaConfiguracionPeajes({
     superficie.cursos ? safe(() => listarCursos(tenantId)) : Promise.resolve(null),
     superficie.cursos ? safe(() => listarConveniosPorNombre(tenantId)) : Promise.resolve(null),
     safe(() => listarMapeos(tenantId)),
-    safe(() => leerConfigBuzon(tenantId)),
+    safe(() => leerEstadoBuzon(tenantId)),
     safe(() => listarArchivosIngesta(tenantId, 20)),
     safe(() => leerConfigEntradas(tenantId)),
   ]);

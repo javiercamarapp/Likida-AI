@@ -17,7 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, exigir, traerTodoEnParalelo, traerPorIds } from '@/lib/likida/pg';
+import { conteo, exigir, traerTodoEnParalelo, traerTodoPorLlave, traerPorIds, PAGINA, LecturaIncompleta } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { normalizarEstadoProspecto } from '@/lib/likida/vendedores';
@@ -359,6 +359,8 @@ interface FilaProspecto {
   duplicado_de: string | null;
   mensajes_generados_en: string | null;
   updated_at: string;
+  /** Solo para el cursor de la carga completa; `aProspecto` no lo copia, no viaja al cliente. */
+  created_at: string;
   prospecto_toque: Array<{ creado_en: string }> | null;
   /** 0140 — solo lo que hace falta para filtrar/ordenar el mapa. */
   sitio_verificado: boolean;
@@ -373,7 +375,20 @@ interface FilaProspecto {
  *  —la usan giroDe/tamanoDe/scoreUrgencia/completitudDe y el filtro de
  *  duplicados—, pero se queda en el servidor. */
 const COLUMNAS_LISTADO =
-  'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, urgencia, unidades, duplicado_de, mensajes_generados_en, updated_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en), prospecto_persona(confianza, origen)';
+  'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, urgencia, unidades, duplicado_de, mensajes_generados_en, updated_at, created_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en), prospecto_persona(confianza, origen)';
+
+/** El select del listado sobre los prospectos vivos (`duplicado_de is null`); `desde` solo decide el count. */
+function vivosDelListado(desde: number) {
+  const raw = supabaseAdmin().from('prospecto').select(COLUMNAS_LISTADO, conteo(desde));
+  return typeof (raw as { is?: unknown }).is === 'function'
+    ? (raw as typeof raw & { is: (c: string, v: null) => typeof raw }).is('duplicado_de', null)
+    : raw;
+}
+
+interface LlaveMapa { created_at: string; id: string }
+/** Lo que viene DESPUÉS de `(created_at, id)` en el orden `created_at desc, id asc`. */
+const despuesDeCreadoId = (c: LlaveMapa): string =>
+  `created_at.lt.${c.created_at},and(created_at.eq.${c.created_at},id.gt.${c.id})`;
 
 // `traerTodoEnParalelo` vive ahora en pg.ts (lo comparten /admin/vendedores y /admin/crecimiento); se re-exporta para no mover a los llamadores.
 export { traerTodoEnParalelo };
@@ -509,23 +524,45 @@ export async function getDatosMapa(
   // acaba de tocar 5,000 filas también pasa de mil.
   let filas: FilaProspecto[];
   try {
-    filas = await traerTodoEnParalelo<FilaProspecto>(
-      (d, h) => {
-        const raw = supabaseAdmin().from('prospecto').select(COLUMNAS_LISTADO, conteo(d));
-        const q = typeof (raw as { is?: unknown }).is === 'function'
-          ? (raw as typeof raw & { is: (c: string, v: null) => typeof raw }).is('duplicado_de', null)
-          : raw;
-        // El orden secundario por id NO es adorno: created_at se repite (los
-        // lotes de siembra comparten el now() de su transacción) y paginar
-        // sobre un orden no único duplica y salta filas entre páginas — se
-        // vio como pines duplicados en el mapa (17-ago). El delta ordena por
-        // la misma columna que filtra, que es lo estable ahí.
-        return desde
-          ? q.gt('updated_at', desdeConsulta as string).order('updated_at', { ascending: true }).order('id', { ascending: true }).range(d, h)
-          : q.order('created_at', { ascending: false }).order('id', { ascending: true }).range(d, h);
-      },
-      desde ? 'prospecto (mapa, delta)' : 'prospecto (mapa)',
-    );
+    if (desde) {
+      filas = await traerTodoEnParalelo<FilaProspecto>(
+        (d, h) => {
+          const q = vivosDelListado(d);
+          // El delta ordena por la misma columna que filtra, que es lo estable ahí.
+          return q.gt('updated_at', desdeConsulta as string).order('updated_at', { ascending: true }).order('id', { ascending: true }).range(d, h);
+        },
+        'prospecto (mapa, delta)',
+      );
+    } else {
+      // Carga completa por CURSOR (created_at desc, id asc), no por OFFSET: con 33k filas cada
+      // página por `.range()` recorría el índice desde el inicio (3.6 s en offset 32,000) y 34
+      // páginas en paralelo saturaban la base. Con el cursor cada página cuesta como la primera.
+      // El orden secundario por id NO es adorno: created_at se repite (los lotes de siembra
+      // comparten el now() de su transacción) y paginar sobre un orden no único duplica y salta
+      // filas — se vio como pines duplicados en el mapa (17-ago).
+      let esperadas: number | null = null;
+      filas = await traerTodoPorLlave<FilaProspecto, LlaveMapa>(
+        (c) => {
+          const base = vivosDelListado(c ? 1 : 0);
+          const q = c
+            // La cota `lte` es redundante con el `or` a propósito: es la que le da al servidor el
+            // rango del índice (el `or` por sí solo no se convierte en condición de índice).
+            ? base.lte('created_at', c.created_at).or(despuesDeCreadoId(c))
+            : base;
+          return Promise.resolve(q.order('created_at', { ascending: false }).order('id', { ascending: true }).limit(PAGINA)).then((r) => {
+            if (!c && typeof r.count === 'number') esperadas = r.count;
+            return r;
+          });
+        },
+        (f) => ({ created_at: f.created_at, id: f.id }),
+        'prospecto (mapa)',
+      );
+      // El helper da por buena una página vacía aunque falten filas. Aquí no: si no llegó el total
+      // que contó la primera vuelta, se LANZA (fallar cerrado) en vez de enseñar una cartera recortada.
+      if (esperadas !== null && filas.length < esperadas) {
+        throw new LecturaIncompleta('prospecto (mapa)', filas.length, esperadas);
+      }
+    }
   } catch (e) {
     logger.error('mapa_prospectos.leer', { delta: desde !== null, err: e instanceof Error ? e.message : String(e) });
     return { filas: [], generadoEn, fallo: true, marca: null, delta: desde !== null, total: null };
