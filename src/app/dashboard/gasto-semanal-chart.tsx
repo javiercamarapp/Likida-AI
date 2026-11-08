@@ -1,4 +1,7 @@
-import { mxn } from '@/lib/formato';
+'use client';
+
+// Ya se renderiza dentro de `panel-periodo` ('use client'); la directiva lo deja explícito: `formatoEje` es una función y
+// solo puede pasarse de cliente a cliente.
 import { ColumnasAgrupadas } from '@/app/ui-v2/graficas';
 import { compactEs } from '@/app/ui-v2/graficas/escala';
 
@@ -24,7 +27,7 @@ export function GastoSemanalChart({ categorias, series }: { categorias: string[]
       etiqueta="Gasto por categoría"
       categorias={categorias}
       series={series.map((s) => ({ nombre: CONCEPTO_LABEL[s.nombre] ?? s.nombre, valores: s.valores }))}
-      formato={mxn}
+      formato="mxn"
       formatoEje={(v) => `$${compactEs(v)}`}
     />
   );

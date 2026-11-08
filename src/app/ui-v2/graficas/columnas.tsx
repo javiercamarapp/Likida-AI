@@ -6,6 +6,7 @@ import type { Matiz } from '../metricas';
 import { cadaCuantas, compactEs, esConteoPequeno, geometriaColumnas, indicesEtiquetados, niceScale, ranuraEn, variacionVsAnterior } from './escala';
 import type { TipoDato } from './kind-badge';
 import { CintaLectura, LecturaPunto, LeyendaFina, TablaGrafica, TEXTO_SIN_DATO, useAncho } from './partes';
+import { resolverFormato, type FormatoGrafica } from './formatos';
 
 export interface ColumnaDato {
   /** Etiqueta corta del eje X («7 sep»). */
@@ -25,11 +26,11 @@ const PAD_T = 20, PAD_B = 22, PAD_R = 6;
  *  anterior, foco por columna con flechas, «Ver como tabla» y estados sin dato (s/d) / parcial (trama) / estimado (KindBadge).
  *  Un valor null NUNCA se dibuja como cero. Todo en cero o sin dato ⇒ plano vacío con UNA línea que dice qué falta.
  *  Crecen una vez al montar (CSS, 420 ms, escalón de 14 ms); con reduced-motion aparecen quietas. */
-export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v), vacio = 'Sin datos en el periodo', tipo = 'observado', alto = 168, variacion = true, unidad }: {
+export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vacio = 'Sin datos en el periodo', tipo = 'observado', alto = 168, variacion = true, unidad }: {
   datos: readonly ColumnaDato[];
   matiz?: Matiz;
   etiqueta: string;
-  formato?: (v: number) => string;
+  formato?: FormatoGrafica;
   vacio?: string;
   /** Clase del dato: estimado/inferido pintan la barra más clara y lo dicen en el tooltip. */
   tipo?: TipoDato;
@@ -38,6 +39,7 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato = (v) => String(v
   variacion?: boolean;
   unidad?: string;
 }) {
+  const formato = resolverFormato(formatoProp);
   const [ref, ancho] = useAncho<HTMLDivElement>();
   const [activa, setActiva] = useState<number | null>(null);
   const plano = useRef<SVGSVGElement>(null);

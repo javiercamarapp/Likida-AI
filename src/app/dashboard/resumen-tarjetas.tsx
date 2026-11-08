@@ -60,7 +60,7 @@ export function TarjetaCierres({ d }: { d: DatosResumen }) {
       estado={c === null ? 'error' : 'ok'} reintentar
       acciones={c && total > 0 ? <span className="rv-res__nota">{numero(total)} en {c.length} semanas · la última, en curso</span> : undefined}
     >
-      {c ? <Columnas datos={c.map((x) => ({ etiqueta: x.etiqueta, valor: x.valor, parcial: x.parcial, largo: `Semana del ${x.etiqueta}` }))} unidad="cierres" matiz={1} etiqueta="Liquidaciones cerradas por semana, últimas ocho semanas" formato={numero} vacio="Sin liquidaciones cerradas en las últimas ocho semanas" /> : null}
+      {c ? <Columnas datos={c.map((x) => ({ etiqueta: x.etiqueta, valor: x.valor, parcial: x.parcial, largo: `Semana del ${x.etiqueta}` }))} unidad="cierres" matiz={1} etiqueta="Liquidaciones cerradas por semana, últimas ocho semanas" formato="numero" vacio="Sin liquidaciones cerradas en las últimas ocho semanas" /> : null}
     </Tarjeta>
   );
 }
