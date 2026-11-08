@@ -107,12 +107,14 @@ interface PropsCampoBase {
   className?: string;
   /** Clase del control (input/select/textarea) en sí. */
   claseControl?: string;
+  /** `id` del control; por omisión se genera uno. Pásalo cuando el `id` ya es contrato (pruebas, enlaces, un combo hermano). */
+  id?: string;
 }
 
 /** Campo de texto del sistema (alto 32, radio 8, borde de control, 13/400). `tipo` por omisión «text»; sirve para number, email, tel, search… */
-export function CampoTexto({ etiqueta, ayuda, error, obligatorio, className, claseControl, tipo = 'text', ...input }: PropsCampoBase & Omit<PropsInput, 'id' | 'className'> & { tipo?: 'text' | 'number' | 'email' | 'tel' | 'search' | 'url' | 'password' }) {
+export function CampoTexto({ etiqueta, ayuda, error, obligatorio, className, claseControl, id, tipo = 'text', ...input }: PropsCampoBase & Omit<PropsInput, 'id' | 'className'> & { tipo?: 'text' | 'number' | 'email' | 'tel' | 'search' | 'url' | 'password' }) {
   return (
-    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className}>
+    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className} id={id}>
       <input {...input} type={tipo} className={cx('rv-ctl', claseControl)} />
     </Campo>
   );
@@ -120,27 +122,27 @@ export function CampoTexto({ etiqueta, ayuda, error, obligatorio, className, cla
 
 /** Campo de fecha del sistema: <input type="date"> con el mismo cromo que el texto (el selector de calendario nativo se conserva por
  *  accesibilidad y teclado). Viaja «aaaa-mm-dd» en el FormData, como siempre. */
-export function CampoFecha({ etiqueta, ayuda, error, obligatorio, className, claseControl, ...input }: PropsCampoBase & Omit<PropsInput, 'id' | 'className'>) {
+export function CampoFecha({ etiqueta, ayuda, error, obligatorio, className, claseControl, id, ...input }: PropsCampoBase & Omit<PropsInput, 'id' | 'className'>) {
   return (
-    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className}>
+    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className} id={id}>
       <input {...input} type="date" className={cx('rv-ctl', 'rv-ctl--fecha', claseControl)} />
     </Campo>
   );
 }
 
 /** Selector nativo del sistema (una sola flecha propia). Recibe sus <option> como hijos. */
-export function CampoSelect({ etiqueta, ayuda, error, obligatorio, className, claseControl, children, ...select }: PropsCampoBase & Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id' | 'className'>) {
+export function CampoSelect({ etiqueta, ayuda, error, obligatorio, className, claseControl, id, children, ...select }: PropsCampoBase & Omit<SelectHTMLAttributes<HTMLSelectElement>, 'id' | 'className'>) {
   return (
-    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className}>
+    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className} id={id}>
       <select {...select} className={cx('rv-ctl', claseControl)}>{children}</select>
     </Campo>
   );
 }
 
 /** Área de texto del sistema (13/400, mínimo 64 px, se redimensiona solo en vertical). */
-export function CampoTextarea({ etiqueta, ayuda, error, obligatorio, className, claseControl, ...area }: PropsCampoBase & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id' | 'className'>) {
+export function CampoTextarea({ etiqueta, ayuda, error, obligatorio, className, claseControl, id, ...area }: PropsCampoBase & Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, 'id' | 'className'>) {
   return (
-    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className}>
+    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className} id={id}>
       <textarea {...area} className={cx('rv-ctl', 'rv-ctl--area', claseControl)} />
     </Campo>
   );
@@ -150,12 +152,12 @@ export function CampoTextarea({ etiqueta, ayuda, error, obligatorio, className, 
  *  `required` y `multiple` funcionan igual) pero oculto de forma accesible (sigue en el orden de tabulación y lo anuncian los lectores
  *  de pantalla); lo que se ve es un botón del sistema de 32 px («Seleccionar archivo») y el nombre elegido, truncado con elipsis
  *  («Sin archivo seleccionado» mientras no haya). El foco del input se pinta en el botón. `textoBoton` cambia solo el rótulo. */
-export function CampoArchivo({ etiqueta, ayuda, error, obligatorio, className, textoBoton = 'Seleccionar archivo', onChange, claseControl, ...input }: Omit<PropsInput, 'id' | 'type' | 'value' | 'className'> & PropsCampoBase & { textoBoton?: string }) {
+export function CampoArchivo({ etiqueta, ayuda, error, obligatorio, className, textoBoton = 'Seleccionar archivo', onChange, claseControl, id, ...input }: Omit<PropsInput, 'id' | 'type' | 'value' | 'className'> & PropsCampoBase & { textoBoton?: string }) {
   const [nombre, setNombre] = useState('');
   const auto = useId();
   const idNombre = `${auto}-nombre`;
   return (
-    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className}>
+    <Campo etiqueta={etiqueta} ayuda={ayuda} error={error} obligatorio={obligatorio} className={className} id={id}>
       <ControlArchivo {...input} className={claseControl} idNombre={idNombre} nombre={nombre} textoBoton={textoBoton}
         onChange={(e) => {
           const f = e.currentTarget.files;
