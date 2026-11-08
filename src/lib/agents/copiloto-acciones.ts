@@ -118,6 +118,16 @@ export const CATALOGO_ACCIONES: readonly AccionCatalogo[] = [
 ] as const;
 
 /**
+ * Lo que el servidor se autoriza para UNA vuelta del runner. La ruta que lo
+ * llama tiene `maxDuration = 60`: 45 s deja margen para la escritura del
+ * resultado (AUDITORÍA 24, AGB-7). A46-AG-01 lo sacó del literal para que el
+ * plazo del cliente (`PLAZO_ACCION_MS`) pueda compararse contra él en prueba:
+ * un cliente que espera menos que esto reporta como fallida una acción que
+ * corrió.
+ */
+export const PRESUPUESTO_RUNNER_MS = 45_000;
+
+/**
  * Qué agente nombra el `objetivo` de `correr_runner`, o `undefined` para la
  * vuelta completa. Acepta `redactor` y `agente:redactor` (la forma que usa el
  * catálogo de interruptores); `runner`, `todos`, `cron` o vacío = todos.
@@ -193,7 +203,7 @@ export async function ejecutarAccionCopiloto(
     // en maxDuration o la escritura final falla, el agente enviador pudo haber
     // mandado un correo real: sin esta fila no quedaría quién lo pidió ni por qué.
     await anotarCorridaEnBitacora(userId, motivo, { objetivo: soloAgente ?? 'todos' }, 'runner.corrida_manual_inicio');
-    const r = await correrRunner(soloAgente, undefined, { venceEn: Date.now() + 45_000 });
+    const r = await correrRunner(soloAgente, undefined, { venceEn: Date.now() + PRESUPUESTO_RUNNER_MS });
     // Se firma TAMBIÉN la vuelta que el kill switch dejó en nada: la acción
     // confirmada fue "correr el runner", y eso es lo que la bitácora audita.
     await anotarCorridaEnBitacora(userId, motivo, {

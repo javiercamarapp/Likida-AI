@@ -7,6 +7,21 @@ import type { AccionPropuesta } from './respuestas';
 type Estado = 'lista' | 'ejecutando' | 'armada' | 'hecha' | 'cancelada';
 
 /**
+ * A46-AG-01: cuánto espera la tarjeta al servidor. Tiene que ser MAYOR que el
+ * presupuesto que el servidor se autoriza para la acción más larga
+ * (`PRESUPUESTO_RUNNER_MS` en `lib/agents/copiloto-acciones.ts`, 45 s) y caber
+ * en el `maxDuration` de `/api/admin/copiloto` (60 s). Eran 20 s heredados
+ * literales del `admin/copiloto.tsx` que esta ronda borró, y nunca se
+ * derivaron del servidor: una vuelta del runner de 23 s —lo esperable, porque
+ * despacha varios agentes con llamadas de modelo— ejecutaba de verdad y la
+ * pantalla decía «No se pudo ejecutar. Inténtalo de nuevo.». El intent ya
+ * estaba gastado, así que el reintento devolvía 409 pidiendo proponer la
+ * acción otra vez, y proponerla otra vez corre el runner una SEGUNDA vez.
+ * `accion_plazo.test.ts` fija la relación, no el número.
+ */
+export const PLAZO_ACCION_MS = 50_000;
+
+/**
  * La previsualización de una acción gateada del copiloto de superadmin: efecto, cómo se revierte, motivo OBLIGATORIO y dos botones.
  * NUNCA ejecuta sin confirmar: EJECUTAR presenta el `intentId` que el SERVIDOR creó al proponer (AdminActionIntent) y un booleano del
  * cliente no es una autoridad. Para `gateo: 'doble'` son DOS POSTs con el mismo intent: el primero lo arma (`armado: true`), el
@@ -57,7 +72,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
       const resp = await fetch(endpoint, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ intentId: a.intentId, accion: { id: a.accion, objetivo: a.objetivo, motivo: motivo.trim() } }),
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(PLAZO_ACCION_MS),
       });
       const d = await resp.json().catch(() => null);
       if (!resp.ok || !d?.ok) {
