@@ -47,11 +47,9 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
           style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
         <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
           Periodo del archivo (opcional)
-          <input type="date" name="periodo_desde" aria-label="Inicio del periodo del archivo"
-            className="hairline text-[12px] px-2 py-1 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+          <input type="date" name="periodo_desde" aria-label="Inicio del periodo del archivo" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
           <span>a</span>
-          <input type="date" name="periodo_hasta" aria-label="Fin del periodo del archivo"
-            className="hairline text-[12px] px-2 py-1 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+          <input type="date" name="periodo_hasta" aria-label="Fin del periodo del archivo" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
         </label>
         <BotonImportar />
       </form>
