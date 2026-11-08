@@ -88,15 +88,15 @@ export function VistaTuTurno({
 
       {/* Cabecera con cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
       <div className="kit-kpis" aria-label="Lo que espera tu turno">
-        <StatCard icono={<ImageIcon {...ICONO} />} etiqueta="Piezas para tu tap"
+        <StatCard icono={<ImageIcon {...ICONO} strokeWidth={1.75} />} etiqueta="Piezas para tu tap"
           valor={bus.errores.some((e) => /pieza/i.test(e)) ? null : bus.piezasPendientes.length} formato="entero"
           sinDato="No se pudo leer la cola de piezas"
           nota={bus.piezasPendientes.length >= TOPE_PIEZAS ? `Se cuentan las ${TOPE_PIEZAS} más recientes; hay más detrás` : undefined} />
-        <StatCard icono={<ListChecks {...ICONO} />} etiqueta="Envíos por aprobar" valor={envios.length} formato="entero" />
-        <StatCard icono={<GitPullRequest {...ICONO} />} etiqueta="PRs esperando tu merge"
+        <StatCard icono={<ListChecks {...ICONO} strokeWidth={1.75} />} etiqueta="Envíos por aprobar" valor={envios.length} formato="entero" />
+        <StatCard icono={<GitPullRequest {...ICONO} strokeWidth={1.75} />} etiqueta="PRs esperando tu merge"
           valor={prs.estado === 'ok' ? prs.prs.length : null} formato="entero"
           sinDato={prs.estado === 'sin_token' ? 'Falta el acceso a GitHub' : 'GitHub no contestó'} />
-        <StatCard icono={<Inbox {...ICONO} />} etiqueta="Escalaciones" valor={totalEscalaciones} formato="entero" />
+        <StatCard icono={<Inbox {...ICONO} strokeWidth={1.75} />} etiqueta="Escalaciones" valor={totalEscalaciones} formato="entero" />
       </div>
 
       {/* ── 1 · Piezas de las rutinas — el tap de publicar ────────────────── */}
@@ -127,7 +127,7 @@ export function VistaTuTurno({
                     <img src={p.mediaUrl} alt={p.titulo} className="w-full h-full object-cover" loading="lazy" />
                   ) : (
                     <span className="inline-flex flex-col items-center gap-1 text-xs" style={{ color: 'var(--faint)' }}>
-                      <ImageIcon {...ICONO} /> Sin imagen
+                      <ImageIcon {...ICONO} strokeWidth={1.75} /> Sin imagen
                     </span>
                   )}
                 </div>

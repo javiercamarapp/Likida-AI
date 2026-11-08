@@ -11,6 +11,7 @@ import { correoConfigurado } from '@/lib/correo/enviar';
 import { hookDeCorreoConfigurado } from '@/lib/correo/auth';
 import { envHealth, faltantes } from '@/lib/env';
 import { IconoProveedor } from '../proveedor-icono';
+import { MarcaIntegracion, type MarcaId } from '../../ui-v2/componentes/marca-integracion';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { StatusPill, EstadoVacio, type Estado } from '../ui/kit';
 
@@ -32,14 +33,16 @@ interface Medicion { estado: Estado; etiqueta: string; detalle?: string }
  *  (WhatsApp Infra, ya vive bajo /admin) usa `next/link` para no recargar
  *  toda la consola. */
 function Conector({
-  Icono, titulo, subtitulo, href, medicion, externo = true,
+  Icono, marca, titulo, subtitulo, href, medicion, externo = true,
 }: {
-  Icono: typeof Blocks; titulo: string; subtitulo: string; href: string;
+  Icono: typeof Blocks; marca?: MarcaId; titulo: string; subtitulo: string; href: string;
   medicion: Medicion; externo?: boolean;
 }) {
   const contenido = (
     <>
-      <Icono width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
+      {marca
+        ? <MarcaIntegracion id={marca} tam={16} className="mt-0.5 shrink-0" />
+        : <Icono width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />}
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-between gap-3">
           <span className="text-[13px] font-medium truncate">{titulo}</span>
@@ -127,11 +130,11 @@ export default async function IntegracionesPage() {
             <TituloSeccion>Conectores</TituloSeccion>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
               <Conector
-                Icono={Database} titulo="Supabase" href="https://supabase.com/dashboard" medicion={medSupabase}
+                Icono={Database} marca="supabase" titulo="Supabase" href="https://supabase.com/dashboard" medicion={medSupabase}
                 subtitulo="Postgres + Auth + RLS — la base de datos y el login de toda la app. La prueba viva (consulta real) está en Salud del sistema."
               />
               <Conector
-                Icono={Mail} titulo="Resend" href="https://resend.com/emails" medicion={medResend}
+                Icono={Mail} marca="resend" titulo="Resend" href="https://resend.com/emails" medicion={medResend}
                 subtitulo="Correo transaccional — avisos, invitaciones y, con el hook encendido, los correos de acceso."
               />
               <Conector
@@ -148,7 +151,7 @@ export default async function IntegracionesPage() {
                 subtitulo="Hosting y despliegues. Vercel ya lo mide en su panel — se enlaza en vez de reconstruirse."
               />
               <Conector
-                Icono={Smartphone} titulo="Meta WhatsApp Business API" href="/admin/whatsapp-infra" externo={false} medicion={medWhatsapp}
+                Icono={Smartphone} marca="whatsapp" titulo="Meta WhatsApp Business API" href="/admin/whatsapp-infra" externo={false} medicion={medWhatsapp}
                 subtitulo="El número sigue siendo el de PRUEBA de Meta: el bot conversa completo, pero un chofer real aún no puede escribirle — falta número mexicano + verificación del negocio."
               />
             </div>
