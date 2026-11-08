@@ -21,6 +21,19 @@ describe('Drawer / Modal', () => {
     expect(html).toContain('rv-ov__pie');
     expect(html).toContain('data-tamano="m"');
   });
+  it('Drawer y Modal exponen role="dialog", aria-modal y nombre accesible; la alerta es alertdialog', () => {
+    const d = renderToStaticMarkup(<Drawer abierto={false} onCerrar={() => {}} titulo="Detalle">x</Drawer>);
+    expect(d).toMatch(/<dialog[^>]* role="dialog"/);
+    expect(d).toMatch(/<dialog[^>]* aria-modal="true"/);
+    expect(d).toMatch(/<dialog[^>]* aria-labelledby="[^"]+"/);
+    const m = renderToStaticMarkup(<Modal abierto={false} onCerrar={() => {}} titulo="Confirmar">x</Modal>);
+    expect(m).toMatch(/<dialog[^>]* role="dialog"/);
+    expect(m).toMatch(/<dialog[^>]* aria-modal="true"/);
+    const a = renderToStaticMarkup(<Modal abierto={false} onCerrar={() => {}} titulo="Borrar" alerta>x</Modal>);
+    expect(a).toMatch(/<dialog[^>]* role="alertdialog"/);
+    const p = renderToStaticMarkup(<Modal abierto={false} onCerrar={() => {}} titulo="Paleta" sinCabecera>x</Modal>);
+    expect(p).toMatch(/<dialog[^>]* aria-label="Paleta"/);
+  });
   it('CSS: la salida no se anima (no hay keyframes de cierre) y la entrada ≤ 180 ms', () => {
     const css = readFileSync(join(__dirname, '..', 'overlay.css'), 'utf8');
     expect(css).not.toMatch(/rv-ov[^{]*:not\(\[open\]\)[^{]*\{[^}]*animation/);
