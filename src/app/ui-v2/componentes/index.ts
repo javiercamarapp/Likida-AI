@@ -25,7 +25,7 @@ export { hrefConParams, ocultosSin, type ParamsUrl } from './barra-periodo-url';
 export { FiltroOpciones, FiltroChip, FiltroBusqueda, FiltroFecha, FiltroInterruptor, FiltroCampo, FiltroLimpiar, type OpcionFiltro } from './filtros';
 export { useMovil } from './movil';
 export { Icono, TRAZO_ICONO, type TamanoIcono } from './icono';
-export { Casilla, Radio, Campo, Fieldset, CampoArchivo } from './campos';
+export { Casilla, Radio, Campo, Fieldset, CampoArchivo, CampoTexto, CampoFecha, CampoSelect, CampoTextarea } from './campos';
 export { SegmentedControl, type OpcionSegmentada } from './segmented';
 export { Tabs, type PestanaDef } from './tabs';
 export { TabsLinea, type PestanaLinea } from './tabs-linea';

@@ -49,11 +49,30 @@
 [data-ui="v2"] .rv-fieldset__leyenda { max-width: 100%; padding: 0 6px; font-size: var(--t-body); font-weight: 600; line-height: 1.5; color: var(--ink); }
 [data-ui="v2"] .rv-fieldset__ayuda { margin: 0; font-size: var(--t-small); color: var(--muted); }
 
-/* ── Campo de archivo ──────────────────────────────────────────────────────────────────────────────────────────────── */
-[data-ui="v2"] .rv-archivo { box-sizing: border-box; width: 100%; padding: 8px; border: 1px solid var(--input); border-radius: 8px; background: var(--canvas); color: var(--ink); font-size: var(--t-small); font-weight: 400; line-height: 1.4; font-family: var(--font-sans-ui, inherit); }
-[data-ui="v2"] .rv-archivo::file-selector-button { min-height: 32px; margin-inline-end: 12px; padding: 6px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: var(--t-small); font-weight: 500; line-height: 1.25; font-family: var(--font-sans-ui, inherit); cursor: pointer; }
-[data-ui="v2"] .rv-archivo:hover::file-selector-button { background: var(--canvas); }
-[data-ui="v2"] .rv-archivo:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* ── Controles de campo (CampoTexto / CampoFecha / CampoSelect / CampoTextarea): el cromo base (alto 32, radio 8, borde --input, 13/400)
+   lo da la regla global «Campo único» de componentes.css; aquí solo lo propio de fecha y área, y que el contenedor no deje un campo
+   más ancho que su celda. ──────────────────────────────────────────────────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-ctl { box-sizing: border-box; width: 100%; min-width: 0; max-width: 100%; }
+[data-ui="v2"] .rv-ctl--area { resize: vertical; }
+[data-ui="v2"] .rv-ctl--fecha { font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .rv-ctl--fecha::-webkit-datetime-edit { padding: 0; }
+[data-ui="v2"] .rv-ctl--fecha::-webkit-datetime-edit-fields-wrapper { padding: 0; }
+[data-ui="v2"] .rv-ctl--fecha::-webkit-calendar-picker-indicator { margin: 0; cursor: pointer; opacity: .65; }
+[data-ui="v2"] .rv-ctl--fecha::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+:root[data-theme="dark"] [data-ui="v2"] .rv-ctl--fecha { color-scheme: dark; }
+
+/* ── Campo de archivo: botón del sistema + nombre truncado; el <input type="file"> real queda oculto de forma accesible ───── */
+[data-ui="v2"] .rv-archivo { position: relative; display: flex; align-items: center; gap: 10px; min-width: 0; max-width: 100%; }
+[data-ui="v2"] .rv-archivo__input { position: absolute; inline-size: 1px; block-size: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; opacity: 0; }
+[data-ui="v2"] .rv-archivo__boton { display: inline-flex; flex: none; align-items: center; gap: 6px; box-sizing: border-box; min-height: 32px; padding: 0 12px; border: 1px solid var(--input); border-radius: 8px; background: var(--surface); color: var(--ink); font: var(--t-ctl-sm); white-space: nowrap; cursor: pointer; }
+[data-ui="v2"] .rv-archivo__boton:hover { background: var(--ui-soft); }
+[data-ui="v2"] .rv-archivo__input:focus-visible + .rv-archivo__boton { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-archivo__input:disabled + .rv-archivo__boton { border-style: dashed; color: var(--muted); cursor: not-allowed; }
+[data-ui="v2"] .rv-archivo__nombre { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-body); font-weight: 400; color: var(--ink); }
+[data-ui="v2"] .rv-archivo__nombre[data-vacio] { color: var(--muted); }
+[data-ui="v2"] .rv-campo > [aria-invalid="true"] .rv-archivo__boton, [data-ui="v2"] .rv-archivo:has([aria-invalid="true"]) .rv-archivo__boton { border-color: var(--bad); }
+@media (max-width: 819px) { [data-ui="v2"] .rv-archivo__boton { min-height: 44px; } }
+@media (forced-colors: active) { [data-ui="v2"] .rv-archivo__boton { forced-color-adjust: auto; border: 1px solid ButtonText; } }
 
 /* ── SegmentedControl (Vexa .segmented): pista suave + borde, activo blanco con anillo ──────────────────────────────── */
 [data-ui="v2"] .rv-seg { display: inline-flex; width: fit-content; max-width: 100%; padding: 2px; gap: 2px; overflow-x: auto; background: var(--surface); border: var(--borde-w, 1px) solid var(--btn-borde-sec); border-radius: 999px; }
