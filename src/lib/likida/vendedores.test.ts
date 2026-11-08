@@ -71,7 +71,7 @@ const {
   ESTADOS_PROSPECTO, TRANSICIONES_PROSPECTO, puedeTransicionar,
   validarProspecto, repartir, agruparConteos, conteosVacios, filtrarProspectosTexto,
   listarVendedores, crearProspecto, asignarProspecto, cambiarEstadoProspecto,
-  actualizarNotasProspecto, asignarPendientes, invitarVendedor,
+  actualizarNotasProspecto, asignarPendientes, invitarVendedor, contarProspectosPorEstado,
 } = await import('./vendedores');
 const { DatoInvalido } = await import('./errores');
 
@@ -671,5 +671,32 @@ describe('A37-S57-09 — los vendedores de baja no reciben prospectos', () => {
     await asignarProspecto(P1, V1);
     const lectura = llamadas.find((l) => l.tabla === 'app_user');
     expect(lectura?.neq).toContainEqual(['activo', false]);
+  });
+});
+
+describe('R9 — contarProspectosPorEstado: el embudo sin bajar la cartera', () => {
+  beforeEach(() => { llamadas.length = 0; respuestas.clear(); });
+
+  it('suma los alias históricos en su etapa canónica y el total sale de su propio conteo', async () => {
+    // Orden de las consultas: total, luego los 14 valores persistidos en el orden del catálogo
+    // (nuevo, contactado, appointment, rescheduled, cancelled, no-show, demo, proposal, negociacion, pilot, won, cerrado, lost, perdido).
+    const filas = (n: number) => Array.from({ length: n }, () => ({}));
+    const conteos = [40, 10, 5, 0, 0, 0, 0, 0, 3, 2, 0, 1, 4, 0, 6];
+    respuestas.set('prospecto', conteos.map((n) => ({ data: filas(n), error: null })));
+    const r = await contarProspectosPorEstado();
+    expect(r.total).toBe(40);
+    expect(r.porEstado.nuevo).toBe(10);
+    expect(r.porEstado.proposal).toBe(5); // proposal 3 + negociacion 2
+    expect(r.porEstado.won).toBe(5); // won 1 + cerrado 4
+    expect(r.porEstado.lost).toBe(6); // perdido
+    expect(Object.keys(r.porEstado)).toHaveLength(11);
+    // Todas las consultas son de solo cabecera sobre prospectos vivos (sin duplicados).
+    expect(llamadas.every((c) => c.tabla === 'prospecto' && c.is.some(([k]) => k === 'duplicado_de'))).toBe(true);
+    expect(llamadas).toHaveLength(15);
+  });
+
+  it('un error de lectura LANZA — jamás un embudo en cero', async () => {
+    respuestas.set('prospecto', [{ data: null, error: { message: 'boom' } }]);
+    await expect(contarProspectosPorEstado()).rejects.toThrow(/contarProspectosPorEstado/);
   });
 });
