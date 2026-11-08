@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex -- recorre src/app por rutas propias del repo; los patrones corren sobre texto de código local. */
 // Guarda: ningún texto VISIBLE de /dashboard (pantallas de cliente) nombra una tabla de la base ni un número de migración.
 //
 // También las variables de entorno del servidor (`RESEND_EMAIL_DOMAIN`, `LIKIDA_*`…): configuración que el cliente no toca.

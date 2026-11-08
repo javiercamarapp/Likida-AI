@@ -20,6 +20,7 @@ const FUENTES: ReadonlyArray<readonly [RegExp, string]> = [
 ];
 
 /** Identificador técnico: `snake_case` con al menos un guion bajo, o `tabla.columna` en minúsculas con guion bajo. */
+// eslint-disable-next-line security/detect-unsafe-regex -- se aplica a textos cortos de la propia aplicación (nombres de fuente), sin entrada del usuario.
 const IDENTIFICADOR = /\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b/;
 
 /** Traduce la `fuente` técnica de una cifra a una frase para el cliente. Nunca devuelve un identificador. */
