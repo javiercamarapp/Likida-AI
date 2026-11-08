@@ -148,14 +148,16 @@
 :root[data-theme="dark"] [data-ui="v2"] .rv-marcaint[data-mono-oscuro] path { fill: currentColor; }
 :root[data-theme="dark"] [data-ui="v2"] .rv-marcaint[data-mono-oscuro] { color: var(--ink); }
 [data-ui="v2"] .rv-chipfuente {
-  display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 28px; padding: 0 10px; border: 1px solid var(--line2);
-  border-radius: 999px; background: var(--surface); color: var(--ink); font: 500 12px/1 var(--font-sans-ui, inherit); white-space: nowrap;
+  position: relative; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 28px; padding: 0 10px; border: 1px solid var(--line2);
+  border-radius: 999px; background: var(--surface); color: var(--ink); font: 500 12px/1 var(--font-sans-ui, inherit); white-space: nowrap; cursor: pointer;
 }
-[data-ui="v2"] button.rv-chipfuente { cursor: pointer; }
-[data-ui="v2"] button.rv-chipfuente:hover { background: var(--canvas); }
-[data-ui="v2"] button.rv-chipfuente:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-/* Activo: el azul de Rovaq (mismos tokens que segmentados y chips). */
-[data-ui="v2"] .rv-chipfuente[data-activo] { background: var(--seg-activo-bg); border-color: var(--seg-activo-borde); color: var(--seg-activo-fg); }
-[data-ui="v2"] button.rv-chipfuente[data-activo]:hover { background: var(--seg-activo-hover); }
-@media (max-width: 819px) { [data-ui="v2"] button.rv-chipfuente { min-height: 44px; } }
-@media (forced-colors: active) { [data-ui="v2"] .rv-chipfuente[data-activo] { border-color: Highlight; } }
+/* El checkbox real queda fuera de la vista (no display:none: sigue enfocable y viaja en el formulario). */
+[data-ui="v2"] .rv-chipfuente__in { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+[data-ui="v2"] .rv-chipfuente:hover { background: var(--canvas); }
+[data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* Marcado: el azul de Rovaq (mismos tokens que segmentados y chips). */
+[data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:checked) { background: var(--seg-activo-bg); border-color: var(--seg-activo-borde); color: var(--seg-activo-fg); }
+[data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:checked):hover { background: var(--seg-activo-hover); }
+[data-ui="v2"] .rv-chipfuente[data-deshabilitado] { opacity: .5; cursor: not-allowed; }
+@media (max-width: 819px) { [data-ui="v2"] .rv-chipfuente { min-height: 44px; } }
+@media (forced-colors: active) { [data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:checked) { border-color: Highlight; } }

@@ -28,4 +28,4 @@ export { Tabs, type PestanaDef } from './tabs';
 export { TabsLinea, type PestanaLinea } from './tabs-linea';
 export { StatusChip, type TonoEstado } from './status-chip';
 export { TablaBase, type ColumnaBase } from './tabla-base';
-export { MarcaIntegracion, ChipFuente, IDS_INTEGRACION, esIntegracionConocida, type IdIntegracion } from './marca-integracion';
+export { MarcaIntegracion, ChipFuente, IDS_INTEGRACION, esIntegracionConocida, type MarcaId } from './marca-integracion';

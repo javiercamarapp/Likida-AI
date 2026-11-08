@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { ChipFuente, IDS_INTEGRACION, MarcaIntegracion, esIntegracionConocida } from './marca-integracion';
+import { ChipFuente, IDS_INTEGRACION, MarcaIntegracion, esIntegracionConocida, type MarcaId } from './marca-integracion';
 import { INTEGRACIONES } from './marca-integracion.data';
 
 const leer = (f: string) => readFileSync(join(__dirname, f), 'utf8');
@@ -33,20 +33,18 @@ describe('MarcaIntegracion', () => {
     expect(h).toContain('lucide');
     expect(INTEGRACIONES.csv.tipo).toBe('generico');
   });
-  it('un id desconocido cae al icono genérico, nunca a un logo inventado', () => {
+  it("'generico' y cualquier id sin marca caen al icono genérico, nunca a un logo inventado", () => {
     expect(esIntegracionConocida('hubspot')).toBe(true);
     expect(esIntegracionConocida('toString')).toBe(false); // no hereda de Object.prototype
-    const h = renderToStaticMarkup(<MarcaIntegracion id="no-existe" />);
-    expect(h).toContain('lucide');
-    expect(h).toContain('data-marca="desconocida"');
-    expect(h).not.toContain('fill="#');
+    for (const id of ['generico', 'no-existe']) {
+      const h = renderToStaticMarkup(<MarcaIntegracion id={id as MarcaId} />);
+      expect(h).toContain('lucide');
+      expect(h).toContain('data-marca="generico"');
+      expect(h).not.toContain('fill="#');
+    }
   });
-  it('accesibilidad: decorativo por omisión (aria-hidden); con etiqueta es role=img con nombre', () => {
-    expect(renderToStaticMarkup(<MarcaIntegracion id="sap" />)).toContain('aria-hidden="true"');
-    const h = renderToStaticMarkup(<MarcaIntegracion id="sap" etiqueta="SAP" />);
-    expect(h).toContain('role="img"');
-    expect(h).toContain('aria-label="SAP"');
-    expect(h).not.toContain('aria-hidden');
+  it('accesibilidad: siempre decorativo (aria-hidden), el nombre va escrito al lado', () => {
+    for (const id of ['sap', 'csv', 'generico'] as const) expect(renderToStaticMarkup(<MarcaIntegracion id={id} />), id).toContain('aria-hidden="true"');
   });
   it('tam cambia el lado', () => {
     expect(renderToStaticMarkup(<MarcaIntegracion id="gmail" tam={20} />)).toContain('width="20" height="20"');
@@ -64,31 +62,33 @@ describe('MarcaIntegracion', () => {
   });
 });
 
-describe('ChipFuente', () => {
-  it('sin onClick es un <span> informativo con el logo y el texto', () => {
-    const h = renderToStaticMarkup(<ChipFuente marca="hubspot">HubSpot</ChipFuente>);
-    expect(h).toMatch(/^<span class="rv-chipfuente"/);
+describe('ChipFuente (píldora tipo casilla, sin JavaScript)', () => {
+  it('renderiza <label> con <input type="checkbox"> name/value, el logo y la etiqueta', () => {
+    const h = renderToStaticMarkup(<ChipFuente id="hubspot" etiqueta="HubSpot" name="fuente" value="hubspot" />);
+    expect(h).toMatch(/^<label class="rv-chipfuente"/);
+    expect(h).toContain('type="checkbox"');
+    expect(h).toContain('name="fuente"');
+    expect(h).toContain('value="hubspot"');
     expect(h).toContain('data-marca="hubspot"');
-    expect(h).toContain('HubSpot</span>');
-    expect(h).not.toContain('aria-pressed');
+    expect(h).toContain('>HubSpot</span>');
+    expect(h).not.toContain('checked');
   });
-  it('con onClick es un <button> con aria-pressed; activo marca data-activo', () => {
-    const inactivo = renderToStaticMarkup(<ChipFuente marca="excel" onClick={() => {}}>Excel</ChipFuente>);
-    expect(inactivo).toMatch(/^<button type="button"/);
-    expect(inactivo).toContain('aria-pressed="false"');
-    expect(inactivo).not.toContain('data-activo');
-    const activo = renderToStaticMarkup(<ChipFuente marca="excel" activo onClick={() => {}}>Excel</ChipFuente>);
-    expect(activo).toContain('aria-pressed="true"');
-    expect(activo).toContain('data-activo');
+  it('activo = defaultChecked; deshabilitado = disabled', () => {
+    expect(renderToStaticMarkup(<ChipFuente id="excel" etiqueta="Excel" activo />)).toContain('checked=""');
+    const d = renderToStaticMarkup(<ChipFuente id="csv" etiqueta="CSV" deshabilitado />);
+    expect(d).toContain('disabled=""');
+    expect(d).toContain('data-deshabilitado');
   });
-  it('sin marca solo pinta el texto', () => {
-    expect(renderToStaticMarkup(<ChipFuente>Todas</ChipFuente>)).not.toContain('<svg');
+  it('sin props de función: sirve en un componente de servidor dentro de un <form method="get">', () => {
+    const h = renderToStaticMarkup(<form method="get"><ChipFuente id="gmail" etiqueta="Gmail" name="f" value="gmail" activo /></form>);
+    expect(h).toContain('<form method="get">');
+    expect(readFileSync(join(__dirname, 'marca-integracion.tsx'), 'utf8')).not.toMatch(/onClick|onChange|=>\s*void/);
   });
-  it('CSS: píldora de 28 px, padding 0 10, radio 999, 12/500, borde 1 px #d6d6d9 (--line2), aire 6; activo con los tokens --seg-activo-*', () => {
+  it('CSS: píldora de 28 px, padding 0 10, radio 999, 12/500, borde 1 px #d6d6d9 (--line2), aire 6; marcado con los tokens --seg-activo-*', () => {
     const css = readFileSync(join(__dirname, '..', 'piezas.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     const base = /\[data-ui="v2"\] \.rv-chipfuente \{([^}]*)\}/.exec(css)?.[1] ?? '';
     for (const re of [/height:\s*28px/, /padding:\s*0 10px/, /border-radius:\s*999px/, /font:\s*500 12px/, /border:\s*1px solid var\(--line2\)/, /gap:\s*6px/]) expect(base).toMatch(re);
-    const activo = /\.rv-chipfuente\[data-activo\] \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    const activo = /\.rv-chipfuente:has\(\.rv-chipfuente__in:checked\) \{([^}]*)\}/.exec(css)?.[1] ?? '';
     for (const t of ['--seg-activo-bg', '--seg-activo-borde', '--seg-activo-fg']) expect(activo).toContain(t);
     expect(readFileSync(join(__dirname, '..', 'tokens.css'), 'utf8')).toMatch(/--line2:\s*#d6d6d9/);
   });
