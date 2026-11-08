@@ -6,8 +6,9 @@ import { numero } from '@/lib/formato';
 
 /**
  * Librería de gráficas del design system v2 — mismas reglas que
- * `admin/charts.tsx` (SVG/CSS a mano, sin librería nueva, monocromo por
- * OPACIDAD sobre la rampa --g1..--g5, nunca por color). Cada una anima su
+ * `admin/charts.tsx` (SVG/CSS a mano, sin librería nueva). R8 (7-nov-2026): el dato lleva el
+ * color del sistema (--chart-1; varias series recorren --chart-1..7) sobre pistas --ui-soft,
+ * en vez de la rampa gris --g1..--g5. Cada una anima su
  * entrada la PRIMERA vez que cruza el viewport (`useInView`), respeta
  * `prefers-reduced-motion` (`usePrefersReducedMotion` — sin movimiento,
  * muestra el estado final de una vez), y usa SOLO técnicas seguras bajo
@@ -21,7 +22,7 @@ const EASE = 'cubic-bezier(.2,.7,.3,1)';
 
 // ── Gauge ────────────────────────────────────────────────────────────────
 
-/** Arco semicircular 0–100%, identidad por relleno --g5 sobre pista --g1.
+/** Arco semicircular 0–100%, identidad por relleno --chart-1 sobre pista --ui-soft.
  *  Un solo arco de valor (no varios apilados) → sin riesgo de costura. */
 export function Gauge({
   valor, etiqueta, formato = 'porcentaje',
@@ -58,8 +59,8 @@ export function Gauge({
   return (
     <div className="flex flex-col items-center">
       <svg viewBox="0 0 200 110" className="w-full" style={{ maxWidth: 220 }}>
-        <path d={arco(ANGULO_INI, ANGULO_INI + ANGULO_TOTAL)} fill="none" stroke="var(--g1)" strokeWidth={GROSOR} strokeLinecap="round" />
-        <path d={arco(ANGULO_INI, anguloValor)} fill="none" stroke="var(--g5)" strokeWidth={GROSOR} strokeLinecap="round"
+        <path d={arco(ANGULO_INI, ANGULO_INI + ANGULO_TOTAL)} fill="none" stroke="var(--ui-soft, var(--g1))" strokeWidth={GROSOR} strokeLinecap="round" />
+        <path d={arco(ANGULO_INI, anguloValor)} fill="none" stroke="var(--chart-1)" strokeWidth={GROSOR} strokeLinecap="round"
           style={{
             strokeDasharray: largoAprox,
             strokeDashoffset: animar ? 0 : largoAprox,
@@ -93,10 +94,10 @@ export function HBars({
       {datos.map((d, i) => (
         <div key={d.etiqueta} className="flex items-center gap-3">
           <div className="w-28 shrink-0 text-xs truncate text-right" style={{ color: 'var(--muted)' }}>{d.etiqueta}</div>
-          <div className="flex-1 h-5 rounded-md overflow-hidden" style={{ background: 'var(--g1)' }}>
+          <div className="flex-1 h-5 rounded-md overflow-hidden" style={{ background: 'var(--ui-soft, var(--g1))' }}>
             <div className="h-full rounded-md" style={{
               width: animar ? `${(d.valor / max) * 100}%` : '0%',
-              background: 'var(--g5)',
+              background: 'var(--chart-1)',
               transition: reducido ? 'none' : `width 550ms ${EASE} ${i * 70}ms`,
             }} />
           </div>
@@ -124,7 +125,6 @@ export function MultiLine({
   const ANCHO = 640, ALTO = 220, PAD = 24;
   const n = categorias.length;
   const max = Math.max(...series.flatMap((s) => s.valores), 1);
-  const pasos = series.length <= 1 ? [1] : series.map((_, i) => 0.3 + (0.7 * i) / (series.length - 1));
   const largoAprox = 2 * (ANCHO + ALTO);
 
   function xy(valores: number[]) {
@@ -141,7 +141,7 @@ export function MultiLine({
           const puntos = xy(s.valores);
           const d = puntos.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
           return (
-            <path key={s.nombre} d={d} fill="none" stroke="var(--g5)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" opacity={pasos[si]}
+            <path key={s.nombre} d={d} fill="none" stroke={`var(--chart-${(si % 7) + 1})`} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"
               style={{
                 strokeDasharray: largoAprox,
                 strokeDashoffset: animar ? 0 : largoAprox,
@@ -154,7 +154,7 @@ export function MultiLine({
         <div className="flex flex-wrap gap-3 mt-2">
           {series.map((s, i) => (
             <div key={s.nombre} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-              <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'var(--g5)', opacity: pasos[i] }} />
+              <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: `var(--chart-${(i % 7) + 1})` }} />
               {s.nombre}
             </div>
           ))}
@@ -181,7 +181,6 @@ export function StackedBars({
   const valorDe = (v: number | undefined) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
   const totales = categorias.map((_, i) => series.reduce((s, ser) => s + valorDe(ser.valores[i]), 0));
   const max = Math.max(...totales, 1);
-  const pasos = series.length <= 1 ? [1] : series.map((_, i) => 0.3 + (0.7 * i) / (series.length - 1));
 
   return (
     <div>
@@ -196,8 +195,7 @@ export function StackedBars({
                   return (
                     <div key={s.nombre} style={{
                       height: animar ? `${segPct}%` : '0%',
-                      background: 'var(--g5)',
-                      opacity: pasos[si],
+                      background: `var(--chart-${(si % 7) + 1})`,
                       transition: reducido ? 'none' : `height 480ms ${EASE} ${ci * 60}ms`,
                     }} />
                   );
@@ -212,7 +210,7 @@ export function StackedBars({
         <div className="flex flex-wrap gap-3 mt-3">
           {series.map((s, i) => (
             <div key={s.nombre} className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-              <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'var(--g5)', opacity: pasos[i] }} />{s.nombre}
+              <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: `var(--chart-${(i % 7) + 1})` }} />{s.nombre}
             </div>
           ))}
         </div>
@@ -249,10 +247,10 @@ export function Funnel({ pasos }: { pasos: Array<{ etiqueta: string; valor: numb
               <span>{p.etiqueta}</span>
               <span className="tabular">{numero(p.valor)}{conversion !== null && (conversion === '—' ? ' · —' : ` · ${conversion}%`)}</span>
             </div>
-            <div className="h-7 rounded-md overflow-hidden" style={{ background: 'var(--g1)' }}>
+            <div className="h-7 rounded-md overflow-hidden" style={{ background: 'var(--ui-soft, var(--g1))' }}>
               <div className="h-full rounded-md" style={{
                 width: animar ? `${pct}%` : '0%',
-                background: 'var(--g5)',
+                background: 'var(--chart-1)',
                 opacity: 0.45 + 0.55 * (1 - i / pasos.length),
                 transition: reducido ? 'none' : `width 480ms ${EASE} ${i * 130}ms`,
               }} />
@@ -307,7 +305,7 @@ export function Waterfall({
                 top: animar ? `${topPct}%` : '100%',
                 height: animar ? `${Math.max(heightPct, 1)}%` : '0%',
                 // Bajas: `--casc-baja` (solo la define la capa v2: gris medio ≥3:1 contra la superficie en claro y oscuro); sin ella, `--g2` de siempre.
-                background: b.esTotal ? 'var(--g5)' : (b.positivo ? 'var(--g4)' : 'var(--casc-baja, var(--g2))'),
+                background: b.esTotal ? 'var(--chart-fuerte, var(--g5))' : (b.positivo ? 'var(--chart-1)' : 'var(--casc-baja, var(--g2))'),
                 transition: reducido ? 'none' : `top 480ms ${EASE} ${i * 80}ms, height 480ms ${EASE} ${i * 80}ms`,
               }} />
               <div className="absolute inset-x-0 text-center text-xs tabular" style={{ top: `calc(${topPct}% - 18px)`, color: 'var(--muted)' }}>
@@ -345,7 +343,7 @@ export function Histogram({ buckets }: { buckets: Array<{ rango: string; conteo:
           <div key={b.rango} className="flex-1 h-full flex items-end" title={`${b.rango}: ${b.conteo}`}>
             <div className="w-full" style={{
               height: animar ? `${(b.conteo / max) * 100}%` : '0%',
-              background: 'var(--g4)',
+              background: 'var(--chart-1)',
               transition: reducido ? 'none' : `height 420ms ${EASE} ${i * 25}ms`,
             }} />
           </div>
@@ -410,7 +408,7 @@ export function Heatmap({
                 return (
                   <td key={c} className="p-0.5">
                     <div title={`${f} · ${c}: ${fmt(v)}`} className="w-6 h-6 rounded-[3px]" style={{
-                      background: 'var(--g5)',
+                      background: 'var(--chart-1)',
                       opacity: animar ? Math.max(0.06, v / max) : 0,
                       transition: reducido ? 'none' : `opacity 380ms ease ${idx * 15}ms`,
                     }} />
@@ -445,7 +443,7 @@ export function CalendarHeatmap({ dias }: { dias: Array<{ fecha: string; valor: 
         <div key={si} className="flex flex-col gap-1">
           {semana.map((d) => (
             <div key={d.fecha} title={`${d.fecha}: ${d.valor}`} className="w-3 h-3 rounded-[2px]" style={{
-              background: 'var(--g5)',
+              background: 'var(--chart-1)',
               opacity: animar ? Math.max(0.08, d.valor / max) : 0,
               transition: reducido ? 'none' : `opacity 350ms ease ${si * 40}ms`,
             }} />
@@ -481,12 +479,12 @@ export function MarginDivergingBars({
         return (
           <div key={d.etiqueta} className="flex items-center gap-3 text-xs">
             <div className="w-28 shrink-0 truncate text-right" style={{ color: 'var(--muted)' }}>{d.etiqueta}</div>
-            <div className="flex-1 h-5 relative rounded-sm overflow-hidden" style={{ background: 'var(--g1)' }}>
+            <div className="flex-1 h-5 relative rounded-sm overflow-hidden" style={{ background: 'var(--ui-soft, var(--g1))' }}>
               <div className="absolute left-1/2 top-0 bottom-0 w-px" style={{ background: 'var(--faint)' }} />
               <div className="absolute top-0 bottom-0 rounded-sm" style={{
                 [positivo ? 'left' : 'right']: '50%',
                 width: animar ? `${pct}%` : '0%',
-                background: positivo ? 'var(--g5)' : 'var(--g3)',
+                background: positivo ? 'var(--chart-1)' : 'var(--chart-6)',
                 transition: reducido ? 'none' : `width 480ms ${EASE} ${i * 70}ms`,
               }} />
             </div>
@@ -536,7 +534,7 @@ export function ParetoBars({
             <div key={d.etiqueta} className="flex-1 h-full flex items-end">
               <div className="w-full rounded-t-[3px]" style={{
                 height: animar ? `${(d.valor / max) * 100}%` : '0%',
-                background: 'var(--g4)',
+                background: 'var(--chart-1)',
                 transition: reducido ? 'none' : `height 420ms ${EASE} ${i * 60}ms`,
               }} />
             </div>
@@ -544,7 +542,7 @@ export function ParetoBars({
         </div>
         <svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" className="absolute inset-0 pointer-events-none">
           <polyline points={conCumulativo.map((d, i) => `${xPct(i)},${100 - d.cumPct}`).join(' ')}
-            fill="none" stroke="var(--g5)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
+            fill="none" stroke="var(--chart-1)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
             style={{
               strokeDasharray: largoAprox,
               strokeDashoffset: animar ? 0 : largoAprox,

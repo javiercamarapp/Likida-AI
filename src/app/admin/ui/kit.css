@@ -1,0 +1,78 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Kit compartido (admin/ui/kit.tsx) · piezas propias que no existen en ui-v2.
+   Radios 12/8, padding 14, bordes de --ui-border, tipografía de la escala cerrada (11–16, 18, 20, 26).
+   Reglas BASE sin ámbito [data-ui] a propósito: el kit también lo pintan pantallas v1 del dashboard; los tokens traen respaldo.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Una Cifra suelta (StatCard / KpiTile) es una tira de UNA celda: llena su celda de la rejilla y alinea los pies. */
+.kit-celda { height: 100%; min-width: 0; }
+.kit-celda > .rv-kpi { height: 100%; }
+
+.kit-subtitulo { margin: -4px 0 8px; font-size: 12px; color: var(--muted); }
+
+/* Estado vacío / error dentro de su propia tarjeta (sin gris dentro de gris). */
+.kit-vacio { min-width: 0; }
+
+/* Acción secundaria en píldora (Ver más, acción del vacío). */
+.kit-vermas {
+  display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; box-sizing: border-box;
+  border: 1px solid var(--ui-border, var(--line)); border-radius: 999px; background: var(--ui-surface, var(--surface));
+  font-size: 12px; font-weight: 500; line-height: 1; color: var(--ink); text-decoration: none; white-space: nowrap;
+  transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.kit-vermas:hover { background: var(--ui-soft, var(--canvas)); }
+.kit-vermas:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
+
+/* Widget de uso del sidebar. */
+.kit-uso { margin: 0 0 4px; padding: 10px 12px; border: 1px solid var(--ui-border, var(--line)); border-radius: 12px; background: var(--ui-surface, var(--surface)); }
+.kit-uso__etq { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.kit-uso__valor { margin-top: 2px; font-size: 18px; font-weight: 600; line-height: 1.2; font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kit-uso__barra { margin-top: 6px; height: 4px; border-radius: 999px; overflow: hidden; background: var(--ui-soft, var(--canvas)); }
+.kit-uso__barra > div { height: 100%; border-radius: 999px; background: var(--chart-1, var(--marca)); }
+.kit-uso__nota { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.kit-uso__ver { display: inline-block; margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--ink); text-decoration: none; }
+.kit-uso__ver:hover { text-decoration: underline; }
+
+/* Banner de insight: una noticia del periodo con su cifra real. */
+.kit-banner {
+  display: flex; align-items: center; gap: 10px; padding: 10px 14px; box-sizing: border-box;
+  border: 1px solid var(--ui-border, var(--line)); border-radius: 12px; background: var(--ui-surface, var(--surface));
+}
+.kit-banner__punto { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.kit-banner__etq { flex: none; font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.kit-banner__texto { min-width: 0; flex: 1 1 12rem; font-size: 13px; overflow-wrap: anywhere; }
+.kit-banner__texto b { white-space: nowrap; }
+.kit-banner__delta { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; }
+.kit-banner__delta[data-bueno="1"] { color: var(--ok); background: var(--okbg); }
+.kit-banner__delta[data-bueno="0"] { color: var(--bad); background: var(--badbg); }
+.kit-banner__ver { margin-left: auto; flex: none; font-size: 12px; font-weight: 500; color: var(--ink); text-decoration: none; }
+.kit-banner__ver:hover { text-decoration: underline; }
+@media (max-width: 767px) { .kit-banner { flex-wrap: wrap; row-gap: 4px; } }
+
+/* Gráficas del kit (charts.tsx / graficas.tsx): color de dato del sistema, trazo de 1.5 y entrada animada. */
+.kit-area { fill: var(--chart-1); }
+.kit-linea { stroke: var(--chart-1); }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes kit-trazo { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes kit-crece { from { transform: scaleY(0); } }
+  @keyframes kit-aparece { from { opacity: 0; } }
+  .kit-linea[pathLength] { stroke-dasharray: 1; animation: kit-trazo 700ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+  .kit-area { animation: kit-aparece 500ms ease-out 200ms backwards; }
+  .kit-barra { transform-origin: bottom; animation: kit-crece 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+  .kit-barra-h { transform-origin: left; animation: kit-crece-h 520ms cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+  @keyframes kit-crece-h { from { transform: scaleX(0); } }
+}
+
+/* ContadorRetro (admin/contador-retro.tsx): cifra del sistema, ya no tablero de dígitos negros. */
+.kit-contador { display: none; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+@media (min-width: 640px) { .kit-contador { display: flex; } }
+.kit-contador__valor { font-size: 20px; font-weight: 600; line-height: 1.2; letter-spacing: -.01em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.kit-contador[data-tam="lg"] .kit-contador__valor { font-size: 26px; font-weight: 700; }
+.kit-contador__valor[data-vacio] { color: var(--faint); }
+.kit-contador__etq { font-size: 11px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+.kit-contador__nota { font-size: 12px; color: var(--faint); }
+
+/* Escala 50k: una cifra de 12+ dígitos se recorta por ANCHO con "…" (la completa va en el `title` de la celda); la etiqueta envuelve a 2 líneas antes de recortar. */
+.kit-celda .rv-kpi__fila { min-width: 0; }
+.kit-celda .rv-kpi__valor { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kit-celda .rv-kpi__etq { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }

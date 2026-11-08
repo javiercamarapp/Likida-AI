@@ -1,8 +1,10 @@
-// Componentes de gráfica en SVG plano — sin librería nueva, monocromo
-// (--ink para el dato, --muted para lo recesivo), specs de dataviz skill:
-// línea de 2px, marcadores ≥8px con anillo de superficie, gridlines
-// hairline de 1px. Interactividad con :hover puro en CSS — sin estado de
+// Componentes de gráfica en SVG plano — sin librería nueva. R8 (7-nov-2026): el dato lleva el color
+// del sistema (--chart-1; la dona recorre --chart-1..8), línea de 1.5 px con relleno degradado, marcadores con
+// anillo de superficie, rejilla de 1 px y entrada animada (ver ui/kit.css). Interactividad con :hover puro en CSS — sin estado de
 // React para algo que no lo necesita.
+
+import { useId } from 'react';
+import './ui/kit.css';
 
 /**
  * `width="100%"` + viewBox, NUNCA un ancho fijo en px: un ancho fijo dentro
@@ -23,8 +25,8 @@ export function Sparkline({ valores, alto = 24 }: { valores: number[]; alto?: nu
   const [ux, uy] = puntos[puntos.length - 1];
   return (
     <svg width="100%" height={alto} viewBox={`0 0 ${ANCHO_VB} ${alto}`} preserveAspectRatio="none" className="block">
-      <path d={d} fill="none" stroke="var(--marca)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} vectorEffect="non-scaling-stroke" />
-      <circle cx={ux} cy={uy} r={2.5} fill="var(--marca)" />
+      <path d={d} fill="none" stroke="var(--chart-1)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      <circle cx={ux} cy={uy} r={2.5} fill="var(--chart-1)" />
     </svg>
   );
 }
@@ -106,6 +108,7 @@ export function AreaChartSimple({
   // dos granularidades en la misma gráfica mentirían la comparación igual que
   // dos escalas (por eso comparten `max` más abajo).
   const comparativa = comparativaCruda && agrupada ? agruparPorSemana(comparativaCruda) : comparativaCruda;
+  const gid = `kit-area-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   const ANCHO = 640, ALTO = 240, PAD_IZQ = 8, PAD_DER = 8, PAD_SUP = 16, PAD_INF = 28;
   const w = ANCHO - PAD_IZQ - PAD_DER, h = ALTO - PAD_SUP - PAD_INF;
   const comp = comparativa && comparativa.length > 1 ? comparativa : null;
@@ -130,7 +133,7 @@ export function AreaChartSimple({
     )}
     {comp && (
       <div className="flex items-center gap-3 mb-1 text-[11px]" style={{ color: 'var(--muted)' }}>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--marca)' }} /> actual</span>
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--chart-1)' }} /> actual</span>
         <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--muted)', borderTopStyle: 'dashed' }} /> {etiquetaComparativa}</span>
       </div>
     )}
@@ -143,12 +146,18 @@ export function AreaChartSimple({
         <path d={lineaComp} fill="none" stroke="var(--muted)" strokeWidth={1.5} strokeDasharray="5 5"
           opacity={0.6} strokeLinecap="round" strokeLinejoin="round" />
       )}
-      <path d={area} fill="var(--marca)" opacity={0.08} />
-      <path d={linea} fill="none" stroke="var(--marca)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+      <defs>
+        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="var(--chart-1)" stopOpacity={0.22} />
+          <stop offset="1" stopColor="var(--chart-1)" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#${gid})`} />
+      <path d={linea} pathLength={1} className="kit-linea" fill="none" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       {xy.map(([x, y], i) => (
         <g key={i} className="group cursor-default">
           <circle cx={x} cy={y} r={9} fill="transparent" />
-          <circle cx={x} cy={y} r={3.5} fill="var(--marca)" stroke="var(--bg)" strokeWidth={2}
+          <circle cx={x} cy={y} r={3.5} fill="var(--chart-1)" stroke="var(--surface)" strokeWidth={2}
             className="opacity-0 group-hover:opacity-100 transition-opacity" />
           {mostrarEtiqueta(i) && (
             <text x={x} y={ALTO - 6} textAnchor="middle" fontSize={10} fill="var(--muted)">
@@ -205,7 +214,7 @@ export function BarChartSimple({
         {datos.map((d, i) => (
           <div key={d.dia} className="flex-1 h-full flex items-end justify-center group relative cursor-default">
             {d.valor > 0 && (
-              <div className="w-full max-w-14 rounded-t-[4px]" style={{ height: `${pcts[i]}%`, background: 'var(--marca)', opacity: 0.82, minHeight: 3 }} />
+              <div className="kit-barra w-full max-w-14 rounded-t-[4px]" style={{ height: `${pcts[i]}%`, background: 'var(--chart-1)', minHeight: 3 }} />
             )}
             <div className="absolute left-1/2 -translate-x-1/2 px-2 py-1 rounded-md text-xs font-semibold opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-10"
               style={{ bottom: `calc(${pcts[i]}% + 8px)`, background: 'var(--marca)', color: 'var(--marca-fg)' }}>
@@ -224,13 +233,13 @@ export function BarChartSimple({
         <svg width="100%" height="100%" className="absolute inset-0 pointer-events-none" viewBox="0 0 100 100" preserveAspectRatio="none">
           <polyline
             points={pcts.map((p, i) => `${xPct(i)},${100 - p}`).join(' ')}
-            fill="none" stroke="var(--marca)" strokeWidth={1.5} strokeOpacity={0.4}
+            fill="none" stroke="var(--chart-1)" strokeWidth={1.5} strokeOpacity={0.35}
             vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round"
           />
         </svg>
         {pcts.map((p, i) => (
           <div key={i} className="absolute w-[7px] h-[7px] rounded-full pointer-events-none"
-            style={{ left: `${xPct(i)}%`, bottom: `${p}%`, transform: 'translate(-50%, 50%)', background: 'var(--marca)', boxShadow: '0 0 0 2px var(--surface)' }} />
+            style={{ left: `${xPct(i)}%`, bottom: `${p}%`, transform: 'translate(-50%, 50%)', background: 'var(--chart-1)', boxShadow: '0 0 0 2px var(--surface)' }} />
         ))}
       </div>
       <div className="flex gap-2 mt-2">
@@ -286,8 +295,7 @@ function pathRebanada(anguloIni: number, anguloFin: number): string {
 }
 
 /**
- * Dona de una categoría — identidad por color (monocromo: por OPACIDAD, no
- * por hue, ya que la paleta es blanco/negro) + leyenda directa.
+ * Dona de una categoría — identidad por color del sistema (--chart-1..7) + leyenda directa.
  *
  * El SVG vive en un `div` de tamaño fijo con `aspect-square` (NO en el
  * `<svg>` mismo con `width`/`height` en px como antes): un tamaño fijo en
@@ -300,7 +308,6 @@ function pathRebanada(anguloIni: number, anguloFin: number): string {
  */
 export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor: number }> }) {
   const total = segmentos.reduce((s, x) => s + x.valor, 0) || 1;
-  const pasos = segmentos.length <= 1 ? [1] : segmentos.map((_, i) => 0.35 + (0.65 * i) / (segmentos.length - 1));
   const acumulados = segmentos.reduce<number[]>((acc, s) => {
     const anterior = acc.length ? acc[acc.length - 1] : 0;
     acc.push(anterior + s.valor / total);
@@ -322,7 +329,7 @@ export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor
             const anguloIni = anguloIniBase + gap / 2;
             const anguloFin = Math.max(anguloIni, anguloFinBase - gap / 2);
             return (
-              <path key={s.etiqueta} d={pathRebanada(anguloIni, anguloFin)} fill="var(--marca)" opacity={pasos[i]} />
+              <path key={s.etiqueta} d={pathRebanada(anguloIni, anguloFin)} fill={`var(--chart-${(i % 7) + 1})`} />
             );
           })}
         </svg>
@@ -330,7 +337,7 @@ export function Dona({ segmentos }: { segmentos: Array<{ etiqueta: string; valor
       <div className="space-y-2 min-w-0">
         {segmentos.map((s, i) => (
           <div key={s.etiqueta} className="flex items-center gap-2 text-sm">
-            <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: 'var(--marca)', opacity: pasos[i] }} />
+            <span className="inline-block w-2.5 h-2.5 rounded-full shrink-0" style={{ background: `var(--chart-${(i % 7) + 1})` }} />
             <span className="font-medium truncate">{s.etiqueta}</span>
             <span className="shrink-0" style={{ color: 'var(--muted)' }}>{Math.round((s.valor / total) * 100)}%</span>
           </div>

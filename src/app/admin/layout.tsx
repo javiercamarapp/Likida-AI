@@ -4,10 +4,19 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import AdminChrome from './chrome';
 import '../ui-v2/tokens.css';
+// Fuente unificada con el dashboard (Hanken Grotesk, decisión de 7-nov-2026; antes D3 la dejaba en Inter).
+import '../ui-v2/fonts.css';
+import '../ui-v2/shell.css';
+import './admin-shell.css';
 import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';
 import '../ui-v2/piezas.css';
 import '../ui-v2/barra-periodo.css';
+import '../ui-v2/graficas.css';
+import '../ui-v2/datos.css';
+import '../ui-v2/movimiento.css';
+import '../ui-v2/paginas.css';
+import '../ui-v2/paginas-dominio.css';
 
 export const dynamic = 'force-dynamic';
 

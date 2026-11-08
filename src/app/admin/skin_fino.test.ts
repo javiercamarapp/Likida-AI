@@ -4,31 +4,33 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 // K3 · /admin pasa al sistema fino de controles: carga tokens.css y el marco lleva data-ui="v2" (los campos, chips, tooltips y
-// cajones heredan alto 32, radio 8/12, borde 1 px y trazo 1.75). La fuente (Inter) NO cambia: no se carga fonts.css (D3).
+// cajones heredan alto 32, radio 8/12, borde 1 px y trazo 1.75). R8 (7-nov-2026): se unifica la fuente con el dashboard (Hanken, fonts.css) y el marco usa `.rv-*` de shell.css.
 const leer = (f: string) => readFileSync(join(__dirname, f), 'utf8');
 
 describe('/admin: skin fino (K3)', () => {
-  it('el layout carga tokens.css antes que las hojas del kit y no carga fonts.css', () => {
+  it('el layout carga tokens.css antes que las hojas del kit y SÍ carga fonts.css (decisión de unificar la fuente, 7-nov-2026; reemplaza a D3)', () => {
     const l = leer('layout.tsx');
     expect(l).toContain("import '../ui-v2/tokens.css';");
     expect(l.indexOf('tokens.css')).toBeLessThan(l.indexOf('componentes.css'));
-    expect(l).not.toContain('fonts.css');
+    expect(l).toContain("import '../ui-v2/fonts.css';");
+    expect(l).toContain("import '../ui-v2/shell.css';");
   });
-  it('el marco lleva data-ui="v2" y el logo de 22 px', () => {
+  it('el marco lleva data-ui="v2" y usa las clases del marco del dashboard (CLASES_V2)', () => {
     const c = leer('chrome.tsx');
-    expect(c).toMatch(/tema-neutro" data-ui="v2"/);
-    expect(c).toContain('alto="h-[22px]"');
-    expect(c).not.toContain('h-[18px]');
+    expect(c).toContain('data-ui="v2"');
+    expect(c).toContain('CLASES_V2.raiz');
+    expect(c).toContain('CLASES_V2.columna');
+    expect(c).not.toContain('glass-panel');
   });
-  it('el ítem activo del menú es gris suave con peso 600, no pastilla negra', () => {
+  it('el ítem activo se marca con aria-current (el activo gris lo pinta .rv-item de shell.css, no una pastilla negra)', () => {
     const s = leer('sidebar-nav.tsx');
-    expect(s).toContain("background: 'var(--nav-activo-bg)'");
-    expect(s).toContain('font-semibold');
+    expect(s).toContain('aria-current');
+    expect(s).toContain('className="rv-item"');
     expect(s).not.toMatch(/background:\s*'var\(--marca\)'/);
   });
-  it('el botón de cerrar sesión (32x32) tiene zona táctil de 44 px', () => {
+  it('el botón de cerrar sesión usa .rv-icono-boton (32x32, zona táctil de 44 px por ::after en shell.css)', () => {
     const c = leer('chrome.tsx');
-    expect(c).toMatch(/aria-label="Cerrar sesión"[\s\S]{0,400}relative[\s\S]{0,400}after:size-11/);
+    expect(c).toMatch(/aria-label="Cerrar sesión"[\s\S]{0,200}rv-icono-boton/);
   });
   it('tokens.css no cambia nada fuera de un marco data-ui="v2" (el fondo global solo con :has)', () => {
     const t = readFileSync(join(__dirname, '../ui-v2/tokens.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

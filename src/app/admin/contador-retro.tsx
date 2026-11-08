@@ -1,61 +1,10 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-
-/** Un dígito: tablero fijo con el valor actual + una "hoja" que gira
- *  (rotateX) mostrando el valor ANTERIOR cayendo hacia adelante, al
- *  estilo reloj/contador de tarjetas plegables (Solari) — cuando el
- *  dígito cambia, la hoja se monta, gira 420ms y se desmonta, dejando
- *  ver el tablero de abajo (que ya tiene el valor nuevo desde el primer
- *  render). Un solo @keyframes en globals.css, sin librería nueva. */
-function Digito({ valor, tamaño }: { valor: string; tamaño: 'md' | 'lg' }) {
-  const [mostrado, setMostrado] = useState(valor);
-  const [valorPrevio, setValorPrevio] = useState(valor);
-  const [anterior, setAnterior] = useState<string | null>(null);
-
-  // Ajustar estado derivado de un cambio de prop se hace EN el render (el
-  // patrón que React recomienda para esto), no en un efecto — el efecto de
-  // abajo solo se encarga de la parte que sí es un timer externo: quitar
-  // la hoja 420ms después de que terminó de girar.
-  if (valor !== valorPrevio) {
-    setAnterior(mostrado);
-    setMostrado(valor);
-    setValorPrevio(valor);
-  }
-
-  useEffect(() => {
-    if (anterior === null) return;
-    const t = setTimeout(() => setAnterior(null), 420);
-    return () => clearTimeout(t);
-  }, [anterior]);
-
-  const dims = tamaño === 'lg' ? { w: 33, h: 45, font: 29, radio: 7 } : { w: 20, h: 27, font: 18, radio: 5 };
-  const base: React.CSSProperties = {
-    fontSize: dims.font,
-    fontFamily: 'var(--font-sans)',
-    fontVariantNumeric: 'tabular-nums',
-    fontWeight: 700,
-    color: '#f2f2f0',
-  };
-
-  return (
-    <div className="relative" style={{ width: dims.w, height: dims.h, borderRadius: dims.radio, background: 'linear-gradient(180deg, #262626, #141414)', perspective: dims.h * 5.5 }}>
-      <span className="absolute inset-0 flex items-center justify-center" style={base}>{mostrado}</span>
-      <div className="absolute inset-x-0 top-1/2 h-px" style={{ background: 'rgba(0,0,0,0.5)' }} />
-      {anterior !== null && (
-        <div
-          className="absolute inset-0 flex items-center justify-center"
-          style={{ ...base, borderRadius: dims.radio, background: 'linear-gradient(180deg, #2b2b2b, #161616)', transformOrigin: 'center', animation: 'reloj-flip 420ms cubic-bezier(0.4,0,0.2,1) forwards' }}
-        >
-          {anterior}
-        </div>
-      )}
-    </div>
-  );
-}
+import { ConteoKpi } from '../ui-v2/graficas/conteo-kpi';
+import './ui/kit.css';
 
 /**
- * Contador retro de tarjetas plegables (estilo reloj Solari) — reutilizable
+ * Contador de una cifra real (antes tablero Solari) — reutilizable
  * en cualquier página donde haya un total real que valga la pena revelar
  * así: MRR en Inicio, facturas históricas en Agente OCR, flotas dadas de
  * alta en Flotas. "Animado" es honesto: al montar cuenta desde 0 hasta
@@ -63,16 +12,13 @@ function Digito({ valor, tamaño }: { valor: string; tamaño: 'md' | 'lg' }) {
  * nunca un tic inventado.
  */
 export default function ContadorRetro({
-  valor, digitos = 4, prefijo, etiqueta, tamaño = 'md', sinDato = 'sin medir',
+  valor, prefijo, etiqueta, tamaño = 'md', sinDato = 'sin medir',
 }: {
   /**
-   * `null` = NO MEDIBLE (ADM-5, auditoría 24): antes esta prop no aceptaba
-   * `null` y el MRR se mandaba como `valor={0}` LITERAL aunque nadie lo
-   * hubiera calculado — el mismo `$0` fabricado que la regla #1 del
-   * producto prohíbe. Con `null` se pinta "—" y `sinDato` abajo, en vez de
-   * un cero que nadie midió.
+   * `null` = NO MEDIBLE (ADM-5, auditoría 24): se pinta "—" y `sinDato`, nunca un cero que nadie midió.
    */
   valor: number | null;
+  /** Sin efecto desde R8 (ya no hay dígitos de tablero con ceros a la izquierda); se conserva para no romper llamadores. */
   digitos?: number;
   prefijo?: string;
   etiqueta: string;
@@ -80,57 +26,22 @@ export default function ContadorRetro({
   /** El pie cuando `valor` es `null`: por qué no hay cifra. */
   sinDato?: string;
 }) {
-  const [mostrado, setMostrado] = useState(valor ?? 0);
-  const montadoRef = useRef(false);
-
-  useEffect(() => {
-    // AUDITORÍA 12, ALTO (frontend) — arrancaba en `useState(0)`: en el
-    // servidor no corre NINGÚN useEffect, así que el HTML servido decía
-    // "0000" sin importar el valor real — el mismo cero que se lee como
-    // medición que CLAUDE.md prohíbe y que la ronda 10 cerró en KpiTile.
-    // El estado arranca en el valor REAL (mismo useState inicial en
-    // servidor y primer render del cliente), y la animación de conteo solo
-    // corre cuando `valor` CAMBIA después de montado (filtro, datos
-    // nuevos) — que es cuando animar tiene algo real que mostrar.
-    if (!montadoRef.current) {
-      montadoRef.current = true;
-      return;
-    }
-    if (valor === null || valor <= 0) return; // el estado ya arranca en el valor real (0)
-    const pasos = Math.min(valor, 30);
-    const incremento = Math.max(1, Math.round(valor / pasos));
-    let actual = 0;
-    const id = setInterval(() => {
-      actual = Math.min(valor, actual + incremento);
-      setMostrado(actual);
-      if (actual >= valor) clearInterval(id);
-    }, 45);
-    return () => clearInterval(id);
-  }, [valor]);
-
-  if (valor === null) {
-    return (
-      <div className="hidden sm:flex flex-col items-end gap-2 shrink-0">
-        <span className="font-bold tabular-nums" style={{ fontSize: tamaño === 'lg' ? 29 : 18, color: 'var(--muted)' }}>—</span>
-        <span className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-          {etiqueta}
-        </span>
-        <span className="text-[10px] normal-case" style={{ color: 'var(--faint)' }}>{sinDato}</span>
-      </div>
-    );
-  }
-
-  const cifras = String(mostrado).padStart(digitos, '0').split('');
-
+  // R8 (7-nov-2026): la cifra deja de ser un tablero de dígitos negros y pasa a ser una cifra del sistema (Hanken, tabular, tinta),
+  // con el conteo corto de `ConteoKpi` (arranca en el valor real; no pasa por 0; respeta reduced-motion).
   return (
-    <div className="hidden sm:flex flex-col items-end gap-2 shrink-0">
-      <div className="flex items-center gap-1.5">
-        {prefijo && <span className="font-bold" style={{ fontSize: tamaño === 'lg' ? 23 : 16, color: 'var(--muted)' }}>{prefijo}</span>}
-        {cifras.map((d, i) => <Digito key={i} valor={d} tamaño={tamaño} />)}
-      </div>
-      <span className="text-xs font-semibold uppercase tracking-wide whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-        {etiqueta}
-      </span>
+    <div className="kit-contador" data-tam={tamaño}>
+      {valor === null ? (
+        <>
+          <span className="kit-contador__valor" data-vacio>—</span>
+          <span className="kit-contador__etq">{etiqueta}</span>
+          <span className="kit-contador__nota">{sinDato}</span>
+        </>
+      ) : (
+        <>
+          <span className="kit-contador__valor">{prefijo}<ConteoKpi valor={valor} /></span>
+          <span className="kit-contador__etq">{etiqueta}</span>
+        </>
+      )}
     </div>
   );
 }
