@@ -164,6 +164,28 @@ export const INFO_OPERACION = {
     'Tu archivo CSV o Excel. El cliente debe existir en Clientes y los sitios en el catálogo de sitios; nada se inventa. Las columnas de tarifa solo se leen con permiso de finanzas. Solo lo ve quien puede editar convenios.',
     'Si ves el enlace «Descargar la plantilla», úsalo para ver las columnas.',
   ),
+  // ── mesa de control (asistencia) ──
+  'asistencia.abiertas': V(
+    'Abiertas',
+    'Incidencias de asistencia en ruta que siguen vivas.',
+    'Cuenta las incidencias de asistencia que no se han cerrado, de cualquier prioridad.',
+    'Expedientes de asistencia de tu flota (reportes por WhatsApp o eventos de cámara), leídos al abrir la pantalla. Cero significa que no hay ninguna abierta, no que la lectura falló: si falla se dice.',
+    'Atiende primero las críticas y las que nadie ha tomado.',
+  ),
+  'asistencia.criticas': V(
+    'Críticas',
+    'Incidencias abiertas con prioridad crítica.',
+    'Cuenta las incidencias abiertas cuya prioridad quedó en crítica al registrarse.',
+    'Expedientes de asistencia de tu flota, leídos al abrir la pantalla.',
+    'Toma el control de cada una para detener el escalamiento automático y decide.',
+  ),
+  'asistencia.sin_tomar': V(
+    'Sin tomar',
+    'Incidencias abiertas que nadie ha reconocido desde la mesa.',
+    'Cuenta las incidencias abiertas sin reconocimiento: el escalamiento automático sigue corriendo en ellas.',
+    'Expedientes de asistencia de tu flota, leídos al abrir la pantalla.',
+    'Pulsa «Tomar el control» para que quede a tu nombre.',
+  ),
   // ── emergencias ──
   'emergencias.poliza': V(
     'Póliza',
