@@ -1,4 +1,4 @@
-import { BarraFiltros, FiltroCampo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
+import { BarraPeriodo, hrefConParams } from '@/app/ui-v2/componentes';
 import { FileDown } from 'lucide-react';
 import { fechaMx, mxn, numero } from '@/lib/formato';
 // SOLO tipos y módulos puros: la vista no debe arrastrar `supabaseAdmin` al bundle.
@@ -138,6 +138,9 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
   const enlace = (pag: number) => `?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose], ...new URLSearchParams(filtrosAQuery({ ...f, pagina: 1 }, false)).entries(), ...(pag > 1 ? [['pag', String(pag)] as [string, string]] : [])]).toString()}#candidatos`;
   const desde = tabla.total === 0 ? 0 : (tabla.pagina - 1) * TAMANO_PAGINA + 1;
   const hasta = Math.min(tabla.total, tabla.pagina * TAMANO_PAGINA);
+  const ctxPares: Array<[string, string]> = [...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]];
+  const baseCand: Record<string, string> = { ...Object.fromEntries(ctxPares), ...Object.fromEntries(new URLSearchParams(filtrosAQuery({ ...f, pagina: 1 }, false)).entries()) };
+  const quitar = (cambios: Record<string, null>) => `${hrefConParams('', baseCand, cambios)}#candidatos`;
   const hayFiltro = f.categoria !== '' || f.estado !== '' || f.unidad !== '' || f.caseta !== '' || f.desde !== '' || f.hasta !== '';
   return (
     <section className="card p-4" id="candidatos">
@@ -167,20 +170,26 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
         </a>
       </div>
 
-      <BarraFiltros accion="#candidatos" etiqueta="Filtros de candidatos" className="mt-3" nActivos={hayFiltro ? 1 : 0}
-        ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]}
-        limpiarHref={`?${new URLSearchParams([...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ['desglose', desglose]]).toString()}#candidatos`}>
-        <FiltroOpciones nombre="cat" etiqueta="Categoría" valor={f.categoria}
-          opciones={[{ valor: '', rotulo: 'Todas' }, ...TODAS_LAS_CATEGORIAS.map((c) => ({ valor: c, rotulo: etiquetaCategoriaFila(c) }))]} />
-        <FiltroOpciones nombre="estado" etiqueta="Estado" valor={f.estado}
-          opciones={[{ valor: '', rotulo: 'Todos' }, ...ESTADOS_CANDIDATO.map((e) => ({ valor: e, rotulo: ETIQUETA_ESTADO_CANDIDATO[e] }))]} />
-        <FiltroCampo etiqueta="Unidad"><input className="border-0 bg-transparent" name="unidad" defaultValue={f.unidad} maxLength={60} data-anillo="envolvente" /></FiltroCampo>
-        <FiltroCampo etiqueta="Caseta"><input className="border-0 bg-transparent" name="caseta" defaultValue={f.caseta} maxLength={60} data-anillo="envolvente" /></FiltroCampo>
-        <FiltroFecha nombre="desde" etiqueta="Desde" valor={f.desde} />
-        <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={f.hasta} />
-        <FiltroOpciones nombre="orden" etiqueta="Orden" valor={f.orden} porDefecto="monto_desc"
-          opciones={[{ valor: 'monto_desc', rotulo: 'Mayor monto primero' }, { valor: 'monto_asc', rotulo: 'Menor monto primero' }, { valor: 'fecha', rotulo: 'Por fecha' }]} />
-      </BarraFiltros>
+      <BarraPeriodo className="mt-3" etiqueta="Periodo y filtros de candidatos"
+        chips={[
+          ...(f.desde || f.hasta ? [{ id: 'rango', etiqueta: `${f.desde ? fechaMx(f.desde) : 'Inicio'} – ${f.hasta ? fechaMx(f.hasta) : 'hoy'}`, hrefQuitar: quitar({ desde: null, hasta: null }) }] : []),
+          ...(f.categoria ? [{ id: 'cat', etiqueta: `Categoría: ${etiquetaCategoriaFila(f.categoria)}`, hrefQuitar: quitar({ cat: null }) }] : []),
+          ...(f.estado ? [{ id: 'estado', etiqueta: `Estado: ${ETIQUETA_ESTADO_CANDIDATO[f.estado]}`, hrefQuitar: quitar({ estado: null }) }] : []),
+          ...(f.unidad ? [{ id: 'unidad', etiqueta: `Unidad: ${f.unidad}`, hrefQuitar: quitar({ unidad: null }) }] : []),
+          ...(f.caseta ? [{ id: 'caseta', etiqueta: `Caseta: ${f.caseta}`, hrefQuitar: quitar({ caseta: null }) }] : []),
+        ]}
+        cajon={{
+          accion: '#candidatos', ocultos: ctxPares, limpiarHref: `${hrefConParams('', Object.fromEntries(ctxPares))}#candidatos`,
+          nActivos: [f.categoria, f.estado, f.unidad, f.caseta, f.desde || f.hasta].filter(Boolean).length,
+          periodo: { desde: f.desde || null, hasta: f.hasta || null },
+          campos: { items: [
+            { tipo: 'select', nombre: 'cat', etiqueta: 'Categoría', valor: f.categoria, opciones: [{ valor: '', rotulo: 'Todas' }, ...TODAS_LAS_CATEGORIAS.map((c) => ({ valor: c, rotulo: etiquetaCategoriaFila(c) }))] },
+            { tipo: 'select', nombre: 'estado', etiqueta: 'Estado', valor: f.estado, opciones: [{ valor: '', rotulo: 'Todos' }, ...ESTADOS_CANDIDATO.map((e) => ({ valor: e, rotulo: ETIQUETA_ESTADO_CANDIDATO[e] }))] },
+            { tipo: 'texto', nombre: 'unidad', etiqueta: 'Unidad', valor: f.unidad },
+            { tipo: 'texto', nombre: 'caseta', etiqueta: 'Caseta', valor: f.caseta },
+            { tipo: 'select', nombre: 'orden', etiqueta: 'Orden', valor: f.orden, opciones: [{ valor: 'monto_desc', rotulo: 'Mayor monto primero' }, { valor: 'monto_asc', rotulo: 'Menor monto primero' }, { valor: 'fecha', rotulo: 'Por fecha' }] },
+          ] },
+        }} />
 
       {tabla.total === 0 ? (
         <p className="text-[12px] mt-4" style={{ color: 'var(--muted)' }}>

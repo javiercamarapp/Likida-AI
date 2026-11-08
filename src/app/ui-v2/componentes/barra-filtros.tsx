@@ -4,8 +4,7 @@ import { Search, SlidersHorizontal } from 'lucide-react';
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { cx } from './clases';
 import { FiltroChip, FiltroLimpiar } from './filtros';
-import { useMovil } from './movil';
-import { PanelLateral, Popover } from './overlay';
+import { Drawer } from './overlay';
 
 export interface ChipFiltro { id: string; etiqueta: string; activo: boolean }
 
@@ -45,7 +44,6 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
   const [abierto, setAbierto] = useState(false);
   const ancla = useRef<HTMLButtonElement>(null);
   const idPanel = useId();
-  const movil = useMovil();
   const esForma = accion !== undefined;
   const pares: Array<readonly [string, string]> = ocultos ? (Array.isArray(ocultos) ? [...(ocultos as ReadonlyArray<readonly [string, string]>)] : Object.entries(ocultos as Record<string, string>)) : [];
 
@@ -68,20 +66,19 @@ export function BarraFiltros({ busqueda, chips = [], onChip, avanzados, nAvanzad
         {limpiarHref && nActivos > 0 ? <FiltroLimpiar href={limpiarHref} /> : null}
         {esForma ? <noscript><button type="submit" className="rv-btn rv-btn--sm">Aplicar</button></noscript> : null}
         {avanzados ? (
-          <button ref={ancla} type="button" className="rv-fl" data-activo={nAvanzados > 0 ? '' : undefined} aria-expanded={abierto} aria-controls={idPanel} onClick={() => setAbierto((v) => !v)}>
+          <button ref={ancla} type="button" className="rv-fl" data-activo={nAvanzados > 0 ? '' : undefined} aria-haspopup="dialog" aria-expanded={abierto} onClick={() => setAbierto((v) => !v)}>
             <SlidersHorizontal aria-hidden="true" strokeWidth={1.75} />
             <span>Filtros</span>
             {nAvanzados > 0 ? <span className="rv-fl__n">{nAvanzados}</span> : null}
           </button>
         ) : null}
       </div>
-      {avanzados ? (movil ? (
-        <PanelLateral abierto={abierto} onCerrar={() => setAbierto(false)} titulo="Filtros" ancho={320}>{avanzados}</PanelLateral>
-      ) : (
-        <Popover abierto={abierto} onCerrar={() => setAbierto(false)} ancla={ancla} etiqueta="Filtros avanzados" id={idPanel}>
-          <div className="rv-filtros__avanzados">{avanzados}</div>
-        </Popover>
-      )) : null}
+      {/* R8: «Filtros» abre SIEMPRE el cajón unificado de 420 (antes un Popover en escritorio). */}
+      {avanzados && abierto ? (
+        <Drawer abierto onCerrar={() => setAbierto(false)} titulo="Filtros" tamano="m">
+          <div id={idPanel} className="rv-filtros__avanzados">{avanzados}</div>
+        </Drawer>
+      ) : null}
     </>
   );
 

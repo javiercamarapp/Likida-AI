@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { BellRing, CalendarClock, Download, ShieldQuestion } from 'lucide-react';
-import { numero, TZ_MX } from '@/lib/formato';
+import { fechaMx, numero, TZ_MX } from '@/lib/formato';
 import { EstadoVacio, EstadoError } from '../estados';
 import {
   ROTULO_PROCEDENCIA, ALCANCE_PROCEDENCIA, aHoras, fraseDelHueco,
@@ -16,7 +16,7 @@ import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { BarraFiltros, FiltroFecha, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraPeriodo, hrefConParams, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -130,6 +130,7 @@ export function VistaJornada({
   // de SU flota bajo un encabezado que dice X (`sufijo.ts`); sin `operador` la
   // tabla sale filtrada y el CSV completo, y los dos se llaman igual.
   const paramsExport = new URLSearchParams(sufijo.replace(/^\?/, ''));
+  const ctxJornada: Record<string, string> = Object.fromEntries(new URLSearchParams(sufijo.replace(/^\?/, '')).entries());
   paramsExport.set('desde', desde);
   paramsExport.set('hasta', hasta);
   if (operador) paramsExport.set('operador', operador);
@@ -177,18 +178,18 @@ export function VistaJornada({
         {/* El filtro de fechas por GET: mueve TODO lo que hay debajo,
             incluida la liga de descarga. Un rótulo que dice «del X al Y»
             tiene que ser cierto para las dos cosas. */}
-        <BarraFiltros accion="?" etiqueta="Filtros de la jornada" className="mb-1"
-          ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}
-          nActivos={operador ? 1 : 0} limpiarHref={`?${new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).toString()}`}>
-          <FiltroFecha nombre="desde" etiqueta="Desde" valor={desde} />
-          <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={hasta} />
-          {/* FE-19: con cientos de choferes, la ventana por omisión nace
-              truncada casi siempre — sin este selector, la única forma de
-              ver la jornada de UN operador era teclear su id en la URL. */}
-          <FiltroOpciones nombre="operador" etiqueta="Operador" valor={operador ?? ''} ariaLabel="Filtrar por operador"
-            deshabilitado={operadores === null || operadores.length === 0}
-            opciones={[{ valor: '', rotulo: 'Todos' }, ...(operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))]} />
-        </BarraFiltros>
+        <BarraPeriodo etiqueta="Periodo y filtros de la jornada"
+          chips={[
+            { id: 'rango', etiqueta: `Del ${fechaMx(desde)} al ${fechaMx(hasta)}` },
+            ...(operador ? [{ id: 'operador', etiqueta: operadores?.find((o) => o.id === operador)?.nombre ?? 'Operador elegido', hrefQuitar: hrefConParams('/dashboard/jornada', { ...ctxJornada, desde, hasta, operador }, { operador: null }) }] : []),
+          ]}
+          cajon={{
+            accion: '/dashboard/jornada', ocultos: Object.entries(ctxJornada), limpiarHref: hrefConParams('/dashboard/jornada', ctxJornada), nActivos: operador ? 1 : 0,
+            resumen: `Del ${fechaMx(desde)} al ${fechaMx(hasta)}${operador ? ' · un operador' : ''}`,
+            periodo: { desde, hasta },
+            // FE-19: con cientos de choferes la ventana por omisión nace truncada casi siempre; sin este selector la única forma de ver a UN operador era teclear su id en la URL.
+            campos: operadores && operadores.length > 0 ? { items: [{ tipo: 'select', nombre: 'operador', etiqueta: 'Operador', valor: operador ?? '', opciones: [{ valor: '', rotulo: 'Todos' }, ...operadores.map((o) => ({ valor: o.id, rotulo: o.nombre }))] }] } : undefined,
+          }} />
         {operadores === null && (
           <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
             No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.

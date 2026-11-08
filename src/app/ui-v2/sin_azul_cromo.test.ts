@@ -11,6 +11,10 @@ import { join } from 'node:path';
 // azules históricos (#0B5FFF, #1F4FB0), ni un hex, `rgb()` o `hsl()` de matiz azul. El azul SOLO vive en los colores de DATOS: la serie
 // de 8 matices (`--chart-N`, `--soft-N`, `--ink-N`, `--on-N`, `--region-*` del mapa), las gráficas y el logotipo de Google (obligatorio por su marca).
 //
+// EXCEPCIÓN ACOTADA (decisión del dueño, 7-nov-2026: «igualar a Rovaq y adoptar su azul»): el azul de Rovaq vive SOLO en las variables
+// `--seg-activo-*` (estado activo de segmentados, chips y filtros) y `--accion-cajon-*` (acción primaria de cajón), declaradas en
+// `ui-v2/tokens.css`. Cualquier otro uso de azul en el cromo sigue prohibido; el burdeos `--senal` sigue siendo la única señal «requiere acción».
+//
 // El ALCANCE ES DERIVADO (recorrido del árbol), no una lista a mano: una página pública nueva entra sola.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -53,6 +57,10 @@ function valores(l: string, css: boolean): string[] {
 }
 // Línea de la serie de datos (permitida): `--chart-1: …`, `--soft-3: …`, `--ink-5: …`, `--on-2: …`.
 const SERIE_DATOS = /--(?:chart|soft|ink|on)-\d\s*:|--region-[a-z]+\s*:/;
+/** Declaración permitida del azul de Rovaq: SOLO en tokens.css y SOLO estas dos familias de variables. */
+const AZUL_ROVAQ = /--(?:seg-activo|accion-cajon)-(?:bg|borde|fg|hover)\s*:/;
+/** Valores exactos que la excepción admite (claro y oscuro); un tono nuevo obliga a tocar esta lista a propósito. */
+export const AZULES_ROVAQ_PERMITIDOS = new Set(['#e6edfa', '#1f4fb0', '#d8e3f8', '#2f6bd8', '#1d2433', '#a9c1f2', '#26314a']);
 // Marca de terceros que no se puede recolorear (logotipo de Google).
 const MARCA_TERCEROS = /#4285F4/;
 
@@ -99,6 +107,11 @@ export function culpablesDe(f: string, fuente: string): string[] {
   const culpables: string[] = [];
   lineas.forEach((l, i) => {
     if (SERIE_DATOS.test(l)) return;
+    if (f === 'ui-v2/tokens.css' && AZUL_ROVAQ.test(l)) {
+      const hex = [...l.matchAll(/#([0-9a-fA-F]{6})\b/g)].map((m) => `#${m[1].toLowerCase()}`);
+      for (const h of hex) if (!AZULES_ROVAQ_PERMITIDOS.has(h)) culpables.push(`${f}:${i + 1} ${h} no está en la lista del azul de Rovaq`);
+      return;
+    }
     const donde = `${f}:${i + 1}`;
     if (TAILWIND_AZUL.test(l)) culpables.push(`${donde} clase de Tailwind azul`);
     if (NOMBRES_AZUL.test(l)) culpables.push(`${donde} nombre/valor de azul histórico`);
@@ -135,6 +148,17 @@ describe('sin azul de interfaz en el cromo v2, /login y las páginas públicas',
       expect(culpables, culpables.join('\n')).toEqual([]);
     });
   }
+
+  it('el azul de Rovaq está acotado: solo en tokens.css, solo en --seg-activo-* y --accion-cajon-*, con los tonos de la lista', () => {
+    const tokens = readFileSync(join(RAIZ, 'ui-v2/tokens.css'), 'utf8');
+    expect(culpablesDe('ui-v2/tokens.css', tokens)).toEqual([]);
+    // La misma línea en cualquier otro archivo del cromo SÍ es culpable.
+    expect(culpablesDe('ui-v2/componentes.css', '  --seg-activo-fg: #1f4fb0;').length).toBeGreaterThan(0);
+    // En tokens.css, otra variable con el mismo azul o un tono nuevo en la familia permitida también lo son.
+    expect(culpablesDe('ui-v2/tokens.css', '  --btn-bg: #1f4fb0;').length).toBeGreaterThan(0);
+    expect(culpablesDe('ui-v2/tokens.css', '  --seg-activo-bg: #0b5fff;').length).toBeGreaterThan(0);
+    expect(culpablesDe('ui-v2/tokens.css', '  --nav-activo-bg: #2f6bd8;').length).toBeGreaterThan(0);
+  });
 
   it('el detector no está ciego: ve hex, rgb(), hsl(), nombres CSS y clases de Tailwind azules, y deja pasar los grises', () => {
     const sucio = [

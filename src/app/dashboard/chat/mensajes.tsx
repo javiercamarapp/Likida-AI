@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Check, Copy, FileSpreadsheet, RefreshCw, TriangleAlert } from 'lucide-react';
+import { Check, Copy, ExternalLink, FileSpreadsheet, RefreshCw, TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
 import MarcaLikida from './marca';
 import BloqueRespuesta from './bloques';
+import TarjetaAccion from './tarjeta-accion';
 import { TrazaFinal, TrazaViva, textoMs } from './traza';
 import { descargar, tablaACsv, textoParaCopiar, visualesDe } from './exportar';
 import { useMovimientoReducido } from './movimiento';
@@ -53,19 +55,23 @@ export function BurbujaUsuario({ turno }: { turno: Turno }) {
 
 function Sello({ r }: { r: Respuesta }) {
   if (!r.origen) return null;
-  const partes = r.origen === 'analista'
-    ? ['Respuesta del analista', r.hora, r.ms !== undefined ? textoMs(r.ms) : undefined]
+  const partes = r.origen === 'analista' || r.origen === 'copiloto'
+    ? [r.origen === 'copiloto' ? 'Respuesta del copiloto' : 'Respuesta del analista', r.hora, r.ms !== undefined ? textoMs(r.ms) : undefined]
     : ['Respuesta de reserva · con lo último que ya estaba cargado', r.hora];
   return <p className="rv-chat__sello" data-origen={r.origen}>{partes.filter(Boolean).join(' · ')}</p>;
 }
 
-export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRepetir }: {
+export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRepetir, acciones = false, endpointAccion, onEjecutada }: {
   turno: Turno;
   ultimo: boolean;
   ocupado: boolean;
   fase: string;
   pasosVivos: PasoTraza[];
   onRepetir: (id: string) => void;
+  /** Modo superadmin: pinta la acción propuesta con su confirmación. Apagado, el bloque `accion` jamás se pinta (no existe en el cliente). */
+  acciones?: boolean;
+  endpointAccion?: string;
+  onEjecutada?: (mensaje: string) => void;
 }) {
   const { r } = turno;
   const [copiado, setCopiado] = useState(false);
@@ -101,6 +107,23 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
         ) : <TextoRespuesta texto={r.texto} escribir={turno.nuevo} onListo={alListo} />}
       </div>
       {terminado && visuales.map((v, j) => <BloqueRespuesta key={j} v={v} indice={j} />)}
+      {terminado && acciones && r.accion && (r.archivada ? (
+        // Una acción reabierta del historial NO trae botón: la previsualización vieja describe el estado de AQUEL día; ejecutarla hoy
+        // firmaría sobre un efecto que ya no es verdad. Se pide de nuevo y el servidor la re-propone.
+        <section className="card rv-chat__bloque rv-accion" data-estado="archivada">
+          <p className="rv-accion__linea">Propuesta archivada del historial (<span className="rv-accion__objetivo">{r.accion.objetivo}</span>). Para ejecutarla, pídela de nuevo — se re-propone con el estado de hoy.</p>
+        </section>
+      ) : (
+        <TarjetaAccion a={r.accion} endpoint={endpointAccion ?? ''} onEjecutada={(m) => onEjecutada?.(m)} />
+      ))}
+      {terminado && r.fuentes && r.fuentes.length > 0 && (
+        <div className="rv-chat__fuentes" role="group" aria-label="Fuentes">
+          <span className="rv-chat__nota">Fuentes:</span>
+          {r.fuentes.map((f) => (
+            <Link key={f.ruta} href={f.ruta} className="rv-chip rv-chat__fuente">{f.etiqueta}<ExternalLink width={12} height={12} strokeWidth={1.75} aria-hidden="true" /></Link>
+          ))}
+        </div>
+      )}
       {terminado && r.pasos && <TrazaFinal pasos={r.pasos} ms={r.ms} />}
       {terminado && <Sello r={r} />}
       {terminado && r.texto.trim() && (
@@ -116,7 +139,7 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
               <FileSpreadsheet aria-hidden="true" /><span>CSV</span>
             </button>
           ))}
-          {ultimo && r.origen === 'analista' && (
+          {ultimo && (r.origen === 'analista' || r.origen === 'copiloto') && (
             <button type="button" className="rv-btn rv-btn--secondary rv-chat__solo" disabled={ocupado} onClick={() => onRepetir(turno.id)}>
               <RefreshCw aria-hidden="true" /><span>Regenerar</span>
             </button>

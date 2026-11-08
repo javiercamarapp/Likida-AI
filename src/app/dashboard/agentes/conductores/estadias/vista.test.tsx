@@ -84,7 +84,15 @@ describe('estadías en andén', () => {
     expect(pintar(filas)).toContain('Periodo por la hora del aviso de LLEGADA');
   });
 
-  it('conserva el tenant de la vista de superadmin en el formulario', () => {
-    expect(pintar(filas, { ocultos: { tenant: 't-9' } })).toContain('name="tenant" value="t-9"');
+  // R8: la barra es BarraPeriodo; el formulario vive en el cajón (se prueba abierto en barra_periodo_ssr).
+  it('el rango vigente sale como chip y cada criterio elegido como chip cuya «x» conserva el tenant y el resto de los parámetros', () => {
+    const html = pintar(filas, {
+      ocultos: { tenant: 't-9' }, filtros: { ...base.filtros, terminalId: 'p1' },
+      catalogos: { terminales: [{ id: 'p1', nombre: 'Patio Norte' }], clientes: [], operadores: [] } as never,
+    });
+    expect(html).toContain('Patio: Patio Norte');
+    expect(html).toContain('aria-label="Quitar Patio: Patio Norte"');
+    expect(html).toMatch(/href="\/dashboard\/agentes\/conductores\/estadias\?desde=2026-09-26&amp;hasta=2026-10-02&amp;tenant=t-9"/); // sin `terminal`, con tenant y periodo
+    expect(html).toContain('aria-haspopup="dialog"');
   });
 });

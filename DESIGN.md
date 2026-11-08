@@ -163,3 +163,26 @@ Una página NUEVA se compone solo de piezas del kit. Si una página necesita un
 patrón que el kit no tiene, el patrón se sube al kit con nombre y regla — no
 nace como excepción local (así murió la dirección del 7-ago: vivía en una
 sola pantalla).
+
+---
+
+## 5. Igualar a Rovaq (R8, 7-nov-2026)
+
+El dueño decidió igualar el nivel visual de Rovaq y **adoptar su azul**. Alcance EXACTO, y nada más:
+
+- **Azul de Rovaq** = solo el estado activo de segmentados, chips y filtros (`--seg-activo-*`) y la acción primaria de un cajón
+  (`--accion-cajon-*`, que lee el mismo trío), definidos en `ui-v2/tokens.css`: fondo `#e6edfa`, texto `#1f4fb0` (6.37:1), anillo de 1 px
+  del azul `#2f6bd8` al 30 %, hover `#d8e3f8`; en oscuro `#1d2433` / `#a9c1f2` / 45 % / `#26314a`. El resto del cromo sigue negro, gris y
+  blanco; el burdeos `--senal` solo para «requiere acción». La guarda `sin_azul_cromo.test.ts` acota la excepción a esas dos familias de
+  variables y a una lista cerrada de tonos: cualquier otro azul sigue fallando.
+- **Cajón unificado** (`Drawer`/`PanelLateral`, `ui-v2/overlay.css`): dos anchos por tipo, **420** estándar y **640** paquetes y previas
+  (los valores heredados `tamano="l"`, `ancho` 320 y 560 se pintan con el de su tipo). Borde del panel `--line`, título con tracking
+  -0.01em y SIEMPRE el logo de Likida abajo en escritorio (100 px de ancho, franja de 28 px, padding 9/0/11, filete superior, opacidad .6).
+  El ⓘ (`InfoTip`) abre un cajón de 420 con bloques `rv-ov-bloque`, pares `rv-ov-kv`, «Lo que no sabemos» y el sello «Clase de dato»
+  (`ContenidoInfo`). Los campos opcionales del catálogo (`periodo`, `cobertura`, `loQueNoSabemos`, `clase`) vacíos no se pintan: no se inventa contenido.
+- **BrandMark** (`componentes/marca-integracion.tsx`): `MarcaIntegracion` (logo de 16 px, viewBox 24, a color de marca) y `ChipFuente`
+  (píldora tipo casilla de 28 px que filtra en un `<form method="get">` sin JavaScript). Los trazados son de simple-icons (CC0) y viven
+  solo en `marca-integracion.data.ts`, con su versión; lo que no tiene trazado verificable usa un icono genérico de lucide, nunca uno inventado.
+- **Sidebar activo**: barra izquierda inset de 2 px, fondo tinta al 7 % y peso 500. El color de la barra es UN token,
+  `--nav-activo-barra` (por omisión `rgb(232, 36, 28)`, el rojo de Rovaq); cambiarlo en `tokens.css` cambia todos los menús. Grupo del
+  menú: 11/500 mayúsculas con tracking 0.66 px. (Esto reemplaza lo de §3 sobre la pill activa sólida en tinta.)

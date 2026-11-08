@@ -383,7 +383,6 @@
 [data-ui="v2"] .rv-info:hover, [data-ui="v2"] .rv-info[aria-expanded="true"] { background: var(--canvas); color: var(--ink); }
 [data-ui="v2"] .rv-info:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 [data-ui="v2"] .rv-info svg { width: var(--ico-sm, 14px); height: var(--ico-sm, 14px); }
-[data-ui="v2"] .rv-pop--info { width: 280px; padding: 10px 12px; }
 [data-ui="v2"] .rv-infotexto { display: grid; gap: 8px; margin: 0; font-size: 12px; line-height: 1.45; }
 [data-ui="v2"] .rv-infotexto dt { margin: 0; font-size: 12px; font-weight: 600; color: var(--ink); }
 [data-ui="v2"] .rv-infotexto dd { margin: 2px 0 0; color: var(--ink2); }
@@ -496,7 +495,6 @@
   [data-ui="v2"] .rv-kpis .rv-kpi:nth-child(3) { animation-delay: 80ms; }
   [data-ui="v2"] .rv-kpis .rv-kpi:nth-child(n+4) { animation-delay: 120ms; }
   [data-ui="v2"] .rv-info { transition: background-color var(--ui-fast) ease, color var(--ui-fast) ease; }
-  [data-ui="v2"] .rv-pop--info { animation: rv-ov-fondo 140ms var(--ui-ease) both; }
 }
 @media (forced-colors: active) {
   [data-ui="v2"] .rv-info { border: 1px solid ButtonText; }

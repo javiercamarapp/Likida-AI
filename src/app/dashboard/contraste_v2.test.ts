@@ -79,6 +79,9 @@ const PARES_TEXTO: Array<[string, string]> = [
   ['--btn-fg', '--btn-bg'], ['--btn-fg', '--btn-hover'], ['--btn-soft-fg', '--btn-soft'], ['--btn-soft-fg', '--btn-soft-hover'],
   ['--tabla-cab-ink', '--tabla-cab-bg'], ['--ink', '--ui-elevated'], ['--ink', '--ui-soft'], ['--muted', '--ui-soft'],
   ['--ink', '--carga-fondo'], ['--ink-6', '--ui-soft'],
+  // Azul de Rovaq (7-nov-2026): estado activo de segmentados/chips/filtros y acción primaria del cajón, en reposo y en hover.
+  ['--seg-activo-fg', '--seg-activo-bg'], ['--seg-activo-fg', '--seg-activo-hover'],
+  ['--accion-cajon-fg', '--accion-cajon-bg'], ['--accion-cajon-fg', '--accion-cajon-hover'],
   ...[1, 2, 3, 4, 5, 6, 7, 8].map((n): [string, string] => [`--on-${n}`, `--chart-${n}`]),
 ];
 

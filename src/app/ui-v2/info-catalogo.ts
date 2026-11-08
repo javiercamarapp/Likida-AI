@@ -22,7 +22,22 @@ export interface InfoTexto {
   fuente: string;
   /** Opcional: qué hacer con esta cifra. */
   queHacer?: string;
+  /**
+   * CAMPOS OPCIONALES del cajón ⓘ (R8). Un campo ausente o vacío NO se pinta: no se inventa contenido que el lector no respalde.
+   * Solo se llenan con lo que el código del indicador hace de verdad.
+   */
+  /** Periodo que cubre la cifra (par «Periodo» del cajón). */
+  periodo?: string;
+  /** Cobertura: qué parte de los datos entra (par «Cobertura» del cajón). */
+  cobertura?: string;
+  /** «Lo que no sabemos»: límites declarados de la cifra, una frase por elemento. */
+  loQueNoSabemos?: readonly string[];
+  /** Sello «Clase de dato»: cómo se obtuvo la cifra. */
+  clase?: ClaseDato;
 }
+
+/** Clase de dato del sello del ⓘ. */
+export type ClaseDato = 'observado' | 'calculado' | 'estimado';
 
 import { PENDIENTE, T, V } from './info-textos/constructores';
 import { INFO_OPERACION } from './info-textos/operacion';

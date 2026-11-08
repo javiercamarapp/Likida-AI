@@ -108,17 +108,17 @@
   --ui-activo-barra: var(--n-500);
 
   /* ── Estados activos y acción principal del cajón (controles finos, K1-0) ──
-     NEUTRO por omisión (decisión de Javier 1-nov: paleta negro/gris/blanco, sin azul de interfaz).
-     Azul de Rovaq, para activarlo con un cambio de una línea por variable (decisión de color PENDIENTE de Javier):
-       --seg-activo-bg: fondo e6edfa (oscuro 1d2433)
-       --seg-activo-borde: 2F6BD8 mezclado al 30 % con transparente (oscuro: al 45 %)
-       --seg-activo-fg: texto 1f4fb0 (oscuro a9c1f2)
-       --seg-activo-hover: fondo d8e3f8 (oscuro 26314a) */
-  --seg-activo-bg: var(--ui-soft);
-  --seg-activo-borde: var(--line2);
-  --seg-activo-fg: var(--ink);
-  --seg-activo-hover: color-mix(in srgb, var(--ink) 4%, var(--ui-soft));
-  /* Acción principal del cajón (Aplicar) y botón «suave»: mismo trío y mismo azul de Rovaq documentado arriba. */
+     AZUL DE ROVAQ, decisión del dueño del 7-nov-2026: el azul SOLO vive aquí, en el estado activo de segmentados, chips y filtros
+     (--seg-activo-*) y en la acción primaria del cajón (--accion-cajon-*). El resto del cromo sigue negro/gris/blanco y el burdeos
+     (--senal) solo para «requiere acción». La guarda sin_azul_cromo.test.ts acota la excepción a ESTAS dos familias de variables.
+     Claro: fondo e6edfa, texto 1f4fb0 (6.37:1), anillo de 1 px = 2F6BD8 al 30 %, hover d8e3f8 (5.80:1).
+     Oscuro (bloque oscuro más abajo): fondo 1d2433, texto a9c1f2, anillo al 45 %, hover 26314a.
+     Para volver al neutro: bg var(--ui-soft), borde var(--line2), fg var(--ink). */
+  --seg-activo-bg: #e6edfa;
+  --seg-activo-borde: color-mix(in srgb, #2f6bd8 30%, transparent);
+  --seg-activo-fg: #1f4fb0;
+  --seg-activo-hover: #d8e3f8;
+  /* Acción principal del cajón (Aplicar) y botón «suave»: mismo trío que el estado activo (un cambio mueve ambos). */
   --accion-cajon-bg: var(--seg-activo-bg);
   --accion-cajon-borde: var(--seg-activo-borde);
   --accion-cajon-fg: var(--seg-activo-fg);
@@ -142,10 +142,12 @@
   --foco-sep-campo: 2px;
   --foco-sep-dentro: 1px;
 
-  /* Navegación: activo sutil (gris muy claro, texto tinta, peso 600; sin barra). Lo lee K2 (shell.css). */
-  --nav-activo-bg: var(--ui-soft);
+  /* Navegación (R8, estilo Rovaq): ítem activo = barra izquierda inset de 2 px + fondo tinta al 7 % + peso 500. UN solo token para el color de la barra
+     (--nav-activo-barra): por omisión el rojo de Rovaq, rgb(232, 36, 28); cambiarlo aquí cambia todos los menús (aside, riel y hoja). Lo lee shell.css. */
+  --nav-activo-bg: color-mix(in srgb, var(--ink) 7%, transparent);
   --nav-activo-fg: var(--ink);
-  --nav-activo-peso: 600;
+  --nav-activo-peso: 500;
+  --nav-activo-barra: rgb(232, 36, 28);
   /* Sombra suave del marco (sidebar flotante), como Vexa; las tarjetas del flujo siguen sin sombra. */
   --sh-marco: 0 1px 2px #0e0e100a, 0 8px 24px -16px #0e0e1029;
 
@@ -361,6 +363,12 @@
   --badbg: #342127;
   --info: #d6d6d9;
   --infobg: #26262b;
+
+  /* Azul de Rovaq en oscuro (ver el bloque claro): estado activo y acción del cajón. */
+  --seg-activo-bg: #1d2433;
+  --seg-activo-borde: color-mix(in srgb, #2f6bd8 45%, transparent);
+  --seg-activo-fg: #a9c1f2;
+  --seg-activo-hover: #26314a;
 
   --g1: #17171a;
   --g2: #1f1f23;
