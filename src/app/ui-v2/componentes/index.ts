@@ -2,6 +2,7 @@
 export { Boton, BotonEnlace, clasesBoton, type VarianteBoton, type TamanoBoton } from './boton';
 export { Chip, type TonoChip } from './chip';
 export { Aviso, type TonoAviso } from './aviso';
+export { Disclosure } from './disclosure';
 export { EncabezadoPagina, APOYO_MAX } from './encabezado-pagina';
 export { MarcoPagina } from './marco-pagina';
 export { ProveedorAreaV2, useArea } from './contexto-area';
