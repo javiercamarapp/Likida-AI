@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Cifra as CifraV2 } from '../../ui-v2/graficas/cifra';
 import Link from 'next/link';
 import { Receipt } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -209,13 +210,14 @@ export default async function CobranzaPage() {
   );
 }
 
-function Cifra({ etiqueta, valor, nota, alerta }: { etiqueta: string; valor: string; nota?: string; alerta?: boolean }) {
+/** Una cifra del sistema (filete de color, cifra 26/700). `estado="vacio"` pinta «—» y el mensaje: nunca un cero con cara de medición. */
+function Cifra({ etiqueta, valor, nota, alerta, estado, mensaje }: {
+  etiqueta: string; valor: string | null; nota?: string; alerta?: boolean; estado?: 'vacio'; mensaje?: string;
+}) {
   return (
-    <div className="card p-3">
-      <div className="text-[11px] uppercase etiqueta-mono" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
-      <div className="text-lg font-semibold mt-1" style={alerta ? { color: 'var(--bad)' } : undefined}>{valor}</div>
-      {nota && <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{nota}</div>}
-    </div>
+    <section className="rv-kpis kit-celda" aria-label={etiqueta}>
+      <CifraV2 etiqueta={etiqueta} valor={valor} nota={nota} tono={alerta ? 'bad' : undefined} estado={estado} mensaje={mensaje} matiz={1} />
+    </section>
   );
 }
 
