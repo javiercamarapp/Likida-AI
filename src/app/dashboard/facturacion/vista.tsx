@@ -19,7 +19,7 @@ import {
 } from './forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Lo que la página inyecta para que la pantalla además CAPTURE. Opcional a
  *  propósito: sin esto la vista sigue siendo pura-props y se puede mirar con
@@ -172,13 +172,11 @@ function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura
           <TablaCubetas datos={datos} />
 
           {c.sinCondiciones > 0 && (
-            <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-              {c.sinCondiciones === 1
-                ? '1 factura con saldo no tiene fecha de vencimiento porque su cliente no tiene días de crédito registrados'
-                : `${numero(c.sinCondiciones)} facturas con saldo no tienen fecha de vencimiento porque su cliente no tiene días de crédito registrados`}
-              {' '}— no entran a lo vencido. Suponerles 30 días pintaría de rojo un plazo que nadie
-              pactó; captúrale los días de crédito al cliente y entran solas.
-            </p>
+            <AvisoCompacto tono="warn"
+              resumen={c.sinCondiciones === 1
+                ? '1 factura con saldo no tiene fecha de vencimiento porque su cliente no tiene días de crédito registrados.'
+                : `${numero(c.sinCondiciones)} facturas con saldo no tienen fecha de vencimiento porque su cliente no tiene días de crédito registrados.`}
+              mas="No entran a lo vencido. Suponerles 30 días pintaría de rojo un plazo que nadie pactó; captúrale los días de crédito al cliente y entran solas." />
           )}
 
           <TablaClientes clientes={c.clientes} />
@@ -490,12 +488,9 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
           </TiraCifras>
 
           {m.sinIngreso > 0 && (
-            <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-              La cifra de arriba es el PISO de lo que dejaste de facturar, no el total:{' '}
-              {plural(m.sinIngreso, 'viaje no tiene', 'viajes no tienen')} el ingreso del flete capturado, y
-              un viaje sin ese dato no vale $0 — no se sabe cuánto vale. El anticipo no sirve para
-              rellenarlo: es lo que le adelantas al operador, no lo que te paga tu cliente.
-            </p>
+            <AvisoCompacto tono="warn"
+              resumen={<>La cifra de arriba es el piso de lo que dejaste de facturar, no el total: {plural(m.sinIngreso, 'viaje no tiene', 'viajes no tienen')} el ingreso del flete capturado.</>}
+              mas="Un viaje sin ese dato no vale $0: no se sabe cuánto vale. El anticipo no sirve para rellenarlo, porque es lo que le adelantas al operador, no lo que te paga tu cliente." />
           )}
 
           <div className="card overflow-x-auto">

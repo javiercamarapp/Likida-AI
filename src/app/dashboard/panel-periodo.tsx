@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { BarraPeriodo, SegmentedControl } from '../ui-v2/componentes';
+import { BarraPeriodo, EstadoVacio, SegmentedControl } from '../ui-v2/componentes';
 import { Dona, AreaChartSimple } from '../admin/charts';
 import { GastoSemanalChart } from './gasto-semanal-chart';
 import { TopRutas } from './top-rutas';
@@ -81,14 +81,14 @@ export function PanelPeriodo({
             {/* A13: `null` es consulta CAÍDA, no flota sin viajes — se dice,
                 como ya hacían "Liquidado" y "Top rutas" en esta misma fila. */}
             {kpiModo === null ? (
-              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>No se pudo cargar esta gráfica.</p></div>
+              <EstadoVacio contenido titulo="No disponible ahora">No se pudo cargar esta gráfica.</EstadoVacio>
             ) : kpiModo.totalViajes > 0 ? (
               <Dona segmentos={[
                 { etiqueta: 'Liquidados', valor: kpiModo.viajesLiquidados },
                 { etiqueta: 'Pendientes', valor: Math.max(0, kpiModo.totalViajes - kpiModo.viajesLiquidados) },
               ]} />
             ) : (
-              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>Aún no hay viajes registrados en este periodo.</p></div>
+              <EstadoVacio contenido titulo="Sin datos">Aún no hay viajes registrados en este periodo.</EstadoVacio>
             )}
           </div>
         </div>
@@ -106,11 +106,11 @@ export function PanelPeriodo({
           <TituloSeccion>Gasto por categoría{ventana('gasto')}</TituloSeccion>
           <div className="mt-3 flex-1 flex flex-col">
             {gastoModo === null ? (
-              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>No se pudo cargar esta gráfica.</p></div>
+              <EstadoVacio contenido titulo="No disponible ahora">No se pudo cargar esta gráfica.</EstadoVacio>
             ) : gastoModo.series.some((s) => s.valores.some((v) => v > 0)) ? (
               <GastoSemanalChart categorias={gastoModo.categorias} series={gastoModo.series} />
             ) : (
-              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center"><p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>Aún no hay gastos capturados.</p></div>
+              <EstadoVacio contenido titulo="Sin datos">Aún no hay gastos capturados.</EstadoVacio>
             )}
           </div>
         </div>
@@ -121,15 +121,11 @@ export function PanelPeriodo({
           )}
           <div className="mt-2.5 flex-1 flex flex-col">
             {liquidadoModo === null ? (
-              <div className="flex-1 min-h-[110px] flex items-center justify-center text-sm text-center" style={{ color: 'var(--muted)' }}>
-                No se pudo cargar esta gráfica.
-              </div>
+              <EstadoVacio contenido titulo="No disponible ahora">No se pudo cargar esta gráfica.</EstadoVacio>
             ) : liquidadoModo.some((d) => d.valor > 0) ? (
               <AreaChartSimple datos={liquidadoModo} etiquetaValor={mxn} />
             ) : (
-              <div className="flex-1 min-h-[110px] flex items-center justify-center text-sm text-center" style={{ color: 'var(--muted)' }}>
-                Sin cierres en este periodo.
-              </div>
+              <EstadoVacio contenido titulo="Sin cierres">Sin cierres en este periodo.</EstadoVacio>
             )}
           </div>
         </div>
@@ -143,11 +139,9 @@ export function PanelPeriodo({
             {rutasModo && rutasModo.length > 0 ? (
               <div className="overflow-x-auto"><TopRutas rutas={rutasModo} /></div>
             ) : (
-              <div className="flex-1 min-h-[110px] w-full flex items-center justify-center">
-                <p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>
-                  {rutasModo ? 'Aún no hay gasto asociado a una ruta.' : 'No se pudo cargar esta sección.'}
-                </p>
-              </div>
+              <EstadoVacio contenido titulo={rutasModo ? 'Sin rutas con gasto' : 'No disponible ahora'}>
+                {rutasModo ? 'Aún no hay gasto asociado a una ruta.' : 'No se pudo cargar esta sección.'}
+              </EstadoVacio>
             )}
           </div>
         </div>
