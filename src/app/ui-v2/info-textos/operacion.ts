@@ -164,6 +164,35 @@ export const INFO_OPERACION = {
     'Tu archivo CSV o Excel. El cliente debe existir en Clientes y los sitios en el catálogo de sitios; nada se inventa. Las columnas de tarifa solo se leen con permiso de finanzas. Solo lo ve quien puede editar convenios.',
     'Si ves el enlace «Descargar la plantilla», úsalo para ver las columnas.',
   ),
+  // ── emergencias ──
+  'emergencias.poliza': V(
+    'Póliza',
+    'Si la flota tiene capturada la póliza que usa el escalamiento de emergencia, y si sigue vigente.',
+    'Lee la póliza vigente capturada: «Vigente» si su fecha de vigencia es de hoy en adelante o no se capturó fecha, «Vencida» si ya pasó, «Sin póliza» si no hay ninguna.',
+    'Pólizas de tu flota capturadas en esta pantalla, leídas al abrirla. No se consulta a la aseguradora.',
+    'Captura o reemplaza la póliza en esta misma tarjeta; sin el 800 de siniestros el escalamiento solo puede decir que falta.',
+  ),
+  'emergencias.proveedores': V(
+    'Proveedores',
+    'Grúas, llanteras y mecánicos de carretera capturados por tu flota.',
+    'Cuenta los proveedores del directorio de la flota, verificados o no.',
+    'Directorio de emergencia de tu flota, capturado a mano y leído al abrir la pantalla. El agente solo usa teléfonos de aquí.',
+    'Agrega los proveedores de tus rutas y márcalos «Verificado» solo cuando alguien haya marcado y le hayan contestado.',
+  ),
+  'emergencias.sin_confirmar': V(
+    'Sin confirmar',
+    'Proveedores capturados que nadie ha verificado con una llamada.',
+    'Cuenta los proveedores sin marca de verificación. Capturar un teléfono no es verificarlo.',
+    'Directorio de emergencia de tu flota, leído al abrir la pantalla. Sin proveedores se muestra 0 porque no hay nada que confirmar.',
+    'Llama al proveedor y pulsa «Verificado ✓» solo si te contestaron.',
+  ),
+  'emergencias.contactos': V(
+    'Contactos',
+    'Contactos de emergencia capturados para los operadores de tu flota.',
+    'Cuenta los contactos (familiares u otras personas) registrados; no distingue si aceptaron avisos.',
+    'Contactos de emergencia capturados en esta pantalla, leídos al abrirla. «Avisar si hay lesionados» nace apagado.',
+    'Activa el aviso solo en los contactos que aceptaron recibirlo.',
+  ),
   // ── unidades ──
   'unidades.alta': V(
     'Dar de alta una unidad',

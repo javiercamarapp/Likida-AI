@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
-import { fechaMx, hoyMx } from '@/lib/formato';
+import { fechaMx, hoyMx, numero } from '@/lib/formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -18,7 +20,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { Disclosure, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Emergencias' };
 
 export const dynamic = 'force-dynamic';
@@ -194,49 +196,53 @@ export default async function PaginaEmergencias({
   }
 
 
+  const polizaVencida = poliza?.vigenciaHasta ? poliza.vigenciaHasta < hoyMx() : false;
+  const sinConfirmar = proveedores.filter((p) => !p.verificadoEn).length;
+
   return (
     <MarcoPagina titulo="Emergencias" apoyo="La grúa, la póliza y los contactos que el escalamiento usa cuando un chofer reporta y nadie contesta.">
       {!leyoOk && (
-        <section className="rounded-2xl px-5 py-4 hairline" style={{ background: 'var(--surface)' }}>
-          <p className="text-sm">No pude leer el directorio ahorita — recarga la página. No se ofrecen los formularios para no capturar a ciegas sobre lo que no se ve.</p>
-        </section>
+        <EstadoVacio pantalla contenido icono={ShieldCheck} titulo="No se pudo leer el directorio">
+          Recarga la página. No se ofrecen los formularios para no capturar a ciegas sobre lo que no se ve.
+        </EstadoVacio>
       )}
 
       {leyoOk && (
         <>
+          <TiraCifras sello={selloHoy('Directorio de emergencia')}>
+            <Cifra etiqueta="Póliza" valor={poliza ? (polizaVencida ? 'Vencida' : 'Vigente') : 'Sin póliza'}
+              tono={!poliza || polizaVencida ? 'warn' : undefined} info="emergencias.poliza" />
+            <Cifra etiqueta="Proveedores" valor={numero(proveedores.length)} info="emergencias.proveedores" />
+            <Cifra etiqueta="Sin confirmar" valor={numero(sinConfirmar)} tono={sinConfirmar > 0 ? 'warn' : undefined} info="emergencias.sin_confirmar" />
+            <Cifra etiqueta="Contactos" valor={numero(contactos.length)} info="emergencias.contactos" />
+          </TiraCifras>
+
           {/* ── Póliza ──────────────────────────────────────────────────── */}
-          <section className="rounded-2xl px-5 py-4 flex flex-col gap-3 hairline" style={{ background: 'var(--surface)' }}>
-            <div className="flex items-start gap-2.5">
-              <ShieldCheck width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-              <div>
-                <p className="text-sm font-medium">Póliza de la flota</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                  {poliza
-                    ? `${poliza.aseguradora} · póliza ${poliza.numeroPoliza} · siniestros ${poliza.telefonoSiniestros}${poliza.vigenciaHasta ? (poliza.vigenciaHasta < hoyMx() ? ` · VENCIDA el ${fechaMx(poliza.vigenciaHasta)} — si ya la renovaste, reemplázala aquí; el aviso de emergencia la rotula vencida mientras tanto` : ` · vigente hasta ${fechaMx(poliza.vigenciaHasta)}`) : ''}. Guardar de nuevo la reemplaza (la anterior queda en la historia).`
-                    : 'Sin póliza capturada. El 800 de siniestros es EL dato de un siniestro — sin él, el tercer nivel de escalamiento solo puede decir que falta.'}
-                </p>
-              </div>
-            </div>
-            <FormaConAviso accion={guardarPolizaAction} boton={poliza ? 'Reemplazar póliza' : 'Guardar póliza'} columnas="md:grid-cols-2">
-              <Campo nombre="aseguradora" etiqueta="Aseguradora" requerido valorInicial={poliza?.aseguradora ?? ''} />
-              <Campo nombre="numeroPoliza" etiqueta="Número de póliza" requerido valorInicial={poliza?.numeroPoliza ?? ''} />
-              <Campo nombre="telefonoSiniestros" etiqueta="Teléfono de siniestros (el 800)" requerido valorInicial={poliza?.telefonoSiniestros ?? ''}
-                ayuda="Solo números. Es el que el dueño va a marcar a las 3 a.m. — revísalo dos veces." />
-              <Campo nombre="vigenciaHasta" etiqueta="Vigente hasta" tipo="date" valorInicial={poliza?.vigenciaHasta ?? ''} />
-            </FormaConAviso>
-          </section>
+          <Tarjeta titulo="Póliza de la flota" info="emergencias.poliza"
+            estado={poliza ? 'ok' : 'vacio'} contenida iconoVacio={ShieldCheck}
+            mensaje="Sin póliza capturada"
+            detalle="El 800 de siniestros es EL dato de un siniestro: sin él, el tercer nivel de escalamiento solo puede decir que falta.">
+            {poliza && (
+              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+                {`${poliza.aseguradora} · póliza ${poliza.numeroPoliza} · siniestros ${poliza.telefonoSiniestros}${poliza.vigenciaHasta ? (polizaVencida ? ` · VENCIDA el ${fechaMx(poliza.vigenciaHasta)} — si ya la renovaste, reemplázala aquí; el aviso de emergencia la rotula vencida mientras tanto` : ` · vigente hasta ${fechaMx(poliza.vigenciaHasta)}`) : ''}. Guardar de nuevo la reemplaza (la anterior queda en la historia).`}
+              </p>
+            )}
+            <Disclosure variante="linea" titulo={poliza ? 'Reemplazar póliza' : 'Capturar la póliza'} abierto={!poliza}>
+              <FormaConAviso accion={guardarPolizaAction} boton={poliza ? 'Reemplazar póliza' : 'Guardar póliza'} columnas="md:grid-cols-2">
+                <Campo nombre="aseguradora" etiqueta="Aseguradora" requerido valorInicial={poliza?.aseguradora ?? ''} />
+                <Campo nombre="numeroPoliza" etiqueta="Número de póliza" requerido valorInicial={poliza?.numeroPoliza ?? ''} />
+                <Campo nombre="telefonoSiniestros" etiqueta="Teléfono de siniestros (el 800)" requerido valorInicial={poliza?.telefonoSiniestros ?? ''}
+                  ayuda="Solo números. Es el que el dueño va a marcar a las 3 a.m. — revísalo dos veces." />
+                <Campo nombre="vigenciaHasta" etiqueta="Vigente hasta" tipo="date" valorInicial={poliza?.vigenciaHasta ?? ''} />
+              </FormaConAviso>
+            </Disclosure>
+          </Tarjeta>
 
           {/* ── Proveedores ─────────────────────────────────────────────── */}
-          <section className="rounded-2xl px-5 py-4 flex flex-col gap-3 hairline" style={{ background: 'var(--surface)' }}>
-            <div className="flex items-start gap-2.5">
-              <PhoneCall width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-              <div>
-                <p className="text-sm font-medium">Proveedores de carretera</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                  Grúas, llanteras y mecánicos de confianza de TU flota. El agente jamás inventa un teléfono: solo usa los de aquí, y rotula los que nadie ha confirmado.
-                </p>
-              </div>
-            </div>
+          <Tarjeta titulo="Proveedores de carretera" info="emergencias.proveedores"
+            estado={proveedores.length === 0 ? 'vacio' : 'ok'} contenida iconoVacio={PhoneCall}
+            mensaje="Sin proveedores capturados"
+            detalle="Grúas, llanteras y mecánicos de confianza de TU flota. El agente jamás inventa un teléfono: solo usa los de aquí, y rotula los que nadie ha confirmado.">
             {proveedores.length > 0 && (
               <ul className="flex flex-col gap-1.5">
                 {proveedores.map((p) => (
@@ -262,34 +268,30 @@ export default async function PaginaEmergencias({
                 ))}
               </ul>
             )}
-            <FormaConAviso accion={altaProveedor} boton="Agregar proveedor" columnas="md:grid-cols-3">
-              <Selector nombre="tipo" etiqueta="Tipo" requerido valorInicial=""
-                opciones={[{ valor: '', texto: 'Elige uno' }, ...TIPOS_PROVEEDOR.map((t) => ({ valor: t, texto: t }))]} />
-              <Campo nombre="nombre" etiqueta="Nombre" requerido placeholder="Grúas García" />
-              <Campo nombre="telefono" etiqueta="Teléfono" requerido placeholder="10 dígitos" />
-              <Campo nombre="radioKm" etiqueta="Radio de cobertura (km)" tipo="number" />
-              {/* Posición del proveedor (Capa C): con ella la cascada mide la
-                  cercanía real al incidente. Opcional en pareja — sin las dos,
-                  el proveedor se lista sin ordenar y el aviso lo dice. Campos
-                  de texto a propósito: el tipo number de Campo trae min=0 y
-                  las longitudes de México son negativas. */}
-              <Campo nombre="lat" etiqueta="Latitud (opcional)" placeholder="19.4326" />
-              <Campo nombre="lng" etiqueta="Longitud (opcional)" placeholder="-99.1332" />
-              <Campo nombre="notas" etiqueta="Notas" placeholder="Zona, horario, condiciones" />
-            </FormaConAviso>
-          </section>
+            <Disclosure variante="linea" titulo="Agregar proveedor" abierto={proveedores.length === 0}>
+              <FormaConAviso accion={altaProveedor} boton="Agregar proveedor" columnas="md:grid-cols-3">
+                <Selector nombre="tipo" etiqueta="Tipo" requerido valorInicial=""
+                  opciones={[{ valor: '', texto: 'Elige uno' }, ...TIPOS_PROVEEDOR.map((t) => ({ valor: t, texto: t }))]} />
+                <Campo nombre="nombre" etiqueta="Nombre" requerido placeholder="Grúas García" />
+                <Campo nombre="telefono" etiqueta="Teléfono" requerido placeholder="10 dígitos" />
+                <Campo nombre="radioKm" etiqueta="Radio de cobertura (km)" tipo="number" />
+                {/* Posición del proveedor (Capa C): con ella la cascada mide la
+                    cercanía real al incidente. Opcional en pareja — sin las dos,
+                    el proveedor se lista sin ordenar y el aviso lo dice. Campos
+                    de texto a propósito: el tipo number de Campo trae min=0 y
+                    las longitudes de México son negativas. */}
+                <Campo nombre="lat" etiqueta="Latitud (opcional)" placeholder="19.4326" />
+                <Campo nombre="lng" etiqueta="Longitud (opcional)" placeholder="-99.1332" />
+                <Campo nombre="notas" etiqueta="Notas" placeholder="Zona, horario, condiciones" />
+              </FormaConAviso>
+            </Disclosure>
+          </Tarjeta>
 
           {/* ── Contactos de emergencia ─────────────────────────────────── */}
-          <section className="rounded-2xl px-5 py-4 flex flex-col gap-3 hairline" style={{ background: 'var(--surface)' }}>
-            <div className="flex items-start gap-2.5">
-              <HeartHandshake width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-              <div>
-                <p className="text-sm font-medium">Contactos de emergencia por operador</p>
-                <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                  Un familiar que nunca aceptó ningún aviso: por eso «avisar si hay lesionados» nace apagado y se activa contacto por contacto. Likida no le marca a nadie — con lesionados, el dato le llega al dueño, que decide.
-                </p>
-              </div>
-            </div>
+          <Tarjeta titulo="Contactos de emergencia por operador" info="emergencias.contactos"
+            estado={contactos.length === 0 ? 'vacio' : 'ok'} contenida iconoVacio={HeartHandshake}
+            mensaje="Sin contactos capturados"
+            detalle="Un familiar que nunca aceptó ningún aviso: por eso «avisar si hay lesionados» nace apagado. Likida no le marca a nadie; con lesionados, el dato le llega al dueño, que decide.">
             {contactos.length > 0 && (
               <ul className="flex flex-col gap-1.5">
                 {contactos.map((c) => (
@@ -314,18 +316,20 @@ export default async function PaginaEmergencias({
             {operadores.length === 0 ? (
               <p className="text-xs" style={{ color: 'var(--muted)' }}>Esta flota aún no tiene operadores dados de alta — el contacto se ata a un operador.</p>
             ) : (
-              <FormaConAviso accion={altaContacto} boton="Agregar contacto" columnas="md:grid-cols-3">
-                <Selector nombre="operadorId" etiqueta="Operador" requerido valorInicial=""
-                  opciones={[{ valor: '', texto: 'Elige uno' }, ...operadores.map((o) => ({ valor: o.id, texto: o.nombre }))]} />
-                <Campo nombre="nombre" etiqueta="Nombre del contacto" requerido />
-                <Campo nombre="telefono" etiqueta="Teléfono" requerido placeholder="10 dígitos" />
-                <Campo nombre="parentesco" etiqueta="Parentesco" placeholder="esposa, hermano…" />
-                <Selector nombre="avisarSiLesionados" etiqueta="¿Avisar si hay lesionados?" valorInicial="no"
-                  opciones={[{ valor: 'no', texto: 'No — solo expediente' }, { valor: 'si', texto: 'Sí — el contacto lo aceptó' }]}
-                  ayuda="Actívalo solo si el contacto aceptó recibir esta clase de aviso." />
-              </FormaConAviso>
+              <Disclosure variante="linea" titulo="Agregar contacto" abierto={contactos.length === 0}>
+                <FormaConAviso accion={altaContacto} boton="Agregar contacto" columnas="md:grid-cols-3">
+                  <Selector nombre="operadorId" etiqueta="Operador" requerido valorInicial=""
+                    opciones={[{ valor: '', texto: 'Elige uno' }, ...operadores.map((o) => ({ valor: o.id, texto: o.nombre }))]} />
+                  <Campo nombre="nombre" etiqueta="Nombre del contacto" requerido />
+                  <Campo nombre="telefono" etiqueta="Teléfono" requerido placeholder="10 dígitos" />
+                  <Campo nombre="parentesco" etiqueta="Parentesco" placeholder="esposa, hermano…" />
+                  <Selector nombre="avisarSiLesionados" etiqueta="¿Avisar si hay lesionados?" valorInicial="no"
+                    opciones={[{ valor: 'no', texto: 'No — solo expediente' }, { valor: 'si', texto: 'Sí — el contacto lo aceptó' }]}
+                    ayuda="Actívalo solo si el contacto aceptó recibir esta clase de aviso." />
+                </FormaConAviso>
+              </Disclosure>
             )}
-          </section>
+          </Tarjeta>
         </>
       )}
     </MarcoPagina>
