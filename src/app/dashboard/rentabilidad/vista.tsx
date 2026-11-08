@@ -51,13 +51,19 @@ export function VistaRentabilidad({
   return (
     <MarcoPagina titulo="Rentabilidad y cobranza" apoyo="Margen real contra lo comprobado, cartera por cobrar y lo vencido por cliente. Si el dato no existe, se dice.">
       {sinNada ? (
-        <EstadoVacio>
-          Esta pantalla trabaja con dos datos que tu cuenta todavía no tiene: el{' '}
-          <strong>ingreso de cada flete</strong> y las <strong>facturas que le emites a tus
-          clientes</strong>. En cuanto existan, aquí se mide — margen real contra lo comprobado
-          (no contra el anticipo), cartera por cobrar y lo vencido por cliente. Nada de esta
-          pantalla se estima: si el dato no está, se dice.
-        </EstadoVacio>
+        <section className="space-y-3">
+          {/* Cinco cifras SIN DATO: la estructura de la pantalla, no ceros que parezcan medición. */}
+          <TiraCifras sello="Sin datos todavía">
+            <Cifra icono={<Banknote width={14} height={14} strokeWidth={1.75} />} etiqueta="Ingreso de fletes liquidados" valor={null} estado="vacio" info="rentabilidad.ingreso" />
+            <Cifra icono={<ReceiptText width={14} height={14} strokeWidth={1.75} />} etiqueta="Costo comprobado" valor={null} estado="vacio" info="rentabilidad.costo" />
+            <Cifra icono={<TrendingUp width={14} height={14} strokeWidth={1.75} />} etiqueta="Contribución" valor={null} estado="vacio" info="rentabilidad.contribucion" />
+            <Cifra icono={<Wallet width={14} height={14} strokeWidth={1.75} />} etiqueta="Por cobrar" valor={null} estado="vacio" info="rentabilidad.por_cobrar" />
+            <Cifra icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />} etiqueta="Vencido" valor={null} estado="vacio" info="rentabilidad.vencido" />
+          </TiraCifras>
+          <EstadoVacio titulo="Faltan el ingreso de cada flete y las facturas" accion={{ href: `/dashboard/facturacion${sufijo}`, texto: 'Registrar una factura' }}>
+            Con esos dos datos aquí se mide el margen contra lo comprobado, la cartera por cobrar y lo vencido por cliente. Nada de esta pantalla se estima.
+          </EstadoVacio>
+        </section>
       ) : (
         <>
           {/* ── Rentabilidad ─────────────────────────────────────── */}
