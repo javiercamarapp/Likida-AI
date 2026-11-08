@@ -4,7 +4,10 @@ import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { FormaConvenio, FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio, type CatalogosFormaConvenio } from './formas';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, AvisoCompacto, Disclosure, EstadoVacio, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { FileText } from 'lucide-react';
 
 // SOLO tipos del repositorio: la vista no arrastra al bundle el acceso a datos.
 
@@ -67,12 +70,22 @@ export function VistaConvenios(p: PropsVistaConvenios) {
     <MarcoPagina titulo="Convenios de clientes" apoyo={p.verDinero
         ? 'Por cliente: puntos A a B, instrucciones de operación, tarifa y requisitos de cobro. El agente solo dice lo que el convenio dice.'
         : 'Por cliente: puntos A a B e instrucciones de operación. El agente solo dice lo que el convenio dice.'}>
-      <Aviso tono="info">
-        Todo nace del convenio: el punto A→B, las instrucciones de operación (por dónde entrar, con quién reportarse, documentos,
-        peculiaridades de la planta){p.verDinero ? ', la tarifa y los requisitos de cobro' : ''}. Al despachar un viaje del cliente, esas instrucciones
-        se ligan al viaje y le llegan al operador por WhatsApp; al acercarse a la planta se le recuerdan, y puede preguntar
-        «¿por dónde entro?». <strong>El agente solo dice lo que el convenio dice</strong>: sin instrucciones registradas, lo dice y lo manda con el jefe de tráfico.
-      </Aviso>
+      <AvisoCompacto tono="info"
+        resumen="Todo nace del convenio: el punto A→B y las instrucciones de operación. Al despachar un viaje del cliente se ligan al viaje y le llegan al operador por WhatsApp. El agente solo dice lo que el convenio dice."
+        mas={(
+          <p>
+            Las instrucciones cubren por dónde entrar, con quién reportarse, documentos y peculiaridades de la planta{p.verDinero ? ', más la tarifa y los requisitos de cobro' : ''}.
+            Al acercarse a la planta se le recuerdan al operador, y puede preguntar «¿por dónde entro?». Sin instrucciones registradas, el agente lo dice y lo manda con el jefe de tráfico.
+          </p>
+        )} />
+
+      {p.estado === 'ok' && (
+        <TiraCifras sello={selloHoy('Convenios')}>
+          <Cifra etiqueta="Convenios activos" valor={numero(lista.filter((c) => c.activo).length)} info="convenios.activos" />
+          <Cifra etiqueta="Sin instrucciones" valor={numero(lista.filter((c) => c.activo && c.instrucciones.length === 0).length)}
+            tono={lista.some((c) => c.activo && c.instrucciones.length === 0) ? 'warn' : undefined} info="convenios.sin_instrucciones" />
+        </TiraCifras>
+      )}
 
       {p.estado === 'no_disponible' && (
         <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
@@ -96,9 +109,9 @@ export function VistaConvenios(p: PropsVistaConvenios) {
             )}
           </div>
           {lista.length === 0 ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Todavía no hay convenios. Importa tu archivo abajo: hasta entonces los viajes se despachan sin instrucciones.
-            </p>
+            <EstadoVacio contenido icono={FileText} titulo="Todavía no hay convenios">
+              Importa tu archivo más abajo: hasta entonces los viajes se despachan sin instrucciones.
+            </EstadoVacio>
           ) : (
             <ul className="divide-y" style={{ borderColor: 'var(--line2)' }}>
               {visibles.map((c) => (
@@ -206,11 +219,13 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       {puedeEditarEnPantalla && (edicionDisponible ? (
         <section className="card p-4 space-y-3" aria-label="Nuevo convenio">
           <TituloRecuadro info="convenios.nuevo">Nuevo convenio</TituloRecuadro>
+          <Disclosure variante="linea" titulo="Capturar un convenio" abierto={lista.length === 0}>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             Da de alta un convenio y su calle de instrucciones sin subir un archivo. El cliente tiene que existir en Clientes y los sitios salen del catálogo de sitios.
             La tarifa y los requisitos de cobro no se editan aquí: entran por la importación con permiso de finanzas.
           </p>
           <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
+          </Disclosure>
         </section>
       ) : (
         <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
@@ -221,6 +236,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       {p.puedeEditar ? (
         <section className="card p-4 space-y-3" aria-label="Importar convenios">
           <TituloRecuadro info="convenios.importar">Importar desde CSV o Excel</TituloRecuadro>
+          <Disclosure variante="linea" titulo="Importar un archivo" abierto={lista.length === 0}>
           <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
             <strong>Una fila por instrucción.</strong> Columnas: <code>cliente, convenio</code> (obligatorias), <code>origen, destino, sitio_origen, sitio_destino, vigente_desde, vigente_hasta, notas</code>,
             y por instrucción <code>categoria</code> (puerta, reportarse, peculiaridad, documentos, horario, seguridad, otro), <code>instruccion</code>, <code>momento</code> (despacho, acercamiento, ambos)
@@ -230,6 +246,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
             {p.puedeExportar && <a href={descarga('plantilla')} className="underline">Descargar la plantilla</a>}
           </p>
           <FormaImportarConvenios accion={p.accionImportar} />
+          </Disclosure>
         </section>
       ) : (
         <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota o el jefe de tráfico editan los convenios.</p>

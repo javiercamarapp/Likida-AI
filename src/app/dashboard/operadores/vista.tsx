@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Users, Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
+import { Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
 import type { ConteosOperadores } from '@/lib/likida/administracion';
@@ -12,7 +12,7 @@ import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import type { InvitacionDeOperador } from '@/lib/likida/invitacion_operador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Disclosure, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
  *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
@@ -115,6 +115,8 @@ export function VistaOperadores({
   // `null` NO se convierte en 0: `—` dice «no lo sé», un 0 dice «no hay».
   const kpi = (v: number | undefined) => (v === undefined ? '—' : numero(v));
   const hayFiltro = pag.q !== '';
+  // Sin operadores el alta es lo único útil: se abre sola; con datos, la lista va primero y las altas quedan plegadas debajo.
+  const sinOperadores = !ilegible && pag.filtrados === 0 && !hayFiltro;
 
   return (
     <MarcoPagina titulo="Operadores" apoyo="Tu padrón de operadores con teléfono y vigencia de licencia. Sin teléfono capturado, los agentes no pueden escribirles.">
@@ -129,39 +131,6 @@ export function VistaOperadores({
         <Cifra etiqueta={`Vencen en ${DIAS_AVISO} días`} valor={kpi(conteos?.licenciasPorVencer)}
           tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} info="operadores.licencias_por_vencer" />
       </TiraCifras>
-
-      {puedeEditar && invitaciones && (
-        <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
-          accion={invitar} hrefGuia={hrefGuia} />
-      )}
-
-      {puedeEditar && (
-        <>
-          <section id="alta" aria-labelledby="titulo-alta" className="card p-4">
-            <div className="flex items-start gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                <UserPlus aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <TituloRecuadro id="titulo-alta" info="operadores.alta">Dar de alta un operador</TituloRecuadro>
-                <p className="mb-3 mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
-                  Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
-                </p>
-                <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
-              </div>
-            </div>
-          </section>
-          <ImportadorMasivo
-            entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
-            archivoPlantilla="plantilla-operadores.csv"
-            columnas={(sinWhatsApp
-              ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
-              : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
-              + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
-            hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
-          />
-        </>
-      )}
 
       <section className="card p-4">
         <TituloRecuadro info="operadores.registro" className="mb-3">El registro</TituloRecuadro>
@@ -180,7 +149,7 @@ export function VistaOperadores({
         {ilegible ? (
           <EstadoError mensaje="No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta." />
         ) : pag.filtrados === 0 && !hayFiltro ? (
-          <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+          <EstadoVacio pantalla contenido titulo="Aún no hay operadores"
             accion={puedeEditar ? { href: '#alta', texto: 'Dar de alta al primero' } : undefined}>
             {puedeEditar
               ? 'Aún no hay operadores dados de alta. Dalos de alta uno por uno arriba, o carga a toda tu flota de una vez desde un Excel o CSV.'
@@ -221,6 +190,42 @@ export function VistaOperadores({
           </div>
         )}
       </section>
+      {puedeEditar && invitaciones && (
+        <InvitarPendientes pendientes={invitaciones.pendientes} conFallo={invitaciones.conFallo}
+          accion={invitar} hrefGuia={hrefGuia} />
+      )}
+
+      {puedeEditar && (
+        <>
+          <Disclosure variante="linea" titulo="Dar de alta un operador" abierto={sinOperadores}>
+          <section id="alta" aria-labelledby="titulo-alta" className="card p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
+                <UserPlus aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <TituloRecuadro id="titulo-alta" info="operadores.alta">Dar de alta un operador</TituloRecuadro>
+                <p className="mb-3 mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
+                  Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.
+                </p>
+                <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
+              </div>
+            </div>
+          </section>
+          </Disclosure>
+          <Disclosure variante="linea" titulo="Cargar operadores desde Excel o CSV" abierto={sinOperadores}>
+          <ImportadorMasivo
+            entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
+            archivoPlantilla="plantilla-operadores.csv"
+            columnas={(sinWhatsApp
+              ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
+              : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
+              + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
+            hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
+          />
+          </Disclosure>
+        </>
+      )}
     </MarcoPagina>
   );
 }

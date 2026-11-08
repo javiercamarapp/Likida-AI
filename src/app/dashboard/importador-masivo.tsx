@@ -10,7 +10,7 @@ import type { ResultadoImportacionUI } from '@/lib/likida/importacion/resultado_
 import { DialogoConfirmar } from '../admin/ui/confirmar';
 import { useNotificar } from '../admin/ui/notificaciones';
 import { AvisoResultado } from '../admin/ui/aviso-resultado';
-import { TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import { CampoArchivo, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -167,12 +167,11 @@ export function ImportadorMasivo({
             <li>
               <p className="font-medium">2. Sube tu archivo y revísalo</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <label htmlFor={`archivo-${entidad}`} className="sr-only">Archivo CSV o Excel con los {sustantivo}</label>
-                <input
-                  ref={entrada} id={`archivo-${entidad}`} type="file" accept=".csv,.xlsx,.xls"
+                <CampoArchivo
+                  entradaRef={entrada} id={`archivo-${entidad}`} accept=".csv,.xlsx,.xls"
+                  etiqueta={`Archivo CSV o Excel con los ${sustantivo}`} etiquetaOculta nombreArchivo={archivo?.name ?? ''}
                   onChange={(e) => { validarArchivoElegido(e.currentTarget); setArchivo(e.currentTarget.files?.[0] ?? null); }}
-                  className="text-[12px] file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:px-3 file:py-1.5 file:text-[12px] file:font-medium"
-                  style={{ color: 'var(--muted)' }}
+                  className="min-w-0 flex-1 basis-64"
                 />
                 <button type="button" onClick={() => enviar('previsualizar')} disabled={!archivo || pendiente}
                   className="rv-btn rv-btn--secondary">
