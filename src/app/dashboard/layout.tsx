@@ -21,6 +21,7 @@ import '../ui-v2/carga.css';
 import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';
 import '../ui-v2/piezas.css';
+import '../ui-v2/barra-periodo.css';
 import '../ui-v2/graficas.css';
 import '../ui-v2/datos.css';
 import '../ui-v2/movimiento.css';

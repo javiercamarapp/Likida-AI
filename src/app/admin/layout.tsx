@@ -7,6 +7,7 @@ import '../ui-v2/tokens.css';
 import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';
 import '../ui-v2/piezas.css';
+import '../ui-v2/barra-periodo.css';
 
 export const dynamic = 'force-dynamic';
 
