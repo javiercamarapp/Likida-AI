@@ -32,6 +32,8 @@ const kpis = { montoComprobado: 12000, viajesLiquidados: 4, conDiferencias: 1, p
 const acred = { iva: 1000, peaje: 200, litrosDiesel: 300 };
 createRoot(document.getElementById('montaje')).render(createElement(ChatFlota, { kpis, acred }));
 `;
+// `next/link` (fuentes clicables del copiloto, en `mensajes.tsx`) arrastra el enrutador de Next al paquete; aquí basta un <a>.
+const STUB_LINK = 'import { createElement } from "react"; export default function Link({ href, children, ...r }) { return createElement("a", { href, ...r }, children); }';
 const STUB_NAVEGACION = 'export const useSearchParams = () => new URLSearchParams(); export const usePathname = () => "/dashboard/chat";';
 
 beforeAll(async () => {
@@ -42,6 +44,8 @@ beforeAll(async () => {
   const stub = join(dir, 'navegacion.ts');
   writeFileSync(entrada, FUENTE_ENTRADA);
   writeFileSync(stub, STUB_NAVEGACION);
+  const stubLink = join(dir, 'link.ts');
+  writeFileSync(stubLink, STUB_LINK);
   const res = await build({
     configFile: false, logLevel: 'silent', root: RAIZ, mode: 'production',
     // vitest corre con NODE_ENV=test: sin esto el JSX sale en modo desarrollo (jsxDEV) contra el runtime de producción de React.
@@ -49,6 +53,7 @@ beforeAll(async () => {
     resolve: {
       alias: [
         { find: /^next\/navigation$/, replacement: stub },
+        { find: /^next\/link$/, replacement: stubLink },
         { find: /^@\//, replacement: `${SRC}/` },
         { find: /^react$/, replacement: requerir.resolve('react') },
         { find: /^react\/jsx-runtime$/, replacement: requerir.resolve('react/jsx-runtime') },

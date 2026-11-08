@@ -6,6 +6,8 @@ import { Drawer } from '../../ui-v2/componentes/overlay';
 import { fechaCorta, numero } from '@/lib/formato';
 import type { Conversacion } from './use-analista';
 
+/** El `MAX_LISTA` de los dos listados del servidor (lib/likida/chat/conversaciones.ts y lib/agents/copiloto-historial.ts): la pantalla confiesa el tope. */
+export const TOPE_CONVERSACIONES = 100;
 const GRUPOS = ['Hoy', 'Ayer', 'Últimos 7 días', 'Últimos 30 días', 'Anteriores'] as const;
 type Grupo = (typeof GRUPOS)[number];
 const plano = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -32,7 +34,7 @@ export function BotonHistorial({ convs, expandido, oculto, onClick, boton }: {
       aria-expanded={expandido} aria-controls="chat-historial" aria-label="Historial de conversaciones" onClick={onClick}>
       <History aria-hidden="true" />
       <span>Historial</span>
-      {Array.isArray(convs) && <span className="rv-chat__hist-cuenta">{convs.length >= 50 ? '50+' : numero(convs.length)}</span>}
+      {Array.isArray(convs) && <span className="rv-chat__hist-cuenta">{convs.length >= TOPE_CONVERSACIONES ? `${TOPE_CONVERSACIONES}+` : numero(convs.length)}</span>}
     </button>
   );
 }
@@ -86,6 +88,9 @@ function CuerpoHistorial({ convs, activa, errorCarga, onNuevo, onAbrir, onCerrar
           <p className="rv-chat__hist-ayuda" role="status">
             {convs.length === 0 ? 'Sin chats recientes.' : `Nada coincide con «${busqueda.trim()}».`}
           </p>
+        )}
+        {Array.isArray(convs) && convs.length >= TOPE_CONVERSACIONES && (
+          <p className="rv-chat__hist-ayuda" role="note">Las {TOPE_CONVERSACIONES} más recientes — las anteriores siguen guardadas.</p>
         )}
         {grupos.map(([grupo, lista]) => (
           <section key={grupo} aria-label={grupo} className="rv-chat__hist-grupo">

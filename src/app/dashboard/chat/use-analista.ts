@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, horaMx } from '@/lib/formato';
+import { leerRespuestaAgente, cerrarPaso } from './transporte';
 import {
   FASES_PENSANDO, respuestaDeBloques, respuestaLocal,
   type PasoTraza, type Respuesta,
@@ -35,7 +36,7 @@ function leerDataUrl(archivo: File): Promise<string> {
   });
 }
 
-export function useAnalista({ kpis, acred }: { kpis: DashboardKpis | null; acred: Acreditables | null }) {
+export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: { kpis: DashboardKpis | null; acred: Acreditables | null; endpoint?: string }) {
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const [historial, setHistorial] = useState<Turno[]>([]);
@@ -227,56 +228,24 @@ export function useAnalista({ kpis, acred }: { kpis: DashboardKpis | null; acred
         { rol: 'usuario' as const, texto: h.q },
         { rol: 'asistente' as const, texto: h.r.texto },
       ]);
-      const resp = await fetch(`/api/dashboard/chat${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`, {
+      const resp = await fetch(`${endpoint}${tenant ? `?tenant=${encodeURIComponent(tenant)}` : ''}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensajes: [...previos, { rol: 'usuario', texto: q }], documento, conversacionId }),
         signal: ctl.signal,
       });
-      // El endpoint transmite NDJSON (la secuencia de pensamiento en vivo); los caminos de tope siguen contestando JSON plano — se
-      // entienden ambos, y un evento ilegible se ignora sin tumbar el turno.
-      let d: Record<string, unknown> | null = null;
-      if (resp.ok && resp.body && (resp.headers.get('content-type') ?? '').includes('ndjson')) {
-        const lector = resp.body.getReader();
-        const dec = new TextDecoder();
-        let resto = '';
-        for (;;) {
-          const { done, value } = await lector.read();
-          if (done) break;
-          resto += dec.decode(value, { stream: true });
-          let salto;
-          while ((salto = resto.indexOf('\n')) >= 0) {
-            const linea = resto.slice(0, salto).trim();
-            resto = resto.slice(salto + 1);
-            if (!linea) continue;
-            let ev: Record<string, unknown> | null = null;
-            try { ev = JSON.parse(linea) as Record<string, unknown>; } catch { continue; }
-            if (ev.t === 'paso' && typeof ev.tool === 'string') {
-              const tool = ev.tool;
-              if (ev.fase === 'inicio') {
-                inicios.set(tool, performance.now());
-                setPasosVivos((p) => [...p, { tool, listo: false }]);
-              } else {
-                const ini = inicios.get(tool);
-                const ms = ini === undefined ? undefined : Math.round(performance.now() - ini);
-                pasosFinales.push({ tool, listo: true, ms });
-                setPasosVivos((p) => {
-                  // findLastIndex a mano: el target de TS de este repo no lo trae.
-                  let idx = -1;
-                  for (let i = p.length - 1; i >= 0; i--) {
-                    if (p[i].tool === tool && !p[i].listo) { idx = i; break; }
-                  }
-                  if (idx >= 0) return p.map((x, i) => (i === idx ? { ...x, listo: true, ms } : x));
-                  return [...p, { tool, listo: true, ms }];
-                });
-              }
-            } else if (ev.t === 'fin' || ev.t === 'error') {
-              d = ev;
-            }
-          }
+      // El endpoint transmite NDJSON (la secuencia de pensamiento en vivo) o JSON plano en los caminos de tope: `leerRespuestaAgente`
+      // entiende ambos (transporte común con el copiloto de superadmin).
+      const d = await leerRespuestaAgente(resp, (tool, fase) => {
+        if (fase === 'inicio') {
+          inicios.set(tool, performance.now());
+          setPasosVivos((p) => [...p, { tool, listo: false }]);
+        } else {
+          const ini = inicios.get(tool);
+          const ms = ini === undefined ? undefined : Math.round(performance.now() - ini);
+          pasosFinales.push({ tool, listo: true, ms });
+          setPasosVivos((p) => cerrarPaso(p, tool, { ms }));
         }
-      } else {
-        d = await resp.json().catch(() => null);
-      }
+      });
       // H4 (auditoría 24): cuando el analista falla de verdad, el servidor manda `{t:'error', error:'...'}` con `resp.ok` en 200 (el
       // fallo va DENTRO del NDJSON). `respuestaLocal` declara el fallo antes de dar la respuesta de reserva — «fallar cerrado y decirlo».
       const motivo = d && d.t === 'error' && typeof d.error === 'string' ? d.error : null;

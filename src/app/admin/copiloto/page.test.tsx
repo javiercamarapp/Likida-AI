@@ -11,7 +11,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 
 const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn() }));
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
-vi.mock('../copiloto', () => ({ default: () => null }));
+vi.mock('../../dashboard/chat/agente-conversacion', () => ({ default: () => null }));
 
 import PaginaCopiloto from './page';
 

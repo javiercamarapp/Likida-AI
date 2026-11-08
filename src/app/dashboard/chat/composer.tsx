@@ -37,7 +37,7 @@ export function Adjuntar({ ocupado, onArchivo, anclaRef }: { ocupado: boolean; o
 
 /** El recuadro de escribir (736 × 58 en escritorio): adjuntar a la izquierda, campo que crece hasta 144 px y enviar a la derecha.
  *  Enter envía, Shift+Enter agrega una línea y Esc detiene la generación en curso; mientras se genera, «enviar» pasa a «Detener». */
-export default function Composer({ valor, onCambio, onEnviar, onDetener, generando, ocupado, documento, onQuitarDocumento, onArchivo }: {
+export default function Composer({ valor, onCambio, onEnviar, onDetener, generando, ocupado, documento, onQuitarDocumento, onArchivo, adjuntos = true, placeholder, etiquetaFormulario = 'Preguntar a tus datos', etiquetaCampo = 'Pregunta sobre tu operación' }: {
   valor: string;
   onCambio: (v: string) => void;
   onEnviar: () => void;
@@ -47,6 +47,11 @@ export default function Composer({ valor, onCambio, onEnviar, onDetener, generan
   documento: { nombre: string } | null;
   onQuitarDocumento: () => void;
   onArchivo: (f: File, limpiar: () => void) => void;
+  /** Sin adjuntos (modo superadmin) el clip no se pinta y el campo ocupa su lugar. */
+  adjuntos?: boolean;
+  placeholder?: string;
+  etiquetaFormulario?: string;
+  etiquetaCampo?: string;
 }) {
   const campo = useRef<HTMLTextAreaElement>(null);
   const clip = useRef<HTMLButtonElement>(null);
@@ -63,7 +68,7 @@ export default function Composer({ valor, onCambio, onEnviar, onDetener, generan
     else if (e.key === 'Escape' && generando) { e.preventDefault(); onDetener(); }
   };
   return (
-    <form className="rv-chat__composer" data-documento={documento ? '' : undefined} onSubmit={enviar} aria-label="Preguntar a tus datos">
+    <form className="rv-chat__composer" data-documento={documento ? '' : undefined} data-sin-clip={adjuntos ? undefined : ''} onSubmit={enviar} aria-label={etiquetaFormulario}>
       {documento && (
         <span className="rv-chat__documento">
           <FileText width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
@@ -71,10 +76,10 @@ export default function Composer({ valor, onCambio, onEnviar, onDetener, generan
           <button type="button" aria-label="Quitar archivo" onClick={onQuitarDocumento}><X width={12} height={12} strokeWidth={2} aria-hidden="true" /></button>
         </span>
       )}
-      <label htmlFor="chat-pregunta" className="rv-sr">Pregunta sobre tu operación</label>
+      <label htmlFor="chat-pregunta" className="rv-sr">{etiquetaCampo}</label>
       <textarea id="chat-pregunta" ref={campo} rows={1} className="bg-transparent border-0" value={valor} maxLength={MAX_PREGUNTA} onChange={(e) => onCambio(e.target.value)} onKeyDown={tecla}
-        placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : 'Pregunta sobre tu operación…'} data-anillo="envolvente" />
-      <Adjuntar ocupado={ocupado} onArchivo={onArchivo} anclaRef={clip} />
+        placeholder={documento ? `Pregunta sobre «${documento.nombre}» o tu operación…` : (placeholder ?? 'Pregunta sobre tu operación…')} data-anillo="envolvente" />
+      {adjuntos && <Adjuntar ocupado={ocupado} onArchivo={onArchivo} anclaRef={clip} />}
       {valor.length >= Math.floor(MAX_PREGUNTA * 0.8) && <span className="rv-chat__cuenta" aria-live="polite">{valor.length}/{MAX_PREGUNTA}</span>}
       {generando
         ? <button type="button" className="rv-btn rv-btn--primary rv-chat__redondo rv-chat__enviar" aria-label="Detener la generación" onClick={onDetener}><Square aria-hidden="true" /></button>
