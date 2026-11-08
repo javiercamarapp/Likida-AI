@@ -299,7 +299,7 @@ export default async function ConsumoPage() {
             <TituloSeccion>Gasto de IA por día</TituloSeccion>
             <div className="mt-2">
               {datosCosto.length > 1 ? (
-                <AreaChartSimple datos={datosCosto} etiquetaValor={usd} />
+                <AreaChartSimple datos={datosCosto} etiquetaValor={usd} etiquetaSerie="Costo de IA (USD)" />
               ) : (
                 <p className="text-sm py-8 text-center m-0" style={{ color: 'var(--muted)' }}>Sin historial suficiente todavía.</p>
               )}
