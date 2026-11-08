@@ -218,14 +218,14 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       await p.close();
     });
   }
-  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es gris suave', async () => {
+  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es azul suave de Rovaq', async () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
     const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!).backgroundColor }));
     expect(r.pop).toBe(true);
     expect(r.despues).toBe(antes);
-    expect(rgb(r.activo)).toEqual([241, 241, 242]); // --seg-activo-bg = --ui-soft #f1f1f2 (controles finos K1: el activo ya no usa --soft-8)
+    expect(rgb(r.activo)).toEqual([230, 237, 250]); // --seg-activo-bg = #e6edfa (azul de Rovaq, decisión 7-nov-2026)
     await p.close();
   });
   it('390: «Filtros» abre una hoja inferior', async () => {
@@ -244,18 +244,18 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del shell)', () => {
-  it('claro: gris suave con texto de tinta (AA), nunca un bloque sólido', async () => {
+  it('claro: azul suave de Rovaq con texto 1f4fb0 (AA), nunca un bloque sólido', async () => {
     const p = await abrir();
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([241, 241, 242]); // --seg-activo-bg neutro (K1)
-    expect(rgb(c.fg)).toEqual([14, 14, 16]);
+    expect(rgb(c.bg)).toEqual([230, 237, 250]); // --seg-activo-bg #e6edfa
+    expect(rgb(c.fg)).toEqual([31, 79, 176]); // --seg-activo-fg #1f4fb0
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
-  it('oscuro: fondo gris oscuro con texto claro (AA)', async () => {
+  it('oscuro: fondo azul oscuro con texto azul claro (AA)', async () => {
     const p = await abrir(1440, { oscuro: true });
     const c = await p.evaluate(() => { const s = getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!); return { bg: s.backgroundColor, fg: s.color }; });
-    expect(rgb(c.bg)).toEqual([31, 31, 35]); // --seg-activo-bg = --ui-soft oscuro #1f1f23 (K1)
+    expect(rgb(c.bg)).toEqual([29, 36, 51]); // --seg-activo-bg oscuro #1d2433
     expect(ratio(rgb(c.bg), rgb(c.fg))).toBeGreaterThanOrEqual(4.5);
     await p.close();
   });
