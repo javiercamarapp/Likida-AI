@@ -203,3 +203,14 @@
 [data-ui="v2"] .rv-vacio[data-contenido] .rv-vacio__accion { margin-top: 6px; }
 [data-ui="v2"] .rv-tarjeta[data-contenida] { align-self: start; }
 [data-ui="v2"] .rv-res__fila > .rv-tarjeta[data-contenida] > .rv-tarjeta__cuerpo > .rv-vacio[data-contenido] { flex: 0 0 auto; }
+
+/* ── AvisoCompacto: 2 líneas del resumen + «Ver más» en <details> ──────────────────────────────────────────────────────── */
+[data-ui="v2"] .rv-aviso--compacto { align-items: flex-start; }
+[data-ui="v2"] .rv-aviso__compacto { flex: 1 1 auto; min-width: 0; }
+[data-ui="v2"] .rv-aviso__resumen { margin: 0; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; line-height: 1.45; }
+[data-ui="v2"] .rv-aviso__mas { margin-top: 4px; }
+[data-ui="v2"] .rv-aviso__mas-cab { display: inline-block; cursor: pointer; font-size: var(--t-small); font-weight: 600; color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+[data-ui="v2"] .rv-aviso__mas-cab:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+[data-ui="v2"] .rv-aviso__mas[open] > .rv-aviso__mas-cab { margin-bottom: 6px; }
+[data-ui="v2"] .rv-aviso__mas-cuerpo { display: grid; gap: 6px; line-height: 1.45; }
+[data-ui="v2"] .rv-aviso__mas-cuerpo p { margin: 0; }
