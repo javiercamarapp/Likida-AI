@@ -3,20 +3,22 @@
 import { useState } from 'react';
 import { porcentaje } from '@/lib/formato';
 import { type Matiz } from '../metricas';
+import { resolverFormato, type FormatoGrafica } from './formatos';
 
 export interface Gajo { etiqueta: string; valor: number | null }
 
 /** Dona de ≤5 gajos de UN matiz (tonos 100/72/52/34/20 %), 132 px, trazo 10. Más de 5 ⇒ los menores se
  *  agrupan en «Otros» (nunca más de 5 gajos). Valores nulos no suman ni se pintan: aparecen «—» en la
  *  leyenda. El número va impreso (centro y leyenda): el color nunca es la única señal. */
-export function DonaMini({ gajos, matiz = 8, etiqueta, centro, formato = (v) => String(v) }: {
+export function DonaMini({ gajos, matiz = 8, etiqueta, centro, formato: formatoProp }: {
   gajos: readonly Gajo[];
   matiz?: Matiz;
   etiqueta: string;
   /** Texto al centro (p. ej. el total ya formateado). */
   centro?: string;
-  formato?: (v: number) => string;
+  formato?: FormatoGrafica;
 }) {
+  const formato = resolverFormato(formatoProp);
   const validos = gajos.filter((g): g is { etiqueta: string; valor: number } => g.valor !== null && g.valor > 0);
   const ordenados = [...validos].sort((a, b) => b.valor - a.valor);
   const vistos = ordenados.length > 5

@@ -5,6 +5,7 @@ import { TooltipGrafica } from '../componentes/overlay';
 import type { Matiz } from '../metricas';
 import { cadaCuantas, compactEs, esConteoPequeno, niceScale, ranuraEn } from './escala';
 import { CintaLectura, LecturaSeries, LeyendaFina, TablaGrafica, TEXTO_SIN_DATO, useAncho } from './partes';
+import { resolverFormato, type FormatoGrafica } from './formatos';
 
 /** `valores[i]` null = sin dato en ese periodo (se dibuja «s/d», NUNCA una barra en cero). */
 export interface SerieAgrupada { nombre: string; valores: ReadonlyArray<number | null> }
@@ -14,19 +15,20 @@ const PAD_T = 20, PAD_B = 22, PAD_R = 6;
 /** Columnas agrupadas (varias series por periodo, UN matiz en tonos): mismo plano, eje, rejilla, tooltip, foco con flechas y
  *  «Ver como tabla» que `Columnas`. Cada serie lleva su tono y su nombre en la leyenda (el color no es la única señal). El tooltip
  *  lista todas las series del periodo con su total. Crecen una vez al montar (420 ms, escalón de 14 ms por periodo). */
-export function ColumnasAgrupadas({ categorias, series, matiz = 2, etiqueta, formato = (v) => String(v), formatoEje = compactEs, unidad, parciales = [] }: {
+export function ColumnasAgrupadas({ categorias, series, matiz = 2, etiqueta, formato: formatoProp, formatoEje = compactEs, unidad, parciales = [] }: {
   categorias: readonly string[];
   series: readonly SerieAgrupada[];
   matiz?: Matiz;
   etiqueta: string;
   /** Cifra exacta (tooltip, tabla, aria). */
-  formato?: (v: number) => string;
+  formato?: FormatoGrafica;
   /** Cifra compacta del eje Y. */
   formatoEje?: (v: number) => string;
   unidad?: string;
   /** Índices de periodos incompletos: trama 45°, rótulo «parcial», sin total comparable. */
   parciales?: readonly number[];
 }) {
+  const formato = resolverFormato(formatoProp);
   const [ref, ancho] = useAncho<HTMLDivElement>();
   const [activa, setActiva] = useState<number | null>(null);
   const plano = useRef<SVGSVGElement>(null);
