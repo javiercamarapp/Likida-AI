@@ -13,7 +13,8 @@ export function hrefConParams(ruta: string, params: ParamsUrl, cambios: Readonly
   }
   if (!conservar.includes('pagina')) salida.delete('pagina');
   const qs = new URLSearchParams([...salida.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))).toString();
-  return qs ? `${ruta}?${qs}` : ruta;
+  // Sin ruta (enlace relativo a la página actual) y sin parámetros, `?` deja la misma página sin consulta.
+  return qs ? `${ruta}?${qs}` : (ruta || '?');
 }
 
 /** Pares ocultos para un `<form method="get">`: los parámetros vigentes menos los que el formulario edita (y `pagina`). */

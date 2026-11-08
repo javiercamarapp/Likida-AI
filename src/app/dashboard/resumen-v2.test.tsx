@@ -48,7 +48,9 @@ describe('Resumen v2 del dueño', () => {
   it('una sola barra de filtros y UN solo primario', async () => {
     datos = completos();
     const h = await pintar();
-    expect((h.match(/role="toolbar"/g) ?? []).length).toBe(1);
+    // R8: la barra de periodo es UNA (grupo «Periodo del resumen»), ya no un toolbar de chips.
+    expect((h.match(/aria-label="Periodo del resumen"/g) ?? []).length).toBe(1);
+    expect(h).not.toContain('role="toolbar"');
     expect((h.match(/rv-btn--primary/g) ?? []).length).toBeLessThanOrEqual(1);
   });
   it('lectura caída: «—» y «No es cero», nunca un 0 inventado ni NaN', async () => {
@@ -83,7 +85,11 @@ describe('Resumen v2 del dueño', () => {
   it('periodo elegido: el chip activo es el de la URL', async () => {
     datos = { ...completos(), rango: '7' };
     const h = await pintar({ rango: '7' });
-    expect(h).toMatch(/aria-pressed="true"[^>]*>7 días</);
+    expect(h).toMatch(/aria-current="true"[^>]*>7 días</);
+    expect((h.match(/aria-current="true"/g) ?? []).length).toBe(1);
+    // los enlaces del periodo usan el MISMO parámetro de siempre (`rango`)
+    expect(h).toMatch(/href="[^"]*rango=30"/);
+    expect(h).toMatch(/href="[^"]*rango=todo"/);
   });
 
   it('flota normal (sin perfil): se presenta como «Tu flota» y no como «cinco agentes»', async () => {

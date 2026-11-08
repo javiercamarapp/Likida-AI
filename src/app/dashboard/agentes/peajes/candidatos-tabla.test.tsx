@@ -87,8 +87,11 @@ describe('la tabla de candidatos en pantalla', () => {
   it('los filtros reflejan la URL y sin resultados la pantalla lo dice', () => {
     const html = pintar(tabla({ unidad: 'no-existe', cat: 'extemporaneo', desde: '2026-03-01' }));
     expect(html).toContain('Ningún candidato cumple este filtro');
-    expect(html).toContain('value="no-existe"');
-    expect(html).toContain('Limpiar');
+    // R8: los filtros vigentes son chips (con «x» que conserva el resto); el formulario vive en el cajón.
+    expect(html).toContain('Unidad: no-existe');
+    expect(html).toContain('aria-label="Quitar Unidad: no-existe"');
+    expect(html).toMatch(/href="\?[^"]*desde=2026-03-01[^"]*#candidatos"/);
+    expect(html).toContain('aria-haspopup="dialog"');
   });
 
   it('la paginación enlaza conservando filtro y flota; una sola página no pinta navegación', () => {

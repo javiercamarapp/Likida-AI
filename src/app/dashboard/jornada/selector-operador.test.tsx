@@ -12,7 +12,7 @@ import { VistaJornada } from './vista';
 
 const accionOk = async () => ({ ok: true as const, mensaje: 'ok' });
 
-function pintar(operadores: Array<{ id: string; nombre: string }> | null) {
+function pintar(operadores: Array<{ id: string; nombre: string }> | null, operador: string | null = null) {
   return renderToStaticMarkup(
     <VistaJornada
       filas={[]}
@@ -23,7 +23,7 @@ function pintar(operadores: Array<{ id: string; nombre: string }> | null) {
       desde="2026-08-01"
       hasta="2026-08-14"
       sufijo=""
-      operador={null}
+      operador={operador}
       operadores={operadores}
       abrir={null}
       puedeCorregir={false}
@@ -42,16 +42,19 @@ function pintar(operadores: Array<{ id: string; nombre: string }> | null) {
 }
 
 describe('Jornada — selector de operador (FE-19)', () => {
-  it('con catálogo, pinta un <select> con cada operador como opción', () => {
-    const html = pintar([{ id: 'o1', nombre: 'J. Pérez' }, { id: 'o2', nombre: 'M. López' }]);
-    expect(html).toContain('<select');
-    expect(html).toContain('J. Pérez');
+  // R8: el filtro vive en el cajón de «Filtros» (se monta al abrir; el contenido abierto se prueba en barra_periodo_comportamiento).
+  it('con catálogo, la barra ofrece «Filtros» y el operador elegido sale como chip con su nombre y una «x» que lo quita', () => {
+    const html = pintar([{ id: 'o1', nombre: 'J. Pérez' }, { id: 'o2', nombre: 'M. López' }], 'o2');
+    expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('M. López');
+    expect(html).toContain('aria-label="Quitar M. López"');
+    expect(html).toContain('Del 01 ago 2026 al 14 ago 2026');
+    expect(html).not.toMatch(/Quitar J\. Pérez/);
   });
 
-  it('sin catálogo (lectura caída), el select se deshabilita y lo dice — no rompe la página', () => {
+  it('sin catálogo (lectura caída), lo dice — no rompe la página — y el filtro por URL sigue valiendo', () => {
     const html = pintar(null);
-    expect(html).toContain('disabled=""');
     expect(html).toContain('No se pudo leer el catálogo de operadores');
+    expect(html).toContain('<code>?operador=</code>');
   });
 });

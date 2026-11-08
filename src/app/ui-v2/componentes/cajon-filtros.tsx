@@ -15,6 +15,10 @@ import { Drawer } from './overlay';
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface SelectorCajon { nombre: string; etiqueta: string; valor: string; opciones: ReadonlyArray<{ valor: string; rotulo: string }> }
+/** Criterio genérico del cajón: un select (con sus opciones reales) o un texto corto. */
+export type CampoCajon =
+  | ({ tipo: 'select' } & SelectorCajon)
+  | { tipo: 'texto'; nombre: string; etiqueta: string; valor: string; maxLength?: number };
 export interface FuenteCajon { valor: string; etiqueta: string; marca: MarcaId }
 
 export interface PropsCajonFiltros {
@@ -36,18 +40,22 @@ export interface PropsCajonFiltros {
     /** El parámetro de periodo (`periodo`): `actual` viaja si no hay fechas; con alguna fecha viaja `personalizado`. */
     modo?: { nombre: string; actual: string; personalizado: string };
   };
+  /** Otros criterios reales de la pantalla (estado, patio, cliente, unidad…), bajo el título `tituloCampos` («Criterios» por omisión). */
+  campos?: { titulo?: string; items: readonly CampoCajon[] };
   monedaBase?: { moneda?: SelectorCajon; base?: SelectorCajon };
   fuentes?: { nombre: string; titulo?: string; opciones: readonly FuenteCajon[]; seleccionadas: readonly string[] };
   texto?: { nombre: string; titulo: string; etiqueta: string; valor: string; ayuda?: string; placeholder?: string; filas?: number };
   /** Bloque plegable «Avanzado» (ReactNode ya armado, con campos de la misma forma). */
   avanzado?: ReactNode;
   nota?: string;
+  /** Nace abierto (pruebas de servidor, que no pueden hacer clic; o un enlace profundo). Por omisión, cerrado. */
+  abiertoInicial?: boolean;
 }
 
 const SECCION = 'rv-cajon__sec';
 
 export function CajonFiltros(p: PropsCajonFiltros) {
-  const [abierto, setAbierto] = useState(false);
+  const [abierto, setAbierto] = useState(p.abiertoInicial ?? false);
   const idForma = useId();
   const nombreDesde = p.periodo?.nombreDesde ?? 'desde';
   const nombreHasta = p.periodo?.nombreHasta ?? 'hasta';
@@ -117,6 +125,17 @@ export function CajonFiltros(p: PropsCajonFiltros) {
                 <div className="rv-cajon__par">
                   {p.monedaBase.moneda ? selector(p.monedaBase.moneda) : null}
                   {p.monedaBase.base ? selector(p.monedaBase.base) : null}
+                </div>
+              </section>
+            ) : null}
+
+            {p.campos && p.campos.items.length > 0 ? (
+              <section className={SECCION} aria-labelledby={`${idForma}-cri`}>
+                <h3 id={`${idForma}-cri`} className="rv-cajon__tit">{p.campos.titulo ?? 'Criterios'}</h3>
+                <div className="rv-cajon__par">
+                  {p.campos.items.map((c) => c.tipo === 'select' ? <div key={c.nombre}>{selector(c)}</div> : (
+                    <Campo key={c.nombre} etiqueta={c.etiqueta}><input type="text" name={c.nombre} defaultValue={c.valor} maxLength={c.maxLength ?? 60} /></Campo>
+                  ))}
                 </div>
               </section>
             ) : null}

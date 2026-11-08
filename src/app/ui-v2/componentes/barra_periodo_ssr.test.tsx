@@ -51,6 +51,35 @@ describe('BarraPeriodo · render de servidor', () => {
   });
 });
 
+describe('CajonFiltros · contenido abierto (render de servidor)', () => {
+  const abierto = renderToStaticMarkup(<BarraPeriodo cajon={{
+    abiertoInicial: true, accion: '/x', ocultos: [['tenant', 't-9']], limpiarHref: '/x?tenant=t-9', nActivos: 2, resumen: 'USD',
+    periodo: { desde: '2026-08-01', hasta: '2026-09-20', nombreDesde: 'des_desde', nombreHasta: 'des_hasta' },
+    monedaBase: { moneda: { nombre: 'moneda', etiqueta: 'Moneda', valor: 'USD', opciones: [{ valor: 'USD', rotulo: 'USD' }] } },
+    campos: { items: [{ tipo: 'select', nombre: 'estado', etiqueta: 'Estado', valor: 'a', opciones: [{ valor: '', rotulo: 'Todos' }, { valor: 'a', rotulo: 'Abiertos' }] }, { tipo: 'texto', nombre: 'unidad', etiqueta: 'Unidad', valor: 'TC9' }] },
+    fuentes: { nombre: 'fuente', opciones: [{ valor: 'hubspot', etiqueta: 'HubSpot', marca: 'hubspot' }], seleccionadas: ['hubspot'] },
+  }} />);
+  it('GET con el contexto oculto y los parámetros propios de la pantalla', () => {
+    expect(abierto).toContain('method="get"');
+    expect(abierto).toContain('name="tenant" value="t-9"');
+    expect(abierto).toContain('name="des_desde"');
+    expect(abierto).toContain('value="2026-08-01"');
+    expect(abierto).toContain('name="estado"');
+    expect(abierto).toContain('name="unidad"');
+    expect(abierto).toContain('value="TC9"');
+  });
+  it('resumen, secciones h3 y nota de paginación; las fuentes usan ChipFuente (casilla) y dicen «Sin selección se incluyen todas»', () => {
+    expect(abierto).toContain('2 filtros activos');
+    expect(abierto).toContain('>Periodo</h3>');
+    expect(abierto).toContain('>Moneda y base</h3>');
+    expect(abierto).toContain('>Fuentes</h3>');
+    expect(abierto).toContain('type="checkbox"');
+    expect(abierto).toContain('Sin selección se incluyen todas.');
+    expect(abierto).toContain('Cambiar filtros reinicia la paginación.');
+    expect(abierto).toContain('Limpiar');
+  });
+});
+
 describe('R8 · el CSS de la barra respeta la escala y los tokens', () => {
   const css = readFileSync(join(__dirname, '..', 'barra-periodo.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
   it('sin tamaños 11.5 / 12.5 / 13.5 / 22 px', () => { expect(css).not.toMatch(/\b(11\.5|12\.5|13\.5|22)px/); });

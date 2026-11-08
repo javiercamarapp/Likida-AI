@@ -20,7 +20,7 @@ export { Tarjeta, type EstadoTarjeta } from './tarjeta';
 export { TituloRecuadro } from './titulo-recuadro';
 export { BarraFiltros, type ChipFiltro } from './barra-filtros';
 export { BarraPeriodo, type OpcionPeriodo, type ChipBarra } from './barra-periodo';
-export { CajonFiltros, type PropsCajonFiltros, type SelectorCajon, type FuenteCajon } from './cajon-filtros';
+export { CajonFiltros, type PropsCajonFiltros, type SelectorCajon, type FuenteCajon, type CampoCajon } from './cajon-filtros';
 export { hrefConParams, ocultosSin, type ParamsUrl } from './barra-periodo-url';
 export { FiltroOpciones, FiltroChip, FiltroBusqueda, FiltroFecha, FiltroInterruptor, FiltroCampo, FiltroLimpiar, type OpcionFiltro } from './filtros';
 export { useMovil } from './movil';
