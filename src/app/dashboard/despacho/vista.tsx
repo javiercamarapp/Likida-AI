@@ -9,7 +9,7 @@ import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type Accio
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { BarraFiltros, FiltroBusqueda, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, CampoTexto, EstadoVacio, FiltroBusqueda, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Tope de "Por asignar" — declarado en pantalla cuando recorta. "En curso"
  *  ya no usa esta constante: FE-2 le dio su propia paginación con `count`
@@ -121,17 +121,17 @@ export function VistaDespacho({
         </TiraCifras>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid lg:grid-cols-3 gap-4 lg:items-start">
         {/* ── La cola que reparte el día ── */}
-        <section className="card p-4 lg:col-span-2 flex flex-col">
+        <section className="card p-4 lg:col-span-2">
           <TituloRecuadro info="despacho.por_asignar">Por asignar</TituloRecuadro>
           <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
             Viajes sin chofer — se asigna y el aviso de WhatsApp sale en el mismo paso
           </p>
           {sinAsignar.length === 0 ? (
-            <Leyenda icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Nada sin repartir. Los viajes que crees sin operador caen aquí.
-            </Leyenda>
+            <EstadoVacio contenido icono={Inbox} titulo="Nada sin repartir">
+              Los viajes que crees sin operador caen aquí.
+            </EstadoVacio>
           ) : (
             <div className="space-y-3">
               {sinAsignar.slice(0, MAX_FILAS).map((v) => (
@@ -173,9 +173,9 @@ export function VistaDespacho({
         </section>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <div className="grid lg:grid-cols-3 gap-4 lg:items-start">
         {/* ── Lo vivo, con el estado del aviso ── */}
-        <section className="card p-4 lg:col-span-2 flex flex-col">
+        <section className="card p-4 lg:col-span-2">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <TituloRecuadro info="despacho.en_curso">En curso</TituloRecuadro>
@@ -195,35 +195,28 @@ export function VistaDespacho({
             </BarraFiltros>
           </div>
           {activos.error !== null ? (
-            <Leyenda icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
-              No se pudo leer &quot;En curso&quot; ahora mismo — vuelve a intentar en un momento.
-            </Leyenda>
+            <EstadoVacio contenido icono={Truck} titulo="No se pudo leer En curso">
+              Vuelve a intentar en un momento.
+            </EstadoVacio>
           ) : activosSinContar ? (
             // `total === null`: la base no confirmó nada — "ningún viaje"
             // sería una afirmación que la lectura no sostiene.
-            <Leyenda icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--warn)' }} />}>
-              No se pudo contar cuántos viajes en curso hay ahora mismo — vuelve a intentar en un momento.
-            </Leyenda>
+            <EstadoVacio contenido icono={Truck} titulo="No se pudo contar los viajes">
+              No se pudo contar cuántos viajes en curso hay ahora mismo. Vuelve a intentar en un momento.
+            </EstadoVacio>
           ) : activosVacioDeNegocio ? (
             // `total === 0`: aquí sí es cierto que no hay ni un viaje en
             // curso (el folio buscado tampoco tiene coincidencias, si lo hay).
-            <Leyenda icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              {folioPedido ? `Ningún viaje en curso con folio "${folioPedido}".` : 'Ningún viaje en curso ahora mismo.'}
-            </Leyenda>
+            <EstadoVacio contenido icono={Truck} titulo={folioPedido ? 'Sin coincidencias' : 'Ningún viaje en curso ahora mismo'}>
+              {folioPedido ? `Ningún viaje en curso con folio "${folioPedido}".` : 'Los viajes con operador y sin cerrar aparecen aquí.'}
+            </EstadoVacio>
           ) : activosVacioDeConsulta ? (
             // `total > 0` pero ESTA página no trajo filas (FE-M1): un
             // `?p=` guardado o "atrás" sobre una cola que ya avanzó. Los
             // viajes existen — lo que está vacío es la página pedida, no
             // la flota — y por eso el rango impreso es "0–0", nunca un
             // cálculo sobre `pagina` que inventaría un rango que no existe.
-            <div className="flex-1 min-h-[110px] flex flex-col items-center justify-center gap-3 text-center">
-              <Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              <p className="text-[12px] max-w-[36ch]" style={{ color: 'var(--muted)' }}>
-                {folioPedido
-                  ? `Esta página no tiene viajes con folio "${folioPedido}" — hay ${numero(activos.total ?? 0)} coincidencias.`
-                  : `Esta página no tiene viajes — hay ${numero(activos.total ?? 0)} en curso.`}
-              </p>
-              <div className="flex items-center gap-3 flex-wrap justify-center text-[12px]" style={{ color: 'var(--faint)' }}>
+            <EstadoVacio contenido icono={Truck} titulo="Esta página no tiene viajes" accion={<div className="flex items-center gap-3 flex-wrap justify-center text-[12px]" style={{ color: 'var(--faint)' }}>
                 <span>0–0 de {numero(activos.total ?? 0)} en curso</span>
                 <NavPaginas>
                   {activos.pagina > 1 && <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina - 1)} direccion="anterior" />}
@@ -231,8 +224,11 @@ export function VistaDespacho({
                     <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, ultimaPaginaConDatos)} direccion="siguiente" etiqueta={`Ir a la última página (${numero(ultimaPaginaConDatos)})`} />
                   )}
                 </NavPaginas>
-              </div>
-            </div>
+              </div>}>
+              {folioPedido
+                ? `No hay viajes con folio "${folioPedido}" en esta página: hay ${numero(activos.total ?? 0)} coincidencias.`
+                : `Hay ${numero(activos.total ?? 0)} en curso, pero no en esta página.`}
+            </EstadoVacio>
           ) : (
             <div className="overflow-x-auto">
               <table aria-label="Viajes por despachar" className="w-full text-[13px]">
@@ -326,15 +322,15 @@ export function VistaDespacho({
           </section>
 
           {/* ── Quién trae cuánto ── */}
-          <section className="card p-4 flex flex-col">
+          <section className="card p-4">
             <TituloRecuadro info="despacho.carga">Carga por operador</TituloRecuadro>
             <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>El que trae más sale arriba — ¿a quién NO le cargas otro?</p>
             {carga === null ? (
-              <Leyenda>No se pudo leer la carga ahora mismo.</Leyenda>
+              <EstadoVacio contenido icono={Users} titulo="No se pudo leer la carga">Vuelve a intentar en un momento.</EstadoVacio>
             ) : carga.length === 0 ? (
-              <Leyenda icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Sin operadores dados de alta todavía.
-              </Leyenda>
+              <EstadoVacio contenido icono={Users} titulo="Sin operadores todavía">
+                Da de alta uno con el formulario de arriba.
+              </EstadoVacio>
             ) : (
               <div className="space-y-1.5">
                 {carga.slice(0, 8).map((c) => (
@@ -373,15 +369,3 @@ export function PillAviso({ v }: { v: Pick<ViajeEnCursoRow, 'aceptadoEn' | 'esca
   if (v.avisadoEn) return pill(v.avisosEnviados > 1 ? `Avisado ×${v.avisosEnviados}` : 'Avisado', 'var(--warn)', 'var(--warnbg)');
   return pill('Sin avisar', 'var(--muted)', 'var(--canvas)');
 }
-
-function Leyenda({ children, icono }: { children: React.ReactNode; icono?: React.ReactNode }) {
-  return (
-    <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <div className="text-center max-w-[32ch]">
-        {icono && <div className="flex justify-center mb-2">{icono}</div>}
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>
-      </div>
-    </div>
-  );
-}
-

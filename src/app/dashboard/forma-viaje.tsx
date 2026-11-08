@@ -5,6 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { ComboCatalogo, type BuscarCatalogo } from './combo-catalogo';
 import { mxn } from '@/lib/formato';
+import { CampoFecha, CampoTexto } from '@/app/ui-v2/componentes';
 
 /**
  * El formulario de NUEVO VIAJE — pieza REUSABLE a propósito (12-ago-2026):
@@ -29,8 +30,6 @@ export type AccionCrearViaje = (
   prev: { error?: string } | null,
   fd: FormData,
 ) => Promise<{ error?: string } | null>;
-
-const ETIQUETA = 'block text-xs font-medium mb-1.5';
 
 function BotonCrear() {
   const { pending } = useFormStatus();
@@ -73,42 +72,20 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
   const [estado, dispatch] = useActionState(action, null);
 
   return (
-    <form action={dispatch} className="space-y-3.5">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-        <div>
-          <label htmlFor="folio" className={ETIQUETA}>Folio</label>
-          <input id="folio" name="folio" type="text" maxLength={40} placeholder="F-0148"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-        </div>
-        <div>
-          <label htmlFor="fechaInicio" className={ETIQUETA}>Fecha de inicio</label>
-          <input id="fechaInicio" name="fechaInicio" type="date"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-        <div>
-          <label htmlFor="origen" className={ETIQUETA}>Origen</label>
-          <input id="origen" name="origen" type="text" maxLength={120} placeholder="Silao"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-        <div>
-          <label htmlFor="destino" className={ETIQUETA}>Destino</label>
-          <input id="destino" name="destino" type="text" maxLength={120} placeholder="Monterrey"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-        {puedeCapturarAnticipo && <div>
-          <label htmlFor="anticipo" className={ETIQUETA}>Anticipo (MXN)</label>
-          <input id="anticipo" name="anticipo" type="number" min={0} max={topeAnticipo} step="0.01" placeholder="8000"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          {topeAnticipo !== undefined && (
-            <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-              {topeAnticipoOrigen === 'politica'
-                ? `Tope de la política de tu flota: ${mxn(topeAnticipo)}`
-                : `Umbral de revisión: ${mxn(topeAnticipo)} (arriba de eso lo captura el dueño)`}
-            </p>
-          )}
-        </div>}
-        <div>
-          <label htmlFor="operadorId" className={ETIQUETA}>Operador</label>
+    <form action={dispatch} className="rv-forma">
+      <div className="rv-forma__rejilla">
+        <CampoTexto id="folio" etiqueta="Folio" name="folio" maxLength={40} placeholder="F-0148" claseControl="cifra-mono" />
+        <CampoFecha id="fechaInicio" etiqueta="Fecha de inicio" name="fechaInicio" />
+        <CampoTexto id="origen" etiqueta="Origen" name="origen" maxLength={120} placeholder="Silao" />
+        <CampoTexto id="destino" etiqueta="Destino" name="destino" maxLength={120} placeholder="Monterrey" />
+        {puedeCapturarAnticipo && (
+          <CampoTexto id="anticipo" etiqueta="Anticipo (MXN)" name="anticipo" tipo="number" min={0} max={topeAnticipo} step="0.01" placeholder="8000" claseControl="cifra-mono"
+            ayuda={topeAnticipo === undefined ? undefined : topeAnticipoOrigen === 'politica'
+              ? `Tope de la política de tu flota: ${mxn(topeAnticipo)}`
+              : `Umbral de revisión: ${mxn(topeAnticipo)} (arriba de eso lo captura el dueño)`} />
+        )}
+        <div className="rv-campo">
+          <label htmlFor="operadorId" className="rv-campo__etq">Operador</label>
           {/* SIN "Sin asignar todavía". `viaje.operador_id` es NOT NULL desde la
               0001, así que esa opción no creaba un viaje sin operador: tronaba
               con un 23502 y el usuario veía "No se pudo crear el viaje" sin
@@ -117,24 +94,23 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
           <ComboCatalogo tipo="operador" name="operadorId" campoId="operadorId" buscar={buscarCatalogo} requerido
             aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
             total={totalOperadores} className="w-full" estilo={{ background: 'var(--surface)' }} />
-          <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+          <span className="rv-campo__ayuda">
             {totalOperadores === 0
               ? 'Necesitas al menos un operador dado de alta: un viaje no puede existir sin quién lo maneje. El alta rápida está a la derecha.'
               : 'Likida le avisa por WhatsApp en cuanto el viaje exista.'}
-          </p>
+          </span>
         </div>
-        <div>
-          <label htmlFor="unidadId" className={ETIQUETA}>Unidad</label>
-          {totalUnidades === 0 ? (
-            <p className="text-[12px] py-2" style={{ color: 'var(--faint)' }}>
-              Todavía no hay unidades dadas de alta. Se registran en Unidades.
-            </p>
-          ) : (
+        {totalUnidades === 0 ? (
+          // Campo con estado vacío (no un párrafo): deshabilitado, sin `name`, y dice dónde se resuelve.
+          <CampoTexto id="unidadId" etiqueta="Unidad" disabled placeholder="Sin unidades dadas de alta" ayuda="Se registran en Unidades." />
+        ) : (
+          <div className="rv-campo">
+            <label htmlFor="unidadId" className="rv-campo__etq">Unidad</label>
             <ComboCatalogo tipo="unidad" name="unidadId" campoId="unidadId" buscar={buscarCatalogo}
               aria-label="Unidad" etiquetaVacia="Sin asignar todavía"
               total={totalUnidades} className="w-full cifra-mono" estilo={{ background: 'var(--surface)' }} />
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* ── EL LADO DEL INGRESO ──────────────────────────────────────────
@@ -144,53 +120,34 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
           quien conoce lo que se le cobra al cliente. Juntos en la misma
           cuadrícula, el anticipo y el ingreso se confunden — y confundirlos
           produce márgenes que se ven bien y están mal. */}
-      {puedeCapturarDinero && <fieldset className="pt-3.5 border-t" style={{ borderColor: 'var(--line)' }}>
-        <legend className="etiqueta-mono text-[11px] uppercase mb-2.5" style={{ color: 'var(--faint)' }}>
-          Lo que se le cobra al cliente · opcional
-        </legend>
+      {puedeCapturarDinero && <fieldset className="rv-forma__ingreso">
+        <legend className="rv-forma__leyenda">Lo que se le cobra al cliente · opcional</legend>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-          <div>
-            <label htmlFor="clienteId" className={ETIQUETA}>Cliente</label>
-            {totalClientes === 0 ? (
-              <p className="text-[12px] py-2" style={{ color: 'var(--faint)' }}>
-                Todavía no hay clientes dados de alta. Se registran en Clientes y tarifas.
-              </p>
-            ) : (
+        <div className="rv-forma__rejilla">
+          {totalClientes === 0 ? (
+            <CampoTexto id="clienteId" etiqueta="Cliente" disabled placeholder="Sin clientes dados de alta" ayuda="Se registran en Clientes y tarifas." />
+          ) : (
+            <div className="rv-campo">
+              <label htmlFor="clienteId" className="rv-campo__etq">Cliente</label>
               <ComboCatalogo tipo="cliente" name="clienteId" campoId="clienteId" buscar={buscarCatalogo}
                 aria-label="Cliente" etiquetaVacia="Sin asignar todavía"
                 total={totalClientes} className="w-full" estilo={{ background: 'var(--surface)' }} />
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="ingresoFlete" className={ETIQUETA}>Ingreso del flete (MXN)</label>
-            <input id="ingresoFlete" name="ingresoFlete" type="text" inputMode="decimal" placeholder="38,500"
-              className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-            <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-              Lo que le cobras al cliente. NO es el anticipo: el anticipo es lo que le adelantas al
-              operador. Déjalo vacío si todavía no lo sabes — vacío no es cero.
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="kmRecorridos" className={ETIQUETA}>Kilómetros</label>
-            <input id="kmRecorridos" name="kmRecorridos" type="text" inputMode="numeric" placeholder="1,240"
-              className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          </div>
+            </div>
+          )}
+          <CampoTexto id="ingresoFlete" etiqueta="Ingreso del flete (MXN)" name="ingresoFlete" inputMode="decimal" placeholder="38,500" claseControl="cifra-mono"
+            ayuda="Lo que le cobras al cliente, NO el anticipo. Vacío no es cero." />
+          <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="1,240" claseControl="cifra-mono" />
         </div>
 
-        <p className="text-[11px] mt-2.5" style={{ color: 'var(--faint)' }}>
+        <p className="rv-campo__ayuda">
           Sin el ingreso capturado, este viaje no entra en la medición de margen — ni la suya ni la de
           su ruta, su cliente o su unidad. Se puede llenar después.
         </p>
       </fieldset>}
 
-      {!puedeCapturarDinero && <div>
-        <label htmlFor="kmRecorridos" className={ETIQUETA}>Kilómetros</label>
-        <input id="kmRecorridos" name="kmRecorridos" type="text" inputMode="numeric" placeholder="1,240"
-          className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-      </div>}
+      {!puedeCapturarDinero && (
+        <CampoTexto id="kmRecorridos" etiqueta="Kilómetros" name="kmRecorridos" inputMode="numeric" placeholder="1,240" claseControl="cifra-mono" />
+      )}
 
       {estado?.error && (
         <div className="rounded-lg px-3 py-2.5 text-[13px]" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
@@ -198,7 +155,7 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
         </div>
       )}
 
-      <div className="pt-1">
+      <div>
         <BotonCrear />
       </div>
     </form>
