@@ -15,7 +15,7 @@ afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, f
 const tmp = () => { const d = mkdtempSync(join(tmpdir(), 'ensayo-rest-')); dirs.push(d); return d; };
 // Entorno sin PATH de supabase/age: si algo llegara a la red fallaría por comando inexistente.
 const correr = (env: Record<string, string>) =>
-  spawnSync('bash', [SCRIPT], { encoding: 'utf8', timeout: 15_000, env: { PATH: '/usr/bin:/bin', HOME: tmp(), ...env } });
+  spawnSync('bash', [SCRIPT], { encoding: 'utf8', timeout: 15_000, env: { PATH: '/usr/bin:/bin', HOME: tmp(), ...env } as NodeJS.ProcessEnv });
 const REF_OK = 'abcdefghij0123456789';
 
 describe('salvaguardas', () => {
@@ -34,7 +34,7 @@ describe('salvaguardas', () => {
     expect(r.stderr).toMatch(/PRODUCCION/);
   });
   it('aborta sin la confirmacion explicita', () => {
-    for (const v of [{}, { CONFIRMO_DESECHABLE: 'si' }, { CONFIRMO_DESECHABLE: 'YES' }]) {
+    for (const v of [{} as Record<string, string>, { CONFIRMO_DESECHABLE: 'si' }, { CONFIRMO_DESECHABLE: 'YES' }]) {
       const r = correr({ REF_DESECHABLE: REF_OK, ...v });
       expect(r.status).toBe(1);
       expect(r.stderr).toMatch(/CONFIRMO_DESECHABLE=SI/);
