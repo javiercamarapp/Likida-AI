@@ -9,7 +9,7 @@ import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type Accio
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { BarraFiltros, CampoTexto, EstadoVacio, FiltroBusqueda, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, EstadoVacio, FiltroBusqueda, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /** Tope de "Por asignar" — declarado en pantalla cuando recorta. "En curso"
  *  ya no usa esta constante: FE-2 le dio su propia paginación con `count`

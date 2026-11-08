@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ScrollText, TriangleAlert, CircleCheck, CircleHelp, Package, Printer } from 'lucide-react';
+import { TriangleAlert, CircleCheck, CircleHelp, Package, Printer } from 'lucide-react';
 import type { EstadoCartaPorte, ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import type { EstadoCampoCcp } from '@/lib/likida/carta_porte';
 import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
