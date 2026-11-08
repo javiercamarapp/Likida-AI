@@ -4,7 +4,8 @@ import { GitCommitHorizontal } from 'lucide-react';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { StatCard, EstadoVacio } from '../ui/kit';
+import { StatCard } from '../ui/kit';
+import { AvisoGitHub } from '../ui/aviso-github';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,18 +40,15 @@ export default async function ActividadCodigoPage() {
         />
 
         <div className="px-5 py-4 flex-1 space-y-2.5">
-          {a.estado === 'sin_token' && (
-            <EstadoVacio>
-              El repo es privado y <span className="cifra-mono">GITHUB_TOKEN</span> no está configurado —
-              sin él, esta pantalla no puede afirmar nada sobre la actividad. Se genera en
-              github.com/settings/tokens (solo lectura del repo) y va en las variables de Vercel.
-            </EstadoVacio>
-          )}
+          {a.estado === 'sin_token' && <AvisoGitHub causa="sin_token" />}
           {a.estado === 'calculando' && (
-            <EstadoVacio>GitHub todavía está calculando la estadística del repo (contestó 202) — recarga en unos segundos.</EstadoVacio>
+            <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>GitHub todavía está calculando la estadística del repo (contestó 202) — recarga en unos segundos.</p>
           )}
           {a.estado === 'error' && (
-            <EstadoVacio>No se pudo leer la actividad: {a.detalle}. Esto NO significa que no haya commits.</EstadoVacio>
+            <>
+              <AvisoGitHub causa="error" />
+              <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>No se pudo leer la actividad: {a.detalle}. Esto NO significa que no haya commits.</p>
+            </>
           )}
 
           {a.estado === 'ok' && (() => {
