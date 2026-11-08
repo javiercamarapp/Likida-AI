@@ -28,7 +28,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, traerTodo } from './pg';
+import { conteo, traerTodo, traerTodoEnParalelo } from './pg';
 import { acotada } from './presupuesto';
 import { DatoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
@@ -424,7 +424,8 @@ export async function buscarProspectos(opciones: PaginaProspectos = {}): Promise
  */
 export async function listarProspectos(filtro: FiltroProspectos = {}): Promise<ProspectoRow[]> {
   const admin = supabaseAdmin();
-  const filas = await traerTodo<Record<string, unknown>>((d, h) => {
+  // R9: ~33,000 prospectos = 34 viajes; en fila eran >15 s en /admin/vendedores. Mismo contrato (conteo exacto o LANZA), páginas en paralelo.
+  const filas = await traerTodoEnParalelo<Record<string, unknown>>((d, h) => {
     let q = admin.from('prospecto')
       .select('id, empresa, contacto_nombre, telefono, correo, ciudad, vacante, fuente, estado, vendedor_id, tenant_id, notas, cerrado_en, created_at', conteo(d))
       .is('duplicado_de', null);
@@ -455,6 +456,28 @@ export async function listarProspectos(filtro: FiltroProspectos = {}): Promise<P
     cerradoEn: (f.cerrado_en as string) ?? null,
     createdAt: String(f.created_at),
   }));
+}
+
+/**
+ * Conteo del pipeline por etapa SIN descargar la cartera: 1 conteo total + 1 por valor persistido, todos en paralelo y de solo
+ * cabecera. /admin/crecimiento solo necesita estas cifras y bajaba ~33,000 filas completas (notas incluidas) para sumarlas.
+ * LANZA ante un error de lectura (no hay «0 prospectos» con la base caída).
+ */
+export async function contarProspectosPorEstado(): Promise<{ porEstado: Record<EstadoProspecto, number>; total: number }> {
+  const admin = supabaseAdmin();
+  const contar = async (estado: string | null): Promise<number> => {
+    let q = admin.from('prospecto').select('id', { count: 'exact', head: true }).is('duplicado_de', null);
+    if (estado !== null) q = q.eq('estado', estado);
+    const { count, error } = await acotada(q, 'contarProspectosPorEstado');
+    if (error) throw new Error(`contarProspectosPorEstado: ${error.message}`);
+    if (typeof count !== 'number') throw new Error('contarProspectosPorEstado: la base no devolvió conteo');
+    return count;
+  };
+  const [total, ...porValor] = await Promise.all([
+    contar(null), ...ESTADOS_PROSPECTO_PERSISTIDOS.map((e) => contar(e)),
+  ]);
+  const porEstado = normalizarConteosProspecto(ESTADOS_PROSPECTO_PERSISTIDOS.map((e, i) => ({ estado: e, n: porValor[i] })));
+  return { porEstado, total };
 }
 
 export interface VendedorRow {
@@ -488,7 +511,7 @@ export async function listarVendedores(opciones: { soloActivos?: boolean } = {})
       },
       'listarVendedores.cuentas',
     ),
-    traerTodo<Record<string, unknown>>(
+    traerTodoEnParalelo<Record<string, unknown>>(
       (d, h) => admin.from('prospecto').select('id, vendedor_id, estado', conteo(d))
         .is('duplicado_de', null).order('id').range(d, h),
       'listarVendedores.prospectos',

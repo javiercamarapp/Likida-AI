@@ -91,7 +91,7 @@ export function RebotesYBajas({ rebotes, suprimidos }: {
         )}
         <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
           Aquí no hay botón para reactivar a nadie: suprimir es para siempre y quitar una fila es
-          una decisión manual sobre la base (0217).
+          una decisión manual sobre la base.
         </p>
       </div>
     </section>

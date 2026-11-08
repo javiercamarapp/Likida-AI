@@ -7,7 +7,7 @@ import { ChipFuente, IDS_INTEGRACION, MarcaIntegracion, esIntegracionConocida, t
 import { INTEGRACIONES } from './marca-integracion.data';
 
 const leer = (f: string) => readFileSync(join(__dirname, f), 'utf8');
-const PEDIDOS = ['hubspot', 'zendesk', 'whatsapp', 'outlook', 'microsoft', 'excel', 'csv', 'sap', 'google', 'gmail', 'resend'];
+const PEDIDOS = ['hubspot', 'zendesk', 'whatsapp', 'outlook', 'microsoft', 'excel', 'csv', 'sap', 'google', 'gmail', 'resend', 'supabase'];
 
 describe('MarcaIntegracion', () => {
   it('trae todos los proveedores pedidos (Microsoft/Outlook, Excel, CSV, SAP, Google, Gmail, Resend, HubSpot, Zendesk, WhatsApp)', () => {

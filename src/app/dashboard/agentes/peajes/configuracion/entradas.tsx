@@ -70,7 +70,7 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
                   <input readOnly value={entradas.direccionCorreo} className="w-full cifra-mono mt-0.5" style={ESTILO_INPUT} />
                 </label>
               )
-              : <p style={{ color: 'var(--warn)' }}>Falta RESEND_EMAIL_DOMAIN en el servidor: sin el dominio de correo no se puede armar la dirección.</p>
+              : <p style={{ color: 'var(--warn)' }}>Falta configurar el dominio de correo en el servidor (lo hace el equipo de Likida): sin él no se puede armar la dirección.</p>
           )}
           {puedeAdministrar && config?.correoActivo && (
             <form action={acciones.guardarRemitentes} className="space-y-1.5">
@@ -118,7 +118,7 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
                   </label>
                   <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Download width={13} height={13} strokeWidth={2} /> Guardar y encender</button>
                 </div>
-                {!entradas.cofreConfigurado && <p className="text-[11px]" style={{ color: 'var(--warn)' }}>Falta LIKIDA_COFRE_LLAVE en el servidor: sin ella no se puede guardar un token de forma segura (el pull sin token sí funciona).</p>}
+                {!entradas.cofreConfigurado && <p className="text-[11px]" style={{ color: 'var(--warn)' }}>Falta configurar el cofre de credenciales en el servidor (lo hace el equipo de Likida): sin él no se puede guardar un token de forma segura (la lectura sin token sí funciona).</p>}
               </form>
             ) : <SoloAdmin />}
             {puedeAdministrar && config.pullConCredencial && (

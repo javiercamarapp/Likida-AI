@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import {
@@ -91,7 +92,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
         <div className="px-5 py-5 flex-1 space-y-2.5">
           <CajaBusqueda q="" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+          <div className="kit-kpis">
             <KpiTile
               icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Conversaciones activas" valor={total} formato="entero"
@@ -110,7 +111,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
               no compara nada. */}
           {conversaciones.length > 1 && (
             <ChartCard titulo="Mensajes por conversación" tamano="S">
-              <HBars datos={conversaciones.map((c) => ({ etiqueta: c.telefono, valor: c.turns.length }))} formato="entero" />
+              <HBars datos={conversaciones.map((c) => ({ etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato="entero" />
             </ChartCard>
           )}
 
@@ -175,7 +176,7 @@ function ListaConversaciones({ conversaciones }: { conversaciones: ConversacionA
         const fila = (
           <>
             <div>
-              <div className="text-sm font-medium">{c.telefono}</div>
+              <div className="text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</div>
               <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
             </div>
             <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>

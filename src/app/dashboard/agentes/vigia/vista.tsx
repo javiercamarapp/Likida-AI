@@ -114,10 +114,10 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
   return (
     <MarcoPagina titulo="Servicio al cliente" apoyo="Atiende a los clientes de tu flota: clasifica, responde con datos reales y escala a una persona lo que lo requiere.">
       <nav aria-label="Herramientas del agente" className="flex flex-wrap gap-2 text-[12px]">
-        <Link href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Grupos críticos e histórico (FAQs y tendencias)</Link>
-        <Link href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Conversaciones sin atender (de los chats exportados)</Link>
-        <Link href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho (subir el archivo del día)</Link>
-        <Link href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Estatus de importación (derivado del programa)</Link>
+        <Link title="Grupos críticos e histórico (FAQs y tendencias)" href={`/dashboard/agentes/vigia/historial${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Histórico</Link>
+        <Link title="Conversaciones sin atender (de los chats exportados)" href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Sin atender</Link>
+        <Link title="Programa de despacho (subir el archivo del día)" href={`/dashboard/agentes/vigia/programa${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Programa de despacho</Link>
+        <Link title="Estatus de importación (derivado del programa)" href={`/dashboard/agentes/vigia/importacion${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Importación</Link>
         <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
           <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
         </Suspense>

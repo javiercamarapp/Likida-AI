@@ -7,7 +7,8 @@ import { MapaActividad } from './mapa-actividad';
 import { getEventosSeguridad, type FilaSeguridad } from '@/lib/seguridad/eventos';
 import { getSLOs, type Slo } from '@/lib/admin/slo';
 import { fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio, StatusPill } from '../ui/kit';
+import { StatusPill } from '../ui/kit';
+import { AvisoGitHub } from '../ui/aviso-github';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
 import { SelectorVista } from '../selector-vista';
 
@@ -62,6 +63,9 @@ export default async function DevPage() {
         <SelectorVista tenants={tenants} />
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
+          {/* Falta de configuración (no corregible por código): UN aviso corto con la variable, no tres vacíos largos. */}
+          {(mapa.estado === 'sin_token' || actividad.estado === 'sin_token') && <AvisoGitHub causa="sin_token" />}
+          {mapa.estado !== 'sin_token' && actividad.estado !== 'sin_token' && (mapa.estado === 'error' || actividad.estado === 'error') && <AvisoGitHub causa="error" />}
           {/* ── El mapa de puntos: 26 semanas de pushes, un punto por día.
                 La intensidad es commits/día; GitHub lo precalcula y a veces
                 contesta "generando" — se dice. Refresca en cada carga
@@ -70,19 +74,13 @@ export default async function DevPage() {
             <TituloSeccion>Mapa de actividad — pushes por día</TituloSeccion>
             <div className="mt-2">
               {mapa.estado === 'sin_token' && (
-                <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Sin <code>GITHUB_TOKEN</code> no hay mapa — no es que no haya pushes.
-                </EstadoVacio>
+                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>Sin <code>GITHUB_TOKEN</code> no hay mapa — no es que no haya pushes.</p>
               )}
               {mapa.estado === 'error' && (
-                <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  GitHub no contestó el histograma — recarga en un momento.
-                </EstadoVacio>
+                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>GitHub no contestó el histograma — recarga en un momento.</p>
               )}
               {mapa.estado === 'generando' && (
-                <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  GitHub está recalculando el histograma tras el último push — recarga en unos segundos.
-                </EstadoVacio>
+                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>GitHub está recalculando el histograma tras el último push — recarga en unos segundos.</p>
               )}
               {mapa.estado === 'ok' && (
                 <div className="flex gap-5 items-start">
@@ -169,14 +167,10 @@ export default async function DevPage() {
             <TituloSeccion>Actividad del código — en vivo</TituloSeccion>
             <div className="mt-2">
               {actividad.estado === 'sin_token' && (
-                <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Sin la llave <code>GITHUB_TOKEN</code> esta sección no puede ver el repo — no es que no haya actividad.
-                </EstadoVacio>
+                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>Sin la llave <code>GITHUB_TOKEN</code> esta sección no puede ver el repo — no es que no haya actividad.</p>
               )}
               {actividad.estado === 'error' && (
-                <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  GitHub no contestó — no se sabe qué hay (que no es lo mismo que nada).
-                </EstadoVacio>
+                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>GitHub no contestó — no se sabe qué hay (que no es lo mismo que nada).</p>
               )}
               {actividad.estado === 'ok' && (
                 <div className="grid gap-3 lg:grid-cols-2">
@@ -229,12 +223,10 @@ export default async function DevPage() {
           <div className="card p-3">
             <TituloSeccion>Lo que falta</TituloSeccion>
             <div className="mt-2">
-              <EstadoVacio icono={<Code2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Calendario de contribuciones, deploys de Vercel con estado de build, feature flags,
+              <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>Calendario de contribuciones, deploys de Vercel con estado de build, feature flags,
                 tiempo de merge/cobertura/error budget y changelog — lo de GitHub ya entra en vivo arriba (17-ago);
                 lo de Vercel sigue sin integración. Vercel y Sentry ya están enlazados desde
-                Inicio/Observabilidad.
-              </EstadoVacio>
+                Inicio/Observabilidad.</p>
             </div>
           </div>
         </div>

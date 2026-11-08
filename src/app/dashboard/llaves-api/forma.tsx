@@ -3,6 +3,7 @@
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { KeyRound, Check, Copy, ShieldAlert } from 'lucide-react';
+import { CampoSelect } from '@/app/ui-v2/componentes';
 // SOLO TIPOS de `llave-api-escritura.ts`: ese módulo importa `supabaseAdmin`,
 // que no puede acabar en el bundle del navegador. El catálogo de áreas viaja
 // como PROP desde la página, igual que `MODOS_TARIFA` en /dashboard/clientes.
@@ -107,35 +108,19 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
             </p>
           </div>
 
-          <div>
-            <label htmlFor="llave-area" className={ETIQUETA}>Área que puede leer</label>
-            <select id="llave-area" name="area" defaultValue={areas[0]?.valor}
-              className="w-full" style={{ background: 'var(--surface)' }}>
-              {areas.map((a) => (
-                <option key={a.valor} value={a.valor}>{a.rotulo}</option>
-              ))}
-            </select>
-            <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-              {areas.map((a) => `${a.rotulo}: ${a.detalle}`).join(' ')} Cada área
-              alcanza también las de abajo — dale a cada sistema la más angosta que le sirva.
-            </p>
-          </div>
+          <CampoSelect etiqueta="Área que puede leer" id="llave-area" name="area" defaultValue={areas[0]?.valor}
+            ayuda={`${areas.map((a) => `${a.rotulo}: ${a.detalle}`).join(' ')} Cada área alcanza también las de abajo — dale a cada sistema la más angosta que le sirva.`}>
+            {areas.map((a) => (
+              <option key={a.valor} value={a.valor}>{a.rotulo}</option>
+            ))}
+          </CampoSelect>
 
-          <div>
-            <label htmlFor="llave-vigencia" className={ETIQUETA}>Hasta cuándo vale</label>
-            <select id="llave-vigencia" name="vigencia" defaultValue={vigenciaDefault}
-              className="w-full" style={{ background: 'var(--surface)' }}>
-              {vigencias.map((v) => (
-                <option key={v.valor} value={v.valor}>{v.rotulo}</option>
-              ))}
-            </select>
-            <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-              Pasada esa fecha la llave deja de servir sola, sin que nadie tenga que
-              acordarse de revocarla — que es lo que salva a una llave olvidada en el
-              repositorio de tu proveedor. «Sin caducidad» solo para lo que de verdad
-              nadie va a rotar.
-            </p>
-          </div>
+          <CampoSelect etiqueta="Hasta cuándo vale" id="llave-vigencia" name="vigencia" defaultValue={vigenciaDefault}
+            ayuda="Pasada esa fecha la llave deja de servir sola, sin que nadie tenga que acordarse de revocarla — que es lo que salva a una llave olvidada en el repositorio de tu proveedor. «Sin caducidad» solo para lo que de verdad nadie va a rotar.">
+            {vigencias.map((v) => (
+              <option key={v.valor} value={v.valor}>{v.rotulo}</option>
+            ))}
+          </CampoSelect>
         </div>
 
         {estado && !estado.ok && <AvisoError error={estado.error} />}

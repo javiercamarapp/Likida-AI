@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { CampoSelect, CampoTexto } from '../../../ui-v2/componentes/campos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { provisionarUsuario, type RolAppUser } from '@/lib/auth/provisionar';
 import { descifrarErrorProvision } from '@/lib/auth/invitar';
@@ -91,40 +92,21 @@ export default async function NuevoUsuario() {
         />
 
         <div className="px-5 py-5 flex-1">
-          <div className="card p-5 max-w-md">
-            <FormaConAviso accion={crear} boton="Crear usuario" columnas="md:grid-cols-1">
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Flota</label>
-                <select name="tenantId" required className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
-                  {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Correo</label>
-                <input name="email" type="email" required placeholder="persona@flota.com"
-                  className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
-              </div>
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Nombre (opcional)</label>
-                <input name="nombre" type="text" className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
-              </div>
-              <div>
-                {/* D5 (auditoría 4): la columna existía (0059), el matcher de
-                    oficina la leía, y ningún alta la llenaba — la persona no
-                    podía escribirle al bot sin un UPDATE a mano. */}
-                <label className="text-sm font-medium block mb-1.5">WhatsApp (opcional)</label>
-                <input name="telefono" type="text" placeholder="10 dígitos"
-                  className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
-                <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat).
-                </p>
-              </div>
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Rol</label>
-                <select name="rol" required defaultValue="flota_admin" className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }}>
-                  {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
-                </select>
-              </div>
+          {/* R9: ancho útil (dos columnas) y campos del sistema; antes una tarjeta angosta con el resto de la pantalla vacío. */}
+          <div className="card p-5 max-w-3xl">
+            <FormaConAviso accion={crear} boton="Crear usuario" columnas="md:grid-cols-2">
+              <CampoSelect etiqueta="Flota" name="tenantId" required>
+                {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+              </CampoSelect>
+              <CampoSelect etiqueta="Rol" name="rol" required defaultValue="flota_admin">
+                {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
+              </CampoSelect>
+              <CampoTexto etiqueta="Correo" name="email" tipo="email" required placeholder="persona@flota.com" />
+              <CampoTexto etiqueta="Nombre (opcional)" name="nombre" />
+              {/* D5 (auditoría 4): la columna existía, el matcher de oficina la leía, y ningún alta la llenaba — la persona no
+                  podía escribirle al bot sin un UPDATE a mano. */}
+              <CampoTexto etiqueta="WhatsApp (opcional)" name="telefono" placeholder="10 dígitos"
+                ayuda="Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat)." />
             </FormaConAviso>
             <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
               Crea la cuenta de Auth y la fila en app_user (mismo camino que el script manual). El primer login (magic link) confirma la cuenta.

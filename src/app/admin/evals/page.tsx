@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { Bug } from 'lucide-react';
@@ -215,10 +216,9 @@ export default async function Evals({
                                   <input type="hidden" name="id" value={c.id} />
                                   <input type="hidden" name="corridaId" value={estado.ultima?.id ?? ''} />
                                   <input type="hidden" name="veredicto" value={v} />
-                                  <button className="px-2 py-0.5 rounded-md text-[10.5px] font-medium hairline hover:opacity-70"
-                                    style={{ color: v === 'paso' ? 'var(--ok)' : 'var(--bad)' }}>
-                                    {v === 'paso' ? '✓ pasó' : '✗ falló'}
-                                  </button>
+                                  <Boton type="submit" variante="secondary" tamano="sm" style={{ color: v === 'paso' ? 'var(--ok)' : 'var(--bad)' }}>
+                                    {v === 'paso' ? 'Pasó' : 'Falló'}
+                                  </Boton>
                                 </form>
                               ))}
                             </span>

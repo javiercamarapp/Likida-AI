@@ -1,4 +1,4 @@
-import { Truck, ShieldAlert, ShieldCheck, Clock, CircleDashed, Wrench, Satellite } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, Clock, CircleDashed, Wrench, Satellite } from 'lucide-react';
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
 import { clasificarVigencia, avisoVigencias, DIAS_AVISO, type ConteoVigencias, type EstadoVigencia } from '@/lib/likida/vigencias';
 import { numero } from '@/lib/formato';
@@ -9,11 +9,11 @@ import { FiltroRegistro } from '../registro-filtro';
 
 // El Plegable es el mismo `<details>` de clientes — no hay una segunda
 // librería de UI, y un plegable propio sería su segunda copia.
-import { Plegable } from '../clientes/forma';
 import { FormaUnidad, type AccionForma, type ProveedorGps, type PatioOpcion } from './forma';
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, TituloRecuadro, Disclosure } from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 
 const PILL: Record<EstadoVigencia, { fg: string; bg: string; Icono: typeof ShieldCheck }> = {
   vencido: { fg: 'var(--bad)', bg: 'var(--badbg)', Icono: ShieldAlert },
@@ -145,6 +145,37 @@ export function VistaUnidades({
   const hayFiltro = pag.q !== '';
   const vacio = !hayFiltro && pag.filtrados === 0 && totalBajas === 0;
 
+  // Altas (formulario y carga masiva): con datos van DESPUÉS de la lista, plegadas; sin unidades, primero y abiertas.
+  const alta = (
+    <>
+      {/* El alta va ANTES del estado vacío a propósito: con cero unidades,
+          esta sección es la única forma de que deje de haber cero. Solo se
+          pinta a quien puede administrar — el encargado la lee, no la
+          escribe (misma puerta que clientes). */}
+      {puedeEditar && (
+        <section className="card p-4">
+          <TituloRecuadro info="unidades.alta" className="mb-1">Dar de alta una unidad</TituloRecuadro>
+          <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
+            Con sus vigencias capturadas, Likida avisa qué papel vence primero.
+          </p>
+          <Disclosure variante="linea" titulo="Capturar unidad" abierto={vacio}>
+            <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
+              patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
+          </Disclosure>
+        </section>
+      )}
+
+      {puedeEditar && (
+        <ImportadorMasivo
+          entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
+          archivoPlantilla="plantilla-unidades.csv"
+          columnas="Obligatoria: placas. Número económico (si no lo traes, se usa la placa), marca, modelo, año, vencimiento de póliza, permiso SICT y verificación, y patio."
+          hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
+        />
+      )}
+    </>
+  );
+
   return (
     <MarcoPagina titulo="Unidades" apoyo="Tus unidades con las vigencias que pide la ley. Lo vencido o por vencer aparece primero.">
       {aviso && (
@@ -158,62 +189,31 @@ export function VistaUnidades({
         </div>
       )}
 
-      {/* El alta va ANTES del estado vacío a propósito: con cero unidades,
-          esta sección es la única forma de que deje de haber cero. Solo se
-          pinta a quien puede administrar — el encargado la lee, no la
-          escribe (misma puerta que clientes). */}
-      {puedeEditar && (
-        <section className="card p-4">
-          <TituloRecuadro info="unidades.alta" className="mb-1">Dar de alta una unidad</TituloRecuadro>
-          <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>
-            Con sus vigencias capturadas, Likida avisa qué papel vence primero.
-          </p>
-          <Plegable resumen="Capturar unidad">
-            <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
-              patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
-          </Plegable>
-        </section>
+      {vacio && (
+        <EstadoVacio pantalla contenido titulo="Todavía no hay unidades"
+          accion={puedeEditar ? { href: '#importar', texto: 'Cargar mi flota desde Excel' } : undefined}>
+          Registra tus tractocamiones con póliza, permiso SICT y verificación y aquí verás cuál vence primero.
+          {puedeEditar ? ' Dalas de alta una por una en el formulario de abajo.' : ''}
+        </EstadoVacio>
       )}
 
-      {puedeEditar && (
-        <ImportadorMasivo
-          entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
-          archivoPlantilla="plantilla-unidades.csv"
-          columnas="Obligatoria: placas. Número económico (si no lo traes, se usa la placa), marca, modelo, año, vencimiento de póliza, permiso SICT y verificación, y patio."
-          hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
-        />
-      )}
+      {vacio && alta}
 
       {/* `unidades` y no `activas`: con todo el parque dado de baja,
           "todavía no hay unidades dadas de alta" sería falso — y mandaría
           a capturar de nuevo camiones que ya están en la base, abajo. */}
       {vacio ? (
-        <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-          accion={puedeEditar ? { href: '#importar', texto: 'Cargar mi flota desde Excel' } : undefined}>
-          Todavía no hay unidades dadas de alta. Cuando registres tus tractocamiones con su póliza,
-          permiso SICT y verificación, aquí se ve cuál está por vencer antes de que te pare un inspector.
-          {puedeEditar ? ' Puedes darlas de alta una por una arriba, o cargar toda tu flota de una vez desde un Excel o CSV.' : ''}
-        </EstadoVacio>
+        null
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-            {([
-              ['Vencidos', conteos?.vencidos, 'var(--bad)'],
-              [`Vencen en ${DIAS_AVISO} días`, conteos?.porVencer, 'var(--warn)'],
-              ['En regla', conteos?.vigentes, 'var(--ok)'],
-              ['Sin papeles', conteos?.sinDato, 'var(--muted)'],
-            ] as const).map(([rotulo, n, color]) => (
-              <div key={rotulo} className="card p-3.5">
-                {/* `—` y no 0 cuando no se pudo contar: un 0 aquí diría
-                    «no hay ninguna vencida», que es la afirmación más cara
-                    que esta pantalla puede hacer en falso. */}
-                <div className="text-[20px] font-semibold tabular" style={{ color: n !== undefined && n > 0 ? color : 'var(--muted)' }}>
-                  {n === undefined ? '—' : numero(n)}
-                </div>
-                <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{rotulo}</div>
-              </div>
-            ))}
-          </div>
+          {/* `—` y no 0 cuando no se pudo contar: un 0 aquí diría «no hay ninguna vencida», que es la afirmación más cara
+              que esta pantalla puede hacer en falso. `Cifra` pinta «—» con valor undefined. */}
+          <TiraCifras>
+            <Cifra etiqueta="Vencidos" valor={conteos?.vencidos} tono={conteos && conteos.vencidos > 0 ? 'bad' : undefined} info="unidades.vencidas" />
+            <Cifra etiqueta={`Vencen en ${DIAS_AVISO} días`} valor={conteos?.porVencer} tono={conteos && conteos.porVencer > 0 ? 'warn' : undefined} info="unidades.por_vencer" />
+            <Cifra etiqueta="En regla" valor={conteos?.vigentes} info="unidades.en_regla" />
+            <Cifra etiqueta="Sin papeles" valor={conteos?.sinDato} info="unidades.sin_papeles" />
+          </TiraCifras>
 
           <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
             sustantivo="unidades" camposOcultos={camposOcultos} />
@@ -228,9 +228,9 @@ export function VistaUnidades({
           )}
 
           {pag.filas.length === 0 && (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            <EstadoVacio pantalla contenido titulo="Sin coincidencias">
               Ninguna unidad coincide con «{pag.q}».
-            </p>
+            </EstadoVacio>
           )}
 
           {pag.filas.map((u) => {
@@ -342,6 +342,8 @@ export function VistaUnidades({
           </p>
         </>
       )}
+
+      {!vacio && alta}
 
       {/* ── LAS QUE YA NO ESTÁN EN EL PARQUE ────────────────────────────
           Aparte y al final: no cuentan en los cuatro contadores de arriba

@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { StatusPill } from '../ui/kit';
 import { Aviso, type ResultadoAccion, type AccionDeForma } from '../ui/forma';
+import { ControlApagar } from '../ui/control-apagar';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PALANCA, EN LA MISMA FILA QUE EL AGENTE.
@@ -38,32 +39,10 @@ export function PalancaAgente({
 
   return (
     <div className="space-y-1">
-      <div className="flex items-center gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
         <StatusPill estado={apagado ? 'bad' : 'ok'}>{apagado ? 'APAGADO' : 'Encendido'}</StatusPill>
+        <ControlApagar id={id} apagado={apagado} pendiente={pendiente} enviar={enviar} etiquetaMotivo="Motivo" />
       </div>
-      <form action={enviar} className="flex flex-wrap items-center gap-1">
-        <input type="hidden" name="id" value={id} />
-        <input type="hidden" name="operacion" value={apagado ? 'encender' : 'apagar'} />
-        {!apagado && (
-          <input
-            name="motivo"
-            required
-            placeholder="Motivo"
-            className="text-[11px] rounded-md px-2 py-1 w-28 outline-none"
-            style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }}
-          />
-        )}
-        <button
-          type="submit"
-          disabled={pendiente}
-          className="text-[11px] font-medium rounded-md px-2 py-1 disabled:opacity-60 disabled:cursor-not-allowed"
-          style={apagado
-            ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
-            : { background: 'var(--badbg)', color: 'var(--bad)', border: '1px solid var(--line)' }}
-        >
-          {pendiente ? '…' : apagado ? 'Encender' : 'Apagar'}
-        </button>
-      </form>
       <Aviso estado={estado} />
     </div>
   );

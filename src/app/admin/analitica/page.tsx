@@ -69,7 +69,7 @@ export default async function AnaliticaPage() {
 
           {r.porDia.length > 1 ? (
             <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
-              <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
+              <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} etiquetaSerie="Costo de IA (USD)" />
             </ChartCard>
           ) : (
             <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
@@ -131,7 +131,7 @@ export default async function AnaliticaPage() {
             </EstadoVacio>
           </ChartCard>
 
-          <EstadoVacio>Exportar CSV y reportes programados — Fase 2 del roadmap.</EstadoVacio>
+          <EstadoVacio>Exportar CSV y reportes programados: aún no existen.</EstadoVacio>
         </div>
       </div>
     </main>

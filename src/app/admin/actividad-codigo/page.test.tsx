@@ -20,7 +20,9 @@ it('sin GITHUB_TOKEN: lo dice explícito, con cómo generarlo — nunca "cero co
   dobles.getActividadCodigo.mockResolvedValue({ estado: 'sin_token' });
   const html = await renderizar();
   expect(html).toContain('GITHUB_TOKEN');
-  expect(html).toContain('no está configurado');
+  // R9: el aviso pasó de un vacío largo a un aviso compacto accionable (misma verdad: falta la variable, no hay «cero commits»).
+  expect(html).toContain('Falta configurar el acceso a GitHub');
+  expect(html).toContain('Vercel');
   expect(html).not.toContain('Commits — últimas 52 semanas');
 });
 
@@ -36,6 +38,7 @@ it('error de lectura: muestra el detalle real y ACLARA que no significa "sin com
   const html = await renderizar();
   expect(html).toContain('GitHub contestó 500');
   expect(html).toContain('Esto NO significa que no haya commits');
+  expect(html).toContain('GITHUB_TOKEN');
 });
 
 it('ok con datos reales: pinta el heatmap y los totales medidos', async () => {

@@ -7,7 +7,7 @@ import { listarCampanasConTotal, estadoIntegracionAds } from '@/lib/admin/campan
 import { ControlCampanas } from './campanas';
 import { accionPausarCampana, accionRefrescarGasto } from './acciones';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
-import { listarProspectos, ESTADOS_PROSPECTO, conteosVacios, normalizarEstadoProspecto } from '@/lib/likida/vendedores';
+import { contarProspectosPorEstado, ESTADOS_PROSPECTO } from '@/lib/likida/vendedores';
 import { getEmbudoActivacion, getCohortesUso } from '@/lib/admin/instrumentacion';
 import { usd } from '@/lib/utils';
 import { numero, fechaCorta } from '@/lib/formato';
@@ -45,7 +45,7 @@ export default async function CrecimientoPage() {
     // El embudo de ADQUISICIÓN sí es real desde la 0105: los prospectos del
     // censo por estado del kanban. Cae por su lado a null y se DICE — un
     // embudo vacío por base caída afirmaría que no hay pipeline.
-    listarProspectos().catch(() => null),
+    contarProspectosPorEstado().catch(() => null),
     // Costo por lead + alertas de adquisición (panel-de-adquisicion §2/§5):
     // cae por su lado a null y se DICE.
     getAdquisicion(ahoraMs()).catch(() => null),
@@ -115,12 +115,8 @@ export default async function CrecimientoPage() {
                 No se pudo leer el pipeline — esto NO significa que no haya prospectos.
               </p>
             </div>
-          ) : prospectos.length > 0 && (() => {
-            const porEstado = conteosVacios();
-            for (const p of prospectos) {
-              const estado = normalizarEstadoProspecto(p.estado);
-              if (estado !== null) porEstado[estado]++;
-            }
+          ) : prospectos.total > 0 && (() => {
+            const { porEstado } = prospectos;
             const embudo = ESTADOS_PROSPECTO
               .filter((e) => e.valor !== 'lost')
               .map((e) => ({ etiqueta: e.rotulo, valor: porEstado[e.valor] }));
@@ -128,14 +124,14 @@ export default async function CrecimientoPage() {
               <div className="card p-4">
                 <div className="flex items-center gap-2">
                   <Filter width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                  <TituloSeccion>Embudo de adquisición — {numero(prospectos.length)} prospectos del censo</TituloSeccion>
+                  <TituloSeccion>Embudo de adquisición — {numero(prospectos.total)} prospectos del censo</TituloSeccion>
                 </div>
                 <div className="mt-3">
                   <HBars datos={embudo} formato="entero" />
                 </div>
                 <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
                   {porEstado.won > 0
-                    ? `Conversión a cierre: ${porEstado.won} de ${numero(prospectos.length)}.`
+                    ? `Conversión a cierre: ${porEstado.won} de ${numero(prospectos.total)}.`
                     : 'Sin cierres todavía — la conversión no se inventa con cero cerrados.'}
                   {porEstado.lost > 0 && ` ${numero(porEstado.lost)} perdidos.`}
                   {' '}El detalle por vendedor vive en <Link href="/admin/vendedores" className="underline">Vendedores</Link>;
@@ -332,7 +328,7 @@ export default async function CrecimientoPage() {
               )}
               <p className="text-xs mt-2 m-0" style={{ color: 'var(--muted)' }}>
                 {cohortes.desdeMedicion === null
-                  ? 'producto_evento (0251) todavía no registra un solo evento: cada celda dice «no medido», que no es un 0% — la matriz se llena sola conforme el panel se use.'
+                  ? 'La medición de uso todavía no registra un solo evento: cada celda dice «no medido», que no es un 0% — la matriz se llena sola conforme el panel se use.'
                   : `La medición empezó en ${cohortes.desdeMedicion}; los meses anteriores se pintan «no medido», nunca 0. El mes en curso está incompleto por definición.`}
                 {' '}Con pocas flotas la cohorte describe, no concluye — necesita más de 1 cliente real para decir algo general.
               </p>
@@ -357,7 +353,7 @@ export default async function CrecimientoPage() {
             )}
           </ChartCard>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+          <div className="kit-kpis">
             <KpiTile
               icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
               etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
@@ -380,7 +376,7 @@ export default async function CrecimientoPage() {
               ))}
             </ul>
             <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Cada renglón dice su propia razón — desde la 0251 ya NO es un genérico «falta instrumentación»:
+              Cada renglón dice su propia razón; ya no es un genérico «falta instrumentación»:
               el embudo de activación y las cohortes se miden arriba.
             </p>
           </div>

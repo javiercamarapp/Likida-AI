@@ -90,13 +90,33 @@ export function agruparPorSemana(
   return cubetas;
 }
 
+/** Con esta cantidad de puntos o menos la gráfica es CORTA y rotula el valor de cada punto (no solo al pasar el cursor). */
+export const MAX_PUNTOS_POCOS = 6;
+
+/**
+ * Rótulo del eje X: «24 ago» para un día ISO (`2026-08-24`), el texto tal cual para cualquier otra cosa (semana, mes, categoría).
+ * Antes era `dia.slice(5)` y el SVG lo cortaba en «08-2…».
+ */
+const MESES_CORTOS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'] as const;
+export function etiquetaEjeX(dia: string): string {
+  const m = /^\d{4}-(\d{2})-(\d{2})/.exec(dia);
+  const mes = m ? Number(m[1]) : 0;
+  // Tabla propia y no `toLocaleDateString`: el separador («24 ago» / «24-ago») cambia según el ICU del motor y el eje debe verse igual en servidor y navegador.
+  return m && mes >= 1 && mes <= 12 ? `${Number(m[2])} ${MESES_CORTOS[mes - 1]}` : dia;
+}
+
+/** Ancho aproximado (unidades del viewBox) de un texto de 11 px: el tooltip lo necesita para no desbordar. */
+const anchoTexto = (t: string) => Math.max(40, t.length * 6.6 + 16);
+
 export function AreaChartSimple({
-  datos: datosCrudos, etiquetaValor, comparativa: comparativaCruda, etiquetaComparativa = 'periodo anterior',
+  datos: datosCrudos, etiquetaValor, comparativa: comparativaCruda, etiquetaComparativa = 'periodo anterior', etiquetaSerie,
 }: {
   datos: Array<{ dia: string; valor: number }>;
   etiquetaValor: (v: number) => string;
   comparativa?: Array<{ dia: string; valor: number }>;
   etiquetaComparativa?: string;
+  /** Leyenda de la serie principal («Costo de IA»). Con comparativa se pinta siempre («actual» por omisión). */
+  etiquetaSerie?: string;
 }) {
   // FE-18: por encima del trimestre se agrupa por semana. El rótulo lo DICE
   // (regla del repo: un rótulo tiene que ser verdad) — una gráfica que suma
@@ -109,20 +129,33 @@ export function AreaChartSimple({
   // dos escalas (por eso comparten `max` más abajo).
   const comparativa = comparativaCruda && agrupada ? agruparPorSemana(comparativaCruda) : comparativaCruda;
   const gid = `kit-area-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
-  const ANCHO = 640, ALTO = 240, PAD_IZQ = 8, PAD_DER = 8, PAD_SUP = 16, PAD_INF = 28;
+  if (datos.length === 0) {
+    return <p className="text-[12px] m-0 py-6 text-center" style={{ color: 'var(--muted)' }}>Sin datos en este periodo.</p>;
+  }
+  const pocos = datos.length <= MAX_PUNTOS_POCOS;
+  // Alto proporcionado a los puntos: con pocos puntos la caja es baja (≈150-190 px en una tarjeta típica), no 280 casi vacíos.
+  const ANCHO = 640, ALTO = pocos ? 176 : 232, PAD_IZQ = 14, PAD_DER = 30, PAD_SUP = pocos ? 30 : 22, PAD_INF = 30;
   const w = ANCHO - PAD_IZQ - PAD_DER, h = ALTO - PAD_SUP - PAD_INF;
   const comp = comparativa && comparativa.length > 1 ? comparativa : null;
   const max = Math.max(...datos.map((d) => d.valor), ...(comp ?? []).map((d) => d.valor), 1);
   const paso = datos.length > 1 ? w / (datos.length - 1) : 0;
-  const xy = datos.map((d, i) => [PAD_IZQ + i * paso, PAD_SUP + h - (d.valor / max) * h] as const);
+  // Un solo punto va al centro: pegado al borde se corta y parece un error.
+  const xDe = (i: number) => (datos.length === 1 ? PAD_IZQ + w / 2 : PAD_IZQ + i * paso);
+  const xy = datos.map((d, i) => [xDe(i), PAD_SUP + h - (d.valor / max) * h] as const);
+  // Líneas rectas entre los puntos REALES: no se interpola nada que no se midió.
   const linea = xy.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
-  const area = `${linea} L${xy[xy.length - 1][0].toFixed(1)},${PAD_SUP + h} L${xy[0][0].toFixed(1)},${PAD_SUP + h} Z`;
+  const area = xy.length > 1 ? `${linea} L${xy[xy.length - 1][0].toFixed(1)},${PAD_SUP + h} L${xy[0][0].toFixed(1)},${PAD_SUP + h} Z` : null;
   const pasoComp = comp ? w / (comp.length - 1) : 0;
   const lineaComp = comp
     ? comp.map((d, i) => `${i === 0 ? 'M' : 'L'}${(PAD_IZQ + i * pasoComp).toFixed(1)},${(PAD_SUP + h - (d.valor / max) * h).toFixed(1)}`).join(' ')
     : null;
-  // Cada 1/4 y última — evita amontonar etiquetas en series largas.
-  const mostrarEtiqueta = (i: number) => i === 0 || i === datos.length - 1 || i % Math.max(1, Math.ceil(datos.length / 5)) === 0;
+  // Pocos puntos: todas las etiquetas. Muchos: unas 6 repartidas y siempre la primera y la última (sin amontonarlas).
+  const cada = pocos ? 1 : Math.max(1, Math.ceil(datos.length / 6));
+  const mostrarEtiqueta = (i: number) => i === 0 || i === datos.length - 1 || i % cada === 0;
+  // La penúltima etiqueta no pisa a la última: si quedan a menos de un paso corto, se omite.
+  const pisaUltima = (i: number) => !pocos && i !== datos.length - 1 && datos.length - 1 - i < Math.ceil(cada / 2);
+  const ancla = (i: number): 'start' | 'middle' | 'end' => (datos.length === 1 ? 'middle' : i === 0 ? 'start' : i === datos.length - 1 ? 'end' : 'middle');
+  const tituloSerie = etiquetaSerie ?? (comp ? 'actual' : null);
 
   return (
     <>
@@ -131,13 +164,14 @@ export function AreaChartSimple({
         Agrupado por semana ({datos.length} semanas) — cada punto suma sus 7 días.
       </div>
     )}
-    {comp && (
+    {(tituloSerie || comp) && (
       <div className="flex items-center gap-3 mb-1 text-[11px]" style={{ color: 'var(--muted)' }}>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--chart-1)' }} /> actual</span>
-        <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--muted)', borderTopStyle: 'dashed' }} /> {etiquetaComparativa}</span>
+        {tituloSerie && <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--chart-1)' }} /> {tituloSerie}</span>}
+        {comp && <span className="inline-flex items-center gap-1.5"><span className="inline-block w-4 border-t-2 rounded" style={{ borderColor: 'var(--muted)', borderTopStyle: 'dashed' }} /> {etiquetaComparativa}</span>}
       </div>
     )}
-    <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} className="w-full h-auto">
+    <svg viewBox={`0 0 ${ANCHO} ${ALTO}`} className="w-full h-auto block" style={{ maxHeight: pocos ? 200 : 300 }} role="img"
+      aria-label={`Serie de ${datos.length} punto${datos.length === 1 ? '' : 's'}, de ${etiquetaEjeX(datos[0].dia)} a ${etiquetaEjeX(datos[datos.length - 1].dia)}`}>
       {[0, 0.5, 1].map((t) => (
         <line key={t} x1={PAD_IZQ} x2={ANCHO - PAD_DER} y1={PAD_SUP + h * t} y2={PAD_SUP + h * t}
           stroke="var(--line)" strokeWidth={1} />
@@ -152,26 +186,39 @@ export function AreaChartSimple({
           <stop offset="1" stopColor="var(--chart-1)" stopOpacity={0} />
         </linearGradient>
       </defs>
-      <path d={area} fill={`url(#${gid})`} />
-      <path d={linea} pathLength={1} className="kit-linea" fill="none" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-      {xy.map(([x, y], i) => (
-        <g key={i} className="group cursor-default">
-          <circle cx={x} cy={y} r={9} fill="transparent" />
-          <circle cx={x} cy={y} r={3.5} fill="var(--chart-1)" stroke="var(--surface)" strokeWidth={2}
-            className="opacity-0 group-hover:opacity-100 transition-opacity" />
-          {mostrarEtiqueta(i) && (
-            <text x={x} y={ALTO - 6} textAnchor="middle" fontSize={10} fill="var(--muted)">
-              {datos[i].dia.slice(5)}
-            </text>
-          )}
-          <g className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-            <rect x={x - 34} y={y - 30} width={68} height={20} rx={5} fill="var(--marca)" />
-            <text x={x} y={y - 16} textAnchor="middle" fontSize={11} fill="var(--bg)" fontWeight={600}>
-              {etiquetaValor(datos[i].valor)}
-            </text>
+      {area && <path d={area} fill={`url(#${gid})`} />}
+      {xy.length > 1 && <path d={linea} pathLength={1} className="kit-linea" fill="none" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />}
+      {xy.map(([x, y], i) => {
+        const txt = etiquetaValor(datos[i].valor);
+        const tw = anchoTexto(txt);
+        const tx = Math.min(Math.max(x - tw / 2, 2), ANCHO - tw - 2);
+        const ty = Math.max(y - 32, 2);
+        return (
+          <g key={i} className="group cursor-default">
+            <title>{`${etiquetaEjeX(datos[i].dia)}: ${txt}`}</title>
+            <circle cx={x} cy={y} r={9} fill="transparent" />
+            {/* Pocos puntos: marcador y valor SIEMPRE visibles. Muchos: aparecen al pasar el cursor. */}
+            <circle cx={x} cy={y} r={3.5} fill="var(--chart-1)" stroke="var(--surface)" strokeWidth={2}
+              className={pocos ? undefined : 'opacity-0 group-hover:opacity-100 transition-opacity'} />
+            {pocos && (
+              <text x={x} y={Math.max(y - 9, 12)} textAnchor={ancla(i)} fontSize={11} fontWeight={600} fill="var(--ink)">{txt}</text>
+            )}
+            {mostrarEtiqueta(i) && !pisaUltima(i) && (
+              <text x={x} y={ALTO - 8} textAnchor={ancla(i)} fontSize={11} fill="var(--muted)">
+                {etiquetaEjeX(datos[i].dia)}
+              </text>
+            )}
+            {!pocos && (
+              <g className="opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <rect x={tx} y={ty} width={tw} height={20} rx={5} fill="var(--marca)" />
+                <text x={tx + tw / 2} y={ty + 14} textAnchor="middle" fontSize={11} fill="var(--marca-fg)" fontWeight={600}>
+                  {txt}
+                </text>
+              </g>
+            )}
           </g>
-        </g>
-      ))}
+        );
+      })}
     </svg>
     </>
   );

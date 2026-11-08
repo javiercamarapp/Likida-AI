@@ -86,7 +86,7 @@ export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline, 
 
           {/* ── Operación + consumo, con dato real ──────────────────────── */}
           {f.operacion ? (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div className="kit-kpis">
               <StatCard icono={<Activity {...ICONO} />} etiqueta="Viajes liquidados" valor={f.operacion.viajesLiquidados} formato="entero" />
               <StatCard icono={<Wallet {...ICONO} />} etiqueta="Monto comprobado" valor={f.operacion.montoComprobado} formato="mxn" />
               <StatCard icono={<Receipt {...ICONO} />} etiqueta="Liquidaciones por revisar" valor={f.operacion.porRevisar} formato="entero" />

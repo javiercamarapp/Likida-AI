@@ -137,6 +137,20 @@ export const INFO_OPERACION = {
     'Si tu flota opera desde un solo patio, asígnalos todos aquí; con varios, usa la columna «patio» de la carga masiva.',
   ),
   // ── convenios ──
+  'convenios.activos': V(
+    'Convenios activos',
+    'Convenios de tus clientes que no están archivados.',
+    'Cuenta los convenios registrados que siguen activos; los archivados no cuentan.',
+    'Convenios de tu flota, leídos al abrir la pantalla. Si la lectura falla no se muestra la cifra.',
+    'Archiva los que ya no apliquen para que el agente no use sus instrucciones.',
+  ),
+  'convenios.sin_instrucciones': V(
+    'Sin instrucciones',
+    'Convenios activos que no traen instrucciones de operación.',
+    'Cuenta los convenios activos con cero instrucciones registradas: el operador no recibirá nada de ellos.',
+    'Convenios de tu flota, leídos al abrir la pantalla.',
+    'Edita el convenio o vuelve a importar el archivo con sus instrucciones.',
+  ),
   'convenios.registrados': V(
     'Convenios registrados',
     'Los convenios de tus clientes: ruta A a B, vigencia e instrucciones de operación.',
@@ -164,6 +178,57 @@ export const INFO_OPERACION = {
     'Tu archivo CSV o Excel. El cliente debe existir en Clientes y los sitios en el catálogo de sitios; nada se inventa. Las columnas de tarifa solo se leen con permiso de finanzas. Solo lo ve quien puede editar convenios.',
     'Si ves el enlace «Descargar la plantilla», úsalo para ver las columnas.',
   ),
+  // ── mesa de control (asistencia) ──
+  'asistencia.abiertas': V(
+    'Abiertas',
+    'Incidencias de asistencia en ruta que siguen vivas.',
+    'Cuenta las incidencias de asistencia que no se han cerrado, de cualquier prioridad.',
+    'Expedientes de asistencia de tu flota (reportes por WhatsApp o eventos de cámara), leídos al abrir la pantalla. Cero significa que no hay ninguna abierta, no que la lectura falló: si falla se dice.',
+    'Atiende primero las críticas y las que nadie ha tomado.',
+  ),
+  'asistencia.criticas': V(
+    'Críticas',
+    'Incidencias abiertas con prioridad crítica.',
+    'Cuenta las incidencias abiertas cuya prioridad quedó en crítica al registrarse.',
+    'Expedientes de asistencia de tu flota, leídos al abrir la pantalla.',
+    'Toma el control de cada una para detener el escalamiento automático y decide.',
+  ),
+  'asistencia.sin_tomar': V(
+    'Sin tomar',
+    'Incidencias abiertas que nadie ha reconocido desde la mesa.',
+    'Cuenta las incidencias abiertas sin reconocimiento: el escalamiento automático sigue corriendo en ellas.',
+    'Expedientes de asistencia de tu flota, leídos al abrir la pantalla.',
+    'Pulsa «Tomar el control» para que quede a tu nombre.',
+  ),
+  // ── emergencias ──
+  'emergencias.poliza': V(
+    'Póliza',
+    'Si la flota tiene capturada la póliza que usa el escalamiento de emergencia, y si sigue vigente.',
+    'Lee la póliza vigente capturada: «Vigente» si su fecha de vigencia es de hoy en adelante o no se capturó fecha, «Vencida» si ya pasó, «Sin póliza» si no hay ninguna.',
+    'Pólizas de tu flota capturadas en esta pantalla, leídas al abrirla. No se consulta a la aseguradora.',
+    'Captura o reemplaza la póliza en esta misma tarjeta; sin el 800 de siniestros el escalamiento solo puede decir que falta.',
+  ),
+  'emergencias.proveedores': V(
+    'Proveedores',
+    'Grúas, llanteras y mecánicos de carretera capturados por tu flota.',
+    'Cuenta los proveedores del directorio de la flota, verificados o no.',
+    'Directorio de emergencia de tu flota, capturado a mano y leído al abrir la pantalla. El agente solo usa teléfonos de aquí.',
+    'Agrega los proveedores de tus rutas y márcalos «Verificado» solo cuando alguien haya marcado y le hayan contestado.',
+  ),
+  'emergencias.sin_confirmar': V(
+    'Sin confirmar',
+    'Proveedores capturados que nadie ha verificado con una llamada.',
+    'Cuenta los proveedores sin marca de verificación. Capturar un teléfono no es verificarlo.',
+    'Directorio de emergencia de tu flota, leído al abrir la pantalla. Sin proveedores se muestra 0 porque no hay nada que confirmar.',
+    'Llama al proveedor y pulsa «Verificado ✓» solo si te contestaron.',
+  ),
+  'emergencias.contactos': V(
+    'Contactos',
+    'Contactos de emergencia capturados para los operadores de tu flota.',
+    'Cuenta los contactos (familiares u otras personas) registrados; no distingue si aceptaron avisos.',
+    'Contactos de emergencia capturados en esta pantalla, leídos al abrirla. «Avisar si hay lesionados» nace apagado.',
+    'Activa el aviso solo en los contactos que aceptaron recibirlo.',
+  ),
   // ── unidades ──
   'unidades.alta': V(
     'Dar de alta una unidad',
@@ -171,6 +236,34 @@ export const INFO_OPERACION = {
     'No se calcula: lo que captures se guarda como unidad de tu flota. Con las fechas de póliza, permiso SICT y verificación capturadas, la pantalla puede avisar cuál vence primero.',
     'Solo lo ven los roles que pueden administrar el catálogo; el encargado lee la lista pero no la escribe.',
     'Para cargar toda tu flota de una vez usa la carga desde Excel o CSV de abajo.',
+  ),
+  'unidades.vencidas': V(
+    'Vencidos',
+    'Unidades activas cuyo papel más próximo a vencer ya venció.',
+    'Cuenta las unidades activas cuyo papel más próximo a vencer (póliza, permiso SICT o verificación) tiene fecha anterior a hoy.',
+    'Parque activo de tu flota, leído al abrir la pantalla; las dadas de baja no cuentan. Sin dato se muestra «—», no cero.',
+    'Abre «Editar unidad» en la ficha para capturar la renovación.',
+  ),
+  'unidades.por_vencer': V(
+    'Vencen en',
+    'Unidades activas con un papel que vence dentro del plazo de aviso.',
+    'Cuenta las unidades activas cuyo papel más próximo a vencer cae entre hoy y los días que dice la etiqueta de la cifra.',
+    'Parque activo de tu flota, leído al abrir la pantalla; las dadas de baja no cuentan. Sin dato se muestra «—», no cero.',
+    'Programa la renovación antes de la fecha.',
+  ),
+  'unidades.en_regla': V(
+    'En regla',
+    'Unidades activas con sus papeles capturados y vigentes.',
+    'Cuenta las unidades activas cuyos tres papeles tienen fecha y ninguno vence dentro del plazo de aviso.',
+    'Parque activo de tu flota, leído al abrir la pantalla. Una unidad sin fecha capturada no cuenta aquí: sale como «sin papeles».',
+    'Nada que hacer; revisa que la lista de abajo coincida con tus expedientes.',
+  ),
+  'unidades.sin_papeles': V(
+    'Sin papeles',
+    'Unidades activas a las que nadie les capturó alguna fecha de vigencia.',
+    'Cuenta las unidades activas sin fecha en alguno de los tres papeles. No se sabe si están en regla; por eso no cuentan como vigentes.',
+    'Parque activo de tu flota, leído al abrir la pantalla. Sin dato se muestra «—», no cero.',
+    'Captura las fechas en «Editar unidad» o carga la flota desde Excel con las columnas de vencimiento.',
   ),
   'unidades.ficha': V(
     'Ficha de la unidad',

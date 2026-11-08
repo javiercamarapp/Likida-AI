@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Cifra as CifraV2 } from '../../ui-v2/graficas/cifra';
 import Link from 'next/link';
 import { Receipt } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -74,6 +75,8 @@ export default async function CobranzaPage() {
   const filasVistas = estado ? estado.facturas.slice(0, FILAS_MOSTRADAS) : [];
   const totalBase = facturas.dato?.total ?? 0;
   const truncada = !!facturas.dato && totalBase > facturas.dato.facturas.length;
+  // Sin facturas leídas, sin total en la base y sin propuestas: ninguna de las 4 cifras tiene base real que medir.
+  const sinBase = !!estado && totalBase === 0 && estado.facturas.length === 0 && estado.propuestasPendientes === 0 && estado.propuestasEnviadas === 0;
 
   return (
     <main className="h-full">
@@ -132,14 +135,23 @@ export default async function CobranzaPage() {
 
           {estado && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Cifra etiqueta="Por cobrar" valor={`${totalBase} · ${mxn(estado.montoPorCobrar)}`}
-                  nota={truncada ? 'Incompleto: hay más facturas de las que se leyeron.' : undefined} alerta={truncada} />
-                <Cifra etiqueta="Vencidas" valor={`${estado.vencidas} · ${mxn(estado.montoVencido)}`} />
-                <Cifra etiqueta="Toques sin propuesta" valor={String(estado.toquesSinPropuesta)}
-                  nota={estado.toquesSinPropuesta > 0 ? 'El agente no ha preparado toques que ya tocaban.' : undefined}
-                  alerta={estado.toquesSinPropuesta > 0 && !piezas.error} />
-                <Cifra etiqueta="Propuestas pendientes / enviadas por el sistema" valor={`${estado.propuestasPendientes} / ${estado.propuestasEnviadas}`} />
+              {/* Sin una sola factura ni propuesta no hay base que medir: cuatro «0 · $0.00» se leerían como medición. Se marcan «—» y lo dicen. */}
+              <div className="kit-kpis">
+                {sinBase ? (
+                  ['Por cobrar', 'Vencidas', 'Toques sin propuesta', 'Propuestas pendientes / enviadas por el sistema'].map((e) => (
+                    <Cifra key={e} etiqueta={e} valor={null} estado="vacio" mensaje="Sin facturas que medir todavía" />
+                  ))
+                ) : (
+                  <>
+                    <Cifra etiqueta="Por cobrar" valor={`${totalBase} · ${mxn(estado.montoPorCobrar)}`}
+                      nota={truncada ? 'Incompleto: hay más facturas de las que se leyeron.' : undefined} alerta={truncada} />
+                    <Cifra etiqueta="Vencidas" valor={`${estado.vencidas} · ${mxn(estado.montoVencido)}`} />
+                    <Cifra etiqueta="Toques sin propuesta" valor={String(estado.toquesSinPropuesta)}
+                      nota={estado.toquesSinPropuesta > 0 ? 'El agente no ha preparado toques que ya tocaban.' : undefined}
+                      alerta={estado.toquesSinPropuesta > 0 && !piezas.error} />
+                    <Cifra etiqueta="Propuestas pendientes / enviadas por el sistema" valor={`${estado.propuestasPendientes} / ${estado.propuestasEnviadas}`} />
+                  </>
+                )}
               </div>
 
               <div className="card p-4">
@@ -198,13 +210,14 @@ export default async function CobranzaPage() {
   );
 }
 
-function Cifra({ etiqueta, valor, nota, alerta }: { etiqueta: string; valor: string; nota?: string; alerta?: boolean }) {
+/** Una cifra del sistema (filete de color, cifra 26/700). `estado="vacio"` pinta «—» y el mensaje: nunca un cero con cara de medición. */
+function Cifra({ etiqueta, valor, nota, alerta, estado, mensaje }: {
+  etiqueta: string; valor: string | null; nota?: string; alerta?: boolean; estado?: 'vacio'; mensaje?: string;
+}) {
   return (
-    <div className="card p-3">
-      <div className="text-[11px] uppercase etiqueta-mono" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
-      <div className="text-lg font-semibold mt-1" style={alerta ? { color: 'var(--bad)' } : undefined}>{valor}</div>
-      {nota && <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{nota}</div>}
-    </div>
+    <section className="rv-kpis kit-celda" aria-label={etiqueta}>
+      <CifraV2 etiqueta={etiqueta} valor={valor} nota={nota} tono={alerta ? 'bad' : undefined} estado={estado} mensaje={mensaje} matiz={1} />
+    </section>
   );
 }
 

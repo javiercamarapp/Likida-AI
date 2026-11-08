@@ -51,7 +51,7 @@ async function exitoTreintaDias(): Promise<Map<string, { ok: number; total: numb
   });
   if (error) throw new Error(`exitoTreintaDias: ${error.message}`);
   if (!Array.isArray(data)) {
-    throw new Error('exitoTreintaDias: consumo_agentes devolvió otra forma (¿migración 0162 sin aplicar?).');
+    throw new Error('exitoTreintaDias: consumo_agentes devolvió otra forma (¿la base no tiene esa columna aún?).');
   }
   const acc = new Map<string, { ok: number; total: number }>();
   for (const f of data as Array<Record<string, unknown>>) {
@@ -212,7 +212,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca }: { acc
         <div className="px-5 py-5 flex-1 space-y-2.5">
           <div className="card overflow-hidden">
             <div className="px-4 pt-3 pb-1">
-              <TituloSeccion>El catálogo declarativo (0116)</TituloSeccion>
+              <TituloSeccion>El catálogo declarativo</TituloSeccion>
               <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
                 Un agente nuevo es una fila, no una migración. Los diseñados corren con su prompt a mano;
                 solo los vivos corren dentro del producto.

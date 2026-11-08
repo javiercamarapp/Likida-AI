@@ -10,6 +10,7 @@ import { MENSAJE_SIN_LINEA_BASE, type Cifra as CifraDato, type InsightsConductor
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { fuenteLegible } from '@/app/dashboard/lenguaje-cliente';
 
 export interface EsperaAceptar {
   id: string;
@@ -400,7 +401,7 @@ function FilaFuente({ etiqueta, valor, cifra }: { etiqueta: string; valor: strin
     <li className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
       <span style={{ color: 'var(--muted)' }}>{etiqueta}</span>
       <span className="tabular-nums font-medium">{valor}</span>
-      <span style={{ color: 'var(--muted)' }}>· {cifra.rotulo} · fuente: {cifra.fuente}</span>
+      <span style={{ color: 'var(--muted)' }}>· {cifra.rotulo} · fuente: {fuenteLegible(cifra.fuente)}</span>
     </li>
   );
 }
@@ -410,7 +411,7 @@ function textoKpiPiloto(k: KpiPiloto): { valor: string; comparacion: string } {
   const sufijo = k.unidad.startsWith('%') ? ' %' : k.unidad.startsWith('min') ? ' min' : '';
   const valor = k.valor === null ? 'sin dato' : `${numero(k.valor)}${sufijo}`;
   const c = k.contraBase;
-  if (c === 'sin dato') return { valor, comparacion: 'sin dato (falta línea base declarada)' };
+  if (c === 'sin dato') return { valor, comparacion: 'sin línea base' };
   const partes = [`base ${numero(c.lineaBase)}${sufijo}`];
   if (c.mejoraPct !== null) partes.push(`mejora ${numero(c.mejoraPct)} %`);
   else if (c.diferencia !== null) partes.push(`diferencia ${c.diferencia > 0 ? '+' : ''}${numero(c.diferencia)}${sufijo}`);
@@ -450,21 +451,27 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
         {seccion('Qué significa', t.queSignifica)}
         {seccion('Qué hacer', t.queHacer)}
       </div>
-      <section aria-label="KPIs del piloto" className="space-y-1">
+      <section aria-label="KPIs del piloto" className="space-y-2">
         <TituloRecuadro nivel="h3" info="conductores.kpis_piloto">KPIs del piloto</TituloRecuadro>
-        <ul className="space-y-1">
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {insights.kpisPiloto.map((k) => {
             const t2 = textoKpiPiloto(k);
             return (
-              <li key={k.id} className="flex flex-wrap items-baseline gap-x-2 text-[12px]">
-                <span style={{ color: 'var(--muted)' }}>{k.nombre}</span>
-                <span className="tabular-nums font-medium">{t2.valor}</span>
-                <span style={{ color: 'var(--muted)' }}>· {k.rotulo} · {t2.comparacion} · fuente: {k.fuente}</span>
+              <li key={k.id} className="hairline rounded-lg px-3 py-2" style={{ background: 'var(--surface, var(--canvas))' }}>
+                <div className="text-[12px]" style={{ color: 'var(--muted)' }}>{k.nombre}</div>
+                <div className="tabular-nums" style={{ fontSize: 'var(--t-kpi, 26px)', fontWeight: 600, lineHeight: 1.15 }}>{t2.valor}</div>
+                <div className="text-[12px]" style={{ color: 'var(--muted)' }}>{k.rotulo} · {t2.comparacion}</div>
               </li>
             );
           })}
         </ul>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Los KPIs de referencia sin línea base declarada no muestran valor.</p>
+        {insights.kpisPiloto.some((k) => k.contraBase === 'sin dato') && (
+          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            Aún no hay línea base declarada para algunos indicadores: indícala en{' '}
+            <Link href="/dashboard/agentes/conductores/configuracion" className="underline">Configuración</Link>{' '}
+            para medir el ahorro. Sin ella no se compara contra tu situación anterior.
+          </p>
+        )}
       </section>
       <details>
         <summary className="cursor-pointer text-[12px]" style={{ color: 'var(--muted)' }}>De dónde sale cada número</summary>

@@ -1,9 +1,8 @@
 import Link from 'next/link';
-import { BarraFiltros, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
+import { BarraFiltros, CampoArchivo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
 import { Truck, Download, RefreshCw, FileText, FileSpreadsheet, Send, Settings2 } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
-import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { motivoDeFallo } from '@/lib/likida/liquidacion_externa/api';
 import {
@@ -127,8 +126,6 @@ function textoImportacion(m: 'importada' | 'importacion_error', imp: ExternasPro
   return det ? `${base} ${det}` : base;
 }
 
-const CLASE_CONTROL = 'text-[12px] rounded-lg px-2 py-1.5 min-w-[9rem]';
-
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
 }
@@ -168,10 +165,7 @@ export async function SeccionExternas(p: ExternasProps) {
 
       {p.subirArchivo && (
         <form action={p.subirArchivo} className="flex flex-wrap items-end gap-2 mb-3">
-          <label className="text-[11px]" style={{ color: 'var(--muted)' }}>
-            Subir liquidaciones (CSV o Excel de tu sistema; una fila por renglón, agrupadas por clave_externa)
-            <input type="file" name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required className={`${CLASE_CONTROL} block mt-1`} style={ESTILO_CONTROL} />
-          </label>
+          <CampoArchivo etiqueta="Subir liquidaciones (CSV o Excel de tu sistema; una fila por renglón, agrupadas por la clave de tu sistema)" name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required />
           <button type="submit" className="rv-btn rv-btn--primary"
             style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>Subir y entregar</button>
         </form>

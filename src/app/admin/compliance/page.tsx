@@ -88,7 +88,7 @@ export default async function CompliancePage() {
         />
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div className="kit-kpis">
             <StatCard icono={<CircleAlert {...ICONO} />}
               etiqueta="Solicitudes ARCO por responder" valor={pendientes.length} formato="entero"
             />

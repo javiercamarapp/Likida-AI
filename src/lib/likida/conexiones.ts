@@ -249,7 +249,7 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
     // verificado y una llave válida solo prueban que se puede mandar; que no
     // caiga en spam depende de la reputación, y eso se mide con los eventos de
     // entrega, no con dos variables de entorno.
-    falta: correoListo ? [] : ['conectar Resend desde el marketplace de Vercel'],
+    falta: correoListo ? [] : ['activar el envío de correo de avisos (lo configura el equipo de Likida)'],
   });
 
   // Datos fiscales — lo que getFiscalDeFlota MIDE (es lo mismo que usa el

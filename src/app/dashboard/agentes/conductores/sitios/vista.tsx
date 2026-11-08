@@ -6,7 +6,7 @@ import { FilaTextoSinSitio, FormaImportarEquivalencias } from './formas_equivale
 import { FormaCatalogo } from './formas_catalogo';
 import { FormaEstadoSitio } from './formas_estado';
 import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
-import { BarraFiltros, FiltroBusqueda, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, FiltroBusqueda, MarcoPagina, AvisoCompacto, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 // SOLO tipos: la vista no debe arrastrar al bundle el acceso a datos.
 
@@ -50,10 +50,11 @@ export function VistaSitios(p: PropsVistaSitios) {
   const avisoSelector = p.selectorHayMas ? 'Hay más sitios activos de los que caben en el selector (solo salen los primeros por nombre).' : null;
   return (
     <MarcoPagina titulo="Catálogo de sitios" apoyo="Clientes, plantas y andenes con su centro y su radio. Ninguna coordenada se calcula ni se inventa." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${p.sufijo}`}>Volver al tablero</BotonEnlace>}>
-      <Aviso tono="info">
-        El agente compara cada «ya llegué» contra el sitio del viaje (pin de WhatsApp o GPS). <strong>Ninguna coordenada se calcula ni se inventa</strong>: la capturas tú o viene en tu archivo.
-        Un viaje sin sitio asignado queda «sin dato», nunca «no coincide».
-      </Aviso>
+      <AvisoCompacto
+        tono="info"
+        resumen="El agente compara cada «ya llegué» contra el sitio del viaje. Ninguna coordenada se calcula ni se inventa."
+        mas={<>Compara contra el pin de WhatsApp o el GPS. <strong>Ninguna coordenada se calcula ni se inventa</strong>: la capturas tú o viene en tu archivo. Un viaje sin sitio asignado queda «sin dato», nunca «no coincide».</>}
+      />
 
       <section className="card p-4 space-y-3" aria-label="Sitios registrados">
         <div className="flex items-center gap-3 flex-wrap">

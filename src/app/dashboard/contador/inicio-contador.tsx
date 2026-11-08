@@ -151,7 +151,7 @@ export async function InicioContador({
     // (`--g1`) con tarjetas blancas encima — la misma anatomía que el
     // Resumen del dueño, porque es la misma casa con otro contenido.
     <MarcoPagina
-      titulo="Resumen"
+      titulo="Contador"
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
       apoyo={`${saludo()}, ${nombre ?? 'contador'}. El dinero comprobado y el papel que lo sostiene, con su fundamento citado.`}
       acciones={(
