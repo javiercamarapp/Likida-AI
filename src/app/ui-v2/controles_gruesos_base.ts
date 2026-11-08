@@ -7,8 +7,6 @@ export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/aprobaciones/forma-pieza.tsx': { R1: 5, R2: 5, R3: 0 },
   'app/admin/chrome.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/conversaciones/page.tsx': { R1: 1, R2: 0, R3: 0 },
-  'app/admin/copiloto-panel.tsx': { R1: 1, R2: 0, R3: 0 },
-  'app/admin/copiloto.tsx': { R1: 11, R2: 7, R3: 0 },
   'app/admin/corridas/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/crecimiento/campanas.tsx': { R1: 2, R2: 1, R3: 0 },
   'app/admin/dev/mapa-actividad.tsx': { R1: 1, R2: 0, R3: 0 },

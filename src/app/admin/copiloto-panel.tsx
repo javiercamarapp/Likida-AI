@@ -3,24 +3,22 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { PanelRightClose, Sparkles, ExternalLink } from 'lucide-react';
-import Copiloto from './copiloto';
+import AgenteConversacion from '../dashboard/chat/agente-conversacion';
+// El chrome de /admin no trae el CSS del chat (solo /dashboard lo importa en su layout); el panel vive en TODAS las pantallas de /admin.
+import '../ui-v2/graficas.css';
+import '../ui-v2/movimiento.css';
+import '../ui-v2/chat.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EL PANEL LATERAL PERSISTENTE DEL COPILOTO — diseño §6: "las dos, y no es
-// indecisión". La página (/admin/copiloto) es para sesiones largas; este
-// panel es para preguntar «¿por qué subió esto?» SIN perder la pantalla que
-// lo muestra. ⌘J lo abre y lo cierra sobre cualquier pantalla de /admin
-// (⌘K → "Abrir el copiloto" hace lo mismo, vía el mismo puente de evento
-// que el botón Buscar del sidebar).
+// EL PANEL LATERAL PERSISTENTE DEL COPILOTO — diseño §6: "las dos, y no es indecisión". La página (/admin/copiloto) es para sesiones
+// largas; este panel es para preguntar «¿por qué subió esto?» SIN perder la pantalla que lo muestra. ⌘J lo abre y lo cierra sobre
+// cualquier pantalla de /admin (⌘K → "Abrir el copiloto" hace lo mismo, vía el evento `likida:abrir-copiloto`).
 //
-// VIVE EN EL CHROME y no en una página: el layout de /admin persiste entre
-// navegaciones del cliente, así que la conversación SOBREVIVE al cambiar de
-// pantalla — cerrado es ancho 0, no desmonte. Es puro dibujo, como todo el
-// chrome: la puerta real es /api/admin/copiloto, que re-chequea superadmin
-// en cada llamada (y el panel no pide nada a la red hasta que se usa).
+// Envuelve el MISMO componente que «Pregunta a tus datos» (`AgenteConversacion`, modo superadmin, variante panel). VIVE EN EL CHROME y no
+// en una página: el layout de /admin persiste entre navegaciones del cliente, así que la conversación SOBREVIVE al cambiar de pantalla —
+// cerrado es ancho 0, no desmonte. Es puro dibujo: la puerta real es /api/admin/copiloto, que re-chequea superadmin en cada llamada (y el
+// panel no pide nada a la red hasta que se usa: la lista del historial se carga al abrirlo).
 // ═══════════════════════════════════════════════════════════════════════════
-
-const ANCHO = 400;
 
 export default function CopilotoPanel() {
   const [abierto, setAbierto] = useState(false);
@@ -43,36 +41,22 @@ export default function CopilotoPanel() {
   }, []);
 
   return (
-    <aside
-      aria-label="Copiloto"
-      className="shrink-0 sticky top-4 self-start h-[calc(100dvh-2rem)] overflow-hidden"
-      // Cerrado cancela el gap-4 del marco con el margen negativo: un hijo
-      // de ancho 0 en un flex con gap seguiría dejando su hueco de 16px.
-      style={{
-        width: abierto ? ANCHO : 0,
-        marginLeft: abierto ? 0 : -16,
-        transition: 'width 480ms cubic-bezier(0.22, 1, 0.36, 1), margin-left 480ms cubic-bezier(0.22, 1, 0.36, 1)',
-      }}
-    >
-      <div className="glass-panel h-full flex flex-col overflow-hidden" style={{ width: ANCHO }}>
-        <div className="flex items-center gap-2 px-3 py-2.5 shrink-0" style={{ borderBottom: '1px solid var(--line)' }}>
-          <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-          <span className="text-[13px] font-medium">Copiloto</span>
-          <kbd className="text-[10px] px-1.5 py-0.5 rounded hairline" style={{ color: 'var(--muted)' }}>⌘J</kbd>
-          <span className="flex-1" />
-          <Link href="/admin/copiloto" title="Abrir en página completa" aria-label="Abrir en página completa"
-            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--canvas)]"
-            style={{ color: 'var(--muted)' }}>
-            <ExternalLink width={13} height={13} strokeWidth={1.75} />
+    <aside aria-label="Copiloto" className="rv-copiloto-panel" data-abierto={abierto} inert={!abierto}>
+      <div className="rv-copiloto-panel__caja">
+        <div className="rv-copiloto-panel__cab">
+          <Sparkles width={14} height={14} strokeWidth={1.75} aria-hidden="true" />
+          <strong>Copiloto</strong>
+          <kbd>⌘J</kbd>
+          <span className="rv-copiloto-panel__esp" />
+          <Link href="/admin/copiloto" title="Abrir en página completa" aria-label="Abrir en página completa" className="rv-btn rv-btn--ghost rv-copiloto-panel__btn">
+            <ExternalLink width={14} height={14} strokeWidth={1.75} aria-hidden="true" />
           </Link>
-          <button type="button" onClick={() => setAbierto(false)} title="Cerrar" aria-label="Cerrar copiloto"
-            className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--canvas)]"
-            style={{ color: 'var(--muted)' }}>
-            <PanelRightClose width={14} height={14} strokeWidth={1.75} />
+          <button type="button" onClick={() => setAbierto(false)} title="Cerrar" aria-label="Cerrar copiloto" className="rv-btn rv-btn--ghost rv-copiloto-panel__btn">
+            <PanelRightClose width={14} height={14} strokeWidth={1.75} aria-hidden="true" />
           </button>
         </div>
-        <div className="flex-1 min-h-0">
-          <Copiloto variante="panel" />
+        <div className="rv-copiloto-panel__cuerpo">
+          <AgenteConversacion modo="superadmin" variante="panel" marca="simbolo" />
         </div>
       </div>
     </aside>
