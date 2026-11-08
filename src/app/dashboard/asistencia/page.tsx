@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Camera, TriangleAlert } from 'lucide-react';
+import { Camera, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -14,7 +14,10 @@ import { logger } from '@/lib/logger';
 import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
 import { BotonAccionMesa } from './boton-accion';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { Disclosure, EstadoVacio, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { numero } from '@/lib/formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 export const metadata: Metadata = { title: 'Mesa de control' };
 
 export const dynamic = 'force-dynamic';
@@ -113,22 +116,24 @@ export default async function PaginaMesaControl({
   return (
     <MarcoPagina titulo="Mesa de control" apoyo={apoyo}>
       {!leyoOk && (
-        <section className="rounded-2xl px-5 py-4 hairline" style={{ background: 'var(--surface)' }}>
-          <p className="text-sm">
-            No pude leer las incidencias ahorita — recarga la página. No se ofrecen botones de
-            intervención para no decidir sobre lo que no se ve.
-          </p>
-        </section>
+        <EstadoVacio pantalla contenido icono={TriangleAlert} titulo="No se pudo leer la mesa">
+          Recarga la página. No se ofrecen botones de intervención para no decidir sobre lo que no se ve.
+        </EstadoVacio>
+      )}
+
+      {leyoOk && (
+        <TiraCifras sello={selloHoy('Mesa de control')}>
+          <Cifra etiqueta="Abiertas" valor={numero(incidencias.length)} info="asistencia.abiertas" />
+          <Cifra etiqueta="Críticas" valor={numero(criticas ?? 0)} tono={criticas ? 'bad' : undefined} info="asistencia.criticas" />
+          <Cifra etiqueta="Sin tomar" valor={numero(incidencias.filter((i) => !i.reconocidaEn).length)}
+            tono={incidencias.some((i) => !i.reconocidaEn) ? 'warn' : undefined} info="asistencia.sin_tomar" />
+        </TiraCifras>
       )}
 
       {leyoOk && incidencias.length === 0 && (
-        <section className="rounded-2xl px-5 py-4 hairline" style={{ background: 'var(--surface)' }}>
-          <p className="text-sm">Sin incidencias de asistencia abiertas.</p>
-          <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-            Cuando un chofer reporte una emergencia por WhatsApp — o la cámara de una unidad
-            detecte un evento grave — el expediente aparece aquí con su timeline y sus botones.
-          </p>
-        </section>
+        <EstadoVacio pantalla contenido icono={ShieldCheck} titulo="Sin incidencias abiertas">
+          Cuando un chofer reporte una emergencia por WhatsApp, o la cámara de una unidad detecte un evento grave, el expediente aparece aquí con su timeline y sus botones.
+        </EstadoVacio>
       )}
 
       {leyoOk && incidencias.map((inc) => (
@@ -196,10 +201,7 @@ export default async function PaginaMesaControl({
           </div>
 
           {/* ── Timeline: la bitácora citable — quién supo qué y cuándo ── */}
-          <details className="text-xs">
-            <summary className="cursor-pointer" style={{ color: 'var(--muted)' }}>
-              Timeline del expediente ({inc.eventos.length} evento{inc.eventos.length === 1 ? '' : 's'})
-            </summary>
+          <Disclosure variante="linea" titulo={`Timeline del expediente (${inc.eventos.length} evento${inc.eventos.length === 1 ? '' : 's'})`}>
             {inc.eventos.length === 0 ? (
               <p className="mt-2" style={{ color: 'var(--muted)' }}>
                 Sin eventos legibles — la bitácora de esta incidencia no se pudo leer o aún no tiene filas.
@@ -217,7 +219,7 @@ export default async function PaginaMesaControl({
                 ))}
               </ol>
             )}
-          </details>
+          </Disclosure>
 
           {/* ── Cierre con nota obligatoria ─────────────────────────────── */}
           <FormaConAviso accion={resolver} boton="Cerrar con nota" columnas="md:grid-cols-1">

@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { ScrollText, TriangleAlert, CircleCheck, CircleHelp, Package, Printer } from 'lucide-react';
+import { TriangleAlert, CircleCheck, CircleHelp, Package, Printer } from 'lucide-react';
 import type { EstadoCartaPorte, ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import type { EstadoCampoCcp } from '@/lib/likida/carta_porte';
 import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
 import { EstadoVacio, EstadoError } from '../estados';
 import { numero } from '@/lib/formato';
 import { FormaDeclaracion, FormaMercancia, FormaDatosCliente, BotonBorrarMercancia, type AccionForma } from './forma';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, AvisoCompacto, Disclosure, TituloRecuadro } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
@@ -45,19 +45,16 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
   const acciones: AccionesCcp = { declarar, agregarMercancia, quitarMercancia, guardarDatosCliente };
   return (
     <MarcoPagina titulo="Carta Porte" apoyo="Por cada viaje en curso: si necesita el complemento Carta Porte 3.1 y qué dato falta, separado por responsable.">
-      <Aviso tono="info">
-        La ley limita la responsabilidad de cada parte a los datos que esa parte aportó. Se evalúa como <strong>carga general</strong>: si mueves hidrocarburos,
-        medicamentos o mercancía de despacho aduanero, el complemento es obligatorio siempre y
-        ninguna facilidad aplica. Likida no timbra ni garantiza cumplimiento: prepara, valida y
-        deja rastro de quién declaró qué.
-      </Aviso>
+      <AvisoCompacto tono="info"
+        resumen="La ley limita la responsabilidad de cada parte a los datos que esa parte aportó. Likida no timbra ni garantiza cumplimiento: prepara, valida y deja rastro de quién declaró qué."
+        mas={<p>Se evalúa como <strong>carga general</strong>: si mueves hidrocarburos, medicamentos o mercancía de despacho aduanero, el complemento es obligatorio siempre y ninguna facilidad aplica.</p>} />
 
       {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del
           siniestro. Es incondicional a propósito — Likida hoy no captura
           ValorMercancia, así que no hay un "por viaje" que evaluar: el
           dato correcto es que se declara AL EMITIR con el PAC, y la
           consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
-      <section className="card p-4 max-w-3xl space-y-1.5" style={{ borderLeft: '3px solid var(--warn)' }}>
+      <section className="card p-4 space-y-1.5" style={{ borderLeft: '3px solid var(--warn)' }}>
         <p className="text-[12px] font-medium flex items-start gap-1.5">
           <TriangleAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
           {AVISO_VALOR_MERCANCIA.titulo}
@@ -67,14 +64,14 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
       </section>
 
       {datos !== null && datos.hazmatDeclarado === true && (
-        <p className="text-[12px] px-3.5 py-2.5 rounded-lg max-w-3xl" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
+        <p className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
           Tu flota declaró que mueve <strong>material peligroso</strong>: la carga es materia excluida
           y el complemento es obligatorio SIEMPRE — ninguna facilidad aplica (regla 2.7.7.2.1, cuarto párrafo).
           El semáforo de abajo ya lo refleja.
         </p>
       )}
       {datos !== null && datos.dedicadoDeclarado === true && (
-        <p className="text-[12px] px-3.5 py-2.5 rounded-lg max-w-3xl" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
+        <p className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
           Tu flota declaró <strong>transporte dedicado</strong>: la regla 2.7.7.1.3 invierte los roles
           y el complemento puede tocarle emitirlo a tu cliente con CFDI de traslado. Confírmalo con tu
           contador — Likida lo advierte, no lo decide.
@@ -83,7 +80,7 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
       {datos === null ? (
         <EstadoError mensaje="No pude leer los viajes en curso ni sus datos de unidad y operador. No se pinta un semáforo a medias: un «no necesita» sobre datos incompletos vale una presunción de contrabando." />
       ) : datos.viajes.length === 0 ? (
-        <EstadoVacio icono={<ScrollText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        <EstadoVacio pantalla contenido titulo="No hay viajes en curso">
           No hay viajes en curso. Al despachar el primero, aquí aparece si necesita Carta Porte —
           con las dos declaraciones que lo deciden (¿pisa carretera federal? ¿el tramo federal
           cabe en un radio de 30 km?) — y el semáforo de los 18 datos del transportista contra lo
@@ -159,36 +156,24 @@ function TarjetaViaje({ v, acciones, sufijo }: { v: ViajeCcp; acciones: Acciones
         </span>
       </div>
 
-      <details>
-        <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-          style={{ color: 'var(--marca)' }}>
-          Los 37 datos, uno por uno
-        </summary>
-        <div className="pt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <Disclosure variante="linea" titulo={"Los 37 datos, uno por uno"}>
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ListaCampos info="carta_porte.datos_transportista" titulo="Del transportista (18) — responde tu flota" campos={c.campos.filter((x) => x.responsable === 'transportista')} />
           <ListaCampos info="carta_porte.datos_cliente" titulo="Del cliente (19) — pídeselos ANTES del viaje" campos={c.campos.filter((x) => x.responsable === 'cliente')} />
         </div>
-      </details>
+</Disclosure>
 
       {acciones.declarar && (
-        <details>
-          <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-            style={{ color: 'var(--marca)' }}>
-            Declarar la ruta de este viaje
-          </summary>
-          <div className="pt-3">
+        <Disclosure variante="linea" titulo={"Declarar la ruta de este viaje"}>
+<div>
             <FormaDeclaracion accion={acciones.declarar} viajeId={v.viajeId} inicial={v.declarado} />
           </div>
-        </details>
+</Disclosure>
       )}
 
-      <details>
-        <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-          style={{ color: 'var(--marca)' }}>
-          <Package width={13} height={13} strokeWidth={1.75} />
-          Mercancía del viaje ({numero(v.mercancias.length)} {v.mercancias.length === 1 ? 'renglón' : 'renglones'})
-        </summary>
-        <div className="pt-3 space-y-3">
+      <Disclosure variante="linea" titulo={<><Package width={13} height={13} strokeWidth={1.75} />
+          Mercancía del viaje ({numero(v.mercancias.length)} {v.mercancias.length === 1 ? 'renglón' : 'renglones'})</>}>
+<div className="space-y-3">
           {v.mercancias.length > 0 && (
             <ul className="space-y-1 text-[12px]">
               {v.mercancias.map((m) => (
@@ -208,18 +193,14 @@ function TarjetaViaje({ v, acciones, sufijo }: { v: ViajeCcp; acciones: Acciones
           )}
           {acciones.agregarMercancia && <FormaMercancia accion={acciones.agregarMercancia} viajeId={v.viajeId} />}
         </div>
-      </details>
+</Disclosure>
 
       {acciones.guardarDatosCliente && (
-        <details>
-          <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-            style={{ color: 'var(--marca)' }}>
-            Datos del cliente (CPs, RFC del destinatario)
-          </summary>
-          <div className="pt-3">
+        <Disclosure variante="linea" titulo={"Datos del cliente (CPs, RFC del destinatario)"}>
+<div>
             <FormaDatosCliente accion={acciones.guardarDatosCliente} viajeId={v.viajeId} inicial={v.datosCliente} />
           </div>
-        </details>
+</Disclosure>
       )}
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">

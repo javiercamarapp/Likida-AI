@@ -18,18 +18,24 @@ export function largoTexto(n: ReactNode): number {
 /** Más allá de esto la explicación va detrás de «Ver más»: un estado vacío es una línea, no un párrafo centrado. */
 export const LARGO_MAX_VACIO = 150;
 
-/** Vacío CONTENIDO: icono sobrio, título corto, la línea de siempre (children) y a lo sumo UNA acción. No se estira a la altura de
- *  su vecino de rejilla. Si la explicación es larga, queda plegada en «Ver más» en vez de un muro de texto centrado.
+/** Vacío CONTENIDO por omisión: icono sobrio, título corto, la línea de siempre (children) y a lo sumo UNA acción. No se estira a la
+ *  altura de su vecino de rejilla (alto ≤ 220 px). `pantalla` lo pone en su propia caja con borde; `contenido={false}` lo suelta.
+ *  Si la explicación es larga, queda plegada en «Ver más» en vez de un muro de texto centrado.
  *  `icono` (ReactNode heredado) se acepta y se ignora: el icono es el mismo en todo el producto. */
-export function EstadoVacio({ titulo = 'Sin datos todavía', children, accion }: {
+export function EstadoVacio({ titulo = 'Sin datos todavía', children, accion, pantalla, contenido }: {
   titulo?: string;
+  /** Dentro de su propia caja con borde (pantalla vacía) y sin estirarse a la altura del vecino. */
+  pantalla?: boolean;
+  /** Alto contenido (≤ 220 px), sin estirarse. Por omisión, sí. */
+  contenido?: boolean;
   icono?: ReactNode;
   children: ReactNode;
   accion?: { href: string; texto: string };
 }) {
   const largo = largoTexto(children) > LARGO_MAX_VACIO;
   return (
-    <EstadoVacioV2 contenido icono={Inbox} titulo={titulo} accion={accion ? <BotonEnlace tamano="sm" href={accion.href}>{accion.texto}</BotonEnlace> : undefined}>
+    <EstadoVacioV2 icono={Inbox} titulo={titulo} pantalla={pantalla} contenido={contenido ?? true}
+      accion={accion ? <BotonEnlace tamano="sm" href={accion.href}>{accion.texto}</BotonEnlace> : undefined}>
       {largo ? <details className="rv-vacio__mas"><summary>Ver más</summary><span>{children}</span></details> : children}
     </EstadoVacioV2>
   );
