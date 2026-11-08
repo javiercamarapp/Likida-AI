@@ -16,7 +16,7 @@ import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { BarraPeriodo, hrefConParams, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraPeriodo, hrefConParams, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -143,14 +143,14 @@ export function VistaJornada({
           pie: una flota que crea que esto sustituye la bitácora de horas
           de servicio se lleva la multa del art. 83 con nuestro archivo en
           la mano. */}
-      <section className="card p-4 space-y-2">
-        <TituloRecuadro info="jornada.alcance">
-          Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo
-        </TituloRecuadro>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NO_ES_BITACORA_83}</p>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_NOM_087}</p>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{LEYENDA_VEREDICTOS}</p>
-      </section>
+      <AvisoCompacto tono="warn" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas="Ver más: alcance legal"
+        mas={(
+          <>
+            <TituloRecuadro info="jornada.alcance">Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo</TituloRecuadro>
+            <p>{LEYENDA_NOM_087}</p>
+            <p>{LEYENDA_VEREDICTOS}</p>
+          </>
+        )} />
 
       <TiraCifras sello={selloHoy('Registro de jornada')}>
         <Cifra etiqueta="Sin registro declarado" valor={cuenta && numero(cuenta.sinRegistro)}
