@@ -142,10 +142,12 @@
   --foco-sep-campo: 2px;
   --foco-sep-dentro: 1px;
 
-  /* Navegación: activo sutil (gris muy claro, texto tinta, peso 600; sin barra). Lo lee K2 (shell.css). */
-  --nav-activo-bg: var(--ui-soft);
+  /* Navegación (R8, estilo Rovaq): ítem activo = barra izquierda inset de 2 px + fondo tinta al 7 % + peso 500. UN solo token para el color de la barra
+     (--nav-activo-barra): por omisión el rojo de Rovaq, rgb(232, 36, 28); cambiarlo aquí cambia todos los menús (aside, riel y hoja). Lo lee shell.css. */
+  --nav-activo-bg: color-mix(in srgb, var(--ink) 7%, transparent);
   --nav-activo-fg: var(--ink);
-  --nav-activo-peso: 600;
+  --nav-activo-peso: 500;
+  --nav-activo-barra: rgb(232, 36, 28);
   /* Sombra suave del marco (sidebar flotante), como Vexa; las tarjetas del flujo siguen sin sombra. */
   --sh-marco: 0 1px 2px #0e0e100a, 0 8px 24px -16px #0e0e1029;
 

@@ -107,10 +107,21 @@ describe('controles finos · tipografía, iconos y marco', () => {
     expect(valor('--sb-w')).toBe('232px');
     expect(valor('--rail-w')).toBe('72px');
   });
-  it('navegación: activo sutil por gris y peso', () => {
-    expect(valor('--nav-activo-bg')).toBe('var(--ui-soft)');
+  it('navegación (Rovaq): activo = tinta al 7 %, peso 500 y UN token para la barra (rgb 232,36,28)', () => {
+    expect(valor('--nav-activo-bg')).toBe('color-mix(in srgb, var(--ink) 7%, transparent)');
     expect(valor('--nav-activo-fg')).toBe('var(--ink)');
-    expect(valor('--nav-activo-peso')).toBe('600');
+    expect(valor('--nav-activo-peso')).toBe('500');
+    expect(valor('--nav-activo-barra')).toBe('rgb(232, 36, 28)');
+    // El color de la barra se declara UNA vez: ni el oscuro ni shell.css lo repiten.
+    expect(valor('--nav-activo-barra', oscuro)).toBeUndefined();
+    expect(sinComentarios(leer('shell.css'))).not.toMatch(/rgb\(\s*232/);
+  });
+  it('grupo del menú: 11/500 mayúsculas con tracking 0.66 px', () => {
+    const g = /\.rv-grupo__t \{([^}]*)\}/.exec(sinComentarios(leer('shell.css')))?.[1] ?? '';
+    expect(g).toMatch(/font-size:\s*11px/);
+    expect(g).toMatch(/font-weight:\s*500/);
+    expect(g).toMatch(/letter-spacing:\s*0\.66px/);
+    expect(g).toMatch(/text-transform:\s*uppercase/);
   });
 });
 
