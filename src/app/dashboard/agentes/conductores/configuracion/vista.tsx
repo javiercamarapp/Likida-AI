@@ -9,7 +9,7 @@ import { DocumentosCliente } from './documentos_cliente';
 import type { DocumentoCliente } from '@/lib/likida/conductor/documentos_cliente';
 import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
-import { MarcoPagina, Aviso, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, AvisoCompacto, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento }: {
   sufijo: string;
@@ -45,9 +45,7 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   const legible = config !== null && valores !== null && contactos !== null;
   return (
     <MarcoPagina titulo="Configuración del agente Conductor" apoyo="Cuándo y cuánto insiste el agente con tus choferes, en qué horario y a quién avisa cuando nadie contesta." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>Volver al tablero</BotonEnlace>}>
-      <Aviso tono="info">
-        Lo que guardes aplica desde la próxima corrida (cada 5 minutos).
-      </Aviso>
+      <AvisoCompacto tono="info" resumen="Lo que guardes aplica desde la próxima corrida (cada 5 minutos)." />
       {preflight !== undefined && <PanelPreflight preflight={preflight} />}
       {legible ? (
         <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} puedeForzarPreflight={puedeForzarPreflight} />
