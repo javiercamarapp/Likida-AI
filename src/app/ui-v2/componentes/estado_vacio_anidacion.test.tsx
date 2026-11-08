@@ -17,6 +17,16 @@ describe('EstadoVacio: el texto no va en un <p> (admite bloques como <details>)'
     const largo = 'Explicación muy larga. '.repeat(40);
     const html = renderToStaticMarkup(<EstadoVacioDashboard titulo="t">{largo}</EstadoVacioDashboard>);
     expect(html).toContain('<details');
-    expect(html).not.toMatch(/<p(?:\s[^>]*)?>(?:(?!<\/p>).)*<details/s);
+    // Sin regex (el linter de seguridad rechaza las que retroceden): se recorre cada <p ...> hasta su </p>.
+    let desde = 0;
+    for (;;) {
+      const ini = html.indexOf('<p', desde);
+      if (ini < 0) break;
+      const sigue = html[ini + 2];
+      desde = ini + 2;
+      if (sigue !== '>' && sigue !== ' ') continue; // <path>, <polyline>…
+      const fin = html.indexOf('</p>', ini);
+      expect(html.slice(ini, fin < 0 ? undefined : fin)).not.toContain('<details');
+    }
   });
 });
