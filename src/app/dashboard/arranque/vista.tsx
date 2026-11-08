@@ -91,8 +91,8 @@ function Paso({ p, puedeAdministrar }: { p: PasoMarcha; puedeAdministrar: boolea
   const sinDato = p.estado === 'sin_dato';
   const puedeActuar = puedeAdministrar || !p.soloDueno;
   return (
-    <li className="flex items-start gap-3">
-      <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px]"
+    <li className="flex items-center gap-3">
+      <span aria-hidden className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px]"
         style={hecho
           ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
           : sinDato ? { border: '1px dashed var(--warn)', color: 'var(--warn)' }
@@ -112,12 +112,11 @@ function Paso({ p, puedeAdministrar }: { p: PasoMarcha; puedeAdministrar: boolea
       {!hecho && (
         puedeActuar ? (
           <Link href={p.href}
-            className="hairline shrink-0 rounded-lg px-2.5 py-1 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]"
-            style={{ color: 'var(--ink2)' }}>
+            className="rv-btn rv-btn--secondary rv-btn--sm shrink-0 min-w-[9.5rem]">
             {p.cta}
           </Link>
         ) : (
-          <span className="shrink-0 text-[11px]" style={{ color: 'var(--faint)' }}>Lo hace quien administra</span>
+          <span className="shrink-0 min-w-[9.5rem] text-center text-[11px]" style={{ color: 'var(--faint)' }}>Lo hace quien administra</span>
         )
       )}
     </li>

@@ -1,10 +1,10 @@
 import Link from 'next/link';
-import { MessageCircle, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import { EstadoError } from '../estados';
 import { AccionesEnlace } from './acciones';
 import type { NumeroWhatsApp } from '@/lib/likida/arranque_whatsapp';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcaIntegracion, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface DatosArranque {
   numero: NumeroWhatsApp;
@@ -88,7 +88,7 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
             )}
             <div className="min-w-0 space-y-2">
               <TituloRecuadro id="titulo-cartel" info="whatsapp.cartel">
-                <MessageCircle aria-hidden width={16} height={16} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+                <MarcaIntegracion id="whatsapp" />
                 Escríbele a Likida por WhatsApp
               </TituloRecuadro>
               <p className="font-display text-[26px] font-semibold tabular" style={{ color: 'var(--ink)' }}>{n.visible}</p>

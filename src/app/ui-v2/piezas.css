@@ -232,3 +232,7 @@
 [data-ui="v2"] .rv-disc--linea .rv-disc__titulo { flex: none; }
 [data-ui="v2"] .rv-disc--linea[open] > .rv-disc__cab { border-bottom: 0; border-radius: 8px; }
 [data-ui="v2"] .rv-disc--linea > .rv-disc__cuerpo { padding: 10px 0 0; }
+
+/* Controles de barra de herramientas: un <summary> con aspecto de botón mide lo mismo que un filtro (32), no más */
+[data-ui="v2"] summary.rv-btn { box-sizing: border-box; min-height: var(--ctl-h, 32px); }
+@media (max-width: 819px) { [data-ui="v2"] summary.rv-btn { min-height: 44px; } }
