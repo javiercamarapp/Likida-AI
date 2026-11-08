@@ -1,4 +1,3 @@
-/* eslint-disable security/detect-non-literal-fs-filename -- lee fuentes del propio repo con rutas fijas */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
