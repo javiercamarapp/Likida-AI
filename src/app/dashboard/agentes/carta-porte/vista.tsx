@@ -8,7 +8,7 @@ import { estadoCatalogosSat, type ConteoCatalogosSat } from '@/lib/likida/carta_
 import { EstadoError, EstadoVacio } from '../../estados';
 import { DireccionBuzon } from '../proveedores/controles';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, AvisoCompacto, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -52,12 +52,11 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   return (
     <MarcoPagina titulo="Carta Porte en automático" apoyo="Al despachar corre el árbol legal y pregunta por WhatsApp lo que falta declarar. Prepara y valida; nunca timbra.">
 
-      <Aviso tono="info">
-        Al despachar un viaje, este agente corre el árbol legal (RMF 2.7.7) y le pregunta al jefe
-        por WhatsApp exactamente lo que falta declarar — o le da el veredicto con fundamento. Nunca
-        afirma «no necesitas» por su cuenta, nunca inventa un dato del complemento y nunca timbra:
-        prepara el borrador y lo valida contra lo que el PAC rechazaría seguro.
-      </Aviso>
+      <AvisoCompacto
+        tono="info"
+        resumen="Al despachar un viaje, el agente pregunta por WhatsApp lo que falta declarar. Prepara el borrador y lo valida; nunca timbra."
+        mas="Corre el árbol legal (RMF 2.7.7) y le pregunta al jefe exactamente lo que falta declarar — o le da el veredicto con fundamento. Nunca afirma «no necesitas» por su cuenta, nunca inventa un dato del complemento y nunca timbra: prepara el borrador y lo valida contra lo que el PAC rechazaría seguro."
+      />
 
       {catalogosSat !== undefined && <AvisoCatalogosSat catalogosSat={catalogosSat} />}
 

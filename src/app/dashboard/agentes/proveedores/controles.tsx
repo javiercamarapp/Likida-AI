@@ -6,6 +6,7 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Upload, Check, X, Copy, Mail } from 'lucide-react';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
+import { CampoArchivo } from '@/app/ui-v2/componentes';
 
 export type AccionProveedores = (
   prev: { error?: string; aviso?: string; confirmar?: boolean } | null,
@@ -25,10 +26,7 @@ export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores
   return (
     <div>
       <form action={accion} className="flex items-center gap-2 flex-wrap">
-        <input type="file" name="archivo" accept=".xml,text/xml,application/xml" required
-          aria-label="XML de la factura de proveedor"
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
-          style={{ color: 'var(--muted)' }} />
+        <CampoArchivo etiqueta="XML de la factura de proveedor" name="archivo" accept=".xml,text/xml,application/xml" required />
         <BotonSubir />
       </form>
       {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
@@ -71,11 +69,8 @@ export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }
   return (
     <div>
       <form action={accion} className="flex items-center gap-2 flex-wrap">
-        <input type="file" name="archivo" accept="image/jpeg,image/png,image/webp" required
-          onChange={(e) => validarArchivoElegido(e.currentTarget)}
-          aria-label="Foto de la factura de proveedor"
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
-          style={{ color: 'var(--muted)' }} />
+        <CampoArchivo etiqueta="Foto de la factura de proveedor" name="archivo" accept="image/jpeg,image/png,image/webp" required
+          onChange={(e) => validarArchivoElegido(e.currentTarget)} />
         <BotonSubir rotulo="Leer foto con IA" pendienteRotulo="Leyendo la foto…" />
       </form>
       <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>Máximo 4 MB por foto.</p>
