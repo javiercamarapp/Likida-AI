@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getDatosMapa } from '@/lib/admin/prospectos-mapa';
+import { AvisoCompacto } from '../../ui-v2/componentes/aviso';
 import { Cerebro } from './cerebro';
 
 export const dynamic = 'force-dynamic';
@@ -18,9 +19,12 @@ export default async function PaginaMapaProspectos() {
   return (
     <div>
       {datos.fallo && (
-        <p className="mb-4 text-sm rounded-xl px-4 py-2.5" style={{ background: 'color-mix(in srgb, #b91c1c 10%, transparent)', color: '#b91c1c' }}>
-          La cartera no se pudo leer — lo que ves abajo está vacío POR ESO, no porque no haya prospectos.
-        </p>
+        <AvisoCompacto
+          tono="error"
+          className="mb-4"
+          resumen="La cartera no se pudo leer — lo que ves abajo está vacío POR ESO, no porque no haya prospectos."
+          mas="Cada página de la cartera se reintenta una vez antes de rendirse. Si recargar no lo arregla, la base tardó más de lo que permite o rechazó la consulta; el detalle queda en el registro del servidor (mapa_prospectos.leer)."
+        />
       )}
       <Cerebro inicial={datos} />
     </div>
