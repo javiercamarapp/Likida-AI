@@ -22,7 +22,8 @@ function leer(ruta: string): string {
   return readFileSync(fileURLToPath(new URL(ruta, import.meta.url)), 'utf8');
 }
 
-const CRECIMIENTO = leer('./crecimiento/page.tsx');
+// R9c: el H1 y su párrafo viven en `bloques.tsx` (cada bloque con su propio Suspense), no en page.tsx.
+const CRECIMIENTO = leer('./crecimiento/bloques.tsx');
 const ANALITICA = leer('./analitica/page.tsx');
 // El Inicio de /admin vive en `consola.tsx` desde el 14-ago-2026 (page.tsx
 // quedó como puro gateo, convención de inicio-contenido.tsx para que el
