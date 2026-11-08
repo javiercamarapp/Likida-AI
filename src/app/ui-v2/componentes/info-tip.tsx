@@ -2,15 +2,15 @@
 
 import { Info } from 'lucide-react';
 import { useId, useRef, useSyncExternalStore } from 'react';
-import { INFO, infoDe, type InfoClave } from '../info-catalogo';
-import { useMovil } from './movil';
-import { Drawer, Popover } from './overlay';
+import { INFO, type InfoClave } from '../info-catalogo';
+import { ContenidoInfo } from './info-contenido';
+import { Drawer } from './overlay';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// InfoTip (ⓘ): botón de 24 px (toque 44) en la esquina del encabezado de cada recuadro. Abre una explicación
-// UNIFICADA (Qué es · Cómo se calcula · Fuente y corte · Qué hacer): popover anclado de ≤280 px en escritorio,
-// hoja inferior en móvil. UN SOLO ⓘ abierto a la vez en toda la página (almacén de módulo). Foco, Esc y
-// aria-describedby: el botón apunta al panel mientras está abierto.
+// InfoTip (ⓘ): botón de 24 px (toque 44) en la esquina del encabezado de cada recuadro. Abre un CAJÓN (Drawer de 420, como Rovaq; hoja
+// inferior en móvil) con la explicación en bloques (`ContenidoInfo`: Qué es · Cómo se calcula · Fuente/Periodo/Cobertura · Lo que no
+// sabemos · Qué hacer · Clase de dato). UN SOLO ⓘ abierto a la vez en toda la página (almacén de módulo). El <dialog> nativo da foco
+// atrapado, Esc y devolución del foco al ⓘ. El texto sale de info-catalogo.ts; los campos opcionales vacíos no se pintan.
 // ═══════════════════════════════════════════════════════════════════════════
 
 let abiertoId: string | null = null;
@@ -19,44 +19,23 @@ const poner = (id: string | null) => { abiertoId = id; oyentes.forEach((f) => f(
 const suscribir = (f: () => void) => { oyentes.add(f); return () => { oyentes.delete(f); }; };
 const useAbierto = (id: string) => useSyncExternalStore(suscribir, () => abiertoId === id, () => false);
 
-function Contenido({ clave }: { clave: InfoClave }) {
-  const t = infoDe(clave);
-  return (
-    <dl className="rv-infotexto">
-      <div><dt>Qué es</dt><dd>{t.queEs}</dd></div>
-      <div><dt>Cómo se calcula</dt><dd>{t.comoSeCalcula}</dd></div>
-      <div><dt>Fuente y corte</dt><dd>{t.fuente}</dd></div>
-      {t.queHacer ? <div><dt>Qué hacer con esto</dt><dd>{t.queHacer}</dd></div> : null}
-      {t.estado === 'por_confirmar' ? <div><dt>Estado</dt><dd>Por confirmar: descripción provisional, aún sin lector verificado.</dd></div> : null}
-    </dl>
-  );
-}
-
 export function InfoTip({ clave }: { clave: InfoClave }) {
   const id = useId();
-  const idPanel = `${id}-info`;
   const ancla = useRef<HTMLButtonElement>(null);
   const abierto = useAbierto(id);
-  const movil = useMovil();
   const t = INFO[clave];
   const cerrar = () => { if (abiertoId === id) poner(null); };
   return (
     <>
       <button
         ref={ancla} type="button" className="rv-info" aria-label={`Información: ${t.titulo}`}
-        aria-haspopup="true" aria-expanded={abierto} aria-describedby={abierto && !movil ? idPanel : undefined}
+        aria-haspopup="dialog" aria-expanded={abierto}
         onClick={() => poner(abierto ? null : id)}
       >
         <Info aria-hidden="true" size={14} strokeWidth={1.75} />
       </button>
-      {movil ? (
-        <Drawer abierto={abierto} onCerrar={cerrar} titulo={t.titulo}><Contenido clave={clave} /></Drawer>
-      ) : (
-        <Popover abierto={abierto} onCerrar={cerrar} ancla={ancla} etiqueta={`Información: ${t.titulo}`} alineacion="fin" className="rv-pop--info" id={idPanel}>
-          <p className="rv-infotexto__titulo">{t.titulo}</p>
-          <Contenido clave={clave} />
-        </Popover>
-      )}
+      {/* Se monta solo abierto: una página con decenas de ⓘ no carga decenas de cajones. Al desmontar, el motor devuelve el foco al ⓘ. */}
+      {abierto ? <Drawer abierto onCerrar={cerrar} titulo={t.titulo}><ContenidoInfo texto={t} /></Drawer> : null}
     </>
   );
 }

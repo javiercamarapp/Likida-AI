@@ -123,3 +123,20 @@
 @media (max-width: 819px) {
   [data-ui="v2"] .rv-tb table[data-tarjeta] tbody th { display: flex; justify-content: space-between; gap: 8px; height: auto; padding: 0; border: 0; }
 }
+
+/* ── Cajón ⓘ (R8, estilo Rovaq): bloques `rv-ov-bloque` dentro del cuerpo del Drawer. Cada selector cuelga de `.rv-ov__cuerpo` (ajuste de contexto:
+   el motor del overlay sigue siendo overlay.css). Contenido: componentes/info-contenido.tsx. ── */
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-info { display: grid; gap: 8px; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque { box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque__tit { margin: 0 0 6px; font-size: 12px; line-height: 1.3; font-weight: 600; color: var(--ink); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque__txt { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink2); text-wrap: pretty; }
+/* «Cómo se calcula»: el texto va en un recuadro gris dentro del bloque. */
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-calculo { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--canvas); font-size: 13px; line-height: 1.5; color: var(--ink2); text-wrap: pretty; }
+/* Pares clave/valor: clave 12/500 muted a la izquierda (96 px), valor 13 a la derecha. */
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv { display: grid; gap: 8px; margin: 0; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv__fila { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv dt { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv dd { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-lista { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.45; color: var(--ink2); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque--sello { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque--sello .rv-ov-bloque__tit { margin: 0; }

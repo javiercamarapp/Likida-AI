@@ -15,6 +15,7 @@ export { Monograma, iniciales, matizDeId } from './monograma';
 export { type EscenaId } from '../svg/escenas';
 export { Switch } from './switch';
 export { InfoTip } from './info-tip';
+export { ContenidoInfo } from './info-contenido';
 export { Tarjeta, type EstadoTarjeta } from './tarjeta';
 export { TituloRecuadro } from './titulo-recuadro';
 export { BarraFiltros, type ChipFiltro } from './barra-filtros';

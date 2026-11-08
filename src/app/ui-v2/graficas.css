@@ -13,6 +13,7 @@
   border: 1px solid var(--line2, var(--line)); background: transparent;
 }
 .rv-kind[data-tipo="observado"] { border-style: solid; background: var(--canvas); }
+[data-ui="v2"] .rv-kind[data-tipo="calculado"] { border-style: solid; background: var(--canvas); color: var(--ink2, var(--ink)); }
 .rv-kind[data-tipo="estimado"] { border-style: dashed; border-color: var(--muted); background: var(--canvas2, var(--canvas)); color: var(--ink2, var(--ink)); }
 .rv-kind[data-tipo="inferido"] { border-style: dotted; border-width: 1.5px; border-color: var(--muted); color: var(--ink2, var(--ink)); }
 .rv-kind[data-tipo="sin_dato"] { border-style: dotted; border-width: 1.5px; border-color: var(--faint, var(--muted)); color: var(--muted); background: transparent; }

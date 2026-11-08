@@ -68,7 +68,7 @@ beforeAll(async () => {
 }, 90_000);
 afterAll(async () => { await browser?.close(); });
 
-const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css', 'graficas.css'].map((f) => readFileSync(join(f === 'tokens.css' ? RAIZ : DIR, f), 'utf8')).join('\n');
+const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'overlay.css', 'graficas.css', 'piezas.css'].map((f) => readFileSync(join(f === 'tokens.css' ? RAIZ : DIR, f), 'utf8')).join('\n');
 async function abrir(ancho = 1440, opts: { animar?: boolean; reduce?: boolean; oscuro?: boolean } = {}): Promise<Page> {
   // Por omisión SIN animación (medidas estables); las pruebas de movimiento piden `animar`.
   const p = await browser!.newPage({ viewport: { width: ancho, height: 900 }, reducedMotion: opts.animar && !opts.reduce ? 'no-preference' : 'reduce' });
@@ -80,58 +80,70 @@ const rgb = (s: string) => (s.match(/\d+\.?\d*/g) ?? []).slice(0, 3).map(Number)
 const lum = ([r, g, b]: number[]) => { const f = (v: number) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }; return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b); };
 const ratio = (a: number[], b: number[]) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
-describe.skipIf(SIN_NAVEGADOR)('B4 · InfoTip (ⓘ)', () => {
-  it('abre un popover ≤280 px con sus bloques (y «Por confirmar» cuando no hay lector verificado), aria-describedby y aria-expanded; Esc cierra y devuelve el foco', async () => {
+describe.skipIf(SIN_NAVEGADOR)('B4 · InfoTip (ⓘ) como cajón (R8)', () => {
+  it('abre un cajón de 420 con sus bloques rv-ov-bloque (y «Por confirmar» cuando no hay lector verificado), aria-expanded; Esc cierra y devuelve el foco al ⓘ', async () => {
     const p = await abrir();
     const boton = p.locator('.rv-info').first();
     await boton.click();
     const r = await p.evaluate(() => {
-      const pop = document.querySelector('.rv-pop--info')!;
+      const d = document.querySelector('dialog[open]')!;
       const b = document.querySelector('.rv-info')!;
+      const bloque = d.querySelector('.rv-ov-bloque') as HTMLElement;
+      const cs = getComputedStyle(bloque);
       return {
-        w: Math.round(pop.getBoundingClientRect().width),
-        dts: [...pop.querySelectorAll('dt')].map((d) => d.textContent),
-        font: parseFloat(getComputedStyle(pop.querySelector('dd')!).fontSize),
-        desc: b.getAttribute('aria-describedby') === pop.id,
+        w: Math.round(d.querySelector('.rv-ov__panel')!.getBoundingClientRect().width),
+        tits: [...d.querySelectorAll('.rv-ov-bloque__tit')].map((x) => x.textContent),
+        claves: [...d.querySelectorAll('.rv-ov-kv dt')].map((x) => x.textContent),
+        calculo: !!d.querySelector('.rv-ov-calculo'),
+        pad: cs.paddingTop + ' ' + cs.paddingLeft, radio: cs.borderTopLeftRadius, borde: cs.borderTopWidth,
         exp: b.getAttribute('aria-expanded'),
+        popover: document.querySelectorAll('.rv-pop--info').length,
+        marca: !!d.querySelector('.rv-ov__marca'),
         btn: Math.round(b.getBoundingClientRect().width),
       };
     });
-    expect(r.w).toBeLessThanOrEqual(280);
-    expect(r.dts).toEqual(['Qué es', 'Cómo se calcula', 'Fuente y corte', 'Estado']); // «Qué hacer» es opcional; «Estado» marca lo por confirmar
-    expect(r.font).toBeGreaterThanOrEqual(12);
-    expect(r.desc).toBe(true);
+    expect(r.w).toBe(420);
+    expect(r.tits).toEqual(['Qué es', 'Cómo se calcula', 'Estado']); // «Estado» marca lo por confirmar; Fuente va en el par clave/valor
+    expect(r.claves).toEqual(['Fuente']); // Periodo y Cobertura no se pintan sin dato
+    expect(r.calculo).toBe(true);
+    expect(r.pad).toBe('10px 12px');
+    expect(r.radio).toBe('8px');
+    expect(r.borde).toBe('1px');
     expect(r.exp).toBe('true');
+    expect(r.popover).toBe(0);
+    expect(r.marca).toBe(true);
     expect(r.btn).toBeGreaterThanOrEqual(20);
     expect(r.btn).toBeLessThanOrEqual(24);
     await p.keyboard.press('Escape');
-    expect(await p.locator('.rv-pop--info').count()).toBe(0);
+    expect(await p.locator('dialog[open]').count()).toBe(0);
     expect(await p.evaluate(() => document.activeElement?.classList.contains('rv-info'))).toBe(true);
     await p.close();
   });
-  it('Tab desde el ⓘ cierra la explicación (el foco nunca entra al panel)', async () => {
+  it('Enter en el ⓘ abre el cajón y el foco queda dentro (atrapado); el botón Cerrar lo cierra', async () => {
     const p = await abrir();
     await p.locator('.rv-info').first().focus();
     await p.keyboard.press('Enter');
-    expect(await p.locator('.rv-pop--info').count()).toBe(1);
+    expect(await p.locator('dialog[open]').count()).toBe(1);
     await p.keyboard.press('Tab');
-    expect(await p.locator('.rv-pop--info').count()).toBe(0);
+    expect(await p.evaluate(() => !!document.activeElement?.closest('dialog[open]'))).toBe(true);
+    await p.getByRole('button', { name: 'Cerrar' }).click();
+    expect(await p.locator('dialog[open]').count()).toBe(0);
     await p.close();
   });
   it('un solo ⓘ abierto a la vez', async () => {
     const p = await abrir();
     await p.locator('.rv-info').nth(0).click();
-    // clic programático (sin mover el foco ni depender de lo que tape el primer panel): el almacén cierra el anterior
+    // clic programático (el cajón modal deja inerte el resto): el almacén cierra el anterior
     await p.evaluate(() => (document.querySelectorAll('.rv-info')[1] as HTMLElement).click());
-    expect(await p.locator('.rv-pop--info').count()).toBe(1);
+    expect(await p.locator('dialog[open]').count()).toBe(1);
     expect(await p.evaluate(() => document.querySelectorAll('.rv-info[aria-expanded="true"]').length)).toBe(1);
     await p.close();
   });
-  it('390: la explicación se abre como hoja inferior con los mismos 4 bloques', async () => {
+  it('390: el mismo contenido se abre como hoja inferior', async () => {
     const p = await abrir(390);
     await p.locator('.rv-info').first().click();
-    const r = await p.evaluate(() => { const d = document.querySelector('dialog[open]')!; const pn = d.querySelector('.rv-ov__panel')!.getBoundingClientRect(); return { dts: [...d.querySelectorAll('dt')].map((x) => x.textContent), pie: Math.round(innerHeight - pn.bottom), alto: pn.height }; });
-    expect(r.dts).toEqual(['Qué es', 'Cómo se calcula', 'Fuente y corte', 'Estado']);
+    const r = await p.evaluate(() => { const d = document.querySelector('dialog[open]')!; const pn = d.querySelector('.rv-ov__panel')!.getBoundingClientRect(); return { tits: [...d.querySelectorAll('.rv-ov-bloque__tit')].map((x) => x.textContent), pie: Math.round(innerHeight - pn.bottom), alto: pn.height }; });
+    expect(r.tits).toEqual(['Qué es', 'Cómo se calcula', 'Estado']);
     expect(r.pie).toBe(0);
     expect(r.alto).toBeLessThanOrEqual(900 * 0.9 + 1);
     await p.close();
