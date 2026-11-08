@@ -196,3 +196,10 @@
 [data-ui="v2"] .rv-chipfuente[data-deshabilitado] { opacity: .5; cursor: not-allowed; }
 @media (max-width: 819px) { [data-ui="v2"] .rv-chipfuente { min-height: 44px; } }
 @media (forced-colors: active) { [data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:checked) { border-color: Highlight; } }
+
+/* ── Estado vacío contenido y tarjeta contenida: no se estiran a la altura del vecino de la rejilla ───────────────────── */
+[data-ui="v2"] .rv-vacio__icono { display: inline-flex; color: var(--muted); }
+[data-ui="v2"] .rv-vacio[data-contenido] { flex: 0 0 auto; align-self: stretch; max-height: 220px; overflow: hidden; padding: 20px 16px; gap: 6px; }
+[data-ui="v2"] .rv-vacio[data-contenido] .rv-vacio__accion { margin-top: 6px; }
+[data-ui="v2"] .rv-tarjeta[data-contenida] { align-self: start; }
+[data-ui="v2"] .rv-res__fila > .rv-tarjeta[data-contenida] > .rv-tarjeta__cuerpo > .rv-vacio[data-contenido] { flex: 0 0 auto; }
