@@ -140,3 +140,22 @@
 [data-ui="v2"] .rv-ov__cuerpo .rv-ov-lista { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.45; color: var(--ink2); }
 [data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque--sello { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 [data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque--sello .rv-ov-bloque__tit { margin: 0; }
+
+/* ── Marcas de integración y chip de fuente (R8): componentes/marca-integracion.tsx. El color de cada logo vive en su <path fill>
+   (marca-integracion.data.ts); aquí solo el tamaño, el modo oscuro y el chip. ── */
+[data-ui="v2"] .rv-marcaint { display: inline-block; flex: none; vertical-align: middle; }
+[data-ui="v2"] .rv-marcaint--generico { color: var(--muted); }
+:root[data-theme="dark"] [data-ui="v2"] .rv-marcaint[data-mono-oscuro] path { fill: currentColor; }
+:root[data-theme="dark"] [data-ui="v2"] .rv-marcaint[data-mono-oscuro] { color: var(--ink); }
+[data-ui="v2"] .rv-chipfuente {
+  display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 28px; padding: 0 10px; border: 1px solid var(--line2);
+  border-radius: 999px; background: var(--surface); color: var(--ink); font: 500 12px/1 var(--font-sans-ui, inherit); white-space: nowrap;
+}
+[data-ui="v2"] button.rv-chipfuente { cursor: pointer; }
+[data-ui="v2"] button.rv-chipfuente:hover { background: var(--canvas); }
+[data-ui="v2"] button.rv-chipfuente:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* Activo: el azul de Rovaq (mismos tokens que segmentados y chips). */
+[data-ui="v2"] .rv-chipfuente[data-activo] { background: var(--seg-activo-bg); border-color: var(--seg-activo-borde); color: var(--seg-activo-fg); }
+[data-ui="v2"] button.rv-chipfuente[data-activo]:hover { background: var(--seg-activo-hover); }
+@media (max-width: 819px) { [data-ui="v2"] button.rv-chipfuente { min-height: 44px; } }
+@media (forced-colors: active) { [data-ui="v2"] .rv-chipfuente[data-activo] { border-color: Highlight; } }
