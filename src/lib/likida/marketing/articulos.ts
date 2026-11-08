@@ -127,7 +127,10 @@ export const ARTICULOS: Articulo[] = [
         t: 'cita',
         texto:
           'La bitácora que casi nadie arma es dinero que casi nadie acredita.',
-        fuente: 'RMF 2026, regla 9.1.8, fracción II',
+        // A46-FIS-01: esta frase es de la casa, no de la fracción II. Atribuirla
+        // a la regla la publicaba como texto normativo en un <blockquote>. El
+        // fundamento real de la bitácora sigue declarado en `fundamento`.
+        fuente: 'Likida: la tercera condición, en una línea',
       },
       { t: 'h2', texto: 'Por qué casi nadie lo cobra' },
       {
@@ -178,7 +181,11 @@ export const ARTICULOS: Articulo[] = [
       {
         t: 'cita',
         texto: 'La cuota aplicable es la disminuida que publica el DOF, con los ajustes que correspondan. Usar la cuota entera es un error de cálculo.',
-        fuente: 'Criterio sobre LIF y acuerdos del DOF (ficha verificada del corpus de Likida)',
+        // A46-FIS-01: la paráfrasis es fiel a `contenido_esencial`, pero
+        // `normas/criterio-1-LIF-PI.yaml` tiene `texto_vigente: null` y
+        // `estado_verificacion: evidencia_corroborante` — llamarla «ficha
+        // verificada» afirmaba una verificación que la ficha no tiene.
+        fuente: 'Likida, parafraseando el criterio 1/LIF/PI; su texto aún no está transcrito en el corpus',
       },
       { t: 'h2', texto: 'Qué hacemos distinto' },
       {
