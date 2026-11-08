@@ -137,6 +137,20 @@ export const INFO_OPERACION = {
     'Si tu flota opera desde un solo patio, asígnalos todos aquí; con varios, usa la columna «patio» de la carga masiva.',
   ),
   // ── convenios ──
+  'convenios.activos': V(
+    'Convenios activos',
+    'Convenios de tus clientes que no están archivados.',
+    'Cuenta los convenios registrados que siguen activos; los archivados no cuentan.',
+    'Convenios de tu flota, leídos al abrir la pantalla. Si la lectura falla no se muestra la cifra.',
+    'Archiva los que ya no apliquen para que el agente no use sus instrucciones.',
+  ),
+  'convenios.sin_instrucciones': V(
+    'Sin instrucciones',
+    'Convenios activos que no traen instrucciones de operación.',
+    'Cuenta los convenios activos con cero instrucciones registradas: el operador no recibirá nada de ellos.',
+    'Convenios de tu flota, leídos al abrir la pantalla.',
+    'Edita el convenio o vuelve a importar el archivo con sus instrucciones.',
+  ),
   'convenios.registrados': V(
     'Convenios registrados',
     'Los convenios de tus clientes: ruta A a B, vigencia e instrucciones de operación.',
