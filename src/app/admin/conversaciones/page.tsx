@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
 import {
@@ -110,7 +111,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
               no compara nada. */}
           {conversaciones.length > 1 && (
             <ChartCard titulo="Mensajes por conversación" tamano="S">
-              <HBars datos={conversaciones.map((c) => ({ etiqueta: c.telefono, valor: c.turns.length }))} formato="entero" />
+              <HBars datos={conversaciones.map((c) => ({ etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato="entero" />
             </ChartCard>
           )}
 
@@ -175,7 +176,7 @@ function ListaConversaciones({ conversaciones }: { conversaciones: ConversacionA
         const fila = (
           <>
             <div>
-              <div className="text-sm font-medium">{c.telefono}</div>
+              <div className="text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</div>
               <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
             </div>
             <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>

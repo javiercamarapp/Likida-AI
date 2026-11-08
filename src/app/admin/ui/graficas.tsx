@@ -92,7 +92,7 @@ export function HBars({
   return (
     <div className="space-y-2.5">
       {datos.map((d, i) => (
-        <div key={d.etiqueta} className="flex items-center gap-3">
+        <div key={`${d.etiqueta}-${i}`} className="flex items-center gap-3">
           <div className="w-32 sm:w-44 shrink-0 text-xs truncate text-right" style={{ color: 'var(--muted)' }} title={d.etiqueta}>{d.etiqueta}</div>
           <div className="flex-1 h-5 rounded-md overflow-hidden" style={{ background: 'var(--ui-soft, var(--g1))' }}>
             <div className="h-full rounded-md" style={{

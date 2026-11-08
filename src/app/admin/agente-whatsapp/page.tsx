@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
   getResumenNegocio, getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES,
@@ -65,7 +66,8 @@ export default async function AgenteWhatsappPage() {
                   <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
                     <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
                       <div>
-                        <div className="text-sm font-medium">{c.telefono}</div>
+                        {/* Minimización (LFPDPPP): el número sale enmascarado; el completo vive en el detalle de la conversación. */}
+                        <div className="text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</div>
                         <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
                       </div>
                       <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
