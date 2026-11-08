@@ -12,7 +12,7 @@ import {
 } from '@/lib/likida/operacion';
 import { clasificarVigencia, contarVigencias, avisoVigencias, DIAS_AVISO } from '@/lib/likida/vigencias';
 import { EstadoVacio } from './estados';
-import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 import { TituloSeccion } from './resumen-visual';
 import { TableroCifras, TablaCarga, TablaViajesOperacion, type FilaViajeOperacion } from './tablero-operacion';
 import AvanceCierre from './avance-cierre';
@@ -302,13 +302,9 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
   return (
     <>
       {ciegas.length > 0 && (
-        <div className="card p-3 flex items-start gap-2.5" style={{ borderColor: 'var(--warn)' }}>
-          <span className="inline-block w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
-          <p className="text-[13px] m-0">
-            No se pudo leer: {ciegas.join(' · ')}. Las alertas de esa parte pueden faltar —
-            es un fallo de lectura, no un &quot;todo en orden&quot;.
-          </p>
-        </div>
+        <AvisoCompacto tono="warn"
+          resumen={`No se pudo leer: ${ciegas.join(' · ')}.`}
+          mas="Las alertas de esa parte pueden faltar. Es un fallo de lectura, no un «todo en orden»." />
       )}
 
       {alertas.length > 0 && (

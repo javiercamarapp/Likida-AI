@@ -17,7 +17,7 @@ import {
 } from '@/lib/likida/fiscal';
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { mxn, pctCambio, hoyMx } from '@/lib/formato';
-import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 import { selloHoy } from './sello-hoy';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
@@ -573,13 +573,9 @@ export async function AvisoEstado({
 
   if (estado === 'error') {
     return (
-      <div className="card p-6" style={{ borderColor: 'var(--bad)' }}>
-        <p className="text-sm font-semibold tracking-tight m-0">No se pudieron cargar los datos</p>
-        <p className="mt-1.5 text-sm m-0" style={{ color: 'var(--muted)' }}>
-          Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
-          que no haya liquidaciones, significa que no se pudieron leer.
-        </p>
-      </div>
+      <AvisoCompacto tono="error"
+        resumen="No se pudieron cargar los datos. Recarga la página en un momento."
+        mas="Hubo un problema al leer del sistema. Esto no significa que no haya liquidaciones, significa que no se pudieron leer." />
     );
   }
   if (estado !== 'parcial') return null;
@@ -587,15 +583,9 @@ export async function AvisoEstado({
   // todo cargó bien en ambos casos: "vacío" son las mismas piezas con sus
   // propios ceros honestos.
   return (
-    <div className="card p-4 flex items-start gap-3" style={{ borderColor: 'var(--warn)' }}>
-      <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
-      <div>
-        <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
-        <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-          Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo.
-        </p>
-      </div>
-    </div>
+    <AvisoCompacto tono="warn"
+      resumen="Faltan datos por cargar: esta pantalla está incompleta."
+      mas="Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo." />
   );
 }
 
