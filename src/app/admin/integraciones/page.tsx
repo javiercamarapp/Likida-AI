@@ -143,11 +143,11 @@ export default async function IntegracionesPage() {
                 subtitulo="El magic link sale por Resend con la plantilla de la marca en vez de la de fábrica de Supabase. Que el hook esté encendido se ve en su panel; aquí solo se mide el secreto."
               />
               <Conector
-                Icono={Bug} titulo="Sentry" href="https://sentry.io" medicion={medSentry}
+                Icono={Bug} marca="sentry" titulo="Sentry" href="https://sentry.io" medicion={medSentry}
                 subtitulo="Registro de errores en producción. Que reciba de verdad se comprueba en su panel, no desde aquí."
               />
               <Conector
-                Icono={Rocket} titulo="Vercel" href="https://vercel.com/dashboard" medicion={medVercel}
+                Icono={Rocket} marca="vercel" titulo="Vercel" href="https://vercel.com/dashboard" medicion={medVercel}
                 subtitulo="Hosting y despliegues. Vercel ya lo mide en su panel — se enlaza en vez de reconstruirse."
               />
               <Conector

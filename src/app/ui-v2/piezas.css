@@ -204,6 +204,13 @@
 [data-ui="v2"] .rv-tarjeta[data-contenida] { align-self: start; }
 [data-ui="v2"] .rv-res__fila > .rv-tarjeta[data-contenida] > .rv-tarjeta__cuerpo > .rv-vacio[data-contenido] { flex: 0 0 auto; }
 
+/* ── Campos del sistema: valores de solo lectura (fijados por la ley o calculados), rejilla compacta sin cajas de entrada ───── */
+[data-ui="v2"] .rv-sis { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; margin: 0; min-width: 0; }
+[data-ui="v2"] .rv-sis__campo { display: grid; gap: 2px; align-content: start; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+[data-ui="v2"] .rv-sis__etq { margin: 0; font-size: var(--t-small); font-weight: 500; color: var(--muted); }
+[data-ui="v2"] .rv-sis__valor { margin: 0; font-size: var(--t-body); font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-sis__nota { margin: 0; font-size: 11px; line-height: 1.4; color: var(--muted); }
+
 /* ── AvisoCompacto: 2 líneas del resumen + «Ver más» en <details> ──────────────────────────────────────────────────────── */
 [data-ui="v2"] .rv-aviso--compacto { align-items: flex-start; }
 [data-ui="v2"] .rv-aviso__compacto { flex: 1 1 auto; min-width: 0; }

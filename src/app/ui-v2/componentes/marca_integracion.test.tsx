@@ -7,7 +7,7 @@ import { ChipFuente, IDS_INTEGRACION, MarcaIntegracion, esIntegracionConocida, t
 import { INTEGRACIONES } from './marca-integracion.data';
 
 const leer = (f: string) => readFileSync(join(__dirname, f), 'utf8');
-const PEDIDOS = ['hubspot', 'zendesk', 'whatsapp', 'outlook', 'microsoft', 'excel', 'csv', 'sap', 'google', 'gmail', 'resend', 'supabase'];
+const PEDIDOS = ['hubspot', 'zendesk', 'whatsapp', 'outlook', 'microsoft', 'excel', 'csv', 'sap', 'google', 'gmail', 'resend', 'supabase', 'sentry', 'vercel', 'meta'];
 
 describe('MarcaIntegracion', () => {
   it('trae todos los proveedores pedidos (Microsoft/Outlook, Excel, CSV, SAP, Google, Gmail, Resend, HubSpot, Zendesk, WhatsApp)', () => {
@@ -24,7 +24,8 @@ describe('MarcaIntegracion', () => {
       if (def.tipo === 'logo') {
         expect(h, id).toContain(`fill="${def.color}"`);
         expect(def.fuente, id).toMatch(/^simple-icons v\d+\.\d+\.\d+$/);
-        expect(def.path.length, id).toBeGreaterThan(50);
+        // Vercel es un triángulo (22 caracteres): basta con que sea un trazado real, no vacío.
+        expect(def.path.length, id).toBeGreaterThan(15);
       }
     }
   });

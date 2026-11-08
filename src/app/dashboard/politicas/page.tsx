@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache';
-import { Info, Route } from 'lucide-react';
+import { Route } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -10,9 +10,9 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { StatusPill } from '../../admin/ui/kit';
 import { EstadoVacio } from '../estados';
-import { FormaConAviso, type ResultadoAccion, ESTILO_CONTROL } from '../../admin/ui/forma';
+import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import type { Metadata } from 'next';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, CamposSistema, CampoTexto, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 export const metadata: Metadata = { title: 'Políticas de gasto' };
 
 export const dynamic = 'force-dynamic';
@@ -167,19 +167,20 @@ export default async function PoliticasPage({
                         return (
                           <tr key={c} className="border-t" style={{ borderColor: 'var(--line)' }}>
                             <td className="py-2.5 pr-4 font-medium">
-                              <label htmlFor={`tope_${c}`}>{etiquetaConcepto(c)}</label>
+                              {etiquetaConcepto(c)}
                             </td>
                             <td className="py-2.5 pr-4">
-                              <input
+                              <CampoTexto
                                 id={`tope_${c}`}
                                 name={`tope_${c}`}
-                                type="number"
+                                tipo="number"
                                 step="0.01"
                                 min="0"
+                                etiqueta={`Tope de ${etiquetaConcepto(c)}`}
+                                etiquetaOculta
                                 defaultValue={p?.topeMonto ?? ''}
                                 placeholder="Sin tope"
-                                className="text-sm rounded-lg px-2.5 py-1.5 w-40"
-                                style={ESTILO_CONTROL}
+                                className="w-40"
                               />
                             </td>
                             <td className="py-2.5">
@@ -277,39 +278,20 @@ export default async function PoliticasPage({
 
           <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
             <TituloRecuadro info="politicas.topes_fiscales">Topes fiscales que aplica el motor</TituloRecuadro>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-              <div className="card p-4">
-                <div className="text-lg font-semibold tabular">{mxn(config.estimulos.viaticosTopeFiscalDiarioMxn)}</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  Tope diario de alimentación nacional — LISR Art. 28-V. Lo que exceda sale marcado como no deducible.
-                </div>
-              </div>
-              <div className="card p-4">
-                <div className="text-lg font-semibold tabular">{mxn(config.estimulos.efectivoTopeMxn)}</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  Tope de gasto en efectivo (no combustible) — LISR Art. 27-III. Arriba de esto exige otra forma de pago.
-                </div>
-              </div>
-              <div className="card p-4">
-                <div className="text-lg font-semibold tabular">{Math.round(config.estimulos.peajeFactor * 100)}%</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  Del gasto de peaje es acreditable — estímulo de autopistas, LIF 2026 Art. 20-A, sujeto a elegibilidad.
-                </div>
-              </div>
-              <div className="card p-4">
-                <div className="text-lg font-semibold tabular">{Math.round(config.tabulador.umbralDesviacion * 100)}%</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  Desviación de consumo a partir de la cual el motor levanta la mano.
-                </div>
-              </div>
+            <div className="mt-3">
+              <CamposSistema etiqueta="Topes fiscales" campos={[
+                { etiqueta: 'Tope diario de alimentación nacional', valor: mxn(config.estimulos.viaticosTopeFiscalDiarioMxn), nota: 'LISR Art. 28-V. Lo que exceda sale marcado como no deducible.' },
+                { etiqueta: 'Tope de gasto en efectivo (no combustible)', valor: mxn(config.estimulos.efectivoTopeMxn), nota: 'LISR Art. 27-III. Arriba de esto exige otra forma de pago.' },
+                { etiqueta: 'Peaje acreditable', valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: 'Estímulo de autopistas, LIF 2026 Art. 20-A, sujeto a elegibilidad.' },
+                { etiqueta: 'Desviación de consumo', valor: `${Math.round(config.tabulador.umbralDesviacion * 100)}%`, nota: 'A partir de aquí el motor levanta la mano.' },
+              ]} />
             </div>
           </section>
 
-          <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Los topes fiscales de arriba NO se editan desde aquí: los fija la ley, no la flota. Los viáticos por
-              ruta/día y el plazo de comprobación del anticipo tampoco están en el esquema como reglas configurables.
-            </EstadoVacio>
+          <div className="px-5 pt-3 pb-5">
+            <AvisoCompacto tono="info"
+              resumen="Los topes fiscales de arriba NO se editan desde aquí: los fija la ley, no la flota."
+              mas="Los viáticos por ruta/día y el plazo de comprobación del anticipo tampoco están en el esquema como reglas configurables." />
           </div>
         </div>
       )}

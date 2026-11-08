@@ -15,7 +15,8 @@ import {
 import { ENCABEZADO_CONTPAQI, SAP_B1_BASE } from '@/lib/likida/contabilidad/formatos';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
+import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
+import { CampoSelect, CampoTexto, Disclosure } from '@/app/ui-v2/componentes';
 
 /**
  * PLAN MAESTRO 26-ago, sección B — el formulario que desbloquea el export a
@@ -206,53 +207,47 @@ export async function PerfilErp({
           el formulario — confirmaría a ciegas encima de una plantilla real. */}
       {leyoOk && (
         <>
-          <details className="rounded-xl hairline px-4 py-3">
-            <summary className="text-xs font-medium cursor-pointer">CONTPAQi — confirmar plantilla</summary>
-            <div className="mt-3">
-              {/* Una sola columna a propósito: el encabezado de 9 columnas
-                  necesita todo el ancho, y partir el form en dos habría
-                  separado campos que la misma action lee juntos. */}
-              <FormaConAviso accion={confirmarContpaqi} boton="Confirmar contra mi instancia" columnas="md:grid-cols-1">
-                <Selector nombre="tipo" etiqueta="Tipo de póliza" requerido valorInicial={cpInicial.tipo}
-                  opciones={[
-                    { valor: 'Dr', texto: 'Dr — diario' },
-                    { valor: 'Ig', texto: 'Ig — ingreso' },
-                    { valor: 'Eg', texto: 'Eg — egreso' },
-                  ]} />
-                <Campo nombre="numeroInicial" etiqueta="Número inicial de póliza" tipo="number" requerido
-                  valorInicial={String(cpInicial.numero)}
-                  ayuda="Lo asigna tu contabilidad; cada póliza del archivo incrementa desde aquí." />
-                <Selector nombre="separador" etiqueta="Separador del archivo" requerido valorInicial={cpInicial.separador ?? ','}
-                  opciones={[
-                    { valor: ',', texto: 'Coma (,)' },
-                    { valor: '\t', texto: 'Tabulador' },
-                    { valor: '|', texto: 'Barra vertical (|)' },
-                  ]} />
-                <Campo nombre="encabezado" etiqueta="Encabezado del esquema (9 columnas separadas por coma)" requerido
-                  valorInicial={(cpInicial.encabezado ?? [...ENCABEZADO_CONTPAQI]).join(', ')}
-                  ayuda="Debe coincidir con el esquema de importación de TU CONTPAQi, no con este ejemplo." />
-              </FormaConAviso>
-            </div>
-          </details>
+          <Disclosure titulo="CONTPAQi — confirmar plantilla">
+            {/* Una sola columna para el encabezado de 9 columnas: necesita todo el ancho; los tres campos cortos van en rejilla. */}
+            <FormaConAviso accion={confirmarContpaqi} boton="Confirmar contra mi instancia" columnas="md:grid-cols-1">
+              <div className="rv-forma__rejilla">
+                <CampoSelect id="tipo" name="tipo" etiqueta="Tipo de póliza" obligatorio defaultValue={cpInicial.tipo}>
+                  <option value="Dr">Dr — diario</option>
+                  <option value="Ig">Ig — ingreso</option>
+                  <option value="Eg">Eg — egreso</option>
+                </CampoSelect>
+                <CampoSelect id="separador" name="separador" etiqueta="Separador del archivo" obligatorio defaultValue={cpInicial.separador ?? ','}>
+                  <option value=",">Coma (,)</option>
+                  <option value={'\t'}>Tabulador</option>
+                  <option value="|">Barra vertical (|)</option>
+                </CampoSelect>
+              </div>
+              <CampoTexto id="numeroInicial" name="numeroInicial" tipo="number" step="0.01" min="0" etiqueta="Número inicial de póliza" obligatorio
+                defaultValue={String(cpInicial.numero)}
+                ayuda="Lo asigna tu contabilidad; cada póliza del archivo incrementa desde aquí." />
+              <CampoTexto id="encabezado" name="encabezado" etiqueta="Encabezado del esquema (9 columnas separadas por coma)" obligatorio
+                defaultValue={(cpInicial.encabezado ?? [...ENCABEZADO_CONTPAQI]).join(', ')}
+                ayuda="Debe coincidir con el esquema de importación de TU CONTPAQi, no con este ejemplo." />
+            </FormaConAviso>
+          </Disclosure>
 
-          <details className="rounded-xl hairline px-4 py-3">
-            <summary className="text-xs font-medium cursor-pointer">SAP Business One (DTW) — confirmar plantilla</summary>
-            <div className="mt-3">
-              <FormaConAviso accion={confirmarSapB1} boton="Confirmar contra mi instancia" columnas="md:grid-cols-1">
-                <Campo nombre="cabeceraTecnica" etiqueta="Cabecera — fila técnica (columnas separadas por coma)" requerido
-                  valorInicial={sapInicial.cabeceraTecnica.join(', ')}
+          <Disclosure titulo="SAP Business One (DTW) — confirmar plantilla">
+            <FormaConAviso accion={confirmarSapB1} boton="Confirmar contra mi instancia" columnas="md:grid-cols-1">
+              <div className="rv-forma__rejilla">
+                <CampoTexto id="cabeceraTecnica" name="cabeceraTecnica" etiqueta="Cabecera — fila técnica (columnas separadas por coma)" obligatorio
+                  defaultValue={sapInicial.cabeceraTecnica.join(', ')}
                   ayuda="La primera fila de la plantilla DTW de asientos (JournalEntries) de TU instancia." />
-                <Campo nombre="cabeceraVisible" etiqueta="Cabecera — fila descriptiva" requerido
-                  valorInicial={sapInicial.cabeceraVisible.join(', ')}
+                <CampoTexto id="cabeceraVisible" name="cabeceraVisible" etiqueta="Cabecera — fila descriptiva" obligatorio
+                  defaultValue={sapInicial.cabeceraVisible.join(', ')}
                   ayuda="La segunda fila de esa misma plantilla. Debe tener las mismas columnas que la técnica." />
-                <Campo nombre="lineasTecnica" etiqueta="Líneas — fila técnica" requerido
-                  valorInicial={sapInicial.lineasTecnica.join(', ')}
+                <CampoTexto id="lineasTecnica" name="lineasTecnica" etiqueta="Líneas — fila técnica" obligatorio
+                  defaultValue={sapInicial.lineasTecnica.join(', ')}
                   ayuda="La primera fila de la plantilla DTW de líneas (JournalEntries_Lines)." />
-                <Campo nombre="lineasVisible" etiqueta="Líneas — fila descriptiva" requerido
-                  valorInicial={sapInicial.lineasVisible.join(', ')} />
-              </FormaConAviso>
-            </div>
-          </details>
+                <CampoTexto id="lineasVisible" name="lineasVisible" etiqueta="Líneas — fila descriptiva" obligatorio
+                  defaultValue={sapInicial.lineasVisible.join(', ')} />
+              </div>
+            </FormaConAviso>
+          </Disclosure>
         </>
       )}
     </section>

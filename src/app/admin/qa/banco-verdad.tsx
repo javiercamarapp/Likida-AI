@@ -227,7 +227,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
         </p>
       ) : (
         <>
-          <p className="text-xs m-0" style={{ color: 'var(--faint)' }}>
+          <p className="text-xs m-0" style={{ color: 'var(--muted)' }}>
             {numero(fotos.length)} comprobante{fotos.length === 1 ? '' : 's'} en el banco, todos listados. Abre uno para
             ver su ficha y su última medición.
           </p>
@@ -253,9 +253,9 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
 function Cifra({ etiqueta, valor, nota }: { etiqueta: string; valor: string; nota: string }) {
   return (
     <div className="rounded-xl px-3 py-2 min-w-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
-      <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
+      <div className="text-[11px]" style={{ color: 'var(--ink2)' }}>{etiqueta}</div>
       <div className="font-display text-[17px] leading-tight font-semibold tabular mt-0.5">{valor}</div>
-      <div className="text-[10px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>
+      <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{nota}</div>
     </div>
   );
 }

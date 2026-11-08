@@ -1,10 +1,10 @@
 'use client';
 
-import { FiltroChip, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, FiltroChip, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Check, ClipboardCopy, Pencil, Send, Trash2, TriangleAlert, Truck } from 'lucide-react';
+import { Check, ClipboardCopy, Pencil, Send, Trash2, Truck } from 'lucide-react';
 import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
 import type { GrupoDia, TarjetaAviso } from '@/lib/likida/vigia/aviso/bandeja';
 import { AVISO_AUTOMATICO_CONECTADO, TEXTO_AVISO_AUTOMATICO_POR_CONECTAR, VACIO_BANDEJA_POR_CONECTAR } from '@/lib/likida/vigia/aviso/conexion';
@@ -57,11 +57,7 @@ const COLOR_ESTADO: Record<string, string> = {
 };
 
 function Aviso({ children }: { children: React.ReactNode }) {
-  return (
-    <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{children}
-    </p>
-  );
+  return <AvisoCompacto tono="error" resumen={children} />;
 }
 
 function Boton({ accion, children, tono }: { accion: string; children: React.ReactNode; tono?: 'peligro' }) {
@@ -257,12 +253,10 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
       <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>
 
       {!AVISO_AUTOMATICO_CONECTADO ? (
-        <p role="note" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }} data-testid="por-conectar">
-          <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{TEXTO_AVISO_AUTOMATICO_POR_CONECTAR}
-        </p>
+        <div data-testid="por-conectar"><AvisoCompacto tono="warn" resumen={TEXTO_AVISO_AUTOMATICO_POR_CONECTAR} /></div>
       ) : null}
       {avisoEncendido === false ? (
-        <Aviso>El aviso de viaje está apagado: no se arman ni se envían avisos nuevos hasta que el dueño lo encienda.</Aviso>
+        <AvisoCompacto tono="warn" resumen="El aviso de viaje está apagado: no se arman ni se envían avisos nuevos hasta que el dueño lo encienda." />
       ) : null}
       {avisoEncendido === null && !sinMigrar && !errorLectura ? (
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude confirmar si el aviso de viaje está encendido.</p>
