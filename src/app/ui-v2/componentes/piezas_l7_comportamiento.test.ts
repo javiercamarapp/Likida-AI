@@ -169,13 +169,27 @@ describe.skipIf(SIN_NAVEGADOR)('Campos · comportamiento en Chromium', () => {
     expect(r.alerta).toBe('alert');
     await p.close();
   });
-  it('archivo: input file real con botón interno de 32 px; acepta por teclado el foco', async () => {
+  it('archivo (R9): input file real oculto de forma accesible + botón del sistema de 32 px + nombre elegido truncado con elipsis', async () => {
     const p = await abrir();
     const r = await p.evaluate(() => {
       const i = document.querySelector<HTMLInputElement>('input[type="file"]')!;
-      return { acc: i.accept, btn: getComputedStyle(i, '::file-selector-button').minHeight, etq: document.querySelector(`label[for="${i.id}"]`)?.textContent };
+      const boton = document.querySelector<HTMLElement>('.rv-archivo__boton')!;
+      const nombre = document.querySelector<HTMLElement>('.rv-archivo__nombre')!;
+      return {
+        acc: i.accept, etq: document.querySelector(`label[for="${i.id}"]`)?.textContent,
+        alto: Math.round(boton.getBoundingClientRect().height), vacio: nombre.textContent,
+        visibleNativo: i.getBoundingClientRect().width > 2, tab: i.tabIndex, desc: i.getAttribute('aria-describedby')!.includes(nombre.id),
+      };
     });
-    expect(r).toEqual({ acc: '.pdf', btn: '32px', etq: 'Documento' });
+    expect(r).toEqual({ acc: '.pdf', etq: 'Documento', alto: 32, vacio: 'Sin archivo seleccionado', visibleNativo: false, tab: 0, desc: true });
+    await p.setInputFiles('input[type="file"]', { name: 'comprobante-con-un-nombre-' + 'muy-largo-'.repeat(40) + '.pdf', mimeType: 'application/pdf', buffer: Buffer.from('%PDF-1.4') });
+    const t = await p.evaluate(() => { const n = document.querySelector<HTMLElement>('.rv-archivo__nombre')!; return { texto: n.textContent, truncado: n.scrollWidth > n.clientWidth, elipsis: getComputedStyle(n).textOverflow, fd: (new FormData(document.querySelector('form')!).get('archivo') as File).name }; });
+    expect(t.texto).toContain('comprobante-con-un-nombre');
+    expect(t.truncado).toBe(true);
+    expect(t.elipsis).toBe('ellipsis');
+    expect(t.fd).toContain('comprobante');
+    await p.focus('input[type="file"]');
+    expect(await p.evaluate(() => getComputedStyle(document.querySelector('.rv-archivo__boton')!).outlineStyle)).toBe('solid');
     await p.close();
   });
   it('alto contraste forzado: casilla y radio vuelven a ser los nativos del sistema', async () => {

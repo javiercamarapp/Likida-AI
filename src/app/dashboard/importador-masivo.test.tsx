@@ -27,7 +27,11 @@ describe('ImportadorMasivo — los tres tiempos', () => {
     const html = pintar(null);
     expect(html).toContain('download="plantilla-operadores.csv"');
     expect(decodeURIComponent(/href="data:text\/csv;charset=utf-8,([^"]+)"/.exec(html)![1])).toBe('﻿nombre,telefono\r\n');
-    expect(html).toMatch(/<label[^>]*for="archivo-operadores"[^>]*class="sr-only"/);
+    // La etiqueta sigue ahí (nombre accesible del input) pero oculta con la clase `rv-sr` del campo de archivo del sistema, que además
+    // muestra el botón y el nombre elegido; el input real conserva id y `accept`.
+    expect(html).toMatch(/<label[^>]*for="archivo-operadores"[^>]*class="[^"]*rv-sr"/);
+    expect(html).toContain('type="file"');
+    expect(html).toContain('Sin archivo seleccionado');
     expect(html).toContain('accept=".csv,.xlsx,.xls"');
     expect(html).toContain('Máximo 4 MB y 2,000 filas por archivo');
     expect(html).toContain('Revisar archivo');
