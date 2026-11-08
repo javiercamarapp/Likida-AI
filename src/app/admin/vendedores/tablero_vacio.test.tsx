@@ -4,7 +4,7 @@ import { TableroProspectos } from './tablero';
 
 const base: Pick<Parameters<typeof TableroProspectos>[0], 'orden' | 'transiciones' | 'rotulos' | 'vendedores' | 'mover'> = {
   orden: ['nuevo', 'contactado'], transiciones: {}, rotulos: { nuevo: 'Nuevo', contactado: 'Contactado' }, vendedores: [],
-  mover: async () => ({ ok: 'listo' }),
+  mover: async () => ({ ok: true as const }),
 };
 const col = (estado: string, rotulo: string, n: number) => ({
   estado, rotulo, total: n,
