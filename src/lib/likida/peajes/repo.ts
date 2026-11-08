@@ -1008,6 +1008,19 @@ export interface ConfigEntradas {
 const COLUMNAS_ENTRADAS = 'correo_activo, correo_token, remitentes_permitidos, pull_url, pull_activo, pull_intervalo_min, pull_ultimo_en, pull_ultimo_error, pull_credencial_cifrada, sftp_host, sftp_puerto, sftp_usuario, sftp_ruta, sftp_huellas, sftp_activo, sftp_intervalo_min, sftp_ultimo_en, sftp_ultimo_error, sftp_credencial_cifrada';
 
 /** La configuración de correo/pull de la flota, o null si nunca se configuró. Lanza ante error de base. */
+/** Una flota que todavía no configuró ninguna entrada no tiene fila: eso es «todo apagado», no una lectura fallida. */
+export const ENTRADAS_SIN_CONFIGURAR: ConfigEntradas = {
+  correoActivo: false, correoToken: null, remitentes: [],
+  pullUrl: null, pullActivo: false, pullIntervaloMin: 60, pullUltimoEn: null, pullUltimoError: null, pullConCredencial: false,
+  sftpHost: null, sftpPuerto: 22, sftpUsuario: null, sftpRuta: null, sftpHuellas: [], sftpActivo: false, sftpIntervaloMin: 60,
+  sftpUltimoEn: null, sftpUltimoError: null, sftpConCredencial: false,
+};
+
+/** Para la pantalla: sin fila = `ENTRADAS_SIN_CONFIGURAR`; si la lectura FALLA, lanza (la pantalla dice «no se pudo leer»). Mismo error que el del buzón: `null` valía a la vez «sin fila» y «falló». */
+export async function leerEstadoEntradas(tenantId: string): Promise<ConfigEntradas> {
+  return (await leerConfigEntradas(tenantId)) ?? ENTRADAS_SIN_CONFIGURAR;
+}
+
 export async function leerConfigEntradas(tenantId: string): Promise<ConfigEntradas | null> {
   const { data, error } = await acotada(supabaseAdmin().from('peaje_ingesta_config')
     .select(COLUMNAS_ENTRADAS).eq('tenant_id', tenantId).maybeSingle(), 'peajes.config_entradas');
