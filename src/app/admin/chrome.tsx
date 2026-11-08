@@ -1,32 +1,18 @@
 import Link from 'next/link';
 import { LogOut } from 'lucide-react';
-import Fondo from '../fondo';
-import { MARCO_FILA, MARCO_SIDEBAR, MARCO_COLUMNA, MARCO_SCROLL, CLASE_COLUMNA_CENTRO } from '../marco';
-import SidebarNav, { SidebarAbajoAdmin } from './sidebar-nav';
-import { BotonSidebar } from '../boton-sidebar';
+import { CLASES_V2 } from '../marco-v2';
+import SidebarNav, { SidebarAbajoAdmin, MarcaAdmin, AsideAdmin } from './sidebar-nav';
 import CommandPalette from './command-palette';
 import CopilotoPanel from './copiloto-panel';
-import { Logo } from '../logo';
+import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 
 /**
- * El marco de /admin — GEMELO de `dashboard/chrome.tsx`, pieza por pieza
- * (14-ago-2026, pedido explícito: "el sidebar idéntico, y sin el asistente
- * de IA"). Puro dibujo, SIN autorización adentro, por la misma razón que su
- * gemelo: es lo que permite verificar el marco DE VERDAD en un render de
- * prueba sin sesión, en vez de verificar una copia que podría divergir. La
- * puerta vive en `layout.tsx`.
+ * El marco de /admin sobre el MISMO sistema que el dashboard (7-nov-2026, ronda R8): `.rv-app`, `.rv-fila`, `.rv-sb`, `.rv-col` y
+ * `.rv-contenido` de `ui-v2/shell.css` (sidebar flotante de 232 px, riel de 72, tarjeta de contenido). Lo propio de /admin vive en
+ * `admin-shell.css`. Puro dibujo, SIN autorización adentro (la puerta vive en `layout.tsx`), para poder verificar el marco real
+ * en un render de prueba sin sesión.
  *
- * EL ASISTENTE EXPANDIBLE SE FUE (14-ago-2026) — la misma decisión que el
- * rail del dashboard el 12-ago — y en la segunda pasada (mismo día) se
- * quitó también la página /admin/chat y sus entradas. La campana de
- * alertas se mudó al Resumen (`consola.tsx`), donde se miran las señales.
- *
- * EL COPILOTO REGRESÓ OTRA COSA (16-ago-2026): aquel asistente era el chat
- * genérico; el Copiloto del fundador es la Fase 2 pieza 1 de su blueprint
- * (`copiloto-del-fundador.md` §6: página propia Y panel lateral, "las dos,
- * y no es indecisión"). El panel (⌘J, `copiloto-panel.tsx`) vive en el
- * chrome para que la conversación sobreviva a la navegación; sigue siendo
- * puro dibujo — la puerta real es /api/admin/copiloto en cada llamada.
+ * El Copiloto (⌘J, `copiloto-panel.tsx`) sigue siendo hermano de la columna dentro de la fila y cancela el gap con su margen -16.
  */
 export default function AdminChrome({
   nombre, avatarUrl, cerrarSesion, usoIa, children,
@@ -35,65 +21,50 @@ export default function AdminChrome({
   avatarUrl: string | null;
   /** Server action. Opcional: el render de prueba no cierra sesión de nadie. */
   cerrarSesion?: () => Promise<void>;
-  /** El costo de IA del mes para el widget de uso del sidebar (16-ago-2026).
-   *  Lo trae layout.tsx; omitido (render de prueba) no se pinta. */
+  /** El costo de IA del mes para el widget de uso del sidebar. Omitido (render de prueba) no se pinta. */
   usoIa?: { mesUsd: number; llamadas: number; etiquetaMes: string } | null;
   children: React.ReactNode;
 }) {
+  const inicial = ((nombre ?? '').trim() || 'J')[0].toUpperCase();
   return (
-    <div className="min-h-dvh tema-neutro" data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
-      <Fondo />
+    <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
       <CommandPalette />
-      <div className={MARCO_FILA}>
-        <aside className={`${MARCO_SIDEBAR} sb-aside`}>
-          <div className="px-3 py-3 flex items-center justify-center lg:justify-start gap-1.5 sb-centrable">
-            <span className="sb-logo min-w-0"><Logo alto="h-[22px]" /></span>
-            <span className="ml-auto hidden lg:block"><BotonSidebar /></span>
-          </div>
-
-          <nav className="flex-1 overflow-y-auto px-2 space-y-2 pb-3">
+      <div className={`${CLASES_V2.fila} adm-fila`}>
+        <AsideAdmin>
+          <MarcaAdmin />
+          <nav aria-label="Navegación de la consola" className="rv-sb__nav">
             <SidebarNav />
           </nav>
-
-          {/* El bloque inferior fijo con su propio fondo — gemelo del de
-              chrome.tsx (la referencia del 13-ago). */}
-          <div className="px-2 pt-2 pb-1.5 space-y-0.5 shrink-0" style={{ background: 'var(--canvas)', borderTop: '1px solid var(--line)' }}>
-            <SidebarAbajoAdmin usoIa={usoIa} />
-          </div>
-
-          {/* El user card, idéntico al del cliente:
-              avatar + nombre + rol, salir como ícono. El avatar real si hay. */}
-          <div className="px-2 pb-2 pt-2" style={{ borderTop: '1px solid var(--line)' }}>
-            <div className="hairline rounded-xl p-2 flex items-center justify-center lg:justify-start gap-2 sb-centrable" style={{ background: 'var(--surface)' }}>
-              {avatarUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element -- avatar chico de Storage, mismo criterio que perfil
-                <img src={avatarUrl} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0" />
-              ) : (
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[11px] font-semibold" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                  {((nombre ?? '').trim() || 'J')[0].toUpperCase()}
-                </div>
-              )}
-              <div className="hidden lg:block min-w-0 flex-1 sb-texto">
-                <Link href="/admin/mi-perfil" className="block text-[12px] font-medium hover:opacity-70 transition-opacity truncate leading-tight">
-                  {(nombre ?? '').trim() || 'Mi cuenta'}
+          <div className="rv-sb__pie">
+            <div className="rv-pie">
+              <SidebarAbajoAdmin usoIa={usoIa} />
+              <div className="rv-cuenta">
+                <Link href="/admin/mi-perfil" className="rv-cuenta__btn" aria-label="Mi cuenta">
+                  {avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- avatar chico de Storage, mismo criterio que perfil
+                    <img src={avatarUrl} alt="" className="rv-avatar" style={{ objectFit: 'cover' }} />
+                  ) : (
+                    <span className="rv-avatar" aria-hidden>{inicial}</span>
+                  )}
+                  <span className="rv-cuenta__txt">
+                    <span className="rv-cuenta__nombre">{(nombre ?? '').trim() || 'Mi cuenta'}</span>
+                    <span className="rv-cuenta__rol">SUPERADMIN</span>
+                  </span>
                 </Link>
-                <div className="text-[11px] truncate" style={{ color: 'var(--faint)' }}>SUPERADMIN</div>
+                {cerrarSesion && (
+                  <form action={cerrarSesion} className="rv-cuenta__salir">
+                    <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión" className="rv-icono-boton">
+                      <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+                    </button>
+                  </form>
+                )}
               </div>
-              {cerrarSesion && (
-                <form action={cerrarSesion} className="hidden lg:block shrink-0 sb-texto">
-                  <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión"
-                    className="relative w-8 h-8 rounded-lg flex items-center justify-center transition-colors hover:bg-[var(--badbg)] after:content-[''] after:absolute after:left-1/2 after:top-1/2 after:-translate-x-1/2 after:-translate-y-1/2 after:size-11"
-                    style={{ color: 'var(--bad)' }}>
-                    <LogOut width={14} height={14} strokeWidth={1.75} />
-                  </button>
-                </form>
-              )}
             </div>
           </div>
-        </aside>
+        </AsideAdmin>
 
-        <div className={`${MARCO_COLUMNA} ${CLASE_COLUMNA_CENTRO}`}>
-          <div className={MARCO_SCROLL}>
+        <div className={`${CLASES_V2.columna} columna-centro`}>
+          <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
             {children}
           </div>
         </div>

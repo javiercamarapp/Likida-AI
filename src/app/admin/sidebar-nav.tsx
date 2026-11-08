@@ -3,37 +3,21 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronRight, ArrowLeftRight } from 'lucide-react';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge } from 'lucide-react';
 import { type Item, AGENTES, NEGOCIO, PLATAFORMA, CONTROL, SISTEMA } from './rutas';
 import { SelectorTema } from '../selector-tema';
+import LogoV2 from '../dashboard/shell/logo-v2';
+import { ALTO_LOGO_PX } from '../marco-v2';
+import { useRiel } from '../dashboard/shell/colapso';
+import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 import { WidgetUso } from './ui/kit';
 import { usd } from '@/lib/utils';
 import { numero } from '@/lib/formato';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// EL MISMO LENGUAJE QUE EL SIDEBAR DE /dashboard, A PROPÓSITO (14-ago-2026,
-// pedido explícito: "que el sidebar sea idéntico"). Las clases, el pill
-// activo (--g1 + --marca), las secciones plegables con chevron y las clases
-// sb-* del colapso vienen de `dashboard/sidebar-nav.tsx` — si aquel cambia
-// de dirección visual, éste se cambia igual. Lo ÚNICO distinto es el
-// contenido: las secciones salen de `admin/rutas.ts` y aquí no hay sufijo de
-// superadmin (las rutas de /admin no cargan ?tenant=).
-// ═══════════════════════════════════════════════════════════════════════════
+// El sidebar de /admin usa las clases del sistema (`.rv-sb`, `.rv-item`, `.rv-grupo` de ui-v2/shell.css), las MISMAS que el del
+// dashboard (7-nov-2026, R8): ancho, hover, activo, colapso a riel y animación de entrada vienen de ahí. Lo único distinto es el
+// contenido: las secciones salen de `admin/rutas.ts` y aquí no hay sufijo de superadmin.
 
-const ITEM = 'flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[13px] transition-colors sb-centrable';
-
-/** Activo = fondo gris suave + peso 600, sin barra ni pastilla negra (K3, SPEC-CONTROLES-FINOS 2.7: el mismo activo neutro del marco v2). */
-function claseItem(activo: boolean): string {
-  return activo
-    ? `${ITEM} font-semibold`
-    : `${ITEM} hover:bg-[color-mix(in_srgb,var(--muted)_10%,transparent)]`;
-}
-function estiloItem(activo: boolean) {
-  return activo ? { background: 'var(--nav-activo-bg)', color: 'var(--nav-activo-fg)' } : undefined;
-}
-function estiloIcono(activo: boolean) {
-  return { width: 16, height: 16, strokeWidth: 1.75, color: activo ? 'var(--nav-activo-fg)' : 'var(--muted)' } as const;
-}
 function idSeccion(titulo: string): string {
   return `nav-seccion-${titulo.toLowerCase().split(' ').join('-')}`;
 }
@@ -41,9 +25,12 @@ function idSeccion(titulo: string): string {
 function Fila({ item, pathname }: { item: Item; pathname: string }) {
   const activo = pathname === item.href;
   return (
-    <Link href={item.href} className={claseItem(activo)} style={estiloItem(activo)} title={item.nombre} aria-label={item.nombre}>
-      <item.Icono {...estiloIcono(activo)} /> <span className="sb-texto truncate">{item.nombre}</span>
-    </Link>
+    <li>
+      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={item.nombre} aria-label={item.nombre}>
+        <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+        <span className="rv-item__txt">{item.nombre}</span>
+      </Link>
+    </li>
   );
 }
 
@@ -51,27 +38,46 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
   titulo: string; items: Item[]; pathname: string; abierta: string | null;
   onAbrir: (titulo: string) => void;
 }) {
-  // ACORDEÓN (orden de Javier, 17-ago, que SUSTITUYE al "todo abierto" del
-  // 14-ago): UNA sola sección abierta a la vez — AGENTES por default, o la
-  // de la ruta activa al llegar por link directo (el padre decide). Abrir
-  // una cierra la anterior; el estado vive arriba por eso mismo.
-  const plegada = abierta !== titulo;
+  // ACORDEÓN (orden de Javier, 17-ago): UNA sola sección abierta a la vez; el estado vive en el padre.
+  const esta = abierta === titulo;
   if (items.length === 0) return null;
+  const id = idSeccion(titulo);
   return (
-    <div id={idSeccion(titulo)}>
-      <button type="button" onClick={() => onAbrir(titulo)}
-        aria-expanded={!plegada}
-        aria-controls={`${idSeccion(titulo)}-items`}
-        className="w-full flex items-center justify-between px-2.5 mb-1.5 text-[11px] font-semibold uppercase tracking-wide sb-texto transition-opacity hover:opacity-70"
-        style={{ color: 'var(--muted)' }}>
-        {titulo}
-        {plegada
-          ? <ChevronRight width={13} height={13} strokeWidth={2} />
-          : <ChevronDown width={13} height={13} strokeWidth={2} />}
-      </button>
-      <div id={`${idSeccion(titulo)}-items`}>
-        {!plegada && items.map((it) => <Fila key={it.href} item={it} pathname={pathname} />)}
+    <section className="rv-grupo" data-abierto={esta ? '' : undefined} aria-labelledby={id}>
+      <h2 className="rv-grupo__h">
+        <button type="button" id={id} className="rv-grupo__t rv-grupo__tog" onClick={() => onAbrir(titulo)}
+          aria-expanded={esta} aria-controls={`${id}-items`}>
+          {titulo}
+          <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
+        </button>
+      </h2>
+      <div id={`${id}-items`} className="rv-grupo__cuerpo" role="region" aria-labelledby={id}>
+        <div className="rv-grupo__int">
+          <ul className="rv-lista">{items.map((it) => <Fila key={it.href} item={it} pathname={pathname} />)}</ul>
+        </div>
       </div>
+    </section>
+  );
+}
+
+/** El `<aside>` `.rv-sb`: lleva `data-riel` cuando el usuario plegó el menú (misma preferencia que el dashboard). */
+export function AsideAdmin({ children }: { children: React.ReactNode }) {
+  const { riel } = useRiel();
+  return <aside className="rv-sb" data-riel={riel ? '' : undefined}>{children}</aside>;
+}
+
+/** La marca del sidebar: logo (horizontal / símbolo en el riel) y el botón de plegar — las mismas piezas que `SidebarV2`. */
+export function MarcaAdmin() {
+  const { riel, alternar } = useRiel();
+  return (
+    <div className="rv-sb__marca">
+      <Link href="/admin" className="rv-sb__logo" aria-label="Likida, ir al inicio">
+        <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
+        <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
+      </Link>
+      <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
+        <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+      </button>
     </div>
   );
 }
@@ -95,11 +101,14 @@ export default function SidebarNav() {
   const alternar = (titulo: string) => setAbierta((a) => (a === titulo ? null : titulo));
   return (
     <>
-      <div>
-        <Link href="/admin" className={claseItem(resumenActivo)} style={estiloItem(resumenActivo)} title="Resumen" aria-label="Resumen">
-          <LayoutGrid {...estiloIcono(resumenActivo)} /> <span className="sb-texto truncate">Resumen</span>
-        </Link>
-      </div>
+      <ul className="rv-lista">
+        <li>
+          <Link href="/admin" className="rv-item" aria-current={resumenActivo ? 'page' : undefined} title="Resumen" aria-label="Resumen">
+            <LayoutGrid className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+            <span className="rv-item__txt">Resumen</span>
+          </Link>
+        </li>
+      </ul>
       {TITULOS_ADMIN.map(([titulo, items]) => (
         <Seccion key={titulo} titulo={titulo} items={items} pathname={pathname}
           abierta={abierta} onAbrir={alternar} />
@@ -122,29 +131,27 @@ export function SidebarAbajoAdmin({ usoIa }: {
   return (
     <>
       {usoIa !== undefined && (
-        <WidgetUso
-          etiqueta={usoIa ? `Costo de IA · ${usoIa.etiquetaMes}` : 'Costo de IA · este mes'}
-          valor={usoIa ? usd(usoIa.mesUsd) : null}
-          detalle={usoIa ? `${numero(usoIa.llamadas)} ${usoIa.llamadas === 1 ? 'llamada' : 'llamadas'} al modelo` : undefined}
-          href="/admin/costos-facturacion" hrefTexto="Ver costos"
-        />
+        <div className="adm-solo-ancho">
+          <WidgetUso
+            etiqueta={usoIa ? `Costo de IA · ${usoIa.etiquetaMes}` : 'Costo de IA · este mes'}
+            valor={usoIa ? usd(usoIa.mesUsd) : null}
+            detalle={usoIa ? `${numero(usoIa.llamadas)} ${usoIa.llamadas === 1 ? 'llamada' : 'llamadas'} al modelo` : undefined}
+            href="/admin/costos-facturacion" hrefTexto="Ver costos"
+          />
+        </div>
       )}
       {usoIa === undefined && (
-        <Link href="/admin/costos-facturacion" aria-label="Costos de IA"
-          className="hairline flex items-center justify-between gap-2 px-3 py-1.5 mb-1 rounded-lg text-[12px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
-          style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
-          <span className="sb-texto truncate">Costos de IA</span><span aria-hidden="true">→</span>
+        <Link href="/admin/costos-facturacion" aria-label="Costos de IA" title="Costos de IA" className="rv-item">
+          <Gauge className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+          <span className="rv-item__txt">Costos de IA</span>
         </Link>
       )}
-      <Link href="/admin/dev" title="Entrar a los paneles de los otros roles (vive en Dev desde el 17-ago)"
-        className="hairline flex items-center gap-2 px-3 py-1.5 mb-1 rounded-lg text-[12px] font-medium transition-colors hover:bg-[var(--canvas)] sb-centrable"
-        style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
-        <ArrowLeftRight width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        <span className="sb-texto truncate">Ver los otros paneles</span>
+      <Link href="/admin/dev" title="Entrar a los paneles de los otros roles (vive en Dev desde el 17-ago)" aria-label="Ver los otros paneles" className="rv-item">
+        <ArrowLeftRight className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+        <span className="rv-item__txt">Ver los otros paneles</span>
       </Link>
-      {/* El selector se esconde entero al colapsar (sb-texto) — misma razón
-          que en el dashboard: a 72px no caben tres botones. */}
-      <div className="sb-texto px-2.5 pt-1.5 flex justify-center">
+      {/* El selector se esconde entero en el riel (adm-solo-ancho): a 72 px no caben tres botones. */}
+      <div className="adm-solo-ancho flex justify-center py-1">
         <SelectorTema />
       </div>
     </>
