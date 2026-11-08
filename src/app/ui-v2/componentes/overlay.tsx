@@ -153,6 +153,8 @@ export function Drawer({ abierto, onCerrar, titulo, descripcion, children, pie, 
     <dialog
       ref={ref}
       className="rv-ov rv-ov--drawer"
+      role="dialog"
+      aria-modal="true"
       data-tamano={ancho ? undefined : tamano}
       data-ancho={ancho}
       aria-labelledby={idTitulo}
@@ -210,7 +212,8 @@ export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, t
     <dialog
       ref={ref}
       className="rv-ov rv-ov--modal"
-      role={alerta ? 'alertdialog' : undefined}
+      role={alerta ? 'alertdialog' : 'dialog'}
+      aria-modal="true"
       data-tamano={tamano}
       data-posicion={posicion === 'arriba' ? 'arriba' : undefined}
       aria-labelledby={sinCabecera ? undefined : idTitulo}

@@ -258,13 +258,37 @@ export const INFO_ADMIN = {
   // ── conversaciones ──
   'conversaciones.hilos': V(
     'Hilos de tu flota', 'Número de conversaciones de WhatsApp entre el bot y números de tu flota.',
-    'Cuenta las conversaciones guardadas de tu flota. Si el conteo falla muestra «—»: eso no significa que no haya ninguna.',
+    'Cuenta las conversaciones guardadas de tu flota. Si el conteo falla, en lugar de la cifra aparece un guion largo (—); eso no significa que no haya ninguna.',
     'Conversaciones de WhatsApp de tu flota, sin ventana de fechas. Solo el dueño y el superadmin ven esta pantalla.',
   ),
   'conversaciones.mensajes': V(
     'Mensajes en los hilos listados', 'Mensajes guardados en los hilos que se listan abajo.',
     'Suma los mensajes de los hilos listados, que son como máximo los 30 más recientes. Si hay más hilos, la cifra no los incluye.',
     'Ventana reciente de cada conversación: se guardan los últimos turnos, no el historial completo.',
+  ),
+  // ── timbrado ──
+  'timbrado.en_cola': V(
+    'En la cola de timbrado', 'Viajes de la lista de abajo: los que ya tienen su borrador de Carta Porte trabajado o un timbre.',
+    'Cuenta los renglones de la lista. No es «todos los viajes que necesitan complemento»: eso lo decide el borrador viaje por viaje.',
+    'Viajes con XML de Carta Porte generado alguna vez y timbres vigentes o en curso, leídos al abrir la pantalla; la lista muestra a lo más los 25 más recientes.',
+    'Abre cada viaje para revisar su borrador y emitir el timbre.',
+  ),
+  'timbrado.sin_timbre': V(
+    'Sin timbre', 'Viajes de la lista que todavía no tienen ningún intento de timbrado.',
+    'Cuenta los renglones de la lista sin timbre ni reserva.',
+    'Los mismos viajes de la cola, leídos al abrir la pantalla.',
+    'Abre el viaje, revisa el borrador y emite cuando esté listo.',
+  ),
+  'timbrado.timbrados': V(
+    'Timbrados', 'Viajes de la lista con un timbre vigente.',
+    'Cuenta los renglones con timbre vigente. Un timbre de prueba cuenta aquí pero lo dice en su renglón: no ampara nada.',
+    'Los mismos viajes de la cola, leídos al abrir la pantalla.',
+  ),
+  'timbrado.bloqueados': V(
+    'Bloqueados', 'Viajes con un intento de timbrado en curso o sin respuesta del PAC, bloqueados a propósito.',
+    'Cuenta los renglones con reserva viva. Mientras dura no se vuelve a timbrar ese viaje, para no duplicar un timbre.',
+    'Los mismos viajes de la cola, leídos al abrir la pantalla.',
+    'Si un renglón dice que el timbre quedó a medio registrar, avisa a soporte; no lo vuelvas a timbrar.',
   ),
   // ── cotizaciones ──
   'cotizaciones.costos': V(

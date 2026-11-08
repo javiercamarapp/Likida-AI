@@ -68,8 +68,9 @@ export default async function SoportePage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; ticket?: string }>;
 }) {
-  await exigirVerRuta('/dashboard/soporte');
   const sp = await searchParams;
+  // `sp` viaja a la puerta: sin él, `?vista=demo` de un superadmin rebotaba al selector de flota.
+  await exigirVerRuta('/dashboard/soporte', sp);
   const { tenantId } = await resolverTenantEfectivo('/dashboard/soporte', sp);
 
   // El link al hilo conserva la previsualización del superadmin ("ver como"):

@@ -18,7 +18,7 @@ const dobles = vi.hoisted(() => ({
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' };
 
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
-vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); } }));
+vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); }, useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/pac', () => ({ estadoPac: dobles.estadoPac }));
 vi.mock('@/lib/likida/carta_porte_timbre', async (importar) => ({
@@ -106,4 +106,16 @@ it('un timbre completo de sandbox dice "DE PRUEBA (no ampara nada)" en el renglÃ
   const html = await renderizar();
   expect(html).toContain('DE PRUEBA (no ampara nada)');
   expect(html).toContain('uuid-real-456');
+});
+
+it('con filas: tira de cifras reales (conteos de la cola) y estado como pastilla; sin PAC no inventa nada', async () => {
+  dobles.listarTimbrado.mockResolvedValue([
+    { viajeId: 'v-1', folio: 'V-1', origen: null, destino: null, xmlGeneradoEn: null, timbre: null },
+    { viajeId: 'v-2', folio: 'V-2', origen: 'A', destino: 'B', xmlGeneradoEn: null, timbre: { estado: 'vigente', uuidFiscal: 'u', modo: 'produccion', fechaTimbrado: null } },
+    { viajeId: 'v-3', folio: 'V-3', origen: 'A', destino: 'B', xmlGeneradoEn: null, timbre: { estado: 'pendiente', uuidFiscal: null, modo: 'produccion', fechaTimbrado: null } },
+  ]);
+  const html = await renderizar();
+  for (const e of ['En la cola', 'Sin timbre', 'Timbrados', 'Bloqueados']) expect(html).toContain(e);
+  expect(html).toContain('rv-estado');
+  expect(html).toContain('ruta sin capturar');
 });

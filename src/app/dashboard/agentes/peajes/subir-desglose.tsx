@@ -6,6 +6,7 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { FileSpreadsheet } from 'lucide-react';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
+import { CampoArchivo } from '@/app/ui-v2/componentes';
 
 export type ResumenImportado = {
   totalLineas: number;
@@ -38,22 +39,17 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
   return (
     <div>
       <form action={accion} className="flex items-center gap-2 flex-wrap">
-        <input type="file" name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
-          onChange={(e) => validarArchivoElegido(e.currentTarget)}
-          aria-label="Desglose del proveedor de peaje (Excel, CSV o PDF)"
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
-          style={{ color: 'var(--muted)' }} />
+        <CampoArchivo etiqueta="Desglose del proveedor de peaje (Excel, CSV o PDF)" name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
+          onChange={(e) => validarArchivoElegido(e.currentTarget)} />
         <input type="text" name="proveedor" placeholder="Proveedor (IAVE, PASE, TeleVía…)"
           aria-label="Proveedor del desglose (opcional)"
           className="hairline text-[12px] px-2.5 py-1.5 rounded-lg w-[210px]"
           style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
         <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
           Periodo del archivo (opcional)
-          <input type="date" name="periodo_desde" aria-label="Inicio del periodo del archivo"
-            className="hairline text-[12px] px-2 py-1 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+          <input type="date" name="periodo_desde" aria-label="Inicio del periodo del archivo" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
           <span>a</span>
-          <input type="date" name="periodo_hasta" aria-label="Fin del periodo del archivo"
-            className="hairline text-[12px] px-2 py-1 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+          <input type="date" name="periodo_hasta" aria-label="Fin del periodo del archivo" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
         </label>
         <BotonImportar />
       </form>

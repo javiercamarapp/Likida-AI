@@ -8,7 +8,7 @@ import { estadoCatalogosSat, type ConteoCatalogosSat } from '@/lib/likida/carta_
 import { EstadoError, EstadoVacio } from '../../estados';
 import { DireccionBuzon } from '../proveedores/controles';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, AvisoCompacto, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -52,12 +52,11 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   return (
     <MarcoPagina titulo="Carta Porte en automático" apoyo="Al despachar corre el árbol legal y pregunta por WhatsApp lo que falta declarar. Prepara y valida; nunca timbra.">
 
-      <Aviso tono="info">
-        Al despachar un viaje, este agente corre el árbol legal (RMF 2.7.7) y le pregunta al jefe
-        por WhatsApp exactamente lo que falta declarar — o le da el veredicto con fundamento. Nunca
-        afirma «no necesitas» por su cuenta, nunca inventa un dato del complemento y nunca timbra:
-        prepara el borrador y lo valida contra lo que el PAC rechazaría seguro.
-      </Aviso>
+      <AvisoCompacto
+        tono="info"
+        resumen="Al despachar un viaje, el agente pregunta por WhatsApp lo que falta declarar. Prepara el borrador y lo valida; nunca timbra."
+        mas="Corre el árbol legal (RMF 2.7.7) y le pregunta al jefe exactamente lo que falta declarar — o le da el veredicto con fundamento. Nunca afirma «no necesitas» por su cuenta, nunca inventa un dato del complemento y nunca timbra: prepara el borrador y lo valida contra lo que el PAC rechazaría seguro."
+      />
 
       {catalogosSat !== undefined && <AvisoCatalogosSat catalogosSat={catalogosSat} />}
 
@@ -130,7 +129,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
         </div>
         <div className="grid md:grid-cols-3 gap-4 text-[12px]">
           <div>
-            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Al despachar</div>
+            <div className="rv-etq mb-1.5" style={{ color: 'var(--faint)' }}>Al despachar</div>
             <p style={{ color: 'var(--muted)' }}>
               Corre el árbol legal y pregunta por WhatsApp: «¿la ruta pisa carretera federal?» con
               botones, y si la unidad cabe en la excepción del C2, el radio («radio F-123 25»).
@@ -138,7 +137,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
             </p>
           </div>
           <div>
-            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Con lo capturado</div>
+            <div className="rv-etq mb-1.5" style={{ color: 'var(--faint)' }}>Con lo capturado</div>
             <p style={{ color: 'var(--muted)' }}>
               Arma el borrador del complemento (37 datos, partidos 19 del cliente / 18 del
               transportista) y lo pasa por las validaciones que el PAC rechaza seguro — «te faltó
@@ -146,7 +145,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
             </p>
           </div>
           <div>
-            <div className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>Jamás</div>
+            <div className="rv-etq mb-1.5" style={{ color: 'var(--faint)' }}>Jamás</div>
             <p style={{ color: 'var(--muted)' }}>
               No afirma «no necesitas Carta Porte» sin tu declaración firmada; no inventa claves del
               SAT ni el número de permiso SICT (faltante = faltante); y no timbra — el CFDI lo emite
@@ -164,7 +163,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
 function Tarjeta({ rotulo, valor, tono }: { rotulo: string; valor: number | null; tono?: string }) {
   return (
     <div className="card p-4">
-      <div className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{rotulo}</div>
+      <div className="rv-etq mb-1" style={{ color: 'var(--faint)' }}>{rotulo}</div>
       <div className="cifra-mono text-[20px] font-semibold" style={tono && valor !== null && valor > 0 ? { color: tono } : undefined}>
         {valor === null ? '—' : numero(valor)}
       </div>
@@ -184,7 +183,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
       <TituloRecuadro id="cp-como-mandar" info="carta_porte_agente.como_mandar">Cómo mandarme documentos</TituloRecuadro>
       <div className="grid md:grid-cols-3 gap-4 text-[12px]">
         <div className="space-y-1.5">
-          <div className="etiqueta-mono text-[11px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+          <div className="rv-etq flex items-center gap-1" style={{ color: 'var(--faint)' }}>
             <Mail width={12} height={12} strokeWidth={1.75} /> 1 · Correo (el medio oficial)
           </div>
           {buzon === 'no_leido' ? (
@@ -214,7 +213,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
           )}
         </div>
         <div className="space-y-1.5">
-          <div className="etiqueta-mono text-[11px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+          <div className="rv-etq flex items-center gap-1" style={{ color: 'var(--faint)' }}>
             <MessageCircle width={12} height={12} strokeWidth={1.75} /> 2 · WhatsApp 1:1 de la oficina
           </div>
           <p style={{ color: 'var(--muted)' }}>
@@ -223,7 +222,7 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
           </p>
         </div>
         <div className="space-y-1.5">
-          <div className="etiqueta-mono text-[11px] uppercase flex items-center gap-1" style={{ color: 'var(--faint)' }}>
+          <div className="rv-etq flex items-center gap-1" style={{ color: 'var(--faint)' }}>
             <LayoutDashboard width={12} height={12} strokeWidth={1.75} /> 3 · El panel
           </div>
           <p style={{ color: 'var(--muted)' }}>Sube el archivo a mano en la bandeja de documentos.</p>
@@ -244,8 +243,8 @@ function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
   return (
     <div className="card p-3.5 text-[12px] space-y-1" style={{ borderLeft: `3px solid ${COLOR_TONO[t.tono]}` }}>
       <div className="font-medium">{t.quePaso}</div>
-      <div style={{ color: 'var(--muted)' }}><span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Qué significa </span>{t.queSignifica}</div>
-      <div><span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Qué hacer </span>{t.queHacer}</div>
+      <div style={{ color: 'var(--muted)' }}><span className="rv-etq" style={{ color: 'var(--faint)' }}>Qué significa </span>{t.queSignifica}</div>
+      <div><span className="rv-etq" style={{ color: 'var(--faint)' }}>Qué hacer </span>{t.queHacer}</div>
     </div>
   );
 }
@@ -253,7 +252,7 @@ function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
 function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string }) {
   return (
     <div className="card p-4">
-      <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
+      <div className="rv-etq mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
       {filas.length === 0 ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
         <table aria-label={titulo} className="w-full text-[12px]">
           <thead><tr style={{ color: 'var(--faint)' }}><th scope="col" className="text-left font-normal">Grupo</th><th scope="col" className="text-right font-normal">Aprobados</th><th scope="col" className="text-right font-normal">Sin tocar</th></tr></thead>
@@ -294,7 +293,7 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="card p-4">
-              <div className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Aprobados sin tocar</div>
+              <div className="rv-etq mb-1" style={{ color: 'var(--faint)' }}>Aprobados sin tocar</div>
               <div className="cifra-mono text-[20px] font-semibold">{pctTxt(i.pctSinTocar)}</div>
               <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{i.aprobados === 0 ? 'Aún no hay aprobados' : `de ${numero(i.aprobados)} aprobados`}</div>
             </div>
@@ -313,7 +312,7 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
           </div>
           <div className="grid md:grid-cols-2 gap-3 text-[12px]">
             <div className="card p-4">
-              <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Por qué se rechazan</div>
+              <div className="rv-etq mb-2" style={{ color: 'var(--faint)' }}>Por qué se rechazan</div>
               {i.causasRechazo === null ? <p style={{ color: 'var(--muted)' }}>No disponible todavía en esta base.</p>
                 : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p style={{ color: 'var(--muted)' }}>No hubo rechazos.</p>
                 : <ul className="space-y-0.5">
@@ -322,7 +321,7 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
                   </ul>}
             </div>
             <div className="card p-4">
-              <div className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Lo que más se corrige</div>
+              <div className="rv-etq mb-2" style={{ color: 'var(--faint)' }}>Lo que más se corrige</div>
               {i.topCamposCorregidos.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nadie ha corregido campos en este periodo.</p>
                 : <ol className="space-y-0.5 list-decimal pl-4">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
             </div>

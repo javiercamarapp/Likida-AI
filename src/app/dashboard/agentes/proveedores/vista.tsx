@@ -225,7 +225,7 @@ export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon,
         // se dice qué falta en vez de armar una dirección que no existe.
         <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
           El dominio de correo no está configurado en este entorno
-          (falta <code className="cifra-mono">RESEND_EMAIL_DOMAIN</code>), así que el buzón por
+          (lo configura el equipo de Likida), así que el buzón por
           correo no puede operar. Es configuración del sistema, no de tu flota.
         </EstadoVacio>
       ) : buzon.direccion ? (

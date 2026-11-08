@@ -115,3 +115,20 @@ describe('VistaRentabilidad — la cartera paginada no se confunde con una carte
     expect(html).toMatch(/Facturas 1–1 de 1/);
   });
 });
+
+describe('VistaRentabilidad — sin ningún dato: estructura honesta, no un hueco flotante', () => {
+  it('muestra cinco cifras SIN DATO (—, nunca $0), un vacío contenido y UNA acción', () => {
+    const html = renderToStaticMarkup(
+      <VistaRentabilidad
+        rentabilidad={{ ...RENTABILIDAD, ingreso: 0, costoComprobado: 0, contribucion: 0, margenPct: null, viajesConIngreso: 0 }}
+        cobranza={cobranza({ total: 0 })}
+        sufijo="?vista=demo"
+      />,
+    );
+    for (const e of ['Ingreso de fletes liquidados', 'Costo comprobado', 'Contribución', 'Por cobrar', 'Vencido']) expect(html).toContain(e);
+    expect(html).toContain('data-contenido');
+    expect(html).toContain('href="/dashboard/facturacion?vista=demo"');
+    expect(html).not.toMatch(/\$0(\.00)?/);
+    expect(html).toContain('Nada de esta pantalla se estima');
+  });
+});

@@ -5,6 +5,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Upload } from 'lucide-react';
+import { CampoArchivo } from '@/app/ui-v2/componentes';
 
 export type AccionSubir = (
   prev: { error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null,
@@ -28,10 +29,7 @@ export function SubirDesglose({ subirDesglose }: { subirDesglose: AccionSubir })
   return (
     <div>
       <form action={accion} className="flex items-center gap-2 flex-wrap">
-        <input type="file" name="archivo" accept=".xml,text/xml,application/xml" required
-          aria-label="XML del CFDI consolidado"
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
-          style={{ color: 'var(--muted)' }} />
+        <CampoArchivo etiqueta="XML del CFDI consolidado" name="archivo" accept=".xml,text/xml,application/xml" required />
         <BotonSubir />
       </form>
       {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
