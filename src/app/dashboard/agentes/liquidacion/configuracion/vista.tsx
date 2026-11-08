@@ -182,7 +182,7 @@ const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' }
 function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
+      <span className="rv-etq" style={{ color: 'var(--faint)' }}>{t}</span>
       {children}
     </label>
   );
@@ -269,7 +269,7 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
               </span>
             </Etiqueta>
             <fieldset className="flex flex-col gap-1" disabled={off}>
-              <legend className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Tipos de operador que reciben su desglose</legend>
+              <legend className="rv-etq" style={{ color: 'var(--faint)' }}>Tipos de operador que reciben su desglose</legend>
               {TIPOS_OPERADOR.map((t) => (
                 <span key={t.valor} className="flex items-center gap-2 text-[12px]">
                   <input type="checkbox" name="tiposQueReciben" value={t.valor} defaultChecked={config.tiposQueReciben.includes(t.valor)} /> {t.etiqueta}

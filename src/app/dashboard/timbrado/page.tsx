@@ -56,7 +56,7 @@ export default async function PaginaTimbrado({
       ancho="lectura"
       apoyo={pac.configurado
         ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? 'de PRUEBAS (los timbres no amparan nada)' : 'de PRODUCCIÓN'}.`
-        : 'Sin PAC configurado: el timbrado directo está apagado (variables LIKIDA_PAC_* del servidor). Likida jamás simula un timbre.'}
+        : 'Sin PAC configurado: el timbrado directo está apagado hasta que Likida lo configure. Likida jamás simula un timbre.'}
     >
       {!puedeTimbrar(rol) && (
         <Aviso tono="warn">Puedes ver esta cola, pero emitir el CFDI es del dueño de la flota o del contador.</Aviso>
@@ -75,10 +75,10 @@ export default async function PaginaTimbrado({
       ) : (
         <section className="space-y-3">
           <TiraCifras sello={selloHoy('Cola de timbrado')}>
-            <Cifra etiqueta="En la cola" valor={filas.length} matiz={1} />
-            <Cifra etiqueta="Sin timbre" valor={filas.filter((f) => f.timbre === null).length} matiz={2} />
-            <Cifra etiqueta="Timbrados" valor={filas.filter((f) => f.timbre?.estado === 'vigente').length} matiz={3} />
-            <Cifra etiqueta="Bloqueados" valor={filas.filter((f) => f.timbre?.estado === 'pendiente').length} matiz={4} tono={filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined} />
+            <Cifra etiqueta="En la cola" info="timbrado.en_cola" valor={filas.length} matiz={1} />
+            <Cifra etiqueta="Sin timbre" info="timbrado.sin_timbre" valor={filas.filter((f) => f.timbre === null).length} matiz={2} />
+            <Cifra etiqueta="Timbrados" info="timbrado.timbrados" valor={filas.filter((f) => f.timbre?.estado === 'vigente').length} matiz={3} />
+            <Cifra etiqueta="Bloqueados" info="timbrado.bloqueados" valor={filas.filter((f) => f.timbre?.estado === 'pendiente').length} matiz={4} tono={filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined} />
           </TiraCifras>
           <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
             Primero lo que pide acción.

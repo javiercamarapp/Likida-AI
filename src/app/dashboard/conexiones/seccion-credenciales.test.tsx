@@ -125,7 +125,8 @@ describe('pistasConRotulo — el rótulo humano sale del catálogo', () => {
 describe('SeccionCredenciales — estados honestos y gateo', () => {
   it('sin cofre: dice QUÉ falta y NO ofrece capturar', () => {
     const html = pintar({ cofreListo: false, puedeAdministrarCofre: true, guardadas: [] });
-    expect(html).toContain('LIKIDA_COFRE_LLAVE');
+    expect(html).toContain('lo configura el equipo de Likida');
+    expect(html).not.toContain('LIKIDA_COFRE_LLAVE');
     expect(html).not.toContain('Elige el sistema');
   });
 

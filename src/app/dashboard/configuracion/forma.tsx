@@ -17,7 +17,7 @@ import { mxn, numero, litros } from '@/lib/formato';
 export type ResultadoGuardar = { ok: true } | { ok: false; error: string } | null;
 export type AccionGuardar = (previo: ResultadoGuardar, fd: FormData) => Promise<ResultadoGuardar>;
 
-const ETIQUETA = 'etiqueta-mono text-[11px] uppercase block mb-1';
+const ETIQUETA = 'rv-etq block mb-1';
 
 function Boton() {
   const { pending } = useFormStatus();

@@ -231,7 +231,7 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
             // sistema, no de la flota.
             <p className="text-[12px] max-w-xl" style={{ color: 'var(--warn)' }}>
               El cofre de credenciales no está configurado en este entorno
-              (falta <code className="cifra-mono">LIKIDA_COFRE_LLAVE</code>): la captura está
+              (lo configura el equipo de Likida): la captura está
               deshabilitada hasta que exista. Es configuración del sistema, no de tu flota.
             </p>
           ) : puedeAdministrarCofre ? (

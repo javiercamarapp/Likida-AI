@@ -86,3 +86,6 @@
 [data-ui="v2"] .rv-vacio__mas { max-width: 48ch; text-align: left; }
 [data-ui="v2"] .rv-vacio__mas > summary { cursor: pointer; text-align: center; font-size: 12px; font-weight: 500; color: var(--ink2, var(--ink)); }
 [data-ui="v2"] .rv-vacio__mas > span { display: block; margin-top: 6px; }
+
+/* Etiqueta de campo / mini-encabezado de bloque en Hanken (12/500), en vez del micro-rótulo mono en mayúsculas de v1 */
+[data-ui="v2"] .rv-etq { font: var(--t-etq); letter-spacing: 0; text-transform: none; }

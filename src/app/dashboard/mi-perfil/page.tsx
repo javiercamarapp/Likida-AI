@@ -324,7 +324,7 @@ export default async function MiPerfilFlota({
 
   return (
     <MarcoPagina titulo="Mi perfil" apoyo="Tu foto, nombre y correo, y la seguridad de tu cuenta: segundo factor, sesiones activas y clientes MCP conectados.">
-      <div className="card p-6" style={{ maxWidth: 480 }}>
+      <div className="card p-6" style={{ maxWidth: 720 }}>
         {sp.ok && OK[sp.ok] && (
           <div className="flex items-center gap-2 text-[13px] px-3.5 py-2.5 rounded-lg mb-5"
             style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>

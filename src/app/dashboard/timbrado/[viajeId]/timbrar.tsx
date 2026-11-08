@@ -266,8 +266,8 @@ export async function SeccionTimbrado({ v, searchParams }: {
       <section className="space-y-2 print:hidden">
         <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          Sin PAC configurado: el timbrado directo está apagado (se enciende con las variables
-          LIKIDA_PAC_* del servidor). Mientras tanto, el XML del borrador se descarga y se timbra en
+          Sin PAC configurado: el timbrado directo está apagado (lo enciende el equipo de
+          Likida al configurar el servicio). Mientras tanto, el XML del borrador se descarga y se timbra en
           tu facturador — Likida jamás simula un timbre.
         </p>
       </section>

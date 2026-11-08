@@ -44,7 +44,8 @@ describe('SeccionBuzon — estados honestos', () => {
     const html = pintar({
       buzon: { token: null, direccion: null }, dominioConfigurado: false, puedeAdministrarBuzon: true,
     });
-    expect(html).toContain('RESEND_EMAIL_DOMAIN');
+    expect(html).toContain('lo configura el equipo de Likida');
+    expect(html).not.toContain('RESEND_EMAIL_DOMAIN');
     expect(html).not.toContain('Generar dirección');
   });
 });
