@@ -74,3 +74,11 @@ it('declara honestamente qué falta (entrega, ventana 24h, opt-ins) — no lo si
   const html = await renderizar();
   expect(html).toContain('requiere integrar la Meta WhatsApp Business API');
 });
+
+it('R9: el teléfono completo NO se pinta en la lista, solo enmascarado (igual que whatsapp-infra)', async () => {
+  dobles.getConversacionesActivas.mockResolvedValue([{ tenantId: 't-1', tenantNombre: 'Flota X', telefono: '5219990001111', turns: [], actualizadaEn: '2026-11-01T00:00:00Z' }]);
+  dobles.contarConversacionesActivas.mockResolvedValue(1);
+  const html = await renderizar();
+  expect(html).not.toContain('5219990001111');
+  expect(html).toContain('***1111');
+});

@@ -232,16 +232,16 @@ export default async function FlotasPage() {
                         <td className="px-4 py-2.5 text-right tabular">{numero(f.viajes)}</td>
                         <td className="px-4 py-2.5 text-right tabular">{usd(f.costoIaUsd)}</td>
                         <td className="px-4 py-2.5">
-                          <FormaConAviso accion={accionFacilidad} boton="Guardar" columnas="110px auto">
+                          <FormaConAviso accion={accionFacilidad} boton="Guardar" enLinea>
                             <input type="hidden" name="flotaId" value={f.id} />
                             <select name="ded" defaultValue={f.facilidad15?.dedicacionExclusivaCarga === true ? 'si' : f.facilidad15?.dedicacionExclusivaCarga === false ? 'no' : ''}
-                              className="text-xs" style={{ width: 110 }}>
+                              className="rv-ctl" aria-label="Dedicación exclusiva a carga" style={{ width: 120 }}>
                               <option value="">Carga: —</option>
                               <option value="si">Carga: Sí</option>
                               <option value="no">Carga: No</option>
                             </select>
                             <select name="reg" defaultValue={f.facilidad15?.regimenElegible === true ? 'si' : f.facilidad15?.regimenElegible === false ? 'no' : ''}
-                              className="text-xs" style={{ width: 110 }}>
+                              className="rv-ctl" aria-label="Régimen elegible" style={{ width: 130 }}>
                               <option value="">Régimen: —</option>
                               <option value="si">Régimen: Sí</option>
                               <option value="no">Régimen: No</option>

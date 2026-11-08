@@ -75,7 +75,7 @@ export default async function ModelOpsPage() {
                           <div className="mt-2 divide-y" style={{ borderColor: 'var(--line2)' }}>
                             {modelos.map((m) => (
                               <div key={m.modelo} className="py-2 flex items-center justify-between gap-3 text-xs">
-                                <span className="font-mono truncate" style={{ color: 'var(--muted)' }}>{m.modelo}</span>
+                                <span className="font-mono truncate" style={{ color: 'var(--muted)' }} title={m.modelo}>{m.modelo}</span>
                                 <span className="tabular shrink-0">{usd(m.costoUsd)} · {numero(m.n)} llamadas</span>
                               </div>
                             ))}
@@ -118,8 +118,8 @@ export default async function ModelOpsPage() {
             <TituloSeccion>Roadmap</TituloSeccion>
             <div className="mt-2">
               <EstadoVacio>
-                Versionado de prompts, rollback, guardrails configurables — Fase 2 del roadmap. Hoy los prompts viven en código
-                (<code className="font-mono text-xs">src/lib/agents/prompts.ts</code>), sin historial de versiones ni UI de edición.
+                Versionado de prompts, reversa y guardrails configurables: aún no existen. Hoy los prompts viven en el código,
+                sin historial de versiones ni pantalla de edición.
                 No existe tampoco un selector de modelo por fase ni tenant: cambiar de modelo hoy es un cambio de código y un deploy.
               </EstadoVacio>
             </div>

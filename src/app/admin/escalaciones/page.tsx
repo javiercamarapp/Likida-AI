@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
+import { BotonEnlace } from '../../ui-v2/componentes/boton';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import Link from 'next/link';
 import {
   Inbox, ShieldCheck, Bot, Wrench, ReceiptText, LifeBuoy, ClipboardCheck,
   ArrowRight, AlertTriangle,
@@ -96,7 +96,7 @@ export default async function EscalacionesPage() {
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
           {/* ── Un conteo por fuente — solo las que SÍ se leyeron ─────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <div className="kit-kpis">
             {legibles.map((f) => {
               const Icono = ICONO_FUENTE[f];
               return (
@@ -183,9 +183,9 @@ export default async function EscalacionesPage() {
                           </td>
                           <td className="px-4 py-2.5 text-right whitespace-nowrap">
                             {it.href ? (
-                              <Link href={it.href} className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full hairline hover:opacity-70 transition-opacity">
+                              <BotonEnlace href={it.href} variante="secondary" tamano="sm">
                                 Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} />
-                              </Link>
+                              </BotonEnlace>
                             ) : (
                               // Sin pantalla a la cual llevar, se dice — un
                               // link que rebota es peor que ninguno.

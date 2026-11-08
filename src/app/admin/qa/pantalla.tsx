@@ -55,7 +55,7 @@ export function PantallaQa({
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
           {/* ── Los tres números del panel ─────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <div className="kit-kpis">
             {bancoError === null ? (
               <StatCard icono={<Camera {...ICONO} />} etiqueta="Fotos en el banco" valor={fotos.length} formato="entero" />
             ) : (

@@ -49,7 +49,8 @@ it('no promete que Javier «edita y manda» desde Aprobaciones: dice que solo ap
 it('MX-003: una factura con 4 toques alcanzados cuenta UN toque sin propuesta, no cuatro', async () => {
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ ...factura, periodoInicio: '2026-01-01' }], total: 1 });
   const h = await html();
-  const m = h.match(/Toques sin propuesta<\/div><div[^>]*>(\d+)</);
+  // R9: la cifra pasó a la Cifra del sistema (etiqueta y valor en spans); la aserción es la misma: UN toque, no cuatro.
+  const m = h.match(/Toques sin propuesta<\/span><\/span><span class="rv-kpi__fila"><span class="rv-kpi__valor"[^>]*>(\d+)</);
   expect(m?.[1]).toBe('1');
 });
 
@@ -66,6 +67,14 @@ it('sin facturas dice 0 por cobrar como estado real, no como error', async () =>
   const h = await html();
   expect(h).toContain('0 mensualidades por cobrar');
   expect(h).not.toContain('No se pudo leer todo');
+});
+
+it('R9: sin facturas ni propuestas las 4 cifras NO parecen medición: van en «—» y dicen que no hay base', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [], total: 0 });
+  const h = await html();
+  expect((h.match(/Sin facturas que medir todavía/g) ?? []).length).toBe(4);
+  expect(h).not.toContain('0 · $0.00');
+  expect(h).not.toContain('0 / 0');
 });
 
 it('si no se pudo leer algo, lo dice y NO afirma que no hay facturas ni propuestas', async () => {

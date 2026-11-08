@@ -24,7 +24,7 @@ async function accionAlta(_previo: ResultadoAccion, fd: FormData): Promise<Resul
     });
     await darDeAltaAgente(v, s.userId);
     revalidatePath('/admin/agentes');
-    return { ok: `"${v.nombre}" quedó en el catálogo como DISEÑADO — sin migración, que es el punto. El runner acotado (0123) lo corre cuando se habilita.` };
+    return { ok: `"${v.nombre}" quedó en el catálogo como DISEÑADO. Se ejecuta cuando se habilita.` };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'dar de alta el agente') };
   }

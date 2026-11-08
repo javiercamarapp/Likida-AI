@@ -265,19 +265,23 @@ export function ChartCard({
 /** El mismo bloque "sin datos suficientes" que ya se repetía a mano en
  *  cada página — consolidado aquí (§H: "no gráficas/widgets ad-hoc por
  *  página"). Nunca rellena con datos de ejemplo. */
-export function EstadoVacio({ icono, children, accion }: {
+export function EstadoVacio({ icono, titulo = 'Sin datos por ahora', children, accion }: {
   icono?: React.ReactNode;
+  /** Título corto (≤6 palabras, sin punto). Por omisión, el genérico. */
+  titulo?: string;
   children: React.ReactNode;
   /** El siguiente paso, como enlace REAL. Un vacío que dice «no hay nada» sin
    *  decir cómo se llena es un callejón (auditoría de producto: «el alta rápida
    *  vive en Despacho» sin enlace). */
   accion?: { href: string; texto: string };
 }) {
-  void icono;
+  // R9: vacío CONTENIDO (alto natural con tope de 220 px, no se estira a la altura del vecino) y con el icono que el llamador ya
+  // pasaba y que antes se descartaba (`void icono`). El icono es un elemento ya renderizado, nunca un componente ni una función.
   return (
-    <div className="rv-tarjeta kit-vacio">
+    <div className="rv-tarjeta kit-vacio" data-contenida>
       <div className="rv-tarjeta__cuerpo">
-        <EstadoVacioV2 titulo="Sin datos por ahora"
+        {icono ? <span className="kit-vacio__icono" aria-hidden="true">{icono}</span> : null}
+        <EstadoVacioV2 titulo={titulo} contenido
           accion={accion ? <Link href={accion.href} className="kit-vermas">{accion.texto}</Link> : undefined}>
           {children}
         </EstadoVacioV2>

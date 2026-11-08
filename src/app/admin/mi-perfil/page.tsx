@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { CampoTexto } from '../../ui-v2/componentes/campos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
@@ -99,7 +100,7 @@ export default async function MiPerfilPage({
         />
 
         <div className="px-5 py-5 flex-1">
-          <div className="card p-5" style={{ maxWidth: 480 }}>
+          <div className="card p-5" style={{ maxWidth: 720 }}>
             {sp.ok && (
               <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
                 <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
@@ -121,11 +122,7 @@ export default async function MiPerfilPage({
             <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
 
             <form action={actualizarNombre} className="space-y-4 mt-6 pt-6 border-t" style={{ borderColor: 'var(--line2)' }}>
-              <div>
-                <label className="text-sm font-medium block mb-1.5">Nombre</label>
-                <input name="nombre" type="text" defaultValue={s.nombre ?? ''} required
-                  className="w-full text-sm px-3.5 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
-              </div>
+              <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={s.nombre ?? ''} required />
               <button type="submit" className="text-sm px-4 py-1.5 rounded-lg font-medium transition-opacity hover:opacity-85"
                 style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
                 Guardar nombre

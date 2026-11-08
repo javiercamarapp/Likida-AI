@@ -9,7 +9,7 @@ import { cx } from './clases';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Id de marca del contrato compartido. `generico` = icono genérico (sin marca). Los ids son los del `.data.ts` más `generico`. */
-export type MarcaId = 'hubspot' | 'zendesk' | 'whatsapp' | 'microsoft' | 'outlook' | 'excel' | 'csv' | 'sap' | 'google' | 'gmail' | 'resend' | 'generico';
+export type MarcaId = 'hubspot' | 'zendesk' | 'whatsapp' | 'microsoft' | 'outlook' | 'excel' | 'csv' | 'sap' | 'google' | 'gmail' | 'resend' | 'supabase' | 'generico';
 /** Ids con marca (o icono genérico propio) en el `.data.ts`; `generico` no está ahí a propósito. */
 export const IDS_INTEGRACION = Object.keys(INTEGRACIONES) as IdIntegracion[];
 /** ¿Hay marca (o icono genérico propio) para este id? */

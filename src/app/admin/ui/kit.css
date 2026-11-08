@@ -11,7 +11,8 @@
 .kit-subtitulo { margin: -4px 0 8px; font-size: 12px; color: var(--muted); }
 
 /* Estado vacío / error dentro de su propia tarjeta (sin gris dentro de gris). */
-.kit-vacio { min-width: 0; }
+.kit-vacio { min-width: 0; align-self: start; }
+.kit-vacio__icono { display: flex; justify-content: center; margin-bottom: -2px; color: var(--muted); }
 
 /* Acción secundaria en píldora (Ver más, acción del vacío). */
 .kit-vermas {
@@ -76,3 +77,8 @@
 .kit-celda .rv-kpi__fila { min-width: 0; }
 .kit-celda .rv-kpi__valor { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .kit-celda .rv-kpi__etq { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+
+/* Rejilla de KPI: cada cifra pide al menos 11.5rem y las de la ÚLTIMA fila se estiran para repartir todo el ancho (nada de una tarjeta
+   suelta con medio renglón vacío). El filete de color de dato lo pone `Cifra` en todas. */
+.kit-kpis { display: flex; flex-wrap: wrap; gap: 12px; }
+.kit-kpis > * { flex: 1 1 11.5rem; min-width: 0; }

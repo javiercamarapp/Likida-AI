@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
+import { CampoArchivo } from '../../ui-v2/componentes/campos';
 import { Film, UploadCloud } from 'lucide-react';
 import { subirConUrlFirmada } from '@/lib/supabase/browser-storage';
 
@@ -62,9 +63,8 @@ export function SubirHook({
         <Film width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
         <span className="text-[13px] font-medium">Subir un video de referencia</span>
       </div>
-      <input ref={inputRef} type="file" accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
-        onChange={elegirArchivo} disabled={pendiente}
-        className="text-[12.5px] w-full" />
+      <CampoArchivo etiqueta="Video de referencia" etiquetaOculta entradaRef={inputRef} accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+        nombreArchivo={archivo?.name ?? null} onChange={elegirArchivo} disabled={pendiente} />
       <textarea value={hookTexto} onChange={(e) => setHookTexto(e.target.value)} disabled={pendiente}
         placeholder="¿Qué hook usa este video? (ej. «la pregunta llega igual en todas las flotas…»)"
         rows={2} className="w-full text-[12.5px] leading-relaxed px-3 py-2 rounded-lg hairline"

@@ -17,7 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { conteo, exigir, traerTodo, traerPorIds, PAGINA, LecturaIncompleta, type RespuestaPg } from '@/lib/likida/pg';
+import { conteo, exigir, traerTodoEnParalelo, traerPorIds } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { normalizarEstadoProspecto } from '@/lib/likida/vendedores';
@@ -375,59 +375,8 @@ interface FilaProspecto {
 const COLUMNAS_LISTADO =
   'id, empresa, ciudad, lat, lng, telefono, correo, contacto_nombre, vacante, estado, fuente, notas, scian, urgencia, unidades, duplicado_de, mensajes_generados_en, updated_at, sitio_verificado, num_unidades, similitud_icp_pct, necesidad_pct, prospecto_toque(creado_en), prospecto_persona(confianza, origen)';
 
-/** Cuántas páginas de 1,000 se piden A LA VEZ (mismo criterio que
- *  `TANDAS_EN_PARALELO` de `traerPorIds` en pg.ts: acotado para no abrir
- *  treinta conexiones de golpe contra Supabase). */
-const PAGINAS_EN_PARALELO = 6;
-
-/**
- * Lee TODA la tabla en PARALELO — no página por página como `traerTodo`.
- *
- * El Cerebro lee ~33,000 prospectos: a 1,000 filas por página son 33 viajes
- * de red EN FILA, uno tras otro, y eso — no el render del mapa, que ya tiene
- * su propio tope (`TOPE_LUCES_PAIS`) — era el "se queda pasmado" al volver
- * del detalle de un prospecto (auditoría de rendimiento, 21-ago): varios
- * segundos de nada en pantalla antes de que `getDatosMapa` terminara.
- *
- * Mismo contrato que `traerTodo` — se demuestra con el conteo EXACTO de la
- * primera página que llegó todo, o se LANZA `LecturaIncompleta`, nunca se
- * enseña una cartera recortada — pero las páginas 2..N se piden TODAS A LA
- * VEZ (acotado, como `traerPorIds`) en vez de una por una.
- *
- * NO reemplaza a `traerTodo` en ningún otro lado: es seguro aquí porque el
- * mapa es lectura de venta, no lo financiero, y un prospecto de más o de
- * menos durante los pocos segundos que tarda la lectura no descuadra un
- * viaje. Lo financiero (`fiscal.ts`, `analytics.ts`, …) se queda con el
- * cursor secuencial que ya se ganó su desconfianza (ver pg.ts).
- */
-export async function traerTodoEnParalelo<T>(
-  construir: (desde: number, hasta: number) => PromiseLike<RespuestaPg<T[]>>,
-  consulta: string,
-): Promise<T[]> {
-  const res0 = await construir(0, PAGINA - 1);
-  const pag0 = exigir(res0, consulta) ?? [];
-  const esperadas = typeof res0.count === 'number' ? res0.count : null;
-  // Sin conteo exacto no hay con qué demostrar que llegó todo pidiendo a
-  // ciegas en paralelo — cae al camino secuencial, ya probado.
-  if (esperadas === null) return traerTodo(construir, consulta);
-  if (pag0.length >= esperadas) return pag0;
-
-  const totalPaginas = Math.ceil(esperadas / PAGINA);
-  const resto: T[][] = new Array(totalPaginas - 1);
-  let siguiente = 1;
-  const obrero = async () => {
-    for (;;) {
-      const p = siguiente++;
-      if (p >= totalPaginas) return;
-      const res = await construir(p * PAGINA, p * PAGINA + PAGINA - 1);
-      resto[p - 1] = exigir(res, consulta) ?? [];
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(PAGINAS_EN_PARALELO, totalPaginas - 1) }, obrero));
-  const filas = [pag0, ...resto].flat();
-  if (filas.length < esperadas) throw new LecturaIncompleta(consulta, filas.length, esperadas);
-  return filas;
-}
+// `traerTodoEnParalelo` vive ahora en pg.ts (lo comparten /admin/vendedores y /admin/crecimiento); se re-exporta para no mover a los llamadores.
+export { traerTodoEnParalelo };
 
 /** El filtro de duplicados del mapa: la marca la escribe el deduplicador
  *  dentro de `notas` (0139). Se resuelve aquí y no en SQL porque `notas` ya

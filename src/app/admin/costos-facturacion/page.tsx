@@ -226,7 +226,7 @@ export default async function CostosFacturacionPage() {
                 ese caso se queda con el card de texto en vez de forzar un
                 0 engañoso dentro de KpiTile. */}
             {costoPorViaje !== null ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-2">
+              <div className="kit-kpis mt-2">
                 <KpiTile
                   icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                   etiqueta="Gastado en IA — todo el histórico" valor={r.costoIaUsd} formato="usd"
