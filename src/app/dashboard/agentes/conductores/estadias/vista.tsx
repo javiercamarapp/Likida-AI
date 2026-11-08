@@ -1,9 +1,9 @@
 import { Download } from 'lucide-react';
-import { numero } from '@/lib/formato';
+import { fechaMx, numero } from '@/lib/formato';
 import { horaExactaMx, type FilaEstadia, type ResumenEstadias } from '@/lib/likida/conductor/estadias_anden';
 import { textoTiempo } from '@/lib/likida/conductor/planificador';
 import type { CatalogosFiltro } from '@/lib/likida/conductor/repo_validacion';
-import { BarraFiltros, FiltroFecha, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { BarraPeriodo, hrefConParams, MarcoPagina, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
@@ -37,7 +37,16 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
   /** Solo si el rol ve dinero: el CSV de cobro (con horas libres, tarifa y monto propuesto). */
   csvUrl: string | null; ocultos: Record<string, string>;
 }) {
-  const hay = Boolean(filtros.terminalId || filtros.clienteId || filtros.operadorId);
+  const RUTA = '/dashboard/agentes/conductores/estadias';
+  const todos = { valor: '', rotulo: 'Todos' };
+  const criterios = [
+    { nombre: 'terminal', etiqueta: 'Patio', valor: filtros.terminalId, opciones: [todos, ...(catalogos?.terminales ?? []).map((t) => ({ valor: t.id, rotulo: t.nombre }))] },
+    { nombre: 'cliente', etiqueta: 'Cliente', valor: filtros.clienteId, opciones: [todos, ...(catalogos?.clientes ?? []).map((c) => ({ valor: c.id, rotulo: c.nombre }))] },
+    { nombre: 'chofer', etiqueta: 'Chofer', valor: filtros.operadorId, opciones: [todos, ...(catalogos?.operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))] },
+  ];
+  // Parámetros vigentes (contexto + periodo + criterios) para armar el enlace de cada «x».
+  const base: Record<string, string> = { ...ocultos, desde: filtros.desde, hasta: filtros.hasta };
+  for (const c of criterios) if (c.valor) base[c.nombre] = c.valor;
   const hrefLimpio = `?${new URLSearchParams(ocultos).toString()}`;
   const carga = promedioCerradas(filas, 'carga');
   const descarga = promedioCerradas(filas, 'descarga');
@@ -48,18 +57,22 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
       </Aviso>
 
       <section className="card p-4 space-y-3" aria-label="Filtros">
-        <BarraFiltros accion="?" ocultos={ocultos} etiqueta="Filtros de estadías" nActivos={hay ? 1 : 0} limpiarHref={hrefLimpio}>
-          <FiltroFecha nombre="desde" etiqueta="Desde" valor={filtros.desde} />
-          <FiltroFecha nombre="hasta" etiqueta="Hasta" valor={filtros.hasta} />
-          <FiltroOpciones nombre="terminal" etiqueta="Patio" valor={filtros.terminalId} opciones={[{ valor: '', rotulo: 'Todos' }, ...(catalogos?.terminales ?? []).map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
-          <FiltroOpciones nombre="cliente" etiqueta="Cliente" valor={filtros.clienteId} opciones={[{ valor: '', rotulo: 'Todos' }, ...(catalogos?.clientes ?? []).map((c) => ({ valor: c.id, rotulo: c.nombre }))]} />
-          <FiltroOpciones nombre="chofer" etiqueta="Chofer" valor={filtros.operadorId} opciones={[{ valor: '', rotulo: 'Todos' }, ...(catalogos?.operadores ?? []).map((o) => ({ valor: o.id, rotulo: o.nombre }))]} />
-          {csvUrl && (
+        <BarraPeriodo etiqueta="Periodo y filtros de estadías"
+          chips={[
+            { id: 'rango', etiqueta: `Del ${fechaMx(filtros.desde)} al ${fechaMx(filtros.hasta)}` },
+            ...criterios.filter((c) => c.valor).map((c) => ({ id: c.nombre, etiqueta: `${c.etiqueta}: ${c.opciones.find((o) => o.valor === c.valor)?.rotulo ?? 'elegido'}`, hrefQuitar: hrefConParams(RUTA, base, { [c.nombre]: null }) })),
+          ]}
+          cajon={{
+            accion: RUTA, ocultos: Object.entries(ocultos), limpiarHref: hrefLimpio, nActivos: criterios.filter((c) => c.valor).length,
+            resumen: `Del ${fechaMx(filtros.desde)} al ${fechaMx(filtros.hasta)}`,
+            periodo: { desde: filtros.desde, hasta: filtros.hasta },
+            campos: { items: criterios.map((c) => ({ tipo: 'select' as const, ...c })) },
+          }}
+          accion={csvUrl ? (
             <a href={csvUrl} className="rv-btn rv-btn--primary rv-btn--sm">
               <Download aria-hidden strokeWidth={1.75} />CSV para cobro de estadías
             </a>
-          )}
-        </BarraFiltros>
+          ) : undefined} />
         {!csvUrl && (
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>El CSV de cobro (horas libres, tarifa y monto propuesto) lo descargan el dueño de la flota y el contador.</p>
         )}

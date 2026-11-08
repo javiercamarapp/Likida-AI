@@ -231,12 +231,15 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · BarraFiltros', () => {
       await p.close();
     });
   }
-  it('1440: «Filtros» abre los avanzados en un popover (no empuja el contenido) y el chip activo es azul suave de Rovaq', async () => {
+  it('1440: «Filtros» abre los avanzados en el cajón de 420 (no empuja el contenido, ya no es un popover) y el chip activo es azul suave de Rovaq', async () => {
     const p = await abrir();
     const antes = await p.evaluate(() => document.querySelector('#esc')!.getBoundingClientRect().top);
     await p.getByRole('button', { name: /Filtros/ }).click();
-    const r = await p.evaluate(() => ({ pop: !!document.querySelector('.rv-pop select'), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!).backgroundColor }));
+    const r = await p.evaluate(() => ({ pop: !!document.querySelector('dialog.rv-ov--drawer[open] select') && !document.querySelector('.rv-pop'), ancho: Math.round(document.querySelector('dialog.rv-ov--drawer[open] .rv-ov__panel')!.getBoundingClientRect().width), despues: document.querySelector('#esc')!.getBoundingClientRect().top, activo: getComputedStyle(document.querySelector('.rv-fl[aria-pressed="true"]')!).backgroundColor }));
     expect(r.pop).toBe(true);
+    expect(r.ancho).toBe(420);
+    await p.keyboard.press('Escape');
+    await p.waitForSelector('dialog.rv-ov--drawer[open]', { state: 'detached' });
     expect(r.despues).toBe(antes);
     expect(rgb(r.activo)).toEqual([230, 237, 250]); // --seg-activo-bg = #e6edfa (azul de Rovaq, decisión 7-nov-2026)
     await p.close();

@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Mail, AlertTriangle, Route } from 'lucide-react';
-import { fechaCorta, numero, hoyMx, inicioDiaMx, fechaHoraMx } from '@/lib/formato';
+import { fechaCorta, fechaMx, numero, hoyMx, inicioDiaMx, fechaHoraMx } from '@/lib/formato';
 import { EstadoVacio } from '../../estados';
 import { ESTILO_CONTROL } from '@/app/admin/ui/forma';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
@@ -8,7 +8,7 @@ import { BotonConfirmar } from '@/app/admin/ui/confirmar';
 import { calcularInsightsA1, entradaDesdeFichas, type InsightA1 } from '@/lib/likida/liquidacion_externa/insights_a1';
 import type { EntregaCorreo, EstadoEntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DetalleDesglose, LecturaDetalle, RolDetalle } from './detalle_desglose';
-import { BarraFiltros, FiltroFecha, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraPeriodo, hrefConParams, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { EnlacePagina, NavPaginas } from '../../paginador';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -259,6 +259,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   // A37-S14-04: las fichas de entregas cuentan los últimos 30 días (hoy y los 29 anteriores, como `fichasDesgloses`): el enlace abre la lista de esa MISMA ventana.
   const desde30 = hoyMx(new Date(Date.parse(inicioDiaMx(hoy)) - 29 * 24 * 3600 * 1000));
   const filtrando = !!(p.filtro || p.desde || p.hasta);
+  const baseDes: Record<string, string> = { ...Object.fromEntries(p.contexto), ...(p.filtro ? { des_estado: p.filtro } : {}), ...(p.desde ? { des_desde: p.desde } : {}), ...(p.hasta ? { des_hasta: p.hasta } : {}) };
   const verSinPoliza = p.filtro === 'sin_poliza';
 
   return (
@@ -293,12 +294,17 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
       <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
 
-      <BarraFiltros accion="?" ocultos={p.contexto} etiqueta="Filtros de desgloses" nActivos={filtrando ? 1 : 0} limpiarHref={query(p.contexto)} className="mb-3">
-        <FiltroOpciones nombre="des_estado" etiqueta="Estado" valor={p.filtro ?? ''}
-          opciones={[{ valor: '', rotulo: 'Todos' }, ...FILTROS.map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f] }))]} />
-        <FiltroFecha nombre="des_desde" etiqueta="Desde" valor={p.desde} max={hoy} />
-        <FiltroFecha nombre="des_hasta" etiqueta="Hasta" valor={p.hasta} max={hoy} />
-      </BarraFiltros>
+      <BarraPeriodo className="mb-3" etiqueta="Periodo y filtros de desgloses"
+        chips={[
+          ...(p.desde || p.hasta ? [{ id: 'rango', etiqueta: `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}`, hrefQuitar: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) }] : []),
+          ...(p.filtro ? [{ id: 'estado', etiqueta: `Estado: ${ROTULO_FILTRO[p.filtro]}`, hrefQuitar: hrefConParams('', baseDes, { des_estado: null }) }] : []),
+        ]}
+        cajon={{
+          accion: '?', ocultos: p.contexto, limpiarHref: query(p.contexto), nActivos: (p.filtro ? 1 : 0) + (p.desde || p.hasta ? 1 : 0),
+          resumen: [p.filtro ? ROTULO_FILTRO[p.filtro] : null, p.desde || p.hasta ? `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}` : null].filter(Boolean).join(' · ') || undefined,
+          periodo: { desde: p.desde ?? null, hasta: p.hasta ?? null, nombreDesde: 'des_desde', nombreHasta: 'des_hasta', max: hoy },
+          campos: { items: [{ tipo: 'select', nombre: 'des_estado', etiqueta: 'Estado', valor: p.filtro ?? '', opciones: [{ valor: '', rotulo: 'Todos' }, ...FILTROS.map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f] }))] }] },
+        }} />
 
       {verSinPoliza ? (
         sinPoliza.length === 0 ? (
