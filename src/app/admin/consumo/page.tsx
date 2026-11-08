@@ -85,7 +85,7 @@ export default async function ConsumoPage() {
                   nota="agente_corrida.costo_usd; el copiloto va al log" />
               </>
             ) : (
-              <div className="card p-3.5 col-span-2"><p className="text-[12.5px] m-0" style={{ color: 'var(--muted)' }}>La medición por agente no se pudo leer — con la migración 0123 sin aplicar, es lo esperado.</p></div>
+              <div className="card p-3.5 col-span-2"><p className="text-[12.5px] m-0" style={{ color: 'var(--muted)' }}>La medición por agente no se pudo leer ahora; la base aún puede no registrar el costo por corrida.</p></div>
             )}
           </div>
 
@@ -109,8 +109,8 @@ export default async function ConsumoPage() {
             <TituloSeccion>Por agente — gasto medido vs techo declarado</TituloSeccion>
             {consumo === null ? (
               <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
-                No se pudo leer la medición por agente. Con la migración 0123 sin aplicar a esta base,
-                es lo esperado — la columna del costo por corrida nace ahí.
+                No se pudo leer la medición por agente. Si esta base aún no registra el costo por corrida,
+                es lo esperado.
               </p>
             ) : (
             // FE-19: la tabla scrollea DENTRO de su tarjeta. Sin esto, una
@@ -198,8 +198,8 @@ export default async function ConsumoPage() {
             <TituloSeccion>Presupuesto de IA por propósito — hoy, con su techo</TituloSeccion>
             {proposito === null ? (
               <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
-                No se pudo leer el gasto por propósito. Con la migración 0244 sin aplicar a esta base,
-                es lo esperado — la dimensión de propósito nace ahí.
+                No se pudo leer el gasto por propósito. Si esta base aún no clasifica el gasto por propósito,
+                es lo esperado.
               </p>
             ) : (
               <>

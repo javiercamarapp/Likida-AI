@@ -48,7 +48,6 @@ export default async function PlaygroundPage() {
               chat ni una caja de prueba: sería una demo que aparenta funcionar sin hacerlo.
             </span>
             <span className="block text-xs mt-4" style={{ color: 'var(--muted)' }}>
-              Referencia: <span className="font-mono">docs/superpowers/plans/2026-08-02-roadmap-admin-negocio.md</span>
             </span>
           </EstadoVacio>
 

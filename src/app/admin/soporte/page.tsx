@@ -307,7 +307,7 @@ export default async function SoportePage({
                             <Casilla
                               nombre="interna"
                               etiqueta="Nota interna — el cliente NO la ve"
-                              ayuda="Va en el mismo hilo (0051) para que el orden cronológico sea uno solo, pero la consulta del panel del cliente la excluye."
+                              ayuda="Va en el mismo hilo para que el orden cronológico sea uno solo, pero la consulta del panel del cliente la excluye."
                             />
                           </FormaConAviso>
                         </div>
@@ -340,9 +340,8 @@ export default async function SoportePage({
               {tickets.length === 0 ? (
                 <EstadoVacio icono={<LifeBuoy width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                   <span className="font-semibold">La cola existe y está vacía de verdad.</span>{' '}
-                  La tabla de tickets (con prioridad, categoría y reloj de SLA) está en la base desde la
-                  migración 0051, el panel del cliente abre tickets desde el 16 de agosto, y desde la 0268
-                  esta pantalla puede responderlos, tomarlos y cerrarlos. Este 0 no es un hueco de
+                  El panel del cliente abre tickets (con prioridad, categoría y reloj de SLA) desde el 16 de agosto,
+                  y esta pantalla puede responderlos, tomarlos y cerrarlos. Este 0 no es un hueco de
                   producto: es que hoy ninguna flota tiene nada pendiente con Likida.
                 </EstadoVacio>
               ) : (

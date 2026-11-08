@@ -186,7 +186,7 @@ export default async function IntegracionesPage() {
                 que antes) y mensaje honesto, ni una palabra cambiada. */}
             <div className="mt-2">
               <EstadoVacio icono={<KeyRound width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Rotación de API keys — Fase 5 del roadmap. Hoy las llaves de cada servicio viven en variables de
+                Rotación de llaves de API: aún no existe. Hoy las llaves de cada servicio viven en variables de
                 entorno de Vercel, sin una UI de administración ni rotación automática dentro de este panel.
               </EstadoVacio>
             </div>

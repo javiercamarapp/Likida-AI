@@ -328,7 +328,7 @@ export default async function CrecimientoPage() {
               )}
               <p className="text-xs mt-2 m-0" style={{ color: 'var(--muted)' }}>
                 {cohortes.desdeMedicion === null
-                  ? 'producto_evento (0251) todavía no registra un solo evento: cada celda dice «no medido», que no es un 0% — la matriz se llena sola conforme el panel se use.'
+                  ? 'La medición de uso todavía no registra un solo evento: cada celda dice «no medido», que no es un 0% — la matriz se llena sola conforme el panel se use.'
                   : `La medición empezó en ${cohortes.desdeMedicion}; los meses anteriores se pintan «no medido», nunca 0. El mes en curso está incompleto por definición.`}
                 {' '}Con pocas flotas la cohorte describe, no concluye — necesita más de 1 cliente real para decir algo general.
               </p>
@@ -376,7 +376,7 @@ export default async function CrecimientoPage() {
               ))}
             </ul>
             <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Cada renglón dice su propia razón — desde la 0251 ya NO es un genérico «falta instrumentación»:
+              Cada renglón dice su propia razón; ya no es un genérico «falta instrumentación»:
               el embudo de activación y las cohortes se miden arriba.
             </p>
           </div>

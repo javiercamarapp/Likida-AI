@@ -137,7 +137,7 @@ export default async function WhatsappInfraPage() {
             <div className="mt-2">
               <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp
-                Business API de lo que Likida usa hoy (Fase 5 del roadmap, a escala):
+                Business API de lo que Likida usa hoy:
               </EstadoVacio>
             </div>
             <ul className="text-sm mt-3 space-y-2" style={{ color: 'var(--muted)' }}>

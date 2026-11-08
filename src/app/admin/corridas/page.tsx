@@ -84,7 +84,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
         <EstadoVacio>
           {hayFiltro
             ? 'Ninguna corrida coincide con el filtro.'
-            : 'Aún no hay corridas. Cada corrida de un agente deja aquí su fila (0102); la primera aparecerá cuando un agente trabaje.'}
+            : 'Aún no hay corridas. Cada corrida de un agente deja aquí su fila; la primera aparecerá cuando un agente trabaje.'}
         </EstadoVacio>
       )}
       {resultado !== null && resultado.total > 0 && (

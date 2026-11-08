@@ -118,8 +118,8 @@ export default async function ModelOpsPage() {
             <TituloSeccion>Roadmap</TituloSeccion>
             <div className="mt-2">
               <EstadoVacio>
-                Versionado de prompts, rollback, guardrails configurables — Fase 2 del roadmap. Hoy los prompts viven en código
-                (<code className="font-mono text-xs">src/lib/agents/prompts.ts</code>), sin historial de versiones ni UI de edición.
+                Versionado de prompts, reversa y guardrails configurables: aún no existen. Hoy los prompts viven en el código,
+                sin historial de versiones ni pantalla de edición.
                 No existe tampoco un selector de modelo por fase ni tenant: cambiar de modelo hoy es un cambio de código y un deploy.
               </EstadoVacio>
             </div>

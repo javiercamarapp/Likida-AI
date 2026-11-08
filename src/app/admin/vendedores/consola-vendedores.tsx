@@ -189,7 +189,7 @@ export async function ConsolaVendedores({
                   — el WhatsApp de Likida sigue en número de prueba y el
                   buscador necesita fuentes externas. Texto, no tarjeta viva. */}
               <p className="text-[11px] mt-3 m-0" style={{ color: 'var(--faint)' }}>
-                Siguiente paso del roadmap: agentes que busquen leads nuevos y hagan el primer
+                Próximamente: agentes que busquen leads nuevos y hagan el primer
                 acercamiento. No existen todavía y esta pantalla no los va a fingir.
               </p>
             </div>
@@ -330,7 +330,7 @@ export async function ConsolaVendedores({
 
           <p className="text-[11px] pt-1 m-0 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
             <Bot width={12} height={12} strokeWidth={1.75} />
-            La comisión está documentada como regla de negocio en la base (migración 0105) y en esta
+            La comisión está documentada como regla de negocio en la base y en esta
             pantalla; el pago se calcula sobre cobros reales cuando existan.
           </p>
         </div>

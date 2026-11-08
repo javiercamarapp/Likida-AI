@@ -910,7 +910,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               </div>
               <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }} title={CRITERIO_SCORES.similitud}>
-                  Similitud ICP mínima (0140)
+                  Similitud ICP mínima
                 </p>
                 <div className="flex gap-1.5">
                   {([0, 40, 65, 85] as const).map((u) => (
@@ -923,7 +923,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               </div>
               <div>
                 <p className="etiqueta-mono text-[10px] font-medium uppercase mb-1.5" style={{ color: TENUE }} title={CRITERIO_SCORES.necesidad}>
-                  Necesidad mínima (0140)
+                  Necesidad mínima
                 </p>
                 <div className="flex gap-1.5">
                   {([0, 40, 65, 85] as const).map((u) => (

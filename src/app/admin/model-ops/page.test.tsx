@@ -47,7 +47,8 @@ it('una fase con llamadas reales muestra su costo y conteo verdaderos, desglosad
 
 it('el roadmap declara lo que NO existe hoy — no aparenta versionado/selector de modelo', async () => {
   const html = await renderizar();
-  expect(html).toContain('sin historial de versiones ni UI de edición');
+  expect(html).toContain('sin historial de versiones ni pantalla de edición');
+  expect(html).not.toContain('Fase 2 del roadmap');
   expect(html).toContain('No existe tampoco un selector de modelo por fase ni tenant');
 });
 

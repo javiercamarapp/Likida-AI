@@ -131,7 +131,7 @@ export default async function AnaliticaPage() {
             </EstadoVacio>
           </ChartCard>
 
-          <EstadoVacio>Exportar CSV y reportes programados — Fase 2 del roadmap.</EstadoVacio>
+          <EstadoVacio>Exportar CSV y reportes programados: aún no existen.</EstadoVacio>
         </div>
       </div>
     </main>
