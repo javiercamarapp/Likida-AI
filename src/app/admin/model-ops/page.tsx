@@ -75,7 +75,7 @@ export default async function ModelOpsPage() {
                           <div className="mt-2 divide-y" style={{ borderColor: 'var(--line2)' }}>
                             {modelos.map((m) => (
                               <div key={m.modelo} className="py-2 flex items-center justify-between gap-3 text-xs">
-                                <span className="font-mono truncate" style={{ color: 'var(--muted)' }}>{m.modelo}</span>
+                                <span className="font-mono truncate" style={{ color: 'var(--muted)' }} title={m.modelo}>{m.modelo}</span>
                                 <span className="tabular shrink-0">{usd(m.costoUsd)} · {numero(m.n)} llamadas</span>
                               </div>
                             ))}

@@ -9,7 +9,8 @@ import { totalEscalaciones as calcularTotalEscalaciones, type BandejaEscalacione
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 import { fechaHoraMx } from '@/lib/formato';
 import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { EstadoVacio, StatusPill } from '../ui/kit';
+import { EstadoVacio, StatCard, StatusPill } from '../ui/kit';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { BotonConfirmar } from '../ui/confirmar';
 import { BotonEnvio } from './boton_envio';
 
@@ -85,6 +86,19 @@ export function VistaTuTurno({
         </p>
       )}
 
+      {/* Cabecera con cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3" aria-label="Lo que espera tu turno">
+        <StatCard icono={<ImageIcon {...ICONO} />} etiqueta="Piezas para tu tap"
+          valor={bus.errores.some((e) => /pieza/i.test(e)) ? null : bus.piezasPendientes.length} formato="entero"
+          sinDato="No se pudo leer la cola de piezas"
+          nota={bus.piezasPendientes.length >= TOPE_PIEZAS ? `Se cuentan las ${TOPE_PIEZAS} más recientes; hay más detrás` : undefined} />
+        <StatCard icono={<ListChecks {...ICONO} />} etiqueta="Envíos por aprobar" valor={envios.length} formato="entero" />
+        <StatCard icono={<GitPullRequest {...ICONO} />} etiqueta="PRs esperando tu merge"
+          valor={prs.estado === 'ok' ? prs.prs.length : null} formato="entero"
+          sinDato={prs.estado === 'sin_token' ? 'Falta el acceso a GitHub' : 'GitHub no contestó'} />
+        <StatCard icono={<Inbox {...ICONO} />} etiqueta="Escalaciones" valor={totalEscalaciones} formato="entero" />
+      </div>
+
       {/* ── 1 · Piezas de las rutinas — el tap de publicar ────────────────── */}
       <section>
         {/* FE-13: `leerEstadoBus` trae 50 piezas pendientes como tope. Con la
@@ -103,20 +117,27 @@ export function VistaTuTurno({
             (si la Mac aún no corre el bus, instala <code>bus.sh</code> — ver el esqueleto de autonomía).
           </EstadoVacio>
         ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 items-stretch">
             {bus.piezasPendientes.map((p) => (
-              <article key={p.id} className="rounded-2xl hairline overflow-hidden flex flex-col" style={{ background: 'var(--card, transparent)' }}>
-                {p.mediaUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element -- URL firmada de storage, dominio propio
-                  <img src={p.mediaUrl} alt={p.titulo} className="w-full aspect-video object-cover" />
-                )}
-                <div className="p-4 flex-1 flex flex-col gap-2">
+              <article key={p.id} className="rounded-xl hairline overflow-hidden flex flex-col h-full" style={{ background: 'var(--ui-surface, var(--surface))' }}>
+                {/* Marco de aspecto fijo (16:9, tope 176 px): una imagen enorme o ausente no cambia la altura de la tarjeta. */}
+                <div className="w-full overflow-hidden flex items-center justify-center" style={{ aspectRatio: '16 / 9', maxHeight: 176, background: 'var(--canvas)' }}>
+                  {p.mediaUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- URL firmada de storage, dominio propio
+                    <img src={p.mediaUrl} alt={p.titulo} className="w-full h-full object-cover" loading="lazy" />
+                  ) : (
+                    <span className="inline-flex flex-col items-center gap-1 text-xs" style={{ color: 'var(--faint)' }}>
+                      <ImageIcon {...ICONO} /> Sin imagen
+                    </span>
+                  )}
+                </div>
+                <div className="p-3.5 flex-1 flex flex-col gap-2">
                   <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
                     <StatusPill estado="neutral">{p.tipo}</StatusPill>
                     <span>{p.rutina}</span>
                     <span className="ml-auto">{edadDe(p.creadoEn, ahora)}</span>
                   </div>
-                  <h3 className="font-medium text-sm leading-snug">{p.titulo}</h3>
+                  <h3 className="font-medium text-sm leading-snug line-clamp-2 min-h-[2.5rem]" title={p.titulo}>{p.titulo}</h3>
                   {p.copyMd && (
                     <details className="text-xs" style={{ color: 'var(--muted)' }}>
                       <summary className="cursor-pointer">Ver el copy</summary>
@@ -124,19 +145,16 @@ export function VistaTuTurno({
                     </details>
                   )}
                   <div className="mt-auto flex gap-2 pt-2">
+                    {/* Acción principal sólida y secundaria discreta: aprobar publica, descartar no. */}
                     <form action={accionPieza}>
                       <input type="hidden" name="pieza" value={p.id} />
                       <input type="hidden" name="accion" value="aprobada" />
-                      <button className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--accent)', color: 'var(--accent-fg)' }}>
-                        Aprobar
-                      </button>
+                      <Boton type="submit" variante="primary" tamano="sm">Aprobar</Boton>
                     </form>
                     <form action={accionPieza}>
                       <input type="hidden" name="pieza" value={p.id} />
                       <input type="hidden" name="accion" value="descartada" />
-                      <button className="px-3 py-1.5 rounded-lg text-xs hairline" style={{ color: 'var(--muted)' }}>
-                        Descartar
-                      </button>
+                      <Boton type="submit" variante="ghost" tamano="sm">Descartar</Boton>
                     </form>
                   </div>
                 </div>
