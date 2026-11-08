@@ -47,7 +47,6 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
   // Parámetros vigentes (contexto + periodo + criterios) para armar el enlace de cada «x».
   const base: Record<string, string> = { ...ocultos, desde: filtros.desde, hasta: filtros.hasta };
   for (const c of criterios) if (c.valor) base[c.nombre] = c.valor;
-  const hay = Boolean(filtros.terminalId || filtros.clienteId || filtros.operadorId);
   const hrefLimpio = `?${new URLSearchParams(ocultos).toString()}`;
   const carga = promedioCerradas(filas, 'carga');
   const descarga = promedioCerradas(filas, 'descarga');
