@@ -56,21 +56,26 @@ describe('controles finos · bordes y foco', () => {
   });
 });
 
-describe('controles finos · color de estados activos y acción del cajón (decisión de color PENDIENTE de Javier)', () => {
-  it('valor por omisión NEUTRO: gris muy claro con texto negro', () => {
-    expect(valor('--seg-activo-bg')).toBe('var(--ui-soft)');
-    expect(valor('--seg-activo-borde')).toBe('var(--line2)');
-    expect(valor('--seg-activo-fg')).toBe('var(--ink)');
-    expect(valor('--seg-activo-hover')).toMatch(/^color-mix\(/);
+describe('controles finos · color de estados activos y acción del cajón (azul de Rovaq, decisión del dueño 7-nov-2026)', () => {
+  it('claro: azul suave e6edfa con texto 1f4fb0, anillo del azul al 30 % y hover d8e3f8', () => {
+    expect(valor('--seg-activo-bg')).toBe('#e6edfa');
+    expect(valor('--seg-activo-borde')).toBe('color-mix(in srgb, #2f6bd8 30%, transparent)');
+    expect(valor('--seg-activo-fg')).toBe('#1f4fb0');
+    expect(valor('--seg-activo-hover')).toBe('#d8e3f8');
+  });
+  it('oscuro: 1d2433 con texto a9c1f2, anillo al 45 % y hover 26314a', () => {
+    expect(valor('--seg-activo-bg', oscuro)).toBe('#1d2433');
+    expect(valor('--seg-activo-borde', oscuro)).toBe('color-mix(in srgb, #2f6bd8 45%, transparent)');
+    expect(valor('--seg-activo-fg', oscuro)).toBe('#a9c1f2');
+    expect(valor('--seg-activo-hover', oscuro)).toBe('#26314a');
   });
   it('la acción del cajón reutiliza el mismo trío (un cambio de una línea mueve ambos)', () => {
     for (const k of ['bg', 'borde', 'fg', 'hover']) expect(valor(`--accion-cajon-${k}`)).toBe(`var(--seg-activo-${k})`);
   });
-  it('el azul de Rovaq queda documentado en el comentario junto a la variable, sin # ni rgb()', () => {
+  it('el comentario junto a la variable documenta la decisión, el alcance y cómo volver al neutro', () => {
     const i = tokens.indexOf('\n  --seg-activo-bg:');
     const com = tokens.slice(tokens.lastIndexOf('/*', i), i);
-    for (const t of ['2F6BD8', 'e6edfa', '1f4fb0', 'd8e3f8', 'PENDIENTE']) expect(com, t).toContain(t);
-    expect(com).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i);
+    for (const t of ['2F6BD8', 'e6edfa', '1f4fb0', 'd8e3f8', '7-nov-2026', 'var(--ui-soft)']) expect(com, t).toContain(t);
   });
   it('mini barras y tooltip: acento neutro por omisión y tooltip carbón con texto claro', () => {
     expect(valor('--barra-acento')).toBe('var(--ink2)');
@@ -79,10 +84,9 @@ describe('controles finos · color de estados activos y acción del cajón (deci
     expect(valor('--tip-fg')).toBe('#f4f4f5');
     expect(valor('--tip-borde')).toBe('transparent');
   });
-  it('en oscuro el tooltip se aclara un tono y los estados activos heredan por var() (sin duplicar)', () => {
+  it('en oscuro el tooltip se aclara un tono', () => {
     expect(valor('--tip-bg', oscuro)).toBe('#3a3a40');
     expect(valor('--tip-fg', oscuro)).toBe('#f4f4f5');
-    expect(valor('--seg-activo-bg', oscuro)).toBeUndefined();
   });
 });
 
@@ -103,10 +107,21 @@ describe('controles finos · tipografía, iconos y marco', () => {
     expect(valor('--sb-w')).toBe('232px');
     expect(valor('--rail-w')).toBe('72px');
   });
-  it('navegación: activo sutil por gris y peso', () => {
-    expect(valor('--nav-activo-bg')).toBe('var(--ui-soft)');
+  it('navegación (Rovaq): activo = tinta al 7 %, peso 500 y UN token para la barra (rgb 232,36,28)', () => {
+    expect(valor('--nav-activo-bg')).toBe('color-mix(in srgb, var(--ink) 7%, transparent)');
     expect(valor('--nav-activo-fg')).toBe('var(--ink)');
-    expect(valor('--nav-activo-peso')).toBe('600');
+    expect(valor('--nav-activo-peso')).toBe('500');
+    expect(valor('--nav-activo-barra')).toBe('rgb(232, 36, 28)');
+    // El color de la barra se declara UNA vez: ni el oscuro ni shell.css lo repiten.
+    expect(valor('--nav-activo-barra', oscuro)).toBeUndefined();
+    expect(sinComentarios(leer('shell.css'))).not.toMatch(/rgb\(\s*232/);
+  });
+  it('grupo del menú: 11/500 mayúsculas con tracking 0.66 px', () => {
+    const g = /\.rv-grupo__t \{([^}]*)\}/.exec(sinComentarios(leer('shell.css')))?.[1] ?? '';
+    expect(g).toMatch(/font-size:\s*11px/);
+    expect(g).toMatch(/font-weight:\s*500/);
+    expect(g).toMatch(/letter-spacing:\s*0\.66px/);
+    expect(g).toMatch(/text-transform:\s*uppercase/);
   });
 });
 

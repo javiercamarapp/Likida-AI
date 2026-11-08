@@ -6,7 +6,7 @@
    porque son el mismo componente. Por eso este archivo se carga en AMBOS layouts y cada variable lleva su valor de
    respaldo: /admin define los tokens v1 (`--surface`, `--line`, `--shadow-pop`) pero no `--scrim`.
 
-   Medidas (Vexa R06): Drawer 420 / 480 / 640 con margen 8; Modal 440 / 560 con margen 16; padding 16; radio 12; cabecera
+   Medidas (Vexa R06, unificadas en R8): Drawer 420 (estándar) / 640 (paquetes y previas) con margen 8; Modal 440 / 560 con margen 16; padding 16; radio 12; cabecera
    12×16 (título 15/600, apoyo 12); cerrar 28 (32 con toque 44 en hoja); pie 12×16; hoja inferior < 820 px con grabber.
    Movimiento: solo con `no-preference`, entrada ≤ 180 ms, la salida no se anima.
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -22,12 +22,12 @@ html[data-overlay-abierto] { overflow: hidden; }
 .rv-ov::backdrop { background: var(--scrim, rgba(14, 14, 16, .4)); }
 .rv-ov__panel {
   display: flex; flex-direction: column; background: var(--surface); color: var(--ink);
-  border: 1px solid var(--line2, var(--line)); border-radius: 12px; box-shadow: var(--shadow-pop, none); overflow: hidden;
+  border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-pop, none); overflow: hidden;
 }
 .rv-ov__grabber { display: none; width: 36px; height: 4px; margin: 8px auto 0; border-radius: 2px; background: var(--line2, var(--line)); touch-action: none; cursor: grab; }
 .rv-ov__cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--borde-reposo, var(--line)); }
 .rv-ov__textos { min-width: 0; }
-.rv-ov__titulo { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; letter-spacing: 0; }
+.rv-ov__titulo { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 600; letter-spacing: -0.01em; }
 .rv-ov__desc { margin: 2px 0 0; font-size: 12px; line-height: 1.4; color: var(--muted); text-wrap: pretty; }
 .rv-ov__cerrar {
   flex: none; position: relative; display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px;
@@ -40,19 +40,21 @@ html[data-overlay-abierto] { overflow: hidden; }
 .rv-ov__cuerpo:empty { display: none; }
 .rv-ov__cuerpo[data-sin-padding] { padding: 0; }
 .rv-ov__pie { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--borde-reposo, var(--line)); flex: none; }
-.rv-ov__marca { display: flex; justify-content: center; flex: none; padding: 9px 0 11px; border-top: 1px solid var(--borde-reposo, var(--line)); opacity: .6; color: var(--ink); }
-/* Franja de marca: logo horizontal de 64 px de ancho (Rovaq); la altura sigue la proporcion del viewBox. */
-.rv-ov__marca svg { width: 64px; height: auto; }
+.rv-ov__marca { display: flex; align-items: center; justify-content: center; flex: none; min-height: 28px; box-sizing: content-box; padding: 9px 0 11px; border-top: 1px solid var(--borde-reposo, var(--line)); opacity: .6; color: var(--ink); }
+/* Franja de marca (Rovaq): logo horizontal de 100 px de ancho en una franja de 28 px de alto; la altura del trazo sigue la proporcion del viewBox. */
+.rv-ov__marca svg { width: 100px; height: auto; }
 /* Controles del encabezado y del pie: 28 px (Rovaq, --ov-btn-sm); el boton chico del kit mide 32 fuera de los overlays. */
 [data-ui="v2"] .rv-ov .rv-btn--sm { min-height: var(--ov-btn-sm, 28px); }
 
 /* Drawer: a la derecha en escritorio, 8 px de margen. `data-ancho` (PanelLateral) manda sobre `data-tamano`. */
 .rv-ov--drawer { margin: 8px 8px 8px auto; height: calc(100dvh - 16px); width: min(calc(100vw - 16px), 420px); }
-.rv-ov--drawer[data-tamano="l"] { width: min(calc(100vw - 16px), 480px); }
+/* CAJÓN UNIFICADO (R8, 7-nov-2026): solo hay dos anchos por TIPO. 420 = estándar (detalle, filtros, ⓘ, historial); 640 = paquetes y previas.
+   Los valores heredados (tamano «l» 480, ancho 320 y 560) se conservan en la API para no romper llamadores, pero se pintan con el ancho de su tipo. */
+.rv-ov--drawer[data-tamano="l"] { width: min(calc(100vw - 16px), 420px); }
 .rv-ov--drawer[data-tamano="xl"] { width: min(calc(100vw - 16px), 640px); }
-.rv-ov--drawer[data-ancho="320"] { width: min(calc(100vw - 16px), 320px); }
+.rv-ov--drawer[data-ancho="320"] { width: min(calc(100vw - 16px), 420px); }
 .rv-ov--drawer[data-ancho="420"] { width: min(calc(100vw - 16px), 420px); }
-.rv-ov--drawer[data-ancho="560"] { width: min(calc(100vw - 16px), 560px); }
+.rv-ov--drawer[data-ancho="560"] { width: min(calc(100vw - 16px), 640px); }
 .rv-ov--drawer .rv-ov__panel { height: 100%; }
 /* Modal: centrado, 16 px de margen. `data-posicion="arriba"` (paleta de comandos) lo sube a un 12 % de la altura. */
 .rv-ov--modal { margin: auto; width: min(calc(100vw - 32px), 440px); }

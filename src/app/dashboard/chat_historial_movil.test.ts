@@ -15,7 +15,7 @@ import path from 'node:path';
 
 const leer = (rel: string) => readFileSync(path.join(__dirname, rel), 'utf8');
 const historial = leer('chat/historial.tsx');
-const flota = leer('chat/chat-flota.tsx');
+const flota = leer('chat/agente-conversacion.tsx');
 const css = readFileSync(path.join(__dirname, '../ui-v2/chat.css'), 'utf8');
 
 describe('chat: el historial en móvil es un Drawer del motor único (L3)', () => {
@@ -39,7 +39,7 @@ describe('chat: el historial en móvil es un Drawer del motor único (L3)', () =
 });
 
 describe('chat: CSP — cero `style=` en los componentes del chat', () => {
-  it.each(['chat-flota', 'composer', 'historial', 'mensajes', 'bloques', 'traza', 'sugerencias', 'marca'])('%s.tsx no usa style=', (n) => {
+  it.each(['chat-flota', 'agente-conversacion', 'tarjeta-accion', 'composer', 'historial', 'mensajes', 'bloques', 'traza', 'sugerencias', 'marca'])('%s.tsx no usa style=', (n) => {
     expect(leer(`chat/${n}.tsx`)).not.toMatch(/\bstyle=\{/);
   });
 });

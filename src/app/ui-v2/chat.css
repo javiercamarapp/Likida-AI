@@ -319,3 +319,56 @@ summary.rv-chat__resumen::marker { content: ""; }
 }
 /* Un historial reabierto no re-anima sus gráficas. */
 .rv-chat__respuesta[data-nuevo="false"] .rv-chat__bloque :is(.rv-dona__gajo, .rv-dona__borde, .rv-area__linea, .rv-area__relleno, .rv-area__punto) { animation: none; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   AGENTE UNIFICADO (R8): lo que el modo superadmin agrega a la MISMA pantalla. Sin `style=`; todo por clase y `data-*`.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Sin clip (el copiloto no tiene adjuntos): el campo toma la primera columna. */
+.rv-chat__composer[data-sin-clip] { grid-template-columns: minmax(0, 1fr) auto; }
+.rv-chat__composer[data-sin-clip] textarea { grid-column: 1; }
+.rv-chat__composer[data-sin-clip] .rv-chat__enviar { grid-column: 2; }
+.rv-chat__composer[data-sin-clip][data-documento] :is(textarea, .rv-chat__enviar) { grid-row: 2; }
+
+/* Fuentes clicables de una respuesta (la pantalla de la que sale cada cifra). */
+.rv-chat__fuentes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.rv-chat__fuentes .rv-chat__nota { margin: 0; }
+.rv-chat__fuente { display: inline-flex; align-items: center; gap: 4px; text-decoration: none; }
+.rv-chat__fuente:hover { background: var(--canvas); }
+.rv-chat__fuente:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
+
+/* Tarjeta de acción: previsualiza y exige confirmación del humano. */
+.rv-accion { display: flex; flex-direction: column; gap: 8px; max-width: 34rem; }
+.rv-accion[data-estado="lista"], .rv-accion[data-estado="ejecutando"], .rv-accion[data-estado="armada"] { border-color: var(--warn, var(--line)); }
+.rv-accion__titulo { display: flex; align-items: center; gap: 8px; margin: 0; font: 600 14px/20px var(--font-sans-ui, inherit); color: var(--ink); }
+.rv-accion__titulo svg { flex: none; color: var(--warn, var(--ink)); }
+.rv-accion__objetivo { font-family: var(--font-mono-ui, ui-monospace, monospace); font-variant-numeric: tabular-nums; }
+.rv-accion__linea { margin: 0; font-size: 13px; line-height: 18px; color: var(--muted); overflow-wrap: anywhere; }
+.rv-accion__linea b { font-weight: 600; color: var(--ink); }
+.rv-accion__campo { display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 16px; color: var(--muted); }
+.rv-accion__aviso { margin: 0; font: 600 12px/16px var(--font-sans-ui, inherit); color: var(--warn, var(--ink)); }
+.rv-accion__botones { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* Variante PANEL (el lateral de 400 px de /admin): la misma pantalla, compacta. */
+.rv-chat[data-variante="panel"] { --col-chat: 100%; padding: 0 12px 12px; box-sizing: border-box; }
+.rv-chat[data-variante="panel"] :is(.rv-chat__pie, .rv-chat__meta) { display: none; }
+.rv-chat[data-variante="panel"] .rv-chat__sub { margin-bottom: 14px; font-size: 13px; line-height: 18px; }
+.rv-chat[data-variante="panel"] .rv-chat__hero h1 { font-size: 18px; }
+
+/* El contenedor de la página /admin/copiloto: el alto lo da la ventana (no hay scroll de documento propio del chat). */
+.rv-agente-pagina { display: flex; flex-direction: column; height: calc(100dvh - 2rem); min-height: 420px; }
+.rv-agente-pagina > .rv-chat { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+
+/* El panel lateral persistente del chrome de /admin: cerrado es ancho 0 (no se desmonta: la conversación sobrevive a la navegación). */
+.rv-copiloto-panel { flex: none; position: sticky; top: 16px; align-self: flex-start; height: calc(100dvh - 2rem); overflow: hidden; width: 0; margin-left: -16px; }
+.rv-copiloto-panel[data-abierto="true"] { width: 400px; margin-left: 0; }
+.rv-copiloto-panel__caja { display: flex; flex-direction: column; width: 400px; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: var(--sh-marco, none); }
+.rv-copiloto-panel__cab { display: flex; align-items: center; gap: 8px; flex: none; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.rv-copiloto-panel__cab strong { font: 600 13px/18px var(--font-sans-ui, inherit); color: var(--ink); }
+.rv-copiloto-panel__cab kbd { padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; font: 500 11px/16px var(--font-sans-ui, inherit); color: var(--muted); }
+.rv-copiloto-panel__esp { flex: 1 1 auto; }
+.rv-copiloto-panel .rv-btn.rv-copiloto-panel__btn { width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; justify-content: center; }
+.rv-copiloto-panel__cuerpo { flex: 1 1 auto; min-height: 0; display: flex; }
+@media (prefers-reduced-motion: no-preference) {
+  .rv-copiloto-panel { transition: width var(--chat-hist) var(--ui-ease), margin-left var(--chat-hist) var(--ui-ease); }
+}

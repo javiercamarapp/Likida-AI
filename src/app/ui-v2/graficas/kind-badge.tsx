@@ -1,4 +1,4 @@
-import { Check, Link2, Minus, TrendingUp } from 'lucide-react';
+import { Calculator, Check, Link2, Minus, TrendingUp } from 'lucide-react';
 import { cx } from '../componentes/clases';
 
 // Modelo epistémico del dato (PLAN §2.4; regla del repo: nunca inventar una cifra).
@@ -6,16 +6,18 @@ import { cx } from '../componentes/clases';
 //   observado  = SILENCIOSO: punto de 6 px + texto muted, sin borde (registrado en la fuente)
 //   estimado   = borde discontinuo (calculado con un supuesto declarado)
 //   inferido   = borde punteado (deducido de otros datos)
+//   calculado  = borde sólido con icono (resultado de una fórmula sobre datos registrados; sello «Clase de dato» del ⓘ)
 //   sin_dato   = punteado vacío (no hay dato; NO es cero)
-export type TipoDato = 'observado' | 'estimado' | 'inferido' | 'sin_dato';
+export type TipoDato = 'observado' | 'calculado' | 'estimado' | 'inferido' | 'sin_dato';
 
 export const ROTULO_DATO: Record<TipoDato, { texto: string; ayuda: string }> = {
   observado: { texto: 'Observado', ayuda: 'Registrado en la fuente.' },
+  calculado: { texto: 'Calculado', ayuda: 'Resultado de una fórmula sobre datos registrados en la fuente.' },
   estimado: { texto: 'Estimado', ayuda: 'Calculado con un supuesto que está a la vista.' },
   inferido: { texto: 'Inferido', ayuda: 'Deducido de otros datos; no se midió directo.' },
   sin_dato: { texto: 'Sin dato', ayuda: 'Todavía no hay dato. No es cero.' },
 };
-const ICONO = { observado: Check, estimado: TrendingUp, inferido: Link2, sin_dato: Minus } as const;
+const ICONO = { observado: Check, calculado: Calculator, estimado: TrendingUp, inferido: Link2, sin_dato: Minus } as const;
 
 export function KindBadge({ tipo, className }: { tipo: TipoDato; className?: string }) {
   const Icono = ICONO[tipo];

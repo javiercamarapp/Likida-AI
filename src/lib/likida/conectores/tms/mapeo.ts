@@ -120,8 +120,9 @@ export function leerRuta(origen: unknown, ruta: string): unknown {
 type Resultado = { ok: unknown } | { error: string };
 
 /**
- * «189,50» → 189.5 · «1,234.50» → 1234.5 · «1.234,50» → 1234.5 · «1,234» → 1234 (la coma con tres dígitos
- * exactos y sin otro separador es de miles; con uno o dos dígitos es decimal). «$» y espacios se ignoran.
+ * «189,50» → 189.5 · «1,234.50» → 1234.5 · «1.234,50» → 1234.5 (un separador seguido de uno o dos dígitos es decimal; si hay
+ * los dos, el último es el decimal). «1,234» y «1.234» (un solo separador con tres dígitos detrás) son AMBIGUOS y se rechazan salvo que
+ * el mapeo declare `decimal` (R7-B2: en dinero no se adivina). «$» y espacios se ignoran.
  */
 export function aNumero(v: unknown, decimalDeclarado?: '.' | ','): Resultado {
   if (typeof v === 'number') return Number.isFinite(v) ? { ok: v } : { error: 'número no finito' };
@@ -156,8 +157,11 @@ export function aNumero(v: unknown, decimalDeclarado?: '.' | ','): Resultado {
     } else if (sep === '.' && cola.length === 3 && /^[1-9]\d{0,2}$/.test(partes[0])) {
       // «1.234»: ¿mil doscientos treinta y cuatro o uno punto doscientos treinta y cuatro? No se adivina (dinero).
       return { error: `«${v.slice(0, 30)}» es ambiguo (¿miles o decimales?): declara «decimal» en el mapeo` };
-    } else if (sep === ',' && cola.length === 3 && partes[0].length >= 1 && partes[0].length <= 3 && partes[0] !== '') normal = partes.join('');
-    else normal = partes.join('.');
+    } else if (sep === ',' && cola.length === 3 && partes[0].length >= 1 && partes[0].length <= 3 && partes[0] !== '') {
+      // R7-B2: «1,234» es el mismo caso que «1.234» con el signo cambiado (¿mil doscientos treinta y cuatro o 1.234?): en dinero no se
+      // adivina; se convierte solo si el mapeo declara el separador decimal.
+      return { error: `«${v.slice(0, 30)}» es ambiguo (¿miles o decimales?): declara «decimal» en el mapeo` };
+    } else normal = partes.join('.');
   } else normal = s;
   const n = Number(normal);
   return Number.isFinite(n) ? { ok: neg ? -n : n } : { error: `«${v.slice(0, 30)}» no es un número` };

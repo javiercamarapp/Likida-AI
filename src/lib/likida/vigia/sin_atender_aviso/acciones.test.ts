@@ -4,7 +4,7 @@ vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: vi.fn() }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 const { TZ_MX } = await import('@/lib/formato');
-const { enviarResumenPanel, guardarConfigPanel, revisarPanel, revisarSinAtender, recortarPorCorte, resumenSinAtenderDeGrupo } = await import('./acciones');
+const { enviarResumenPanel, guardarConfigPanel, revisarPanel, revisarSinAtender, recortarPorCorte, resumenSinAtenderDeGrupo, resumenSinAtenderDeGrupos } = await import('./acciones');
 const { resumenHabilitadoParaFlota } = await import('./interruptor');
 const { copiaConfigGuardadaPorOmision } = await import('../sin_atender/config_guardada');
 const { salDeFlota, hashAutor } = await import('../historial/export_whatsapp');
@@ -24,6 +24,7 @@ function deps(p: Partial<Deps> = {}): Deps & { llamadas: { leerChats: string[] }
     puertoConfig: { leer: async () => null, guardar: vi.fn(async () => ({ ok: true as const })) },
     detectar: () => resultado([alerta()]),
     habilitado: async () => ({ ok: true }),
+    permitirEnvio: async () => true,
     enviar: vi.fn(async (e) => ({ ok: true as const, destinatarios: e.destinatarios.length, alertas: e.resultado.alertas.length, clave: 'k' })),
     bitacora: vi.fn(async () => undefined) as never,
     ahora: () => AHORA_DIA,
@@ -69,6 +70,39 @@ describe('enviar el resumen (acción)', () => {
     expect(eNoche.turno).toBe('noche');
     expect(eDia.destinatarios.map((x: { correo: string }) => x.correo)).not.toContain('noche@ejemplo.test');
     expect(eNoche.destinatarios.map((x: { correo: string }) => x.correo)).toContain('noche@ejemplo.test');
+  });
+  it('R7-A6: enfriamiento por flota: el segundo envío seguido no manda nada, aunque el contenido cambie', async () => {
+    const vistas = new Map<string, number>();
+    const permitirEnvio = async (t: string) => { const n = (vistas.get(t) ?? 0) + 1; vistas.set(t, n); return n <= 1; };
+    const d = deps({ permitirEnvio });
+    const a = await enviarResumenPanel(ctx(), form({ fechaCorte: '2026-11-01' }), d);
+    expect(a.ok).toBe(true);
+    const b = await enviarResumenPanel(ctx(), form({ fechaCorte: '2026-11-02' }), d);
+    expect(b).toMatchObject({ ok: false });
+    expect(b.ok === false && b.error).toMatch(/hace menos de 10 minutos/);
+    expect(d.enviar).toHaveBeenCalledTimes(1);
+    // otra flota no comparte el enfriamiento
+    const c = await enviarResumenPanel(ctx('flota_admin', TENANT_B), form({ fechaCorte: '2026-11-01' }), d);
+    expect(c.ok).toBe(true);
+    expect(d.enviar).toHaveBeenCalledTimes(2);
+  });
+  it('R7-A6: sin alertas o sin destinatarios no se gasta el enfriamiento', async () => {
+    const permitirEnvio = vi.fn(async () => true);
+    const sinAlertas = deps({ permitirEnvio, detectar: () => resultado([]), enviar: vi.fn(async () => ({ ok: false as const, motivo: 'sin_alertas' as const })) });
+    await enviarResumenPanel(ctx(), form({ fechaCorte: '2026-11-01' }), sinAlertas);
+    const sinDest = deps({ permitirEnvio, leerDestinatarios: async () => crudos({ servicio: [], nivel1: [], nivel2: [] }), enviar: vi.fn(async () => ({ ok: false as const, motivo: 'sin_destinatarios' as const })) });
+    await enviarResumenPanel(ctx(), form({ fechaCorte: '2026-11-01' }), sinDest);
+    expect(permitirEnvio).not.toHaveBeenCalled();
+  });
+  it('R7-A6: la dependencia real usa una ventana de 10 minutos por flota y un solo envío', async () => {
+    const { ENFRIAMIENTO_RESUMEN_MS, depsSinAtenderReales } = await import('./acciones');
+    expect(ENFRIAMIENTO_RESUMEN_MS).toBe(600_000);
+    const { reiniciarLimites } = await import('@/lib/ratelimit');
+    reiniciarLimites();
+    expect(await depsSinAtenderReales.permitirEnvio(TENANT_A)).toBe(true);
+    expect(await depsSinAtenderReales.permitirEnvio(TENANT_A)).toBe(false);
+    expect(await depsSinAtenderReales.permitirEnvio(TENANT_B)).toBe(true);
+    reiniciarLimites();
   });
   it('éxito: bitácora con conteos y sin texto; error del proveedor también se asienta y se explica', async () => {
     const ok = deps();
@@ -131,6 +165,12 @@ describe('revisión tras importar un chat', () => {
     expect(d.llamadas.leerChats).toEqual([TENANT_A]);
     expect(d.enviar).not.toHaveBeenCalled();
     expect(d.bitacora).not.toHaveBeenCalled();
+  });
+  it('varios grupos: UNA sola lectura de la flota sin importar cuántos grupos se pidan (R7-A4)', async () => {
+    const d = deps({ detectar: () => resultado([alerta({ chatId: 'g1', nivel: 'alta' }), alerta({ chatId: 'g2', clave: 'b' }), alerta({ chatId: 'g9', clave: 'c' })]) });
+    const r = await resumenSinAtenderDeGrupos(TENANT_A, ['g1', 'g2', 'g3', 'g1'], ['Operador 1'], d);
+    expect(d.llamadas.leerChats).toEqual([TENANT_A]);
+    expect([...r!.entries()]).toEqual([['g1', { alertas: 1, altas: 1 }], ['g2', { alertas: 1, altas: 0 }], ['g3', { alertas: 0, altas: 0 }]]);
   });
   it('si no se puede revisar devuelve null, nunca lanza', async () => {
     expect(await resumenSinAtenderDeGrupo(TENANT_A, 'g1', [], deps({ leerChats: async () => null }))).toBeNull();

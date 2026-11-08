@@ -82,6 +82,8 @@ En este orden, parando primero lo que lee:
 
 Estado: **ninguna parte de este contrato está confirmada por el cliente.** Existe para que, el día que llegue su especificación, conectar sea corregir un archivo y no escribir código. El modo API viene **apagado**.
 
+> **Verificado en la ronda 7 (por lectura del código):** `crearAdaptadorTms` (`contrato.ts`) NO tiene hoy ningún llamador de producción: solo lo usan `contrato_openapi.ts` (que deriva el OpenAPI de abajo) y sus pruebas. Lo que lee el cron `tms` y el pull de desgloses es otra cosa: la tabla `tms_mapeo`, la función `loginDe` y `CONFIG_API_DESGLOSE`. El procedimiento real para el día que llegue la especificación es la **sección 8**; esta sección 7 describe el adaptador F4 (listo y probado, sin cablear).
+
 **Un solo archivo de contrato:** `src/lib/likida/conectores/tms/contrato.supuesto.json` (login y token, detección de sesión caída, paginación por recurso, fecha de corte, modos api/archivos/push, texto) más los mapeos JSON que nombra (`mapeos/viajes|peajes|posiciones|liquidaciones.supuesto.json`: rutas, nombres de campo y formatos de fecha). `contrato.ts` lo valida (falla cerrado con el motivo) y arma `crearAdaptadorTms(contrato, { http, base, credenciales })`. La URL base y las credenciales NO viven en el contrato: salen del cofre por flota.
 
 **Qué cubre el adaptador (probado con dobles en `contrato.test.ts`, 0 red):**
@@ -103,3 +105,68 @@ Estado: **ninguna parte de este contrato está confirmada por el cliente.** Exis
 **Regenerar el OpenAPI** tras tocar el contrato o un mapeo: `TMS_OPENAPI_ACTUALIZAR=1 npx vitest run src/lib/likida/conectores/tms/contrato_openapi.test.ts` y revisar el diff.
 
 **Cuando llegue la especificación real:** corregir `contrato.supuesto.json` y los mapeos, cambiar `estado` a `CONFIRMADO` solo con evidencia, correr la suite de contrato contra el servicio de prueba y recién entonces encender el modo API (decisión de la persona responsable). Migraciones: este cambio no necesita ninguna (el rango 0985-0989 está reservado a F5 «cofre v2»; este cambio no lo toca).
+
+## 8. Al recibir el API: procedimiento exacto (R7)
+
+Todo lo de abajo SOLO LEE del sistema de la flota. Cada nombre fue verificado contra el código en la ronda 7.
+
+### 8.1 Dónde vive cada pieza de la forma del API (qué se edita)
+
+| Pieza | Dónde está | Qué es |
+|---|---|---|
+| Credencial (dirección, usuario, clave, ruta de login, ambiente) | `/dashboard/conexiones`, ficha `tms_api_lectura` | Dato por flota, cifrado. «Probar conexión» hace login + una lectura (`RUTA_PRUEBA_LECTURA` de `tms/ficha.ts`). |
+| Forma del login (cuerpo, dónde viene el token) | `loginDe` en `src/lib/likida/conectores/tms/acceso.ts` (lo usan el sincronizador y el lector de desgloses) y `probarTmsApiLectura`/`extraerToken` en `tms/ficha.ts` (solo la prueba de la ficha) | **Código**, no dato: si el login real difiere (otros nombres de campo, token en otra ruta), se corrigen esos dos sitios. No es el transporte (`SesionTms` no cambia). |
+| viajes, peajes, posiciones | tabla `tms_mapeo` (fila por flota y recurso: `tenant_id`, `recurso`, `mapeo` jsonb, `version`, `activo`) | Dato. Punto de partida: `src/lib/likida/conectores/tms/mapeos/{viajes,peajes,posiciones}.supuesto.json`. |
+| liquidaciones (nómina) | `tms_mapeo` con `recurso = 'liquidaciones'`; el `mapeo` es `{ "nomina": {…}, "operadores": {…}, "conceptos": {…} }` | Dato. Punto de partida: `mapeos/liquidaciones.supuesto.json`. |
+| Desgloses por bitácora (pull del cron `liquidaciones-externas`) | `CONFIG_API_DESGLOSE` en `src/lib/likida/liquidacion_externa/desglose_tms_supuesto.ts` | **Código global** (no por flota): ruta, parámetros, `rutaItems`, `campoCursor` y el `mapeo` de campos. Cambiarlo es un cambio de código y un deploy. |
+| Entrega por empuje (`muestra-tms`) | `desglose_muestra_tms.ts` y `desglose_muestra_recepcion.ts` | Código; apagado por omisión (8.6). |
+
+El texto de las secciones 1–7 sigue valiendo para pedir datos, credencial, prueba, desactivación y reversión.
+
+### 8.2 Pasos
+
+1. **Credencial en `prueba`.** `/dashboard/conexiones` → ficha `tms_api_lectura` → ambiente `prueba` → «Probar conexión». Debe salir «sirve» (sección 3). Sin credencial probada y sin error, el cron no lee nada.
+2. **Corregir el login si hace falta** (8.1) y correr `npx vitest run src/lib/likida/conectores/tms/ficha.test.ts src/lib/likida/conectores/tms/sesion.test.ts`.
+3. **Armar el archivo de mapeos** FUERA del repo (p. ej. `/ruta/mapeos.json`), copiando los `*.supuesto.json` y editando rutas y nombres de campo según la especificación:
+   `{ "viajes": {…}, "peajes": {…}, "posiciones": {…}, "liquidaciones": { "nomina": {…}, "operadores": {…}, "conceptos": {…} } }`. Reglas del mapeo: `validarMapeo` en `tms/mapeo.ts` (ruta con «/» inicial, `raiz`, `campos`, `clave_externa`, `obligatorios`; transformaciones `numero`, `fecha_local`, `texto`, `booleano`). Un importe en texto con un solo separador de tres dígitos («1.234» o «1,234») es ambiguo: se declara `"decimal": "."` o `","` en el campo.
+4. **Archivo de credenciales de prueba** fuera del repo, modo 600, líneas `clave=valor`: `base_url`, `usuario`, `clave` y, si aplica, `ruta_login`.
+5. **Prueba en seco** (lee a lo más 20 registros por mapeo, UNA página de los últimos 2 días; no escribe nada; no imprime valores):
+
+   ```bash
+   TMS_CREDENCIALES_ARCHIVO=/ruta/.env.tms node scripts/tms/verificar-local.mjs --en-seco /ruta/mapeos.json --desgloses
+   ```
+
+   Sin `--desgloses` no se prueba la lectura de desgloses por bitácora (8.1). Sin credenciales reales, el ensayo contra el servidor sintético es `node scripts/tms/verificar-local.mjs --en-seco --falso`. La misma prueba existe como función de servidor: `pruebaEnSecoDeFlota(tenantId, { borrador })` en `tms/prueba_en_seco.ts` (usa la credencial del cofre de la flota; sin `borrador` prueba el mapeo activo de `tms_mapeo`). **No está en la interfaz de conexiones:** no hay hoy ninguna pantalla donde se edite o se vea un mapeo, así que agregarla sería construir una superficie nueva; se corre por script.
+6. **Leer el reporte** (código de salida 0 = limpio, 1 = pendientes, 2 = uso/credenciales). Por mapeo: `falta requerido «destino» (fuente «ruta»)` = esa ruta no vino en alguna fila (la fila no entra; nunca se rellena con ceros); `tipo no cuadra … AMBIGUO` = falta declarar `decimal`; `campos del origen que el mapeo no usa` = se ignoran, solo informativo; `opcionales ausentes` = pueden ser correctos; `el mapeo no pudo leer «campo»` (desgloses) = nombre de campo del contrato interno que no se pudo leer. Corregir el JSON (o `CONFIG_API_DESGLOSE`) y repetir hasta `RESULTADO: limpio`.
+7. **Activar el mapeo de una flota.** No hay pantalla ni código que escriba `tms_mapeo`; es una operación de datos con rol de servicio, en una sola transacción (una versión activa por flota y recurso; las anteriores quedan como historia). No es una migración:
+
+   ```sql
+   begin;
+   update public.tms_mapeo set activo = false where tenant_id = '<tenant>' and recurso = '<recurso>' and activo;
+   insert into public.tms_mapeo (tenant_id, recurso, mapeo, version, activo)
+   values ('<tenant>', '<recurso>', '<json>'::jsonb,
+           (select coalesce(max(version), 0) + 1 from public.tms_mapeo where tenant_id = '<tenant>' and recurso = '<recurso>'), true);
+   commit;
+   ```
+
+   `<recurso>` es `viajes`, `peajes`, `posiciones` o `liquidaciones`. El `mapeo` debe pesar menos de 64 KiB (restricción de la tabla).
+8. **Verificar.** El cron `tms` corre cada 10 minutos (`vercel.json`) y exige: interruptor `global` encendido, credencial activa, probada y sin error, y mapeo activo. Mirar: latido `tms` en `/admin/salud-sistema` (`ok` o `parcial`; en `parcial` leer `detalle` y el log `cron.tms.parcial`), filas de `tms_sincronizacion` de la flota (`ultimo_error` vacío, `ultima_ok_en` reciente) y que `credencialRechazada` sea falso. Cada recurso informa `leidas/nuevas/omitidas/rechazadas/pendientes` sin datos del cliente. Pasar de `prueba` a `produccion` solo con todo limpio en `prueba` (sección 3, punto 5).
+
+### 8.3 Cómo apagar
+
+- **Una flota, sin perder su credencial:** `update public.tms_mapeo set activo = false where tenant_id = '<tenant>' and activo;` (sección 5, punto 3). No existe interruptor por flota (A37-TRANSVERSAL-08).
+- **Cortar el acceso:** «Desactivar» la ficha en `/dashboard/conexiones` (sección 4; para volver hay que recapturar).
+- **Todo el sincronizador `tms`:** interruptor `global` de la tabla `interruptor` (también apaga los demás crons de agentes).
+- **Pull de desgloses (cron `liquidaciones-externas`):** interruptor `agente:liquidacion` (el cron pregunta primero `global` y luego éste) o dejar apagado «Activar el envío» de la flota con canal `correo`; sin eso `lectoresDesglosesTms` no entrega la flota al pull.
+
+### 8.4 Qué verificar contra la prueba en seco antes de confiar
+
+La prueba usa los mismos `aplicarMapeo`, `aNumero`, `aFechaLocal` y `mapearBitacoraTms` que producción, así que lo que marca limpio es lo que producción acepta. No sustituye la revisión de una persona de las cifras (que una liquidación cuadre contra su PDF) ni cubre paginación completa, cursores, límites de tasa ni sesiones caídas (eso lo cubre la suite de `tms/*.test.ts` con servidores falsos).
+
+### 8.5 Qué NO cubre este procedimiento
+
+La especificación real no existe: login, rutas, paginación, zona horaria, semántica de `Icident` y campo de consumo siguen SUPUESTOS (sección 1.2). Ninguna flota real está conectada.
+
+### 8.6 Entrega por empuje `muestra-tms` (`POST /v1/liquidaciones-externas/desgloses`)
+
+Apagada por omisión y falla cerrado (403 sin explicar la causa). Se enciende con TODO esto: variable de plataforma `LIKIDA_TMS_MUESTRA=si` (un redeploy), interruptores `global` y `agente:liquidacion` encendidos, y que la flota tenga «Activar el envío» con canal `correo`. Topes: 100 bitácoras por petición, 100 renglones por bloque (Percepciones, Deducciones) y 2 MB de cuerpo. El tenant sale de la llave de API, nunca del cuerpo. La muestra no trae póliza: lo que se recibe queda en `sin_poliza` (no se envía) y no se inventa una. Apagar: `LIKIDA_TMS_MUESTRA` distinta de `si` (redeploy) o el interruptor `agente:liquidacion`.

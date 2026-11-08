@@ -63,11 +63,11 @@
 [data-ui="v2"] .rv-lista { list-style: none; margin: 0; padding: 0; }
 [data-ui="v2"] .rv-grupo { margin-top: 6px; }
 [data-ui="v2"] .rv-grupo__h { margin: 0; font: inherit; }
-/* Caption de grupo: 11 mono MAYÚSCULAS .06em; estático 24, toggle 32 */
+/* Caption de grupo (Rovaq): 11/500 MAYÚSCULAS con tracking 0.66 px (= .06em de 11 px); estático 24, toggle 32 */
 [data-ui="v2"] .rv-grupo__t {
   margin: 0; padding: 0 18px; height: 24px; display: flex; align-items: center;
   font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1;
+  font-size: 11px; font-weight: 500; letter-spacing: 0.66px; text-transform: uppercase; line-height: 1;
   color: var(--faint);
 }
 [data-ui="v2"] .rv-grupo__tog {
@@ -85,7 +85,7 @@
 [data-ui="v2"] .rv-grupo[data-abierto] .rv-grupo__chev { transform: rotate(180deg); }
 [data-ui="v2"] .rv-grupo[data-estatico] .rv-grupo__cuerpo { display: block; }
 
-/* Ítem de navegación: alto 32, padding 6 10, gap 9, 13/500 (activo 600), icono 16, radio 8; toque 44 por ::after */
+/* Ítem de navegación: alto 32, padding 6 10, gap 9, 13/500 (activo también 500), icono 16, radio 8; toque 44 por ::after */
 [data-ui="v2"] .rv-item {
   position: relative; display: flex; align-items: center; gap: 9px;
   height: 32px; margin: 0 8px; padding: 6px 10px; border-radius: 8px;
@@ -96,10 +96,9 @@
 [data-ui="v2"] .rv-item:hover { background: var(--ui-soft); color: var(--ink); }
 [data-ui="v2"] .rv-item__ico { flex: none; color: var(--muted); }
 [data-ui="v2"] .rv-item__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* ◆ Activo SUTIL (controles finos, SPEC D8): jerarquía por gris y peso, sin barra ni sombra interior. Fondo --nav-activo-bg (gris muy claro),
-   texto --nav-activo-fg y peso --nav-activo-peso (tokens.css). Reversible: reponer `box-shadow: inset 2px 0 0 var(--ink)` y su aserción.
-   Nunca bloque negro ni blanco ni barra de color; el rojo/burdeos (--senal) solo como acento puntual de atención. */
-[data-ui="v2"] .rv-item[aria-current="page"] { background: var(--nav-activo-bg); color: var(--nav-activo-fg); font-weight: var(--nav-activo-peso); }
+/* ◆ Activo estilo Rovaq (R8): barra izquierda INSET de 2 px (--nav-activo-barra, un solo token para el color), fondo tinta al 7 % (--nav-activo-bg),
+   texto --nav-activo-fg y peso 500 (--nav-activo-peso). Sin bloque negro ni blanco; el burdeos (--senal) sigue siendo solo «requiere acción». */
+[data-ui="v2"] .rv-item[aria-current="page"] { background: var(--nav-activo-bg); color: var(--nav-activo-fg); font-weight: var(--nav-activo-peso); box-shadow: inset 2px 0 0 var(--nav-activo-barra); }
 [data-ui="v2"] .rv-item[aria-current="page"] .rv-item__ico { color: var(--nav-activo-fg); }
 [data-ui="v2"] .rv-item:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
 [data-ui="v2"] .rv-icono-boton:focus-visible,

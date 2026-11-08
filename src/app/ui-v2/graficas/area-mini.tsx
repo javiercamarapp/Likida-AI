@@ -6,6 +6,7 @@ import type { Matiz } from '../metricas';
 import { cadaCuantas, compactEs, esConteoPequeno, indicesEtiquetados, niceScale, variacionVsAnterior } from './escala';
 import type { TipoDato } from './kind-badge';
 import { CintaLectura, LecturaPunto, TablaGrafica, useAncho } from './partes';
+import { resolverFormato, type FormatoGrafica } from './formatos';
 
 const PAD_T = 20, PAD_R = 14;
 
@@ -13,17 +14,18 @@ const PAD_T = 20, PAD_R = 14;
  *  tenue, etiquetas directas del máximo y del último valor (punto r 3.25), crosshair y tooltip al pasar, tocar o con ←/→ (Inicio/Fin,
  *  Esc), «Ver como tabla». Un nulo CORTA la línea (nunca se interpola) y el hueco se marca punteado; <2 puntos ⇒ `.mc-vacio`
  *  conservando el alto. La línea se dibuja una vez (trazo 380 ms); con reduced-motion aparece quieta. */
-export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato = (v) => String(v), alto = 140, tipo = 'observado', unidad }: {
+export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato: formatoProp, alto = 140, tipo = 'observado', unidad }: {
   valores: ReadonlyArray<number | null>;
   etiquetas?: readonly string[];
   matiz?: Matiz;
   /** Nombre accesible de la figura. */
   etiqueta: string;
-  formato?: (v: number) => string;
+  formato?: FormatoGrafica;
   alto?: number;
   tipo?: TipoDato;
   unidad?: string;
 }) {
+  const formato = resolverFormato(formatoProp);
   const [ref, ancho] = useAncho<HTMLDivElement>();
   const [sel, setSel] = useState<number | null>(null);
   const plano = useRef<SVGSVGElement>(null);

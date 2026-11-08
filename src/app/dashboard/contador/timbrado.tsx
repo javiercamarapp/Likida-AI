@@ -4,6 +4,7 @@ import { Stamp } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
+import { cambioFiscalExigeStepUp, exigirStepUpAccion } from '@/lib/auth/stepup';
 import { estadoPac } from '@/lib/likida/pac';
 import { guardarPerfilFiscal } from '@/lib/likida/carta_porte_timbre';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -65,15 +66,29 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
       return { error: 'Tu rol no puede declarar el perfil fiscal del timbrado.' };
     }
+    const nuevo = {
+      rfc: t(fd.get('rfc'))?.toUpperCase() ?? null,
+      razonSocial: t(fd.get('razonSocial')),
+      regimenFiscal: t(fd.get('regimenFiscal')),
+      lugarExpedicion: t(fd.get('lugarExpedicion')),
+      serie: t(fd.get('serie')),
+      modo: String(fd.get('modo')) === 'produccion' ? 'produccion' as const : 'sandbox' as const,
+    };
+    // R7-A3: cambiar el RFC o pasar a producción exige segundo factor reciente. Se compara contra lo GUARDADO ahora (no contra lo
+    // que pintó la pantalla: otra pestaña pudo cambiarlo) y, si no se pudo leer, se cierra.
+    let vigente: { rfc?: string | null; modo?: string | null } | null | undefined;
     try {
-      await guardarPerfilFiscal(s.tenantId, {
-        rfc: t(fd.get('rfc'))?.toUpperCase() ?? null,
-        razonSocial: t(fd.get('razonSocial')),
-        regimenFiscal: t(fd.get('regimenFiscal')),
-        lugarExpedicion: t(fd.get('lugarExpedicion')),
-        serie: t(fd.get('serie')),
-        modo: String(fd.get('modo')) === 'produccion' ? 'produccion' : 'sandbox',
-      }, { id: s.userId });
+      const { data, error } = await acotada(supabaseAdmin().from('flota_fiscal').select('rfc, modo').eq('tenant_id', s.tenantId).maybeSingle(), 'timbrado.perfil_vigente');
+      vigente = error ? undefined : (data as { rfc?: string | null; modo?: string | null } | null);
+    } catch {
+      vigente = undefined;
+    }
+    if (cambioFiscalExigeStepUp(vigente, nuevo)) {
+      const pasoMfa = await exigirStepUpAccion(s.rol, 'perfil_fiscal', { tenantId: s.tenantId, userId: s.userId });
+      if (pasoMfa) return { error: pasoMfa };
+    }
+    try {
+      await guardarPerfilFiscal(s.tenantId, nuevo, { id: s.userId });
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'guardar el perfil de timbrado') };
     }

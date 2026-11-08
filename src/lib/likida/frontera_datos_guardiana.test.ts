@@ -324,7 +324,9 @@ import { join, relative } from 'node:path';
 // F9 (CT-ENT-01 y CT-DAT-16, migraciones 0997/0998): +2 archivos (331 -> 333) y +4 llamadas (2,474 -> 2,478), medidos con el guardián: `seguridad/acceso_superadmin.ts` (un
 // insert en `superadmin_acceso`, de solo agregar, best-effort) y `likida/offboarding/exportar.ts` (lectura paginada por `tenant_id` de las tablas del mapa de datos y el insert de la constancia
 // en `tenant_exportacion`). Los dos apagados por omisión. Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 333;
+// Ronda 7 (arreglos de auditoria + prueba en seco del TMS): +1 archivo (333 -> 334), `conectores/tms/prueba_en_seco.ts`: lee `tms_mapeo` de UNA flota (activo, anclado a tenant_id,
+// por `acotada`) para la prueba en seco; no cabe en `sincronizar.ts`, cuya lectura es por lote de flotas. Funcionalidad nueva, no codigo migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 334;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -678,7 +680,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 333;
 // por flota (horario, palabras, equipo, insistencia y el interruptor del correo) no tenía dónde vivir y es de la misma familia de tablas que `vigia_config`. Funcionalidad nueva, no código migrado.
 // Ronda 6 (carril tms-muestra): +1 sobre config (2,488 → 2,489, medido tras integrar; 0 archivos nuevos). `liquidacion_externa/repo.ts#leerPadronOperadores`: lectura de solo consulta (nombre y número de empleado) del padrón del tenant
 // para resolver al operador por NOMBRE en el formato «muestra-tms»; con `tenant_id`, por `acotada`, completa y demostrada con `traerTodo` y `order('id')`. No escribe.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_489;
+// Ronda 7: +2 (2,489 -> 2,491), medidas con el guardian: `conectores/tms/prueba_en_seco.ts` (+1, el mapeo activo de una flota) y `dashboard/contador/timbrado.tsx` (+1: el RFC y el
+// modo GUARDADOS al momento de guardar, para decidir si el cambio exige segundo factor; se lee en la accion, no se confia en lo pintado). Funcionalidad nueva, no codigo migrado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_491;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

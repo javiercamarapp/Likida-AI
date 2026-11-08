@@ -94,7 +94,7 @@ describe('Actividad — el gráfico realmente se pinta (PRU-M2, mata A4)', () =>
       <Actividad porDia={[]} porMes={[{ dia: '2026-06', valor: 5 }, { dia: '2026-07', valor: 12 }]} modo="historico" />,
     );
     expect(html).toContain('<svg');
-    expect(html).toMatch(/<path[^>]*stroke="var\(--marca\)"/);
+    expect(html).toMatch(/<path[^>]*class="kit-linea"[^>]*stroke-width="1.5"/);
     // El texto del tooltip lo escribe `etiquetaValor`: solo puede aparecer si
     // el `AreaChartSimple` de verdad recibió y pintó ese punto.
     expect(html).toMatch(/12 viajes/);

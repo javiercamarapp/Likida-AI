@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { Fuel } from 'lucide-react';
 import { KpiTile, ChartCard, StatCard, EstadoVacio } from './kit';
@@ -21,6 +23,10 @@ import { KpiTile, ChartCard, StatCard, EstadoVacio } from './kit';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const ICONO = <Fuel width={15} height={15} />;
+
+// R8 (7-nov-2026): el kit pinta con `Cifra`/`Tarjeta` de ui-v2. Las reglas de ANCHO que antes eran utilidades de Tailwind en el marcado
+// (`line-clamp-2`, `text-ellipsis whitespace-nowrap`, `whitespace-nowrap` del monto) ahora viven en `kit.css`; las pruebas leen ese CSS.
+const KIT_CSS = readFileSync(join(__dirname, 'kit.css'), 'utf8');
 
 describe('KpiTile — el HTML servido (antes de hidratar)', () => {
   it('con una cifra real distinta de cero, el texto servido NO es "$0.00"', () => {
@@ -70,7 +76,7 @@ describe('KpiTile y ChartCard — el rótulo ya no se corta a la mitad', () => {
       <KpiTile icono={ICONO} etiqueta="IVA acreditable documentado" valor={12480} formato="mxn" />,
     );
     expect(html).not.toContain('truncate');
-    expect(html).toContain('line-clamp-2');
+    expect(KIT_CSS).toMatch(/\.kit-celda \.rv-kpi__etq \{[^}]*-webkit-line-clamp: 2/);
   });
 
   it('KpiTile: el rótulo completo sigue en el DOM, sin recortar el texto', () => {
@@ -87,7 +93,7 @@ describe('KpiTile y ChartCard — el rótulo ya no se corta a la mitad', () => {
       </ChartCard>,
     );
     expect(html).not.toContain('truncate');
-    expect(html).toContain('line-clamp-2');
+    expect(html).toContain('rv-tarjeta__titulo');
     expect(html).toContain('El gasto del periodo, por su suerte fiscal');
   });
 });
@@ -154,8 +160,8 @@ describe('StatCard — delta null (sin comparable) no afirma "0%"', () => {
     const html = renderToStaticMarkup(
       <StatCard icono={ICONO} etiqueta="Gasto total" valor={500} formato="mxn" delta={{ pct: 0, bueno: true }} />,
     );
-    expect(html).toContain('0%');
-    expect(html).toContain('sin cambio vs periodo anterior');
+    expect(html).toContain('0 % vs periodo anterior');
+    expect(html).toContain('sin cambio');
     expect(html).not.toContain('sin periodo comparable');
   });
 
@@ -192,7 +198,7 @@ describe('BannerInsight — el monto nunca se trunca', () => {
     expect(html).not.toContain('truncate');
     expect(html).toContain(GRANDE_TXT);
     // El <b> del monto no se parte en dos líneas.
-    expect(html).toContain('whitespace-nowrap');
+    expect(KIT_CSS).toMatch(/\.kit-banner__texto b \{ white-space: nowrap/);
   });
 });
 
@@ -203,7 +209,7 @@ describe('KpiTile / StatCard / WidgetUso — prueba de ancho con $999,999,999.00
     );
     expect(html).toContain(`>${GRANDE_TXT}<`);
     expect(html).toContain(`title="${GRANDE_TXT}"`);
-    expect(html).toMatch(/min-w-0 overflow-hidden text-ellipsis whitespace-nowrap[^>]*title="\$999,999,999\.00"/);
+    expect(KIT_CSS).toMatch(/\.kit-celda \.rv-kpi__valor \{[^}]*text-overflow: ellipsis; white-space: nowrap/);
     // Sin `truncate` (la prueba de la auditoría 10 sigue valiendo para el rótulo).
     expect(html).not.toContain('truncate');
   });
@@ -214,14 +220,15 @@ describe('KpiTile / StatCard / WidgetUso — prueba de ancho con $999,999,999.00
     );
     expect(html).toContain(`>${GRANDE_TXT}<`);
     expect(html).toContain(`title="${GRANDE_TXT}"`);
-    expect(html).toMatch(/overflow-hidden text-ellipsis whitespace-nowrap[^>]*title="\$999,999,999\.00"/);
+    expect(KIT_CSS).toMatch(/\.kit-celda \.rv-kpi__valor \{[^}]*text-overflow: ellipsis/);
   });
 
   it('KpiTile/StatCard no medibles: el guion va SIN title (no hay cifra que completar)', () => {
     const a = renderToStaticMarkup(<KpiTile icono={ICONO} etiqueta="x" valor={null} formato="mxn" vacio="sin dato" />);
     const b = renderToStaticMarkup(<StatCard icono={ICONO} etiqueta="x" valor={null} formato="mxn" />);
-    expect(a).not.toContain('title="');
-    expect(b).not.toContain('title="');
+    // Sin cifra, la celda no lleva `title` (el KindBadge «Sin dato» sí trae el suyo, y es otra cosa).
+    expect(a).not.toMatch(/<section[^>]*title=/);
+    expect(b).not.toMatch(/<section[^>]*title=/);
     expect(a).toContain('—');
     expect(b).toContain('—');
   });
@@ -232,7 +239,7 @@ describe('KpiTile / StatCard / WidgetUso — prueba de ancho con $999,999,999.00
     );
     expect(html).toContain(`US${GRANDE_TXT}`);
     expect(html).toContain(`title="US${GRANDE_TXT}"`);
-    expect(html).toContain('overflow-hidden text-ellipsis whitespace-nowrap');
+    expect(KIT_CSS).toMatch(/\.kit-uso__valor \{[^}]*text-overflow: ellipsis; white-space: nowrap/);
   });
 });
 

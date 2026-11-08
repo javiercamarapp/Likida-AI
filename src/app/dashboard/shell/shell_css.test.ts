@@ -34,13 +34,12 @@ describe('shell.css ↔ marco-v2.ts', () => {
     expect(regla('[data-ui="v2"] .rv-cab-movil')).toContain(`height: ${ALTO_CABECERA_MOVIL_PX}px`);
     expect(regla('[data-ui="v2"] .rv-cab-esc', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`height: ${ALTO_CABECERA_ESCRITORIO_PX}px`);
     expect(regla('[data-ui="v2"] .rv-item', sinComentarios.indexOf('.rv-item {'))).toContain(`height: ${ALTO_ITEM_PX}px`);
-    // Activo SUTIL (controles finos K2-2, SPEC §2.7 y D8): fondo gris muy claro + texto de tinta + peso 600, por los tokens --nav-activo-*.
-    // Se retiró la barra interior de 3 px: la triple señal (barra + peso + fondo) era lo tosco. Reversible: reponer `box-shadow: inset 2px 0 0 var(--ink)`.
+    // Activo estilo Rovaq (R8): barra inset de 2 px por el token --nav-activo-barra + fondo tinta al 7 % + peso 500, todo por tokens --nav-activo-*.
     const activo = regla('[data-ui="v2"] .rv-item[aria-current="page"]');
     expect(activo).toContain('background: var(--nav-activo-bg)');
     expect(activo).toContain('color: var(--nav-activo-fg)');
     expect(activo).toContain('font-weight: var(--nav-activo-peso)');
-    expect(activo).not.toMatch(/box-shadow|inset/);
+    expect(activo).toContain('box-shadow: inset 2px 0 0 var(--nav-activo-barra)');
     expect(regla('[data-ui="v2"] .rv-puesta[aria-current="page"]')).not.toMatch(/box-shadow|inset/);
     expect(activo).not.toMatch(/background:\s*var\(--marca\)/);
     expect(regla('[data-ui="v2"] .rv-fila', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`padding: ${MARCO_PX}px`);

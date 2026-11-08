@@ -61,9 +61,28 @@ describe('overlay.css fino (K2-1)', () => {
     expect(r).toMatch(/max-width:\s*min\(280px/);
   });
 
-  it('la franja de marca del cajón mide 64 px de ancho y opacidad .6', () => {
-    expect(sin).toMatch(/\.rv-ov__marca svg\s*\{[^}]*width:\s*64px/);
-    expect(regla('.rv-ov__marca')).toMatch(/opacity:\s*\.6/);
+  it('la franja de marca del cajón: logo de 100 px, franja de 28 px con padding 9/0/11, filete superior y opacidad .6', () => {
+    expect(sin).toMatch(/\.rv-ov__marca svg\s*\{[^}]*width:\s*100px/);
+    const m = regla('.rv-ov__marca');
+    expect(m).toMatch(/opacity:\s*\.6/);
+    expect(m).toMatch(/min-height:\s*28px/);
+    expect(m).toMatch(/padding:\s*9px 0 11px/);
+  });
+
+  it('borde del panel en --line y título con tracking -0.01em', () => {
+    expect(regla('.rv-ov__panel')).toMatch(/border:\s*1px solid var\(--line\);/);
+    expect(regla('.rv-ov__titulo')).toMatch(/letter-spacing:\s*-0\.01em/);
+  });
+
+  it('cajón unificado: solo 420 (estándar) y 640 (paquetes y previas); los anchos heredados se pintan con el de su tipo', () => {
+    const w = (sel: string) => /width:\s*min\(calc\(100vw - 16px\),\s*(\d+)px\)/.exec(regla(sel))?.[1];
+    expect(w('.rv-ov--drawer')).toBe('420');
+    expect(w('.rv-ov--drawer[data-tamano="l"]')).toBe('420');
+    expect(w('.rv-ov--drawer[data-tamano="xl"]')).toBe('640');
+    expect(w('.rv-ov--drawer[data-ancho="320"]')).toBe('420');
+    expect(w('.rv-ov--drawer[data-ancho="420"]')).toBe('420');
+    expect(w('.rv-ov--drawer[data-ancho="560"]')).toBe('640');
+    expect(sin).not.toMatch(/\b480px/);
   });
 
   it('movimiento: entradas <= 180 ms y sin desenfoque', () => {

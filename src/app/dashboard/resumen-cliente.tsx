@@ -2,9 +2,9 @@
 
 import { ArrowRight, Check, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useMemo, useState, useTransition } from 'react';
-import { BarraFiltros, BotonEnlace, Boton, PanelLateral, type ChipFiltro } from '@/app/ui-v2/componentes';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { BarraPeriodo, BotonEnlace, Boton, PanelLateral, hrefConParams } from '@/app/ui-v2/componentes';
 import { armarPasosCincoAgentes, type SenalesAsistente } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { conPaso } from './puesta-en-marcha/con-paso';
 import { useDeclaraciones } from './puesta-en-marcha/usar-declaraciones';
@@ -13,23 +13,20 @@ import { elegirAcciones, RANGOS, ROTULO_RANGO, type FilaAtencion, type RangoResu
 // Piezas de cliente del Resumen v2: la barra de periodo, «Requiere tu atención» (con su panel lateral de detalle) y «Siguiente
 // mejor acción». Las dos últimas leen las declaraciones del navegador para que la Puesta en marcha coincida con el asistente.
 
-/** Barra de filtros de UNA fila (40 px): el periodo. Mueve todas las cifras de abajo (la URL manda; el servidor relee). */
+/** Barra de periodo del Resumen (R8, patrón Rovaq): segmentado 7 días / 30 días / Todo + chip de cobertura de fuentes. Mueve todas las cifras de abajo:
+ *  el estado vive en la URL (`?rango=7|30|todo`, como siempre) y cada opción es un enlace que conserva los demás parámetros (tenant, vista, rol…).
+ *  No hay moneda ni «Filtros»: el Resumen no tiene otros criterios y no se inventan. */
 export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuentes: string }) {
-  const router = useRouter();
   const ruta = usePathname();
   const params = useSearchParams();
-  const [pendiente, empezar] = useTransition();
-  const chips: ChipFiltro[] = RANGOS.map((r) => ({ id: r, etiqueta: ROTULO_RANGO[r], activo: r === rango }));
-  const elegir = (id: string) => {
-    const p = new URLSearchParams(params?.toString() ?? '');
-    p.set('rango', id);
-    empezar(() => router.replace(`${ruta}?${p.toString()}`, { scroll: false }));
-  };
-  // Mientras llega el nuevo periodo las tarjetas conservan sus datos previos, atenuadas (sin capa de carga).
+  const actuales: Record<string, string> = {};
+  params?.forEach((v, k) => { actuales[k] = v; });
   return (
-    <div data-pendiente={pendiente || undefined} aria-busy={pendiente || undefined}>
-      <BarraFiltros chips={chips} onChip={elegir} fuentes={fuentes} />
-    </div>
+    <BarraPeriodo
+      etiqueta="Periodo del resumen"
+      periodo={{ etiqueta: 'Periodo de las cifras', valor: rango, opciones: RANGOS.map((r) => ({ valor: r, etiqueta: ROTULO_RANGO[r], href: hrefConParams(ruta ?? '', actuales, { rango: r }) })) }}
+      chips={[{ id: 'fuentes', etiqueta: fuentes }]}
+    />
   );
 }
 

@@ -1,5 +1,6 @@
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
+import { ETIQUETA_TOOL_ADMIN } from './etiquetas-copiloto';
 
 // Lógica PURA del chat «Pregunta a tus datos» (L5: separada de la interfaz sin cambiar una coma de lo que responde). Aquí viven el
 // respondedor local de reserva, el catálogo de Consulta, la traducción de los bloques del analista y los rótulos de la traza.
@@ -20,7 +21,22 @@ export type Visual =
 export interface PasoTraza { tool: string; listo: boolean; ms?: number }
 
 /** De dónde salió la respuesta: el analista (lee tu operación) o el respondedor de reserva (lo que ya estaba cargado en la página). */
-export type OrigenRespuesta = 'analista' | 'reserva';
+export type OrigenRespuesta = 'analista' | 'reserva' | 'copiloto';
+
+/** La previsualización de una acción gateada del copiloto de superadmin (solo `modo='superadmin'`). */
+export interface AccionPropuesta {
+  accion: string;
+  gateo: 'confirma' | 'doble';
+  implementada: boolean;
+  objetivo: string;
+  efecto: string;
+  revertir: string;
+  motivoSugerido: string | null;
+  /** La llave de ejecución que el SERVIDOR creó al proponer. Sin ella no hay botón. */
+  intentId?: string;
+}
+/** La pantalla fuente de una cifra: derivada de qué tools corrieron, nunca de lo que diga el modelo. */
+export interface FuenteRespuesta { ruta: string; etiqueta: string }
 
 export interface Respuesta {
   texto: string; visual?: Visual; visuales?: Visual[]; pendiente?: boolean;
@@ -30,6 +46,8 @@ export interface Respuesta {
   fallo?: boolean;
   /** El usuario detuvo la generación. */
   cancelada?: boolean;
+  /** Solo superadmin: la acción propuesta, las pantallas fuente, y si el turno viene archivado del historial (sin botón de ejecutar). */
+  accion?: AccionPropuesta; fuentes?: FuenteRespuesta[]; archivada?: boolean;
 }
 
 /** Cómo se lee cada tool del analista en la secuencia de pensamiento
@@ -61,7 +79,8 @@ export const ETIQUETA_TOOL: Record<string, string> = {
   escalar_a_persona: 'Dejando la tarea para la persona que decide',
   entregar_respuesta: 'Armando la respuesta',
 };
-export const rotuloTool = (t: string) => ETIQUETA_TOOL[t] ?? t.replaceAll('_', ' ');
+/** Los nombres de tool de los dos agentes son disjuntos, así que un solo buscador sirve a ambos modos sin inventar rótulos. */
+export const rotuloTool = (t: string) => ETIQUETA_TOOL[t] ?? ETIQUETA_TOOL_ADMIN[t] ?? t.replaceAll('_', ' ');
 
 /** Las fases del "pensando" (pedido del 12-ago: como Claude). Son honestas
  *  por construcción: solo se AVANZA de fase si de verdad sigue trabajando —
@@ -80,6 +99,7 @@ export const FASES_PENSANDO: Array<[number, string]> = [
 export function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Respuesta {
   const textos: string[] = [];
   const visuales: Visual[] = [];
+  let accion: AccionPropuesta | undefined;
   for (const b of bloques) {
     if (b.tipo === 'texto' && typeof b.texto === 'string') textos.push(b.texto);
     else if (b.tipo === 'cifra' && typeof b.valor === 'number') {
@@ -91,9 +111,12 @@ export function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Res
       visuales.push({ tipo: 'dona', segmentos: b.segmentos as Array<{ etiqueta: string; valor: number }> });
     } else if (b.tipo === 'serie' && Array.isArray(b.puntos)) {
       visuales.push({ tipo: 'serie', puntos: b.puntos as Array<{ dia: string; valor: number }>, formato: b.formato === 'mxn' ? 'mxn' : 'numero' });
+    } else if (b.tipo === 'accion' && typeof b.accion === 'string') {
+      // Solo el copiloto de superadmin emite este bloque; el modo cliente nunca lo pinta (`acciones` apagado).
+      accion = b as unknown as AccionPropuesta;
     }
   }
-  return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined };
+  return { texto: textos.join(' ') || 'Listo.', visuales: visuales.length > 0 ? visuales : undefined, ...(accion ? { accion } : {}) };
 }
 
 /** El catálogo de Consulta, por CATEGORÍA y formal (pedido del 12-ago:

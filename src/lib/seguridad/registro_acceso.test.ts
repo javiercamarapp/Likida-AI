@@ -26,6 +26,23 @@ describe('esExporteDeDinero', () => {
   });
 });
 
+describe('exporteExigeStepUp (lista del segundo factor, separada de la bitácora; R7-A2)', () => {
+  it.each([
+    'https://x/api/export/liquidaciones', 'https://x/api/export/poliza?formato=sap_b1', 'https://x/api/export/peajes-reclamacion',
+    'https://x/api/export/pdf/11111111-1111-4111-8111-111111111111', 'https://x/api/export/convenios?tipo=completo',
+    'https://x/api/export/convenios?tipo=%20completo%20',
+  ])('exige: %s', (u) => expect(mod.exporteExigeStepUp(u)).toBe(true));
+  it.each([
+    'https://x/api/export/jornada', 'https://x/api/export/vigia-faqs', 'https://x/api/export/carta-porte-xml',
+    'https://x/api/export/convenios', 'https://x/api/export/convenios?tipo=instrucciones', 'https://x/api/export/convenios?tipo=texto',
+    'https://x/api/export/convenios?tipo=plantilla', 'https://x/api/export/pdf', 'https://x/api/export/pdf/a/b', 'no es una url',
+  ])('no exige: %s', (u) => expect(mod.exporteExigeStepUp(u)).toBe(false));
+  it('la bitácora NO se amplió: el PDF y los convenios siguen sin registrarse como exporte de dinero', () => {
+    expect(mod.esExporteDeDinero('/api/export/pdf/abc')).toBe(false);
+    expect(mod.esExporteDeDinero('/api/export/convenios')).toBe(false);
+  });
+});
+
 describe('registrarExporteDinero', () => {
   it('registra un exporte de dinero con actor, flota, ruta y red; severidad info', async () => {
     await mod.registrarExporteDinero({ url: 'https://app.likida.ai/api/export/poliza?formato=sap_b1&tenant=zzz', tenantId: 't1', rol: 'contador', userId: 'u1' });

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { SegmentedControl } from '../ui-v2/componentes';
+import { BarraPeriodo, SegmentedControl } from '../ui-v2/componentes';
 import { Dona, AreaChartSimple } from '../admin/charts';
 import { GastoSemanalChart } from './gasto-semanal-chart';
 import { TopRutas } from './top-rutas';
@@ -65,10 +65,13 @@ export function PanelPeriodo({
     // Cada bloque es una TARJETA blanca sobre el lienzo tenue
     // (12-ago-2026) — el padding horizontal lo pone el padre.
     <>
-      <div className="flex items-center justify-end">
+      {/* R8: la barra de periodo del sistema (una fila, sin hueco). Las tres granularidades son las únicas que el backend sabe calcular
+          (Semanal 7 d / Mensual 5 sem / Histórico): no se ofrecen «30 días» ni «90 días». El estado es local (los tres juegos de series
+          llegan precalculados), así que va como `selector` y no como enlaces de URL. */}
+      <BarraPeriodo etiqueta="Periodo de las gráficas" selector={
         <SegmentedControl etiqueta="Periodo de las gráficas" tamano="sm" valor={modo}
           onChange={(v) => setModoIdx(MODOS.indexOf(v))} opciones={OPCIONES.map((o) => ({ valor: o.id, etiqueta: o.etiqueta }))} />
-      </div>
+      } />
 
       {/* ── Viajes / Actividad ── */}
       <div className="pt-2 grid grid-cols-1 md:grid-cols-3 gap-2">

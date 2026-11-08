@@ -11,7 +11,7 @@ export { AVISO_SOLO_TEXTO, MAX_ARCHIVOS_LOTE, textoAdjuntosSinTexto };
 export type { EstadoArchivoLote, ResultadoArchivoLote, ResultadoLote };
 import { aprobarRespuestaRapida, borrarGrupo, crearGrupo, grupoDeFlota, guardarImportacion, leerGrupos, marcarGrupoCritico, retirarRespuestaRapida } from './repo';
 import { validarRespuestaRapida } from '../respuestas_rapidas';
-import { resumenSinAtenderDeGrupo, type ResumenGrupoSinAtender } from '../sin_atender_aviso/acciones';
+import { resumenSinAtenderDeGrupo, resumenSinAtenderDeGrupos, type ResumenGrupoSinAtender } from '../sin_atender_aviso/acciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DE LA PANTALLA «GRUPOS E HISTÓRICO» DEL VIGÍA — con puertos para probarlas.
@@ -150,7 +150,7 @@ function prepararArchivo(tenantId: string, equipo: readonly string[], archivo: A
 }
 
 /** Guarda un chat ya validado en UN grupo ya elegido: lo comparten la subida de un archivo y la de varios. */
-async function guardarPreparado(ctx: ContextoGrupos, grupoId: string, equipo: readonly string[], p: { crudo: string; lectura: Lectura }, d: DepsGrupos): Promise<ArchivoProcesado> {
+async function guardarPreparado(ctx: ContextoGrupos, grupoId: string, equipo: readonly string[], p: { crudo: string; lectura: Lectura }, d: DepsGrupos, revisarAqui = true): Promise<ArchivoProcesado> {
   const { crudo, lectura } = p;
   try {
     const grupo = await d.grupoDeFlota(ctx.tenantId, grupoId);
@@ -167,7 +167,7 @@ async function guardarPreparado(ctx: ContextoGrupos, grupoId: string, equipo: re
     if (lectura.descartados > 0) notas.push(`${lectura.descartados} líneas de sistema o multimedia omitidas`);
     if (lectura.fechasInvalidas > 0) notas.push(`${lectura.fechasInvalidas} con fecha ilegible`);
     if (lectura.adjuntosOmitidos > 0) notas.push(textoAdjuntosSinTexto(lectura.adjuntosOmitidos));
-    const sinAtender = d.sinAtenderDeGrupo ? await d.sinAtenderDeGrupo(ctx.tenantId, grupoId, equipo).catch(() => null) : null;
+    const sinAtender = revisarAqui && d.sinAtenderDeGrupo ? await d.sinAtenderDeGrupo(ctx.tenantId, grupoId, equipo).catch(() => null) : null;
     return { ok: true, grupoNombre: grupo.nombre, mensajes: lectura.mensajes.length, autores: lectura.autores, notas, adjuntosSinTexto: lectura.adjuntosOmitidos, sinAtender };
   } catch (e) {
     logger.error('vigia.historial_importar_fallo', { err: e instanceof Error ? e.message : String(e) });
@@ -220,10 +220,12 @@ export async function importarHistorialPanel(ctx: ContextoGrupos, fd: FormData, 
 export const MAX_LOTE_BYTES = MAX_ARCHIVO_BYTES;
 
 export interface DepsLote extends DepsGrupos {
+  /** Opcional: revisa lo sin atender de TODOS los grupos importados con una sola lectura, al final del lote. Sin él, el lote no revisa. */
+  sinAtenderDeGrupos?: (tenantId: string, grupoIds: readonly string[], equipo: readonly string[]) => Promise<Map<string, ResumenGrupoSinAtender> | null>;
   /** Los grupos de la flota (para buscar por nombre). `null` = la lectura no estuvo disponible. */
   gruposDeFlota: (tenantId: string) => Promise<Array<{ id: string; nombre: string; clienteId: string }> | null>;
 }
-export const depsLoteReales: DepsLote = { ...depsGruposReales, gruposDeFlota: (t) => leerGrupos(t) };
+export const depsLoteReales: DepsLote = { ...depsGruposReales, gruposDeFlota: (t) => leerGrupos(t), sinAtenderDeGrupos: (t, g, e) => resumenSinAtenderDeGrupos(t, g, e) };
 
 export interface EntradaLote { archivo: ArchivoSubido; grupoNombre: string }
 
@@ -250,6 +252,9 @@ export async function importarLotePanel(ctx: ContextoGrupos, fd: FormData, entra
   for (const g of grupos) { const k = claveNombre(g.nombre); porNombre.set(k, [...(porNombre.get(k) ?? []), g]); }
 
   const resultados: ResultadoArchivoLote[] = [];
+  // Grupo de cada fila importada: la revisión de «sin atender» se hace UNA vez al final (una lectura del histórico de la flota),
+  // no tras cada archivo (R7-A4). Así cada grupo se mide ya con todo lo que trajo el lote.
+  const grupoDeFila = new Map<ResultadoArchivoLote, string>();
   for (const { archivo, grupoNombre: nombreCrudo } of entradas) {
     const nombreGrupo = nombreCrudo.replace(/\s+/g, ' ').trim() || nombreGrupoDeArchivo(archivo.nombre);
     const fila = (estado: EstadoArchivoLote, detalle: string, extra: Partial<ResultadoArchivoLote> = {}): void => { resultados.push({ archivo: archivo.nombre, grupo: nombreGrupo, estado, detalle, ...extra }); };
@@ -283,9 +288,21 @@ export async function importarLotePanel(ctx: ContextoGrupos, fd: FormData, entra
       }
     } else { fila('error', 'No hay un grupo con ese nombre en tu flota. Escribe el nombre de uno existente, o elige el cliente para que se cree.'); continue; }
 
-    const r = await guardarPreparado(ctx, grupoId, equipo, prep, d);
-    if (r.ok) fila('importado', `${grupoNuevo ? 'Grupo nuevo creado con ese nombre (si fue un error de escritura, bórralo en «Grupos»). ' : ''}${r.notas.join(' · ')}.${revisionSinAtender(r.sinAtender)}`, { grupoNuevo, mensajes: r.mensajes, adjuntosSinTexto: r.adjuntosSinTexto, ...(r.sinAtender ? { sinAtender: r.sinAtender } : {}) });
-    else fila(r.duplicado ? 'duplicado' : 'error', r.error);
+    const r = await guardarPreparado(ctx, grupoId, equipo, prep, d, false);
+    if (r.ok) {
+      fila('importado', `${grupoNuevo ? 'Grupo nuevo creado con ese nombre (si fue un error de escritura, bórralo en «Grupos»). ' : ''}${r.notas.join(' · ')}.`, { grupoNuevo, mensajes: r.mensajes, adjuntosSinTexto: r.adjuntosSinTexto });
+      grupoDeFila.set(resultados[resultados.length - 1], grupoId);
+    } else fila(r.duplicado ? 'duplicado' : 'error', r.error);
+  }
+
+  if (grupoDeFila.size > 0 && d.sinAtenderDeGrupos) {
+    const porGrupo = await d.sinAtenderDeGrupos(ctx.tenantId, [...grupoDeFila.values()], equipo).catch(() => null);
+    for (const [f, g] of grupoDeFila) {
+      const res = porGrupo?.get(g) ?? null;
+      if (res === null) continue;
+      f.detalle += revisionSinAtender(res);
+      f.sinAtender = res;
+    }
   }
 
   const importados = resultados.filter((r) => r.estado === 'importado').length;

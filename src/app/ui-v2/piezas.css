@@ -123,3 +123,41 @@
 @media (max-width: 819px) {
   [data-ui="v2"] .rv-tb table[data-tarjeta] tbody th { display: flex; justify-content: space-between; gap: 8px; height: auto; padding: 0; border: 0; }
 }
+
+/* ── Cajón ⓘ (R8, estilo Rovaq): bloques `rv-ov-bloque` dentro del cuerpo del Drawer. Cada selector cuelga de `.rv-ov__cuerpo` (ajuste de contexto:
+   el motor del overlay sigue siendo overlay.css). Contenido: componentes/info-contenido.tsx. ── */
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-info { display: grid; gap: 8px; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque { box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque__tit { margin: 0 0 6px; font-size: 12px; line-height: 1.3; font-weight: 600; color: var(--ink); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque__txt { margin: 0; font-size: 13px; line-height: 1.5; color: var(--ink2); text-wrap: pretty; }
+/* «Cómo se calcula»: el texto va en un recuadro gris dentro del bloque. */
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-calculo { margin: 0; padding: 8px 10px; border-radius: 6px; background: var(--canvas); font-size: 13px; line-height: 1.5; color: var(--ink2); text-wrap: pretty; }
+/* Pares clave/valor: clave 12/500 muted a la izquierda (96 px), valor 13 a la derecha. */
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv { display: grid; gap: 8px; margin: 0; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv__fila { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 12px; align-items: baseline; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv dt { margin: 0; font-size: 12px; font-weight: 500; color: var(--muted); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-kv dd { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink); overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-lista { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.45; color: var(--ink2); }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque--sello { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+[data-ui="v2"] .rv-ov__cuerpo .rv-ov-bloque--sello .rv-ov-bloque__tit { margin: 0; }
+
+/* ── Marcas de integración y chip de fuente (R8): componentes/marca-integracion.tsx. El color de cada logo vive en su <path fill>
+   (marca-integracion.data.ts); aquí solo el tamaño, el modo oscuro y el chip. ── */
+[data-ui="v2"] .rv-marcaint { display: inline-block; flex: none; vertical-align: middle; }
+[data-ui="v2"] .rv-marcaint--generico { color: var(--muted); }
+:root[data-theme="dark"] [data-ui="v2"] .rv-marcaint[data-mono-oscuro] path { fill: currentColor; }
+:root[data-theme="dark"] [data-ui="v2"] .rv-marcaint[data-mono-oscuro] { color: var(--ink); }
+[data-ui="v2"] .rv-chipfuente {
+  position: relative; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; height: 28px; padding: 0 10px; border: 1px solid var(--line2);
+  border-radius: 999px; background: var(--surface); color: var(--ink); font: 500 12px/1 var(--font-sans-ui, inherit); white-space: nowrap; cursor: pointer;
+}
+/* El checkbox real queda fuera de la vista (no display:none: sigue enfocable y viaja en el formulario). */
+[data-ui="v2"] .rv-chipfuente__in { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: inherit; }
+[data-ui="v2"] .rv-chipfuente:hover { background: var(--canvas); }
+[data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:focus-visible) { outline: 2px solid var(--ink); outline-offset: 2px; }
+/* Marcado: el azul de Rovaq (mismos tokens que segmentados y chips). */
+[data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:checked) { background: var(--seg-activo-bg); border-color: var(--seg-activo-borde); color: var(--seg-activo-fg); }
+[data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:checked):hover { background: var(--seg-activo-hover); }
+[data-ui="v2"] .rv-chipfuente[data-deshabilitado] { opacity: .5; cursor: not-allowed; }
+@media (max-width: 819px) { [data-ui="v2"] .rv-chipfuente { min-height: 44px; } }
+@media (forced-colors: active) { [data-ui="v2"] .rv-chipfuente:has(.rv-chipfuente__in:checked) { border-color: Highlight; } }
