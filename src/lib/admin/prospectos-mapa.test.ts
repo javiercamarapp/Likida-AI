@@ -251,6 +251,29 @@ describe('traerTodoEnParalelo — el Cerebro no espera 33 vueltas de red en fila
     }, 'prueba')).rejects.toThrow(LecturaIncompleta);
   });
 
+  it('un timeout transitorio en UNA página se reintenta y la cartera llega entera', async () => {
+    const total = PAGINA * 2 + 3;
+    const universo = Array.from({ length: total }, (_, i) => ({ id: i }));
+    const intentos = new Map<number, number>();
+    const filas = await traerTodoEnParalelo(async (d, h) => {
+      const n = (intentos.get(d) ?? 0) + 1;
+      intentos.set(d, n);
+      if (d === PAGINA && n === 1) return { data: null, error: { message: 'canceling statement due to statement timeout' }, count: undefined };
+      return { data: universo.slice(d, h + 1), error: null, count: d === 0 ? total : undefined };
+    }, 'prueba', 1);
+    expect(filas).toEqual(universo);
+    expect(intentos.get(PAGINA)).toBe(2);
+  });
+
+  it('si el reintento también falla, LANZA — sigue fallando cerrado', async () => {
+    const total = PAGINA + 3;
+    const universo = Array.from({ length: total }, (_, i) => ({ id: i }));
+    await expect(traerTodoEnParalelo(async (d, h) =>
+      d === PAGINA
+        ? { data: null, error: { message: 'statement timeout' }, count: undefined }
+        : { data: universo.slice(d, h + 1), error: null, count: d === 0 ? total : undefined }, 'prueba', 1)).rejects.toThrow(/statement timeout/);
+  });
+
   it('sin conteo exacto (Supabase no lo mandó), cae al camino secuencial y aun así trae todo', async () => {
     const universo = Array.from({ length: PAGINA + 3 }, (_, i) => ({ id: i }));
     const filas = await traerTodoEnParalelo(async (d, h) =>

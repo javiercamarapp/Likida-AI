@@ -379,6 +379,8 @@ const COLUMNAS_LISTADO =
  *  `TANDAS_EN_PARALELO` de `traerPorIds` en pg.ts: acotado para no abrir
  *  treinta conexiones de golpe contra Supabase). */
 const PAGINAS_EN_PARALELO = 6;
+/** Espera antes de reintentar UNA página que falló (timeout transitorio). */
+const ESPERA_REINTENTO_MS = 400;
 
 /**
  * Lee TODA la tabla en PARALELO — no página por página como `traerTodo`.
@@ -401,9 +403,21 @@ const PAGINAS_EN_PARALELO = 6;
  * cursor secuencial que ya se ganó su desconfianza (ver pg.ts).
  */
 export async function traerTodoEnParalelo<T>(
-  construir: (desde: number, hasta: number) => PromiseLike<RespuestaPg<T[]>>,
+  construirCrudo: (desde: number, hasta: number) => PromiseLike<RespuestaPg<T[]>>,
   consulta: string,
+  esperaReintentoMs = ESPERA_REINTENTO_MS,
 ): Promise<T[]> {
+  // R9: con ~34 páginas de ~1,000 filas (join a toques/personas) basta UN timeout transitorio de la base —típico cuando otras
+  // pantallas de /admin leen la misma tabla a la vez— para tumbar TODA la cartera y pintar «no se pudo leer». Cada página se
+  // reintenta UNA vez tras una espera corta. El contrato no cambia: si el reintento también falla, `exigir` lanza igual y el
+  // conteo exacto sigue demostrando que llegó entera (fallar cerrado); lo único que se pierde es el pánico por un parpadeo.
+  const construir = async (desde: number, hasta: number) => {
+    const res = await construirCrudo(desde, hasta);
+    if (!res.error) return res;
+    logger.warn('mapa_prospectos.pagina_reintento', { consulta, desde, err: res.error.message });
+    await new Promise((r) => setTimeout(r, esperaReintentoMs));
+    return construirCrudo(desde, hasta);
+  };
   const res0 = await construir(0, PAGINA - 1);
   const pag0 = exigir(res0, consulta) ?? [];
   const esperadas = typeof res0.count === 'number' ? res0.count : null;
