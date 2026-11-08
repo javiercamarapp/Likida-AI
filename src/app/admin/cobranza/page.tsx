@@ -74,6 +74,8 @@ export default async function CobranzaPage() {
   const filasVistas = estado ? estado.facturas.slice(0, FILAS_MOSTRADAS) : [];
   const totalBase = facturas.dato?.total ?? 0;
   const truncada = !!facturas.dato && totalBase > facturas.dato.facturas.length;
+  // Sin facturas leídas, sin total en la base y sin propuestas: ninguna de las 4 cifras tiene base real que medir.
+  const sinBase = !!estado && totalBase === 0 && estado.facturas.length === 0 && estado.propuestasPendientes === 0 && estado.propuestasEnviadas === 0;
 
   return (
     <main className="h-full">
@@ -132,14 +134,23 @@ export default async function CobranzaPage() {
 
           {estado && (
             <>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-                <Cifra etiqueta="Por cobrar" valor={`${totalBase} · ${mxn(estado.montoPorCobrar)}`}
-                  nota={truncada ? 'Incompleto: hay más facturas de las que se leyeron.' : undefined} alerta={truncada} />
-                <Cifra etiqueta="Vencidas" valor={`${estado.vencidas} · ${mxn(estado.montoVencido)}`} />
-                <Cifra etiqueta="Toques sin propuesta" valor={String(estado.toquesSinPropuesta)}
-                  nota={estado.toquesSinPropuesta > 0 ? 'El agente no ha preparado toques que ya tocaban.' : undefined}
-                  alerta={estado.toquesSinPropuesta > 0 && !piezas.error} />
-                <Cifra etiqueta="Propuestas pendientes / enviadas por el sistema" valor={`${estado.propuestasPendientes} / ${estado.propuestasEnviadas}`} />
+              {/* Sin una sola factura ni propuesta no hay base que medir: cuatro «0 · $0.00» se leerían como medición. Se marcan «—» y lo dicen. */}
+              <div className="kit-kpis">
+                {sinBase ? (
+                  ['Por cobrar', 'Vencidas', 'Toques sin propuesta', 'Propuestas pendientes / enviadas por el sistema'].map((e) => (
+                    <Cifra key={e} etiqueta={e} valor={null} estado="vacio" mensaje="Sin facturas que medir todavía" />
+                  ))
+                ) : (
+                  <>
+                    <Cifra etiqueta="Por cobrar" valor={`${totalBase} · ${mxn(estado.montoPorCobrar)}`}
+                      nota={truncada ? 'Incompleto: hay más facturas de las que se leyeron.' : undefined} alerta={truncada} />
+                    <Cifra etiqueta="Vencidas" valor={`${estado.vencidas} · ${mxn(estado.montoVencido)}`} />
+                    <Cifra etiqueta="Toques sin propuesta" valor={String(estado.toquesSinPropuesta)}
+                      nota={estado.toquesSinPropuesta > 0 ? 'El agente no ha preparado toques que ya tocaban.' : undefined}
+                      alerta={estado.toquesSinPropuesta > 0 && !piezas.error} />
+                    <Cifra etiqueta="Propuestas pendientes / enviadas por el sistema" valor={`${estado.propuestasPendientes} / ${estado.propuestasEnviadas}`} />
+                  </>
+                )}
               </div>
 
               <div className="card p-4">

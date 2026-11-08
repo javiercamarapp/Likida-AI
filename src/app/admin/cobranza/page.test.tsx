@@ -68,6 +68,14 @@ it('sin facturas dice 0 por cobrar como estado real, no como error', async () =>
   expect(h).not.toContain('No se pudo leer todo');
 });
 
+it('R9: sin facturas ni propuestas las 4 cifras NO parecen medición: van en «—» y dicen que no hay base', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [], total: 0 });
+  const h = await html();
+  expect((h.match(/Sin facturas que medir todavía/g) ?? []).length).toBe(4);
+  expect(h).not.toContain('0 · $0.00');
+  expect(h).not.toContain('0 / 0');
+});
+
 it('si no se pudo leer algo, lo dice y NO afirma que no hay facturas ni propuestas', async () => {
   dobles.getPorCobrarTodas.mockRejectedValue(new Error('base caída'));
   dobles.getPiezasDunningPlataforma.mockRejectedValue(new Error('base caída'));
