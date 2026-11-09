@@ -118,7 +118,11 @@ export const ARTICULOS: Articulo[] = [
       {
         t: 'ul',
         items: [
-          'Que el peaje sea de la Red Nacional de Autopistas de Cuota. Es un término fiscal con lista propia: no toda caseta del país entra, y hay puentes de cuota sobre carretera libre que sí.',
+          // FIS-46-01b: `normas/red-nacional-autopistas.yaml` (verificado contra fuente primaria) dice que NO existe
+          // definición legal de la Red y que prácticamente toda plaza de cuota cae dentro: lo que filtra no es la
+          // geografía, es el medio de pago y la trazabilidad. Mandar al contralor a buscar una lista blanca lo invita
+          // a NO acreditar casetas que sí entran. Anclado en `articulos_red_nacional.test.ts`.
+          'Que el peaje sea de la Red Nacional de Autopistas de Cuota. En la práctica casi toda plaza de cuota del país entra: lo que decide no es por dónde pasaste, sino las dos condiciones que siguen.',
           'Que se pague con medios electrónicos (TAG, tarjeta). El efectivo no deja el rastro que la regla exige.',
           'Que exista la bitácora: qué unidad cruzó, cuándo, por dónde, contra qué CFDI. Esta es la condición que casi ninguna flota cumple.',
         ],
