@@ -11,6 +11,7 @@ vi.mock('@/lib/logger', () => ({
 }));
 
 const { analizarMuestra, pruebaEnSecoTms, pruebaEnSecoDeFlota, MAX_FILAS_EN_SECO } = await import('./prueba_en_seco');
+const { CONFIG_PULL_MUESTRA_TMS } = await import('../../liquidacion_externa/desglose_muestra_pull_config');
 const { MAPEO_VIAJES_SUPUESTO } = await import('./viajes');
 const { MAPEO_LIQUIDACIONES_SUPUESTO } = await import('./liquidaciones');
 type Mapeo = import('./mapeo').MapeoTms;
@@ -267,5 +268,39 @@ describe('R7-B1 · desgloses por bitácora (la lectura del pull de liquidaciones
     const o = origen({ '/api/liquidaciones': lista([fila(1)]) });
     await pruebaEnSecoTms({ valores: VALORES, mapeos: {}, http: o.http, ahora: () => AHORA });
     expect(o.peticiones.some((p) => p.url.includes('/api/liquidaciones'))).toBe(false);
+  });
+});
+
+describe('r13p · muestra-tms por consulta en la prueba en seco', () => {
+  const bit = (i: number, extra: Record<string, unknown> = {}) => ({
+    BitacoraID: 900000 + i, Operador: 'Operador Ficticio Uno', Unidad: '0526', Fecha: { Inicia: '2026-11-05 06:00:00', Termina: '2026-11-06 20:00:00' },
+    Percepciones: [{ Descripcion: 'Sueldo semanal', Monto: 4000 }], Deducciones: [{ Descripcion: 'Anticipo de viaje', Monto: 1000 }], ...extra,
+  });
+  const correr = (cuerpo: unknown, extra: Record<string, unknown> = {}) => {
+    const o = origen({ '/api/bitacoras': cuerpo });
+    return pruebaEnSecoTms({ valores: VALORES, mapeos: {}, http: o.http, ahora: () => Date.parse('2026-10-15T18:00:00.000Z'), muestra: { ...CONFIG_PULL_MUESTRA_TMS, ruta: '/api/bitacoras', ...extra } }).then((r) => ({ r, o }));
+  };
+  it('muestra sana: limpio, pide por nombre lo que el contrato no trae y nunca copia valores', async () => {
+    const { r, o } = await correr([bit(1), bit(2)]);
+    const d = r.mapeos.find((m) => m.mapeo === 'desgloses-muestra-tms')!;
+    expect(d).toMatchObject({ estado: 'limpio', filasLeidas: 2, filasMapeables: 2, filasRechazadas: 0 });
+    expect(d.opcionalesAusentes.map((c) => c.campo)).toEqual(expect.arrayContaining(['poliza', 'numeroLiquidacion', 'numeroPago', 'tipoOperador']));
+    expect(JSON.stringify(r)).not.toMatch(/Ficticio|4000/);
+    expect(o.peticiones.filter((p) => p.metodo !== 'GET').every((p) => p.url.endsWith('/api/login'))).toBe(true);
+  });
+  it('hallazgos por nombre de campo: monto con 3 decimales, fecha ilegible, llave desconocida', async () => {
+    const mala = bit(1, { Percepciones: [{ Descripcion: 'Sueldo semanal', Monto: 100.505 }], Extra: 1 });
+    const fecha = bit(2, { Fecha: { Inicia: 'x', Termina: SENTINELA_TEXTO } });
+    const { r } = await correr([mala, fecha]);
+    const d = r.mapeos.find((m) => m.mapeo === 'desgloses-muestra-tms')!;
+    expect(d.estado).toBe('con_hallazgos');
+    expect(d.camposInvalidos.map((c) => c.campo)).toEqual(expect.arrayContaining(['Percepciones[0].Monto', 'Fecha.Termina']));
+    expect(d.camposDesconocidos).toEqual([{ campo: 'Extra', filas: 1 }]);
+    expect(JSON.stringify(r)).not.toContain(SENTINELA_TEXTO);
+    expect(logs.flat().map((x) => JSON.stringify(x)).join('')).not.toContain(SENTINELA_TEXTO);
+  });
+  it('envoltorio mal configurado: error con la ruta, sin datos', async () => {
+    const { r } = await correr([bit(1)], { envoltorio: 'envuelto', rutaLista: 'data.items' });
+    expect(r.mapeos.find((m) => m.mapeo === 'desgloses-muestra-tms')).toMatchObject({ estado: 'error', error: expect.stringContaining('data.items') });
   });
 });

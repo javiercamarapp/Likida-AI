@@ -412,3 +412,29 @@ describe('A37-A1-liquidaciones-06: un pull que no avanza se hace notar', () => {
     expect((await pullDesgloses(TENANT, lectorEnMemoria([fila(1)]), b.deps)).atascado).toBeUndefined();
   });
 });
+
+describe('r13p: filas rechazadas por operador y revisión que se cierra sola', () => {
+  const lectorConRechazada = (rechazadas: Array<{ clave: string; campo: string; tipo?: 'operador_no_encontrado'; detalle?: Record<string, unknown> }>, items: DesgloseBitacora[] = []): LectorDesglosesPuerto => ({
+    listar: async () => ({ items, rechazadas, siguiente: null, hayMas: false }),
+  });
+  it('abre la excepción del tipo y con el detalle que trae la fila rechazada (por omisión mapeo_invalido con el campo)', async () => {
+    const b = banco();
+    await pullDesgloses(TENANT, lectorConRechazada([
+      { clave: 'BIT-1', campo: 'Operador', tipo: 'operador_no_encontrado', detalle: { bitacora: '1', motivo: 'nombre_ambiguo', origen: 'muestra-tms', desde: '2026-10-14T08:00:00.000Z' } },
+      { clave: 'BIT-2', campo: 'Percepciones[0].Monto' },
+    ]), b.deps);
+    expect(b.excepciones.map((e) => [e.clave, e.tipo, e.detalle])).toEqual([
+      ['BIT-1', 'operador_no_encontrado', expect.objectContaining({ motivo: 'nombre_ambiguo' })],
+      ['BIT-2', 'mapeo_invalido', { campo: 'Percepciones[0].Monto' }],
+    ]);
+  });
+  it('cuando el operador ya se resuelve (la bitácora llega con desglose), la excepción de operador se resuelve sola, aun sin póliza', async () => {
+    const b = banco();
+    b.excepciones.push({ id: 1, clave: clave(1), tipo: 'operador_no_encontrado', detalle: {}, resuelta: false });
+    b.deps.excepcionesOperador = async () => new Map(b.excepciones.filter((e) => e.tipo === 'operador_no_encontrado' && !e.resuelta).map((e) => [e.clave, e.id] as const));
+    const r = await pullDesgloses(TENANT, lectorEnMemoria([fila(1, { poliza: null })]), b.deps);
+    expect(r.resueltas).toBe(1);
+    expect(abiertas(b, 'operador_no_encontrado')).toHaveLength(0);
+    expect(abiertas(b, 'sin_poliza')).toHaveLength(1);
+  });
+});

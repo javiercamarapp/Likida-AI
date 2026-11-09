@@ -10,6 +10,8 @@
 // "posiciones": {…}, "liquidaciones": { "nomina": {…}, "operadores": {…}, "conceptos": {…} } }` (lo mismo que va en `tms_mapeo.mapeo`).
 //   node scripts/tms/verificar-local.mjs --en-seco --falso                              ensayo contra el servidor sintético
 //   TMS_CREDENCIALES_ARCHIVO=/ruta/.env.tms node scripts/tms/verificar-local.mjs --en-seco /ruta/mapeos.json [--desgloses]
+//   ... [--muestra-tms]   prueba además la lectura por CONSULTA del contrato `muestra-tms` (UNA página, sin copiar valores). Usa la
+//                         configuración de LIKIDA_TMS_DESGLOSE_CONFIG (JSON parcial; ver desglose_muestra_pull_config.ts) o los SUPUESTOS.
 // `--desgloses` prueba además la lectura de desgloses por bitácora del pull de liquidaciones-externas (config en desglose_tms_supuesto.ts).
 //
 // El archivo de credenciales (líneas CLAVE=valor: base_url, usuario, clave, ruta_login opcional) vive FUERA del repo y
@@ -96,7 +98,12 @@ function origenFalso(datos) {
     for (const r of l.deducciones) nomina.push({ ID: id++, ...comunes, ConceptoID: conceptoId(r.concepto), Cargo: 0, Abono: r.valor });
   });
   const conceptos = [...catalogo].map(([descripcion, ID]) => ({ ID, Clave: `C${String(ID).padStart(3, '0')}`, Descripcion: descripcion, Oculto: 'no' }));
-  const tablas = { '/api/nomina-bitacora': nomina, '/api/operadores': operadores, '/api/conceptos-nomina': conceptos, '/api/liquidaciones': nomina };
+  // Contrato muestra-tms sintético (solo --falso): una bitácora por liquidación sintética, en la forma de la muestra del cliente.
+  const muestra = datos.liquidaciones.map((l, i) => ({
+    BitacoraID: 900000 + i, Operador: l.operador, Unidad: l.unidad, Fecha: { Inicia: `${l.de.slice(0, 10)} 06:00:00`, Termina: `${l.a.slice(0, 10)} 20:00:00` },
+    Percepciones: l.percepciones.map((r) => ({ Descripcion: r.concepto, Monto: r.valor })), Deducciones: l.deducciones.map((r) => ({ Descripcion: r.concepto, Monto: r.valor })),
+  }));
+  const tablas = { '/api/bitacoras': muestra, '/api/nomina-bitacora': nomina, '/api/operadores': operadores, '/api/conceptos-nomina': conceptos, '/api/liquidaciones': nomina };
   return async (pet) => {
     const u = new URL(pet.url);
     if (u.pathname === '/api/login') return { estado: 200, encabezados: {}, cuerpo: JSON.stringify({ token: 'tok-sintetico' }) };
@@ -117,8 +124,8 @@ async function main() {
   const iSeco = args.indexOf('--en-seco');
   const enSeco = iSeco >= 0;
   const archivoMapeos = enSeco && args[iSeco + 1] && !args[iSeco + 1].startsWith('--') ? args[iSeco + 1] : undefined;
-  const desconocido = args.find((a, i) => a !== '--falso' && a !== '--en-seco' && a !== '--desgloses' && !(enSeco && i === iSeco + 1 && a === archivoMapeos));
-  if (desconocido || (enSeco && !falso && !archivoMapeos)) salir(2, 'Uso: node scripts/tms/verificar-local.mjs [--falso] | --en-seco --falso [--desgloses] | --en-seco <mapeos.json> [--desgloses]');
+  const desconocido = args.find((a, i) => a !== '--falso' && a !== '--en-seco' && a !== '--desgloses' && a !== '--muestra-tms' && !(enSeco && i === iSeco + 1 && a === archivoMapeos));
+  if (desconocido || (enSeco && !falso && !archivoMapeos)) salir(2, 'Uso: node scripts/tms/verificar-local.mjs [--falso] | --en-seco --falso [--desgloses] | --en-seco <mapeos.json> [--desgloses] [--muestra-tms]');
 
   const mod = (ruta) => import(pathToFileURL(resolve(RAIZ, 'src/lib/likida', ruta)).href);
   const { SesionTms } = await mod('conectores/tms/sesion.ts');
@@ -149,7 +156,19 @@ async function main() {
     else {
       try { mapeos = JSON.parse(readFileSync(resolve(archivoMapeos), 'utf8')); } catch { salir(2, 'No se pudo leer el archivo de mapeos como JSON. No se llamó a nadie.'); }
     }
-    const reporte = await pruebaEnSecoTms({ valores, mapeos, http, desgloses: args.includes('--desgloses'), ...(falso ? { ahora: () => 1_000_000, dormir: async () => undefined } : {}) });
+    let muestraCfg;
+    if (args.includes('--muestra-tms')) {
+      const { validarConfigPullMuestra } = await mod('liquidacion_externa/desglose_muestra_pull_config.ts');
+      let ajustes;
+      if (falso) ajustes = { ruta: '/api/bitacoras', envoltorio: 'envuelto', rutaLista: 'data.items' };
+      else if ((process.env.LIKIDA_TMS_DESGLOSE_CONFIG ?? '').trim() !== '') {
+        try { ajustes = JSON.parse(process.env.LIKIDA_TMS_DESGLOSE_CONFIG); } catch { salir(2, 'LIKIDA_TMS_DESGLOSE_CONFIG no es JSON. No se llamó a nadie.'); }
+      }
+      const v = validarConfigPullMuestra(ajustes);
+      if (!v.ok) salir(2, `Configuración de muestra-tms inválida: ${v.motivo}. No se llamó a nadie.`);
+      muestraCfg = v.config;
+    }
+    const reporte = await pruebaEnSecoTms({ valores, mapeos, http, desgloses: args.includes('--desgloses'), ...(muestraCfg ? { muestra: muestraCfg } : {}), ...(falso ? { ahora: () => 1_000_000, dormir: async () => undefined } : {}) });
     salir(reporte.limpio ? 0 : 1, ...lineasDeReporteEnSeco(reporte));
   }
 
