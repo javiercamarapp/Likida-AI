@@ -1,36 +1,45 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-09 (lunes)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-08 (59 días naturales, 9 viernes de
+  cuota de diésel, incluye la ventana completa en la que debería haberse
+  detectado cualquier publicación de oct-2026) sin barrer. Sigue
+  arrancando en 09-11 para la próxima corrida — NO se movió el ancla
+  porque no se leyó ninguna nota nueva.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable_hoy — hoy no es viernes. Los 9 viernes del
+  rango pendiente (11, 18 y 25-sep; 2, 9, 16, 23 y 30-oct; 6-nov) tampoco
+  se pudieron verificar nunca: mismo bloqueo, sin excepción conocida.
+etag_sat: no_leído — hoy es lunes y tocaba, pero el minisitio del SAT
+  dio el mismo 403 que el resto de los dominios (ver estado).
+deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-ene-2027)
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — CUARTA corrida confirmada con el mismo corte (12-sep, 15-sep y
+  20-sep ya lo habían reportado; entre 20-sep y hoy no hay más entradas
+  de latido, o sea no hay evidencia de que la rutina haya corrido en ese
+  tramo — pudo no haberse disparado, o haber corrido y no haber dejado
+  rastro). Probado hoy con curl directo por HTTPS_PROXY contra los
+  CUATRO dominios de references/fuentes.md, uno por uno:
+  sidofqa.segob.gob.mx (notas), www.sat.gob.mx (minisitio),
+  www.diputados.gob.mx (LeyesBiblio/pdf) y www.google.com como control.
+  LOS CUATRO devolvieron "CONNECT tunnel failed, response 403" —
+  idéntico al patrón de septiembre: no es que el SIDOF o el SAT estén
+  caídos, es que la política de egreso de este entorno programado no
+  tiene ninguno de estos dominios en la lista permitida (el propio
+  agent-proxy lo etiqueta "connect_rejected ... most often means that
+  the host is not allowed for this session"). Sigue sin resolverse desde
+  al menos el 12-sep-2026 (≈2 meses). El rango sin verificar ya cubre 59
+  días naturales y 9 viernes de cuota de diésel — incluye, sin poder
+  confirmarlo ni descartarlo, cualquier modificación a la RMF 2026,
+  cualquier anticipada nueva en el minisitio del SAT, y la ventana
+  completa de la deriva trimestral de leyes que corría el 1-oct (no se
+  evaluó porque ni siquiera se alcanzó ese paso con el DOF bloqueado).
+  Requiere intervención humana: añadir sidofqa.segob.gob.mx,
+  www.sat.gob.mx y www.diputados.gob.mx a la política de egreso de este
+  entorno programado (ver /root/.ccr/README.md), o mover esta rutina a un
+  entorno/sesión con esos dominios permitidos. Mientras no se resuelva,
+  cada corrida de esta skill seguirá devolviendo este mismo resultado y
+  no tiene sentido seguir repitiéndolo sin cambiar la política de red.
