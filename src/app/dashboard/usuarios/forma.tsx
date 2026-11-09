@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { UserPlus } from 'lucide-react';
+import { CampoSelect } from '@/app/ui-v2/componentes';
 // SOLO TIPOS: el catálogo `ROLES_INVITABLES` viaja como PROP desde la página
 // (mismo patrón que `MODOS_TARIFA` en /dashboard/clientes). `invitar.ts` hoy
 // no importa `supabaseAdmin`, pero importa `errores.ts` → `logger`, y un
@@ -69,16 +70,14 @@ export function FormaInvitar({ accion, roles }: {
         </div>
 
         <div>
-          <label htmlFor="inv-rol" className={ETIQUETA}>Rol</label>
           {/* `contador` primero y por default: es el caso por el que existe
               esta pantalla (D6). Arrancar en `flota_admin` repartiría control
               total de la cuenta por pura inercia del que no cambia el select. */}
-          <select id="inv-rol" name="rol" required defaultValue="contador"
-            className="w-full" style={{ background: 'var(--surface)' }}>
+          <CampoSelect etiqueta="Rol" id="inv-rol" name="rol" required defaultValue="contador">
             {roles.map((r) => (
               <option key={r.valor} value={r.valor}>{r.rotulo}</option>
             ))}
-          </select>
+          </CampoSelect>
           {/* La ayuda dice la VERDAD de visibilidad.ts, no marketing: qué ve
               y qué NO ve cada rol es exactamente lo que el dueño necesita
               saber antes de repartir accesos. */}
@@ -145,8 +144,7 @@ export function FormaCambiarRol({ accion, id, rolActual, roles }: {
     <form action={despachar} className="space-y-1.5">
       <div className="flex items-center gap-1.5">
         <input type="hidden" name="id" value={id} />
-        <select name="rol" defaultValue={rolActual} aria-label="Nuevo rol"
-          className="hairline rounded-lg px-2 h-8 text-[12px] outline-none" style={{ background: 'var(--surface)' }}>
+        <select name="rol" defaultValue={rolActual} aria-label="Nuevo rol" className="rv-ctl">
           {roles.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
         </select>
         <BotonChico etiqueta="Cambiar rol" ocupado="Cambiando…" />

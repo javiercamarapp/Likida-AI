@@ -1,4 +1,4 @@
-import { BarraFiltros, BotonEnlace, FiltroInterruptor, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { CircleAlert, MapPin, MapPinOff, Radio, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -228,9 +228,9 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
           </tbody>
         </table>
       </div>
-      {pregunta}
       {tareas}
-      {notificaciones}
+      {pregunta ? <Disclosure variante="linea" titulo="Pregúntale al asistente">{pregunta}</Disclosure> : null}
+      {notificaciones ? <Disclosure variante="linea" titulo="Notificaciones de los avisos">{notificaciones}</Disclosure> : null}
     </MarcoPagina>
   );
 }

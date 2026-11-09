@@ -1,7 +1,8 @@
 // Puerta única de las primitivas del carril B (PLAN §2.4). Las páginas importan de aquí.
 export { Boton, BotonEnlace, clasesBoton, type VarianteBoton, type TamanoBoton } from './boton';
 export { Chip, type TonoChip } from './chip';
-export { Aviso, type TonoAviso } from './aviso';
+export { Aviso, AvisoCompacto, type TonoAviso } from './aviso';
+export { Disclosure } from './disclosure';
 export { EncabezadoPagina, APOYO_MAX } from './encabezado-pagina';
 export { MarcoPagina } from './marco-pagina';
 export { ProveedorAreaV2, useArea } from './contexto-area';
@@ -25,7 +26,8 @@ export { hrefConParams, ocultosSin, type ParamsUrl } from './barra-periodo-url';
 export { FiltroOpciones, FiltroChip, FiltroBusqueda, FiltroFecha, FiltroInterruptor, FiltroCampo, FiltroLimpiar, type OpcionFiltro } from './filtros';
 export { useMovil } from './movil';
 export { Icono, TRAZO_ICONO, type TamanoIcono } from './icono';
-export { Casilla, Radio, Campo, Fieldset, CampoArchivo } from './campos';
+export { CamposSistema } from './campos-sistema';
+export { Casilla, Radio, Campo, Fieldset, CampoArchivo, CampoTexto, CampoFecha, CampoSelect, CampoTextarea } from './campos';
 export { SegmentedControl, type OpcionSegmentada } from './segmented';
 export { Tabs, type PestanaDef } from './tabs';
 export { TabsLinea, type PestanaLinea } from './tabs-linea';

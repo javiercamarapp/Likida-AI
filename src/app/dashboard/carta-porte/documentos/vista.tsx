@@ -7,8 +7,8 @@ import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
 import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/lib/likida/carta_porte_docs/presentacion';
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
-import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from './forma_accion';
-import { BarraFiltros, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import { BotonEnvio, FormaAccion, type AccionDoc } from './forma_accion';
+import { BarraFiltros, CamposSistema, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Disclosure, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
@@ -192,21 +192,16 @@ function Metricas({ m }: { m: MetricasAgente }) {
 
 function Subir({ accion, clientes }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }> }) {
   return (
-    <section className="card p-4 space-y-3 max-w-3xl">
+    <section className="card p-4 space-y-3">
       <TituloRecuadro info="carta_porte_docs.subir"><Upload width={14} height={14} strokeWidth={1.75} /> Subir un documento</TituloRecuadro>
       <FormaAccion accion={accion} enctype="multipart/form-data">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="cp-archivo" className={ETIQUETA}>Archivo (PDF, foto, Excel, CSV, XML o correo .eml — hasta 9 MB)</label>
-            <input id="cp-archivo" name="archivo" type="file" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt" className="w-full py-1.5 h-auto" style={{ background: 'var(--surface)' }} />
-          </div>
-          <div>
-            <label htmlFor="cp-cliente" className={ETIQUETA}>¿De qué cliente es? (ayuda a reconocer su formato)</label>
-            <select id="cp-cliente" name="clienteId" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
-              <option value="">Sin indicar</option>
-              {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-          </div>
+        <div className="rv-forma__rejilla">
+          <CampoArchivo id="cp-archivo" name="archivo" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt"
+            etiqueta="Archivo (PDF, foto, Excel, CSV, XML o correo .eml — hasta 9 MB)" />
+          <CampoSelect id="cp-cliente" name="clienteId" defaultValue="" etiqueta="¿De qué cliente es? (ayuda a reconocer su formato)">
+            <option value="">Sin indicar</option>
+            {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </CampoSelect>
         </div>
         <BotonEnvio etiqueta="Subir y leer" pendiente="Leyendo el documento…" />
       </FormaAccion>
@@ -358,9 +353,9 @@ function Canales({ buzon, acciones }: { buzon: BuzonVista | null; acciones: Acci
             )}
             {acciones.guardarRemitentes && (
               <FormaAccion accion={acciones.guardarRemitentes}>
-                <label htmlFor="cp-remitentes" className={ETIQUETA}>Remitentes de tus clientes (uno por línea: correo o dominio). Sin al menos uno, el buzón no recibe correos.</label>
-                <textarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')} className="w-full h-auto py-2" style={{ background: 'var(--surface)' }} />
-                <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Un correo de otro remitente entra igual, marcado «remitente no reconocido» para que lo revises.</p>
+                <CampoTextarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')}
+                  etiqueta="Remitentes de tus clientes (uno por línea: correo o dominio). Sin al menos uno, el buzón no recibe correos."
+                  ayuda="Un correo de otro remitente entra igual, marcado «remitente no reconocido» para que lo revises." />
                 <BotonEnvio variante="secundario" etiqueta="Guardar remitentes" />
               </FormaAccion>
             )}
@@ -384,18 +379,15 @@ function Perfiles({ perfiles, acciones }: { perfiles: PerfilVista[]; acciones: A
     <section className="space-y-2">
       <TituloRecuadro info="carta_porte_docs.formatos"><Layers width={14} height={14} strokeWidth={1.75} /> Formatos que Likida ya conoce</TituloRecuadro>
       {perfiles.length === 0 ? (
-        <p className="text-[12px] max-w-3xl" style={{ color: 'var(--muted)' }}>
+        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           Todavía ninguno. Cuando apruebes el primer Excel, PDF con texto, XML o correo de un cliente, Likida recuerda en qué columna o
           etiqueta viene cada dato y la siguiente vez lo lee sin modelo.
         </p>
       ) : (
         <div className="space-y-2">
           {perfiles.map((p) => (
-            <details key={p.id} className="card p-3.5">
-              <summary className="cursor-pointer text-[12px] select-none">
-                <strong>{p.nombre}</strong> <span style={{ color: 'var(--muted)' }}>· {ROTULO_FORMATO[p.formato] ?? p.formato} · versión {p.versionActiva} · {numero(p.mapeos)} campos reconocidos</span>
-              </summary>
-              <ul className="pt-2.5 space-y-1.5 text-[12px]">
+            <Disclosure key={p.id} titulo={p.nombre} resumen={`${ROTULO_FORMATO[p.formato] ?? p.formato} · versión ${p.versionActiva} · ${numero(p.mapeos)} campos reconocidos`}>
+              <ul className="space-y-1.5 text-[12px]">
                 {p.versiones.map((v) => (
                   <li key={v.version} className="flex flex-wrap items-center gap-2">
                     <span className="cifra-mono">v{v.version}</span>
@@ -411,7 +403,7 @@ function Perfiles({ perfiles, acciones }: { perfiles: PerfilVista[]; acciones: A
                   </li>
                 ))}
               </ul>
-            </details>
+            </Disclosure>
           ))}
         </div>
       )}
@@ -437,7 +429,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
   return (
     <section className="space-y-2">
       <TituloRecuadro info="carta_porte_docs.exportar"><Download width={14} height={14} strokeWidth={1.75} /> Exportar lo aprobado</TituloRecuadro>
-      <p className="text-[12px] max-w-3xl" style={{ color: 'var(--muted)' }}>
+      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
         Solo salen documentos <strong>aprobados</strong>. El formato exacto que espera tu cliente (por ejemplo el cliente de demo) todavía no se conoce:
         declara aquí qué columna lleva cada dato y se genera el CSV o JSON a tu medida. Mientras tanto, está el formato estándar de Likida.
       </p>
@@ -455,29 +447,23 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
         ))}
       </div>
       {acciones.guardarExport && (
-        <details className="card p-3.5 max-w-3xl">
-          <summary className="cursor-pointer text-[12px] font-medium select-none">Declarar un formato destino</summary>
-          <FormaAccion accion={acciones.guardarExport} className="pt-3 space-y-3">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label htmlFor="cp-exp-nombre" className={ETIQUETA}>Nombre (si ya existe, se reemplaza)</label>
-                <input id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Cliente demo" className="w-full" style={{ background: 'var(--surface)' }} />
-              </div>
-              <div>
-                <label htmlFor="cp-exp-formato" className={ETIQUETA}>Formato</label>
-                <select id="cp-exp-formato" name="formato" defaultValue="csv" className="w-full" style={{ background: 'var(--surface)' }}>
-                  <option value="csv">CSV</option><option value="json">JSON</option>
-                </select>
-              </div>
+        <Disclosure titulo="Declarar un formato destino">
+          <FormaAccion accion={acciones.guardarExport} className="space-y-3">
+            <div className="rv-forma__rejilla">
+              <CampoTexto id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder="Cliente demo" etiqueta="Nombre (si ya existe, se reemplaza)" />
+              <CampoSelect id="cp-exp-formato" name="formato" defaultValue="csv" etiqueta="Formato">
+                <option value="csv">CSV</option><option value="json">JSON</option>
+              </CampoSelect>
             </div>
-            <div>
-              <label htmlFor="cp-exp-config" className={ETIQUETA}>Mapeo (JSON)</label>
-              <textarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} className="w-full h-auto py-2 font-mono text-[12px]" style={{ background: 'var(--surface)' }} />
-              <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-                Campos: los del complemento (<code>origen_cp</code>, <code>destino_rfc</code>…), de mercancía (<code>mercancia.peso_kg</code>…) y de sistema
-                (<code>documento.id</code>, <code>documento.archivo</code>, <code>documento.viaje_folio</code>…). <code>porMercancia: false</code> = una fila por documento.
-              </p>
-            </div>
+            <CampoTextarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} etiqueta="Mapeo (JSON)" claseControl="cifra-mono"
+              ayuda={<><code>porMercancia: false</code> = una fila por documento. Los campos que puedes citar están abajo, en «Campos del sistema».</>} />
+            <Disclosure variante="linea" titulo="Campos del sistema">
+              <CamposSistema etiqueta="Campos que se pueden citar en el mapeo" campos={[
+                { etiqueta: 'Del complemento', valor: <><code>origen_cp</code>, <code>destino_rfc</code>…</>, nota: 'Lo que se leyó del documento.' },
+                { etiqueta: 'De la mercancía', valor: <><code>mercancia.peso_kg</code>…</>, nota: 'Una fila por partida.' },
+                { etiqueta: 'Del sistema', valor: <><code>documento.id</code>, <code>documento.archivo</code>, <code>documento.viaje_folio</code>…</>, nota: 'Los pone Likida; no se capturan.' },
+              ]} />
+            </Disclosure>
             <BotonEnvio etiqueta="Guardar formato" />
           </FormaAccion>
           {configs.length > 0 && acciones.borrarExport && (
@@ -493,7 +479,7 @@ function Exportacion({ configs, acciones, apiSufijo }: { configs: ConfigVista[];
               ))}
             </ul>
           )}
-        </details>
+        </Disclosure>
       )}
       <p className="text-[11px] flex items-start gap-1.5" style={{ color: 'var(--faint)' }}>
         <TriangleAlert width={12} height={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />

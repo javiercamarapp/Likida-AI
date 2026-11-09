@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { agruparPorSemana, AreaChartSimple, UMBRAL_AGRUPAR_SEMANA } from './charts';
+import { agruparPorSemana, AreaChartSimple, UMBRAL_AGRUPAR_SEMANA, etiquetaEjeX } from './charts';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-18 (auditoría prod) — "TODO EL HISTÓRICO" EN UNA TARJETA DE 640×240.
@@ -94,5 +94,43 @@ describe('AreaChartSimple agrupa sola pasando el trimestre', () => {
     expect(punteada).not.toBeNull();
     // 53 vértices en la línea punteada = agrupada; 365 sería la cruda.
     expect((punteada![1]).split('L')).toHaveLength(53);
+  });
+});
+
+describe('R9 — AreaChartSimple: eje X completo, alto proporcionado, pocos puntos', () => {
+  it('etiquetaEjeX da «24 ago» y no corta el año-mes («08-2…»)', () => {
+    expect(etiquetaEjeX('2026-08-24')).toBe('24 ago');
+    expect(etiquetaEjeX('2026-08-24')).not.toContain('08-2');
+    expect(etiquetaEjeX('Semana 3')).toBe('Semana 3');
+  });
+
+  it('con 3 puntos: caja baja, TODAS las etiquetas completas y los valores visibles sin cursor', () => {
+    const datos = [{ dia: '2026-08-24', valor: 1.5 }, { dia: '2026-08-25', valor: 3 }, { dia: '2026-08-26', valor: 2 }];
+    const html = renderToStaticMarkup(<AreaChartSimple datos={datos} etiquetaValor={(v) => `US$${v}`} etiquetaSerie="Costo de IA" />);
+    expect(html).toMatch(/viewBox="0 0 640 176"/);
+    expect(html).toContain('24 ago');
+    expect(html).toContain('26 ago');
+    expect(html).toContain('Costo de IA');
+    // Valor rotulado en el propio SVG (no solo en el tooltip de hover).
+    expect(html).toContain('US$3');
+    expect(html).not.toMatch(/>08-2/);
+  });
+
+  it('un solo punto: solo marcador (sin línea ni área inventadas)', () => {
+    const html = renderToStaticMarkup(<AreaChartSimple datos={[{ dia: '2026-08-24', valor: 5 }]} etiquetaValor={(v) => String(v)} />);
+    expect(html).not.toContain('kit-linea');
+    expect(html).not.toContain('url(#kit-area');
+    expect((html.match(/<circle/g) ?? []).length).toBe(2);
+  });
+
+  it('serie vacía: dice que no hay datos en vez de reventar', () => {
+    expect(renderToStaticMarkup(<AreaChartSimple datos={[]} etiquetaValor={(v) => String(v)} />)).toContain('Sin datos');
+  });
+
+  it('muchos puntos: la caja es más alta y no pone una etiqueta por punto', () => {
+    const html = renderToStaticMarkup(<AreaChartSimple datos={serie(30)} etiquetaValor={(v) => String(v)} />);
+    expect(html).toMatch(/viewBox="0 0 640 232"/);
+    // Etiquetas del eje (texto gris), no los tooltips de hover.
+    expect((html.match(/<text[^>]*fill="var\(--muted\)"/g) ?? []).length).toBeLessThan(10);
   });
 });

@@ -3,7 +3,6 @@
 export interface ConteoControles { R1: number; R2: number; R3: number }
 export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/agentes/[id]/insumos/zona-insumos.tsx': { R1: 3, R2: 1, R3: 0 },
-  'app/admin/agentes/palanca.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/aprobaciones/forma-pieza.tsx': { R1: 5, R2: 5, R3: 0 },
   'app/admin/conversaciones/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/corridas/page.tsx': { R1: 1, R2: 0, R3: 0 },
@@ -11,7 +10,6 @@ export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/dev/mapa-actividad.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/elegir-flota/contenido.tsx': { R1: 2, R2: 1, R3: 0 },
   'app/admin/error.tsx': { R1: 1, R2: 1, R3: 0 },
-  'app/admin/evals/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/mapa-prospectos/[id]/detalle.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/mapa-prospectos/calles.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/mapa-prospectos/cerebro.tsx': { R1: 11, R2: 2, R3: 1 },
@@ -21,12 +19,10 @@ export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/mi-perfil/avatar-uploader.tsx': { R1: 2, R2: 1, R3: 0 },
   'app/admin/mi-perfil/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/notificaciones/lista.tsx': { R1: 2, R2: 2, R3: 0 },
-  'app/admin/observabilidad/interruptores-ui.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/observabilidad/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/qa/banco-verdad.tsx': { R1: 4, R2: 0, R3: 0 },
   'app/admin/qa/lanzar-form.tsx': { R1: 5, R2: 0, R3: 0 },
   'app/admin/rango-costo.tsx': { R1: 1, R2: 0, R3: 0 },
-  'app/admin/techo-ia/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/tu-turno/boton_envio.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/tu-turno/vista.tsx': { R1: 3, R2: 0, R3: 0 },
   'app/admin/ui/confirmar.tsx': { R1: 1, R2: 0, R3: 0 },

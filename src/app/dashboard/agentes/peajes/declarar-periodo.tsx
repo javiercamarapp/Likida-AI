@@ -23,11 +23,9 @@ export function DeclararPeriodo({ declarar, desgloseId, desde, hasta }: { declar
     <form action={accion} className="flex items-center gap-1.5 flex-wrap text-[11px]" style={{ color: 'var(--muted)' }}>
       <input type="hidden" name="desglose" value={desgloseId} />
       <span>Periodo oficial del archivo{desde && hasta ? `: ${desde} a ${hasta}` : ': sin declarar'}</span>
-      <input type="date" name="periodo_desde" required defaultValue={desde ?? ''} aria-label="Inicio del periodo oficial"
-        className="hairline text-[12px] px-2 py-0.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+      <input type="date" name="periodo_desde" required defaultValue={desde ?? ''} aria-label="Inicio del periodo oficial" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
       <span>a</span>
-      <input type="date" name="periodo_hasta" required defaultValue={hasta ?? ''} aria-label="Fin del periodo oficial"
-        className="hairline text-[12px] px-2 py-0.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
+      <input type="date" name="periodo_hasta" required defaultValue={hasta ?? ''} aria-label="Fin del periodo oficial" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
       <button type="submit" disabled={pendiente}
         className="rv-btn rv-btn--secondary py-0.5"
         style={{ background: 'var(--surface)', color: 'var(--ink)' }}>

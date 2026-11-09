@@ -35,7 +35,9 @@ function contieneTexto(nodo: unknown, texto: string): boolean {
   if (typeof nodo === 'string') return nodo.includes(texto);
   if (Array.isArray(nodo)) return nodo.some((n) => contieneTexto(n, texto));
   if (typeof nodo === 'object' && 'props' in nodo) {
-    return contieneTexto((nodo as { props?: { children?: unknown } }).props?.children, texto);
+    // AvisoCompacto lleva el texto en `resumen`/`mas`, no en `children`.
+    const props = (nodo as { props?: { children?: unknown; resumen?: unknown; mas?: unknown } }).props;
+    return contieneTexto(props?.children, texto) || contieneTexto(props?.resumen, texto) || contieneTexto(props?.mas, texto);
   }
   return false;
 }

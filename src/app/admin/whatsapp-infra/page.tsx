@@ -55,12 +55,23 @@ export default async function WhatsappInfraPage() {
           titulo="WhatsApp Infra"
         />
         <div className="px-5 py-5 flex-1 space-y-2.5">
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            El número real que opera el bot, y lo que falta para tratarlo como infraestructura a escala
-          </p>
+          {/* El conteo REAL de `wa_conversacion` (count exact, FE-9). Antes
+              esta tarjeta enseñaba el tamaño de la página —20— con una nota
+              que confesaba el tope: una cifra de infraestructura que se topa
+              en 20 no sirve para dimensionar infraestructura. */}
+          <div className="kit-kpis">
+            <StatCard icono={<MessageCircle {...ICONO_KPI} />}
+              etiqueta="Conversaciones activas" valor={total} formato="entero"
+              sinDato="no se pudo contar"
+              nota="Filas vivas en wa_conversacion (ventana rodante de turnos)"
+            />
+          </div>
 
-          <div className="card p-3">
+          <div className="card p-4">
             <TituloSeccion>Número operativo</TituloSeccion>
+            <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
+              El número real que opera el bot, y lo que falta para tratarlo como infraestructura a escala
+            </p>
             <div className="hairline rounded-lg px-3 py-2.5 mt-2 flex items-center gap-2.5" style={{ background: 'var(--surface)' }}>
               <Smartphone width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
               <div className="min-w-0">
@@ -76,19 +87,7 @@ export default async function WhatsappInfraPage() {
             </p>
           </div>
 
-          {/* El conteo REAL de `wa_conversacion` (count exact, FE-9). Antes
-              esta tarjeta enseñaba el tamaño de la página —20— con una nota
-              que confesaba el tope: una cifra de infraestructura que se topa
-              en 20 no sirve para dimensionar infraestructura. */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <StatCard icono={<MessageCircle {...ICONO_KPI} />}
-              etiqueta="Conversaciones activas" valor={total} formato="entero"
-              sinDato="no se pudo contar"
-              nota="Filas vivas en wa_conversacion (ventana rodante de turnos)"
-            />
-          </div>
-
-          <section id="conversaciones" className="card p-3 scroll-mt-24">
+          <section id="conversaciones" className="card p-4 scroll-mt-24">
             <TituloSeccion>
               {recortado ? `Conversaciones — las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Conversaciones'}
             </TituloSeccion>
@@ -129,7 +128,7 @@ export default async function WhatsappInfraPage() {
             )}
           </section>
 
-          <div className="card p-3">
+          <div className="card p-4">
             <TituloSeccion>Fuera de alcance hoy</TituloSeccion>
             {/* EstadoVacio (kit compartido) — mismo mensaje + icono (Info,
                 igual que antes) de la intro; la lista de items fuera de
@@ -137,7 +136,7 @@ export default async function WhatsappInfraPage() {
             <div className="mt-2">
               <EstadoVacio icono={<Info width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
                 Ninguno de estos existe todavía en este panel — requieren integrar más a fondo la Meta WhatsApp
-                Business API de lo que Likida usa hoy (Fase 5 del roadmap, a escala):
+                Business API de lo que Likida usa hoy:
               </EstadoVacio>
             </div>
             <ul className="text-sm mt-3 space-y-2" style={{ color: 'var(--muted)' }}>

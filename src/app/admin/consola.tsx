@@ -203,7 +203,7 @@ export async function ConsolaAdmin({
             es de operación diaria y ese bloque es herramienta de desarrollo. */}
         <div className="px-5 pb-5 flex-1 space-y-2.5">
           {/* ── KPIs — StatCard (kit compartido), todo dato real ──────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <div className="kit-kpis">
             <StatCard icono={<Truck {...ICONO_KPI} />}
               etiqueta={r.tenants === 0 ? 'Flotas (ninguna dada de alta)' : esSoloDemo ? 'Flota (solo el demo)' : 'Flotas'}
               valor={r.tenants} formato="entero"

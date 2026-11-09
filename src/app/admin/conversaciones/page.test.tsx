@@ -107,3 +107,11 @@ it('la página pedida (?p=) viaja a buscarConversaciones; una página inválida 
   await renderizar({ q: '999', p: 'no-es-numero' });
   expect(dobles.buscarConversaciones).toHaveBeenLastCalledWith({ q: '999', pagina: 1 });
 });
+
+it('R9: la lista pinta el teléfono enmascarado; el número completo solo viaja en el enlace al detalle (acción explícita)', async () => {
+  dobles.getConversacionesActivas.mockResolvedValue([CONV]);
+  dobles.contarConversacionesActivas.mockResolvedValue(1);
+  const html = await renderizar();
+  expect(html).toContain('***4567');
+  expect(html).not.toContain('>5219991234567<');
+});

@@ -41,7 +41,7 @@ export default function GraficaCostoConRango({ porDia, anidado = false }: { porD
           ))}
         </div>
       </div>
-      <AreaChartSimple datos={datos} etiquetaValor={usd} />
+      <AreaChartSimple datos={datos} etiquetaValor={usd} etiquetaSerie="Costo de IA (USD)" />
     </div>
   );
 }

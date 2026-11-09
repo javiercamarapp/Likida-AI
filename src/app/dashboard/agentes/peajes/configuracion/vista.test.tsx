@@ -42,8 +42,8 @@ describe('la llave del buzón es un secreto', () => {
     expect(html).not.toContain('Llave de firma');
     expect(html).toContain('Activar buzón');
   });
-  it('sin PEAJES_INGESTA_SECRETO lo dice con todas sus letras', () => {
-    expect(pintar({ buzon: { ...buzonActivo, secretoConfigurado: false, llave: null } })).toContain('Falta PEAJES_INGESTA_SECRETO');
+  it('sin llave del servidor lo dice en lenguaje llano, sin nombrar la variable (la configura Likida)', () => {
+    expect(pintar({ buzon: { ...buzonActivo, secretoConfigurado: false, llave: null } })).toContain('Falta configurar la llave del buzón en el servidor');
   });
   it('estado ilegible: «no se pudo leer», no «desactivado»', () => {
     const html = pintar({ buzon: { ...buzonActivo, estado: 'ilegible', llave: null } });
@@ -150,7 +150,7 @@ describe('recepción por correo y pull (0563)', () => {
   });
 
   it('sin dominio de correo en el servidor lo dice (no inventa una dirección)', () => {
-    expect(pintar({ entradas: E({ direccionCorreo: null }) })).toContain('Falta RESEND_EMAIL_DOMAIN');
+    expect(pintar({ entradas: E({ direccionCorreo: null }) })).toContain('Falta configurar el dominio de correo en el servidor');
   });
 
   it('pull: URL, intervalo, última consulta buena y el último error del endpoint, escapado', () => {
@@ -166,7 +166,7 @@ describe('recepción por correo y pull (0563)', () => {
   it('el token guardado no vuelve a la pantalla (solo se sabe que existe) y sin cofre el campo se deshabilita con el motivo', () => {
     const html = pintar({ entradas: E({ cofreConfigurado: false }) });
     expect(html).toContain('ya hay uno guardado');
-    expect(html).toContain('Falta LIKIDA_COFRE_LLAVE');
+    expect(html).toContain('Falta configurar el cofre de credenciales en el servidor');
     // El orden de los atributos lo decide React, no la fuente: se mira la etiqueta completa del campo.
     const campo = /<input[^>]*name="token"[^>]*>/.exec(html)?.[0] ?? '';
     expect(campo).toMatch(/disabled/);

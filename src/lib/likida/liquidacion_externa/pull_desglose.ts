@@ -25,7 +25,7 @@ import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { claveDeBitacora, validarDesgloseBitacora, type DesgloseBitacora } from './desglose_contrato';
 import {
   reLeerDesdeDeCursor, TmsCredenciales, TmsLimite, TmsNoDisponible,
-  type CursorDesglose, type LectorDesglosesPuerto,
+  type CursorDesglose, type FilaDesgloseRechazada, type LectorDesglosesPuerto,
 } from './desglose_puerto';
 import { recibirDesglose, type ResultadoDesglose } from './desglose_recibir';
 import {
@@ -53,6 +53,8 @@ export interface DependenciasPull {
   ) => Promise<{ id: number; nueva: boolean }>;
   /** Excepciones `sin_poliza` abiertas: clave externa → id. */
   excepcionesSinPoliza: (tenantId: string) => Promise<Map<string, number>>;
+  /** r13p: excepciones `operador_no_encontrado` abiertas (clave externa → id); se resuelven solas cuando la bitácora ya entra. Opcional. */
+  excepcionesOperador?: (tenantId: string) => Promise<Map<string, number>>;
   resolverExcepcion: (tenantId: string, id: number, ahora: Date) => Promise<boolean>;
   entregasDe: (tenantId: string, liquidacionId: string) => Promise<EntregaCorreo[]>;
   /**
@@ -76,10 +78,19 @@ export const dependenciasPullPorOmision: DependenciasPull = {
     const l = await listarExcepciones(t, { soloAbiertas: true, tipo: 'sin_poliza', limite: 500 });
     return new Map(l.ok ? l.valor.map((e) => [e.claveExterna, e.id] as const) : []);
   },
+  excepcionesOperador: async (t) => {
+    const l = await listarExcepciones(t, { soloAbiertas: true, tipo: 'operador_no_encontrado', limite: 500 });
+    return new Map(l.ok ? l.valor.map((e) => [e.claveExterna, e.id] as const) : []);
+  },
   resolverExcepcion,
   desdeSinPolizaMasAntiguo: async (t) => {
-    const l = await listarExcepciones(t, { soloAbiertas: true, tipo: 'sin_poliza', limite: 500 });
-    if (!l.ok) return null;
+    // r13p: también las bitácoras cuyo operador no se resolvió (detalle.desde): el padrón puede completarse días después.
+    const [a, b] = await Promise.all([
+      listarExcepciones(t, { soloAbiertas: true, tipo: 'sin_poliza', limite: 500 }),
+      listarExcepciones(t, { soloAbiertas: true, tipo: 'operador_no_encontrado', limite: 500 }),
+    ]);
+    if (!a.ok) return null;
+    const l = { ok: true as const, valor: [...a.valor, ...(b.ok ? b.valor : [])] };
     const ts = l.valor.map((e) => (typeof e.detalle.desde === 'string' ? Date.parse(e.detalle.desde) : NaN)).filter((n) => Number.isFinite(n));
     return ts.length > 0 ? new Date(Math.min(...ts)).toISOString() : null;
   },
@@ -167,6 +178,7 @@ export async function pullDesgloses(
 
   try {
     const sinPoliza = await deps.excepcionesSinPoliza(tenantId);
+    const sinOperador = deps.excepcionesOperador ? await deps.excepcionesOperador(tenantId) : new Map<string, number>();
     // A39-A1-02: la relectura llega hasta la bitácora sin póliza más antigua (con tope de días), no solo 24 h.
     if (reLeerDesde !== undefined && cursorInicial && deps.desdeSinPolizaMasAntiguo) {
       const pendiente = Date.parse((await deps.desdeSinPolizaMasAntiguo(tenantId).catch(() => null)) ?? '');
@@ -181,10 +193,10 @@ export async function pullDesgloses(
     let releidos = 0;
     let primera = true;
     // Filas que el lector ya no pudo mapear: excepción visible (solo el nombre del campo), nunca descarte silencioso.
-    const abrirRechazadas = async (pag: { rechazadas?: Array<{ clave: string; campo: string }> }): Promise<void> => {
+    const abrirRechazadas = async (pag: { rechazadas?: FilaDesgloseRechazada[] }): Promise<void> => {
       for (const rech of pag.rechazadas ?? []) {
         r.leidas += 1;
-        await deps.abrirExcepcion(tenantId, rech.clave, 'mapeo_invalido', { campo: rech.campo }, ahora);
+        await deps.abrirExcepcion(tenantId, rech.clave, rech.tipo ?? 'mapeo_invalido', rech.detalle ?? { campo: rech.campo }, ahora);
         r.excepciones += 1;
       }
     };
@@ -230,6 +242,9 @@ export async function pullDesgloses(
         }
 
         if (d.poliza === null) {
+          // r13p: el desglose ya trae operador resuelto, así que una revisión de operador abierta bajo esta clave deja de aplicar.
+          const opAbierta = sinOperador.get(clave);
+          if (opAbierta !== undefined && await deps.resolverExcepcion(tenantId, opAbierta, ahora)) { sinOperador.delete(clave); r.resueltas += 1; }
           await deps.abrirExcepcion(tenantId, clave, 'sin_poliza', { bitacora: d.bitacora, desde: d.desde }, ahora);
           r.excepciones += 1;
           continue;
@@ -256,6 +271,12 @@ export async function pullDesgloses(
         const abierta = sinPoliza.get(res.claveExterna);
         if (abierta !== undefined && await deps.resolverExcepcion(tenantId, abierta, ahora)) {
           sinPoliza.delete(res.claveExterna);
+          r.resueltas += 1;
+        }
+
+        const abiertaOp = sinOperador.get(res.claveExterna);
+        if (abiertaOp !== undefined && await deps.resolverExcepcion(tenantId, abiertaOp, ahora)) {
+          sinOperador.delete(res.claveExterna);
           r.resueltas += 1;
         }
 

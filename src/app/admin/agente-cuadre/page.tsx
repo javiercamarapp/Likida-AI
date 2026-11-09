@@ -36,7 +36,7 @@ export default async function AgenteCuadrePage() {
         <div className="px-5 py-5 flex-1 space-y-2.5">
           <p className="text-xs" style={{ color: 'var(--muted)' }}>Concilia gastos comprobados contra anticipo y política — costo real, histórico</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="kit-kpis">
             <StatCard icono={<DollarSign {...ICONO_KPI} />}
               etiqueta="Gastado en Cuadre" valor={cuadre ? cuadre.costoUsd : 0} formato="usd"
             />

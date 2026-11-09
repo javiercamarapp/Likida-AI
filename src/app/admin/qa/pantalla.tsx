@@ -55,7 +55,7 @@ export function PantallaQa({
 
         <div className="px-5 py-5 flex-1 space-y-2.5">
           {/* ── Los tres números del panel ─────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+          <div className="kit-kpis">
             {bancoError === null ? (
               <StatCard icono={<Camera {...ICONO} />} etiqueta="Fotos en el banco" valor={fotos.length} formato="entero" />
             ) : (
@@ -78,7 +78,7 @@ export function PantallaQa({
                   <div className="font-display text-[20px] leading-tight font-semibold tabular mt-0.5">{usd4(gastoHoy)}</div>
                 </div>
                 <div className="grow" />
-                <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--faint)' }}>
+                <p className="text-xs mx-1.5 mt-1.5 pt-1.5 pb-0" style={{ borderTop: '1px dashed var(--line2)', color: 'var(--muted)' }}>
                   de {usd(topeDiaUsd)} de tope diario — suma de llm_costo por corrida, nunca estimado
                 </p>
               </div>

@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Inbox } from 'lucide-react';
-import { EstadoVacio, StatusPill, type Estado } from '../ui/kit';
+import { StatusPill, type Estado } from '../ui/kit';
 import { numero } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -222,6 +222,16 @@ export function TableroProspectos({
    *  sería mentirle sobre su propia cartera. */
   conVendedor?: boolean;
 }) {
+  // Todas las etapas vacías: UNA sola pista honesta en vez de once columnas repitiendo lo mismo.
+  if (columnas.every((c) => c.tarjetas.length === 0 && c.total === 0)) {
+    return (
+      <p className="m-0 py-3 text-[13px]" style={{ color: 'var(--muted)' }}>
+        {hayFiltro
+          ? 'Ningún prospecto coincide con el filtro actual en ninguna etapa. Quita los filtros para ver todo el pipeline.'
+          : 'Ninguna etapa tiene prospectos todavía.'}
+      </p>
+    );
+  }
   return (
     // El tablero scrollea DENTRO de su contenedor (regla de wide content):
     // seis columnas no caben en un portátil y la página no debe crecer a lo
@@ -237,11 +247,13 @@ export function TableroProspectos({
             </div>
             <div className="space-y-1.5">
               {col.tarjetas.length === 0 ? (
-                <EstadoVacio icono={<Inbox width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}>
+                // R9: una línea sobria por columna vacía (antes una tarjeta «Sin datos por ahora» repetida en cada etapa).
+                <p className="m-0 px-1 py-2 text-[12px] inline-flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
+                  <Inbox width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
                   {hayFiltro
                     ? 'Ninguno en esta etapa con el filtro actual.'
                     : 'Sin prospectos en esta etapa.'}
-                </EstadoVacio>
+                </p>
               ) : (
                 col.tarjetas.map((t) => (
                   <Tarjeta key={t.id} t={t} orden={orden} transiciones={transiciones} rotulos={rotulos}

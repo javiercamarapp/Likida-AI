@@ -1,4 +1,5 @@
 import { Blocks } from 'lucide-react';
+import { MarcaIntegracion, StatusChip, type MarcaId, type TonoEstado } from '@/app/ui-v2/componentes';
 import { porCategoria, ESTADO_INTEGRACION, type Integracion } from '@/lib/likida/integraciones';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -24,12 +25,10 @@ import { porCategoria, ESTADO_INTEGRACION, type Integracion } from '@/lib/likida
 // WhatsApp con credenciales por flota, que no existe.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const TONO: Record<string, { fg: string; bg: string }> = {
-  ok: { fg: 'var(--ok)', bg: 'var(--okbg)' },
-  neutral: { fg: 'var(--muted)', bg: 'var(--canvas)' },
-  warn: { fg: 'var(--warn)', bg: 'var(--warnbg)' },
-  apagado: { fg: 'var(--faint)', bg: 'var(--canvas)' },
-};
+const TONO: Record<string, TonoEstado> = { ok: 'ok', neutral: 'neutral', warn: 'warn', apagado: 'muted' };
+
+/** Marca SOLO donde hay trazado verificado (CSV, SAP, WhatsApp); el resto cae al icono genérico de integración, nunca a un logo inventado. */
+const MARCA: Record<string, MarcaId> = { export_csv: 'csv', sap_b1: 'sap', whatsapp_docs: 'whatsapp' };
 
 /**
  * El catálogo de sistemas con su «Cómo conecta hoy».
@@ -60,31 +59,24 @@ export function SeccionIntegraciones({ integraciones }: { integraciones: Integra
 
             {items.map((i) => {
               const e = ESTADO_INTEGRACION[i.estado];
-              const t = TONO[e.tono];
               return (
-                <article key={i.id} className="rounded-lg hairline p-3" style={{ background: 'var(--surface)' }}>
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <h4 className="text-[13px] font-medium">{i.nombre}</h4>
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0"
-                      style={{ color: t.fg, background: t.bg }}>
-                      {e.rotulo}
-                    </span>
+                <article key={i.id} className="rounded-lg hairline px-3 py-2.5" style={{ background: 'var(--surface)' }}>
+                  <div className="flex items-center gap-2.5">
+                    <MarcaIntegracion id={MARCA[i.id] ?? 'generico'} tam={18} />
+                    <h4 className="text-[13px] font-medium min-w-0 flex-1">{i.nombre}</h4>
+                    <StatusChip tono={TONO[e.tono] ?? 'neutral'} className="shrink-0">{e.rotulo}</StatusChip>
                   </div>
 
                   <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>{i.queHace}</p>
 
-                  <dl className="mt-2 space-y-1.5">
+                  <dl className="mt-1.5 space-y-1">
                     <div>
-                      <dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
-                        Cómo conecta hoy
-                      </dt>
+                      <dt className="rv-etq" style={{ color: 'var(--faint)' }}>Cómo conecta hoy</dt>
                       <dd className="text-[12px] mt-0.5">{i.comoConectaHoy}</dd>
                     </div>
                     {i.paraSubirDeEscalon && (
                       <div>
-                        <dt className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>
-                          Para dar el siguiente paso
-                        </dt>
+                        <dt className="rv-etq" style={{ color: 'var(--faint)' }}>Para dar el siguiente paso</dt>
                         <dd className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
                           {i.paraSubirDeEscalon}
                         </dd>

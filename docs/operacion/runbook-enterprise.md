@@ -97,8 +97,9 @@ banderas en base actúan sin build.
 
 ## 6. Lo que NO está resuelto
 
-- **Restauración de la base: nunca se ha ensayado** (`DEPLOY.md`: «Última prueba de restauración: nunca»). RPO 24 h y RTO 4 h son
-  objetivos declarados, no demostrados. El guion está en `restauracion-guion-y-acta.md`; lo corre Javier.
+- **Restauración de la base: aún no se ha ensayado** (`DEPLOY.md`: «Última prueba de restauración: nunca»). Ensayo **preparado,
+  pendiente de correr por el dueño**: procedimiento en `ensayo-restauracion.md` (script `scripts/ensayo-restauracion-likida.sh`).
+  RPO 24 h y RTO 4 h son objetivos declarados, no demostrados. El acta está en `restauracion-guion-y-acta.md`; lo corre Javier.
 - **WhatsApp en tiempo real depende de Meta.** La verificación de negocio figura como rechazada en `avisos-correo.md`; los avisos
   tienen segundo canal por correo, pero la entrada en vivo de mensajes no tiene señal propia de «Meta dejó de entregar».
 - **Monitor externo a `/api/health`** no existe (gasto, decisión de Javier): si cae toda la plataforma, la guardia tampoco corre.

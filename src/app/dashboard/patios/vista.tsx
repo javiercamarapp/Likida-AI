@@ -1,12 +1,12 @@
 import Link from 'next/link';
-import { MapPin, Users, Container, UserCog } from 'lucide-react';
+import { Users, Container, UserCog } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import { EstadoVacio, EstadoError } from '../estados';
 import { Plegable } from '../clientes/forma';
 import {
   FormaNuevoPatio, FormaEditarPatio, FormaJefe, FormaSinPatio, type AccionForma,
 } from './formas';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, AvisoCompacto, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 export interface FilaPatio {
   id: string;
@@ -58,28 +58,27 @@ export function VistaPatios({
   const opciones = lista.map((p) => ({ id: p.id, nombre: p.nombre }));
   return (
     <MarcoPagina titulo="Patios" apoyo="Un patio (o terminal) es el lugar de donde salen tus unidades.">
-      <Aviso tono="info">
-        Con patios, cada jefe de tráfico ve y corrige lo suyo, la cola de liquidación se filtra por patio y las plantillas de
-        carga masiva saben a dónde va cada camión.
-        {patioDelJefe && <> Tú eres jefe de <strong>{patioDelJefe}</strong>: solo corriges operadores, unidades y jornadas de ese patio.</>}
-      </Aviso>
+      <AvisoCompacto tono="info"
+        resumen={<>Con patios, cada jefe de tráfico ve y corrige lo suyo y la cola de liquidación se filtra por patio.
+          {patioDelJefe && <> Eres jefe de <strong>{patioDelJefe}</strong>: solo corriges lo de ese patio.</>}</>}
+        mas="Las plantillas de carga masiva también saben a dónde va cada camión. Un jefe con patio solo corrige operadores, unidades y jornadas de ese patio." />
 
       {puedeAdministrar && (
-        <section className="card p-4">
-          <TituloRecuadro info="patios.crear" className="mb-3">Crear un patio</TituloRecuadro>
+        <section className="card p-3">
+          <TituloRecuadro info="patios.crear" className="mb-2">Crear un patio</TituloRecuadro>
           <FormaNuevoPatio accion={crear} />
         </section>
       )}
 
-      <section className="card p-4">
-        <TituloRecuadro info="patios.lista" className="mb-3">Tus patios</TituloRecuadro>
+      <section className="card p-3">
+        <TituloRecuadro info="patios.lista" className="mb-2">Tus patios</TituloRecuadro>
         {ilegible ? (
           <EstadoError mensaje="No pude leer los patios de tu flota. No se enseña una lista a medias: parecería que faltan patios que sí existen." />
         ) : lista.length === 0 ? (
-          <EstadoVacio icono={<MapPin width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          <EstadoVacio titulo="Sin patios todavía">
             {puedeAdministrar
-              ? 'Todavía no hay patios. Crea el primero arriba: lo vas a necesitar para repartir tus camiones y tus jefes de tráfico. Si tu flota opera desde un solo lugar, puedes dejarlo así.'
-              : 'Tu flota todavía no tiene patios. Quien administra la cuenta los crea.'}
+              ? 'Crea el primero arriba para repartir camiones y jefes de tráfico. Si operas desde un solo lugar, puedes dejarlo así.'
+              : 'Quien administra la cuenta los crea.'}
           </EstadoVacio>
         ) : (
           <div className="overflow-x-auto">
@@ -109,7 +108,7 @@ export function VistaPatios({
       </section>
 
       {puedeAdministrar && lista.length > 0 && (
-        <section className="card p-4 space-y-4">
+        <section className="card p-3 space-y-3">
           <div>
             <TituloRecuadro info="patios.jefes">
               <UserCog aria-hidden width={15} height={15} strokeWidth={1.75} /> Jefes de tráfico
@@ -136,7 +135,7 @@ export function VistaPatios({
       )}
 
       {puedeAdministrar && lista.length > 0 && sinPatio && (sinPatio.operadores > 0 || sinPatio.unidades > 0) && (
-        <section className="card p-4 space-y-3">
+        <section className="card p-3 space-y-2">
           <div>
             <TituloRecuadro info="patios.sin_patio">
               <Users aria-hidden width={15} height={15} strokeWidth={1.75} />

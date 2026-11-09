@@ -142,7 +142,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo }: { buzon: BuzonVista
         nota="El sistema del proveedor (o un script de la flota) manda el archivo de cada corte a este buzón firmado y el agente lo importa y lo cruza solo, cada 15 minutos. Sin esto, alguien tiene que subirlo a mano." />
       {!buzon.secretoConfigurado && (
         <p className="text-[12px] mb-3" style={{ color: 'var(--warn)' }}>
-          Falta PEAJES_INGESTA_SECRETO en el servidor (mínimo 32 caracteres): mientras no exista, el buzón rechaza todo envío. Lo configura quien administra Likida.
+          Falta configurar la llave del buzón en el servidor: mientras no exista, el buzón rechaza todo envío. Lo configura el equipo de Likida.
         </p>
       )}
       {buzon.estado === 'ilegible' ? (

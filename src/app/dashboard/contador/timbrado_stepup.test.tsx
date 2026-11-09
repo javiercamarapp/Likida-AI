@@ -9,7 +9,7 @@ const m = vi.hoisted(() => ({
 }));
 vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('next/link', () => ({ default: () => null }));
-vi.mock('lucide-react', () => ({ Stamp: () => null }));
+vi.mock('lucide-react', async (original) => ({ ...(await original<object>()), Stamp: () => null }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() } }));
 vi.mock('@/lib/seguridad/eventos', () => ({ registrarEventoSeguridad: vi.fn(async () => {}) }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't1', rol: 'contador', userId: 'u1' }) }));
@@ -30,7 +30,7 @@ vi.mock('@/lib/supabase/server', () => ({
     getAuthenticatorAssuranceLevel: async () => ({ data: { currentLevel: m.aal, currentAuthenticationMethods: [] }, error: null }),
   } } }),
 }));
-vi.mock('../../admin/ui/forma', () => ({ FormaConAviso: () => null, Campo: () => null, Selector: () => null }));
+vi.mock('../../admin/ui/forma', () => ({ FormaConAviso: () => null }));
 
 const { Timbrado } = await import('./timbrado');
 

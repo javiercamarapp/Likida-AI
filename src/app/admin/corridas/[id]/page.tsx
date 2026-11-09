@@ -22,7 +22,7 @@ const DISPARO: Record<string, string> = {
   cron: 'Programado (cron)',
   manual: 'Manual («Ejecutar ahora»)',
   correo: 'Por correo entrante',
-  whatsapp: 'Confirmado por WhatsApp (0115)',
+  whatsapp: 'Confirmado por WhatsApp',
 };
 
 function duracion(ms: number | null): string {
@@ -236,7 +236,7 @@ export default async function TrazaCorridaPage({
                     Abrir el panel de esta flota
                   </div>
                   <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                    Ver como {flota}. El acceso queda firmado en la bitácora (0110).
+                    Ver como {flota}. El acceso queda firmado en la bitácora.
                   </div>
                 </Link>
               )}

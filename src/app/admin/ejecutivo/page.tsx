@@ -57,7 +57,7 @@ export default async function EjecutivoPage() {
                 sparkline+tendencia del gasto de IA, sin inventar historia
                 donde no la hay (flotas/viajes no traen sparkline: n=1 no es
                 una serie). */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mt-2">
+            <div className="kit-kpis mt-2">
               <KpiTile
                 icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
                 etiqueta="Gasto en IA (no es burn total de la empresa)"

@@ -130,7 +130,7 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
         </div>
         <div className="rounded-2xl p-4" style={{ background: SUPERFICIE, border: `1px solid ${LINEA}` }}>
           <h3 className="text-[11px] uppercase tracking-wider mb-3" style={{ color: TENUE }}>
-            De investigación (0140) — calculadas, nadie las escribe a mano
+            De investigación — calculadas, nadie las escribe a mano
           </h3>
           <div className="space-y-3">
             <Barra etiqueta="Similitud con el ICP" pct={p.similitudIcpPct} color="#8b5cf6"

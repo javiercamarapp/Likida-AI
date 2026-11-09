@@ -68,14 +68,16 @@ it('si SOLO el resumen (llm_costo) falla, la sección de agentes sigue viva por 
 it('si SOLO el consumo por agente (migración 0123) falla, el resumen de negocio sigue vivo', async () => {
   dobles.getConsumoPorAgente.mockRejectedValueOnce(new Error('caída'));
   const html = await renderizar();
-  expect(html).toContain('Con la migración 0123 sin aplicar a esta base');
+  expect(html).toContain('aún no registra el costo por corrida');
+  expect(html).not.toMatch(/migración 0\d{3}/);
   expect(html).toContain('Flota A'); // la tabla por flota (de r) sí se pintó
 });
 
 it('si el presupuesto por propósito (migración 0244) falla, el resto de la página sigue viva', async () => {
   dobles.getPresupuestoPorProposito.mockRejectedValueOnce(new Error('caída'));
   const html = await renderizar();
-  expect(html).toContain('Con la migración 0244 sin aplicar a esta base');
+  expect(html).toContain('aún no clasifica el gasto por propósito');
+  expect(html).not.toMatch(/migración 0\d{3}/);
   expect(html).toContain('analista');
 });
 

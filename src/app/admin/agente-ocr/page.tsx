@@ -74,7 +74,7 @@ export default async function AgenteOcrPage() {
         <div className="px-5 py-5 flex-1 space-y-2.5">
           <p className="text-xs" style={{ color: 'var(--muted)' }}>Lectura de comprobantes — monto, folio y CFDI. Costo real, histórico</p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="kit-kpis">
             <StatCard icono={<DollarSign {...ICONO_KPI} />}
               etiqueta="Gastado en OCR" valor={ocr ? ocr.costoUsd : 0} formato="usd"
             />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
+import { CampoArchivo } from '../../ui-v2/componentes/campos';
 import { UserSquare2 } from 'lucide-react';
 
 export type ResultadoReferencia = { ok: true } | { error: string } | null;
@@ -30,8 +31,7 @@ export function SubirReferencia({ accion }: { accion: (previo: ResultadoReferenc
       </div>
       <input name="etiqueta" placeholder="Etiqueta libre — opcional (edad, vestuario, hora del día…)" disabled={pendiente}
         className="w-full text-[12.5px] px-3 py-1.5 rounded-lg hairline" style={{ background: 'var(--canvas)' }} />
-      <input type="file" name="foto" accept="image/jpeg,image/png,image/webp" required disabled={pendiente}
-        className="text-[12.5px] w-full" />
+      <CampoArchivo etiqueta="Foto de referencia" etiquetaOculta name="foto" accept="image/jpeg,image/png,image/webp" obligatorio disabled={pendiente} />
       <label className="flex items-start gap-2 text-[12px]" style={{ color: 'var(--muted)' }}>
         <input type="checkbox" name="consentimiento" disabled={pendiente} className="mt-0.5" />
         <span>

@@ -1,4 +1,5 @@
 import { BarChartSimple, AreaChartSimple } from '../admin/charts';
+import { EstadoVacio } from '../ui-v2/componentes';
 import type { DiaViajes } from './serie-diaria';
 
 export type ModoPeriodo = 'semanal' | 'mensual' | 'historico';
@@ -45,11 +46,7 @@ export function Actividad({
 }) {
   if ((modo !== 'historico' && porDia === null) || (modo === 'historico' && porMes === null)) {
     return (
-      <div className="flex-1 min-h-[110px] w-full flex items-center justify-center">
-        <p className="text-sm text-center max-w-[26ch]" style={{ color: 'var(--muted)' }}>
-          No se pudo cargar esta gráfica.
-        </p>
-      </div>
+      <EstadoVacio contenido titulo="No disponible ahora">No se pudo cargar esta gráfica.</EstadoVacio>
     );
   }
 
@@ -61,11 +58,9 @@ export function Actividad({
 
   if (sinDatos) {
     return (
-      <div className="flex-1 min-h-[110px] w-full flex items-center justify-center">
-        <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
-          {modo === 'historico' ? 'Aún no hay viajes registrados.' : 'Sin viajes iniciados en este periodo.'}
-        </p>
-      </div>
+      <EstadoVacio contenido titulo="Sin viajes">
+        {modo === 'historico' ? 'Aún no hay viajes registrados.' : 'Sin viajes iniciados en este periodo.'}
+      </EstadoVacio>
     );
   }
   return modo === 'historico'

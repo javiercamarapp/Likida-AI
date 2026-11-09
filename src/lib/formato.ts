@@ -47,6 +47,15 @@ export function hoyMx(fecha: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: TZ_MX, year: 'numeric', month: '2-digit', day: '2-digit' }).format(fecha);
 }
 
+/** El instante en hora de México como `yyyy-MM-dd HH:mm:ss` (sin zona): la forma que algunos sistemas de transporte esperan en sus parámetros. */
+export function instanteMx(fecha: Date): string {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TZ_MX, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(fecha);
+  const p = (t: string): string => partes.find((x) => x.type === t)?.value ?? '00';
+  return `${p('year')}-${p('month')}-${p('day')} ${p('hour')}:${p('minute')}:${p('second')}`;
+}
+
 /** Día natural de un instante en una zona IANA. Postgres es la autoridad para
  * persistir el bucket; este helper sólo cubre el fallback de despliegue y hace
  * explícito que el servidor no debe usar su zona local. */

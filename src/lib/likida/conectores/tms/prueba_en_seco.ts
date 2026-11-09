@@ -28,6 +28,10 @@ import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { CONFIG_API_DESGLOSE, type ConfigApiDesglose } from '../../liquidacion_externa/desglose_tms_supuesto';
 import { leerRuta as leerRutaDesglose, mapearBitacoraTms } from '../../liquidacion_externa/desglose_mapeo_tms';
 import { instanteDeCursor } from './lector_desgloses';
+import {
+  CONFIG_PULL_MUESTRA_TMS, fechaDeParametro, type ConfigPullMuestraTms,
+} from '../../liquidacion_externa/desglose_muestra_pull_config';
+import { convertirBitacoraMuestra, listaDeMuestra, EnvoltorioInvalido, NO_DISPONIBLE_MUESTRA, normalizarNombre } from '../../liquidacion_externa/desglose_muestra_tms';
 import { SesionTms } from './sesion';
 import { loginDe, RECURSOS_SINCRONIZABLES, urlBaseHttps, type RecursoSincronizable } from './acceso';
 
@@ -215,6 +219,12 @@ export interface EntradaEnSeco {
    * `liquidacion_externa/desglose_tms_supuesto.ts`, no en `tms_mapeo`). `true` = la configuración vigente; o una propia (pruebas/borrador).
    */
   desgloses?: boolean | ConfigApiDesglose;
+  /**
+   * r13p: prueba la lectura por consulta del contrato `muestra-tms` (UNA página, sin valores). `true` = la configuración por omisión
+   * (`CONFIG_PULL_MUESTRA_TMS`, todo SUPUESTO); o una propia (la de plataforma, un borrador). El operador NO se compara con el padrón
+   * (la prueba no toca la base): solo la forma, los montos, las fechas y los conceptos.
+   */
+  muestra?: boolean | ConfigPullMuestraTms;
 }
 
 const SUBMAPEOS_LIQUIDACIONES = ['nomina', 'operadores', 'conceptos'] as const;
@@ -287,6 +297,11 @@ export async function pruebaEnSecoTms(e: EntradaEnSeco): Promise<ReporteEnSeco> 
   if (accesoOk && e.desgloses) {
     const cfg = e.desgloses === true ? CONFIG_API_DESGLOSE : e.desgloses;
     mapeos.push(await probarDesgloses(sesion, cfg, desde, hasta, maxFilas));
+  }
+
+  if (accesoOk && e.muestra) {
+    const cfg = e.muestra === true ? CONFIG_PULL_MUESTRA_TMS : e.muestra;
+    mapeos.push(await probarMuestra(sesion, cfg, desde, hasta, maxFilas));
   }
 
   const hubo = mapeos.some((m) => m.estado !== 'sin_mapeo');
@@ -364,13 +379,64 @@ async function probarDesgloses(sesion: SesionTms, cfg: ConfigApiDesglose, desde:
   return reporte;
 }
 
+const LLAVES_MUESTRA: ReadonlySet<string> = new Set(['BitacoraID', 'Operador', 'Unidad', 'Fecha', 'Percepciones', 'Deducciones']);
+/** Los campos que la muestra NO trae y que hay que pedirle al cliente (nombres, no valores). */
+const PIDE_AL_CLIENTE = NO_DISPONIBLE_MUESTRA.filter((c) => ['numeroLiquidacion', 'numeroPago', 'poliza', 'tipoOperador', 'terminal', 'numeroEmpleado'].includes(c));
+
+/** UNA página del contrato `muestra-tms` con la configuración del pull; mismo reporte, sin valores ni nombres de operador. */
+async function probarMuestra(sesion: SesionTms, cfg: ConfigPullMuestraTms, desde: string, hasta: string, maxFilas: number): Promise<ReporteMapeoEnSeco> {
+  const nombre = 'desgloses-muestra-tms';
+  const query: Record<string, string | number> = {
+    [cfg.params.desde]: fechaDeParametro(desde, cfg.formatoFechaParam), [cfg.params.hasta]: fechaDeParametro(hasta, cfg.formatoFechaParam),
+  };
+  if (cfg.params.pagina !== null && cfg.params.tam !== null) { query[cfg.params.pagina] = 1; query[cfg.params.tam] = Math.min(cfg.tamano, maxFilas); }
+  const r = await sesion.peticion({ ruta: cfg.ruta, query });
+  if (!r.ok) return vacio(nombre, 'error', { error: r.motivo.slice(0, 200) });
+  if (r.r.estado < 200 || r.r.estado >= 300) return vacio(nombre, 'error', { error: `el sistema contestó ${r.r.estado}, que no es lo esperado` });
+  const crudo = jsonCualquiera(r.r.cuerpo);
+  if (crudo === undefined) return vacio(nombre, 'error', { error: 'el sistema contestó 200 con un cuerpo que no es JSON' });
+  let lista: unknown[];
+  try {
+    lista = listaDeMuestra(crudo, { envoltorio: cfg.envoltorio, rutaLista: cfg.rutaLista });
+  } catch (err) {
+    if (!(err instanceof EnvoltorioInvalido)) throw err;
+    return vacio(nombre, 'error', { error: `la respuesta no trae la lista como se configuró (envoltorio «${cfg.envoltorio}», ruta «${corto(cfg.rutaLista)}»)` });
+  }
+  const muestra = lista.slice(0, maxFilas);
+  // El padrón se arma con los propios nombres de la muestra: así solo se juzga la FORMA (el nombre jamás sale de aquí).
+  const padron = muestra.flatMap((f) => (esObjeto(f) && typeof f.Operador === 'string' && f.Operador.trim() !== '' ? [f.Operador] : []))
+    .filter((n, i, a) => a.findIndex((m) => normalizarNombre(m) === normalizarNombre(n)) === i).map((n, i) => ({ numeroEmpleado: String(i + 1), nombre: n }));
+  const invalidos = new Map<string, number>();
+  const desconocidos = new Map<string, number>();
+  let buenas = 0;
+  for (const fila of muestra) {
+    if (esObjeto(fila)) for (const k of Object.keys(fila)) if (!LLAVES_MUESTRA.has(k)) desconocidos.set(corto(k), (desconocidos.get(corto(k)) ?? 0) + 1);
+    const motivos: string[] = [];
+    if (instanteDeCursor(leerRutaDesglose(fila, cfg.campoCursor)) === null) motivos.push(corto(cfg.campoCursor));
+    const c = convertirBitacoraMuestra(fila, { padron });
+    for (const m of c.revision) motivos.push(corto(m.campo));
+    if (motivos.length === 0 && c.desglose !== null) buenas += 1;
+    // Solo la ruta del campo (`Percepciones[0].Monto`): nunca el valor.
+    for (const campo of new Set(motivos)) invalidos.set(campo, (invalidos.get(campo) ?? 0) + 1);
+  }
+  const rechazadas = muestra.length - buenas;
+  const reporte = vacio(nombre, muestra.length === 0 || rechazadas > 0 ? 'con_hallazgos' : 'limpio', {
+    filasLeidas: muestra.length, filasMapeables: buenas, filasRechazadas: rechazadas,
+    camposInvalidos: [...invalidos].map(([campo, filas]) => ({ campo, filas })).sort((a, b) => b.filas - a.filas || a.campo.localeCompare(b.campo)),
+    camposDesconocidos: [...desconocidos].map(([campo, filas]) => ({ campo, filas })).sort((a, b) => b.filas - a.filas || a.campo.localeCompare(b.campo)).slice(0, MAX_NOMBRES),
+    opcionalesAusentes: PIDE_AL_CLIENTE.map((campo) => ({ campo, fuente: '(el contrato no lo trae)', filas: muestra.length })),
+  });
+  if (muestra.length === 0) reporte.error = 'la muestra vino vacía: no hay nada que comprobar (amplía la ventana o revisa los filtros del origen)';
+  return reporte;
+}
+
 /**
  * Con la credencial y el mapeo ACTIVO de una flota (o un `borrador` de mapeos que se quiere probar antes de activarlo). Solo lee.
  * `sin credencial` ⇒ reporte con `accesoOk: false`: nunca se inventa una.
  */
 export async function pruebaEnSecoDeFlota(
   tenantId: string,
-  opciones: { borrador?: EntradaEnSeco['mapeos']; maxFilas?: number } & Pick<EntradaEnSeco, 'http' | 'ahora' | 'dormir' | 'desgloses'> = {},
+  opciones: { borrador?: EntradaEnSeco['mapeos']; maxFilas?: number } & Pick<EntradaEnSeco, 'http' | 'ahora' | 'dormir' | 'desgloses' | 'muestra'> = {},
   deps: {
     credencial?: (tenantId: string) => Promise<ValoresCredencial | null>;
     mapeosActivos?: (tenantId: string) => Promise<EntradaEnSeco['mapeos']>;
@@ -382,7 +448,7 @@ export async function pruebaEnSecoDeFlota(
   const valores = await leerCred(tenantId);
   if (valores === null) return { accesoOk: false, maxFilas, peticiones: 0, mapeos: [], limpio: false, error: 'la flota no tiene la credencial «tms_api_lectura» activa: no se llamó a nadie' };
   const mapeos = opciones.borrador ?? await leerMapeos(tenantId);
-  return pruebaEnSecoTms({ valores, mapeos, maxFilas, http: opciones.http, ahora: opciones.ahora, dormir: opciones.dormir, desgloses: opciones.desgloses });
+  return pruebaEnSecoTms({ valores, mapeos, maxFilas, http: opciones.http, ahora: opciones.ahora, dormir: opciones.dormir, desgloses: opciones.desgloses, muestra: opciones.muestra });
 }
 
 async function mapeosActivosReales(tenantId: string): Promise<EntradaEnSeco['mapeos']> {

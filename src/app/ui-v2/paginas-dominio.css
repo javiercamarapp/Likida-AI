@@ -80,3 +80,12 @@
 /* Controles de fecha y de archivo: nunca más anchos que su tarjeta (a 390 px empujaban el documento a un scroll horizontal) */
 [data-ui="v2"] :is(main.h-full, .rv-marco) .card :is(input[type="date"], input[type="file"], select) { min-width: 0; max-width: 100%; }
 [data-ui="v2"] :is(main.h-full, .rv-marco) .card :is(form, label, fieldset) { min-width: 0; }
+
+/* Vacío contenido con explicación larga plegada («Ver más»): al abrir, deja de recortarse a 220 px */
+[data-ui="v2"] .rv-vacio[data-contenido]:has(.rv-vacio__mas[open]) { max-height: none; overflow: visible; }
+[data-ui="v2"] .rv-vacio__mas { max-width: 48ch; text-align: left; }
+[data-ui="v2"] .rv-vacio__mas > summary { cursor: pointer; text-align: center; font-size: 12px; font-weight: 500; color: var(--ink2, var(--ink)); }
+[data-ui="v2"] .rv-vacio__mas > span { display: block; margin-top: 6px; }
+
+/* Etiqueta de campo / mini-encabezado de bloque en Hanken (12/500), en vez del micro-rótulo mono en mayúsculas de v1 */
+[data-ui="v2"] .rv-etq { font: var(--t-etq); letter-spacing: 0; text-transform: none; }

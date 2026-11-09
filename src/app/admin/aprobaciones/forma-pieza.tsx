@@ -4,6 +4,7 @@ import { useActionState, useState } from 'react';
 import { Check, PencilLine, X } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
 import { StatusPill } from '../ui/kit';
+import { paresLegibles } from '../valor-legible';
 import { BotonConfirmar } from '../ui/confirmar';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 
@@ -20,6 +21,8 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
   const [estado, enviar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
   const [editando, setEditando] = useState(false);
   const [rechazando, setRechazando] = useState(false);
+  // Objetos → resumen legible; null/vacío → se omite (nunca «[object Object]» ni «null»).
+  const paresFuentes = paresLegibles(pieza.fuentes);
 
   if (estado?.ok) {
     return (
@@ -47,9 +50,9 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
         {pieza.cuerpo}
       </pre>
 
-      {pieza.fuentes && Object.keys(pieza.fuentes).length > 0 && (
+      {paresFuentes.length > 0 && (
         <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-          Fuentes: {Object.entries(pieza.fuentes).map(([k, v]) => `${k}: ${String(v)}`).join(' · ')}
+          Fuentes: {paresFuentes.map(([k, v]) => `${k}: ${v}`).join(' · ')}
         </p>
       )}
 

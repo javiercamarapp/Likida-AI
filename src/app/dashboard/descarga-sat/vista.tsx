@@ -1,6 +1,6 @@
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
-import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d, ShieldCheck } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -20,7 +20,7 @@ import { EstadoVacio } from '../estados';
 import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 
 /**
  * DESCARGA DEL SAT (0231) — la pantalla del contralor.
@@ -176,12 +176,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
                 el SAT exige la e.firma.
               </span>
             </p>
-            {!proveedor.configurado && (
-              <p className="text-[12px] m-0 pt-1" style={{ color: 'var(--warn)' }}>
-                <TriangleAlert size={13} className="inline mb-0.5 mr-1" aria-hidden />
-                {proveedor.motivo}
-              </p>
-            )}
+            {!proveedor.configurado && <AvisoCompacto tono="warn" resumen={proveedor.motivo} />}
             {proveedor.configurado && (
               <p className="text-[12px] m-0 pt-1" style={{ color: 'var(--muted)' }}>
                 Proveedor conectado: {proveedor.proveedor?.toUpperCase()}. No hay ambiente de
@@ -194,16 +189,8 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       </section>
 
       {datos.incompleta && (
-        <div className="card p-4 flex items-start gap-3" style={{ borderColor: 'var(--warn)' }}>
-          <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
-          <div>
-            <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
-            <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-              Una o más lecturas no respondieron. Lo que ves puede no ser todo: reintenta antes
-              de capturar encima.
-            </p>
-          </div>
-        </div>
+        <AvisoCompacto tono="warn" resumen="Faltan datos por cargar: esta pantalla está incompleta."
+          mas="Una o más lecturas no respondieron. Lo que ves puede no ser todo: reintenta antes de capturar encima." />
       )}
 
       {/* ── 2. EL ESTADO Y LAS CIFRAS ─────────────────────────────── */}

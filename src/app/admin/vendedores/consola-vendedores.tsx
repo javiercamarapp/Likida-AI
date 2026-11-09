@@ -1,3 +1,4 @@
+import { Suspense, cache } from 'react';
 import Link from 'next/link';
 import {
   Activity, BadgePercent, Bot, Building2, CalendarDays, CheckCircle2, Inbox,
@@ -14,6 +15,7 @@ import { ultimasCorridasNegocio, duracionLegible, type CorridaRegistrada } from 
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, hoyMx } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
+import { EsqTarjetaV2, EsqCifrasV2, EsqTablaV2 } from '../../ui-v2/componentes';
 import { StatCard, StatusPill, EstadoVacio, type Estado } from '../ui/kit';
 import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from '../../dashboard/resumen-visual';
 import { TableroProspectos, type ColumnaTablero } from './tablero';
@@ -36,6 +38,13 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
 }
 
+
+/** R9c: las tres lecturas de antes (un `Promise.all` que esperaba a la más lenta) ahora las pide cada bloque dentro de su <Suspense>; `cache()`
+ *  las comparte entre bloques de una misma petición, así que no se lee nada dos veces ni se suma ninguna lectura nueva. */
+const cargarVendedores = cache(() => safe<VendedorRow[]>(() => listarVendedores()));
+const cargarProspectos = cache(() => safe<ProspectoRow[]>(() => listarProspectos()));
+const cargarCorridas = cache(() => safe<CorridaRegistrada[]>(() => ultimasCorridasNegocio('ventas', 5)));
+
 /**
  * LA CONSOLA DEL EQUIPO DE VENTAS — el contenido completo de
  * /admin/vendedores, SIN el gate. Vive en su propio archivo, exportado, por
@@ -49,23 +58,93 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
  * superadmin por sesión y MFA en `acciones.ts` — montar el componente no
  * regala ninguna escritura.
  */
-export async function ConsolaVendedores({
+export function ConsolaVendedores({
   nombre, sp,
 }: {
   nombre: string | null;
   sp: { vendedor?: string; q?: string };
 }) {
-  const [vendedores, prospectos, corridas] = await Promise.all([
-    safe<VendedorRow[]>(() => listarVendedores()),
-    safe<ProspectoRow[]>(() => listarProspectos()),
-    safe<CorridaRegistrada[]>(() => ultimasCorridasNegocio('ventas', 5)),
-  ]);
+  const comision = reglaComision();
+  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
-  // ── Datos derivados (solo si las lecturas llegaron) ──────────────────────
+  return (
+    <main className="h-full">
+      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
+        <BarraPagina icono={<Users {...ICONO} style={{ color: 'var(--muted)' }} />} titulo="Zona de vendedores" />
+        <HeroSaludo
+          saludo={saludo()} nombre={nombre ?? 'Javier'}
+          tagline="El censo convertido en pipeline: prospectos, vendedores y la regla de comisión"
+          derecha={
+            <div className="shrink-0 pt-1">
+              <ChipFecha icono={<CalendarDays {...ICONO} style={{ color: 'var(--muted)' }} />}>
+                {fechaMx(hoyMx(new Date(ahoraMs())))}
+              </ChipFecha>
+            </div>
+          }
+        />
 
+        <div className="px-5 pb-5 flex-1 space-y-2">
+          <Suspense fallback={<div className="mt-2"><EsqCifrasV2 n={5} /></div>}><BloqueKpis /></Suspense>
+
+          {/* ── El agente asignador + el esquema de comisión ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            <div className="card p-3">
+              <TituloSeccion>Agente asignador</TituloSeccion>
+              <p className="text-[13px] mt-2 mb-2" style={{ color: 'var(--muted)' }}>
+                Reparte los prospectos sin vendedor (en Nuevo) entre el equipo, equilibrando por carga
+                viva. Cada corrida queda en la bitácora de agentes.
+              </p>
+              <BotonRepartir accion={accionRepartir} />
+              <Suspense fallback={<div className="mt-3"><EsqTarjetaV2 alto={60} plana /></div>}><BloqueCorridas /></Suspense>
+              {/* Lo que NO existe no se pinta como si existiera: los agentes
+                  que buscan leads y hacen el primer acercamiento son roadmap
+                  — el WhatsApp de Likida sigue en número de prueba y el
+                  buscador necesita fuentes externas. Texto, no tarjeta viva. */}
+              <p className="text-[11px] mt-3 m-0" style={{ color: 'var(--faint)' }}>
+                Próximamente: agentes que busquen leads nuevos y hagan el primer
+                acercamiento. No existen todavía y esta pantalla no los va a fingir.
+              </p>
+            </div>
+
+            <div className="card p-3">
+              <TituloSeccion>Esquema de comisión</TituloSeccion>
+              <div className="mt-2 flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
+                  <BadgePercent width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
+                </div>
+                <div className="text-[13px] space-y-1">
+                  <p className="m-0 font-medium">{comision.primerMes}</p>
+                  <p className="m-0 font-medium">{comision.recurrente}</p>
+                  <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>{comision.aclaracion}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
+
+          <Suspense fallback={<EsqTablaV2 filas={4} />}><BloqueDesempeno /></Suspense>
+
+          <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueAltas /></Suspense>
+
+          <p className="text-[11px] pt-1 m-0 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
+            <Bot width={12} height={12} strokeWidth={1.75} />
+            La comisión está documentada como regla de negocio en la base y en esta
+            pantalla; el pago se calcula sobre cobros reales cuando existan.
+          </p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// ── Bloques con su propia lectura y su propio <Suspense> (R9c) ───────────────
+
+/** Los datos derivados del pipeline, una sola vez por bloque que los necesite (solo si las lecturas llegaron). */
+async function derivarPipeline(sp: { vendedor?: string; q?: string }) {
+  const [vendedores, prospectos] = await Promise.all([cargarVendedores(), cargarProspectos()]);
   const nombresVendedor = new Map((vendedores ?? []).map((v) => [v.id, v.nombre ?? v.email]));
   const opcionesVendedor = (vendedores ?? []).map((v) => ({ id: v.id, nombre: v.nombre ?? v.email }));
-
   const hayFiltro = Boolean(sp.vendedor || sp.q);
   let columnas: ColumnaTablero[] | null = null;
   const totales = conteosVacios();
@@ -85,8 +164,7 @@ export async function ConsolaVendedores({
         : porTexto;
 
     columnas = ESTADOS_PROSPECTO.map((e) => {
-      // Las filas históricas se agrupan en su significado canónico; no
-      // desaparecen ni crean una segunda columna semánticamente idéntica.
+      // Las filas históricas se agrupan en su significado canónico; no desaparecen ni crean una segunda columna semánticamente idéntica.
       const en = filtrados.filter((p) => normalizarEstadoProspecto(p.estado) === e.valor);
       return {
         estado: e.valor,
@@ -105,31 +183,16 @@ export async function ConsolaVendedores({
       };
     });
   }
-
   const vivos = ESTADOS_VIVOS.reduce((s, e) => s + totales[e], 0);
   const totalProspectos = (Object.values(totales) as number[]).reduce((s, n) => s + n, 0);
-  const comision = reglaComision();
-  const pct = resolverFormato('porcentaje');
+  return { vendedores, prospectos, opcionesVendedor, hayFiltro, columnas, totales, vivos, vivosSinVendedor, totalProspectos };
+}
+
+async function BloqueKpis() {
+  const { vendedores, prospectos, totales, vivos, vivosSinVendedor, totalProspectos } = await derivarPipeline({});
   const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
-  const PILL_CORRIDA: Record<string, Estado> = { ok: 'ok', parcial: 'warn', fallo: 'bad' };
-
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<Users {...ICONO} style={{ color: 'var(--muted)' }} />} titulo="Zona de vendedores" />
-        <HeroSaludo
-          saludo={saludo()} nombre={nombre ?? 'Javier'}
-          tagline="El censo convertido en pipeline: prospectos, vendedores y la regla de comisión"
-          derecha={
-            <div className="shrink-0 pt-1">
-              <ChipFecha icono={<CalendarDays {...ICONO} style={{ color: 'var(--muted)' }} />}>
-                {fechaMx(hoyMx(new Date(ahoraMs())))}
-              </ChipFecha>
-            </div>
-          }
-        />
-
-        <div className="px-5 pb-5 flex-1 space-y-2">
+    <>
           {/* ── KPIs — solo si el pipeline se pudo LEER: unos ceros sobre una
               base caída afirmarían "no hay prospectos" estando ciegos. */}
           {prospectos === null ? (
@@ -138,7 +201,7 @@ export async function ConsolaVendedores({
                 esto NO significa que no haya prospectos: significa que no se pudo leer.</p>
             </div>
           ) : (
-            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-2">
+            <div className="mt-2 kit-kpis">
               <StatCard icono={<Building2 {...ICONO} />} etiqueta="Prospectos en el pipeline" valor={totalProspectos} formato="entero" />
               <StatCard icono={<Activity {...ICONO} />} etiqueta="Prospectos con seguimiento" valor={vivos} formato="entero" />
               <StatCard icono={<CheckCircle2 {...ICONO} />} etiqueta="Ganados" valor={totales.won} formato="entero" />
@@ -152,16 +215,14 @@ export async function ConsolaVendedores({
                 )}
             </div>
           )}
+    </>
+  );
+}
 
-          {/* ── El agente asignador + el esquema de comisión ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            <div className="card p-3">
-              <TituloSeccion>Agente asignador</TituloSeccion>
-              <p className="text-[13px] mt-2 mb-2" style={{ color: 'var(--muted)' }}>
-                Reparte los prospectos sin vendedor (en Nuevo) entre el equipo, equilibrando por carga
-                viva. Cada corrida queda en la bitácora de agentes.
-              </p>
-              <BotonRepartir accion={accionRepartir} />
+async function BloqueCorridas() {
+  const corridas = await cargarCorridas();
+  const PILL_CORRIDA: Record<string, Estado> = { ok: 'ok', parcial: 'warn', fallo: 'bad' };
+  return (
               <div className="mt-3">
                 <TituloSeccion>Últimas corridas</TituloSeccion>
                 {corridas === null ? (
@@ -184,31 +245,13 @@ export async function ConsolaVendedores({
                   </ul>
                 )}
               </div>
-              {/* Lo que NO existe no se pinta como si existiera: los agentes
-                  que buscan leads y hacen el primer acercamiento son roadmap
-                  — el WhatsApp de Likida sigue en número de prueba y el
-                  buscador necesita fuentes externas. Texto, no tarjeta viva. */}
-              <p className="text-[11px] mt-3 m-0" style={{ color: 'var(--faint)' }}>
-                Siguiente paso del roadmap: agentes que busquen leads nuevos y hagan el primer
-                acercamiento. No existen todavía y esta pantalla no los va a fingir.
-              </p>
-            </div>
+  );
+}
 
-            <div className="card p-3">
-              <TituloSeccion>Esquema de comisión</TituloSeccion>
-              <div className="mt-2 flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                  <BadgePercent width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-                </div>
-                <div className="text-[13px] space-y-1">
-                  <p className="m-0 font-medium">{comision.primerMes}</p>
-                  <p className="m-0 font-medium">{comision.recurrente}</p>
-                  <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>{comision.aclaracion}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
+async function BloqueTablero({ sp }: { sp: { vendedor?: string; q?: string } }) {
+  const { columnas, opcionesVendedor, hayFiltro, totalProspectos } = await derivarPipeline(sp);
+  return (
+    <>
           {/* ── El tablero ── */}
           {columnas !== null && (
             <div className="card p-3">
@@ -262,7 +305,15 @@ export async function ConsolaVendedores({
               </div>
             </div>
           )}
+    </>
+  );
+}
 
+async function BloqueDesempeno() {
+  const vendedores = await cargarVendedores();
+  const pct = resolverFormato('porcentaje');
+  return (
+    <>
           {/* ── Desempeño por vendedor — cifras REALES de la tabla prospecto. */}
           <div className="card p-3">
             <TituloSeccion>Desempeño por vendedor</TituloSeccion>
@@ -310,7 +361,15 @@ export async function ConsolaVendedores({
               </div>
             )}
           </div>
+    </>
+  );
+}
 
+async function BloqueAltas() {
+  const vendedores = await cargarVendedores();
+  const opcionesVendedor = (vendedores ?? []).map((v) => ({ id: v.id, nombre: v.nombre ?? v.email }));
+  return (
+    <>
           {/* ── Altas ── */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
             <div className="card p-3">
@@ -327,14 +386,6 @@ export async function ConsolaVendedores({
               <FormaInvitarVendedor accion={accionInvitar} />
             </div>
           </div>
-
-          <p className="text-[11px] pt-1 m-0 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
-            <Bot width={12} height={12} strokeWidth={1.75} />
-            La comisión está documentada como regla de negocio en la base (migración 0105) y en esta
-            pantalla; el pago se calcula sobre cobros reales cuando existan.
-          </p>
-        </div>
-      </div>
-    </main>
+    </>
   );
 }

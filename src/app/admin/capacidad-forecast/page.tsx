@@ -52,7 +52,7 @@ export default async function CapacidadForecastPage() {
             </EstadoVacio>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="kit-kpis">
                 <StatCard icono={<DollarSign {...ICONO} />}
                   etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
                   valor={proyeccion.promedioDiario} formato="usd"
@@ -67,7 +67,7 @@ export default async function CapacidadForecastPage() {
                 <TituloSeccion>Costo de IA por día</TituloSeccion>
                 <div className="mt-3">
                   {r.porDia.length > 1 ? (
-                    <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} />
+                    <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} etiquetaSerie="Costo de IA por día (USD)" />
                   ) : (
                     <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
                       Sin historial suficiente todavía para una serie — solo hay un día con datos.

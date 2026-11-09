@@ -199,8 +199,8 @@ export default async function PaginaAprobaciones() {
           <RebotesYBajas rebotes={rebotes} suprimidos={suprimidos} />
 
           <EstadoVacio>
-            El candado es de base, no de esta pantalla: `cola_enviado_solo_aprobado` (0117) hace imposible
-            que cualquier código envíe una pieza no aprobada, y la resolución exige actor con snapshot (0120).
+            El candado es de la base de datos, no de esta pantalla: es imposible que cualquier código envíe una pieza no aprobada,
+            y cada resolución queda firmada por quien la tomó.
             Rechazar exige motivo — un rechazo sin motivo es una pieza que se vuelve a proponer igual.
           </EstadoVacio>
         </div>

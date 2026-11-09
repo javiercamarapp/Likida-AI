@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Send, UserPlus, RefreshCw } from 'lucide-react';
+import { CampoTexto } from '@/app/ui-v2/componentes';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 
 export type AccionDespacho = (
@@ -148,14 +149,10 @@ function BotonInsistir({ texto }: { texto: string }) {
 export function AltaOperador({ altaOperador }: { altaOperador: AccionDespacho }) {
   const [estado, accion] = useActionState(altaOperador, null);
   return (
-    <form action={accion} className="space-y-2">
-      <input name="nombre" required placeholder="Nombre del operador"
-        aria-label="Nombre del operador"
-        className="w-full text-[12px] px-3 py-2 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
-      <div className="flex items-center gap-2">
-        <input name="telefono" required placeholder="WhatsApp (10 dígitos)" inputMode="tel"
-          aria-label="WhatsApp del operador"
-          className="flex-1 min-w-0 text-[12px] px-3 py-2 rounded-lg hairline cifra-mono" style={{ background: 'var(--surface)' }} />
+    <form action={accion} className="rv-forma">
+      <CampoTexto etiqueta="Nombre del operador" name="nombre" required />
+      <div className="rv-forma__fila">
+        <CampoTexto etiqueta="WhatsApp (10 dígitos)" name="telefono" required inputMode="tel" claseControl="cifra-mono" className="rv-forma__crece" />
         <BotonEnviar texto="Dar de alta" pendienteTexto="Guardando…" Icono={UserPlus} />
       </div>
       {estado?.error && <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>}

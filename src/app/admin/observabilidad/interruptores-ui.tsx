@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { Power } from 'lucide-react';
 import { StatusPill } from '../ui/kit';
 import { Aviso, type ResultadoAccion, type AccionDeForma } from '../ui/forma';
+import { ControlApagar } from '../ui/control-apagar';
 import { fechaHoraMx } from '@/lib/formato';
 import { etiquetaInterruptor } from './etiquetas';
 
@@ -77,29 +78,7 @@ function FilaInterruptor({ interruptor: i, accion }: { interruptor: InterruptorP
 
         <div className="flex items-center gap-2 shrink-0">
           <StatusPill estado={i.apagado ? 'bad' : 'ok'}>{i.apagado ? 'APAGADO' : 'Encendido'}</StatusPill>
-          <form action={enviar} className="flex items-center gap-2">
-            <input type="hidden" name="id" value={i.id} />
-            <input type="hidden" name="operacion" value={i.apagado ? 'encender' : 'apagar'} />
-            {!i.apagado && (
-              <input
-                name="motivo"
-                required
-                placeholder="Motivo (obligatorio)"
-                className="text-xs rounded-lg px-2.5 py-1.5 w-44 outline-none"
-                style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }}
-              />
-            )}
-            <button
-              type="submit"
-              disabled={pendiente}
-              className="text-xs font-medium rounded-lg px-3 py-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-              style={i.apagado
-                ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
-                : { background: 'var(--badbg)', color: 'var(--bad)', border: '1px solid var(--line)' }}
-            >
-              {pendiente ? 'Guardando…' : i.apagado ? 'Encender' : 'Apagar'}
-            </button>
-          </form>
+          <ControlApagar id={i.id} apagado={i.apagado} pendiente={pendiente} enviar={enviar} />
         </div>
       </div>
       <Aviso estado={estado} />

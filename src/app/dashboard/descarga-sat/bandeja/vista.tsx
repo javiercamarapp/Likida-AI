@@ -347,9 +347,8 @@ export async function PanelBandeja({
       <EstadoVacio icono={<CloudDownload width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
         Nada de esto borra un comprobante. Archivar y deshacer dejan rastro firmado con el
         correo de quien lo hizo —congelado, para que sobreviva a que la cuenta se borre— y el
-        expediente de cada fila se abre debajo de ella. El candado es de base, no de esta
-        pantalla: `sat_cfdi_descargado_casado_coherente` (0231) hace imposible que un
-        comprobante afirme un cruce sin decir con qué gasto.
+        expediente de cada fila se abre debajo de ella. El candado es de la base de datos, no de
+        esta pantalla: un comprobante no puede afirmar un cruce sin decir con qué gasto.
       </EstadoVacio>
     </MarcoPagina>
   );

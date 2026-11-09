@@ -91,7 +91,14 @@ function FilaCobertura({ f }: { f: CoberturaFuente }) {
       <td className="py-2 pr-3 align-top text-sm">{f.titulo}</td>
       <td className="py-2 pr-3 align-top"><StatusPill estado={f.emite ? 'ok' : 'warn'}>{f.emite ? 'Emite' : 'Pendiente'}</StatusPill></td>
       <td className="py-2 pr-3 align-top text-sm tabular whitespace-nowrap">{f.emite && f.filas30d === 0 ? <span style={{ color: 'var(--muted)' }}>{medida}</span> : medida}</td>
-      <td className="py-2 align-top text-xs" style={{ color: 'var(--muted)' }}>{f.donde}</td>
+      <td className="py-2 align-top text-xs" style={{ color: 'var(--muted)' }}>
+        {/* Las rutas de código no son para el superadmin: quedan plegadas. A la vista, solo lo accionable en español llano. */}
+        <span>{f.emite ? 'Registra eventos aquí.' : 'Todavía no escribe aquí.'}</span>
+        <details className="mt-0.5">
+          <summary className="cursor-pointer" style={{ color: 'var(--faint)' }}>Detalle técnico</summary>
+          <p className="m-0 mt-1 break-words">{f.donde}</p>
+        </details>
+      </td>
     </tr>
   );
 }
@@ -153,7 +160,7 @@ export default async function TrustSafetyPage() {
                         <th scope="col" className="py-2 pr-3 font-medium">Fuente</th>
                         <th scope="col" className="py-2 pr-3 font-medium">Estado</th>
                         <th scope="col" className="py-2 pr-3 font-medium">Filas · 30 días</th>
-                        <th scope="col" className="py-2 font-medium">Dónde vive o qué falta</th>
+                        <th scope="col" className="py-2 font-medium">Detalle</th>
                       </tr>
                     </thead>
                     <tbody>

@@ -1,4 +1,4 @@
-import { EstadoError, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { CamposSistema, CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoError, Fieldset, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { TriangleAlert } from 'lucide-react';
@@ -14,7 +14,7 @@ import {
   getPanelCotizador, guardarConfigCotizador, crearCotizacion, marcarEnviada, marcarPerdida,
   convertirEnViaje, type PanelCotizador, type CotizacionRow,
 } from '@/lib/likida/cotizador/lector';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion, type AccionDeForma } from '../../admin/ui/forma';
+import { FormaConAviso, type ResultadoAccion, type AccionDeForma } from '../../admin/ui/forma';
 import { FilaAccionesCotizacion } from './acciones';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Cotizador' };
@@ -157,6 +157,8 @@ export default async function PaginaCotizaciones({
   }
 
   const c = panel?.config;
+  const vInicial = (x: number | null | undefined): string => (x === null || x === undefined ? '' : String(x));
+  const costosSinDeclarar = c ? [c.dieselPorKm, c.fijosPorKm, c.salarioDia, c.viaticosDia, c.factorRegresoVacio, c.margenObjetivoPct].filter((x) => x === null || x === undefined).length : 6;
   const opcionesCliente = [
     { valor: '', texto: '— sin cliente (prospecto) —' },
     ...(panel?.clientes ?? []).map((x) => ({ valor: x.id, texto: x.nombre })),
@@ -170,20 +172,34 @@ export default async function PaginaCotizaciones({
 
       {panel && (
         <>
-          <section className="rounded-lg border p-4">
-            <TituloRecuadro info="cotizaciones.costos" className="mb-1">Costos declarados de la flota</TituloRecuadro>
-            <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
-              Lo que TÚ declaras — nada se supone. Un campo vacío = sin declarar, y el
-              cotizador entonces no sugiere precio: dice qué falta.
-            </p>
-            <FormaConAviso accion={guardarConfig} boton="Guardar costos">
-              <Campo nombre="dieselPorKm" etiqueta="Diésel ($/km)" valorInicial={c?.dieselPorKm === null || c?.dieselPorKm === undefined ? '' : String(c.dieselPorKm)} ayuda="combustible por km, como lo calcules" />
-              <Campo nombre="fijosPorKm" etiqueta="Fijos ($/km)" valorInicial={c?.fijosPorKm === null || c?.fijosPorKm === undefined ? '' : String(c.fijosPorKm)} ayuda="seguros, admin, depreciación prorrateados" />
-              <Campo nombre="salarioDia" etiqueta="Salario operador ($/día)" valorInicial={c?.salarioDia === null || c?.salarioDia === undefined ? '' : String(c.salarioDia)} />
-              <Campo nombre="viaticosDia" etiqueta="Viáticos ($/día)" valorInicial={c?.viaticosDia === null || c?.viaticosDia === undefined ? '' : String(c.viaticosDia)} ayuda="si no pagas viáticos, declara 0 — no lo dejes vacío" />
-              <Campo nombre="factorRegresoVacio" etiqueta="Factor de regreso (1–3)" valorInicial={c?.factorRegresoVacio === null || c?.factorRegresoVacio === undefined ? '' : String(c.factorRegresoVacio)} ayuda="1 = regreso cargado; 2 = la ruta se cobra redonda" />
-              <Campo nombre="margenObjetivoPct" etiqueta="Markup objetivo sobre el costo (%)" valorInicial={c?.margenObjetivoPct === null || c?.margenObjetivoPct === undefined ? '' : String(c.margenObjetivoPct)} ayuda="precio sugerido = costo × (1 + markup), 0–90; la ganancia de abajo se muestra como margen sobre el precio, por eso es menor" />
-            </FormaConAviso>
+          <section className="space-y-2">
+            <TituloRecuadro info="cotizaciones.costos">Costos declarados de la flota</TituloRecuadro>
+            <Disclosure titulo="Costos de la flota" resumen={costosSinDeclarar === 0 ? 'completos' : `${costosSinDeclarar} sin declarar`} abierto={costosSinDeclarar > 0}>
+              <p className="mb-3 text-sm" style={{ color: 'var(--muted)' }}>
+                Lo que TÚ declaras — nada se supone. Un campo vacío = sin declarar, y el
+                cotizador entonces no sugiere precio: dice qué falta.
+              </p>
+              <FormaConAviso accion={guardarConfig} boton="Guardar costos" columnas="md:grid-cols-1">
+                <Fieldset leyenda="Por kilómetro">
+                  <div className="rv-forma__rejilla">
+                    <CampoTexto id="dieselPorKm" name="dieselPorKm" etiqueta="Diésel ($/km)" defaultValue={vInicial(c?.dieselPorKm)} ayuda="combustible por km, como lo calcules" />
+                    <CampoTexto id="fijosPorKm" name="fijosPorKm" etiqueta="Fijos ($/km)" defaultValue={vInicial(c?.fijosPorKm)} ayuda="seguros, admin, depreciación prorrateados" />
+                  </div>
+                </Fieldset>
+                <Fieldset leyenda="Operador">
+                  <div className="rv-forma__rejilla">
+                    <CampoTexto id="salarioDia" name="salarioDia" etiqueta="Salario operador ($/día)" defaultValue={vInicial(c?.salarioDia)} />
+                    <CampoTexto id="viaticosDia" name="viaticosDia" etiqueta="Viáticos ($/día)" defaultValue={vInicial(c?.viaticosDia)} ayuda="si no pagas viáticos, declara 0 — no lo dejes vacío" />
+                  </div>
+                </Fieldset>
+                <Fieldset leyenda="Regreso y markup">
+                  <div className="rv-forma__rejilla">
+                    <CampoTexto id="factorRegresoVacio" name="factorRegresoVacio" etiqueta="Factor de regreso (1–3)" defaultValue={vInicial(c?.factorRegresoVacio)} ayuda="1 = regreso cargado; 2 = la ruta se cobra redonda" />
+                    <CampoTexto id="margenObjetivoPct" name="margenObjetivoPct" etiqueta="Markup objetivo sobre el costo (%)" defaultValue={vInicial(c?.margenObjetivoPct)} ayuda="precio sugerido = costo × (1 + markup), 0–90; la ganancia de abajo se muestra como margen sobre el precio, por eso es menor" />
+                  </div>
+                </Fieldset>
+              </FormaConAviso>
+            </Disclosure>
           </section>
 
           <section className="rounded-lg border p-4">
@@ -192,16 +208,26 @@ export default async function PaginaCotizaciones({
               Si esta ruta tiene viajes liquidados, las casetas salen MEDIDAS de ahí (y la
               captura manual se ignora — la medición gana y el desglose lo dice).
             </p>
-            <FormaConAviso accion={cotizar} boton="Cotizar">
-              <Selector nombre="clienteId" etiqueta="Cliente" opciones={opcionesCliente} />
-              <Campo nombre="origen" etiqueta="Origen" requerido />
-              <Campo nombre="destino" etiqueta="Destino" requerido />
-              <Campo nombre="km" etiqueta="Km de la ruta" ayuda="de ida; el factor de regreso hace el resto" />
-              <Campo nombre="dias" etiqueta="Días de viaje" ayuda="los declara quien cotiza; el desglose los cita" />
-              <Campo nombre="casetasManual" etiqueta="Casetas ($, si no hay medición)" />
-              <Campo nombre="precio" etiqueta="Precio a cotizar ($)" ayuda="tu decisión — el sugerido es referencia, no captura sola" />
-              <Campo nombre="folio" etiqueta="Folio" />
-              <Campo nombre="vigenteHasta" etiqueta="Vigente hasta" tipo="date" />
+            <FormaConAviso accion={cotizar} boton="Cotizar" columnas="md:grid-cols-1">
+              <Fieldset leyenda="Ruta">
+                <div className="rv-forma__rejilla">
+                  <CampoSelect id="clienteId" name="clienteId" etiqueta="Cliente" defaultValue="">
+                    {opcionesCliente.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
+                  </CampoSelect>
+                  <CampoTexto id="origen" name="origen" etiqueta="Origen" obligatorio />
+                  <CampoTexto id="destino" name="destino" etiqueta="Destino" obligatorio />
+                  <CampoTexto id="km" name="km" etiqueta="Km de la ruta" ayuda="de ida; el factor de regreso hace el resto" />
+                  <CampoTexto id="dias" name="dias" etiqueta="Días de viaje" ayuda="los declara quien cotiza; el desglose los cita" />
+                </div>
+              </Fieldset>
+              <Fieldset leyenda="Precio y vigencia">
+                <div className="rv-forma__rejilla">
+                  <CampoTexto id="casetasManual" name="casetasManual" etiqueta="Casetas ($, si no hay medición)" />
+                  <CampoTexto id="precio" name="precio" etiqueta="Precio a cotizar ($)" ayuda="tu decisión — el sugerido es referencia, no captura sola" />
+                  <CampoTexto id="folio" name="folio" etiqueta="Folio" />
+                  <CampoFecha id="vigenteHasta" name="vigenteHasta" etiqueta="Vigente hasta" />
+                </div>
+              </Fieldset>
             </FormaConAviso>
           </section>
 
@@ -283,15 +309,13 @@ function Fila({
                 <span className="whitespace-nowrap">{l.monto !== null ? mxn(l.monto) : '—'}</span>
               </li>
             ))}
-            <li className="flex justify-between border-t pt-1 font-medium">
-              <span>Costo total</span>
-              <span>{q.desglose.costoTotal !== null ? mxn(q.desglose.costoTotal) : 'incompleto'}</span>
-            </li>
-            <li className="flex justify-between font-medium">
-              <span>Precio sugerido</span>
-              <span>{q.desglose.precioSugerido !== null ? mxn(q.desglose.precioSugerido) : 'sin sugerencia'}</span>
-            </li>
           </ul>
+          <div className="mt-2">
+            <CamposSistema etiqueta="Totales del desglose" campos={[
+              { etiqueta: 'Costo total', valor: q.desglose.costoTotal !== null ? mxn(q.desglose.costoTotal) : 'incompleto' },
+              { etiqueta: 'Precio sugerido', valor: q.desglose.precioSugerido !== null ? mxn(q.desglose.precioSugerido) : 'sin sugerencia' },
+            ]} />
+          </div>
           {q.tarifaCatalogo && (
             <p className="mt-2" style={{ color: 'var(--ink2)' }}>
               Tarifa del catálogo: {q.tarifaCatalogo.monto !== null ? mxn(q.tarifaCatalogo.monto) : 'sin monto (falta un dato de la tarifa)'}

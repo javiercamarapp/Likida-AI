@@ -200,8 +200,10 @@ describe('Conductores — tarjeta de insights (T-A5-32)', () => {
     expect(html).not.toContain('unas 36');
     expect(html).toContain('Estimación con tu línea base de 2026-02-20');
     // cada número trae fuente y rótulo
-    expect(html).toContain('fuente: viaje_hito.fuente');
-    expect(html).toContain('fuente: viaje_cruce_geocerca.registrado_en − detectado_en');
+    // la fuente se dice en español llano (justificado: antes imprimía nombres de tabla y columna al cliente)
+    expect(html).toContain('fuente: registro de cada hito: quién lo capturó');
+    expect(html).toContain('fuente: hora en que el GPS detectó la llegada contra la hora en que se registró');
+    expect(html).not.toMatch(/viaje_hito|viaje_cruce_geocerca|agente_conductor_config/);
     expect(html).toContain('medido');
     expect(html).toContain('estimación');
     // el tiempo del chofer no se presenta como la hora del evento físico
@@ -219,7 +221,8 @@ describe('Conductores — tarjeta de insights (T-A5-32)', () => {
     expect(html).toContain('Revisa 2 episodios');
     expect(html).toContain('Asigna sitio a 3 viajes');
     expect(html).toContain('Chofer vs GPS sin coincidir');
-    expect(html).toContain('viaje_senal_vida');
+    expect(html).toContain('episodios de falta de señal del vehículo');
+    expect(html).not.toContain('viaje_senal_vida');
   });
 
   it('sin línea base: no inventa ahorro y pide la línea base', () => {
@@ -241,7 +244,9 @@ describe('Conductores — tarjeta de insights (T-A5-32)', () => {
     expect(html).toContain('90 %');
     expect(html).toContain('sin dato');
     expect(html).not.toContain('mejora');
-    expect(html).toContain('KPIs de referencia sin línea base declarada no muestran valor');
+    expect(html).toContain('Aún no hay línea base declarada');
+    expect(html).toContain('indícala en');
+    expect(html).not.toContain('viaje_hito.fuente (');
   });
 
   it('KPIs del piloto: con línea base declarada, muestra la base y la mejora', () => {

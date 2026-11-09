@@ -357,7 +357,7 @@ export default async function ObservabilidadPage({
             </p>
             {latencias === null || latencias.rutas === null ? (
               <div className="mt-2">
-                <EstadoError mensaje="No se pudo leer la latencia de rutas. La consulta falló — no es que no haya tráfico, es que no se pudo mirar (¿migración 0700 sin aplicar?)." />
+                <EstadoError mensaje="No se pudo leer la latencia de rutas. La consulta falló — no es que no haya tráfico, es que no se pudo mirar." />
               </div>
             ) : latencias.rutas.length === 0 ? (
               <div className="mt-2">
