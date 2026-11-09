@@ -119,6 +119,7 @@ Todo lo de abajo SOLO LEE del sistema de la flota. Cada nombre fue verificado co
 | viajes, peajes, posiciones | tabla `tms_mapeo` (fila por flota y recurso: `tenant_id`, `recurso`, `mapeo` jsonb, `version`, `activo`) | Dato. Punto de partida: `src/lib/likida/conectores/tms/mapeos/{viajes,peajes,posiciones}.supuesto.json`. |
 | liquidaciones (nómina) | `tms_mapeo` con `recurso = 'liquidaciones'`; el `mapeo` es `{ "nomina": {…}, "operadores": {…}, "conceptos": {…} }` | Dato. Punto de partida: `mapeos/liquidaciones.supuesto.json`. |
 | Desgloses por bitácora (pull del cron `liquidaciones-externas`) | `CONFIG_API_DESGLOSE` en `src/lib/likida/liquidacion_externa/desglose_tms_supuesto.ts` | **Código global** (no por flota): ruta, parámetros, `rutaItems`, `campoCursor` y el `mapeo` de campos. Cambiarlo es un cambio de código y un deploy. |
+| Desgloses por CONSULTA con el contrato `muestra-tms` (r13p) | Variables de plataforma `LIKIDA_TMS_DESGLOSE_CONTRATO`, `LIKIDA_TMS_DESGLOSE_CONFIG` y `LIKIDA_TMS_MUESTRA`; valores por omisión (SUPUESTOS) en `liquidacion_externa/desglose_muestra_pull_config.ts` | **Configuración**, no código (un redeploy). Ver 8.7. |
 | Entrega por empuje (`muestra-tms`) | `desglose_muestra_tms.ts` y `desglose_muestra_recepcion.ts` | Código; apagado por omisión (8.6). |
 
 El texto de las secciones 1–7 sigue valiendo para pedir datos, credencial, prueba, desactivación y reversión.
@@ -170,3 +171,35 @@ La especificación real no existe: login, rutas, paginación, zona horaria, sem�
 ### 8.6 Entrega por empuje `muestra-tms` (`POST /v1/liquidaciones-externas/desgloses`)
 
 Apagada por omisión y falla cerrado (403 sin explicar la causa). Se enciende con TODO esto: variable de plataforma `LIKIDA_TMS_MUESTRA=si` (un redeploy), interruptores `global` y `agente:liquidacion` encendidos, y que la flota tenga «Activar el envío» con canal `correo`. Topes: 100 bitácoras por petición, 100 renglones por bloque (Percepciones, Deducciones) y 2 MB de cuerpo. El tenant sale de la llave de API, nunca del cuerpo. La muestra no trae póliza: lo que se recibe queda en `sin_poliza` (no se envía) y no se inventa una. Apagar: `LIKIDA_TMS_MUESTRA` distinta de `si` (redeploy) o el interruptor `agente:liquidacion`.
+
+### 8.7 Consulta (pull) con el contrato `muestra-tms` (r13p, 8-nov-2026)
+
+Decisión del dueño: el cliente NO empuja; Likida CONSULTA su API (solo `GET`, cuenta de servicio; no existe ninguna escritura hacia el TMS). El mismo contrato `muestra-tms` de la ruta POST (`BitacoraID`, `Operador`, `Unidad`, `Fecha{Inicia,Termina}`, `Percepciones[]`, `Deducciones[]`) se lee ahora también por consulta: `conectores/tms/lector_muestra.ts` lo pone detrás del mismo puerto que el pull ya usaba, así que el cursor, la relectura, `recibirDesglose` (idempotencia por `BIT-<BitacoraID>`) y las guardas son las de siempre.
+
+**Qué se configura (sin escribir código).** Apagado por omisión. Para encenderlo, en la plataforma:
+
+| Variable | Valor | Efecto |
+|---|---|---|
+| `LIKIDA_TMS_DESGLOSE_CONTRATO` | `muestra-tms` (vacío o `supuesto` = el comportamiento de siempre) | Elige la forma de la respuesta. Un nombre desconocido deja el pull sin lectores. |
+| `LIKIDA_TMS_MUESTRA` | `si` | La MISMA bandera que enciende la entrega por empuje (8.6). Además: interruptores `global` y `agente:liquidacion`, y la flota con «Activar el envío» + canal `correo` + credencial `tms_api_lectura` probada y sana. |
+| `LIKIDA_TMS_DESGLOSE_CONFIG` | JSON con SOLO lo que difiere de los valores por omisión | Ver abajo. Llave desconocida o valor fuera de rango ⇒ ningún lector (falla cerrado; el aviso nombra la llave, nunca el valor). |
+
+Llaves de `LIKIDA_TMS_DESGLOSE_CONFIG` y su valor por omisión (todos SUPUESTOS): `ruta` (`/api/liquidaciones`), `params` (`{desde:"desde",hasta:"hasta",pagina:"pagina",tam:"tam"}`; `pagina` y `tam` en `null` = el API no pagina), `tamano` (100), `envoltorio` (`auto`: arreglo directo o `{data:[…]}`; también `arreglo` y `envuelto`), `rutaLista` (`data`), `rutaTotalPaginas` y `rutaTotalRegistros` (`null`: si el API los trae y lo leído no coincide, NO se recibe nada), `campoCursor` (`Fecha.Termina`; o `Fecha.Inicia`), `formatoFechaParam` (`iso`; o `fecha_hora_mx` = `yyyy-MM-dd HH:mm:ss` y `fecha_mx`, ambas en hora de México), `maxPaginas` (50), `ventanaInicialDias` (2). Ejemplo: `{"ruta":"/v1/bitacoras","params":{"desde":"fechaInicio","hasta":"fechaFin","pagina":"page","tam":"size"},"envoltorio":"envuelto","rutaLista":"resultado.filas","rutaTotalPaginas":"resultado.paginas","formatoFechaParam":"fecha_hora_mx"}`.
+
+**Qué hace y qué no.**
+- Falla cerrado y lo dice: red, 5xx o 429 agotados ⇒ `TmsNoDisponible`/`TmsLimite`; 401 (tras UN re-login) o 403 ⇒ `TmsCredenciales` (la credencial se degrada una vez, como siempre); respuesta sin la lista configurada, página vacía antes del total, total que no cuadra o tope de páginas ⇒ error. En todos los casos la lectura devuelve NADA (no hay datos a medias) y el cursor no avanza.
+- Nada se inventa. La muestra no trae póliza: lo leído queda en `sin_poliza` (no se envía) hasta que haya póliza. Tampoco trae nº de liquidación, nº de pago, terminal, nº de empleado ni tipo de operador (este último ⇒ `tipo_sin_regla`, retenido).
+- Operador por NOMBRE contra el padrón de la flota (coincidencia exacta normalizada): ausente u homónimo ⇒ excepción `operador_no_encontrado` (motivo `nombre_sin_alta`/`nombre_ambiguo`, sin el nombre); se relee hasta 14 días atrás y se resuelve sola cuando el padrón se completa. Monto con más de 2 decimales, fecha ilegible, concepto desconocido o `BitacoraID` repetida con otro contenido ⇒ `mapeo_invalido` con el nombre del campo, jamás el valor.
+- Las credenciales no aparecen en logs ni respuestas (token solo en memoria; los mensajes de error se redactan).
+
+**Prueba en seco.** `node scripts/tms/verificar-local.mjs --en-seco --falso --muestra-tms` (ensayo sintético) o `TMS_CREDENCIALES_ARCHIVO=… LIKIDA_TMS_DESGLOSE_CONFIG='{…}' node scripts/tms/verificar-local.mjs --en-seco /ruta/mapeos.json --muestra-tms`. Pide UNA página, no escribe nada y reporta solo nombres de campo y conteos (el operador no se compara con el padrón en la prueba). En `opcionales ausentes` lista lo que el contrato no trae.
+
+**Qué falta pedirle a José Luis (sin esto todo lo de arriba sigue siendo supuesto):**
+1. URL de pruebas (base https) y, si el login no es `usuario`/`clave` → `token`, su forma real (`loginDe`, 8.1).
+2. Ruta exacta del recurso y si es GET.
+3. Nombres de los parámetros de fecha (¿filtran por inicio o por fin de la bitácora?) y su formato; si hay zona horaria distinta de la de México.
+4. Paginación: parámetros, tamaño máximo, si trae total de páginas o de registros, y el envoltorio (¿arreglo directo o dentro de un objeto? ¿cuál campo?).
+5. Póliza: en qué campo (hoy el contrato no la trae; sin ella nada se envía).
+6. Nº de liquidación y nº de pago (hoy ausentes).
+7. Tipo de operador (foráneo/local/…) por bitácora, y el nº de empleado junto al nombre (hoy se cruza solo por nombre).
+8. Si una bitácora ya consumida cambia después (corrección) o es inmutable, y cómo se identifica una cancelada.

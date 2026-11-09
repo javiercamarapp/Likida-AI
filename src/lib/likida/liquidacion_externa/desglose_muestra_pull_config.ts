@@ -68,14 +68,15 @@ export const CONFIG_PULL_MUESTRA_TMS: ConfigPullMuestraTms = {
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
 const NOMBRE_PARAM = /^[A-Za-z][A-Za-z0-9_.-]{0,39}$/;
-const RUTA_CAMPO = /^[A-Za-z_][A-Za-z0-9_]{0,39}(?:\.[A-Za-z_][A-Za-z0-9_]{0,39}){0,5}$/;
+const SEGMENTO_CAMPO = /^[A-Za-z_][A-Za-z0-9_]{0,39}$/;
+const rutaCampoValida = (v: string): boolean => { const p = v.split('.'); return p.length <= 6 && p.every((x) => SEGMENTO_CAMPO.test(x)); };
 const RUTA_RECURSO = /^\/[A-Za-z0-9_\-./]{0,199}$/;
 
 export type ResultadoConfigPull = { ok: true; config: ConfigPullMuestraTms } | { ok: false; motivo: string };
 
 const entero = (v: unknown, min: number, max: number): number | null =>
   typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max ? v : null;
-const rutaOpc = (v: unknown): string | null | undefined => (v === null ? null : typeof v === 'string' && RUTA_CAMPO.test(v) ? v : undefined);
+const rutaOpc = (v: unknown): string | null | undefined => (v === null ? null : typeof v === 'string' && rutaCampoValida(v) ? v : undefined);
 
 /**
  * Mezcla `ajustes` (JSON parcial) sobre los valores por omisión. Estricta: llave desconocida o valor fuera de rango ⇒ `ok: false`
