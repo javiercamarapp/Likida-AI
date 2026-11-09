@@ -16,7 +16,7 @@
 // Pura (sin red, sin base, sin credenciales). Una configuración inválida NO se corrige ni se ignora: falla cerrado (ningún lector).
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { TZ_MX } from '../../formato';
+import { hoyMx, instanteMx } from '../../formato';
 import { CONTRATO_MUESTRA_TMS, CONTRATOS_DESGLOSE_TMS } from './desglose_muestra_tms';
 
 export type NombreContratoDesglose = keyof typeof CONTRATOS_DESGLOSE_TMS;
@@ -140,12 +140,8 @@ export function fechaDeParametro(iso: string, formato: FormatoFechaParam): strin
   if (formato === 'iso') return iso;
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) throw new RangeError('instante inválido');
-  const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TZ_MX, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit',
-  }).formatToParts(new Date(ms));
-  const p = (t: string): string => partes.find((x) => x.type === t)?.value ?? '00';
-  const dia = `${p('year')}-${p('month')}-${p('day')}`;
-  return formato === 'fecha_mx' ? dia : `${dia} ${p('hour')}:${p('minute')}:${p('second')}`;
+  const fecha = new Date(ms);
+  return formato === 'fecha_mx' ? hoyMx(fecha) : instanteMx(fecha);
 }
 
 // ── Selección por nombre (entorno) ──────────────────────────────────────────
