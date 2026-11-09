@@ -71,6 +71,10 @@ function formularios(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === 'form') salida.push(nodo);
   formularios(nodo.props.children as ReactNode, salida);
+  // A47-FE-01: la captura ya no viaja por `children` —se perdía con el estado
+  // vacío de la tarjeta— sino por la ranura `formulario` de `Tarjeta`. El
+  // recorrido tiene que entrar ahí o deja de ver las tres formas de la pantalla.
+  formularios(nodo.props.formulario as ReactNode, salida);
   return salida;
 }
 
@@ -82,6 +86,7 @@ function formasConAviso(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === FormaConAviso) salida.push(nodo);
   formasConAviso(nodo.props.children as ReactNode, salida);
+  formasConAviso(nodo.props.formulario as ReactNode, salida);  // A47-FE-01, igual que arriba
   return salida;
 }
 

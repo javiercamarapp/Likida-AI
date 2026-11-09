@@ -12,7 +12,7 @@ export type EstadoTarjeta = 'ok' | 'vacio' | 'cargando' | 'error';
  *  los MISMOS estados en todo el producto: vacío (título + una línea + UNA acción), cargando (esqueleto con la forma real, o los datos
  *  previos atenuados con `aria-busy` si no se da uno) y error blando («No disponible ahora. No es cero» + Reintentar).
  *  Una tarjeta nunca se pinta con una sola cifra suelta ni con vacío interior. */
-export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detalle, accionVacio, iconoVacio, contenida, esqueleto, onReintentar, reintentar, children, className }: {
+export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detalle, accionVacio, iconoVacio, contenida, formulario, esqueleto, onReintentar, reintentar, children, className }: {
   titulo: string;
   /** Clave del catálogo de explicaciones: pone la ⓘ junto al título. */
   info?: InfoClave;
@@ -28,6 +28,10 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detall
   iconoVacio?: LucideIcon;
   /** La tarjeta NO se estira a la altura de su vecina en la rejilla (`align-self: start`); con vacío, el vacío va contenido. */
   contenida?: boolean;
+  /** A47-FE-01: ranura para el formulario de CAPTURA. Se pinta en `ok` Y en `vacio`, porque en una flota nueva el estado de la
+   *  tarjeta es justamente `vacio` y es ahí donde hace falta capturar el primer dato. Un formulario pasado por `children` se
+   *  pierde con el vacío (`children` solo se pinta en `ok`), y la pantalla queda sin salida. */
+  formulario?: ReactNode;
   /** Cargando: el esqueleto de la forma real de lo que va a ocupar este lugar. */
   esqueleto?: ReactNode;
   onReintentar?: () => void;
@@ -48,6 +52,7 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detall
         {estado === 'error' ? <EstadoError onReintentar={onReintentar} reintentar={reintentar} compacto>{mensaje}</EstadoError> : null}
         {estado === 'cargando' && esqueleto ? esqueleto : null}
         {estado === 'ok' || (estado === 'cargando' && !esqueleto) ? children : null}
+        {formulario && (estado === 'ok' || estado === 'vacio') ? formulario : null}
       </div>
     </section>
   );
