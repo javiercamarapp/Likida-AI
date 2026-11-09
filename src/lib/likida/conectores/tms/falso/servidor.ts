@@ -27,7 +27,38 @@ export interface ConfigFalla {
   htmlLogin?: boolean;
 }
 
+/** Una bitácora en la forma `muestra-tms` (SINTÉTICA; ver `liquidacion_externa/desglose_muestra_tms.ts`). */
+export interface BitacoraMuestraSintetica {
+  BitacoraID: number; Operador: string; Unidad: string;
+  Fecha: { Inicia: string; Termina: string };
+  Percepciones: Array<{ Descripcion: string; Monto: number }>;
+  Deducciones: Array<{ Descripcion: string; Monto: number }>;
+}
+
+/** Cómo contesta `GET /api/bitacoras` (forma muestra-tms). Todo SUPUESTO, igual que el API real: se configura para probar cada variante. */
+export interface ConfigMuestraFalsa {
+  /** `arreglo`: el cuerpo es la lista; `data`: `{ data: [...] }`; `items`: `{ data: { items: [...] } }` (con totales). */
+  envoltorio?: 'arreglo' | 'data' | 'items';
+  /** Filas por página (por omisión, lo que pida `tam`). */
+  tamPagina?: number;
+  /** Con `items`: incluye `total_paginas` (y `total`). */
+  conTotales?: boolean;
+  /** Desde esta página (1 = primera) responde 503 (error a media paginación). */
+  falla503DesdePagina?: number;
+  /** Declara `total` de registros mayor al que realmente entrega (paginación incompleta). */
+  totalDeclaradoExtra?: number;
+  /** La página N (≥2) llega vacía aunque `total_paginas` diga que hay más. */
+  paginaVaciaEn?: number;
+  /** Responde 403 en esta ruta. */
+  prohibido?: boolean;
+}
+
+export const RUTA_MUESTRA = '/api/bitacoras';
+
 export interface OpcionesServidor {
+  /** Bitácoras en forma `muestra-tms` que sirve `GET /api/bitacoras`. */
+  bitacorasMuestra?: BitacoraMuestraSintetica[];
+  muestra?: ConfigMuestraFalsa;
   datos?: ConjuntoSintetico;
   usuario?: string;
   clave?: string;
@@ -73,6 +104,26 @@ export function crearServidorTmsFalso(op: OpcionesServidor = {}): ServidorTmsFal
   const json = (status: number, cuerpo: unknown, headers: Record<string, string> = {}): RespuestaHttp =>
     ({ status, headers: { 'content-type': 'application/json', ...headers }, cuerpo });
 
+  // Fechas de la muestra: `yyyy-MM-dd HH:mm:ss` en hora de México (UTC-6, sin horario de verano desde 2022).
+  const aMsMx = (v: string): number => Date.parse(`${v.replace(' ', 'T')}-06:00`);
+  const bitacorasMuestra = op.bitacorasMuestra ?? [];
+  const cfgM: ConfigMuestraFalsa = op.muestra ?? {};
+  function servirMuestra(q: Record<string, string | number | undefined>): RespuestaHttp {
+    if (cfgM.prohibido) return json(403, { error: 'sin permiso' });
+    const desde = q.desde !== undefined ? aMs(String(q.desde)) : -Infinity;
+    const hasta = q.hasta !== undefined ? aMs(String(q.hasta)) : Infinity;
+    const filas = bitacorasMuestra.filter((b) => { const t = aMsMx(b.Fecha.Termina); return t >= desde && t <= hasta; });
+    const tam = Math.max(1, cfgM.tamPagina ?? (Number(q.tam) || 100));
+    const pagina = Math.max(1, Number(q.pagina ?? 1) || 1);
+    const totalPaginas = Math.max(1, Math.ceil(filas.length / tam));
+    if (cfgM.falla503DesdePagina !== undefined && pagina >= cfgM.falla503DesdePagina) return json(503, { error: 'servicio no disponible' });
+    const pag = cfgM.paginaVaciaEn !== undefined && pagina === cfgM.paginaVaciaEn ? [] : filas.slice((pagina - 1) * tam, pagina * tam);
+    const env = cfgM.envoltorio ?? 'arreglo';
+    if (env === 'arreglo') return json(200, pag);
+    if (env === 'data') return json(200, { data: pag });
+    return json(200, { data: { items: pag, ...(cfgM.conTotales ? { total_paginas: totalPaginas, total: filas.length + (cfgM.totalDeclaradoExtra ?? 0) } : {}) } });
+  }
+
   const http: Http = async (s) => {
     if (s.metodo === 'POST' && s.ruta === '/api/login') {
       const c = (s.cuerpo ?? {}) as { usuario?: unknown; clave?: unknown };
@@ -84,8 +135,9 @@ export function crearServidorTmsFalso(op: OpcionesServidor = {}): ServidorTmsFal
       return json(200, { token, expira_en: expira });
     }
     const m = /^\/api\/([a-z_]+)$/.exec(s.ruta);
-    if (s.metodo !== 'GET' || !m || !(RUTAS_DATOS as readonly string[]).includes(m[1])) return json(404, { error: 'ruta inexistente' });
-    const recurso = m[1] as RutaDatos;
+    const esMuestra = s.metodo === 'GET' && s.ruta === RUTA_MUESTRA;
+    if (!esMuestra && (s.metodo !== 'GET' || !m || !(RUTAS_DATOS as readonly string[]).includes(m[1]))) return json(404, { error: 'ruta inexistente' });
+    const recurso = (m?.[1] ?? 'liquidaciones') as RutaDatos;
     nDatos++;
 
     if (fallas.htmlLogin) return { status: 200, headers: { 'content-type': 'text/html' }, cuerpo: HTML_LOGIN };
@@ -102,6 +154,7 @@ export function crearServidorTmsFalso(op: OpcionesServidor = {}): ServidorTmsFal
     }
 
     const q = s.query ?? {};
+    if (esMuestra) return servirMuestra(q);
     const desde = q.desde !== undefined ? aMs(String(q.desde)) : -Infinity;
     const hasta = q.hasta !== undefined ? aMs(String(q.hasta)) : Infinity;
     const campo = CAMPO_FECHA[recurso];
