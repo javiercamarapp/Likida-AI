@@ -194,7 +194,7 @@ Llaves de `LIKIDA_TMS_DESGLOSE_CONFIG` y su valor por omisión (todos SUPUESTOS)
 
 **Prueba en seco.** `node scripts/tms/verificar-local.mjs --en-seco --falso --muestra-tms` (ensayo sintético) o `TMS_CREDENCIALES_ARCHIVO=… LIKIDA_TMS_DESGLOSE_CONFIG='{…}' node scripts/tms/verificar-local.mjs --en-seco /ruta/mapeos.json --muestra-tms`. Pide UNA página, no escribe nada y reporta solo nombres de campo y conteos (el operador no se compara con el padrón en la prueba). En `opcionales ausentes` lista lo que el contrato no trae.
 
-**Qué falta pedirle a José Luis (sin esto todo lo de arriba sigue siendo supuesto):**
+**Qué falta pedirle a sistemas del cliente (sin esto todo lo de arriba sigue siendo supuesto):**
 1. URL de pruebas (base https) y, si el login no es `usuario`/`clave` → `token`, su forma real (`loginDe`, 8.1).
 2. Ruta exacta del recurso y si es GET.
 3. Nombres de los parámetros de fecha (¿filtran por inicio o por fin de la bitácora?) y su formato; si hay zona horaria distinta de la de México.
