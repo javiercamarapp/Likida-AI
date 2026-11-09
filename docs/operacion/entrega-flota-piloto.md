@@ -1,15 +1,15 @@
-# Entrega a Innovativos: día de conexión (liquidaciones, peajes, Carta Porte y servicio al cliente)
+# Entrega a la flota piloto: día de conexión (liquidaciones, peajes, Carta Porte y servicio al cliente)
 
-Estado a nov-2026: la plataforma, los cuatro agentes y el lector por consulta de bitácoras están en producción **apagados**. Nada se ha probado con datos reales de Innovativos. Este documento es el orden de encendido cuando ellos entreguen su API. Detalle técnico del conector: `conexion-tms.md` (§8.7 lista lo que falta pedirle a José Luis).
+Estado a nov-2026: la plataforma, los cuatro agentes y el lector por consulta de bitácoras están en producción **apagados**. Nada se ha probado con datos reales de el cliente. Este documento es el orden de encendido cuando ellos entreguen su API. Detalle técnico del conector: `conexion-tms.md` (§8.7 lista lo que falta pedirle a sistemas del cliente).
 
 ## 0. Qué debe existir antes de tocar nada
 
 | Pieza | Quién | Cómo se comprueba |
 |---|---|---|
-| API de bitácoras de solo lectura, ambiente de **pruebas** y cuenta de servicio sin correo personal | Sistemas de Innovativos | Documentación + URL de pruebas por canal seguro (nunca chat) |
-| Datos que la muestra no trae: póliza, nº de liquidación y de pago, tipo de operador, nº de empleado | Sistemas de Innovativos | Sin póliza, la bitácora queda retenida y no se envía (por diseño) |
-| Padrón de operadores (nombre, nº de empleado, correo) cargado en la flota | Innovativos / Javier | Cada bitácora debe resolver un operador único; ausente u homónimo ⇒ revisión humana |
-| Un responsable y un revisor por agente | Innovativos | Nombres escritos en el plan del piloto |
+| API de bitácoras de solo lectura, ambiente de **pruebas** y cuenta de servicio sin correo personal | Sistemas del cliente | Documentación + URL de pruebas por canal seguro (nunca chat) |
+| Datos que la muestra no trae: póliza, nº de liquidación y de pago, tipo de operador, nº de empleado | Sistemas del cliente | Sin póliza, la bitácora queda retenida y no se envía (por diseño) |
+| Padrón de operadores (nombre, nº de empleado, correo) cargado en la flota | Cliente / Javier | Cada bitácora debe resolver un operador único; ausente u homónimo ⇒ revisión humana |
+| Un responsable y un revisor por agente | el cliente | Nombres escritos en el plan del piloto |
 | Contraseña de la cuenta de servicio cambiada en el primer acceso | Javier | La que viajó por chat se considera expuesta |
 
 ## 1. Orden de encendido (siempre en `prueba`, nunca primero en producción)
