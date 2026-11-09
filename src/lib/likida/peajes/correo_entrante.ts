@@ -27,7 +27,8 @@ import { logger } from '@/lib/logger';
 import { esTokenValido } from '@/lib/correo/buzon';
 import { estaApagado } from '../interruptores';
 import { reclamarCorreo, finalizarCorreo } from '../carta_porte_docs/repo';
-import { remitenteReconocido, SIN_REMITENTES_AUTORIZADOS } from '@/lib/correo/remitente';
+import { remitenteReconocido, direccionDeRemitente, SIN_REMITENTES_AUTORIZADOS } from '@/lib/correo/remitente';
+import { autenticacionDeRemitente, type CabecerasEntrantes } from '@/lib/correo/autenticacion_entrante';
 import type { CorreoEntrante, DescargaAdjunto } from '../carta_porte_docs/correo_entrante';
 import { buzonCorreoPeajesPorToken } from './datos';
 import { registrarCorrida } from '../agentes/corridas';
@@ -104,6 +105,18 @@ export async function atenderCorreoPeajes(token: string, correo: CorreoEntrante,
     // El remitente no se loguea completo: es un dato personal y el `email_id` alcanza para rastrearlo en Resend.
     logger.warn('peajes_correo.remitente_no_permitido', { emailId: correo.emailId, tenantId });
     return { status: 200, cuerpo: { ok: true, ignorado: 'remitente_no_permitido' } };
+  }
+
+  // SPF/DKIM: el From se falsifica en dos líneas. Si el proveedor entregó resultados de autenticación, se exige que SPF o DKIM
+  // hayan pasado (falla cerrado). Sin esa información se conserva el comportamiento anterior, pero queda dicho en el log.
+  const dir = direccionDeRemitente(correo.from);
+  const autenticacion = autenticacionDeRemitente(correo.headers as CabecerasEntrantes, dir ? dir.slice(dir.lastIndexOf('@') + 1) : null);
+  if (autenticacion === 'rechazado') {
+    logger.warn('peajes_correo.remitente_sin_spf_dkim', { emailId: correo.emailId, tenantId });
+    return { status: 200, cuerpo: { ok: true, ignorado: 'remitente_no_autenticado' } };
+  }
+  if (autenticacion === 'sin_informacion') {
+    logger.warn('peajes_correo.autenticacion_no_verificable', { emailId: correo.emailId, tenantId });
   }
 
   // El interruptor ANTES de consumir el correo: 503 para que vuelva cuando lo enciendan (un 200 lo perdería).

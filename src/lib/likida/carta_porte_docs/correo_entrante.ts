@@ -83,6 +83,8 @@ export interface CorreoEntrante {
   text?: string;
   html?: string;
   attachments?: AdjuntoEntrante[];
+  /** Cabeceras del mensaje cuando el proveedor las entrega (para `Authentication-Results`). */
+  headers?: unknown;
 }
 
 export type DescargaAdjunto = { ok: true; bytes: Uint8Array } | { ok: false; transitorio: boolean };

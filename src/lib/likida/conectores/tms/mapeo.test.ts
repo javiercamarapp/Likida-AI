@@ -292,3 +292,50 @@ describe('R7-B2 · tolerancia del mapeo ante una respuesta distinta a la esperad
     expect(r.rechazadas).toHaveLength(2);
   });
 });
+
+describe('los motivos de rechazo no citan el valor leído (datos de terceros)', () => {
+  const SECRETO = 'SECRETO-3RO';
+  const mapeo = base({
+    campos: {
+      folio: 'id',
+      operador: 'operador.nombre',
+      neto: { fuente: 'neto', transformar: 'numero' },
+      neto2: { fuente: 'neto2', transformar: 'numero' },
+      salida: { fuente: 'salida', transformar: 'fecha_local', formato: 'yyyy-MM-dd' },
+      salida2: { fuente: 'salida2', transformar: 'fecha_local' },
+      activo: { fuente: 'activo', transformar: 'booleano' },
+      nota: 'nota',
+    },
+  });
+  const filaBuena = { id: 'F1', operador: { nombre: 'Op' }, neto: '1', neto2: '1', salida: '2026-01-01', salida2: '2026-01-01 10:00', activo: 'si', nota: 'x' };
+  const casos: Array<[string, Record<string, unknown>]> = [
+    ['número ilegible', { neto: `${SECRETO}` }],
+    ['número ambiguo', { neto2: '1,234' }],
+    ['número con basura', { neto: `1.2.${SECRETO}` }],
+    ['fecha que no sigue el formato', { salida: SECRETO }],
+    ['fecha que no existe', { salida: '2026-02-31' }],
+    ['fecha sin patrón ilegible', { salida2: SECRETO }],
+    ['fecha ISO con zona ilegible', { salida2: `${SECRETO}Z` }],
+    ['sí/no inválido', { activo: SECRETO }],
+    ['valor no simple', { nota: { dentro: SECRETO } }],
+  ];
+  for (const [nombre, cambio] of casos) {
+    it(`${nombre}: cita el campo y la razón, nunca el valor`, () => {
+      const r = aplicarMapeo(mapeo, { data: { items: [{ ...filaBuena, ...cambio }] } });
+      expect(r.error).toBeUndefined();
+      expect(r.rechazadas).toHaveLength(1);
+      const motivo = r.rechazadas[0].motivo;
+      expect(motivo).not.toContain(SECRETO);
+      expect(motivo).not.toContain('1,234');
+      expect(motivo).not.toContain('2026-02-31');
+      expect(motivo).toMatch(/^«(neto|neto2|salida|salida2|activo|nota)»: /);
+    });
+  }
+  it('los transformadores sueltos tampoco devuelven el valor en el error', () => {
+    for (const r of [aNumero(`x${SECRETO}`), aNumero('1,234'), aNumero('1.234'), aFechaLocal(SECRETO, undefined, 'America/Mexico_City'), aFechaLocal(`${SECRETO}Z`, undefined, 'America/Mexico_City'), aFechaLocal(SECRETO, 'yyyy-MM-dd', 'America/Mexico_City')]) {
+      expect('error' in r && r.error).toBeTruthy();
+      expect(JSON.stringify(r)).not.toContain(SECRETO);
+      expect(JSON.stringify(r)).not.toMatch(/1[.,]234/);
+    }
+  });
+});
