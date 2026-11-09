@@ -37,6 +37,10 @@ export interface FilaDesgloseRechazada {
   /** Clave de la bitácora (`BIT-<terminal>-<bitácora>`); `BIT-DESCONOCIDA` si ni eso se pudo leer. */
   clave: string;
   campo: string;
+  /** Tipo de excepción a abrir; por omisión `mapeo_invalido`. `operador_no_encontrado` = el operador no se resolvió contra el padrón. */
+  tipo?: 'mapeo_invalido' | 'operador_no_encontrado';
+  /** Detalle de la excepción cuando `tipo` es `operador_no_encontrado` (bitácora, motivo, origen y desde; JAMÁS nombres ni valores). */
+  detalle?: Record<string, unknown>;
 }
 
 export interface PaginaDesgloses {

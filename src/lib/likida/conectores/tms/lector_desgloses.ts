@@ -21,15 +21,18 @@ import {
   type FilaDesgloseRechazada, type LectorDesglosesPuerto, type ListarDesglosesParams, type PaginaDesgloses,
 } from '../../liquidacion_externa/desglose_puerto';
 import type { CanalEntrega } from '../../liquidacion_externa/repo_correo';
+import { seleccionarContratoDesglose, type SeleccionContrato } from '../../liquidacion_externa/desglose_muestra_pull_config';
+import type { PadronOperadores } from '../../liquidacion_externa/desglose_muestra_tms';
 import { aInstanteMx } from '../../peajes/formatos';
 import { jsonObjeto } from '../posiciones_comun';
 import type { Http, ValoresCredencial } from '../tipos';
 import { SesionTms } from './sesion';
+import { crearLectorMuestraTms } from './lector_muestra';
 import { loginDe, urlBaseHttps, CONECTOR_TMS } from './acceso';
 
 const DIA_MS = 86_400_000;
 
-interface Entrada {
+export interface Entrada {
   desde: string; id: string; desglose?: DesgloseBitacora; rechazada?: FilaDesgloseRechazada;
   /** La fila no trae instante de cursor utilizable: su `desde` es la época 0 y NO cuenta para la ventana de relectura. */
   sinInstante?: true;
@@ -52,7 +55,7 @@ export function instanteDeCursor(campo: unknown): string | null {
   return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }
 
-const orden = (a: Entrada, b: Entrada): number => {
+export const orden = (a: Entrada, b: Entrada): number => {
   const ta = Date.parse(a.desde); const tb = Date.parse(b.desde);
   if (ta !== tb) return ta - tb;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
@@ -94,12 +97,22 @@ export function crearLectorDesglosesTms(o: OpcionesLectorTms): LectorDesglosesPu
   }
 
   // `cfg.marcar` es null (no hay endpoint): sin `marcarEnviadas`, el pull no marca y su verdad sigue siendo Likida.
+  return crearLectorDeVentana({ ahora: o.ahora, ventanaInicialDias: cfg.ventanaInicialDias, leerVentana });
+}
+
+/**
+ * La parte común a todo lector por consulta: dada una función que lee COMPLETA una ventana `[desde, hasta]` (o lanza), arma la
+ * paginación por cursor `(desde, id)`, la relectura y el reporte de filas rechazadas. Compartida por el contrato supuesto y `muestra-tms`.
+ */
+export function crearLectorDeVentana(o: {
+  ahora: () => number; ventanaInicialDias: number; leerVentana: (desde: string, hasta: string) => Promise<Entrada[]>;
+}): LectorDesglosesPuerto {
   return {
     async listar(p: ListarDesglosesParams): Promise<PaginaDesgloses> {
       if (!Number.isInteger(p.limite) || p.limite < 1) throw new RangeError('limite debe ser un entero >= 1');
       const ahora = o.ahora();
-      const desde = p.reLeerDesde ?? p.cursor?.desde ?? new Date(ahora - cfg.ventanaInicialDias * DIA_MS).toISOString();
-      const leidas = await leerVentana(desde, new Date(ahora).toISOString());
+      const desde = p.reLeerDesde ?? p.cursor?.desde ?? new Date(ahora - o.ventanaInicialDias * DIA_MS).toISOString();
+      const leidas = await o.leerVentana(desde, new Date(ahora).toISOString());
       // A37-S38-08: una fila SIN fecha utilizable no tiene lugar en el cursor: no entra en la secuencia (jamás lo lleva a 1970);
       // se reporta como rechazada, en la PRIMERA página de toda lectura sin cursor y de toda relectura (A37-A1-liquidaciones-18;
       // A37-O7-04: antes solo con !hayMas, y las páginas siguientes ya no traen reLeerDesde: con más de una página se perdían).
@@ -167,6 +180,15 @@ export interface DependenciasLectoresTms {
    * la clave mala cada pasada (~12 por hora) y podía bloquear la cuenta de servicio del cliente. Opcional (pruebas).
    */
   degradar?: (tenantId: string, detalle: string) => Promise<void>;
+  /**
+   * r13p: qué contrato de desglose lee el pull. Por omisión sale de la configuración de plataforma
+   * (`seleccionarContratoDesglose`): `supuesto` salvo que se elija `muestra-tms`. `invalido` ⇒ ningún lector (falla cerrado).
+   */
+  seleccion?: SeleccionContrato;
+  /** r13p: padrón de operadores de la flota (nombre ↔ nº de empleado), para resolver el operador de `muestra-tms`. */
+  padron?: (tenantId: string) => Promise<PadronOperadores>;
+  /** r13p: ¿esta flota puede leer `muestra-tms`? Por omisión: bandera de plataforma + interruptores + «Activar el envío» (apagado por defecto). */
+  muestraHabilitada?: (tenantId: string) => Promise<boolean>;
 }
 
 /**
@@ -196,9 +218,23 @@ function conDegradacion(lector: LectorDesglosesPuerto, tenantId: string, degrada
   };
 }
 
+async function habilitadaPorOmision(tenantId: string): Promise<boolean> {
+  const { muestraTmsHabilitada } = await import('../../liquidacion_externa/desglose_muestra_recepcion');
+  return (await muestraTmsHabilitada(tenantId)).ok;
+}
+
+async function padronPorOmision(tenantId: string): Promise<PadronOperadores> {
+  return (await import('../../liquidacion_externa/repo')).leerPadronOperadores(tenantId);
+}
+
 /** Los lectores de las flotas que cumplen TODO el opt-in. Una flota que falla se salta y se dice; no tumba a las demás. */
 export async function lectoresDesglosesTms(deps: DependenciasLectoresTms): Promise<Array<{ tenantId: string; lector: LectorDesglosesPuerto }>> {
   const salida: Array<{ tenantId: string; lector: LectorDesglosesPuerto }> = [];
+  const seleccion = deps.seleccion ?? seleccionarContratoDesglose();
+  if (seleccion.contrato === 'invalido') {
+    logger.warn('liqcorreo.tms_contrato_invalido', { motivo: seleccion.motivo });
+    return [];
+  }
   for (const tenantId of await deps.tenantsConEnvioActivo()) {
     try {
       if ((await deps.canalDeEntrega(tenantId)) !== 'correo') continue;
@@ -213,7 +249,13 @@ export async function lectoresDesglosesTms(deps: DependenciasLectoresTms): Promi
         credenciales: { usuario: (c.valores.usuario ?? '').trim(), clave: c.valores.clave ?? '' },
         reloj: { ahora: deps.ahora, ...(deps.dormir ? { dormir: deps.dormir } : {}) },
       });
-      const lector = crearLectorDesglosesTms({ sesion, ahora: deps.ahora, ...(deps.config ? { config: deps.config } : {}) });
+      let lector: LectorDesglosesPuerto;
+      if (seleccion.contrato === 'muestra-tms') {
+        if (!(await (deps.muestraHabilitada ?? habilitadaPorOmision)(tenantId))) continue;
+        lector = crearLectorMuestraTms({ sesion, ahora: deps.ahora, config: seleccion.config, padron: () => (deps.padron ?? padronPorOmision)(tenantId) });
+      } else {
+        lector = crearLectorDesglosesTms({ sesion, ahora: deps.ahora, ...(deps.config ? { config: deps.config } : {}) });
+      }
       salida.push({ tenantId, lector: deps.degradar ? conDegradacion(lector, tenantId, deps.degradar) : lector });
     } catch (e) {
       logger.warn('liqcorreo.tms_lector_omitido', { tenantId, tipo: e instanceof Error ? e.name : 'desconocido' });

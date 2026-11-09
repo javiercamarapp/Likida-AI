@@ -15,7 +15,7 @@ import {
   listarCursos, listarConveniosPorNombre, cambiarEstadoCurso,
   listarMapeos, guardarMapeo, borrarMapeo,
   leerEstadoBuzon, activarBuzon, desactivarBuzon, rotarLlaveBuzon, listarArchivosIngesta,
-  leerConfigEntradas, activarCorreoPeajes, desactivarCorreoPeajes, rotarCorreoPeajes, guardarRemitentesPeajes,
+  leerEstadoEntradas, activarCorreoPeajes, desactivarCorreoPeajes, rotarCorreoPeajes, guardarRemitentesPeajes,
   guardarPullPeajes, apagarPullPeajes, borrarCredencialPull,
   listarTarifas, confirmarTarifa, importarTarifasArchivo,
   leerConfigPeajes, leerCorreoAvisos, guardarUmbralesPeajes, guardarConfigAvisos,
@@ -150,7 +150,7 @@ export default async function PaginaConfiguracionPeajes({
     safe(() => listarMapeos(tenantId)),
     safe(() => leerEstadoBuzon(tenantId)),
     safe(() => listarArchivosIngesta(tenantId, 20)),
-    safe(() => leerConfigEntradas(tenantId)),
+    safe(() => leerEstadoEntradas(tenantId)),
   ]);
 
   // La llave SOLO se calcula para quien administra y SOLO si el buzón está activo.
