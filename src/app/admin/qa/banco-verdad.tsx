@@ -188,7 +188,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
       <div className="flex flex-wrap items-center gap-3 pb-1">
         <button type="button" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo) || corriendo}
           className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40 rv-qa-marca">
-          {corriendo ? <Loader2 width={14} height={14} strokeWidth={2} className="animate-spin" /> : <ScanLine width={14} height={14} strokeWidth={2} />}
+          {corriendo ? <Loader2 width={14} height={14} strokeWidth={1.75} className="animate-spin" /> : <ScanLine width={14} height={14} strokeWidth={1.75} />}
           {corriendo ? 'Corriendo el OCR real…' : `Correr el OCR contra ${seleccion.size} foto${seleccion.size === 1 ? '' : 's'}`}
         </button>
         <button type="button"
