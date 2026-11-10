@@ -284,7 +284,10 @@ import { join, relative, sep } from 'node:path';
 // 114 → 115 (F9, CT-DAT-16): `api/admin/offboarding/route.ts` — exportación de una flota. Su puerta: 404 mientras la palanca
 //   `LIKIDA_OFFBOARDING_EXPORTACION` esté apagada (por omisión); luego `sesionSuperadmin()` (rol + segundo factor), mismo sitio, `tenantId` uuid
 //   validado; solo lee y deja constancia en `tenant_exportacion`. Prueba: `admin/offboarding/route.test.ts`.
-const RUTAS_APP_REVISADAS = 115;
+// 115 → 116 (F5, Copiloto «Decide hoy»): `api/admin/copiloto/briefing/route.ts` — GET de solo lectura. Su puerta: `sesionSuperadmin()` (misma que el
+//   chat del Copiloto: sin sesión 401, otro rol 403) ANTES de leer, más `rateLimit` por usuario (30/min); no recibe parámetros ni toca una flota
+//   en concreto (el briefing es de nivel compañía). Prueba: `admin/copiloto/briefing/route.test.ts`.
+const RUTAS_APP_REVISADAS = 116;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
