@@ -17,7 +17,7 @@ export function FilaTarjetas({ variante, llena, children, className }: {
   className?: string;
 }) {
   return (
-    <div className={cx('rv-fila', className)} data-variante={variante} data-llena={llena || undefined}>
+    <div className={cx('rv-fila-tarjetas', className)} data-variante={variante} data-llena={llena || undefined}>
       {children}
     </div>
   );
