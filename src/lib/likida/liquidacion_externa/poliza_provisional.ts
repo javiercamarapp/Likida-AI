@@ -30,21 +30,30 @@ export const esPolizaProvisional = (poliza: string | null | undefined): boolean 
 type ErrorPg = { message?: string; code?: string } | null;
 const faltaColumna = (e: ErrorPg): boolean => !!e && /poliza_provisional/.test(e.message ?? '');
 
-/** ¿La flota liberó las liquidaciones sin póliza como «provisionales»? Cualquier duda ⇒ `false` (se sigue reteniendo). */
-export async function leerPolizaProvisional(tenantId: string): Promise<boolean> {
+/**
+ * Lectura medida: `true`/`false`, o `null` si NO se pudo leer (el asistente «¿estoy listo?» dice «sin dato»). Una base sin la columna
+ * (migración 1001 pendiente) es `false`: la perilla no puede estar encendida.
+ */
+export async function medirPolizaProvisional(tenantId: string): Promise<boolean | null> {
   try {
     const res = await acotada(supabaseAdmin().from('liquidacion_correo_config')
       .select('poliza_provisional').eq('tenant_id', tenantId).maybeSingle(), 'liqcorreo.poliza_provisional_leer');
     const r = res as unknown as { data: { poliza_provisional?: unknown } | null; error: ErrorPg };
     if (r.error) {
-      if (!faltaColumna(r.error)) logger.warn('liqcorreo.poliza_provisional_lectura_fallo', { codigo: r.error.code ?? null });
-      return false;
+      if (faltaColumna(r.error)) return false;
+      logger.warn('liqcorreo.poliza_provisional_lectura_fallo', { codigo: r.error.code ?? null });
+      return null;
     }
     return r.data?.poliza_provisional === true;
   } catch (e) {
     logger.warn('liqcorreo.poliza_provisional_lectura_fallo', { err: e instanceof Error ? e.message : String(e) });
-    return false;
+    return null;
   }
+}
+
+/** ¿La flota liberó las liquidaciones sin póliza como «provisionales»? Cualquier duda ⇒ `false` (se sigue reteniendo). */
+export async function leerPolizaProvisional(tenantId: string): Promise<boolean> {
+  return (await medirPolizaProvisional(tenantId)) === true;
 }
 
 /** Enciende o apaga la perilla. Requiere que la flota ya tenga su fila de configuración de correo. Queda en el log con el actor. */
