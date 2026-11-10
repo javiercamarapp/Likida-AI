@@ -64,6 +64,11 @@ vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: 
 const anotarBitacora = vi.fn(async () => true);
 vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: (...a: unknown[]) => anotarBitacora(...(a as [])) }));
 
+// El aviso al superadmin se prueba en soporte-avisos.test.ts; aquí solo se
+// fija CUÁNDO se dispara.
+const avisarRespuestaDelCliente = vi.fn(async (..._a: unknown[]) => ({ avisado: true }));
+vi.mock('./soporte-avisos', () => ({ avisarRespuestaDelCliente: (...a: unknown[]) => avisarRespuestaDelCliente(...a) }));
+
 const {
   getTicketDelTenant, getHilo, responderTicket, tomarTicket, cambiarEstadoTicket,
   ESTADOS_TICKET, LARGO_MAX_MENSAJE,
@@ -216,6 +221,21 @@ describe('responderTicket', () => {
     const r = await responderTicket('tk-1', TENANT_A, DUENO_FLOTA, { cuerpo: '¿alguna novedad?', interna: false });
     expect(r.movioAEnProceso).toBe(false);
     expect(llamadas.some((l) => l.op === 'update')).toBe(false);
+  });
+
+  it('avisa al superadmin SOLO cuando el cliente escribe un mensaje público', async () => {
+    avisarRespuestaDelCliente.mockClear();
+    await responderTicket('tk-1', TENANT_A, ADMIN_LIKIDA, { cuerpo: 'vamos', interna: false });
+    await responderTicket('tk-1', TENANT_A, ADMIN_LIKIDA, { cuerpo: 'nota', interna: true });
+    expect(avisarRespuestaDelCliente).not.toHaveBeenCalled();
+    await responderTicket('tk-1', TENANT_A, DUENO_FLOTA, { cuerpo: '¿alguna novedad?', interna: false });
+    expect(avisarRespuestaDelCliente).toHaveBeenCalledTimes(1);
+    expect(avisarRespuestaDelCliente.mock.calls[0][0]).toMatchObject({ ticketId: 'tk-1', tenantId: TENANT_A });
+  });
+
+  it('si el aviso revienta, la respuesta del cliente igual queda escrita', async () => {
+    avisarRespuestaDelCliente.mockRejectedValueOnce(new Error('boom'));
+    await expect(responderTicket('tk-1', TENANT_A, DUENO_FLOTA, { cuerpo: 'hola', interna: false })).resolves.toBeTruthy();
   });
 
   it('sobre un ticket ya en_proceso no reescribe el estado', async () => {
