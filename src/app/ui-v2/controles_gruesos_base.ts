@@ -25,10 +25,7 @@ export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/rango-costo.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/tu-turno/boton_envio.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/tu-turno/vista.tsx': { R1: 3, R2: 0, R3: 0 },
-  'app/admin/ui/confirmar.tsx': { R1: 1, R2: 0, R3: 0 },
-  'app/admin/ui/forma.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/ui/kit.tsx': { R1: 1, R2: 1, R3: 1 },
-  'app/admin/ui/notificaciones.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/vendedores/consola-vendedores.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/vendedores/formas.tsx': { R1: 1, R2: 0, R3: 1 },
   'app/admin/vendedores/tablero.tsx': { R1: 3, R2: 0, R3: 1 },
@@ -43,6 +40,5 @@ export const BASE_SIN_ALTURA: Record<string, number> = {
   'app/admin/qa/banco-verdad.tsx': 3,
   'app/admin/qa/lanzar-form.tsx': 3,
   'app/admin/tu-turno/boton_envio.tsx': 1,
-  'app/admin/ui/confirmar.tsx': 1,
   'app/admin/vendedores/tablero.tsx': 3,
 };

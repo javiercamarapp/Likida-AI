@@ -34,3 +34,10 @@ export { TabsLinea, type PestanaLinea } from './tabs-linea';
 export { StatusChip, type TonoEstado } from './status-chip';
 export { TablaBase, type ColumnaBase } from './tabla-base';
 export { MarcaIntegracion, ChipFuente, IDS_INTEGRACION, esIntegracionConocida, type MarcaId } from './marca-integracion';
+// Comportamiento de formularios y avisos (movido desde admin/ui en la fase 0; `admin/ui/*` re-exporta lo mismo). `Aviso`, `Campo`,
+// `CampoTexto` y `Casilla` de `./forma` NO se exportan aquí: chocan con las piezas de arriba; quien los necesite, importa `./forma`.
+export { FormaConAviso, type ResultadoAccion, type AccionDeForma } from './forma';
+export { DialogoConfirmar, BotonConfirmar, type PropsDialogo } from './confirmar';
+export { AvisoResultado, leerResultado, type ResultadoUI, type ResultadoLeido } from './aviso-resultado';
+export { ProveedorNotificaciones, useNotificar, useNotificarResultado, type TonoNotificacion, type NuevaNotificacion } from './notificaciones';
+export { resolverFormato, type FormatoPreset } from '../formato-preset';

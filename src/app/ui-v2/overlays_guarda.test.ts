@@ -37,7 +37,7 @@ describe('overlays: un solo motor', () => {
   it('ningún velo `fixed inset-0` a mano (el fondo decorativo es la única excepción)', () => {
     const velos: string[] = [];
     for (const f of codigo) {
-      if (/fixed\s+inset-(0|x-0|y-0)|inset-0 z-/.test(sinComentarios(readFileSync(f, 'utf8'))) && !f.endsWith('/app/fondo.tsx') && !f.endsWith('/admin/mapa-prospectos/calles.tsx') && !f.endsWith('/admin/ui/notificaciones.tsx')) velos.push(relative(SRC, f));
+      if (/fixed\s+inset-(0|x-0|y-0)|inset-0 z-/.test(sinComentarios(readFileSync(f, 'utf8'))) && !f.endsWith('/app/fondo.tsx') && !f.endsWith('/admin/mapa-prospectos/calles.tsx') && !f.endsWith('/ui-v2/componentes/notificaciones.tsx')) velos.push(relative(SRC, f));
     }
     expect(velos).toEqual([]);
   });
