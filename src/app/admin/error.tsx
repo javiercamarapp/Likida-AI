@@ -2,9 +2,12 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import { recargarSiChunkViejo } from '@/lib/recarga-chunk';
 
 export default function AdminError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
+    // Chunk viejo tras un despliegue: se recarga UNA vez por ventana (F16); si no aplica, sigue el registro normal.
+    recargarSiChunkViejo(error);
     void import('@/lib/logger').then(({ logger }) => logger.error('admin.boundary', {
       digest: error.digest ?? 'sin-digest', err: error.message,
     }));

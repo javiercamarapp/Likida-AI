@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { Kicker, Pildora, TituloEditorial, serifEditorial } from '../editorial';
 import { MENSAJE_FLOTA_CAMBIO, esErrorFlotaCambio } from '@/lib/auth/flota_cambio';
+import { recargarSiChunkViejo } from '@/lib/recarga-chunk';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Error boundary del segmento dashboard: un fallo de red/render NO deja
@@ -38,6 +39,8 @@ export default function DashboardError({
   reset: () => void;
 }) {
   useEffect(() => {
+    // Chunk viejo tras un despliegue: se recarga UNA vez por ventana (F16); si no aplica, sigue el registro normal.
+    recargarSiChunkViejo(error);
     // Import perezoso: el logger es de servidor y este es un componente de
     // cliente. En el navegador el `console.error` del logger es lo que queda en
     // la consola de quien reproduce el fallo; en el servidor, la línea del log.
