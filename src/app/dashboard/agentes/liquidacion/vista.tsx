@@ -191,7 +191,7 @@ async function BloqueCiclo({ ciclo }: { ciclo: Promise<CicloLiquidacion> }) {
     <Tarjeta titulo="Viajes en curso" info="liquidacion.viajes_en_curso">
       <p className="rv-liq-sub">La foto de ahora mismo, por etapa</p>
       {/* BarList y no embudo A PROPÓSITO: el embudo imprime conversión paso a paso y este ciclo no es un embudo decreciente. */}
-      <BarList etiqueta="Viajes en curso por etapa" items={pasosVivos} formato="numero" />
+      <BarList etiqueta="Viajes en curso por etapa" items={pasosVivos} />
       {funnel.liquidados !== null && (
         <p className="rv-liq-pie">
           <strong className="cifra-mono">{numero(funnel.liquidados)}</strong> viajes liquidados en total, histórico.
@@ -336,7 +336,7 @@ async function BloqueOperadores({ operadores: p }: {
   return (
     <Tarjeta titulo="Diferencias por operador" info="liquidacion.por_operador">
       <p className="rv-liq-sub">Liquidaciones con diferencia, por operador</p>
-      <BarList etiqueta="Liquidaciones con diferencia por operador" formato="numero" items={operadores.map((o, i) => ({ clave: `${i}-${o.etiqueta}`, etiqueta: o.etiqueta, valor: o.valor }))} />
+      <BarList etiqueta="Liquidaciones con diferencia por operador" items={operadores.map((o, i) => ({ clave: `${i}-${o.etiqueta}`, etiqueta: o.etiqueta, valor: o.valor }))} />
     </Tarjeta>
   );
 }

@@ -265,7 +265,7 @@ export async function SeccionExternas(p: ExternasProps) {
                 },
               },
               { id: 'enviada', titulo: 'Enviada', celda: (l) => <span className="rv-liq-apagado">{l.enviadaEn ? fechaHoraMx(l.enviadaEn) : '—'}</span> },
-              { id: 'acciones', titulo: 'Acciones', tituloOculto: true, alinear: 'der', celda: (l) => <AccionesFila l={l} p={p} formato={formato} avisos={avisos} /> },
+              { id: 'acciones', titulo: 'Acciones', alinear: 'der', celda: (l) => <AccionesFila l={l} p={p} formato={formato} avisos={avisos} /> },
             ]}
           />
           <div className="rv-liq-pagina">
