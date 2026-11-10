@@ -356,8 +356,6 @@ summary.rv-chat__resumen::marker { content: ""; }
 .rv-chat[data-variante="panel"] .rv-chat__hero h1 { font-size: 18px; }
 
 /* El contenedor de la página /admin/copiloto: el alto lo da la ventana (no hay scroll de documento propio del chat). */
-.rv-agente-pagina { display: flex; flex-direction: column; height: calc(100dvh - 2rem); min-height: 420px; }
-.rv-agente-pagina > .rv-chat { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 
 /* El panel lateral persistente del chrome de /admin: cerrado es ancho 0 (no se desmonta: la conversación sobrevive a la navegación). */
 .rv-copiloto-panel { flex: none; position: sticky; top: 16px; align-self: flex-start; height: calc(100dvh - 2rem); overflow: hidden; width: 0; margin-left: -16px; }
