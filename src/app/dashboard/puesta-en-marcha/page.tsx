@@ -38,7 +38,7 @@ export default async function PaginaPuestaEnMarcha({
   const soloLectura = Boolean(sp.tenant || sp.vista || sp.rol || s.tenantNombre);
 
   return (
-    <main className="h-full">
+    <main className="rv-marco" aria-labelledby="puesta-titulo">
       <VistaPuestaEnMarcha
         senales={senales}
         ambito={`${s.tenantId}:${s.userId}`}
