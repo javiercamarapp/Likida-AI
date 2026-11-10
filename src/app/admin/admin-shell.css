@@ -57,6 +57,17 @@
   [data-ui="v2"] .adm-fila .rv-col { border-radius: 0; border-width: 0; box-shadow: none; height: auto; min-height: 100dvh; overflow: visible; }
   [data-ui="v2"] .adm-fila .rv-contenido { overflow: visible; }
   [data-ui="v2"] .adm-fila > aside[aria-label="Copiloto"] { display: none; }
+  /* El pie compartido (`ui-v2/pie-sidebar.css`) en este riel de 56 px: solo iconos (organización, avisos, acceso, tema). */
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org > .rv-ps-cap,
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org__fila,
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-toggles { display: none; }
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org__riel,
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-tema__riel { display: flex; }
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org { padding: 0; }
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-acceso { justify-content: center; margin: 0 6px; padding: 0; height: 40px; border-color: transparent; background: transparent; }
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-acceso__txt { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-sindato,
+  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-avisos .rv-contador { display: none; }
 }
 
 /* ── Páginas de /admin sobre el marco compartido `main.h-full > .hairline` (paginas-dominio.css ya quita la caja gris envolvente y
