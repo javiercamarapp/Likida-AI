@@ -16,7 +16,7 @@ function archivo(n: string, v: unknown, modo = 0o600): string {
   return p;
 }
 const correr = (args: string[]) => {
-  const r = spawnSync(process.execPath, [SCRIPT, ...args], { env: { PATH: process.env.PATH ?? '' }, encoding: 'utf8', timeout: 90_000 });
+  const r = spawnSync(process.execPath, [SCRIPT, ...args], { env: { NODE_ENV: 'test', PATH: process.env.PATH ?? '' }, encoding: 'utf8', timeout: 90_000 });
   return { codigo: r.status, salida: `${r.stdout}\n${r.stderr}` };
 };
 
