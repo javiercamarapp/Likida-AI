@@ -48,8 +48,6 @@ export interface UltimaLectura {
   motivo: string | null;
 }
 
-const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
-
 export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasError }: {
   fotos: FotoConUrl[];
   bancoError: string | null;
@@ -140,7 +138,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
   if (bancoError !== null) {
     return (
       <div className="card p-4 flex items-start gap-3">
-        <AlertTriangle {...ICONO} className="rv-qa-bad" />
+        <AlertTriangle width={15} height={15} strokeWidth={1.75} className="rv-qa-bad" />
         <p className="text-sm m-0">
           <span className="font-semibold">El banco de comprobantes no se pudo leer.</span>
           <span className="block text-xs mt-0.5 font-mono rv-qa-mut">{bancoError}</span>
@@ -277,7 +275,7 @@ function FilaFoto({ foto, lectura, elegida, abierta, onElegir, onAbrir }: {
           <img src={foto.url} alt={foto.etiqueta} className="w-10 h-10 rounded object-cover shrink-0" />
         ) : (
           <div className="w-10 h-10 rounded flex items-center justify-center shrink-0 rv-qa-fc">
-            <Camera {...ICONO} className="rv-qa-faint" />
+            <Camera width={15} height={15} strokeWidth={1.75} className="rv-qa-faint" />
           </div>
         )}
         <button type="button" onClick={onAbrir} className="flex-1 min-w-0 text-left inline-flex items-center gap-1.5">
