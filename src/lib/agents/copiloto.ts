@@ -18,7 +18,7 @@ import { randomUUID } from 'crypto';
 import type OpenAI from 'openai';
 import { generateWithTools, PartialExecutionError } from '@/lib/llm/openrouter';
 import { toolSchemas, makeExecutor, registerTool, type ToolContext } from '@/lib/llm/tool-executor';
-import { validarBloques, cifrasRespaldadas, extraerNumeros, type Bloque } from './analista';
+import { validarBloques, cifrasRespaldadas, extraerNumeros, construirRespaldo, type Bloque } from './analista';
 import { logger } from '@/lib/logger';
 import { combineAbortSignals } from '@/lib/llm/runtime-signal';
 import { ahoraMs } from '@/lib/saludo';
@@ -266,13 +266,12 @@ export async function ejecutarCopiloto(opts: {
       readOnlyTools: TOOLS_COPILOTO_LECTURA,
     });
 
-    const respaldo = new Set<number>();
-    for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
-    // SOLO los turnos del usuario respaldan: el historial llega del navegador y un turno con rol 'asistente'
-    // fabricado ahí haría pasar como respaldada una cifra inventada (F16, hallazgo de la revisión del portafolio).
-    extraerNumeros(opts.mensajes.filter((m) => m.rol === 'usuario').map((m) => m.texto).join(' '), respaldo);
-    extraerNumeros(hoyMx(new Date(ahoraMs())), respaldo);
-    extraerNumeros(fechaLarga, respaldo);
+    // Solo respalda lo que el sistema produjo en este turno (herramientas + calendario): ni el texto del usuario ni
+    // el historial que manda el navegador (F16).
+    const respaldo = construirRespaldo({
+      resultadosTools: res.toolCalls.map((t) => t.result),
+      calendario: [hoyMx(new Date(ahoraMs())), fechaLarga],
+    });
 
     let bloques = CAPTURAS.get(runId)
       ?? (res.finalText.trim() ? [{ tipo: 'texto', texto: res.finalText.trim().slice(0, 900) } as Bloque] : null);
