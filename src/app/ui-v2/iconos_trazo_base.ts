@@ -64,7 +64,6 @@ export const BASE_SIN_TRAZO: Record<string, number> = {
   'app/admin/conversaciones/page.tsx': 1,
   'app/admin/tu-turno/vista.tsx': 13,
   'app/admin/whatsapp-infra/page.tsx': 2,
-  'app/dashboard/agentes/conductores/tablero-hitos.tsx': 14,
   'app/dashboard/chat/agente-conversacion.tsx': 1,
   'app/dashboard/chat/composer.tsx': 3,
   'app/dashboard/chat/historial.tsx': 3,

@@ -3,8 +3,11 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
-import { BarraFiltros, FiltroBusqueda } from '@/app/ui-v2/componentes';
-import { AvisoResultado, type ResultadoUI } from '../../../../admin/ui/aviso-resultado';
+import '../conductores.css';
+import {
+  AvisoResultado, BarraFiltros, Boton, CampoSelect, CampoTexto, Casilla as CasillaV2, Disclosure, FiltroBusqueda, Fieldset, Icono, Radio,
+  type ResultadoUI,
+} from '@/app/ui-v2/componentes';
 import { FILAS_NUEVAS_CONTACTO, NOMBRES_DIA, OPCIONES_PERFIL, avisoZona } from '@/lib/likida/conductor/config_forma';
 import type { ConfigConductor } from '@/lib/likida/conductor/config';
 import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
@@ -18,33 +21,21 @@ import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
 export type ResultadoConfig = ResultadoUI;
 export type AccionConfig = (previo: ResultadoConfig, fd: FormData) => Promise<ResultadoConfig>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
-const AYUDA = 'text-[11px] mt-1';
-
 function Casilla({ nombre, etiqueta, ayuda, marcada, deshabilitada }: { nombre: string; etiqueta: string; ayuda?: string; marcada: boolean; deshabilitada: boolean }) {
-  return (
-    <label className="flex items-start gap-2 text-[12px]">
-      <input type="checkbox" name={`f_${nombre}`} value="si" defaultChecked={marcada} disabled={deshabilitada} className="mt-0.5" />
-      <span>{etiqueta}{ayuda && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{ayuda}</span>}</span>
-    </label>
-  );
+  return <CasillaV2 name={`f_${nombre}`} value="si" defaultChecked={marcada} disabled={deshabilitada} etiqueta={etiqueta} ayuda={ayuda} />;
 }
 
 function Numero({ nombre, etiqueta, valor, ayuda, deshabilitada, placeholder }: { nombre: string; etiqueta: string; valor: string; ayuda?: string; deshabilitada: boolean; placeholder?: string }) {
-  return (
-    <label>
-      <span className={ETIQUETA}>{etiqueta}</span>
-      <input name={`f_${nombre}`} defaultValue={valor} inputMode="numeric" disabled={deshabilitada} placeholder={placeholder} className="w-full" />
-      {ayuda && <span className={AYUDA} style={{ color: 'var(--faint)' }}>{ayuda}</span>}
-    </label>
-  );
+  return <CampoTexto etiqueta={etiqueta} name={`f_${nombre}`} defaultValue={valor} inputMode="numeric" disabled={deshabilitada} placeholder={placeholder} ayuda={ayuda} />;
 }
 
-function Seccion({ id, titulo, children }: { id: string; titulo: string; children: React.ReactNode }) {
+/** Una sección de la configuración: plegable, con una línea de resumen de su estado cuando hay uno. */
+function Seccion({ id, titulo, resumen, abierto, children }: { id: string; titulo: string; resumen?: string; abierto?: boolean; children: React.ReactNode }) {
   return (
-    <section className="card p-4 space-y-3" aria-labelledby={id}>
-      <h2 id={id} className="font-display text-[15px] font-semibold">{titulo}</h2>
-      {children}
+    <section id={id} aria-label={titulo}>
+      <Disclosure titulo={titulo} resumen={resumen} abierto={abierto}>
+        <div className="rv-cd__seccion-conf">{children}</div>
+      </Disclosure>
     </section>
   );
 }
@@ -52,10 +43,9 @@ function Seccion({ id, titulo, children }: { id: string; titulo: string; childre
 function Guardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Save width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : 'Guardar configuración'}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} tam={14} />}>
+      {pending ? 'Guardando…' : 'Guardar configuración'}
+    </Boton>
   );
 }
 
@@ -74,8 +64,8 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
   const off = !puedeEditar;
   const filas = contactos.length + FILAS_NUEVAS_CONTACTO;
   return (
-    <form action={enviar} className="space-y-4" aria-label="Configuración del agente Conductor">
-      <Seccion id="cfg-estado" titulo="Estado del agente">
+    <form action={enviar} className="rv-cd__pila" aria-label="Configuración del agente Conductor">
+      <Seccion id="cfg-estado" titulo="Estado del agente" abierto resumen={config.activo ? 'Activo' : 'Apagado'}>
         <Casilla nombre="activo" etiqueta="Agente encendido para esta flota" marcada={config.activo} deshabilitada={off}
           ayuda="Apagado, el agente no pide ni persigue hitos; lo que el chofer escriba por WhatsApp se sigue registrando." />
         <Casilla nombre="confirmarAlChofer" etiqueta="Confirmarle al chofer cada hito que registra" marcada={config.confirmarAlChofer} deshabilitada={off} />
@@ -84,20 +74,17 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
       </Seccion>
 
       <Seccion id="cfg-perfil" titulo="¿Qué sigue el agente?">
-        <fieldset className="space-y-2" disabled={off}>
-          <legend className={ETIQUETA}>Perfil de seguimiento</legend>
+        <fieldset className="rv-fieldset" disabled={off}>
+          <legend className="rv-fieldset__leyenda">Perfil de seguimiento</legend>
           {OPCIONES_PERFIL.map((o) => (
-            <label key={o.valor} className="flex items-start gap-2 text-[12px]">
-              <input type="radio" name="f_perfilSeguimiento" value={o.valor} defaultChecked={config.perfilSeguimiento === o.valor} className="mt-0.5" />
-              <span>{o.etiqueta}<span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{o.ayuda}</span></span>
-            </label>
+            <Radio key={o.valor} name="f_perfilSeguimiento" value={o.valor} defaultChecked={config.perfilSeguimiento === o.valor} etiqueta={o.etiqueta} ayuda={o.ayuda} />
           ))}
         </fieldset>
         <Casilla nombre="mostrarEstadosFrontera" etiqueta="Mostrar en el tablero los estados de frontera" marcada={config.mostrarEstadosFrontera} deshabilitada={off}
           ayuda="Solo informativo: no genera avisos al chofer ni escalamiento." />
         <Casilla nombre="aplicarSalidaDelTms" etiqueta="Dar por hecha la salida cuando tu sistema de despacho la reporta" marcada={config.aplicarSalidaDelTms} deshabilitada={off} />
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Estos tiempos son una primera propuesta; ajústalos con tus supervisores.</p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <p className="rv-cd__nota">Estos tiempos son una primera propuesta; ajústalos con tus supervisores.</p>
+        <div className="rv-cd__cuad">
           <Numero nombre="gpsObsoletoMin" etiqueta="El GPS se da por viejo después de (min)" valor={valores.gpsObsoletoMin} deshabilitada={off} ayuda="De 5 a 720." />
           <Numero nombre="detenidoMin" etiqueta="La unidad se da por detenida después de (min)" valor={valores.detenidoMin} deshabilitada={off} ayuda="De 5 a 720." />
           <Numero nombre="segundoAvisoMin" etiqueta="Segundo aviso al chofer después de (min)" valor={valores.segundoAvisoMin} deshabilitada={off} ayuda="De 5 a 720." />
@@ -107,12 +94,9 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
       </Seccion>
 
       <Seccion id="cfg-escalera" titulo="Estrategia de recordatorios">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          <label className="sm:col-span-2">
-            <span className={ETIQUETA}>Escalera al chofer (minutos desde que toca el hito)</span>
-            <input name="f_solicitudesMin" defaultValue={valores.solicitudesMin} disabled={off} className="w-full" placeholder="0, 15, 30, 45" />
-            <span className={AYUDA} style={{ color: 'var(--faint)' }}>El primero es la solicitud; los demás, recordatorios. Ascendente, de 1 a 6 valores.</span>
-          </label>
+        <div className="rv-cd__cuad">
+          <CampoTexto etiqueta="Escalera al chofer (minutos desde que toca el hito)" name="f_solicitudesMin" defaultValue={valores.solicitudesMin} disabled={off}
+            placeholder="0, 15, 30, 45" ayuda="El primero es la solicitud; los demás, recordatorios. Ascendente, de 1 a 6 valores." />
           <Numero nombre="escalarTrasMin" etiqueta="Avisar al patio a los (min)" valor={valores.escalarTrasMin} deshabilitada={off} ayuda="Debe ser después del último recordatorio." />
           <Numero nombre="segundoNivelMin" etiqueta="Subir al jefe general después de (min)" valor={valores.segundoNivelMin} deshabilitada={off} />
           <Numero nombre="topeDiarioChofer" etiqueta="Tope diario de mensajes por chofer" valor={valores.topeDiarioChofer} deshabilitada={off} />
@@ -121,26 +105,25 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         </div>
       </Seccion>
 
-      <Seccion id="cfg-ventana" titulo="Ventana horaria y días">
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Zona horaria de la flota: <strong>{config.zonaHoraria}</strong> (solo lectura).</p>
-        {avisoZona(config.zonaHoraria) && <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>{avisoZona(config.zonaHoraria)}</p>}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <Seccion id="cfg-ventana" titulo="Ventana horaria y días" resumen={`${valores.horaInicio}:00–${valores.horaFin}:00`}>
+        <p className="rv-cd__nota">Zona horaria de la flota: <strong>{config.zonaHoraria}</strong> (solo lectura).</p>
+        {avisoZona(config.zonaHoraria) && <p role="alert" className="rv-cd__nota" data-tono="bad">{avisoZona(config.zonaHoraria)}</p>}
+        <div className="rv-cd__cuad">
           <Numero nombre="horaInicio" etiqueta="Desde las (0 a 23)" valor={valores.horaInicio} deshabilitada={off} />
           <Numero nombre="horaFin" etiqueta="Hasta las (1 a 24)" valor={valores.horaFin} deshabilitada={off} />
         </div>
-        <fieldset className="flex flex-wrap gap-x-4 gap-y-1.5 text-[12px]" disabled={off}>
-          <legend className={ETIQUETA}>Días permitidos</legend>
-          {NOMBRES_DIA.map((n, i) => (
-            <label key={n} className="flex items-center gap-1.5 capitalize">
-              <input type="checkbox" name={`f_dia_${i + 1}`} value="si" defaultChecked={config.diasSemana.includes(i + 1)} />{n}
-            </label>
-          ))}
-        </fieldset>
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Fuera de la ventana el agente no manda nada, tampoco las escalaciones.</p>
+        <Fieldset leyenda="Días permitidos">
+          <div className="rv-cd__dias">
+            {NOMBRES_DIA.map((n, i) => (
+              <CasillaV2 key={n} name={`f_dia_${i + 1}`} value="si" defaultChecked={config.diasSemana.includes(i + 1)} disabled={off} etiqueta={n} />
+            ))}
+          </div>
+        </Fieldset>
+        <p className="rv-cd__micro">Fuera de la ventana el agente no manda nada, tampoco las escalaciones.</p>
       </Seccion>
 
       <Seccion id="cfg-plazos" titulo="Plazos cuando el viaje no trae cita (supuestos tuyos, no mediciones)">
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="rv-cd__cuad">
           <Numero nombre="anticipoCitaMin" etiqueta="Pedir la llegada a carga antes de la cita (min)" valor={valores.anticipoCitaMin} deshabilitada={off} />
           <Numero nombre="esperaSinCitaMin" etiqueta="Sin cita: esperar tras aceptar (min)" valor={valores.esperaSinCitaMin} deshabilitada={off} />
           <Numero nombre="esperaCargaMin" etiqueta="Carga: esperar antes de pedir la salida (min)" valor={valores.esperaCargaMin} deshabilitada={off} />
@@ -157,7 +140,7 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <Casilla nombre="pedirFotoEvidencia" etiqueta="Invitar al chofer a mandar la foto del sello o del andén" marcada={config.pedirFotoEvidencia} deshabilitada={off} />
         <Casilla nombre="fotoRegistraHito" etiqueta="La foto cuenta como aviso: un «andén», «sello» o «recibido» sin aviso previo registra el hito" marcada={config.fotoRegistraHito} deshabilitada={off}
           ayuda="Con la hora del mensaje del chofer y la foto como evidencia. Apagado, la foto solo se cuelga de un aviso ya registrado." />
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="rv-cd__cuad">
           <Numero nombre="toleranciaUbicacionM" etiqueta="Tolerancia sobre el radio (m)" valor={valores.toleranciaUbicacionM} deshabilitada={off} ayuda="Supuesto; ajústalo con tus datos." />
           <Numero nombre="ventanaUbicacionMin" etiqueta="Ventana para comparar la posición (min)" valor={valores.ventanaUbicacionMin} deshabilitada={off} />
           <Numero nombre="margenAcercamientoM" etiqueta="Margen de acercamiento a la planta (m)" valor={valores.margenAcercamientoM} deshabilitada={off}
@@ -175,37 +158,34 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
         <Casilla nombre="avisarSenalVida" etiqueta="Preguntar «¿sigues bien?» si el GPS de un tractor en tránsito se calla" marcada={config.avisarSenalVida} deshabilitada={off}
           ayuda="Si la última posición queda vieja o el tractor lleva rato detenido fuera de un sitio: un aviso con botones al chofer, un segundo aviso y después al jefe de tráfico. Apagado: solo se ve en el tablero. Requiere plantilla aprobada fuera de la ventana de 24 h. Solo se puede encender cuando «¿Está lista la flota?» no tiene nada en rojo." />
         {puedeForzarPreflight && (
-          <label className="flex items-start gap-2 text-[12px]">
-            <input type="checkbox" name="forzarPreflight" value="si" disabled={off} className="mt-0.5" />
-            <span>Encender la señal de vida aunque «¿Está lista la flota?» tenga faltantes (solo QA; queda en la bitácora)</span>
-          </label>
+          <CasillaV2 name="forzarPreflight" value="si" disabled={off} etiqueta="Encender la señal de vida aunque «¿Está lista la flota?» tenga faltantes (solo QA; queda en la bitácora)" />
         )}
-        <div className="grid sm:grid-cols-2 gap-3">
+        <div className="rv-cd__cuad">
           <Numero nombre="estadiaAlertaCargaMin" etiqueta="Alerta de estadía en carga (min)" valor={valores.estadiaAlertaCargaMin} deshabilitada={off} placeholder="vacío = sin alerta" ayuda="De 15 a 4,320. Vacío la apaga." />
           <Numero nombre="estadiaAlertaDescargaMin" etiqueta="Alerta de estadía en descarga (min)" valor={valores.estadiaAlertaDescargaMin} deshabilitada={off} placeholder="vacío = sin alerta" />
         </div>
       </Seccion>
 
       <Seccion id="cfg-contactos" titulo="A quién se escala">
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-cd__nota">
           <strong>Nivel 1</strong> es el patio responsable (si eliges un patio, solo atiende viajes de ese patio); <strong>nivel 2</strong> es el jefe general.
           Para quitar un contacto, borra su nombre y su teléfono. Números mexicanos de 10 dígitos.
         </p>
         <input type="hidden" name="c_filas" value={filas} />
-        <div className="space-y-2">
+        <div className="rv-cd__pila">
           {[...new Array<number>(filas).keys()].map((i) => {
             const c = contactos[i];
             return (
-              <div key={`${i}-${c?.telefono ?? 'nuevo'}`} className="grid grid-cols-2 sm:grid-cols-[110px_1fr_160px_1fr] gap-2">
-                <select name={`c_nivel_${i}`} defaultValue={String(c?.nivel ?? 1)} disabled={off} aria-label={`Nivel del contacto ${i + 1}`} className="w-full">
+              <div key={`${i}-${c?.telefono ?? 'nuevo'}`} className="rv-cd__cuad">
+                <CampoSelect etiqueta={`Nivel del contacto ${i + 1}`} etiquetaOculta name={`c_nivel_${i}`} defaultValue={String(c?.nivel ?? 1)} disabled={off}>
                   <option value="1">Nivel 1 (patio)</option><option value="2">Nivel 2 (jefe general)</option>
-                </select>
-                <input name={`c_nombre_${i}`} defaultValue={c?.nombre ?? ''} disabled={off} maxLength={80} placeholder="Nombre" aria-label={`Nombre del contacto ${i + 1}`} className="w-full" />
-                <input name={`c_tel_${i}`} defaultValue={c ? c.telefono.replace(/^52/, '') : ''} disabled={off} inputMode="tel" placeholder="10 dígitos" aria-label={`Teléfono del contacto ${i + 1}`} className="w-full" />
-                <select name={`c_patio_${i}`} defaultValue={c?.terminalId ?? ''} disabled={off} aria-label={`Patio del contacto ${i + 1}`} className="w-full">
+                </CampoSelect>
+                <CampoTexto etiqueta={`Nombre del contacto ${i + 1}`} etiquetaOculta name={`c_nombre_${i}`} defaultValue={c?.nombre ?? ''} disabled={off} maxLength={80} placeholder="Nombre" />
+                <CampoTexto etiqueta={`Teléfono del contacto ${i + 1}`} etiquetaOculta name={`c_tel_${i}`} defaultValue={c ? c.telefono.replace(/^52/, '') : ''} disabled={off} inputMode="tel" placeholder="10 dígitos" />
+                <CampoSelect etiqueta={`Patio del contacto ${i + 1}`} etiquetaOculta name={`c_patio_${i}`} defaultValue={c?.terminalId ?? ''} disabled={off}>
                   <option value="">Toda la flota</option>
                   {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </select>
+                </CampoSelect>
               </div>
             );
           })}
@@ -213,12 +193,12 @@ export function FormaConfigConductor({ accion, config, valores, contactos, patio
       </Seccion>
 
       {puedeEditar ? (
-        <div className="space-y-2">
-          <Guardar />
+        <div className="rv-cd__pila--s">
+          <div><Guardar /></div>
           <AvisoResultado estado={estado} />
         </div>
       ) : (
-        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta configuración.</p>
+        <p className="rv-cd__nota" data-tono="faint">Solo el dueño de la flota cambia esta configuración.</p>
       )}
     </form>
   );
@@ -244,18 +224,16 @@ const diezDigitos = (tel: string): string => tel.replace(/\D/g, '').replace(/^52
 function BotonVoluntario({ texto, enCurso }: { texto: string; enCurso: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary">
-      {pending ? enCurso : texto}
-    </button>
+    <Boton type="submit" loading={pending}>{pending ? enCurso : texto}</Boton>
   );
 }
 
 function FilaVoluntario({ op, accion, puedeEditar }: { op: OperadorPilotoVista; accion: AccionVoluntario; puedeEditar: boolean }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <li className="py-2 space-y-1.5">
-      <form action={enviar} className="flex items-center justify-between gap-3 text-[12px]" aria-label={`Retirar a ${op.nombre} del piloto`}>
-        <span><strong>{op.nombre}</strong> <span style={{ color: 'var(--faint)' }}>{diezDigitos(op.telefono)}</span></span>
+    <li className="rv-cd__item">
+      <form action={enviar} className="rv-cd__linea" aria-label={`Retirar a ${op.nombre} del piloto`}>
+        <span><strong>{op.nombre}</strong> <span className="rv-cd__faint">{diezDigitos(op.telefono)}</span></span>
         <input type="hidden" name="operadorId" value={op.id} />
         {puedeEditar && <BotonVoluntario texto="Retirar del piloto" enCurso="Retirando…" />}
       </form>
@@ -275,39 +253,36 @@ export function SeccionVoluntarios({ datos, puedeEditar, accionAlta, accionBaja,
   const [estadoAlta, enviarAlta] = useActionState(accionAlta, null);
   const n = datos.voluntarios.length;
   return (
-    <Seccion id="cfg-voluntarios" titulo="Operadores del piloto">
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <Seccion id="cfg-voluntarios" titulo="Operadores del piloto" abierto resumen={`${n} de ${datos.tope}`}>
+      <p className="rv-cd__nota">
         El agente solo da seguimiento a los viajes importados de los operadores que aceptaron participar. Márcalos aquí uno por uno; al retirar a uno,
         sus viajes importados que siguen abiertos vuelven a «sin aceptar».
       </p>
-      <p className="text-[13px] font-medium" aria-live="polite">{n} de {datos.tope} operadores en el piloto</p>
+      <p className="rv-cd__medio" aria-live="polite">{n} de {datos.tope} operadores en el piloto</p>
       {n > 0 ? (
-        <ul className="divide-y" style={{ borderColor: 'var(--line)' }}>
+        <ul className="rv-cd__lista">
           {datos.voluntarios.map((v) => <FilaVoluntario key={v.id} op={v} accion={accionBaja} puedeEditar={puedeEditar} />)}
         </ul>
       ) : (
-        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Todavía no hay operadores en el piloto.</p>
+        <p className="rv-cd__nota" data-tono="faint">Todavía no hay operadores en el piloto.</p>
       )}
       {puedeEditar ? (
-        <div className="space-y-2">
+        <div className="rv-cd__pila">
           <BarraFiltros buscar accion="?" enLinea etiqueta="Buscar operador" ocultos={parametros.map(([k, v]) => [k, v] as const)}
             nActivos={datos.busqueda ? 1 : 0} limpiarHref={`?${new URLSearchParams(parametros).toString()}`}>
             <FiltroBusqueda nombre="q" valor={datos.busqueda} placeholder="Nombre o teléfono" etiqueta="Buscar operador activo (nombre o teléfono)" />
           </BarraFiltros>
-          <form action={enviarAlta} className="flex items-end gap-2" aria-label="Agregar operador al piloto">
-            <label className="flex-1">
-              <span className={ETIQUETA}>Operador</span>
-              <select name="operadorId" defaultValue="" className="w-full" aria-label="Operador a agregar">
-                <option value="" disabled>{datos.candidatos.length > 0 ? 'Elige un operador…' : 'Sin operadores disponibles con ese criterio'}</option>
-                {datos.candidatos.map((c) => <option key={c.id} value={c.id}>{c.nombre} · {diezDigitos(c.telefono)}</option>)}
-              </select>
-            </label>
+          <form action={enviarAlta} className="rv-cd__linea" aria-label="Agregar operador al piloto">
+            <CampoSelect etiqueta="Operador" name="operadorId" defaultValue="" aria-label="Operador a agregar">
+              <option value="" disabled>{datos.candidatos.length > 0 ? 'Elige un operador…' : 'Sin operadores disponibles con ese criterio'}</option>
+              {datos.candidatos.map((c) => <option key={c.id} value={c.id}>{c.nombre} · {diezDigitos(c.telefono)}</option>)}
+            </CampoSelect>
             <BotonVoluntario texto="Agregar al piloto" enCurso="Agregando…" />
           </form>
           <AvisoResultado estado={estadoAlta} />
         </div>
       ) : (
-        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia quién está en el piloto.</p>
+        <p className="rv-cd__nota" data-tono="faint">Solo el dueño de la flota cambia quién está en el piloto.</p>
       )}
     </Seccion>
   );
