@@ -4,7 +4,7 @@ import {
   Settings2, FlaskConical, Truck, LineChart, DollarSign, Receipt, TrendingUp, Presentation,
   Server, Blocks, BookOpen, Megaphone, ShieldAlert, ShieldCheck, Users, Settings,
   Activity, ClipboardCheck, Code2, HeartPulse, LifeBuoy, PlugZap, Gauge, Handshake, Inbox,
-  Bot, Bug, ListChecks, Sparkles, Hand, Globe2, AlarmClock, Clapperboard,
+  Bot, Bug, ListChecks, BadgeCheck, Timer, Sparkles, Hand, Globe2, AlarmClock, Clapperboard,
 } from 'lucide-react';
 
 /**
@@ -32,7 +32,7 @@ export const AGENTES: Item[] = [
   { href: '/admin/playground', nombre: 'Playground', Icono: FlaskConical },
   // El panel de QA (Fase A): fotos reales contra el pipeline real, veredicto
   // por oráculos del ejército (scripts/qa-agentes/). Diseño: 00-PANEL-DE-QA.md.
-  { href: '/admin/qa', nombre: 'QA autónomo', Icono: Bug },
+  { href: '/admin/qa', nombre: 'QA autónomo', Icono: BadgeCheck },
 ];
 
 export const NEGOCIO: Item[] = [
@@ -99,7 +99,7 @@ export const SISTEMA: Item[] = [
   { href: '/admin/actividad-codigo', nombre: 'Actividad de código', Icono: GitCommitHorizontal },
   { href: '/admin/soporte', nombre: 'Soporte', Icono: LifeBuoy },
   { href: '/admin/mcp-clientes', nombre: 'Clientes MCP', Icono: PlugZap },
-  { href: '/admin/capacidad-forecast', nombre: 'Capacidad & Forecast', Icono: Gauge },
+  { href: '/admin/capacidad-forecast', nombre: 'Capacidad & Forecast', Icono: Timer },
 ];
 
 /** Las cinco secciones CON su rótulo — el MISMO agrupamiento y los MISMOS

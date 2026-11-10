@@ -17,6 +17,7 @@ import '../ui-v2/datos.css';
 import '../ui-v2/movimiento.css';
 import '../ui-v2/paginas.css';
 import '../ui-v2/paginas-dominio.css';
+import '../ui-v2/carga.css';
 
 export const dynamic = 'force-dynamic';
 
