@@ -1,0 +1,14 @@
+/* Mi perfil · solo lo que las piezas del sistema no traen. Colores de tokens. */
+.rv-mp__pila { display: grid; gap: 12px; }
+.rv-mp__linea { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; }
+.rv-mp__codigo { width: 9rem; }
+.rv-mp__codigo-corto { width: 8rem; }
+.rv-mp__texto { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-mp__texto[data-tono="bad"] { color: var(--bad); }
+.rv-mp__nota { margin: 0; font-size: var(--t-micro); color: var(--faint); word-break: break-all; }
+.rv-mp__qr { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.rv-mp__datos { margin: 0; display: grid; gap: 8px; font-size: var(--t-body); }
+.rv-mp__datos > div { display: flex; justify-content: space-between; gap: 16px; }
+.rv-mp__datos dt { color: var(--muted); }
+.rv-mp__datos dd { margin: 0; text-align: right; }
+.rv-mp__separador { padding-top: 16px; border-top: 1px solid var(--line); }

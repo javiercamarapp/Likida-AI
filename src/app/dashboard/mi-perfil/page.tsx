@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation';
-import { CheckCircle2, AlertTriangle } from 'lucide-react';
 import { supabaseServer } from '@/lib/supabase/server';
 import { estadoMfa, MSG_MFA_SUPERADMIN, type VeredictoMfaSuperadmin } from '@/lib/auth/mfa';
 import { requireSessionTenant } from '@/lib/auth/guard';
@@ -15,7 +14,8 @@ import AvatarUploader from '../../admin/mi-perfil/avatar-uploader';
 import { sufijoTenant } from '../sufijo';
 import { TablaClientesMcp } from '../sesiones-mcp/vista';
 import type { Metadata } from 'next';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Aviso, Boton, BotonEnlace, CampoTexto, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import './mi-perfil.css';
 export const metadata: Metadata = { title: 'Mi perfil' };
 
 export const dynamic = 'force-dynamic';
@@ -323,183 +323,140 @@ export default async function MiPerfilFlota({
     sp.exige === 'inscribir' || sp.exige === 'retar' || sp.exige === 'no_verificable' ? sp.exige : null;
 
   return (
-    <MarcoPagina titulo="Mi perfil" apoyo="Tu foto, nombre y correo, y la seguridad de tu cuenta: segundo factor, sesiones activas y clientes MCP conectados.">
-      <div className="card p-6" style={{ maxWidth: 720 }}>
-        {sp.ok && OK[sp.ok] && (
-          <div className="flex items-center gap-2 text-[13px] px-3.5 py-2.5 rounded-lg mb-5"
-            style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-            <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
-            {OK[sp.ok]}
-          </div>
-        )}
-        {/* ── SEG-3 (auditoría 24): por qué te rebotaron aquí ──────────
-            Con `LIKIDA_SUPERADMIN_MFA=obligatorio`, la puerta de /admin y
-            la de /dashboard mandan al superadmin sin segundo factor a esta
-            pantalla (guard.ts). Sin este aviso el rebote sería un misterio:
-            clic en la consola, aterrizas en tu perfil, sin explicación. */}
-        {exigencia && (
-          <div className="flex items-start gap-2 text-[13px] px-3.5 py-2.5 rounded-lg mb-5"
-            style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-            <AlertTriangle width={15} height={15} strokeWidth={1.75} className="shrink-0 mt-0.5" />
-            <span>{MSG_MFA_SUPERADMIN[exigencia]}</span>
-          </div>
-        )}
-        {sp.error && ERROR[sp.error] && (
-          <div className="flex items-center gap-2 text-[13px] px-3.5 py-2.5 rounded-lg mb-5"
-            style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-            <AlertTriangle width={15} height={15} strokeWidth={1.75} />
-            {ERROR[sp.error]}
-          </div>
-        )}
+    <MarcoPagina titulo="Mi perfil" ancho="lectura" apoyo="Tu foto, nombre y correo, y la seguridad de tu cuenta: segundo factor, sesiones activas y clientes MCP conectados.">
+      {sp.ok && OK[sp.ok] && <Aviso tono="ok">{OK[sp.ok]}</Aviso>}
+      {/* ── SEG-3 (auditoría 24): por qué te rebotaron aquí ──────────
+          Con `LIKIDA_SUPERADMIN_MFA=obligatorio`, la puerta de /admin y
+          la de /dashboard mandan al superadmin sin segundo factor a esta
+          pantalla (guard.ts). Sin este aviso el rebote sería un misterio:
+          clic en la consola, aterrizas en tu perfil, sin explicación. */}
+      {exigencia && <Aviso tono="error">{MSG_MFA_SUPERADMIN[exigencia]}</Aviso>}
+      {sp.error && ERROR[sp.error] && <Aviso tono="error">{ERROR[sp.error]}</Aviso>}
 
-        <AvatarUploader nombre={s.nombre ?? 'Tú'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
+      <Tarjeta titulo="Tu perfil">
+        <div className="rv-mp__pila">
+          <AvatarUploader nombre={s.nombre ?? 'Tú'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
 
-        <form action={actualizarNombre} className="space-y-4 mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <div>
-            <label htmlFor="perfil-nombre" className="text-[13px] font-medium block mb-1.5">Nombre</label>
-            <input id="perfil-nombre" name="nombre" type="text" defaultValue={s.nombre ?? ''} required maxLength={80}
-              className="w-full" style={{ background: 'var(--surface)' }} />
-            <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-              Es el nombre con el que te ven tus compañeros de flota en el panel.
-            </p>
-          </div>
-          <button type="submit" className="rv-btn rv-btn--primary"
-            style={{ background: 'var(--marca)', color: 'white' }}>
-            Guardar nombre
-          </button>
-        </form>
+          <form action={actualizarNombre} className="rv-mp__pila rv-mp__separador">
+            <CampoTexto etiqueta="Nombre" id="perfil-nombre" name="nombre" defaultValue={s.nombre ?? ''} required maxLength={80}
+              ayuda="Es el nombre con el que te ven tus compañeros de flota en el panel." />
+            <div><Boton type="submit" variante="primary">Guardar nombre</Boton></div>
+          </form>
 
-        {/* ── SEGURIDAD: segundo factor TOTP (fase 7 enterprise) ────────
-            La política es incremental: inscribirlo es OPTAR por que las
-            acciones sensibles exijan AAL2 (lib/auth/mfa.ts). ── */}
-        <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloRecuadro info="mi_perfil.segundo_factor" className="mb-1">Seguridad — segundo factor</TituloRecuadro>
-          {mfa.inscrito ? (
-            <div className="space-y-3">
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                Activo. Las acciones sensibles exigen el código de tu app; verifícalo aquí para subir esta sesión al nivel alto.
-              </p>
-              <form action={verificarMfa} className="flex gap-2 items-center">
-                <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
-                <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
-                  className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="rv-btn rv-btn--secondary">
-                  Verificar sesión
-                </button>
-              </form>
-              <form action={quitarMfa} className="flex gap-2 items-center">
-                <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
-                <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="código" required
-                  className="w-24 text-[12px] px-3 py-1.5 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--bad)' }}>
-                  Quitar el factor (exige el código)
-                </button>
-              </form>
+          <dl className="rv-mp__datos rv-mp__separador">
+            <div>
+              <dt>Correo</dt>
+              <dd>{correoFalloLectura ? 'No se pudo leer' : (fila?.email as string) ?? '—'}</dd>
             </div>
-          ) : qr ? (
-            <div className="space-y-3">
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                Escanea el código con tu app (Google Authenticator, 1Password…) y escribe el código de 6 dígitos.
-              </p>
-              {/* El SVG lo genera Supabase en el enroll — sin librerías. */}
-              <img src={qr.svg} alt="Código QR del segundo factor" width={168} height={168}
-                className="rounded-lg hairline p-2" style={{ background: 'white' }} />
-              <p className="text-[11px] break-all" style={{ color: 'var(--faint)' }}>
-                Si no puedes escanear: {qr.secreto}
-              </p>
-              <form action={verificarMfa} className="flex gap-2 items-center">
-                <input type="hidden" name="factorId" value={qr.factorId} />
-                <input name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
-                  className="w-28 text-[13px] px-3 py-2 rounded-lg hairline tabular" style={{ background: 'var(--surface)' }} />
-                <button type="submit" className="rv-btn rv-btn--primary"
-                  style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                  Activar
-                </button>
-              </form>
+            <div>
+              <dt>Rol</dt>
+              <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
             </div>
-          ) : (
-            <div className="space-y-2">
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                Un código de tu teléfono además de tu correo. Al activarlo, las acciones sensibles lo van a exigir.
-              </p>
-              <a href={volverAMiPerfil(sufijo, 'mfa=inscribir')}
-                className="inline-block text-[12px] px-3.5 py-2 rounded-lg font-medium hairline transition-colors hover:bg-[var(--canvas)]">
-                Activar segundo factor
-              </a>
-            </div>
-          )}
+          </dl>
+          <p className="rv-mp__nota">
+            Correo y rol no se editan aquí: el correo está ligado a tu acceso (cambiarlo es un flujo
+            de verificación aparte) y el rol lo asigna el dueño de la flota desde Usuarios.
+          </p>
         </div>
+      </Tarjeta>
 
-        {/* ── SEGURIDAD: sesiones activas (FASE 1 · SEG-SESIONES) ──────
-            Cierra TODAS mis sesiones a la vez, en cualquier dispositivo
-            donde haya iniciado sesión — no solo esta pestaña. ── */}
-        <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloRecuadro info="mi_perfil.sesiones" className="mb-1">Seguridad — sesiones activas</TituloRecuadro>
-          <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
+      {/* ── SEGURIDAD: segundo factor TOTP (fase 7 enterprise) ────────
+          La política es incremental: inscribirlo es OPTAR por que las
+          acciones sensibles exijan AAL2 (lib/auth/mfa.ts). ── */}
+      <Tarjeta titulo="Seguridad — segundo factor" info="mi_perfil.segundo_factor">
+        {mfa.inscrito ? (
+          <div className="rv-mp__pila">
+            <p className="rv-mp__texto">
+              Activo. Las acciones sensibles exigen el código de tu app; verifícalo aquí para subir esta sesión al nivel alto.
+            </p>
+            <form action={verificarMfa} className="rv-mp__linea">
+              <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
+              <CampoTexto etiqueta="Código de 6 dígitos" etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
+                className="rv-mp__codigo" claseControl="tabular" />
+              <Boton type="submit">Verificar sesión</Boton>
+            </form>
+            <form action={quitarMfa} className="rv-mp__linea">
+              <input type="hidden" name="factorId" value={mfa.factorId ?? ''} />
+              <CampoTexto etiqueta="Código para quitar el factor" etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="código" required
+                className="rv-mp__codigo-corto" claseControl="tabular" />
+              <Boton type="submit" variante="danger" tamano="sm">Quitar el factor (exige el código)</Boton>
+            </form>
+          </div>
+        ) : qr ? (
+          <div className="rv-mp__pila">
+            <p className="rv-mp__texto">
+              Escanea el código con tu app (Google Authenticator, 1Password…) y escribe el código de 6 dígitos.
+            </p>
+            {/* El SVG lo genera Supabase en el enroll — sin librerías. */}
+            <img src={qr.svg} alt="Código QR del segundo factor" width={168} height={168} className="rv-mp__qr" />
+            <p className="rv-mp__nota">Si no puedes escanear: {qr.secreto}</p>
+            <form action={verificarMfa} className="rv-mp__linea">
+              <input type="hidden" name="factorId" value={qr.factorId} />
+              <CampoTexto etiqueta="Código de 6 dígitos" etiquetaOculta name="codigo" inputMode="numeric" pattern="\d{6}" maxLength={6} placeholder="000000" required
+                className="rv-mp__codigo" claseControl="tabular" />
+              <Boton type="submit" variante="primary">Activar</Boton>
+            </form>
+          </div>
+        ) : (
+          <div className="rv-mp__pila">
+            <p className="rv-mp__texto">
+              Un código de tu teléfono además de tu correo. Al activarlo, las acciones sensibles lo van a exigir.
+            </p>
+            <div><BotonEnlace href={volverAMiPerfil(sufijo, 'mfa=inscribir')}>Activar segundo factor</BotonEnlace></div>
+          </div>
+        )}
+      </Tarjeta>
+
+      {/* ── SEGURIDAD: sesiones activas (FASE 1 · SEG-SESIONES) ──────
+          Cierra TODAS mis sesiones a la vez, en cualquier dispositivo
+          donde haya iniciado sesión — no solo esta pestaña. ── */}
+      <Tarjeta titulo="Seguridad — sesiones activas" info="mi_perfil.sesiones">
+        <div className="rv-mp__pila">
+          <p className="rv-mp__texto">
             Si crees que alguien más entró con tu cuenta, o perdiste un celular o laptop donde quedaste conectado,
             cierra todas tus sesiones de un tiro. Vas a tener que volver a iniciar sesión aquí también.
           </p>
           <form action={cerrarTodasMisSesiones}>
-            <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--bad)' }}>
-              Cerrar sesión en todos los dispositivos
-            </button>
+            <Boton type="submit" variante="danger" tamano="sm">Cerrar sesión en todos los dispositivos</Boton>
           </form>
         </div>
+      </Tarjeta>
 
-        {/* ── SEGURIDAD: mis clientes MCP (H3, 29-ago-2026) ────────────
-            Lo que Claude o ChatGPT pueden leer de la flota EN MI NOMBRE.
-            Vive junto al segundo factor y no en otra pantalla porque es
-            la misma pregunta: ¿qué puede entrar a mi cuenta hoy? ── */}
-        <div className="mt-6 pt-6 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloRecuadro info="mi_perfil.clientes_mcp" className="mb-1">Seguridad — clientes MCP conectados</TituloRecuadro>
-          {mcp === null ? (
-            <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-              No pude leer tus conexiones MCP. No se enseña una lista a medias:
-              «no tienes nada conectado» sobre una consulta caída es justo la
-              mentira que haría que no cortaras nada. Recarga la pantalla.
+      {/* ── SEGURIDAD: mis clientes MCP (H3, 29-ago-2026) ────────────
+          Lo que Claude o ChatGPT pueden leer de la flota EN MI NOMBRE.
+          Vive junto al segundo factor y no en otra pantalla porque es
+          la misma pregunta: ¿qué puede entrar a mi cuenta hoy? ── */}
+      <Tarjeta titulo="Seguridad — clientes MCP conectados" info="mi_perfil.clientes_mcp">
+        {mcp === null ? (
+          <p className="rv-mp__texto" data-tono="bad">
+            No pude leer tus conexiones MCP. No se enseña una lista a medias:
+            «no tienes nada conectado» sobre una consulta caída es justo la
+            mentira que haría que no cortaras nada. Recarga la pantalla.
+          </p>
+        ) : mcp.length === 0 ? (
+          <p className="rv-mp__texto">
+            No tienes ningún cliente MCP conectado: nada fuera de este panel está
+            leyendo los datos de la flota en tu nombre.
+          </p>
+        ) : (
+          <div className="rv-mp__pila">
+            <p className="rv-mp__texto">
+              Estos clientes <strong>leen</strong> —nunca cambian— lo que ves tú en el
+              panel, sin navegador y sin volver a iniciar sesión. El nombre lo declaró
+              quien registró el cliente, no Likida.
             </p>
-          ) : mcp.length === 0 ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              No tienes ningún cliente MCP conectado: nada fuera de este panel está
-              leyendo los datos de la flota en tu nombre.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                Estos clientes <strong>leen</strong> —nunca cambian— lo que ves tú en el
-                panel, sin navegador y sin volver a iniciar sesión. El nombre lo declaró
-                quien registró el cliente, no Likida.
-              </p>
-              <TablaClientesMcp clientes={mcp} />
-              <form action={cortarMisSesionesMcp}>
-                <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--bad)' }}>
-                  {/* Lo que la función de la 0265 hace, dicho tal cual: corta
-                      TODOS, no uno. Un rótulo más fino prometería una
-                      precisión que la revocación por usuario no tiene. */}
-                  Cortar {mcp.length === 1 ? 'este acceso' : `los ${mcp.length} accesos`} (no hay deshacer)
-                </button>
-              </form>
-            </div>
-          )}
-        </div>
-
-        <dl className="mt-6 pt-6 border-t space-y-3 text-[13px]" style={{ borderColor: 'var(--line)' }}>
-          <div className="flex justify-between gap-4">
-            <dt style={{ color: 'var(--muted)' }}>Correo</dt>
-            <dd className="text-right">
-              {correoFalloLectura ? 'No se pudo leer' : (fila?.email as string) ?? '—'}
-            </dd>
+            <TablaClientesMcp clientes={mcp} />
+            <form action={cortarMisSesionesMcp}>
+              {/* Lo que la función de la 0265 hace, dicho tal cual: corta
+                  TODOS, no uno. Un rótulo más fino prometería una
+                  precisión que la revocación por usuario no tiene. */}
+              <Boton type="submit" variante="danger" tamano="sm">
+                Cortar {mcp.length === 1 ? 'este acceso' : `los ${mcp.length} accesos`} (no hay deshacer)
+              </Boton>
+            </form>
           </div>
-          <div className="flex justify-between gap-4">
-            <dt style={{ color: 'var(--muted)' }}>Rol</dt>
-            <dd className="text-right">{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
-          </div>
-        </dl>
-        <p className="text-[11px] mt-4" style={{ color: 'var(--faint)' }}>
-          Correo y rol no se editan aquí: el correo está ligado a tu acceso (cambiarlo es un flujo
-          de verificación aparte) y el rol lo asigna el dueño de la flota desde Usuarios.
-        </p>
-      </div>
+        )}
+      </Tarjeta>
     </MarcoPagina>
   );
 }

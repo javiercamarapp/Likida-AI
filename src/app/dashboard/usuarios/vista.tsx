@@ -1,13 +1,12 @@
-import { Users, ShieldCheck } from 'lucide-react';
-import { StatusPill } from '../../admin/ui/kit';
-import { EstadoVacio } from '../estados';
+import { Users } from 'lucide-react';
 import { fechaMx } from '@/lib/formato';
 import type { OpcionRol } from '@/lib/auth/invitar';
 import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
 import {
   FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BotonEnlace, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import './usuarios.css';
 
 export interface UsuarioRow {
   id: string;
@@ -58,154 +57,96 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
   rolesInvitar?: ReadonlyArray<OpcionRol>;
   acciones: AccionesEquipo;
 }) {
+  const columnas: ColumnaBase<UsuarioRow>[] = [
+    {
+      id: 'nombre', titulo: 'Nombre', principal: true,
+      celda: (u) => (
+        <span className="rv-usu__nombre" data-baja={u.activo ? undefined : true}>
+          {/* Sin nombre cae al correo, no a "—": una persona recién invitada sin nombre sería un renglón que no se puede distinguir de otro. */}
+          {u.nombre ?? <span className="cifra-mono">{u.email}</span>}
+          {u.id === userId && <span className="rv-usu__yo">(tú)</span>}
+          {u.nombre && <span className="rv-usu__correo cifra-mono">{u.email}</span>}
+          {!u.activo && (
+            <span className="rv-usu__correo">
+              <StatusChip tono="bad">dada de baja{u.desactivadoEn ? ` el ${fechaMx(u.desactivadoEn)}` : ''}</StatusChip>
+            </span>
+          )}
+        </span>
+      ),
+    },
+    { id: 'rol', titulo: 'Rol', celda: (u) => <StatusChip tono={u.activo && u.rol === 'flota_admin' ? 'ok' : 'neutral'}>{nombreDeRol(u.rol)}</StatusChip> },
+    { id: 'que', titulo: 'Qué puede hacer', celda: (u) => <span className="rv-usu__tenue">{detalleDeRol(u.rol)}</span> },
+    {
+      id: 'wa', titulo: 'WhatsApp',
+      celda: (u) => (u.telefono
+        ? <span className="cifra-mono rv-usu__nombre" data-baja={u.activo ? undefined : true}>{u.telefono}</span>
+        : <span className="rv-usu__sin">sin WhatsApp — el bot no lo reconoce</span>),
+    },
+    ...(puedeInvitar ? [{
+      id: 'acciones', titulo: 'Acciones',
+      celda: (u: UsuarioRow) => <Acciones u={u} esYo={u.id === userId} roles={roles} acciones={acciones} />,
+    }] : []),
+  ];
+
   return (
     <MarcoPagina titulo="Usuarios del equipo" apoyo="Quién entra a este panel y qué puede ver.">
-      <div className="glass-panel overflow-hidden">
-        {usuarios === null ? (
-          <div className="p-8 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el equipo.</div>
-        ) : (
-          <>
-            <div className="pt-5 pb-2 px-5">
-              <TituloRecuadro info="usuarios.equipo">Tu equipo</TituloRecuadro>
-            </div>
+      {usuarios === null ? (
+        <EstadoError accion={<BotonEnlace href="" tamano="sm">Reintentar</BotonEnlace>}>No se pudo cargar el equipo. No es que no haya cuentas: la consulta no respondió.</EstadoError>
+      ) : (
+        <>
+          <Tarjeta titulo="Tu equipo" info="usuarios.equipo">
             {usuarios.length === 0 ? (
-              <div className="px-5 pb-5">
-                <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  No hay cuentas dadas de alta en esta flota todavía.
-                </EstadoVacio>
-              </div>
+              <EstadoVacio icono={Users} titulo="No hay cuentas dadas de alta" contenido>
+                Cuando invites a alguien de tu equipo, aparece aquí con su rol.
+              </EstadoVacio>
             ) : (
-              <div className="overflow-x-auto mt-1 pb-2">
-                <table aria-label="Usuarios y su rol" className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th scope="col" className="px-5 py-2.5 font-medium">Nombre</th>
-                      <th scope="col" className="px-5 py-2.5 font-medium">Rol</th>
-                      <th scope="col" className="px-5 py-2.5 font-medium">Qué puede hacer</th>
-                      <th scope="col" className="px-5 py-2.5 font-medium">WhatsApp</th>
-                      {puedeInvitar && <th scope="col" className="px-5 py-2.5 font-medium">Acciones</th>}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usuarios.map((u) => (
-                      <Renglon key={u.id} u={u} esYo={u.id === userId} puedeInvitar={puedeInvitar} roles={roles} acciones={acciones} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <TablaBase etiqueta="Usuarios y su rol" columnas={columnas} filas={usuarios} idFila={(u) => u.id} altoMaximo={false} tarjetaMovil />
             )}
+          </Tarjeta>
 
-            {puedeInvitar ? (
-              <section className="px-5 pb-5">
-                <div className="card p-4">
-                  {/* `<details>` nativo, como el Plegable de /dashboard/clientes:
-                      sin JavaScript sigue abriendo. */}
-                  <details className="group">
-                    <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-                      style={{ color: 'var(--marca)' }}>
-                      + Invitar a alguien de tu equipo
-                    </summary>
-                    <div className="pt-3">
-                      <FormaInvitar accion={acciones.invitar} roles={rolesInvitar ?? roles} />
-                    </div>
-                  </details>
-                </div>
-              </section>
-            ) : (
-              <p className="px-5 pb-4 text-[11px] m-0" style={{ color: 'var(--faint)' }}>
-                Tu rol ve el equipo pero no lo administra: dar acceso al panel, cambiar
-                un rol o dar de baja es una decisión del dueño de la flota.
-              </p>
-            )}
+          {puedeInvitar ? (
+            <Disclosure titulo="+ Invitar a alguien de tu equipo">
+              <FormaInvitar accion={acciones.invitar} roles={rolesInvitar ?? roles} />
+            </Disclosure>
+          ) : (
+            <p className="rv-usu__pie">
+              Tu rol ve el equipo pero no lo administra: dar acceso al panel, cambiar
+              un rol o dar de baja es una decisión del dueño de la flota.
+            </p>
+          )}
 
-            <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-              <div className="card p-4 flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--okbg)' }}>
-                  <ShieldCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ok)' }} />
-                </div>
-                <div>
-                  <p className="text-sm font-medium m-0">El aislamiento no depende de esconder botones</p>
-                  <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-                    Cada consulta de este panel va filtrada por tu flota, y la base separa los datos de cada flota por su cuenta: aunque
-                    alguien pidiera datos de otra flota a mano, la base no se los devuelve. Una cuenta dada de baja
-                    deja de entrar en su siguiente clic y su sesión se revoca; cada cambio de rol, baja y reactivación
-                    queda en la bitácora de auditoría con quién lo hizo.
-                  </p>
-                </div>
-              </div>
-            </section>
-          </>
-        )}
-      </div>
+          <Tarjeta titulo="El aislamiento no depende de esconder botones">
+            <p className="rv-usu__aislamiento">
+              Cada consulta de este panel va filtrada por tu flota, y la base separa los datos de cada flota por su cuenta: aunque
+              alguien pidiera datos de otra flota a mano, la base no se los devuelve. Una cuenta dada de baja
+              deja de entrar en su siguiente clic y su sesión se revoca; cada cambio de rol, baja y reactivación
+              queda en la bitácora de auditoría con quién lo hizo.
+            </p>
+          </Tarjeta>
+        </>
+      )}
     </MarcoPagina>
   );
 }
 
-function Renglon({ u, esYo, puedeInvitar, roles, acciones }: {
-  u: UsuarioRow; esYo: boolean; puedeInvitar: boolean;
-  roles: ReadonlyArray<OpcionRol>; acciones: AccionesEquipo;
+function Acciones({ u, esYo, roles, acciones }: {
+  u: UsuarioRow; esYo: boolean; roles: ReadonlyArray<OpcionRol>; acciones: AccionesEquipo;
 }) {
-  // Tachada pero VISIBLE: ocultar una cuenta de baja borraría de la pantalla
-  // la evidencia de quién tuvo acceso y desde cuándo no.
-  const tachado = u.activo ? undefined : { color: 'var(--faint)' as const };
   // Un superadmin en la lista es personal de Likida: no se administra aquí
   // (el motor lo rechaza igual — esto solo evita ofrecer un botón que rebota).
-  const administrable = puedeInvitar && !esYo && u.rol !== 'superadmin';
+  const administrable = !esYo && u.rol !== 'superadmin';
+  if (!administrable) {
+    return <span className="rv-usu__sin">{esYo ? 'Tu propia cuenta la administra otro dueño.' : 'Cuenta de Likida.'}</span>;
+  }
+  if (!u.activo) return <FormaReactivar accion={acciones.reactivar} id={u.id} />;
   return (
-    <tr className="border-t align-top" style={{ borderColor: 'var(--line)' }}>
-      <td className="px-5 py-3 font-medium" style={tachado}>
-        {/* Sin nombre cae al correo, no a "—": una persona recién invitada
-            sin nombre sería un renglón que no se puede distinguir de otro. */}
-        {u.nombre ?? <span className="cifra-mono font-normal">{u.email}</span>}
-        {esYo && (
-          <span className="ml-2 text-xs font-normal" style={{ color: 'var(--muted)' }}>(tú)</span>
-        )}
-        {u.nombre && (
-          <div className="cifra-mono text-[11px] font-normal" style={{ color: 'var(--faint)' }}>{u.email}</div>
-        )}
-        {!u.activo && (
-          <div className="mt-1">
-            <StatusPill estado="bad">
-              dada de baja{u.desactivadoEn ? ` el ${fechaMx(u.desactivadoEn)}` : ''}
-            </StatusPill>
-          </div>
-        )}
-      </td>
-      <td className="px-5 py-3">
-        <StatusPill estado={u.activo ? (u.rol === 'flota_admin' ? 'ok' : 'neutral') : 'neutral'}>{nombreDeRol(u.rol)}</StatusPill>
-      </td>
-      <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>
-        {detalleDeRol(u.rol)}
-      </td>
-      <td className="px-5 py-3">
-        {u.telefono ? (
-          <span className="cifra-mono" style={tachado}>{u.telefono}</span>
-        ) : (
-          <span className="text-xs" style={{ color: 'var(--faint)' }}>
-            sin WhatsApp — el bot no lo reconoce
-          </span>
-        )}
-      </td>
-      {puedeInvitar && (
-        <td className="px-5 py-3">
-          {!administrable ? (
-            <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
-              {esYo ? 'Tu propia cuenta la administra otro dueño.' : 'Cuenta de Likida.'}
-            </span>
-          ) : u.activo ? (
-            <div className="flex flex-col gap-2">
-              <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
-              <div className="flex items-start gap-3 flex-wrap">
-                <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
-                <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
-                <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
-              </div>
-            </div>
-          ) : (
-            <FormaReactivar accion={acciones.reactivar} id={u.id} />
-          )}
-        </td>
-      )}
-    </tr>
+    <div className="rv-usu__acciones">
+      <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
+      <div className="rv-usu__fila">
+        <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
+        <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
+        <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
+      </div>
+    </div>
   );
 }

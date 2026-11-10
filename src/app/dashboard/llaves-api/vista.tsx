@@ -1,8 +1,9 @@
 import { KeyRound } from 'lucide-react';
-import { EstadoVacio } from '../estados';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import { AREAS_DE_LLAVE, llaveVencida, type LlaveListada } from '@/lib/auth/llave-api-escritura';
+import { EstadoVacio, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { FormaRevocar, type AccionForma } from './forma';
+import './llaves-api.css';
 
 /**
  * La lista de llaves, PURA PROPS — separada de la página (que es la puerta y
@@ -15,98 +16,54 @@ const ROTULO_AREA: Record<string, string> = Object.fromEntries(
   AREAS_DE_LLAVE.map((a) => [a.valor, a.rotulo]),
 );
 
+// SEG-8: una llave VENCIDA ya no sirve —`resolverLlave` la rechaza con el mismo 401 que una revocada—, así que se lee igual de
+// muerta en la lista. Tachada pero VISIBLE: ocultar una llave revocada borraría de la pantalla la evidencia de qué se revocó y cuándo.
+const muerta = (l: LlaveListada): boolean => l.revocadaEn !== null || llaveVencida(l.expiraEn);
+
 export function ListaLlaves({ llaves, revocarLlave }: {
   llaves: LlaveListada[];
   revocarLlave: AccionForma;
 }) {
   if (llaves.length === 0) {
     return (
-      <EstadoVacio icono={<KeyRound width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-        Todavía no hay una sola llave emitida, así que nada fuera de este panel puede
-        leer los datos de la flota — ni el TMS ni un tablero. Emite la primera aquí
-        abajo: se enseña completa <strong>una sola vez</strong> y de ahí en adelante
-        solo se guarda su huella.
+      <EstadoVacio icono={KeyRound} titulo="Aún no hay llaves emitidas">
+        Nada fuera de este panel puede leer los datos de la flota, ni el TMS ni un tablero. Emite la primera aquí
+        abajo: se enseña completa <strong>una sola vez</strong> y de ahí en adelante solo se guarda su huella.
       </EstadoVacio>
     );
   }
 
-  return (
-    <div className="card overflow-x-auto">
-      <table aria-label="Llaves de API" className="w-full text-[12px]">
-        <thead>
-          <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th scope="col" className="px-3 py-2 font-medium">Pista</th>
-            <th scope="col" className="px-3 py-2 font-medium">Nombre</th>
-            <th scope="col" className="px-3 py-2 font-medium">Área</th>
-            <th scope="col" className="px-3 py-2 font-medium">Creada</th>
-            <th scope="col" className="px-3 py-2 font-medium">Vence</th>
-            <th scope="col" className="px-3 py-2 font-medium">Último uso</th>
-            <th scope="col" className="px-3 py-2 font-medium" />
-          </tr>
-        </thead>
-        <tbody>
-          {llaves.map((l) => (
-            <RenglonLlave key={l.id} l={l} revocarLlave={revocarLlave} />
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  const columnas: ColumnaBase<LlaveListada>[] = [
+    { id: 'pista', titulo: 'Pista', celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta cifra-mono' : 'rv-lla__tenue cifra-mono'}>{l.prefijo}…</span> },
+    { id: 'nombre', titulo: 'Nombre', principal: true, celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : undefined}>{l.nombre}</span> },
+    { id: 'area', titulo: 'Área', celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : undefined}>{ROTULO_AREA[l.area] ?? l.area}</span> },
+    { id: 'creada', titulo: 'Creada', celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : 'rv-lla__tenue'}>{fechaMx(l.creadaEn)}</span> },
+    {
+      id: 'vence', titulo: 'Vence',
+      // "no caduca" es la verdad de `expira_en` null, y una verdad incómoda a propósito: una llave eterna se ve como lo que es.
+      celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : 'rv-lla__tenue'}>{l.expiraEn === null ? 'no caduca' : fechaMx(l.expiraEn)}</span>,
+    },
+    {
+      id: 'uso', titulo: 'Último uso',
+      // La verdad, no un guion: "nunca" es la respuesta a "¿la puedo revocar sin romperle nada a nadie?".
+      celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : 'rv-lla__tenue'}>{l.ultimoUsoEn === null ? 'nunca' : fechaHoraMx(l.ultimoUsoEn)}</span>,
+    },
+    { id: 'estado', titulo: 'Estado', celda: (l) => <EstadoLlave l={l} revocarLlave={revocarLlave} /> },
+  ];
+
+  return <TablaBase etiqueta="Llaves de API" columnas={columnas} filas={llaves} idFila={(l) => l.id} altoMaximo={false} tarjetaMovil />;
 }
 
-function RenglonLlave({ l, revocarLlave }: {
-  l: LlaveListada;
-  revocarLlave: AccionForma;
-}) {
-  const revocada = l.revocadaEn !== null;
-  // SEG-8: una llave VENCIDA ya no sirve —`resolverLlave` la rechaza con el
-  // mismo 401 que una revocada—, así que se lee igual de muerta en la lista.
-  const vencida = llaveVencida(l.expiraEn);
-  const muerta = revocada || vencida;
-  // Tachada pero VISIBLE: ocultar una llave revocada borraría de la pantalla
-  // la evidencia de qué se revocó y cuándo — el renglón es la auditoría.
-  const tachado = muerta ? { textDecoration: 'line-through' as const, color: 'var(--faint)' } : undefined;
-
-  return (
-    <tr className="border-t" style={{ borderColor: 'var(--line2)' }}>
-      <td className="px-3 py-2 cifra-mono whitespace-nowrap" style={tachado ?? { color: 'var(--muted)' }}>
-        {l.prefijo}…
-      </td>
-      <td className="px-3 py-2 font-medium" style={tachado}>{l.nombre}</td>
-      <td className="px-3 py-2" style={tachado}>{ROTULO_AREA[l.area] ?? l.area}</td>
-      <td className="px-3 py-2 whitespace-nowrap" style={tachado ?? { color: 'var(--muted)' }}>
-        {fechaMx(l.creadaEn)}
-      </td>
-      <td className="px-3 py-2 whitespace-nowrap" style={tachado ?? { color: 'var(--muted)' }}>
-        {/* "no caduca" es la verdad de `expira_en` null, y una verdad
-            incómoda a propósito: una llave eterna se ve como lo que es. */}
-        {l.expiraEn === null ? 'no caduca' : fechaMx(l.expiraEn)}
-      </td>
-      <td className="px-3 py-2 whitespace-nowrap" style={tachado ?? { color: 'var(--muted)' }}>
-        {/* La verdad, no un guion: "nunca" es la respuesta a "¿la puedo
-            revocar sin romperle nada a nadie?". */}
-        {l.ultimoUsoEn === null ? 'nunca' : fechaHoraMx(l.ultimoUsoEn)}
-      </td>
-      <td className="px-3 py-2">
-        {revocada ? (
-          <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
-            style={{ color: 'var(--muted)', background: 'var(--canvas)' }}>
-            revocada el {fechaMx(l.revocadaEn)}
-          </span>
-        ) : vencida ? (
-          // Vencida pero NO revocada: se deja el botón, porque revocarla sella
-          // la fila y deja constancia de que ya nadie la va a resucitar.
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap"
-              style={{ color: 'var(--bad)', background: 'var(--badbg)' }}>
-              vencida el {fechaMx(l.expiraEn)}
-            </span>
-            <FormaRevocar accion={revocarLlave} id={l.id} nombre={l.nombre} />
-          </div>
-        ) : (
-          <FormaRevocar accion={revocarLlave} id={l.id} nombre={l.nombre} />
-        )}
-      </td>
-    </tr>
-  );
+function EstadoLlave({ l, revocarLlave }: { l: LlaveListada; revocarLlave: AccionForma }) {
+  if (l.revocadaEn !== null) return <StatusChip tono="muted">{`revocada el ${fechaMx(l.revocadaEn)}`}</StatusChip>;
+  if (llaveVencida(l.expiraEn)) {
+    // Vencida pero NO revocada: se deja el botón, porque revocarla sella la fila y deja constancia de que ya nadie la va a resucitar.
+    return (
+      <div className="rv-lla__fila">
+        <StatusChip tono="bad">{`vencida el ${fechaMx(l.expiraEn)}`}</StatusChip>
+        <FormaRevocar accion={revocarLlave} id={l.id} nombre={l.nombre} />
+      </div>
+    );
+  }
+  return <FormaRevocar accion={revocarLlave} id={l.id} nombre={l.nombre} />;
 }
