@@ -51,11 +51,20 @@ test('del resumen al registro navegando con el dedo, y la tabla es legible', asy
   // El rail de navegación colapsa a íconos bajo `lg` (MARCO_SIDEBAR): el
   // destino se toca, no se lee — como lo haría el pulgar.
   const nav = await abrirNavegacion(page);
-  await nav.locator(VIAJES).first().tap();
+  // v1 trae un enlace directo al registro (además de Despacho): se prefiere ese. v2 solo trae la entrada «Viajes» → Despacho.
+  const registroDirecto = nav.locator('a[href^="/dashboard/viajes"]');
+  await ((await registroDirecto.count()) ? registroDirecto.first() : nav.locator(VIAJES).first()).tap();
   // v2: «Viajes» abre el grupo Despacho y el registro es su pestaña «Registro»; v1 lleva directo al registro.
   if (!/\/dashboard\/viajes/.test(page.url())) {
     await expect(page).toHaveURL(/\/dashboard\/despacho/);
-    await page.getByRole('navigation', { name: 'Secciones de Viajes' }).getByRole('link', { name: 'Registro', exact: true }).tap();
+    // v2 trae la barra de pestañas «Secciones de Viajes»; v1 (flotas sembradas en v1 en la pasada normal) no la tiene y el
+    // registro se alcanza con su propio enlace. En los dos casos se llega tocando, como el pulgar.
+    const pestanas = page.getByRole('navigation', { name: 'Secciones de Viajes' });
+    if (await pestanas.count()) {
+      await pestanas.getByRole('link', { name: 'Registro', exact: true }).tap();
+    } else {
+      await page.locator('a[href="/dashboard/viajes"]:visible').first().tap();
+    }
   }
   await expect(page).toHaveURL(/\/dashboard\/viajes/);
   await expect(page.locator('body')).toContainText('VJ-2026-0001');
