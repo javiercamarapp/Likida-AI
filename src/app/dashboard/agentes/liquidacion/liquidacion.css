@@ -1,0 +1,78 @@
+/* Piezas propias de la pantalla de Liquidación automática (agente del cliente). Solo tokens del sistema. */
+.rv-liq-sub { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.45; }
+.rv-liq-pie { margin: 0; padding-top: 10px; border-top: 1px solid var(--line); font-size: var(--t-small, 12px); color: var(--muted); }
+.rv-liq-pie strong { color: var(--ink); font-weight: 600; }
+.rv-liq-apagado { color: var(--muted); }
+.rv-liq-malo { color: var(--bad); }
+.rv-liq-enlace { display: inline-flex; align-items: center; gap: 4px; font-size: var(--t-small, 12px); font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.rv-liq-enlace:hover { opacity: .7; }
+
+.rv-liq-hechos { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; font-size: var(--t-small, 12px); }
+.rv-liq-hecho { display: flex; align-items: flex-start; gap: 8px; }
+.rv-liq-hecho--aparte { padding-top: 8px; border-top: 1px solid var(--line); }
+.rv-liq-hecho__icono { flex: none; margin-top: 1px; color: var(--muted); display: inline-flex; }
+.rv-liq-hecho__icono[data-tono="warn"] { color: var(--warn); }
+.rv-liq-hecho__icono[data-tono="ok"] { color: var(--ok); }
+.rv-liq-hecho__texto { min-width: 0; }
+.rv-liq-hecho__texto strong { font-weight: 600; }
+.rv-liq-hecho__fecha { display: block; font-size: var(--t-micro, 11px); color: var(--muted); }
+
+.rv-liq-filas { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-liq-filas__fila { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--t-small, 12px); }
+.rv-liq-filas__rotulo { color: var(--muted); min-width: 0; }
+
+.rv-liq-rotulo { margin: 0 0 4px; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-liq-nota { display: block; margin-top: 2px; font-size: var(--t-micro, 11px); font-weight: 400; color: var(--muted); line-height: 1.45; }
+.rv-liq-nota[data-tono="bad"] { color: var(--bad); }
+.rv-liq-pagina { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* Fichas de conteo del desglose (enlace a la lista filtrada o, para nómina, solo el conteo). */
+.rv-liq-fichas { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 1024px) { .rv-liq-fichas { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+.rv-liq-ficha { display: block; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink); text-decoration: none; }
+.rv-liq-ficha[data-alerta] { border-color: var(--bad); }
+.rv-liq-ficha[data-enlace]:hover { background: var(--canvas); }
+.rv-liq-ficha__rotulo { display: block; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-liq-ficha__valor { display: block; font-size: var(--t-kpi, 26px); font-weight: 600; line-height: 1.2; }
+.rv-liq-ficha[data-alerta] .rv-liq-ficha__valor { color: var(--bad); }
+
+/* «Qué pasó · qué significa · qué hacer». */
+.rv-liq-insights { display: grid; gap: 6px; }
+.rv-liq-insights__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-liq-insight { padding: 8px 12px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 8px; background: var(--surface); }
+.rv-liq-insight[data-tono="ok"] { border-left-color: var(--ok); }
+.rv-liq-insight[data-tono="warn"] { border-left-color: var(--warn); }
+.rv-liq-insight[data-tono="bad"] { border-left-color: var(--bad); }
+.rv-liq-insight[data-tono="muted"] { border-left-color: var(--faint); }
+.rv-liq-insight__titulo { margin: 0; font-size: var(--t-body, 13px); font-weight: 500; }
+.rv-liq-insight__hacer { margin: 0; font-size: var(--t-small, 12px); }
+
+/* Detalle de un desglose. */
+.rv-liq-detalle { display: grid; gap: 16px; }
+.rv-liq-detalle__bitacora { margin: 0; font-size: var(--t-body, 13px); font-weight: 500; }
+.rv-liq-cabecera { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; font-size: var(--t-body, 13px); }
+@media (min-width: 1024px) { .rv-liq-cabecera { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rv-liq-cabecera dd { margin: 0; }
+.rv-liq-neto { font-weight: 600; }
+.rv-liq-retenido { display: grid; gap: 4px; padding: 10px 12px; border-radius: 8px; background: var(--warnbg); }
+.rv-liq-retenido__titulo { margin: 0; font-size: var(--t-body, 13px); font-weight: 500; color: var(--warn); }
+.rv-liq-renglones__fila { display: flex; flex-wrap: wrap; gap: 16px; }
+.rv-liq-renglones { flex: 1 1 16rem; min-width: 0; }
+.rv-liq-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-liq-acciones--forma { align-items: flex-end; margin-top: 12px; }
+.rv-liq-excepciones { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: var(--t-small, 12px); }
+.rv-liq-excepciones strong { font-weight: 600; }
+.rv-liq-ok { color: var(--ok); }
+.rv-liq-nota[data-tono="ok"] { color: var(--ok); }
+.rv-liq-nota[data-tono="warn"] { color: var(--warn); }
+.rv-liq-barras { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.rv-liq-pre { white-space: pre-line; }
+.rv-liq-dos { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+@media (min-width: 640px) { .rv-liq-dos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rv-liq-forma { display: grid; gap: 8px; align-content: start; }
+.rv-liq-forma__titulo { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-body, 13px); font-weight: 500; }
+.rv-liq-config { display: grid; gap: 12px; }
+.rv-liq-cuatro { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 640px) { .rv-liq-cuatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .rv-liq-cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rv-liq-total { display: grid; gap: 8px; align-content: start; }

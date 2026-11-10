@@ -1,3 +1,5 @@
+import { Tarjeta } from '@/app/ui-v2/componentes';
+import '../peajes.css';
 type Accion = (fd: FormData) => Promise<void>;
 
 export interface CruceViajesVista {
@@ -9,7 +11,6 @@ export interface CruceViajesVista {
   acciones: { guardarCruceViajes: Accion };
 }
 
-const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
 
 /**
  * CRUCE COBRO ↔ VIAJE: el interruptor por flota (apagado de origen). Encendido, cada archivo conciliado liga sus cobros con el
@@ -19,14 +20,14 @@ const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' }
 export function SeccionCruceViajes({ datos }: { datos: CruceViajesVista }) {
   const { activo, fuente, puedeAdministrar, acciones } = datos;
   return (
-    <section className="card p-4" id="cruce-viajes">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Cruce de cobros con viajes</h2>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+    <div id="cruce-viajes">
+    <Tarjeta titulo="Cruce de cobros con viajes">
+      <p className="text-[11px] mb-3 rv-pj-c-faint">
         Liga cada cobro del proveedor con su viaje: primero por <b>Icident</b> (el número de despacho del sistema de transporte), y si el cobro no lo trae,
         por unidad y fecha. Es una señal para revisar, no una acusación. Apagado de origen: sin viajes cargados todo saldría «sin viaje».
       </p>
       {activo === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer el estado del cruce ahora mismo.</p>
+        <p className="text-[12px] rv-pj-c-muted">No se pudo leer el estado del cruce ahora mismo.</p>
       ) : (
         <div className="space-y-2">
           <p className="text-[12px]">
@@ -36,21 +37,22 @@ export function SeccionCruceViajes({ datos }: { datos: CruceViajesVista }) {
               : ` Hay ${fuente.viajes} viaje(s) cargado(s), ${fuente.viajesConDespacho} con Icident, y ${fuente.posicionesConDespacho} posición(es) con Icident.`}
           </p>
           {fuente !== null && fuente.viajes === 0 && (
-            <p role="note" className="text-[12px] p-2.5 rounded-lg" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+            <p role="note" className="rv-pj-caja rv-pj-sub">
               Todavía no hay viajes cargados: si lo enciendes ahora, todos los cobros saldrán «sin viaje». Enciéndelo cuando el sistema de transporte ya entregue los viajes.
             </p>
           )}
           {!puedeAdministrar ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo quien administra la flota lo cambia.</p>
+            <p className="text-[12px] rv-pj-c-muted">Solo quien administra la flota lo cambia.</p>
           ) : (
             <form action={acciones.guardarCruceViajes} className="flex items-center gap-2 flex-wrap">
               <input type="hidden" name="activo" value={activo ? '0' : '1'} />
-              <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>{activo ? 'Apagar el cruce' : 'Encender el cruce'}</button>
-              <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Aplica a los archivos que se concilien desde ahora; los anteriores se recalculan al reprocesarlos.</span>
+              <button type="submit" className="rv-btn rv-btn--primary">{activo ? 'Apagar el cruce' : 'Encender el cruce'}</button>
+              <span className="text-[11px] rv-pj-c-faint">Aplica a los archivos que se concilien desde ahora; los anteriores se recalculan al reprocesarlos.</span>
             </form>
           )}
         </div>
       )}
-    </section>
+    </Tarjeta>
+    </div>
   );
 }

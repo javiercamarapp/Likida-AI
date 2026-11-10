@@ -1,9 +1,12 @@
 import { ArrowLeft, Save } from 'lucide-react';
+import '../liquidacion.css';
 
 // SOLO tipos y constantes: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ConfigCorreo, CanalEntrega, Revisor } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { hoyMx } from '@/lib/formato';
-import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, CampoTextarea, Fieldset, Icono, MarcoPagina, Tarjeta,
+} from '@/app/ui-v2/componentes';
 
 type Accion = (fd: FormData) => Promise<void>;
 export interface AccionesConfiguracion { guardar: Accion }
@@ -176,21 +179,6 @@ export function leerFormularioConfig(fd: FormData): ResultadoFormulario {
 
 // ── Vista ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-
-function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="rv-etq" style={{ color: 'var(--faint)' }}>{t}</span>
-      {children}
-    </label>
-  );
-}
-const Ayuda = ({ children }: { children: React.ReactNode }) => (
-  <span className="text-[11px]" style={{ color: 'var(--faint)' }}>{children}</span>
-);
-
 export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, hayFila, disponible, puedeAdministrar, acciones }: {
   sufijo: string; aviso: string | null; error: string | null;
   /** Lo guardado, o el defecto (WhatsApp, inactiva) cuando la flota no tiene fila. */
@@ -203,156 +191,99 @@ export function VistaConfiguracionLiquidacion({ sufijo, aviso, error, config, ha
   const off = !puedeAdministrar || !disponible;
   const renombres = (Array.isArray(config.renombres) ? config.renombres : []).filter(esRenombre);
   return (
-    <MarcoPagina titulo="Configuración del desglose" apoyo="Cómo se entrega el desglose de cada liquidación, quién lo recibe, cómo se ve y qué conceptos retienen el envío." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
-      {aviso && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-      {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+    <MarcoPagina titulo="Configuración del desglose" apoyo="Cómo se entrega el desglose de cada liquidación, quién lo recibe, cómo se ve y qué conceptos retienen el envío." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<Icono icono={ArrowLeft} />}>Volver al agente</BotonEnlace>}>
+      {aviso && <AvisoCompacto tono="info" resumen={aviso} />}
+      {error && <AvisoCompacto tono="error" resumen={error} />}
 
       {!disponible && (
-        <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>
-          La configuración de la entrega por correo todavía no está disponible en esta base. No se puede leer ni guardar nada hasta que se aplique.
-        </p>
+        <AvisoCompacto tono="error" resumen="La configuración de la entrega por correo todavía no está disponible en esta base. No se puede leer ni guardar nada hasta que se aplique." />
       )}
       {disponible && !hayFila && (
-        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }}>
-          Todavía no hay configuración guardada: el agente sigue entregando por WhatsApp y no se manda nada por correo. El envío por correo no se activa solo; tú lo enciendes cuando esté todo listo.
-        </p>
+        <AvisoCompacto tono="info" resumen="Todavía no hay configuración guardada: el agente sigue entregando por WhatsApp y no se manda nada por correo. El envío por correo no se activa solo; tú lo enciendes cuando esté todo listo." />
       )}
       {!puedeAdministrar && (
-        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota cambia esta configuración.</p>
+        <p className="rv-liq-sub">Solo el dueño de la flota cambia esta configuración.</p>
       )}
 
-      <form action={acciones.guardar} className="space-y-4">
-        <section className="card p-4 space-y-3">
-          <TituloRecuadro info="liquidacion_config.entrega">1. Entrega</TituloRecuadro>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Etiqueta t="Canal">
-              <select name="canal" defaultValue={config.canal} className="w-full" style={ESTILO_INPUT} disabled={off}>
-                {CANALES.map((c) => <option key={c.valor} value={c.valor}>{c.etiqueta}</option>)}
-              </select>
-            </Etiqueta>
-            <Etiqueta t="Envío por correo">
-              <span className="flex items-center gap-2 text-[12px]">
-                <input type="checkbox" name="activa" defaultChecked={config.activa} disabled={off} /> Activar el envío
-              </span>
-              <Ayuda>Apagado, no sale ningún correo aunque haya desgloses listos: quedan en espera y salen solos al encenderlo.</Ayuda>
-            </Etiqueta>
-            <Etiqueta t="Nombre del remitente">
-              <input name="remitenteNombre" defaultValue={config.remitenteNombre ?? ''} maxLength={MAX_ETIQUETA} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
-            <Etiqueta t="Responder a">
-              <input name="responderA" type="email" defaultValue={config.responderA ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-              <Ayuda>A este correo llegan las respuestas del operador. Si lo dejas vacío se usa el correo emisor; sin ninguno de los dos no se envía nada.</Ayuda>
-            </Etiqueta>
-            <Etiqueta t="Correo emisor de la empresa">
-              <input name="remitenteCorreo" type="email" defaultValue={config.remitenteCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-              <Ayuda>El correo desde el que la empresa manda hoy los desgloses. Hoy los correos salen por Likida y las respuestas llegan aquí; el envío desde este mismo buzón queda para cuando su área de TI lo autorice.</Ayuda>
-            </Etiqueta>
-            <Etiqueta t="Hora mínima de envío (0 a 23)">
-              <input name="enviarDesdeHora" type="number" min={0} max={23} step={1} defaultValue={config.enviarDesdeHora ?? ''} placeholder="(sin restricción)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
+      <form action={acciones.guardar} className="rv-liq-config">
+        <Tarjeta titulo="1. Entrega" info="liquidacion_config.entrega">
+          <div className="rv-liq-dos">
+            <CampoSelect etiqueta="Canal" name="canal" defaultValue={config.canal} disabled={off}>
+              {CANALES.map((c) => <option key={c.valor} value={c.valor}>{c.etiqueta}</option>)}
+            </CampoSelect>
+            <Casilla etiqueta="Activar el envío por correo" name="activa" defaultChecked={config.activa} disabled={off}
+              ayuda="Apagado, no sale ningún correo aunque haya desgloses listos: quedan en espera y salen solos al encenderlo." />
+            <CampoTexto etiqueta="Nombre del remitente" name="remitenteNombre" defaultValue={config.remitenteNombre ?? ''} maxLength={MAX_ETIQUETA} placeholder="(sin definir)" disabled={off} />
+            <CampoTexto tipo="email" etiqueta="Responder a" name="responderA" defaultValue={config.responderA ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" disabled={off}
+              ayuda="A este correo llegan las respuestas del operador. Si lo dejas vacío se usa el correo emisor; sin ninguno de los dos no se envía nada." />
+            <CampoTexto tipo="email" etiqueta="Correo emisor de la empresa" name="remitenteCorreo" defaultValue={config.remitenteCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" disabled={off}
+              ayuda="El correo desde el que la empresa manda hoy los desgloses. Hoy los correos salen por Likida y las respuestas llegan aquí; el envío desde este mismo buzón queda para cuando su área de TI lo autorice." />
+            <CampoTexto tipo="number" etiqueta="Hora mínima de envío (0 a 23)" name="enviarDesdeHora" min={0} max={23} step={1} defaultValue={config.enviarDesdeHora ?? ''} placeholder="(sin restricción)" disabled={off} />
           </div>
-        </section>
+        </Tarjeta>
 
-        <section className="card p-4 space-y-3">
-          <TituloRecuadro info="liquidacion_config.destinatarios">2. Quién lo recibe</TituloRecuadro>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Etiqueta t={`Correos de RH (hasta ${MAX_RH}, uno por renglón)`}>
-              <textarea name="rhCorreos" rows={3} defaultValue={config.rhCorreos.join('\n')} placeholder="(vacío: RH no recibe copia)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
-            <Etiqueta t="Buzón de archivo">
-              <input name="archivoCorreo" type="email" defaultValue={config.archivoCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-              <Ayuda>Recibe una copia de cada desglose para el archivo de la empresa.</Ayuda>
-            </Etiqueta>
-            <Etiqueta t="Coordinador">
-              <span className="flex items-center gap-2 text-[12px]">
-                <input type="checkbox" name="enviaCoordinador" defaultChecked={config.enviaCoordinador} disabled={off} /> Enviar también al coordinador del operador
-              </span>
-            </Etiqueta>
-            <fieldset className="flex flex-col gap-1" disabled={off}>
-              <legend className="rv-etq" style={{ color: 'var(--faint)' }}>Tipos de operador que reciben su desglose</legend>
+        <Tarjeta titulo="2. Quién lo recibe" info="liquidacion_config.destinatarios">
+          <div className="rv-liq-dos">
+            <CampoTextarea etiqueta={`Correos de RH (hasta ${MAX_RH}, uno por renglón)`} name="rhCorreos" rows={3} defaultValue={config.rhCorreos.join('\n')} placeholder="(vacío: RH no recibe copia)" disabled={off} />
+            <CampoTexto tipo="email" etiqueta="Buzón de archivo" name="archivoCorreo" defaultValue={config.archivoCorreo ?? ''} maxLength={MAX_CORREO} placeholder="(sin definir)" disabled={off}
+              ayuda="Recibe una copia de cada desglose para el archivo de la empresa." />
+            <Casilla etiqueta="Enviar también al coordinador del operador" name="enviaCoordinador" defaultChecked={config.enviaCoordinador} disabled={off} />
+            <Fieldset leyenda="Tipos de operador que reciben su desglose" ayuda="Un tipo que no marques (o un operador sin tipo) queda retenido, no se envía.">
               {TIPOS_OPERADOR.map((t) => (
-                <span key={t.valor} className="flex items-center gap-2 text-[12px]">
-                  <input type="checkbox" name="tiposQueReciben" value={t.valor} defaultChecked={config.tiposQueReciben.includes(t.valor)} /> {t.etiqueta}
-                </span>
+                <Casilla key={t.valor} etiqueta={t.etiqueta} name="tiposQueReciben" value={t.valor} defaultChecked={config.tiposQueReciben.includes(t.valor)} disabled={off} />
               ))}
-              <Ayuda>Un tipo que no marques (o un operador sin tipo) queda retenido, no se envía.</Ayuda>
-            </fieldset>
+            </Fieldset>
           </div>
-        </section>
+        </Tarjeta>
 
-        <section className="card p-4 space-y-3">
-          <TituloRecuadro info="liquidacion_config.fecha_corte">Fecha de corte del arranque</TituloRecuadro>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <Tarjeta titulo="Fecha de corte del arranque" info="liquidacion_config.fecha_corte">
+          <p className="rv-liq-sub">
             Los desgloses cuyo periodo termina ANTES de esta fecha se guardan, pero no se envían a nadie (quedan «omitidos»). Pon el día en que arranca
             el envío: así subir el histórico no manda nóminas viejas a los operadores, coordinadores ni RH. Vacío = se envía todo lo que llegue.
           </p>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Etiqueta t="No enviar desgloses anteriores a (AAAA-MM-DD)">
-              <input name="noEnviarAntes" type="date" defaultValue={config.noEnviarAntes ?? ''} className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
+          <div className="rv-liq-dos">
+            <CampoFecha etiqueta="No enviar desgloses anteriores a (AAAA-MM-DD)" name="noEnviarAntes" defaultValue={config.noEnviarAntes ?? ''} disabled={off} />
           </div>
-        </section>
+        </Tarjeta>
 
-        <section className="card p-4 space-y-3">
-          <TituloRecuadro info="liquidacion_config.primer_mes">Primer mes: revisión por departamento</TituloRecuadro>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <Tarjeta titulo="Primer mes: revisión por departamento" info="liquidacion_config.primer_mes">
+          <p className="rv-liq-sub">
             Durante el primer mes, cada desglose —enviado o retenido— le llega también por correo al revisor de cada departamento, con el mismo Excel.
             Al terminar la fecha, el modo se apaga solo.
           </p>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Etiqueta t="Modo primer mes">
-              <span className="flex items-center gap-2 text-[12px]">
-                <input type="checkbox" name="primerMes" defaultChecked={config.primerMesHasta !== null} disabled={off} /> Activar la revisión por departamento
-              </span>
-            </Etiqueta>
-            <Etiqueta t="Dura hasta (AAAA-MM-DD, inclusive)">
-              <input name="primerMesHasta" type="date" defaultValue={config.primerMesHasta ?? sumarDias(hoyMx(), 30)} className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
-            <Etiqueta t={`Revisores (hasta ${MAX_REVISORES}, «departamento: correo» por renglón)`}>
-              <textarea name="revisores" rows={3} defaultValue={config.revisores.map((r) => `${r.departamento}: ${r.correo}`).join('\n')} placeholder={'nomina: …\nrh: …'} className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
+          <div className="rv-liq-dos">
+            <Casilla etiqueta="Activar la revisión por departamento" name="primerMes" defaultChecked={config.primerMesHasta !== null} disabled={off} />
+            <CampoFecha etiqueta="Dura hasta (AAAA-MM-DD, inclusive)" name="primerMesHasta" defaultValue={config.primerMesHasta ?? sumarDias(hoyMx(), 30)} disabled={off} />
+            <CampoTextarea etiqueta={`Revisores (hasta ${MAX_REVISORES}, «departamento: correo» por renglón)`} name="revisores" rows={3}
+              defaultValue={config.revisores.map((r) => `${r.departamento}: ${r.correo}`).join('\n')} placeholder={'nomina: …\nrh: …'} disabled={off} />
           </div>
-        </section>
+        </Tarjeta>
 
-        <section className="card p-4 space-y-3">
-          <TituloRecuadro info="liquidacion_config.formato">3. Cómo se ve el desglose</TituloRecuadro>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Etiqueta t="Renglón de viaje">
-              <span className="flex items-center gap-2 text-[12px]">
-                <input type="checkbox" name="agruparViaje" defaultChecked={config.agruparViaje} disabled={off} /> Juntar los conceptos de viaje en un solo renglón
-              </span>
-            </Etiqueta>
-            <Etiqueta t="Etiqueta del renglón de viaje">
-              <input name="etiquetaViaje" defaultValue={config.etiquetaViaje} maxLength={MAX_ETIQUETA} className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
-            <Etiqueta t="Conceptos que se funden en el viaje (uno por renglón)">
-              <textarea name="conceptosViaje" rows={3} defaultValue={config.conceptosViaje.join('\n')} className="w-full" style={ESTILO_INPUT} disabled={off} />
-            </Etiqueta>
-            <Etiqueta t="Renombres (uno por renglón: concepto → etiqueta)">
-              <textarea name="renombres" rows={3} defaultValue={renombres.map((r) => `${r.texto} → ${r.a}`).join('\n')} placeholder="(sin renombres)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-              <Ayuda>Cambia el nombre con que un concepto aparece en el desglose; el importe no cambia.</Ayuda>
-            </Etiqueta>
+        <Tarjeta titulo="3. Cómo se ve el desglose" info="liquidacion_config.formato">
+          <div className="rv-liq-dos">
+            <Casilla etiqueta="Juntar los conceptos de viaje en un solo renglón" name="agruparViaje" defaultChecked={config.agruparViaje} disabled={off} />
+            <CampoTexto etiqueta="Etiqueta del renglón de viaje" name="etiquetaViaje" defaultValue={config.etiquetaViaje} maxLength={MAX_ETIQUETA} disabled={off} />
+            <CampoTextarea etiqueta="Conceptos que se funden en el viaje (uno por renglón)" name="conceptosViaje" rows={3} defaultValue={config.conceptosViaje.join('\n')} disabled={off} />
+            <CampoTextarea etiqueta="Renombres (uno por renglón: concepto → etiqueta)" name="renombres" rows={3} defaultValue={renombres.map((r) => `${r.texto} → ${r.a}`).join('\n')} placeholder="(sin renombres)" disabled={off}
+              ayuda="Cambia el nombre con que un concepto aparece en el desglose; el importe no cambia." />
           </div>
-        </section>
+        </Tarjeta>
 
-        <section className="card p-4 space-y-3">
-          <TituloRecuadro info="liquidacion_config.retencion">4. Qué retiene el envío</TituloRecuadro>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Etiqueta t="Conceptos que retienen el envío (uno por renglón)">
-              <textarea name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder="(ninguno)" className="w-full" style={ESTILO_INPUT} disabled={off} />
-              <Ayuda>Si un desglose trae alguno, no sale: queda a la espera de que alguien lo revise y lo libere.</Ayuda>
-            </Etiqueta>
-            <Etiqueta t="Neto negativo">
-              <select name="netoNegativo" defaultValue={config.netoNegativo} className="w-full" style={ESTILO_INPUT} disabled={off}>
-                <option value="retener">Retener el envío</option>
-                <option value="enviar">Enviar de todos modos</option>
-              </select>
-            </Etiqueta>
+        <Tarjeta titulo="4. Qué retiene el envío" info="liquidacion_config.retencion">
+          <div className="rv-liq-dos">
+            <CampoTextarea etiqueta="Conceptos que retienen el envío (uno por renglón)" name="conceptosProhibidos" rows={3} defaultValue={config.conceptosProhibidos.join('\n')} placeholder="(ninguno)" disabled={off}
+              ayuda="Si un desglose trae alguno, no sale: queda a la espera de que alguien lo revise y lo libere." />
+            <CampoSelect etiqueta="Neto negativo" name="netoNegativo" defaultValue={config.netoNegativo} disabled={off}>
+              <option value="retener">Retener el envío</option>
+              <option value="enviar">Enviar de todos modos</option>
+            </CampoSelect>
           </div>
-        </section>
+        </Tarjeta>
 
         {puedeAdministrar && disponible && (
-          <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar configuración</button>
+          <div className="rv-liq-acciones">
+            <Boton type="submit" variante="primary" icono={<Icono icono={Save} />}>Guardar configuración</Boton>
+          </div>
         )}
       </form>
     </MarcoPagina>

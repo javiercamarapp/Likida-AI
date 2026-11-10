@@ -2,7 +2,8 @@
 
 import { useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { AvisoResultado, type ResultadoUI } from '@/app/admin/ui/aviso-resultado';
+import { AvisoResultado, Boton, CampoFecha, type ResultadoUI } from '@/app/ui-v2/componentes';
+import './peajes.css';
 
 export type EstadoPeriodo = { ok?: string; error?: string } | null;
 export type AccionPeriodo = (prev: EstadoPeriodo, fd: FormData) => Promise<EstadoPeriodo>;
@@ -20,17 +21,13 @@ export function DeclararPeriodo({ declarar, desgloseId, desde, hasta }: { declar
   }, [estado, router]);
 
   return (
-    <form action={accion} className="flex items-center gap-1.5 flex-wrap text-[11px]" style={{ color: 'var(--muted)' }}>
+    <form action={accion} className="rv-pj-forma rv-pj-forma--linea">
       <input type="hidden" name="desglose" value={desgloseId} />
-      <span>Periodo oficial del archivo{desde && hasta ? `: ${desde} a ${hasta}` : ': sin declarar'}</span>
-      <input type="date" name="periodo_desde" required defaultValue={desde ?? ''} aria-label="Inicio del periodo oficial" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
-      <span>a</span>
-      <input type="date" name="periodo_hasta" required defaultValue={hasta ?? ''} aria-label="Fin del periodo oficial" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
-      <button type="submit" disabled={pendiente}
-        className="rv-btn rv-btn--secondary py-0.5"
-        style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-        {pendiente ? 'Guardando…' : 'Declarar periodo'}
-      </button>
+      <span className="rv-pj-sub">Periodo oficial del archivo{desde && hasta ? `: ${desde} a ${hasta}` : ': sin declarar'}</span>
+      <CampoFecha etiqueta="Inicio del periodo oficial" etiquetaOculta name="periodo_desde" required defaultValue={desde ?? ''} />
+      <span className="rv-pj-sub">a</span>
+      <CampoFecha etiqueta="Fin del periodo oficial" etiquetaOculta name="periodo_hasta" required defaultValue={hasta ?? ''} />
+      <Boton type="submit" tamano="sm" loading={pendiente}>{pendiente ? 'Guardando…' : 'Declarar periodo'}</Boton>
       <AvisoResultado estado={estado as ResultadoUI} compacto />
     </form>
   );

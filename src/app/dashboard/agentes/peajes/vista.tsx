@@ -8,7 +8,6 @@ import type { ResumenEvidenciaGps, EvidenciaGpsLinea } from '@/lib/likida/peajes
 import type { ResumenVerificacion } from '@/lib/likida/peajes/verificacion';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
-import { EstadoVacio } from '../../estados';
 import { SubirDesglose, type AccionSubir } from './subir';
 import { BotonEjecutar, type AccionBarrer } from './controles';
 import { SubirDesgloseProveedor, type AccionImportar } from './subir-desglose';
@@ -20,7 +19,10 @@ import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
 import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  AvisoCompacto, BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, TituloRecuadro,
+} from '@/app/ui-v2/componentes';
+import './peajes.css';
 
 /** Sin perfil: todo se pinta (valor local para no importar el módulo de servidor). */
 const SUPERFICIE_TODA: SuperficiePeajes = { estimulo: true, cfdiYTickets: true, bitacoraEstimulo: true, gps: true, cursos: true };
@@ -119,35 +121,31 @@ export function VistaAgentePeajes({
 
       {/* ── La ingesta: el ritual del PoC (CFDI consolidado: stand-by con perfil) ── */}
       {superficie.cfdiYTickets && (<>
-      <section className="card p-4">
-        <TituloRecuadro info="peajes.subir_estado_cuenta" className="mb-1">Subir estado de cuenta</TituloRecuadro>
-        <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+      <Tarjeta titulo="Subir estado de cuenta" info="peajes.subir_estado_cuenta">
+        <p className="rv-pj-sub">
           El XML del CFDI consolidado del TAG o del monedero — el mismo que el proveedor manda
           cada corte. El agente lo cruza contra los gastos de los viajes al instante.
           (También entra reenviándolo al WhatsApp de Likida desde la oficina. El desglose en
           Excel/PDF todavía no entra por aquí.)
         </p>
         <SubirDesglose subirDesglose={subirDesglose} />
-      </section>
+      </Tarjeta>
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      <FilaTarjetas variante="6-6">
         {/* La cola honesta */}
-        <section className="card p-4 flex flex-col">
-          <div className="flex items-start justify-between gap-3 mb-1">
-            <TituloRecuadro info="peajes.esperan_humano">Esperan a un humano</TituloRecuadro>
-            {superficie.cfdiYTickets && (lineas?.length ?? 0) > 0 && (
-              <Link href={`/dashboard/combustible-casetas${sufijo}`}
-                className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity shrink-0"
-                style={{ color: 'var(--marca)' }}>
-                Resolver en la mesa <ArrowRight width={12} height={12} strokeWidth={2} />
-              </Link>
-            )}
-          </div>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        <Tarjeta
+          titulo="Esperan a un humano" info="peajes.esperan_humano"
+          acciones={superficie.cfdiYTickets && (lineas?.length ?? 0) > 0 ? (
+            <Link href={`/dashboard/combustible-casetas${sufijo}`} className="rv-pj-enlace">
+              Resolver en la mesa <Icono icono={ArrowRight} tam={14} />
+            </Link>
+          ) : undefined}
+        >
+          <p className="rv-pj-sub">
             Líneas del estado de cuenta a las que el cruce automático no les encontró gasto único.
             El barrido las re-cruza contra los gastos que llegaron después.
           </p>
-          <div className="mb-3">
+          <div>
             {/* FE-10: `.total` (medido, `count: 'exact'`), no `.length`
                 (tope 200) — a un TAG de 800 tractos, decenas de miles de
                 cruces/mes topan la mesa en "200 pendientes" cuando hay
@@ -155,81 +153,84 @@ export function VistaAgentePeajes({
             <BotonEjecutar ejecutarAhora={ejecutarAhora} pendientes={lineas === null ? null : lineas.total} />
           </div>
           {lineas === null ? (
-            <Leyenda>No se pudo leer la cola ahora mismo.</Leyenda>
+            <EstadoError compacto>No se pudo leer la cola ahora mismo.</EstadoError>
           ) : lineas.length === 0 ? (
-            <Leyenda>Nada espera a un humano — cada línea nueva que el cruce no
-              resuelva solo, aparece aquí.</Leyenda>
-          ) : (
-            <div className="space-y-2">
-              {lineas.slice(0, 6).map((l) => (
-                <div key={l.id} className="flex items-center gap-2.5 text-[12px]">
-                  <span className="shrink-0" style={{ color: 'var(--muted)' }}>{l.fecha ? fechaCorta(l.fecha) : 'sin fecha'}</span>
-                  <span className="truncate" title={l.descripcion ?? undefined}>{l.descripcion ?? 'sin descripción'}</span>
-                  <span className="ml-auto shrink-0 cifra-mono">{mxn(l.monto)}</span>
-                  <span className="shrink-0 text-[11px]" style={{ color: 'var(--faint)' }}>
-                    {l.candidatos.length === 0 ? 'sin candidatos' : `${numero(l.candidatos.length)} candidato${l.candidatos.length === 1 ? '' : 's'}`}
-                  </span>
-                </div>
-              ))}
-              {lineas.total > 6 && (
-                <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
-                  y {numero(lineas.total - 6)} más en la mesa.
-                </p>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Bitácora de desgloses */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="peajes.estados_recibidos" className="mb-1">Estados de cuenta recibidos</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Cada consolidado, con el saldo de su cruce</p>
-          {desgloses === null ? (
-            <Leyenda>No se pudo leer la bitácora ahora mismo.</Leyenda>
-          ) : desgloses.length === 0 ? (
-            <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Aún no llega ningún estado de cuenta — súbelo arriba o reenvíalo por WhatsApp
-              y el cruce corre solo.
+            <EstadoVacio icono={Inbox} titulo="Nada espera a un humano">
+              Cada línea nueva que el cruce no resuelva solo, aparece aquí.
             </EstadoVacio>
           ) : (
-            <div className="space-y-2.5 text-[12px]">
+            <ul className="rv-pj-lista">
+              {lineas.slice(0, 6).map((l) => (
+                <li key={l.id} className="rv-pj-lista__fila">
+                  <span className="rv-pj-apagado rv-pj-fijo">{l.fecha ? fechaCorta(l.fecha) : 'sin fecha'}</span>
+                  <span className="rv-pj-corto" title={l.descripcion ?? undefined}>{l.descripcion ?? 'sin descripción'}</span>
+                  <span className="rv-pj-der rv-pj-fijo cifra-mono">{mxn(l.monto)}</span>
+                  <span className="rv-pj-fijo rv-pj-nota">
+                    {l.candidatos.length === 0 ? 'sin candidatos' : `${numero(l.candidatos.length)} candidato${l.candidatos.length === 1 ? '' : 's'}`}
+                  </span>
+                </li>
+              ))}
+              {lineas.total > 6 && (
+                <li className="rv-pj-nota">y {numero(lineas.total - 6)} más en la mesa.</li>
+              )}
+            </ul>
+          )}
+        </Tarjeta>
+
+        {/* Bitácora de desgloses */}
+        <Tarjeta titulo="Estados de cuenta recibidos" info="peajes.estados_recibidos">
+          <p className="rv-pj-sub">Cada consolidado, con el saldo de su cruce</p>
+          {desgloses === null ? (
+            <EstadoError compacto>No se pudo leer la bitácora ahora mismo.</EstadoError>
+          ) : desgloses.length === 0 ? (
+            <EstadoVacio icono={Inbox} titulo="Aún sin estados de cuenta">
+              Súbelo arriba o reenvíalo por WhatsApp y el cruce corre solo.
+            </EstadoVacio>
+          ) : (
+            <ul className="rv-pj-lista">
               {desgloses.map((d) => (
-                <div key={d.cfdiXmlId} className="flex items-center gap-2.5">
-                  <span className="cifra-mono text-[11px] shrink-0" style={{ color: 'var(--faint)' }}>{d.uuidCorto}</span>
-                  <span className="shrink-0" style={{ color: 'var(--muted)' }}>{d.recibido ? fechaCorta(d.recibido) : '—'}</span>
+                <li key={d.cfdiXmlId} className="rv-pj-lista__fila">
+                  <span className="cifra-mono rv-pj-nota rv-pj-fijo">{d.uuidCorto}</span>
+                  <span className="rv-pj-apagado rv-pj-fijo">{d.recibido ? fechaCorta(d.recibido) : '—'}</span>
                   {d.parcial && (
-                    <span className="ml-auto shrink-0 text-[11px] px-1.5 py-0.5 rounded border" style={{ color: 'var(--warn)', borderColor: 'var(--warn)' }}
+                    <span className="rv-pj-der rv-pj-fijo"
                       title="Este estado de cuenta rebasa la ventana de 1,000 líneas que se lee aquí: el importe y los conteos son un mínimo, no el total.">
-                      parcial
+                      <StatusChip tono="warn">parcial</StatusChip>
                     </span>
                   )}
-                  <span className={`${d.parcial ? '' : 'ml-auto '}shrink-0 cifra-mono`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto)}</span>
-                  <span className="shrink-0 inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--ok)' }}>
-                    <CircleCheck width={11} height={11} strokeWidth={2} /> {numero(d.conciliadas)}
+                  <span className={`${d.parcial ? '' : 'rv-pj-der '}rv-pj-fijo cifra-mono`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto)}</span>
+                  <span className="rv-pj-fijo rv-pj-conteo" data-tono="ok">
+                    <Icono icono={CircleCheck} tam={14} /> {numero(d.conciliadas)}
                   </span>
                   {d.porConciliar > 0 && (
-                    <span className="shrink-0 inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--warn)' }}>
-                      <CircleAlert width={11} height={11} strokeWidth={2} /> {numero(d.porConciliar)}
+                    <span className="rv-pj-fijo rv-pj-conteo" data-tono="warn">
+                      <Icono icono={CircleAlert} tam={14} /> {numero(d.porConciliar)}
                     </span>
                   )}
                   {d.sinMatch > 0 && (
-                    <span className="shrink-0 inline-flex items-center gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>
-                      <CircleSlash width={11} height={11} strokeWidth={2} /> {numero(d.sinMatch)}
+                    <span className="rv-pj-fijo rv-pj-conteo">
+                      <Icono icono={CircleSlash} tam={14} /> {numero(d.sinMatch)}
                     </span>
                   )}
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </section>
-      </div>
+        </Tarjeta>
+      </FilaTarjetas>
 
       </>)}
 
       {/* ── El desglose del PROVEEDOR (F5, PoC): tres cubetas y bitácora ── */}
-      <section className="card p-4">
-        <TituloRecuadro info="peajes.desglose_proveedor" className="mb-1">Desglose del proveedor de peaje</TituloRecuadro>
-        <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+      <Tarjeta
+        titulo="Desglose del proveedor de peaje" info="peajes.desglose_proveedor"
+        acciones={(
+          <BotonEnlace href={`/dashboard/agentes/peajes/configuracion${sufijo}`} tamano="sm" icono={<Icono icono={Settings2} />}>
+            Configuración: TAGs, casetas, {superficie.gps ? 'geocercas, ' : ''}mapeo de columnas y buzón
+          </BotonEnlace>
+        )}
+      >
+        <p className="rv-pj-sub">
           El Excel/CSV (o PDF con texto) que IAVE, PASE, TeleVía o el convenio directo mandan
           cada corte — a mano aquí, o solo por el buzón firmado (ver Configuración). El agente lo
           cruza contra los gastos de caseta de los viajes — por fecha (±1 día) y monto, usando el
@@ -237,113 +238,91 @@ export function VistaAgentePeajes({
           Cada línea queda <b>cuadra</b>, <b>sin respaldo</b> o <b>por verificar</b>: lo que el dato
           no alcanza a afirmar no se acusa.{superficie.bitacoraEstimulo && ' De lo que cuadra sale la bitácora de la RMF 9.1.8.'}
         </p>
-        <div className="mb-3">
-          <Link href={`/dashboard/agentes/peajes/configuracion${sufijo}`}
-            className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
-            style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-            <Settings2 width={13} height={13} strokeWidth={2} /> Configuración: TAGs, casetas, {superficie.gps ? 'geocercas, ' : ''}mapeo de columnas y buzón
-          </Link>
-        </div>
         <SubirDesgloseProveedor importar={importarDesglose} />
 
         {desglosesProveedor === null ? (
-          <p className="text-[12px] mt-4" style={{ color: 'var(--muted)' }}>
-            No se pudo leer la lista de desgloses ahora mismo.
-          </p>
+          <EstadoError compacto>No se pudo leer la lista de desgloses ahora mismo.</EstadoError>
         ) : desglosesProveedor.length === 0 ? (
-          <div className="mt-4">
-            <EstadoVacio icono={<FileSpreadsheet width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Aún no se importa ningún desglose del proveedor — súbelo arriba y el cruce corre al
-              instante, con su % conciliado medido.
-            </EstadoVacio>
-          </div>
+          <EstadoVacio icono={FileSpreadsheet} titulo="Aún sin desgloses del proveedor">
+            Súbelo arriba y el cruce corre al instante, con su % conciliado medido.
+          </EstadoVacio>
         ) : (
-          <div className="grid lg:grid-cols-[minmax(240px,1fr)_2fr] gap-4 mt-4">
+          <div className="rv-pj-desglose">
             {/* La lista, cada uno con su % MEDIDO */}
-            <div>
-              <TituloRecuadro nivel="h3" info="peajes.desgloses_importados" className="mb-2">Desgloses importados</TituloRecuadro>
-              <div className="space-y-1.5">
+            <div className="rv-pj-desglose__lista">
+              <TituloRecuadro nivel="h3" info="peajes.desgloses_importados">Desgloses importados</TituloRecuadro>
+              <ul className="rv-pj-lista">
                 {desglosesProveedor.map((d) => {
                   const activo = d.desgloseId === desgloseSeleccionado?.desgloseId;
                   return (
-                    <Link key={d.desgloseId}
-                      href={`/dashboard/agentes/peajes${sufijo}${sufijo ? '&' : '?'}desglose=${d.desgloseId}`}
-                      className="block rounded-lg px-2.5 py-2 hairline transition-colors hover:bg-[var(--canvas)]"
-                      style={activo ? { background: 'var(--canvas)' } : undefined}>
-                      <div className="flex items-center gap-2 text-[12px]">
-                        <span className="truncate" title={d.archivoNombre ?? undefined}>
-                          {d.proveedor ?? d.archivoNombre ?? 'desglose'}
+                    <li key={d.desgloseId}>
+                      <Link
+                        href={`/dashboard/agentes/peajes${sufijo}${sufijo ? '&' : '?'}desglose=${d.desgloseId}`}
+                        className="rv-pj-item" data-activo={activo || undefined} aria-current={activo ? 'true' : undefined}>
+                        <span className="rv-pj-item__cab">
+                          <span className="rv-pj-corto" title={d.archivoNombre ?? undefined}>
+                            {d.proveedor ?? d.archivoNombre ?? 'desglose'}
+                          </span>
+                          <span className="rv-pj-der cifra-mono" data-tono={d.pctCuadra !== null && d.pctCuadra >= 100 ? 'ok' : undefined}>
+                            {d.pctCuadra === null ? '—' : `${numero(d.pctCuadra)}%`}
+                          </span>
                         </span>
-                        <span className="ml-auto shrink-0 cifra-mono text-[12px]"
-                          style={{ color: d.pctCuadra !== null && d.pctCuadra >= 100 ? 'var(--ok)' : undefined }}>
-                          {d.pctCuadra === null ? '—' : `${numero(d.pctCuadra)}%`}
+                        <span className="rv-pj-nota">
+                          {d.periodoDesde && d.periodoHasta
+                            ? `${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`
+                            : 'periodo sin medir (líneas sin fecha)'}
+                          {' · '}{numero(d.total)} líneas
                         </span>
-                      </div>
-                      <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
-                        {d.periodoDesde && d.periodoHasta
-                          ? `${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`
-                          : 'periodo sin medir (líneas sin fecha)'}
-                        {' · '}{numero(d.total)} líneas
-                      </div>
-                    </Link>
+                      </Link>
+                    </li>
                   );
                 })}
-              </div>
+              </ul>
             </div>
 
             {/* El detalle del seleccionado: las tres cubetas */}
             {desgloseSeleccionado && (
-              <div>
-                <div className="flex items-center gap-2 flex-wrap mb-3">
+              <div className="rv-pj-desglose__detalle">
+                <div className="rv-pj-acciones">
                   <BotonConciliar conciliar={conciliarDesglose} desgloseId={desgloseSeleccionado.desgloseId} />
                   {puedeAnular && anularDesglose && <BotonAnular anular={anularDesglose} desgloseId={desgloseSeleccionado.desgloseId} />}
                   {superficie.bitacoraEstimulo && (<>
                   {desgloseSeleccionado.cuadra > 0 ? (
-                    <a href={`/api/export/bitacora-peaje?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
-                      className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
-                      style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-                      <FileDown width={13} height={13} strokeWidth={2} /> Bitácora RMF 9.1.8 (CSV)
-                    </a>
+                    <BotonEnlace href={`/api/export/bitacora-peaje?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                      icono={<Icono icono={FileDown} />}>
+                      Bitácora RMF 9.1.8 (CSV)
+                    </BotonEnlace>
                   ) : (
-                    <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
+                    <span className="rv-pj-nota">
                       La bitácora RMF 9.1.8 se habilita cuando al menos una línea cuadre.
                     </span>
                   )}
-                  <a href={`/api/export/bitacora-conciliada?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
-                    className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
-                    style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-                    <FileDown width={13} height={13} strokeWidth={2} /> Bitácora conciliada (CSV)
-                  </a>
+                  <BotonEnlace href={`/api/export/bitacora-conciliada?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                    icono={<Icono icono={FileDown} />}>
+                    Bitácora conciliada (CSV)
+                  </BotonEnlace>
                   </>)}
-                  <a href={`/api/export/peajes-vinculos?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
-                    className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
-                    style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-                    <FileDown width={13} height={13} strokeWidth={2} /> Casetas ligadas a viaje (Excel)
-                  </a>
-                  <Link href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
-                    className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
-                    style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                    <FileDown width={13} height={13} strokeWidth={2} /> Reporte de reclamación
-                  </Link>
-                  <Link href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}#revision-cobros`}
-                    className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg hairline transition-colors hover:bg-[var(--canvas)]"
-                    style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+                  <BotonEnlace href={`/api/export/peajes-vinculos?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                    icono={<Icono icono={FileDown} />}>
+                    Casetas ligadas a viaje (Excel)
+                  </BotonEnlace>
+                  <BotonEnlace variante="primary" href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
+                    icono={<Icono icono={FileDown} />}>
+                    Reporte de reclamación
+                  </BotonEnlace>
+                  <BotonEnlace href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}#revision-cobros`}>
                     Revisión de cobros (candidatos)
-                  </Link>
+                  </BotonEnlace>
                 </div>
                 {declararPeriodo && (
-                  <div className="mb-3">
-                    <DeclararPeriodo declarar={declararPeriodo} desgloseId={desgloseSeleccionado.desgloseId}
-                      desde={periodoOficial?.desde ?? null} hasta={periodoOficial?.hasta ?? null} />
-                  </div>
+                  <DeclararPeriodo declarar={declararPeriodo} desgloseId={desgloseSeleccionado.desgloseId}
+                    desde={periodoOficial?.desde ?? null} hasta={periodoOficial?.hasta ?? null} />
                 )}
                 {superficie.gps && <EstadoConciliado v={verificacion} />}
                 {detalleSeleccionado === null ? (
-                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                    No se pudo leer el detalle de este desglose ahora mismo.
-                  </p>
+                  <EstadoError compacto>No se pudo leer el detalle de este desglose ahora mismo.</EstadoError>
                 ) : (
-                  <div className="grid md:grid-cols-3 gap-3">
+                  <div className="rv-pj-cubetas">
                     <CubetaDesglose
                       titulo="Cuadran"
                       total={desgloseSeleccionado.cuadra}
@@ -374,19 +353,18 @@ export function VistaAgentePeajes({
             )}
           </div>
         )}
-      </section>
+      </Tarjeta>
 
       {/* ── El estímulo de peaje: cada renglón dice lo que su ficha sostiene ── */}
       {superficie.estimulo && (
-      <section className="card p-4">
-        <TituloRecuadro info="peajes.estimulo" className="mb-1">El estímulo de peaje — hasta 50% (LIF 2026 art. 20, ap. A · RMF 2026 regla 9.1.8)</TituloRecuadro>
-        <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+      <Tarjeta titulo="El estímulo de peaje — hasta 50% (LIF 2026 art. 20, ap. A · RMF 2026 regla 9.1.8)" info="peajes.estimulo">
+        <p className="rv-pj-sub">
           La ley otorga un acreditamiento de hasta el 50% del gasto en autopistas de cuota; los
           requisitos operativos los fija la regla 9.1.8 de la RMF 2026 (texto verificado en
           fuente primaria — ficha rmf-2026-9.1.8). Cada renglón dice qué produce esta pantalla
           y qué corre por cuenta de la flota. Esta pantalla no afirma que el estímulo proceda.
         </p>
-        <div className="grid md:grid-cols-2 gap-x-6 gap-y-1.5 text-[12px]">
+        <div className="rv-pj-requisitos">
           <Requisito tono="ok" texto="Fr. II — bitácora de viaje que coincida con el estado de cuenta del sistema electrónico de pago: es lo que esta pantalla produce con los cruces conciliados (botón «Bitácora RMF 9.1.8»); origen/destino salen del viaje y quedan vacíos si no se capturaron" />
           <Requisito tono="ok" texto="Fr. IV — factor 0.5 sobre el importe SIN IVA: la base que la regla fija y la que el motor ya aplica (la duda de «gasto total erogado» de la LIF quedó resuelta por esta fracción)" />
           <Requisito tono="flota" texto="Fr. I — aviso en MARZO del año siguiente por buzón tributario, con inventario vehicular desglosado — trámite de la flota, Likida no lo presenta" />
@@ -397,15 +375,15 @@ export function VistaAgentePeajes({
           <Requisito tono="flota" texto="No ser parte relacionada (LISR art. 179) — dato de la flota, Likida no lo conoce" />
         </div>
         {peajeAcreditable !== null && (
-          <p className="text-[12px] mt-3 pt-2.5 border-t" style={{ color: 'var(--muted)', borderColor: 'var(--line2)' }}>
+          <p className="rv-pj-pie">
             Peaje con el factor ya aplicado, histórico:{' '}
-            <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{mxn(peajeAcreditable)}</span>
+            <strong className="cifra-mono">{mxn(peajeAcreditable)}</strong>
             {' '}— es estímulo BRUTO, sujeto a las condiciones de arriba, y es ingreso acumulable:
             tu contador lo neta de ISR.
           </p>
         )}
-        <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
-      </section>
+        <p className="rv-pj-nota">{LEYENDA_CORTA}</p>
+      </Tarjeta>
       )}
 
       {notificaciones}
@@ -437,18 +415,18 @@ const EVIDENCIA_LEGIBLE: Record<string, string> = {
 /** El estado conciliado del desglose: tres cubetas honestas, con el dinero de cada una. */
 function EstadoConciliado({ v }: { v: { resumen: ResumenVerificacion; sinEvaluarGps: number } | null }) {
   if (v === null) {
-    return <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>No se pudo calcular el estado conciliado ahora mismo.</p>;
+    return <EstadoError compacto>No se pudo calcular el estado conciliado ahora mismo.</EstadoError>;
   }
   const r = v.resumen;
   return (
-    <div className="mb-3">
+    <div className="rv-pj-conciliado">
       <TiraCifras sello={selloHoy('Estados de cuenta de peaje')}>
         <Cifra etiqueta="Cuadran" info="peajes.cuadran" valor={numero(r.cuadra)} nota={mxn(r.montoCuadra)} />
         <Cifra etiqueta="Por verificar" info="peajes.por_verificar" valor={numero(r.porVerificar)} nota={`${mxn(r.montoPorVerificar)} · el dato no alcanza o hay una señal`} tono={r.porVerificar > 0 ? 'warn' : undefined} />
         <Cifra etiqueta="Sin respaldo" info="peajes.sin_respaldo" valor={numero(r.sinRespaldo)} nota={`${mxn(r.montoSinRespaldo)} · no es acusación`} tono={r.sinRespaldo > 0 ? 'bad' : undefined} />
       </TiraCifras>
       {v.sinEvaluarGps > 0 && (
-        <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+        <p className="rv-pj-nota">
           {numero(v.sinEvaluarGps)} líneas no tienen evaluación GPS (el cruce es anterior a la hora del cobro): pulsa «Conciliar» para evaluarlas.
         </p>
       )}
@@ -460,17 +438,17 @@ function MetaLinea({ linea, evidencia }: { linea: LineaDesgloseVista; evidencia?
   const partes: React.ReactNode[] = [];
   if (linea.viajeFolio) partes.push(<span key="v">viaje {linea.viajeFolio}</span>);
   if (linea.diferencia !== null && linea.diferencia !== 0) {
-    partes.push(<span key="d" style={{ color: 'var(--warn)' }}>dif. {mxn(linea.diferencia)}</span>);
+    partes.push(<span key="d" className="rv-pj-tono" data-tono="warn">dif. {mxn(linea.diferencia)}</span>);
   }
   if (linea.motivo) partes.push(<span key="m">{MOTIVO_LEGIBLE[linea.motivo] ?? linea.motivo}</span>);
   if (evidencia) {
     partes.push(evidencia.estatus === 'con_evidencia'
-      ? <span key="g" style={{ color: 'var(--ok)' }}>GPS: {numero(evidencia.posicionesDia)} posiciones ese día</span>
+      ? <span key="g" className="rv-pj-tono" data-tono="ok">GPS: {numero(evidencia.posicionesDia)} posiciones ese día</span>
       : <span key="g">{EVIDENCIA_LEGIBLE[evidencia.motivo]}</span>);
   }
   if (partes.length === 0) return null;
   return (
-    <div className="text-[11px]" style={{ color: 'var(--faint)' }}>
+    <div className="rv-pj-nota">
       {partes.map((p, i) => (
         <span key={i}>{i > 0 && ' · '}{p}</span>
       ))}
@@ -488,11 +466,7 @@ function MetaLinea({ linea, evidencia }: { linea: LineaDesgloseVista; evidencia?
  */
 function EvidenciaGpsResumen({ resumen }: { resumen: ResumenEvidenciaGps | null }) {
   if (resumen === null) {
-    return (
-      <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
-        La evidencia GPS de este desglose no se pudo leer ahora mismo.
-      </p>
-    );
+    return <p className="rv-pj-nota">La evidencia GPS de este desglose no se pudo leer ahora mismo.</p>;
   }
   const m = resumen.porMotivo;
   const huecos: string[] = [];
@@ -501,10 +475,10 @@ function EvidenciaGpsResumen({ resumen }: { resumen: ResumenEvidenciaGps | null 
   if (m.sin_posiciones_dia > 0) huecos.push(`${numero(m.sin_posiciones_dia)} sin posiciones ese día`);
   if (m.sin_fecha > 0) huecos.push(`${numero(m.sin_fecha)} sin fecha legible`);
   return (
-    <div className="rounded-xl hairline p-3 mt-3" style={{ background: 'var(--surface)' }}>
-      <div className="flex items-baseline gap-2">
-        <span className="text-[12px] font-semibold">Evidencia GPS del periodo</span>
-        <span className="cifra-mono text-[13px] ml-auto">
+    <div className="rv-pj-caja">
+      <div className="rv-pj-caja__cab">
+        <strong>Evidencia GPS del periodo</strong>
+        <span className="cifra-mono rv-pj-der">
           {numero(resumen.conEvidencia)} de {numero(resumen.total)} cruces con posiciones de su unidad ese día
         </span>
       </div>
@@ -516,7 +490,7 @@ function EvidenciaGpsResumen({ resumen }: { resumen: ResumenEvidenciaGps | null 
           dispositivo las lecturas llegan huérfanas, y de los cuatro solo
           Samsara tiene lector de posiciones escrito hoy (`LECTORES_POSICION`). */}
       {huecos.length > 0 && (
-        <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
+        <p className="rv-pj-nota">
           Sin evidencia: {huecos.join(' · ')}. «Sin posiciones» casi siempre significa GPS sin
           conectar: la credencial de tu proveedor se captura y se prueba en Conexiones, y cada
           unidad se liga a su número de dispositivo en Unidades. De los cuatro, el que hoy trae
@@ -524,7 +498,7 @@ function EvidenciaGpsResumen({ resumen }: { resumen: ResumenEvidenciaGps | null 
           de posiciones está pendiente.
         </p>
       )}
-      <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
+      <p className="rv-pj-nota">
         Esto AFIRMA que la unidad anduvo ese día; no afirma cercanía a la caseta — eso exige la
         posición de cada plaza de cobro, sin catálogo oficial hoy. Un cruce sin evidencia no es
         un cruce falso: es un dato que falta, y esta tarjeta dice cuál.
@@ -548,33 +522,30 @@ function CubetaDesglose({ titulo, total, nota, tono, lineas, evidencia }: {
   evidencia?: Record<string, EvidenciaGpsLinea>;
 }) {
   return (
-    <div className="rounded-xl hairline p-3" style={{ background: 'var(--surface)' }}>
-      <div className="flex items-baseline gap-2">
-        <span className="text-[12px] font-semibold">{titulo}</span>
-        <span className="cifra-mono text-[15px] font-medium ml-auto"
-          style={tono ? { color: `var(--${tono})` } : undefined}>{numero(total)}</span>
+    <div className="rv-pj-caja">
+      <div className="rv-pj-caja__cab">
+        <strong>{titulo}</strong>
+        <span className="cifra-mono rv-pj-der rv-pj-caja__total" data-tono={tono}>{numero(total)}</span>
       </div>
-      <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>{nota}</p>
+      <p className="rv-pj-nota">{nota}</p>
       {lineas.length === 0 ? (
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Ninguna línea en esta cubeta.</p>
+        <p className="rv-pj-nota">Ninguna línea en esta cubeta.</p>
       ) : (
-        <div className="space-y-1.5">
+        <ul className="rv-pj-lista">
           {lineas.map((l) => (
-            <div key={l.id} className="text-[11px] leading-snug">
-              <div className="flex items-center gap-1.5">
-                <span style={{ color: 'var(--muted)' }}>{l.fecha ? fechaCorta(l.fecha) : 'sin fecha'}</span>
-                <span className="truncate" title={l.caseta ?? undefined}>{l.caseta ?? 'sin caseta'}</span>
-                <span className="ml-auto shrink-0 cifra-mono">{mxn(l.monto)}</span>
+            <li key={l.id} className="rv-pj-cubeta__linea">
+              <div className="rv-pj-lista__fila">
+                <span className="rv-pj-apagado rv-pj-fijo">{l.fecha ? fechaCorta(l.fecha) : 'sin fecha'}</span>
+                <span className="rv-pj-corto" title={l.caseta ?? undefined}>{l.caseta ?? 'sin caseta'}</span>
+                <span className="rv-pj-der rv-pj-fijo cifra-mono">{mxn(l.monto)}</span>
               </div>
               <MetaLinea linea={l} evidencia={evidencia?.[l.id]} />
-            </div>
+            </li>
           ))}
           {total > lineas.length && (
-            <p className="text-[11px] pt-0.5" style={{ color: 'var(--faint)' }}>
-              y {numero(total - lineas.length)} más en esta cubeta.
-            </p>
+            <li className="rv-pj-nota">y {numero(total - lineas.length)} más en esta cubeta.</li>
           )}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -591,20 +562,9 @@ function CubetaDesglose({ titulo, total, nota, tono, lineas, evidencia }: {
  */
 function Requisito({ tono, texto }: { tono: 'ok' | 'abierto' | 'flota'; texto: string }) {
   return (
-    <div className="flex items-start gap-2">
-      {tono === 'ok'
-        ? <CircleCheck width={13} height={13} strokeWidth={2} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} />
-        : <CircleAlert width={13} height={13} strokeWidth={2} className="mt-0.5 shrink-0" style={{ color: tono === 'abierto' ? 'var(--warn)' : 'var(--muted)' }} />}
-      <span style={{ color: tono === 'ok' ? undefined : 'var(--muted)' }}>{texto}</span>
+    <div className="rv-pj-req" data-tono={tono}>
+      <span className="rv-pj-req__icono"><Icono icono={tono === 'ok' ? CircleCheck : CircleAlert} /></span>
+      <span className="rv-pj-req__texto">{texto}</span>
     </div>
   );
 }
-
-function Leyenda({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <p className="text-[12px] text-center max-w-[34ch]" style={{ color: 'var(--muted)' }}>{children}</p>
-    </div>
-  );
-}
-

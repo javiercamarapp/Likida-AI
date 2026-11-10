@@ -3,6 +3,8 @@ import {
   PLAZO_MESES_MIN, PLAZO_MESES_MAX, PLAZO_MESES_DEFAULT, AVISO_DIAS_MAX, DIAS_GRACIA_MIN, DIAS_GRACIA_MAX,
 } from '@/lib/likida/peajes/config_avisos';
 import { MIN_CRUCES_MIN, MIN_CRUCES_MAX, VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH, VENTANA_HORAS_MAX } from '@/lib/likida/peajes/atipicos_config';
+import { Tarjeta } from '@/app/ui-v2/componentes';
+import '../peajes.css';
 
 type Accion = (fd: FormData) => Promise<void>;
 
@@ -22,15 +24,13 @@ export interface UmbralesAvisosVista {
   acciones: AccionesUmbralesAvisos;
 }
 
-const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
 
 function Numero({ nombre, etiqueta, valor, min, max, paso, ancho }: { nombre: string; etiqueta: string; valor: number; min: number; max: number; paso?: number; ancho?: string }) {
   return (
     <label className="block">
-      <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>{etiqueta}</span>
+      <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{etiqueta}</span>
       <input type="number" name={nombre} defaultValue={valor} min={min} max={max} step={paso ?? 1} required
-        className={`${ancho ?? 'w-[110px]'} mt-0.5`} style={ESTILO_INPUT} />
+        className={`${ancho ?? 'w-[110px]'} mt-0.5 rv-ctl`} />
     </label>
   );
 }
@@ -41,7 +41,7 @@ function Interruptor({ nombre, etiqueta, activo, nota, deshabilitado }: { nombre
       <input type="checkbox" name={nombre} value="1" defaultChecked={activo} disabled={deshabilitado} className="mt-0.5" />
       <span>
         <span className="font-medium">{etiqueta}</span>
-        {nota && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</span>}
+        {nota && <span className="block text-[11px] rv-pj-c-faint">{nota}</span>}
       </span>
     </label>
   );
@@ -57,22 +57,23 @@ const SUBTITULO = 'text-[11px] font-semibold uppercase tracking-wide mb-2';
 export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista }) {
   const { config, puedeAdministrar, acciones } = datos;
   return (
-    <section className="card p-4" id="umbrales-avisos">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Umbrales y avisos</h2>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+    <div id="umbrales-avisos">
+    <Tarjeta titulo="Umbrales y avisos">
+      <p className="text-[11px] mb-3 rv-pj-c-faint">
         Qué patrones inusuales se señalan, cuánto tiempo hay para reclamar y a quién se avisa por WhatsApp. Todo viene <b>apagado</b> y sin
         destinatario: mientras no lo enciendas, no se manda ningún aviso y los casos solo se ven en pantalla. Los avisos son una señal para
         revisar, nunca una acusación.
       </p>
 
       {config === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la configuración ahora mismo.</p>
+        <p className="text-[12px] rv-pj-c-muted">No se pudo leer la configuración ahora mismo.</p>
       ) : !puedeAdministrar ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo quien administra la flota cambia estos valores.</p>
+        <p className="text-[12px] rv-pj-c-muted">Solo quien administra la flota cambia estos valores.</p>
       ) : (
         <div className="space-y-5">
           <form action={acciones.guardarUmbrales} className="space-y-3" id="umbrales-atipicos">
-            <h3 className={SUBTITULO} style={{ color: 'var(--muted)' }}>Cruces atípicos</h3>
+            {/* sin-info: rótulo de un bloque dentro de la tarjeta */}
+            <h3 className={`${SUBTITULO} rv-pj-c-muted`}>Cruces atípicos</h3>
             <Interruptor nombre="activo" etiqueta="Buscar cruces atípicos en cada archivo" activo={config.atipicosActivo}
               nota="Apagado de origen. Encendido, el sistema marca patrones inusuales por unidad para que alguien los revise." />
             <div className="flex items-end gap-4 flex-wrap">
@@ -92,15 +93,16 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
                 <Numero nombre="velocidad_max" etiqueta="Velocidad máx. (km/h)" valor={config.umbrales.secuencia_imposible.velocidadMaxKmh} min={VELOCIDAD_MIN_KMH} max={VELOCIDAD_MAX_KMH} ancho="w-[140px]" />
               </div>
             </div>
-            <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar umbrales</button>
+            <button type="submit" className="rv-btn rv-btn--primary">Guardar umbrales</button>
           </form>
 
           <form action={acciones.guardarAvisos} className="space-y-3" id="plazo-avisos">
-            <h3 className={SUBTITULO} style={{ color: 'var(--muted)' }}>Plazo de reclamo y recordatorios</h3>
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+            {/* sin-info: rótulo de un bloque dentro de la tarjeta */}
+            <h3 className={`${SUBTITULO} rv-pj-c-muted`}>Plazo de reclamo y recordatorios</h3>
+            <p className="text-[11px] rv-pj-c-faint">
               El proveedor da un plazo para reclamar un cobro; <b>aún no está confirmado por escrito</b> ni se sabe desde qué fecha cuenta, por eso es ajustable.
             </p>
-            <p role="note" className="text-[11px]" style={{ color: 'var(--faint)' }}>
+            <p role="note" className="text-[11px] rv-pj-c-faint">
               Los avisos salen por WhatsApp al destinatario de abajo (sin destinatario no se manda nada) y los revisa el sistema cada ~15 minutos. El plazo y los
               días de aviso que captures aquí los usa el aviso; las pantallas de seguimiento siguen mostrando la regla de {PLAZO_MESES_DEFAULT} meses que dijo el cliente
               mientras el proveedor no la confirme por escrito. El vencimiento de tus reclamos siempre se ve en la pantalla de seguimiento.
@@ -108,10 +110,10 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
             <div className="flex items-end gap-3 flex-wrap">
               <Numero nombre="plazo_meses" etiqueta="Plazo (meses)" valor={config.avisos.plazo.meses} min={PLAZO_MESES_MIN} max={PLAZO_MESES_MAX} />
               <label className="block">
-                <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Avisar cuántos días antes</span>
+                <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">Avisar cuántos días antes</span>
                 <input name="aviso_dias" defaultValue={config.avisos.plazo.avisoDias.join(', ')} required maxLength={40} placeholder="30, 7"
                   aria-label={`Días de aviso antes del vencimiento (de 1 a ${AVISO_DIAS_MAX}, separados por comas)`}
-                  className="w-[150px] mt-0.5" style={ESTILO_INPUT} />
+                  className="w-[150px] mt-0.5 rv-ctl" />
               </label>
               <Numero nombre="dias_gracia" etiqueta="Gracia del archivo (días)" valor={config.avisos.recordatorio.diasGracia} min={DIAS_GRACIA_MIN} max={DIAS_GRACIA_MAX} ancho="w-[150px]" />
             </div>
@@ -121,20 +123,21 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
               <Interruptor nombre="recordatorio_archivo" etiqueta="Recordar que falta el archivo de la decena" activo={config.avisos.interruptores.recordatorio_archivo}
                 nota="Un solo recordatorio por decena, pasados los días de gracia desde su cierre sin que llegue el archivo. Apagado de origen." />
             </div>
-            <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar plazo y avisos</button>
+            <button type="submit" className="rv-btn rv-btn--primary">Guardar plazo y avisos</button>
           </form>
 
           <form action={acciones.guardarDestinatario} className="space-y-2" id="destinatario-avisos">
-            <h3 className={SUBTITULO} style={{ color: 'var(--muted)' }}>A quién se avisa</h3>
+            {/* sin-info: rótulo de un bloque dentro de la tarjeta */}
+            <h3 className={`${SUBTITULO} rv-pj-c-muted`}>A quién se avisa</h3>
             <div className="flex items-end gap-2 flex-wrap">
               <label className="block">
-                <span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>WhatsApp (10 a 15 dígitos)</span>
+                <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">WhatsApp (10 a 15 dígitos)</span>
                 <input name="telefono" defaultValue={config.telefono ?? ''} maxLength={30} placeholder="Vacío = solo en pantalla" inputMode="tel"
-                  className="w-[220px] mt-0.5" style={ESTILO_INPUT} />
+                  className="w-[220px] mt-0.5 rv-ctl" />
               </label>
-              <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>Guardar destinatario</button>
+              <button type="submit" className="rv-btn rv-btn--primary">Guardar destinatario</button>
             </div>
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+            <p className="text-[11px] rv-pj-c-faint">
               {config.telefono
                 ? 'Los avisos que enciendas llegan a este número. Para dejar de recibirlos, vacía el campo y guarda.'
                 : 'Sin destinatario: nada se manda por WhatsApp; los casos solo se ven en pantalla.'}
@@ -142,6 +145,7 @@ export function SeccionUmbralesAvisos({ datos }: { datos: UmbralesAvisosVista })
           </form>
         </div>
       )}
-    </section>
+    </Tarjeta>
+    </div>
   );
 }
