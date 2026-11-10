@@ -5,6 +5,7 @@ import '@/lib/likida/orquestador/fuentes_reales';
 import { leerTareasDeDinero, TOPE_TAREAS_DINERO } from '@/lib/likida/orquestador/tareas_de_dinero';
 import { TareasAbiertas } from '../viajes-en-vivo/vista';
 import { InicioContador } from './inicio-contador';
+import './contador.css';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Contador' };
 
@@ -63,10 +64,10 @@ export default async function PanelContadorPage({
       searchParams={sp}
     />
     {hayTareas && (
-      <main className="px-4 md:px-6 pb-6 space-y-2">
+      <div className="rv-cont__tareas">
         <TareasAbiertas tareas={tareas} errorLectura={tareasConError} accion={null} ocultos={{}} />
-        {hayMas && <p className="text-[12px]" role="status" style={{ color: 'var(--muted)' }}>Hay más de {TOPE_TAREAS_DINERO} tareas de dinero abiertas: se muestran las {TOPE_TAREAS_DINERO} más recientes.</p>}
-      </main>
+        {hayMas && <p className="rv-cont__linea" role="status">Hay más de {TOPE_TAREAS_DINERO} tareas de dinero abiertas: se muestran las {TOPE_TAREAS_DINERO} más recientes.</p>}
+      </div>
     )}
     </>
   );
