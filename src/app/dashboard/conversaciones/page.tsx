@@ -1,15 +1,15 @@
 import { redirect } from 'next/navigation';
-import { MessageCircle, MessagesSquare, ChevronDown } from 'lucide-react';
+import { MessageCircle, MessagesSquare } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getHilosDeFlota, contarHilosDeFlota, TOPE_HILOS } from '@/lib/likida/conversaciones';
 import { fechaHoraMx } from '@/lib/formato';
-import { EstadoVacio } from '../estados';
-import { TituloSeccion } from '../resumen-visual';
+import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import './conversaciones.css';
 export const metadata: Metadata = { title: 'Conversaciones de WhatsApp' };
 
 export const dynamic = 'force-dynamic';
@@ -53,84 +53,70 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
   try {
     [hilos, total] = await Promise.all([getHilosDeFlota(tenantId), contarHilosDeFlota(tenantId)]);
   } catch (e) {
-    errorCarga = e instanceof Error ? e.message : String(e);
+    // El detalle va al registro (sin teléfonos ni contenido de mensajes) y no a la pantalla: una cadena cruda de la base no le dice nada al dueño.
+    logger.error('conversaciones.lectura_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
+    errorCarga = 'lectura';
   }
   const mensajes = hilos.reduce((s, h) => s + h.turns.length, 0);
   const recortado = total !== null && total > hilos.length;
 
   return (
-    <MarcoPagina titulo="Conversaciones de WhatsApp" apoyo="Lo que tu bot habló con tus operadores, tal cual quedó guardado: sirve para verificar qué se le dijo a un chofer.">
+    <MarcoPagina titulo="Equipo" apoyo="Lo que tu bot habló con tus operadores, tal cual quedó guardado: sirve para verificar qué se le dijo a un chofer.">
       <TiraCifras sello={selloHoy('Hilos de WhatsApp')}>
         <Cifra
-          icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+          icono={<Icono icono={MessageCircle} />}
           etiqueta="Hilos de tu flota" info="conversaciones.hilos" valor={total} formato="entero"
           mensaje={total === null ? 'No se pudo contar — esto no significa que no haya ninguno.' : undefined}
         />
         <Cifra
-          icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
+          icono={<Icono icono={MessagesSquare} />}
           etiqueta={`Mensajes en los ${hilos.length} que se listan`} info="conversaciones.mensajes" valor={mensajes} formato="entero"
         />
       </TiraCifras>
 
-      <div className="card p-3">
-        <TituloSeccion>
-          {recortado ? `Los ${TOPE_HILOS} más recientes de ${total}` : 'Todos tus hilos'}
-        </TituloSeccion>
-
+      <Tarjeta titulo={recortado ? `Los ${TOPE_HILOS} más recientes de ${total}` : 'Todos tus hilos'} info="conversaciones.hilos">
         {errorCarga !== null ? (
-          <div className="rounded-lg p-3 text-sm mt-2"
-            style={{ background: 'color-mix(in srgb, var(--color-warn) 10%, transparent)', color: 'var(--color-warn)' }}>
-            No se pudieron leer las conversaciones ahora mismo ({errorCarga.slice(0, 120)}). Recarga en un
-            momento — hasta que la base conteste no hay forma de saber si el bot habló con alguien.
-          </div>
+          <EstadoError reintentar>
+            No se pudieron leer las conversaciones ahora mismo. Recarga en un momento: hasta que la base conteste no hay forma de saber si el bot habló con alguien.
+          </EstadoError>
         ) : hilos.length === 0 ? (
-          <div className="mt-2">
-            <EstadoVacio icono={<MessageCircle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              El bot todavía no ha conversado con ningún número de tu flota. En cuanto un operador le
-              escriba por WhatsApp, el hilo aparece aquí.
-            </EstadoVacio>
-          </div>
+          <EstadoVacio icono={MessageCircle} contenido titulo="Sin conversaciones todavía">
+            El bot todavía no ha conversado con ningún número de tu flota. En cuanto un operador le
+            escriba por WhatsApp, el hilo aparece aquí.
+          </EstadoVacio>
         ) : (
-          <div className="space-y-1.5 mt-2">
+          <div className="rv-cv__hilos">
             {hilos.map((h) => (
-              <details key={h.telefono} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
-                <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
-                  <div>
-                    <div className="text-sm font-medium">{h.operadorNombre ?? h.telefono}</div>
-                    <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+              <Disclosure key={h.telefono} variante="tarjeta"
+                titulo={(
+                  <>
+                    {h.operadorNombre ?? h.telefono}
+                    <span className="rv-cv__sub">
                       {h.operadorNombre ? `${h.telefono} · ` : ''}
                       {h.viajeFolio ? `viaje ${h.viajeFolio} · ` : ''}
                       {fechaHoraMx(h.actualizadaEn)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
-                    {h.turns.length > 0 ? `${h.turns.length} mensajes` : 'sin mensajes guardados'}
-                    <ChevronDown width={14} height={14} className="transition-transform group-open:rotate-180" />
-                  </div>
-                </summary>
+                    </span>
+                  </>
+                )}
+                resumen={h.turns.length > 0 ? `${h.turns.length} mensajes` : 'sin mensajes guardados'}>
                 {h.turns.length > 0 && (
-                  <div className="px-3 pb-3 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line2)' }}>
+                  <div className="rv-cv__turnos">
                     {h.turns.map((t, i) => (
-                      <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                        <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
-                          style={t.role === 'user'
-                            ? { background: 'var(--canvas)', border: '1px solid var(--line2)' }
-                            : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                          {t.content}
-                        </div>
+                      <div key={i} className="rv-cv__turno" data-rol={t.role === 'user' ? 'chofer' : 'bot'}>
+                        <div className="rv-cv__burbuja">{t.content}</div>
                       </div>
                     ))}
-                    <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
+                    <p className="rv-cv__nota">
                       Ventana reciente de la conversación: Likida guarda los últimos turnos, no el
                       historial completo desde el primer día.
                     </p>
                   </div>
                 )}
-              </details>
+              </Disclosure>
             ))}
           </div>
         )}
-      </div>
+      </Tarjeta>
     </MarcoPagina>
   );
 }

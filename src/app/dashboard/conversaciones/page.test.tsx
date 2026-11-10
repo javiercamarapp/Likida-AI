@@ -18,7 +18,7 @@ const dobles = vi.hoisted(() => ({
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' };
 
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
-vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); } }));
+vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); }, useRouter: () => ({ refresh: () => {} }) }));
 vi.mock('@/lib/likida/conversaciones', async (importar) => ({
   ...(await importar<typeof import('@/lib/likida/conversaciones')>()),
   getHilosDeFlota: dobles.getHilosDeFlota,
