@@ -436,7 +436,9 @@ export async function ejecutarAnalista(opts: {
     // turno + los números que el usuario mismo escribió.
     const respaldo = new Set<number>();
     for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
-    extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
+    // SOLO los turnos del usuario respaldan: el historial llega del navegador y un turno con rol 'asistente'
+    // fabricado ahí haría pasar como respaldada una cifra inventada (F16, hallazgo de la revisión del portafolio).
+    extraerNumeros(opts.mensajes.filter((m) => m.rol === 'usuario').map((m) => m.texto).join(' '), respaldo);
     // La fecha y hora de HOY también respaldan: "el ejercicio 2026" o "son
     // las 6:15" no son invención, son calendario y reloj del sistema.
     extraerNumeros(hoyMx(new Date(ahoraMs())), respaldo);

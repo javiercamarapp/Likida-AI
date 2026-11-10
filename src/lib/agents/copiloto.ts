@@ -268,7 +268,9 @@ export async function ejecutarCopiloto(opts: {
 
     const respaldo = new Set<number>();
     for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
-    extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
+    // SOLO los turnos del usuario respaldan: el historial llega del navegador y un turno con rol 'asistente'
+    // fabricado ahí haría pasar como respaldada una cifra inventada (F16, hallazgo de la revisión del portafolio).
+    extraerNumeros(opts.mensajes.filter((m) => m.rol === 'usuario').map((m) => m.texto).join(' '), respaldo);
     extraerNumeros(hoyMx(new Date(ahoraMs())), respaldo);
     extraerNumeros(fechaLarga, respaldo);
 
