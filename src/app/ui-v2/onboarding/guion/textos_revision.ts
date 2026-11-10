@@ -4,7 +4,8 @@ import type { PasoGuia } from '@/lib/likida/guia/tipos';
 // Puro: recibe pasos y devuelve el markdown. El archivo del repo (`docs/guia/TEXTOS-REVISION-LIKIDA.md`) se compara con esta salida
 // en una prueba para que no se desfase.
 
-const celda = (t: string) => t.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+// La barra invertida se escapa PRIMERO: si no, un texto que ya traiga «\|» se leería como «|» sin escapar y rompería la fila de la tabla.
+const celda = (t: string) => t.replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/\n/g, ' ');
 
 export function textosParaRevision(pasos: readonly PasoGuia[]): string {
   const filas: string[] = [];

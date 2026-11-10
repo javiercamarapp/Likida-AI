@@ -28,6 +28,11 @@ export function cuerpoDeFuncion(f: string, trasNombre: number): string {
 }
 export const sinComentarios = (t: string) => t.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
+/** Escapa todo metacarácter de expresión regular (incluida la barra invertida) de un nombre que se inserta en un RegExp. */
+function escaparRegex(t: string): string {
+  return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Acciones (nombre) del archivo que no llegan a la guarda, directo o por un ayudante del mismo archivo. */
 export function accionesSinGuarda(fuenteCruda: string): string[] {
   const fuente = sinComentarios(fuenteCruda);
@@ -36,7 +41,7 @@ export function accionesSinGuarda(fuenteCruda: string): string[] {
   const llega = (cuerpo: string, visto: Set<string>): boolean => {
     if (GUARDA.test(cuerpo)) return true;
     for (const [n, c] of cuerpos) {
-      if (visto.has(n) || !new RegExp(`\\b${n.replace(/\$/g, '\\$')}\\s*\\(`).test(cuerpo)) continue;
+      if (visto.has(n) || !new RegExp(`\\b${escaparRegex(n)}\\s*\\(`).test(cuerpo)) continue;
       visto.add(n);
       if (llega(c, visto)) return true;
     }
