@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 type Reg = { tabla: string; op: string; payload: Record<string, unknown> | null; filtros: Array<[string, string, unknown]> };
 const regs: Reg[] = [];
-const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null }>>();
+const respuestas = new Map<string, Array<{ data: unknown; error: { message: string } | null; count?: number | null }>>();
 function builder(tabla: string) {
   const r: Reg = { tabla, op: 'select', payload: null, filtros: [] };
   regs.push(r);
@@ -16,7 +16,7 @@ function builder(tabla: string) {
     select: () => b,
     update: (p: Record<string, unknown>) => { r.op = 'update'; r.payload = p; return b; },
     eq: f('eq'), lt: f('lt'), in: f('in'),
-    order: () => b, range: () => b,
+    order: () => b, range: () => b, limit: () => b,
     maybeSingle: () => Promise.resolve(resp()),
     then: (a: (x: unknown) => unknown, c: (e: unknown) => unknown) => Promise.resolve().then(resp).then(a, c),
   });
@@ -111,5 +111,49 @@ describe('vaciarVencidas', () => {
     const r = await m.vaciarVencidas('u1', { dryRun: false }, AHORA);
     expect(r).toMatchObject({ resueltas: 0, vencidas: 0 });
     expect(regs.some((x) => x.op === 'update')).toBe(false);
+  });
+});
+
+describe('estado de la bandeja (pestañas y aviso de freno)', () => {
+  it('armarResumenBandeja usa la MISMA regla del runner: ≥ tope frena; la más vieja pasada del plazo frena; si no, no', () => {
+    const tope = m.armarResumenBandeja(40, 0, new Date(AHORA - 86_400_000).toISOString(), AHORA);
+    expect(tope.frenaAlRunner).toBe(true);
+    expect(tope.motivoFreno).toMatch(/bandeja sin atender/);
+    const vieja = m.armarResumenBandeja(3, 0, new Date(AHORA - 9 * 86_400_000).toISOString(), AHORA);
+    expect(vieja.frenaAlRunner).toBe(true);
+    expect(vieja.diasMasVieja).toBeCloseTo(9, 5);
+    const sana = m.armarResumenBandeja(3, 1, new Date(AHORA - 2 * 86_400_000).toISOString(), AHORA);
+    expect(sana).toMatchObject({ frenaAlRunner: false, motivoFreno: null, pendientes: 3, urgentes: 1 });
+    const vacia = m.armarResumenBandeja(0, 0, null, AHORA);
+    expect(vacia).toMatchObject({ frenaAlRunner: false, diasMasVieja: null, masViejaCreadaEn: null });
+  });
+
+  it('leerResumenBandeja: lee conteos y la más vieja SIN escribir nada', async () => {
+    respuestas.set('cola_aprobacion:select', [
+      { data: null, error: null, count: 100 },
+      { data: null, error: null, count: 2 },
+      { data: [{ creado_en: new Date(AHORA - 70 * 86_400_000).toISOString() }], error: null },
+    ]);
+    const r = await m.leerResumenBandeja(AHORA);
+    expect(r).toMatchObject({ pendientes: 100, urgentes: 2, frenaAlRunner: true });
+    expect(regs.every((x) => x.op === 'select')).toBe(true);
+  });
+
+  it('si la base falla devuelve null (sin dato), NUNCA 0 pendientes', async () => {
+    respuestas.set('cola_aprobacion:select', [
+      { data: null, error: { message: 'caída' } },
+      { data: null, error: null, count: 0 },
+      { data: [], error: null },
+    ]);
+    expect(await m.leerResumenBandeja(AHORA)).toBeNull();
+  });
+
+  it('una base que no devuelve el conteo tampoco se lee como 0', async () => {
+    respuestas.set('cola_aprobacion:select', [
+      { data: null, error: null },
+      { data: null, error: null, count: 0 },
+      { data: [], error: null },
+    ]);
+    expect(await m.leerResumenBandeja(AHORA)).toBeNull();
   });
 });

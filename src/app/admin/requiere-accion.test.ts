@@ -7,8 +7,9 @@ vi.mock('@/lib/admin/escalaciones', async (importar) => ({
 }));
 
 import type { AlertaExtra } from '@/lib/admin/fuentes-alerta-extra';
+import type { ResumenBandejaCola } from '@/lib/admin/cola-aprobacion';
 import {
-  obtenerRequiereAccion, resumirRequiereAccion, vaciarCacheRequiereAccion, SIN_DATO, TTL_REQUIERE_ACCION_MS,
+  obtenerPanoramaAccion, obtenerRequiereAccion, resumirRequiereAccion, vaciarCacheRequiereAccion, SIN_DATO, TTL_REQUIERE_ACCION_MS,
 } from './requiere-accion';
 
 const CERO: ConteosEscalaciones = {
@@ -23,6 +24,11 @@ const SIN_EXTRAS = async () => [] as AlertaExtra[];
 const extra = (id: AlertaExtra['id']): AlertaExtra => ({ id, tipo: 'atencion', texto: id, href: '/admin/crons', items: [] });
 
 beforeEach(() => vaciarCacheRequiereAccion());
+
+const COLA: ResumenBandejaCola = {
+  pendientes: 100, urgentes: 0, masViejaCreadaEn: '2026-09-02T00:00:00Z', diasMasVieja: 70, frenaAlRunner: true,
+  motivoFreno: 'bandeja sin atender', topeBandeja: 40, diasVencimiento: 7,
+};
 
 describe('resumirRequiereAccion', () => {
   it('0 pendientes: número 0 (se leyó y no hay nada), sin urgencia', () => {
@@ -80,5 +86,26 @@ describe('fuentes de alerta extra', () => {
     const leer = vi.fn().mockResolvedValue(bandeja({ talachas: 2 }));
     const r = await obtenerRequiereAccion(9, leer, () => Promise.reject(new Error('x')));
     expect(r).toEqual({ pendientes: 2, hayUrgente: true });
+  });
+});
+
+describe('panorama: el estado de la bandeja de aprobación viaja con la misma lectura', () => {
+  it('trae la cola junto a la bandeja y la guarda en la misma caché (una lectura por ventana)', async () => {
+    const leer = vi.fn().mockResolvedValue(bandeja({ talachas: 1 }));
+    const leerCola = vi.fn().mockResolvedValue(COLA);
+    const a = await obtenerPanoramaAccion(1_000, leer, SIN_EXTRAS, leerCola);
+    expect(a.cola).toEqual(COLA);
+    await obtenerPanoramaAccion(1_001, leer, SIN_EXTRAS, leerCola);
+    expect(leerCola).toHaveBeenCalledTimes(1);
+  });
+  it('si leer la cola lanza, la campana y las pestañas siguen: cola null («sin dato»), nunca 0', async () => {
+    const leer = vi.fn().mockResolvedValue(bandeja({ talachas: 2 }));
+    const p = await obtenerPanoramaAccion(7, leer, SIN_EXTRAS, () => Promise.reject(new Error('red')));
+    expect(p.cola).toBeNull();
+    expect(p.resumen.pendientes).toBe(2);
+  });
+  it('si la bandeja entera falla: todo «sin dato»', async () => {
+    const p = await obtenerPanoramaAccion(8, vi.fn().mockRejectedValue(new Error('x')), SIN_EXTRAS, async () => COLA);
+    expect(p).toEqual({ resumen: SIN_DATO, bandeja: null, cola: null });
   });
 });
