@@ -22,16 +22,28 @@ export default function CabeceraMovil({ rol, perfil }: { rol: string; perfil?: P
   // El logo lleva a la «casa» del rol (su primer ítem), no a un `/dashboard` que el rol podría no abrir (el contador, bajo el perfil).
   const casa = menu.resumen[0]?.href ?? menu.grupos[0]?.items[0]?.href ?? '/dashboard';
   return (
+    <CabeceraMovilVista hrefCasa={`${casa}${sufijo}`} hrefAvisos={campana ? `/dashboard/notificaciones${sufijo}` : null}>
+      <MenuGuia rol={rol} perfil={perfil} compacto />
+    </CabeceraMovilVista>
+  );
+}
+
+/** El dibujo de la cabecera móvil, sin saber de qué panel es: lo comparten /dashboard y /admin. `children` van entre la fecha y la campana. */
+export function CabeceraMovilVista({ hrefCasa, hrefAvisos, etiquetaAvisos = 'Notificaciones', punto = false, children }: {
+  hrefCasa: string; hrefAvisos: string | null; etiquetaAvisos?: string; punto?: boolean; children?: React.ReactNode;
+}) {
+  return (
     <header className="rv-cab-movil">
-      <Link href={`${casa}${sufijo}`} className="rv-cab-movil__logo" aria-label="Likida, ir al inicio">
+      <Link href={hrefCasa} className="rv-cab-movil__logo" aria-label="Likida, ir al inicio">
         <LogoV2 alto={ALTO_LOGO_PX.movil} />
       </Link>
       <div className="rv-cab-movil__acciones">
         <FechaHoy className="rv-cab-movil__fecha" />
-        <MenuGuia rol={rol} perfil={perfil} compacto />
-        {campana && (
-          <Link href={`/dashboard/notificaciones${sufijo}`} className="rv-icono-boton" aria-label="Notificaciones">
+        {children}
+        {hrefAvisos && (
+          <Link href={hrefAvisos} className="rv-icono-boton" aria-label={etiquetaAvisos} title={etiquetaAvisos}>
             <Bell width={18} height={18} strokeWidth={TRAZO_ICONO} aria-hidden />
+            {punto && <span className="rv-campana__punto" aria-hidden />}
           </Link>
         )}
       </div>

@@ -227,15 +227,15 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
     <MarcoPagina titulo="Facturación" apoyo="Lo que Likida cobra a sus flotas: planes, mensualidad, pagos recibidos y su CFDI.">
       {!banco ? (
         <Aviso tono="warn" titulo="Sin cuenta de cobro configurada">
-          Faltan la CLABE, el banco o el beneficiario de la cuenta de Likida, o la CLABE no pasa su dígito verificador. Sin las tres, la pantalla del cliente no enseña
-          instrucciones de pago: una cuenta a medias manda el dinero al vacío.
+          Faltan la CLABE, el banco o el beneficiario de la cuenta de Likida, o la CLABE no es válida. Sin las tres, la pantalla del cliente no muestra
+          instrucciones de pago, para no mandar un depósito a una cuenta incompleta.
         </Aviso>
       ) : null}
       {!hayStripe ? (
         <Aviso tono="warn" titulo="Stripe sin conectar">Sin la llave de Stripe no se puede leer un precio ni cobrar con tarjeta, y la pantalla del cliente esconde el botón de pago a propósito.</Aviso>
       ) : !webhookConfigurado() ? (
         <Aviso tono="error" titulo="Falta el secreto del webhook de Stripe">
-          Se puede mandar a pagar, pero nadie se entera del pago: el webhook contesta 503 y la suscripción nunca pasa a activa. El cliente pagaría y seguiría viéndose sin plan.
+          Se puede mandar a pagar, pero Likida no se entera del pago y la suscripción nunca pasa a activa: el cliente pagaría y seguiría viéndose sin plan.
         </Aviso>
       ) : null}
 
@@ -262,7 +262,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
       ]} />
 
       <FilaTarjetas variante="8-4">
-        <Tarjeta titulo="Por cobrar" estado={porCobrar === null ? 'error' : porCobrar.length === 0 ? 'vacio' : 'ok'} mensaje={porCobrar === null ? 'No se pudo leer lo que está por cobrarse' : 'Nada pendiente de cobro'}
+        <Tarjeta titulo="Por cobrar" estado={porCobrar === null ? 'error' : porCobrar.length === 0 ? 'vacio' : 'ok'} contenida={porCobrar !== null && porCobrar.length === 0} mensaje={porCobrar === null ? 'No se pudo leer lo que está por cobrarse' : 'Nada pendiente de cobro'}
           detalle={porCobrar === null ? 'Esto NO quiere decir que no haya nada pendiente: quiere decir que no se sabe. Recarga en un momento.' : 'Aparece aquí en cuanto emitas una mensualidad.'} reintentar>
           {porCobrar !== null ? (
             <>

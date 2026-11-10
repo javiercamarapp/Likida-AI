@@ -127,17 +127,20 @@ export default function SidebarNav() {
  * el conteo real de `requiere-accion.ts` (lectura caída = «sin dato»). Acceso cruzado al panel del cliente. `salir` llega ya armado
  * por el servidor (el `<form>` de cerrar sesión): aquí no viaja ninguna función.
  */
-export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir }: {
+export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir, alNavegar }: {
   nombre: string | null; avatarUrl: string | null;
   /** `null` = la lista de flotas no se pudo leer (se dice «Sin dato»); `undefined` = no se pidió (render de prueba). */
   flotas?: Array<{ id: string; nombre: string }> | null;
   flotaActual?: string | null;
   salir?: React.ReactNode;
+  /** La hoja «Más» del móvil la cierra al navegar. */
+  alNavegar?: () => void;
 }) {
   const r = useRequiereAccion();
   const n = (nombre ?? '').trim();
   return (
     <PieSidebar
+      alNavegar={alNavegar}
       organizacion={{
         opciones: flotas === undefined ? [] : flotas === null ? null : flotas.map((f) => ({ valor: f.id, nombre: f.nombre })),
         actual: flotaActual ?? null,

@@ -5,7 +5,7 @@ import { Ellipsis } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { hrefActivo } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
-import { destinosMovil } from './barra-inferior-destinos';
+import { destinosMovil, type DestinoMovil } from './barra-inferior-destinos';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
@@ -20,8 +20,14 @@ export default function BarraInferior({ rol, perfil, masAbierta, alAbrirMas }: {
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   const destinos = destinosMovil(rol, menu);
+  return <BarraInferiorVista destinos={destinos} sufijo={sufijo} activo={hrefActivo(pathname, menu)} masAbierta={masAbierta} alAbrirMas={alAbrirMas} />;
+}
+
+/** El dibujo de la barra, sin saber de qué panel es (lo comparten /dashboard y /admin): recibe los destinos ya resueltos y el activo. */
+export function BarraInferiorVista({ destinos, sufijo, activo, masAbierta, alAbrirMas }: {
+  destinos: DestinoMovil[]; sufijo: string; activo: string | null; masAbierta: boolean; alAbrirMas: () => void;
+}) {
   if (destinos.length === 0) return null;
-  const activo = hrefActivo(pathname, menu);
   const activoEnBarra = destinos.some((d) => d.href === activo);
   return (
     <nav className="rv-nav-inf" aria-label="Navegación móvil">

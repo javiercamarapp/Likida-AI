@@ -143,7 +143,7 @@ describe('Resumen v2 · página canónica del contrato visual', () => {
     const h = await pintar();
     expect((h.match(/<h1/g) ?? []).length).toBe(1);
     expect(h).toMatch(/^<main class="rv-marco"/);
-    expect((h.match(/class="rv-fila"/g) ?? []).length).toBe(2);
+    expect((h.match(/class="rv-fila-tarjetas"/g) ?? []).length).toBe(2);
     expect(h).toContain('data-variante="8-4"');
     expect(h).toContain('data-variante="4-4-4"');
     // ni el contenedor ni la rejilla ni la envoltura de cifras heredados (las piezas hijas conservan sus propias clases)

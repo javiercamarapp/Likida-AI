@@ -85,6 +85,8 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
   const conAdjuntos = (adjuntos ?? perfil.adjuntos) && Boolean(a.leerArchivo);
   const endpointAccion = endpoint ?? perfil.endpoint;
   const panel = variante === 'panel';
+  /** El título de la portada: encabezado de nivel 1 en la página y de nivel 2 en el panel lateral (ver la nota donde se pinta). */
+  const Titulo = panel ? 'h2' : 'h1';
   const [texto, setTexto] = useState('');
   const [histAbierto, setHistAbierto] = useState(false);
   const [lejosDelFondo, setLejosDelFondo] = useState(false);
@@ -186,11 +188,12 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
           {!hay && (
             <header className="rv-chat__hero" data-onboarding="pantalla.titulo">
               <LogoV2 variante={marca === 'simbolo' ? 'simbolo' : 'horizontal'} alto={28} className="rv-chat__logo" />
-              <h1>{tx.titulo}</h1>
+              {/* UN solo encabezado de nivel 1 por página: el panel lateral del Copiloto vive en el chrome de /admin junto al título de cada pantalla, así que ahí baja a nivel 2. */}
+              <Titulo>{tx.titulo}</Titulo>
               <p className="rv-chat__sub">{tx.subtitulo}</p>
             </header>
           )}
-          {hay && <h1 className="rv-sr">{tx.titulo}</h1>}
+          {hay && <Titulo className="rv-sr">{tx.titulo}</Titulo>}
           {hay && (
             <div className="rv-chat__hilo-caja">
               <div ref={hilo} className="rv-chat__hilo" role="log" aria-live="polite" tabIndex={0} aria-label="Conversación" onScroll={medirFondo}>

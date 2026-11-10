@@ -5,7 +5,7 @@
    `.rv-contenido` de ui-v2/shell.css), con el mismo ancho (232, riel de 72), hover/activo y animación de entrada.
    Este archivo solo trae lo que /admin necesita y shell.css no da: (1) el hueco de 16 px para el panel del Copiloto,
    que cancela su margen con un -16 (gap del marco), (2) el contenido sin padding propio (cada página dibuja su lienzo),
-   (3) un riel de íconos bajo 768 px (shell.css esconde el aside ahí y /admin no tiene barra inferior), y (4) lo que se
+   (3) el tratamiento móvil bajo 768 px (cabecera, barra inferior y hoja «Más» del dashboard), y (4) lo que se
    oculta en el riel. NO se edita shell.css (lo cambia otra fase).
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -13,7 +13,9 @@
 [data-ui="v2"] .adm-fila .rv-sb { margin-right: 0; }
 /* Sin padding SOLO para las pantallas que aún dibujan su propio lienzo; las que ya vienen en `MarcoPagina` (`.rv-marco`) conservan el
    relleno del shell. La compatibilidad se retira cuando la última pantalla migre. */
-[data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco)) { padding: 0; }
+/* El chat del Copiloto (`.rv-chat-pagina`) trae su propio relleno (chat.css): sin esta salvedad se lo quitábamos y «Historial» quedaba pegado al borde. */
+[data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-top: 0; padding-left: 0; padding-right: 0; }
+@media (min-width: 768px) { [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-bottom: 0; } }
 
 /* La caja de lo que solo cabe con el sidebar ancho (selector de tema, widget de uso). */
 [data-ui="v2"] .adm-solo-ancho { min-width: 0; }
@@ -25,49 +27,14 @@
   [data-ui="v2"] .rv-sb .adm-solo-ancho { display: none; }
 }
 
-/* Bajo 768 px: riel de íconos fijo a la izquierda (el menú NO desaparece; el panel es de uso interno de escritorio, pero se abre en tablet y móvil). */
+/* Bajo 768 px: el MISMO tratamiento móvil del dashboard (cabecera `.rv-cab-movil`, barra inferior `.rv-nav-inf`, hoja «Más»; ver
+   `navegacion-movil-admin.tsx`). El aside no se ve (lo esconde shell.css), la fila no deja hueco entre columnas y la columna del contenido
+   es el documento que scrollea. El Copiloto (panel lateral de escritorio) no existe en móvil. */
 @media (max-width: 767.98px) {
   [data-ui="v2"] .adm-fila { gap: 0; }
-  [data-ui="v2"] .adm-fila .rv-sb {
-    display: flex; flex-direction: column; flex: none; position: sticky; top: 0; z-index: 20; align-self: flex-start;
-    width: 56px; height: 100dvh; box-sizing: border-box; padding-bottom: 8px;
-    background: var(--ui-surface); border-right: 1px solid var(--ui-border);
-  }
-  [data-ui="v2"] .adm-fila .rv-sb__marca { justify-content: center; padding: 0; height: var(--marca-h); display: flex; align-items: center; }
-  [data-ui="v2"] .adm-fila .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 6px 0 8px; }
-  [data-ui="v2"] .adm-fila .rv-sb__pie { flex: none; padding: 8px 4px; border-top: 1px solid var(--ui-border); }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-item { height: 40px; justify-content: center; margin: 0 6px; padding: 0; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-item__txt,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-grupo__tt,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-grupo__chev,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-cuenta__txt {
-    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden;
-    clip-path: inset(50%); white-space: nowrap; border: 0;
-  }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-grupo__cuerpo { grid-template-rows: 1fr; visibility: visible; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-grupo__h { display: none; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-grupo { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--ui-border); }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-logo-h,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-sb__plegar,
-  [data-ui="v2"] .adm-fila .rv-sb .adm-solo-ancho,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-cuenta__salir { display: none; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-logo-s { display: block; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-cuenta { flex-direction: column; height: auto; padding: 4px 0; border: 0; background: transparent; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-cuenta__btn { width: 100%; height: 40px; padding: 0; justify-content: center; flex: none; }
-  [data-ui="v2"] .adm-fila .rv-col { border-radius: 0; border-width: 0; box-shadow: none; height: auto; min-height: 100dvh; overflow: visible; }
-  [data-ui="v2"] .adm-fila .rv-contenido { overflow: visible; }
   [data-ui="v2"] .adm-fila > aside[aria-label="Copiloto"] { display: none; }
-  /* El pie compartido (`ui-v2/pie-sidebar.css`) en este riel de 56 px: solo iconos (organización, avisos, acceso, tema). */
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org > .rv-ps-cap,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org__fila,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-toggles { display: none; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org__riel,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-tema__riel { display: flex; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-org { padding: 0; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-acceso { justify-content: center; margin: 0 6px; padding: 0; height: 40px; border-color: transparent; background: transparent; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-acceso__txt { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-sindato,
-  [data-ui="v2"] .adm-fila .rv-sb .rv-ps-avisos .rv-contador { display: none; }
+  /* Las pantallas sin `MarcoPagina` (padding 0) conservan el aire inferior que deja libre la barra flotante (64 + área segura + 24). */
+  [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-bottom: calc(64px + max(10px, env(safe-area-inset-bottom)) + 24px); }
 }
 
 /* ── Páginas de /admin sobre el marco compartido `main.h-full > .hairline` (paginas-dominio.css ya quita la caja gris envolvente y

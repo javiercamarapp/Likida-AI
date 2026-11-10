@@ -79,7 +79,7 @@ function TarjetaAgentesParados({ parados, cola }: { parados: AgentesParados | nu
       {cola?.frenaAlRunner && (
         <Aviso tono="error" titulo="La bandeja de aprobación los frena."
           acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">Ir a Aprobaciones</BotonEnlace>}>
-          {numero(cola.pendientes)} piezas pendientes esperan tu decisión; el tope del runner no se toca.
+          {numero(cola.pendientes)} piezas pendientes esperan tu decisión; el límite de ejecución automática no se toca.
         </Aviso>
       )}
     </Tarjeta>
@@ -160,9 +160,9 @@ export function VistaTuTurno({
           },
           { etiqueta: 'Envíos por aprobar', icono: <ListChecks {...ICONO} />, valor: envios.length, formato: 'entero' },
           {
-            etiqueta: 'PRs esperando tu merge', icono: <GitPullRequest {...ICONO} />, formato: 'entero',
+            etiqueta: 'Cambios por aprobar', icono: <GitPullRequest {...ICONO} />, formato: 'entero',
             valor: prs.estado === 'ok' ? prs.prs.length : null,
-            nota: prs.estado === 'ok' ? undefined : prs.estado === 'sin_token' ? 'Falta el acceso a GitHub' : 'GitHub no contestó',
+            nota: prs.estado === 'ok' ? undefined : prs.estado === 'sin_token' ? 'Falta conectar GitHub' : 'GitHub no contestó',
           },
           {
             etiqueta: 'Escalaciones', icono: <Inbox {...ICONO} />, valor: totalEscalaciones, formato: 'entero',
@@ -181,8 +181,8 @@ export function VistaTuTurno({
           <p className="bj-nota">Se listan las {TOPE_PIEZAS} más recientes — hay más esperando detrás.</p>
         )}
         {bus.piezasPendientes.length === 0 ? (
-          <EstadoVacio titulo="No hay piezas esperando">
-            Las rutinas de la Mac las suben aquí al terminar (si la Mac aún no corre el bus, instala <code>bus.sh</code> — ver el esqueleto de autonomía).
+          <EstadoVacio titulo="No hay piezas esperando" contenido>
+            Las piezas que preparan las rutinas automáticas aparecen aquí para que las apruebes. Si esperabas alguna, revisa que las rutinas estén encendidas.
           </EstadoVacio>
         ) : (
           <div className="bj-piezas">
@@ -233,7 +233,7 @@ export function VistaTuTurno({
         {/* ── 2 · Envíos redactados (0117) — dinero directo, se resuelven en Aprobaciones ─ */}
         <Tarjeta
           titulo={`Envíos por aprobar (${envios.length})`}
-          estado={envios.length === 0 ? 'vacio' : 'ok'} mensaje="Nada redactado esperando tu firma"
+          estado={envios.length === 0 ? 'vacio' : 'ok'} contenida mensaje="Nada redactado esperando tu firma"
           acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">Revisar y aprobar en la cola</BotonEnlace>}
         >
           <ul className="bj-lista">
@@ -250,7 +250,7 @@ export function VistaTuTurno({
         {/* ── 4 · Escalaciones — el top; la cola completa vive en su pantalla ── */}
         <Tarjeta
           titulo={`Escalaciones (${totalEscalaciones === null ? '—' : totalEscalaciones})`}
-          estado={totalEscalaciones === null ? 'error' : totalEscalaciones === 0 ? 'vacio' : 'ok'}
+          estado={totalEscalaciones === null ? 'error' : totalEscalaciones === 0 ? 'vacio' : 'ok'} contenida
           mensaje={totalEscalaciones === null ? 'No se pudo leer ninguna fuente de escalaciones. No es cero.' : 'Nada escalado a un humano ahora mismo'}
           acciones={<BotonEnlace href="/admin/escalaciones" variante="secondary" tamano="sm">La cola completa</BotonEnlace>}
         >
@@ -267,15 +267,15 @@ export function VistaTuTurno({
       </FilaTarjetas>
 
       <FilaTarjetas variante="6-6">
-        {/* ── 3 · PRs — la aprobación de CÓDIGO es el merge, no un botón aquí ── */}
+        {/* ── 3 · Cambios de código (PRs) — la aprobación de CÓDIGO es fusionarlos en GitHub, no un botón aquí ── */}
         {prs.estado === 'sin_token' ? (
-          <Tarjeta titulo="PRs esperando tu merge" estado="vacio" mensaje="Falta la llave de GitHub"
-            detalle="Sin GITHUB_TOKEN en Vercel esta sección no puede ver los PRs — es una de tus llaves pendientes, no un cero." />
+          <Tarjeta titulo="Cambios por aprobar" estado="vacio" contenida mensaje="Falta conectar GitHub"
+            detalle="Sin ese acceso no se pueden ver los cambios de código pendientes. Es un dato que falta, no un cero." />
         ) : prs.estado === 'error' ? (
-          <Tarjeta titulo="PRs esperando tu merge" estado="error"
-            mensaje="GitHub no contestó — no se sabe cuántos PRs esperan (que no es lo mismo que ninguno)." />
+          <Tarjeta titulo="Cambios por aprobar" estado="error"
+            mensaje="GitHub no contestó: no se sabe cuántos cambios esperan, y eso no es lo mismo que ninguno." />
         ) : (
-          <Tarjeta titulo="PRs esperando tu merge" estado={prs.prs.length === 0 ? 'vacio' : 'ok'} mensaje="No hay PRs abiertos">
+          <Tarjeta titulo="Cambios por aprobar" estado={prs.prs.length === 0 ? 'vacio' : 'ok'} contenida mensaje="No hay cambios por aprobar" detalle="Cuando alguien proponga un cambio de código, lo verás aquí.">
             <ul className="bj-lista">
               {prs.prs.map((pr) => (
                 <li key={pr.numero}>
@@ -295,7 +295,7 @@ export function VistaTuTurno({
       {/* ── 5 · Las rutinas de la Mac — estado y mando ───────────────────── */}
       <section className="bj-bloque" aria-labelledby="tt-rutinas">
         <div className="bj-titulo-fila">
-          <h2 className="bj-titulo" id="tt-rutinas">Rutinas de la Mac ({bus.rutinas.length})</h2>
+          <h2 className="bj-titulo" id="tt-rutinas">Rutinas automáticas ({bus.rutinas.length})</h2>
           <div className="bj-acciones">
             <form action={accionOrden}>
               <input type="hidden" name="tipo" value="kill_switch_on" />
@@ -303,7 +303,7 @@ export function VistaTuTurno({
               <BotonConfirmar
                 etiqueta="Apagar todas" icono={<PowerOff {...ICONO} />} tono="peligro"
                 etiquetaConfirmar="Sí, apagar todas" titulo="Apagar todas las rutinas"
-                descripcion={`Se encola la orden de apagado: la Mac detiene las ${bus.rutinas.length} rutinas en su siguiente latido (≤5 min) hasta que las enciendas.`}
+                descripcion={`Se encola la orden de apagado: se detienen las ${bus.rutinas.length} rutinas en la siguiente revisión (≤5 min) hasta que las enciendas.`}
                 className={clasesBoton('danger', 'sm')}
               />
             </form>
@@ -312,18 +312,18 @@ export function VistaTuTurno({
               <BotonConfirmar
                 etiqueta="Encender todas" icono={<Power {...ICONO} />} tono="normal"
                 etiquetaConfirmar="Sí, encender todas" titulo="Encender todas las rutinas"
-                descripcion={`Se encola la orden de encendido: la Mac reactiva las ${bus.rutinas.length} rutinas en su siguiente latido (≤5 min). Pueden gastar modelo y publicar.`}
+                descripcion={`Se encola la orden de encendido: se reactivan las ${bus.rutinas.length} rutinas en la siguiente revisión (≤5 min). Pueden gastar modelo y publicar.`}
                 className={clasesBoton('secondary', 'sm')}
               />
             </form>
           </div>
         </div>
         {bus.killSwitchPendiente && (
-          <p className="bj-nota">Hay una orden de apagado/encendido esperando el latido de la Mac.</p>
+          <p className="bj-nota">Hay una orden de apagado o encendido esperando la siguiente revisión.</p>
         )}
         {bus.rutinas.length === 0 ? (
-          <EstadoVacio titulo="Sin rutinas sembradas" icono={Bot}>
-            La Mac aún no siembra el catálogo — corre <code>bus.sh sembrar-catalogo</code> una vez.
+          <EstadoVacio titulo="Aún no hay rutinas registradas" icono={Bot} contenido>
+            Cuando el equipo técnico dé de alta las rutinas automáticas, aparecerán aquí con su estado.
           </EstadoVacio>
         ) : (
           <>
@@ -363,7 +363,7 @@ export function VistaTuTurno({
       </Tarjeta>
 
       <p className="bj-nota">
-        Sesión: {sesionNombre} · Las órdenes las ejecuta la Mac en su latido (≤5 min) y firma el
+        Sesión: {sesionNombre} · Las órdenes se ejecutan en la siguiente revisión (≤5 min) y firma el
         resultado aquí. Esta pantalla nunca toca la Mac directo.
       </p>
     </MarcoPagina>

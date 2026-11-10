@@ -39,8 +39,8 @@ it('R9: cabecera con KPIs reales, tarjetas de altura uniforme, imagen con marco 
   // KPIs: cifras reales de las fuentes legibles; PRs sin token es «—» (no un cero).
   expect(html).toContain('Piezas para tu tap');
   expect(html).toContain('Envíos por aprobar');
-  expect(html).toContain('PRs esperando tu merge');
-  expect(html).toContain('Falta el acceso a GitHub');
+  expect(html).toContain('Cambios por aprobar');
+  expect(html).toContain('Falta conectar GitHub');
   // Las dos tarjetas tienen la misma caja de imagen (con o sin imagen; el 16:9 vive en bandeja.css, no en style=).
   expect((html.match(/class="bj-pieza__marco"/g) ?? []).length).toBe(2);
   expect(html).toContain('Sin imagen');

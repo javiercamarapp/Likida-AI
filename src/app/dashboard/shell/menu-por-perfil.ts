@@ -131,7 +131,7 @@ export function hrefActivo(pathname: string, menu: MenuV2): string | null {
   let mejor: { largo: number; href: string } | null = null;
   for (const it of todosLosItems(menu)) {
     for (const h of [it.href, ...(it.pestanas ?? []).map((p) => p.href)]) {
-      const coincide = pathname === h || (h !== '/dashboard' && pathname.startsWith(`${h}/`));
+      const coincide = pathname === h || (h !== '/dashboard' && h !== '/admin' && pathname.startsWith(`${h}/`));
       if (coincide && (mejor === null || h.length > mejor.largo)) mejor = { largo: h.length, href: it.href };
     }
   }

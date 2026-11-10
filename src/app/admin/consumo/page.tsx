@@ -125,7 +125,7 @@ export default async function ConsumoPage() {
       ]} />
 
       <FilaTarjetas variante="8-4">
-        <Tarjeta titulo="Gasto de IA por día" estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} mensaje={r ? 'Sin historial suficiente' : undefined} detalle="Hacen falta al menos dos días con registro para dibujar la serie." reintentar>
+        <Tarjeta titulo="Gasto de IA por día" estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} contenida={!!r && r.porDia.length <= 1} mensaje={r ? 'Sin historial suficiente' : undefined} detalle="Hacen falta al menos dos días con registro para dibujar la serie." reintentar>
           {r ? (
             <>
               <Columnas etiqueta="Gasto de IA por día" datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: dia(d.dia), valor: d.costoUsd }))} formato="usd" vacio="Sin gasto registrado" />
@@ -238,7 +238,7 @@ function AvisosDeTope({ avisos, encendidos }: { avisos: FilaAlertaTope[] | null;
   if (avisos.length === 0) {
     return (
       <Tarjeta
-        titulo={titulo} estado="vacio" mensaje="Ningún aviso registrado"
+        titulo={titulo} estado="vacio" contenida mensaje="Ningún aviso registrado"
         detalle={encendidos ? 'Ninguna flota cruzó el 80 % de su techo diario en estos días.' : 'Los avisos están apagados: no se sabe si alguna flota cruzó su techo.'}
         accionVacio={<BotonEnlace href="/admin/techo-ia" variante="secondary" tamano="sm">Ver techos</BotonEnlace>}
       />

@@ -137,7 +137,7 @@ describe.skipIf(SIN_NAVEGADOR)('copiloto unificado · página', () => {
     const caja = await p.locator('.rv-chat__composer').boundingBox();
     expect(Math.round(caja!.width)).toBe(736);
     expect(Math.round(caja!.height)).toBe(58);
-    expect(await p.locator('.rv-chat__hero h1').evaluate((e) => `${getComputedStyle(e).fontSize}/${getComputedStyle(e).fontWeight}`)).toBe('20px/600');
+    expect(await p.locator('.rv-chat__hero :is(h1, h2)').evaluate((e) => `${getComputedStyle(e).fontSize}/${getComputedStyle(e).fontWeight}`)).toBe('20px/600');
     expect(await p.locator('.rv-chat__tema').count()).toBe(3);
     expect(await p.locator('.rv-chat__clip').count()).toBe(0);
     await p.close();

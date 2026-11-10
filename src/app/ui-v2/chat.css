@@ -53,7 +53,7 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 /* ── Portada vacía: marca, título, frase, recuadro y sugerencias como UN grupo centrado verticalmente (escritorio) ── */
 .rv-chat__hero { order: 1; margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 0; text-align: center; }
 .rv-chat__logo { margin-bottom: 14px; color: var(--ink); }
-.rv-chat__hero h1 { margin: 0 0 6px; font: 600 20px/1.25 var(--font-sans-ui, inherit); letter-spacing: 0; color: var(--ink); }
+.rv-chat__hero :is(h1, h2) { margin: 0 0 6px; font: 600 20px/1.25 var(--font-sans-ui, inherit); letter-spacing: 0; color: var(--ink); }
 .rv-chat__sub { margin: 0 0 20px; max-width: 34rem; font-size: 14px; line-height: 20px; text-align: center; color: var(--muted); }
 .rv-chat__dock { order: 2; display: flex; justify-content: center; width: 100%; max-width: var(--col-chat, 46rem); padding: 0; }
 .rv-chat__agente[data-has="true"] .rv-chat__dock { padding-top: 8px; }
@@ -353,7 +353,7 @@ summary.rv-chat__resumen::marker { content: ""; }
 .rv-chat[data-variante="panel"] { --col-chat: 100%; padding: 0 12px 12px; box-sizing: border-box; }
 .rv-chat[data-variante="panel"] :is(.rv-chat__pie, .rv-chat__meta) { display: none; }
 .rv-chat[data-variante="panel"] .rv-chat__sub { margin-bottom: 14px; font-size: 13px; line-height: 18px; }
-.rv-chat[data-variante="panel"] .rv-chat__hero h1 { font-size: 18px; }
+.rv-chat[data-variante="panel"] .rv-chat__hero :is(h1, h2) { font-size: 18px; }
 
 /* El contenedor de la página /admin/copiloto: el alto lo da la ventana (no hay scroll de documento propio del chat). */
 

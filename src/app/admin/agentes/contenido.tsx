@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import {
   listarAgentes, DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
@@ -13,7 +12,7 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
+  Aviso, BotonEnlace, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
@@ -117,15 +116,15 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
       id: 'agente', titulo: 'Agente', principal: true,
       celda: ({ a }) => {
         const e = exito?.get(a.id);
-        const pct = e && e.total > 0 ? `${Math.round((e.ok / e.total) * 100)} % de éxito (${e.total})` : exito === null ? 'éxito: no se pudo leer' : 'sin corridas en 30 días';
-        const costo = consumo === null ? 'costo: no se pudo leer' : (costoDe.get(a.id) ?? 0) > 0 ? `${usd(costoDe.get(a.id) ?? 0)} en 30 días` : 'sin costo medido';
+        const pct = e && e.total > 0 ? `${Math.round((e.ok / e.total) * 100)} % de éxito (${e.total})` : exito === null ? 'éxito sin dato' : 'sin corridas en 30 días';
+        const costo = consumo === null ? 'costo sin dato' : (costoDe.get(a.id) ?? 0) > 0 ? `${usd(costoDe.get(a.id) ?? 0)} en 30 días` : 'sin costo medido';
         const tope = a.presupuestoDiaUsd === null ? 'sin tope declarado' : `${usd(a.presupuestoDiaUsd)}/día`;
+        // Una sola línea de apoyo (departamento y éxito); modelo, tope y costo van en el tooltip y en «Configurar», no en cada fila.
         return (
-          <>
+          <span title={`${a.modeloRol ?? 'modelo sin declarar'} · ${tope} · ${costo}`}>
             <strong>{a.nombre}</strong>
-            <span className="rv-agente-sub">{rotuloDepto.get(a.departamento) ?? a.departamento} · {a.modeloRol ?? 'modelo sin declarar'} · {tope}</span>
-            <span className="rv-agente-sub">{pct} · {costo}</span>
-          </>
+            <span className="rv-agente-sub">{rotuloDepto.get(a.departamento) ?? a.departamento} · {pct}</span>
+          </span>
         );
       },
     },
@@ -142,9 +141,9 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
     {
       id: 'corrida', titulo: 'Última corrida',
       celda: ({ a, corrida }) => corrida === 'error'
-        ? <span>No se pudo leer</span>
+        ? <span className="rv-agente-nowrap">No se pudo leer</span>
         : corrida === null
-          ? <span>{a.estado === 'vivo' ? 'Sin corridas todavía' : 'No corre en el producto'}</span>
+          ? <span className="rv-agente-nowrap">{a.estado === 'vivo' ? 'Sin corridas todavía' : 'No corre en el producto'}</span>
           : (
             <>
               <StatusChip tono={tonoPorAntiguedad(corrida.inicio, ahora)}>{fechaHoraMx(corrida.inicio)}</StatusChip>
@@ -162,11 +161,11 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
     {
       id: 'palanca', titulo: 'Kill switch',
       celda: ({ a, apagado }) => a.estado !== 'vivo'
-        ? <span>—</span>
+        ? <span className="rv-agente-nowrap">—</span>
         : apagado === null
-          ? <span>No se pudo leer</span>
+          ? <span className="rv-agente-nowrap">No se pudo leer</span>
           : apagado === undefined
-            ? <span>Sin palanca propia</span>
+            ? <span className="rv-agente-nowrap">Sin palanca propia</span>
             : <KillSwitchAgente palanca={`agente:${a.id}`} nombre={a.nombre} apagado={apagado} accion={accionPalanca} />,
     },
     {
@@ -180,9 +179,9 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
               presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
             }}
           />
-          <Link className="rv-btn rv-btn--ghost rv-btn--sm" href={`/admin/agentes/${a.id}/insumos`}>
+          <BotonEnlace variante="ghost" tamano="sm" href={`/admin/agentes/${a.id}/insumos`}>
             {insumosPendientes === null ? 'Insumos' : (insumosPendientes.get(a.id) ?? 0) > 0 ? `Insumos (${insumosPendientes.get(a.id)})` : 'Insumos'}
-          </Link>
+          </BotonEnlace>
         </div>
       ),
     },

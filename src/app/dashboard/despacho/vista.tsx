@@ -106,7 +106,7 @@ export function VistaDespacho({
   const columnasActivos: ColumnaBase<ViajeEnCursoRow>[] = [
     { id: 'viaje', titulo: 'Viaje', principal: true, celda: (v) => <span className="rv-dsp__folio">{v.folio}</span> },
     { id: 'ruta', titulo: 'Ruta', celda: (v) => <span className="rv-dsp__ruta">{v.origen ?? '—'} → {v.destino ?? '—'}</span> },
-    { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ?? <span className="rv-dsp__tenue">Sin asignar</span> },
+    { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ? <span className="rv-dsp__nombre" title={v.operadorNombre}>{v.operadorNombre}</span> : <span className="rv-dsp__tenue">Sin asignar</span> },
     {
       id: 'unidad', titulo: 'Unidad',
       celda: (v) => (

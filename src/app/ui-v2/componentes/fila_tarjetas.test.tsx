@@ -14,7 +14,7 @@ describe('FilaTarjetas', () => {
   it('pinta un contenedor con la variante pedida y sus hijos, sin style en línea', () => {
     for (const v of VARIANTES) {
       const html = renderToStaticMarkup(<FilaTarjetas variante={v}><Tarjeta titulo="A">a</Tarjeta><Tarjeta titulo="B">b</Tarjeta></FilaTarjetas>);
-      expect(html).toContain('class="rv-fila"');
+      expect(html).toContain('class="rv-fila-tarjetas"');
       expect(html).toContain(`data-variante="${v}"`);
       expect(html.match(/rv-tarjeta"/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
       expect(html).not.toContain('style=');
@@ -55,7 +55,7 @@ describe('FilaTarjetas', () => {
   it('convive con MarcoPagina como bloque hijo', () => {
     const html = renderToStaticMarkup(<MarcoPagina titulo="Resumen"><FilaTarjetas variante="8-4"><Tarjeta titulo="A">a</Tarjeta><Tarjeta titulo="B">b</Tarjeta></FilaTarjetas></MarcoPagina>);
     expect(html.match(/<h1/g)).toHaveLength(1);
-    expect(html.indexOf('rv-fila')).toBeGreaterThan(html.indexOf('<h1'));
+    expect(html.indexOf('rv-fila-tarjetas')).toBeGreaterThan(html.indexOf('<h1'));
   });
 });
 

@@ -27,6 +27,17 @@ const clases = (html: string): Set<string> => {
 const cliente = renderToStaticMarkup(<AgenteConversacion modo="cliente" kpis={null} acred={null} />);
 const superadmin = renderToStaticMarkup(<AgenteConversacion modo="superadmin" />);
 
+describe('UN solo <h1> por página: el panel lateral del Copiloto no compite con el título de la pantalla', () => {
+  const panel = renderToStaticMarkup(<AgenteConversacion modo="superadmin" variante="panel" marca="simbolo" />);
+  it('la variante panel pinta el título como <h2>', () => {
+    expect(panel).not.toContain('<h1');
+    expect(panel).toMatch(/<h2>[^<]+<\/h2>/);
+  });
+  it('la variante página (el chat de /dashboard y la página del Copiloto) conserva su <h1>', () => {
+    expect((superadmin.match(/<h1/g) ?? []).length).toBe(1);
+  });
+});
+
 describe('el cliente y el superadmin comparten estructura y clases', () => {
   it('las clases rv-* son las mismas salvo el clip de adjuntar (el copiloto no tiene adjuntos)', () => {
     const c = clases(cliente);
