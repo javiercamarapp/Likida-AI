@@ -7,7 +7,7 @@ import { FormaCatalogo } from './formas_catalogo';
 import { FormaEstadoSitio } from './formas_estado';
 import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
 import '../conductores.css';
-import { AvisoCompacto, BarraFiltros, BotonEnlace, Disclosure, FiltroBusqueda, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraFiltros, BotonEnlace, Disclosure, FiltroBusqueda, MarcoPagina, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 
 // SOLO tipos: la vista no debe arrastrar al bundle el acceso a datos.
 

@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { Send, CheckCheck, Flag, MapPin, Package, Truck, Sparkles, Ban } from 'lucide-react';
+import { Send, CheckCheck, Flag, MapPin, Package, Truck, Ban } from 'lucide-react';
 import type { EventoConductor } from '@/lib/likida/analytics';
 import { HORAS_PARA_ESCALAR } from '@/lib/likida/escalar_viaje';
 import { numero, fechaCorta } from '@/lib/formato';
@@ -10,7 +10,7 @@ import { EtiquetaSimulado } from './tablero-hitos';
 import { MENSAJE_SIN_LINEA_BASE, type Cifra as CifraDato, type InsightsConductor, type KpiPiloto } from '@/lib/likida/conductor/insights';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Disclosure, EsqCifrasV2, EstadoError, EstadoVacio, EsqTablaV2, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Disclosure, EsqCifrasV2, EstadoError, EstadoVacio, EsqTablaV2, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { fuenteLegible } from '@/app/dashboard/lenguaje-cliente';
 
 export interface EsperaAceptar {

@@ -174,7 +174,9 @@ describe('conversaciones activas y toma de control', () => {
     const html = await pintar(BloqueConversaciones({ datos: Promise.resolve(d), ahoraMs: AHORA, puedeDecidir: true, acciones }));
     expect(html).toContain('Espera 10 min');
     expect(html).toContain('Espera 50 min');
-    expect(html.match(/color:var\(--bad\)/g)?.length ?? 0).toBeGreaterThanOrEqual(1);
+    // El tono viaja en el atributo del chip (no en un color en línea): pasado el SLA = bad; dentro del plazo = warn.
+    expect(html).toMatch(/data-tono="bad"[^>]*>Espera 50 min/);
+    expect(html).toMatch(/data-tono="warn"[^>]*>Espera 10 min/);
   });
   it('vacío: lo dice', async () => {
     expect(await pintar(BloqueConversaciones({ datos: Promise.resolve(base()), ahoraMs: AHORA, puedeDecidir: true, acciones }))).toContain('Ningún cliente tiene un hilo abierto');
