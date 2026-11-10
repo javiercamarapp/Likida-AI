@@ -13,12 +13,12 @@
 // un estado nuevo en `ESTADOS_TICKET` (lib/likida/soporte.ts, dominio de la
 // 0051) sin rótulo aquí NO COMPILA — el patrón de `rotulo-diferencia.ts`.
 // ═══════════════════════════════════════════════════════════════════════════
-import type { Estado } from '@/app/admin/ui/kit';
+import type { TonoEstado } from '@/app/ui-v2/componentes';
 import type { EstadoTicket } from '@/lib/likida/soporte';
 
 /** `ticket_soporte.estado` (dominio de la 0051) como pill — mismo criterio
  *  de color que `PILL_ESTATUS` en resumen-visual. */
-export const PILL_TICKET: Record<EstadoTicket, { estado: Estado; etiqueta: string }> = {
+export const PILL_TICKET: Record<EstadoTicket, { estado: TonoEstado; etiqueta: string }> = {
   abierto: { estado: 'warn', etiqueta: 'Abierto' },
   en_proceso: { estado: 'warn', etiqueta: 'En proceso' },
   esperando: { estado: 'neutral', etiqueta: 'Esperando' },
@@ -29,6 +29,6 @@ export const PILL_TICKET: Record<EstadoTicket, { estado: Estado; etiqueta: strin
 /** Un valor fuera del dominio se pinta con su clave cruda en neutro —
  *  visible, no roto, y nunca una etiqueta inventada (mismo contrato que
  *  `etiquetaEstatus` en `dashboard/estatus.ts`). */
-export function pillTicket(estado: string): { estado: Estado; etiqueta: string } {
+export function pillTicket(estado: string): { estado: TonoEstado; etiqueta: string } {
   return PILL_TICKET[estado as EstadoTicket] ?? { estado: 'neutral', etiqueta: estado };
 }
