@@ -40,25 +40,36 @@ export function resumirRequiereAccion(b: Pick<BandejaEscalaciones, 'conteos'>): 
 }
 
 type Lector = (ahoraMs: number) => Promise<BandejaEscalaciones>;
-let cache: { valor: RequiereAccion; vence: number } | null = null;
+export interface PanoramaAccion { resumen: RequiereAccion; bandeja: BandejaEscalaciones | null }
+let cache: { valor: PanoramaAccion; vence: number } | null = null;
 
 /** Solo para pruebas. */
 export function vaciarCacheRequiereAccion(): void { cache = null; }
 
 /**
- * Lo que consume el layout. NUNCA lanza: si la bandeja entera falla devuelve `SIN_DATO` (y no lo cachea, para reintentar en la
- * siguiente navegación). Lector y reloj inyectables para la prueba.
+ * La lectura única de la bandeja con su resumen, en caché corta. La campana (`obtenerRequiereAccion`) y los conteos de las pestañas
+ * (`conteos-pestanas.ts`) salen de AQUÍ: una sola lectura por ventana, nunca dos. NUNCA lanza: si la bandeja entera falla devuelve
+ * `{ resumen: SIN_DATO, bandeja: null }` (y no lo cachea, para reintentar en la siguiente navegación). Lector y reloj inyectables.
  */
+export async function obtenerPanoramaAccion(
+  ahoraMs: number = Date.now(),
+  leer: Lector = getBandejaEscalaciones,
+): Promise<PanoramaAccion> {
+  if (cache && ahoraMs < cache.vence) return cache.valor;
+  try {
+    const bandeja = await leer(ahoraMs);
+    const valor = { resumen: resumirRequiereAccion(bandeja), bandeja };
+    cache = { valor, vence: ahoraMs + TTL_REQUIERE_ACCION_MS };
+    return valor;
+  } catch {
+    return { resumen: SIN_DATO, bandeja: null };
+  }
+}
+
+/** Lo que consume el layout para la campana. Ver `obtenerPanoramaAccion`. */
 export async function obtenerRequiereAccion(
   ahoraMs: number = Date.now(),
   leer: Lector = getBandejaEscalaciones,
 ): Promise<RequiereAccion> {
-  if (cache && ahoraMs < cache.vence) return cache.valor;
-  try {
-    const valor = resumirRequiereAccion(await leer(ahoraMs));
-    cache = { valor, vence: ahoraMs + TTL_REQUIERE_ACCION_MS };
-    return valor;
-  } catch {
-    return SIN_DATO;
-  }
+  return (await obtenerPanoramaAccion(ahoraMs, leer)).resumen;
 }
