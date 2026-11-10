@@ -20,7 +20,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FileText, MessageCircle } from 'lucide-react';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
 import { TituloSeccion } from '../../../dashboard/resumen-visual';
-import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { BotonEnlace, EstadoError, MarcoPagina } from '@/app/ui-v2/componentes';
 import '../qa.css';
 import { StatusPill, type Estado } from '../../ui/kit';
 import { PILL_CORRIDA } from '../pantalla';
@@ -54,7 +54,7 @@ function json(v: unknown): string {
   return typeof v === 'string' ? v : JSON.stringify(v, null, 1);
 }
 
-export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, medicionInicial = null, medicionErrorInicial = null }: {
+function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicionInicial = null, medicionErrorInicial = null }: {
   corridaInicial: CorridaQA;
   fotosIniciales: FotoFirmada[];
   pdfsIniciales: PdfFirmado[];
@@ -187,12 +187,6 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
   const av = corrida.avance;
 
   return (
-    <MarcoPagina
-      area="Calidad"
-      titulo={`Corrida ${corrida.id.slice(0, 8)}`}
-      apoyo={`Escenario: ${escenarioPorId(corrida.escenario)?.nombre ?? corrida.escenario}. El avance, el veredicto y la evidencia de esta corrida.`}
-      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">Volver a Pruebas reales</BotonEnlace>}
-    >
       <div className="space-y-2.5">
           {/* ── Avisos de lectura (fallar cerrado, dicho) ─────────────────── */}
           {errorLectura && (
@@ -470,6 +464,32 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
             </div>
           )}
       </div>
+  );
+}
+
+/** La pantalla de una corrida: UN solo MarcoPagina. Si la lectura de la corrida falló (`errorLectura`), lo dice en lugar del cuerpo: no es que no exista, es que no se pudo mirar. */
+export function CorridaViva({ corridaInicial = null, errorLectura = null, ...resto }: {
+  corridaInicial?: CorridaQA | null;
+  errorLectura?: string | null;
+  fotosIniciales?: FotoFirmada[];
+  pdfsIniciales?: PdfFirmado[];
+  medicionInicial?: ResumenPrecisionCorrida | null;
+  medicionErrorInicial?: string | null;
+}) {
+  return (
+    <MarcoPagina
+      area="Calidad"
+      titulo={corridaInicial ? `Corrida ${corridaInicial.id.slice(0, 8)}` : 'Calidad'}
+      apoyo={corridaInicial
+        ? `Escenario: ${escenarioPorId(corridaInicial.escenario)?.nombre ?? corridaInicial.escenario}. El avance, el veredicto y la evidencia de esta corrida.`
+        : 'La corrida de pruebas reales no se pudo abrir.'}
+      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">Volver a Pruebas reales</BotonEnlace>}
+    >
+      {corridaInicial ? (
+        <CuerpoCorrida corridaInicial={corridaInicial} fotosIniciales={resto.fotosIniciales ?? []} pdfsIniciales={resto.pdfsIniciales ?? []} medicionInicial={resto.medicionInicial} medicionErrorInicial={resto.medicionErrorInicial} />
+      ) : (
+        <EstadoError reintentar>{`No se pudo leer la corrida. ${errorLectura ?? ''} — no es que no exista, es que no se pudo mirar.`}</EstadoError>
+      )}
     </MarcoPagina>
   );
 }

@@ -5,7 +5,6 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { leerCorrida, leerManifiesto, leerLecturasDeCorrida, firmarRutas, BUCKET_QA_FOTOS } from '@/lib/admin/qa-storage';
 import { resumenDeLecturas } from '@/lib/admin/qa-medicion';
 import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
-import { MarcoPagina, EstadoError } from '@/app/ui-v2/componentes';
 import { CorridaViva, type FotoFirmada, type PdfFirmado } from './corrida-viva';
 
 export const dynamic = 'force-dynamic';
@@ -30,9 +29,7 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
     // Error DICHO, no tragado: una pantalla en blanco sobre un Storage caído
     // afirmaría "esta corrida no dejó nada", que es lo contrario de un ledger.
     return (
-      <MarcoPagina area="Calidad" titulo="Calidad" apoyo="La corrida de pruebas reales no se pudo abrir.">
-        <EstadoError>{`No se pudo leer la corrida. ${r.error} — no es que no exista, es que no se pudo mirar.`}</EstadoError>
-      </MarcoPagina>
+      <CorridaViva errorLectura={r.error} />
     );
   }
   if (r.datos === null) notFound();
