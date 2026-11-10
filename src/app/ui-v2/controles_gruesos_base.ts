@@ -3,7 +3,6 @@
 export interface ConteoControles { R1: number; R2: number; R3: number }
 export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/agentes/[id]/insumos/zona-insumos.tsx': { R1: 3, R2: 1, R3: 0 },
-  'app/admin/aprobaciones/forma-pieza.tsx': { R1: 5, R2: 5, R3: 0 },
   'app/admin/conversaciones/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/corridas/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/crecimiento/campanas.tsx': { R1: 2, R2: 1, R3: 0 },
@@ -23,8 +22,6 @@ export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/qa/banco-verdad.tsx': { R1: 4, R2: 0, R3: 0 },
   'app/admin/qa/lanzar-form.tsx': { R1: 5, R2: 0, R3: 0 },
   'app/admin/rango-costo.tsx': { R1: 1, R2: 0, R3: 0 },
-  'app/admin/tu-turno/boton_envio.tsx': { R1: 1, R2: 0, R3: 0 },
-  'app/admin/tu-turno/vista.tsx': { R1: 3, R2: 0, R3: 0 },
   'app/admin/ui/kit.tsx': { R1: 1, R2: 1, R3: 1 },
   'app/admin/vendedores/consola-vendedores.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/vendedores/formas.tsx': { R1: 1, R2: 0, R3: 1 },
@@ -39,6 +36,5 @@ export const BASE_SIN_ALTURA: Record<string, number> = {
   'app/admin/mi-perfil/avatar-uploader.tsx': 1,
   'app/admin/qa/banco-verdad.tsx': 3,
   'app/admin/qa/lanzar-form.tsx': 3,
-  'app/admin/tu-turno/boton_envio.tsx': 1,
   'app/admin/vendedores/tablero.tsx': 3,
 };

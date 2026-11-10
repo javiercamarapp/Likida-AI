@@ -13,7 +13,7 @@ import {
   contarVencidas, vaciarVencidas, leerResumenBandeja, normalizarParametros,
 } from '@/lib/admin/cola-aprobacion';
 import { ahoraMs } from '@/lib/saludo';
-import { Aviso, EstadoVacio, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { Aviso, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
 import { FormaPieza, FormaEnvio, FormaLiberarAmbiguo, type ResultadoPieza } from './forma-pieza';
 import { RebotesYBajas } from './rebotes';
 import { LimpiezaLote, type ResultadoConteo, type ResultadoVaciado } from './lote';

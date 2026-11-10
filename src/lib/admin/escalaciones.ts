@@ -469,3 +469,15 @@ const TODAS_LAS_FUENTES: FuenteEscalacion[] = [
 export function totalEscalaciones(b: BandejaEscalaciones): number {
   return TODAS_LAS_FUENTES.reduce((s, f) => s + (conteoDeFuente(f, b.conteos) ?? 0), 0);
 }
+
+/** Como `totalEscalaciones`, pero una lectura caída NO se cuenta como 0: si NINGUNA fuente se pudo leer devuelve `null` («sin dato»);
+ *  si alguna sí, es el mínimo verdadero de lo legible (la pantalla ya avisa cuál fuente quedó ciega). */
+export function totalEscalacionesLegible(b: Pick<BandejaEscalaciones, 'conteos'>): number | null {
+  let suma = 0;
+  let leidas = 0;
+  for (const f of TODAS_LAS_FUENTES) {
+    const c = conteoDeFuente(f, b.conteos) ?? null;
+    if (c !== null) { suma += c; leidas += 1; }
+  }
+  return leidas === 0 ? null : suma;
+}

@@ -458,3 +458,18 @@ describe('getBandejaEscalaciones — las corridas en fallo se juntan en rachas',
     expect(await corridas()).toHaveLength(4);
   });
 });
+
+describe('totalEscalacionesLegible', () => {
+  const base = { arco: 0, corridasFallo: 0, talachas: 0, facturasProveedor: 0, ticketsAbiertos: 0, ticketsVencidos: 0, liquidacionesRevisar: 0 };
+  it('suma lo legible; un 0 leído es 0', async () => {
+    const { totalEscalacionesLegible } = await import('./escalaciones');
+    expect(totalEscalacionesLegible({ conteos: base })).toBe(0);
+    expect(totalEscalacionesLegible({ conteos: { ...base, talachas: 2, arco: null } })).toBe(2);
+  });
+  it('si ninguna fuente se pudo leer: null, nunca 0', async () => {
+    const { totalEscalacionesLegible } = await import('./escalaciones');
+    const caido = Object.fromEntries(Object.keys(base).map((k) => [k, null])) as unknown as typeof base;
+    expect(totalEscalacionesLegible({ conteos: caido })).toBeNull();
+    expect(totalEscalacionesLegible({ conteos: {} as never })).toBeNull();
+  });
+});
