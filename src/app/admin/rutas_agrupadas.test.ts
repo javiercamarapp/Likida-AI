@@ -37,7 +37,7 @@ describe('menú de /admin agrupado en pestañas', () => {
       'Consumo de IA': { href: '/admin/consumo', pestanas: ['Consumo', 'Techos'] },
       Facturación: { href: '/admin/cobranza', pestanas: ['Cobranza', 'Planes y cobro', 'Facturas'] },
       Crecimiento: { href: '/admin/crecimiento', pestanas: ['Adquisición', 'Estudio'] },
-      'Seguridad y datos': { href: '/admin/compliance', pestanas: ['Compliance y datos', 'Trust & Safety', 'Clientes MCP'] },
+      'Seguridad y datos': { href: '/admin/compliance', pestanas: ['Compliance y datos', 'Trust & Safety', 'Clientes MCP', 'Bitácora'] },
       Equipo: { href: '/admin/equipo', pestanas: ['Personas', 'Nuevo acceso'] },
       Salud: { href: '/admin/salud-sistema', pestanas: ['Estado', 'Relojes', 'Observabilidad', 'Corridas', 'Capacidad'] },
       Soporte: { href: '/admin/soporte', pestanas: [] },
@@ -99,7 +99,7 @@ describe('menú de /admin agrupado en pestañas', () => {
     expect(busca('tu turno')).toContain('/admin/tu-turno');
     expect(busca('cerebro')).toContain('/admin/mapa-prospectos');
     expect(busca('examenes')).toContain('/admin/evals');
-    expect(busca('bitacora')).toEqual([]); // la pestaña Bitácora llega en la Fase 7: hoy no se promete.
+    expect(busca('bitacora')).toEqual(['/admin/bitacora']); // la pestaña Bitácora existe desde la Fase 7.
   });
 
   it('ninguna ruta aparece en dos entradas distintas', () => {

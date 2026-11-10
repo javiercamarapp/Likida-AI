@@ -1,0 +1,32 @@
+/* Piezas mínimas de las pantallas de Seguridad y Sistema de /admin (Bitácora, Compliance, Soporte, Salud, Relojes, Corridas,
+   Observabilidad, Integraciones). Archivo propio: nada de editar componentes.css ni paginas.css. Solo tokens, sin movimiento. */
+[data-ui="v2"] .adm-sis-nota { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+[data-ui="v2"] .adm-sis-nota + .adm-sis-nota { margin-top: 4px; }
+[data-ui="v2"] .adm-sis-sub { display: block; font-size: 11px; line-height: 1.4; color: var(--muted); }
+[data-ui="v2"] .adm-sis-bloque { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+[data-ui="v2"] .adm-sis-titulo { margin: 0; font: 600 var(--t-card, 14px)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
+[data-ui="v2"] .adm-sis-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+[data-ui="v2"] .adm-sis-forma { display: flex; flex-direction: column; gap: 12px; max-width: 520px; }
+[data-ui="v2"] .adm-sis-rejilla { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+[data-ui="v2"] .adm-sis-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-sis-lista > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+[data-ui="v2"] .adm-sis-lista > li:first-child { border-top: 0; padding-top: 0; }
+[data-ui="v2"] .adm-sis-lista > li > span:first-child { color: var(--muted); min-width: 120px; }
+[data-ui="v2"] .adm-sis-fila { display: flex; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+[data-ui="v2"] .adm-sis-fila__cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 13px; font-weight: 600; }
+[data-ui="v2"] .adm-sis-fila__texto { margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+[data-ui="v2"] .adm-sis-fila__enlace { font-size: 12px; }
+[data-ui="v2"] .adm-sis-guia { margin: 6px 0 0; padding: 8px 12px; font-size: 12px; line-height: 1.5; color: var(--ink2); background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
+[data-ui="v2"] .adm-sis-guia > b { display: block; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+[data-ui="v2"] .adm-sis-guia code { font: inherit; font-weight: 600; }
+[data-ui="v2"] .adm-sis-hilo { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-ui="v2"] .adm-sis-msg { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+[data-ui="v2"] .adm-sis-msg[data-interna] { background: var(--surface); border-style: dashed; border-color: var(--ink2); }
+[data-ui="v2"] .adm-sis-msg__cab { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .adm-sis-msg__cab b { color: var(--ink); font-weight: 600; }
+[data-ui="v2"] .adm-sis-msg__cuerpo { margin: 6px 0 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+[data-ui="v2"] .adm-sis-descripcion { margin: 0; padding: 10px 12px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--canvas); border: 1px solid var(--line); border-radius: 8px; }
+[data-ui="v2"] .adm-sis-pie { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .adm-sis-pie nav { display: flex; flex-wrap: wrap; gap: 8px; }
+[data-ui="v2"] .adm-sis-error-fila { display: block; max-width: 60ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .adm-sis-dato { display: block; overflow-wrap: anywhere; }

@@ -73,12 +73,12 @@ export const NEGOCIO: Item[] = [
   ] },
 ];
 
-// La pestaña «Bitácora» se agrega en la Fase 7 (cuando exista la pantalla).
 export const CONTROL: Item[] = [
   { href: '/admin/compliance', nombre: 'Seguridad y datos', Icono: ShieldCheck, pestanas: [
     { href: '/admin/compliance', nombre: 'Compliance y datos' },
     { href: '/admin/trust-safety', nombre: 'Trust & Safety' },
     { href: '/admin/mcp-clientes', nombre: 'Clientes MCP' },
+    { href: '/admin/bitacora', nombre: 'Bitácora' },
   ] },
   { href: '/admin/equipo', nombre: 'Equipo', Icono: Users, pestanas: [
     { href: '/admin/equipo', nombre: 'Personas' },
@@ -145,6 +145,7 @@ export function pestanaActiva(item: Item, pathname: string): Pestana | null {
 export const ALIAS_BUSQUEDA: Readonly<Record<string, readonly string[]>> = {
   '/admin/agentes': ['kill switch', 'apagar', 'encender', 'interruptor', 'palanca'],
   '/admin/compliance': ['arco', 'privacidad', 'datos personales'],
+  '/admin/bitacora': ['auditoría', 'auditoria', 'registro', 'quién hizo', 'historial'],
   '/admin/techo-ia': ['techo', 'tope', 'presupuesto de ia'],
   '/admin/usuarios/nuevo': ['invitar', 'invitación', 'alta de usuario', 'nuevo usuario'],
   '/admin/corridas': ['traza', 'trazas', 'corrida'],
