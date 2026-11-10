@@ -9,6 +9,8 @@ import { ProveedorRequiereAccion } from './cabecera-admin';
 import { obtenerPanoramaAccion } from './requiere-accion';
 import { conteosDePestanas } from './conteos-pestanas';
 import { ProveedorConteosPestanas } from './conteos-pestanas-contexto';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
 import '../ui-v2/tokens.css';
 // Fuente unificada con el dashboard (Hanken Grotesk, decisión de 7-nov-2026; antes D3 la dejaba en Inter).
 import '../ui-v2/fonts.css';
@@ -59,7 +61,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/login');
   }
 
+  // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es.
+  const idiomaDatos = await datosParaProveedor(['shell']);
+
   return (
+    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
     <ProveedorRequiereAccion valor={requiereAccion}>
       <ProveedorConteosPestanas valor={conteosPestanas}>
         <AdminChrome nombre={nombre ?? null} avatarUrl={avatarUrl ?? null} cerrarSesion={cerrarSesion} flotas={flotas} flotaActual={flotaActual}>
@@ -67,5 +73,6 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </AdminChrome>
       </ProveedorConteosPestanas>
     </ProveedorRequiereAccion>
+    </IdiomaProvider>
   );
 }

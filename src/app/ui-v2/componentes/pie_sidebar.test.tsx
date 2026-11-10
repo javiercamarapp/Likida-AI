@@ -4,6 +4,8 @@ import { Settings } from 'lucide-react';
 
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(), usePathname: () => '/dashboard' }));
 const { default: PieSidebar, TarjetaUsuario, etiquetaAvisos, inicialesDe, ConmutadorIdioma } = await import('./pie-sidebar');
+const { IdiomaProvider } = await import('@/lib/i18n/proveedor');
+const { shell: shellEn } = await import('@/lib/i18n/en/shell');
 
 const tarjeta = <TarjetaUsuario nombre="Ana Pérez" rolEtiqueta="Administrador" iniciales="AP" href="/mi" />;
 const org = (opciones: Array<{ valor: string; nombre: string }> | null, actual: string | null = null) =>
@@ -56,11 +58,52 @@ describe('PieSidebar: conmutadores', () => {
     for (const r of ['Tema claro', 'Seguir al sistema', 'Tema oscuro']) expect(bloque).toContain(`aria-label="${r}"`);
     expect(bloque).toMatch(/checked=""[^>]*value="claro"|value="claro"[^>]*checked=""/);
   });
-  it('idioma: visible pero DESHABILITADO y dice «Próximamente» (Likida no tiene i18n: no se finge traducción)', () => {
+  it('idioma: dos radios activos (MX y US), español marcado por omisión y sin «Próximamente»', () => {
     const bloque = renderToStaticMarkup(<ConmutadorIdioma />);
-    expect(bloque).toContain('disabled');
-    expect(bloque).toContain('Próximamente');
-    expect(bloque).toContain('title="Idioma: próximamente"');
+    expect(bloque.match(/type="radio"/g)).toHaveLength(2);
+    expect(bloque).not.toContain('disabled');
+    expect(bloque).not.toContain('Próximamente');
+    expect(bloque).toMatch(/value="es"[^>]*checked|checked=""[^>]*value="es"/);
+    expect(bloque).not.toMatch(/value="en"[^>]*checked=""|checked=""[^>]*value="en"/);
+    expect(bloque).toContain('aria-label="Español (México)"');
+    expect(bloque).toContain('aria-label="English (US)"');
+  });
+  it('idioma: con el proveedor en inglés marca US y la interfaz del pie está en inglés', () => {
+    const bloque = renderToStaticMarkup(
+      <IdiomaProvider idioma="en" diccionarios={{ shell: shellEn }}><ConmutadorIdioma /></IdiomaProvider>,
+    );
+    expect(bloque).toMatch(/value="en"[^>]*checked|checked=""[^>]*value="en"/);
+    expect(bloque).toContain('Language');
+  });
+});
+
+describe('PieSidebar en inglés (demostración de i18n P0)', () => {
+  const enIngles = (o: Parameters<typeof PieSidebar>[0]) =>
+    renderToStaticMarkup(<IdiomaProvider idioma="en" diccionarios={{ shell: shellEn }}><PieSidebar {...o} /></IdiomaProvider>);
+  it('traduce todas las cadenas del propio pie y no deja español suelto', () => {
+    const h = enIngles({
+      // Sin `textoIr`: el «Ir» por omisión sale del diccionario (quien lo pasa, como el admin con «Ver como», traduce el suyo).
+      organizacion: { opciones: [{ valor: 'a', nombre: 'Flota A' }, { valor: 'b', nombre: 'Flota B' }], actual: 'b', hrefIr: (v: string) => `/ir/${v}` },
+      avisos: { href: '/av', pendientes: 2, urgente: true },
+      tarjeta: <TarjetaUsuario nombre={null} rolEtiqueta="Admin" iniciales="?" href="/mi" cerrarSesion={async () => {}} />,
+    });
+    for (const t of ['Organization', 'Notices', 'Notices: 2 pending, something is urgent', 'Interface theme', 'Light theme', 'Language', 'My account', 'Sign out', 'Go']) {
+      expect(h, t).toContain(t);
+    }
+    for (const t of ['Organización', 'Avisos', 'Tema', 'Idioma', 'Mi cuenta', 'Cerrar sesión', 'pendiente', 'Seguir al sistema']) {
+      expect(h, t).not.toContain(t);
+    }
+  });
+  it('lectura caída y sin pendientes siguen siendo honestos en inglés', () => {
+    const base = { organizacion: org(null), tarjeta };
+    expect(enIngles({ ...base, avisos: { href: '/av', pendientes: null } })).toContain('Notices: no data');
+    expect(enIngles({ ...base, avisos: { href: '/av', pendientes: 0 } })).toContain('Notices: nothing pending');
+    expect(enIngles({ ...base, avisos: { href: '/av' } })).toContain('No data');
+  });
+  it('etiquetaAvisos acepta un traductor y por omisión sigue en español', async () => {
+    expect(etiquetaAvisos({ pendientes: 1 })).toBe('Avisos: 1 pendiente');
+    expect(etiquetaAvisos({ pendientes: 3, urgente: true })).toBe('Avisos: 3 pendientes, hay algo urgente');
+    expect(etiquetaAvisos({ pendientes: null })).toBe('Avisos: sin dato');
   });
 });
 
