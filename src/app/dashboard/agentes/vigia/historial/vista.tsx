@@ -57,10 +57,10 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
     { id: 'critico', titulo: 'Crítico', celda: (g) => (g.critico ? <StatusChip tono="warn">Sí</StatusChip> : 'No') },
     { id: 'historico', titulo: 'Histórico', celda: (g) => (g.importaciones === 0 ? 'Sin subir' : `${numero(g.mensajes)} mensajes · ${g.ultimaImportacion ? fechaHoraMx(g.ultimaImportacion) : ''}`) },
     {
-      id: 'acciones', titulo: 'Acciones', tituloOculto: true, alinear: 'der',
+      id: 'acciones', titulo: 'Acciones', alinear: 'der',
       celda: (g) => (puedeEditar ? <span className="rv-vg__linea"><FilaCritico accion={acciones.critico} grupoId={g.id} critico={g.critico} /><FilaBorrar accion={acciones.borrar} grupoId={g.id} /></span> : null),
     },
-  ] as unknown as readonly ColumnaBase<GrupoVigia>[];
+  ];
   const columnasTemas: readonly ColumnaBase<ReporteHistorial['tendencias'][number]>[] = [
     { id: 'tema', titulo: 'Tema', principal: true, celda: (t) => t.etiqueta },
     { id: 'total', titulo: 'Mensajes', alinear: 'der', celda: (t) => numero(t.total) },

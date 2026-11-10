@@ -58,7 +58,7 @@ export function VistaSitios(p: PropsVistaSitios) {
     { id: 'cliente', titulo: 'Cliente', celda: (s) => s.clienteNombre ?? '—' },
     { id: 'fuente', titulo: 'Origen del dato', celda: (s) => (s.fuente === 'csv' ? 'importado de CSV' : 'captura manual') },
     {
-      id: 'acciones', titulo: 'Acciones', tituloOculto: true, alinear: 'der',
+      id: 'acciones', titulo: 'Acciones', alinear: 'der',
       celda: (s) => (p.puedeEditar ? (
         <span className="rv-cd__linea">
           <Link href={`/dashboard/agentes/conductores/sitios?editar=${s.id}${p.sufijo.startsWith('?') ? `&${p.sufijo.slice(1)}` : ''}`} className="rv-cd__enlace">Editar</Link>
@@ -66,7 +66,7 @@ export function VistaSitios(p: PropsVistaSitios) {
         </span>
       ) : null),
     },
-  ] as unknown as readonly ColumnaBase<SitioFila>[];
+  ];
   const columnasTextos: readonly ColumnaBase<TextoSinSitio>[] = [
     { id: 'texto', titulo: 'Texto', principal: true, celda: (x) => <span className="rv-cd__medio rv-cd__romper">{x.texto}</span> },
     { id: 'lado', titulo: 'Lado', celda: (x) => (x.lado === 'ambos' ? 'origen y destino' : x.lado) },
