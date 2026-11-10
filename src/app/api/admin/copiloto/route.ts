@@ -43,7 +43,7 @@ import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { supabaseServer } from '@/lib/supabase/server';
 import { exigirAal2SiHayFactor, MSG_STEP_UP, MSG_MFA_NO_VERIFICABLE } from '@/lib/auth/mfa';
-import { CATALOGO_ACCIONES } from '@/lib/agents/copiloto-acciones';
+import { gateoEfectivo } from '@/lib/agents/copiloto-acciones';
 import { PartialExecutionError } from '@/lib/llm/openrouter';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { esperarRegistro } from '@/lib/seguridad/esperar_registro';
@@ -167,8 +167,7 @@ export async function POST(req: Request) {
     // factor exige la sesión en AAL2 — ANTES de tocar el intent, para no
     // gastarlo en un intento que va a rebotar. Sin factor inscrito pasa
     // (política incremental de lib/auth/mfa.ts).
-    const defAccion = CATALOGO_ACCIONES.find((x) => x.id === accionId);
-    if (defAccion?.gateo === 'doble') {
+    if (gateoEfectivo(accionId, objetivo) === 'doble') {
       const paso = await exigirAal2SiHayFactor(await supabaseServer());
       if (!paso.ok) {
         await esperarRegistro(registrarEventoSeguridad({ origen: 'copiloto', tipo: 'step_up_rechazado', severidad: 'info', actor: sesion.userId, detalle: { accion: accionId, motivo: paso.motivo } }));

@@ -53,6 +53,8 @@ vi.mock('@/lib/agents/copiloto-acciones', () => ({
     { id: 'correr_runner', gateo: 'doble', implementada: true },
     { id: 'encender_agente', gateo: 'doble', implementada: false },
   ],
+  // Espejo del real: el route pide el gateo efectivo (accion, objetivo); aquí basta con el del catálogo mock.
+  gateoEfectivo: (id: string) => ({ apagar_agente: 'confirma' }[id as 'apagar_agente'] ?? 'doble'),
 }));
 interface RespuestaMock {
   bloques: Array<Record<string, unknown>>;

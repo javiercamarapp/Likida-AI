@@ -178,7 +178,7 @@ registerTool('estado_agentes', {
     type: 'function',
     function: {
       name: 'estado_agentes',
-      description: 'El estado de los agentes: los 8 interruptores del kill switch (quién está apagado, por qué y desde cuándo) y las corridas recientes cruzando todas las flotas.',
+      description: 'El estado de los agentes: los interruptores del kill switch (los 58 del catálogo, incluido el global) (quién está apagado, por qué y desde cuándo) y las corridas recientes cruzando todas las flotas.',
       parameters: SIN_PARAMS,
     },
   },
