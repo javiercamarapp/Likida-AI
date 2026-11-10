@@ -1,7 +1,7 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { supabaseServer } from '@/lib/supabase/server';
-import { CLAVE_PREFERENCIA, COOKIE_IDIOMA, resolverIdioma, type Idioma } from './idioma';
+import { CLAVE_PREFERENCIA, COOKIE_IDIOMA, idiomaServible, resolverIdioma, type Idioma } from './idioma';
 import { cargarDiccionarios, type ClaveDe, type DiccionarioDe, type Namespace } from './catalogo';
 import { crearTraductor, type Traductor } from './traducir';
 
@@ -33,7 +33,7 @@ async function leerIdiomaActual(): Promise<Idioma> {
 }
 
 /** El idioma de ESTA petición (memorizado por petición con `cache()`). Nunca lanza: ante cualquier fallo, es. */
-export const idiomaActual = cache(leerIdiomaActual);
+export const idiomaActual = cache(async (): Promise<Idioma> => idiomaServible(await leerIdiomaActual()));
 
 /** El traductor de un namespace para un Server Component: `const { t } = await getT('shell')`. No manda nada al navegador. */
 export async function getT<N extends Namespace>(ns: N): Promise<Traductor<DiccionarioDe<N>>> {

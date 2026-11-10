@@ -52,3 +52,12 @@ export function resolverIdioma(fuentes: { cookie?: unknown; preferencia?: unknow
   if (idiomaValido(fuentes.preferencia)) return fuentes.preferencia;
   return IDIOMA_POR_OMISION;
 }
+
+/**
+ * El idioma que de verdad se SIRVE: un idioma sin traducción completa no se muestra aunque la cookie o la preferencia
+ * guardada lo pidan (un inglés a medias es peor que el español). La precedencia la decide `resolverIdioma`; esto solo
+ * aplica la disponibilidad. Cuando `IDIOMA_EN_DISPONIBLE` se encienda, la elección guardada vuelve a valer sola.
+ */
+export function idiomaServible(idioma: Idioma, enDisponible: boolean = IDIOMA_EN_DISPONIBLE): Idioma {
+  return idiomaElegible(idioma, enDisponible) ? idioma : IDIOMA_POR_OMISION;
+}
