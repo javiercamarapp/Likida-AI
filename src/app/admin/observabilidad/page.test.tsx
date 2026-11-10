@@ -38,12 +38,12 @@ const fd = (c: Record<string, string>) => { const f = new FormData(); for (const
 const INTERRUPTOR = { id: 'agente:cobranza', apagado: false, motivo: null, cambiadoPorNombre: null, cambiadoEn: null };
 
 async function accionDeLaPagina(): Promise<Accion> {
-  const pagina = await ObservabilidadPage({ searchParams: Promise.resolve({}) } as never);
+  const pagina = await ObservabilidadPage();
   const seccion = buscar(pagina, SeccionInterruptores)[0];
   if (!seccion) throw new Error('la página no pintó SeccionInterruptores');
   return seccion.props.accion as Accion;
 }
-const pintar = async () => renderToStaticMarkup(await ObservabilidadPage({ searchParams: Promise.resolve({}) } as never));
+const pintar = async () => renderToStaticMarkup(await ObservabilidadPage());
 
 beforeEach(() => {
   vi.clearAllMocks();
