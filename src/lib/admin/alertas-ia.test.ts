@@ -9,7 +9,7 @@ import { alertasExtra } from './fuentes-alerta-extra';
 // agrupada; respaldo > 5 % con muestra mínima de 20 = 1 alerta; con menos de 20 llamadas, «sin medir» y no alerta.
 
 const AHORA = Date.UTC(2026, 10, 10, 18, 0, 0); // minuto 0: toca la pasada de 15 min
-const ENV = { ALERTAS_IA_GUARDIA: 'encendido' } as NodeJS.ProcessEnv;
+const ENV = { ALERTAS_IA_GUARDIA: 'encendido' } as unknown as NodeJS.ProcessEnv;
 const primario = (f: string) => ({ ocr: 'google/gemini-3.1-flash-lite', cuadre: 'anthropic/claude-sonnet-5', chat: 'google/gemini-3.5-flash-lite' } as Record<string, string>)[f] ?? null;
 const filasDe = (n: number, respaldo: number) => [
   ...Array.from({ length: n - respaldo }, () => ({ fase: 'ocr', modelo: 'google/gemini-3.1-flash-lite' })),
@@ -64,7 +64,7 @@ describe('correrAlertasIa', () => {
 
   it('apagada por omisión: no lee ni avisa', async () => {
     const leer = vi.fn();
-    const r = await correrAlertasIa(AHORA, null, { env: {} as NodeJS.ProcessEnv, leer });
+    const r = await correrAlertasIa(AHORA, null, { env: {} as unknown as NodeJS.ProcessEnv, leer });
     expect(r.estado).toBe('apagado');
     expect(leer).not.toHaveBeenCalled();
   });

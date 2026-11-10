@@ -160,7 +160,7 @@ export function extraerNumeros(v: unknown, destino: Set<number>): void {
 /** Cifras con MULTIPLICADOR escrito pegado al número: «99k», «7 mil», «1.5 millones». Sin «m»/«mm» sueltos: son metros y milímetros.
  *  Sin esto el regex de dígitos veía 99, 7 y 1.5 (todos «blancos» o fáciles de empatar con un 99 de una
  *  herramienta) y la cantidad real —99,000, 7,000, 1,500,000— salía sin verificar (F16). */
-const RE_MULTIPLICADOR = /(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)\s*(k|mil|millones|millón|millon)(?![a-záéíóúñ0-9])/gi;
+const RE_MULTIPLICADOR = /(\d[\d,]*\.?\d*)\s*(k|mil|millones|millón|millon)(?![a-záéíóúñ0-9])/gi;
 const ESCALA: Record<string, number> = { k: 1e3, mil: 1e3, millon: 1e6, 'millón': 1e6, millones: 1e6 };
 
 /** Quita del texto las cifras con multiplicador y devuelve su valor ya multiplicado. */
