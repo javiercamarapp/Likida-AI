@@ -1,4 +1,5 @@
-import { Bell } from 'lucide-react';
+import { Disclosure } from '@/app/ui-v2/componentes';
+import './agentes.css';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { correoConfigurado, enviarCorreo } from '@/lib/correo/enviar';
 import { avisoDePrueba } from '@/lib/correo/avisos';
@@ -192,14 +193,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
   }
 
   return (
-    <section className="card p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Bell width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        <h2 className="font-display text-[15px] font-semibold">Notificaciones</h2>
-      </div>
-      <p className="text-[11px] mb-3.5" style={{ color: 'var(--faint)' }}>
-        De qué avisa este agente por correo, y a quién de tu equipo le llega.
-      </p>
+    <Disclosure titulo="Notificaciones" resumen="De qué avisa este agente por correo, y a quién de tu equipo le llega">
       <FormaNotificaciones
         guardar={guardar}
         datos={{
@@ -219,6 +213,6 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
         }}
       />
       <BotonPrueba mandarPrueba={mandarPrueba} canalListo={correoConfigurado()} />
-    </section>
+    </Disclosure>
   );
 }

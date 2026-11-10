@@ -1,2 +1,26 @@
 /* Piezas compartidas de las páginas de agentes del cliente. Archivo propio; solo tokens del sistema. */
 .rv-ag-error { display: block; margin-top: 2px; max-width: 380px; font-size: var(--t-micro, 11px); color: var(--bad); }
+
+/* Notificaciones por agente (forma + reparto). */
+.rv-ag-notif { display: grid; gap: 12px; }
+.rv-ag-notif__rejilla { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 1024px) { .rv-ag-notif__rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rv-ag-notif__forma, .rv-ag-notif__verdad { display: grid; gap: 12px; align-content: start; }
+.rv-ag-notif__lista { display: grid; gap: 10px; }
+.rv-ag-notif__lista[data-apagado] { opacity: .5; }
+.rv-ag-notif__linea { display: block; }
+.rv-ag-notif__linea[data-tono="warn"], .rv-ag-notif__nota[data-tono="warn"] { color: var(--warn); }
+.rv-ag-notif__acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.rv-ag-notif__bloque { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-ag-notif__rotulo { margin: 0; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-ag-notif__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; }
+.rv-ag-notif__nota strong { color: var(--ink); font-weight: 600; }
+.rv-ag-notif__personas { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-ag-notif__personas li { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-size: var(--t-small, 12px); }
+.rv-ag-notif__personas strong { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-ag-notif__personas span { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-ag-notif__personas em { margin-left: auto; flex: none; font-style: normal; font-size: var(--t-micro, 11px); color: var(--faint); }
+
+.rv-ag-prueba { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rv-ag-prueba__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.rv-ag-forma { display: grid; gap: 12px; max-width: 520px; }
