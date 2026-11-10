@@ -1,14 +1,19 @@
 import Link from 'next/link';
-import { ScrollText, TriangleAlert, Sparkles, Mail, MessageCircle, LayoutDashboard } from 'lucide-react';
+import { ScrollText, TriangleAlert, Mail, MessageCircle, LayoutDashboard, Inbox, CheckCircle2 } from 'lucide-react';
+import './carta-porte.css';
 import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import type { InsightsAgente, CalidadGrupo, TarjetaInsight } from '@/lib/likida/carta_porte_docs/metricas';
 import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/likida/carta_porte_docs/viajes_sin_ccp';
 import { estadoCatalogosSat, type ConteoCatalogosSat } from '@/lib/likida/carta_porte_docs/catalogos_sat';
-import { EstadoError, EstadoVacio } from '../../estados';
 import { DireccionBuzon } from '../proveedores/controles';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
-import { MarcoPagina, Aviso, AvisoCompacto, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import {
+  Aviso, AvisoCompacto, clasesBoton, Disclosure, EstadoError, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  type ColumnaBase, type TonoEstado,
+} from '@/app/ui-v2/componentes';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -27,6 +32,22 @@ export interface BuzonCartaPorteVista { direccion: string | null; activo: boolea
  * la distinga de cualquier otra mención: «grupo» solo puede aparecer aquí.
  */
 export const FRASE_SIN_GRUPOS = 'Los grupos de WhatsApp no se pueden leer: pide a tus clientes que escriban al correo o reenvíalos tú.';
+
+type ViajeEnCola = EstadoCartaPorte['viajes'][number];
+
+const COLUMNAS_COLA: readonly ColumnaBase<ViajeEnCola>[] = [
+  { id: 'folio', titulo: 'Viaje', principal: true, celda: (v) => <span className="cifra-mono">{v.folio ?? v.viajeId.slice(0, 8)}</span> },
+  { id: 'ruta', titulo: 'Ruta', celda: (v) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'sin ruta capturada') },
+  {
+    id: 'falta', titulo: 'Lo que falta declarar',
+    celda: (v) => (
+      <span className="rv-cp__pendientes">
+        <Icono icono={TriangleAlert} tam={14} />
+        {v.decision.pendientes.join(' · ')}
+      </span>
+    ),
+  },
+];
 
 export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, sinCcp, nombresCliente = {}, diasVentana = 30, catalogosSat }: {
   datos: EstadoCartaPorte | null;
@@ -48,6 +69,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
     datos === null ? null : datos.viajes.filter((v) => v.decision.necesita === n).length;
   const armables = datos === null ? null : datos.viajes.filter((v) => v.borrador.borrador !== null && v.borrador.fallas.length === 0).length;
   const cola = datos === null ? [] : datos.viajes.filter((v) => v.decision.necesita === 'falta_declarar');
+  const esperan = conteo('falta_declarar');
 
   return (
     <MarcoPagina titulo="Carta Porte en automático" apoyo="Al despachar corre el árbol legal y pregunta por WhatsApp lo que falta declarar. Prepara y valida; nunca timbra.">
@@ -61,49 +83,28 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       {catalogosSat !== undefined && <AvisoCatalogosSat catalogosSat={catalogosSat} />}
 
       {datos === null ? (
-        <EstadoError mensaje="No se pudieron leer los viajes en curso. Sin lectura no se pintan conteos: un cero fingido aquí diría «todo en regla»." />
+        <EstadoError>No se pudieron leer los viajes en curso. Sin lectura no se pintan conteos: un cero fingido aquí diría «todo en regla».</EstadoError>
       ) : (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <Tarjeta rotulo="Viajes en curso" valor={datos.total} />
-            <Tarjeta rotulo="Esperan declaración" valor={conteo('falta_declarar')} tono="var(--bad)" />
-            <Tarjeta rotulo="Necesitan complemento" valor={conteo('si')} tono="var(--warn)" />
-            <Tarjeta rotulo="Borradores sin fallas" valor={armables} tono="var(--ok)" />
-          </div>
+          <TiraCifras sello={selloHoy('Viajes en curso')}>
+            <Cifra info="carta_porte_agente.en_curso" etiqueta="Viajes en curso" valor={numero(datos.total)} />
+            <Cifra info="carta_porte_agente.esperan" etiqueta="Esperan declaración" valor={esperan === null ? null : numero(esperan)} tono={esperan !== null && esperan > 0 ? 'bad' : undefined} />
+            <Cifra info="carta_porte_agente.necesitan" etiqueta="Necesitan complemento" valor={conteo('si') === null ? null : numero(conteo('si') as number)} tono={(conteo('si') ?? 0) > 0 ? 'warn' : undefined} />
+            <Cifra info="carta_porte_agente.borradores" etiqueta="Borradores sin fallas" valor={armables === null ? null : numero(armables)} />
+          </TiraCifras>
 
-          <section className="card p-4 space-y-3">
-            <TituloRecuadro info="carta_porte_agente.cola">Esperando al jefe</TituloRecuadro>
-            {cola.length === 0 ? (
-              <EstadoVacio icono={<ScrollText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Nada pendiente de declarar: cada viaje en curso ya tiene su veredicto (o no hay
-                viajes). Al despachar uno nuevo, el agente pregunta solo.
-              </EstadoVacio>
-            ) : (
-              <ul className="space-y-2 text-[12px]">
-                {cola.map((v) => (
-                  <li key={v.viajeId} className="flex flex-wrap items-start gap-x-3 gap-y-0.5">
-                    <span className="cifra-mono font-medium">{v.folio ?? v.viajeId.slice(0, 8)}</span>
-                    <span style={{ color: 'var(--muted)' }}>
-                      {v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'sin ruta capturada'}
-                    </span>
-                    <span className="inline-flex items-start gap-1" style={{ color: 'var(--warn)' }}>
-                      <TriangleAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-                      {v.decision.pendientes.join(' · ')}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Link href={`/dashboard/carta-porte${sufijo}`} className="inline-block text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
-              Declarar y capturar en la pantalla de Carta Porte →
-            </Link>
+          <Tarjeta titulo="Esperando al jefe" info="carta_porte_agente.cola"
+            estado={cola.length === 0 ? 'vacio' : 'ok'} iconoVacio={ScrollText} mensaje="Nada pendiente de declarar"
+            detalle="Cada viaje en curso ya tiene su veredicto (o no hay viajes). Al despachar uno nuevo, el agente pregunta solo."
+            acciones={<Link href={`/dashboard/carta-porte${sufijo}`} className={clasesBoton('secondary', 'sm')}>Declarar y capturar</Link>}>
+            <TablaBase etiqueta="Viajes esperando una declaración" columnas={COLUMNAS_COLA} filas={cola} idFila={(v) => v.viajeId} densa tarjetaMovil />
             {datos.viajes.length < datos.total && (
-              <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+              <p className="rv-cp__nota" data-tono="faint">
                 Los conteos por veredicto salen de los {numero(datos.viajes.length)} viajes más
                 próximos de {numero(datos.total)} en curso.
               </p>
             )}
-          </section>
+          </Tarjeta>
         </>
       )}
 
@@ -113,61 +114,48 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
 
       {insights !== undefined && <InsightsDelAgente insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
 
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+      <p className="rv-cp__nota">
         Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
-        <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>catálogo del cliente →</Link>
+        <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="rv-cp__enlace">catálogo del cliente</Link>.
       </p>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+      <p className="rv-cp__nota">
         Los clientes que necesitan su referencia para cobrar, y los viajes cargados que aún no la traen:{' '}
-        <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>referencia del cliente →</Link>
+        <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="rv-cp__enlace">referencia del cliente</Link>.
       </p>
 
-      <section className="card p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Sparkles width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-          <TituloRecuadro info="carta_porte_agente.alcance">Lo que hace, y lo que jamás hará</TituloRecuadro>
-        </div>
-        <div className="grid md:grid-cols-3 gap-4 text-[12px]">
-          <div>
-            <div className="rv-etq mb-1.5" style={{ color: 'var(--faint)' }}>Al despachar</div>
-            <p style={{ color: 'var(--muted)' }}>
-              Corre el árbol legal y pregunta por WhatsApp: «¿la ruta pisa carretera federal?» con
-              botones, y si la unidad cabe en la excepción del C2, el radio («radio F-123 25»).
-              Cada declaración queda firmada con quién y cuándo.
-            </p>
+      <Tarjeta titulo="Lo que hace, y lo que jamás hará" info="carta_porte_agente.alcance">
+        <Disclosure titulo="Alcance del agente" resumen="Al despachar · Con lo capturado · Jamás" abierto variante="linea">
+          <div className="rv-cp__tres">
+            <div className="rv-cp__col">
+              <p className="rv-cp__rotulo">Al despachar</p>
+              <p className="rv-cp__nota">
+                Corre el árbol legal y pregunta por WhatsApp: «¿la ruta pisa carretera federal?» con
+                botones, y si la unidad cabe en la excepción del C2, el radio («radio F-123 25»).
+                Cada declaración queda firmada con quién y cuándo.
+              </p>
+            </div>
+            <div className="rv-cp__col">
+              <p className="rv-cp__rotulo">Con lo capturado</p>
+              <p className="rv-cp__nota">
+                Arma el borrador del complemento (37 datos, partidos 19 del cliente / 18 del
+                transportista) y lo pasa por las validaciones que el PAC rechaza seguro — «te faltó
+                esto, antes de salir» en vez de «rebotó el timbrado con el viaje entregado».
+              </p>
+            </div>
+            <div className="rv-cp__col">
+              <p className="rv-cp__rotulo">Jamás</p>
+              <p className="rv-cp__nota">
+                No afirma «no necesitas Carta Porte» sin tu declaración firmada; no inventa claves del
+                SAT ni el número de permiso SICT (faltante = faltante); y no timbra — el CFDI lo emite
+                tu PAC de siempre.
+              </p>
+            </div>
           </div>
-          <div>
-            <div className="rv-etq mb-1.5" style={{ color: 'var(--faint)' }}>Con lo capturado</div>
-            <p style={{ color: 'var(--muted)' }}>
-              Arma el borrador del complemento (37 datos, partidos 19 del cliente / 18 del
-              transportista) y lo pasa por las validaciones que el PAC rechaza seguro — «te faltó
-              esto, antes de salir» en vez de «rebotó el timbrado con el viaje entregado».
-            </p>
-          </div>
-          <div>
-            <div className="rv-etq mb-1.5" style={{ color: 'var(--faint)' }}>Jamás</div>
-            <p style={{ color: 'var(--muted)' }}>
-              No afirma «no necesitas Carta Porte» sin tu declaración firmada; no inventa claves del
-              SAT ni el número de permiso SICT (faltante = faltante); y no timbra — el CFDI lo emite
-              tu PAC de siempre.
-            </p>
-          </div>
-        </div>
-      </section>
+        </Disclosure>
+      </Tarjeta>
 
       {notificaciones}
     </MarcoPagina>
-  );
-}
-
-function Tarjeta({ rotulo, valor, tono }: { rotulo: string; valor: number | null; tono?: string }) {
-  return (
-    <div className="card p-4">
-      <div className="rv-etq mb-1" style={{ color: 'var(--faint)' }}>{rotulo}</div>
-      <div className="cifra-mono text-[20px] font-semibold" style={tono && valor !== null && valor > 0 ? { color: tono } : undefined}>
-        {valor === null ? '—' : numero(valor)}
-      </div>
-    </div>
   );
 }
 
@@ -179,91 +167,88 @@ function Tarjeta({ rotulo, valor, tono }: { rotulo: string; valor: number | null
 function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista | null | 'no_leido'; sufijo: string }) {
   const panel = `/dashboard/carta-porte/documentos${sufijo}`;
   return (
-    <section className="card p-4 space-y-3" aria-labelledby="cp-como-mandar">
-      <TituloRecuadro id="cp-como-mandar" info="carta_porte_agente.como_mandar">Cómo mandarme documentos</TituloRecuadro>
-      <div className="grid md:grid-cols-3 gap-4 text-[12px]">
-        <div className="space-y-1.5">
-          <div className="rv-etq flex items-center gap-1" style={{ color: 'var(--faint)' }}>
-            <Mail width={12} height={12} strokeWidth={1.75} /> 1 · Correo (el medio oficial)
+    <Tarjeta titulo="Cómo mandarme documentos" info="carta_porte_agente.como_mandar">
+      <div className="rv-cp__pila">
+        <div className="rv-cp__tres">
+          <div className="rv-cp__col">
+            <p className="rv-cp__rotulo"><Icono icono={Mail} tam={14} /> 1 · Correo (el medio oficial)</p>
+            {buzon === 'no_leido' ? (
+              <EstadoError compacto>No se pudo leer el buzón de tu flota. Sin lectura no se enseña una dirección: una inventada se perdería.</EstadoError>
+            ) : buzon === null ? (
+              <EstadoVacio titulo="Aún no tienes buzón" icono={Inbox} contenido>
+                Actívalo en el panel de documentos y aquí verás la dirección para
+                que tus clientes (o tú) reenvíen los embarques.
+              </EstadoVacio>
+            ) : buzon.direccion ? (
+              <>
+                <DireccionBuzon direccion={buzon.direccion} />
+                {!buzon.activo && <p className="rv-cp__nota" data-tono="warn">El buzón está apagado: lo que llegue no se leerá hasta encenderlo en el panel.</p>}
+                <p className="rv-cp__nota">
+                  Los adjuntos (PDF, Excel, XML, foto) y el texto del correo entran solos a la bandeja.
+                </p>
+                <p className="rv-cp__nota">
+                  {buzon.remitentes.length > 0
+                    ? `Remitentes de tus clientes reconocidos: ${buzon.remitentes.join(', ')}. Uno distinto entra igual, marcado «remitente no reconocido».`
+                    : AVISO_SIN_REMITENTES}
+                </p>
+              </>
+            ) : (
+              <p className="rv-cp__nota" data-tono="warn">
+                {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
+              </p>
+            )}
           </div>
-          {buzon === 'no_leido' ? (
-            <EstadoError mensaje="No se pudo leer el buzón de tu flota. Sin lectura no se enseña una dirección: una inventada se perdería." />
-          ) : buzon === null ? (
-            <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Aún no tienes buzón. Actívalo en el panel de documentos y aquí verás la dirección para
-              que tus clientes (o tú) reenvíen los embarques.
-            </EstadoVacio>
-          ) : buzon.direccion ? (
-            <>
-              <DireccionBuzon direccion={buzon.direccion} />
-              {!buzon.activo && <p style={{ color: 'var(--warn)' }}>El buzón está apagado: lo que llegue no se leerá hasta encenderlo en el panel.</p>}
-              <p style={{ color: 'var(--muted)' }}>
-                Los adjuntos (PDF, Excel, XML, foto) y el texto del correo entran solos a la bandeja.
-              </p>
-              <p style={{ color: 'var(--muted)' }}>
-                {buzon.remitentes.length > 0
-                  ? `Remitentes de tus clientes reconocidos: ${buzon.remitentes.join(', ')}. Uno distinto entra igual, marcado «remitente no reconocido».`
-                  : AVISO_SIN_REMITENTES}
-              </p>
-            </>
-          ) : (
-            <p style={{ color: 'var(--warn)' }}>
-              {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
+          <div className="rv-cp__col">
+            <p className="rv-cp__rotulo"><Icono icono={MessageCircle} tam={14} /> 2 · WhatsApp 1:1 de la oficina</p>
+            <p className="rv-cp__nota">
+              Quien despacha reenvía el archivo al número de Likida, o pega el texto del embarque empezando
+              con la palabra «carta porte». Una foto debe llevar ese mismo pie.
             </p>
-          )}
-        </div>
-        <div className="space-y-1.5">
-          <div className="rv-etq flex items-center gap-1" style={{ color: 'var(--faint)' }}>
-            <MessageCircle width={12} height={12} strokeWidth={1.75} /> 2 · WhatsApp 1:1 de la oficina
           </div>
-          <p style={{ color: 'var(--muted)' }}>
-            Quien despacha reenvía el archivo al número de Likida, o pega el texto del embarque empezando
-            con la palabra «carta porte». Una foto debe llevar ese mismo pie.
-          </p>
-        </div>
-        <div className="space-y-1.5">
-          <div className="rv-etq flex items-center gap-1" style={{ color: 'var(--faint)' }}>
-            <LayoutDashboard width={12} height={12} strokeWidth={1.75} /> 3 · El panel
+          <div className="rv-cp__col">
+            <p className="rv-cp__rotulo"><Icono icono={LayoutDashboard} tam={14} /> 3 · El panel</p>
+            <p className="rv-cp__nota">Sube el archivo a mano en la bandeja de documentos.</p>
+            <Link href={panel} className="rv-cp__enlace">Abrir la bandeja de documentos</Link>
           </div>
-          <p style={{ color: 'var(--muted)' }}>Sube el archivo a mano en la bandeja de documentos.</p>
-          <Link href={panel} className="inline-block text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
-            Abrir la bandeja de documentos →
-          </Link>
         </div>
+        <p className="rv-cp__frase">{FRASE_SIN_GRUPOS}</p>
       </div>
-      <p className="text-[12px] font-medium">{FRASE_SIN_GRUPOS}</p>
-    </section>
+    </Tarjeta>
   );
 }
 
 const pctTxt = (p: number | null): string => (p === null ? '—' : `${p} %`);
-const COLOR_TONO: Record<TarjetaInsight['tono'], string> = { bad: 'var(--bad)', warn: 'var(--warn)', info: 'var(--muted)' };
+const TONO_INSIGHT: Record<TarjetaInsight['tono'], string> = { bad: 'bad', warn: 'warn', info: 'info' };
 
 function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
   return (
-    <div className="card p-3.5 text-[12px] space-y-1" style={{ borderLeft: `3px solid ${COLOR_TONO[t.tono]}` }}>
-      <div className="font-medium">{t.quePaso}</div>
-      <div style={{ color: 'var(--muted)' }}><span className="rv-etq" style={{ color: 'var(--faint)' }}>Qué significa </span>{t.queSignifica}</div>
-      <div><span className="rv-etq" style={{ color: 'var(--faint)' }}>Qué hacer </span>{t.queHacer}</div>
+    <div className="rv-cp__quepaso" data-tono={TONO_INSIGHT[t.tono]}>
+      <p><strong>{t.quePaso}</strong></p>
+      <p className="rv-cp__nota"><b>Qué significa </b>{t.queSignifica}</p>
+      <p><b>Qué hacer </b>{t.queHacer}</p>
     </div>
   );
 }
 
-function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string }) {
+/** Calidad por grupo: una lista de barras con el % sin tocar y el texto exacto («% (n)») — reemplaza la tabla a mano. */
+function CalidadPorGrupo({ titulo, filas, rotular }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string }) {
+  const columnas: readonly ColumnaBase<CalidadGrupo>[] = [
+    { id: 'grupo', titulo: 'Grupo', principal: true, celda: (g) => rotular(g.clave) },
+    { id: 'aprobados', titulo: 'Aprobados', alinear: 'der', celda: (g) => numero(g.documentos) },
+    { id: 'sintocar', titulo: 'Sin tocar', alinear: 'der', celda: (g) => `${pctTxt(g.pctSinTocar)} (${numero(g.sinTocar)})` },
+  ];
   return (
-    <div className="card p-4">
-      <div className="rv-etq mb-2" style={{ color: 'var(--faint)' }}>{titulo}</div>
-      {filas.length === 0 ? <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Sin documentos aprobados todavía.</p> : (
-        <table aria-label={titulo} className="w-full text-[12px]">
-          <thead><tr style={{ color: 'var(--faint)' }}><th scope="col" className="text-left font-normal">Grupo</th><th scope="col" className="text-right font-normal">Aprobados</th><th scope="col" className="text-right font-normal">Sin tocar</th></tr></thead>
-          <tbody>
-            {filas.map((g) => (
-              <tr key={g.clave}><td>{rotular(g.clave)}</td><td className="text-right cifra-mono">{numero(g.documentos)}</td><td className="text-right cifra-mono">{pctTxt(g.pctSinTocar)} ({numero(g.sinTocar)})</td></tr>
-            ))}
-          </tbody>
-        </table>
+    <Tarjeta titulo={titulo} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje="Sin documentos aprobados todavía" detalle="Cuando se aprueben documentos, aquí verás cuántos pasaron sin tocar.">
+      {filas.length > 0 && (
+        <>
+          <BarList etiqueta={`${titulo}: porcentaje sin tocar`} formato={(v) => `${v} %`}
+            items={filas.slice(0, 5).map((g) => ({ clave: g.clave, etiqueta: rotular(g.clave), valor: g.pctSinTocar, texto: `${pctTxt(g.pctSinTocar)} (${numero(g.sinTocar)} de ${numero(g.documentos)})` }))} maximo={100} />
+          <Disclosure titulo="Ver la tabla" variante="linea">
+            <TablaBase etiqueta={titulo} columnas={columnas} filas={filas} idFila={(g) => g.clave} densa tarjetaMovil />
+          </Disclosure>
+        </>
       )}
-    </div>
+    </Tarjeta>
   );
 }
 
@@ -272,68 +257,68 @@ function TablaCalidad({ titulo, filas, rotular }: { titulo: string; filas: Calid
  * envíos. Solo conteos: ningún valor de un documento. Sin base, dice «—», nunca un 0 % que parezca medición.
  */
 function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights: InsightsAgente | 'no_leido'; nombresCliente: Record<string, string>; diasVentana: number }) {
+  const titulo = `Cómo le va al agente · últimos ${diasVentana} días`;
   if (insights === 'no_leido') {
-    return <section className="card p-4"><EstadoError mensaje="No se pudieron leer los resultados del agente. Vuelve a intentar en un momento." /></section>;
+    return <Tarjeta titulo={titulo} info="carta_porte_agente.resultados" estado="error" mensaje="No se pudieron leer los resultados del agente. Vuelve a intentar en un momento." reintentar />;
   }
   const i = insights;
   const nombre = (c: string) => (c === 'sin_cliente' ? 'Sin cliente asignado' : nombresCliente[c] ?? 'Cliente sin nombre');
   const e = i.envios;
   const hayAlgo = i.aprobados > 0 || e.enviados + e.rechazadosTms + e.pendientesReque + e.subidosAMano > 0 || (i.causasRechazo?.length ?? 0) > 0;
   return (
-    <section className="space-y-3" aria-label="Cómo le va al agente">
-      <TituloRecuadro info="carta_porte_agente.resultados">Cómo le va al agente <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· últimos {diasVentana} días</span></TituloRecuadro>
-      {i.parcial && (
-        <p className="text-[12px]" role="note" style={{ color: 'var(--warn)' }}>
-          Cifras de los {numero(i.parcial.leidos)} documentos más recientes de {numero(i.parcial.total)} de los últimos {diasVentana} días: son parciales.
-        </p>
-      )}
-      {!hayAlgo ? (
-        <EstadoVacio>Todavía no hay resultados que medir. Cuando se aprueben documentos y salgan envíos, aquí verás cuántos pasaron sin tocar, por qué se rechazaron y qué falta enviar.</EstadoVacio>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="card p-4">
-              <div className="rv-etq mb-1" style={{ color: 'var(--faint)' }}>Aprobados sin tocar</div>
-              <div className="cifra-mono text-[20px] font-semibold">{pctTxt(i.pctSinTocar)}</div>
-              <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{i.aprobados === 0 ? 'Aún no hay aprobados' : `de ${numero(i.aprobados)} aprobados`}</div>
-            </div>
-            <Tarjeta rotulo="Enviados al sistema del cliente" valor={e.enviados} />
-            <Tarjeta rotulo="Esperan requerimiento" valor={e.pendientesReque} tono="var(--warn)" />
-            <Tarjeta rotulo="Rechazados por el sistema del cliente" valor={e.rechazadosTms} tono="var(--bad)" />
-          </div>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-            Tiempo típico de aprobado a enviado: {e.medianaAprobadoAEnviadoMin === null ? '— (aún no hay envíos medibles)' : `${e.medianaAprobadoAEnviadoMin} min (mediana)`}.
-            {e.pendienteMasViejoHoras !== null && ` El que más espera lleva ${e.pendienteMasViejoHoras} h.`}
+    <Tarjeta titulo={titulo} info="carta_porte_agente.resultados" estado={hayAlgo ? 'ok' : 'vacio'} mensaje="Todavía no hay resultados que medir"
+      detalle="Cuando se aprueben documentos y salgan envíos, aquí verás cuántos pasaron sin tocar, por qué se rechazaron y qué falta enviar.">
+      <div className="rv-cp__pila">
+        {i.parcial && (
+          <p className="rv-cp__nota" data-tono="warn" role="note">
+            Cifras de los {numero(i.parcial.leidos)} documentos más recientes de {numero(i.parcial.total)} de los últimos {diasVentana} días: son parciales.
           </p>
-          {i.tarjetas.length > 0 && <div className="grid md:grid-cols-2 gap-3">{i.tarjetas.map((t) => <TarjetaQuePaso key={t.id} t={t} />)}</div>}
-          <div className="grid md:grid-cols-2 gap-3">
-            <TablaCalidad titulo="Calidad por formato" filas={i.porFormato} rotular={(c) => c} />
-            <TablaCalidad titulo="Calidad por cliente" filas={i.porCliente} rotular={nombre} />
-          </div>
-          <div className="grid md:grid-cols-2 gap-3 text-[12px]">
-            <div className="card p-4">
-              <div className="rv-etq mb-2" style={{ color: 'var(--faint)' }}>Por qué se rechazan</div>
-              {i.causasRechazo === null ? <p style={{ color: 'var(--muted)' }}>No disponible todavía en esta base.</p>
-                : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p style={{ color: 'var(--muted)' }}>No hubo rechazos.</p>
-                : <ul className="space-y-0.5">
-                    {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="cifra-mono">{numero(c.documentos)}</span></li>)}
-                    {(i.rechazadosSinCausa ?? 0) > 0 && <li>Sin clasificar: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span></li>}
-                  </ul>}
-            </div>
-            <div className="card p-4">
-              <div className="rv-etq mb-2" style={{ color: 'var(--faint)' }}>Lo que más se corrige</div>
-              {i.topCamposCorregidos.length === 0 ? <p style={{ color: 'var(--muted)' }}>Nadie ha corregido campos en este periodo.</p>
-                : <ol className="space-y-0.5 list-decimal pl-4">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
-            </div>
-          </div>
-        </>
-      )}
-    </section>
+        )}
+        <TiraCifras sello={selloHoy('Documentos de Carta Porte')}>
+          <Cifra info="carta_porte_agente.sin_tocar" etiqueta="Aprobados sin tocar" valor={pctTxt(i.pctSinTocar)} nota={i.aprobados === 0 ? 'Aún no hay aprobados' : `de ${numero(i.aprobados)} aprobados`} />
+          <Cifra info="carta_porte_agente.enviados" etiqueta="Enviados al sistema del cliente" valor={numero(e.enviados)} />
+          <Cifra info="carta_porte_agente.esperan_requerimiento" etiqueta="Esperan requerimiento" valor={numero(e.pendientesReque)} tono={e.pendientesReque > 0 ? 'warn' : undefined} />
+          <Cifra info="carta_porte_agente.rechazados_tms" etiqueta="Rechazados por el sistema del cliente" valor={numero(e.rechazadosTms)} tono={e.rechazadosTms > 0 ? 'bad' : undefined} />
+        </TiraCifras>
+        <p className="rv-cp__nota">
+          Tiempo típico de aprobado a enviado: {e.medianaAprobadoAEnviadoMin === null ? '— (aún no hay envíos medibles)' : `${e.medianaAprobadoAEnviadoMin} min (mediana)`}.
+          {e.pendienteMasViejoHoras !== null && ` El que más espera lleva ${e.pendienteMasViejoHoras} h.`}
+        </p>
+        {i.tarjetas.length > 0 && <div className="rv-cp__dos">{i.tarjetas.map((t) => <TarjetaQuePaso key={t.id} t={t} />)}</div>}
+        <FilaTarjetas variante="6-6">
+          <CalidadPorGrupo titulo="Calidad por formato" filas={i.porFormato} rotular={(c) => c} />
+          <CalidadPorGrupo titulo="Calidad por cliente" filas={i.porCliente} rotular={nombre} />
+        </FilaTarjetas>
+        <FilaTarjetas variante="6-6">
+          <Tarjeta titulo="Por qué se rechazan">
+            {i.causasRechazo === null ? <p className="rv-cp__nota">No disponible todavía en esta base.</p>
+              : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p className="rv-cp__nota">No hubo rechazos.</p>
+              : <ul className="rv-cp__lista">
+                  {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="cifra-mono">{numero(c.documentos)}</span></li>)}
+                  {(i.rechazadosSinCausa ?? 0) > 0 && <li>Sin clasificar: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span></li>}
+                </ul>}
+          </Tarjeta>
+          <Tarjeta titulo="Lo que más se corrige">
+            {i.topCamposCorregidos.length === 0 ? <p className="rv-cp__nota">Nadie ha corregido campos en este periodo.</p>
+              : <ol className="rv-cp__lista rv-cp__lista--num">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
+          </Tarjeta>
+        </FilaTarjetas>
+      </div>
+    </Tarjeta>
   );
 }
 
-const TONO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'var(--ok)', ambar: 'var(--warn)', rojo: 'var(--bad)' };
+const TONO_ANTIGUEDAD: Record<ColorAntiguedad, TonoEstado> = { verde: 'ok', ambar: 'warn', rojo: 'bad' };
 const ROTULO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'Reciente', ambar: 'Atención', rojo: 'Riesgo de multa' };
+
+interface FilaSinCcp { clave: string; cliente: string; folio: string; horas: number; dias: number; color: ColorAntiguedad }
+
+const COLUMNAS_SIN_CCP: readonly ColumnaBase<FilaSinCcp>[] = [
+  { id: 'cliente', titulo: 'Cliente', principal: true, celda: (f) => f.cliente },
+  { id: 'folio', titulo: 'Viaje', celda: (f) => f.folio },
+  { id: 'horas', titulo: 'Sin Carta Porte', alinear: 'der', celda: (f) => <span className="cifra-mono">{numero(f.horas)} h ({numero(f.dias)} d)</span> },
+  { id: 'estado', titulo: 'Antigüedad', celda: (f) => <StatusChip tono={TONO_ANTIGUEDAD[f.color]}>{ROTULO_ANTIGUEDAD[f.color]}</StatusChip> },
+];
 
 /**
  * T-A3-66 — viajes que ya salieron y siguen sin Carta Porte, por cliente y con su antigüedad. SOLO LECTURA: no envía
@@ -341,73 +326,65 @@ const ROTULO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'Reciente', 
  */
 function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
   if (listado === 'no_leido') {
-    return <section className="card p-4"><EstadoError mensaje="No se pudo leer la lista de viajes salidos sin Carta Porte. Vuelve a intentar en un momento." /></section>;
+    return <Tarjeta titulo="Viajes salidos sin Carta Porte" info="carta_porte_agente.sin_ccp" estado="error" mensaje="No se pudo leer la lista de viajes salidos sin Carta Porte. Vuelve a intentar en un momento." reintentar />;
   }
   // A3-01 (cierre100): null no es 0. Sin ningún viaje importado del TMS no se puede decir que no haya viajes sin Carta Porte:
   // ni cifra ni estado vacío verde, ni descarga.
   if (listado.sinDatosTms?.motivo === 'sin_viajes') {
     return (
-      <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
-        <TituloRecuadro info="carta_porte_agente.sin_ccp">Viajes salidos sin Carta Porte</TituloRecuadro>
-        <p role="alert" className="card p-4 text-[13px]" style={{ color: 'var(--warn)' }}>
+      <Tarjeta titulo="Viajes salidos sin Carta Porte" info="carta_porte_agente.sin_ccp">
+        <Aviso tono="warn">
           <strong>Sin datos del TMS:</strong> no se puede decir si hay viajes salidos sin Carta Porte. No hay ningún viaje importado del sistema de transporte en los últimos días
           {listado.sinDatosTms.ultimoImportadoEn ? ` (el último que entró fue hace ${numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h)` : ''}.
           Esto no significa que todo tenga Carta Porte.
-        </p>
-      </section>
+        </Aviso>
+      </Tarjeta>
     );
   }
   const ligados = listado.ligadosPorFolio;
   // A3-02: si casi nada liga por folio, el supuesto «folio del TMS = folio del cliente» probablemente es falso y TODO saldría «sin CCP».
   const pocoLigado = !!ligados && ligados.total >= 10 && ligados.ligados / ligados.total < 0.05;
+  const filas: FilaSinCcp[] = listado.grupos.flatMap((g) =>
+    g.viajes.map((v) => ({
+      clave: `${g.clienteId ?? 'sin_cliente'}-${v.viajeId}`,
+      cliente: g.clienteNombre,
+      folio: `${v.folio ?? 'Sin folio'}${v.localAbierto ? ' · local abierto' : ''}`,
+      horas: v.horas, dias: v.dias, color: v.color,
+    })));
+  const sinTabla = listado.vacio && (listado.truncado || !!listado.sinDatosTms);
   return (
-    <section className="space-y-3" aria-label="Viajes salidos sin Carta Porte">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <TituloRecuadro info="carta_porte_agente.sin_ccp">Viajes salidos sin Carta Porte <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>· {numero(listado.total)}</span></TituloRecuadro>
-        {!listado.vacio && (
-          <a download="viajes-sin-carta-porte.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(aCsvSinCcp(listado))}`}
-            className="text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>Descargar reporte (CSV)</a>
+    <Tarjeta titulo={`Viajes salidos sin Carta Porte · ${numero(listado.total)}`} info="carta_porte_agente.sin_ccp"
+      estado={listado.vacio && !sinTabla ? 'vacio' : 'ok'} iconoVacio={CheckCircle2} mensaje="No hay viajes salidos sin Carta Porte"
+      detalle="Cuando salga uno sin complemento aparecerá aquí con las horas que lleva sin él."
+      acciones={!listado.vacio ? (
+        <a download="viajes-sin-carta-porte.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(aCsvSinCcp(listado))}`} className={clasesBoton('secondary', 'sm')}>
+          Descargar reporte (CSV)
+        </a>
+      ) : undefined}>
+      <div className="rv-cp__pila">
+        {listado.sinDatosTms?.motivo === 'importacion_vieja' && (
+          <Aviso tono="warn">
+            La última importación de viajes del TMS fue hace {numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h: esta lista puede estar atrasada y no debe leerse como «todo en regla».
+          </Aviso>
         )}
+        {ligados && (
+          <p className="rv-cp__nota">
+            {numero(ligados.ligados)} de {numero(ligados.total)} viajes ligados a un documento por folio (cliente + folio).
+          </p>
+        )}
+        {pocoLigado && (
+          <Aviso tono="warn">
+            Casi ningún viaje liga con un documento por folio: es posible que el folio del TMS no sea el mismo número que el folio del cliente. Confírmalo antes de leer esta lista como riesgo de multa.
+          </Aviso>
+        )}
+        {listado.truncado && (
+          <Aviso tono="warn">
+            La lista está incompleta: hay más salidas de las que se pueden leer de una vez y faltan las más antiguas. Revisa los viajes viejos en Viajes.
+          </Aviso>
+        )}
+        {!listado.vacio && <TablaBase etiqueta="Viajes salidos sin Carta Porte" columnas={COLUMNAS_SIN_CCP} filas={filas} idFila={(f) => f.clave} densa tarjetaMovil />}
       </div>
-      {listado.sinDatosTms?.motivo === 'importacion_vieja' && (
-        <p role="alert" className="text-[12px]" style={{ color: 'var(--warn)' }}>
-          La última importación de viajes del TMS fue hace {numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h: esta lista puede estar atrasada y no debe leerse como «todo en regla».
-        </p>
-      )}
-      {ligados && (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          {numero(ligados.ligados)} de {numero(ligados.total)} viajes ligados a un documento por folio (cliente + folio).
-        </p>
-      )}
-      {pocoLigado && (
-        <p role="alert" className="text-[12px]" style={{ color: 'var(--warn)' }}>
-          Casi ningún viaje liga con un documento por folio: es posible que el folio del TMS no sea el mismo número que el folio del cliente. Confírmalo antes de leer esta lista como riesgo de multa.
-        </p>
-      )}
-      {listado.truncado && (
-        <p role="alert" className="text-[12px]" style={{ color: 'var(--warn)' }}>
-          La lista está incompleta: hay más salidas de las que se pueden leer de una vez y faltan las más antiguas. Revisa los viajes viejos en Viajes.
-        </p>
-      )}
-      {listado.vacio && (listado.truncado || listado.sinDatosTms) ? null : listado.vacio ? (
-        <EstadoVacio>No hay viajes salidos sin Carta Porte. Cuando salga uno sin complemento aparecerá aquí con las horas que lleva sin él.</EstadoVacio>
-      ) : listado.grupos.map((g) => (
-        <div key={g.clienteId ?? 'sin_cliente'} className="card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-[13px] font-medium">{g.clienteNombre}</div>
-            <div className="text-[11px]" style={{ color: TONO_ANTIGUEDAD[g.colorMax] }}>{numero(g.viajes.length)} {g.viajes.length === 1 ? 'viaje' : 'viajes'} · el más viejo {numero(g.masAntiguoHoras)} h</div>
-          </div>
-          <ul className="space-y-0.5 text-[12px]">
-            {g.viajes.map((v) => (
-              <li key={v.viajeId} className="flex items-center justify-between gap-3">
-                <span>{v.folio ?? 'Sin folio'}{v.localAbierto ? ' · local abierto' : ''}</span>
-                <span className="cifra-mono" style={{ color: TONO_ANTIGUEDAD[v.color] }}>{numero(v.horas)} h ({numero(v.dias)} d) · {ROTULO_ANTIGUEDAD[v.color]}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -429,7 +406,7 @@ export function AvisoCatalogosSat({ catalogosSat }: { catalogosSat: ConteoCatalo
     <div data-catalogos-sat={vacios.length === filas.length ? 'vacios' : 'parcial'}>
       <Aviso tono="warn">
         {vacios.length === filas.length ? TEXTO_CATALOGOS_SAT_VACIOS : 'Faltan por cargar algunos catálogos del SAT: sus claves aparecen como «no se pudo verificar» y las valida tu PAC al timbrar.'}
-        <ul className="mt-1.5 text-[12px] space-y-0.5">
+        <ul className="rv-cp__lista">
           {filas.map((f) => <li key={f.catalogo}>{f.nombre}: {f.n === 0 ? 'sin cargar' : `${numero(f.n)} claves`}</li>)}
         </ul>
       </Aviso>
