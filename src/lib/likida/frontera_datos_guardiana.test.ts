@@ -339,7 +339,10 @@ import { join, relative } from 'node:path';
 // F5 (w3/age): +1 archivo, `likida/agentes/config-agente.ts` (configurar un agente desde el admin: lee la fila `agente_definicion` por id y la actualiza con motivo y bitácora). Funcionalidad nueva.
 // F7 «seguridad y sistema» (/admin, 10-nov-2026): +1 archivo (342 -> 343), `admin/soporte-escalado.ts`: leer en `bitacora_auditoria` si consta el aviso de SLA vencido de cada ticket
 // (la consecuencia visible del plazo). No cabe en `soporte.ts` sin arrastrar el correo y Meta de `soporte-avisos.ts` a todo el que lee la cola. Funcionalidad nueva, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 346;
+// Pie de sidebar (r19, 10-nov-2026): +1 archivo neto (346 -> 347) y +1 llamada neta (2,536 -> 2,537). Los layouts de /admin y /dashboard leen `tenant` para el selector de flota del pie
+// (admin: id+nombre de todas las flotas, tras requireSuperadmin; dashboard: el nombre de UNA flota por `eq('id', tenantDelMenu)`, el tenant de la sesión). Las dos fallan cerradas (el pie dice
+// «Sin dato», nunca una lista vacía). Cuenta neta porque `dashboard/contador/inicio-contador.tsx` dejó de leer. Lecturas legítimas de presentación, no código migrado.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 347;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -706,7 +709,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 346;
 // Integración de la Ola 3: +2 (Bandeja) +3 (Dinero) = 2,519 sobre 2,514.
 // F7 «seguridad y sistema» (/admin, 10-nov-2026): +7 llamadas (2,519 -> 2,526), todas por `acotada` y de solo lectura: `admin/bitacora.ts` +6 (la página filtrada de la bitácora, las listas de
 // flotas y personas para los filtros y la tabla de accesos del equipo con sus dos resoluciones de nombre) y `admin/soporte-escalado.ts` +1 (el aviso de SLA vencido por ticket).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_536;
+// Pie de sidebar (r19): +2 llamadas en los layouts de /admin y /dashboard (lectura de `tenant`) y -1 en inicio-contador.tsx = +1 neto (2,536 -> 2,537); ver el techo de archivos.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_537;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
