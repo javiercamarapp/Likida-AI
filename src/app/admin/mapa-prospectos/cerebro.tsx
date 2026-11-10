@@ -630,8 +630,9 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} onClick={() => setFiltrosAbiertos(true)}>
             Filtros{filtrosActivos ? ` · ${filtrosActivos}` : ''}
           </Boton>
-          <Boton tamano="sm" onClick={alternarPantalla} title="Pantalla completa" aria-label="Pantalla completa"
-            icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />} />
+          <Boton tamano="sm" onClick={alternarPantalla} title="Pantalla completa" icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>
+            <span className="rv-sr">Pantalla completa</span>
+          </Boton>
         </div>
       </div>
 
@@ -733,8 +734,9 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
               {listaSeleccion.some((p) => p.lat !== null) && (
                 <Boton tamano="sm" variante="primary" onClick={() => setCalles(true)}>Calles →</Boton>
               )}
-              <Boton tamano="sm" variante="ghost" onClick={() => elegirEstado(null)} title="Cerrar" aria-label="Cerrar el estado"
-                icono={<Icono icono={X} />} />
+              <Boton tamano="sm" variante="ghost" onClick={() => elegirEstado(null)} title="Cerrar" icono={<Icono icono={X} />}>
+                <span className="rv-sr">Cerrar el estado</span>
+              </Boton>
             </div>
             <div className="cer-lista">
               {listaSeleccion.length === 0 ? (

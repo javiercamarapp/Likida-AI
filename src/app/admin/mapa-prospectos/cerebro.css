@@ -2,20 +2,25 @@
    sale de --etapa (una variable por etapa, con tokens --chart-n), el resto de la geometría, de aquí. Toda animación vive dentro de
    `prefers-reduced-motion: no-preference`: con `reduce` el mapa, las luces y los paneles quedan quietos y se leen igual. */
 
+/* El color por omisión de una etapa desconocida (declarado al inicio de línea: la guarda tokens_definidos lo busca así). */
+.cer-punto, .cer-pin, .cer-pop, .cer-pin-calle {
+  --etapa: var(--muted);
+}
+
 /* ── El color de cada etapa del embudo (los mismos 14 estados que COLOR_EMBUDO; la prueba `cerebro_piel.test.ts` los cruza) ── */
 [data-etapa="nuevo"], .cer-e-nuevo { --etapa: var(--muted); }
-[data-etapa="contactado"], .cer-e-contactado { --etapa: var(--chart-4); }
-[data-etapa="demo"], .cer-e-demo { --etapa: var(--chart-7); }
-[data-etapa="negociacion"], .cer-e-negociacion { --etapa: var(--chart-2); }
-[data-etapa="cerrado"], .cer-e-cerrado { --etapa: var(--chart-3); }
+[data-etapa="contactado"], .cer-e-contactado { --etapa: var(--chart-4, var(--muted)); }
+[data-etapa="demo"], .cer-e-demo { --etapa: var(--chart-7, var(--muted)); }
+[data-etapa="negociacion"], .cer-e-negociacion { --etapa: var(--chart-2, var(--muted)); }
+[data-etapa="cerrado"], .cer-e-cerrado { --etapa: var(--chart-3, var(--muted)); }
 [data-etapa="perdido"], .cer-e-perdido { --etapa: var(--faint); }
-[data-etapa="appointment"], .cer-e-appointment { --etapa: var(--chart-1); }
-[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: var(--chart-5); }
-[data-etapa="cancelled"], .cer-e-cancelled { --etapa: var(--chart-6); }
-[data-etapa="no-show"], .cer-e-no-show { --etapa: var(--chart-6); }
-[data-etapa="proposal"], .cer-e-proposal { --etapa: var(--chart-7); }
-[data-etapa="pilot"], .cer-e-pilot { --etapa: var(--chart-5); }
-[data-etapa="won"], .cer-e-won { --etapa: var(--chart-3); }
+[data-etapa="appointment"], .cer-e-appointment { --etapa: var(--chart-1, var(--muted)); }
+[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: var(--chart-5, var(--muted)); }
+[data-etapa="cancelled"], .cer-e-cancelled { --etapa: var(--chart-6, var(--muted)); }
+[data-etapa="no-show"], .cer-e-no-show { --etapa: var(--chart-6, var(--muted)); }
+[data-etapa="proposal"], .cer-e-proposal { --etapa: var(--chart-7, var(--muted)); }
+[data-etapa="pilot"], .cer-e-pilot { --etapa: var(--chart-5, var(--muted)); }
+[data-etapa="won"], .cer-e-won { --etapa: var(--chart-3, var(--muted)); }
 [data-etapa="lost"], .cer-e-lost { --etapa: var(--faint); }
 
 .cer-raiz { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
@@ -105,12 +110,12 @@
 .cer-pct { display: flex; align-items: center; gap: 8px; font-size: var(--t-micro); color: var(--muted); }
 .cer-pct__etq { width: 56px; flex: none; }
 .cer-pct__pista { flex: 1; height: 6px; display: block; }
-.cer-pct__pista rect { fill: var(--chart-1); }
-.cer-pct__pista[data-serie="urgencia"] rect { fill: var(--chart-4); }
-.cer-pct__pista[data-serie="cierre"] rect { fill: var(--chart-3); }
-.cer-pct__pista[data-serie="icp"] rect { fill: var(--chart-7); }
-.cer-pct__pista[data-serie="necesidad"] rect { fill: var(--chart-6); }
-.cer-pct__pista[data-serie="datos"] rect { fill: var(--chart-5); }
+.cer-pct__pista rect { fill: var(--chart-1, var(--muted)); }
+.cer-pct__pista[data-serie="urgencia"] rect { fill: var(--chart-4, var(--muted)); }
+.cer-pct__pista[data-serie="cierre"] rect { fill: var(--chart-3, var(--muted)); }
+.cer-pct__pista[data-serie="icp"] rect { fill: var(--chart-7, var(--muted)); }
+.cer-pct__pista[data-serie="necesidad"] rect { fill: var(--chart-6, var(--muted)); }
+.cer-pct__pista[data-serie="datos"] rect { fill: var(--chart-5, var(--muted)); }
 .cer-pct__pista rect.cer-pct__riel { fill: var(--line); }
 .cer-pct__val { width: 36px; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
 

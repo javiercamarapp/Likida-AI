@@ -40,7 +40,9 @@ describe('Cerebro: contrato visual', () => {
     const css = leer('cerebro.css');
     for (const [estado, { color }] of Object.entries(COLOR_EMBUDO)) {
       expect(color, estado).toMatch(/^var\(--(chart-[1-8]|muted|faint)\)$/);
-      expect(css, estado).toContain(`[data-etapa="${estado}"], .cer-e-${estado} { --etapa: ${color}; }`);
+      // En el CSS cada token de datos lleva su respaldo (la guarda `tokens_definidos` no admite var() sin fallback para --chart-n).
+      const enCss = color.replace(/var\((--chart-\d)\)/, 'var($1, var(--muted))');
+      expect(css, estado).toContain(`[data-etapa="${estado}"], .cer-e-${estado} { --etapa: ${enCss}; }`);
     }
   });
 
