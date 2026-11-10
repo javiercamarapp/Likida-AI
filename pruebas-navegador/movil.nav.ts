@@ -23,6 +23,9 @@ import { abrirNavegacion } from './apoyo/navegacion';
 
 test.use({ storageState: ESTADOS.duena });
 
+/** El ítem «Viajes» del menú: v1 apunta al registro; v2, al grupo Despacho (el registro es una de sus pestañas). */
+const VIAJES = 'a[href^="/dashboard/viajes"], a[href^="/dashboard/despacho"]';
+
 /** La página entera no debe scrollear de lado: lo ancho (tablas) scrollea
  *  dentro de su propio contenedor. Un desborde horizontal en móvil es la
  *  pantalla rota clásica que el escritorio nunca enseña. */
@@ -38,7 +41,7 @@ test('el resumen carga en el teléfono sin desborde y con la navegación a mano'
   await page.goto('/dashboard');
   // v1: el aside de íconos; v2: la hoja «Más». El ayudante devuelve el contenedor donde está el menú en cada caso.
   const nav = await abrirNavegacion(page);
-  await expect(nav.locator('a[href^="/dashboard/viajes"]').first()).toBeVisible();
+  await expect(nav.locator(VIAJES).first()).toBeVisible();
   await page.keyboard.press('Escape');
   await sinDesbordeHorizontal(page);
 });
@@ -48,7 +51,12 @@ test('del resumen al registro navegando con el dedo, y la tabla es legible', asy
   // El rail de navegación colapsa a íconos bajo `lg` (MARCO_SIDEBAR): el
   // destino se toca, no se lee — como lo haría el pulgar.
   const nav = await abrirNavegacion(page);
-  await nav.locator('a[href^="/dashboard/viajes"]').first().tap();
+  await nav.locator(VIAJES).first().tap();
+  // v2: «Viajes» abre el grupo Despacho y el registro es su pestaña «Registro»; v1 lleva directo al registro.
+  if (!/\/dashboard\/viajes/.test(page.url())) {
+    await expect(page).toHaveURL(/\/dashboard\/despacho/);
+    await page.getByRole('navigation', { name: 'Secciones de Viajes' }).getByRole('link', { name: 'Registro', exact: true }).tap();
+  }
   await expect(page).toHaveURL(/\/dashboard\/viajes/);
   await expect(page.locator('body')).toContainText('VJ-2026-0001');
   await sinDesbordeHorizontal(page);

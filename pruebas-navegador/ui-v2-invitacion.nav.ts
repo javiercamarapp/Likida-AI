@@ -18,8 +18,8 @@ import { CORREOS, entrar } from './apoyo/sesion';
 test.skip(process.env.LIKIDA_UI_V2_FORZAR !== '1', 'solo corre con LIKIDA_UI_V2_FORZAR=1 en el servidor');
 
 const ROLES = [
-  { nombre: 'dueño', correo: CORREOS.perfilDueno, ip: '10.77.0.31', destino: 'aside a[href="/dashboard/viajes"]' },
-  { nombre: 'encargado', correo: CORREOS.perfilEncargado, ip: '10.77.0.32', destino: 'aside a[href="/dashboard/viajes"]' },
+  { nombre: 'dueño', correo: CORREOS.perfilDueno, ip: '10.77.0.31', destino: 'aside a[href="/dashboard/despacho"]' },
+  { nombre: 'encargado', correo: CORREOS.perfilEncargado, ip: '10.77.0.32', destino: 'aside a[href="/dashboard/despacho"]' },
   { nombre: 'contador', correo: CORREOS.perfilContador, ip: '10.77.0.33', destino: 'aside a[href="/dashboard/agentes/peajes"]' },
   { nombre: 'nómina', correo: CORREOS.perfilNomina, ip: '10.77.0.34', destino: '[data-tour="nav-notificaciones"]' },
 ] as const;

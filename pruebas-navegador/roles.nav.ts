@@ -76,7 +76,8 @@ test.describe('contador: dinero sin despacho ni administración', () => {
     page.on('console', (m) => { if (m.type() === 'error') errores.push(m.text()); });
     await paginaSana(page, '/dashboard/contador', 'Contador E2E');
     await expect(page.locator('a[href="/dashboard/despacho"]')).toHaveCount(0);
-    await page.locator('a[href="/dashboard/facturacion"]').first().click();
+    // En v2 el grupo «Dinero y fiscal» del sidebar llega plegado: se toca el enlace a Facturación que SÍ está a la vista.
+    await page.locator('a[href="/dashboard/facturacion"]:visible').first().click();
     await expect(page).toHaveURL(/\/dashboard\/facturacion$/);
     await expect(page.locator('body')).toContainText('Facturación');
     await page.waitForLoadState('networkidle');
