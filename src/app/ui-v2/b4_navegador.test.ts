@@ -282,12 +282,14 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · chip activo (los tokens de marca son del s
 });
 
 describe.skipIf(SIN_NAVEGADOR)('B4 · movimiento', () => {
-  it('conteo de KPI: arranca cerca (nunca en 0), termina en el valor y con reduced-motion no se mueve', async () => {
+  it('conteo de KPI: parte de 0 (650 ms, easeOutCubic), termina en el valor exacto y con reduced-motion no se mueve', async () => {
     const p = await abrir(1440, { animar: true });
     const muestras: string[] = [];
     for (let i = 0; i < 6; i++) { muestras.push(await p.evaluate(() => document.querySelector('.rv-kpi__valor')!.textContent!)); await p.waitForTimeout(90); }
+    await p.waitForTimeout(400); // 650 ms de conteo: 6 x 90 no alcanzan
+    muestras.push(await p.evaluate(() => document.querySelector('.rv-kpi__valor')!.textContent!));
     const n = muestras.map((m) => Number(m.replace(/[^0-9.]/g, '')));
-    expect(n.every((v) => v > 0)).toBe(true);
+    expect(n.every((v) => v >= 0 && v <= 1250)).toBe(true);
     expect(n.some((v) => v < 1250)).toBe(true);
     expect(n[n.length - 1]).toBe(1250);
     await p.close();

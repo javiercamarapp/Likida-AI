@@ -77,16 +77,16 @@ describe('controles finos · color de estados activos y acción del cajón (azul
     const com = tokens.slice(tokens.lastIndexOf('/*', i), i);
     for (const t of ['2F6BD8', 'e6edfa', '1f4fb0', 'd8e3f8', '7-nov-2026', 'var(--ui-soft)']) expect(com, t).toContain(t);
   });
-  it('mini barras y tooltip: acento neutro por omisión y tooltip carbón con texto claro', () => {
+  it('mini barras y tooltip: acento neutro por omisión y tooltip como tarjeta blanca de Rovaq (superficie, tinta y línea)', () => {
     expect(valor('--barra-acento')).toBe('var(--ink2)');
     expect(valor('--barra-fondo')).toBe('var(--ui-soft)');
-    expect(valor('--tip-bg')).toBe('#2a2a2f');
-    expect(valor('--tip-fg')).toBe('#f4f4f5');
-    expect(valor('--tip-borde')).toBe('transparent');
+    expect(valor('--tip-bg')).toBe('var(--surface)');
+    expect(valor('--tip-fg')).toBe('var(--ink)');
+    expect(valor('--tip-borde')).toBe('var(--line)');
   });
-  it('en oscuro el tooltip se aclara un tono', () => {
-    expect(valor('--tip-bg', oscuro)).toBe('#3a3a40');
-    expect(valor('--tip-fg', oscuro)).toBe('#f4f4f5');
+  it('en oscuro el tooltip hereda la superficie oscura (sin override propio)', () => {
+    expect(valor('--tip-bg', oscuro)).toBeUndefined();
+    expect(valor('--tip-fg', oscuro)).toBeUndefined();
   });
 });
 

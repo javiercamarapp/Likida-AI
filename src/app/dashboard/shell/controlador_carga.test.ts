@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { crearControlador, type EstadoCarga, TOPE_MS } from './controlador-carga';
+import { crearControlador, type EstadoCarga, MINIMO_VISIBLE_MS, RETARDO_NAVEGACION_MS, TOPE_MS, VENTANA_NAVEGACION_MS } from './controlador-carga';
 
-// ESTILO-LIKIDA §9 + decisión de Javier del 31-oct: el telón es SOLO de la primera carga de la sesión. Medido con reloj falso: la
-// primera carga se libera tras 600 ms estables y ≥400 ms visible; una recarga de la misma sesión, en cuanto el contenido está
-// listo; las navegaciones NUNCA levantan el telón (ahí van esqueletos); seguro de 20 s. Sin DOM: el «puerto» simula la pantalla de carga.
+// ESTILO-LIKIDA §9 + decisión del dueño del 10-nov (reemplaza la de Javier del 31-oct): el telón es IGUAL A ROVAQ. Medido con reloj falso:
+// la primera carga se libera tras 600 ms estables y ≥400 ms visible; una recarga de la misma sesión, en cuanto el contenido está
+// listo; una NAVEGACIÓN lenta (pantalla de carga pendiente > 250 ms) levanta el telón, que dura ≥400 ms; seguro de 45 s.
+// Sin DOM: el «puerto» simula la pantalla de carga.
 
 function armar(primeraVez = true) {
   const est = { pendiente: false };
@@ -65,7 +66,7 @@ describe('primera carga de la sesión', () => {
     expect(ctl.estado()).toBe('oculta');
   });
 
-  it('seguro de 20 s: si nunca termina se retira y queda el estado «tope» (No disponible ahora)', () => {
+  it('seguro de 45 s: si nunca termina se retira y queda el estado «tope» (No disponible ahora)', () => {
     const { est, ctl } = armar();
     est.pendiente = true;
     ctl.evaluar();
@@ -99,7 +100,7 @@ describe('recarga dentro de la misma sesión', () => {
   });
 });
 
-describe('navegación interna: el telón NO vuelve', () => {
+describe('navegación interna: el telón vuelve si la carga tarda más de 250 ms', () => {
   function listoOculta() {
     const a = armar();
     a.ctl.evaluar();
@@ -108,22 +109,67 @@ describe('navegación interna: el telón NO vuelve', () => {
     return a;
   }
 
-  it('una navegación lenta (más de 250 ms, incluso 10 s) no levanta el telón: la pantalla muestra su esqueleto', () => {
+  it('una navegación rápida (la pantalla de carga se va antes de 250 ms) NO levanta el telón', () => {
     const { est, ctl, historia } = listoOculta();
     est.pendiente = true; ctl.evaluar();
-    vi.advanceTimersByTime(10_000);
+    vi.advanceTimersByTime(RETARDO_NAVEGACION_MS - 1);
     est.pendiente = false; ctl.evaluar();
     vi.advanceTimersByTime(2000);
     expect(ctl.estado()).toBe('oculta');
-    expect(historia.filter(([, e]) => e !== 'oculta' && e !== 'inicial')).toHaveLength(0);
-    expect(historia.filter(([, e]) => e === 'inicial')).toHaveLength(0);
+    expect(historia.filter(([, e]) => e === 'nav')).toHaveLength(0);
   });
 
-  it('el seguro de 20 s ya no corre una vez soltado el telón', () => {
+  it('una navegación lenta levanta el telón a los 250 ms y lo suelta al terminar, tras el mínimo de 400 ms visible', () => {
     const { est, ctl } = listoOculta();
     est.pendiente = true; ctl.evaluar();
-    vi.advanceTimersByTime(TOPE_MS + 1000);
+    vi.advanceTimersByTime(RETARDO_NAVEGACION_MS - 1);
     expect(ctl.estado()).toBe('oculta');
+    vi.advanceTimersByTime(2);
+    expect(ctl.estado()).toBe('nav');
+    vi.advanceTimersByTime(5000);
+    expect(ctl.estado()).toBe('nav'); // sigue pendiente: no se suelta
+    est.pendiente = false; ctl.evaluar();
+    vi.advanceTimersByTime(VENTANA_NAVEGACION_MS - 1);
+    expect(ctl.estado()).toBe('nav');
+    vi.advanceTimersByTime(2);
+    expect(ctl.estado()).toBe('oculta');
+  });
+
+  it('si termina apenas aparece, el telón se mantiene hasta cumplir 400 ms visible (sin destello)', () => {
+    const { est, ctl } = listoOculta();
+    est.pendiente = true; ctl.evaluar();
+    vi.advanceTimersByTime(RETARDO_NAVEGACION_MS + 1);
+    expect(ctl.estado()).toBe('nav');
+    est.pendiente = false; ctl.evaluar();
+    vi.advanceTimersByTime(MINIMO_VISIBLE_MS - 20);
+    expect(ctl.estado()).toBe('nav');
+    vi.advanceTimersByTime(40);
+    expect(ctl.estado()).toBe('oculta');
+  });
+
+  it('el seguro de 45 s corre también en una navegación: queda «tope» y no vuelve a levantarse mientras siga pendiente', () => {
+    const { est, ctl } = listoOculta();
+    est.pendiente = true; ctl.evaluar();
+    vi.advanceTimersByTime(RETARDO_NAVEGACION_MS + 1);
+    vi.advanceTimersByTime(TOPE_MS + 1);
+    expect(ctl.estado()).toBe('tope');
+    ctl.evaluar();
+    vi.advanceTimersByTime(5000);
+    expect(ctl.estado()).toBe('tope');
+    est.pendiente = false; ctl.evaluar();
+    expect(ctl.estado()).toBe('oculta');
+  });
+
+  it('puede repetirse: una segunda navegación lenta vuelve a levantar el telón', () => {
+    const { est, ctl } = listoOculta();
+    for (let i = 0; i < 2; i++) {
+      est.pendiente = true; ctl.evaluar();
+      vi.advanceTimersByTime(RETARDO_NAVEGACION_MS + 1);
+      expect(ctl.estado()).toBe('nav');
+      est.pendiente = false; ctl.evaluar();
+      vi.advanceTimersByTime(MINIMO_VISIBLE_MS + 10);
+      expect(ctl.estado()).toBe('oculta');
+    }
   });
 });
 

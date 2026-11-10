@@ -2,11 +2,12 @@
    UI v2 · CAPA DE CARGA ÚNICA (ESTILO-LIKIDA §9, decisión de Javier)
 
    Una capa fija de pantalla completa de UN color (`--carga-fondo` = fondo de la app, claro y oscuro) con SOLO el logo de
-   Likida centrado que respira. Tapa sidebar, topbar y contenido. Sin texto ni spinner. SOLO en la primera carga de la sesión
-   (decisión de Javier, 31-oct): las navegaciones y las tarjetas muestran esqueletos con la forma real.
+   Likida centrado (140 px de ancho, como Rovaq) que respira. Tapa sidebar, topbar y contenido. Sin texto ni spinner. IGUAL A ROVAQ desde el
+   10-nov-2026 (decisión del dueño; reemplaza la del 31-oct de «solo la primera carga»): sale en la carga, en la recarga y en las
+   navegaciones internas lentas (> 250 ms, ≥ 400 ms visible). Con prefers-reduced-motion el logo queda estático.
    El primer pintado lo da el HTML del servidor (`data-estado="inicial"`) con ESTE css: no hace falta script inline (la CSP con
    nonce y el hash de SCRIPT_TEMA no se tocan). El controlador cliente (`dashboard/shell/capa-carga.tsx`) solo cambia
-   `data-estado`: inicial (visible) | oculta.
+   `data-estado`: inicial (visible) | nav (visible, navegación lenta) | oculta.
    ═══════════════════════════════════════════════════════════════════════════ */
 
 [data-ui="v2"] .rv-carga {
@@ -25,28 +26,28 @@
    visible y el foco no se cuela bajo la capa. Al soltarla vuelve al instante; el fundido de 170 ms lo hace la capa por encima. */
 [data-ui="v2"]:has(> .rv-carga:not([data-estado="oculta"])) > :is(.rv-skip, .rv-cab-movil, .rv-fila) {
   visibility: hidden;
-  /* Seguro (ver abajo): a los 20 s el marco vuelve a ser visible aunque nadie suelte la capa. */
-  animation-name: rv-marco-seguro; animation-duration: 120ms; animation-delay: 20s; animation-fill-mode: forwards;
+  /* Seguro (ver abajo): a los 45 s el marco vuelve a ser visible aunque nadie suelte la capa. */
+  animation-name: rv-marco-seguro; animation-duration: 120ms; animation-delay: 45s; animation-fill-mode: forwards;
 }
 
-/* ── SEGURO DE 20 s, SIN SCRIPT y con CUALQUIER preferencia de movimiento ─────────────────────────────────────────────
-   Si el controlador cliente nunca corre (hidratación rota, chunk bloqueado) o `data-estado` se queda en inicial/nav, a los 20 s
+/* ── SEGURO DE 45 s, SIN SCRIPT y con CUALQUIER preferencia de movimiento ─────────────────────────────────────────────
+   Si el controlador cliente nunca corre (hidratación rota, chunk bloqueado) o `data-estado` se queda en inicial/nav, a los 45 s
    la capa se retira (visibility + pointer-events) Y el marco recupera su visibilidad. No es movimiento decorativo: es un cambio
    de estado diferido (la animación solo conmuta propiedades discretas), por eso vive FUERA de `prefers-reduced-motion`.
-   En reduced-motion la duración baja a ~0: el retardo de 20 s se conserva. */
+   En reduced-motion la duración baja a ~0: el retardo de 45 s se conserva. */
 @keyframes rv-carga-seguro { to { opacity: 0; visibility: hidden; pointer-events: none; } }
 @keyframes rv-marco-seguro { to { visibility: visible; } }
 [data-ui="v2"] .rv-carga:not([data-estado="oculta"]) {
-  animation-name: rv-carga-seguro; animation-duration: 120ms; animation-delay: 20s; animation-fill-mode: forwards;
+  animation-name: rv-carga-seguro; animation-duration: 120ms; animation-delay: 45s; animation-fill-mode: forwards;
 }
 /* Con reduced-motion `movimiento.css` anula TODA animación del alcance con `animation: none !important`: el seguro lo reafirma con
    !important y mayor especificidad (si no, la capa taparía la app para siempre en esa preferencia). Duración ~0, retardo intacto. */
 @media (prefers-reduced-motion: reduce) {
   [data-ui="v2"] .rv-carga:not([data-estado="oculta"]) {
-    animation-name: rv-carga-seguro !important; animation-duration: 0.01ms !important; animation-delay: 20s !important; animation-fill-mode: forwards !important;
+    animation-name: rv-carga-seguro !important; animation-duration: 0.01ms !important; animation-delay: 45s !important; animation-fill-mode: forwards !important;
   }
   [data-ui="v2"]:has(> .rv-carga:not([data-estado="oculta"])) > :is(.rv-skip, .rv-cab-movil, .rv-fila) {
-    animation-name: rv-marco-seguro !important; animation-duration: 0.01ms !important; animation-delay: 20s !important; animation-fill-mode: forwards !important;
+    animation-name: rv-marco-seguro !important; animation-duration: 0.01ms !important; animation-delay: 45s !important; animation-fill-mode: forwards !important;
   }
 }
 

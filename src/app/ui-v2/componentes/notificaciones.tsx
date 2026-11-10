@@ -1,7 +1,7 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Info, TriangleAlert, X } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, Check, Info, OctagonAlert, X } from 'lucide-react';
 import { leerResultado, type ResultadoUI } from './aviso-resultado';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -19,7 +19,10 @@ import { leerResultado, type ResultadoUI } from './aviso-resultado';
 //  · se pausa con el cursor encima o con el foco adentro;
 //  · como máximo 4 a la vez (los más viejos salen), y el mismo mensaje repetido
 //    no se apila: renueva el que ya está;
-//  · sin movimiento si el sistema pide `prefers-reduced-motion`.
+//  · sin movimiento si el sistema pide `prefers-reduced-motion`;
+//  · CAPA SUPERIOR (identidad Rovaq, 10-nov-2026): el contenedor es un `popover="manual"` siempre abierto y se re-eleva con cada aviso
+//    nuevo, así un toast se ve y se cierra ENCIMA de un <dialog> modal (Drawer, Modal, Confirmar); un `z-index` no pasa la capa superior;
+//  · la piel es la de `Aviso` (`.rv-aviso`, tono por `data-tono`), sin Tailwind ni `style`.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export type TonoNotificacion = 'ok' | 'error' | 'aviso' | 'info';
@@ -110,16 +113,29 @@ export function ProveedorNotificaciones({ children }: { children: React.ReactNod
   const errores = cola.filter((n) => n.tono === 'error');
   const demas = cola.filter((n) => n.tono !== 'error');
 
+  // Capa superior: el popover manual se abre al montar y se vuelve a abrir (queda por ENCIMA de los <dialog> abiertos después) cuando llega
+  // un aviso nuevo. Sin la API (navegador viejo, jsdom) queda el `position: fixed` normal del CSS.
+  const capa = useRef<HTMLDivElement>(null);
+  const ultimoId = cola.length ? cola[cola.length - 1].id : 0;
+  useLayoutEffect(() => {
+    const el = capa.current;
+    if (!el || typeof el.showPopover !== 'function') return;
+    try {
+      if (el.matches(':popover-open')) el.hidePopover();
+      el.showPopover();
+    } catch { /* sin soporte: queda como capa fija normal */ }
+  }, [ultimoId]);
+
   return (
     <NotificacionesContexto.Provider value={valor}>
       {children}
       {/* Dos regiones, SIEMPRE montadas: un `aria-live` que aparece junto con su
           texto no se anuncia (el lector necesita la región ya existente). */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-0 z-[60] flex flex-col items-end gap-2 p-4 sm:inset-x-auto sm:right-0 sm:w-[26rem]">
-        <div role="alert" aria-live="assertive" className="flex w-full flex-col gap-2">
+      <div ref={capa} popover="manual" className="rv-toasts">
+        <div role="alert" aria-live="assertive" className="rv-toasts__region">
           {errores.map((n) => <Toast key={n.id} n={n} descartar={descartar} />)}
         </div>
-        <div role="status" aria-live="polite" className="flex w-full flex-col gap-2">
+        <div role="status" aria-live="polite" className="rv-toasts__region">
           {demas.map((n) => <Toast key={n.id} n={n} descartar={descartar} />)}
         </div>
       </div>
@@ -127,11 +143,12 @@ export function ProveedorNotificaciones({ children }: { children: React.ReactNod
   );
 }
 
-const ESTILO: Record<TonoNotificacion, { fondo: string; color: string; Icono: typeof Info }> = {
-  ok: { fondo: 'var(--okbg)', color: 'var(--ok)', Icono: CheckCircle2 },
-  error: { fondo: 'var(--badbg)', color: 'var(--bad)', Icono: AlertTriangle },
-  aviso: { fondo: 'var(--warnbg)', color: 'var(--warn)', Icono: TriangleAlert },
-  info: { fondo: 'var(--canvas)', color: 'var(--ink2)', Icono: Info },
+/** Tono del toast → tono de `Aviso` (`warn` se llama `aviso` aquí por historia) e icono del mismo juego. */
+const PIEL: Record<TonoNotificacion, { tono: 'ok' | 'error' | 'warn' | 'info'; Icono: typeof Info }> = {
+  ok: { tono: 'ok', Icono: Check },
+  error: { tono: 'error', Icono: OctagonAlert },
+  aviso: { tono: 'warn', Icono: AlertTriangle },
+  info: { tono: 'info', Icono: Info },
 };
 
 function Toast({ n, descartar }: { n: Notificacion; descartar: (id: number) => void }) {
@@ -143,25 +160,21 @@ function Toast({ n, descartar }: { n: Notificacion; descartar: (id: number) => v
     return () => clearTimeout(t);
   }, [ms, pausado, n.id, descartar]);
 
-  const { fondo, color, Icono } = ESTILO[n.tono];
+  const { tono, Icono } = PIEL[n.tono];
   return (
     <div
-      className="pointer-events-auto hairline flex items-start gap-2.5 rounded-xl px-3.5 py-3 text-[13px] animate-in"
-      style={{ background: 'var(--surface)', boxShadow: 'var(--shadow-pop)', borderLeft: `3px solid ${color}` }}
+      className="rv-aviso rv-toast"
+      data-tono={tono}
       onMouseEnter={() => setPausado(true)} onMouseLeave={() => setPausado(false)}
       onFocus={() => setPausado(true)} onBlur={() => setPausado(false)}
     >
-      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full" style={{ background: fondo, color }}>
-        <Icono aria-hidden width={13} height={13} strokeWidth={2} />
-      </span>
-      <div className="min-w-0 flex-1">
-        {n.titulo && <p className="font-medium" style={{ color: 'var(--ink)' }}>{n.titulo}</p>}
-        <p style={{ color: 'var(--ink2)' }}>{n.mensaje}</p>
+      <Icono className="rv-aviso__icono" width={14} height={14} strokeWidth={2} aria-hidden="true" />
+      <div className="rv-aviso__cuerpo">
+        {n.titulo ? <strong className="rv-aviso__titulo">{n.titulo}</strong> : null}
+        <span>{n.mensaje}</span>
       </div>
-      <button type="button" onClick={() => descartar(n.id)} aria-label="Cerrar aviso"
-        className="-mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-[var(--canvas)] focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ color: 'var(--muted)', outlineColor: 'var(--marca)' }}>
-        <X aria-hidden width={14} height={14} strokeWidth={2} />
+      <button type="button" className="rv-toast__x" onClick={() => descartar(n.id)} aria-label="Cerrar aviso">
+        <X aria-hidden="true" width={14} height={14} strokeWidth={2} />
       </button>
     </div>
   );

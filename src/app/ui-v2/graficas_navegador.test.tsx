@@ -146,10 +146,10 @@ describe.skipIf(SIN_NAVEGADOR)('gráficas y vacíos · pintados en Chromium', ()
     expect(r.guion).toBe('none'); // en reposo la línea es continua: el guion de pathLength solo existe mientras se dibuja
     await p.close();
   });
-  it('390: el estado vacío es un bloque compacto (título + acción) sin borde punteado, de ≤ 120 px', async () => {
+  it('390: el estado vacío es un bloque compacto (título + acción) sin borde punteado, de ≤ 124 px', async () => {
     const p = await pagina(390);
     const r = await p.evaluate(() => { const e = document.querySelector('#vacio .rv-vacio')!; return { h: e.getBoundingClientRect().height, borde: getComputedStyle(e).borderTopStyle }; });
-    expect(r.h).toBeLessThanOrEqual(120);
+    expect(r.h).toBeLessThanOrEqual(124); // 120 + 4: el botón sm de móvil sube a 36 (identidad Rovaq)
     expect(r.borde).toBe('none');
     await p.close();
   });
