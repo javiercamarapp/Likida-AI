@@ -124,4 +124,5 @@ from (values
   ('BIT-DEMO-006', 'operador_sin_correo',    '{"bitacora":"BIT-DEMO-006","rol":"operador","motivo":"operador_sin_correo"}'::jsonb),
   ('BIT-DEMO-007', 'sin_poliza',             '{"bitacora":"BIT-DEMO-007"}'::jsonb)
 ) as x(clave, tipo, detalle)
-where not exists (select 1 from liquidacion_excepcion e where e.tenant_id = current_setting('demo.tenant')::uuid and e.clave_externa = x.clave and e.tipo = x.tipo and e.resuelta_en is null);
+where not exists (select 1 from liquidacion_excepcion e where e.tenant_id = current_setting('demo.tenant')::uuid and e.clave_externa = x.clave and e.tipo = x.tipo and e.resuelta_en is null)
+on conflict do nothing;
