@@ -8,7 +8,7 @@ import { sinComentarios } from '@/lib/pruebas/codigo';
 // ya viven en el sistema único. Una pantalla que vuelva al kit viejo, a `.card` a mano, a `style=`,
 // a una tabla escrita a mano o a un emoji rompe esta prueba.
 const RAIZ = join(process.cwd(), 'src/app/dashboard');
-const CARPETAS = ['arranque', 'sesiones-mcp', 'llaves-api'];
+const CARPETAS = ['arranque', 'sesiones-mcp', 'llaves-api', 'usuarios'];
 
 function fuentes(dir: string, salida: string[] = []): string[] {
   for (const n of readdirSync(dir)) {

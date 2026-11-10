@@ -1,0 +1,18 @@
+/* Usuarios · solo lo que las piezas del sistema no traen. */
+.rv-usu__nombre { font-weight: 500; }
+.rv-usu__nombre[data-baja] { color: var(--faint); }
+.rv-usu__yo { margin-left: 8px; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
+.rv-usu__correo { display: block; font-size: var(--t-micro); font-weight: 400; color: var(--faint); }
+.rv-usu__tenue { color: var(--muted); }
+.rv-usu__sin { font-size: var(--t-small); color: var(--faint); }
+.rv-usu__acciones { display: grid; gap: 8px; }
+.rv-usu__fila { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px 12px; }
+.rv-usu__pie { margin: 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-usu__aislamiento { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-usu__forma { display: grid; gap: 12px; }
+.rv-usu__rejilla { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .rv-usu__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.rv-usu__roles { margin: 0; display: grid; gap: 2px; font-size: var(--t-micro); color: var(--faint); }
+.rv-usu__roles p { margin: 0; }
+.rv-usu__fila-forma { display: grid; gap: 6px; }
+.rv-usu__cambiar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
