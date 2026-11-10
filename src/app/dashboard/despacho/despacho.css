@@ -1,0 +1,23 @@
+/* Despacho · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-dsp__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-dsp__pila { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.rv-dsp__cola { display: grid; gap: 10px; }
+.rv-dsp__item { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-dsp__item-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: var(--t-body); min-width: 0; }
+.rv-dsp__item-cab > span:first-child { font-weight: 500; }
+.rv-dsp__ruta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); min-width: 0; }
+.rv-dsp__fecha { flex: none; color: var(--faint); }
+.rv-dsp__folio { font-weight: 500; }
+.rv-dsp__mono { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-dsp__tenue { color: var(--faint); }
+.rv-dsp__fila-accion { display: flex; align-items: flex-start; gap: 8px; }
+.rv-dsp__fila-accion > .rv-dsp__crece { flex: 1 1 auto; min-width: 0; }
+.rv-dsp__der { text-align: right; }
+.rv-dsp__pie { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; font-size: var(--t-small); color: var(--muted); }
+.rv-dsp__pagina-vacia { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; font-size: var(--t-small); color: var(--muted); }
+.rv-dsp__enlace { text-decoration: underline; text-underline-offset: 2px; }
+.rv-dsp__carga { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-dsp__carga li { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--t-small); }
+.rv-dsp__carga li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-dsp__carga li > span:last-child { flex: none; font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-dsp__inactivo { color: var(--faint); font-size: var(--t-micro); }

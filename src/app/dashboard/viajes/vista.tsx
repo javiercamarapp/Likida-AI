@@ -1,14 +1,11 @@
-import Link from 'next/link';
 import { ArrowRight, Inbox, FileUp } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
-import { StatusPill, type Estado } from '@/app/admin/ui/kit';
-import { EstadoVacio } from '../estados';
-import { PILL_ESTATUS } from '../resumen-visual';
-import { PillAviso } from '../despacho/vista';
+import { PillAviso, PillEstatusViaje } from './pills';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { BarraFiltros, FiltroBusqueda, FiltroOpciones, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarraFiltros, BotonEnlace, Disclosure, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import './registro.css';
 import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
@@ -79,28 +76,24 @@ function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRe
         const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? null;
         return (
           <>
-            <span className="font-medium block whitespace-nowrap">{v.folio}</span>
+            <span className="rv-reg__folio">{v.folio}</span>
             <span className="rv-tl__sub">{ruta ?? 'sin ruta capturada'}</span>
           </>
         );
       },
     },
     { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ?? <span className="rv-tl__tenue">Sin asignar</span> },
-    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (v) => (v.unidadEco ? <span className="cifra-mono">{v.unidadEco}</span> : <span className="rv-tl__tenue rv-tl__nada">—</span>) },
+    { id: 'unidad', titulo: 'Unidad', corta: true, celda: (v) => (v.unidadEco ? <span className="rv-reg__mono">{v.unidadEco}</span> : <span className="rv-tl__tenue rv-tl__nada">—</span>) },
     { id: 'inicio', titulo: 'Inicio', corta: true, celda: (v) => <span className="rv-tl__apagado">{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</span> },
     ...dinero,
     { id: 'aviso', titulo: 'Aviso', corta: true, celda: (v) => (v.estatus === 'liquidado' ? <span className="rv-tl__tenue rv-tl__nada">—</span> : <PillAviso v={v} />) },
-    {
-      id: 'estatus', titulo: 'Estatus', corta: true,
-      celda: (v) => { const e = PILL_ESTATUS[v.estatus] ?? { etiqueta: v.estatus, estado: 'neutral' as Estado }; return <StatusPill estado={e.estado}>{e.etiqueta}</StatusPill>; },
-    },
+    { id: 'estatus', titulo: 'Estatus', corta: true, celda: (v) => <PillEstatusViaje estatus={v.estatus} /> },
     {
       id: 'accion', titulo: 'Acción', alinear: 'der', tituloOculto: true,
       celda: (v) => v.liqId ? (
-        <Link href={`/dashboard/${v.liqId}${sufijo}`}
-          className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity whitespace-nowrap rv-tl__enlace">
-          Ver <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
-        </Link>
+        <BotonEnlace variante="ghost" tamano="sm" href={`/dashboard/${v.liqId}${sufijo}`} className="rv-tl__enlace">
+          Ver <Icono icono={ArrowRight} tam={16} />
+        </BotonEnlace>
       ) : <span className="rv-tl__tenue rv-tl__nada">—</span>,
     },
   ];
@@ -152,42 +145,29 @@ export function VistaViajes({
       </TiraCifras>
       <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente="Registro de viajes" leidoEn={ahoraMs()} edad={false} /></div>
 
-      <section className="card p-4 relative">
-        <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-          {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
-              campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente. */}
-          <BarraFiltros accion="/dashboard/viajes" enLinea buscar etiqueta="Filtros de viajes" nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
-            ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
-            <FiltroOpciones etiqueta="Estado" valor={filtro} porDefecto="todos"
-              opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f], href: hrefRegistro(sufijo, { f, q }) }))} />
-            <FiltroBusqueda nombre="q" valor={q} placeholder="Folio, origen o destino" etiqueta="Buscar viaje" />
-          </BarraFiltros>
-          <div className="flex items-center gap-2 flex-wrap">
-            {puedeImportar && (
-              // Sin JavaScript ni estado: `<details>` abre y cierra solo.
-              // Cerrado es un botón secundario; abierto, el panel del
-              // import aparece debajo de la barra, a lo ancho.
-              <details className="group">
-                <summary className="rv-btn rv-btn--secondary list-none cursor-pointer select-none" style={{ background: 'var(--surface)' }}>
-                  <FileUp width={13} height={13} strokeWidth={1.75} aria-hidden /> Importar desde tu TMS
-                </summary>
-                <div className="absolute left-0 right-0 z-10 mt-2 px-4">
-                  <div className="card p-4 shadow-[var(--shadow-pop)]">
-                    <TituloRecuadro info="viajes.importar" className="mb-2">Importar desde tu TMS</TituloRecuadro>
-                    <ImportarViajes importar={importar} verDinero={verDinero} />
-                  </div>
-                </div>
-              </details>
-            )}
-          </div>
-        </div>
+      <Tarjeta titulo="Registro de viajes" info="viajes.total" className="rv-reg">
+        {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
+            campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente. */}
+        <BarraFiltros accion="/dashboard/viajes" enLinea buscar etiqueta="Filtros de viajes" nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
+          ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
+          <FiltroOpciones etiqueta="Estado" valor={filtro} porDefecto="todos"
+            opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f], href: hrefRegistro(sufijo, { f, q }) }))} />
+          <FiltroBusqueda nombre="q" valor={q} placeholder="Folio, origen o destino" etiqueta="Buscar viaje" />
+        </BarraFiltros>
+
+        {puedeImportar && (
+          // Sin JavaScript ni estado: el plegable abre y cierra solo.
+          <Disclosure variante="linea" titulo={<><Icono icono={FileUp} tam={16} /> Importar desde tu TMS</>}>
+            <ImportarViajes importar={importar} verDinero={verDinero} />
+          </Disclosure>
+        )}
 
         {filas.length === 0 ? (
-          <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          <EstadoVacio contenido icono={Inbox} titulo={q || filtro !== 'todos' ? 'Sin coincidencias' : 'Sin viajes registrados'}>
             {q
               ? `Ningún viaje coincide con «${q}»${filtro !== 'todos' ? ` en «${ROTULO_FILTRO[filtro]}»` : ''}.`
               : filtro === 'todos'
-                ? 'Aún no hay viajes registrados — el primero que despaches aparece aquí.'
+                ? 'El primer viaje que despaches aparece aquí.'
                 : `Ningún viaje cae en «${ROTULO_FILTRO[filtro]}».`}
           </EstadoVacio>
         ) : (
@@ -218,8 +198,8 @@ export function VistaViajes({
         </div>
 
         {(cursor || hayMas) && (
-          <div className="flex items-center justify-between gap-3 mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
-            <span className="text-[11px]" style={{ color: 'var(--faint)' }}>
+          <div className="rv-reg__pie">
+            <span className="rv-reg__nota">
               Hasta {numero(porPagina)} viajes por página, del más reciente al más antiguo.
             </span>
             <NavPaginas>
@@ -228,7 +208,7 @@ export function VistaViajes({
             </NavPaginas>
           </div>
         )}
-      </section>
+      </Tarjeta>
     </MarcoPagina>
   );
 }

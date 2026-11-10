@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
+import { Boton, Icono } from '@/app/ui-v2/componentes';
+import './en-vivo.css';
 import { CADA_SEG_POR_OMISION, puedeRefrescar } from './refresco';
 
 /**
@@ -38,10 +40,10 @@ export function ActualizarSolo({ cadaSeg = CADA_SEG_POR_OMISION }: { cadaSeg?: n
   }, [cadaSeg, pausado, refrescar]);
 
   return (
-    <div className="inline-flex flex-wrap items-center gap-2 text-[12px]" style={{ color: 'var(--muted)' }} aria-live="off">
+    <div className="rv-vv__estado" aria-live="off">
       <span>{pausado ? 'Actualización automática en pausa' : `Se actualiza solo cada ${cadaSeg} s`}{ultima ? ` · última vez ${ultima.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}</span>
-      <button type="button" onClick={() => refrescar(true)} className="rv-btn rv-btn--secondary"><RefreshCw size={12} aria-hidden /> Actualizar ahora</button>
-      <button type="button" onClick={() => setPausado((p) => !p)} className="rv-btn rv-btn--ghost">{pausado ? 'Reanudar' : 'Pausar'}</button>
+      <Boton tamano="sm" icono={<Icono icono={RefreshCw} tam={16} />} onClick={() => refrescar(true)}>Actualizar ahora</Boton>
+      <Boton tamano="sm" variante="ghost" onClick={() => setPausado((p) => !p)}>{pausado ? 'Reanudar' : 'Pausar'}</Boton>
     </div>
   );
 }
