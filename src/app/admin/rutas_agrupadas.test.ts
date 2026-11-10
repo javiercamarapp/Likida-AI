@@ -35,7 +35,7 @@ describe('menú de /admin agrupado en pestañas', () => {
       Ventas: { href: '/admin/mapa-prospectos', pestanas: ['Cerebro de ventas', 'Vendedores'] },
       Clientes: { href: '/admin/flotas', pestanas: [] },
       'Consumo de IA': { href: '/admin/consumo', pestanas: ['Consumo', 'Techos'] },
-      Facturación: { href: '/admin/cobranza', pestanas: ['Cobranza', 'Planes y cobro'] },
+      Facturación: { href: '/admin/cobranza', pestanas: ['Cobranza', 'Planes y cobro', 'Facturas'] },
       Crecimiento: { href: '/admin/crecimiento', pestanas: ['Adquisición', 'Estudio'] },
       'Seguridad y datos': { href: '/admin/compliance', pestanas: ['Compliance y datos', 'Trust & Safety', 'Clientes MCP'] },
       Equipo: { href: '/admin/equipo', pestanas: ['Personas', 'Nuevo acceso'] },
@@ -81,7 +81,7 @@ describe('menú de /admin agrupado en pestañas', () => {
 
   it('⌘K: cada pestaña se encuentra como «Entrada · Pestaña» y las llaves de la lista son únicas', () => {
     const nombres = TODAS_LAS_RUTAS.map((r) => r.nombre);
-    for (const n of ['Agentes · OCR', 'Salud · Corridas', 'Equipo · Nuevo acceso', 'Facturación · Planes y cobro', 'Consumo de IA · Techos']) expect(nombres).toContain(n);
+    for (const n of ['Agentes · OCR', 'Salud · Corridas', 'Equipo · Nuevo acceso', 'Facturación · Planes y cobro', 'Facturación · Facturas', 'Consumo de IA · Techos']) expect(nombres).toContain(n);
     const hrefs = TODAS_LAS_RUTAS.map((r) => r.href);
     expect(new Set(hrefs).size).toBe(hrefs.length);
   });
