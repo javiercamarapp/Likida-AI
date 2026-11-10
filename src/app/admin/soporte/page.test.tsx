@@ -22,10 +22,13 @@ const dobles = vi.hoisted(() => ({
   tomarTicket: vi.fn(),
   cambiarEstadoTicket: vi.fn(),
   revalidatePath: vi.fn(),
+  avisosDeSlaPorTicket: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
 vi.mock('next/cache', () => ({ revalidatePath: dobles.revalidatePath }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/soporte', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/lib/admin/soporte-escalado', () => ({ avisosDeSlaPorTicket: dobles.avisosDeSlaPorTicket }));
 vi.mock('@/lib/admin/soporte', async (importar) => ({
   ...(await importar<typeof import('@/lib/admin/soporte')>()),
   getTicketsCruzados: dobles.getTicketsCruzados,
@@ -72,6 +75,7 @@ beforeEach(() => {
   dobles.requireSuperadmin.mockResolvedValue({ userId: 'u-1', tenantId: null, rol: 'superadmin' });
   dobles.getTicketsCruzados.mockResolvedValue([]);
   dobles.contarTickets.mockResolvedValue({ abiertos: 0, vencidos: 0, sinSla: 0, cerrados: 0 });
+  dobles.avisosDeSlaPorTicket.mockResolvedValue(new Map());
 });
 
 it('no-superadmin: requireSuperadmin ya redirige (lo prueba guard.test.ts) — aquí sólo confirmamos que la página lo invoca antes de leer la cola', async () => {
@@ -131,4 +135,85 @@ it('cambiar estado: manda el userId de la SESIÓN; si la bitácora falló, lo DI
   const r = await accion(null, fd({ ticket: 't-1', estado: 'resuelto' }));
   expect(dobles.cambiarEstadoTicket).toHaveBeenCalledWith('t-1', 'tn-1', { tipo: 'likida', userId: 'u-1' }, 'resuelto');
   expect(r).toEqual(expect.objectContaining({ ok: expect.stringContaining('no se pudo escribir fue la entrada de bitácora') }));
+});
+
+// ── F7: SLA con consecuencia visible, reabrir y nota interna ────────────────
+
+const FILA = (extra: Record<string, unknown> = {}) => ({
+  id: 't-1', asunto: 'No puedo timbrar', categoria: 'fiscal', prioridad: 'alta', estado: 'abierto', abiertoEn: '2026-11-01T10:00:00Z', resueltoEn: null,
+  venceEn: '2026-11-02T10:00:00Z', horasRestantes: -30, tenantId: 'tn-1', tenantNombre: 'Transportes ACME', asignadoA: null, asignadoNombre: null, ...extra,
+});
+async function html(sp: { ticket?: string } = {}) {
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  return renderToStaticMarkup(await SoportePage({ searchParams: Promise.resolve(sp) }));
+}
+
+it('SLA vencido CON aviso registrado: la fila dice que se avisó al operador y cuándo', async () => {
+  dobles.getTicketsCruzados.mockResolvedValue([FILA()]);
+  dobles.avisosDeSlaPorTicket.mockResolvedValue(new Map([['t-1', '2026-11-03T16:00:00Z']]));
+  const salida = await html();
+  expect(salida).toContain('Vencido hace 30 h');
+  expect(salida).toContain('Se avisó al operador');
+  expect(dobles.avisosDeSlaPorTicket).toHaveBeenCalledWith(['t-1']);
+});
+
+it('SLA vencido SIN aviso registrado: lo dice, no afirma un aviso que no consta', async () => {
+  dobles.getTicketsCruzados.mockResolvedValue([FILA()]);
+  const salida = await html();
+  expect(salida).toContain('Aún sin aviso al operador');
+  expect(salida).not.toContain('Se avisó al operador');
+});
+
+it('si no se pudo leer el registro de avisos, dice «sin dato», no «sin aviso»', async () => {
+  dobles.getTicketsCruzados.mockResolvedValue([FILA()]);
+  dobles.avisosDeSlaPorTicket.mockResolvedValue(null);
+  const salida = await html();
+  expect(salida).toContain('Aviso al operador: sin dato');
+  expect(salida).not.toContain('Aún sin aviso');
+});
+
+it('un ticket sin SLA pactado dice «sin SLA», nunca «vencido»; uno cerrado no pide aviso', async () => {
+  dobles.getTicketsCruzados.mockResolvedValue([FILA({ id: 't-2', venceEn: null, horasRestantes: null }), FILA({ id: 't-3', estado: 'cerrado' })]);
+  const salida = await html();
+  expect(salida).toContain('Sin SLA pactado');
+  expect(dobles.avisosDeSlaPorTicket).toHaveBeenCalledWith([]);
+  expect(salida).not.toContain('Aún sin aviso');
+});
+
+it('un ticket cerrado ofrece REABRIR (y no responder): vuelve a «abierto» con la firma de la sesión y queda en bitácora', async () => {
+  dobles.resolverTicketCruzado.mockResolvedValue({ id: 't-1', tenantId: 'tn-1', tenantNombre: 'Transportes ACME' });
+  dobles.getTicketDelTenant.mockResolvedValue({ ...DETALLE, estado: 'cerrado' });
+  dobles.getHilo.mockResolvedValue([]);
+  const pagina = await SoportePage({ searchParams: Promise.resolve({ ticket: 't-1' }) });
+  expect(formasConAviso(pagina).some((f) => /^Enviar$/.test(String(f.props.boton)))).toBe(false);
+  const accion = accionDelBoton(pagina, /Reabrir el ticket/);
+  dobles.cambiarEstadoTicket.mockResolvedValue({ estadoPrevio: 'cerrado', estado: 'abierto', anotado: true });
+  const r = await accion(null, fd({ ticket: 't-1', estado: 'abierto' }));
+  expect(dobles.cambiarEstadoTicket).toHaveBeenCalledWith('t-1', 'tn-1', { tipo: 'likida', userId: 'u-1' }, 'abierto');
+  expect(r).toEqual(expect.objectContaining({ ok: expect.stringContaining('Quedó en la bitácora') }));
+});
+
+it('un ticket abierto NO ofrece reabrir; ofrece responder con nota interna que el cliente no ve', async () => {
+  const pagina = await paginaConTicketAbierto();
+  expect(formasConAviso(pagina).some((f) => /Reabrir/.test(String(f.props.boton)))).toBe(false);
+  const salida = await html({ ticket: 't-1' });
+  expect(salida).toContain('Nota interna: el cliente NO la ve');
+});
+
+it('el hilo pinta la nota interna distinta y con su rótulo', async () => {
+  dobles.resolverTicketCruzado.mockResolvedValue({ id: 't-1', tenantId: 'tn-1', tenantNombre: 'Transportes ACME' });
+  dobles.getTicketDelTenant.mockResolvedValue(DETALLE);
+  dobles.getHilo.mockResolvedValue([
+    { id: 'm1', cuerpo: 'Hola, ya lo vemos', interna: false, deLikida: true, autorNombre: 'Ana', creadoEn: '2026-11-02T10:00:00Z' },
+    { id: 'm2', cuerpo: 'Revisar con fiscal', interna: true, deLikida: true, autorNombre: 'Ana', creadoEn: '2026-11-02T11:00:00Z' },
+  ]);
+  const salida = await html({ ticket: 't-1' });
+  expect(salida).toContain('Revisar con fiscal');
+  expect(salida).toContain('Nota interna: el cliente no la ve');
+});
+
+it('la pantalla no imprime claves internas (tablas ni columnas)', async () => {
+  dobles.getTicketsCruzados.mockResolvedValue([FILA()]);
+  const salida = await html();
+  expect(salida).not.toMatch(/vence_en|ticket_mensaje|ticket_soporte|bitacora_auditoria/);
 });

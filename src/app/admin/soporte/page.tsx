@@ -1,14 +1,13 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
-import { LifeBuoy, AlertTriangle, Timer, CheckCircle2, UserCheck } from 'lucide-react';
-// Los estados terminales viven junto a la lectura (lib/admin/soporte.ts), y
-// desde FE-11 el conteo de abiertos/cerrados también: la pantalla ya no
-// reclasifica en memoria una lista que además viene acotada.
+// Los estados terminales viven junto a la lectura (lib/admin/soporte.ts), y desde FE-11 el conteo de abiertos/cerrados también: la
+// pantalla ya no reclasifica en memoria una lista que además viene acotada.
 import {
-  getTicketsCruzados, contarTickets, resolverTicketCruzado, TOPE_TICKETS,
+  getTicketsCruzados, contarTickets, resolverTicketCruzado, TOPE_TICKETS, ESTADOS_TICKET_CERRADO,
   type TicketCruzado, type ConteosTickets,
 } from '@/lib/admin/soporte';
+import { avisosDeSlaPorTicket } from '@/lib/admin/soporte-escalado';
 import {
   getTicketDelTenant, getHilo, responderTicket, tomarTicket, cambiarEstadoTicket,
   ESTADOS_TICKET, LARGO_MAX_MENSAJE,
@@ -18,20 +17,22 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, numero } from '@/lib/formato';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { StatCard, StatusPill, EstadoVacio, EstadoError } from '../ui/kit';
-import { FormaConAviso, CampoTexto, Casilla, Selector, type ResultadoAccion } from '../ui/forma';
-import { HiloSoporte } from '../ui/hilo-soporte';
-// El rótulo del estado del ticket vivía aquí, privado, y /dashboard/soporte
-// imprimía `t.estado` crudo (auditoría 21, MEDIO 1). Ahora las dos pantallas
-// importan el MISMO mapa — el patrón de `dashboard/estatus.ts`.
+import {
+  Aviso, BotonEnlace, CampoSelect, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, Tarjeta, type TonoEstado,
+} from '../../ui-v2/componentes';
+import { TiraCifras } from '../../ui-v2/graficas';
+import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
+import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
+import { HiloTicket } from './hilo';
+// El rótulo del estado del ticket vivía aquí, privado, y /dashboard/soporte imprimía `t.estado` crudo (auditoría 21, MEDIO 1). Ahora
+// las dos pantallas importan el MISMO mapa — el patrón de `dashboard/estatus.ts`.
 import { pillTicket } from '../../dashboard/soporte/estatus';
+import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 
-/** "hace 3 h" / "hace 2 d" — la edad del ticket contra el reloj del SERVIDOR
- *  (`ahoraMs()`), el mismo contra el que se resta el SLA: dos relojes en la
- *  misma fila terminan contándose historias distintas. */
+/** "hace 3 h" / "hace 2 d" — la edad del ticket contra el reloj del SERVIDOR (`ahoraMs()`), el mismo contra el que se resta el SLA: dos
+ *  relojes en la misma fila terminan contándose historias distintas. */
 function edadDe(abiertoEn: string, ahora: number): string {
   const horas = (ahora - new Date(abiertoEn).getTime()) / 3_600_000;
   if (horas < 1) return 'hace menos de 1 h';
@@ -39,12 +40,25 @@ function edadDe(abiertoEn: string, ahora: number): string {
   return `hace ${Math.floor(horas / 24)} d`;
 }
 
-/** El reloj de SLA de la fila — mismas tres verdades que /dashboard/soporte:
- *  sin SLA no hay reloj, vencido se dice con cuánto, y lo demás es lo que falta. */
+/** El reloj de SLA de la fila — mismas tres verdades que /dashboard/soporte: sin SLA no hay reloj, vencido se dice con cuánto, y lo
+ *  demás es lo que falta. */
 function slaDe(t: TicketCruzado): { texto: string; vencido: boolean } {
-  if (t.horasRestantes == null) return { texto: 'sin SLA', vencido: false };
-  if (t.horasRestantes < 0) return { texto: `vencido hace ${Math.abs(Math.round(t.horasRestantes))} h`, vencido: true };
-  return { texto: `${Math.round(t.horasRestantes)} h`, vencido: false };
+  if (t.horasRestantes == null) return { texto: 'Sin SLA pactado', vencido: false };
+  if (t.horasRestantes < 0) return { texto: `Vencido hace ${numero(Math.abs(Math.round(t.horasRestantes)))} h`, vencido: true };
+  return { texto: `Faltan ${numero(Math.round(t.horasRestantes))} h`, vencido: false };
+}
+
+const capital = (t: string): string => (t ? t.charAt(0).toUpperCase() + t.slice(1).replace(/_/g, ' ') : '—');
+const tonoDe = (estado: string): TonoEstado => pillTicket(estado).estado as TonoEstado;
+
+/** La consecuencia de un SLA vencido, a la vista: o consta que se avisó al operador (y cuándo), o consta que no. `null` = no se pudo leer. */
+function ConsecuenciaSla({ t, avisos }: { t: TicketCruzado; avisos: Map<string, string> | null }) {
+  if (!slaDe(t).vencido || ESTADOS_TICKET_CERRADO.has(t.estado)) return null;
+  if (avisos === null) return <span className="adm-sis-sub">Aviso al operador: sin dato</span>;
+  const cuando = avisos.get(t.id);
+  return cuando
+    ? <span className="adm-sis-sub">Se avisó al operador · {fechaHoraMx(cuando)}</span>
+    : <span className="adm-sis-sub">Aún sin aviso al operador</span>;
 }
 
 /**
@@ -211,204 +225,152 @@ export default async function SoportePage({
     }
   }
 
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
+  const abiertoVencidos = (tickets ?? []).filter((t) => slaDe(t).vencido && !ESTADOS_TICKET_CERRADO.has(t.estado)).map((t) => t.id);
+  const avisos = tickets === null ? null : await avisosDeSlaPorTicket(abiertoVencidos);
+
+  const columnas: ColumnaTabla<TicketCruzado>[] = [
+    {
+      id: 'asunto', titulo: 'Asunto', principal: true,
+      celda: (t) => (
+        <>
+          <Link href={`/admin/soporte?ticket=${encodeURIComponent(t.id)}`}>{t.asunto}</Link>
+          <span className="adm-sis-sub">{capital(t.categoria)}</span>
+        </>
+      ),
+    },
+    { id: 'flota', titulo: 'Flota', celda: (t) => t.tenantNombre },
+    { id: 'prioridad', titulo: 'Prioridad', celda: (t) => capital(t.prioridad) },
+    {
+      id: 'estado', titulo: 'Estado',
+      celda: (t) => (
+        <>
+          <StatusChip tono={tonoDe(t.estado)}>{pillTicket(t.estado).etiqueta}</StatusChip>
+          <span className="adm-sis-sub">{t.asignadoA ? (t.asignadoNombre ?? 'Tomado') : 'Sin tomar'}</span>
+        </>
+      ),
+    },
+    { id: 'abierto', titulo: 'Abierto', corta: true, celda: (t) => <>{fechaMx(t.abiertoEn)}<span className="adm-sis-sub">{edadDe(t.abiertoEn, ahora)}</span></> },
+    {
+      id: 'sla', titulo: 'SLA', alinear: 'der',
+      celda: (t) => {
+        const sla = slaDe(t);
+        return (
+          <>
+            {sla.vencido && !ESTADOS_TICKET_CERRADO.has(t.estado) ? <StatusChip tono="bad">{sla.texto}</StatusChip> : sla.texto}
+            <ConsecuenciaSla t={t} avisos={avisos} />
+          </>
+        );
+      },
+    },
+  ];
+  const terminal = detalle !== null && ESTADOS_TICKET_CERRADO.has(detalle.estado);
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<LifeBuoy {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo="Soporte — todas las flotas"
-        />
+    <MarcoPagina titulo="Soporte" apoyo="Los tickets de todas las flotas: lo más urgente primero, sin plazo al final.">
+      {tickets === null ? (
+        <EstadoError reintentar>No se pudo leer la cola de tickets. La consulta falló: no es que no haya tickets, es que no se pudo mirar.</EstadoError>
+      ) : (
+        <>
+          <TiraCifras etiqueta="Tickets de soporte" items={[
+            { etiqueta: 'Abiertos', valor: conteos.abiertos, formato: 'entero', nota: 'De todas las flotas.', ...(conteos.abiertos === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
+            { etiqueta: 'Con SLA vencido', valor: conteos.vencidos, formato: 'entero', tono: (conteos.vencidos ?? 0) > 0 ? 'bad' : undefined, nota: 'Pasó el plazo y siguen sin cerrarse.', ...(conteos.vencidos === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
+            { etiqueta: 'Sin SLA pactado', valor: conteos.sinSla, formato: 'entero', nota: 'No están vencidos: nadie les puso plazo.', ...(conteos.sinSla === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
+            { etiqueta: 'Resueltos o cerrados', valor: conteos.cerrados, formato: 'entero', nota: 'Histórico.', ...(conteos.cerrados === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
+          ]} />
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          {tickets === null ? (
-            <EstadoError mensaje="No se pudo leer la cola de tickets. La consulta falló — no es que no haya tickets, es que no se pudo mirar." />
-          ) : (
-            <>
-              {/* ── KPIs — conteos reales de la cola cross-tenant ─────────── */}
-              <div className="kit-kpis">
-                <StatCard icono={<LifeBuoy {...ICONO} />}
-                  etiqueta="Tickets abiertos — todas las flotas" valor={conteos.abiertos} formato="entero"
-                  sinDato="no se pudo contar"
+          {/* ── EL HILO Y LAS ACCIONES ───────────────────────────────────── */}
+          {pedido !== '' && (
+            hiloFallo ? (
+              <EstadoError reintentar>No se pudo leer ese hilo. No significa que esté vacío: contestar sin ver lo que ya se dijo es como se manda dos veces la misma respuesta.</EstadoError>
+            ) : detalle === null ? (
+              <EstadoVacio titulo="Ese ticket ya no existe" accion={<BotonEnlace href="/admin/soporte" variante="secondary" tamano="sm">Volver a la cola</BotonEnlace>}>
+                Puede que se haya borrado con la flota. La cola de abajo es lo que sí hay.
+              </EstadoVacio>
+            ) : (
+              <Tarjeta titulo={detalle.asunto} acciones={<><StatusChip tono={tonoDe(detalle.estado)}>{pillTicket(detalle.estado).etiqueta}</StatusChip><BotonEnlace href="/admin/soporte" variante="ghost" tamano="sm">Volver a la cola</BotonEnlace></>}>
+                <ul className="adm-sis-lista">
+                  <li><span>Flota</span><span>{flotaDelDetalle}</span></li>
+                  <li><span>Categoría y prioridad</span><span>{capital(detalle.categoria)} · {capital(detalle.prioridad)}</span></li>
+                  <li><span>Abierto</span><span>{fechaHoraMx(detalle.abiertoEn)}</span></li>
+                  <li><span>Plazo (SLA)</span><span>{detalle.venceEn ? fechaHoraMx(detalle.venceEn) : 'Sin SLA pactado'}</span></li>
+                  {/* SIN TOMAR no es "en proceso": son dos cosas distintas y se dicen distinto. */}
+                  <li><span>Tomado por</span><span>{detalle.asignadoA ? (detalle.asignadoNombre ?? 'Alguien del equipo') : 'Sin tomar'}</span></li>
+                </ul>
+                {detalle.descripcion ? <p className="adm-sis-descripcion">{detalle.descripcion}</p> : null}
+                <HiloTicket
+                  mensajes={hilo ?? []}
+                  vacio="Nadie ha escrito en este hilo todavía. Mientras no haya una respuesta pública, la alarma de «sin respuesta» del agente de Éxito sigue encendida, y con razón."
                 />
-                <StatCard icono={<AlertTriangle {...ICONO} />}
-                  etiqueta="Con SLA vencido" valor={conteos.vencidos} formato="entero"
-                  sinDato="no se pudo contar"
-                />
-                <StatCard icono={<Timer {...ICONO} />}
-                  etiqueta="Sin SLA pactado" valor={conteos.sinSla} formato="entero"
-                  nota="No están vencidos: nadie les puso plazo"
-                  sinDato="no se pudo contar"
-                />
-                <StatCard icono={<CheckCircle2 {...ICONO} />}
-                  etiqueta="Resueltos o cerrados — histórico" valor={conteos.cerrados} formato="entero"
-                  sinDato="no se pudo contar"
-                />
-              </div>
-
-              {/* ── EL HILO Y LAS ACCIONES ────────────────────────────────── */}
-              {pedido !== '' && (
-                <section className="card p-4 space-y-3">
-                  {hiloFallo ? (
-                    <EstadoError mensaje="No se pudo leer ese hilo. No significa que esté vacío — la consulta falló, y contestar sin ver lo que ya se dijo es como se manda dos veces la misma respuesta." />
-                  ) : detalle === null ? (
-                    <EstadoVacio>
-                      Ese ticket ya no existe. Puede que se haya borrado con la flota — la cola de abajo es lo que sí hay.
-                    </EstadoVacio>
+                {terminal ? (
+                  <Aviso tono="info" titulo="Este ticket está cerrado">
+                    Para escribir en el hilo, una respuesta o una nota, primero hay que reabrirlo.
+                  </Aviso>
+                ) : null}
+                <div className="adm-sis-rejilla">
+                  {terminal ? (
+                    <div className="adm-sis-bloque">
+                      <h3 className="adm-sis-titulo">Reabrir</h3>
+                      <FormaConAviso accion={accionEstado} boton="Reabrir el ticket" columnas="md:grid-cols-1">
+                        <input type="hidden" name="ticket" value={detalle.id} />
+                        <input type="hidden" name="estado" value="abierto" />
+                        <p className="adm-sis-nota">Vuelve a «abierto», borra la fecha de resolución y deja el cambio en la bitácora. La flota ve que se reabrió.</p>
+                      </FormaConAviso>
+                    </div>
                   ) : (
-                    <>
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div>
-                          <TituloSeccion>{detalle.asunto}</TituloSeccion>
-                          <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                            {flotaDelDetalle} · {detalle.categoria}/{detalle.prioridad} · abierto {fechaHoraMx(detalle.abiertoEn)}
-                            {detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn)}` : ' · sin SLA pactado'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <StatusPill estado={pillTicket(detalle.estado).estado}>
-                            {pillTicket(detalle.estado).etiqueta}
-                          </StatusPill>
-                          <span className="text-xs flex items-center gap-1" style={{ color: 'var(--muted)' }}>
-                            <UserCheck width={13} height={13} strokeWidth={1.75} />
-                            {/* SIN TOMAR no es "en proceso": son dos cosas
-                                distintas y se dicen distinto. */}
-                            {detalle.asignadoA ? (detalle.asignadoNombre ?? 'tomado') : 'sin tomar'}
-                          </span>
-                        </div>
-                      </div>
-
-                      {detalle.descripcion && (
-                        <p className="text-[13px] whitespace-pre-wrap rounded-lg px-3 py-2.5"
-                          style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
-                          {detalle.descripcion}
-                        </p>
-                      )}
-
-                      <HiloSoporte
-                        mensajes={hilo ?? []}
-                        vacio="Nadie ha escrito en este hilo todavía. Mientras no haya una respuesta pública, la alarma de «sin respuesta» del agente de Éxito sigue encendida — y con razón."
-                      />
-
-                      <div className="grid gap-3 md:grid-cols-2">
-                        <div className="space-y-2">
-                          <TituloSeccion>Responder</TituloSeccion>
-                          <FormaConAviso accion={accionResponder} boton="Enviar" columnas="md:grid-cols-1">
-                            <input type="hidden" name="ticket" value={detalle.id} />
-                            <CampoTexto
-                              nombre="cuerpo"
-                              etiqueta="Mensaje"
-                              requerido
-                              maxLargo={LARGO_MAX_MENSAJE}
-                              placeholder="Qué le vas a decir a la flota"
-                              ayuda="Un mensaje público apaga la alarma de «sin respuesta»; una nota interna, no."
-                            />
-                            <Casilla
-                              nombre="interna"
-                              etiqueta="Nota interna — el cliente NO la ve"
-                              ayuda="Va en el mismo hilo para que el orden cronológico sea uno solo, pero la consulta del panel del cliente la excluye."
-                            />
-                          </FormaConAviso>
-                        </div>
-
-                        <div className="space-y-2">
-                          <TituloSeccion>Tomar y mover</TituloSeccion>
-                          <FormaConAviso accion={accionTomar} boton="Tomar el ticket" columnas="md:grid-cols-1">
-                            <input type="hidden" name="ticket" value={detalle.id} />
-                          </FormaConAviso>
-                          <FormaConAviso accion={accionEstado} boton="Cambiar estado" columnas="md:grid-cols-1">
-                            <input type="hidden" name="ticket" value={detalle.id} />
-                            <Selector
-                              nombre="estado"
-                              etiqueta="Estado"
-                              valorInicial={detalle.estado}
-                              opciones={ESTADOS_TICKET.map((e) => ({ valor: e, texto: e }))}
-                              ayuda="Resuelto y cerrado escriben la fecha de resolución; salir de ellos la borra — el constraint de la 0051 exige que las dos cosas digan lo mismo."
-                            />
-                          </FormaConAviso>
-                        </div>
-                      </div>
-                    </>
+                    <div className="adm-sis-bloque">
+                      <h3 className="adm-sis-titulo">Responder</h3>
+                      <FormaConAviso accion={accionResponder} boton="Enviar" columnas="md:grid-cols-1">
+                        <input type="hidden" name="ticket" value={detalle.id} />
+                        <CampoTextarea etiqueta="Mensaje" name="cuerpo" obligatorio rows={4} maxLength={LARGO_MAX_MENSAJE} placeholder="Qué le vas a decir a la flota"
+                          ayuda="Un mensaje público apaga la alarma de «sin respuesta»; una nota interna, no." />
+                        <Casilla name="interna" value="1" etiqueta="Nota interna: el cliente NO la ve"
+                          ayuda="Va en el mismo hilo para que el orden sea uno solo, pero el panel del cliente la excluye." />
+                      </FormaConAviso>
+                    </div>
                   )}
-                  <Link href="/admin/soporte" className="text-xs inline-block" style={{ color: 'var(--marca)' }}>
-                    ← Volver a la cola
-                  </Link>
-                </section>
-              )}
-
-              {tickets.length === 0 ? (
-                <EstadoVacio icono={<LifeBuoy width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  <span className="font-semibold">La cola existe y está vacía de verdad.</span>{' '}
-                  El panel del cliente abre tickets (con prioridad, categoría y reloj de SLA) desde el 16 de agosto,
-                  y esta pantalla puede responderlos, tomarlos y cerrarlos. Este 0 no es un hueco de
-                  producto: es que hoy ninguna flota tiene nada pendiente con Likida.
-                </EstadoVacio>
-              ) : (
-                <div className="card overflow-hidden">
-                  <div className="px-4 pt-3 pb-1">
-                    <TituloSeccion>La cola — lo más urgente primero, sin-SLA al final</TituloSeccion>
+                  <div className="adm-sis-bloque">
+                    <h3 className="adm-sis-titulo">Tomar y mover</h3>
+                    <FormaConAviso accion={accionTomar} boton="Tomar el ticket" columnas="md:grid-cols-1">
+                      <input type="hidden" name="ticket" value={detalle.id} />
+                    </FormaConAviso>
+                    <FormaConAviso accion={accionEstado} boton="Cambiar estado" columnas="md:grid-cols-1">
+                      <input type="hidden" name="ticket" value={detalle.id} />
+                      <CampoSelect etiqueta="Estado" name="estado" defaultValue={detalle.estado}
+                        ayuda="Resuelto y cerrado escriben la fecha de resolución; salir de ellos la borra.">
+                        {ESTADOS_TICKET.map((e) => <option key={e} value={e}>{pillTicket(e).etiqueta}</option>)}
+                      </CampoSelect>
+                    </FormaConAviso>
                   </div>
-                  <div className="overflow-x-auto mt-1">
-                    <table aria-label="Cola de soporte" className="w-full text-sm">
-                      <thead>
-                        <tr style={{ color: 'var(--muted)' }} className="text-left">
-                          <th scope="col" className="px-4 py-2 font-medium">Asunto</th>
-                          <th scope="col" className="px-4 py-2 font-medium">Flota</th>
-                          <th scope="col" className="px-4 py-2 font-medium">Categoría</th>
-                          <th scope="col" className="px-4 py-2 font-medium">Prioridad</th>
-                          <th scope="col" className="px-4 py-2 font-medium">Estado</th>
-                          <th scope="col" className="px-4 py-2 font-medium">Tomado por</th>
-                          <th scope="col" className="px-4 py-2 font-medium">Abierto</th>
-                          <th scope="col" className="px-4 py-2 font-medium text-right">SLA</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tickets.map((t) => {
-                          const pill = pillTicket(t.estado);
-                          const sla = slaDe(t);
-                          return (
-                            <tr key={t.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                              <td className="px-4 py-2.5 font-medium">
-                                <Link href={`/admin/soporte?ticket=${encodeURIComponent(t.id)}`} style={{ color: 'var(--marca)' }}>
-                                  {t.asunto}
-                                </Link>
-                              </td>
-                              <td className="px-4 py-2.5">{t.tenantNombre}</td>
-                              <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{t.categoria}</td>
-                              <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>{t.prioridad}</td>
-                              <td className="px-4 py-2.5"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
-                              <td className="px-4 py-2.5 text-xs" style={{ color: 'var(--muted)' }}>
-                                {t.asignadoA ? (t.asignadoNombre ?? 'tomado') : 'sin tomar'}
-                              </td>
-                              <td className="px-4 py-2.5 whitespace-nowrap text-xs" style={{ color: 'var(--muted)' }}>
-                                {fechaMx(t.abiertoEn)} · {edadDe(t.abiertoEn, ahora)}
-                              </td>
-                              <td className="px-4 py-2.5 text-right text-xs tabular whitespace-nowrap"
-                                style={{ color: sla.vencido ? 'var(--bad)' : 'var(--muted)' }}>
-                                {sla.texto}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                  <p className="text-xs px-4 pt-2 pb-3" style={{ color: 'var(--muted)' }}>
-                    {recortado
-                      ? `Se listan los ${numero(TOPE_TICKETS)} más urgentes de ${numero(total!)} tickets de todas las flotas.`
-                      : `${numero(tickets.length)} ${tickets.length === 1 ? 'ticket' : 'tickets'} en total, de todas las flotas.`}
-                    {' '}El reloj se deriva de <code className="font-mono">vence_en</code> contra el
-                    reloj del servidor — un ticket sin SLA pactado dice &quot;sin SLA&quot;, nunca &quot;vencido&quot;.
-                    {' '}El asunto abre el hilo, con responder, tomar y cerrar.
-                  </p>
                 </div>
-              )}
-            </>
+              </Tarjeta>
+            )
           )}
-        </div>
-      </div>
-    </main>
+
+          <section className="adm-sis-bloque" aria-labelledby="cola-soporte">
+            <h2 className="adm-sis-titulo" id="cola-soporte">La cola, lo más urgente primero</h2>
+            <TablaLista<TicketCruzado>
+              etiqueta="Cola de soporte" columnas={columnas} filas={tickets} idFila={(t) => t.id} base="/admin/soporte" params={{ ticket: pedido || undefined }}
+              vacio={{ titulo: 'La cola está vacía', texto: 'Ninguna flota tiene nada pendiente con Likida. Los tickets entran desde el panel de cada cliente.' }}
+              pie={(
+                <p className="adm-sis-nota">
+                  {recortado
+                    ? `Se listan los ${numero(TOPE_TICKETS)} más urgentes de ${numero(total!)} tickets de todas las flotas. `
+                    : `${numero(tickets.length)} ${tickets.length === 1 ? 'ticket' : 'tickets'} de todas las flotas. `}
+                  El reloj cuenta contra el plazo pactado al abrir el ticket; uno sin plazo dice «sin SLA», nunca «vencido». El asunto abre el hilo.
+                </p>
+              )}
+            />
+          </section>
+
+          <Disclosure titulo="Qué pasa cuando vence un plazo" resumen="Aviso al operador, una sola vez">
+            <p className="adm-sis-nota">
+              Un ticket abierto cuyo plazo ya pasó se avisa una vez al operador, por correo y por WhatsApp, siempre que esos canales estén configurados. La columna SLA dice
+              si consta ese aviso (y cuándo) o si todavía no hay; no se infiere un aviso que no quedó registrado. Un mensaje nuevo de la flota también avisa.
+            </p>
+          </Disclosure>
+        </>
+      )}
+    </MarcoPagina>
   );
 }
 
