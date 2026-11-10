@@ -2,132 +2,70 @@ import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { usd, numero } from '@/lib/formato';
-import { Settings2, ScanText, Calculator, MessagesSquare } from 'lucide-react';
-import { Dona } from '../charts';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { EstadoVacio } from '../ui/kit';
-import { HBars } from '../ui/graficas';
+import { MarcoPagina, FilaTarjetas, Tarjeta, Disclosure, BotonEnlace } from '@/app/ui-v2/componentes';
+import { DonaMini, BarList } from '@/app/ui-v2/graficas';
+import { TarjetaFase } from '../tarjeta-fase';
 
 export const dynamic = 'force-dynamic';
 
-const FASE_LABEL: Record<string, string> = { ocr: 'Agente OCR', cuadre: 'Agente de Cuadre', whatsapp: 'Agente de WhatsApp' };
+const FASE_LABEL: Record<string, string> = { ocr: 'OCR', cuadre: 'Cuadre', whatsapp: 'WhatsApp' };
 
-/** Las TRES fases del pipeline DEL VIAJE — en el orden en que corren. Esta
- *  página gobierna solo ese camino; NO es el inventario de agentes de la
- *  compañía: el catálogo vive en /admin/agentes (58 definiciones), el
- *  runner acotado (0123) los corre, y la matriz operativa por rol está en
- *  `agente_definicion.modelo_rol` (0125). Decir aquí "no hay más fases"
- *  fue verdad hasta ago-2026 y dejó de serlo — auditoría 5: truth drift. */
+/** Las TRES fases del pipeline DEL VIAJE, en el orden en que corren. Esta pantalla gobierna solo ese camino; NO es el inventario de
+ *  agentes de la compañía (eso es Agentes › Panel, con la matriz de roles de modelo en `agente_definicion.modelo_rol`). */
 const FASES = [
-  { fase: 'ocr', nombre: 'Agente OCR', Icono: ScanText, queHace: 'Lee la foto de un comprobante (diésel, caseta, factura) y extrae monto, folio y CFDI.' },
-  { fase: 'cuadre', nombre: 'Agente de Cuadre', Icono: Calculator, queHace: 'Compara los gastos ya capturados contra el anticipo y la política de la flota.' },
-  { fase: 'whatsapp', nombre: 'Agente de WhatsApp', Icono: MessagesSquare, queHace: 'Lleva la conversación con el operador de principio a fin: recibe fotos, confirma y cierra la liquidación.' },
+  { fase: 'ocr', nombre: 'OCR', queHace: 'Lee la foto de un comprobante (diésel, caseta, factura) y extrae monto, folio y CFDI.' },
+  { fase: 'cuadre', nombre: 'Cuadre', queHace: 'Compara los gastos ya capturados contra el anticipo y la política de la flota.' },
+  { fase: 'whatsapp', nombre: 'WhatsApp', queHace: 'Lleva la conversación con el operador de principio a fin: recibe fotos, confirma y cierra la liquidación.' },
 ] as const;
 
 /**
- * Model Ops — registro real de las 3 fases fijas del pipeline de Likida, no
- * un editor de agentes. No existe UI para crear/versionar/asignar modelo por
- * fase: eso sería funcionalidad decorativa que no hace nada, prohibido por
- * la regla del proyecto. Todo lo que se ve aquí sale de `llm_costo`
- * (`getResumenNegocio`/`getCostoPorFaseModelo`).
- *
- * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
- * con el ícono de `rutas.ts`; las fichas de fase son las fichas internas de
- * la consola (hairline sobre --surface). Cifras y fuente no cambian.
+ * Modelos: el pipeline completo del viaje con su costo real por fase y por modelo. Todo sale de `llm_costo` (`getResumenNegocio` /
+ * `getCostoPorFaseModelo`). No hay editor de prompts ni selector de modelo por fase: eso sería funcionalidad decorativa, y se
+ * declara abajo. El rol de modelo de cada AGENTE del catálogo sí se cambia, desde Agentes › Panel › Configurar.
  */
 export default async function ModelOpsPage() {
-  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo()]);
-  const porFaseMap = new Map(r.porFase.map((f) => [f.fase, f]));
+  const porFase = new Map(r.porFase.map((f) => [f.fase, f]));
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Settings2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Model Ops"
-        />
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>Registro de las 3 fases fijas del pipeline y su costo real</p>
+    <MarcoPagina
+      area="Agentes"
+      titulo="Agentes"
+      apoyo="Modelos: las tres fases del pipeline del viaje y lo que cuestan, por fase y por modelo."
+      acciones={<BotonEnlace href="/admin/agentes" variante="secondary" tamano="sm">Rol de modelo por agente</BotonEnlace>}
+    >
+      <FilaTarjetas variante="4-4-4">
+        {FASES.map(({ fase, nombre, queHace }) => (
+          <TarjetaFase key={fase} titulo={nombre} queHace={queHace} datos={porFase.get(fase)} modelos={porFaseModelo.filter((m) => m.fase === fase)} />
+        ))}
+      </FilaTarjetas>
 
-          <div className="card p-3">
-            <TituloSeccion>Registro de agentes</TituloSeccion>
-            <div className="space-y-1.5 mt-2">
-              {FASES.map(({ fase, nombre, Icono, queHace }) => {
-                const datos = porFaseMap.get(fase);
-                const modelos = porFaseModelo.filter((m) => m.fase === fase);
-                return (
-                  <div key={fase} className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
-                    <div className="flex items-start gap-2.5">
-                      <Icono width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-4 flex-wrap">
-                          <div className="text-[13px] font-semibold">{nombre}</div>
-                          <div className="text-right">
-                            <div className="text-sm font-semibold tabular">{datos ? usd(datos.costoUsd) : usd(0)}</div>
-                            <div className="text-xs" style={{ color: 'var(--muted)' }}>{datos ? `${numero(datos.n)} llamadas` : 'sin llamadas'}</div>
-                          </div>
-                        </div>
-                        <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{queHace}</p>
+      <FilaTarjetas variante="6-6">
+        <Tarjeta titulo="Costo por fase" estado={r.porFase.length > 0 ? 'ok' : 'vacio'} mensaje="Sin actividad de IA" detalle="Todavía no hay actividad de IA registrada.">
+          <DonaMini
+            etiqueta="Costo por fase"
+            formato="usd"
+            gajos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))}
+            centro={usd(r.porFase.reduce((s, f) => s + f.costoUsd, 0))}
+          />
+        </Tarjeta>
+        <Tarjeta titulo="Costo por modelo, todas las fases" estado={r.porModelo.length > 0 ? 'ok' : 'vacio'} mensaje="Sin llamadas" detalle="Sin llamadas registradas todavía.">
+          <BarList
+            etiqueta="Costo por modelo"
+            items={r.porModelo.map((m) => ({ clave: m.modelo, etiqueta: m.modelo, valor: m.costoUsd, texto: `${usd(m.costoUsd)} · ${numero(m.n)} llamadas` }))}
+          />
+        </Tarjeta>
+      </FilaTarjetas>
 
-                        {modelos.length > 0 ? (
-                          <div className="mt-2 divide-y" style={{ borderColor: 'var(--line2)' }}>
-                            {modelos.map((m) => (
-                              <div key={m.modelo} className="py-2 flex items-center justify-between gap-3 text-xs">
-                                <span className="font-mono truncate" style={{ color: 'var(--muted)' }} title={m.modelo}>{m.modelo}</span>
-                                <span className="tabular shrink-0">{usd(m.costoUsd)} · {numero(m.n)} llamadas</span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>Sin llamadas registradas para esta fase todavía.</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-            <div className="card p-4">
-              <TituloSeccion>Costo por fase</TituloSeccion>
-              {r.porFase.length > 0 ? (
-                <div className="mt-3">
-                  <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
-                </div>
-              ) : (
-                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>Todavía no hay actividad de IA registrada.</div>
-              )}
-            </div>
-            <div className="card p-4">
-              <TituloSeccion>Costo por modelo — todas las fases</TituloSeccion>
-              {r.porModelo.length === 0 ? (
-                <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>Sin llamadas registradas todavía.</div>
-              ) : (
-                <div className="mt-3">
-                  <HBars datos={r.porModelo.map((m) => ({ etiqueta: m.modelo, valor: m.costoUsd }))} formato="usd" />
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="card p-3">
-            <TituloSeccion>Roadmap</TituloSeccion>
-            <div className="mt-2">
-              <EstadoVacio>
-                Versionado de prompts, reversa y guardrails configurables: aún no existen. Hoy los prompts viven en el código,
-                sin historial de versiones ni pantalla de edición.
-                No existe tampoco un selector de modelo por fase ni tenant: cambiar de modelo hoy es un cambio de código y un deploy.
-              </EstadoVacio>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
+      <Disclosure titulo="Lo que no existe todavía" resumen="Versionado y selector de modelo">
+        <p>
+          Versionado de prompts, reversa y guardrails configurables: aún no existen. Hoy los prompts viven en el código, sin historial de versiones ni pantalla de edición.
+          No existe tampoco un selector de modelo por fase ni tenant: cambiar de modelo en el pipeline del viaje es un cambio de código y un despliegue.
+        </p>
+      </Disclosure>
+    </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Model Ops' };
+export const metadata: Metadata = { title: 'Modelos' };
