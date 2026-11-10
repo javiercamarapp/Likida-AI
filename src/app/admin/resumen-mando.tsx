@@ -20,15 +20,30 @@ const TONO_AVISO = { verde: 'ok', amarillo: 'warn', rojo: 'error' } as const;
 /** 1. ¿Estoy bien? Verde, amarillo o rojo, con la causa y a dónde ir. */
 export async function BloqueSemaforo() {
   const s = semaforoSalud(await entradaSemaforo());
+  const guardia = s.guardiaHaceMin !== null ? `Guardia: hace ${numero(s.guardiaHaceMin)} min` : 'Guardia: sin dato';
+  if (s.causas.length === 0) {
+    return (
+      <Aviso tono={TONO_AVISO[s.nivel]} titulo={s.titulo} acciones={<StatusChip tono={s.guardiaHaceMin !== null ? 'neutral' : 'muted'}>{guardia}</StatusChip>}>
+        Ninguna alarma viva y todas las fuentes se leyeron.
+      </Aviso>
+    );
+  }
+  // Aviso COMPACTO: la frase de estado y cuántas señales son; la lista completa (puede traer decenas de nombres) queda plegada.
+  const n = s.causas.length;
   return (
-    <Aviso tono={TONO_AVISO[s.nivel]} titulo={s.titulo}
-      acciones={s.guardiaHaceMin !== null ? <StatusChip tono="neutral">Guardia: hace {numero(s.guardiaHaceMin)} min</StatusChip> : <StatusChip tono="muted">Guardia: sin dato</StatusChip>}>
-      {s.causas.length > 0 ? (
-        <ul className="adm-res-semaforo-causas">
-          {s.causas.map((c) => <li key={c.texto}>{c.texto} <Link href={c.href}>Ver</Link></li>)}
-        </ul>
-      ) : 'Ninguna alarma viva y todas las fuentes se leyeron.'}
-    </Aviso>
+    <AvisoCompacto
+      tono={TONO_AVISO[s.nivel]}
+      resumen={<><strong>{s.titulo}.</strong> {n === 1 ? 'Una señal pide revisión.' : `${numero(n)} señales piden revisión.`}</>}
+      etiquetaMas={n === 1 ? 'Ver el detalle' : `Ver las ${numero(n)} señales`}
+      mas={(
+        <>
+          <ul className="adm-res-semaforo-causas">
+            {s.causas.map((c) => <li key={c.texto}>{c.texto} <Link href={c.href}>Ver</Link></li>)}
+          </ul>
+          <p className="adm-res-pie">{guardia}</p>
+        </>
+      )}
+    />
   );
 }
 
