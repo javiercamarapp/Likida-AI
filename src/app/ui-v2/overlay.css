@@ -155,3 +155,32 @@ html[data-overlay-abierto] { overflow: hidden; }
 /* La lectura de una grafica lleva colores de dato en tinta: conserva la tarjeta blanca de siempre (el Tooltip corto ahora es también tarjeta blanca). */
 .rv-pop--grafica::before, .rv-pop--grafica::after { content: none; }
 @media (max-width: 819px) { .rv-pop--grafica { display: none; } }
+
+/* ── Toasts (notificaciones.tsx): contenedor en CAPA SUPERIOR (`popover="manual"`) y piel de `Aviso` (.rv-aviso + data-tono) ──────────────
+   El popover trae estilos del navegador (centrado, borde, fondo, padding): se reponen a una esquina inferior derecha transparente que no
+   atrapa el puntero (solo cada toast lo recibe). En móvil ocupa el ancho. */
+.rv-toasts {
+  position: fixed; inset: auto 0 0 auto; margin: 0; width: min(26rem, 100%); height: auto; max-height: 100dvh; box-sizing: border-box;
+  padding: 16px; border: 0; background: transparent; color: inherit; overflow: visible;
+  display: flex; flex-direction: column; align-items: stretch; gap: 8px; pointer-events: none;
+}
+@media (max-width: 639px) { .rv-toasts { inset: auto 0 0 0; width: auto; } }
+.rv-toasts__region { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.rv-toasts__region:empty { display: none; }
+.rv-toast { pointer-events: auto; align-items: flex-start; box-shadow: var(--sh-pop, var(--shadow-pop)); }
+.rv-toast__x {
+  position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; margin: -2px -6px -2px 0;
+  padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; opacity: .75; cursor: pointer;
+}
+.rv-toast__x::after { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 44px; height: 44px; }
+.rv-toast__x:hover { opacity: 1; background: color-mix(in srgb, currentColor 10%, transparent); }
+.rv-toast__x:focus-visible { outline: 2px solid var(--ui-focus, currentColor); outline-offset: 1px; opacity: 1; }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes rv-toast-entra { from { opacity: 0; transform: translateY(6px); } }
+  .rv-toast { animation: rv-toast-entra 180ms var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; }
+}
+
+/* ── Pie de overlays (Rovaq): botones de 32 px en escritorio, aunque alguien pase `tamano="sm"` (que ahora mide 28). En móvil rige el 36 del botón. ── */
+@media (min-width: 820px) {
+  [data-ui="v2"] .rv-ov__pie .rv-btn { min-height: var(--ctl-h, 32px); }
+}

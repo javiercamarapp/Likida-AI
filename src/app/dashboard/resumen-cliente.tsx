@@ -93,7 +93,7 @@ export function ListaAtencion({ filas, senales, ambito, soloLectura, sufijo, vis
         abierto={panel !== null} onCerrar={() => setPanel(null)} ancho={420}
         titulo={actual ? actual.titulo : 'Requiere tu atención'}
         descripcion={actual ? ROTULO_SEV[actual.severidad] : 'Lo que espera una decisión o una mirada tuya.'}
-        pie={actual?.href ? <BotonEnlace tamano="sm" variante="secondary" href={actual.href} icono={<ArrowRight />}>{actual.textoAccion ?? 'Abrir'}</BotonEnlace> : undefined}
+        pie={actual?.href ? <BotonEnlace variante="secondary" href={actual.href} icono={<ArrowRight />}>{actual.textoAccion ?? 'Abrir'}</BotonEnlace> : undefined}
       >
         {actual ? (
           <dl className="rv-infotexto">

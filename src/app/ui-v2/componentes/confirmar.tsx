@@ -63,10 +63,10 @@ export function DialogoConfirmar({
       alerta={peligro} abierto={abierto} onCerrar={onCancelar} titulo={titulo} describedBy={idTexto} cierraConFondo={cierraConFondo}
       pie={(
         <>
-          <Boton variante="secondary" tamano="sm" onClick={onCancelar} data-autofocus={peligro ? '' : undefined}>
+          <Boton variante="secondary" onClick={onCancelar} data-autofocus={peligro ? '' : undefined}>
             {etiquetaCancelar}
           </Boton>
-          <Boton variante={peligro ? 'danger-soft' : 'primary'} tamano="sm" className={peligro ? 'border border-[var(--bad)]' : undefined} type={tipoConfirmar} name={nombreConfirmar} value={valorConfirmar}
+          <Boton variante={peligro ? 'danger-soft' : 'primary'} className={peligro ? 'border border-[var(--bad)]' : undefined} type={tipoConfirmar} name={nombreConfirmar} value={valorConfirmar}
             disabled={pendiente} onClick={onConfirmar} data-autofocus={peligro ? undefined : ''}>
             {pendiente ? 'Un momento…' : etiquetaConfirmar}
           </Boton>
