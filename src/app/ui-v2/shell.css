@@ -281,7 +281,9 @@
   [data-ui="v2"] .rv-sb__logo::after { content: ""; position: absolute; inset: -11px 0; }
   [data-ui="v2"] .rv-sb__logo:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
   [data-ui="v2"] .rv-logo-s { display: none; }
-  [data-ui="v2"] .rv-sb__plegar { width: 32px; height: 32px; }
+  /* UN solo botón de plegar en escritorio: el de la cabecera, junto a «Guía» (como Rovaq). El del sidebar queda en el árbol (sin él los tests de contrato
+     y el riel pierden su gancho) pero no se pinta. */
+  [data-ui="v2"] .rv-sb__plegar { display: none; }
   /* El contenido del sidebar scrollea por dentro; el pie queda fijo abajo. */
   [data-ui="v2"] .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 8px; }
   [data-ui="v2"] .rv-sb__pie { flex: none; box-sizing: border-box; padding: 8px; border-top: 1px solid var(--ui-border); }
