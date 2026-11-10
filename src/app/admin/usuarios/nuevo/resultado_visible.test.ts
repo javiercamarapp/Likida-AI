@@ -36,9 +36,11 @@ describe('el resultado del alta se ve en la pantalla', () => {
     expect(PAGINA).not.toContain('<form action={crear}');
   });
 
-  it('`provisionarUsuario` va dentro de un try que traduce el error a mensaje', () => {
-    expect(PAGINA).toMatch(/try \{\s*\n\s*await provisionarUsuario\(/);
-    expect(PAGINA).toContain('descifrarErrorProvision(e)');
+  it('el alta (cuenta + asiento + correo) va dentro de un try que traduce el error a mensaje', () => {
+    expect(PAGINA).toMatch(/try \{[\s\S]*?await altaDeUsuarioDesdeAdmin\(/);
+    expect(PAGINA).toContain("mensajeParaPantalla(e, 'dar de alta al usuario')");
+    // `provisionarUsuario` y su traducción de errores viven ahora en gestion_admin.ts (probado en gestion_admin.test.ts).
+    expect(PAGINA).not.toMatch(/await provisionarUsuario\(/);
   });
 
   it('el rol se valida con LISTA BLANCA (ADM-12: `vendedor` con tenant ya no entra)', () => {
