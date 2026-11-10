@@ -1,9 +1,9 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useCallback } from 'react';
 import { Send } from 'lucide-react';
 import { numero } from '@/lib/formato';
-import { AvisoResultado, BotonConfirmar, Icono, Tarjeta, clasesBoton, useNotificarResultado } from '@/app/ui-v2/componentes';
+import { AvisoResultado, BotonConfirmar, Icono, Tarjeta, clasesBoton, leerResultado, useNotificar } from '@/app/ui-v2/componentes';
 import './operadores.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -17,18 +17,19 @@ import './operadores.css';
 export type ResultadoInvitar =
   | null
   | { ok: true; mensaje: string; fallidas: Array<{ nombre: string; motivo: string }> }
-  | { ok: false; error: string };
+  | { ok: false; error: string; fallidas?: Array<{ nombre: string; motivo: string }> };
 export type AccionInvitar = (previo: ResultadoInvitar, datos: FormData) => Promise<ResultadoInvitar>;
 
 const CONFIRMACION =
   'Cada invitación es un mensaje de WhatsApp (plantilla aprobada, con el costo de Meta). Confírmalo solo si son tus choferes y aceptaron recibir mensajes de la empresa.';
 
 function Fallidas({ estado }: { estado: ResultadoInvitar }) {
-  if (!estado || !estado.ok || estado.fallidas.length === 0) return null;
+  const fallidas = estado?.fallidas ?? [];
+  if (fallidas.length === 0) return null;
   return (
     <ul className="rv-eq__lista">
-      {estado.fallidas.slice(0, 10).map((f) => <li key={f.nombre + f.motivo}>{f.nombre}: {f.motivo}</li>)}
-      {estado.fallidas.length > 10 && <li>y {numero(estado.fallidas.length - 10)} más.</li>}
+      {fallidas.slice(0, 10).map((f) => <li key={f.nombre + f.motivo}>{f.nombre}: {f.motivo}</li>)}
+      {fallidas.length > 10 && <li>y {numero(fallidas.length - 10)} más.</li>}
     </ul>
   );
 }
@@ -96,8 +97,16 @@ export function InvitarUno({ operadorId, nombre, reintento, accion }: {
   reintento: boolean;
   accion: AccionInvitar;
 }) {
-  const [estado, despachar] = useActionState(accion, null);
-  useNotificarResultado(estado);
+  // El aviso sale DENTRO de la acción, no de un efecto de este componente: tras `revalidatePath` la fila pasa a «Invitación
+  // enviada»/«falló», este botón se desmonta y un `useNotificarResultado` se perdía (el éxito y, peor, el error nunca se veían).
+  const { notificar } = useNotificar();
+  const conAviso = useCallback<AccionInvitar>(async (previo, datos) => {
+    const resultado = await accion(previo, datos);
+    const leido = leerResultado(resultado);
+    if (leido) notificar({ tono: leido.tono === 'error' ? 'error' : 'ok', mensaje: leido.texto });
+    return resultado;
+  }, [accion, notificar]);
+  const [, despachar] = useActionState(conAviso, null);
   return (
     <form action={despachar} className="rv-eq__en-linea">
       <input type="hidden" name="modo" value="uno" />
