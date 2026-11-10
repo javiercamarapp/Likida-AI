@@ -80,7 +80,6 @@ describe('la guía de arranque del chofer', () => {
 
 describe('el cartel imprimible', () => {
   it('solo el cartel sale al imprimir (regla de impresión en la hoja de la pantalla, no en un <style> en línea)', () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee un archivo de FUENTE del propio repo
     const css = readFileSync(join(process.cwd(), 'src/app/dashboard/whatsapp/whatsapp.css'), 'utf8');
     expect(css).toContain('@media print');
     expect(css).toContain('#cartel-whatsapp');

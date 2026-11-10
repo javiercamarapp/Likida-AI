@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { MessageCircle, Send } from 'lucide-react';
+import { Send } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import { AvisoResultado, BotonConfirmar, Icono, Tarjeta, clasesBoton, useNotificarResultado } from '@/app/ui-v2/componentes';
 import './operadores.css';
@@ -44,7 +44,7 @@ export function InvitarPendientes({ pendientes, conFallo, accion, hrefGuia }: {
   const [estado, despachar] = useActionState(accion, null);
   if (pendientes === 0 && conFallo === 0 && !estado) return null;
   return (
-    <Tarjeta titulo="Invitar a los operadores por WhatsApp" info="operadores.invitar">
+    <Tarjeta titulo="Invitar a los operadores por WhatsApp" info="whatsapp.avance">
       <div className="rv-eq__bloque">
         <p className="rv-eq__texto">
           {pendientes > 0

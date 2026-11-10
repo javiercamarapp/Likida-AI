@@ -19,7 +19,7 @@ const RUTA = '/dashboard/conversaciones';
 /**
  * LO QUE EL BOT LE DIJO A TUS CHOFERES — auditoría 20, hallazgo 6 (MEDIO).
  *
- * Hasta el 29-ago-2026 la conversación bot↔chofer sólo se leía desde /admin
+ * Hasta el 29-ago-2026 la conversación bot y chofer sólo se leía desde /admin
  * (`getConversacionesActivas`, cruzada de TODAS las flotas). El dueño de la
  * flota —que es de quien son esos datos— no tenía dónde verla: cuando un
  * chofer alegaba "el bot me dijo que ya estaba liquidado", la única forma de

@@ -1,0 +1,30 @@
+/* Convenios · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-cv__lista { list-style: none; margin: 0; padding: 0; display: grid; }
+.rv-cv__item { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.rv-cv__item:first-child { border-top: 0; padding-top: 0; }
+.rv-cv__item[data-archivado] { opacity: .6; }
+.rv-cv__cab { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: var(--t-body); }
+.rv-cv__cliente { font-weight: 500; }
+.rv-cv__fin { margin-left: auto; }
+.rv-cv__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-cv__nota[data-tono="warn"] { color: var(--warn); }
+.rv-cv__nota strong { color: var(--ink); font-weight: 600; }
+.rv-cv__pie { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-cv__tenue { font-size: var(--t-micro); color: var(--faint); }
+.rv-cv__enlace { text-decoration: underline; text-underline-offset: 2px; font-size: var(--t-small); color: var(--muted); }
+.rv-cv__descargas { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.rv-cv__editor { display: grid; gap: 8px; }
+.rv-cv__caja { padding: 12px; border-radius: 8px; background: var(--canvas); }
+.rv-cv__instrucciones { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; font-size: var(--t-small); }
+.rv-cv__pre { margin: 4px 0 0; padding: 12px; border-radius: 8px; background: var(--canvas); overflow-x: auto; white-space: pre-wrap; font-size: var(--t-micro); }
+.rv-cv__paginas { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rv-cv__fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.rv-cv__selector { min-width: 220px; max-width: 280px; }
+.rv-cv__todo { flex-basis: 100%; }
+.rv-cv__detalles { margin: 6px 0 0; padding-left: 16px; display: grid; gap: 2px; }
+.rv-cv__fijo { margin: 0; display: flex; align-items: center; min-height: 32px; font-size: var(--t-body); }
+.rv-cv__mono { font-size: var(--t-small); }
+.rv-cv__instruccion { display: grid; gap: 8px; align-items: end; grid-template-columns: 150px minmax(0, 1fr) 170px 150px auto; }
+@media (max-width: 900px) { .rv-cv__instruccion { grid-template-columns: minmax(0, 1fr); } }
+.rv-cv__casillas { display: grid; gap: 6px; font-size: var(--t-small); }
+.rv-cv__sangria { margin-left: 24px; }

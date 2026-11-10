@@ -4,7 +4,8 @@ import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { FormaConvenio, FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio, type CatalogosFormaConvenio } from './formas';
-import { MarcoPagina, AvisoCompacto, Disclosure, EstadoVacio, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Aviso, AvisoCompacto, Boton, Disclosure, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import './convenios.css';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { FileText } from 'lucide-react';
@@ -67,7 +68,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
   const edicionDisponible = puedeEditarEnPantalla && lista.every((c) => c.version !== null);
   const descarga = (tipo: string) => `/api/export/convenios?tipo=${tipo}${p.sufijo.startsWith('?') ? `&${p.sufijo.slice(1)}` : ''}`;
   return (
-    <MarcoPagina titulo="Convenios de clientes" apoyo={p.verDinero
+    <MarcoPagina titulo="Clientes" apoyo={p.verDinero
         ? 'Por cliente: puntos A a B, instrucciones de operación, tarifa y requisitos de cobro. El agente solo dice lo que el convenio dice.'
         : 'Por cliente: puntos A a B e instrucciones de operación. El agente solo dice lo que el convenio dice.'}>
       <AvisoCompacto tono="info"
@@ -88,82 +89,77 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       )}
 
       {p.estado === 'no_disponible' && (
-        <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+        <Aviso tono="warn">
           Los convenios todavía no están disponibles en tu cuenta; avísale a Likida y los habilita. Mientras tanto los viajes se despachan como siempre, sin instrucciones.
-        </p>
+        </Aviso>
       )}
       {p.estado === 'error' && (
-        <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>No se pudieron leer los convenios ahora mismo. Intenta de nuevo en un momento.</p>
+        <Aviso tono="error">No se pudieron leer los convenios ahora mismo. Intenta de nuevo en un momento.</Aviso>
       )}
 
       {p.estado === 'ok' && (
-        <section className="card p-4 space-y-3" aria-label="Convenios registrados">
-          <div className="flex items-center gap-3 flex-wrap">
-            <TituloRecuadro info="convenios.registrados">Convenios registrados</TituloRecuadro>
-            {p.puedeExportar && (
-              <span className="ml-auto flex items-center gap-3 text-[12px]">
-                <a href={descarga('instrucciones')} className="underline" style={{ color: 'var(--muted)' }}>Descargar instrucciones (CSV, sin dinero)</a>
-                <a href={descarga('texto')} className="underline" style={{ color: 'var(--muted)' }}>Descargar texto para tu sistema</a>
-                {p.verDinero && <a href={descarga('completo')} className="underline" style={{ color: 'var(--muted)' }}>Descargar completo (con tarifa)</a>}
-              </span>
-            )}
-          </div>
+        <Tarjeta titulo="Convenios registrados" info="convenios.registrados"
+          acciones={p.puedeExportar ? (
+            <span className="rv-cv__descargas">
+              <a href={descarga('instrucciones')} className="rv-cv__enlace">Descargar instrucciones (CSV, sin dinero)</a>
+              <a href={descarga('texto')} className="rv-cv__enlace">Descargar texto para tu sistema</a>
+              {p.verDinero && <a href={descarga('completo')} className="rv-cv__enlace">Descargar completo (con tarifa)</a>}
+            </span>
+          ) : undefined}>
           {lista.length === 0 ? (
             <EstadoVacio contenido icono={FileText} titulo="Todavía no hay convenios">
               Importa tu archivo más abajo: hasta entonces los viajes se despachan sin instrucciones.
             </EstadoVacio>
           ) : (
-            <ul className="divide-y" style={{ borderColor: 'var(--line2)' }}>
+            <ul className="rv-cv__lista">
               {visibles.map((c) => (
-                <li key={c.id} className="py-3 space-y-1.5" style={{ opacity: c.activo ? 1 : 0.55 }}>
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="font-medium text-[13px]">{c.cliente}</span>
-                    <span className="text-[13px]">· {c.nombre}</span>
-                    {!c.activo && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>(archivado)</span>}
+                <li key={c.id} className="rv-cv__item" data-archivado={c.activo ? undefined : ''}>
+                  <div className="rv-cv__cab">
+                    <span className="rv-cv__cliente">{c.cliente}</span>
+                    <span>· {c.nombre}</span>
+                    {!c.activo && <span className="rv-cv__tenue">(archivado)</span>}
                     {p.puedeEditar && (
-                      <form action={p.accionEstado} className="ml-auto">
+                      <form action={p.accionEstado} className="rv-cv__fin">
                         <input type="hidden" name="id" value={c.id} />
                         <input type="hidden" name="activo" value={c.activo ? 'no' : 'si'} />
-                        <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>{c.activo ? 'Archivar' : 'Reactivar'}</button>
+                        <Boton type="submit" variante="ghost" tamano="sm">{c.activo ? 'Archivar' : 'Reactivar'}</Boton>
                       </form>
                     )}
                   </div>
-                  <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                  <p className="rv-cv__nota">
                     {c.origen ?? '¿origen?'} → {c.destino ?? '¿destino?'}
                     {(c.sitioOrigenNombre || c.sitioDestinoNombre) && <> · sitios: {c.sitioOrigenNombre ?? '—'} → {c.sitioDestinoNombre ?? '—'}</>}
                     {' · '}{vigencia(c)}
                   </p>
                   {edicionDisponible && c.version !== null && (p.editarId === c.id ? (
-                    <div className="text-[12px]">
-                      <Link href={href({ editar: null, pag: pagina > 1 ? String(pagina) : null })} className="underline" style={{ color: 'var(--muted)' }}>Cerrar la edición</Link>
-                      <div className="mt-2 p-3 rounded-lg" style={{ background: 'var(--canvas)' }}>
+                    <div className="rv-cv__editor">
+                      <Link href={href({ editar: null, pag: pagina > 1 ? String(pagina) : null })} className="rv-cv__enlace">Cerrar la edición</Link>
+                      <div className="rv-cv__caja">
                         <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} convenio={{ ...c, version: c.version }} />
                       </div>
                     </div>
                   ) : (
-                    <Link href={href({ editar: c.id, pag: pagina > 1 ? String(pagina) : null })} className="text-[12px] underline" style={{ color: 'var(--muted)' }}>Editar convenio e instrucciones</Link>
+                    <Link href={href({ editar: c.id, pag: pagina > 1 ? String(pagina) : null })} className="rv-cv__enlace">Editar convenio e instrucciones</Link>
                   ))}
                   {c.instrucciones.length === 0 ? (
-                    <p className="text-[12px]" style={{ color: 'var(--warn)' }}>Sin instrucciones de operación: el operador no recibirá nada de este convenio.</p>
+                    <StatusChip tono="warn">Sin instrucciones de operación: el operador no recibirá nada de este convenio.</StatusChip>
                   ) : (
-                    <details className="text-[12px]">
-                      <summary className="cursor-pointer underline" style={{ color: 'var(--muted)' }}>{c.instrucciones.length} instrucci{c.instrucciones.length === 1 ? 'ón' : 'ones'}</summary>
-                      <ul className="mt-1.5 space-y-1">
+                    <Disclosure variante="linea" titulo={`${c.instrucciones.length} instrucci${c.instrucciones.length === 1 ? 'ón' : 'ones'}`}>
+                      <ul className="rv-cv__instrucciones">
                         {c.instrucciones.map((i, n) => (
                           <li key={n}>
-                            <span className="font-medium">{ETIQUETA_CATEGORIA[i.categoria]}:</span> {i.texto}
-                            <span className="ml-1.5 text-[11px]" style={{ color: 'var(--faint)' }}>({LUGAR_TEXTO[i.lugar]}, {MOMENTO_TEXTO[i.momento]})</span>
+                            <span className="rv-cv__cliente">{ETIQUETA_CATEGORIA[i.categoria]}:</span> {i.texto}
+                            <span className="rv-cv__tenue"> ({LUGAR_TEXTO[i.lugar]}, {MOMENTO_TEXTO[i.momento]})</span>
                           </li>
                         ))}
                       </ul>
-                      <details className="mt-2">
-                        <summary className="cursor-pointer text-[11px]" style={{ color: 'var(--faint)' }}>Texto para pegar en tu sistema</summary>
-                        <pre className="mt-1 p-3 rounded-lg overflow-x-auto font-mono text-[11px] whitespace-pre-wrap" style={{ background: 'var(--canvas)' }}>{textoParaSistemaDeLaFlota(c)}</pre>
-                      </details>
-                    </details>
+                      <Disclosure variante="linea" titulo="Texto para pegar en tu sistema">
+                        <pre className="rv-cv__pre">{textoParaSistemaDeLaFlota(c)}</pre>
+                      </Disclosure>
+                    </Disclosure>
                   )}
                   {p.verDinero && c.comercial && (
-                    <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+                    <p className="rv-cv__nota">
                       Tarifa: {c.comercial.modo && c.comercial.precio !== null ? `${mxn(c.comercial.precio)} ${c.comercial.moneda} ${MODO_TEXTO[c.comercial.modo]}` : 'sin tarifa pactada'}
                       {c.comercial.requisitos.length > 0 && <> · Para cobrar: {c.comercial.requisitos.join(', ')}</>}
                     </p>
@@ -173,35 +169,34 @@ export function VistaConvenios(p: PropsVistaConvenios) {
             </ul>
           )}
           {paginas > 1 && (
-            <nav aria-label="Páginas de convenios" className="flex items-center gap-3 text-[12px]">
-              <span style={{ color: 'var(--muted)' }}>Convenios {numero((pagina - 1) * CONVENIOS_POR_PAGINA + 1)}–{numero(Math.min(pagina * CONVENIOS_POR_PAGINA, lista.length))} de {numero(lista.length)}</span>
-              {pagina > 1 && <Link href={href({ pag: pagina - 1 > 1 ? String(pagina - 1) : null, editar: null })} className="underline">Anterior</Link>}
-              {pagina < paginas && <Link href={href({ pag: String(pagina + 1), editar: null })} className="underline">Siguiente</Link>}
+            <nav aria-label="Páginas de convenios" className="rv-cv__paginas">
+              <span className="rv-cv__nota">Convenios {numero((pagina - 1) * CONVENIOS_POR_PAGINA + 1)}–{numero(Math.min(pagina * CONVENIOS_POR_PAGINA, lista.length))} de {numero(lista.length)}</span>
+              {pagina > 1 && <Link href={href({ pag: pagina - 1 > 1 ? String(pagina - 1) : null, editar: null })} className="rv-cv__enlace">Anterior</Link>}
+              {pagina < paginas && <Link href={href({ pag: String(pagina + 1), editar: null })} className="rv-cv__enlace">Siguiente</Link>}
             </nav>
           )}
-        </section>
+        </Tarjeta>
       )}
 
       {p.estado === 'ok' && p.puedeEditar && p.accionCorregir && p.viajes && (
-        <section className="card p-4 space-y-3" aria-label="Convenio ligado a cada viaje">
-          <TituloRecuadro info="convenios.ligado_viaje">Convenio ligado a cada viaje en curso</TituloRecuadro>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <Tarjeta titulo="Convenio ligado a cada viaje en curso" info="convenios.ligado_viaje">
+          <p className="rv-cv__nota">
             Si el sistema ligó el convenio equivocado, o no pudo elegir porque varios empataban, corrígelo aquí: se vuelve a tomar la foto de
             instrucciones del convenio que elijas y queda como corrección manual (el despacho automático ya no lo cambia). Puedes mandarle de nuevo
             las instrucciones al operador.
           </p>
           {p.viajes.length === 0 ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No hay viajes abiertos con cliente.</p>
+            <p className="rv-cv__nota">No hay viajes abiertos con cliente.</p>
           ) : (
-            <ul className="divide-y" style={{ borderColor: 'var(--line2)' }}>
+            <ul className="rv-cv__lista">
               {p.viajes.map((v) => (
-                <li key={v.viajeId} className="py-3 space-y-1.5">
-                  <div className="flex items-baseline gap-2 flex-wrap">
-                    <span className="font-medium text-[13px]">{v.folio}</span>
-                    <span className="text-[13px]">· {v.cliente ?? 'sin cliente'}</span>
-                    <span className="text-[12px]" style={{ color: 'var(--muted)' }}>{v.origen ?? '¿origen?'} → {v.destino ?? '¿destino?'}{v.operador ? ` · ${v.operador}` : ''}</span>
+                <li key={v.viajeId} className="rv-cv__item">
+                  <div className="rv-cv__cab">
+                    <span className="rv-cv__cliente">{v.folio}</span>
+                    <span>· {v.cliente ?? 'sin cliente'}</span>
+                    <span className="rv-cv__nota">{v.origen ?? '¿origen?'} → {v.destino ?? '¿destino?'}{v.operador ? ` · ${v.operador}` : ''}</span>
                   </div>
-                  <p className="text-[12px]" style={{ color: v.convenioNombre || v.ligadoPor === null ? 'var(--muted)' : 'var(--warn)' }}>
+                  <p className="rv-cv__nota" data-tono={v.convenioNombre || v.ligadoPor === null ? undefined : 'warn'}>
                     {v.ligadoPor === null
                       ? 'Sin convenio ligado todavía (nunca se despachó con convenio, o varios empataron).'
                       : v.convenioNombre
@@ -213,47 +208,45 @@ export function VistaConvenios(p: PropsVistaConvenios) {
               ))}
             </ul>
           )}
-        </section>
+        </Tarjeta>
       )}
 
       {puedeEditarEnPantalla && (edicionDisponible ? (
-        <section className="card p-4 space-y-3" aria-label="Nuevo convenio">
-          <TituloRecuadro info="convenios.nuevo">Nuevo convenio</TituloRecuadro>
+        <Tarjeta titulo="Nuevo convenio" info="convenios.nuevo">
           <Disclosure variante="linea" titulo="Capturar un convenio" abierto={lista.length === 0}>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-            Da de alta un convenio y su calle de instrucciones sin subir un archivo. El cliente tiene que existir en Clientes y los sitios salen del catálogo de sitios.
-            La tarifa y los requisitos de cobro no se editan aquí: entran por la importación con permiso de finanzas.
-          </p>
-          <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
+            <p className="rv-cv__nota">
+              Da de alta un convenio y su calle de instrucciones sin subir un archivo. El cliente tiene que existir en Clientes y los sitios salen del catálogo de sitios.
+              La tarifa y los requisitos de cobro no se editan aquí: entran por la importación con permiso de finanzas.
+            </p>
+            <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
           </Disclosure>
-        </section>
+        </Tarjeta>
       ) : (
-        <p role="alert" className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
+        <Aviso tono="warn">
           La edición de convenios en pantalla todavía no está disponible en tu cuenta; avísale a Likida y la habilita. Mientras tanto puedes importar el archivo.
-        </p>
+        </Aviso>
       ))}
 
       {p.puedeEditar ? (
-        <section className="card p-4 space-y-3" aria-label="Importar convenios">
-          <TituloRecuadro info="convenios.importar">Importar desde CSV o Excel</TituloRecuadro>
+        <Tarjeta titulo="Importar desde CSV o Excel" info="convenios.importar">
           <Disclosure variante="linea" titulo="Importar un archivo" abierto={lista.length === 0}>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-            <strong>Una fila por instrucción.</strong> Columnas: <code>cliente, convenio</code> (obligatorias), <code>origen, destino, sitio_origen, sitio_destino, vigente_desde, vigente_hasta, notas</code>,
-            y por instrucción <code>categoria</code> (puerta, reportarse, peculiaridad, documentos, horario, seguridad, otro), <code>instruccion</code>, <code>momento</code> (despacho, acercamiento, ambos)
-            y <code>lugar</code> (origen, destino, ambos){p.verDinero ? <>; con permiso de finanzas también <code>tarifa_modo, tarifa_precio, moneda, requisitos_cobro</code></> : ''}.
-            El cliente tiene que existir en Clientes y los sitios en el catálogo de sitios (por código o nombre): nada se inventa. Todo o nada: si una fila falla, no se importa ninguna y te decimos cuál corregir.
-            Re-subir el mismo archivo actualiza por cliente + convenio; no duplica, y las instrucciones que ya no trae se quitan.{' '}
-            {p.puedeExportar && <a href={descarga('plantilla')} className="underline">Descargar la plantilla</a>}
-          </p>
-          <FormaImportarConvenios accion={p.accionImportar} />
+            <p className="rv-cv__nota">
+              <strong>Una fila por instrucción.</strong> Columnas: <code>cliente, convenio</code> (obligatorias), <code>origen, destino, sitio_origen, sitio_destino, vigente_desde, vigente_hasta, notas</code>,
+              y por instrucción <code>categoria</code> (puerta, reportarse, peculiaridad, documentos, horario, seguridad, otro), <code>instruccion</code>, <code>momento</code> (despacho, acercamiento, ambos)
+              y <code>lugar</code> (origen, destino, ambos){p.verDinero ? <>; con permiso de finanzas también <code>tarifa_modo, tarifa_precio, moneda, requisitos_cobro</code></> : ''}.
+              El cliente tiene que existir en Clientes y los sitios en el catálogo de sitios (por código o nombre): nada se inventa. Todo o nada: si una fila falla, no se importa ninguna y te decimos cuál corregir.
+              Re-subir el mismo archivo actualiza por cliente + convenio; no duplica, y las instrucciones que ya no trae se quitan.{' '}
+              {p.puedeExportar && <a href={descarga('plantilla')} className="rv-cv__enlace">Descargar la plantilla</a>}
+            </p>
+            <FormaImportarConvenios accion={p.accionImportar} />
           </Disclosure>
-        </section>
+        </Tarjeta>
       ) : (
-        <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota o el jefe de tráfico editan los convenios.</p>
+        <p className="rv-cv__pie">Solo el dueño de la flota o el jefe de tráfico editan los convenios.</p>
       )}
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+      <p className="rv-cv__pie">
         Las instrucciones que ya se le mandaron a un operador no cambian si editas el convenio después, salvo que marques «llevar este cambio a los viajes en curso»: cada viaje conserva las que se le dijeron.{' '}
-        <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="underline">Catálogo de sitios</Link>
+        <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cv__enlace">Catálogo de sitios</Link>
       </p>
     </MarcoPagina>
   );
