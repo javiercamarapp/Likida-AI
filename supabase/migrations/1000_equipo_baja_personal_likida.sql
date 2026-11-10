@@ -1,3 +1,4 @@
+-- REVERSA: drop function if exists public.equipo_baja_personal_likida(uuid, uuid);
 -- 1000 · Baja del personal de Likida (superadmin y vendedor) con el candado EN LA BASE. PROPUESTA de la sub-entrega 4b: pendiente de
 -- revisión del dueño y de aplicación. Sin ella, src/lib/auth/baja_acceso.ts cae a un camino de aplicación (cuenta, escribe, recuenta
 -- y revierte). Con ella, el recuento del "último superadmin" y el UPDATE corren en la misma transacción bajo un candado, como 0846.
