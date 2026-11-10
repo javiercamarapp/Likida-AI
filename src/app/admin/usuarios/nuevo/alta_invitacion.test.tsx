@@ -1,44 +1,31 @@
-import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // El alta de /admin deja de ser «crea la cuenta y que alguien le avise»: manda la invitación por correo, asienta la bitácora y DICE la verdad
-// del envío. La página es un server component con la acción por closure; se extrae del árbol renderizado, como en costos-facturacion.
+// del envío. La acción vive en ./acciones.ts (extraída de la página).
 
-type Elemento = ReactElement<Record<string, unknown>>;
 type Accion = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string }>;
 
 const d = vi.hoisted(() => ({
-  sup: vi.fn(), resumen: vi.fn(), alta: vi.fn(), paso: vi.fn(),
+  sup: vi.fn(), alta: vi.fn(), paso: vi.fn(),
 }));
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: d.sup }));
-vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: d.resumen }));
+vi.mock('next/cache', () => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/admin/acciones_riesgo', async (i) => ({ ...(await i<typeof import('@/lib/admin/acciones_riesgo')>()), pasoExtraSuperadmin: d.paso }));
 vi.mock('@/lib/auth/gestion_admin', async (i) => ({ ...(await i<typeof import('@/lib/auth/gestion_admin')>()), altaDeUsuarioDesdeAdmin: d.alta }));
 vi.mock('@/lib/env', () => ({ appUrl: () => 'https://app.test' }));
 
 import { DatoInvalido } from '@/lib/likida/errores';
-import { FormaConAviso } from '../../ui/forma';
-import NuevoUsuario from './page';
+import { accionNuevoAcceso } from './acciones';
 
-function buscar(n: ReactNode, c: unknown, out: Elemento[] = []): Elemento[] {
-  if (Array.isArray(n)) { for (const h of n) buscar(h, c, out); return out; }
-  if (!isValidElement<Record<string, unknown>>(n)) return out;
-  if (n.type === c) out.push(n);
-  buscar(n.props.children as ReactNode, c, out);
-  return out;
-}
 const fd = (c: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(c)) f.set(k, v); return f; };
 const BUENO = { tenantId: 'tn-1', email: 'persona@flota.test', rol: 'contador', nombre: 'Pat' };
-let crear: Accion;
+const crear = accionNuevoAcceso as unknown as Accion;
 
-beforeEach(async () => {
+beforeEach(() => {
   vi.clearAllMocks();
   d.sup.mockResolvedValue({ userId: 'u-1', tenantId: null, rol: 'superadmin' });
-  d.resumen.mockResolvedValue({ flotas: [{ id: 'tn-1', nombre: 'ACME' }] });
   d.paso.mockResolvedValue(null);
   d.alta.mockResolvedValue({ userId: 'nuevo', tenantId: 'tn-1', correo: { enviado: true }, bitacora: true });
-  const pagina = await NuevoUsuario();
-  crear = buscar(pagina, FormaConAviso)[0].props.accion as Accion;
 });
 
 describe('Nuevo usuario (/admin)', () => {

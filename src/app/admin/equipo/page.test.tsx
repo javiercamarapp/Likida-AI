@@ -1,85 +1,103 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
-// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
-vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// /admin/equipo — CERO cobertura. La puerta (requireSuperadmin) vive en
-// layout.tsx, compartida por todo /admin — no se repite aquí. Esta página no
-// tiene server actions: es sólo lectura, cruzada de TODOS los tenants a
-// propósito (getEquipo() sin filtro). Lo real que se vigila: el orden por
-// jerarquía operativa (no alfabético), y que el rótulo "los 5 roles reales"
-// no mienta si algún día cambia el dominio.
-// ═══════════════════════════════════════════════════════════════════════════
-
-const dobles = vi.hoisted(() => ({ getEquipo: vi.fn() }));
-vi.mock('@/lib/admin/negocio', () => ({ getEquipo: dobles.getEquipo }));
+const d = vi.hoisted(() => ({ sup: vi.fn(), personas: vi.fn() }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn(), push: vi.fn(), replace: vi.fn() }), usePathname: () => '/admin/equipo', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: d.sup }));
+vi.mock('@/lib/admin/personas', async (i) => ({ ...(await i<typeof import('@/lib/admin/personas')>()), getPersonas: d.personas }));
+vi.mock('../usuarios/acciones', () => ({
+  accionCambiarRolUsuario: vi.fn(), accionDarDeBajaUsuario: vi.fn(), accionReactivarUsuario: vi.fn(), accionReenviarAccesoUsuario: vi.fn(),
+  accionCerrarSesionesUsuario: vi.fn(), accionDarDeBajaPersonalLikida: vi.fn(), accionReactivarPersonalLikida: vi.fn(),
+}));
 
 import PaginaEquipo from './page';
+import { armarPersonas, type FilaAppUser } from '@/lib/admin/personas';
 
-const SP = Promise.resolve({});
-async function renderizar(sp = SP) { return renderToStaticMarkup(await PaginaEquipo({ searchParams: sp })); }
-const miembro = (over: Partial<{ id: string; email: string; nombre: string | null; rol: string; tenantId: string | null; tenantNombre: string | null; operadorId: string | null }>) => ({
-  id: 'u-1', email: 'x@x.com', nombre: 'X', rol: 'contador', tenantId: 't-1', tenantNombre: 'Flota X', operadorId: null, ...over,
+const fila = (id: string, o: Partial<FilaAppUser> = {}): FilaAppUser => ({
+  id, email: `${id}@x.mx`, nombre: id, rol: 'contador', tenant_id: 't-1', activo: true, desactivado_en: null, tenant: { nombre: 'Flota X' }, ...o,
 });
+const AUTH = (ids: string[], sin: string[] = []) => new Map(ids.map((i) => [i, { lastSignInAt: sin.includes(i) ? null : '2026-11-01T12:00:00Z' }]));
+const render = async (sp: Record<string, string> = {}) => renderToStaticMarkup(await PaginaEquipo({ searchParams: Promise.resolve(sp) }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  dobles.getEquipo.mockResolvedValue([]);
+  d.sup.mockResolvedValue({ userId: 'yo', rol: 'superadmin', tenantId: null });
+  d.personas.mockResolvedValue({ personas: [], accesoLegible: true });
 });
 
-it('lee el roster COMPLETO sin filtrar por tenant — getEquipo() sin argumentos', async () => {
-  await renderizar();
-  expect(dobles.getEquipo).toHaveBeenCalledWith();
+it('lee a todas las personas y no se queda con el rótulo falso de "audit log no se registra hoy"', async () => {
+  const html = await render();
+  expect(html).not.toContain('no se registra hoy');
+  expect(html).toContain('Sin personas con cuenta');
+  expect(html).toContain('bitácora de auditoría');
 });
 
-it('ordena por jerarquía operativa, no alfabético: superadmin, vendedor, flota_admin, encargado, contador', async () => {
-  dobles.getEquipo.mockResolvedValue([
-    miembro({ id: 'c', rol: 'contador', nombre: 'Contador' }),
-    miembro({ id: 's', rol: 'superadmin', nombre: 'Super', tenantId: null, tenantNombre: null }),
-    miembro({ id: 'e', rol: 'encargado', nombre: 'Encargado' }),
-    miembro({ id: 'f', rol: 'flota_admin', nombre: 'Dueno' }),
-    miembro({ id: 'v', rol: 'vendedor', nombre: 'Vendedor', tenantId: null, tenantNombre: null }),
-  ]);
-  const html = await renderizar();
-  const posiciones = ['Super', 'Vendedor', 'Dueno', 'Encargado', 'Contador'].map((n) => html.indexOf(n));
-  expect(posiciones).toEqual([...posiciones].sort((a, b) => a - b));
-  expect(posiciones.every((p) => p !== -1)).toBe(true);
+it('ordena por jerarquía operativa, no alfabético', async () => {
+  d.personas.mockResolvedValue({
+    personas: armarPersonas([
+      fila('Zeta', { rol: 'contador' }), fila('Ana', { rol: 'superadmin', tenant_id: null, tenant: null }), fila('Beto', { rol: 'flota_admin' }),
+    ], AUTH(['Zeta', 'Ana', 'Beto'])),
+    accesoLegible: true,
+  });
+  const html = await render();
+  const pos = ['Ana', 'Beto', 'Zeta'].map((n) => html.indexOf(`>${n}<`));
+  expect(pos.every((p) => p !== -1)).toBe(true);
+  expect(pos).toEqual([...pos].sort((a, b) => a - b));
 });
 
-it('un rol fuera del dominio conocido no revienta el orden — se manda al final, no se pierde', async () => {
-  dobles.getEquipo.mockResolvedValue([
-    miembro({ id: 'x', rol: 'rol_invalido', nombre: 'Raro' }),
-    miembro({ id: 's', rol: 'superadmin', nombre: 'Super', tenantId: null, tenantNombre: null }),
-  ]);
-  const html = await renderizar();
-  expect(html.indexOf('Super')).toBeLessThan(html.indexOf('Raro'));
+it('dice "Nunca entró" y "De baja" y "Sin cuenta de acceso", cada uno con su estado', async () => {
+  d.personas.mockResolvedValue({
+    personas: armarPersonas([fila('a'), fila('b', { activo: false }), fila('c')], AUTH(['a', 'b'], ['a'])),
+    accesoLegible: true,
+  });
+  const html = await render();
+  expect(html).toContain('Nunca entró');
+  expect(html).toContain('De baja');
+  expect(html).toContain('Sin cuenta de acceso');
 });
 
-it('superadmin sin flota se dice explícitamente, no un guion ambiguo', async () => {
-  dobles.getEquipo.mockResolvedValue([miembro({ id: 's', rol: 'superadmin', nombre: 'Super', tenantId: null, tenantNombre: null })]);
-  const html = await renderizar();
-  expect(html).toContain('superadmin, sin flota');
+it('si no se pudo leer el acceso, NO afirma que nadie ha entrado', async () => {
+  d.personas.mockResolvedValue({ personas: armarPersonas([fila('a')], null), accesoLegible: false });
+  const html = await render();
+  expect(html).toContain('Sin dato');
+  expect(html).not.toContain('Nunca entró');
 });
 
-it('cero cuentas dice "sin usuarios dados de alta" — no una tabla vacía muda', async () => {
-  const html = await renderizar();
-  expect(html).toContain('Sin usuarios dados de alta');
+it('la búsqueda filtra también por nombre de flota', async () => {
+  d.personas.mockResolvedValue({
+    personas: armarPersonas([fila('Ana', { tenant: { nombre: 'Transportes Norte' } }), fila('Beto', { tenant: { nombre: 'Fletes Sur' } })], AUTH(['Ana', 'Beto'])),
+    accesoLegible: true,
+  });
+  const html = await render({ q: 'Norte' });
+  expect(html).toContain('>Ana<');
+  expect(html).not.toContain('>Beto<');
 });
 
-it('el rótulo declara los 5 roles reales del dominio, con vendedor incluido (no los 4 de antes)', async () => {
-  const html = await renderizar();
-  expect(html).toContain('Los 5 roles reales del sistema');
-  expect(html).toContain('vendedor');
-  expect(html).toContain('contador');
+it('?abrir= muestra las acciones de esa persona; para un superadmin propio no ofrece la baja', async () => {
+  d.personas.mockResolvedValue({
+    personas: armarPersonas([fila('yo', { rol: 'superadmin', tenant_id: null, tenant: null }), fila('b')], AUTH(['yo', 'b'])),
+    accesoLegible: true,
+  });
+  const ajena = await render({ abrir: 'b' });
+  expect(ajena).toContain('Dar de baja');
+  expect(ajena).toContain('Reenviar acceso');
+  const propia = await render({ abrir: 'yo' });
+  expect(propia).toContain('no puedes darte de baja a ti mismo');
 });
 
-it('la búsqueda (?q=) filtra también por nombre de flota, no sólo por nombre/correo de la persona', async () => {
-  dobles.getEquipo.mockResolvedValue([
-    miembro({ id: 'a', nombre: 'Ana', tenantNombre: 'Transportes Norte' }),
-    miembro({ id: 'b', nombre: 'Beto', tenantNombre: 'Fletes Sur' }),
-  ]);
-  const html = await renderizar(Promise.resolve({ q: 'Norte' }));
-  expect(html).toContain('Ana');
-  expect(html).not.toContain('Beto');
+it('la baja del personal de Likida nace apagada y lo dice', async () => {
+  delete process.env.LIKIDA_BAJA_PERSONAL_LIKIDA;
+  d.personas.mockResolvedValue({
+    personas: armarPersonas([fila('v', { rol: 'vendedor', tenant_id: null, tenant: null })], AUTH(['v'])), accesoLegible: true,
+  });
+  const html = await render({ abrir: 'v' });
+  expect(html).toContain('pendiente de la revisión del dueño');
+  expect(html).not.toContain('Sí, dar de baja');
+});
+
+it('una lectura caída es error con reintento, no "sin personas"', async () => {
+  d.personas.mockRejectedValue(new Error('caída'));
+  const html = await render();
+  expect(html).toContain('No se pudo leer el equipo');
+  expect(html).not.toContain('Sin personas con cuenta');
 });

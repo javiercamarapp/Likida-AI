@@ -1,129 +1,149 @@
 import type { Metadata } from 'next';
+import Link from 'next/link';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { getEquipo } from '@/lib/admin/negocio';
-import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
-import { Users } from 'lucide-react';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { paginarRegistro } from '../../dashboard/paginar-registro';
-import { FiltroRegistro } from '../../dashboard/registro-filtro';
-import { EstadoVacio } from '../ui/kit';
+import { getPersonas, ordenarPorJerarquia, type Persona } from '@/lib/admin/personas';
+import { bajaPersonalLikidaHabilitada } from '@/lib/auth/baja_acceso';
+import { nombreDeRol, ROTULOS_ROL } from '@/lib/auth/roles';
+import { fechaHoraMx, numero } from '@/lib/formato';
+import { BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroBusqueda, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { TablaLista, hrefConParams, type ColumnaTabla } from '../../ui-v2/datos';
+import {
+  accionCambiarRolUsuario, accionDarDeBajaUsuario, accionReactivarUsuario, accionReenviarAccesoUsuario, accionCerrarSesionesUsuario,
+  accionDarDeBajaPersonalLikida, accionReactivarPersonalLikida,
+} from '../usuarios/acciones';
+import { GestionPersona } from './gestion-persona';
 
 export const dynamic = 'force-dynamic';
 
-const ORDEN_ROL: RolAppUser[] = ['superadmin', 'vendedor', 'flota_admin', 'encargado', 'contador'];
+type Params = Record<string, string | string[] | undefined>;
+const uno = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
+const ESTADOS = [
+  { valor: 'todas', rotulo: 'Todas' }, { valor: 'activa', rotulo: 'Activas' }, { valor: 'baja', rotulo: 'De baja' }, { valor: 'sin_acceso', rotulo: 'Sin cuenta de acceso' },
+] as const;
+const ROTULO_ESTADO = { activa: 'Activa', baja: 'De baja', sin_acceso: 'Sin cuenta de acceso' } as const;
+const TONO_ESTADO = { activa: 'ok', baja: 'muted', sin_acceso: 'bad' } as const;
 
-function InsigniaRol({ rol }: { rol: string }) {
-  const label = ROL_LABEL[rol as RolAppUser] ?? rol;
-  return (
-    <span className="text-xs font-medium px-2 py-0.5 rounded-full inline-block"
-      style={{ background: 'var(--canvas)', border: '1px solid var(--line2)', color: 'var(--ink)' }}>
-      {label}
-    </span>
-  );
+/** Búsqueda por nombre, correo, rol o flota (sin acentos ni mayúsculas). */
+function coincide(p: Persona, q: string): boolean {
+  if (!q) return true;
+  const plano = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return plano([p.nombre, p.email, p.rol, nombreDeRol(p.rol), p.tenantNombre].filter(Boolean).join(' ')).includes(plano(q));
 }
 
 /**
- * Equipo / RBAC — roster completo de `app_user` (`getEquipo`), datos 100%
- * reales. Los 5 roles vienen del dominio real de la base (RolAppUser), no
- * de una lista inventada. Se ordena por rol siguiendo la jerarquía
- * operativa del negocio (los de Likida primero: superadmin → vendedor;
- * luego la flota: dueño → encargado → contador), no alfabético.
- *
- * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
- * (--g1); el subtítulo que vivía en el header viejo ahora abre la tarjeta.
+ * Equipo › Personas — TODAS las personas con acceso (personal de Likida y de cada flota): rol, flota, estado (activa, de baja o sin
+ * cuenta de acceso), último acceso y las acciones de gestión con confirmación. Cruza flotas a propósito. Cada lectura cae por su lado:
+ * si no se pudo leer el acceso, el último acceso dice «sin dato» y nunca «nunca entró».
  */
-export default async function EquipoPage({
-  searchParams,
-}: {
-  /** FE-12: `?q=` busca por nombre/correo/flota y `?p=` pagina. El roster
-   *  cruza TODOS los tenants: a 50 flotas con su dueño, su contador y su
-   *  encargado, la tabla se vuelve una lista por la que nadie puede navegar. */
-  searchParams: Promise<{ q?: string; p?: string }>;
-}) {
+export default async function EquipoPage({ searchParams }: { searchParams?: Promise<Params> }) {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
-  await requireSuperadmin();
-  const [equipo, sp] = await Promise.all([getEquipo(), searchParams]);
-  const ordenados = [...equipo].sort((a, b) => {
-    const ia = ORDEN_ROL.indexOf(a.rol as RolAppUser);
-    const ib = ORDEN_ROL.indexOf(b.rol as RolAppUser);
-    return (ia === -1 ? ORDEN_ROL.length : ia) - (ib === -1 ? ORDEN_ROL.length : ib);
-  });
-  const pag = paginarRegistro(
-    ordenados,
-    (u) => [u.nombre, u.email, u.rol, u.tenantNombre].filter(Boolean).join(' '),
-    sp,
+  const sesion = await requireSuperadmin();
+  const sp = (await searchParams) ?? {};
+  const q = uno(sp.q).trim();
+  const estado = ESTADOS.some((e) => e.valor === uno(sp.estado)) ? uno(sp.estado) : 'todas';
+  const flotaId = uno(sp.flota);
+  const abrir = uno(sp.abrir);
+
+  const marco = (hijos: React.ReactNode) => (
+    <MarcoPagina area="Control" titulo="Equipo" apoyo="Quién puede entrar, con qué rol, desde cuándo y cuándo fue su último acceso.">{hijos}</MarcoPagina>
   );
 
-  return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Users width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Equipo"
+  let lectura: Awaited<ReturnType<typeof getPersonas>>;
+  try {
+    lectura = await getPersonas();
+  } catch {
+    return marco(<EstadoError reintentar>No se pudo leer el equipo.</EstadoError>);
+  }
+  const todas = ordenarPorJerarquia(lectura.personas);
+  const nombreFlota = flotaId ? todas.find((p) => p.tenantId === flotaId)?.tenantNombre ?? null : null;
+  const filas = todas.filter((p) => coincide(p, q)
+    && (estado === 'todas' || p.estado === estado)
+    && (!flotaId || p.tenantId === flotaId));
+  const seleccionada = abrir ? todas.find((p) => p.id === abrir) : undefined;
+
+  const quitar = (cambios: Record<string, string | null>) => hrefConParams('/admin/equipo', sp, cambios);
+  const conteo = (e: Persona['estado']) => todas.filter((p) => p.estado === e).length;
+  const nuncaEntraron = todas.filter((p) => p.nuncaEntro).length;
+
+  const columnas: ColumnaTabla<Persona>[] = [
+    {
+      id: 'persona', titulo: 'Persona', principal: true, valor: (p) => (p.nombre ?? p.email).toLowerCase(),
+      celda: (p) => <span>{p.nombre ?? '(sin nombre)'}<br /><small>{p.email}</small></span>,
+    },
+    { id: 'rol', titulo: 'Rol', valor: (p) => p.rol, celda: (p) => nombreDeRol(p.rol) },
+    { id: 'flota', titulo: 'Flota', valor: (p) => p.tenantNombre ?? '', celda: (p) => p.tenantNombre ?? (p.esLikida ? 'Likida' : '—') },
+    { id: 'estado', titulo: 'Estado', valor: (p) => p.estado, celda: (p) => <StatusChip tono={TONO_ESTADO[p.estado]}>{ROTULO_ESTADO[p.estado]}</StatusChip> },
+    {
+      id: 'acceso', titulo: 'Último acceso', corta: true, valor: (p) => p.ultimoAcceso ?? '',
+      celda: (p) => !lectura.accesoLegible ? 'Sin dato' : p.sinCuentaAuth ? '—' : p.nuncaEntro ? 'Nunca entró' : p.ultimoAcceso ? fechaHoraMx(p.ultimoAcceso) : '—',
+    },
+    {
+      id: 'acciones', titulo: 'Acciones', tituloOculto: true, alinear: 'der',
+      celda: (p) => <BotonEnlace href={quitar({ abrir: p.id })} tamano="sm" variante="secondary">Gestionar</BotonEnlace>,
+    },
+  ];
+
+  return marco(
+    <>
+      <TiraCifras etiqueta="Resumen del equipo">
+        <Cifra etiqueta="Personas con cuenta" valor={todas.length} formato="entero" />
+        <Cifra etiqueta="Activas" valor={conteo('activa')} formato="entero" />
+        <Cifra etiqueta="De baja" valor={conteo('baja')} formato="entero" />
+        <Cifra
+          etiqueta="Nunca han entrado" valor={lectura.accesoLegible ? nuncaEntraron : null} formato="entero"
+          estado={lectura.accesoLegible ? 'ok' : 'error'} mensaje="No se pudo leer el último acceso."
+          nota={lectura.accesoLegible ? 'Se les dio de alta, pero no han iniciado sesión' : undefined} tono={lectura.accesoLegible && nuncaEntraron > 0 ? 'warn' : undefined}
         />
+      </TiraCifras>
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <div className="card overflow-hidden">
-            <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-3">
-              <TituloSeccion>Cuentas dadas de alta — {ordenados.length}</TituloSeccion>
-              <span className="text-xs shrink-0" style={{ color: 'var(--muted)' }}>Roster real de cuentas y roles (RBAC)</span>
-            </div>
+      {seleccionada && (
+        <GestionPersona
+          p={seleccionada} yo={sesion.userId} bajaLikidaHabilitada={bajaPersonalLikidaHabilitada()}
+          acciones={{
+            cambiarRol: accionCambiarRolUsuario, darDeBaja: accionDarDeBajaUsuario, reactivar: accionReactivarUsuario,
+            reenviarAcceso: accionReenviarAccesoUsuario, cerrarSesiones: accionCerrarSesionesUsuario,
+            darDeBajaLikida: accionDarDeBajaPersonalLikida, reactivarLikida: accionReactivarPersonalLikida,
+          }}
+        />
+      )}
+      {abrir && !seleccionada && <Tarjeta titulo="Persona no encontrada" estado="vacio" mensaje="Esa cuenta ya no existe" detalle="Vuelve a la lista y elige otra." />}
 
-            {ordenados.length > 0 && (
-              <div className="px-4 pt-1">
-                <FiltroRegistro ruta="/admin/equipo" sufijo="" pagina={pag} sustantivo="cuentas" />
-              </div>
-            )}
+      <Tarjeta
+        titulo={`Personas${flotaId && nombreFlota ? `: ${nombreFlota}` : ''}`}
+        acciones={<BotonEnlace href="/admin/usuarios/nuevo" variante="primary" tamano="sm">Nuevo acceso</BotonEnlace>}
+        estado={todas.length === 0 ? 'vacio' : 'ok'} mensaje="Sin personas con cuenta" detalle="Da de alta a la primera desde «Nuevo acceso»."
+      >
+        <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta="Filtros del equipo" nActivos={(q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0)}
+          limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
+          <FiltroOpciones etiqueta="Estado" valor={estado} porDefecto="todas"
+            opciones={ESTADOS.map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
+          <FiltroBusqueda nombre="q" valor={q} placeholder="Nombre, correo, rol o flota" etiqueta="Buscar persona" />
+        </BarraFiltros>
+        {flotaId && (
+          <p>Solo la flota {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>Ver todas</Link></p>
+        )}
+        <TablaLista
+          etiqueta="Personas con acceso" columnas={columnas} filas={filas} idFila={(p) => p.id}
+          base="/admin/equipo" params={sp} orden="local" paginacion={{ tamano: 25 }}
+          vacio={{ titulo: 'Ninguna persona coincide', texto: 'Cambia o quita los filtros.' }}
+        />
+        {!lectura.accesoLegible && <p>No se pudo leer el último acceso de las cuentas: no se afirma quién nunca ha entrado.</p>}
+        <p>{numero(filas.length)} de {numero(todas.length)} personas.</p>
+      </Tarjeta>
 
-            {ordenados.length === 0 ? (
-              <p className="px-4 pb-4 pt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin usuarios dados de alta todavía.</p>
-            ) : (
-              <div className="overflow-x-auto mt-1">
-                <table aria-label="Usuarios del equipo" className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th scope="col" className="px-4 py-2 font-medium">Nombre</th>
-                      <th scope="col" className="px-4 py-2 font-medium">Rol</th>
-                      <th scope="col" className="px-4 py-2 font-medium">Flota</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pag.filas.map((u) => (
-                      <tr key={u.id} className="border-t transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
-                        <td className="px-4 py-2.5">
-                          <div className="font-medium">{u.nombre ?? '(sin nombre)'}</div>
-                          <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{u.email}</div>
-                        </td>
-                        <td className="px-4 py-2.5"><InsigniaRol rol={u.rol} /></td>
-                        <td className="px-4 py-2.5" style={{ color: 'var(--muted)' }}>
-                          {u.tenantNombre ?? (u.rol === 'superadmin' ? '— (superadmin, sin flota)' : '—')}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {pag.filas.length === 0 && (
-                  <p className="px-4 py-3 text-sm" style={{ color: 'var(--muted)' }}>
-                    Ninguna cuenta coincide con «{pag.q}».
-                  </p>
-                )}
-              </div>
-            )}
-
-            {/* Los 5 del dominio real (0105 metió `vendedor`) — la versión
-                anterior de este párrafo decía "los 4 roles" y omitía al
-                vendedor: un rótulo que contradice el constraint de la base. */}
-            <p className="text-xs px-4 pt-2 pb-3" style={{ color: 'var(--muted)' }}>
-              Los 5 roles reales del sistema: <strong>superadmin</strong> (Javier, ve todas las flotas), <strong>vendedor</strong> (equipo de ventas de Likida, sin flota), <strong>flota_admin</strong> (dueño/contralor de una flota), <strong>encargado</strong> (asigna viajes, no factura ni invita usuarios) y <strong>contador</strong> (lectura fiscal). El chofer ya no tiene cuenta — solo WhatsApp.
-            </p>
-          </div>
-
-          <EstadoVacio>
-            2FA, última sesión, audit log de acciones/impersonations — no se registra hoy.
-          </EstadoVacio>
-        </div>
-      </div>
-    </main>
+      <Disclosure titulo="Qué puede hacer cada rol" resumen="Catálogo de roles">
+        <ul>
+          {Object.entries(ROTULOS_ROL).filter(([rol]) => rol !== 'operador').map(([rol, r]) => (
+            <li key={rol}><strong>{r.nombre}.</strong> {r.detalle}</li>
+          ))}
+        </ul>
+        <p>
+          El chofer no tiene cuenta: habla con el bot por WhatsApp. Cada alta, cambio de rol, baja, reactivación, reenvío de acceso y cierre
+          de sesiones queda asentado en la bitácora de auditoría con quién lo hizo.
+        </p>
+      </Disclosure>
+    </>,
   );
 }
 
