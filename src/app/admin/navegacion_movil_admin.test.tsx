@@ -7,6 +7,7 @@ import NavegacionMovilAdmin, { CabeceraMovilAdmin, MENU_ADMIN, destinosBarraAdmi
 import { ProveedorRequiereAccion } from './cabecera-admin';
 import { SECCIONES } from './rutas';
 import { readFileSync } from 'node:fs';
+import { PieAdmin } from './sidebar-nav';
 
 // El admin bajo 768 px era un riel de 56 px con 25 iconos SIN etiqueta (revisión visual 10-nov). Ahora usa las piezas del dashboard.
 describe('Navegación móvil de /admin: cabecera, barra inferior y hoja «Más» del dashboard con destinos del admin', () => {
@@ -41,5 +42,13 @@ describe('Navegación móvil de /admin: cabecera, barra inferior y hoja «Más»
     const css = readFileSync(new URL('./admin-shell.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(css).not.toMatch(/width:\s*56px/);
     expect(css).toMatch(/max-width:\s*767\.98px\)\s*\{[^}]*\}[\s\S]*padding-bottom:\s*calc\(64px/);
+  });
+
+  it('«Consumo de IA» aparece UNA sola vez en el menú del admin y el pie compartido no trae un atajo duplicado', () => {
+    const entradas = SECCIONES.flatMap((s) => s.items).filter((i) => i.nombre === 'Consumo de IA');
+    expect(entradas).toHaveLength(1);
+    const pie = renderToStaticMarkup(<PieAdmin nombre="Ana" avatarUrl={null} flotas={[]} />);
+    expect(pie).not.toContain('/admin/consumo');
+    expect(pie).not.toContain('Consumo de IA');
   });
 });

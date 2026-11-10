@@ -13,8 +13,9 @@
 [data-ui="v2"] .adm-fila .rv-sb { margin-right: 0; }
 /* Sin padding SOLO para las pantallas que aún dibujan su propio lienzo; las que ya vienen en `MarcoPagina` (`.rv-marco`) conservan el
    relleno del shell. La compatibilidad se retira cuando la última pantalla migre. */
-[data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco)) { padding-top: 0; padding-left: 0; padding-right: 0; }
-@media (min-width: 768px) { [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco)) { padding-bottom: 0; } }
+/* El chat del Copiloto (`.rv-chat-pagina`) trae su propio relleno (chat.css): sin esta salvedad se lo quitábamos y «Historial» quedaba pegado al borde. */
+[data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-top: 0; padding-left: 0; padding-right: 0; }
+@media (min-width: 768px) { [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-bottom: 0; } }
 
 /* La caja de lo que solo cabe con el sidebar ancho (selector de tema, widget de uso). */
 [data-ui="v2"] .adm-solo-ancho { min-width: 0; }
@@ -33,7 +34,7 @@
   [data-ui="v2"] .adm-fila { gap: 0; }
   [data-ui="v2"] .adm-fila > aside[aria-label="Copiloto"] { display: none; }
   /* Las pantallas sin `MarcoPagina` (padding 0) conservan el aire inferior que deja libre la barra flotante (64 + área segura + 24). */
-  [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco)) { padding-bottom: calc(64px + max(10px, env(safe-area-inset-bottom)) + 24px); }
+  [data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco), :has(.rv-chat-pagina)) { padding-bottom: calc(64px + max(10px, env(safe-area-inset-bottom)) + 24px); }
 }
 
 /* ── Páginas de /admin sobre el marco compartido `main.h-full > .hairline` (paginas-dominio.css ya quita la caja gris envolvente y
