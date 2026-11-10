@@ -43,8 +43,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
 export const BASE_H1_PROPIO: Record<string, number> = {
   'app/admin/calidad-evals/page.tsx': 1,
   'app/admin/error.tsx': 1,
-  'app/admin/mapa-prospectos/[id]/detalle.tsx': 1,
-  'app/admin/mapa-prospectos/cerebro.tsx': 1,
 };
 export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};
@@ -71,8 +69,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/flotas',
   'app/admin/flotas/[id]',
   'app/admin/integraciones',
-  'app/admin/mapa-prospectos',
-  'app/admin/mapa-prospectos/[id]',
   'app/admin/mcp-clientes',
   'app/admin/model-ops',
   'app/admin/observabilidad',
@@ -94,9 +90,6 @@ export const BASE_PAGINAS_FUERA_DEL_MENU: string[] = [
 /** sin_emojis_en_producto: emoji por archivo (src/app y src/lib, sin pruebas). */
 export const BASE_EMOJIS: Record<string, number> = {
   'app/admin/calidad-evals/page.tsx': 4,
-  'app/admin/mapa-prospectos/[id]/detalle.tsx': 6,
-  'app/admin/mapa-prospectos/calles.tsx': 3,
-  'app/admin/mapa-prospectos/cerebro.tsx': 7,
   'app/admin/qa/[id]/corrida-viva.tsx': 4,
   'app/admin/qa/[id]/medicion-corrida.tsx': 11,
   'app/admin/qa/banco-verdad.tsx': 7,
