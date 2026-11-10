@@ -257,6 +257,111 @@ export interface ResultadoRunner {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// «POR QUÉ NO CORRIÓ» (auditoría admin, 10-nov-2026, hallazgo P0).
+//
+// Medido en producción: 48 de 49 agentes con runner habilitado NO corrían
+// porque la contrapresión global (`topeBandejaGlobal`) llevaba semanas
+// activa con ~100 piezas sin resolver, y el latido seguía `'ok'` — el motivo
+// solo viajaba en la respuesta HTTP del cron, que nadie lee. Aquí vive la
+// parte PURA que decide el estado del latido y deja cada salto con su causa.
+//
+// Lo que esto NO hace: no suelta ni cambia el tope. La contrapresión es un
+// freno correcto (aprobar es humano); lo que estaba mal era que el freno no
+// se viera. Vaciar la bandeja es trabajo de `lib/admin/cola-aprobacion.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type CausaSalto =
+  | 'contrapresion_bandeja'
+  | 'reloj'
+  | 'apagado'
+  | 'sin_presupuesto'
+  | 'techo_diario'
+  | 'costo_no_medido'
+  | 'pausa_por_fallos'
+  | 'lectura_fallida'
+  | 'experimental'
+  | 'sin_motor'
+  | 'otra';
+
+/** Clasifica el motivo en prosa de un salto en una causa estable (para contar
+ *  y filtrar). Pura. Un motivo ausente o desconocido es `'otra'`, nunca se
+ *  adivina una causa más amable. */
+export function causaDeSalto(motivo: string | undefined): CausaSalto {
+  const m = (motivo ?? '').toLowerCase();
+  if (!m) return 'otra';
+  if (m.includes('bandeja sin atender') || m.includes('piezas sin resolver')) return 'contrapresion_bandeja';
+  if (m.includes('reloj')) return 'reloj';
+  if (m.includes('fail closed') || m.includes('no se pudo leer')) return 'lectura_fallida';
+  if (m.includes('apagado')) return 'apagado';
+  if (m.includes('sin kill switch')) return 'apagado';
+  if (m.includes('sin presupuesto_dia_usd')) return 'sin_presupuesto';
+  if (m.includes('no medido')) return 'costo_no_medido';
+  if (m.includes('techo diario')) return 'techo_diario';
+  if (m.includes('experimental')) return 'experimental';
+  if (m.includes('sin motor despachable') || m.includes('divergen')) return 'sin_motor';
+  if (m.includes('pausa') || m.includes('fallos seguidos') || m.includes('racha')) return 'pausa_por_fallos';
+  return 'otra';
+}
+
+export interface SaltadoConCausa {
+  agente: string;
+  causa: CausaSalto;
+  motivo: string;
+}
+
+/** Los agentes que se SALTARON en la vuelta, cada uno con su causa y su motivo
+ *  (recortado a 200 caracteres: el latido es una fila, no un log). */
+export function saltadosConCausa(agentes: ReadonlyArray<AgenteDelRunner>): SaltadoConCausa[] {
+  return agentes
+    .filter((a) => a.resultado === 'saltado')
+    .map((a) => ({ agente: a.agente, causa: causaDeSalto(a.motivo), motivo: (a.motivo ?? 'sin motivo declarado').slice(0, 200) }));
+}
+
+export interface LatidoRunner {
+  estado: 'ok' | 'parcial';
+  detalle: Record<string, unknown>;
+}
+
+/**
+ * El latido de una vuelta, ya decidido. `'parcial'` si el reloj cortó (como
+ * antes) O si la contrapresión de la bandeja frenó a al menos un agente. El
+ * detalle expone el motivo de la contrapresión y la lista de saltados con su
+ * causa. Pura: la ruta solo la llama y escribe lo que devuelve.
+ */
+export function evaluarLatidoRunner(
+  r: ResultadoRunner,
+  extra: { cortesSeguidos: number },
+): LatidoRunner {
+  const despachados = r.agentes.filter((a) => a.resultado === 'corrio').length;
+  const saltados = saltadosConCausa(r.agentes);
+  const porCausa: Record<string, number> = {};
+  for (const s of saltados) porCausa[s.causa] = (porCausa[s.causa] ?? 0) + 1;
+  const frenados = saltados.filter((s) => s.causa === 'contrapresion_bandeja');
+  const cortoElReloj = r.saltadosPorReloj.length > 0 || r.cortadaPorRelojDuro === true;
+  const hayContrapresion = frenados.length > 0;
+  const detalle: Record<string, unknown> = {
+    agentes: r.agentes.length,
+    despachados,
+    saltadosPorReloj: r.saltadosPorReloj,
+    cortesSeguidos: extra.cortesSeguidos,
+    // Solo si hubo saltos: una vuelta limpia deja el mismo detalle de siempre.
+    ...(saltados.length > 0 ? { saltados, saltadosPorCausa: porCausa } : {}),
+  };
+  if (hayContrapresion) {
+    detalle.contrapresion = {
+      agentesFrenados: frenados.length,
+      motivo: frenados[0].motivo,
+      topeBandejaGlobal: topeBandejaGlobal(),
+      diasVencimientoPieza: diasVencimientoPieza(),
+    };
+    // `motivo` al primer nivel: es la llave que `motivoDeSalto` (salud.ts) ya
+    // sabe leer para pintar el «por qué» en /admin/crons.
+    detalle.motivo = `contrapresión de la bandeja: ${frenados.length} de ${r.agentes.length} agentes no corrieron — ${frenados[0].motivo}`;
+  }
+  return { estado: cortoElReloj || hayContrapresion ? 'parcial' : 'ok', detalle };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EL PARTE EN VIVO DE LA VUELTA (c7-1, 28-ago-2026).
 //
 // `correrRunner` devuelve su resultado AL FINAL. Eso basta cuando la vuelta

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import {
   correrRunner, MARGEN_RELOJ_MS,
-  conRelojDuro, nuevoAvanceRunner, cerrarPorRelojDuro,
+  conRelojDuro, nuevoAvanceRunner, cerrarPorRelojDuro, evaluarLatidoRunner,
 } from '@/lib/likida/agentes/runner';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
@@ -122,12 +122,12 @@ export async function GET(req: Request) {
     // `parcial` cuando el reloj cortó de cualquiera de las dos formas. Una
     // pasada cortada que late es infinitamente mejor que una pasada completa
     // que muere muda.
-    await registrarLatido('runner', cortoElReloj ? 'parcial' : 'ok', {
-      agentes: r.agentes.length,
-      despachados,
-      saltadosPorReloj: r.saltadosPorReloj,
-      cortesSeguidos,
-    });
+    // Desde el 10-nov-2026 el estado sale de `evaluarLatidoRunner`: además del
+    // reloj, la CONTRAPRESIÓN de la bandeja vuelve el latido `'parcial'` y
+    // deja el motivo y la causa de cada salto en el detalle (antes: 48 de 49
+    // agentes sin correr y latido `'ok'`).
+    const latido = evaluarLatidoRunner(r, { cortesSeguidos });
+    await registrarLatido('runner', latido.estado, latido.detalle);
 
     // ── EL CORTE QUE SE REPITE, ya con el latido a salvo ────────────────────
     if (cortesSeguidos >= 3) {
