@@ -66,22 +66,32 @@ export default async function TrazaCorridaPage({
   if (traza === null) notFound();
 
   const volver = <BotonEnlace href="/admin/corridas" variante="ghost" tamano="sm">Volver a Corridas</BotonEnlace>;
+  const c = traza?.corrida;
+  const chip = c ? (CHIP[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }) : null;
+  const flota = c ? (c.tenantNombre ?? (c.tenantId === null ? 'Likida (negocio)' : '—')) : '—';
 
-  if (traza === undefined) {
-    return (
-      <MarcoPagina titulo="Traza de la corrida" acciones={volver}>
-        <EstadoError reintentar>No se pudo leer la corrida. La consulta falló: no es que no exista, es que no se pudo mirar.</EstadoError>
-      </MarcoPagina>
-    );
-  }
-
-  const { corrida: c, costo, costoNoDisponible } = traza;
-  const chip = CHIP[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado };
-  const flota = c.tenantNombre ?? (c.tenantId === null ? 'Likida (negocio)' : '—');
-  const resumen = c.resumen ? Object.entries(c.resumen).map(([k, v]) => [etiquetaContadorVigia(k), valorLegible(v)] as const).filter((p): p is readonly [string, string] => p[1] !== null) : [];
-
+  // UN solo marco para los dos casos (lectura caída o traza): cambian el título y el cuerpo, el marco no se duplica.
   return (
-    <MarcoPagina titulo={`Traza: ${etiquetaInterruptor(`agente:${c.agente}`)}`} apoyo={`${flota} · ${fechaHoraMx(c.inicio)}`} acciones={<><StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip>{volver}</>}>
+    <MarcoPagina
+      titulo={c ? `Traza: ${etiquetaInterruptor(`agente:${c.agente}`)}` : 'Traza de la corrida'}
+      apoyo={c ? `${flota} · ${fechaHoraMx(c.inicio)}` : undefined}
+      acciones={<>{chip ? <StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip> : null}{volver}</>}
+    >
+      {traza === undefined ? (
+        <EstadoError reintentar>No se pudo leer la corrida. La consulta falló: no es que no exista, es que no se pudo mirar.</EstadoError>
+      ) : (
+        <CuerpoTraza traza={traza as TrazaCorrida} flota={flota} />
+      )}
+    </MarcoPagina>
+  );
+}
+
+/** Todo lo que se sabe de una corrida. */
+function CuerpoTraza({ traza, flota }: { traza: TrazaCorrida; flota: string }) {
+  const { corrida: c, costo, costoNoDisponible } = traza;
+  const resumen = c.resumen ? Object.entries(c.resumen).map(([k, v]) => [etiquetaContadorVigia(k), valorLegible(v)] as const).filter((p): p is readonly [string, string] => p[1] !== null) : [];
+  return (
+    <>
       <TiraCifras etiqueta="La corrida en cifras" items={[
         // NULL ≠ 0: una corrida que no se mide en tareas dice «—», no 0/0.
         { etiqueta: 'Tareas', valor: c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : null, estado: c.tareasHechas !== null && c.tareasTotal !== null ? 'ok' : 'vacio', mensaje: 'Esta corrida no mide tareas.' },
@@ -141,7 +151,7 @@ export default async function TrazaCorridaPage({
         </div>
         <p className="adm-sis-nota">Abrir el panel de una flota la muestra como la ve ella y deja el acceso firmado en la bitácora. Las conversaciones cruzan todas las flotas: la columna de flota dice cuáles son de {flota}.</p>
       </Tarjeta>
-    </MarcoPagina>
+    </>
   );
 }
 
