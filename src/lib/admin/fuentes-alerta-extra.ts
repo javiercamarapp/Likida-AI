@@ -22,6 +22,7 @@
 // convierte en «todo bien».
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { alertasIaDeDetalle } from './alertas-ia';
 import { esApagadoPorInterruptor, esHuecoDeConfiguracion, type EstadoLatido } from './salud';
 
 export interface LatidoParaAlerta {
@@ -45,7 +46,7 @@ export interface EntradaAlertasExtra {
   sonda?: { estado: 'ok' | 'llave_invalida' | 'sin_saldo' | 'sin_llave' | 'inalcanzable' } | null;
 }
 
-export type IdAlertaExtra = 'cron_sin_latido' | 'cron_estado_no_ok' | 'crons_ilegibles' | 'ia_credito_agotado';
+export type IdAlertaExtra = 'cron_sin_latido' | 'cron_estado_no_ok' | 'crons_ilegibles' | 'ia_credito_agotado' | 'ia_sin_registro' | 'ia_respaldo_alto';
 
 export interface AlertaExtra {
   id: IdAlertaExtra;
@@ -117,6 +118,21 @@ export function alertasExtra(e: EntradaAlertasExtra): AlertaExtra[] {
     out.push({
       id: 'ia_credito_agotado', tipo: 'atencion', href: HREF_SALUD, items: ['openrouter'],
       texto: 'Crédito de IA agotado (402): el proveedor rechaza toda llamada y la IA está caída. Recarga el saldo en OpenRouter.',
+    });
+  }
+
+  // F16: lo que la guardia evaluó de la IA en su última pasada (solo existe con ALERTAS_IA_GUARDIA=encendido).
+  const ia = e.latidos ? alertasIaDeDetalle(e.latidos.guardia?.detalle) : null;
+  if (ia?.sinRegistro.estado === 'alerta') {
+    out.push({
+      id: 'ia_sin_registro', tipo: 'atencion', href: HREF_SALUD, items: ['llm_costo'],
+      texto: `Sin una sola llamada de IA registrada en las últimas ${ia.sinRegistro.horas} h con ${plural(ia.sinRegistro.viajesAbiertos ?? 0, 'viaje abierto', 'viajes abiertos')}: la IA puede estar caída o el registro de costo roto.`,
+    });
+  }
+  if (ia?.respaldo.estado === 'alerta') {
+    out.push({
+      id: 'ia_respaldo_alto', tipo: 'atencion', href: HREF_SALUD, items: Object.keys(ia.respaldo.porFase),
+      texto: `${Math.round((ia.respaldo.tasa ?? 0) * 1000) / 10} % de las ${ia.respaldo.muestra} llamadas de IA de la última hora corrieron en el modelo de respaldo: el primario puede estar fallando.`,
     });
   }
   return out;
