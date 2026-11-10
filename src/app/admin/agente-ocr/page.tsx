@@ -85,7 +85,7 @@ export default async function AgenteOcrPage() {
       </FilaTarjetas>
 
       <Tarjeta titulo="Facturas procesadas, últimos 7 días" estado={r.facturasPorDia.some((d) => d.n > 0) ? 'ok' : 'vacio'} mensaje="Sin facturas en 7 días" detalle="Aparecen cuando una flota manda comprobantes por WhatsApp.">
-        <Columnas etiqueta="Facturas procesadas por día" datos={r.facturasPorDia.map((d) => ({ etiqueta: d.dia, valor: d.n }))} formato="entero" />
+        <Columnas etiqueta="Facturas procesadas por día" datos={r.facturasPorDia.map((d) => ({ etiqueta: d.dia, valor: d.n }))} formato="numero" />
       </Tarjeta>
 
       {!desgloseSeparable ? <Aviso tono="info">El costo por modelo de arriba cubre todas las fases: con los datos de hoy no se puede aislar solo el de OCR.</Aviso> : null}
