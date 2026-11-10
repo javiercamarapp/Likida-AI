@@ -126,10 +126,11 @@
   /* Acento de las mini barras de lista de cajón (Rovaq: violeta 7B5CD6 del gráfico 7); neutro: gris oscuro. */
   --barra-acento: var(--ink2);
   --barra-fondo: var(--ui-soft);
-  /* Tooltip corto: pastilla carbón (captura 1 de Rovaq). Para volver a la tarjeta blanca de Rovaq: --tip-bg: var(--surface); --tip-fg: var(--ink); --tip-borde: var(--line). */
-  --tip-bg: #2a2a2f;
-  --tip-fg: #f4f4f5;
-  --tip-borde: transparent;
+  /* Tooltip corto: TARJETA blanca como Rovaq (identidad 10-nov-2026, decisión 7 del dueño; antes pastilla carbón #2a2a2f). Un solo lugar:
+     claro y oscuro heredan de la superficie, el texto y la línea. */
+  --tip-bg: var(--surface);
+  --tip-fg: var(--ink);
+  --tip-borde: var(--line);
 
   /* Bordes y foco de los controles (un valor, un lugar). Botones, chips y segmentado usan el borde claro de Rovaq; los CAMPOS conservan
      --input porque su borde es la única señal del control (contraste). */
@@ -149,9 +150,11 @@
   --nav-activo-peso: 500;
   --nav-activo-barra: rgb(232, 36, 28);
   /* Sombra suave del marco (sidebar flotante), como Vexa; las tarjetas del flujo siguen sin sombra. */
-  --sh-marco: 0 1px 2px #0e0e100a, 0 8px 24px -16px #0e0e1029;
+  --sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;
 
   --ui-canvas: var(--bg);
+  /* Fondo HUNDIDO del contenido (Rovaq `--ui-sunken`): la tarjeta blanca flota sobre él dentro del marco (`.rv-col`). */
+  --ui-sunken: #f1f1f2;
   --ui-surface: var(--surface);
   --ui-soft: var(--canvas);
   --ui-elevated: #ffffff;
@@ -167,8 +170,8 @@
   --carga-fondo: #ffffff;
   /* Cabecera de tabla: tinte NEUTRO sólido (gris muy suave en claro; el oscuro se redefine abajo) con texto tinta. Antes petróleo (#eef6f9). */
   --tint-info: #f4f4f5;
-  --tabla-cab-bg: var(--tint-info);
-  --tabla-cab-ink: var(--info);
+  --tabla-cab-bg: var(--ui-soft);
+  --tabla-cab-ink: var(--muted);
   /* Líneas de aviso = tono al 24–26 % (R01 de Vexa) */
   --aviso-linea-info: color-mix(in srgb, var(--info) 24%, transparent);
   --aviso-linea-warn: color-mix(in srgb, var(--warn) 26%, transparent);
@@ -246,8 +249,8 @@
   --fs-kpi-movil: clamp(18px, 5.2vw, 21px);
 
   /* Tipografía de controles (todo dentro de la escala cerrada 11/12/13/14/15/16/18/20/26) */
-  --t-ctl: 600 13px/1.25 var(--font-sans-ui, inherit);
-  --t-ctl-sm: 600 12px/1.3 var(--font-sans-ui, inherit);
+  --t-ctl: 500 13px/1.3 var(--font-sans-ui, inherit);
+  --t-ctl-sm: 500 12px/1.3 var(--font-sans-ui, inherit);
   --t-chip: 500 12px/1.4 var(--font-sans-ui, inherit);
   --t-etq: 500 12px/1.4 var(--font-sans-ui, inherit);
   --t-grupo: 500 11px/1.4 var(--font-sans-ui, inherit);
@@ -337,7 +340,7 @@
   --faint: #9a9aa2;
 
   --line: #26262b;
-  --line2: #48484a;
+  --line2: #34343a;
   --input: #8b8b93;
 
   --marca: #f4f4f5;
@@ -386,9 +389,10 @@
   --ink-8: #f4f4f5;
 
   --ui-elevated: #1f1f23;
+  --ui-sunken: #0e0e10;
   --carga-fondo: #0e0e10;
   --tint-info: #1b1b1f;
-  --tabla-cab-bg: var(--tint-info);
+  --tabla-cab-bg: var(--ui-soft);
 
   --n-950: #0e0e10;
   --n-900: #17171a;
@@ -431,12 +435,9 @@
   --scrim: #000a;
   --tip: #f4f4f5;
   --tip-ink: #0e0e10;
-  /* Tooltip corto en oscuro: pastilla un tono más clara que el fondo. Los demás tokens de estado activo heredan por var(). */
-  --tip-bg: #3a3a40;
-  --tip-fg: #f4f4f5;
 
   --shadow-pop: 0 12px 32px -8px #000c, 0 2px 6px #0006;
-  --sh-marco: 0 1px 2px #0006, 0 8px 24px -16px #000c;
+  --sh-marco: none;
 }
 
 /* ── Lienzo fuera del alcance (riesgo del spike: `body` queda fuera del div del chrome) ──
