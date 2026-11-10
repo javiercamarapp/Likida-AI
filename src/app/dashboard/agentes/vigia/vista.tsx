@@ -37,6 +37,13 @@ export async function EnlaceAvisos({ sufijo, pendientes }: { sufijo: string; pen
   );
 }
 
+/** Solo si hay avisos de viaje esperando a una persona; sin número o en cero no pinta nada (las pestañas ya llevan a Avisos). */
+async function AvisosPorRevisar({ sufijo, pendientes }: { sufijo: string; pendientes?: Promise<number | null> }) {
+  const n = pendientes ? await pendientes.catch(() => null) : null;
+  if (typeof n !== 'number' || n <= 0) return null;
+  return <div className="rv-vg__herr"><EnlaceAvisos sufijo={sufijo} pendientes={Promise.resolve(n)} /></div>;
+}
+
 /** Minutos enteros que lleva esperando una conversación (0 si nadie espera). */
 export function minutosDeEspera(sinRespuestaDesde: string | null, ahoraMs: number): number {
   if (!sinRespuestaDesde) return 0;
@@ -114,15 +121,8 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
 }) {
   return (
     <MarcoPagina titulo="Servicio al cliente" apoyo="Atiende a los clientes de tu flota: clasifica, responde con datos reales y escala a una persona lo que lo requiere.">
-      <nav aria-label="Herramientas del agente" className="rv-vg__herr">
-        <Link title="Grupos críticos e histórico (FAQs y tendencias)" href={`/dashboard/agentes/vigia/historial${sufijo}`} className={ENLACE}>Histórico</Link>
-        <Link title="Conversaciones sin atender (de los chats exportados)" href={`/dashboard/agentes/vigia/sin-atender${sufijo}`} className={ENLACE}>Sin atender</Link>
-        <Link title="Programa de despacho (subir el archivo del día)" href={`/dashboard/agentes/vigia/programa${sufijo}`} className={ENLACE}>Programa de despacho</Link>
-        <Link title="Estatus de importación (derivado del programa)" href={`/dashboard/agentes/vigia/importacion${sufijo}`} className={ENLACE}>Importación</Link>
-        <Suspense fallback={<Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>Avisos de viaje</Link>}>
-          <EnlaceAvisos sufijo={sufijo} pendientes={avisosPendientes} />
-        </Suspense>
-      </nav>
+      {/* La navegación entre las secciones del agente son las pestañas del marco; aquí solo queda el aviso con número cuando algo espera. */}
+      <Suspense fallback={null}><AvisosPorRevisar sufijo={sufijo} pendientes={avisosPendientes} /></Suspense>
       <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqCifrasV2 n={4} />}>
         <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
       </Bloque>
