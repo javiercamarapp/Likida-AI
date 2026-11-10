@@ -39,6 +39,8 @@ import { guardarEstadoGuia, leerSenalesDeLaGuia, registrarEventosGuia } from '@/
 import { invitacionEncendida, leerEstado } from '@/lib/likida/guia/repo';
 import type { EstadoGuia } from '@/lib/likida/guia/tipos';
 import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progreso';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
 
 // Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
 export const metadata: Metadata = { title: { default: 'Likida — Liquidación de viajes', template: '%s · Likida' } };
@@ -148,7 +150,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
   );
 
   // El motor del recorrido envuelve TODO el chrome (no solo la página): el menú Guía vive en la barra superior y necesita su contexto.
-  return onb && onb.principal ? (
+  // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es. El layout RAÍZ no lo lee (públicas estáticas).
+  const idiomaDatos = await datosParaProveedor(['shell']);
+  const arbol = onb && onb.principal ? (
     <TourProvider
       recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}
       soloLectura={sesion.rol === 'superadmin'} rutasPermitidas={rutasDelRecorrido}
@@ -158,4 +162,5 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {marco}
     </TourProvider>
   ) : marco;
+  return <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>{arbol}</IdiomaProvider>;
 }
