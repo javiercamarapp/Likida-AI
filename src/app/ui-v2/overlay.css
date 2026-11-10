@@ -106,7 +106,8 @@ html[data-overlay-abierto] { overflow: hidden; }
 .rv-pop--adjuntar .rv-menu__item > span:not(.rv-menu__icono):not(.rv-menu__apoyo) { flex: none; }
 .rv-menu__apoyo { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 400; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) {
-  .rv-pop { animation: rv-ov-fondo 140ms var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; }
+  /* Entrada como la de Rovaq (`.popover-panel`): escala .97 + opacidad en 140 ms, nacida en la esquina superior izquierda. */
+  .rv-pop { animation: rv-ov-pop 140ms var(--ui-ease, cubic-bezier(.22, 1, .36, 1)) both; transform-origin: top left; }
 }
 
 /* ── Tooltip corto (controles finos §2.6): pastilla de tokens (--tip-bg/--tip-fg/--tip-borde; la tarjeta blanca de Rovaq son 3 variables), radio --r-tip 8, padding 6x10, 12/500/1.4, ancho por contenido hasta 280. Siempre en el DOM

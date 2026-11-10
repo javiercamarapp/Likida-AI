@@ -16,6 +16,7 @@ import DashboardChromeV2 from './shell/chrome-v2';
 import '../ui-v2/tokens.css';
 import '../ui-v2/fonts.css';
 import '../ui-v2/shell.css';
+import '../ui-v2/pie-sidebar.css';
 import '../ui-v2/carga.css';
 // Piezas del carril B (botones, chips, drawers, KPI, gráficas, recorrido) y páginas del carril C. Nadie las importaba todavía.
 import '../ui-v2/componentes.css';
@@ -87,6 +88,15 @@ export default async function DashboardLayout({ children }: { children: React.Re
     }
   }
 
+  // Nombre de la flota para el selector «Organización» del pie (solo v2). `null` = no se pudo leer: el pie dice «Sin dato».
+  let organizacion: { id: string; nombre: string } | null | undefined;
+  if (ui === 'v2' && tenantDelMenu) {
+    try {
+      const { data, error } = await supabaseAdmin().from('tenant').select('nombre').eq('id', tenantDelMenu).maybeSingle();
+      organizacion = !error && data?.nombre ? { id: tenantDelMenu, nombre: String(data.nombre) } : null;
+    } catch { organizacion = null; }
+  }
+
   async function cerrarSesion() {
     'use server';
     const sb = await supabaseServer();
@@ -131,6 +141,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     <Chrome
       nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
       {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
+      {...(v2 && organizacion !== undefined ? { organizacion } : {})}
     >
       {contenido}
     </Chrome>

@@ -26,7 +26,7 @@ import PaletaDashboard from './paleta';
  * hasta que el contenido está listo (ver `capa-carga.tsx` y `ui-v2/carga.css`). Sin `Fondo` (el shader): v2 es plano y el documento recibe el fondo por `html:root:has([data-ui="v2"])` (tokens.css).
  */
 export default function DashboardChromeV2({
-  nombre, rol, cerrarSesion, usoIa, perfil, insignias, children,
+  nombre, rol, cerrarSesion, usoIa, perfil, insignias, organizacion, children,
 }: {
   nombre: string | null;
   rol: string;
@@ -38,6 +38,8 @@ export default function DashboardChromeV2({
   perfil?: PerfilTenant | null;
   /** Insignias por href del menú (p. ej. el avance de «Puesta en marcha»); las llena quien conoce el avance. */
   insignias?: Record<string, string>;
+  /** La flota que se ve (nombre leído en el servidor; `null` = no se pudo leer; ausente = sin dato todavía). */
+  organizacion?: { id: string; nombre: string } | null;
   children: React.ReactNode;
 }) {
   // `provisionar.ts` toca la base: la etiqueta del rol se resuelve AQUÍ (servidor) y baja como texto a los componentes cliente.
@@ -50,9 +52,9 @@ export default function DashboardChromeV2({
         <PaletaDashboard rol={rol} perfil={perfil} />
         <CabeceraMovil rol={rol} perfil={perfil} />
         <div className={CLASES_V2.fila}>
-          <SidebarV2 rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
+          <SidebarV2 rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} />
           <div className={CLASES_V2.columna}>
-            <CabeceraEscritorio rol={rol} perfil={perfil} insignias={insignias} />
+            <CabeceraEscritorio rol={rol} perfil={perfil} />
             {/* `tabIndex={-1}`: el enlace «Saltar al contenido» mueve el foco AQUÍ. */}
             <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
               <AvisoRol rolReal={rol} />
@@ -61,7 +63,7 @@ export default function DashboardChromeV2({
             </div>
           </div>
         </div>
-        <NavegacionMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} />
+        <NavegacionMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} />
       </div>
     </ProveedorNotificaciones>
   );
