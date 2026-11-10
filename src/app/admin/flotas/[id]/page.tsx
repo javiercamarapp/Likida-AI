@@ -11,7 +11,10 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { EstadoError } from '../../ui/kit';
 import type { ResultadoAccion } from '../../ui/forma';
 import { etiquetaInterruptor } from '../../observabilidad/etiquetas';
+import { getPlanes } from '@/lib/saas/suscripcion';
+import { accionGestionarPlan } from '../acciones-plan';
 import { Ficha360 } from './ficha';
+import { GestionPlan } from './gestion-plan';
 
 export const dynamic = 'force-dynamic';
 
@@ -96,7 +99,16 @@ export default async function PaginaFicha({ params }: { params: Promise<{ id: st
   // `leerAgenteChoferHabilitado` nunca lanza y falla cerrado: «compuerta_ilegible» se dice como tal, no como «apagado».
   const agenteChofer = await leerAgenteChoferHabilitado(id);
 
-  return <Ficha360 f={ficha} interruptoresPipeline={interruptoresPipeline} accionInterruptorPipeline={accionInterruptorPipeline} agenteChofer={agenteChofer} accionAgenteChofer={accionAgenteChofer} />;
+  // Los planes, resiliente por su lado: `null` = no se pudieron leer (se dice), nunca una lista vacía que parezca «no hay planes».
+  const planes = await getPlanes().then((l) => l.map((p) => ({ clave: p.clave, nombre: p.nombre }))).catch(() => null);
+
+  return (
+    <Ficha360
+      f={ficha} interruptoresPipeline={interruptoresPipeline} accionInterruptorPipeline={accionInterruptorPipeline}
+      agenteChofer={agenteChofer} accionAgenteChofer={accionAgenteChofer}
+      gestionPlan={<GestionPlan tenantId={id} planes={planes} accion={accionGestionarPlan} />}
+    />
+  );
 }
 
 export const metadata: Metadata = { title: 'Flota' };

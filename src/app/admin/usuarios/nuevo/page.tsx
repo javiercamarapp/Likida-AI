@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
 import { CampoSelect, CampoTexto } from '../../../ui-v2/componentes/campos';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { provisionarUsuario, type RolAppUser } from '@/lib/auth/provisionar';
-import { descifrarErrorProvision } from '@/lib/auth/invitar';
+import type { RolAppUser } from '@/lib/auth/provisionar';
+import { rolAsignableExigeStepUp } from '@/lib/auth/stepup';
+import { altaDeUsuarioDesdeAdmin, fraseDeAlta } from '@/lib/auth/gestion_admin';
+import { pasoExtraSuperadmin } from '@/lib/admin/acciones_riesgo';
+import { appUrl } from '@/lib/env';
 import { ROTULOS_ROL } from '@/lib/auth/roles';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { getResumenNegocio } from '@/lib/admin/negocio';
@@ -53,7 +56,7 @@ export default async function NuevoUsuario() {
 
   async function crear(_previo: ResultadoAccion, formData: FormData): Promise<ResultadoAccion> {
     'use server';
-    await requireSuperadmin();
+    const sesion = await requireSuperadmin();
     const tenantId = String(formData.get('tenantId') ?? '');
     const email = String(formData.get('email') ?? '').trim();
     const nombre = String(formData.get('nombre') ?? '').trim() || undefined;
@@ -72,15 +75,21 @@ export default async function NuevoUsuario() {
       return { error: 'Elige uno de los tres roles de la lista. Superadmin y vendedor no se dan de alta desde aquí.' };
     }
     const telefono = String(formData.get('telefono') ?? '').trim() || undefined;
-    try {
-      await provisionarUsuario(tenantId, email, nombre, rol as RolAppUser, telefono);
-    } catch (e) {
-      // Los dos errores de captura (correo ya registrado, WhatsApp repetido)
-      // se traducen por patrón para salir verbatim; el resto sigue el camino
-      // normal (log + mensaje genérico honesto).
-      return { error: mensajeParaPantalla(descifrarErrorProvision(e) ?? e, 'dar de alta al usuario') };
+    // Repartir acceso de dueño o contador es repartir acceso a dinero: mismo segundo factor reciente que el panel del dueño (apagado hasta
+    // encender LIKIDA_TOTP_ESCALONADO). Va ANTES de crear nada.
+    if (rolAsignableExigeStepUp(rol)) {
+      const pasoMfa = await pasoExtraSuperadmin('cambio_rol', sesion, tenantId);
+      if (pasoMfa) return { error: pasoMfa };
     }
-    return { ok: `${email} quedó dado de alta. Entra tecleando su correo en el panel (enlace mágico).` };
+    try {
+      // Alta + asiento `usuario.provisionado` + correo de acceso por Resend (lib/auth/gestion_admin.ts). Los dos errores de captura
+      // (correo ya registrado, WhatsApp repetido) salen verbatim; el resto sigue el camino normal (log + mensaje genérico honesto).
+      const r = await altaDeUsuarioDesdeAdmin({ tenantId, email, nombre, rol, telefono, actor: sesion });
+      const f = fraseDeAlta(email, r, appUrl());
+      return f.ok ? { ok: f.texto } : { error: f.texto };
+    } catch (e) {
+      return { error: mensajeParaPantalla(e, 'dar de alta al usuario') };
+    }
   }
 
   return (
@@ -109,7 +118,7 @@ export default async function NuevoUsuario() {
                 ayuda="Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat)." />
             </FormaConAviso>
             <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-              Crea la cuenta de Auth y la fila en app_user (mismo camino que el script manual). El primer login (magic link) confirma la cuenta.
+              Crea la cuenta de Auth y la fila en app_user, deja el asiento en la bitácora y le manda el correo de acceso (Resend). El primer login (enlace mágico) confirma la cuenta. Si el canal de correo no está configurado, la pantalla lo dice y la cuenta queda creada: usa «Reenviar acceso» después.
             </p>
           </div>
         </div>

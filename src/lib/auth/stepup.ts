@@ -29,9 +29,9 @@ import { estadoMfa, type VeredictoMfaSuperadmin } from './mfa';
 // FALLAR CERRADO: si no se pudo preguntar (Supabase Auth caído), no pasa.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export type AccionRiesgo = 'emitir_cfdi' | 'llave_api' | 'cambio_rol' | 'exporte_dinero' | 'perfil_fiscal';
+export type AccionRiesgo = 'emitir_cfdi' | 'llave_api' | 'cambio_rol' | 'exporte_dinero' | 'perfil_fiscal' | 'dinero_saas';
 
-export const ACCIONES_RIESGO: readonly AccionRiesgo[] = ['emitir_cfdi', 'llave_api', 'cambio_rol', 'exporte_dinero', 'perfil_fiscal'];
+export const ACCIONES_RIESGO: readonly AccionRiesgo[] = ['emitir_cfdi', 'llave_api', 'cambio_rol', 'exporte_dinero', 'perfil_fiscal', 'dinero_saas'];
 
 /** Roles a los que alcanza el escalonado. El superadmin tiene su propia puerta (`mfaSuperadminObligatorio`). */
 const ROLES_ESCALONADOS: ReadonlySet<string> = new Set(['flota_admin', 'contador']);
@@ -118,6 +118,8 @@ export const MSG_STEP_UP_ESCALONADO: Record<AccionRiesgo, string> = {
   cambio_rol: 'Cambiar roles del equipo exige tu segundo factor.',
   exporte_dinero: 'Descargar exportes de dinero exige tu segundo factor.',
   perfil_fiscal: 'Cambiar el RFC o pasar el timbrado a producción exige tu segundo factor.',
+  // Lo que Likida le cobra a una flota (precio del plan, mensualidad, conciliación, alta/cambio/pausa/baja de suscripción): /admin.
+  dinero_saas: 'Cambiar precios, emitir cobros, conciliar pagos o mover la suscripción de una flota exige tu segundo factor.',
 };
 
 const COLA: Record<Exclude<VeredictoMfaSuperadmin, 'ok'>, string> = {

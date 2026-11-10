@@ -285,6 +285,16 @@ export async function conciliar(
 }
 
 /**
+ * La flota dueña de una factura SaaS, o `null` si la factura no existe. LANZA si la base no contesta: `null` es «no hay», no «no pude
+ * leer». Lo usa la bitácora de la conciliación para atribuir el asiento a su flota.
+ */
+export async function tenantDeFacturaSaas(facturaId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin().from('factura_saas').select('tenant_id').eq('id', facturaId).maybeSingle();
+  if (error) throw new Error(`tenantDeFacturaSaas: ${error.message}`);
+  return data?.tenant_id ? String(data.tenant_id) : null;
+}
+
+/**
  * Timbra el CFDI de una factura YA PAGADA.
  *
  * SEPARADO DE `conciliar()` A PROPÓSITO, aunque se llamen juntos. Marcar el pago

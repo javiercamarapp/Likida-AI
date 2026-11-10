@@ -5,11 +5,12 @@ import { usd, mxn } from '@/lib/utils';
 import { hoyMx } from '@/lib/formato';
 import { DollarSign, Calculator, CreditCard, TriangleAlert, Landmark } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
+import { anotarAccionAdmin, pasoExtraSuperadmin, AVISO_SIN_BITACORA } from '@/lib/admin/acciones_riesgo';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { getPlanes, guardarPriceDePlan, type Plan } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
-  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, type FacturaPorCobrar,
+  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, tenantDeFacturaSaas, type FacturaPorCobrar,
 } from '@/lib/saas/transferencia';
 import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
@@ -34,13 +35,22 @@ export const dynamic = 'force-dynamic';
  */
 async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
   'use server';
-  await requireSuperadmin();
+  const s = await requireSuperadmin();
+  // Confirmación extra (step-up reutilizado; apagada mientras no se encienda LIKIDA_TOTP_ESCALONADO): cambiar el price mueve lo que se cobra.
+  const pasoMfa = await pasoExtraSuperadmin('dinero_saas', s);
+  if (pasoMfa) return { error: pasoMfa };
   const clave = String(fd.get('plan') ?? '');
   const price = String(fd.get('price') ?? '');
   try {
     const { montoMensual, moneda, ivaIncluido } = await guardarPriceDePlan(clave, price);
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
+    // Huella del acto (plan.price_guardado): quién ligó qué price a qué plan. El monto y el criterio de IVA son los LEÍDOS de Stripe.
+    const anotado = await anotarAccionAdmin({
+      actor: s, tenantId: null, accion: 'plan.price_guardado', entidad: 'plan', entidadId: clave,
+      detalle: { price_id: price.trim(), monto_mensual: montoMensual, moneda, iva_incluido: ivaIncluido },
+    });
+    const nota = anotado ? '' : AVISO_SIN_BITACORA;
     // El criterio del IVA se dice en el mismo mensaje que el monto: son la misma
     // pregunta ("cuánto se cobra") y verlos juntos es lo que permite notar que
     // falta uno. Sin criterio no se puede emitir, y eso se dice aquí y no
@@ -50,12 +60,12 @@ async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<Res
         ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes, leído de Stripe. OJO: ese price no declara si el `
           + 'precio incluye IVA (tax_behavior = "unspecified"), así que TODAVÍA NO SE PUEDE EMITIR la mensualidad — '
           + 'no se sabría si cobrar el precio o el precio × 1.16. Ponle "inclusive" o "exclusive" en Stripe y vuelve '
-          + 'a guardar el price.',
+          + 'a guardar el price.' + nota,
       };
     }
     return {
       ok: `Plan ${clave}: ${mxn(montoMensual)} ${moneda} al mes ${ivaIncluido ? 'IVA INCLUIDO' : 'MÁS IVA'}, leído `
-        + 'de Stripe. Ya se puede contratar.',
+        + 'de Stripe. Ya se puede contratar.' + nota,
     };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'guardar el precio del plan') };
@@ -119,9 +129,12 @@ function periodoMesActualMx(): { ini: string; fin: string } {
  */
 async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
   'use server';
-  await requireSuperadmin();
+  const s = await requireSuperadmin();
   const tenantId = String(fd.get('tenantId') ?? '');
   if (!tenantId) return { error: 'Elige una flota.' };
+  // Confirmación extra (step-up reutilizado): emitir es decirle a una flota cuánto transferir.
+  const pasoMfa = await pasoExtraSuperadmin('dinero_saas', s, tenantId);
+  if (pasoMfa) return { error: pasoMfa };
 
   const { ini, fin } = periodoMesActualMx();
 
@@ -129,12 +142,16 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
     const r = await emitirMensualidad(tenantId, ini, fin);
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
+    const anotado = await anotarAccionAdmin({
+      actor: s, tenantId, accion: 'mensualidad.emitida', entidad: 'factura_saas', entidadId: r.id,
+      detalle: { periodo_inicio: ini, periodo_fin: fin, monto: r.monto, subtotal: r.subtotal, iva: r.iva, referencia: r.referencia },
+    });
     // Se dicen las TRES cifras. El total es lo que la flota transfiere y el
     // desglose es lo que va a salir en su CFDI: verlos juntos en la misma frase
     // es lo que permite cachar el día uno que el IVA quedó del lado equivocado.
     return {
       ok: `Mensualidad emitida por ${mxn(r.monto)} (base ${mxn(r.subtotal)} + IVA ${mxn(r.iva)}). La flota ya ve a `
-        + `dónde transferir, con la referencia ${r.referencia}.`,
+        + `dónde transferir, con la referencia ${r.referencia}.` + (anotado ? '' : AVISO_SIN_BITACORA),
     };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'emitir la mensualidad') };
@@ -149,9 +166,19 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
 async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
   'use server';
   const s = await requireSuperadmin();
+  // Confirmación extra (step-up reutilizado): marcar pagada dispara además el timbrado de un CFDI real.
+  const pasoMfa = await pasoExtraSuperadmin('dinero_saas', s);
+  if (pasoMfa) return { error: pasoMfa };
   try {
     const id = String(fd.get('facturaId') ?? '');
     await conciliar(id, String(fd.get('referenciaBanco') ?? ''), s.userId);
+    // Huella del pago (pago.conciliado). La flota se lee DESPUÉS, solo para atribuir el asiento; si no se pudo leer, el asiento
+    // sale sin flota (la factura va en `entidad_id`) en vez de perderse. La referencia del banco queda en la propia factura.
+    const tenantFactura = await tenantDeFacturaSaas(id).catch(() => null);
+    const anotado = await anotarAccionAdmin({
+      actor: s, tenantId: tenantFactura, accion: 'pago.conciliado', entidad: 'factura_saas', entidadId: id,
+      detalle: { con_referencia_banco: true },
+    });
 
     // El timbrado va DESPUÉS y con su propio try: el pago ya quedó registrado y
     // un PAC caído no puede deshacer un hecho del banco.
@@ -169,7 +196,7 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
 
     revalidatePath('/admin/costos-facturacion');
     revalidatePath('/dashboard/suscripcion');
-    return { ok: `Factura marcada como pagada, con su referencia del banco.${nota}` };
+    return { ok: `Factura marcada como pagada, con su referencia del banco.${nota}${anotado ? '' : AVISO_SIN_BITACORA}` };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'conciliar el pago') };
   }

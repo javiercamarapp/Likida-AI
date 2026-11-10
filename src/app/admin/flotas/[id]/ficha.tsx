@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { Building2, Wallet, Cpu, Receipt, LifeBuoy, Activity, Sprout } from 'lucide-react';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
@@ -28,8 +29,10 @@ function NoSePudo({ que }: { que: string }) {
   return <p className="text-[12.5px] m-0" style={{ color: 'var(--muted)' }}>No se pudo leer {que} ahora mismo — reintenta.</p>;
 }
 
-export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline, agenteChofer, accionAgenteChofer }: {
+export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline, agenteChofer, accionAgenteChofer, gestionPlan }: {
   f: FichaCliente;
+  /** El bloque «Plan de esta flota» (`GestionPlan`). `undefined` = no se monta (previews). */
+  gestionPlan?: ReactNode;
   /**
    * ADM-6 (auditoría 24): las palancas del pipeline del chofer de ESTA
    * flota (`interruptor_tenant`, mig. 0297) — `undefined` (props opcionales,
@@ -165,6 +168,7 @@ export function Ficha360({ f, interruptoresPipeline, accionInterruptorPipeline, 
                   </table>
                   </div>
                 )}
+                {gestionPlan}
               </div>
             </div>
 
