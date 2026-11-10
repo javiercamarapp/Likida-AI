@@ -3,8 +3,10 @@
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Sparkles, ShieldQuestion } from 'lucide-react';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
+import {
+  AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, CampoTextarea, Icono, clasesBoton,
+} from '@/app/ui-v2/componentes';
+import './reglas.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PANTALLA DE "MIS REGLAS" — lado del navegador.
@@ -43,25 +45,17 @@ export type ResultadoForma =
   | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
-
 function AvisoError({ estado }: { estado: { error: string; puedoVigilar?: string[] } }) {
   return (
-    <div className="space-y-2">
+    <div className="rv-reglas__avisos">
       <AvisoResultado estado={{ ok: false, error: estado.error }} />
-      {/* La mitad honesta de la negativa. Un "no puedo" a secas deja a la
-          persona adivinando qué sí; esta lista es lo que evita que se rinda. */}
+      {/* La mitad honesta de la negativa. Un "no puedo" a secas deja a la persona adivinando qué sí; esta lista es lo que evita que se rinda. */}
       {estado.puedoVigilar && estado.puedoVigilar.length > 0 && (
-        <div className="rounded-lg hairline p-3.5" style={{ background: 'var(--surface)' }}>
-          <p className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>
-            Esto es lo que sí sé vigilar hoy
-          </p>
-          <ul className="space-y-1.5">
+        <div className="rv-reglas__puedo">
+          <p className="rv-reglas__rotulo">Esto es lo que sí sé vigilar hoy</p>
+          <ul className="rv-reglas__lista">
             {estado.puedoVigilar.map((linea) => (
-              <li key={linea} className="text-[12px] flex gap-2" style={{ color: 'var(--ink2)' }}>
-                <span style={{ color: 'var(--faint)' }}>·</span>
-                <span>{linea}</span>
-              </li>
+              <li key={linea}>{linea}</li>
             ))}
           </ul>
         </div>
@@ -74,23 +68,16 @@ function AvisoOk({ mensaje }: { mensaje: string }) {
   return <AvisoResultado estado={{ ok: true, mensaje }} />;
 }
 
-function BotonEnvio({ etiqueta, ocupado, tono = 'marca', Icono }: {
+function BotonEnvio({ etiqueta, ocupado, tono = 'marca', icono }: {
   etiqueta: string; ocupado: string; tono?: 'marca' | 'suave' | 'malo';
-  Icono?: typeof Sparkles;
+  icono?: typeof Sparkles;
 }) {
   const { pending } = useFormStatus();
-  const estilo = tono === 'marca'
-    ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
-    : tono === 'malo'
-      ? { background: 'var(--badbg)', color: 'var(--bad)' }
-      : { background: 'var(--surface)', color: 'var(--ink2)' };
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary"
-      style={estilo}>
-      {Icono && <Icono width={14} height={14} strokeWidth={1.75} />}
+    <Boton type="submit" variante={tono === 'marca' ? 'primary' : tono === 'malo' ? 'danger' : 'secondary'} tamano="sm"
+      loading={pending} icono={icono ? <Icono icono={icono} /> : undefined}>
       {pending ? ocupado : etiqueta}
-    </button>
+    </Boton>
   );
 }
 
@@ -107,27 +94,16 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
   const [texto, setTexto] = useState('');
 
   return (
-    <form action={despachar} className="space-y-3">
-      <div>
-        <label htmlFor="regla-texto" className={ETIQUETA}>
-          ¿De qué quieres que te avise?
-        </label>
-        <textarea id="regla-texto" name="texto" required maxLength={400} rows={3}
-          value={texto} onChange={(e) => setTexto(e.target.value)}
-          placeholder="avísame si un gasto de caseta pasa de $3,000"
-          className="w-full hairline rounded-lg px-3 py-2 text-[13px] outline-none focus:border-[var(--muted)] transition-colors resize-y"
-          style={{ background: 'var(--surface)' }} />
-        <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-          Escríbelo como se lo dirías a tu jefe de tráfico. Lo voy a traducir a una
-          vigilancia concreta y te la voy a enseñar ANTES de encenderla.
-        </p>
-      </div>
+    <form action={despachar} className="rv-reglas__forma">
+      <CampoTextarea id="regla-texto" name="texto" required maxLength={400} rows={3}
+        etiqueta="¿De qué quieres que te avise?"
+        value={texto} onChange={(e) => setTexto(e.target.value)}
+        placeholder="avísame si un gasto de caseta pasa de $3,000"
+        ayuda="Escríbelo como se lo dirías a tu jefe de tráfico. Lo voy a traducir a una vigilancia concreta y te la voy a enseñar ANTES de encenderla." />
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className="rv-reglas__ejemplos">
         {ejemplos.map((e) => (
-          <button key={e} type="button" onClick={() => setTexto(e)}
-            className="rv-chip"
-            style={{ color: 'var(--muted)' }}>
+          <button key={e} type="button" onClick={() => setTexto(e)} className="rv-chip">
             {e}
           </button>
         ))}
@@ -135,7 +111,7 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
 
       {estado && !estado.ok && <AvisoError estado={estado} />}
       {estado?.ok && <AvisoOk mensaje={estado.mensaje} />}
-      <BotonEnvio etiqueta="Interpretar" ocupado="Interpretando…" Icono={Sparkles} />
+      <BotonEnvio etiqueta="Interpretar" ocupado="Interpretando…" icono={Sparkles} />
     </form>
   );
 }
@@ -156,42 +132,33 @@ export function FormaElegirAMano({ accion, plantillas }: {
   if (!plantilla) return null;
 
   return (
-    <form action={despachar} className="space-y-3">
-      <div>
-        <label htmlFor="regla-plantilla" className={ETIQUETA}>Vigilancia</label>
-        <select id="regla-plantilla" name="plantilla" value={elegida}
-          onChange={(e) => setElegida(e.target.value)}
-          className="w-full" style={{ background: 'var(--surface)' }}>
-          {plantillas.map((p) => (
-            <option key={p.id} value={p.id}>{p.titulo}</option>
-          ))}
-        </select>
-        <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>{plantilla.queVigila}</p>
-      </div>
+    <form action={despachar} className="rv-reglas__forma">
+      <CampoSelect id="regla-plantilla" name="plantilla" etiqueta="Vigilancia" value={elegida}
+        onChange={(e) => setElegida(e.target.value)} ayuda={plantilla.queVigila}>
+        {plantillas.map((p) => (
+          <option key={p.id} value={p.id}>{p.titulo}</option>
+        ))}
+      </CampoSelect>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div className="rv-forma__rejilla">
         {plantilla.campos.map((c) => (
-          <div key={c.nombre}>
-            <label htmlFor={`p-${c.nombre}`} className={ETIQUETA}>
-              {c.etiqueta}{c.sufijo ? ` (${c.sufijo})` : ''}
-            </label>
-            {c.tipo === 'opcion' ? (
-              <select id={`p-${c.nombre}`} name={`p_${c.nombre}`} className="w-full" style={{ background: 'var(--surface)' }}>
-                {(c.opciones ?? []).map((o) => (
-                  <option key={o.valor} value={o.valor}>{o.rotulo}</option>
-                ))}
-              </select>
-            ) : (
-              <input id={`p-${c.nombre}`} name={`p_${c.nombre}`} type="number" step="any" min="0" required
-                className="w-full" style={{ background: 'var(--surface)' }} />
-            )}
-          </div>
+          c.tipo === 'opcion' ? (
+            <CampoSelect key={c.nombre} id={`p-${c.nombre}`} name={`p_${c.nombre}`}
+              etiqueta={`${c.etiqueta}${c.sufijo ? ` (${c.sufijo})` : ''}`}>
+              {(c.opciones ?? []).map((o) => (
+                <option key={o.valor} value={o.valor}>{o.rotulo}</option>
+              ))}
+            </CampoSelect>
+          ) : (
+            <CampoTexto key={c.nombre} id={`p-${c.nombre}`} name={`p_${c.nombre}`} tipo="number" step="any" min="0" required
+              etiqueta={`${c.etiqueta}${c.sufijo ? ` (${c.sufijo})` : ''}`} />
+          )
         ))}
       </div>
 
       {estado && !estado.ok && <AvisoError estado={estado} />}
       {estado?.ok && <AvisoOk mensaje={estado.mensaje} />}
-      <BotonEnvio etiqueta="Preparar la regla" ocupado="Preparando…" tono="suave" Icono={ShieldQuestion} />
+      <BotonEnvio etiqueta="Preparar la regla" ocupado="Preparando…" tono="suave" icono={ShieldQuestion} />
     </form>
   );
 }
@@ -204,13 +171,13 @@ export function BotonDeRegla({ accion, id, etiqueta, ocupado, tono = 'suave' }: 
 }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <div className="space-y-1.5">
+    <div className="rv-reglas__avisos">
       <form action={despachar}>
         <input type="hidden" name="id" value={id} />
         <BotonEnvio etiqueta={etiqueta} ocupado={ocupado} tono={tono} />
       </form>
       {estado && !estado.ok && (
-        <p className="text-[11px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>
+        <p className="rv-reglas__error" role="alert">{estado.error}</p>
       )}
     </div>
   );
@@ -223,14 +190,13 @@ export function BotonDeRegla({ accion, id, etiqueta, ocupado, tono = 'suave' }: 
 export function BorrarRegla({ accion, id }: { accion: AccionForma; id: string }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-2">
+    <form action={despachar} className="rv-reglas__avisos">
       <input type="hidden" name="id" value={id} />
       <BotonConfirmar
         etiqueta="Borrar" tono="peligro" etiquetaConfirmar="Sí, borrarla"
         titulo="Borrar esta regla"
         descripcion="Se va la regla y también la memoria de lo que ya te avisó. Si la vuelves a declarar, los mismos casos te van a sonar otra vez."
-        className="text-[12px] font-medium select-none hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--bad)' }}
+        className={clasesBoton('danger-soft', 'sm')}
       />
       {estado && !estado.ok && <AvisoError estado={estado} />}
     </form>
@@ -248,19 +214,13 @@ export function FormaFrecuencia({ accion, id, maxAvisosDia, minHorasEntreAvisos 
 }) {
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-2">
+    <form action={despachar} className="rv-reglas__avisos">
       <input type="hidden" name="id" value={id} />
-      <div className="flex flex-wrap items-end gap-3">
-        <label className="block">
-          <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Máximo de avisos en 24 h</span>
-          <input type="number" name="maxAvisosDia" min={1} max={24} step={1} required
-            defaultValue={maxAvisosDia} className="w-full w-28" />
-        </label>
-        <label className="block">
-          <span className={ETIQUETA} style={{ color: 'var(--muted)' }}>Horas entre un aviso y otro</span>
-          <input type="number" name="minHorasEntreAvisos" min={0} max={168} step={1} required
-            defaultValue={minHorasEntreAvisos} className="w-full w-28" />
-        </label>
+      <div className="rv-reglas__frecuencia">
+        <CampoTexto tipo="number" name="maxAvisosDia" min={1} max={24} step={1} required
+          etiqueta="Máximo de avisos en 24 h" defaultValue={maxAvisosDia} />
+        <CampoTexto tipo="number" name="minHorasEntreAvisos" min={0} max={168} step={1} required
+          etiqueta="Horas entre un aviso y otro" defaultValue={minHorasEntreAvisos} />
         <BotonEnvio etiqueta="Guardar límite" ocupado="Guardando…" tono="suave" />
       </div>
       {estado && <AvisoResultado estado={estado.ok ? { ok: true, mensaje: estado.mensaje } : { ok: false, error: estado.error }} />}
