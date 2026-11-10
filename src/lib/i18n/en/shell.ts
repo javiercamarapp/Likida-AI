@@ -1,0 +1,33 @@
+import type { shell as shellEs } from '../es/shell';
+
+// «shell» en inglés (US). El tipo exige EXACTAMENTE las claves de es: una que falte o sobre no compila. Glosario:
+// scratchpad/i18n/GLOSARIO.md («Cerrar sesión» = Sign out).
+export const shell: Record<keyof typeof shellEs, string> = {
+  'pie.org.titulo': 'Organization',
+  'pie.org.sinDato': 'No data',
+  'pie.org.sinOrganizacion': 'No organization',
+  'pie.org.ir': 'Go',
+  'pie.org.irA': '{ir}: {nombre}',
+  'pie.org.sinNombre': 'organization',
+  'pie.avisos.titulo': 'Notices',
+  'pie.avisos.sinDato': 'Notices: no data',
+  'pie.avisos.nadaPendiente': 'Notices: nothing pending',
+  'pie.avisos.pendientes.uno': 'Notices: {n} pending',
+  'pie.avisos.pendientes.otros': 'Notices: {n} pending',
+  'pie.avisos.pendientesUrgente.uno': 'Notices: {n} pending, something is urgent',
+  'pie.avisos.pendientesUrgente.otros': 'Notices: {n} pending, something is urgent',
+  'pie.tema.titulo': 'Interface theme',
+  'pie.tema.claro': 'Light theme',
+  'pie.tema.sistema': 'Follow system',
+  'pie.tema.oscuro': 'Dark theme',
+  'pie.tema.ciclo': '{actual}. Switch to: {siguiente}',
+  'pie.tema.cicloTitulo': '{actual} (switch to: {siguiente})',
+  'pie.idioma.titulo': 'Language',
+  'pie.idioma.es': 'Español (México)',
+  'pie.idioma.en': 'English (US)',
+  'pie.idioma.error': 'Could not save the language. Please try again.',
+  'pie.cuenta.fallback': 'My account',
+  'pie.cuenta.menu': 'Account menu',
+  'pie.cuenta.etiqueta': 'Account',
+  'pie.cuenta.salir': 'Sign out',
+};
