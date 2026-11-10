@@ -171,6 +171,35 @@ describe('contenido por rol y perfil', () => {
   });
 });
 
+describe('grupos por propósito del rol (sin perfil)', () => {
+  const grupo = (rol: string, nombre: string) => menuPorPerfil(rol, null).grupos.find((g) => g.items.some((i) => i.nombre === nombre))?.titulo;
+
+  it('el jefe de tráfico ve Carta Porte en Operación y no existe para él un grupo «Dinero y fiscal» con una sola entrada', () => {
+    expect(grupo('encargado', 'Carta Porte')).toBe('Operación');
+    expect(menuPorPerfil('encargado', null).grupos.map((g) => g.titulo)).not.toContain('Dinero y fiscal');
+  });
+
+  it('el contador ve «Sin viaje» (entrada Viajes) y Clientes en «Dinero y fiscal», sin grupo «Operación»', () => {
+    expect(grupo('contador', 'Viajes')).toBe('Dinero y fiscal');
+    expect(grupo('contador', 'Clientes')).toBe('Dinero y fiscal');
+    expect(menuPorPerfil('contador', null).grupos.map((g) => g.titulo)).not.toContain('Operación');
+  });
+
+  it('el dueño y el superadmin conservan el reparto del catálogo (Carta Porte en Dinero y fiscal, Viajes en Operación)', () => {
+    for (const rol of ['flota_admin', 'superadmin']) {
+      expect(grupo(rol, 'Carta Porte'), rol).toBe('Dinero y fiscal');
+      expect(grupo(rol, 'Viajes'), rol).toBe('Operación');
+    }
+  });
+
+  it('ninguna entrada se pinta en dos grupos ni desaparece por moverla (mismas entradas que antes de reubicar)', () => {
+    for (const rol of ['encargado', 'contador']) {
+      const nombres = menuPorPerfil(rol, null).grupos.flatMap((g) => g.items.map((i) => i.nombre));
+      expect(new Set(nombres).size, rol).toBe(nombres.length);
+    }
+  });
+});
+
 describe('⌘K', () => {
   it('cada pestaña aparece como «Entrada · Pestaña»; una entrada de una sola pantalla, con su nombre', () => {
     const p = paletaDelDashboard('flota_admin', null);

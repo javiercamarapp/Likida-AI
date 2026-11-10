@@ -72,6 +72,17 @@ const GRUPOS_GENERICOS: ReadonlyArray<{ id: string; titulo: string; grupo: Entra
 ];
 const PIE_GENERICO = ['notificaciones', 'mi-perfil', 'ayuda', 'plan'];
 
+/**
+ * Grupos por PROPÓSITO del rol (identidad Rovaq): un grupo con una sola entrada que no es de lo que el rol hace mal rotula. Sin perfil:
+ *   · jefe de tráfico: no ve dinero, así que «Carta Porte» (el documento del viaje) va en Operación y no solo en «Dinero y fiscal»;
+ *   · contador: no despacha, así que su «Sin viaje» (comprobantes sin viaje) y Clientes y tarifas van en «Dinero y fiscal» y no en «Operación».
+ * El catálogo (`ENTRADAS_DASHBOARD`) no cambia: solo en qué grupo se pinta la entrada para ese rol.
+ */
+const GRUPO_POR_ROL: Readonly<Record<string, Readonly<Record<string, Entrada['grupo']>>>> = {
+  encargado: { 'carta-porte': 'operacion' },
+  contador: { viajes: 'dinero', clientes: 'dinero' },
+};
+
 /** La ruta del asistente: fila del pie mientras va <6/6, ítem de «Cuenta y conexiones» cuando termina. */
 export const HREF_PUESTA_EN_MARCHA = '/dashboard/puesta-en-marcha';
 export const HREF_NOTIFICACIONES = '/dashboard/notificaciones';
@@ -104,7 +115,7 @@ export function menuPorPerfil(rol: string, perfil?: PerfilTenant | null): MenuV2
   return {
     resumen,
     grupos: GRUPOS_GENERICOS
-      .map((g) => ({ id: g.id, titulo: g.titulo, items: veTodas(ENTRADAS_DASHBOARD.filter((e) => e.grupo === g.grupo).map((e) => e.clave)) }))
+      .map((g) => ({ id: g.id, titulo: g.titulo, items: veTodas(ENTRADAS_DASHBOARD.filter((e) => (GRUPO_POR_ROL[rol]?.[e.clave] ?? e.grupo) === g.grupo).map((e) => e.clave)) }))
       .filter((g) => g.items.length > 0),
     pie: veTodas(PIE_GENERICO),
   };

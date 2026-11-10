@@ -43,7 +43,7 @@ export default function DashboardChromeV2({
   children: React.ReactNode;
 }) {
   // `provisionar.ts` toca la base: la etiqueta del rol se resuelve AQUÍ (servidor) y baja como texto a los componentes cliente.
-  const rolEtiqueta = ROL_BADGE[rol as RolAppUser] ?? rol.toUpperCase();
+  const rolEtiqueta = ROL_BADGE[rol as RolAppUser] ?? rol;
   return (
     <ProveedorNotificaciones>
       <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
