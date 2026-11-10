@@ -49,10 +49,10 @@ describe.skipIf(SIN_NAVEGADOR)('primitivas v2 · estilos calculados en Chromium'
     expect(r.cab).toBeLessThanOrEqual(1); // la cabecera sigue en el árbol (semántica) pero fuera de la vista
     await p.close();
   });
-  it('390: el campo deshabilitado conserva el trazo DISCONTINUO (outline) aunque la caja de 44 use borde transparente', async () => {
+  it('390: el campo deshabilitado ya no usa trazo discontinuo (ni outline) aunque la caja de 44 use borde transparente', async () => {
     const p = await pagina(390);
     const r = await p.evaluate(() => { const c = getComputedStyle(document.getElementById('dis')!); const n = getComputedStyle(document.getElementById('normal')!); return { outline: c.outlineStyle, alto: document.getElementById('dis')!.getBoundingClientRect().height, normalOutline: n.outlineStyle }; });
-    expect(r.outline).toBe('dashed');
+    expect(r.outline).not.toBe('dashed');
     expect(r.alto).toBe(44);
     expect(r.normalOutline).not.toBe('dashed');
     await p.close();

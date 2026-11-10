@@ -125,9 +125,9 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 }
 [data-ui="v2"] .rv-kind__punto { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ink); }
 [data-ui="v2"] .rv-kind[data-tipo="observado"] { padding: 0; color: var(--muted); }
-[data-ui="v2"] .rv-kind[data-tipo="estimado"] { border-style: dashed; border-color: var(--prov-est-bd); background: var(--prov-est-bg); }
+[data-ui="v2"] .rv-kind[data-tipo="estimado"] { border-style: solid; border-color: var(--prov-est-bd); background: var(--prov-est-bg); }
 [data-ui="v2"] .rv-kind[data-tipo="inferido"] { border-style: dotted; border-color: var(--prov-inf-bd); background: var(--prov-inf-bg); }
-[data-ui="v2"] .rv-kind[data-tipo="sin_dato"] { border-style: dashed; border-color: var(--prov-sin-bd); background: transparent; color: var(--muted); }
+[data-ui="v2"] .rv-kind[data-tipo="sin_dato"] { border-style: solid; border-color: var(--prov-sin-bd); background: transparent; color: var(--muted); }
 [data-ui="v2"] .rv-kpis {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden;
