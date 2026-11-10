@@ -1,26 +1,26 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it, vi } from 'vitest';
-// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
-vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
+import { beforeEach, expect, it, vi } from 'vitest';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// /admin/playground — página 100% estática. Su contrato: NO debe simular un
-// chat/caja de prueba que aparente funcionar sin hacerlo (comentario propio
-// del archivo) — debe seguir diciendo honestamente que el sandbox no existe
-// y enlazar a las páginas de agente reales.
-// ═══════════════════════════════════════════════════════════════════════════
+// Stub 308 de /admin/playground (Fase 1): la pantalla se retiró y su dirección vieja sigue sirviendo, hacia /admin/agentes. Contrato que se fija:
+// (1) la puerta de superadmin se llama ANTES de redirigir, (2) la redirección es permanente (308, no 307) y (3) conserva la consulta.
+const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn(), permanente: vi.fn((destino: string): never => { throw new Error(`NEXT_REDIRECT:${destino}`); }) }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
+vi.mock('next/navigation', () => ({ permanentRedirect: dobles.permanente, redirect: vi.fn() }));
 
-import PlaygroundPage from './page';
+import Pagina from './page';
 
-it('dice honestamente que el sandbox no existe, y no simula un chat/caja de prueba', async () => {
-  const html = renderToStaticMarkup(await PlaygroundPage());
-  expect(html).toContain('Esta función no existe en Likida hoy');
-  expect(html).not.toMatch(/<textarea|<input[^>]*type="text"/);
+beforeEach(() => { vi.clearAllMocks(); dobles.requireSuperadmin.mockResolvedValue({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' }); });
+
+it('redirige de forma permanente a /admin/agentes', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/admin/agentes');
+  expect(dobles.permanente).toHaveBeenCalledTimes(1);
 });
 
-it('enlaza a las tres páginas de agente reales que SÍ existen', async () => {
-  const html = renderToStaticMarkup(await PlaygroundPage());
-  expect(html).toContain('href="/admin/agente-ocr"');
-  expect(html).toContain('href="/admin/agente-cuadre"');
-  expect(html).toContain('href="/admin/agente-whatsapp"');
+it('conserva la consulta de la dirección vieja', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({ tenant: 't-1' }) })).rejects.toThrow('NEXT_REDIRECT:/admin/agentes?tenant=t-1');
+});
+
+it('llama la puerta de superadmin antes de redirigir; sin sesión no redirige', async () => {
+  dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT:/login'));
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/login');
+  expect(dobles.permanente).not.toHaveBeenCalled();
 });
