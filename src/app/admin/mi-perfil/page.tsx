@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
+import { AvisoCompacto, Boton, Fieldset, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import { CampoTexto } from '../../ui-v2/componentes/campos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
-import { UserRound, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
-import { BarraPagina } from '../../dashboard/resumen-visual';
 import AvatarUploader from './avatar-uploader';
 import { descartarAvataresViejos } from '@/lib/perfil/avatar_huerfanos';
+import '../resumen.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -91,61 +91,41 @@ export default async function MiPerfilPage({
     redirect('/admin/mi-perfil?ok=avatar');
   }
 
+  const mensajeError = sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.'
+    : sp.error === 'tipo' ? 'Solo se aceptan imágenes JPG, PNG o WebP.'
+      : sp.error === 'peso' ? 'La imagen pasa de 2 MB — usa una más ligera.'
+        : sp.error === 'avatar_guardar' ? 'La foto se subió, pero no se pudo guardar en tu perfil — intenta de nuevo.'
+          : sp.error === 'nombre_guardar' ? 'No se pudo guardar el nombre — intenta de nuevo.'
+            : 'El nombre no puede quedar vacío.';
+
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<UserRound width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Mi perfil"
-        />
+    <MarcoPagina area="Cuenta" titulo="Mi perfil" apoyo="Tu nombre y tu foto. El correo y el rol los define la cuenta." ancho="lectura">
+      {sp.ok && <AvisoCompacto tono="ok" resumen={sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'} />}
+      {sp.error && <AvisoCompacto tono="error" resumen={mensajeError} />}
 
-        <div className="px-5 py-5 flex-1">
-          <div className="card p-5" style={{ maxWidth: 720 }}>
-            {sp.ok && (
-              <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-                <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
-                {sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'}
-              </div>
-            )}
-            {sp.error && (
-              <div className="flex items-center gap-2 text-sm px-3.5 py-2.5 rounded-lg mb-5" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-                <AlertTriangle width={15} height={15} strokeWidth={1.75} />
-                {sp.error === 'avatar' ? 'No se pudo subir la foto — intenta con otra imagen.'
-                  : sp.error === 'tipo' ? 'Solo se aceptan imágenes JPG, PNG o WebP.'
-                    : sp.error === 'peso' ? 'La imagen pasa de 2 MB — usa una más ligera.'
-                  : sp.error === 'avatar_guardar' ? 'La foto se subió, pero no se pudo guardar en tu perfil — intenta de nuevo.'
-                    : sp.error === 'nombre_guardar' ? 'No se pudo guardar el nombre — intenta de nuevo.'
-                      : 'El nombre no puede quedar vacío.'}
-              </div>
-            )}
+      <Tarjeta titulo="Foto">
+        <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
+      </Tarjeta>
 
-            <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
+      <Tarjeta titulo="Nombre">
+        <form action={actualizarNombre} className="adm-perfil-form">
+          <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={s.nombre ?? ''} obligatorio />
+          <Boton type="submit" variante="primary">Guardar nombre</Boton>
+        </form>
+      </Tarjeta>
 
-            <form action={actualizarNombre} className="space-y-4 mt-6 pt-6 border-t" style={{ borderColor: 'var(--line2)' }}>
-              <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={s.nombre ?? ''} required />
-              <button type="submit" className="text-sm px-4 py-1.5 rounded-lg font-medium transition-opacity hover:opacity-85"
-                style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                Guardar nombre
-              </button>
-            </form>
-
-            <dl className="mt-6 pt-6 border-t space-y-3 text-sm" style={{ borderColor: 'var(--line2)' }}>
-              <div className="flex justify-between gap-4">
-                <dt style={{ color: 'var(--muted)' }}>Correo</dt>
-                <dd className="text-right">{(fila?.email as string) ?? '—'}</dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt style={{ color: 'var(--muted)' }}>Rol</dt>
-                <dd className="text-right">{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
-              </div>
-            </dl>
-            <p className="text-xs mt-4" style={{ color: 'var(--muted)' }}>
-              Correo y rol no son editables aquí — el correo está ligado a tu cuenta de acceso y el rol lo asigna otro superadmin.
-            </p>
-          </div>
-        </div>
-      </div>
-    </main>
+      <Tarjeta titulo="Cuenta">
+        <Fieldset leyenda="Datos de acceso">
+          <dl className="adm-res-pares">
+            <dt>Correo</dt>
+            <dd>{(fila?.email as string) ?? '—'}</dd>
+            <dt>Rol</dt>
+            <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
+          </dl>
+        </Fieldset>
+        <p className="adm-res-pie">Correo y rol no son editables aquí: el correo está ligado a tu cuenta de acceso y el rol lo asigna otro superadmin.</p>
+      </Tarjeta>
+    </MarcoPagina>
   );
 }
 

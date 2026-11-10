@@ -98,7 +98,6 @@ export const BASE_SIN_TRAZO: Record<string, number> = {
   'app/admin/corridas/page.tsx': 2,
   'app/admin/escalaciones/page.tsx': 1,
   'app/admin/flotas/[id]/ficha.tsx': 7,
-  'app/admin/mi-perfil/avatar-uploader.tsx': 1,
   'app/admin/observabilidad/page.tsx': 1,
   'app/admin/qa/[id]/corrida-viva.tsx': 1,
   'app/admin/qa/banco-verdad.tsx': 2,

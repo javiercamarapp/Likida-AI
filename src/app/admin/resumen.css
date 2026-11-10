@@ -11,3 +11,11 @@
 [data-ui="v2"] .adm-res-pares dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 [data-ui="v2"] .adm-res-paneles { display: inline-flex; flex-wrap: wrap; gap: 4px; }
 [data-ui="v2"] .adm-res-semaforo-causas { margin: 0; padding-left: 18px; font-size: var(--t-body); }
+
+/* Mi perfil · Elegir flota (F2): lo que ui-v2 no trae. */
+[data-ui="v2"] .adm-perfil-avatar { display: flex; align-items: center; gap: 12px; }
+[data-ui="v2"] .adm-perfil-avatar__img { width: 40px; height: 40px; border-radius: 999px; object-fit: cover; }
+[data-ui="v2"] .adm-perfil-avatar__texto { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: var(--t-body); }
+[data-ui="v2"] .adm-perfil-form { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+[data-ui="v2"] .adm-flota-form { margin: 0; }
+[data-ui="v2"] .adm-flota-id { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }

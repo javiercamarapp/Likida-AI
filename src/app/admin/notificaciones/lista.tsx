@@ -1,133 +1,51 @@
 'use client';
 
-import { useRef, useState, useSyncExternalStore } from 'react';
-import Link from 'next/link';
-import { TriangleAlert, CircleCheck, CheckCheck, ArrowRight } from 'lucide-react';
+import { useSyncExternalStore } from 'react';
+import { Boton, BotonEnlace, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import type { Alerta } from '../calcular-alertas';
-import { claveAlerta, leerLeidas, marcarLeida, marcarTodasLeidas, suscribirCambiosLeidas, SIN_LEIDAS } from '../notificaciones-leidas';
-
-const UMBRAL_SWIPE = 72; // px de arrastre horizontal antes de contar como "descartar"
-
-/** Una fila — en escritorio, el botón "Marcar leído"; en táctil, se puede
- *  arrastrar de lado (izquierda o derecha) para descartarla, y al soltar
- *  pasado el umbral se anima saliendo de lado Y HACIA ARRIBA (pedido así
- *  explícitamente) antes de marcarse como leída. Por debajo del umbral,
- *  regresa a su lugar — no se pierde por accidente con un roce. */
-function FilaAlerta({ alerta, onLeida }: { alerta: Alerta; onLeida: () => void }) {
-  const [dx, setDx] = useState(0);
-  const [arrastrando, setArrastrando] = useState(false);
-  const [saliendo, setSaliendo] = useState<'izq' | 'der' | null>(null);
-  const inicio = useRef<{ x: number; y: number } | null>(null);
-
-  function onTouchStart(e: React.TouchEvent) {
-    inicio.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    setArrastrando(true);
-  }
-  function onTouchMove(e: React.TouchEvent) {
-    if (!inicio.current) return;
-    setDx(e.touches[0].clientX - inicio.current.x);
-  }
-  function onTouchEnd() {
-    setArrastrando(false);
-    inicio.current = null;
-    if (Math.abs(dx) > UMBRAL_SWIPE) {
-      setSaliendo(dx > 0 ? 'der' : 'izq');
-      setTimeout(onLeida, 260);
-    } else {
-      setDx(0);
-    }
-  }
-
-  const transform = saliendo
-    ? `translate(${saliendo === 'der' ? 420 : -420}px, -72px) rotate(${saliendo === 'der' ? 6 : -6}deg)`
-    : `translateX(${dx}px)`;
-
-  return (
-    <div
-      className="px-5 py-4 flex items-start gap-3 touch-pan-y"
-      style={{
-        transform,
-        opacity: saliendo ? 0 : 1,
-        transition: arrastrando ? 'none' : 'transform 260ms cubic-bezier(0.22,1,0.36,1), opacity 260ms ease',
-      }}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
-      onTouchEnd={onTouchEnd}
-    >
-      <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-        style={{ background: alerta.tipo === 'atencion' ? 'color-mix(in srgb, var(--color-bad) 12%, transparent)' : 'color-mix(in srgb, var(--color-ok) 12%, transparent)' }}>
-        {alerta.tipo === 'atencion'
-          ? <TriangleAlert width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--color-bad)' }} />
-          : <CircleCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--color-ok)' }} />}
-      </div>
-      <div className="flex-1 pt-1 min-w-0">
-        <p className="text-sm">{alerta.texto}</p>
-        {/* La alerta lleva a DONDE SE RESUELVE (las de escalación, todas a
-            /admin/escalaciones). Sin href no se pinta nada — un "Ver" sin
-            destino sería un botón que miente. */}
-        {alerta.href && (
-          <Link href={alerta.href}
-            className="mt-1 inline-flex items-center gap-1 text-xs font-medium underline hover:opacity-70 transition-opacity">
-            Ver <ArrowRight width={11} height={11} strokeWidth={1.75} />
-          </Link>
-        )}
-      </div>
-      <button type="button" onClick={() => { setSaliendo('der'); setTimeout(onLeida, 260); }}
-        className="shrink-0 text-xs px-2.5 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-        Marcar leído
-      </button>
-    </div>
-  );
-}
+import {
+  alertasPendientes, claveAlerta, esSilenciable, leerLeidas, marcarLeida, marcarTodasLeidas, suscribirCambiosLeidas, SIN_LEIDAS,
+} from '../notificaciones-leidas';
+import '../resumen.css';
 
 /**
- * Lista real de /admin/notificaciones — "marcar como leído" es dismissal
- * de UI guardado en localStorage (`notificaciones-leidas.ts`), no una
- * tabla nueva: las alertas no tienen id de base de datos, son un cálculo
- * en vivo. En móvil cada fila se puede correr de lado para descartarla; en
- * cualquier tamaño hay un botón "Marcar leído" por fila y uno "Marcar
- * todas como leídas" arriba.
+ * Lista real de /admin/notificaciones. "Marcar leído" es un descarte de pantalla guardado en localStorage (`notificaciones-leidas.ts`),
+ * no una tabla: las alertas son un cálculo en vivo. NO silencia lo que tiene plazo legal (ARCO), un plazo vencido (SLA) o una fuente
+ * ciega: esas siguen aquí y siguen contando hasta que se resuelvan (una alerta leída no es una alerta resuelta).
  */
 export default function NotificacionesLista({ alertas }: { alertas: Alerta[] }) {
   const leidas = useSyncExternalStore(suscribirCambiosLeidas, leerLeidas, () => SIN_LEIDAS);
-  const pendientes = alertas.filter((a) => !leidas.has(claveAlerta(a)));
-
-  function marcar(a: Alerta) {
-    marcarLeida(claveAlerta(a));
-  }
-  function marcarTodas() {
-    marcarTodasLeidas(alertas.map(claveAlerta));
-  }
+  const pendientes = alertasPendientes(alertas, leidas);
+  const silenciables = pendientes.filter(esSilenciable);
 
   if (alertas.length === 0) {
-    return (
-      <div className="p-10 text-sm text-center" style={{ color: 'var(--muted)' }}>
-        Sin novedades — no hay ninguna condición real que requiera tu atención ahorita.
-      </div>
-    );
+    return <Tarjeta titulo="Pendientes" estado="vacio" mensaje="Sin novedades" detalle="No hay ninguna condición real que requiera tu atención ahorita." />;
   }
-
   if (pendientes.length === 0) {
-    return (
-      <div className="p-10 text-sm text-center" style={{ color: 'var(--muted)' }}>
-        Ya marcaste todas como leídas.
-      </div>
-    );
+    return <Tarjeta titulo="Pendientes" estado="vacio" mensaje="Todo marcado como leído" detalle="Si la condición cambia, la alerta vuelve a aparecer." />;
   }
 
   return (
-    <div>
-      <div className="px-5 py-3 flex justify-end border-b" style={{ borderColor: 'var(--line)' }}>
-        <button type="button" onClick={marcarTodas}
-          className="text-xs font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity inline-flex items-center gap-1.5">
-          <CheckCheck width={13} height={13} strokeWidth={1.75} /> Marcar todas como leídas
-        </button>
-      </div>
-      <div className="divide-y overflow-hidden" style={{ borderColor: 'var(--line)' }}>
+    <Tarjeta
+      titulo="Pendientes"
+      acciones={silenciables.length > 0
+        ? <Boton tamano="sm" variante="secondary" onClick={() => marcarTodasLeidas(silenciables.map(claveAlerta))}>Marcar todas como leídas</Boton>
+        : undefined}
+    >
+      <ul className="adm-res-lista">
         {pendientes.map((a) => (
-          <FilaAlerta key={claveAlerta(a)} alerta={a} onLeida={() => marcar(a)} />
+          <li key={claveAlerta(a)} className="adm-res-fila">
+            <StatusChip tono={a.tipo === 'atencion' ? 'bad' : 'ok'}>{a.tipo === 'atencion' ? 'Atención' : 'Informativo'}</StatusChip>
+            <div className="adm-res-fila__texto">
+              <span className="adm-res-fila__titulo">{a.texto}</span>
+              {!esSilenciable(a) ? <span className="adm-res-fila__detalle">Con plazo o sin lectura: no se puede ocultar hasta resolverla.</span> : null}
+            </div>
+            {/* La alerta lleva a DONDE SE RESUELVE. Sin href no se pinta nada: un «Ver» sin destino sería un botón que miente. */}
+            {a.href ? <BotonEnlace tamano="sm" variante="secondary" href={a.href}>Ver</BotonEnlace> : null}
+            {esSilenciable(a) ? <Boton tamano="sm" variante="ghost" onClick={() => marcarLeida(claveAlerta(a))}>Marcar leído</Boton> : null}
+          </li>
         ))}
-      </div>
-    </div>
+      </ul>
+    </Tarjeta>
   );
 }
