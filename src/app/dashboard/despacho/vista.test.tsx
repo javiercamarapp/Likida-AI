@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { VistaDespacho } from './vista';
@@ -145,5 +147,22 @@ describe('Despacho — "En curso" declara el recorte de la paginación (FE-B1)',
     const html = pintar(activos);
     expect(html).not.toContain('Siguiente');
     expect(html).toContain('registro');
+  });
+});
+
+describe('Despacho — tabla «En curso»: la acción no se corta y el folio no se parte', () => {
+  const css = readFileSync(join(__dirname, 'despacho.css'), 'utf8');
+  it('«En curso» va a todo el ancho (fila 12) y la tabla lleva la clase que fija el ancho mínimo', () => {
+    const html = pintar({ filas: [filaViaje(0)], pagina: 1, porPagina: 25, total: 1, paginaMax: 200, truncada: false, error: null });
+    const i = html.indexOf('En curso');
+    expect(html.slice(html.lastIndexOf('rv-fila-tarjetas', i) - 30, i)).toContain('data-variante="12"');
+    expect(html).toContain('rv-dsp__tabla');
+    expect(html).toContain('Alta rápida de operador');
+  });
+  it('el CSS: folio y fecha en una sola línea, la última columna (acción) sin encoger y la tabla con ancho mínimo en escritorio', () => {
+    expect(css.match(/\.rv-dsp__folio \{[^}]*\}/)![0]).toMatch(/white-space:\s*nowrap/);
+    expect(css.match(/\.rv-dsp__mono \{[^}]*\}/)![0]).toMatch(/white-space:\s*nowrap/);
+    expect(css).toMatch(/\.rv-dsp__tabla table td:last-child \{[^}]*white-space:\s*nowrap/);
+    expect(css).toMatch(/@media \(min-width: 820px\) \{ \.rv-dsp__tabla table \{ min-width: 720px/);
   });
 });

@@ -7,8 +7,8 @@
 .rv-dsp__item-cab > span:first-child { font-weight: 500; }
 .rv-dsp__ruta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); min-width: 0; }
 .rv-dsp__fecha { flex: none; color: var(--faint); }
-.rv-dsp__folio { font-weight: 500; }
-.rv-dsp__mono { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-dsp__folio { font-weight: 500; white-space: nowrap; }
+.rv-dsp__mono { font-variant-numeric: tabular-nums; color: var(--muted); white-space: nowrap; }
 .rv-dsp__tenue { color: var(--faint); }
 .rv-dsp__fila-accion { display: flex; align-items: flex-start; gap: 8px; }
 .rv-dsp__fila-accion > .rv-dsp__crece { flex: 1 1 auto; min-width: 0; }
@@ -24,3 +24,8 @@
 
 /* Nombres de persona: una línea con elipsis (el completo va en el title) y un mínimo que impide partirlos en dos renglones. */
 .rv-dsp__nombre { display: block; min-width: 140px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Tabla «En curso»: el folio y la fecha no se parten; la columna de acción (botón) no se corta ni se encoge. En móvil (< 820 px) la tabla
+   ya se apila como tarjetas (`tarjetaMovil`), y ahí no aplica el ancho mínimo. */
+.rv-dsp__tabla table td:last-child { white-space: nowrap; width: 1%; }
+@media (min-width: 820px) { .rv-dsp__tabla table { min-width: 720px; } }

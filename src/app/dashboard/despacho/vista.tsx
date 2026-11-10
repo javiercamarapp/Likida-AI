@@ -189,7 +189,8 @@ export function VistaDespacho({
         </Tarjeta>
       </FilaTarjetas>
 
-      <FilaTarjetas variante="8-4">
+      {/* A todo el ancho: con 7 columnas (select de unidad y botón de acción incluidos) no cabe en 8/12 y la acción quedaba cortada. */}
+      <FilaTarjetas variante="12">
         {/* ── Lo vivo, con el estado del aviso ── */}
         <Tarjeta titulo="En curso" info="despacho.en_curso"
           acciones={(
@@ -234,7 +235,7 @@ export function VistaDespacho({
             </EstadoVacio>
           ) : (
             <>
-              <TablaBase<ViajeEnCursoRow> etiqueta="Viajes por despachar" columnas={columnasActivos} filas={activos.filas} idFila={(v) => v.id} tarjetaMovil />
+              <TablaBase<ViajeEnCursoRow> etiqueta="Viajes por despachar" columnas={columnasActivos} filas={activos.filas} idFila={(v) => v.id} tarjetaMovil className="rv-dsp__tabla" />
               {/* FE-2: `activos.total` es el conteo REAL de la consulta (`count: 'exact'`), no `filas.length` sobre un recorte fijo — y
                   hay paginación de verdad para llegar al resto. */}
               <div className="rv-dsp__pie">
@@ -262,14 +263,18 @@ export function VistaDespacho({
             </>
           )}
         </Tarjeta>
+      </FilaTarjetas>
 
+      <FilaTarjetas variante="6-6">
         <div className="rv-dsp__pila">
           {/* ── Alta rápida ── */}
           <Tarjeta titulo="Alta rápida de operador" info="despacho.alta_operador">
             <p className="rv-dsp__nota">Nombre y WhatsApp — la lada 52 y los duplicados los cuida el servidor</p>
             <AltaOperador altaOperador={altaOperador} />
           </Tarjeta>
+        </div>
 
+        <div className="rv-dsp__pila">
           {/* ── Quién trae cuánto ── */}
           <Tarjeta titulo="Carga por operador" info="despacho.carga">
             <p className="rv-dsp__nota">El que trae más sale arriba — ¿a quién NO le cargas otro?</p>
