@@ -24,3 +24,19 @@
 .rv-ag-prueba { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .rv-ag-prueba__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
 .rv-ag-forma { display: grid; gap: 12px; max-width: 520px; }
+
+/* Botones de acción de un agente (Ejecutar ahora / Pausar) con su resultado debajo. */
+.rv-ag-accion { display: grid; gap: 8px; justify-items: end; }
+.rv-ag-accion__confirmar { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.rv-ag-accion__resultado { display: grid; gap: 6px; justify-items: end; max-width: 520px; }
+.rv-ag-malo { color: var(--bad); }
+
+.rv-ag-par { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.rv-ag-dias { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.rv-ag-previa { display: block; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); font-size: var(--t-body, 13px); line-height: 1.5; white-space: pre-line; }
+.rv-ag-previa[data-tono="warn"] { color: var(--warn); font-size: var(--t-small, 12px); }
+
+.rv-ag-mini { display: grid; gap: 4px; margin: 0; }
+.rv-ag-mini__fila { display: flex; justify-content: space-between; gap: 12px; font-size: var(--t-small, 12px); }
+.rv-ag-mini__fila dd { margin: 0; }
+.rv-ag-mini__fila dd:last-child { color: var(--muted); }

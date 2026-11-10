@@ -50,7 +50,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   '[id]/revision-panel.tsx': 1,
   'agentes/carta-porte/configuracion/seccion_ccp.tsx': 1,
   'agentes/carta-porte/configuracion/seccion_primer_mes.tsx': 1,
-  'agentes/cobranza/page.tsx': 1,
   'agentes/conductores/configuracion/documentos_cliente.tsx': 1,
   'agentes/conductores/configuracion/forma.tsx': 1,
   'agentes/conductores/configuracion/preflight.tsx': 2,

@@ -1,13 +1,13 @@
-import { FileWarning, Gauge } from 'lucide-react';
+import { FileWarning } from 'lucide-react';
 import type { ConfigGasto, PlanCobroGasto, ItemCobro } from '@/lib/likida/agentes/cobranza_gasto_pura';
 import { ROTULO_MOTIVO, ROTULO_CONCEPTO_COBRANZA } from '@/lib/likida/agentes/cobranza_gasto_pura';
 import type { TableroGastos } from '@/lib/likida/agentes/cobranza_gasto';
 import { numero, mxn, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
 import { FormaPorGasto } from './forma-por-gasto';
 import type { AccionSimple } from './controles';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Disclosure, EstadoVacio, FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import '../agentes.css';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 const MAX_FILAS = 40;
@@ -32,17 +32,26 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
   const ef = tablero?.efectividad ?? null;
   const ejemplo: ItemCobro[] = plan.paraContactar[0]?.items.slice(0, 2) ?? [];
 
+  const COLS: readonly ColumnaBase<ItemCobro>[] = [
+    { id: 'viaje', titulo: 'Viaje', principal: true, celda: (i) => i.folioViaje ?? 'Sin folio' },
+    {
+      id: 'gasto', titulo: 'Gasto',
+      celda: (i) => <>{ROTULO_CONCEPTO_COBRANZA[i.concepto] ?? i.concepto} <span className="cifra-mono">{mxn(i.monto)}</span>{i.fecha ? ` · ${fechaCorta(i.fecha)}` : ''}</>,
+    },
+    { id: 'falta', titulo: 'Qué falta', celda: (i) => <StatusChip tono="warn">{ROTULO_MOTIVO[i.motivo]}</StatusChip> },
+    { id: 'chofer', titulo: 'Chofer', celda: (i) => i.operadorNombre ?? 'Sin nombre' },
+    { id: 'dias', titulo: 'Días', alinear: 'der', celda: (i) => numero(i.dias) },
+    { id: 'tier', titulo: 'Siguiente aviso', alinear: 'der', celda: (i) => (i.tier !== null ? `toca hoy (tier ${i.tier})` : 'esperando su tier') },
+  ];
+
   return (
-    <section className="card p-4 space-y-4" aria-labelledby="cobranza-por-gasto">
-      <div>
-        <TituloRecuadro id="cobranza-por-gasto" info="cobranza.gasto">Cobranza por gasto</TituloRecuadro>
-        <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
-          Qué comprobante falta de qué gasto, con un solo mensaje por chofer y su tope diario.{' '}
-          {config.porGasto
-            ? 'Encendida: los viajes con gastos pendientes se cobran por gasto.'
-            : 'Apagada: el agente cobra por viaje. Enciéndela abajo para cobrar gasto por gasto.'}
-        </p>
-      </div>
+    <Tarjeta titulo="Cobranza por gasto" info="cobranza.gasto">
+      <p className="rv-ag-notif__nota">
+        Qué comprobante falta de qué gasto, con un solo mensaje por chofer y su tope diario.{' '}
+        {config.porGasto
+          ? 'Encendida: los viajes con gastos pendientes se cobran por gasto.'
+          : 'Apagada: el agente cobra por viaje. Enciéndela abajo para cobrar gasto por gasto.'}
+      </p>
 
       <TiraCifras sello={selloHoy('Gastos de los viajes')}>
         <Cifra info="cobranza.gasto_sin_comprobante" etiqueta="Gastos sin comprobante" valor={numero(plan.pendientes.length)} nota="en viajes abiertos o en cuadre" />
@@ -61,132 +70,83 @@ export function SeccionPorGasto({ config, plan, tablero, firma, instrucciones, g
       </TiraCifras>
 
       {/* ── Qué comprobante falta de qué gasto ── */}
-      <div>
-        <TituloRecuadro nivel="h3" info="cobranza.gasto_faltantes" className="mb-2">Qué falta, gasto por gasto</TituloRecuadro>
+      <Disclosure titulo="Qué falta, gasto por gasto" resumen={`${numero(plan.pendientes.length)} gastos`} abierto={plan.pendientes.length > 0}>
         {plan.pendientes.length === 0 ? (
-          <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          <EstadoVacio titulo="Nada por comprobar" icono={FileWarning} contenido>
             {config.porGasto
               ? 'Todos los gastos de los viajes abiertos tienen su comprobante.'
               : 'Ningún gasto de los viajes abiertos tiene un comprobante faltante a la vista. Cuando el cobro por gasto esté encendido, cada faltante aparece aquí.'}
           </EstadoVacio>
         ) : (
-          <div className="overflow-x-auto">
-            <table aria-label="Comprobantes faltantes por gasto" className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  {['Viaje', 'Gasto', 'Qué falta', 'Chofer', 'Días', 'Siguiente aviso'].map((t, i) => (
-                    <th scope="col" key={t} className={`etiqueta-mono text-[11px] uppercase font-normal pb-2 ${i >= 4 ? 'text-right' : ''}`}>{t}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {plan.pendientes.slice(0, MAX_FILAS).map((i) => (
-                  <tr key={i.gastoId} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                    <td className="py-2 font-medium">{i.folioViaje ?? 'Sin folio'}</td>
-                    <td className="py-2">
-                      {ROTULO_CONCEPTO_COBRANZA[i.concepto] ?? i.concepto} <span className="cifra-mono">{mxn(i.monto)}</span>
-                      {i.fecha && <span style={{ color: 'var(--faint)' }}> · {fechaCorta(i.fecha)}</span>}
-                    </td>
-                    <td className="py-2">
-                      <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                        style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>{ROTULO_MOTIVO[i.motivo]}</span>
-                    </td>
-                    <td className="py-2" style={{ color: 'var(--muted)' }}>{i.operadorNombre ?? 'Sin nombre'}</td>
-                    <td className="py-2 text-right cifra-mono">{numero(i.dias)}</td>
-                    <td className="py-2 text-right cifra-mono" style={{ color: 'var(--muted)' }}>
-                      {i.tier !== null ? `toca hoy (tier ${i.tier})` : 'esperando su tier'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <>
+            <TablaBase etiqueta="Comprobantes faltantes por gasto" columnas={COLS} filas={plan.pendientes.slice(0, MAX_FILAS)} idFila={(i) => i.gastoId} densa tarjetaMovil />
             {plan.pendientes.length > MAX_FILAS && (
-              <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-                …y {numero(plan.pendientes.length - MAX_FILAS)} gastos más (los más atrasados están arriba).
-              </p>
+              <p className="rv-ag-notif__nota">…y {numero(plan.pendientes.length - MAX_FILAS)} gastos más (los más atrasados están arriba).</p>
             )}
-          </div>
+          </>
         )}
-      </div>
+      </Disclosure>
 
-      <div className="grid lg:grid-cols-2 gap-4">
+      <FilaTarjetas variante="6-6">
         {/* ── Efectividad ── */}
-        <div>
-          <TituloRecuadro nivel="h3" info="cobranza.gasto_efectividad_desglose" className="mb-2">
-            <span className="inline-flex items-center gap-1.5">
-              <Gauge width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} /> Efectividad por tier y por motivo
-            </span>
-          </TituloRecuadro>
-          {ef === null ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la efectividad ahora mismo.</p>
-          ) : ef.avisos === 0 ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Aún sin avisos por gasto: cada aviso que salga se mide aquí — cuántos produjeron el comprobante y en cuánto tiempo.
-            </p>
-          ) : (
-            <div className="space-y-3 text-[12px]">
+        <Tarjeta titulo="Efectividad por tier y por motivo" info="cobranza.gasto_efectividad_desglose"
+          estado={ef === null ? 'error' : ef.avisos === 0 ? 'vacio' : 'ok'}
+          mensaje={ef === null ? 'No se pudo leer la efectividad ahora mismo.' : 'Aún sin avisos por gasto'}
+          detalle="Cada aviso que salga se mide aquí: cuántos produjeron el comprobante y en cuánto tiempo.">
+          {ef !== null && ef.avisos > 0 && (
+            <>
               <Mini titulo="Por tier (días)" filas={ef.porTier.map((t) => [`${t.tier} días`, t.avisos, t.resueltos])} />
               <Mini titulo="Por motivo" filas={ef.porMotivo.map((m) => [ROTULO_MOTIVO[m.motivo], m.avisos, m.resueltos])} />
               {ef.cerradosSinResolver > 0 && (
-                <p style={{ color: 'var(--muted)' }}>
+                <p className="rv-ag-notif__nota">
                   {numero(ef.cerradosSinResolver)} aviso{ef.cerradosSinResolver === 1 ? '' : 's'} terminaron con el viaje cerrado y el comprobante aún faltando.
                 </p>
               )}
-            </div>
+            </>
           )}
-        </div>
+        </Tarjeta>
 
         {/* ── Bitácora por gasto ── */}
-        <div>
-          <TituloRecuadro nivel="h3" info="cobranza.gasto_bitacora" className="mb-2">Últimos avisos por gasto</TituloRecuadro>
-          {tablero === null ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudo leer la bitácora ahora mismo.</p>
-          ) : tablero.bitacora.length === 0 ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún sin avisos por gasto — cada intento queda escrito aquí, salga o no.</p>
-          ) : (
-            <div className="space-y-2 text-[12px]">
-              {tablero.bitacora.map((c) => (
-                <div key={`${c.gastoId}-${c.tier}`}>
-                  <span className="font-medium">{c.operadorNombre ?? 'Chofer'}</span>
-                  {' — '}
-                  {c.concepto ? (ROTULO_CONCEPTO_COBRANZA[c.concepto] ?? c.concepto) : 'gasto'}
-                  {c.monto !== null && <> <span className="cifra-mono">{mxn(c.monto)}</span></>}
-                  {c.folioViaje && <> (viaje {c.folioViaje})</>}
-                  : {ROTULO_MOTIVO[c.motivo]}, tier {c.tier}.{' '}
-                  {c.enviado
-                    ? <span style={{ color: 'var(--ok)' }}>Enviado{c.via === 'plantilla' ? ' por plantilla' : ''}.</span>
-                    : <span style={{ color: 'var(--bad)' }}>No salió{c.detalle ? ` — ${c.detalle}` : ''}.</span>}
-                  {c.resueltoPor === 'chofer' && <span style={{ color: 'var(--ok)' }}> Ya llegó el comprobante.</span>}
-                  {c.resueltoPor === 'cierre' && <span style={{ color: 'var(--warn)' }}> El viaje se cerró sin él.</span>}
-                  <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(c.cuando)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+        <Tarjeta titulo="Últimos avisos por gasto" info="cobranza.gasto_bitacora"
+          estado={tablero === null ? 'error' : tablero.bitacora.length === 0 ? 'vacio' : 'ok'}
+          mensaje={tablero === null ? 'No se pudo leer la bitácora ahora mismo.' : 'Aún sin avisos por gasto'}
+          detalle="Cada intento queda escrito aquí, salga o no.">
+          {tablero !== null && tablero.bitacora.map((c) => (
+            <p key={`${c.gastoId}-${c.tier}`} className="rv-ag-notif__nota">
+              <strong>{c.operadorNombre ?? 'Chofer'}</strong>
+              {' — '}
+              {c.concepto ? (ROTULO_CONCEPTO_COBRANZA[c.concepto] ?? c.concepto) : 'gasto'}
+              {c.monto !== null && <> <span className="cifra-mono">{mxn(c.monto)}</span></>}
+              {c.folioViaje && <> (viaje {c.folioViaje})</>}
+              : {ROTULO_MOTIVO[c.motivo]}, tier {c.tier}.{' '}
+              {c.enviado
+                ? <StatusChip tono="ok">Enviado{c.via === 'plantilla' ? ' por plantilla' : ''}</StatusChip>
+                : <StatusChip tono="bad">No salió{c.detalle ? ` — ${c.detalle}` : ''}</StatusChip>}
+              {c.resueltoPor === 'chofer' && <> <StatusChip tono="ok">Ya llegó el comprobante</StatusChip></>}
+              {c.resueltoPor === 'cierre' && <> <StatusChip tono="warn">El viaje se cerró sin él</StatusChip></>}
+              {' · '}{fechaCorta(c.cuando)}
+            </p>
+          ))}
+        </Tarjeta>
+      </FilaTarjetas>
 
-      <div>
-        <TituloRecuadro nivel="h3" info="cobranza.gasto_config" className="mb-2">Configuración de la cobranza por gasto</TituloRecuadro>
+      <Disclosure titulo="Configuración de la cobranza por gasto" resumen={config.porGasto ? 'Encendida' : 'Apagada'}>
         <FormaPorGasto config={config} ejemplo={ejemplo} firma={firma} instrucciones={instrucciones} guardar={guardar} />
-      </div>
-    </section>
+      </Disclosure>
+    </Tarjeta>
   );
 }
 
-
 function Mini({ titulo, filas }: { titulo: string; filas: Array<[string, number, number]> }) {
   return (
-    <div>
-      <div className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>{titulo}</div>
+    <dl className="rv-ag-mini">
+      <dt className="rv-ag-notif__rotulo">{titulo}</dt>
       {filas.map(([rotulo, avisos, resueltos]) => (
-        <div key={rotulo} className="flex items-center justify-between gap-3 py-0.5">
-          <span>{rotulo}</span>
-          <span className="cifra-mono" style={{ color: 'var(--muted)' }}>
-            {numero(resueltos)} de {numero(avisos)} con comprobante
-          </span>
+        <div key={rotulo} className="rv-ag-mini__fila">
+          <dd>{rotulo}</dd>
+          <dd className="cifra-mono">{numero(resueltos)} de {numero(avisos)} con comprobante</dd>
         </div>
       ))}
-    </div>
+    </dl>
   );
 }
