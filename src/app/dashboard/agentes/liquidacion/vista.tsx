@@ -1,20 +1,18 @@
 import Link from 'next/link';
 import { ArrowRight, Bot, BellRing, Flag, Link2, Settings } from 'lucide-react';
+import './liquidacion.css';
 import type { LiqRow, DashboardKpis, HechoSolo, DineroObservadoTipo } from '@/lib/likida/analytics';
 import { etiquetaConcepto, type PoliticaGasto } from '@/lib/likida/cuadre/engine';
 import { mxn, mxnCompacto, numero, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
-import { CalendarHeatmap, HBars } from '@/app/admin/ui/graficas';
-import { Dona } from '@/app/admin/charts';
-import { Bloque, Barra, EsqTabla } from '../../bloque';
+import { Bloque } from '../../bloque';
 import { SeccionCola, type ColaProps } from './cola';
 
 // El rótulo de cada tipo de diferencia vive en `rotulo-diferencia.ts`, tipado
 // contra `TipoDiferencia` completo (M10) — aquí había 3 renglones para ~35 tipos.
 import { rotuloDiferencia as rotuloTipo } from './rotulo-diferencia';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { BarList, Columnas, Cifra, DonaMini, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 
 /** Los conteos del ciclo. `porRevisar` sale de los KPIs; los otros tres, de
  *  `contarViajes`. Van juntos porque los pinta UNA sola tarjeta. */
@@ -95,54 +93,43 @@ export function VistaAgenteLiquidacion({
   return (
     <MarcoPagina titulo="Liquidación automática" apoyo="El agente arma la liquidación de cada viaje: lo que espera tu firma, lo que hizo solo y el criterio con el que juzga.">
 
-      <Bloque mensaje="No se pudieron leer los indicadores del agente."
-        esqueleto={
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" role="status" aria-label="Cargando">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="card p-3.5">
-                <Barra alto={10} ancho="55%" />
-                <div className="mt-1.5"><Barra alto={20} ancho="70%" /></div>
-                <div className="mt-1"><Barra alto={11} ancho="40%" /></div>
-              </div>
-            ))}
-          </div>
-        }>
+      <Bloque mensaje="No se pudieron leer los indicadores del agente." esqueleto={<EsqCifrasV2 n={4} />}>
         <BloqueKpis kpis={kpis} />
       </Bloque>
 
-      <Bloque mensaje="No se pudo leer la cola de revisión." esqueleto={<EsqTabla filas={5} />}>
+      <Bloque mensaje="No se pudo leer la cola de revisión." esqueleto={<EsqTablaV2 filas={5} />}>
         <SeccionCola {...cola} />
       </Bloque>
 
       {externas}
 
       {/* ── La evidencia de que trabaja ── */}
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Bloque mensaje="No se pudo contar el ciclo." esqueleto={<EsqSeccion alto={190} />}>
+      <FilaTarjetas variante="4-4-4">
+        <Bloque mensaje="No se pudo contar el ciclo." esqueleto={<EsqTarjetaV2 alto={160} />}>
           <BloqueCiclo ciclo={extra.ciclo} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer la actividad." esqueleto={<EsqSeccion alto={190} />}>
+        <Bloque mensaje="No se pudo leer la actividad." esqueleto={<EsqTarjetaV2 alto={160} />}>
           <BloqueCierres cierresPorDia={extra.cierresPorDia} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer el registro." esqueleto={<EsqSeccion alto={190} />}>
+        <Bloque mensaje="No se pudo leer el registro." esqueleto={<EsqTarjetaV2 alto={160} />}>
           <BloqueHizoSolo hizoSolo={extra.hizoSolo} />
         </Bloque>
-      </div>
+      </FilaTarjetas>
 
       {/* ── El criterio con el que juzga ── */}
-      <div className="grid lg:grid-cols-3 gap-4">
-        <Bloque mensaje="No se pudo leer el desglose." esqueleto={<EsqSeccion alto={230} />}>
+      <FilaTarjetas variante="4-4-4">
+        <Bloque mensaje="No se pudo leer el desglose." esqueleto={<EsqTarjetaV2 alto={240} />}>
           <BloqueDineroObservado porTipo={extra.porTipo} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer el desglose por operador." esqueleto={<EsqSeccion alto={230} />}>
+        <Bloque mensaje="No se pudo leer el desglose por operador." esqueleto={<EsqTarjetaV2 alto={240} />}>
           <BloqueOperadores operadores={extra.operadores} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer la política." esqueleto={<EsqSeccion alto={230} />}>
+        <Bloque mensaje="No se pudo leer la política." esqueleto={<EsqTarjetaV2 alto={240} />}>
           <BloqueReglas politica={extra.politica} puedeVerReglas={extra.puedeVerReglas} sufijo={sufijo} />
         </Bloque>
-      </div>
+      </FilaTarjetas>
 
-      <Bloque mensaje="No se pudieron leer los últimos cierres." esqueleto={<EsqTabla filas={5} />}>
+      <Bloque mensaje="No se pudieron leer los últimos cierres." esqueleto={<EsqTablaV2 filas={5} />}>
         <BloqueUltimosCierres liquidaciones={liquidaciones} sufijo={sufijo} />
       </Bloque>
 
@@ -154,18 +141,6 @@ export function VistaAgenteLiquidacion({
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS BLOQUES. Cada uno espera SOLO su promesa.
 // ═══════════════════════════════════════════════════════════════════════════
-
-/** El hueco de una de las tarjetas de la rejilla de tres: rótulo, subrótulo
- *  y el cuerpo, del mismo alto que el contenido que va a caer ahí. */
-function EsqSeccion({ alto }: { alto: number }) {
-  return (
-    <section className="card p-4" role="status" aria-label="Cargando">
-      <Barra alto={15} ancho="45%" />
-      <div className="mt-1.5"><Barra alto={11} ancho="60%" /></div>
-      <div className="mt-3"><Barra alto={alto} className="rounded-xl" /></div>
-    </section>
-  );
-}
 
 async function BloqueKpis({ kpis: pKpis }: { kpis: Promise<DashboardKpis> }) {
   const kpis = await pKpis;
@@ -196,32 +171,33 @@ async function BloqueCiclo({ ciclo }: { ciclo: Promise<CicloLiquidacion> }) {
   const cicloVivoLegible = funnel.abiertos !== null && funnel.enCuadre !== null;
   const pasosVivos = cicloVivoLegible
     ? [
-        { etiqueta: 'Abiertos', valor: funnel.abiertos as number },
-        { etiqueta: 'En cuadre', valor: funnel.enCuadre as number },
-        { etiqueta: 'Por revisar', valor: funnel.porRevisar },
+        { clave: 'abiertos', etiqueta: 'Abiertos', valor: funnel.abiertos as number },
+        { clave: 'en_cuadre', etiqueta: 'En cuadre', valor: funnel.enCuadre as number },
+        { clave: 'por_revisar', etiqueta: 'Por revisar', valor: funnel.porRevisar },
       ]
     : [];
   const hayCicloVivo = cicloVivoLegible && pasosVivos.some((p) => p.valor > 0);
+  if (!cicloVivoLegible) {
+    return <Tarjeta titulo="Viajes en curso" info="liquidacion.viajes_en_curso" estado="error" mensaje="No se pudo contar el ciclo ahora mismo. Queda pendiente; no es un cero." />;
+  }
+  if (!hayCicloVivo) {
+    return (
+      <Tarjeta titulo="Viajes en curso" info="liquidacion.viajes_en_curso" estado="vacio" mensaje="Nada vivo en el ciclo" detalle="El próximo viaje que despaches aparece aquí.">
+        {null}
+      </Tarjeta>
+    );
+  }
   return (
-    <section className="card p-4 flex flex-col">
-      <TituloRecuadro info="liquidacion.viajes_en_curso" className="mb-1">Viajes en curso</TituloRecuadro>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>La foto de ahora mismo, por etapa</p>
-      {!cicloVivoLegible ? (
-        <Leyenda>No se pudo contar el ciclo ahora mismo — antes que un cero sin medir, se queda pendiente.</Leyenda>
-      ) : hayCicloVivo ? (
-        /* HBars y no Funnel A PROPÓSITO: el Funnel imprime conversión
-           paso-a-paso y este ciclo no es un embudo decreciente. */
-        <HBars datos={pasosVivos} />
-      ) : (
-        <Leyenda>Nada vivo en el ciclo ahora mismo — el próximo viaje que despaches aparece aquí.</Leyenda>
-      )}
+    <Tarjeta titulo="Viajes en curso" info="liquidacion.viajes_en_curso">
+      <p className="rv-liq-sub">La foto de ahora mismo, por etapa</p>
+      {/* BarList y no embudo A PROPÓSITO: el embudo imprime conversión paso a paso y este ciclo no es un embudo decreciente. */}
+      <BarList etiqueta="Viajes en curso por etapa" items={pasosVivos} formato="numero" />
       {funnel.liquidados !== null && (
-        <p className="text-[12px] mt-3 pt-2.5 border-t" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
-          <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{numero(funnel.liquidados)}</span>{' '}
-          viajes liquidados en total, histórico.
+        <p className="rv-liq-pie">
+          <strong className="cifra-mono">{numero(funnel.liquidados)}</strong> viajes liquidados en total, histórico.
         </p>
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -230,103 +206,116 @@ async function BloqueCierres({ cierresPorDia }: {
 }) {
   const dias = await cierresPorDia;
   const total = dias?.reduce((s, d) => s + d.valor, 0) ?? 0;
+  if (dias === null) {
+    return <Tarjeta titulo="Cierres por día" info="liquidacion.cierres_por_dia" estado="error" mensaje="No se pudo leer la actividad ahora mismo." />;
+  }
+  if (total <= 0) {
+    return (
+      <Tarjeta titulo="Cierres por día" info="liquidacion.cierres_por_dia" estado="vacio" mensaje="Sin cierres en 12 semanas" detalle="Cada día con cierres pinta su columna.">
+        {null}
+      </Tarjeta>
+    );
+  }
   return (
-    <section className="card p-4 flex flex-col">
-      <TituloRecuadro info="liquidacion.cierres_por_dia" className="mb-1">Cierres por día</TituloRecuadro>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Últimas 12 semanas</p>
-      {dias === null ? (
-        <Leyenda>No se pudo leer la actividad ahora mismo.</Leyenda>
-      ) : total > 0 ? (
-        <>
-          <CalendarHeatmap dias={dias} />
-          <p className="text-[12px] mt-3" style={{ color: 'var(--faint)' }}>
-            {numero(total)} liquidaciones cerradas en la ventana.
-          </p>
-        </>
-      ) : (
-        <Leyenda>Aún sin cierres en las últimas 12 semanas — cada día con cierres pinta su cuadrito.</Leyenda>
-      )}
-    </section>
+    <Tarjeta titulo="Cierres por día" info="liquidacion.cierres_por_dia">
+      <p className="rv-liq-sub">Últimas 12 semanas</p>
+      <Columnas
+        etiqueta="Liquidaciones cerradas por día, últimas 12 semanas"
+        datos={dias.map((d) => ({ etiqueta: fechaCorta(d.fecha), valor: d.valor, largo: fechaCorta(d.fecha) }))}
+        formato="numero"
+        alto={140}
+        variacion={false}
+        unidad="liquidaciones"
+      />
+      <p className="rv-liq-pie">{numero(total)} liquidaciones cerradas en la ventana.</p>
+    </Tarjeta>
   );
 }
 
 async function BloqueHizoSolo({ hizoSolo }: { hizoSolo: Promise<HizoSolo> }) {
   const { hechos, huerfanos, docsProcesados, actividadIa } = await hizoSolo;
+  if (hechos === null) {
+    return <Tarjeta titulo="Lo que hizo solo" info="liquidacion.hizo_solo" estado="error" mensaje="No se pudo leer el registro ahora mismo." />;
+  }
+  if (hechos.length === 0 && !(huerfanos && huerfanos.resueltos > 0)) {
+    return (
+      <Tarjeta titulo="Lo que hizo solo" info="liquidacion.hizo_solo" estado="vacio" mensaje="Aún nada que presumir"
+        detalle="Cuando el agente mande un recordatorio o escale un viaje sin que nadie se lo pida, queda escrito aquí.">
+        {null}
+      </Tarjeta>
+    );
+  }
   return (
-    <section className="card p-4 flex flex-col">
-      <TituloRecuadro info="liquidacion.hizo_solo" className="mb-3">Lo que hizo solo</TituloRecuadro>
-      {hechos === null ? (
-        <Leyenda>No se pudo leer el registro ahora mismo.</Leyenda>
-      ) : hechos.length === 0 && !(huerfanos && huerfanos.resueltos > 0) ? (
-        <Leyenda>Aún nada que presumir: cuando el agente mande un recordatorio o escale un
-          viaje sin que nadie se lo pida, queda escrito aquí.</Leyenda>
-      ) : (
-        <div className="space-y-2.5 text-[12px]">
-          {hechos.map((h, i) => (
-            <div key={i} className="flex items-start gap-2">
+    <Tarjeta titulo="Lo que hizo solo" info="liquidacion.hizo_solo">
+      <ul className="rv-liq-hechos">
+        {hechos.map((h, i) => (
+          <li key={i} className="rv-liq-hecho">
+            <span className="rv-liq-hecho__icono" data-tono={h.tipo === 'recordatorio' ? 'neutro' : 'warn'}>
+              <Icono icono={h.tipo === 'recordatorio' ? BellRing : Flag} />
+            </span>
+            <div className="rv-liq-hecho__texto">
               {h.tipo === 'recordatorio'
-                ? <BellRing width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-                : <Flag width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />}
-              <div className="min-w-0">
-                {h.tipo === 'recordatorio'
-                  ? <span>Le recordó a <span className="font-medium">{h.operador ?? 'el operador'}</span> comprobar el viaje {h.folio}</span>
-                  : <span>Escaló el viaje <span className="font-medium">{h.folio}</span> para atención humana</span>}
-                <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(h.cuando)}</span>
-              </div>
+                ? <span>Le recordó a <strong>{h.operador ?? 'el operador'}</strong> comprobar el viaje {h.folio}</span>
+                : <span>Escaló el viaje <strong>{h.folio}</strong> para atención humana</span>}
+              <span className="rv-liq-hecho__fecha">{fechaCorta(h.cuando)}</span>
             </div>
-          ))}
-          {huerfanos && huerfanos.resueltos > 0 && (
-            <div className="flex items-start gap-2 pt-1.5 border-t" style={{ borderColor: 'var(--line2)' }}>
-              <Link2 width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} />
-              <span>Amarró solo <span className="font-medium">{numero(huerfanos.resueltos)}</span> comprobantes
-                que llegaron sin viaje asignado.</span>
-            </div>
-          )}
-        </div>
-      )}
+          </li>
+        ))}
+        {huerfanos && huerfanos.resueltos > 0 && (
+          <li className="rv-liq-hecho rv-liq-hecho--aparte">
+            <span className="rv-liq-hecho__icono" data-tono="ok"><Icono icono={Link2} /></span>
+            <span className="rv-liq-hecho__texto">Amarró solo <strong>{numero(huerfanos.resueltos)}</strong> comprobantes que llegaron sin viaje asignado.</span>
+          </li>
+        )}
+      </ul>
       {(docsProcesados !== null || actividadIa !== null) && (
-        <p className="text-[12px] mt-auto pt-2.5 border-t" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
+        <p className="rv-liq-pie">
           {docsProcesados !== null && (
-            <><span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{numero(docsProcesados)}</span> comprobantes leídos</>
+            <><strong className="cifra-mono">{numero(docsProcesados)}</strong> comprobantes leídos</>
           )}
           {docsProcesados !== null && actividadIa !== null && ' · '}
           {actividadIa !== null && (
-            <><span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{numero(actividadIa)}</span> lecturas de IA</>
+            <><strong className="cifra-mono">{numero(actividadIa)}</strong> lecturas de IA</>
           )}
           {' '}— histórico.
         </p>
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
 export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<DineroObservadoTipo[] | null> }) {
   const porTipo = await p;
   const totalObservado = porTipo?.reduce((s, t) => s + t.monto, 0) ?? 0;
+  if (porTipo === null) {
+    return <Tarjeta titulo="Dinero observado" info="liquidacion.dinero_observado" estado="error" mensaje="No se pudo leer el desglose ahora mismo." />;
+  }
+  if (porTipo.length === 0) {
+    return (
+      <Tarjeta titulo="Dinero observado" info="liquidacion.dinero_observado" estado="vacio" mensaje="Sin diferencias detectadas"
+        detalle="Cuando el agente atrape un gasto fuera de política o un ticket duplicado, aquí se desglosa.">
+        {null}
+      </Tarjeta>
+    );
+  }
   return (
-    <section className="card p-4 flex flex-col">
-      <TituloRecuadro info="liquidacion.dinero_observado">Dinero observado</TituloRecuadro>
-      <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>Todas las diferencias que el motor registró, por tipo — histórico completo, no solo fuera de política o duplicado</p>
-      {porTipo === null ? (
-        <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
-      ) : porTipo.length === 0 ? (
-        <Leyenda>Sin diferencias detectadas todavía — cuando el agente atrape un gasto fuera
-          de política o un ticket duplicado, aquí se desglosa.</Leyenda>
-      ) : (
-        <>
-          <div className="cifra-mono text-[20px] font-medium mb-2">{mxn(totalObservado)}</div>
-          <Dona segmentos={porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo), valor: t.monto }))} />
-          <div className="mt-2 space-y-1">
-            {porTipo.map((t) => (
-              <div key={t.tipo} className="flex items-center justify-between text-[12px]">
-                <span style={{ color: 'var(--muted)' }}>{rotuloTipo(t.tipo)} · {numero(t.n)}</span>
-                <span className="cifra-mono">{mxn(t.monto)}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </section>
+    <Tarjeta titulo="Dinero observado" info="liquidacion.dinero_observado">
+      <p className="rv-liq-sub">Todas las diferencias que el motor registró, por tipo — histórico completo, no solo fuera de política o duplicado</p>
+      <DonaMini
+        etiqueta="Dinero observado por tipo de diferencia"
+        centro={mxn(totalObservado)}
+        formato="mxn"
+        gajos={porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo), valor: t.monto }))}
+      />
+      <ul className="rv-liq-filas">
+        {porTipo.map((t) => (
+          <li key={t.tipo} className="rv-liq-filas__fila">
+            <span className="rv-liq-filas__rotulo">{rotuloTipo(t.tipo)} · {numero(t.n)}</span>
+            <span className="cifra-mono">{mxn(t.monto)}</span>
+          </li>
+        ))}
+      </ul>
+    </Tarjeta>
   );
 }
 
@@ -334,18 +323,21 @@ async function BloqueOperadores({ operadores: p }: {
   operadores: Promise<Array<{ etiqueta: string; valor: number }> | null>;
 }) {
   const operadores = await p;
+  if (operadores === null) {
+    return <Tarjeta titulo="Diferencias por operador" info="liquidacion.por_operador" estado="error" mensaje="No se pudo leer el desglose ahora mismo." />;
+  }
+  if (operadores.length === 0) {
+    return (
+      <Tarjeta titulo="Diferencias por operador" info="liquidacion.por_operador" estado="vacio" mensaje="Ningún operador acumula diferencias" detalle="La señal que quieres ver.">
+        {null}
+      </Tarjeta>
+    );
+  }
   return (
-    <section className="card p-4 flex flex-col">
-      <TituloRecuadro info="liquidacion.por_operador">Diferencias por operador</TituloRecuadro>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Liquidaciones con diferencia, por operador</p>
-      {operadores === null ? (
-        <Leyenda>No se pudo leer el desglose ahora mismo.</Leyenda>
-      ) : operadores.length === 0 ? (
-        <Leyenda>Ningún operador acumula diferencias — la señal que quieres ver.</Leyenda>
-      ) : (
-        <HBars datos={operadores} />
-      )}
-    </section>
+    <Tarjeta titulo="Diferencias por operador" info="liquidacion.por_operador">
+      <p className="rv-liq-sub">Liquidaciones con diferencia, por operador</p>
+      <BarList etiqueta="Liquidaciones con diferencia por operador" formato="numero" items={operadores.map((o, i) => ({ clave: `${i}-${o.etiqueta}`, etiqueta: o.etiqueta, valor: o.valor }))} />
+    </Tarjeta>
   );
 }
 
@@ -353,39 +345,29 @@ async function BloqueReglas({ politica: p, puedeVerReglas, sufijo }: {
   politica: Promise<PoliticaGasto[] | null>; puedeVerReglas: boolean; sufijo: string;
 }) {
   const politica = await p;
+  /* "Ver", no "Editar": Configuración hoy es solo lectura — un botón que promete editar y no edita es un botón que miente.
+     Cuando esa página edite, esto vuelve a ser "Editar". */
+  const ver = puedeVerReglas ? (
+    <Link href={`/dashboard/configuracion${sufijo}`} title="Ver la configuración completa" className="rv-liq-enlace">
+      <Icono icono={Settings} tam={14} /> Ver
+    </Link>
+  ) : null;
+  if (politica === null) {
+    return <Tarjeta titulo="Sus reglas" info="liquidacion.reglas" acciones={ver} estado="error" mensaje="No se pudo leer la política ahora mismo." />;
+  }
   return (
-    <section className="card p-4 flex flex-col">
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <TituloRecuadro info="liquidacion.reglas">Sus reglas</TituloRecuadro>
-          {puedeVerReglas && (
-            /* "Ver", no "Editar": Configuración hoy es solo lectura —
-               un botón que promete editar y no edita es un botón que
-               miente. Cuando esa página edite, esto vuelve a ser
-               "Editar". */
-            <Link href={`/dashboard/configuracion${sufijo}`} title="Ver la configuración completa"
-              className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
-              style={{ color: 'var(--marca)' }}>
-              <Settings width={12} height={12} strokeWidth={1.75} /> Ver
-            </Link>
-          )}
-        </div>
-        {politica === null ? (
-          <Leyenda>No se pudo leer la política ahora mismo.</Leyenda>
-        ) : (
-          <div className="space-y-1">
-            {politica.map((pg) => (
-              <div key={pg.concepto} className="flex items-center justify-between text-[12px]">
-                <span style={{ color: 'var(--muted)' }}>{etiquetaConcepto(pg.concepto)}</span>
-                <span className="cifra-mono">
-                  {pg.topeMonto !== undefined ? mxn(pg.topeMonto) : pg.requiereCfdi ? 'Requiere CFDI' : 'Sin tope'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
+    <Tarjeta titulo="Sus reglas" info="liquidacion.reglas" acciones={ver}>
+      <ul className="rv-liq-filas">
+        {politica.map((pg) => (
+          <li key={pg.concepto} className="rv-liq-filas__fila">
+            <span className="rv-liq-filas__rotulo">{etiquetaConcepto(pg.concepto)}</span>
+            <span className="cifra-mono">
+              {pg.topeMonto !== undefined ? mxn(pg.topeMonto) : pg.requiereCfdi ? 'Requiere CFDI' : 'Sin tope'}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Tarjeta>
   );
 }
 
@@ -395,79 +377,48 @@ async function BloqueUltimosCierres({ liquidaciones, sufijo }: {
   const liqs = await liquidaciones;
   const cierres = liqs.filter((l) => l.estatus !== 'revisar').slice(0, 5);
   return (
-    <section className="card p-4">
-      <TituloRecuadro info="liquidacion.ultimos_cierres" className="mb-3">Últimos cierres</TituloRecuadro>
+    <Tarjeta titulo="Últimos cierres" info="liquidacion.ultimos_cierres">
       {cierres.length === 0 ? (
-        <EstadoVacio icono={<Bot width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        <EstadoVacio icono={Bot} titulo="Aún sin cierres">
           El agente todavía no cierra ninguna liquidación en esta flota.
         </EstadoVacio>
       ) : (
         <TablaLiqs filas={cierres} sufijo={sufijo} conVer />
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
-/** Leyenda de vacío/pendiente — centrada por alto y ancho, como TODAS las
- *  leyendas del panel (regla del 12-ago). */
-function Leyenda({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <p className="text-[12px] text-center max-w-[30ch]" style={{ color: 'var(--muted)' }}>{children}</p>
-    </div>
-  );
-}
-
-
-const ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> = {
-  cuadrada: { rotulo: 'Cuadrada', fg: 'var(--ok)', bg: 'var(--okbg)' },
-  con_diferencias: { rotulo: 'Con diferencias', fg: 'var(--warn)', bg: 'var(--warnbg)' },
-  revisar: { rotulo: 'Por revisar', fg: 'var(--bad)', bg: 'var(--badbg)' },
+const ESTATUS: Record<string, { rotulo: string; tono: TonoEstado }> = {
+  cuadrada: { rotulo: 'Cuadrada', tono: 'ok' },
+  con_diferencias: { rotulo: 'Con diferencias', tono: 'warn' },
+  revisar: { rotulo: 'Por revisar', tono: 'bad' },
 };
 
 function TablaLiqs({ filas, sufijo, conVer }: { filas: LiqRow[]; sufijo: string; conVer?: boolean }) {
   return (
-    <div className="overflow-x-auto">
-      <table aria-label="Viajes de la liquidación" className="w-full text-[13px]">
-        <thead>
-          <tr className="text-left" style={{ color: 'var(--faint)' }}>
-            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
-            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Fecha</th>
-            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Comprobado</th>
-            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Diferencia</th>
-            <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estatus</th>
-            {conVer && <th scope="col" className="pb-2" />}
-          </tr>
-        </thead>
-        <tbody>
-          {filas.map((l) => {
-            const e = ESTATUS[l.estatus] ?? { rotulo: l.estatus, fg: 'var(--muted)', bg: 'var(--canvas)' };
-            return (
-              <tr key={l.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                <td className="py-2 font-medium">{l.folio}</td>
-                <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaCorta(l.creadoEn)}</td>
-                <td className="py-2 text-right cifra-mono">{mxn(l.comprobado)}</td>
-                <td className="py-2 pr-6 text-right cifra-mono" style={l.diferencia !== 0 ? { color: 'var(--bad)' } : undefined}>
-                  {mxn(l.diferencia)}
-                </td>
-                <td className="py-2">
-                  <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                    style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
-                </td>
-                {conVer && (
-                  <td className="py-2 text-right">
-                    <Link href={`/dashboard/${l.id}${sufijo}`}
-                      className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity"
-                      style={{ color: 'var(--marca)' }}>
-                      Ver <ArrowRight width={12} height={12} strokeWidth={2} />
-                    </Link>
-                  </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+    <TablaBase<LiqRow>
+      etiqueta="Viajes de la liquidación"
+      filas={filas}
+      idFila={(l) => l.id}
+      tarjetaMovil
+      columnas={[
+        { id: 'viaje', titulo: 'Viaje', principal: true, celda: (l) => <strong>{l.folio}</strong> },
+        { id: 'fecha', titulo: 'Fecha', celda: (l) => <span className="rv-liq-apagado">{fechaCorta(l.creadoEn)}</span> },
+        { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado)}</span> },
+        { id: 'diferencia', titulo: 'Diferencia', alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-liq-malo' : 'cifra-mono'}>{mxn(l.diferencia)}</span> },
+        {
+          id: 'estatus', titulo: 'Estatus', celda: (l) => {
+            const e = ESTATUS[l.estatus] ?? { rotulo: l.estatus, tono: 'muted' as const };
+            return <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>;
+          },
+        },
+        ...(conVer ? [{
+          id: 'ver', titulo: 'Ver el viaje', alinear: 'der' as const, celda: (l: LiqRow) => (
+            <Link href={`/dashboard/${l.id}${sufijo}`} className="rv-liq-enlace">Ver <Icono icono={ArrowRight} tam={14} /></Link>
+          ),
+        }] : []),
+      ]}
+    />
   );
 }

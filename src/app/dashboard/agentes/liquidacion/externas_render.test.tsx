@@ -81,9 +81,9 @@ describe('las fichas: un conteo que no se pudo leer NO es cero', () => {
 
   it('«No coincide» y «Fallaron» con casos se resaltan; con cero no', async () => {
     const con = await pintar([fila()]);
-    expect(con).toMatch(/border-color:var\(--bad\)/);
+    expect(con).toContain('data-alerta="true"');
     const sin = await pintar([fila()], { fichas: { porEstado: { pendiente: 0, en_cola: 0, enviada: 0, acusada: 0, fallida: 0 }, noCoincide: 0 } });
-    expect(sin).not.toMatch(/border-color:var\(--bad\)/);
+    expect(sin).not.toContain('data-alerta="true"');
   });
 
   it('cada ficha filtra: sus links llevan el estado y conservan el contexto (tenant)', async () => {
@@ -95,9 +95,9 @@ describe('las fichas: un conteo que no se pudo leer NO es cero', () => {
 });
 
 describe('la tabla', () => {
-  it('una disputa se ve: fila resaltada y «No coincide» en rojo', async () => {
+  it('una disputa se ve: celda marcada como disputa y «No coincide» en rojo', async () => {
     const html = await pintar([fila({ estado: 'acusada', acuseTipo: 'no_coincide', acuseEn: '2026-09-09T10:00:00Z' })]);
-    expect(html).toMatch(/background:var\(--badbg\)/);
+    expect(html).toContain('data-disputa="true"');
     expect(html).toContain('No coincide');
   });
 
