@@ -12,7 +12,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/agente-whatsapp/page.tsx': 1,
   'app/admin/agentes/[id]/insumos/page.tsx': 1,
   'app/admin/agentes/contenido.tsx': 1,
-  'app/admin/analitica/page.tsx': 1,
   'app/admin/aprobaciones/page.tsx': 1,
   'app/admin/calidad-evals/page.tsx': 1,
   'app/admin/capacidad-forecast/page.tsx': 1,
@@ -27,7 +26,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/crecimiento/page.tsx': 1,
   'app/admin/crons/vista.tsx': 1,
   'app/admin/dev/page.tsx': 1,
-  'app/admin/ejecutivo/page.tsx': 1,
   'app/admin/equipo/page.tsx': 1,
   'app/admin/escalaciones/page.tsx': 1,
   'app/admin/evals/page.tsx': 1,
@@ -70,7 +68,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/agente-whatsapp',
   'app/admin/agentes',
   'app/admin/agentes/[id]/insumos',
-  'app/admin/analitica',
   'app/admin/aprobaciones',
   'app/admin/calidad-evals',
   'app/admin/capacidad-forecast',
@@ -86,7 +83,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/crecimiento',
   'app/admin/crons',
   'app/admin/dev',
-  'app/admin/ejecutivo',
   'app/admin/elegir-flota',
   'app/admin/equipo',
   'app/admin/escalaciones',
@@ -116,8 +112,6 @@ export const BASE_SIN_MARCO: string[] = [
 
 /** admin_paginas_en_menu: direcciones estáticas que ninguna entrada ni pestaña de rutas.ts cubre. */
 export const BASE_PAGINAS_FUERA_DEL_MENU: string[] = [
-  '/admin/analitica',
-  '/admin/ejecutivo',
 ];
 
 /** sin_emojis_en_producto: emoji por archivo (src/app y src/lib, sin pruebas). */
