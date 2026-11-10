@@ -7,6 +7,7 @@
 \ir sql/03_gps.sql
 \ir sql/04_peajes.sql
 \ir sql/05_liquidacion.sql
+\ir sql/05b_desglose_correo.sql
 \ir sql/06_cartaporte.sql
 \ir sql/07_vigia_y_conductor.sql
 \ir sql/08_convenios.sql

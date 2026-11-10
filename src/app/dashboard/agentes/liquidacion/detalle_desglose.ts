@@ -9,6 +9,7 @@
 //   · la descarga es una URL firmada de 24 h; si no se pudo firmar, el detalle sigue y lo dice (`descargaUrl: null`).
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { POLIZA_PROVISIONAL } from '@/lib/likida/liquidacion_externa/poliza_provisional';
 import type { LiquidacionExterna } from '@/lib/likida/liquidacion_externa/repo';
 import type { Desglose, EntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DestinoVista, EstadoDestino } from './desgloses';
@@ -53,7 +54,7 @@ export interface DetalleDesglose {
   generaciones: GeneracionDetalle[];
   /** Por rol: ya hay un envío saliendo (jamás se reenvía encima). */
   enCurso: Record<'operador' | 'coordinador' | 'rh', boolean>;
-  retenido: null | { por: 'neto' | 'revision'; liberable: boolean };
+  retenido: null | { por: 'neto' | 'revision' | 'poliza_provisional'; liberable: boolean };
   excepciones: ExcepcionDetalle[];
   descargaUrl: string | null;
   /** `desglose-<bitacora>.xlsx`, ya saneado. */
@@ -131,7 +132,7 @@ export function armarDetalle(e: EntradaDetalle): DetalleDesglose {
   const abiertas = e.excepciones.filter((x) => x.resueltaEn === null);
   const retenido = desglose.retenidaMotivo
     ? {
-      por: (/neto/i.test(desglose.retenidaMotivo) ? 'neto' : 'revision') as 'neto' | 'revision',
+      por: (desglose.poliza === POLIZA_PROVISIONAL ? 'poliza_provisional' : /neto/i.test(desglose.retenidaMotivo) ? 'neto' : 'revision') as 'neto' | 'revision' | 'poliza_provisional',
       liberable: abiertas.filter((x) => ['neto_negativo', 'tipo_sin_regla', 'concepto_prohibido'].includes(x.tipo)).every((x) => LIBERABLES.includes(x.tipo)),
     }
     : null;

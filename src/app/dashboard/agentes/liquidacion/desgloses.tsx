@@ -37,7 +37,7 @@ export type EstadoDestino = 'entregado' | 'enviado' | 'pendiente' | 'no_entregad
 export interface DestinoVista {
   estado: EstadoDestino;
   /** Cuando es `retenido`: la razón ya clasificada («neto negativo» o «requiere revisión»). */
-  retenidoPor?: 'neto' | 'revision';
+  retenidoPor?: 'neto' | 'revision' | 'poliza_provisional';
   /** Cuándo pasó el último cambio (entrega o rebote), si lo hay. */
   en?: string | null;
 }
@@ -148,7 +148,7 @@ const ESTADO_DE_ENTREGA: Record<EstadoEntregaCorreo, EstadoDestino> = {
  */
 export function destinosDe(entregas: EntregaCorreo[], retenidaMotivo: string | null): Record<RolVisible, DestinoVista> {
   if (retenidaMotivo) {
-    const retenidoPor = /neto/i.test(retenidaMotivo) ? 'neto' : 'revision';
+    const retenidoPor = /^póliza provisional/i.test(retenidaMotivo) ? 'poliza_provisional' : /neto/i.test(retenidaMotivo) ? 'neto' : 'revision';
     return { operador: { estado: 'retenido', retenidoPor }, coordinador: { estado: 'retenido', retenidoPor }, rh: { estado: 'retenido', retenidoPor } };
   }
   const out = {} as Record<RolVisible, DestinoVista>;
@@ -190,7 +190,7 @@ export function rotuloDestino(d: DestinoVista): { rotulo: string; tono: Tono } {
     case 'no_entregado': return { rotulo: 'No se pudo entregar', tono: 'bad' };
     case 'omitido': return { rotulo: 'No se envió', tono: 'muted' };
     case 'sin_correo': return { rotulo: 'Sin correo', tono: 'bad' };
-    case 'retenido': return { rotulo: d.retenidoPor === 'neto' ? 'Retenido: neto negativo' : 'Retenido: pide revisión', tono: 'warn' };
+    case 'retenido': return { rotulo: d.retenidoPor === 'neto' ? 'Retenido: neto negativo' : d.retenidoPor === 'poliza_provisional' ? 'Retenido: póliza provisional' : 'Retenido: pide revisión', tono: 'warn' };
     default: return { rotulo: '—', tono: 'muted' };
   }
 }
@@ -203,7 +203,7 @@ export function ayudaDestino(rol: RolVisible, d: DestinoVista): string | null {
         ? 'El correo de RH no llegó: corrígelo en la configuración.'
         : `El correo ${DE_ROL[rol]} rebotó: corrígelo y reenvía.`;
     case 'sin_correo': return 'Este operador no tiene correo registrado: agrégalo y reenvía.';
-    case 'retenido': return d.retenidoPor === 'neto' ? 'El neto salió negativo: revísalo antes de liberar el envío.' : 'Una regla pidió revisar este desglose antes de enviarlo.';
+    case 'retenido': return d.retenidoPor === 'neto' ? 'El neto salió negativo: revísalo antes de liberar el envío.' : d.retenidoPor === 'poliza_provisional' ? 'Póliza provisional: una persona debe revisarlo antes de enviarlo.' : 'Una regla pidió revisar este desglose antes de enviarlo.';
     default: return null;
   }
 }
@@ -313,7 +313,7 @@ export async function SeccionDesgloses(p: DesglosesProps) {
         <EstadoVacio icono={Route} titulo={filtrando ? 'Ningún desglose con ese filtro' : 'Aún sin desgloses'}>
           {filtrando
             ? 'Ningún desglose cae en ese filtro. Prueba con otro estado o con más fechas.'
-            : 'Aún no hay desgloses: llegan cuando una bitácora tiene póliza.'}
+            : 'Aún no hay desgloses. Llegan cuando está conectado el sistema de transporte (TMS), los operadores tienen correo y la bitácora trae póliza.'}
         </EstadoVacio>
       ) : (
         <>
@@ -607,7 +607,7 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
       {d.retenido && (
         <div className="rv-liq-retenido">
           <p className="rv-liq-retenido__titulo">
-            {d.retenido.por === 'neto' ? 'Retenido: neto negativo' : 'Retenido: pide revisión'}
+            {d.retenido.por === 'neto' ? 'Retenido: neto negativo' : d.retenido.por === 'poliza_provisional' ? 'Retenido: póliza provisional' : 'Retenido: pide revisión'}
           </p>
           <p className="rv-liq-sub">
             Este desglose no se ha enviado a nadie.{' '}
