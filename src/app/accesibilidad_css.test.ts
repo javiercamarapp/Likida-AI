@@ -119,7 +119,10 @@ describe('regla de foco visible por intención (R4)', () => {
       }
     }
     expect(transparentes).toBeGreaterThanOrEqual(10);
-    expect(ocultos).toBeGreaterThanOrEqual(3);
+    // Eran 3 hasta que cobranza (estrategia.tsx, forma-por-gasto.tsx) pasó a <Casilla> de ui-v2 (`rv-marca__input`): una caja propia VISIBLE
+    // que recibe el anillo de foco global, ya no un `<input class="sr-only">` con `data-foco`. Queda el radio de revision-panel.tsx; el piso
+    // sigue exigiendo que el detector vea al menos uno (si no, estaría ciego).
+    expect(ocultos).toBeGreaterThanOrEqual(1);
     expect(sinMarca).toEqual([]);
   }, 60_000); // recorre todo src/: bajo carga del CI superaba el límite de 5 s
 
