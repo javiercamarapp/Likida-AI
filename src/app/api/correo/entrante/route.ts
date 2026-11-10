@@ -76,6 +76,8 @@ interface EventoCorreo {
     text?: string;
     html?: string;
     attachments?: AdjuntoEntrante[];
+    /** Cabeceras del mensaje, si el proveedor las incluye (lista `{name,value}` o mapa). */
+    headers?: unknown;
   };
 }
 
@@ -245,7 +247,7 @@ export async function POST(req: Request) {
     const restantePj = () => finPj - Date.now();
     const r = await atenderCorreoPeajes(
       tokenPj,
-      { emailId, from: d.from, subject: d.subject, text: d.text, html: d.html, attachments: d.attachments },
+      { emailId, from: d.from, subject: d.subject, text: d.text, html: d.html, attachments: d.attachments, headers: d.headers },
       { descargar: descargadorResend(process.env.RESEND_API_KEY ?? '', restantePj) },
     );
     return NextResponse.json(r.cuerpo, { status: r.status });

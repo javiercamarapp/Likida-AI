@@ -128,7 +128,7 @@ export function aNumero(v: unknown, decimalDeclarado?: '.' | ','): Resultado {
   if (typeof v === 'number') return Number.isFinite(v) ? { ok: v } : { error: 'número no finito' };
   if (typeof v !== 'string') return { error: 'se esperaba un número' };
   const t = v.trim().replace(/^\$\s*/, '').replace(/\s+/g, '');
-  if (!/^-?\d[\d.,]*$/.test(t) && !/^-?[.,]\d+$/.test(t)) return { error: `«${v.slice(0, 30)}» no es un número` };
+  if (!/^-?\d[\d.,]*$/.test(t) && !/^-?[.,]\d+$/.test(t)) return { error: 'no es un número' };
   const neg = t.startsWith('-');
   const s = neg ? t.slice(1) : t;
   const ultPunto = s.lastIndexOf('.');
@@ -138,10 +138,10 @@ export function aNumero(v: unknown, decimalDeclarado?: '.' | ','): Resultado {
     // Formato declarado: el otro separador solo puede ser de miles (grupos de tres dígitos).
     const miles = decimalDeclarado === '.' ? ',' : '.';
     const partes = s.split(decimalDeclarado);
-    if (partes.length > 2) return { error: `«${v.slice(0, 30)}» no es un número` };
+    if (partes.length > 2) return { error: 'no es un número' };
     const grupos = partes[0].split(miles);
-    if (grupos.length > 1 && (grupos[0].length < 1 || grupos[0].length > 3 || !grupos.slice(1).every((g) => g.length === 3))) return { error: `«${v.slice(0, 30)}» no es un número` };
-    if (partes.length === 2 && partes[1].includes(miles)) return { error: `«${v.slice(0, 30)}» no es un número` };
+    if (grupos.length > 1 && (grupos[0].length < 1 || grupos[0].length > 3 || !grupos.slice(1).every((g) => g.length === 3))) return { error: 'no es un número' };
+    if (partes.length === 2 && partes[1].includes(miles)) return { error: 'no es un número' };
     normal = grupos.join('') + (partes.length === 2 ? `.${partes[1]}` : '');
   } else if (ultPunto >= 0 && ultComa >= 0) {
     const decimal = ultPunto > ultComa ? '.' : ',';
@@ -152,19 +152,19 @@ export function aNumero(v: unknown, decimalDeclarado?: '.' | ','): Resultado {
     const partes = s.split(sep);
     const cola = partes[partes.length - 1];
     if (partes.length > 2) {
-      if (!partes.slice(1).every((p) => p.length === 3)) return { error: `«${v.slice(0, 30)}» no es un número` };
+      if (!partes.slice(1).every((p) => p.length === 3)) return { error: 'no es un número' };
       normal = partes.join('');
     } else if (sep === '.' && cola.length === 3 && /^[1-9]\d{0,2}$/.test(partes[0])) {
       // «1.234»: ¿mil doscientos treinta y cuatro o uno punto doscientos treinta y cuatro? No se adivina (dinero).
-      return { error: `«${v.slice(0, 30)}» es ambiguo (¿miles o decimales?): declara «decimal» en el mapeo` };
+      return { error: 'número ambiguo (¿miles o decimales?): declara «decimal» en el mapeo' };
     } else if (sep === ',' && cola.length === 3 && partes[0].length >= 1 && partes[0].length <= 3 && partes[0] !== '') {
       // R7-B2: «1,234» es el mismo caso que «1.234» con el signo cambiado (¿mil doscientos treinta y cuatro o 1.234?): en dinero no se
       // adivina; se convierte solo si el mapeo declara el separador decimal.
-      return { error: `«${v.slice(0, 30)}» es ambiguo (¿miles o decimales?): declara «decimal» en el mapeo` };
+      return { error: 'número ambiguo (¿miles o decimales?): declara «decimal» en el mapeo' };
     } else normal = partes.join('.');
   } else normal = s;
   const n = Number(normal);
-  return Number.isFinite(n) ? { ok: neg ? -n : n } : { error: `«${v.slice(0, 30)}» no es un número` };
+  return Number.isFinite(n) ? { ok: neg ? -n : n } : { error: 'no es un número' };
 }
 
 const TOKENS_FECHA = /yyyy|MM|dd|HH|H|mm|ss/g;
@@ -176,7 +176,7 @@ export function aFechaLocal(v: unknown, formato: string | undefined, zona: strin
     // Sin patrón: ISO «AAAA-MM-DD[ T]HH:mm[:ss]» (hora local de la zona) o ISO con zona explícita (Z / ±hh:mm).
     if (/(Z|[+-]\d{2}:?\d{2})$/i.test(t)) {
       const ms = Date.parse(t);
-      return Number.isFinite(ms) ? { ok: new Date(ms).toISOString() } : { error: `fecha «${t.slice(0, 30)}» ilegible` };
+      return Number.isFinite(ms) ? { ok: new Date(ms).toISOString() } : { error: 'fecha ilegible' };
     }
     formato = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(t) ? 'yyyy-MM-dd HH:mm:ss' : 'yyyy-MM-dd HH:mm';
     if (/T/.test(t)) return aFechaLocal(t.replace('T', ' '), formato, zona);
@@ -186,13 +186,13 @@ export function aFechaLocal(v: unknown, formato: string | undefined, zona: strin
     .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     .replace(TOKENS_FECHA, (tk) => { orden.push(tk); return tk === 'yyyy' ? '(\\d{4})' : tk === 'H' ? '(\\d{1,2})' : '(\\d{2})'; });
   const m = new RegExp(`^${fuente}$`).exec(t);
-  if (!m) return { error: `fecha «${t.slice(0, 30)}» no sigue el formato ${formato}` };
+  if (!m) return { error: `la fecha no sigue el formato ${formato}` };
   const p: Record<string, number> = { yyyy: 0, MM: 1, dd: 1, HH: 0, H: 0, mm: 0, ss: 0 };
   orden.forEach((tk, i) => { p[tk] = Number(m[i + 1]); });
   const h = orden.includes('HH') ? p.HH : p.H;
   const f = new Date(Date.UTC(p.yyyy, p.MM - 1, p.dd));
   if (f.getUTCFullYear() !== p.yyyy || f.getUTCMonth() !== p.MM - 1 || f.getUTCDate() !== p.dd || h > 23 || p.mm > 59 || p.ss > 59) {
-    return { error: `fecha «${t.slice(0, 30)}» no existe` };
+    return { error: 'la fecha no existe' };
   }
   const pad = (n: number, l = 2) => String(n).padStart(l, '0');
   return { ok: localAUtc(`${pad(p.yyyy, 4)}-${pad(p.MM)}-${pad(p.dd)} ${pad(h)}:${pad(p.mm)}:${pad(p.ss)}`, zona).toISOString() };
