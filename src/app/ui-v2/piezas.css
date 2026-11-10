@@ -35,7 +35,7 @@
 }
 
 /* ── Campo: etiqueta, ayuda, error ─────────────────────────────────────────────────────────────────────────────────── */
-[data-ui="v2"] .rv-campo { display: grid; gap: 6px; min-width: 0; }
+[data-ui="v2"] .rv-campo { display: grid; gap: 6px; min-width: 0; /* start: en una rejilla con campos de distinta altura (uno con ayuda, otro sin ella) las filas del campo se repartían el sobrante y el control engordaba: un solo alto de campo por formulario. */ align-content: start; }
 [data-ui="v2"] .rv-campo__etq { font-size: var(--t-small); font-weight: 500; color: var(--ink2); }
 [data-ui="v2"] .rv-campo__obl { font-weight: 400; color: var(--muted); }
 [data-ui="v2"] .rv-campo__ayuda { font-size: var(--t-small); color: var(--muted); }
@@ -236,7 +236,7 @@
 [data-ui="v2"] .rv-disc--linea + .rv-disc--linea { margin-top: 4px; }
 [data-ui="v2"] .rv-disc--linea > .rv-disc__cab { width: fit-content; max-width: 100%; min-height: 32px; padding: 0 8px 0 0; border-radius: 8px; font-size: var(--t-small); }
 [data-ui="v2"] .rv-disc--linea > .rv-disc__cab:hover { background: transparent; text-decoration: underline; text-underline-offset: 2px; }
-[data-ui="v2"] .rv-disc--linea .rv-disc__titulo { flex: none; }
+[data-ui="v2"] .rv-disc--linea .rv-disc__titulo { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 [data-ui="v2"] .rv-disc--linea[open] > .rv-disc__cab { border-bottom: 0; border-radius: 8px; }
 [data-ui="v2"] .rv-disc--linea > .rv-disc__cuerpo { padding: 10px 0 0; }
 

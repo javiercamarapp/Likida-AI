@@ -21,3 +21,6 @@
 .rv-dsp__carga li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-dsp__carga li > span:last-child { flex: none; font-variant-numeric: tabular-nums; color: var(--muted); }
 .rv-dsp__inactivo { color: var(--faint); font-size: var(--t-micro); }
+
+/* Nombres de persona: una línea con elipsis (el completo va en el title) y un mínimo que impide partirlos en dos renglones. */
+.rv-dsp__nombre { display: block; min-width: 140px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

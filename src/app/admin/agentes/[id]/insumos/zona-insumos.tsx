@@ -103,7 +103,7 @@ function FormaArchivo({ tipo, accion }: { tipo: 'documento' | 'imagen' | 'video'
           tomarArchivo(e.dataTransfer.files?.[0]);
         }}
         onClick={() => inputRef.current?.click()}
-        className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-2 py-8 cursor-pointer transition-colors"
+        className="rounded-xl border flex flex-col items-center justify-center gap-2 py-8 cursor-pointer transition-colors"
         style={{ borderColor: arrastrando ? 'var(--marca)' : 'var(--line2)', background: arrastrando ? 'var(--canvas)' : 'transparent' }}
       >
         <UploadCloud width={22} height={22} strokeWidth={1.5} style={{ color: 'var(--muted)' }} />

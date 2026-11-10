@@ -82,7 +82,7 @@ function columnasViajes(sufijo: string, verDinero: boolean): ColumnaTabla<FilaRe
         );
       },
     },
-    { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ?? <span className="rv-tl__tenue">Sin asignar</span> },
+    { id: 'operador', titulo: 'Operador', celda: (v) => v.operadorNombre ? <span className="rv-reg__nombre" title={v.operadorNombre}>{v.operadorNombre}</span> : <span className="rv-tl__tenue">Sin asignar</span> },
     { id: 'unidad', titulo: 'Unidad', corta: true, celda: (v) => (v.unidadEco ? <span className="rv-reg__mono">{v.unidadEco}</span> : <span className="rv-tl__tenue rv-tl__nada">—</span>) },
     { id: 'inicio', titulo: 'Inicio', corta: true, celda: (v) => <span className="rv-tl__apagado">{v.fechaInicio ? fechaMx(v.fechaInicio) : '—'}</span> },
     ...dinero,
