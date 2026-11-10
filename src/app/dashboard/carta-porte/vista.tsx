@@ -209,7 +209,7 @@ function TarjetaViaje({ v, acciones, sufijo }: { v: ViajeCcp; acciones: Acciones
 function ListaCampos({ titulo, campos }: { titulo: string; campos: EstadoCampoCcp[] }) {
   return (
     <div>
-      <h3 className="rv-ccp__sub">{titulo}</h3>
+      <p className="rv-ccp__sub">{titulo}</p>
       <ul className="rv-ccp__campos">
         {campos.map((c) => (
           <li key={c.clave}>
