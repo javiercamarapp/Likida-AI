@@ -159,8 +159,8 @@ const FUERA_DEL_PERFIL: Record<string, Clase> = {
   'admin/elegir-flota/page.tsx': 'consola_superadmin',
   'admin/evals/page.tsx': 'consola_superadmin',
   'admin/flotas/[id]/page.tsx': 'consola_superadmin',
+  'admin/flotas/acciones.ts': 'consola_superadmin',
   'admin/flotas/acciones-plan.ts': 'consola_superadmin',
-  'admin/flotas/page.tsx': 'consola_superadmin',
   'admin/mapa-prospectos/acciones-exportar.ts': 'consola_superadmin',
   'admin/marketing/page.tsx': 'consola_superadmin',
   'admin/mcp-clientes/page.tsx': 'consola_superadmin',
@@ -170,7 +170,7 @@ const FUERA_DEL_PERFIL: Record<string, Clase> = {
   'admin/techo-ia/acciones.ts': 'consola_superadmin',
   'admin/tu-turno/page.tsx': 'consola_superadmin',
   'admin/usuarios/acciones.ts': 'consola_superadmin',
-  'admin/usuarios/nuevo/page.tsx': 'consola_superadmin',
+  'admin/usuarios/nuevo/acciones.ts': 'consola_superadmin',
   'admin/vendedores/acciones.ts': 'consola_superadmin',
   'vendedor/panel-vendedor.tsx': 'zona_vendedor',
 };
