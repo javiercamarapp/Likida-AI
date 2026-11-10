@@ -18,9 +18,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/capacidad-forecast/page.tsx': 1,
   'app/admin/cobranza/page.tsx': 1,
   'app/admin/compliance/page.tsx': 1,
-  'app/admin/comunicacion/page.tsx': 1,
-  'app/admin/configuracion/page.tsx': 1,
-  'app/admin/conocimiento-rag/page.tsx': 1,
   'app/admin/consola.tsx': 1,
   'app/admin/consumo/page.tsx': 1,
   'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
@@ -43,7 +40,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/mi-perfil/page.tsx': 1,
   'app/admin/model-ops/page.tsx': 1,
   'app/admin/observabilidad/page.tsx': 1,
-  'app/admin/playground/page.tsx': 1,
   'app/admin/qa/[id]/corrida-viva.tsx': 1,
   'app/admin/qa/[id]/page.tsx': 1,
   'app/admin/qa/pantalla.tsx': 1,
@@ -82,9 +78,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/capacidad-forecast',
   'app/admin/cobranza',
   'app/admin/compliance',
-  'app/admin/comunicacion',
-  'app/admin/configuracion',
-  'app/admin/conocimiento-rag',
   'app/admin/consumo',
   'app/admin/conversaciones',
   'app/admin/conversaciones/[tenant]/[telefono]',
@@ -111,7 +104,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/model-ops',
   'app/admin/notificaciones',
   'app/admin/observabilidad',
-  'app/admin/playground',
   'app/admin/qa',
   'app/admin/qa/[id]',
   'app/admin/salud-sistema',
@@ -126,17 +118,8 @@ export const BASE_SIN_MARCO: string[] = [
 
 /** admin_paginas_en_menu: direcciones estáticas que ninguna entrada ni pestaña de rutas.ts cubre. */
 export const BASE_PAGINAS_FUERA_DEL_MENU: string[] = [
-  '/admin',
   '/admin/analitica',
-  '/admin/comunicacion',
-  '/admin/configuracion',
-  '/admin/conocimiento-rag',
-  '/admin/corridas',
   '/admin/ejecutivo',
-  '/admin/elegir-flota',
-  '/admin/mi-perfil',
-  '/admin/notificaciones',
-  '/admin/playground',
 ];
 
 /** sin_emojis_en_producto: emoji por archivo (src/app y src/lib, sin pruebas). */

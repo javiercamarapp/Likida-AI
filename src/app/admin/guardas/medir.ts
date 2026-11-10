@@ -1,6 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- recorre el árbol de FUENTE del propio repo; ninguna ruta viene de entrada de usuario. */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { REDIRECCIONES_308 } from './redirecciones_308';
 
 // Medidores compartidos por las guardas de trinquete de /admin (Fase 0, K3). Cada guarda tiene una línea base MEDIDA (`base.ts`) que
 // solo puede BAJAR: un archivo nuevo no entra, un conteo no sube, y un archivo que ya quedó limpio se borra de la base.
@@ -46,12 +47,14 @@ export function apoyosLargos(src: string): number {
   return n;
 }
 
-/** Directorios de ruta (con `page.tsx`) y los `.tsx` que viven directamente en cada uno. */
+/** Directorios de ruta (con `page.tsx`) y los `.tsx` que viven directamente en cada uno. Los stubs 308 (`REDIRECCIONES_308`) no cuentan:
+ *  no son pantallas, solo guardan la dirección vieja, y su guarda propia es `redirecciones_308`. */
 export function rutasConArchivos(): Array<{ dir: string; paginas: string[] }> {
   const salida: Array<{ dir: string; paginas: string[] }> = [];
+  const stubs = new Set(Object.keys(REDIRECCIONES_308).map((d) => `app${d}`));
   const visita = (dir: string) => {
     const hijos = readdirSync(dir);
-    if (hijos.includes('page.tsx')) {
+    if (hijos.includes('page.tsx') && !stubs.has(ruta(dir))) {
       salida.push({ dir: ruta(dir), paginas: hijos.filter((n) => n.endsWith('.tsx') && !/\.(test|nav|tmp)\./.test(n)).map((n) => join(dir, n)) });
     }
     for (const n of hijos) { const r = join(dir, n); if (statSync(r).isDirectory()) visita(r); }
