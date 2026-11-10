@@ -229,6 +229,9 @@ function ventanaDeCadena(fuente: string, desde: number): string {
  * una vez en el mismo archivo con destinos distintos.
  */
 const ALLOWLIST: Record<string, string> = {
+  'src/lib/admin/agentes-parados.ts': 'La alerta de agentes parados (/admin, superadmin) lee la última `agente_corrida` POR AGENTE: los agentes son de LIKIDA, no de una flota (misma razón que slo.ts/runner.ts); la salud del agente no se parte por tenant.',
+  'src/lib/admin/calidad-agentes.ts': 'El tablero de calidad por agente (/admin, superadmin) cuenta `agente_corrida`, `cola_aprobacion` y `orquestador_escalacion` a través de TODAS las flotas a propósito: mide al AGENTE de Likida (aprobado/rechazado/costo), igual que calidad.ts y consumo.ts.',
+  'src/lib/admin/cola-aprobacion.ts': 'La cola de aprobación de /admin (superadmin) es la bandeja de las salidas de los agentes de LIKIDA (cola_aprobacion, deny-all, sin flota dueña) y resuelve al actor por su id en app_user para verificar rol; solo la invocan acciones re-gateadas superadmin.',
   'src/lib/admin/slo.ts': 'Los SLOs (fase 7, 17-ago-2026) miden la salud DEL PRODUCTO — tasa de éxito y p95 de agente_corrida de TODOS los tenants a propósito: un SLO por flota mediría a la flota, no al servicio. Solo lo lee la tarjeta de /admin/dev, detrás de requireSuperadmin.',
   'src/lib/admin/capacidad.ts': 'El modelo de capacidad (fase 7, 17-ago-2026) agrega llm_costo y cuenta liquidaciones DE TODA la operación a propósito: mide el costo unitario del PRODUCTO para los escenarios de escala del superadmin (/admin/capacidad-forecast, detrás de requireSuperadmin). Un filtro por tenant mediría la capacidad de una flota, no la de Likida.',
   'src/lib/admin/negocio.ts': 'CLAUDE.md la nombra, textual, como "la única función con ese permiso": la consola /admin (superadmin) cruza TODOS los tenants a propósito para ver costo de IA, flotas y agentes de TODAS las flotas a la vez.',
