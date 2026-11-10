@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { Check, Copy, Printer } from 'lucide-react';
-import { useNotificar } from '../../admin/ui/notificaciones';
+import { Boton, Icono, useNotificar } from '@/app/ui-v2/componentes';
+import './whatsapp.css';
 
 /** Copiar el enlace y imprimir el cartel — los dos gestos de la guía de arranque. */
 export function AccionesEnlace({ enlace, esPrueba = false }: { enlace: string; esPrueba?: boolean }) {
@@ -23,17 +24,13 @@ export function AccionesEnlace({ enlace, esPrueba = false }: { enlace: string; e
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={copiar} disabled={esPrueba}
-        className="rv-btn rv-btn--secondary">
-        {copiado ? <Check aria-hidden width={14} height={14} strokeWidth={2} /> : <Copy aria-hidden width={14} height={14} strokeWidth={1.75} />}
+    <div className="rv-wa__botones">
+      <Boton type="button" onClick={copiar} disabled={esPrueba} variante="secondary" icono={<Icono icono={copiado ? Check : Copy} />}>
         {copiado ? 'Copiado' : 'Copiar enlace'}
-      </button>
-      <button type="button" onClick={() => window.print()} disabled={esPrueba}
-        className="rv-btn rv-btn--secondary">
-        <Printer aria-hidden width={14} height={14} strokeWidth={1.75} />
+      </Boton>
+      <Boton type="button" onClick={() => window.print()} disabled={esPrueba} variante="secondary" icono={<Icono icono={Printer} />}>
         Imprimir cartel
-      </button>
+      </Boton>
     </div>
   );
 }
