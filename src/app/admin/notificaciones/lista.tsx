@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { Boton, BotonEnlace, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Boton, BotonEnlace, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import type { Alerta } from '../calcular-alertas';
 import {
   alertasPendientes, claveAlerta, esSilenciable, leerLeidas, marcarLeida, marcarTodasLeidas, suscribirCambiosLeidas, SIN_LEIDAS,

@@ -27,11 +27,11 @@ export function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       apoyo={`${saludo()}, ${nombre ?? 'Javier'}. Lo que espera tu decisión, primero.`}
       acciones={<Chip>{fechaHoyMx}</Chip>}
     >
-      <Suspense fallback={<EsqTarjetaV2 alto={64} />}><BloqueSemaforo /></Suspense>
+      <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
 
       <FilaTarjetas variante="8-4">
-        <Suspense fallback={<EsqTarjetaV2 alto={260} />}><BloqueTuTurno /></Suspense>
-        <Suspense fallback={<EsqTarjetaV2 alto={260} />}><BloqueCaja /></Suspense>
+        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
+        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
       </FilaTarjetas>
 
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
@@ -40,7 +40,7 @@ export function ConsolaAdmin({ nombre }: { nombre: string | null }) {
 
       <Suspense fallback={<EsqTablaV2 />}><BloqueCalidad /></Suspense>
 
-      <Suspense fallback={<EsqTarjetaV2 alto={56} />}><BloquePlataforma /></Suspense>
+      <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloquePlataforma /></Suspense>
 
       <Suspense fallback={<EsqTablaV2 />}><BloqueFlotas /></Suspense>
     </MarcoPagina>
