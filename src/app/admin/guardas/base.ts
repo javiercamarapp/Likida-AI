@@ -22,7 +22,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/conversaciones/page.tsx': 2,
   'app/admin/corridas/[id]/page.tsx': 2,
   'app/admin/corridas/page.tsx': 1,
-  'app/admin/crecimiento/page.tsx': 1,
   'app/admin/crons/vista.tsx': 1,
   'app/admin/dev/page.tsx': 1,
   'app/admin/ejecutivo/page.tsx': 1,
@@ -51,7 +50,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
 };
 export const BASE_H1_PROPIO: Record<string, number> = {
   'app/admin/calidad-evals/page.tsx': 1,
-  'app/admin/crecimiento/bloques.tsx': 1,
   'app/admin/elegir-flota/contenido.tsx': 1,
   'app/admin/error.tsx': 1,
   'app/admin/mapa-prospectos/[id]/detalle.tsx': 1,
@@ -79,7 +77,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/copiloto',
   'app/admin/corridas',
   'app/admin/corridas/[id]',
-  'app/admin/crecimiento',
   'app/admin/crons',
   'app/admin/dev',
   'app/admin/ejecutivo',
