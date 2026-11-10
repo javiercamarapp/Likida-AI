@@ -1,9 +1,5 @@
 import { Suspense, cache } from 'react';
-import Link from 'next/link';
-import {
-  Activity, BadgePercent, Bot, Building2, CalendarDays, CheckCircle2, Inbox,
-  Search, Users,
-} from 'lucide-react';
+import { Building2, Activity, CheckCircle2, Inbox, Users } from 'lucide-react';
 import {
   ESTADOS_PROSPECTO, ESTADOS_VIVOS, TRANSICIONES_PROSPECTO,
   conteosVacios, normalizarEstadoProspecto, esEstadoVivo,
@@ -12,129 +8,82 @@ import {
   type ProspectoRow, type VendedorRow,
 } from '@/lib/likida/vendedores';
 import { ultimasCorridasNegocio, duracionLegible, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
-import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, fechaHoraMx, hoyMx } from '@/lib/formato';
+import { fechaHoraMx } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
-import { EsqTarjetaV2, EsqCifrasV2, EsqTablaV2 } from '../../ui-v2/componentes';
-import { StatCard, StatusPill, EstadoVacio, type Estado } from '../ui/kit';
-import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from '../../dashboard/resumen-visual';
+import {
+  AvisoCompacto, BarraFiltros, EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, FiltroBusqueda, FiltroOpciones, Icono,
+  MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
+} from '../../ui-v2/componentes';
+import { TiraCifras } from '../../ui-v2/graficas';
 import { TableroProspectos, type ColumnaTablero } from './tablero';
 import { FormaProspecto, FormaInvitarVendedor, BotonRepartir } from './formas';
 import {
   accionMover, accionAsignar, accionNota, accionRedactar,
   accionCrearProspecto, accionInvitar, accionRepartir,
 } from './acciones';
+import './tablero.css';
 
 const RUTA = '/admin/vendedores';
 
-/** Tarjetas que se pintan por columna. El censo trae ~800 empresas: pintar
- *  cientos de tarjetas por columna cuelga el tablero, así que se recorta y
- *  el recorte SE DICE ("y N más — filtra para verlos"). */
+/** Tarjetas que se pintan por columna. El censo trae ~800 empresas: pintar cientos de tarjetas por columna cuelga el tablero, así que se
+ *  recorta y el recorte SE DICE ("y N más — filtra para verlos"). */
 const TOPE_COLUMNA = 30;
 
-/** Resiliencia por sección, mismo helper que los dashboards: una consulta
- *  caída deja `null` y su tarjeta lo dice — jamás un cero con cara de dato. */
+/** Resiliencia por sección, mismo helper que los dashboards: una consulta caída deja `null` y su tarjeta lo dice, jamás un cero con cara de dato. */
 async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
   try { return await fn(); } catch { return null; }
 }
 
-
-/** R9c: las tres lecturas de antes (un `Promise.all` que esperaba a la más lenta) ahora las pide cada bloque dentro de su <Suspense>; `cache()`
- *  las comparte entre bloques de una misma petición, así que no se lee nada dos veces ni se suma ninguna lectura nueva. */
+/** R9c: las lecturas las pide cada bloque dentro de su <Suspense>; `cache()` las comparte entre bloques de una misma petición, así que no
+ *  se lee nada dos veces ni se suma ninguna lectura nueva. */
 const cargarVendedores = cache(() => safe<VendedorRow[]>(() => listarVendedores()));
 const cargarProspectos = cache(() => safe<ProspectoRow[]>(() => listarProspectos()));
 const cargarCorridas = cache(() => safe<CorridaRegistrada[]>(() => ultimasCorridasNegocio('ventas', 5)));
 
 /**
- * LA CONSOLA DEL EQUIPO DE VENTAS — el contenido completo de
- * /admin/vendedores, SIN el gate. Vive en su propio archivo, exportado, por
- * la misma razón #2 que `dashboard/inicio-contenido.tsx` documenta: la
- * página llama `requireSuperadmin()` y un preview headless sin sesión no
- * puede montarla — este componente sí se monta con un `nombre` y `sp`
- * arbitrarios, y es el REAL (una copia verificaría la copia).
+ * VENTAS › VENDEDORES — el contenido completo de /admin/vendedores, SIN el gate. Vive en su propio archivo, exportado, por la razón #2 de
+ * `dashboard/inicio-contenido.tsx`: la página llama `requireSuperadmin()` y un preview headless sin sesión no puede montarla; este
+ * componente sí, y es el REAL (una copia verificaría la copia).
  *
- * La AUTORIZACIÓN no se relaja con la extracción: el gate de pantalla sigue
- * en admin/layout.tsx + page.tsx, y cada server action de aquí re-gatea
- * superadmin por sesión y MFA en `acciones.ts` — montar el componente no
- * regala ninguna escritura.
+ * La AUTORIZACIÓN no se relaja con la extracción: el gate de pantalla sigue en admin/layout.tsx + page.tsx, y cada server action de aquí
+ * re-gatea superadmin por sesión y MFA en `acciones.ts`: montar el componente no regala ninguna escritura.
  */
-export function ConsolaVendedores({
-  nombre, sp,
-}: {
-  nombre: string | null;
-  sp: { vendedor?: string; q?: string };
-}) {
-  const comision = reglaComision();
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
-
+export function ConsolaVendedores({ sp }: { nombre?: string | null; sp: { vendedor?: string; q?: string } }) {
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<Users {...ICONO} style={{ color: 'var(--muted)' }} />} titulo="Zona de vendedores" />
-        <HeroSaludo
-          saludo={saludo()} nombre={nombre ?? 'Javier'}
-          tagline="El censo convertido en pipeline: prospectos, vendedores y la regla de comisión"
-          derecha={
-            <div className="shrink-0 pt-1">
-              <ChipFecha icono={<CalendarDays {...ICONO} style={{ color: 'var(--muted)' }} />}>
-                {fechaMx(hoyMx(new Date(ahoraMs())))}
-              </ChipFecha>
-            </div>
-          }
-        />
-
-        <div className="px-5 pb-5 flex-1 space-y-2">
-          <Suspense fallback={<div className="mt-2"><EsqCifrasV2 n={5} /></div>}><BloqueKpis /></Suspense>
-
-          {/* ── El agente asignador + el esquema de comisión ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            <div className="card p-3">
-              <TituloSeccion>Agente asignador</TituloSeccion>
-              <p className="text-[13px] mt-2 mb-2" style={{ color: 'var(--muted)' }}>
-                Reparte los prospectos sin vendedor (en Nuevo) entre el equipo, equilibrando por carga
-                viva. Cada corrida queda en la bitácora de agentes.
-              </p>
-              <BotonRepartir accion={accionRepartir} />
-              <Suspense fallback={<div className="mt-3"><EsqTarjetaV2 alto={60} plana /></div>}><BloqueCorridas /></Suspense>
-              {/* Lo que NO existe no se pinta como si existiera: los agentes
-                  que buscan leads y hacen el primer acercamiento son roadmap
-                  — el WhatsApp de Likida sigue en número de prueba y el
-                  buscador necesita fuentes externas. Texto, no tarjeta viva. */}
-              <p className="text-[11px] mt-3 m-0" style={{ color: 'var(--faint)' }}>
-                Próximamente: agentes que busquen leads nuevos y hagan el primer
-                acercamiento. No existen todavía y esta pantalla no los va a fingir.
-              </p>
-            </div>
-
-            <div className="card p-3">
-              <TituloSeccion>Esquema de comisión</TituloSeccion>
-              <div className="mt-2 flex items-start gap-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                  <BadgePercent width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-                </div>
-                <div className="text-[13px] space-y-1">
-                  <p className="m-0 font-medium">{comision.primerMes}</p>
-                  <p className="m-0 font-medium">{comision.recurrente}</p>
-                  <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>{comision.aclaracion}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
-
-          <Suspense fallback={<EsqTablaV2 filas={4} />}><BloqueDesempeno /></Suspense>
-
-          <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueAltas /></Suspense>
-
-          <p className="text-[11px] pt-1 m-0 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
-            <Bot width={12} height={12} strokeWidth={1.75} />
-            La comisión está documentada como regla de negocio en la base y en esta
-            pantalla; el pago se calcula sobre cobros reales cuando existan.
+    <MarcoPagina titulo="Ventas" apoyo="El pipeline del censo, el equipo de vendedores y el asignador. Las comisiones se calculan solo con cobros reales.">
+      <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis /></Suspense>
+      <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
+      <FilaTarjetas variante="6-6">
+        <Tarjeta titulo="Agente asignador">
+          <p className="ven-tarjeta__tenue">
+            Reparte los prospectos sin vendedor (en Nuevo) entre el equipo, equilibrando por carga viva. Cada corrida queda en la bitácora de agentes.
           </p>
-        </div>
-      </div>
-    </main>
+          <BotonRepartir accion={accionRepartir} />
+          <Suspense fallback={<EsqTarjetaV2 alto={60} plana />}><BloqueCorridas /></Suspense>
+          {/* Lo que NO existe no se pinta como si existiera: los agentes que buscan leads y hacen el primer acercamiento son roadmap. */}
+          <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">
+            Próximamente: agentes que busquen leads nuevos y hagan el primer acercamiento. No existen todavía y esta pantalla no los va a fingir.
+          </p>
+        </Tarjeta>
+        <BloqueComisiones />
+      </FilaTarjetas>
+      <Suspense fallback={<EsqTablaV2 filas={4} />}><BloqueDesempeno /></Suspense>
+      <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueAltas /></Suspense>
+    </MarcoPagina>
+  );
+}
+
+// ── Comisiones: solo con base real ───────────────────────────────────────────
+
+/** La regla pactada SÍ se enseña (es un dato del negocio); el MONTO no: no hay registro de comisiones ni liga de prospecto a flota y a
+ *  factura pagada, así que calcular una cifra hoy sería inventarla. Cuando exista la base, esta tarjeta se sustituye por el cálculo. */
+function BloqueComisiones() {
+  const regla = reglaComision();
+  return (
+    <Tarjeta titulo="Comisiones de vendedores" estado="vacio" mensaje="Falta: aún no hay base para calcularlas"
+      detalle="Hace falta ligar cada prospecto cerrado con su flota y con la factura pagada; sin eso no se muestra ninguna cifra de comisión.">
+      <p className="ven-regla"><span>{regla.primerMes}</span><span>{regla.recurrente}</span></p>
+    </Tarjeta>
   );
 }
 
@@ -190,178 +139,114 @@ async function derivarPipeline(sp: { vendedor?: string; q?: string }) {
 
 async function BloqueKpis() {
   const { vendedores, prospectos, totales, vivos, vivosSinVendedor, totalProspectos } = await derivarPipeline({});
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
+  // Solo si el pipeline se pudo LEER: unos ceros sobre una base caída afirmarían «no hay prospectos» estando ciegos.
+  if (prospectos === null) {
+    return (
+      <AvisoCompacto tono="error"
+        resumen="No se pudo leer el pipeline en este momento. Recarga la página: esto NO significa que no haya prospectos, significa que no se pudo leer." />
+    );
+  }
   return (
-    <>
-          {/* ── KPIs — solo si el pipeline se pudo LEER: unos ceros sobre una
-              base caída afirmarían "no hay prospectos" estando ciegos. */}
-          {prospectos === null ? (
-            <div className="card p-4 mt-2">
-              <p className="text-sm m-0">No se pudo leer el pipeline en este momento. Recarga la página —
-                esto NO significa que no haya prospectos: significa que no se pudo leer.</p>
-            </div>
-          ) : (
-            <div className="mt-2 kit-kpis">
-              <StatCard icono={<Building2 {...ICONO} />} etiqueta="Prospectos en el pipeline" valor={totalProspectos} formato="entero" />
-              <StatCard icono={<Activity {...ICONO} />} etiqueta="Prospectos con seguimiento" valor={vivos} formato="entero" />
-              <StatCard icono={<CheckCircle2 {...ICONO} />} etiqueta="Ganados" valor={totales.won} formato="entero" />
-              <StatCard icono={<Inbox {...ICONO} />} etiqueta="Vivos sin vendedor" valor={vivosSinVendedor} formato="entero" />
-              {vendedores !== null
-                ? <StatCard icono={<Users {...ICONO} />} etiqueta="Vendedores con cuenta" valor={vendedores.length} formato="entero" />
-                : (
-                  <div className="card p-3 h-full flex items-center text-sm" style={{ color: 'var(--muted)' }}>
-                    No se pudo leer el equipo de vendedores.
-                  </div>
-                )}
-            </div>
-          )}
-    </>
+    <TiraCifras etiqueta="Pipeline de ventas" items={[
+      { etiqueta: 'Prospectos en el pipeline', valor: totalProspectos, formato: 'entero', icono: <Icono icono={Building2} /> },
+      { etiqueta: 'Con seguimiento', valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
+      { etiqueta: 'Ganados', valor: totales.won, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
+      { etiqueta: 'Vivos sin vendedor', valor: vivosSinVendedor, formato: 'entero', icono: <Icono icono={Inbox} /> },
+      vendedores !== null
+        ? { etiqueta: 'Vendedores con cuenta', valor: vendedores.length, formato: 'entero', icono: <Icono icono={Users} /> }
+        : { etiqueta: 'Vendedores con cuenta', valor: null, estado: 'error', mensaje: 'No se pudo leer el equipo de vendedores.', icono: <Icono icono={Users} /> },
+    ]} />
   );
 }
 
+const TONO_CORRIDA: Record<string, TonoEstado> = { ok: 'ok', parcial: 'warn', fallo: 'bad' };
+
 async function BloqueCorridas() {
   const corridas = await cargarCorridas();
-  const PILL_CORRIDA: Record<string, Estado> = { ok: 'ok', parcial: 'warn', fallo: 'bad' };
   return (
-              <div className="mt-3">
-                <TituloSeccion>Últimas corridas</TituloSeccion>
-                {corridas === null ? (
-                  <p className="text-[12px] mt-1.5 m-0" style={{ color: 'var(--muted)' }}>No se pudo leer la bitácora del asignador.</p>
-                ) : corridas.length === 0 ? (
-                  <p className="text-[12px] mt-1.5 m-0" style={{ color: 'var(--muted)' }}>El asignador aún no corre. Su primera corrida aparece aquí.</p>
-                ) : (
-                  <ul className="mt-1.5 space-y-1 list-none p-0 m-0">
-                    {corridas.map((c) => (
-                      <li key={c.id} className="flex items-center gap-2 text-[12px]">
-                        <StatusPill estado={PILL_CORRIDA[c.estado] ?? 'neutral'}>{c.estado}</StatusPill>
-                        <span style={{ color: 'var(--muted)' }}>{fechaHoraMx(c.inicio)}</span>
-                        <span className="tabular">
-                          {c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas}/${c.tareasTotal}` : '—'}
-                        </span>
-                        <span style={{ color: 'var(--faint)' }}>{duracionLegible(c.duracionMs) ?? ''}</span>
-                        {c.error && <span className="truncate" style={{ color: 'var(--bad)' }}>{c.error}</span>}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+    <div>
+      <h3 className="ven-tarjeta__empresa">Últimas corridas</h3>
+      {corridas === null ? (
+        <p className="ven-tarjeta__tenue">No se pudo leer la bitácora del asignador.</p>
+      ) : corridas.length === 0 ? (
+        <p className="ven-tarjeta__tenue">El asignador aún no corre. Su primera corrida aparece aquí.</p>
+      ) : (
+        <ul className="ven-corridas">
+          {corridas.map((c) => (
+            <li key={c.id}>
+              <StatusChip tono={TONO_CORRIDA[c.estado] ?? 'neutral'}>{c.estado}</StatusChip>
+              <span className="ven-corridas__fecha">{fechaHoraMx(c.inicio)}</span>
+              <span>{c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas}/${c.tareasTotal}` : '—'}</span>
+              <span className="ven-corridas__dur">{duracionLegible(c.duracionMs) ?? ''}</span>
+              {c.error && <span className="ven-corridas__error">{c.error}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
 async function BloqueTablero({ sp }: { sp: { vendedor?: string; q?: string } }) {
   const { columnas, opcionesVendedor, hayFiltro, totalProspectos } = await derivarPipeline(sp);
+  if (columnas === null) {
+    return <Tarjeta titulo="Pipeline de prospectos" estado="error" mensaje="No se pudo leer el pipeline" reintentar />;
+  }
   return (
-    <>
-          {/* ── El tablero ── */}
-          {columnas !== null && (
-            <div className="card p-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <TituloSeccion>Pipeline de prospectos</TituloSeccion>
-                {/* Filtro por GET: los searchParams SON el estado del filtro,
-                    así que el link se comparte y el refresh no lo pierde. */}
-                <form method="get" className="flex flex-wrap items-center gap-1.5">
-                  <select name="vendedor" defaultValue={sp.vendedor ?? ''} aria-label="Filtrar por vendedor"
-                    className="hairline rounded-lg px-2 h-8 text-[12px] outline-none" style={{ background: 'var(--surface)' }}>
-                    <option value="">Todos los vendedores</option>
-                    <option value="sin">Sin asignar</option>
-                    {opcionesVendedor.map((v) => (
-                      <option key={v.id} value={v.id}>{v.nombre}</option>
-                    ))}
-                  </select>
-                  <input name="q" defaultValue={sp.q ?? ''} placeholder="Empresa, vacante o ciudad" maxLength={120}
-                    className="hairline rounded-lg px-2.5 h-8 text-[12px] outline-none w-52" style={{ background: 'var(--surface)' }} />
-                  <button type="submit"
-                    className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85"
-                    style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                    <Search width={13} height={13} strokeWidth={2} /> Filtrar
-                  </button>
-                  {hayFiltro && (
-                    <Link href={RUTA} className="text-[12px] font-medium px-2" style={{ color: 'var(--muted)' }}>
-                      Quitar filtros
-                    </Link>
-                  )}
-                </form>
-              </div>
-              <div className="mt-2.5">
-                {totalProspectos === 0 ? (
-                  <EstadoVacio icono={<Building2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                    Todavía no hay prospectos. Agrega el primero aquí abajo — o importa el censo, que es
-                    para lo que existe esta zona.
-                  </EstadoVacio>
-                ) : (
-                  <TableroProspectos
-                    columnas={columnas}
-                    orden={ESTADOS_PROSPECTO.map((e) => e.valor)}
-                    transiciones={TRANSICIONES_PROSPECTO}
-                    rotulos={Object.fromEntries(ESTADOS_PROSPECTO.map((e) => [e.valor, e.rotulo]))}
-                    vendedores={opcionesVendedor}
-                    mover={accionMover}
-                    asignar={accionAsignar}
-                    guardarNota={accionNota}
-                    redactar={accionRedactar}
-                    hayFiltro={hayFiltro}
-                  />
-                )}
-              </div>
-            </div>
-          )}
-    </>
+    <Tarjeta titulo="Pipeline de prospectos" acciones={(
+      /* Filtro por GET: los searchParams SON el estado del filtro, así que el link se comparte y el refresh no lo pierde. */
+      <BarraFiltros accion={RUTA} enLinea buscar etiqueta="Filtrar el pipeline" limpiarHref={RUTA} nActivos={hayFiltro ? 1 : 0}>
+        <FiltroOpciones nombre="vendedor" etiqueta="Vendedor" valor={sp.vendedor ?? ''}
+          opciones={[{ valor: '', rotulo: 'Todos los vendedores' }, { valor: 'sin', rotulo: 'Sin asignar' }, ...opcionesVendedor.map((v) => ({ valor: v.id, rotulo: v.nombre }))]} />
+        <FiltroBusqueda nombre="q" valor={sp.q ?? ''} placeholder="Empresa, vacante o ciudad" etiqueta="Buscar prospecto" maxLength={120} />
+      </BarraFiltros>
+    )}>
+      {totalProspectos === 0 ? (
+        <EstadoVacio titulo="Sin prospectos todavía" icono={Building2}>
+          Agrega el primero en «Agregar prospecto», más abajo, o importa el censo: para eso existe esta zona.
+        </EstadoVacio>
+      ) : (
+        <TableroProspectos
+          columnas={columnas}
+          orden={ESTADOS_PROSPECTO.map((e) => e.valor)}
+          transiciones={TRANSICIONES_PROSPECTO}
+          rotulos={Object.fromEntries(ESTADOS_PROSPECTO.map((e) => [e.valor, e.rotulo]))}
+          vendedores={opcionesVendedor}
+          mover={accionMover}
+          asignar={accionAsignar}
+          guardarNota={accionNota}
+          redactar={accionRedactar}
+          hayFiltro={hayFiltro}
+        />
+      )}
+    </Tarjeta>
   );
 }
 
 async function BloqueDesempeno() {
   const vendedores = await cargarVendedores();
   const pct = resolverFormato('porcentaje');
+  if (vendedores === null) {
+    return <Tarjeta titulo="Desempeño por vendedor" estado="error" mensaje="No se pudo leer el equipo en este momento" reintentar />;
+  }
+  if (vendedores.length === 0) {
+    return (
+      <Tarjeta titulo="Desempeño por vendedor" estado="vacio" mensaje="Sin vendedores todavía"
+        detalle="Invita al primero más abajo: entra con su correo y ve solo sus prospectos en /vendedor." />
+    );
+  }
+  const columnas: ColumnaBase<VendedorRow>[] = [
+    { id: 'vendedor', titulo: 'Vendedor', principal: true, celda: (v) => v.nombre ?? v.email },
+    { id: 'asignados', titulo: 'Asignados', alinear: 'der', celda: (v) => v.asignados },
+    ...ESTADOS_PROSPECTO.map((e): ColumnaBase<VendedorRow> => ({ id: e.valor, titulo: e.rotulo, alinear: 'der', celda: (v) => v.conteos[e.valor] })),
+    // Sin cartera no hay tasa: un «0 %» pintado se leería como «lo intentó y no cerró».
+    { id: 'conversion', titulo: 'Conversión', alinear: 'der', celda: (v) => (v.tasaConversion === null ? 'sin actividad todavía' : pct(v.tasaConversion * 100)) },
+  ];
+  // Cifras REALES de la tabla prospecto.
   return (
-    <>
-          {/* ── Desempeño por vendedor — cifras REALES de la tabla prospecto. */}
-          <div className="card p-3">
-            <TituloSeccion>Desempeño por vendedor</TituloSeccion>
-            {vendedores === null ? (
-              <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>No se pudo leer el equipo en este momento.</p>
-            ) : vendedores.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio icono={<Users width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Todavía no hay vendedores. Invita al primero aquí abajo: entra con su correo y ve solo
-                  sus prospectos en /vendedor.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <div className="overflow-x-auto mt-2">
-                <table aria-label="Prospectos por vendedor y estado" className="w-full border-collapse">
-                  <thead>
-                    <tr style={{ background: 'var(--canvas)' }}>
-                      {['Vendedor', 'Asignados', ...ESTADOS_PROSPECTO.map((e) => e.rotulo), 'Conversión'].map((h, i, todos) => (
-                        <th scope="col" key={h} className={`etiqueta-mono text-[10px] font-medium uppercase px-3 py-1.5 ${i === 0 ? 'text-left rounded-l-lg' : 'text-right'} ${i === todos.length - 1 ? 'rounded-r-lg' : ''}`}
-                          style={{ color: 'var(--muted)' }}>
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vendedores.map((v) => (
-                      <tr key={v.id} className="border-b" style={{ borderColor: 'var(--line2)' }}>
-                        <td className="px-3 py-2 text-sm font-medium whitespace-nowrap">{v.nombre ?? v.email}</td>
-                        <td className="px-3 py-2 text-[13px] text-right tabular">{v.asignados}</td>
-                        {ESTADOS_PROSPECTO.map((e) => (
-                          <td key={e.valor} className="px-3 py-2 text-[13px] text-right tabular">{v.conteos[e.valor]}</td>
-                        ))}
-                        <td className="px-3 py-2 text-[13px] text-right whitespace-nowrap">
-                          {/* Sin cartera no hay tasa: un "0%" pintado se
-                              leería como "lo intentó y no cerró". */}
-                          {v.tasaConversion === null
-                            ? <span style={{ color: 'var(--faint)' }}>sin actividad todavía</span>
-                            : <span className="tabular">{pct(v.tasaConversion * 100)}</span>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-    </>
+    <Tarjeta titulo="Desempeño por vendedor">
+      <TablaBase etiqueta="Prospectos por vendedor y estado" columnas={columnas} filas={vendedores} idFila={(v) => v.id} densa />
+    </Tarjeta>
   );
 }
 
@@ -369,23 +254,14 @@ async function BloqueAltas() {
   const vendedores = await cargarVendedores();
   const opcionesVendedor = (vendedores ?? []).map((v) => ({ id: v.id, nombre: v.nombre ?? v.email }));
   return (
-    <>
-          {/* ── Altas ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
-            <div className="card p-3">
-              <TituloSeccion>Agregar prospecto</TituloSeccion>
-              <div className="mt-2">
-                <FormaProspecto accion={accionCrearProspecto} vendedores={opcionesVendedor} />
-              </div>
-            </div>
-            <div className="card p-3">
-              <TituloSeccion>Invitar vendedor</TituloSeccion>
-              <p className="text-[12px] mt-2 mb-2 m-0" style={{ color: 'var(--muted)' }}>
-                Cuenta de Likida (sin flota): entra a /vendedor y ve únicamente sus prospectos.
-              </p>
-              <FormaInvitarVendedor accion={accionInvitar} />
-            </div>
-          </div>
-    </>
+    <FilaTarjetas variante="6-6">
+      <Tarjeta titulo="Agregar prospecto">
+        <FormaProspecto accion={accionCrearProspecto} vendedores={opcionesVendedor} />
+      </Tarjeta>
+      <Tarjeta titulo="Invitar vendedor">
+        <p className="ven-tarjeta__tenue">Cuenta de Likida (sin flota): entra a /vendedor y ve únicamente sus prospectos.</p>
+        <FormaInvitarVendedor accion={accionInvitar} />
+      </Tarjeta>
+    </FilaTarjetas>
   );
 }

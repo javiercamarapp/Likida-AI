@@ -37,7 +37,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/techo-ia/page.tsx': 1,
   'app/admin/trust-safety/page.tsx': 1,
   'app/admin/usuarios/nuevo/page.tsx': 1,
-  'app/admin/vendedores/consola-vendedores.tsx': 1,
   'app/admin/whatsapp-infra/page.tsx': 1,
 };
 export const BASE_H1_PROPIO: Record<string, number> = {
@@ -79,7 +78,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/techo-ia',
   'app/admin/trust-safety',
   'app/admin/usuarios/nuevo',
-  'app/admin/vendedores',
   'app/admin/whatsapp-infra',
 ];
 
