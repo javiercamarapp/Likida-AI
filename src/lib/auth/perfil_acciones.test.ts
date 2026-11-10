@@ -150,6 +150,7 @@ const FUERA_DEL_PERFIL: Record<string, Clase> = {
   'admin/layout.tsx': 'sin_datos',
   'vendedor/layout.tsx': 'sin_datos',
   'admin/agentes/[id]/insumos/page.tsx': 'consola_superadmin',
+  'admin/facturas/acciones.ts': 'consola_superadmin',
   'admin/agentes/page.tsx': 'consola_superadmin',
   'admin/aprobaciones/page.tsx': 'consola_superadmin',
   'admin/compliance/page.tsx': 'consola_superadmin',
