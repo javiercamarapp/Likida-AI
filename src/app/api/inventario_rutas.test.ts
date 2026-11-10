@@ -284,7 +284,12 @@ import { join, relative, sep } from 'node:path';
 // 114 → 115 (F9, CT-DAT-16): `api/admin/offboarding/route.ts` — exportación de una flota. Su puerta: 404 mientras la palanca
 //   `LIKIDA_OFFBOARDING_EXPORTACION` esté apagada (por omisión); luego `sesionSuperadmin()` (rol + segundo factor), mismo sitio, `tenantId` uuid
 //   validado; solo lee y deja constancia en `tenant_exportacion`. Prueba: `admin/offboarding/route.test.ts`.
-const RUTAS_APP_REVISADAS = 115;
+// 115 → 117 (i18n P0): la base r19/admin-unificado ya traía 116 rutas en disco contra 115 en esta constante (una ruta sin inventariar,
+//   anterior a esta rama); se corrige a 116 y esta suma `api/preferencias/idioma/route.ts` — cambia el idioma de la interfaz de quien llama. Su puerta: cuerpo ≤ 200 B,
+//   mismo sitio (`vieneDeNuestroSitio`), `getSessionTenant()` obligatoria (401 sin ella), límite 20/min por usuario, lista cerrada de
+//   idiomas (400 si no); solo escribe la cookie `likida_lang` y `user_metadata.idioma` del propio usuario. Prueba:
+//   `preferencias/idioma/route.test.ts`.
+const RUTAS_APP_REVISADAS = 117;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');
