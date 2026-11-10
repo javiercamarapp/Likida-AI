@@ -3,6 +3,8 @@ import { LogOut } from 'lucide-react';
 import { CLASES_V2 } from '../marco-v2';
 import SidebarNav, { SidebarAbajoAdmin, MarcaAdmin, AsideAdmin } from './sidebar-nav';
 import CommandPalette from './command-palette';
+import CabeceraAdmin from './cabecera-admin';
+import CapaCarga from '../dashboard/shell/capa-carga';
 import CopilotoPanel from './copiloto-panel';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 
@@ -28,6 +30,8 @@ export default function AdminChrome({
   const inicial = ((nombre ?? '').trim() || 'J')[0].toUpperCase();
   return (
     <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
+      {/* El mismo telón de carga con el logo que el dashboard (una vez por sesión): /admin no lo montaba. */}
+      <CapaCarga />
       <CommandPalette />
       <div className={`${CLASES_V2.fila} adm-fila`}>
         <AsideAdmin>
@@ -64,6 +68,7 @@ export default function AdminChrome({
         </AsideAdmin>
 
         <div className={`${CLASES_V2.columna} columna-centro`}>
+          <CabeceraAdmin />
           <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
             {children}
           </div>
