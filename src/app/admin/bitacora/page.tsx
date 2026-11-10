@@ -13,18 +13,13 @@ import {
 import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { PiePaginas } from '../pie-paginas';
+import { quienDe } from './quien';
 import { etiquetaAccion, etiquetaEntidad, ROTULO_TIPO_ACCESO } from './etiquetas';
 import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 
 type SP = { accion?: string; persona?: string; flota?: string; desde?: string; hasta?: string; p?: string; vista?: string };
-
-/** Quién, sin correos: un nombre, «Sistema» (una tarea programada o un escritor viejo sin firma) o «Persona sin nombre». */
-export function quienDe(actor: string | null): string {
-  if (actor === null || actor.trim() === '') return 'Sistema';
-  return actor.includes('@') ? 'Persona sin nombre' : actor;
-}
 
 function columnasAcciones(): ColumnaTabla<EntradaBitacora>[] {
   return [

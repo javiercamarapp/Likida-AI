@@ -19,7 +19,8 @@ vi.mock('@/lib/admin/bitacora', async (importar) => ({
   opcionesBitacora: dobles.opcionesBitacora,
 }));
 
-import BitacoraPage, { quienDe } from './page';
+import BitacoraPage from './page';
+import { quienDe } from './quien';
 import { etiquetaAccion } from './etiquetas';
 
 const ENTRADA = { id: 1, tenantId: 't1', tenantNombre: 'Flota Uno', actor: 'Ana', accion: 'usuario.rol_cambiado', entidad: 'app_user', entidadId: '3f2b8c1e-5a47-4d0e-9b61-0c2f7a8d9e10', detalle: { telefono: '5219991234567', motivo: 'x' }, ocurrioEn: '2026-11-09T18:00:00Z' };
