@@ -81,3 +81,23 @@ export function suscribirCambiosLeidas(cb: () => void): () => void {
     window.removeEventListener('storage', cb);
   };
 }
+
+// ── Lo que "leída" NO puede silenciar ──────────────────────────────────────
+// "Leída" es un descarte de pantalla, no "resuelta": la solicitud sigue abierta y su plazo sigue corriendo. Las alertas con plazo legal
+// (ARCO), con plazo vencido (SLA de soporte) o que avisan de una fuente ciega NO se pueden marcar como leídas: se quedan en la lista
+// y siguen contando. Antes la clave `tipo::texto` bastaba para apagarlas hasta que cambiara el conteo.
+const NO_SILENCIABLES: readonly RegExp[] = [/\bARCO\b/, /SLA vencido/i, /No se pudo leer/i];
+
+export function esSilenciable(a: Alerta): boolean {
+  return !NO_SILENCIABLES.some((r) => r.test(a.texto));
+}
+
+/** Lo que sigue pendiente: lo no leído, MÁS lo que "leída" no puede ocultar. */
+export function alertasPendientes(alertas: readonly Alerta[], leidas: ReadonlySet<string>): Alerta[] {
+  return alertas.filter((a) => !esSilenciable(a) || !leidas.has(claveAlerta(a)));
+}
+
+/** ¿Enciende la señal de atención? Una alerta de atención no silenciable enciende siempre; las demás, si no se leyeron. */
+export function hayAtencionPendiente(alertas: readonly Alerta[], leidas: ReadonlySet<string>): boolean {
+  return alertasPendientes(alertas, leidas).some((a) => a.tipo === 'atencion');
+}

@@ -12,13 +12,11 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/agente-whatsapp/page.tsx': 1,
   'app/admin/agentes/[id]/insumos/page.tsx': 1,
   'app/admin/agentes/contenido.tsx': 1,
-  'app/admin/analitica/page.tsx': 1,
   'app/admin/aprobaciones/page.tsx': 1,
   'app/admin/calidad-evals/page.tsx': 1,
   'app/admin/capacidad-forecast/page.tsx': 1,
   'app/admin/cobranza/page.tsx': 1,
   'app/admin/compliance/page.tsx': 1,
-  'app/admin/consola.tsx': 1,
   'app/admin/consumo/page.tsx': 1,
   'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
   'app/admin/conversaciones/page.tsx': 2,
@@ -28,7 +26,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/crecimiento/page.tsx': 1,
   'app/admin/crons/vista.tsx': 1,
   'app/admin/dev/page.tsx': 1,
-  'app/admin/ejecutivo/page.tsx': 1,
   'app/admin/equipo/page.tsx': 1,
   'app/admin/escalaciones/page.tsx': 1,
   'app/admin/evals/page.tsx': 1,
@@ -37,7 +34,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/integraciones/page.tsx': 1,
   'app/admin/marketing/page.tsx': 1,
   'app/admin/mcp-clientes/page.tsx': 1,
-  'app/admin/mi-perfil/page.tsx': 1,
   'app/admin/model-ops/page.tsx': 1,
   'app/admin/observabilidad/page.tsx': 1,
   'app/admin/qa/[id]/corrida-viva.tsx': 1,
@@ -55,7 +51,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
 export const BASE_H1_PROPIO: Record<string, number> = {
   'app/admin/calidad-evals/page.tsx': 1,
   'app/admin/crecimiento/bloques.tsx': 1,
-  'app/admin/elegir-flota/contenido.tsx': 1,
   'app/admin/error.tsx': 1,
   'app/admin/mapa-prospectos/[id]/detalle.tsx': 1,
   'app/admin/mapa-prospectos/cerebro.tsx': 1,
@@ -65,14 +60,12 @@ export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};
 /** Pantallas (carpetas con page.tsx) que todavía no usan MarcoPagina. */
 export const BASE_SIN_MARCO: string[] = [
-  'app/admin',
   'app/admin/actividad-codigo',
   'app/admin/agente-cuadre',
   'app/admin/agente-ocr',
   'app/admin/agente-whatsapp',
   'app/admin/agentes',
   'app/admin/agentes/[id]/insumos',
-  'app/admin/analitica',
   'app/admin/aprobaciones',
   'app/admin/calidad-evals',
   'app/admin/capacidad-forecast',
@@ -88,8 +81,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/crecimiento',
   'app/admin/crons',
   'app/admin/dev',
-  'app/admin/ejecutivo',
-  'app/admin/elegir-flota',
   'app/admin/equipo',
   'app/admin/escalaciones',
   'app/admin/evals',
@@ -100,9 +91,7 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/mapa-prospectos/[id]',
   'app/admin/marketing',
   'app/admin/mcp-clientes',
-  'app/admin/mi-perfil',
   'app/admin/model-ops',
-  'app/admin/notificaciones',
   'app/admin/observabilidad',
   'app/admin/qa',
   'app/admin/qa/[id]',
@@ -118,8 +107,6 @@ export const BASE_SIN_MARCO: string[] = [
 
 /** admin_paginas_en_menu: direcciones estáticas que ninguna entrada ni pestaña de rutas.ts cubre. */
 export const BASE_PAGINAS_FUERA_DEL_MENU: string[] = [
-  '/admin/analitica',
-  '/admin/ejecutivo',
 ];
 
 /** sin_emojis_en_producto: emoji por archivo (src/app y src/lib, sin pruebas). */

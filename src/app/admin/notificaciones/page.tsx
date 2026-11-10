@@ -4,7 +4,7 @@ import { getResumenNegocio, getConversacionesActivas, contarConversacionesActiva
 import { getBandejaEscalaciones, type ConteosEscalaciones } from '@/lib/admin/escalaciones';
 import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertas } from '../calcular-alertas';
-import { Bell } from 'lucide-react';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
 import NotificacionesLista from './lista';
 
 export const dynamic = 'force-dynamic';
@@ -52,16 +52,9 @@ export default async function NotificacionesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <header className="glass-panel h-14 flex items-center gap-2.5 px-5">
-        <Bell width={16} height={16} strokeWidth={1.75} />
-        <span className="text-sm font-medium">Notificaciones</span>
-      </header>
-
-      <div className="glass-panel overflow-hidden">
-        <NotificacionesLista alertas={alertas} />
-      </div>
-    </div>
+    <MarcoPagina titulo="Notificaciones" apoyo="Lo que espera a una persona, calculado en vivo.">
+      <NotificacionesLista alertas={alertas} />
+    </MarcoPagina>
   );
 }
 
