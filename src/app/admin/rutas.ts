@@ -62,10 +62,10 @@ export const NEGOCIO: Item[] = [
     { href: '/admin/consumo', nombre: 'Consumo' },
     { href: '/admin/techo-ia', nombre: 'Techos' },
   ] },
-  // Facturación: la pestaña «Facturas» se agrega en la Fase 3 (cuando exista la pantalla).
   { href: '/admin/cobranza', nombre: 'Facturación', Icono: Receipt, pestanas: [
     { href: '/admin/cobranza', nombre: 'Cobranza' },
     { href: '/admin/costos-facturacion', nombre: 'Planes y cobro' },
+    { href: '/admin/facturas', nombre: 'Facturas' },
   ] },
   { href: '/admin/crecimiento', nombre: 'Crecimiento', Icono: TrendingUp, pestanas: [
     { href: '/admin/crecimiento', nombre: 'Adquisición' },
