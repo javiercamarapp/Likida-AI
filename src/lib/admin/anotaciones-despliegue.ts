@@ -78,8 +78,9 @@ export async function getAnotacionesDespliegue(opts: { dias?: number; entorno?: 
       .select('sha, entorno, rama, primera_vista, vistas')
       .gte('primera_vista', desde);
     if (opts.entorno) q = q.eq('entorno', opts.entorno);
+    // orden-no-importa: `sha` es la llave primaria de despliegue_visto y desempata el corte; el guardián solo reconoce `id`
     const { data, error } = await acotada(
-      q.order('primera_vista', { ascending: false }).limit(TOPE_FILAS),
+      q.order('primera_vista', { ascending: false }).order('sha').limit(TOPE_FILAS),
       'anotaciones_despliegue',
     );
     if (error) throw new Error(error.message);

@@ -75,6 +75,7 @@ const enlaceTicket = (id: string) => `${appUrl()}/admin/soporte?ticket=${encodeU
 
 async function yaSeAviso(accion: string, tenantId: string, entidadId: string): Promise<boolean | null> {
   try {
+    // orden-no-importa: solo se pregunta si existe alguna fila del aviso (se lee la presencia, no cuál fila es)
     const { data, error } = await acotada(
       supabaseAdmin().from('bitacora_auditoria').select('id')
         .eq('tenant_id', tenantId).eq('accion', accion)
@@ -228,6 +229,7 @@ export async function escalarSlasVencidos(ahoraMs: number = Date.now()): Promise
       .not('vence_en', 'is', null)
       .lt('vence_en', new Date(ahoraMs).toISOString())
       .order('vence_en', { ascending: true })
+      .order('id')
       .limit(TOPE_BARRIDO_SLA),
     'soporteAvisos.barridoSla',
   );

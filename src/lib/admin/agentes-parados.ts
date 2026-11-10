@@ -112,6 +112,7 @@ export async function getAgentesParados(
 
     const ultimas = new Map<string, string>();
     await Promise.all(defs.map(async (d) => {
+      // orden-no-importa: solo se lee la columna `inicio` de la corrida más reciente; si dos empatan en `inicio` el valor leído es idéntico
       const r = await acotada(
         supabaseAdmin().from('agente_corrida').select('inicio').eq('agente', d.id)
           .order('inicio', { ascending: false }).limit(1),
