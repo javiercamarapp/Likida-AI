@@ -65,7 +65,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'agentes/peajes/configuracion/reglas-cobro.tsx': 4,
   'agentes/peajes/configuracion/tarifario.tsx': 1,
   'agentes/peajes/configuracion/umbrales-avisos.tsx': 4,
-  'agentes/peajes/reclamacion/revision.tsx': 4,
   'agentes/proveedores/seccion_buzon.tsx': 3,
   'carta-porte/borrador/[viajeId]/page.tsx': 6,
   'carta-porte/documentos/[id]/vista.tsx': 1,

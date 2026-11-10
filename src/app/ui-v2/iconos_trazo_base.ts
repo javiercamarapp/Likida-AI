@@ -20,8 +20,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/dashboard/agentes/peajes/configuracion/reglas-cobro.tsx': 3,
   'app/dashboard/agentes/peajes/configuracion/tarifario.tsx': 1,
   'app/dashboard/agentes/peajes/configuracion/vista.tsx': 7,
-  'app/dashboard/agentes/peajes/reclamacion/revision.tsx': 2,
-  'app/dashboard/agentes/peajes/reclamacion/vista.tsx': 3,
   'app/dashboard/agentes/proveedores/controles.tsx': 6,
   'app/dashboard/agentes/proveedores/controles_buzon.tsx': 6,
   'app/dashboard/agentes/proveedores/seccion_buzon.tsx': 1,

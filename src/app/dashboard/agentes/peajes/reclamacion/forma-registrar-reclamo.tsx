@@ -4,6 +4,8 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { numero } from '@/lib/formato';
 import { ETIQUETA_CATEGORIA_COBRO, type CategoriaCobro } from '@/lib/likida/peajes/reglas_cobro';
+import { Boton, CampoFecha, CampoSelect, CampoTexto } from '@/app/ui-v2/componentes';
+import '../peajes.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «REGISTRAR RECLAMO» — auditoría adversarial, HALLAZGO ALTO #1.
@@ -27,15 +29,12 @@ import { ETIQUETA_CATEGORIA_COBRO, type CategoriaCobro } from '@/lib/likida/peaj
 
 type Accion = (fd: FormData) => Promise<void>;
 
-const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-
-function Boton() {
+function BotonRegistrar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>
+    <Boton type="submit" variante="primary" loading={pending}>
       {pending ? 'Registrando…' : 'Registrar reclamo'}
-    </button>
+    </Boton>
   );
 }
 
@@ -53,17 +52,14 @@ export function FormaRegistrarReclamo({ accion, desglose, opciones }: {
   }, null);
 
   return (
-    <form action={despachar} className="flex items-end gap-2 flex-wrap mt-4">
+    <form action={despachar} className="rv-pj-forma">
       <input type="hidden" name="desglose" value={desglose} />
-      <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Registrar reclamo de</span>
-        <select name="categoria" required className="mt-0.5" style={ESTILO_INPUT}>
-          {opciones.map(({ categoria, n }) => <option key={categoria} value={categoria}>{ETIQUETA_CATEGORIA_COBRO[categoria]} ({numero(n)})</option>)}
-        </select></label>
-      <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Enviado el (si ya lo enviaste)</span>
-        <input type="date" name="enviado_en" className="mt-0.5" style={ESTILO_INPUT} /></label>
-      <label className="block"><span className="etiqueta-mono text-[11px] uppercase block" style={{ color: 'var(--faint)' }}>Folio del portal (opc.)</span>
-        <input name="referencia" maxLength={120} className="w-[150px] mt-0.5" style={ESTILO_INPUT} /></label>
-      <Boton />
+      <CampoSelect etiqueta="Registrar reclamo de" name="categoria" required>
+        {opciones.map(({ categoria, n }) => <option key={categoria} value={categoria}>{ETIQUETA_CATEGORIA_COBRO[categoria]} ({numero(n)})</option>)}
+      </CampoSelect>
+      <CampoFecha etiqueta="Enviado el (si ya lo enviaste)" name="enviado_en" />
+      <CampoTexto etiqueta="Folio del portal (opc.)" name="referencia" maxLength={120} />
+      <BotonRegistrar />
     </form>
   );
 }

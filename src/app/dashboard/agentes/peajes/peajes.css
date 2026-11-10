@@ -75,3 +75,17 @@
 .rv-pj-total__valor { font-size: var(--t-kpi, 26px); font-weight: 600; }
 .rv-pj-rotulo { font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .rv-pj-paginas { display: flex; align-items: center; gap: 12px; font-size: var(--t-small, 12px); }
+
+/* Reclamación: cierre mensual, seguimiento y revisión. */
+.rv-pj-bloque { display: grid; gap: 12px; }
+.rv-pj-cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.rv-pj-decenas { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@media (min-width: 640px) { .rv-pj-decenas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.rv-pj-categorias { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+@media (min-width: 640px) { .rv-pj-categorias { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .rv-pj-categorias { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+.rv-pj-caja--enlace { color: var(--ink); text-decoration: none; }
+.rv-pj-caja--enlace:hover { background: var(--canvas); }
+.rv-pj-det { display: grid; gap: 8px; }
+.rv-pj-det__cab { cursor: pointer; font-size: var(--t-body, 13px); font-weight: 600; }
+.rv-pj-que--ancho { max-width: 40rem; display: grid; gap: 4px; justify-items: start; }
