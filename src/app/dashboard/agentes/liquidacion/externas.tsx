@@ -208,7 +208,7 @@ export async function SeccionExternas(p: ExternasProps) {
       {pagina.filas.length === 0 ? (
         <EstadoVacio icono={Truck} titulo={sinNada ? 'Aún sin liquidaciones externas' : 'Ninguna con ese estado'}>
           {sinNada
-            ? 'Todavía no ha llegado ninguna liquidación de tu sistema. Cuando tu SAP/TMS la mande a Likida (POST /v1/liquidaciones-externas), la vas a ver aquí con su estado de entrega.'
+            ? 'Todavía no ha llegado ninguna liquidación de tu sistema. Cuando tu SAP o TMS la mande a Likida, la vas a ver aquí con su estado de entrega.'
             : 'Ninguna liquidación cae en ese estado.'}
         </EstadoVacio>
       ) : (

@@ -155,13 +155,14 @@ describe('la tabla', () => {
 describe('vacíos y paginación', () => {
   it('sin ninguna liquidación y sin filtro explica CÓMO llegan, no dice «no hay nada»', async () => {
     const html = await pintar([], { total: 0 });
-    expect(html).toContain('POST /v1/liquidaciones-externas');
+    expect(html).toContain('Cuando tu SAP o TMS la mande a Likida');
+    expect(html).not.toContain('/v1/liquidaciones-externas'); // la ruta de API no se le enseña al cliente
   });
 
   it('un filtro que no devuelve nada lo dice distinto', async () => {
     const html = await pintar([], { total: 0, filtro: 'fallida' });
     expect(html).toContain('Ninguna liquidación cae en ese estado');
-    expect(html).not.toContain('POST /v1/liquidaciones-externas');
+    expect(html).not.toContain('Cuando tu SAP o TMS la mande a Likida');
   });
 
   it('un total que no se pudo contar se dice (no «0 en total»)', async () => {

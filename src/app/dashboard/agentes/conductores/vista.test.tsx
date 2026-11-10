@@ -237,7 +237,7 @@ describe('Conductores — tarjeta de insights (T-A5-32)', () => {
 
   it('KPIs del piloto (T-A5-61): los 6 salen en la tarjeta; sin línea base dicen «sin dato», sin porcentaje inventado', () => {
     const html = pintarI(entradaI({ lineaBase: null }));
-    expect(html).toContain('aria-label="KPIs del piloto"');
+    expect(html).toContain('aria-label="Indicadores de la operación"');
     for (const n of ['Hitos sin intervención', 'Minutos del GPS al registro', 'Viajes completos', 'Mensajes del supervisor evitados',
       'Tiempo de salida de terminal al primer cliente', 'Reubicaciones por cliente']) expect(html).toContain(n);
     // KPI 1 sí tiene valor medido (90 % = 18 de 20) pero NO base: la comparación dice «sin dato».

@@ -126,9 +126,8 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
       {/* ── PUSH PROPIO ─────────────────────────────────────────────── */}
       <Tarjeta titulo="GPS propio (envío firmado a Likida)">
         <p className="rv-cx__apoyo">
-          Si tu GPS puede mandar un POST, envía las posiciones a esta dirección firmadas con HMAC-SHA256
-          (cabeceras <code className="cifra-mono">X-Likida-Timestamp</code> y <code className="cifra-mono">X-Likida-Signature: v1=…</code>).
-          Hasta 500 lecturas por envío; reenviar es seguro (no duplica).
+          Si tu sistema de GPS puede enviar las posiciones a una dirección web, mándalas a la dirección de abajo. Cada envío lleva una firma
+          de seguridad: pídele al equipo de Likida la guía para tu proveedor y la clave. Hasta 500 lecturas por envío; reenviar es seguro (no duplica).
         </p>
         <p className="rv-cx__endpoint cifra-mono">{endpoint}</p>
         <div className="rv-cx__salud-fila" data-tono={push.fila.tono}>
@@ -175,11 +174,11 @@ export function SeccionGps({ salud, push, endpoint, huerfanos, hayMasHuerfanos, 
       {/* ── HUÉRFANOS ───────────────────────────────────────────────── */}
       <Tarjeta titulo="Dispositivos sin unidad">
         <p className="rv-cx__apoyo">
-          Dispositivos que tu proveedor reporta y ninguna unidad reclama. Likida NO crea unidades desde un feed ajeno:
+          Dispositivos que tu proveedor reporta y ninguna unidad reclama. Likida no crea unidades a partir de datos de un tercero:
           no se dibujan en el mapa hasta que los ligues a una unidad que ya existe (archivo de abajo).
         </p>
         {huerfanos.length === 0 ? (
-          <p className="rv-cx__texto">Ningún dispositivo huérfano.</p>
+          <p className="rv-cx__texto">Ningún dispositivo sin unidad.</p>
         ) : (
           <TablaBase etiqueta="Dispositivos GPS que ninguna unidad reclama" columnas={COLUMNAS_HUERFANOS} filas={huerfanos}
             idFila={(h) => `${h.proveedor}|${h.deviceId}`} densa />

@@ -410,8 +410,8 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
           {seccion('Qué significa', t.queSignifica)}
           {seccion('Qué hacer', t.queHacer)}
         </div>
-        <section aria-label="KPIs del piloto" className="rv-cd__pila">
-          <p className="rv-cd__rotulo">KPIs del piloto</p>
+        <section aria-label="Indicadores de la operación" className="rv-cd__pila">
+          <p className="rv-cd__rotulo">Indicadores de la operación</p>
           <ul className="rv-cd__kpis">
             {insights.kpisPiloto.map((k) => {
               const t2 = textoKpiPiloto(k);
