@@ -1,0 +1,44 @@
+/* Mapa de viajes · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13, colores de tokens y animación SOLO con
+   movimiento permitido (el trayecto activo fluye y el destino pulsa; con `reduce` todo queda estático e igual de claro). */
+.rv-mp__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-mp__nota[data-tono="warn"] { color: var(--warn); }
+.rv-mp__poll { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-mp__poll[data-tono="warn"] { color: var(--warn); }
+.rv-mp__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rv-mp__frescura { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--t-small); color: var(--muted); }
+.rv-mp__unidad { font-weight: 500; }
+.rv-mp__placas { margin-left: 8px; font-size: var(--t-micro); color: var(--faint); font-variant-numeric: tabular-nums; }
+.rv-mp__mono { font-variant-numeric: tabular-nums; }
+.rv-mp__sub { display: block; font-size: var(--t-micro); color: var(--faint); }
+.rv-mp__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-mp__sin { display: flex; align-items: center; gap: 10px; font-size: var(--t-small); }
+.rv-mp__sin > svg { flex: none; color: var(--warn); }
+.rv-mp__sin-motivo { margin-left: auto; text-align: right; color: var(--faint); }
+.rv-mp__enlace { text-decoration: underline; text-underline-offset: 2px; }
+
+/* El mapa vivo */
+.rv-mp__rejilla { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; }
+@media (max-width: 1023.98px) { .rv-mp__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.rv-mp__lienzo { position: relative; min-width: 0; }
+.rv-mp__svg { display: block; width: 100%; height: auto; }
+.rv-mp__vacio { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.rv-mp__vacio p { margin: 0; max-width: 36ch; padding: 10px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--muted); font-size: var(--t-body); text-align: center; }
+.rv-mp__arco { cursor: pointer; opacity: .55; }
+.rv-mp__arco:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-mp__cards { display: grid; gap: 8px; align-content: start; }
+@media (min-width: 1024px) { .rv-mp__cards { max-height: 520px; overflow-y: auto; padding-right: 4px; } }
+.rv-mp__card { display: block; width: 100%; padding: 12px; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; }
+.rv-mp__card[data-activo] { border-color: var(--ink); }
+.rv-mp__card:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-mp__card-cab { display: flex; align-items: center; gap: 8px; }
+.rv-mp__card-cab > strong { font-size: var(--t-body); font-weight: 500; }
+.rv-mp__card-dias { margin-left: auto; flex: none; font-size: var(--t-micro); color: var(--muted); font-variant-numeric: tabular-nums; }
+.rv-mp__card-ruta { margin-top: 4px; font-size: var(--t-small); }
+.rv-mp__card-pie { margin-top: 2px; font-size: var(--t-micro); color: var(--faint); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .rv-mp__activo { stroke-dasharray: 5 6; animation: rv-mp-flujo 1.2s linear infinite; }
+  .rv-mp__pulso { transform-box: fill-box; transform-origin: center; animation: rv-mp-pulso 2.4s ease-out infinite; }
+  @keyframes rv-mp-flujo { to { stroke-dashoffset: -44; } }
+  @keyframes rv-mp-pulso { 0%, 100% { transform: scale(1); opacity: .35; } 50% { transform: scale(2.1); opacity: 0; } }
+}

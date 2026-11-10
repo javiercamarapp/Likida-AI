@@ -97,7 +97,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'shell/navegacion-v2.tsx': 2,
   'timbrado/[viajeId]/timbrar.tsx': 4,
   'unidades/taller.tsx': 4,
-  'viajes-en-vivo/pregunta.tsx': 1,
 };
 
 describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => {

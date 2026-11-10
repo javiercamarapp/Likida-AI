@@ -2,10 +2,10 @@ import { Inbox } from 'lucide-react';
 import type { HuerfanoDeFlota, MotivoHuerfano } from '@/lib/likida/repo';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '../estados';
 import { FilaAcciones, type AccionHuerfano } from './acciones';
 import type { BuscarViaje } from './combo-viaje';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { EstadoVacio, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import './huerfanos.css';
 
 /** Por qué quedó suelto, en palabras de oficina. Un motivo nuevo cae al
  *  crudo en gris — visible, no roto. */
@@ -37,77 +37,53 @@ export function VistaHuerfanos({ pendientes, hayViajesVivos, buscarViaje, totalP
   // El tope real de `getHuerfanosDeFlota`. Si la página viene llena Y el
   // conteo dice que hay más, se declara — "N de M", nunca "M" a secas.
   const hayMas = totalPendientes !== null && totalPendientes > pendientes.length;
+  const columnas: ColumnaBase<HuerfanoDeFlota>[] = [
+    { id: 'recibido', titulo: 'Recibido', celda: (h) => fechaCorta(h.creadoEn) },
+    { id: 'operador', titulo: 'Operador', celda: (h) => h.operadorNombre ?? 'Sin nombre' },
+    {
+      id: 'comprobante', titulo: 'Comprobante', principal: true,
+      celda: (h) => (
+        <>
+          {etiquetaConcepto(h.concepto)}
+          {h.fecha && <span className="rv-hf__tenue">del {fechaCorta(h.fecha)}</span>}
+        </>
+      ),
+    },
+    {
+      id: 'monto', titulo: 'Monto', alinear: 'der',
+      // Un $0.00 aquí sería una cifra que nadie midió (el OCR no pudo leerla) — se dice, no se pinta.
+      celda: (h) => (h.monto > 0 ? <span className="rv-hf__mono">{mxn(h.monto)}</span> : <span className="rv-hf__tenue">sin monto legible</span>),
+    },
+    { id: 'motivo', titulo: 'Por qué está aquí', celda: (h) => MOTIVO[h.motivo] ?? h.motivo },
+    {
+      id: 'resolver', titulo: 'Resolver', alinear: 'der',
+      celda: (h) => (
+        <FilaAcciones huerfanoId={h.id} hayViajesVivos={hayViajesVivos}
+          sinMonto={h.monto <= 0} buscarViaje={buscarViaje}
+          adjuntar={acciones.adjuntar} descartar={acciones.descartar} />
+      ),
+    },
+  ];
   return (
     <MarcoPagina titulo="Comprobantes sin viaje" apoyo="Las fotos y comprobantes que llegaron sin viaje se guardan aquí hasta que alguien los acomode. Nada se rechaza.">
-
-      <section className="card p-4">
-        <div className="mb-3">
-          <TituloRecuadro info="huerfanos.bandeja">
-            Esperan que alguien los acomode{pendientes.length > 0 && (
-              <> · <span className="cifra-mono">
-                {hayMas ? `${numero(pendientes.length)} de ${numero(totalPendientes!)}` : numero(pendientes.length)}
-              </span></>
-            )}
-          </TituloRecuadro>
-          <p className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
-            Una foto nunca se rechaza: lo que llega sin viaje se guarda aquí. Al chofer también
-            se le ofrece adjuntarlos por WhatsApp — quien llegue primero.
-            {hayMas && ' Se listan los más antiguos primero: resuélvelos y aparecen los siguientes.'}
-          </p>
-        </div>
-
+      <Tarjeta
+        titulo={pendientes.length > 0
+          ? `Esperan que alguien los acomode · ${hayMas ? `${numero(pendientes.length)} de ${numero(totalPendientes!)}` : numero(pendientes.length)}`
+          : 'Esperan que alguien los acomode'}
+        info="huerfanos.bandeja">
+        <p className="rv-hf__nota">
+          Una foto nunca se rechaza: lo que llega sin viaje se guarda aquí. Al chofer también
+          se le ofrece adjuntarlos por WhatsApp — quien llegue primero.
+          {hayMas && ' Se listan los más antiguos primero: resuélvelos y aparecen los siguientes.'}
+        </p>
         {pendientes.length === 0 ? (
-          <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-            No hay comprobantes en el limbo — todo lo que ha llegado tiene su viaje.
+          <EstadoVacio contenido icono={Inbox} titulo="Sin comprobantes sueltos">
+            Todo lo que ha llegado tiene su viaje.
           </EstadoVacio>
         ) : (
-          <div className="overflow-x-auto">
-            <table aria-label="Mensajes recibidos sin viaje asociado" className="w-full text-[13px]">
-              <thead>
-                <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Comprobante</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-6 text-right">Monto</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Por qué está aquí</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right pr-1">Resolver</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendientes.map((h) => (
-                  <tr key={h.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                    <td className="py-2.5" style={{ color: 'var(--muted)' }}>{fechaCorta(h.creadoEn)}</td>
-                    <td className="py-2.5" style={{ color: 'var(--muted)' }}>{h.operadorNombre ?? 'Sin nombre'}</td>
-                    <td className="py-2.5">
-                      <span className="font-medium block">{etiquetaConcepto(h.concepto)}</span>
-                      {h.fecha && (
-                        <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
-                          del {fechaCorta(h.fecha)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 pr-6 text-right">
-                      {/* Un $0.00 aquí sería una cifra que nadie midió (el
-                          OCR no pudo leerla) — se dice, no se pinta. */}
-                      {h.monto > 0
-                        ? <span className="cifra-mono">{mxn(h.monto)}</span>
-                        : <span className="text-[11px]" style={{ color: 'var(--faint)' }}>sin monto legible</span>}
-                    </td>
-                    <td className="py-2.5 text-[12px]" style={{ color: 'var(--muted)' }}>
-                      {MOTIVO[h.motivo] ?? h.motivo}
-                    </td>
-                    <td className="py-2.5 pl-4">
-                      <FilaAcciones huerfanoId={h.id} hayViajesVivos={hayViajesVivos}
-                        sinMonto={h.monto <= 0} buscarViaje={buscarViaje}
-                        adjuntar={acciones.adjuntar} descartar={acciones.descartar} />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TablaBase<HuerfanoDeFlota> etiqueta="Mensajes recibidos sin viaje asociado" columnas={columnas} filas={pendientes} idFila={(h) => h.id} tarjetaMovil />
         )}
-      </section>
+      </Tarjeta>
     </MarcoPagina>
   );
 }
