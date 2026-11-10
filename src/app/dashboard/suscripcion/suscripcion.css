@@ -1,0 +1,15 @@
+/* Plan y facturación · solo lo que las piezas del sistema no traen. */
+.rv-sus__tenue { font-size: var(--t-small); color: var(--muted); margin: 0; font-weight: 400; }
+.rv-sus__nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
+.rv-sus__mono { font-variant-numeric: tabular-nums; letter-spacing: .04em; word-break: break-all; }
+.rv-sus__uso { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-sus__uso-cifra { font-size: var(--t-kpi); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rv-sus__uso-cifra .rv-sus__tenue { font-size: var(--t-body); }
+.rv-sus__rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.rv-sus__plan { display: grid; gap: 8px; }
+.rv-sus__precio { font-size: var(--t-kpi); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rv-sus__precio .rv-sus__tenue { font-size: var(--t-small); }
+.rv-sus__limites { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-small); color: var(--muted); }
+.rv-sus__transf { display: grid; gap: 8px; }
+.rv-sus__enlace { display: block; font-size: var(--t-small); text-decoration: underline; margin-top: 4px; }
+.rv-sus__aviso-prueba { display: flex; gap: 8px; align-items: flex-start; }
