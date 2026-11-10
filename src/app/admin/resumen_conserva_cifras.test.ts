@@ -60,15 +60,15 @@ describe('cero cifras caídas pintadas como 0, cero kit viejo', () => {
   });
 });
 
-// El bloque Notificaciones (campana con punto rojo) salió del Resumen SOLO porque la campana viva de la cabecera la cubre en toda la consola.
+// El bloque Notificaciones (campana con punto rojo) salió del Resumen SOLO porque la campana viva («Avisos» del pie) la cubre en toda la consola.
 describe('la campana viva cubre el bloque Notificaciones retirado', () => {
-  it('el layout entrega el conteo y la cabecera lo pinta; el Resumen ya no monta la campana vieja', () => {
+  it('el layout entrega el conteo y «Avisos» del pie lo pinta; el Resumen ya no monta la campana vieja', () => {
     const layout = leer('./layout.tsx');
-    const cabecera = leer('./cabecera-admin.tsx');
+    const pie = leer('./sidebar-nav.tsx');
     expect(layout).toMatch(/obtenerPanoramaAccion\(\)/);
     expect(layout).toMatch(/<ProveedorRequiereAccion valor=\{requiereAccion\}>/);
-    expect(cabecera).toMatch(/href="\/admin\/notificaciones"/);
-    expect(cabecera).toMatch(/rv-campana__cuenta/);
+    expect(pie).toMatch(/href: '\/admin\/notificaciones'/);
+    expect(pie).toMatch(/useRequiereAccion\(\)/);
     expect(CONSOLA).not.toMatch(/from '\.\/notificaciones'/);
     expect(CONSOLA).not.toMatch(/calcularAlertas/);
   });

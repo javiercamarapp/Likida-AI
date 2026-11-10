@@ -38,8 +38,8 @@ describe('kit nuevo: ninguna función cruza hacia componentes de ui-v2', () => {
 
 describe('marco de /admin: el servidor no pasa funciones a los componentes de cliente del sidebar', () => {
   const chrome = leer('../chrome.tsx');
-  it('cerrarSesion solo se usa en el form del propio chrome (servidor), no como prop de SidebarNav/AsideAdmin/MarcaAdmin/SidebarAbajoAdmin', () => {
-    for (const n of ['SidebarNav', 'AsideAdmin', 'MarcaAdmin', 'SidebarAbajoAdmin']) {
+  it('cerrarSesion solo se usa en el form del propio chrome (servidor), no como prop de SidebarNav/AsideAdmin/MarcaAdmin/PieAdmin', () => {
+    for (const n of ['SidebarNav', 'AsideAdmin', 'MarcaAdmin', 'PieAdmin']) {
       for (const t of usos(chrome, n)) expect(t, `${n}: ${t}`).not.toMatch(/cerrarSesion|=>|\bon[A-Z]\w*=/);
     }
     expect(chrome).toMatch(/<form action=\{cerrarSesion\}/);

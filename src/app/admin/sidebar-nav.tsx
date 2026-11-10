@@ -3,16 +3,14 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
 import { type Item, SECCIONES, entradaDeRuta } from './rutas';
-import { SelectorTema } from '../selector-tema';
+import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
+import { useRequiereAccion } from './cabecera-admin';
 import LogoV2 from '../dashboard/shell/logo-v2';
 import { ALTO_LOGO_PX } from '../marco-v2';
 import { useRiel } from '../dashboard/shell/colapso';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
-import { WidgetUso } from './ui/kit';
-import { usd } from '@/lib/utils';
-import { numero } from '@/lib/formato';
 
 // El sidebar de /admin usa las clases del sistema (`.rv-sb`, `.rv-item`, `.rv-grupo` de ui-v2/shell.css), las MISMAS que el del
 // dashboard (7-nov-2026, R8): ancho, hover, activo, colapso a riel y animación de entrada vienen de ahí. Lo único distinto es el
@@ -123,43 +121,33 @@ export default function SidebarNav() {
   );
 }
 
-/** El bloque inferior fijo — gemelo de `SidebarAbajo` del dashboard (pill de
- *  ayuda + selector de tema). Aquí la pill es la puerta a los paneles de los
- *  otros roles: la acción que el superadmin hace todo el día.
- *
- *  `usoIa` (16-ago-2026, ref. shadcn-dashboard): el costo de IA del mes,
- *  medido — lo trae layout.tsx. `undefined` = no se pidió (render de
- *  prueba): el widget no se pinta; `null` = se pidió y no se pudo leer: el
- *  widget lo DICE. */
-export function SidebarAbajoAdmin({ usoIa }: {
-  usoIa?: { mesUsd: number; llamadas: number; etiquetaMes: string } | null;
+/**
+ * El pie de /admin: el MISMO `PieSidebar` del dashboard. Organización = selector de flota con «Ver como» (la flota se abre en el
+ * dashboard con `?tenant=`, el mecanismo de siempre, sin escribir nada; «Elegir flota» lleva al flujo de `elegir-flota`). «Avisos» lee
+ * el conteo real de `requiere-accion.ts` (lectura caída = «sin dato»). Acceso cruzado al panel del cliente. `salir` llega ya armado
+ * por el servidor (el `<form>` de cerrar sesión): aquí no viaja ninguna función.
+ */
+export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir }: {
+  nombre: string | null; avatarUrl: string | null;
+  /** `null` = la lista de flotas no se pudo leer (se dice «Sin dato»); `undefined` = no se pidió (render de prueba). */
+  flotas?: Array<{ id: string; nombre: string }> | null;
+  flotaActual?: string | null;
+  salir?: React.ReactNode;
 }) {
+  const r = useRequiereAccion();
+  const n = (nombre ?? '').trim();
   return (
-    <>
-      {usoIa !== undefined && (
-        <div className="adm-solo-ancho">
-          <WidgetUso
-            etiqueta={usoIa ? `Costo de IA · ${usoIa.etiquetaMes}` : 'Costo de IA · este mes'}
-            valor={usoIa ? usd(usoIa.mesUsd) : null}
-            detalle={usoIa ? `${numero(usoIa.llamadas)} ${usoIa.llamadas === 1 ? 'llamada' : 'llamadas'} al modelo` : undefined}
-            href="/admin/consumo" hrefTexto="Ver consumo"
-          />
-        </div>
-      )}
-      {usoIa === undefined && (
-        <Link href="/admin/consumo" aria-label="Consumo de IA" title="Consumo de IA" className="rv-item">
-          <Gauge className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-          <span className="rv-item__txt">Consumo de IA</span>
-        </Link>
-      )}
-      <Link href="/admin/dev" title="Entrar a los paneles de los otros roles (vive en Dev desde el 17-ago)" aria-label="Ver los otros paneles" className="rv-item">
-        <ArrowLeftRight className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        <span className="rv-item__txt">Ver los otros paneles</span>
-      </Link>
-      {/* El selector se esconde entero en el riel (adm-solo-ancho): a 72 px no caben tres botones. */}
-      <div className="adm-solo-ancho flex justify-center py-1">
-        <SelectorTema />
-      </div>
-    </>
+    <PieSidebar
+      organizacion={{
+        opciones: flotas === undefined ? [] : flotas === null ? null : flotas.map((f) => ({ valor: f.id, nombre: f.nombre })),
+        actual: flotaActual ?? null,
+        hrefIr: (id) => `/dashboard?tenant=${encodeURIComponent(id)}`,
+        textoIr: 'Ver como',
+        hrefSinOpcion: '/admin/elegir-flota',
+      }}
+      avisos={{ href: '/admin/notificaciones', pendientes: r ? r.pendientes : undefined, urgente: r?.hayUrgente }}
+      acceso={{ href: '/dashboard', texto: 'Panel del cliente', Icono: ArrowLeftRight }}
+      tarjeta={<TarjetaUsuario nombre={nombre} rolEtiqueta="Superadmin" iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} href="/admin/mi-perfil" salir={salir} />}
+    />
   );
 }
