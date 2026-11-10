@@ -5,6 +5,7 @@ export { Aviso, AvisoCompacto, type TonoAviso } from './aviso';
 export { Disclosure } from './disclosure';
 export { EncabezadoPagina, APOYO_MAX } from './encabezado-pagina';
 export { MarcoPagina } from './marco-pagina';
+export { FilaTarjetas, type VarianteFila } from './fila-tarjetas';
 export { ProveedorAreaV2, useArea } from './contexto-area';
 export { UiV2Provider, useUiV2 } from './contexto';
 export { cx } from './clases';
