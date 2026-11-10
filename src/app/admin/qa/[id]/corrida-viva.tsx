@@ -15,7 +15,6 @@
 // muerto sin escribir su aborto — nunca un spinner eterno con cara de avance.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FileText, MessageCircle } from 'lucide-react';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
@@ -31,8 +30,6 @@ import { MedicionCorrida } from './medicion-corrida';
 
 export interface FotoFirmada { id: string; etiqueta: string; url: string | null }
 export interface PdfFirmado { path: string; url: string | null }
-
-const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
 const PILL_PASO: Record<EstadoPaso, { estado: Estado; etiqueta: string }> = {
   pendiente: { estado: 'neutral', etiqueta: 'pendiente' },

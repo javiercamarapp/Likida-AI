@@ -27,12 +27,15 @@ const PANTALLAS: ReadonlyArray<readonly [prefijo: string, nombre: string]> = [
   ['/admin/costos-facturacion', 'Dinero › Costos y facturación'],
 ];
 
-/** Solo rutas de /admin con segmentos simples (minúsculas, dígitos, guion, guion bajo): ni query, ni `..`, ni texto libre. */
-const RUTA_VALIDA = /^\/admin(?:\/[a-z0-9][a-z0-9_-]{0,63}){0,4}$/;
+const SEGMENTO_VALIDO = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 
+/** Solo rutas de /admin con segmentos simples (minúsculas, dígitos, guion, guion bajo): ni query, ni `..`, ni texto libre. Se valida segmento a segmento (sin cuantificadores anidados). */
 export function rutaDePantallaValida(crudo: unknown): string | null {
   if (typeof crudo !== 'string' || crudo.length > 200) return null;
-  return RUTA_VALIDA.test(crudo) ? crudo : null;
+  if (crudo !== '/admin' && !crudo.startsWith('/admin/')) return null;
+  const segmentos = crudo === '/admin' ? [] : crudo.slice('/admin/'.length).split('/');
+  if (segmentos.length > 4) return null;
+  return segmentos.every((seg) => SEGMENTO_VALIDO.test(seg)) ? crudo : null;
 }
 
 /** El nombre legible de la pantalla; `null` si la ruta no es válida. Una ruta de /admin sin nombre conocido se describe por su ruta. */
