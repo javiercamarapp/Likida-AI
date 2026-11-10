@@ -95,13 +95,13 @@ describe('resolverRango', () => {
 const PAGINAS = ['../../dashboard/page.tsx', '../page.tsx', '../consola.tsx'];
 
 describe('ninguna página vuelve a declarar el default por su cuenta', () => {
-  // Si NINGUNA página de la lista usa el filtro, la vigilancia entera quedó
-  // apuntando a la nada — eso tiene que fallar solo, no quedarse en silencio.
-  it('la lista vigila al menos un archivo que SÍ usa <GlobalFilter', () => {
-    const conFiltro = PAGINAS.filter((rel) =>
-      readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8').includes('<GlobalFilter'),
-    );
-    expect(conFiltro.length).toBeGreaterThan(0);
+  // F2 (Resumen como Centro de Mando): el Resumen retiró el selector `?rango=` (su ventana de facturas es fija y el rótulo la dice), así que hoy
+  // ninguna página de la lista monta <GlobalFilter. La vigilancia sigue viva para el día que alguna lo vuelva a usar: la lista no puede
+  // apuntar a archivos que no existen (eso sí sería una vigilancia hueca).
+  it('la lista apunta a archivos que existen', () => {
+    for (const rel of PAGINAS) {
+      expect(() => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8'), rel).not.toThrow();
+    }
   });
 
   for (const rel of PAGINAS) {

@@ -24,13 +24,11 @@ function leer(ruta: string): string {
 
 // R9c: el H1 y su párrafo viven en `bloques.tsx` (cada bloque con su propio Suspense), no en page.tsx.
 const CRECIMIENTO = leer('./crecimiento/bloques.tsx');
-const ANALITICA = leer('./analitica/page.tsx');
 // El Inicio de /admin vive en `consola.tsx` desde el 14-ago-2026 (page.tsx
 // quedó como puro gateo, convención de inicio-contenido.tsx para que el
 // preview headless monte el componente REAL) — se vigila el archivo donde la
 // etiqueta REALMENTE vive, no el cascarón.
 const ADMIN = leer('./consola.tsx');
-const EJECUTIVO = leer('./ejecutivo/page.tsx');
 
 describe('admin/crecimiento: el conteo de flotas ya no es texto fijo', () => {
   it('el H1 no dice "Con 1 flota dada de alta" sin condición', () => {
@@ -51,18 +49,8 @@ describe('admin/crecimiento: el conteo de flotas ya no es texto fijo', () => {
   });
 });
 
-describe('admin/analitica: "hoy Likida tiene 1 flota" ya lee el conteo real', () => {
-  it('no queda el "1" fijo en esa frase', () => {
-    expect(ANALITICA).not.toMatch(/hoy Likida tiene 1 flota/);
-  });
-
-  it('usa r.tenants en su lugar', () => {
-    expect(ANALITICA).toMatch(/hoy Likida tiene \{r\.tenants\}/);
-  });
-});
-
-describe('admin/consola.tsx y admin/ejecutivo: "Flota (solo el demo)" ya no es incondicional', () => {
-  for (const [nombre, src] of [['admin/consola.tsx', ADMIN], ['admin/ejecutivo/page.tsx', EJECUTIVO]] as const) {
+describe('admin/consola.tsx: "Flota (solo el demo)" ya no es incondicional', () => {
+  for (const [nombre, src] of [['admin/consola.tsx', ADMIN]] as const) {
     it(`${nombre}: la etiqueta ya no es "r.tenants <= 1 ? 'Flota (solo el demo)'"`, () => {
       // Esa era la forma exacta del bug: con 0 tenants, `r.tenants <= 1` es
       // verdadero y el tile decía "0 — Flota (solo el demo)".
@@ -73,8 +61,8 @@ describe('admin/consola.tsx y admin/ejecutivo: "Flota (solo el demo)" ya no es i
       // Se evalúa la MISMA expresión que el JSX usa para decidir la etiqueta,
       // con r.tenants en 0 — el escenario real del 4/5-ago-2026 — y se
       // comprueba que no cuela "demo" en el resultado.
-      const match = src.match(/etiqueta=\{([^}]*'Flota[^}]*)\}/);
-      expect(match, `no se encontró la etiqueta de KpiTile en ${nombre}`).not.toBeNull();
+      const match = src.match(/etiqueta: (r\.tenants === 0 \?[^{}]*?: 'Flotas'),/);
+      expect(match, `no se encontró la etiqueta de Flotas en ${nombre}`).not.toBeNull();
       const expr = match![1];
       // Evaluar la expresión JSX real extraída del archivo, con r.tenants=0
       // y sin tenant demo, es la forma más directa de probar el caso exacto

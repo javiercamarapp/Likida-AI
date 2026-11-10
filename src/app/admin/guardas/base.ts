@@ -18,7 +18,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/capacidad-forecast/page.tsx': 1,
   'app/admin/cobranza/page.tsx': 1,
   'app/admin/compliance/page.tsx': 1,
-  'app/admin/consola.tsx': 1,
   'app/admin/consumo/page.tsx': 1,
   'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
   'app/admin/conversaciones/page.tsx': 2,
@@ -65,7 +64,6 @@ export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};
 /** Pantallas (carpetas con page.tsx) que todavía no usan MarcoPagina. */
 export const BASE_SIN_MARCO: string[] = [
-  'app/admin',
   'app/admin/actividad-codigo',
   'app/admin/agente-cuadre',
   'app/admin/agente-ocr',

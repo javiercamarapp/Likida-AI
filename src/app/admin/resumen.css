@@ -1,0 +1,13 @@
+/* Resumen de /admin (Centro de Mando): solo lo que las piezas de ui-v2 no dan. Tokens del sistema, sin hex, sin animaciones. */
+[data-ui="v2"] .adm-res-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+[data-ui="v2"] .adm-res-fila { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); min-height: 40px; }
+[data-ui="v2"] .adm-res-fila:last-child { border-bottom: 0; }
+[data-ui="v2"] .adm-res-fila__texto { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+[data-ui="v2"] .adm-res-fila__titulo { font-size: var(--t-body); font-weight: 500; overflow-wrap: anywhere; }
+[data-ui="v2"] .adm-res-fila__detalle { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
+[data-ui="v2"] .adm-res-pie { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
+[data-ui="v2"] .adm-res-pares { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; margin: 0; font-size: var(--t-body); }
+[data-ui="v2"] .adm-res-pares dt { color: var(--muted); }
+[data-ui="v2"] .adm-res-pares dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+[data-ui="v2"] .adm-res-paneles { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+[data-ui="v2"] .adm-res-semaforo-causas { margin: 0; padding-left: 18px; font-size: var(--t-body); }
