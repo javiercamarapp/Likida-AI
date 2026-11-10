@@ -144,7 +144,7 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
             <button key={`g${i}`} type="button" className="rv-btn rv-btn--secondary"
               aria-label={graficas.length > 1 ? `Descargar los datos de la gráfica ${i + 1} como CSV` : 'Descargar los datos de la gráfica como CSV'}
               onClick={() => setErrorArchivo(!descargar(`likida-grafica-${i + 1}.csv`, g.tipo === 'serie' ? serieACsv(g.puntos) : repartoACsv(g.segmentos), 'text/csv;charset=utf-8'))}>
-              <FileSpreadsheet aria-hidden="true" /><span>Datos CSV</span>
+              <FileSpreadsheet aria-hidden="true" strokeWidth={1.75} /><span>Datos CSV</span>
             </button>
           ))}
           {ultimo && (r.origen === 'analista' || r.origen === 'copiloto') && (
