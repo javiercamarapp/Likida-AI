@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { Fuel, Building2 } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';

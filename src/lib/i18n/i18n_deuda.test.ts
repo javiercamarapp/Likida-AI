@@ -32,6 +32,7 @@ const MIGRADOS = [
 interface Base { version: 1; descripcion: string; archivos: Record<string, number> }
 
 function archivos(dir: string, acc: string[] = []): string[] {
+  // eslint-disable-next-line security/detect-non-literal-fs-filename
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
     if (e.isDirectory()) {
@@ -48,6 +49,7 @@ const PISTA = /[áéíóúñ¿¡]|\b(?:de|la|el|que|para|con|por|sin|no|en|se|lo
 function medirTodo(): Record<string, number> {
   const salida: Record<string, number> = {};
   for (const f of archivos(join(RAIZ, ESCANEADO))) {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const codigo = readFileSync(f, 'utf8');
     if (!PISTA.test(codigo)) continue;
     const n = medirDeuda(codigo, f);

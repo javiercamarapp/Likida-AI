@@ -12,7 +12,7 @@ import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type A
 import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
 import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 import {
-  AvisoCompacto, Boton, BotonEnlace, CampoTexto, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, TituloRecuadro,
+  AvisoCompacto, Boton, BotonEnlace, CampoTexto, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 

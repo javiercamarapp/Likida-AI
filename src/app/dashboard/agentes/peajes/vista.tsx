@@ -20,7 +20,7 @@ import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  AvisoCompacto, BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, TituloRecuadro,
+  BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, TituloRecuadro,
 } from '@/app/ui-v2/componentes';
 import './peajes.css';
 

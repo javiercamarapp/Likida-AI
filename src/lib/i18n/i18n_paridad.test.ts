@@ -26,6 +26,7 @@ function etiquetasHtml(texto: string): string[] {
 
 describe('el catálogo coincide con el disco', () => {
   it('cada archivo es/<ns>.ts tiene su en/<ns>.ts y su registro en NAMESPACES (y al revés)', () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const en = (d: string) => readdirSync(join(process.cwd(), 'src/lib/i18n', d)).filter((f) => f.endsWith('.ts')).map((f) => f.replace(/\.ts$/, '')).sort();
     expect(en('es')).toEqual([...NAMESPACES].sort());
     expect(en('en')).toEqual([...NAMESPACES].sort());

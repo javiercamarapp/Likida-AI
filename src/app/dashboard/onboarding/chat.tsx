@@ -7,7 +7,7 @@ import { ArrowUp, Search, Paperclip, X, FileText, Check } from 'lucide-react';
 import { Boton, BotonEnlace, Icono, cx } from '@/app/ui-v2/componentes';
 import { AreaMini, DonaMini } from '@/app/ui-v2/graficas';
 import './entrevista.css';
-import { mxn, litros, numero } from '@/lib/formato';
+import { mxn, litros } from '@/lib/formato';
 import { Logo, LogoIcono } from '../../logo';
 import { CampoPixeles } from '../pixeles';
 import type { OpcionChip } from '@/lib/likida/perfil/entrevista';
