@@ -15,8 +15,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/dashboard/agentes/facturas/portales-vinculo.tsx': 1,
   'app/dashboard/agentes/facturas/relogin-controles.tsx': 3,
   'app/dashboard/agentes/facturas/vincular-asistida.tsx': 3,
-  'app/dashboard/agentes/liquidacion/configuracion/vista.tsx': 2,
-  'app/dashboard/agentes/liquidacion/formato/vista.tsx': 5,
   'app/dashboard/agentes/peajes/anular-desglose.tsx': 1,
   'app/dashboard/agentes/peajes/candidatos-tabla.tsx': 1,
   'app/dashboard/agentes/peajes/conciliar-desglose.tsx': 2,

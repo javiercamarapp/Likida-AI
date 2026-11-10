@@ -71,3 +71,8 @@
 @media (min-width: 640px) { .rv-liq-dos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .rv-liq-forma { display: grid; gap: 8px; align-content: start; }
 .rv-liq-forma__titulo { margin: 0; display: inline-flex; align-items: center; gap: 6px; font-size: var(--t-body, 13px); font-weight: 500; }
+.rv-liq-config { display: grid; gap: 12px; }
+.rv-liq-cuatro { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@media (min-width: 640px) { .rv-liq-cuatro { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .rv-liq-cuatro { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.rv-liq-total { display: grid; gap: 8px; align-content: start; }

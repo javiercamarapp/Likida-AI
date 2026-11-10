@@ -3,22 +3,24 @@ import { ArrowLeft, Upload, Trash2, Save } from 'lucide-react';
 // SOLO tipos: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ConfigFormatoFlota, TelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { ETIQUETA_CAMPO_RENGLON, ETIQUETA_CAMPO_ENCABEZADO } from '@/lib/likida/liquidacion_externa/formato_flota';
-import { MarcoPagina, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Icono, MarcoPagina, Tarjeta,
+} from '@/app/ui-v2/componentes';
+import '../liquidacion.css';
 
 type Accion = (fd: FormData) => Promise<void>;
 
 export interface AccionesFormato { subirMuestra: Accion; guardarAjustes: Accion; quitar: Accion; guardarTelefonos?: Accion }
 
-const ESTILO_INPUT = { background: 'var(--surface)', color: 'var(--ink)' } as const;
-const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--muted)' } as const;
-
-function Etiqueta({ t, children }: { t: string; children: React.ReactNode }) {
+/** Los dos grupos de teléfonos (copia al jefe de flota y aviso de discrepancia): los mismos con o sin formato de Excel. */
+function CamposTelefonos({ copia, discrepancia, deshabilitado }: { copia: string[]; discrepancia: string[]; deshabilitado: boolean }) {
   return (
-    <label className="flex flex-col gap-1">
-      <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{t}</span>
-      {children}
-    </label>
+    <div className="rv-liq-dos">
+      <CampoTextarea etiqueta="Copia al jefe de flota (WhatsApp, hasta 3)" name="copia" rows={2} defaultValue={copia.join('\n')} placeholder="5512345678" disabled={deshabilitado}
+        ayuda="Reciben el resumen y la liga del documento de cada liquidación entregada. La copia lleva cifras: solo los números que pongas aquí." />
+      <CampoTextarea etiqueta="Aviso cuando un operador responde «No coincide» (hasta 3)" name="discrepancia" rows={2} defaultValue={discrepancia.join('\n')} placeholder="5512345678" disabled={deshabilitado}
+        ayuda="La persona responsable de revisar discrepancias. Si lo dejas vacío, se avisa al jefe de la copia y, sin copia, a quien ve dinero." />
+    </div>
   );
 }
 
@@ -30,137 +32,102 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
 }) {
   const f = config?.formato ?? null;
   return (
-    <MarcoPagina titulo="Formato de las liquidaciones" apoyo="Tu formato de liquidación: Likida toma el dato del pago y se lo manda al operador con el mismo formato que hoy." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<ArrowLeft width={12} height={12} strokeWidth={2} />}>Volver al agente</BotonEnlace>}>
-      {aviso && <p role="status" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }}>{aviso}</p>}
-      {error && <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+    <MarcoPagina titulo="Formato de las liquidaciones" apoyo="Tu formato de liquidación: Likida toma el dato del pago y se lo manda al operador con el mismo formato que hoy." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/liquidacion${sufijo}`} icono={<Icono icono={ArrowLeft} />}>Volver al agente</BotonEnlace>}>
+      {aviso && <AvisoCompacto tono="info" resumen={aviso} />}
+      {error && <AvisoCompacto tono="error" resumen={error} />}
 
-      <section className="card p-4">
-        <TituloRecuadro info="liquidacion_formato.formato" className="mb-1">1. Tu formato</TituloRecuadro>
-        <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
+      <Tarjeta titulo="1. Tu formato" info="liquidacion_formato.formato">
+        <p className="rv-liq-sub">
           Tú calculas la liquidación en tu sistema; Likida toma el dato del pago y se lo manda al operador con el mismo formato que hoy
           copias y pegas. Sube el Excel de muestra (el «formatito») y Likida lee sus columnas, sus encabezados y los datos de arriba
           (operador, periodo, folio). Lo que no reconoce no se inventa: te lo dice. Likida no recalcula nada: imprime las cifras que mandas.
         </p>
         {puedeAdministrar ? (
-          <form action={acciones.subirMuestra} encType="multipart/form-data" className="flex flex-wrap items-end gap-2">
-            <Etiqueta t="Excel de muestra (.xlsx)">
-              <input type="file" name="archivo" accept=".xlsx,.xls,.ods,.csv" required className="w-full" style={ESTILO_INPUT} />
-            </Etiqueta>
-            <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Upload width={13} height={13} strokeWidth={2} /> {f ? 'Reemplazar muestra' : 'Subir muestra'}</button>
+          <form action={acciones.subirMuestra} encType="multipart/form-data" className="rv-liq-acciones rv-liq-acciones--forma">
+            <CampoArchivo etiqueta="Excel de muestra (.xlsx)" name="archivo" accept=".xlsx,.xls,.ods,.csv" required />
+            <Boton type="submit" variante="primary" icono={<Icono icono={Upload} />}>{f ? 'Reemplazar muestra' : 'Subir muestra'}</Boton>
           </form>
         ) : (
-          <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Solo el dueño de la flota sube la muestra y cambia el formato.</p>
+          <p className="rv-liq-sub">Solo el dueño de la flota sube la muestra y cambia el formato.</p>
         )}
-      </section>
+      </Tarjeta>
 
       {!f && (
-        <section className="card p-4">
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <Tarjeta titulo="Sin formato todavía">
+          <p className="rv-liq-sub">
             Todavía no hay formato: las liquidaciones salen con el PDF genérico de Likida. No necesitas un Excel de muestra para
             designar a quién se le copia cada liquidación ni quién revisa las discrepancias: captúralos aquí abajo.
           </p>
-        </section>
+        </Tarjeta>
       )}
 
       {!f && acciones.guardarTelefonos && (
-        <section className="card p-4">
-          <TituloRecuadro info="liquidacion_formato.avisos" className="mb-1">2. A quién se le avisa (sin formato de Excel)</TituloRecuadro>
-          <form action={acciones.guardarTelefonos} className="space-y-3">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <Etiqueta t="Copia al jefe de flota (WhatsApp, hasta 3)">
-                <textarea name="copia" rows={2} defaultValue={(telefonos?.copia ?? []).join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Reciben el resumen y la liga del documento de cada liquidación entregada. La copia lleva cifras: solo los números que pongas aquí.</span>
-              </Etiqueta>
-              <Etiqueta t="Aviso cuando un operador responde «No coincide» (hasta 3)">
-                <textarea name="discrepancia" rows={2} defaultValue={(telefonos?.discrepancia ?? []).join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                <span className="text-[11px]" style={{ color: 'var(--faint)' }}>La persona responsable de revisar discrepancias. Si lo dejas vacío, se avisa al jefe de la copia y, sin copia, a quien ve dinero.</span>
-              </Etiqueta>
-            </div>
+        <Tarjeta titulo="2. A quién se le avisa (sin formato de Excel)" info="liquidacion_formato.avisos">
+          <form action={acciones.guardarTelefonos} className="rv-liq-config">
+            <CamposTelefonos copia={telefonos?.copia ?? []} discrepancia={telefonos?.discrepancia ?? []} deshabilitado={!puedeAdministrar} />
             {puedeAdministrar && (
-              <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar teléfonos</button>
+              <div className="rv-liq-acciones">
+                <Boton type="submit" variante="primary" icono={<Icono icono={Save} />}>Guardar teléfonos</Boton>
+              </div>
             )}
           </form>
-        </section>
+        </Tarjeta>
       )}
 
       {f && config && (
-        <>
-          <section className="card p-4">
-            <TituloRecuadro info="liquidacion_formato.impresion" className="mb-1">2. Cómo se imprime</TituloRecuadro>
-            <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-              Muestra: {config.nombreMuestra ?? '—'}. Cada liquidación que llega genera el PDF y el Excel con estas columnas; por WhatsApp viaja el que elijas.
-            </p>
-            <form action={acciones.guardarAjustes} className="space-y-4">
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <Etiqueta t="Título del documento">
-                  <input name="titulo" defaultValue={f.titulo ?? ''} maxLength={120} placeholder="(el nombre de tu flota)" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                </Etiqueta>
-                <Etiqueta t="Documento que viaja por WhatsApp">
-                  <select name="salida" defaultValue={f.salida} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar}>
-                    <option value="pdf">PDF</option>
-                    <option value="xlsx">Excel</option>
-                  </select>
-                </Etiqueta>
-                <Etiqueta t="Fechas">
-                  <select name="fechas" defaultValue={f.fechas} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar}>
-                    <option value="dmy">DD/MM/AAAA</option>
-                    <option value="iso">AAAA-MM-DD</option>
-                  </select>
-                </Etiqueta>
-                <Etiqueta t="Fila de total">
-                  <span className="flex items-center gap-2">
-                    <input type="checkbox" name="mostrarTotal" defaultChecked={f.total.mostrar} disabled={!puedeAdministrar} />
-                    <input name="etiquetaTotal" defaultValue={f.total.etiqueta} maxLength={80} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                  </span>
-                </Etiqueta>
+        <Tarjeta titulo="2. Cómo se imprime" info="liquidacion_formato.impresion">
+          <p className="rv-liq-sub">
+            Muestra: {config.nombreMuestra ?? '—'}. Cada liquidación que llega genera el PDF y el Excel con estas columnas; por WhatsApp viaja el que elijas.
+          </p>
+          <form action={acciones.guardarAjustes} className="rv-liq-config">
+            <div className="rv-liq-cuatro">
+              <CampoTexto etiqueta="Título del documento" name="titulo" defaultValue={f.titulo ?? ''} maxLength={120} placeholder="(el nombre de tu flota)" disabled={!puedeAdministrar} />
+              <CampoSelect etiqueta="Documento que viaja por WhatsApp" name="salida" defaultValue={f.salida} disabled={!puedeAdministrar}>
+                <option value="pdf">PDF</option>
+                <option value="xlsx">Excel</option>
+              </CampoSelect>
+              <CampoSelect etiqueta="Fechas" name="fechas" defaultValue={f.fechas} disabled={!puedeAdministrar}>
+                <option value="dmy">DD/MM/AAAA</option>
+                <option value="iso">AAAA-MM-DD</option>
+              </CampoSelect>
+              <div className="rv-liq-total">
+                <Casilla etiqueta="Mostrar la fila de total" name="mostrarTotal" defaultChecked={f.total.mostrar} disabled={!puedeAdministrar} />
+                <CampoTexto etiqueta="Etiqueta de la fila de total" name="etiquetaTotal" defaultValue={f.total.etiqueta} maxLength={80} disabled={!puedeAdministrar} />
               </div>
+            </div>
 
-              <div>
-                <p className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Datos de arriba</p>
-                {f.datos.length === 0 ? (
-                  <p className="text-[12px]" style={{ color: 'var(--faint)' }}>La muestra no traía datos sobre la tabla (operador, periodo, folio…): el documento lleva solo la tabla.</p>
-                ) : (
-                  <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                    {f.datos.map((d, i) => (
-                      <Etiqueta key={`${d.campo}-${i}`} t={`Se llena con: ${ETIQUETA_CAMPO_ENCABEZADO[d.campo]}`}>
-                        <input name={`dato_${i}`} defaultValue={d.etiqueta} maxLength={80} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                      </Etiqueta>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <p className="etiqueta-mono text-[11px] uppercase mb-1" style={{ color: 'var(--faint)' }}>Columnas de la tabla, en orden</p>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-2">
-                  {f.columnas.map((c, i) => (
-                    <Etiqueta key={`${c.campo}-${i}`} t={`Se llena con: ${ETIQUETA_CAMPO_RENGLON[c.campo]}`}>
-                      <input name={`col_${i}`} defaultValue={c.encabezado} maxLength={80} className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                    </Etiqueta>
+            <div>
+              <p className="rv-liq-rotulo">Datos de arriba</p>
+              {f.datos.length === 0 ? (
+                <p className="rv-liq-sub">La muestra no traía datos sobre la tabla (operador, periodo, folio…): el documento lleva solo la tabla.</p>
+              ) : (
+                <div className="rv-liq-cuatro">
+                  {f.datos.map((d, i) => (
+                    <CampoTexto key={`${d.campo}-${i}`} etiqueta={`Se llena con: ${ETIQUETA_CAMPO_ENCABEZADO[d.campo]}`} name={`dato_${i}`} defaultValue={d.etiqueta} maxLength={80} disabled={!puedeAdministrar} />
                   ))}
                 </div>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-3">
-                <Etiqueta t="Copia al jefe de flota (WhatsApp, hasta 3)">
-                  <textarea name="copia" rows={2} defaultValue={config.copiaTelefonos.join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                  <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Reciben el resumen y la liga del documento de cada liquidación entregada. La copia lleva cifras: solo los números que pongas aquí.</span>
-                </Etiqueta>
-                <Etiqueta t="Aviso cuando un operador responde «No coincide» (hasta 3)">
-                  <textarea name="discrepancia" rows={2} defaultValue={config.discrepanciaTelefonos.join('\n')} placeholder="5512345678" className="w-full" style={ESTILO_INPUT} disabled={!puedeAdministrar} />
-                  <span className="text-[11px]" style={{ color: 'var(--faint)' }}>La persona responsable de revisar discrepancias. Si lo dejas vacío, se avisa al jefe de la copia y, sin copia, a quien ve dinero.</span>
-                </Etiqueta>
-              </div>
-
-              {puedeAdministrar && (
-                <div className="flex flex-wrap gap-2">
-                  <button type="submit" className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}><Save width={13} height={13} strokeWidth={2} /> Guardar cambios</button>
-                  <button type="submit" formAction={acciones.quitar} className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}><Trash2 width={12} height={12} strokeWidth={2} className="inline mr-1" />Quitar el formato</button>
-                </div>
               )}
-            </form>
-          </section>
-        </>
+            </div>
+
+            <div>
+              <p className="rv-liq-rotulo">Columnas de la tabla, en orden</p>
+              <div className="rv-liq-cuatro">
+                {f.columnas.map((c, i) => (
+                  <CampoTexto key={`${c.campo}-${i}`} etiqueta={`Se llena con: ${ETIQUETA_CAMPO_RENGLON[c.campo]}`} name={`col_${i}`} defaultValue={c.encabezado} maxLength={80} disabled={!puedeAdministrar} />
+                ))}
+              </div>
+            </div>
+
+            <CamposTelefonos copia={config.copiaTelefonos} discrepancia={config.discrepanciaTelefonos} deshabilitado={!puedeAdministrar} />
+
+            {puedeAdministrar && (
+              <div className="rv-liq-acciones">
+                <Boton type="submit" variante="primary" icono={<Icono icono={Save} />}>Guardar cambios</Boton>
+                <Boton type="submit" formAction={acciones.quitar} variante="secondary" icono={<Icono icono={Trash2} />}>Quitar el formato</Boton>
+              </div>
+            )}
+          </form>
+        </Tarjeta>
       )}
     </MarcoPagina>
   );
