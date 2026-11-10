@@ -1,11 +1,11 @@
-import { Inbox, Download, TriangleAlert, Mail } from 'lucide-react';
+import { Inbox, Download, Mail } from 'lucide-react';
+import './proveedores.css';
 import type { FacturaProveedor } from '@/lib/likida/proveedores';
 import type { BuzonDeFlota } from '@/lib/correo/buzon_escritura';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Disclosure, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { SelloDato, TablaLista, type ColumnaTabla, type ParamsURL } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
@@ -92,45 +92,36 @@ export function VistaAgenteProveedores({
       </TiraCifras>
 
       {topeTocado && (
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+        <AvisoCompacto tono="info" resumen={<>
           Las aprobadas, rechazadas y el receptor ajeno se cuentan sobre las {numero(TOPE_FACTURAS)} facturas
           más recientes del buzón — hay más atrás. Las pendientes se leen todas
           {pendientes.length >= TOPE_PENDIENTES ? `, hasta ${numero(TOPE_PENDIENTES)}: hay más por decidir de las que caben aquí` : ''}.
-        </p>
+        </>} />
       )}
 
-      <section className="card p-4">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <TituloRecuadro info="proveedores.subir" className="mb-1">Subir factura de proveedor</TituloRecuadro>
-            <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-              El XML es el dato duro del CFDI — súbelo siempre que lo tengas. Si solo hay
-              papel, la foto también entra: la IA lee las cifras y la bandeja la marca para
-              revisarse contra el papel antes de aprobar. {rfcFlota
-                ? <>Se valida contra el RFC de tu flota ({rfcFlota}).</>
-                : <>Tu flota aún no tiene RFC capturado: la validación de receptor queda pendiente y se dice.</>}
-            </p>
-            <div className="space-y-2">
-              <SubirFactura subirFactura={acciones.subirFactura} />
-              <SubirFotoFactura subirFoto={acciones.subirFoto} />
-            </div>
-          </div>
-          {aprobadas.length > 0 && (
-            <div className="shrink-0 space-y-1.5">
-              <BotonExport
-                href={linkExport(sufijo, 'sap_b1')}
-                rotulo="Exportar aprobadas (CSV SAP B1)" />
-              <BotonExport
-                href={linkExport(sufijo, 'contpaqi')}
-                rotulo="Exportar aprobadas (CSV CONTPAQi)" />
-              <p className="text-[11px] max-w-[260px]" style={{ color: 'var(--faint)' }}>
-                Layout estándar de importación — valídalo con tu contador o consultor SAP
-                antes del primer import. Lo exportado queda marcado en la bandeja.
-              </p>
-            </div>
-          )}
+      <Tarjeta titulo="Subir factura de proveedor" info="proveedores.subir">
+        <p className="rv-prov__nota">
+          El XML es el dato duro del CFDI — súbelo siempre que lo tengas. Si solo hay
+          papel, la foto también entra: la IA lee las cifras y la bandeja la marca para
+          revisarse contra el papel antes de aprobar. {rfcFlota
+            ? <>Se valida contra el RFC de tu flota ({rfcFlota}).</>
+            : <>Tu flota aún no tiene RFC capturado: la validación de receptor queda pendiente y se dice.</>}
+        </p>
+        <div className="rv-prov__subir">
+          <SubirFactura subirFactura={acciones.subirFactura} />
+          <SubirFotoFactura subirFoto={acciones.subirFoto} />
         </div>
-      </section>
+        {aprobadas.length > 0 && (
+          <div className="rv-prov__export">
+            <BotonExport href={linkExport(sufijo, 'sap_b1')} rotulo="Exportar aprobadas (CSV SAP B1)" />
+            <BotonExport href={linkExport(sufijo, 'contpaqi')} rotulo="Exportar aprobadas (CSV CONTPAQi)" />
+            <p className="rv-prov__nota">
+              Layout estándar de importación — valídalo con tu contador o consultor SAP
+              antes del primer import. Lo exportado queda marcado en la bandeja.
+            </p>
+          </div>
+        )}
+      </Tarjeta>
 
       <SeccionBuzon
         buzon={buzon}
@@ -141,13 +132,10 @@ export function VistaAgenteProveedores({
 
       {recepcion}
 
-      <section className="card p-4">
-        <TituloRecuadro info="proveedores.bandeja" className="mb-1">La bandeja</TituloRecuadro>
-        <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-          Pendientes arriba; lo decidido queda con su quién y su cuándo
-        </p>
+      <Tarjeta titulo="La bandeja" info="proveedores.bandeja">
+        <p className="rv-prov__nota">Pendientes arriba; lo decidido queda con su quién y su cuándo</p>
         {facturas.length === 0 ? (
-          <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          <EstadoVacio titulo="Sin facturas de proveedor" icono={Inbox} contenido>
             Aún no hay facturas de proveedor — sube el primer XML y aparece aquí
             esperando tu decisión.
           </EstadoVacio>
@@ -169,17 +157,19 @@ export function VistaAgenteProveedores({
             </div>
           </>
         )}
-      </section>
+      </Tarjeta>
 
       {entrega}
 
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+      <Disclosure titulo="Qué son los CSV de exportación">
+      <p className="rv-prov__nota">
         Los CSV usan el layout estándar de importación de facturas de compra (SAP Business
         One por Excel/DTW; variante simple para CONTPAQi) — no una compatibilidad
         certificada: valídalos con tu contador o consultor SAP antes del primer import. La
         escritura directa al Service Layer de SAP B1 se activa con credenciales del cliente —
         este agente no la promete antes de tenerlas.
       </p>
+      </Disclosure>
 
       {ficha}
 
@@ -204,49 +194,39 @@ export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon,
   acciones: { generarBuzon: AccionProveedores; rotarBuzon: AccionProveedores };
 }) {
   return (
-    <section className="card p-4">
-      <TituloRecuadro info="proveedores.buzon" className="mb-1">Buzón de facturas por correo</TituloRecuadro>
-      <p className="text-[11px] mb-3 max-w-xl" style={{ color: 'var(--faint)' }}>
+    <Tarjeta titulo="Buzón de facturas por correo" info="proveedores.buzon">
+      <p className="rv-prov__nota">
         Dale esta dirección a tus proveedores o reenvía ahí sus facturas: los XML adjuntos
         entran solos a esta bandeja, sin subir nada a mano.
       </p>
 
       {buzon === null ? (
-        // La lectura falló. NO se dice "sin buzón": ese estado ofrecería
-        // generar uno encima del que quizá ya existe, y rotarlo sin querer.
-        // Un <p> y no `EstadoError`: aquel trae `useRouter` para reintentar,
-        // y esta sección se degrada dentro de una página que sí cargó.
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-          No se pudo leer el buzón de la flota ahora mismo. Recarga la página; si se repite,
-          avísale a Likida.
-        </p>
+        // La lectura falló. NO se dice "sin buzón": ese estado ofrecería generar uno encima del que quizá ya existe, y rotarlo sin querer.
+        <AvisoCompacto tono="error" resumen="No se pudo leer el buzón de la flota ahora mismo. Recarga la página; si se repite, avísale a Likida." />
       ) : !dominioConfigurado ? (
-        // Sin RESEND_EMAIL_DOMAIN no hay dirección que enseñar ni que generar:
-        // se dice qué falta en vez de armar una dirección que no existe.
-        <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        // Sin RESEND_EMAIL_DOMAIN no hay dirección que enseñar ni que generar: se dice qué falta en vez de armar una que no existe.
+        <EstadoVacio titulo="Buzón no disponible" icono={Mail} contenido>
           El dominio de correo no está configurado en este entorno
           (lo configura el equipo de Likida), así que el buzón por
           correo no puede operar. Es configuración del sistema, no de tu flota.
         </EstadoVacio>
       ) : buzon.direccion ? (
-        <div>
+        <div className="rv-prov__subir">
           <DireccionBuzon direccion={buzon.direccion} />
           {puedeAdministrarBuzon && <RotarBuzon rotar={acciones.rotarBuzon} />}
         </div>
       ) : (
-        <div>
-          <p className="text-[12px] mb-2 max-w-xl" style={{ color: 'var(--muted)' }}>
+        <div className="rv-prov__subir">
+          <p className="rv-prov__nota">
             Tu flota aún no tiene dirección. Se genera una vez y es única de tu flota — el token
             en la dirección es lo que decide que esas facturas entren aquí y no a otra parte.
           </p>
           {puedeAdministrarBuzon
             ? <GenerarBuzon generar={acciones.generarBuzon} />
-            : <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
-                Generarla es una acción del dueño de la flota — pídesela a tu administrador.
-              </p>}
+            : <p className="rv-prov__nota">Generarla es una acción del dueño de la flota — pídesela a tu administrador.</p>}
         </div>
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -272,9 +252,7 @@ function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: Accion
         <>
           <span className="cifra-mono block">{f.emisorRfc ?? 'sin RFC'}</span>
           {f.receptorEsFlota === false && (
-            <span className="inline-flex items-center gap-1 text-[11px] rv-tl__bad">
-              <TriangleAlert width={11} height={11} strokeWidth={2} aria-hidden /> receptor ajeno
-            </span>
+            <StatusChip tono="bad">receptor ajeno</StatusChip>
           )}
           {f.receptorEsFlota === null && <span className="rv-tl__sub">receptor sin validar</span>}
         </>
@@ -293,19 +271,13 @@ function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: Accion
           {/* Cifra leída por VISIÓN, no del XML: se dice siempre, con su
               confianza, para que nadie apruebe un OCR como dato duro. */}
           {f.requiereRevision && (
-            <span className="inline-flex items-center gap-1 text-[11px] rv-tl__warn">
-              <TriangleAlert width={10} height={10} strokeWidth={2} aria-hidden />
-              {f.revisionMotivo ?? 'lectura de PDF: cotéjala antes de aprobar'}
-            </span>
+            <StatusChip tono="warn">{f.revisionMotivo ?? 'lectura de PDF: cotéjala antes de aprobar'}</StatusChip>
           )}
           {f.tienePdf && acciones.verPdf && (
             <span className="block mt-1"><BotonVerPdf campo="facturaId" id={f.id} ver={acciones.verPdf} /></span>
           )}
           {f.ocrConfianza !== null && (
-            <span className="inline-flex items-center gap-1 text-[11px] rv-tl__warn">
-              <TriangleAlert width={10} height={10} strokeWidth={2} aria-hidden />
-              leída de {f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? 'PDF' : 'foto'} (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
-            </span>
+            <StatusChip tono="warn">leída de {f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? 'PDF' : 'foto'} (OCR {numero(f.ocrConfianza)}) — revisa contra el papel</StatusChip>
           )}
         </>
       ),
@@ -334,12 +306,7 @@ function linkExport(sufijo: string, formato: 'sap_b1' | 'contpaqi'): string {
 function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
   return (
     <form method="post" action={href}>
-      <button type="submit"
-        className="rv-btn rv-btn--secondary rv-btn--sm w-full"
-        style={{ background: 'var(--surface)' }}>
-        <Download width={13} height={13} strokeWidth={1.75} />
-        {rotulo}
-      </button>
+      <Boton type="submit" variante="secondary" tamano="sm" icono={<Icono icono={Download} tam={14} />}>{rotulo}</Boton>
     </form>
   );
 }
@@ -349,49 +316,23 @@ function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
  *  contestó. Un CFDI cancelado grita: aprobarlo mandaría al ERP una factura
  *  que el SAT ya no reconoce. */
 function NotaSat({ estadoSat }: { estadoSat: FacturaProveedor['estadoSat'] }) {
-  if (estadoSat === 'vigente') {
-    return <span className="block text-[11px] mt-0.5" style={{ color: 'var(--ok)' }}>vigente ante el SAT</span>;
-  }
-  if (estadoSat === 'cancelado') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
-        <TriangleAlert width={10} height={10} strokeWidth={2} /> CANCELADO ante el SAT
-      </span>
-    );
-  }
-  if (estadoSat === 'no_encontrado') {
-    // El SAT no reconoce ese folio fiscal — la señal más fuerte de un CFDI
-    // inventado (el buzón acepta cualquier XML sin validar el sello digital).
-    // MISMO tratamiento que 'cancelado': no se ve igual de discreto que
-    // "pendiente"/"sin consultar".
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
-        <TriangleAlert width={10} height={10} strokeWidth={2} /> el SAT NO LO ENCUENTRA — folio no reconocido
-      </span>
-    );
-  }
-  return (
-    <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
-      {estadoSat === 'pendiente' ? 'SAT sin contestar al ingerir' : 'SAT sin consultar'}
-    </span>
-  );
+  if (estadoSat === 'vigente') return <StatusChip tono="ok">vigente ante el SAT</StatusChip>;
+  if (estadoSat === 'cancelado') return <StatusChip tono="bad">CANCELADO ante el SAT</StatusChip>;
+  // El SAT no reconoce ese folio fiscal — la señal más fuerte de un CFDI inventado: MISMO tratamiento que 'cancelado'.
+  if (estadoSat === 'no_encontrado') return <StatusChip tono="bad">el SAT NO LO ENCUENTRA — folio no reconocido</StatusChip>;
+  return <StatusChip tono="muted">{estadoSat === 'pendiente' ? 'SAT sin contestar al ingerir' : 'SAT sin consultar'}</StatusChip>;
 }
 
 function PillEstado({ f }: { f: FacturaProveedor }) {
-  // «Exportada» no borra la decisión: es una aprobada que YA salió en un CSV
-  // (`exportada_en`, 0108) — el anti-doble-import visible.
-  const cfg = f.estado === 'aprobada'
+  // «Exportada» no borra la decisión: es una aprobada que YA salió en un CSV (`exportada_en`, 0108): el anti-doble-import visible.
+  const cfg: { rotulo: string; tono: TonoEstado } = f.estado === 'aprobada'
     ? f.entregadaEn
-      ? { rotulo: 'Entregada al contador', fg: 'var(--ok)', bg: 'var(--okbg)' }
-    : f.exportadaEn
-      ? { rotulo: 'Exportada', fg: 'var(--ok)', bg: 'var(--okbg)' }
-      : { rotulo: 'Aprobada', fg: 'var(--ok)', bg: 'var(--okbg)' }
+      ? { rotulo: 'Entregada al contador', tono: 'ok' }
+      : f.exportadaEn
+        ? { rotulo: 'Exportada', tono: 'ok' }
+        : { rotulo: 'Aprobada', tono: 'ok' }
     : f.estado === 'rechazada'
-      ? { rotulo: 'Rechazada', fg: 'var(--muted)', bg: 'var(--canvas)' }
-      : { rotulo: 'Pendiente', fg: 'var(--warn)', bg: 'var(--warnbg)' };
-  return (
-    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-      style={{ color: cfg.fg, background: cfg.bg }}>{cfg.rotulo}</span>
-  );
+      ? { rotulo: 'Rechazada', tono: 'muted' }
+      : { rotulo: 'Pendiente', tono: 'warn' };
+  return <StatusChip tono={cfg.tono}>{cfg.rotulo}</StatusChip>;
 }
-

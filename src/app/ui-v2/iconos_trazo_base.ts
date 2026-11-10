@@ -39,7 +39,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/dashboard/agentes/proveedores/controles.tsx': 6,
   'app/dashboard/agentes/proveedores/controles_buzon.tsx': 6,
   'app/dashboard/agentes/proveedores/seccion_buzon.tsx': 1,
-  'app/dashboard/agentes/proveedores/vista.tsx': 5,
   'app/dashboard/arranque/vista.tsx': 2,
   'app/dashboard/aviso-rol.tsx': 1,
   'app/dashboard/chat/composer.tsx': 1,

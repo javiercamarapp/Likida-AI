@@ -1,0 +1,4 @@
+/* Facturas de proveedores · archivo propio de la pantalla. Solo tokens del sistema. */
+.rv-prov__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; max-width: 72ch; }
+.rv-prov__subir { display: grid; gap: 8px; max-width: 560px; }
+.rv-prov__export { display: grid; gap: 8px; justify-items: start; padding-top: 12px; border-top: 1px solid var(--line); }
