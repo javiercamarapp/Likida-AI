@@ -1,4 +1,6 @@
 import { mxn, fechaMx } from '@/lib/utils';
+import { Boton, CampoSelect } from '@/app/ui-v2/componentes';
+import './combustible.css';
 import type { LineaPorConciliar } from '@/lib/likida/analytics';
 
 // La pantalla que faltaba desde la 0076 (auditoría 10, hallazgo CRÍTICO
@@ -15,8 +17,6 @@ import type { LineaPorConciliar } from '@/lib/likida/analytics';
  *  exporta para que la Server Action en `page.tsx` sepa distinguirlo de un
  *  `gastoId` sin tener que importar lógica de `intake/consolidado.ts` aquí. */
 export const NINGUNO_VALOR = '__ninguno__';
-
-const CONTROL = { background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' } as const;
 
 /** Por qué una línea NO se ligó sola, en una frase — la misma distinción que
  *  hace `conciliarLineas`: cero candidatos es "nadie cuadra", dos o más es
@@ -35,43 +35,36 @@ export function LineasPorConciliar({
   if (lineas.length === 0) return null;
 
   return (
-    <div className="divide-y mt-3" style={{ borderColor: 'var(--line)' }}>
+    <ul className="rv-comb__lineas" aria-label="Líneas por resolver a mano">
       {lineas.map((l) => (
-        <div key={l.id} className="py-4 flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold tabular">{mxn(l.monto)}</div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                {l.fecha ? fechaMx(l.fecha) : 'sin fecha en el CFDI'}
-                {l.estacionRfc ? ` · estación ${l.estacionRfc}` : ''}
-                {l.folioOperacion ? ` · folio ${l.folioOperacion}` : ''}
-                {l.descripcion ? ` · ${l.descripcion}` : ''}
-              </div>
-              {l.cfdiUuid && (
-                <div className="text-xs mt-0.5 font-mono truncate max-w-md" style={{ color: 'var(--muted)' }}>
-                  CFDI {l.cfdiUuid} · línea {l.indice}
-                </div>
-              )}
-            </div>
-          </div>
+        <li key={l.id} className="rv-comb__linea">
+          <strong className="rv-comb__monto">{mxn(l.monto)}</strong>
+          <span className="rv-comb__tenue">
+            {l.fecha ? fechaMx(l.fecha) : 'sin fecha en el CFDI'}
+            {l.estacionRfc ? ` · estación ${l.estacionRfc}` : ''}
+            {l.folioOperacion ? ` · folio ${l.folioOperacion}` : ''}
+            {l.descripcion ? ` · ${l.descripcion}` : ''}
+          </span>
+          {l.cfdiUuid && (
+            <span className="rv-comb__tenue rv-comb__mono">CFDI {l.cfdiUuid} · línea {l.indice}</span>
+          )}
 
-          <div className="text-xs" style={{ color: 'var(--muted)' }}>
+          <span className="rv-comb__tenue">
             {motivoPorConciliar(l.candidatos.length)}
             {l.candidatos.length > 0 && ': ' + l.candidatos
               .map((c) => `viaje ${c.viajeFolio ?? '(sin folio)'} (${mxn(c.monto)}, ${c.fecha ? fechaMx(c.fecha) : 'sin fecha'})`)
               .join(' · ')}
-          </div>
+          </span>
 
-          <form action={accion} className="flex items-center gap-2 flex-wrap mt-1">
+          <form action={accion} className="rv-comb__forma">
             <input type="hidden" name="lineaId" value={l.id} />
             {/* A37-S17-01: con VARIOS candidatos empatados no se adivina cuál: nada viene preseleccionado y hay que elegir. */}
-            <select
+            <CampoSelect
               name="eleccion"
-              aria-label="Con qué gasto ligar esta línea"
+              etiqueta="Con qué gasto ligar esta línea"
+              etiquetaOculta
               required
               defaultValue={l.candidatos.length === 0 ? NINGUNO_VALOR : l.candidatos.length === 1 ? l.candidatos[0].gastoId : ''}
-              className="text-sm rounded-lg px-2.5 py-1.5 max-w-xs"
-              style={CONTROL}
             >
               {l.candidatos.length > 1 && <option value="" disabled>Elige con qué gasto ligar…</option>}
               {l.candidatos.map((c) => (
@@ -80,14 +73,11 @@ export function LineasPorConciliar({
                 </option>
               ))}
               <option value={NINGUNO_VALOR}>Ninguno de estos — no ligar a nada</option>
-            </select>
-            <button type="submit" className="rv-btn rv-btn--primary"
-              style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-              Resolver
-            </button>
+            </CampoSelect>
+            <Boton type="submit" variante="primary">Resolver</Boton>
           </form>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }
