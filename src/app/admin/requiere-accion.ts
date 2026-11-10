@@ -1,6 +1,7 @@
 import { calcularAlertas } from './calcular-alertas';
 import { alertasExtra, leerEntradaAlertasExtra, type AlertaExtra } from '@/lib/admin/fuentes-alerta-extra';
 import { conteoDeFuente, getBandejaEscalaciones, type BandejaEscalaciones, type FuenteEscalacion } from '@/lib/admin/escalaciones';
+import { leerResumenBandeja, type ResumenBandejaCola } from '@/lib/admin/cola-aprobacion';
 
 /**
  * Lo que la campana de la cabecera de /admin necesita saber: cuántas cosas esperan a un humano y si alguna es urgente.
@@ -50,7 +51,9 @@ type LectorExtras = () => Promise<ReadonlyArray<AlertaExtra>>;
 
 /** Nunca lanza: si las fuentes extra no se pueden leer, la campana sigue con la bandeja sola. */
 const leerExtras: LectorExtras = async () => alertasExtra(await leerEntradaAlertasExtra());
-export interface PanoramaAccion { resumen: RequiereAccion; bandeja: BandejaEscalaciones | null }
+type LectorCola = (ahoraMs: number) => Promise<ResumenBandejaCola | null>;
+/** `cola` = el estado de la bandeja de aprobación (`null` = no se pudo leer: «sin dato», nunca 0). Alimenta los números de las pestañas Tu turno y Aprobaciones. */
+export interface PanoramaAccion { resumen: RequiereAccion; bandeja: BandejaEscalaciones | null; cola: ResumenBandejaCola | null }
 let cache: { valor: PanoramaAccion; vence: number } | null = null;
 
 /** Solo para pruebas. */
@@ -65,15 +68,20 @@ export async function obtenerPanoramaAccion(
   ahoraMs: number = Date.now(),
   leer: Lector = getBandejaEscalaciones,
   leerAlertasExtra: LectorExtras = leerExtras,
+  leerCola: LectorCola = leerResumenBandeja,
 ): Promise<PanoramaAccion> {
   if (cache && ahoraMs < cache.vence) return cache.valor;
   try {
-    const [bandeja, extras] = await Promise.all([leer(ahoraMs), leerAlertasExtra().catch((): ReadonlyArray<AlertaExtra> => [])]);
-    const valor = { resumen: resumirRequiereAccion(bandeja, extras), bandeja };
+    const [bandeja, extras, cola] = await Promise.all([
+      leer(ahoraMs),
+      leerAlertasExtra().catch((): ReadonlyArray<AlertaExtra> => []),
+      leerCola(ahoraMs).catch((): ResumenBandejaCola | null => null),
+    ]);
+    const valor = { resumen: resumirRequiereAccion(bandeja, extras), bandeja, cola };
     cache = { valor, vence: ahoraMs + TTL_REQUIERE_ACCION_MS };
     return valor;
   } catch {
-    return { resumen: SIN_DATO, bandeja: null };
+    return { resumen: SIN_DATO, bandeja: null, cola: null };
   }
 }
 

@@ -83,6 +83,23 @@ describe('conteos vivos en las pestañas', () => {
     expect(conteosDePestanas(bandeja(caido))['/admin/escalaciones'].conteo).toBeNull();
     expect(conteosDePestanas(null)).toEqual({});
   });
+  const cola = (c: Partial<{ pendientes: number; urgentes: number; frenaAlRunner: boolean }> = {}) => ({ pendientes: 0, urgentes: 0, frenaAlRunner: false, ...c });
+  it('Aprobaciones lleva las piezas pendientes; pide atención si hay urgentes o si la bandeja ya frena al runner', () => {
+    expect(conteosDePestanas(null, cola({ pendientes: 100, frenaAlRunner: true }))['/admin/aprobaciones']).toEqual({ conteo: 100, atencion: true });
+    expect(conteosDePestanas(null, cola({ pendientes: 3, urgentes: 1 }))['/admin/aprobaciones']).toEqual({ conteo: 3, atencion: true });
+    expect(conteosDePestanas(null, cola({ pendientes: 3 }))['/admin/aprobaciones']).toEqual({ conteo: 3, atencion: false });
+    // 0 leído no es alerta aunque el runner estuviera frenado por otra razón.
+    expect(conteosDePestanas(null, cola())['/admin/aprobaciones']).toEqual({ conteo: 0, atencion: false });
+  });
+  it('Tu turno suma envíos por aprobar + escalaciones; una lectura caída solo quita SU parte (mínimo verdadero) y las dos caídas dan null', () => {
+    const c = conteosDePestanas(bandeja({ talachas: 2 }), cola({ pendientes: 5 }));
+    expect(c['/admin/tu-turno'].conteo).toBe(7);
+    const caido = Object.fromEntries(['arco', 'corridasFallo', 'talachas', 'facturasProveedor', 'ticketsAbiertos', 'ticketsVencidos', 'liquidacionesRevisar'].map((k) => [k, null]));
+    expect(conteosDePestanas(bandeja(caido), cola({ pendientes: 5 }))['/admin/tu-turno'].conteo).toBe(5);
+    expect(conteosDePestanas(bandeja(caido), null)['/admin/tu-turno'].conteo).toBeNull();
+    expect(conteosDePestanas(bandeja({ talachas: 2 }), null)['/admin/tu-turno'].conteo).toBe(2);
+    expect(conteosDePestanas(bandeja({}), cola())['/admin/tu-turno']).toEqual({ conteo: 0, atencion: false });
+  });
   it('se mezclan sobre las pestañas de la ruta; las demás pestañas quedan sin número', () => {
     const v = pestanasDeRuta('/admin/tu-turno', { '/admin/escalaciones': { conteo: 12, atencion: true } });
     const por = Object.fromEntries(v!.pestanas.map((p) => [p.nombre, p]));

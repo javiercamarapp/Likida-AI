@@ -12,7 +12,15 @@ vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol
 // tamaño de una lista topada.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const dobles = vi.hoisted(() => ({ getBandejaEscalaciones: vi.fn() }));
+const dobles = vi.hoisted(() => ({ getBandejaEscalaciones: vi.fn(), getAgentesParados: vi.fn(), leerResumenBandeja: vi.fn() }));
+vi.mock('@/lib/admin/agentes-parados', async (importar) => ({
+  ...(await importar<typeof import('@/lib/admin/agentes-parados')>()),
+  getAgentesParados: dobles.getAgentesParados,
+}));
+vi.mock('@/lib/admin/cola-aprobacion', async (importar) => ({
+  ...(await importar<typeof import('@/lib/admin/cola-aprobacion')>()),
+  leerResumenBandeja: dobles.leerResumenBandeja,
+}));
 vi.mock('@/lib/admin/escalaciones', async (importar) => ({
   ...(await importar<typeof import('@/lib/admin/escalaciones')>()),
   getBandejaEscalaciones: dobles.getBandejaEscalaciones,
@@ -32,7 +40,11 @@ function bandejaVacia(): BandejaEscalaciones {
   };
 }
 
-beforeEach(() => { vi.clearAllMocks(); });
+beforeEach(() => {
+  vi.clearAllMocks();
+  dobles.getAgentesParados.mockResolvedValue({ parados: [], habilitados: 3, umbralHoras: 72, latidoDelRunner: null });
+  dobles.leerResumenBandeja.mockResolvedValue(null);
+});
 
 it('las seis fuentes leídas y sin nada pendiente: dice "la cola está vacía de verdad"', async () => {
   dobles.getBandejaEscalaciones.mockResolvedValue(bandejaVacia());
@@ -91,4 +103,49 @@ it('un item sin pantalla a la que llevar dice "sin ficha" — nunca un link que 
   dobles.getBandejaEscalaciones.mockResolvedValue(b);
   const html = await renderizar();
   expect(html).toContain('sin ficha');
+});
+
+it('un solo h1 y sin tarjeta dentro de tarjeta: la tabla es TablaBase directa en el marco', async () => {
+  const b = bandejaVacia();
+  b.cola = [{ fuente: 'talachas', titulo: 'Talacha X', detalle: null, tenantNombre: 'Flota Y', desde: '2026-01-01T00:00:00Z', vence: null, href: '/admin/conversaciones' }];
+  dobles.getBandejaEscalaciones.mockResolvedValue(b);
+  const html = await renderizar();
+  expect((html.match(/<h1/g) ?? []).length).toBe(1);
+  expect(html).toContain('rv-tb');
+  expect(html).not.toContain('style=');
+});
+
+it('«Agentes que no corrieron y por qué»: cuenta, causa y motivo del runner; la bandeja que frena se dice y NO se toca el tope', async () => {
+  dobles.getBandejaEscalaciones.mockResolvedValue(bandejaVacia());
+  dobles.getAgentesParados.mockResolvedValue({
+    parados: [
+      { agente: 'a1', nombre: 'Agente Uno', ultimaCorrida: '2026-09-02T00:00:00Z', horasSinCorrer: 1800, causa: 'contrapresion_bandeja', motivo: 'bandeja sin atender' },
+      { agente: 'a2', nombre: null, ultimaCorrida: null, horasSinCorrer: null, causa: null, motivo: null },
+    ],
+    habilitados: 49, umbralHoras: 72, latidoDelRunner: '2026-11-10T10:00:00Z',
+  });
+  dobles.leerResumenBandeja.mockResolvedValue({ pendientes: 100, urgentes: 0, masViejaCreadaEn: '2026-08-20T00:00:00Z', diasMasVieja: 82, frenaAlRunner: true, motivoFreno: 'x', topeBandeja: 40, diasVencimiento: 7 });
+  const html = await renderizar();
+  expect(html).toContain('Agentes que no corrieron y por qué');
+  expect(html).toContain('2 de 49 agentes habilitados llevan más de 72 h sin correr');
+  expect(html).toContain('Frenado por la bandeja de aprobación');
+  expect(html).toContain('Nunca ha corrido');
+  expect(html).toContain('Sin dato: no figura entre los saltados');
+  expect(html).toContain('La bandeja de aprobación está frenando a los agentes.');
+  expect(html).toContain('/admin/aprobaciones');
+});
+
+it('lectura de agentes caída: lo DICE, no afirma que ninguno esté parado', async () => {
+  dobles.getBandejaEscalaciones.mockResolvedValue(bandejaVacia());
+  dobles.getAgentesParados.mockResolvedValue(null);
+  const html = await renderizar();
+  expect(html).toContain('No es que no haya agentes parados');
+  expect(html).not.toContain('Ningún agente parado');
+});
+
+it('sin agentes parados: lo dice con el universo evaluado', async () => {
+  dobles.getBandejaEscalaciones.mockResolvedValue(bandejaVacia());
+  const html = await renderizar();
+  expect(html).toContain('Ningún agente parado');
+  expect(html).toContain('Los 3 agentes habilitados corrieron en las últimas 72 h');
 });

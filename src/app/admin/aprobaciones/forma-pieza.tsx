@@ -3,10 +3,11 @@
 import { useActionState, useState } from 'react';
 import { Check, PencilLine, X } from 'lucide-react';
 import { fechaHoraMx } from '@/lib/formato';
-import { StatusPill } from '../ui/kit';
+import { Boton, CampoTexto, CampoTextarea, StatusChip, clasesBoton } from '../../ui-v2/componentes';
+import { BotonConfirmar } from '../../ui-v2/componentes/confirmar';
 import { paresLegibles } from '../valor-legible';
-import { BotonConfirmar } from '../ui/confirmar';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
+import '../bandeja.css';
 
 export type ResultadoPieza = { ok?: string; error?: string } | null;
 export type AccionPieza = (previo: ResultadoPieza, fd: FormData) => Promise<ResultadoPieza>;
@@ -25,83 +26,62 @@ export function FormaPieza({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
   const paresFuentes = paresLegibles(pieza.fuentes);
 
   if (estado?.ok) {
-    return (
-      <div className="hairline rounded-lg px-3 py-2.5 text-[12.5px]" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-        {estado.ok}
-      </div>
-    );
+    return <div className="bj-item bj-item--hecha" role="status">{estado.ok}</div>;
   }
 
   return (
-    <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="text-[13px] font-medium">{pieza.titulo}</span>
-        <StatusPill estado="neutral">{pieza.tipo}</StatusPill>
-        <span className="cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{pieza.agente}</span>
-        {pieza.prospectoEmpresa && (
-          <span className="text-[11px]" style={{ color: 'var(--muted)' }}>→ {pieza.prospectoEmpresa}</span>
-        )}
-        <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--faint)' }}>{fechaHoraMx(pieza.creadoEn)}</span>
+    <div className="bj-item">
+      <div className="bj-item__cab">
+        <span className="bj-item__titulo">{pieza.titulo}</span>
+        <StatusChip tono="neutral">{pieza.tipo}</StatusChip>
+        <span className="bj-item__meta">{pieza.agente}</span>
+        {pieza.prospectoEmpresa && <span className="bj-item__meta">→ {pieza.prospectoEmpresa}</span>}
+        <span className="bj-item__fecha">{fechaHoraMx(pieza.creadoEn)}</span>
       </div>
 
       {/* El borrador COMPLETO, con scroll propio — nunca truncado. */}
-      <pre className="mt-2 text-[12.5px] leading-relaxed whitespace-pre-wrap max-h-56 overflow-y-auto rounded-lg px-3 py-2 hairline"
-        style={{ background: 'var(--canvas)', fontFamily: 'inherit' }}>
-        {pieza.cuerpo}
-      </pre>
+      <pre className="bj-item__borrador">{pieza.cuerpo}</pre>
 
       {paresFuentes.length > 0 && (
-        <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-          Fuentes: {paresFuentes.map(([k, v]) => `${k}: ${v}`).join(' · ')}
-        </p>
+        <p className="bj-nota">Fuentes: {paresFuentes.map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>
       )}
 
-      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <p className="bj-item__aviso" role="alert">{estado.error}</p>}
 
-      <form action={enviar} className="mt-2.5 space-y-2">
+      <form action={enviar} className="bj-item__forma">
         <input type="hidden" name="pieza" value={pieza.id} />
         {editando && (
-          <textarea name="cuerpoEditado" defaultValue={pieza.cuerpo} rows={6}
-            className="w-full text-[12.5px] leading-relaxed px-3 py-2 rounded-lg hairline"
-            style={{ background: 'var(--surface)' }} />
+          <CampoTextarea etiqueta="Texto que debe salir" etiquetaOculta name="cuerpoEditado" defaultValue={pieza.cuerpo} rows={6} />
         )}
         {rechazando && (
-          <input name="motivo" placeholder="Motivo del rechazo (obligatorio) — sin él, la misma pieza vuelve"
-            className="w-full text-[12.5px] px-3 py-2 rounded-lg hairline" style={{ background: 'var(--surface)' }} />
+          <CampoTexto etiqueta="Motivo del rechazo" etiquetaOculta obligatorio name="motivo"
+            placeholder="Motivo del rechazo (obligatorio) — sin él, la misma pieza vuelve" />
         )}
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="bj-item__fila">
           {!rechazando && (
-            <button type="submit" name="operacion" value="aprobar" disabled={pendiente}
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
-              style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
-              <Check width={13} height={13} strokeWidth={2} />
+            <Boton type="submit" name="operacion" value="aprobar" variante="primary" tamano="sm" disabled={pendiente}
+              icono={<Check width={13} height={13} strokeWidth={1.75} />}>
               {editando ? 'Aprobar con mi edición' : 'Aprobar tal cual'}
-            </button>
+            </Boton>
           )}
           {!editando && !rechazando && (
-            <button type="button" onClick={() => setEditando(true)}
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-              <PencilLine width={13} height={13} strokeWidth={1.75} /> Editar y aprobar
-            </button>
+            <Boton variante="secondary" tamano="sm" onClick={() => setEditando(true)} icono={<PencilLine width={13} height={13} strokeWidth={1.75} />}>
+              Editar y aprobar
+            </Boton>
           )}
           {rechazando ? (
             <>
-              <button type="submit" name="operacion" value="rechazar" disabled={pendiente}
-                className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
-                style={{ background: 'var(--bad)', color: 'var(--surface)' }}>
-                <X width={13} height={13} strokeWidth={2} /> Rechazar
-              </button>
-              <button type="button" onClick={() => setRechazando(false)}
-                className="text-[12.5px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-                Cancelar
-              </button>
+              <Boton type="submit" name="operacion" value="rechazar" variante="danger" tamano="sm" disabled={pendiente}
+                icono={<X width={13} height={13} strokeWidth={1.75} />}>
+                Rechazar
+              </Boton>
+              <Boton variante="secondary" tamano="sm" onClick={() => setRechazando(false)}>Cancelar</Boton>
             </>
           ) : (
-            <button type="button" onClick={() => { setRechazando(true); setEditando(false); }}
-              className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity"
-              style={{ color: 'var(--bad)' }}>
-              <X width={13} height={13} strokeWidth={1.75} /> Rechazar…
-            </button>
+            <Boton variante="ghost" tamano="sm" onClick={() => { setRechazando(true); setEditando(false); }}
+              icono={<X width={13} height={13} strokeWidth={1.75} />}>
+              Rechazar…
+            </Boton>
           )}
         </div>
       </form>
@@ -140,28 +120,24 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
   const enviable = TIPOS_ENVIABLES_UI.has(pieza.tipo);
 
   if (estado?.ok) {
-    return (
-      <div className="hairline rounded-lg px-3 py-2.5 text-[12.5px]" style={{ background: 'var(--surface)', color: 'var(--ok)' }}>
-        {estado.ok}
-      </div>
-    );
+    return <div className="bj-item bj-item--hecha" role="status">{estado.ok}</div>;
   }
   return (
-    <div className="hairline rounded-lg px-3 py-2.5 flex items-center gap-2.5 flex-wrap" style={{ background: 'var(--surface)' }}>
-      <span className="text-[13px] font-medium truncate">{pieza.titulo}</span>
-      {pieza.cuerpoFinal && <StatusPill estado="neutral">con edición</StatusPill>}
-      <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <div className="bj-item bj-item--envio">
+      <span className="bj-item__titulo">{pieza.titulo}</span>
+      {pieza.cuerpoFinal && <StatusChip tono="neutral">con edición</StatusChip>}
+      <span className="bj-item__meta">
         {pieza.prospectoEmpresa ? `→ ${pieza.prospectoEmpresa}` : 'sin prospecto'}
         {pieza.prospectoCorreo ? ` · ${pieza.prospectoCorreo}` : ''}
       </span>
       {pieza.envioError && (
-        <span className="text-[11.5px]" style={{ color: 'var(--bad)' }}>último intento: {pieza.envioError}</span>
+        <span className="bj-sub" data-tono="bad">último intento: {pieza.envioError}</span>
       )}
-      {estado?.error && <span className="text-[12px] basis-full" style={{ color: 'var(--bad)' }}>{estado.error}</span>}
+      {estado?.error && <span className="bj-sub" data-tono="bad" role="alert">{estado.error}</span>}
       <form action={enviar} className="ml-auto shrink-0">
         <input type="hidden" name="pieza" value={pieza.id} />
         {!enviable ? (
-          <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>pieza interna — no se manda al prospecto</span>
+          <span className="bj-item__meta">pieza interna — no se manda al prospecto</span>
         ) : pieza.prospectoCorreo ? (
           <BotonConfirmar
             etiqueta={pendiente ? 'Enviando…' : 'Enviar por correo'}
@@ -172,11 +148,10 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
             descripcion={`Se va a mandar "${pieza.titulo}" a ${pieza.prospectoEmpresa ? `${pieza.prospectoEmpresa} — ` : ''}`
               + `${pieza.prospectoCorreo}. Resend lo entrega al instante — es un correo real a un prospecto externo, `
               + 'y no hay botón para deshacerlo.'}
-            className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3.5 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
-            style={{ background: 'var(--ink)', color: 'var(--surface)' }}
+            className={clasesBoton('primary', 'sm')}
           />
         ) : (
-          <span className="text-[11.5px]" style={{ color: 'var(--faint)' }}>sin correo capturado — se captura en Vendedores</span>
+          <span className="bj-item__meta">sin correo capturado — se captura en Vendedores</span>
         )}
       </form>
     </div>
@@ -191,7 +166,7 @@ export function FormaEnvio({ pieza, accion }: { pieza: PiezaEnCola; accion: Acci
  */
 export function FormaLiberarAmbiguo({ pieza, accion }: { pieza: PiezaEnCola; accion: AccionPieza }) {
   const [estado, liberar, pendiente] = useActionState<ResultadoPieza, FormData>(accion, null);
-  if (estado?.ok) return <span className="text-[12px]" style={{ color: 'var(--ok)' }}>{estado.ok}</span>;
+  if (estado?.ok) return <span className="bj-sub" data-tono="ok" role="status">{estado.ok}</span>;
   return (
     <form action={liberar} className="inline-flex items-center gap-2">
       <input type="hidden" name="pieza" value={pieza.id} />
@@ -202,10 +177,9 @@ export function FormaLiberarAmbiguo({ pieza, accion }: { pieza: PiezaEnCola; acc
         etiquetaConfirmar="Sí, verifiqué en Resend que no salió"
         titulo="Liberar el envío ambiguo"
         descripcion={`Verifica primero en Resend que "${pieza.titulo}" NO salió. Si lo liberas y sí había salido, el siguiente intento usa la misma llave de idempotencia, pero Resend solo la respeta dentro de su ventana.`}
-        className="inline-flex items-center gap-1.5 text-[11.5px] font-medium px-2.5 py-1 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
-        style={{ background: 'var(--ink)', color: 'var(--surface)' }}
+        className={clasesBoton('primary', 'sm')}
       />
-      {estado?.error && <span className="text-[12px]" style={{ color: 'var(--bad)' }}>{estado.error}</span>}
+      {estado?.error && <span className="bj-sub" data-tono="bad" role="alert">{estado.error}</span>}
     </form>
   );
 }

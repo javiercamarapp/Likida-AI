@@ -18,6 +18,8 @@ const dobles = vi.hoisted(() => ({
   emailDeActor: vi.fn(),
   getBandejaEscalaciones: vi.fn(),
   bandejaPendiente: vi.fn(),
+  getAgentesParados: vi.fn(),
+  leerResumenBandeja: vi.fn(),
   revalidatePath: vi.fn(),
   redirect: vi.fn((url: string) => { throw new Error(`REDIRECT:${url}`); }),
 }));
@@ -35,6 +37,8 @@ vi.mock('@/lib/admin/bus', async (importar) => ({
 }));
 vi.mock('@/lib/admin/escalaciones', () => ({ getBandejaEscalaciones: dobles.getBandejaEscalaciones }));
 vi.mock('@/lib/likida/agentes/cola', () => ({ bandejaPendiente: dobles.bandejaPendiente }));
+vi.mock('@/lib/admin/agentes-parados', () => ({ getAgentesParados: dobles.getAgentesParados }));
+vi.mock('@/lib/admin/cola-aprobacion', () => ({ leerResumenBandeja: dobles.leerResumenBandeja }));
 vi.mock('./vista', () => ({ VistaTuTurno: (props: Record<string, unknown>) => props }));
 
 import PaginaTuTurno from './page';
@@ -54,6 +58,8 @@ beforeEach(() => {
   dobles.getBandejaEscalaciones.mockResolvedValue([]);
   dobles.bandejaPendiente.mockResolvedValue([]);
   dobles.emailDeActor.mockResolvedValue('javier@likida.ai');
+  dobles.getAgentesParados.mockResolvedValue(null);
+  dobles.leerResumenBandeja.mockResolvedValue(null);
 });
 
 async function pagina() { return ((await PaginaTuTurno({ searchParams: SP })) as unknown as { props: Props }).props; }
@@ -132,4 +138,12 @@ it('A37-S08-07: la URL lleva códigos cerrados y un texto ajeno en ?aviso= / ?er
   const ok = await Pagina({ searchParams: Promise.resolve({ aviso: 'pieza_aprobada', error: 'orden' }) });
   expect((ok as { props: { aviso?: string } }).props.aviso).toContain('Pieza aprobada');
   expect((ok as { props: { error?: string } }).props.error).toContain('No se pudo encolar');
+});
+
+it('pasa a la vista los agentes parados y el estado de la bandeja (null = sin dato, no se inventa)', async () => {
+  const parados = { parados: [], habilitados: 2, umbralHoras: 72, latidoDelRunner: null };
+  dobles.getAgentesParados.mockResolvedValue(parados);
+  const p = (await PaginaTuTurno({ searchParams: SP })) as unknown as { props: { parados: unknown; cola: unknown } };
+  expect(p.props.parados).toBe(parados);
+  expect(p.props.cola).toBeNull();
 });

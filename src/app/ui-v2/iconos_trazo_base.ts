@@ -2,7 +2,6 @@
 // Solo puede BAJAR: al migrar un archivo a <Icono> (o a 1.75) se borra su línea. Un archivo nuevo no entra aquí.
 export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/admin/agentes/[id]/insumos/zona-insumos.tsx': 1,
-  'app/admin/aprobaciones/forma-pieza.tsx': 2,
   'app/admin/command-palette.tsx': 2,
   'app/admin/marketing/subir-hook.tsx': 1,
   'app/admin/marketing/tarjeta-pieza.tsx': 2,
@@ -96,7 +95,6 @@ export const BASE_SIN_TRAZO: Record<string, number> = {
   'app/admin/conversaciones/page.tsx': 1,
   'app/admin/corridas/[id]/page.tsx': 2,
   'app/admin/corridas/page.tsx': 2,
-  'app/admin/escalaciones/page.tsx': 1,
   'app/admin/flotas/[id]/ficha.tsx': 7,
   'app/admin/observabilidad/page.tsx': 1,
   'app/admin/qa/[id]/corrida-viva.tsx': 1,

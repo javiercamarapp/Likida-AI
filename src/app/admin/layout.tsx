@@ -39,8 +39,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { nombre, avatarUrl } = await requireSuperadmin();
   // UNA lectura (caché de 45 s; nunca lanza, lectura caída = «sin dato») alimenta la campana de la cabecera (cuántas cosas esperan a un
   // humano) y los números de las pestañas (hoy Escalaciones): así campana y pestaña no pueden discrepar ni leer la base dos veces.
-  const { resumen: requiereAccion, bandeja } = await obtenerPanoramaAccion();
-  const conteosPestanas = conteosDePestanas(bandeja);
+  const { resumen: requiereAccion, bandeja, cola } = await obtenerPanoramaAccion();
+  const conteosPestanas = conteosDePestanas(bandeja, cola);
 
   async function cerrarSesion() {
     'use server';

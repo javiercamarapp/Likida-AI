@@ -32,6 +32,8 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { traerTodo, conteo } from '@/lib/likida/pg';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { DatoInvalido } from '@/lib/likida/errores';
+import { logger } from '@/lib/logger';
+import { diasVencimientoPieza, motivoBandejaGlobalSinAtender, topeBandejaGlobal } from '@/lib/likida/agentes/runner';
 
 /** Días de espera a partir de los cuales una pieza pendiente está vencida. */
 export const DIAS_VENCIDA_POR_OMISION = 30;
@@ -251,4 +253,77 @@ export async function vaciarVencidas(
     ...resumen, dryRun: false, resueltas: ids.length, ids,
     restantes: Math.max(0, resumen.vencidas - ids.length), bitacoraEscrita,
   };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ESTADO DE LA BANDEJA — lo que el dueño necesita ver ANTES de vaciarla y
+// lo que alimenta los números de las pestañas (Tu turno / Aprobaciones).
+//
+// Tres lecturas baratas (dos conteos y la fila más vieja), NO la bandeja
+// entera: se evalúa en cada navegación del admin. `null` = no se pudo leer;
+// nunca un 0 que diga «la bandeja está al día». La regla del freno es la MISMA
+// función pura del runner (`motivoBandejaGlobalSinAtender`), no una copia: si
+// el tope cambia allá, aquí cambia solo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface ResumenBandejaCola {
+  pendientes: number;
+  urgentes: number;
+  /** `creado_en` de la pendiente más vieja, o `null` si no hay ninguna. */
+  masViejaCreadaEn: string | null;
+  /** Días que lleva esperando la más vieja (reloj inyectado), o `null` si no hay. */
+  diasMasVieja: number | null;
+  /** ¿El runner está frenando a los agentes por esta bandeja? Misma regla que `runner.ts`. */
+  frenaAlRunner: boolean;
+  /** El motivo exacto del freno (el que el runner deja en el latido), o `null` si no frena. */
+  motivoFreno: string | null;
+  topeBandeja: number;
+  diasVencimiento: number;
+}
+
+/** Pura. Arma el resumen con los tres datos leídos. */
+export function armarResumenBandeja(
+  pendientes: number,
+  urgentes: number,
+  masViejaCreadaEn: string | null,
+  ahoraMs: number,
+): ResumenBandejaCola {
+  const motivoFreno = motivoBandejaGlobalSinAtender(pendientes, masViejaCreadaEn, ahoraMs);
+  return {
+    pendientes, urgentes, masViejaCreadaEn,
+    diasMasVieja: masViejaCreadaEn === null ? null : Math.max(0, (ahoraMs - Date.parse(masViejaCreadaEn)) / 86_400_000),
+    frenaAlRunner: motivoFreno !== null, motivoFreno,
+    topeBandeja: topeBandejaGlobal(), diasVencimiento: diasVencimientoPieza(),
+  };
+}
+
+async function contarPendientes(prioridad: 'urgente' | null): Promise<number> {
+  let q = supabaseAdmin().from('cola_aprobacion').select('id', { count: 'exact', head: true }).eq('estado', 'pendiente');
+  if (prioridad) q = q.eq('prioridad', prioridad);
+  const { count, error } = await acotada(q, `colaAprobacion.conteo/${prioridad ?? 'todas'}`);
+  if (error) throw new Error(`colaAprobacion.conteo: ${error.message}`);
+  if (typeof count !== 'number') throw new Error('colaAprobacion.conteo: la base no devolvió el conteo');
+  return count;
+}
+
+async function leerMasVieja(): Promise<string | null> {
+  const { data, error } = await acotada(
+    supabaseAdmin().from('cola_aprobacion').select('creado_en').eq('estado', 'pendiente')
+      .order('creado_en', { ascending: true }).order('id', { ascending: true }).limit(1),
+    'colaAprobacion.masVieja',
+  );
+  if (error) throw new Error(`colaAprobacion.masVieja: ${error.message}`);
+  return ((data ?? [])[0] as { creado_en?: string } | undefined)?.creado_en ?? null;
+}
+
+/** NUNCA lanza: `null` = no se pudo saber (se dice «sin dato», no «0 pendientes»). */
+export async function leerResumenBandeja(ahoraMs: number = Date.now()): Promise<ResumenBandejaCola | null> {
+  try {
+    // Las tres son funciones async: un fallo síncrono (p. ej. sin llave) cae como rechazo manejado por Promise.all, no suelto.
+    const [pendientes, urgentes, masVieja] = await Promise.all([contarPendientes(null), contarPendientes('urgente'), leerMasVieja()]);
+    return armarResumenBandeja(pendientes, urgentes, masVieja, ahoraMs);
+  } catch (e) {
+    logger.warn('cola_aprobacion.resumen_sin_dato', { err: e instanceof Error ? e.message : String(e) });
+    return null;
+  }
 }
