@@ -18,7 +18,7 @@
 // salida contiene los Excel con los datos de la muestra: queda en modo 700 y es tuya, bórrala al terminar. Códigos: 0 ok · 1 la muestra no
 // pasa el contrato · 2 uso o archivo inseguro.
 // ═══════════════════════════════════════════════════════════════════════════
-import { chmodSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -50,11 +50,17 @@ export function dentroDelRepo(ruta, raiz = RAIZ) {
 
 function leerJson(ruta, etiqueta, { exigirModo600 }) {
   if (dentroDelRepo(ruta)) throw new Error(`${etiqueta}: la ruta está DENTRO del repositorio. Los datos reales nunca van al repo; ponla fuera (p. ej. ~/ensayo-tms/).`);
-  let st;
-  try { st = statSync(ruta); } catch { throw new Error(`${etiqueta}: no se pudo leer el archivo.`); }
-  if (!st.isFile()) throw new Error(`${etiqueta}: no es un archivo.`);
-  if (exigirModo600 && (st.mode & 0o777) !== 0o600) throw new Error(`${etiqueta}: debe tener modo 600 (tiene ${(st.mode & 0o777).toString(8)}). Corrige con chmod 600.`);
-  try { return JSON.parse(readFileSync(ruta, 'utf8')); } catch { throw new Error(`${etiqueta}: no es un JSON válido.`); }
+  // Un solo descriptor abierto: validar y leer sobre el MISMO archivo (sin comprobar-y-luego-usar por ruta).
+  let fd;
+  try { fd = openSync(ruta, 'r'); } catch { throw new Error(`${etiqueta}: no se pudo leer el archivo.`); }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) throw new Error(`${etiqueta}: no es un archivo.`);
+    if (exigirModo600 && (st.mode & 0o777) !== 0o600) throw new Error(`${etiqueta}: debe tener modo 600 (tiene ${(st.mode & 0o777).toString(8)}). Corrige con chmod 600.`);
+    let texto;
+    try { texto = readFileSync(fd, 'utf8'); } catch { throw new Error(`${etiqueta}: no se pudo leer el archivo.`); }
+    try { return JSON.parse(texto); } catch { throw new Error(`${etiqueta}: no es un JSON válido.`); }
+  } finally { closeSync(fd); }
 }
 
 async function main() {

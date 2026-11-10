@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 // K3 · /login al sistema fino de controles (SPEC-CONTROLES-FINOS, D4): alto 40 (--ctl-h-lg, con respaldo porque /login no carga tokens.css),
 // radio 8, borde de 1 px y sin sombras de relieve. El h1 serif de 36 px es marca editorial, no un control.
 const CSS = readFileSync(join(__dirname, 'login.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-const regla = (sel: string) => CSS.match(new RegExp(`${sel.replace(/[.[\]]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+const regla = (sel: string) => CSS.match(new RegExp(`${sel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
 
 describe('/login: controles finos (K3)', () => {
   it('el botón mide --ctl-h-lg (40) con respaldo, radio 8 y sin pastilla de 52', () => {

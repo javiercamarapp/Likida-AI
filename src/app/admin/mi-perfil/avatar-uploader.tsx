@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react';
 import { Boton, Monograma } from '@/app/ui-v2/componentes';
 
+const TIPOS_PERMITIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
 /**
  * `accion` es un Server Action de verdad (`'use server'` adentro, definido en page.tsx) — SÍ se puede pasar de un Server Component a un
  * Client Component como prop. Elegir la foto envía el form de inmediato: la vista previa local YA es la confirmación visual de qué se subió.
@@ -17,7 +19,14 @@ export default function AvatarUploader({
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
     if (!archivo) return;
-    setPreview(URL.createObjectURL(archivo));
+    // Solo imágenes permitidas y una URL de objeto local (blob:) — nunca contenido arbitrario en el DOM.
+    if (!TIPOS_PERMITIDOS.has(archivo.type)) return;
+    const url = URL.createObjectURL(archivo);
+    if (!url.startsWith('blob:')) return;
+    setPreview((anterior) => {
+      if (anterior) URL.revokeObjectURL(anterior);
+      return url;
+    });
     formRef.current?.requestSubmit();
   }
 

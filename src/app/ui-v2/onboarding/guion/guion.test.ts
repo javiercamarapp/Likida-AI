@@ -58,9 +58,10 @@ describe('integridad del guion', () => {
   });
   it('las ilustraciones citadas existen y cada ancla existe en el marcado de la pantalla', () => {
     const codigo = fuente(join(SRC, 'app')).join('\n');
+    const escaparRe = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     for (const p of TODOS) {
       if (p.visual.tipo === 'ilu') expect(NOMBRES_ILU, p.id).toContain(p.visual.id);
-      if (p.ancla) expect(codigo, `${p.id}: ancla ${p.ancla}`).toMatch(new RegExp(`ancla(Tour|Onboarding)\\(\\s*['"]${p.ancla.replace(/\./g, '\\.')}['"]|data-(onboarding|tour)=["']${p.ancla.replace(/\./g, '\\.')}["']`));
+      if (p.ancla) expect(codigo, `${p.id}: ancla ${p.ancla}`).toMatch(new RegExp(`ancla(Tour|Onboarding)\\(\\s*['"]${escaparRe(p.ancla)}['"]|data-(onboarding|tour)=["']${escaparRe(p.ancla)}["']`));
     }
   });
   it('el borrador completo es un recorrido válido para el motor', () => {

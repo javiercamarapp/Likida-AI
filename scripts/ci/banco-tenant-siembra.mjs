@@ -127,8 +127,8 @@ function parsearRegex(pat) {
 
   function cuantificar(a) {
     const c = pat[i];
-    let min = 1;
-    let max = 1;
+    let min;
+    let max;
     if (c === '?') {
       min = 0;
       max = 1;

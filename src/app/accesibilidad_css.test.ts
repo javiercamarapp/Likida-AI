@@ -6,6 +6,8 @@ import ts from 'typescript';
 
 // F8 / CT-PAR-11: el respaldo de accesibilidad de globals.css no se pierde en una limpieza.
 const css = readFileSync(join(__dirname, 'globals.css'), 'utf8');
+// Interpolación del FUENTE analizado (no de este archivo): se arma por partes para no parecer una plantilla sin evaluar.
+const PLACEHOLDER_CSS = '$' + '{css}';
 const sinComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 describe('respaldo de accesibilidad en globals.css', () => {
@@ -127,9 +129,9 @@ describe('regla de foco visible por intención (R4)', () => {
   }, 60_000); // recorre todo src/: bajo carga del CI superaba el límite de 5 s
 
   it('resuelve className por constante del mismo archivo y no exige atributo a un campo transparente con borde visible', () => {
-    const sinBorde = camposMarcables("const css = 'px-2 bg-transparent border-0'; export const A = () => <input className={`${css} w-full`} />;", 'x.tsx');
+    const sinBorde = camposMarcables("const css = 'px-2 bg-transparent border-0'; export const A = () => <input className={`" + PLACEHOLDER_CSS + " w-full`} />;", 'x.tsx');
     expect(sinBorde[0].transparente && !sinBorde[0].anillo).toBe(true);
-    const conBorde = camposMarcables("const css = 'hairline rounded-lg bg-transparent'; export const A = () => <input className={`${css} w-full`} />;", 'x.tsx');
+    const conBorde = camposMarcables("const css = 'hairline rounded-lg bg-transparent'; export const A = () => <input className={`" + PLACEHOLDER_CSS + " w-full`} />;", 'x.tsx');
     expect(conBorde[0].transparente).toBe(false);
   });
 
