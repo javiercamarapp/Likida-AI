@@ -13,12 +13,13 @@ import {
 } from '@/lib/likida/administracion';
 import { validarAjustes } from '@/lib/likida/ajustes_operativos';
 import { cuentasDeclaradas } from '@/lib/likida/contabilidad/catalogo';
-import { EstadoVacio } from '../estados';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import { FormaAjustes, type ResultadoGuardar } from './forma';
 import { ajustesIniciales, type EstadoCatalogo } from './inicial';
 import type { Metadata } from 'next';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  MarcoPagina, Tarjeta, TablaBase, EstadoError, FormaConAviso, CampoTextarea, Icono, type ColumnaBase, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import './configuracion.css';
 export const metadata: Metadata = { title: 'Configuración' };
 
 export const dynamic = 'force-dynamic';
@@ -159,108 +160,65 @@ export default async function ConfiguracionPage({
 
   const inicial = ajustesIniciales(config, cuentas);
 
+  type FilaUnidad = { placa: string; rendimientoBase: number; capacidadTanque: number };
+  const filasUnidades: FilaUnidad[] = unidades.map(([placa, u]) => ({ placa, rendimientoBase: u.rendimientoBase, capacidadTanque: u.capacidadTanque }));
+  const columnasUnidades: ColumnaBase<FilaUnidad>[] = [
+    { id: 'placa', titulo: 'Placa', principal: true, celda: (u) => <span className="cifra-mono">{u.placa}</span> },
+    { id: 'rend', titulo: 'Rendimiento base', alinear: 'der', celda: (u) => <span className="tabular">{u.rendimientoBase} km/L</span> },
+    { id: 'tanque', titulo: 'Capacidad de tanque', alinear: 'der', celda: (u) => <span className="tabular">{u.capacidadTanque} L</span> },
+  ];
+
   return (
     <MarcoPagina titulo="Configuración" apoyo="Lo que el motor usa para cuadrar tus viajes.">
       {config === null ? (
-        <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
-          No se pudo leer la configuración de esta flota.
-        </div>
+        <EstadoError reintentar>No se pudo leer la configuración de esta flota. No es que esté vacía: la lectura falló.</EstadoError>
       ) : (
-        <div className="glass-panel overflow-hidden">
-          <section className="p-5">
-            <TituloRecuadro info="configuracion.empresa">La empresa</TituloRecuadro>
-            <div className="card p-4 mt-3 flex items-start gap-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                <Building2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-              </div>
+        <>
+          <Tarjeta titulo="La empresa" info="configuracion.empresa">
+            <div className="rv-cfg__empresa">
+              <span className="rv-cfg__sello" aria-hidden="true"><Icono icono={Building2} tam={18} /></span>
               <div>
-                <div className="text-sm font-mono">{config.empresa.rfc}</div>
-                <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
+                <p className="rv-cfg__rfc cifra-mono">{config.empresa.rfc}</p>
+                <p className="rv-cfg__nota">
                   RFC contra el que se valida que un CFDI de gasto sea tuyo. Si no coincide con el receptor del
                   comprobante, el motor lo marca como no verificable. No se edita aquí: cambiarlo apaga esa
                   validación sobre todo tu histórico — se corrige con nosotros.
-                </div>
+                </p>
                 {config.empresa.rfcsAdicionales && config.empresa.rfcsAdicionales.length > 0 && (
-                  <div className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                    También se aceptan: {config.empresa.rfcsAdicionales.join(', ')}
-                  </div>
+                  <p className="rv-cfg__nota">También se aceptan: {config.empresa.rfcsAdicionales.join(', ')}</p>
                 )}
               </div>
             </div>
+          </Tarjeta>
 
-            {/* Las OTRAS razones sociales, EDITABLES desde el 29-ago-2026. El
-                RFC principal sigue sin formulario (cambiarlo apaga la
-                validación de receptor sobre todo el histórico); éstos se
-                SUMAN a él y por eso sí son del cliente. */}
-            <div className="card p-4 mt-3">
-              <TituloRecuadro nivel="h3" info="configuracion.rfcs_adicionales">Otras razones sociales que facturas</TituloRecuadro>
-              <p className="text-xs mt-1 mb-3" style={{ color: 'var(--muted)' }}>
-                Si tu operación factura con más de un RFC (dos empresas del mismo grupo, la razón social
-                vieja y la nueva), decláralos aquí y el motor aceptará como tuyos los CFDI de gasto
-                timbrados a cualquiera de ellos. Sin esto, salen «a revisar» uno por uno.
-                Máximo {MAX_RFCS_ADICIONALES}. Dejarlo vacío y guardar los borra: vuelves a facturar con un
-                solo RFC.
-              </p>
-              <FormaConAviso accion={guardarRfcs} boton="Guardar RFC adicionales" columnas="md:grid-cols-1">
-                <div className="flex flex-col gap-1">
-                  <label htmlFor="rfcsAdicionales" className="text-xs" style={{ color: 'var(--muted)' }}>
-                    RFC adicionales — uno por línea o separados por coma
-                  </label>
-                  <textarea id="rfcsAdicionales" name="rfcsAdicionales" rows={3} spellCheck={false}
-                    defaultValue={(config.empresa.rfcsAdicionales ?? []).join('\n')}
-                    placeholder={`Distinto de ${rfcPrincipal}`}
-                    className="text-sm rounded-lg px-2.5 py-2 font-mono"
-                    style={{ background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' }} />
-                  <span className="text-xs" style={{ color: 'var(--faint)' }}>
-                    Se comprueban forma y dígito verificador, igual que en el alta de la flota. El RFC
-                    principal ({rfcPrincipal}) no va aquí.
-                  </span>
-                </div>
-              </FormaConAviso>
-            </div>
-          </section>
-
-          <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <TituloRecuadro info="configuracion.ajustes" className="mb-4">Ajustes de tu operación</TituloRecuadro>
-            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} ejemploIlegible={ejemploIlegible} guardar={guardar} catalogo={estadoCatalogo} />
-          </section>
-
-          <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <TituloRecuadro info="configuracion.unidades">Unidades calibradas</TituloRecuadro>
-            <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-              Placas con consumo propio, que le ganan al rendimiento por defecto de arriba.
+          {/* Las OTRAS razones sociales, EDITABLES desde el 29-ago-2026. El
+              RFC principal sigue sin formulario (cambiarlo apaga la
+              validación de receptor sobre todo el histórico); éstos se
+              SUMAN a él y por eso sí son del cliente. */}
+          <Tarjeta titulo="Otras razones sociales que facturas" info="configuracion.rfcs_adicionales">
+            <p className="rv-cfg__apoyo">
+              Si tu operación factura con más de un RFC (dos empresas del mismo grupo, la razón social
+              vieja y la nueva), decláralos aquí y el motor aceptará como tuyos los CFDI de gasto
+              timbrados a cualquiera de ellos. Sin esto, salen «a revisar» uno por uno.
+              Máximo {MAX_RFCS_ADICIONALES}. Dejarlo vacío y guardar los borra: vuelves a facturar con un
+              solo RFC.
             </p>
-            {unidades.length === 0 ? (
-              <div className="mt-3">
-                <EstadoVacio icono={<Fuel width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Ninguna placa tiene calibración propia todavía — todas usan el rendimiento por defecto.
-                  Darlas de alta una por una todavía se hace con nosotros.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <div className="overflow-x-auto mt-3">
-                <table aria-label="Rendimiento base por placa" className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th scope="col" className="py-2.5 font-medium">Placa</th>
-                      <th scope="col" className="py-2.5 font-medium text-right">Rendimiento base</th>
-                      <th scope="col" className="py-2.5 font-medium text-right">Capacidad de tanque</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {unidades.map(([placa, u]) => (
-                      <tr key={placa} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                        <td className="py-3 font-mono">{placa}</td>
-                        <td className="py-3 text-right tabular">{u.rendimientoBase} km/L</td>
-                        <td className="py-3 text-right tabular">{u.capacidadTanque} L</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </div>
+            <FormaConAviso accion={guardarRfcs} boton="Guardar RFC adicionales" columnas="md:grid-cols-1">
+              <CampoTextarea etiqueta="RFC adicionales — uno por línea o separados por coma" id="rfcsAdicionales" name="rfcsAdicionales" rows={3} spellCheck={false}
+                defaultValue={(config.empresa.rfcsAdicionales ?? []).join('\n')} claseControl="cifra-mono"
+                placeholder={`Distinto de ${rfcPrincipal}`}
+                ayuda={`Se comprueban forma y dígito verificador, igual que en el alta de la flota. El RFC principal (${rfcPrincipal}) no va aquí.`} />
+            </FormaConAviso>
+          </Tarjeta>
+
+          <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} ejemploIlegible={ejemploIlegible} guardar={guardar} catalogo={estadoCatalogo} />
+
+          <Tarjeta titulo="Unidades calibradas" info="configuracion.unidades">
+            <p className="rv-cfg__apoyo">Placas con consumo propio, que le ganan al rendimiento por defecto de arriba.</p>
+            <TablaBase etiqueta="Rendimiento base por placa" columnas={columnasUnidades} filas={filasUnidades} idFila={(u) => u.placa} altoMaximo={false}
+              vacio={{ titulo: 'Ninguna placa calibrada', texto: 'Todas usan el rendimiento por defecto. Darlas de alta una por una todavía se hace con nosotros.' }} />
+          </Tarjeta>
+        </>
       )}
     </MarcoPagina>
   );

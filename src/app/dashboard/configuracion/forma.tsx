@@ -2,8 +2,9 @@
 
 import { useMemo, useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Save, TriangleAlert, CheckCircle2 } from 'lucide-react';
-import { AvisoCompacto, CampoTexto, CampoTextarea, Disclosure, Fieldset, Radio, StatusChip } from '@/app/ui-v2/componentes';
+import { Save } from 'lucide-react';
+import { Aviso, AvisoCompacto, Boton, CampoTexto, CampoTextarea, Disclosure, Fieldset, Icono, Radio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import './configuracion.css';
 import {
   validarAjustes, FORMATOS, type AjustesCrudos,
 } from '@/lib/likida/ajustes_operativos';
@@ -18,15 +19,12 @@ export type ResultadoGuardar = { ok: true } | { ok: false; error: string } | nul
 export type AccionGuardar = (previo: ResultadoGuardar, fd: FormData) => Promise<ResultadoGuardar>;
 
 
-function Boton() {
+function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Save width={14} height={14} strokeWidth={1.75} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />}>
       {pending ? 'Guardando…' : 'Guardar ajustes'}
-    </button>
+    </Boton>
   );
 }
 /**
@@ -84,8 +82,9 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
   }, [revision, ejemploKm]);
 
   return (
-    <div className="grid lg:grid-cols-2 gap-5">
-      <form action={accion} className="space-y-4">
+    <div className="rv-cfg__split">
+      <Tarjeta titulo="Ajustes de tu operación" info="configuracion.ajustes">
+      <form action={accion} className="rv-cfg__forma">
         <input type="hidden" name="salida" value={v.salida} />
 
         <Fieldset leyenda="Tabulador — con esto el motor calcula el diésel esperado">
@@ -142,7 +141,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
               ella, un viaje con IVA no acreditado (o con IEPS de diésel, que
               este motor nunca acredita) descuadraba el periodo entero. */}
           <Disclosure variante="linea" titulo="Cuentas de balance que hacen falta">
-            <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+            <p className="rv-cfg__texto">
               Para exportar la póliza a tu ERP hacen falta, además de tus conceptos de gasto, estas
               cinco cuentas de balance:{' '}
               <span className="cifra-mono">iva_acreditable</span>,{' '}
@@ -154,38 +153,18 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
           </Disclosure>
         </Fieldset>
 
-        {!revision.ok && (
-          <div className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
-            style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
-            <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-            {revision.error}
-          </div>
-        )}
-        {estado && !estado.ok && (
-          <div className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
-            style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-            <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-            {estado.error}
-          </div>
-        )}
-        {estado && estado.ok && (
-          <div className="flex items-center gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
-            style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-            <CheckCircle2 width={15} height={15} strokeWidth={1.75} />
-            Ajustes guardados. Aplican a los viajes que se cuadren de aquí en adelante.
-          </div>
-        )}
+        {!revision.ok && <Aviso tono="warn">{revision.error}</Aviso>}
+        {estado && !estado.ok && <Aviso tono="error">{estado.error}</Aviso>}
+        {estado && estado.ok && <Aviso tono="ok">Ajustes guardados. Aplican a los viajes que se cuadren de aquí en adelante.</Aviso>}
 
-        <Boton />
+        <div><BotonGuardar /></div>
       </form>
+      </Tarjeta>
 
-      <aside className="space-y-3">
-        <div className="card p-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>
-            Qué cambia esto
-          </h3>
+      <aside className="rv-cfg__lateral">
+        <Tarjeta titulo="Qué cambia esto">
           {previo === null ? (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            <p className="rv-cfg__texto">
               {!revision.ok
                 ? 'Corrige lo de la izquierda para ver el efecto.'
                 : ejemploIlegible
@@ -194,44 +173,39 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
             </p>
           ) : (
             <>
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+              <p className="rv-cfg__texto">
                 En un viaje de <span className="cifra-mono">{numero(ejemploKm!)} km</span> de
                 tu operación, el motor va a esperar:
               </p>
-              <div className="mt-2.5 space-y-1.5">
-                <div className="flex justify-between gap-3 text-[13px]">
-                  <span style={{ color: 'var(--muted)' }}>Diésel esperado</span>
-                  <span className="cifra-mono font-medium">{litros(Math.round(previo.litros))}</span>
+              <div className="rv-cfg__lineas">
+                <div className="rv-cfg__linea">
+                  <span>Diésel esperado</span>
+                  <span className="cifra-mono">{litros(Math.round(previo.litros))}</span>
                 </div>
-                <div className="flex justify-between gap-3 text-[13px]">
-                  <span style={{ color: 'var(--muted)' }}>A tu precio</span>
-                  <span className="cifra-mono font-medium">{mxn(Math.round(previo.pesos))}</span>
+                <div className="rv-cfg__linea">
+                  <span>A tu precio</span>
+                  <span className="cifra-mono">{mxn(Math.round(previo.pesos))}</span>
                 </div>
-                <div className="flex justify-between gap-3 text-[13px] pt-1.5 border-t" style={{ borderColor: 'var(--line)' }}>
-                  <span style={{ color: 'var(--muted)' }}>Se marca si se pasa de</span>
-                  <span className="cifra-mono font-medium">
-                    {mxn(Math.round(previo.pesos * (1 + previo.margen / 100)))}
-                  </span>
+                <div className="rv-cfg__linea" data-total>
+                  <span>Se marca si se pasa de</span>
+                  <span className="cifra-mono">{mxn(Math.round(previo.pesos * (1 + previo.margen / 100)))}</span>
                 </div>
               </div>
-              <p className="text-[11px] mt-2.5" style={{ color: 'var(--faint)' }}>
+              <p className="rv-cfg__pie">
                 Cuenta ilustrativa con el rendimiento por defecto. Una unidad con catálogo propio usa el suyo,
                 y el precio real del ticket gana sobre el de aquí.
               </p>
             </>
           )}
-        </div>
+        </Tarjeta>
 
-        <div className="card p-4">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wide mb-2" style={{ color: 'var(--muted)' }}>
-            Lo que no se edita aquí
-          </h3>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <Tarjeta titulo="Lo que no se edita aquí">
+          <p className="rv-cfg__texto">
             El estímulo del 50% de peaje, las claves de combustible del SAT y los topes de deducibilidad
             no tienen formulario a propósito: los fija la ley, no tu flota. Si la ley cambia, lo cambiamos
             nosotros para todos.
           </p>
-        </div>
+        </Tarjeta>
       </aside>
     </div>
   );

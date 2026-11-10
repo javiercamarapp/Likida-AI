@@ -79,7 +79,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'conexiones/seccion-credenciales.tsx': 1,
   'conexiones/seccion-gps.tsx': 4,
   'conexiones/seccion-integraciones.tsx': 2,
-  'configuracion/forma.tsx': 2,
   'inicio-cinco-agentes.tsx': 1,
   'onboarding/forma.tsx': 4,
   'opera-whatsapp.tsx': 1,
