@@ -18,7 +18,7 @@ function fuentes(dir: string, salida: string[] = []): string[] {
   return salida;
 }
 const archivos = CARPETAS.flatMap((c) => fuentes(join(RAIZ, c)));
-const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B50}\u{FE0F}]/u;
+const EMOJI = /\p{Extended_Pictographic}/u;
 
 describe('operación de viajes sobre ui-v2', () => {
   it('hay archivos que revisar', () => { expect(archivos.length).toBeGreaterThan(15); });
