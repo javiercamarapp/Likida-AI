@@ -14,3 +14,6 @@ export { Columnas, type ColumnaDato } from './columnas';
 export { BarList, type ItemBarList } from './bar-list';
 export { TablaGrafica, LeyendaFina } from './partes';
 export { ColumnasAgrupadas, type SerieAgrupada } from './columnas-agrupadas';
+export { Embudo, type EtapaEmbudo } from './embudo';
+export { MapaCalor, nivelCalor, type FilaMapaCalor } from './mapa-calor';
+export { ColumnasApiladas, type PeriodoApilado } from './columnas-apiladas';

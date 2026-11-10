@@ -461,3 +461,84 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-colum__barra.rv-tono-1, [data-ui="v2"] .rv-colum__barra.rv-tono-2, [data-ui="v2"] .rv-colum__barra.rv-tono-3 { stroke: var(--cat, var(--ink)); stroke-width: 1; }
 [data-ui="v2"] .rv-dona__borde { stroke: var(--cat, var(--ink)); }
 [data-ui="v2"] .rv-gt__sw { border: 1px solid var(--cat, var(--ink)); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UI v2 · GRÁFICAS AVANZADAS Y MOVIMIENTO DE TARJETA (paquete B2)
+   Embudo, mapa de calor, columnas apiladas, tinta neutra de columnas (TOKENS #24),
+   elevación `[data-lift]` (#29) y entrada de página/bloque (#28). Vive al final de
+   `graficas.css`. Todo movimiento vive en no-preference (E-09) y con reduce no hay
+   animación ni transición. Colores: solo tokens (--cat, --tono, --chart-*, --line).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Embudo ── */
+[data-ui="v2"] .rv-embudo { margin: 0; min-width: 0; }
+[data-ui="v2"] .rv-embudo__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+[data-ui="v2"] .rv-embudo__fila { display: grid; gap: 5px; min-width: 0; }
+[data-ui="v2"] .rv-embudo__cab { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+[data-ui="v2"] .rv-embudo__etq { font-size: 13px; font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-embudo__val { font: 600 13px var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums; white-space: nowrap; flex: none; }
+[data-ui="v2"] .rv-embudo__pista { display: flex; height: 22px; border-radius: 6px; background: var(--chart-rejilla); overflow: hidden; }
+[data-ui="v2"] .rv-embudo__pista[data-desconocido] { background: repeating-linear-gradient(135deg, var(--muted) 0 3px, transparent 3px 6px); opacity: .55; }
+[data-ui="v2"] .rv-embudo__barra { display: block; height: 100%; min-width: 2px; background: var(--cat, var(--chart-barra)); border-radius: 6px; transform-origin: left; }
+[data-ui="v2"] .rv-embudo__nota { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+[data-ui="v2"] :is(.rv-embudo__vacio, .rv-calor__vacio, .rv-apcol__vacio) { margin: 0; padding: 20px 12px; border: 1.5px dotted var(--input); border-radius: 8px; font-size: 13px; color: var(--muted); text-align: center; }
+
+/* ── Mapa de calor: 5 pasos de UN matiz; el título de cada celda lleva la cifra ── */
+[data-ui="v2"] .rv-calor { margin: 0; min-width: 0; }
+[data-ui="v2"] .rv-calor__rejilla { display: grid; gap: 3px; align-items: center; }
+[data-ui="v2"] .rv-calor__fila { display: contents; }
+[data-ui="v2"] .rv-calor__col, [data-ui="v2"] .rv-calor__fila-etq { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-calor__col { text-align: center; }
+[data-ui="v2"] .rv-calor__celda { display: flex; align-items: center; justify-content: center; min-height: 28px; border-radius: 4px; font: 500 11px var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums; color: var(--ink); background: var(--chart-rejilla); }
+[data-ui="v2"] .rv-calor__celda[data-nivel="0"] { background: var(--chart-rejilla); }
+[data-ui="v2"] .rv-calor__celda[data-nivel="1"] { background: color-mix(in srgb, var(--cat, var(--ink)) 20%, var(--surface)); }
+[data-ui="v2"] .rv-calor__celda[data-nivel="2"] { background: color-mix(in srgb, var(--cat, var(--ink)) 40%, var(--surface)); }
+[data-ui="v2"] .rv-calor__celda[data-nivel="3"] { background: color-mix(in srgb, var(--cat, var(--ink)) 66%, var(--surface)); }
+[data-ui="v2"] .rv-calor__celda[data-nivel="4"] { background: var(--cat, var(--ink)); color: var(--surface); }
+[data-ui="v2"] .rv-calor__celda[data-sd] { background: repeating-linear-gradient(135deg, var(--muted) 0 2px, transparent 2px 5px); opacity: .5; }
+[data-ui="v2"] .rv-calor__escala { display: flex; align-items: center; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 11px; color: var(--muted); }
+[data-ui="v2"] .rv-calor__escala .rv-calor__celda { display: block; width: 18px; min-height: 10px; height: 10px; }
+
+/* ── Columnas apiladas por fase o canal ── */
+[data-ui="v2"] .rv-apcol { margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+[data-ui="v2"] .rv-apcol__leyenda { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .rv-apcol__leyenda li { display: inline-flex; align-items: center; gap: 6px; }
+[data-ui="v2"] .rv-apcol__plano { display: flex; align-items: flex-end; gap: 6px; border-bottom: 1px solid var(--chart-eje); padding-bottom: 0; }
+[data-ui="v2"] .rv-apcol__col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; gap: 3px; }
+[data-ui="v2"] .rv-apcol__total { font: 600 11px var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums; text-align: center; color: var(--ink); overflow-wrap: anywhere; }
+[data-ui="v2"] .rv-apcol__pila { display: flex; flex-direction: column-reverse; gap: 1px; min-height: 2px; max-width: 28px; width: 100%; margin: 0 auto; border-radius: 3px 3px 0 0; overflow: hidden; transform-origin: bottom; }
+[data-ui="v2"] .rv-apcol__tramo { flex-basis: 0; min-height: 2px; background: var(--tono, var(--ink)); }
+[data-ui="v2"] .rv-apcol__etq { font-size: 11px; color: var(--muted); text-align: center; overflow-wrap: anywhere; margin-bottom: -18px; position: relative; top: 18px; }
+[data-ui="v2"] .rv-apcol__plano { margin-bottom: 18px; }
+@media (forced-colors: active) {
+  [data-ui="v2"] :is(.rv-embudo__barra, .rv-apcol__tramo, .rv-calor__celda) { forced-color-adjust: none; border: 1px solid CanvasText; }
+}
+
+/* ── Columnas en tinta neutra (Rovaq): barras neutras; el último periodo y el activo en tinta fuerte ── */
+[data-ui="v2"] .rv-colum[data-tinta="neutra"] .rv-colum__barra:not([data-parcial]) { fill: var(--chart-barra); }
+[data-ui="v2"] .rv-colum[data-tinta="neutra"] .rv-colum__col:is([data-ultima], [data-activa]) .rv-colum__barra:not([data-parcial]) { fill: var(--chart-fuerte); }
+
+/* ── Elevación de tarjeta al pasar el puntero (Rovaq `[data-lift]`, 120 ms) y entrada de bloque ── */
+@media (prefers-reduced-motion: no-preference) {
+  [data-ui="v2"] [data-lift] { transition: transform var(--ui-fast) var(--ui-ease), box-shadow var(--ui-fast) var(--ui-ease); }
+  @media (hover: hover) {
+    [data-ui="v2"] [data-lift]:hover { transform: translateY(-1px); box-shadow: var(--sh-hover, 0 6px 16px -10px #0e0e1033); }
+  }
+  /* Entrada al montar (Rovaq `workspace-enter`): secciones 250 ms, tarjetas 180 ms, solo translateY. */
+  [data-ui="v2"] [data-entra="seccion"] { animation: rv-sube var(--ui-slow) var(--ui-ease) both; }
+  [data-ui="v2"] [data-entra="tarjeta"] { animation: rv-sube 180ms var(--ui-ease) both; }
+  /* Revelado con opacidad (Rovaq `.reveal`): 260 ms, escalón de 40 ms hasta el 5.º hijo. */
+  [data-ui="v2"] [data-entra="revela"] > * { animation: rv-sube 260ms var(--ui-ease) both, rv-fade 260ms var(--ui-ease) both; }
+  [data-ui="v2"] [data-entra="revela"] > :nth-child(2) { animation-delay: 40ms; }
+  [data-ui="v2"] [data-entra="revela"] > :nth-child(3) { animation-delay: 80ms; }
+  [data-ui="v2"] [data-entra="revela"] > :nth-child(4) { animation-delay: 120ms; }
+  [data-ui="v2"] [data-entra="revela"] > :nth-child(n+5) { animation-delay: 160ms; }
+  /* Las gráficas nuevas entran con el mismo crecimiento que las existentes (420 ms). */
+  [data-ui="v2"] .rv-embudo__barra { animation: rv-crece var(--t-bar) var(--ui-ease) both; }
+  [data-ui="v2"] .rv-embudo__barra[data-r="1"] { animation-delay: 40ms; }
+  [data-ui="v2"] .rv-embudo__barra[data-r="2"] { animation-delay: 80ms; }
+  [data-ui="v2"] .rv-embudo__barra[data-r="3"] { animation-delay: 120ms; }
+  [data-ui="v2"] .rv-embudo__barra[data-r="4"] { animation-delay: 160ms; }
+  [data-ui="v2"] .rv-embudo__barra:is([data-r="5"], [data-r="6"], [data-r="7"], [data-r="8"], [data-r="9"]) { animation-delay: 200ms; }
+  [data-ui="v2"] .rv-apcol__pila { animation: rv-crece-y var(--t-bar) var(--ui-ease) both; }
+}
