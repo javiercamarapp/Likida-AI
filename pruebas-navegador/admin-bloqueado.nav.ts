@@ -11,7 +11,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { test, expect } from './apoyo/fixture';
-import { ESTADOS } from './apoyo/sesion';
+import { ESTADOS, MARCA_CONSOLA } from './apoyo/sesion';
 
 /** Las rutas que se atacan: la raíz y dos hondas, elegidas porque enseñan lo
  *  más caro de la consola (dinero de Likida y datos cruzados de tenants). */
@@ -24,7 +24,7 @@ test.describe('con credenciales de la Flota Demo (flota_admin)', () => {
     test(`${ruta} por URL directa rebota a /dashboard sin pintar la consola`, async ({ page }) => {
       await page.goto(ruta);
       await expect(page).toHaveURL(/\/dashboard/);
-      await expect(page.locator('body')).not.toContainText('Consola de Likida');
+      await expect(page.locator('body')).not.toContainText(MARCA_CONSOLA);
     });
   }
 });
@@ -35,7 +35,7 @@ test.describe('con credenciales de la otra flota (Flota E2E B)', () => {
   test('/admin por URL directa rebota a /dashboard', async ({ page }) => {
     await page.goto('/admin');
     await expect(page).toHaveURL(/\/dashboard/);
-    await expect(page.locator('body')).not.toContainText('Consola de Likida');
+    await expect(page.locator('body')).not.toContainText(MARCA_CONSOLA);
   });
 });
 
@@ -45,7 +45,7 @@ test.describe('sin sesión', () => {
   test('/admin manda a /login, no a una consola vacía', async ({ page }) => {
     await page.goto('/admin');
     await expect(page).toHaveURL(/\/login/);
-    await expect(page.locator('body')).not.toContainText('Consola de Likida');
+    await expect(page.locator('body')).not.toContainText(MARCA_CONSOLA);
   });
 });
 
@@ -55,6 +55,6 @@ test.describe('el superadmin sí entra (el candado no está soldado)', () => {
   test('/admin sirve la consola al único rol que la posee', async ({ page }) => {
     await page.goto('/admin');
     await expect(page).toHaveURL(/\/admin/);
-    await expect(page.locator('body')).toContainText('Consola de Likida');
+    await expect(page.locator('body')).toContainText(MARCA_CONSOLA);
   });
 });

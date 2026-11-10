@@ -38,6 +38,10 @@ export const CORREOS = {
   perfilNomina: 'perfil.nomina.e2e@likida.test',
 } as const;
 
+/** Marca que SOLO pinta el Centro de Mando de /admin (título de su tarjeta de caja; existe aun si la lectura cae). Antes era «Consola de Likida»,
+ * texto que el rediseño del admin retiró: las pruebas negativas con esa cadena pasaban en vacío. */
+export const MARCA_CONSOLA = 'Caja y clientes';
+
 export const ESTADOS = {
   superadmin: 'pruebas-navegador/.estado/superadmin.json',
   duena: 'pruebas-navegador/.estado/duena.json',

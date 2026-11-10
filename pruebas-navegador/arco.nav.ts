@@ -71,7 +71,7 @@ test.describe('ARCO: alcance explícito de la cancelación sintética', () => {
     page.on('pageerror', e => errores.push(e.message));
     await page.goto('/dashboard/arco');
     await page.waitForLoadState('networkidle');
-    const fila = page.locator('tr', { hasText: NOMBRE });
+    const fila = page.locator('li', { hasText: NOMBRE });
     await expect(fila.getByRole('button', { name: 'Ejecutar cancelación', exact: true })).toBeVisible();
     await expect(fila).not.toContainText(PROMESA_EXCESIVA);
     await expect(fila).toContainText(/conserv|reten/i);
@@ -81,7 +81,7 @@ test.describe('ARCO: alcance explícito de la cancelación sintética', () => {
     try {
       const vista = await encargado.newPage();
       await vista.goto('/dashboard/arco');
-      const otraFila = vista.locator('tr', { hasText: NOMBRE });
+      const otraFila = vista.locator('li', { hasText: NOMBRE });
       await otraFila.getByRole('button', { name: 'Ejecutar cancelación', exact: true }).click();
       // A37-S16-04: la cancelación es irreversible y ahora pide confirmación; el envío es el botón del diálogo.
       await otraFila.getByRole('button', { name: 'Sí, ejecutar cancelación', exact: true }).click();
@@ -138,7 +138,7 @@ test.describe('ARCO: alcance explícito de la cancelación sintética', () => {
     expect(operadores[0].nombre).toMatch(/^Operador [A-F0-9]{6}$/);
     expect(operadores[0].telefono).toMatch(/^anon:[a-f0-9]{16}$/);
     await page.reload();
-    const resuelta = page.locator('tr', { hasText: operadores[0].nombre });
+    const resuelta = page.locator('li', { hasText: operadores[0].nombre });
     await expect(resuelta).toContainText('Resuelta');
     await expect(resuelta).toContainText(despues.resolucion);
     await resuelta.scrollIntoViewIfNeeded();

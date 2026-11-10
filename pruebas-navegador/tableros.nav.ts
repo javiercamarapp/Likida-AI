@@ -11,7 +11,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { test, expect, type Page } from './apoyo/fixture';
-import { ESTADOS } from './apoyo/sesion';
+import { ESTADOS, MARCA_CONSOLA } from './apoyo/sesion';
 
 /** Junta las excepciones de página desde ANTES de navegar; se afirma al final. */
 function vigilarErrores(page: Page): string[] {
@@ -59,10 +59,10 @@ test.describe('el panel de la flota', () => {
 test.describe('la consola del superadmin', () => {
   test.use({ storageState: ESTADOS.superadmin });
 
-  test('/admin pinta la Consola de Likida sin errores de página', async ({ page }) => {
+  test('/admin pinta el Centro de Mando (Resumen) sin errores de página', async ({ page }) => {
     const errores = vigilarErrores(page);
     await page.goto('/admin');
-    await expect(page.locator('body')).toContainText('Consola de Likida');
+    await expect(page.locator('body')).toContainText(MARCA_CONSOLA);
     await sinOverlayDeNext(page);
     expect(errores, `pageerror en /admin: ${errores.join(' | ')}`).toHaveLength(0);
   });
