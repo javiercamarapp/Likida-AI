@@ -102,13 +102,6 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
     enVuelo.current?.abort();
   }
 
-  function preguntar(q: string) {
-    if (!q.trim() || ocupado) return;
-    void preguntarCopiloto(q, null);
-  }
-
-  useEffect(() => { preguntarRef.current = preguntar; });
-
   function repetir(idTurno: string) {
     if (ocupado) return;
     const t = historial.find((x) => x.id === idTurno);
@@ -215,6 +208,14 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
       }
     }
   }
+
+  function preguntar(q: string) {
+    if (!q.trim() || ocupado) return;
+    void preguntarCopiloto(q, null);
+  }
+
+  useEffect(() => { preguntarRef.current = preguntar; });
+
 
   return {
     historial, ocupado, generando, documento: null, setDocumento: () => {}, conversacionId, convs, errorCarga, fasePensando, pasosVivos,

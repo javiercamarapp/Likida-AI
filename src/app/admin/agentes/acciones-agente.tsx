@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useId, useState } from 'react';
+import { useActionState, useId, useState } from 'react';
 import { Power, Settings2 } from 'lucide-react';
 import {
   AvisoResultado, Boton, CampoSelect, CampoTexto, CampoTextarea, Drawer, Icono, Modal, StatusChip,
@@ -33,12 +33,14 @@ export function KillSwitchAgente({ palanca, nombre, apagado, accion }: {
   apagado: boolean;
   accion: AccionFila;
 }) {
-  const [abierto, setAbierto] = useState(false);
+  const [abiertoEn, setAbiertoEn] = useState<{ base: ResultadoAccion } | null>(null);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   const idForma = useId();
   const operacion = apagado ? 'encender' : 'apagar';
   const ok = estado !== null && typeof estado === 'object' && 'ok' in estado && Boolean(estado.ok);
-  useEffect(() => { if (ok) setAbierto(false); }, [ok]);
+  // Se cierra solo cuando llega un resultado ok NUEVO (distinto del que había al abrir): derivado, sin setState dentro de un efecto.
+  const abierto = abiertoEn !== null && !(ok && estado !== abiertoEn.base);
+  const setAbierto = (v: boolean) => setAbiertoEn(v ? { base: estado } : null);
 
   return (
     <div className="rv-agente-fila-accion">
@@ -77,11 +79,13 @@ export function ConfigurarAgente({ id, nombre, actual, accion, estados }: {
   accion: AccionFila;
   estados: ReadonlyArray<{ valor: string; rotulo: string }>;
 }) {
-  const [abierto, setAbierto] = useState(false);
+  const [abiertoEn, setAbiertoEn] = useState<{ base: ResultadoAccion } | null>(null);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   const idForma = useId();
   const ok = estado !== null && typeof estado === 'object' && 'ok' in estado && Boolean(estado.ok);
-  useEffect(() => { if (ok) setAbierto(false); }, [ok]);
+  // Se cierra solo cuando llega un resultado ok NUEVO (distinto del que había al abrir): derivado, sin setState dentro de un efecto.
+  const abierto = abiertoEn !== null && !(ok && estado !== abiertoEn.base);
+  const setAbierto = (v: boolean) => setAbiertoEn(v ? { base: estado } : null);
 
   return (
     <>

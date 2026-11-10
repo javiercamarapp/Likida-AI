@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 // Imports directos y no el barril de ui-v2: el barril arrastra `BotonReintentar` (next/navigation) al paquete del chat.
 import { StatusChip } from '../../ui-v2/componentes/status-chip';
 import { Boton } from '../../ui-v2/componentes/boton';
@@ -35,14 +35,16 @@ export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint
   endpoint?: string;
 }) {
   const [b, setB] = useState<Briefing | 'error' | null>(null);
-  const cargar = useCallback(() => {
-    setB(null);
+  const [intento, setIntento] = useState(0);
+  useEffect(() => {
+    let vivo = true;
     fetch(`${endpoint}/briefing`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((d) => setB(Array.isArray(d?.tarjetas) ? { tarjetas: d.tarjetas, fuentesCiegas: Array.isArray(d.fuentesCiegas) ? d.fuentesCiegas : [] } : 'error'))
-      .catch(() => setB('error'));
-  }, [endpoint]);
-  useEffect(() => { cargar(); }, [cargar]);
+      .then((d) => { if (vivo) setB(Array.isArray(d?.tarjetas) ? { tarjetas: d.tarjetas, fuentesCiegas: Array.isArray(d.fuentesCiegas) ? d.fuentesCiegas : [] } : 'error'); })
+      .catch(() => { if (vivo) setB('error'); });
+    return () => { vivo = false; };
+  }, [endpoint, intento]);
+  const cargar = () => { setB(null); setIntento((i) => i + 1); };
 
   return (
     <section className="rv-chat__briefing" aria-label="Decide hoy" aria-busy={b === null || undefined}>
