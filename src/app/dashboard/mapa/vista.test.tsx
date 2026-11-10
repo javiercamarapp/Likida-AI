@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// «Reintentar» del estado de error (ui-v2) pide el router: aquí no hay app.
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 import { renderToStaticMarkup } from 'react-dom/server';
 import { VistaMapa, type Rastreo } from './vista';
 

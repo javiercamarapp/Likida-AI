@@ -1,0 +1,14 @@
+/* Comprobantes sin viaje · solo lo que las piezas del sistema no traen. Escala tipográfica y colores de tokens. */
+.rv-hf__combo { flex: 1 1 auto; min-width: 0; }
+.rv-hf__aviso { margin: 4px 0 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-hf__aviso[data-tono="bad"] { color: var(--bad); }
+.rv-hf__aviso[data-tono="warn"] { color: var(--warn); }
+.rv-hf__acciones { display: grid; gap: 4px; min-width: 260px; }
+.rv-hf__fila { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+.rv-hf__fila .rv-hf__combo { max-width: 180px; }
+.rv-hf__pregunta { font-size: var(--t-small); color: var(--muted); }
+.rv-hf__ayuda { margin: 0; font-size: var(--t-micro); color: var(--muted); text-align: right; }
+.rv-hf__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-hf__sin { font-size: var(--t-small); color: var(--faint); text-align: right; }
+.rv-hf__tenue { display: block; font-size: var(--t-micro); color: var(--faint); }
+.rv-hf__mono { font-variant-numeric: tabular-nums; }

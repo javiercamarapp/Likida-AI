@@ -51,7 +51,7 @@ export function Serie({ b }: { b: Extract<BloqueVista, { tipo: 'serie' }> }) {
     <figure className="rv-vv__fig" aria-label={rotulo}>
       <svg role="img" aria-label={rotulo} viewBox={`0 0 ${W} ${H}`} className="rv-vv__serie">
         <polyline fill="none" stroke="var(--muted)" strokeWidth="1.5" points={puntos} />
-        <circle cx={x(b.puntos.length - 1)} cy={y(ultimo.valor)} r="2.5" fill="var(--chart-3)" />
+        <circle cx={x(b.puntos.length - 1)} cy={y(ultimo.valor)} r="2.5" fill="var(--ok)" />
       </svg>
       <div className="rv-vv__ext">
         <span>{primero.dia}: <span className="rv-vv__num">{numero(primero.valor)}</span></span>
