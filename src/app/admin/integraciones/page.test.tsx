@@ -24,6 +24,7 @@ vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: dobles.getResumenNego
 vi.mock('@/lib/observability/sentry', () => ({ sentryActivo: dobles.sentryActivo }));
 vi.mock('@/lib/correo/enviar', () => ({ correoConfigurado: dobles.correoConfigurado }));
 vi.mock('@/lib/correo/auth', () => ({ hookDeCorreoConfigurado: dobles.hookDeCorreoConfigurado }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/integraciones', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/env', () => ({ envHealth: dobles.envHealth, faltantes: dobles.faltantes }));
 
 import IntegracionesPage from './page';
@@ -47,7 +48,7 @@ it('Vercel SIEMPRE dice "Sin medir" en neutro — nunca un verde fijo (D3, el bu
 it('Sentry sin DSN se pinta en rojo con el detalle real, no un "conectado" de adorno', async () => {
   const html = await renderizar();
   expect(html).toContain('Sin DSN');
-  expect(html).toContain('runtime log de Vercel');
+  expect(html).toContain('registro de ejecución de Vercel');
 });
 
 it('con DSN, Sentry se mide como configurado — el rótulo dice lo que se mide, no "conectado" (no se comprueba que reciba)', async () => {
@@ -65,7 +66,7 @@ it('Supabase sin llaves completas nombra EXACTAMENTE lo que falta', async () => 
 it('el hook de correo de acceso avisa el caso caro: encendido en Supabase pero sin secreto aquí = 500 para todos', async () => {
   const html = await renderizar();
   expect(html).toContain('Sin secreto');
-  expect(html).toContain('contesta 500');
+  expect(html).toContain('responde con error');
 });
 
 it('los modelos LLM listados son los que YA corrieron (llm_costo), no un catálogo de "podría usarse"', async () => {
@@ -83,4 +84,18 @@ it('sin llamadas registradas, lo dice — no una tabla vacía sin explicación',
 it('R9c: Supabase, Resend, WhatsApp, Sentry y Vercel usan su marca original (trazados de simple-icons)', async () => {
   const html = renderToStaticMarkup(await IntegracionesPage());
   for (const id of ['supabase', 'resend', 'whatsapp', 'sentry', 'vercel']) expect(html).toContain(`data-marca="${id}"`);
+});
+
+it('F7: si la lectura de costos cae, los conectores siguen en pie y la lista de modelos dice que no se pudo leer', async () => {
+  dobles.getResumenNegocio.mockRejectedValue(new Error('caída'));
+  const html = await renderizar();
+  expect(html).toContain('No se pudo leer el gasto por modelo');
+  expect(html).toContain('data-marca="supabase"');
+});
+
+it('F7: los nombres de variables solo aparecen plegados en «Cómo arreglarlo», nunca en el cuerpo de la pieza', async () => {
+  const html = await renderizar();
+  const cuerpo = html.replace(/<details[\s\S]*?<\/details>/g, '');
+  expect(cuerpo).not.toMatch(/SUPABASE_SERVICE_ROLE_KEY|WHATSAPP_TOKEN|RESEND_API_KEY/);
+  expect(html).toContain('SUPABASE_SERVICE_ROLE_KEY');
 });

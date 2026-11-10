@@ -1,202 +1,107 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import Link from 'next/link';
 import { getResumenNegocio } from '@/lib/admin/negocio';
+import { logger } from '@/lib/logger';
 import { usd, numero } from '@/lib/formato';
-import {
-  Blocks, Database, Mail, Bug, Rocket, Smartphone, KeyRound,
-} from 'lucide-react';
 import { sentryActivo } from '@/lib/observability/sentry';
 import { correoConfigurado } from '@/lib/correo/enviar';
 import { hookDeCorreoConfigurado } from '@/lib/correo/auth';
 import { envHealth, faltantes } from '@/lib/env';
-import { IconoProveedor } from '../proveedor-icono';
-import { MarcaIntegracion, type MarcaId } from '../../ui-v2/componentes/marca-integracion';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { StatusPill, EstadoVacio, type Estado } from '../ui/kit';
+import { Disclosure, EstadoError, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
+import { TarjetaRenglon, type RenglonSistema } from '../renglon-sistema';
+import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 
-/** El estado MEDIDO de un conector — o la confesión de que no se mide. */
-interface Medicion { estado: Estado; etiqueta: string; detalle?: string }
+type Modelo = { modelo: string; n: number; costoUsd: number };
 
-/** Tarjeta de conector — ficha interna estilo consola (hairline sobre
- *  --surface). El pill ya NO es un `estado="ok"` fijo: la versión anterior
- *  pintaba "Conectado" en verde para las 5 tarjetas sin medir nada — el
- *  mismo "verde de adorno" que salud-sistema documenta como bug D3, y que
- *  la auditoría del 14-ago volvió a señalar aquí. Ahora cada pill viene de
- *  una medición real (`sentryActivo`, `correoConfigurado`, `envHealth`) con
- *  el rótulo que esa medición puede sostener ("DSN configurado", no
- *  "Conectado": que el servicio reciba de verdad se comprueba en su panel);
- *  y lo que no tiene medición desde aquí (Vercel) dice "Sin medir" en
- *  neutro, nunca verde. `href` externo abre en pestaña nueva; interno
- *  (WhatsApp Infra, ya vive bajo /admin) usa `next/link` para no recargar
- *  toda la consola. */
-function Conector({
-  Icono, marca, titulo, subtitulo, href, medicion, externo = true,
-}: {
-  Icono: typeof Blocks; marca?: MarcaId; titulo: string; subtitulo: string; href: string;
-  medicion: Medicion; externo?: boolean;
-}) {
-  const contenido = (
-    <>
-      {marca
-        ? <MarcaIntegracion id={marca} tam={16} className="mt-0.5 shrink-0" />
-        : <Icono width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />}
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-[13px] font-medium truncate">{titulo}</span>
-          <StatusPill estado={medicion.estado}>{medicion.etiqueta}</StatusPill>
-        </div>
-        <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{subtitulo}</p>
-        {medicion.detalle && (
-          <p className="text-xs mt-1" style={{ color: medicion.estado === 'bad' ? 'var(--bad)' : 'var(--warn)' }}>
-            {medicion.detalle}
-          </p>
-        )}
-      </div>
-    </>
-  );
-  const className = 'hairline rounded-lg px-3 py-2.5 flex items-start gap-2.5 transition-colors hover:bg-[var(--canvas)]';
-  const estilo = { background: 'var(--surface)' };
-  return externo ? (
-    <a href={href} target="_blank" rel="noopener noreferrer" className={className} style={estilo}>{contenido}</a>
-  ) : (
-    <Link href={href} className={className} style={estilo}>{contenido}</Link>
-  );
-}
+const COLUMNAS_MODELO: ColumnaBase<Modelo>[] = [
+  { id: 'modelo', titulo: 'Modelo', principal: true, celda: (m) => m.modelo },
+  { id: 'llamadas', titulo: 'Llamadas', alinear: 'der', celda: (m) => numero(m.n) },
+  { id: 'costo', titulo: 'Costo', alinear: 'der', celda: (m) => usd(m.costoUsd) },
+];
 
 /**
- * Integraciones — a diferencia de WhatsApp Infra y Conocimiento/RAG, esta
- * página SÍ tiene mucho que enseñar de verdad: son conectores reales, y su
- * estado ahora está MEDIDO (variables de entorno y configuración de cada
- * servicio, las mismas mediciones que usa salud-sistema — no una copia:
- * `sentryActivo()`, `correoConfigurado()`, `envHealth()`/`faltantes()`).
- * Los proveedores de modelos no son una tarjeta genérica — se listan los
- * modelos reales que corrieron (`resumen.porModelo`, la misma fuente que
- * usa Inicio), porque eso es lo único honesto que se puede decir de un
- * "proveedor de LLM": no cuáles se PODRÍAN usar, sino cuáles YA se usaron.
+ * Integraciones — los conectores REALES de los que depende Likida hoy. Su estado está MEDIDO (variables de entorno y configuración de
+ * cada servicio, las mismas mediciones que usa Salud: `sentryActivo()`, `correoConfigurado()`, `envHealth()`/`faltantes()`), o dice que
+ * no se mide desde aquí. «Configurado» no es «vivo»: el rótulo dice exactamente lo medido; la prueba viva de la base está en Salud.
  *
- * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
- * con el ícono de `rutas.ts`.
+ * Los proveedores de modelos no son una tarjeta genérica: se listan los modelos que YA corrieron (`resumen.porModelo`, la misma fuente
+ * que usa el Inicio), no los que se PODRÍAN usar.
  */
 export default async function IntegracionesPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
-  const r = await getResumenNegocio();
+  // Si la lectura de costos cae, los conectores siguen en pie: solo la lista de modelos se queda sin dato (y lo dice).
+  const r = await getResumenNegocio().catch((e: unknown) => { logger.error('admin.integraciones.negocio', { err: e instanceof Error ? e.message : String(e) }); return null; });
   const salud = envHealth();
   const falta = faltantes();
 
-  // Qué puede afirmar cada pill sin mentir (mismo criterio que
-  // salud-sistema): configuración presente ≠ servicio vivo. La prueba viva
-  // de Supabase (consulta HEAD real) vive en salud-sistema; aquí se afirma
-  // lo que estas mediciones alcanzan, con el rótulo exacto de lo medido.
-  const medSupabase: Medicion = salud.supabase
-    ? { estado: 'ok', etiqueta: 'Llaves completas' }
-    : { estado: 'bad', etiqueta: 'Faltan llaves', detalle: `Faltan: ${(falta.supabase ?? []).join(', ')}.` };
-  const medResend: Medicion = correoConfigurado()
-    ? { estado: 'ok', etiqueta: 'Configurado' }
-    : { estado: 'warn', etiqueta: 'Sin configurar', detalle: 'Falta RESEND_API_KEY o RESEND_EMAIL_DOMAIN: ningún correo sale (esperado en local).' };
-  // EL CORREO DE ACCESO (18-ago). Se mide el SECRETO, que es lo único que se
-  // puede medir desde aquí; que el hook esté encendido vive en el panel de
-  // Supabase. El caso caro es el inverso —encendido allá, sin secreto acá—:
-  // el endpoint contesta 500 y nadie entra, así que eso se pinta en ámbar.
-  const medHookCorreo: Medicion = hookDeCorreoConfigurado()
-    ? { estado: 'ok', etiqueta: 'Secreto configurado' }
-    : { estado: 'warn', etiqueta: 'Sin secreto', detalle: 'Si el hook está ENCENDIDO en Supabase, nadie puede entrar: /api/auth/correo contesta 500. Ver docs/correo-de-acceso.md.' };
-  const medSentry: Medicion = sentryActivo()
-    ? { estado: 'ok', etiqueta: 'DSN configurado' }
-    : { estado: 'bad', etiqueta: 'Sin DSN', detalle: 'Los errores solo quedan en el runtime log de Vercel.' };
-  // Desde adentro no hay nada que medir de Vercel: si esta página
-  // renderiza, Vercel ya contestó. Neutral honesto, nunca verde fijo.
-  const medVercel: Medicion = { estado: 'neutral', etiqueta: 'Sin medir' };
-  const medWhatsapp: Medicion = salud.whatsapp
-    ? { estado: 'ok', etiqueta: 'Variables completas' }
-    : { estado: 'bad', etiqueta: 'Faltan variables', detalle: `Faltan: ${(falta.whatsapp ?? []).join(', ')}.` };
+  const conectores: RenglonSistema[] = [
+    {
+      titulo: 'Supabase', marca: 'supabase', link: { href: 'https://supabase.com/dashboard', texto: 'Abrir el panel de Supabase' },
+      ...(salud.supabase
+        ? { tono: 'ok' as const, etiqueta: 'Llaves completas', detalle: 'La base de datos y el login de toda la app. La prueba viva (una consulta real) está en Estado.' }
+        : { tono: 'bad' as const, etiqueta: 'Faltan llaves', detalle: 'La base de datos y el login de toda la app no pueden conectarse completos.', arreglo: `Faltan: ${(falta.supabase ?? []).join(', ')}.` }),
+    },
+    {
+      titulo: 'Resend', marca: 'resend', link: { href: 'https://resend.com/emails', texto: 'Abrir Resend' },
+      ...(correoConfigurado()
+        ? { tono: 'ok' as const, etiqueta: 'Configurado', detalle: 'Correo transaccional: avisos, invitaciones y, con el enlace encendido, los correos de acceso.' }
+        : { tono: 'warn' as const, etiqueta: 'Sin configurar', detalle: 'Ningún correo sale (esperado en local).', arreglo: 'Faltan RESEND_API_KEY o RESEND_EMAIL_DOMAIN en el servidor.' }),
+    },
+    {
+      // EL CORREO DE ACCESO. Se mide el SECRETO, que es lo único que se puede medir desde aquí; que el enlace esté encendido vive en el panel
+      // de Supabase. El caso caro es el inverso —encendido allá, sin secreto acá—: responde con error y nadie entra, así que se pinta en ámbar.
+      titulo: 'Correo de acceso', link: { href: 'https://supabase.com/dashboard/project/_/auth/hooks', texto: 'Abrir los enlaces de acceso en Supabase' },
+      ...(hookDeCorreoConfigurado()
+        ? { tono: 'ok' as const, etiqueta: 'Secreto configurado', detalle: 'El enlace de acceso sale por Resend con la plantilla de la marca en vez de la de fábrica de Supabase. Que esté encendido se ve en el panel de Supabase; aquí solo se mide el secreto.' }
+        : { tono: 'warn' as const, etiqueta: 'Sin secreto', detalle: 'Si el enlace está ENCENDIDO en Supabase, nadie puede entrar: la ruta de correo de acceso responde con error. Aquí solo se mide el secreto.', arreglo: 'Ver docs/correo-de-acceso.md.' }),
+    },
+    {
+      titulo: 'Sentry', marca: 'sentry', link: { href: 'https://sentry.io', texto: 'Abrir Sentry' },
+      ...(sentryActivo()
+        ? { tono: 'ok' as const, etiqueta: 'DSN configurado', detalle: 'Registro de errores en producción. Que reciba de verdad se comprueba en su panel, no desde aquí.' }
+        : { tono: 'bad' as const, etiqueta: 'Sin DSN', detalle: 'Los errores solo quedan en el registro de ejecución de Vercel.', arreglo: 'Falta el DSN de Sentry en el servidor.' }),
+    },
+    {
+      // Desde adentro no hay nada que medir de Vercel: si esta página renderiza, Vercel ya contestó. Neutral honesto, nunca verde fijo.
+      titulo: 'Vercel', marca: 'vercel', link: { href: 'https://vercel.com/dashboard', texto: 'Abrir el panel de Vercel' },
+      tono: 'neutral', etiqueta: 'Sin medir', detalle: 'Hosting y despliegues. Vercel ya lo mide en su panel: se enlaza en vez de reconstruirse.',
+    },
+    {
+      titulo: 'WhatsApp Business (Meta)', marca: 'whatsapp', link: { href: '/admin/whatsapp-infra', texto: 'Ir a WhatsApp' },
+      ...(salud.whatsapp
+        ? { tono: 'ok' as const, etiqueta: 'Variables completas', detalle: 'El número sigue siendo el de PRUEBA de Meta: el bot conversa completo, pero un chofer real aún no puede escribirle. Falta el número mexicano y la verificación del negocio.' }
+        : { tono: 'bad' as const, etiqueta: 'Faltan variables', detalle: 'La conexión con WhatsApp no tiene todas sus variables. Además el número sigue siendo el de PRUEBA de Meta.', arreglo: `Faltan: ${(falta.whatsapp ?? []).join(', ')}.` }),
+    },
+  ];
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Blocks width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Integraciones"
-        />
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            Los servicios reales de los que depende Likida hoy — cada pill está medido en este entorno, o dice que no se mide desde aquí
-          </p>
-
-          <div className="card p-3">
-            <TituloSeccion>Conectores</TituloSeccion>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 mt-2">
-              <Conector
-                Icono={Database} marca="supabase" titulo="Supabase" href="https://supabase.com/dashboard" medicion={medSupabase}
-                subtitulo="Postgres + Auth + RLS — la base de datos y el login de toda la app. La prueba viva (consulta real) está en Salud del sistema."
-              />
-              <Conector
-                Icono={Mail} marca="resend" titulo="Resend" href="https://resend.com/emails" medicion={medResend}
-                subtitulo="Correo transaccional — avisos, invitaciones y, con el hook encendido, los correos de acceso."
-              />
-              <Conector
-                Icono={KeyRound} titulo="Correo de acceso (Auth Hook)"
-                href="https://supabase.com/dashboard/project/_/auth/hooks" medicion={medHookCorreo}
-                subtitulo="El magic link sale por Resend con la plantilla de la marca en vez de la de fábrica de Supabase. Que el hook esté encendido se ve en su panel; aquí solo se mide el secreto."
-              />
-              <Conector
-                Icono={Bug} marca="sentry" titulo="Sentry" href="https://sentry.io" medicion={medSentry}
-                subtitulo="Registro de errores en producción. Que reciba de verdad se comprueba en su panel, no desde aquí."
-              />
-              <Conector
-                Icono={Rocket} marca="vercel" titulo="Vercel" href="https://vercel.com/dashboard" medicion={medVercel}
-                subtitulo="Hosting y despliegues. Vercel ya lo mide en su panel — se enlaza en vez de reconstruirse."
-              />
-              <Conector
-                Icono={Smartphone} marca="whatsapp" titulo="Meta WhatsApp Business API" href="/admin/whatsapp-infra" externo={false} medicion={medWhatsapp}
-                subtitulo="El número sigue siendo el de PRUEBA de Meta: el bot conversa completo, pero un chofer real aún no puede escribirle — falta número mexicano + verificación del negocio."
-              />
-            </div>
-          </div>
-
-          <div className="card overflow-hidden">
-            <div className="px-4 pt-3 pb-1">
-              <TituloSeccion>Proveedores de modelos (LLM)</TituloSeccion>
-              <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                No un conector genérico — los modelos reales que corrieron OCR y Cuadre, tal como quedaron
-                registrados en <code className="font-mono">llm_costo</code>.
-              </p>
-            </div>
-            {r.porModelo.length === 0 ? (
-              <div className="px-4 pb-3 pt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin llamadas registradas todavía.</div>
-            ) : (
-              <div className="divide-y mt-1" style={{ borderColor: 'var(--line2)' }}>
-                {r.porModelo.map((m) => (
-                  <div key={m.modelo} className="px-4 py-2.5 flex items-center gap-3">
-                    <IconoProveedor modelo={m.modelo} />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-mono truncate">{m.modelo}</div>
-                      <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{numero(m.n)} llamadas</div>
-                    </div>
-                    <div className="text-sm font-semibold tabular shrink-0">{usd(m.costoUsd)}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="card p-3">
-            <TituloSeccion>Rotación de API keys</TituloSeccion>
-            {/* EstadoVacio (kit compartido) — mismo icono (KeyRound, igual
-                que antes) y mensaje honesto, ni una palabra cambiada. */}
-            <div className="mt-2">
-              <EstadoVacio icono={<KeyRound width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Rotación de llaves de API: aún no existe. Hoy las llaves de cada servicio viven en variables de
-                entorno de Vercel, sin una UI de administración ni rotación automática dentro de este panel.
-              </EstadoVacio>
-            </div>
-          </div>
+    <MarcoPagina titulo="Integraciones" apoyo="Los servicios reales de los que depende Likida hoy. Cada estado está medido en este entorno, o dice que no se mide desde aquí.">
+      <section className="adm-sis-bloque" aria-labelledby="conectores">
+        <h2 className="adm-sis-titulo" id="conectores">Conectores</h2>
+        <div className="adm-sis-rejilla">
+          {conectores.map((c) => <TarjetaRenglon key={c.titulo} r={c} />)}
         </div>
-      </div>
-    </main>
+      </section>
+
+      {r === null ? (
+        <EstadoError reintentar>No se pudo leer el gasto por modelo. Los conectores de arriba no dependen de esa lectura.</EstadoError>
+      ) : (
+        <Tarjeta titulo="Proveedores de modelos de IA" estado={r.porModelo.length === 0 ? 'vacio' : 'ok'} mensaje="Sin llamadas registradas todavía" detalle="Aparecen aquí los modelos en cuanto corren OCR o Cuadre por primera vez.">
+          <p className="adm-sis-nota">No es un catálogo de lo que se podría usar: son los modelos que ya corrieron, tal como quedaron en el registro de costos.</p>
+          <TablaBase etiqueta="Modelos que ya corrieron" columnas={COLUMNAS_MODELO} filas={r.porModelo} idFila={(m) => m.modelo} densa tarjetaMovil />
+        </Tarjeta>
+      )}
+
+      <Disclosure titulo="Lo que aún no existe aquí" resumen="Rotación de llaves">
+        <p className="adm-sis-nota">
+          La rotación de llaves de API no existe todavía: hoy las llaves de cada servicio viven en las variables del servidor en Vercel, sin una pantalla de administración ni rotación automática dentro de este panel.
+        </p>
+      </Disclosure>
+    </MarcoPagina>
   );
 }
 

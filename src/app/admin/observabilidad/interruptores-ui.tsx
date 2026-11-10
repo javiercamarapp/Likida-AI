@@ -2,11 +2,12 @@
 
 import { useActionState } from 'react';
 import { Power } from 'lucide-react';
-import { StatusPill } from '../ui/kit';
+import { StatusChip } from '../../ui-v2/componentes';
 import { Aviso, type ResultadoAccion, type AccionDeForma } from '../ui/forma';
 import { ControlApagar } from '../ui/control-apagar';
 import { fechaHoraMx } from '@/lib/formato';
 import { etiquetaInterruptor } from './etiquetas';
+import '../sistema.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS TOGGLES DEL KILL SWITCH — la parte de /admin/observabilidad que Javier
@@ -47,7 +48,7 @@ export function SeccionInterruptores({
     Number(b.apagado) - Number(a.apagado) || Number(b.id === 'global') - Number(a.id === 'global'));
 
   return (
-    <div className="space-y-1.5">
+    <div className="adm-sis-bloque">
       {orden.map((i) => <FilaInterruptor key={i.id} interruptor={i} accion={accion} />)}
     </div>
   );
@@ -57,27 +58,24 @@ function FilaInterruptor({ interruptor: i, accion }: { interruptor: InterruptorP
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
 
   return (
-    <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="text-[13px] font-medium inline-flex items-center gap-1.5">
-            <Power width={13} height={13} strokeWidth={1.75}
-              style={{ color: i.apagado ? 'var(--bad)' : 'var(--muted)' }} />
+    <div className="adm-sis-fila">
+      <div className="adm-sis-fila__cab">
+        <div className="adm-sis-bloque">
+          <span className="adm-sis-fila__nombre">
+            <Power width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
             {etiquetaInterruptor(i.id)}
-            <code className="font-mono text-[10px]" style={{ color: 'var(--muted)' }}>{i.id}</code>
-          </div>
-          {/* Quién y cuándo, VISIBLES: una palanca sin firma a la vista invita
-              a preguntar en el chat "¿quién apagó esto?" en pleno incidente. */}
-          <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
+          </span>
+          {/* Quién y cuándo, VISIBLES: una palanca sin firma a la vista invita a preguntar en el chat "¿quién apagó esto?" en pleno incidente. */}
+          <span className="adm-sis-fila__texto">
             {i.apagado && i.motivo ? <>Motivo: {i.motivo} · </> : null}
             {i.cambiadoEn
               ? <>{i.apagado ? 'Apagado' : 'Último cambio'} por {i.cambiadoPorNombre ?? 'cuenta borrada'} · {fechaHoraMx(i.cambiadoEn)}</>
               : 'Nunca se ha tocado — encendido por default (sin fila = encendido).'}
-          </div>
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <StatusPill estado={i.apagado ? 'bad' : 'ok'}>{i.apagado ? 'APAGADO' : 'Encendido'}</StatusPill>
+        <div className="adm-sis-acciones">
+          <StatusChip tono={i.apagado ? 'bad' : 'ok'}>{i.apagado ? 'APAGADO' : 'Encendido'}</StatusChip>
           <ControlApagar id={i.id} apagado={i.apagado} pendiente={pendiente} enviar={enviar} />
         </div>
       </div>

@@ -10,18 +10,9 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/agentes/[id]/insumos/page.tsx': 1,
   'app/admin/calidad-evals/page.tsx': 1,
   'app/admin/capacidad-forecast/page.tsx': 1,
-  'app/admin/compliance/page.tsx': 1,
   'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
   'app/admin/conversaciones/page.tsx': 2,
-  'app/admin/corridas/[id]/page.tsx': 2,
-  'app/admin/corridas/page.tsx': 1,
-  'app/admin/crons/vista.tsx': 1,
   'app/admin/dev/page.tsx': 1,
-  'app/admin/integraciones/page.tsx': 1,
-  'app/admin/mcp-clientes/page.tsx': 1,
-  'app/admin/observabilidad/page.tsx': 1,
-  'app/admin/salud-sistema/page.tsx': 1,
-  'app/admin/soporte/page.tsx': 1,
   'app/admin/techo-ia/page.tsx': 1,
   'app/admin/trust-safety/page.tsx': 1,
   'app/admin/whatsapp-infra/page.tsx': 1,
@@ -38,19 +29,10 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/agentes/[id]/insumos',
   'app/admin/calidad-evals',
   'app/admin/capacidad-forecast',
-  'app/admin/compliance',
   'app/admin/conversaciones',
   'app/admin/conversaciones/[tenant]/[telefono]',
   'app/admin/copiloto',
-  'app/admin/corridas',
-  'app/admin/corridas/[id]',
-  'app/admin/crons',
   'app/admin/dev',
-  'app/admin/integraciones',
-  'app/admin/mcp-clientes',
-  'app/admin/observabilidad',
-  'app/admin/salud-sistema',
-  'app/admin/soporte',
   'app/admin/techo-ia',
   'app/admin/trust-safety',
   'app/admin/whatsapp-infra',
@@ -58,6 +40,7 @@ export const BASE_SIN_MARCO: string[] = [
 
 /** admin_paginas_en_menu: direcciones estáticas que ninguna entrada ni pestaña de rutas.ts cubre. */
 export const BASE_PAGINAS_FUERA_DEL_MENU: string[] = [
+
 ];
 
 /** sin_emojis_en_producto: emoji por archivo (src/app y src/lib, sin pruebas). */

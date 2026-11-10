@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 // `EstadoError` usa `router.refresh()` para reintentar, y `useRouter` fuera
 // del App Router revienta — mismo router de mentiras que `bloque.test.tsx`:
 // lo que se mira aquí es QUÉ se pinta, no a dónde navega el botón.
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/crons', useSearchParams: () => new URLSearchParams() }));
 import { CRONS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
 import { VistaCrons, resumenRelojes, cadaCuanto, desdeHace, resumenDetalle } from './vista';
 
@@ -81,14 +81,14 @@ describe('VistaCrons — el card dice la verdad', () => {
     const html = renderToStaticMarkup(
       <VistaCrons latidos={todos({ facturar: { ultimoEstado: 'fallo' } })} />,
     );
-    expect(html).not.toContain('ninguno reportó fallo');
+    expect(html).not.toContain('Ninguno reportó fallo');
     expect(html).toContain('última corrida reportó');
-    expect(html).toContain('facturar');
+    expect(html).toContain('Facturas de portales');
   });
 
   it('todo sano: lo afirma con las dos patas (cadencia Y resultado)', () => {
     const html = renderToStaticMarkup(<VistaCrons latidos={todos()} />);
-    expect(html).toContain('ninguno reportó fallo en su última corrida');
+    expect(html).toContain('Ninguno reportó fallo en su última corrida');
   });
 
   it('base caída: no pinta una tabla vacía, dice que no se sabe', () => {
