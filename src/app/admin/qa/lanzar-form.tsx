@@ -181,13 +181,10 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {ESCENARIOS_QA.map((e) => (
           <button key={e.id} type="button" onClick={() => elegirEscenario(e.id)}
-            className="text-left hairline rounded-lg px-3 py-1.5 transition-colors"
-            style={escenario === e.id
-              ? { background: 'var(--marca)', color: 'var(--marca-fg)' }
-              : { background: 'var(--surface)' }}>
+            className="text-left hairline rounded-lg px-3 py-1.5 transition-colors rv-qa-fs rv-qa-escenario" data-activo={escenario === e.id}>
             <div className="text-sm font-semibold">{e.nombre}</div>
-            <div className="text-xs mt-1" style={escenario === e.id ? undefined : { color: 'var(--ink2)' }}>{e.descripcion}</div>
-            <div className="text-[11px] mt-1.5 font-mono" style={escenario === e.id ? undefined : { color: 'var(--muted)' }}>
+            <div className={escenario === e.id ? 'text-xs mt-1' : 'text-xs mt-1 rv-qa-ink2'}>{e.descripcion}</div>
+            <div className={escenario === e.id ? 'text-[11px] mt-1.5 font-mono' : 'text-[11px] mt-1.5 font-mono rv-qa-mut'}>
               invariantes {e.invariantes.join(' · ')}
               {e.minFotos > 1 ? ` — mínimo ${e.minFotos} fotos` : ''}
             </div>
@@ -197,7 +194,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       {/* Lo que falta se dice, con número: el catálogo del diseño tiene 11 y
           el selector no los ofrece todos. Callarlo haría creer que esto es
           toda la cobertura que existe. */}
-      <p className="text-[11px] m-0" style={{ color: 'var(--muted)' }}>
+      <p className="text-[11px] m-0 rv-qa-mut">
         {ESCENARIOS_QA.length} de los 11 escenarios del catálogo. Los {11 - ESCENARIOS_QA.length} restantes
         —y el oráculo #4, que necesita saber cuánto dice cada ticket— siguen pendientes.
       </p>
@@ -209,11 +206,11 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
             se va al carril completo, que no tiene tope de fotos. Lo que se
             dice aquí es lo que de verdad ocurre al darle a Lanzar — incluido
             lo que SÍ la puede parar, que es el reloj y el dinero. */}
-        <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>
+        <div className="text-xs font-medium mb-1.5 rv-qa-mut">
           Fotos del viaje — {seleccion.size} seleccionada{seleccion.size === 1 ? '' : 's'}
           {carril === 'completo' ? ' · CARRIL COMPLETO' : ' · carril rápido'}
         </div>
-        <p className="text-[11px] -mt-1 mb-1.5 m-0" style={{ color: 'var(--muted)' }}>
+        <p className="text-[11px] -mt-1 mb-1.5 m-0 rv-qa-mut">
           {carril === 'completo' ? (
             <>
               Sin tope de fotos. La corrida avanza en <strong>pasadas</strong> de hasta {Math.round(TECHO_PASADA_MS / 1000)} s
@@ -233,25 +230,24 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
           onDragOver={(ev) => { ev.preventDefault(); setArrastrando(true); }}
           onDragLeave={() => setArrastrando(false)}
           onDrop={(ev) => { ev.preventDefault(); setArrastrando(false); void subirArchivos(ev.dataTransfer.files); }}
-          className="rounded-xl border border-dashed px-4 py-4 text-center cursor-pointer"
-          style={{ borderColor: arrastrando ? 'var(--marca)' : 'var(--line)', background: arrastrando ? 'var(--canvas)' : 'transparent' }}
+          className="rounded-xl border border-dashed px-4 py-4 text-center cursor-pointer rv-qa-zona" data-arrastrando={arrastrando}
           onClick={() => inputRef.current?.click()}
         >
           <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden"
             onChange={(ev) => { if (ev.target.files) void subirArchivos(ev.target.files); }} />
-          <div className="inline-flex items-center gap-2 text-sm" style={{ color: 'var(--muted)' }}>
+          <div className="inline-flex items-center gap-2 text-sm rv-qa-mut">
             {subiendo ? <Loader2 width={15} height={15} strokeWidth={1.75} className="animate-spin" /> : <Upload width={15} height={15} strokeWidth={1.75} />}
             {subiendo ? 'Subiendo al banco…' : 'Suelta aquí todas las fotos que quieras (JPEG/PNG/WebP) o da clic — se deduplican por hash'}
           </div>
         </div>
         {avisosSubida.length > 0 && (
-          <ul className="text-xs mt-1.5 space-y-0.5" style={{ color: 'var(--muted)' }}>
+          <ul className="text-xs mt-1.5 space-y-0.5 rv-qa-mut">
             {avisosSubida.map((a, i) => <li key={i}>· {a}</li>)}
           </ul>
         )}
 
         {bancoError !== null ? null : fotos.length === 0 ? (
-          <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+          <p className="text-xs mt-2 rv-qa-mut">
             El banco está vacío de verdad (el manifiesto se leyó completo) — sube tus primeras fotos arriba.
           </p>
         ) : (
@@ -261,18 +257,17 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
               return (
                 <button key={f.id} type="button" onClick={() => alternarFoto(f.id)}
                   title={f.etiqueta}
-                  className="relative rounded-lg overflow-hidden hairline text-left"
-                  style={activa ? { outline: '2px solid var(--marca)', outlineOffset: '-2px' } : undefined}>
+                  className={activa ? 'relative rounded-lg overflow-hidden hairline text-left rv-qa-activa' : 'relative rounded-lg overflow-hidden hairline text-left'}>
                   {f.url ? (
                     // eslint-disable-next-line @next/next/no-img-element -- URL firmada de 60 s de un bucket privado: next/image no puede optimizarla (expira) y cachearla la rompería
                     <img src={f.url} alt={f.etiqueta} className="w-full h-16 object-cover" />
                   ) : (
-                    <div className="w-full h-16 flex items-center justify-center text-[11px] px-1" style={{ background: 'var(--canvas)', color: 'var(--ink2)' }}>
+                    <div className="w-full h-16 flex items-center justify-center text-[11px] px-1 rv-qa-fc rv-qa-ink2">
                       sin firma
                     </div>
                   )}
-                  <div className="px-1 py-0.5 text-[11px] truncate" style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
-                    {activa ? '✓ ' : ''}{f.etiqueta}
+                  <div className="px-1 py-0.5 text-[11px] truncate rv-qa-fs rv-qa-ink2">
+                    {activa ? 'Elegida · ' : ''}{f.etiqueta}
                   </div>
                 </button>
               );
@@ -283,20 +278,20 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
 
       {/* ── Parámetros del viaje ───────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <label className="text-xs" style={{ color: 'var(--muted)' }}>
+        <label className="text-xs rv-qa-mut">
           Anticipo (MXN)
           <input className={`${inputCss} w-full`} inputMode="decimal" value={anticipo} onChange={(e) => setAnticipo(e.target.value)}
             placeholder={escenario === 'feliz' ? 'lo que sumen tus fotos' : ''} />
         </label>
-        <label className="text-xs" style={{ color: 'var(--muted)' }}>
+        <label className="text-xs rv-qa-mut">
           RFC de la empresa (opcional)
           <input className={`${inputCss} w-full`} value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} />
         </label>
-        <label className="text-xs" style={{ color: 'var(--muted)' }}>
+        <label className="text-xs rv-qa-mut">
           Origen
           <input className={`${inputCss} w-full`} value={origen} onChange={(e) => setOrigen(e.target.value)} />
         </label>
-        <label className="text-xs" style={{ color: 'var(--muted)' }}>
+        <label className="text-xs rv-qa-mut">
           Destino
           <input className={`${inputCss} w-full`} value={destino} onChange={(e) => setDestino(e.target.value)} />
         </label>
@@ -304,7 +299,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
 
       {/* ── Política de gasto ──────────────────────────────────────────────── */}
       <div>
-        <div className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>
+        <div className="text-xs font-medium mb-1.5 rv-qa-mut">
           Política de gasto del tenant sintético (concepto · tope · CFDI)
         </div>
         <div className="space-y-1.5">
@@ -314,14 +309,14 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
                 onChange={(e) => setPolitica((prev) => prev.map((x, j) => j === i ? { ...x, concepto: e.target.value } : x))} />
               <input className={`${inputCss} w-28`} inputMode="decimal" value={p.topeMonto} placeholder="sin tope"
                 onChange={(e) => setPolitica((prev) => prev.map((x, j) => j === i ? { ...x, topeMonto: e.target.value } : x))} />
-              <label className="text-xs inline-flex items-center gap-1.5 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
+              <label className="text-xs inline-flex items-center gap-1.5 whitespace-nowrap rv-qa-mut">
                 <input type="checkbox" checked={p.requiereCfdi}
                   onChange={(e) => setPolitica((prev) => prev.map((x, j) => j === i ? { ...x, requiereCfdi: e.target.checked } : x))} />
                 CFDI
               </label>
               <button type="button" onClick={() => setPolitica((prev) => prev.filter((_, j) => j !== i))}
                 className="p-1 rounded hover:opacity-70" aria-label={`quitar ${p.concepto || 'concepto'}`}>
-                <Trash2 width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                <Trash2 width={13} height={13} strokeWidth={1.75} className="rv-qa-mut" />
               </button>
             </div>
           ))}
@@ -333,22 +328,21 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       </div>
 
       {/* ── Lanzar ─────────────────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-3 pt-1 border-t" style={{ borderColor: 'var(--line2)' }}>
+      <div className="flex flex-wrap items-center gap-3 pt-1 border-t rv-qa-bl2">
         <button type="button" onClick={() => void lanzar()} disabled={Boolean(motivoBloqueo) || lanzando}
-          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40"
-          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40 rv-qa-marca">
           {lanzando ? <Loader2 width={14} height={14} strokeWidth={2} className="animate-spin" /> : <Play width={14} height={14} strokeWidth={2} />}
           {lanzando ? 'Lanzando…' : 'Lanzar corrida'}
         </button>
-        <label className="text-xs inline-flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
+        <label className="text-xs inline-flex items-center gap-1.5 rv-qa-mut">
           <input type="checkbox" checked={conservar} onChange={(e) => setConservar(e.target.checked)} />
           conservar el tenant sintético al terminar (para inspección)
         </label>
         {motivoBloqueo && (
-          <span className="text-xs" style={{ color: 'var(--muted)' }}>⛔ {motivoBloqueo}</span>
+          <span className="text-xs rv-qa-mut">Bloqueado: {motivoBloqueo}</span>
         )}
         {errorLanzar && (
-          <span className="text-xs font-medium" style={{ color: 'var(--bad)' }}>{errorLanzar}</span>
+          <span className="text-xs font-medium rv-qa-bad">{errorLanzar}</span>
         )}
       </div>
     </div>

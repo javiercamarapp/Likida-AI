@@ -17,9 +17,11 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Bug, Camera, FileText, MessageCircle } from 'lucide-react';
+import { Camera, FileText, MessageCircle } from 'lucide-react';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
-import { BarraPagina, TituloSeccion } from '../../../dashboard/resumen-visual';
+import { TituloSeccion } from '../../../dashboard/resumen-visual';
+import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import '../qa.css';
 import { StatusPill, type Estado } from '../../ui/kit';
 import { PILL_CORRIDA } from '../pantalla';
 import { escenarioPorId } from '@/lib/admin/qa-escenarios';
@@ -41,9 +43,9 @@ const PILL_PASO: Record<EstadoPaso, { estado: Estado; etiqueta: string }> = {
 };
 
 const PILL_ORACULO: Record<'ok' | 'fallo' | 'no_verificado', { estado: Estado; etiqueta: string }> = {
-  ok: { estado: 'ok', etiqueta: '✅ ok' },
-  fallo: { estado: 'bad', etiqueta: '❌ fallo' },
-  no_verificado: { estado: 'warn', etiqueta: '⚠️ no verificado' },
+  ok: { estado: 'ok', etiqueta: 'ok' },
+  fallo: { estado: 'bad', etiqueta: 'fallo' },
+  no_verificado: { estado: 'warn', etiqueta: 'no verificado' },
 };
 
 const TERMINALES = new Set(['ok', 'parcial', 'fallo', 'abortada']);
@@ -185,28 +187,22 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
   const av = corrida.avance;
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Bug {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo={`Corrida de QA — ${escenarioPorId(corrida.escenario)?.nombre ?? corrida.escenario} — ${corrida.id.slice(0, 8)}`}
-          derecha={
-            <Link href="/admin/qa" className="text-xs inline-flex items-center gap-1" style={{ color: 'var(--muted)' }}>
-              <ArrowLeft width={12} height={12} strokeWidth={1.75} /> Panel de QA
-            </Link>
-          }
-        />
-
-        <div className="px-5 py-5 flex-1 space-y-2.5">
+    <MarcoPagina
+      area="Calidad"
+      titulo={`Corrida ${corrida.id.slice(0, 8)}`}
+      apoyo={`Escenario: ${escenarioPorId(corrida.escenario)?.nombre ?? corrida.escenario}. El avance, el veredicto y la evidencia de esta corrida.`}
+      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">Volver a Pruebas reales</BotonEnlace>}
+    >
+      <div className="space-y-2.5">
           {/* ── Avisos de lectura (fallar cerrado, dicho) ─────────────────── */}
           {errorLectura && (
-            <div className="card p-3 text-sm" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+            <div className="card p-3 text-sm rv-qa-malo">
               No se pudo leer el estado de la corrida: {errorLectura}. Lo que ves abajo es la última
               lectura buena — no afirma el estado actual.
             </div>
           )}
           {posiblementeMuerta && (
-            <div className="card p-3 text-sm" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
+            <div className="card p-3 text-sm rv-qa-malo">
               El motor lleva {sinLatidoS}s sin dar señales y la corrida sigue marcada «corriendo»:
               pudo haber muerto sin alcanzar a escribir su aborto. Si no avanza, el tenant
               «{corrida.tenantNombre}» puede haber quedado sembrado — revísalo y límpialo a mano.
@@ -215,31 +211,31 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
 
           {/* ── El renglón resumen ────────────────────────────────────────── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
-              <div className="text-xs" style={{ color: 'var(--muted)' }}>Estado</div>
+            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
+              <div className="text-xs rv-qa-mut">Estado</div>
               <div className="mt-1"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></div>
-              {corrida.motivo && <div className="text-[10px] mt-1" style={{ color: 'var(--muted)' }}>{corrida.motivo}</div>}
+              {corrida.motivo && <div className="text-[10px] mt-1 rv-qa-mut">{corrida.motivo}</div>}
             </div>
-            <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
-              <div className="text-xs" style={{ color: 'var(--muted)' }}>Carril</div>
+            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
+              <div className="text-xs rv-qa-mut">Carril</div>
               <div className="mt-1 text-sm font-medium">
                 {corrida.carril === 'completo' ? 'completo — en varias pasadas' : 'rápido — en proceso, pipeline real'}
               </div>
               {corrida.carril === 'completo' && (
-                <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>
+                <div className="text-[10px] mt-0.5 rv-qa-mut">
                   pasada {corrida.pasadas} · {enPasada ? 'trabajando ahora' : viva ? 'pausada entre pasadas' : 'terminada'}
                 </div>
               )}
             </div>
-            <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
-              <div className="text-xs" style={{ color: 'var(--muted)' }}>Costo hasta ahora (real)</div>
+            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
+              <div className="text-xs rv-qa-mut">Costo hasta ahora (real)</div>
               <div className="mt-1 text-sm font-medium tabular">{usd4(corrida.costoUsdTotal ?? 0)}</div>
-              <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>leído de llm_costo — nunca estimado</div>
+              <div className="text-[10px] mt-0.5 rv-qa-mut">leído de llm_costo — nunca estimado</div>
             </div>
-            <div className="hairline rounded-lg px-3 py-2.5" style={{ background: 'var(--surface)' }}>
-              <div className="text-xs" style={{ color: 'var(--muted)' }}>Tenant sintético</div>
+            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
+              <div className="text-xs rv-qa-mut">Tenant sintético</div>
               <div className="mt-1 text-xs font-mono break-all">{corrida.tenantNombre}</div>
-              <div className="text-[10px] mt-0.5" style={{ color: 'var(--muted)' }}>
+              <div className="text-[10px] mt-0.5 rv-qa-mut">
                 {corrida.inicio ? `inicio ${fechaHoraMx(corrida.inicio)}` : 'sin arrancar'}{corrida.fin ? ` · fin ${fechaHoraMx(corrida.fin)}` : ''}
               </div>
             </div>
@@ -254,41 +250,38 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
               <TituloSeccion>El avance, foto por foto</TituloSeccion>
               <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
                 <div className="font-display text-[22px] leading-tight font-semibold tabular">
-                  {av.ok} <span className="text-[14px] font-normal" style={{ color: 'var(--muted)' }}>de {av.total} fotos procesadas</span>
+                  {av.ok} <span className="text-[14px] font-normal rv-qa-mut">de {av.total} fotos procesadas</span>
                 </div>
                 {av.sinTurno > 0 && (
-                  <span className="text-xs" style={{ color: 'var(--muted)' }}>· {av.sinTurno} sin turno todavía</span>
+                  <span className="text-xs rv-qa-mut">· {av.sinTurno} sin turno todavía</span>
                 )}
                 {av.enVuelo > 0 && (
-                  <span className="text-xs" style={{ color: 'var(--muted)' }}>· {av.enVuelo} en vuelo</span>
+                  <span className="text-xs rv-qa-mut">· {av.enVuelo} en vuelo</span>
                 )}
                 {av.bad > 0 && (
-                  <span className="text-xs" style={{ color: 'var(--bad)' }}>· {av.bad} con fallo</span>
+                  <span className="text-xs rv-qa-bad">· {av.bad} con fallo</span>
                 )}
                 {av.interrumpidas > 0 && (
-                  <span className="text-xs" style={{ color: 'var(--warn)' }}>
+                  <span className="text-xs rv-qa-warn">
                     · {av.interrumpidas} INTERRUMPIDA{av.interrumpidas === 1 ? '' : 'S'} (una pasada murió con
                     ellas en vuelo — no se sabe cómo acabaron: ni acierto ni fallo)
                   </span>
                 )}
               </div>
-              <div className="mt-1.5 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--line2)' }}>
-                <div className="h-full" style={{
-                  width: `${av.total > 0 ? Math.round(((av.ok + av.bad) / av.total) * 100) : 0}%`,
-                  background: 'var(--marca)',
-                }} />
+              <div className="mt-1.5 h-1.5 rounded-full overflow-hidden rv-qa-fl2">
+                <progress className="rv-qa-barra" value={av.ok + av.bad} max={Math.max(av.total, 1)} aria-label="Avance de la corrida" />
               </div>
 
               {corrida.corte !== null && (
-                <p className="text-xs mt-2 m-0" style={{ color: corrida.corte === 'dinero' ? 'var(--bad)' : 'var(--muted)' }}>
+                <p className={corrida.corte === 'dinero' ? 'text-xs mt-2 m-0 rv-qa-bad' : 'text-xs mt-2 m-0 rv-qa-mut'}>
                   {corrida.corte === 'dinero'
-                    ? '⛔ La última pasada paró por DINERO — la corrida no vuelve a gastar. El motivo de arriba trae la cifra medida.'
-                    : '⏱ La última pasada paró por RELOJ. Ninguna foto se pierde: la siguiente continúa desde donde iba y no repite las que ya se midieron.'}
+                    ? 'La última pasada paró por DINERO — la corrida no vuelve a gastar. El motivo de arriba trae la cifra medida.'
+                    : 'La última pasada paró por RELOJ. Ninguna foto se pierde: la siguiente continúa desde donde iba y no repite las que ya se midieron.'}
                 </p>
               )}
 
               {av.sinTurnoIds.length > 0 && (
-                <details className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                <details className="mt-2 text-xs rv-qa-mut">
                   <summary className="cursor-pointer">
                     Las {av.sinTurnoIds.length} que no han tenido turno — dichas por su nombre, no contadas nada más
                   </summary>
@@ -303,16 +296,16 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
               )}
 
               {viva && (
-                <p className="text-[11px] mt-2 m-0" style={{ color: 'var(--faint)' }}>
+                <p className="text-[11px] mt-2 m-0 rv-qa-faint">
                   Esta pantalla es la que empuja las pasadas. Si la cierras, la corrida se queda
                   pausada exactamente donde iba —sin perder nada— y sigue al volver a abrirla.
                 </p>
               )}
               {avisoPasada && (
-                <p className="text-[11px] mt-1 m-0 font-mono" style={{ color: 'var(--faint)' }}>{avisoPasada}</p>
+                <p className="text-[11px] mt-1 m-0 font-mono rv-qa-faint">{avisoPasada}</p>
               )}
               {errorPasada && (
-                <p className="text-xs mt-1 m-0" style={{ color: 'var(--bad)' }}>
+                <p className="text-xs mt-1 m-0 rv-qa-bad">
                   La pasada no pudo correr: {errorPasada}
                 </p>
               )}
@@ -323,7 +316,7 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
           <div className="card p-3">
             <TituloSeccion>La corrida, paso a paso</TituloSeccion>
             {corrida.pasos.length === 0 ? (
-              <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
+              <p className="text-sm mt-2 rv-qa-mut">
                 Todavía no arranca el primer paso{viva ? ' — esta pantalla se actualiza sola cada 2.5 s' : ''}.
               </p>
             ) : (
@@ -331,14 +324,14 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
                 {corrida.pasos.map((p) => {
                   const pp = PILL_PASO[p.estado] ?? PILL_PASO.pendiente;
                   return (
-                    <div key={p.n} className="flex items-start justify-between gap-3 text-sm py-1 border-b" style={{ borderColor: 'var(--line2)' }}>
+                    <div key={p.n} className="flex items-start justify-between gap-3 text-sm py-1 border-b rv-qa-bl2">
                       <div className="min-w-0">
-                        <span className="font-mono text-xs mr-2" style={{ color: 'var(--muted)' }}>{p.n}.</span>
+                        <span className="font-mono text-xs mr-2 rv-qa-mut">{p.n}.</span>
                         {p.nombre}
-                        {p.detalle && <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{p.detalle}</div>}
+                        {p.detalle && <div className="text-xs mt-0.5 rv-qa-mut">{p.detalle}</div>}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        {p.costoUsd > 0 && <span className="text-xs tabular" style={{ color: 'var(--muted)' }}>{usd4(p.costoUsd)}</span>}
+                        {p.costoUsd > 0 && <span className="text-xs tabular rv-qa-mut">{usd4(p.costoUsd)}</span>}
                         <StatusPill estado={pp.estado}>{pp.etiqueta}</StatusPill>
                       </div>
                     </div>
@@ -352,14 +345,14 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
           <div className="card p-3">
             <TituloSeccion>El veredicto — el LLM explora, el código juzga</TituloSeccion>
             {corrida.veredicto === null ? (
-              <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
+              <p className="text-sm mt-2 rv-qa-mut">
                 {viva ? 'Los oráculos corren al final de la corrida.' : 'Esta corrida terminó sin veredicto — los oráculos no alcanzaron a correr (ver el motivo arriba).'}
               </p>
             ) : (
               <div className="overflow-x-auto mt-2">
                 <table aria-label="Veredicto por invariante" className="w-full text-sm">
                   <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
+                    <tr className="rv-qa-mut text-left">
                       <th scope="col" className="px-2 py-1.5 font-medium">Invariante</th>
                       <th scope="col" className="px-2 py-1.5 font-medium">Estado</th>
                       <th scope="col" className="px-2 py-1.5 font-medium">Severidad</th>
@@ -369,7 +362,7 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
                     {corrida.veredicto.map((v, i) => {
                       const pv = PILL_ORACULO[v.estado];
                       return (
-                        <tr key={i} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
+                        <tr key={i} className="border-t align-top rv-qa-bl2">
                           <td className="px-2 py-2">
                             <details>
                               <summary className="cursor-pointer font-medium">{v.invariante}</summary>
@@ -382,8 +375,8 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
                                   <span className="font-semibold">real:</span>{' '}
                                   <code className="font-mono break-all">{json(v.real)}</code>
                                 </div>
-                                {v.detalle && <div style={{ color: 'var(--muted)' }}>{v.detalle}</div>}
-                                <div className="font-mono" style={{ color: 'var(--faint)' }}>{v.oraculo}</div>
+                                {v.detalle && <div className="rv-qa-mut">{v.detalle}</div>}
+                                <div className="font-mono rv-qa-faint">{v.oraculo}</div>
                               </div>
                             </details>
                           </td>
@@ -406,15 +399,14 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
             <div className="card p-3">
               <TituloSeccion>La conversación (evidencia, solo lectura)</TituloSeccion>
               {corrida.turnos.length === 0 ? (
-                <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
+                <p className="text-sm mt-2 rv-qa-mut">
                   {viva ? 'Los turnos aparecen al cierre de la corrida.' : 'No quedó conversación registrada.'}
                 </p>
               ) : (
                 <div className="mt-2 space-y-1.5 max-h-80 overflow-y-auto pr-1">
                   {corrida.turnos.map((t, i) => (
                     <div key={i} className={`flex ${t.rol === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className="max-w-[85%] rounded-xl px-3 py-1.5 text-xs whitespace-pre-wrap hairline"
-                        style={t.rol === 'user' ? { background: 'var(--marca)', color: 'var(--marca-fg)' } : { background: 'var(--surface)' }}>
+                      <div className={t.rol === 'user' ? 'max-w-[85%] rounded-xl px-3 py-1.5 text-xs whitespace-pre-wrap hairline rv-qa-burbuja-user' : 'max-w-[85%] rounded-xl px-3 py-1.5 text-xs whitespace-pre-wrap hairline rv-qa-burbuja-bot'}>
                         <span className="inline-flex items-center gap-1 font-medium text-[10px] opacity-70">
                           <MessageCircle width={10} height={10} strokeWidth={1.75} /> {t.rol === 'user' ? 'chofer sintético' : 'Likida'}
                         </span>
@@ -430,9 +422,9 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
               <TituloSeccion>Fotos y PDF de esta corrida</TituloSeccion>
               <div className="mt-2 space-y-1.5">
                 {fotos.map((f) => (
-                  <div key={f.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b" style={{ borderColor: 'var(--line2)' }}>
+                  <div key={f.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b rv-qa-bl2">
                     <span className="inline-flex items-center gap-1.5 min-w-0">
-                      <Camera width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                      <Camera width={13} height={13} strokeWidth={1.75} className="rv-qa-mut" />
                       <span className="truncate text-xs">{f.etiqueta}</span>
                     </span>
                     {f.url ? (
@@ -440,19 +432,19 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
                         abrir (firma 60 s)
                       </a>
                     ) : (
-                      <span className="text-xs shrink-0" style={{ color: 'var(--faint)' }}>sin firma</span>
+                      <span className="text-xs shrink-0 rv-qa-faint">sin firma</span>
                     )}
                   </div>
                 ))}
                 {(corrida.pdfs ?? []).length === 0 ? (
-                  <p className="text-xs pt-1" style={{ color: 'var(--muted)' }}>
+                  <p className="text-xs pt-1 rv-qa-mut">
                     {viva ? 'El PDF aparece si el cierre lo genera.' : 'No quedó PDF registrado en esta corrida.'}
                   </p>
                 ) : (
                   pdfs.map((p) => (
                     <div key={p.path} className="flex items-center justify-between gap-2 text-sm py-1">
                       <span className="inline-flex items-center gap-1.5 min-w-0">
-                        <FileText width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
+                        <FileText width={13} height={13} strokeWidth={1.75} className="rv-qa-mut" />
                         <span className="truncate text-xs font-mono">{p.path.split('/').pop()}</span>
                       </span>
                       {p.url ? (
@@ -460,7 +452,7 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
                           abrir PDF (firma 60 s)
                         </a>
                       ) : (
-                        <span className="text-xs shrink-0" style={{ color: 'var(--faint)' }}>
+                        <span className="text-xs shrink-0 rv-qa-faint">
                           borrado con el tenant (retención «conservar» lo preserva)
                         </span>
                       )}
@@ -473,12 +465,11 @@ export function CorridaViva({ corridaInicial, fotosIniciales, pdfsIniciales, med
 
           {/* ── La limpieza, dicha ────────────────────────────────────────── */}
           {corrida.limpieza && (
-            <div className="card p-3 text-xs" style={{ color: 'var(--muted)' }}>
+            <div className="card p-3 text-xs rv-qa-mut">
               <span className="font-semibold">Limpieza:</span> {corrida.limpieza}
             </div>
           )}
-        </div>
       </div>
-    </main>
+    </MarcoPagina>
   );
 }
