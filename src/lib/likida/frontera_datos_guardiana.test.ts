@@ -690,7 +690,9 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 342;
 // Ronda 7: +2 (2,489 -> 2,491), medidas con el guardian: `conectores/tms/prueba_en_seco.ts` (+1, el mapeo activo de una flota) y `dashboard/contador/timbrado.tsx` (+1: el RFC y el
 // modo GUARDADOS al momento de guardar, para decidir si el cambio exige segundo factor; se lee en la accion, no se confia en lo pintado). Funcionalidad nueva, no codigo migrado.
 // Integración r19: +13 llamadas (2,501 -> 2,514) medidas con el guardián, de las mismas lecturas nuevas de /admin y del runner; techo subido a lo medido.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_514;
+// W3 Dinero del admin: +2 llamadas (2,514 -> 2,516), medidas con el guardián: `saas/transferencia.ts` `listarFacturasSaas` (la lista de facturas de la mensualidad para /admin/facturas y el CSV del contador) y
+// `llm/repo.ts` `listarAlertasTopeRecientes` (los avisos de tope de /admin/consumo). Lecturas nuevas del superadmin, no código migrado.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_516;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

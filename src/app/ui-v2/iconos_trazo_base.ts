@@ -93,7 +93,6 @@ export const BASE_SIN_TRAZO: Record<string, number> = {
   'app/admin/capacidad-forecast/page.tsx': 3,
   'app/admin/compliance/page.tsx': 3,
   'app/admin/consola.tsx': 14,
-  'app/admin/consumo/page.tsx': 5,
   'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
   'app/admin/conversaciones/page.tsx': 1,
   'app/admin/corridas/[id]/page.tsx': 2,
