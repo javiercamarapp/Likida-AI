@@ -51,7 +51,7 @@ export const PERFIL_CLIENTE: PerfilAgente = {
 
 export const PERFIL_SUPERADMIN: PerfilAgente = {
   textos: {
-    titulo: 'El copiloto del fundador',
+    titulo: 'Copiloto',
     subtitulo: 'La compañía entera, con la cifra que ya calculó el motor — y las acciones gateadas que hoy exigen recorrer pantallas.',
     placeholder: 'Pregunta sobre la compañía, o pide una acción…',
     etiquetaFormulario: 'Preguntar al copiloto',
@@ -65,8 +65,8 @@ export const PERFIL_SUPERADMIN: PerfilAgente = {
   },
   temas: [
     { categoria: 'Negocio', preguntas: ['¿Cómo va el negocio?', '¿Por qué subió el costo de IA?'] },
-    { categoria: 'Operación', preguntas: ['¿Qué espera decisión hoy?', '¿Qué agentes están apagados?'] },
-    { categoria: 'Acciones', preguntas: ['Apaga el agente de cobranza'] },
+    { categoria: 'Operación', preguntas: ['¿Qué espera decisión hoy?', '¿Qué agentes están apagados?', '¿Qué debo mirar en la pantalla que tengo abierta?'] },
+    { categoria: 'Acciones', preguntas: ['Apaga el agente de cobranza', 'Enciende el agente de cobranza'] },
   ],
   endpoint: '/api/admin/copiloto',
   fases: [

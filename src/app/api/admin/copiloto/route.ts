@@ -39,6 +39,7 @@ import { validarConversacionId } from '@/app/api/dashboard/chat/validacion';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { sesionSuperadmin } from './puerta';
+import { rutaDePantallaValida } from '@/lib/agents/copiloto-contexto';
 import { registrarEventoSeguridad } from '@/lib/seguridad/eventos';
 import { estaApagado } from '@/lib/likida/interruptores';
 import { supabaseServer } from '@/lib/supabase/server';
@@ -251,6 +252,8 @@ export async function POST(req: Request) {
           // de un env global ni de un tenant de relleno.
           budgetTenantId: sesion.tenantId,
           mensajes,
+          // La pantalla que Javier está viendo: dato validado con lista estricta, jamás texto libre del cliente.
+          rutaPantalla: rutaDePantallaValida((cuerpo.contexto as { ruta?: unknown } | null | undefined)?.ruta),
           onPaso: (p) => manda({ t: 'paso', fase: p.fase, tool: p.tool }),
         });
         // EL INTENT NACE AL PROPONER (copiloto-intents.ts): cada bloque

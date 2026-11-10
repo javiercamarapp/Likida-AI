@@ -26,7 +26,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
 
   if (!a.implementada) {
     return (
-      <section className="card rv-chat__bloque rv-accion" data-estado="no-implementada" aria-label="Acción no disponible">
+      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="no-implementada" aria-label="Acción no disponible">
         <p className="rv-accion__titulo"><ShieldAlert width={14} height={14} strokeWidth={1.75} aria-hidden="true" />{a.accion} — todavía no está implementada desde el copiloto</p>
         <p className="rv-accion__linea">{a.efecto}</p>
         <p className="rv-chat__nota">Hoy se hace desde su pantalla del panel.</p>
@@ -36,14 +36,14 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   // Sin intent no hay botón (defensa: una propuesta vieja re-pintada sin su llave no puede fingir que ejecuta).
   if (!a.intentId) {
     return (
-      <section className="card rv-chat__bloque rv-accion" data-estado="sin-llave">
+      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="sin-llave">
         <p className="rv-accion__linea">Esta propuesta ya no trae su llave de ejecución. Pídela de nuevo — el copiloto la re-propone con el estado de hoy.</p>
       </section>
     );
   }
   if (estado === 'hecha' || estado === 'cancelada') {
     return (
-      <section className="card rv-chat__bloque rv-accion" data-estado={estado} role="status">
+      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} role="status">
         <p className="rv-accion__linea">{estado === 'hecha' ? 'Acción ejecutada — el resultado quedó abajo.' : 'Acción cancelada. Nada se movió.'}</p>
       </section>
     );
@@ -76,7 +76,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   }
 
   return (
-    <section className="card rv-chat__bloque rv-accion" data-estado={estado} aria-label="Confirmar acción">
+    <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} aria-label="Confirmar acción">
       <p className="rv-accion__titulo">Voy a {apagar ? 'apagar' : encender ? 'encender' : 'ejecutar'} <span className="rv-accion__objetivo">{a.objetivo}</span></p>
       <label className="rv-accion__campo">
         <span>Motivo (obligatorio)</span>

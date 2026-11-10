@@ -19,7 +19,9 @@ import { getFichaCliente } from '@/lib/admin/ficha-cliente';
 import { getAdquisicion } from '@/lib/admin/adquisicion';
 import { gastoDelDiaUsd } from '@/lib/likida/agentes/runner';
 import { ultimasCorridasNegocio } from '@/lib/likida/agentes/corridas';
-import { getResumenNegocio, getConteosPlataforma, getCostoPorFaseModelo } from '@/lib/admin/negocio';
+import { getResumenNegocio, getConteosPlataforma, getCostoPorFaseModelo, costoIaPorDiaDesde } from '@/lib/admin/negocio';
+import { getAgentesParados } from '@/lib/admin/agentes-parados';
+import { armarBriefing } from '@/lib/admin/copiloto-briefing';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
 import { clasificacionDeGuardia } from '@/lib/admin/guardia';
 import { ultimasEntradasBitacora } from '@/lib/admin/bitacora';
@@ -37,6 +39,7 @@ export const TOOLS_COPILOTO_LECTURA = [
   'metrica_negocio', 'conteos_plataforma', 'bandeja', 'guardia', 'metrica_norte',
   'estado_agentes', 'traza_corrida', 'pipeline_ventas', 'cobranza_saas',
   'costo_por_fase_modelo', 'bitacora', 'ficha_cliente', 'estado_runner', 'adquisicion',
+  'decide_hoy', 'agentes_parados', 'costo_ia_por_dia',
 ] as const;
 
 /** tool → la pantalla de /admin que muestra lo mismo (la fuente clicable). */
@@ -55,6 +58,9 @@ export const PANTALLA_POR_TOOL: Record<string, { ruta: string; etiqueta: string 
   ficha_cliente: { ruta: '/admin/flotas', etiqueta: 'Flotas / Clientes' },
   estado_runner: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
   adquisicion: { ruta: '/admin/crecimiento', etiqueta: 'Crecimiento' },
+  decide_hoy: { ruta: '/admin/escalaciones', etiqueta: 'Escalaciones' },
+  agentes_parados: { ruta: '/admin/agentes', etiqueta: 'Agentes' },
+  costo_ia_por_dia: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos' },
 };
 
 registerTool('metrica_negocio', {
@@ -411,5 +417,56 @@ registerTool('adquisicion', {
   handler: async () => {
     const a = await getAdquisicion(ahoraMs());
     return { pantalla: PANTALLA_POR_TOOL.adquisicion.ruta, ...a };
+  },
+});
+
+registerTool('decide_hoy', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'decide_hoy',
+      description: 'El briefing «Decide hoy»: lo que de verdad pide una decisión del dueño (agentes parados, bandeja de aprobaciones vencida, incidentes graves S1/S2), cada punto con la decisión propuesta y su pantalla. Las fuentes que no se pudieron leer vienen en fuentesCiegas: di «no se pudo leer X», nunca «no hay pendientes».',
+      parameters: SIN_PARAMS,
+    },
+  },
+  handler: async () => {
+    const b = await armarBriefing(ahoraMs());
+    return { pantalla: PANTALLA_POR_TOOL.decide_hoy.ruta, ...b };
+  },
+});
+
+registerTool('agentes_parados', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'agentes_parados',
+      description: 'Los agentes vivos con runner habilitado que llevan 72 horas o más sin correr (o nunca corrieron) y el motivo del último salto del runner (p. ej. bandeja llena). `sinDato: true` = no se pudo leer; no equivale a «todos corren».',
+      parameters: SIN_PARAMS,
+    },
+  },
+  handler: async () => {
+    const r = await getAgentesParados(ahoraMs());
+    if (r === null) return { pantalla: PANTALLA_POR_TOOL.agentes_parados.ruta, sinDato: true, nota: 'No se pudo leer qué agentes están parados.' };
+    return { pantalla: PANTALLA_POR_TOOL.agentes_parados.ruta, habilitados: r.habilitados, umbralHoras: r.umbralHoras, parados: r.parados.slice(0, 25), totalParados: r.parados.length };
+  },
+});
+
+registerTool('costo_ia_por_dia', {
+  schema: {
+    type: 'function',
+    function: {
+      name: 'costo_ia_por_dia',
+      description: 'El costo de IA en USD por día (UTC) de los últimos 14 días: solo los días con actividad. Sirve para graficar una serie: entrégala como bloque «serie» con `puntos` tal cual, sin rellenar los días sin actividad.',
+      parameters: SIN_PARAMS,
+    },
+  },
+  handler: async () => {
+    const desde = new Date(ahoraMs() - 14 * 86_400_000).toISOString();
+    const dias = await costoIaPorDiaDesde(desde);
+    return {
+      pantalla: PANTALLA_POR_TOOL.costo_ia_por_dia.ruta,
+      puntos: dias.map((d) => ({ dia: d.dia, valor: Math.round(d.costoUsd * 10000) / 10000 })),
+      nota: 'Solo días con actividad; USD. Costo medido en llm_costo.',
+    };
   },
 });

@@ -27,6 +27,7 @@ import { TOOLS_COPILOTO_LECTURA } from './copiloto-tools';
 import { CATALOGO_ACCIONES, accionDelCatalogo, gateoEfectivo } from './copiloto-acciones';
 import { createLlmBudget } from '@/lib/llm/budget';
 import { INTERRUPTORES, estaApagado, type NombreInterruptor } from '@/lib/likida/interruptores';
+import { lineaDeContexto } from './copiloto-contexto';
 import './copiloto-tools'; // registra las tools 🟢 al importar
 
 /** La previsualización de una acción gateada — la interfaz la pinta con
@@ -197,6 +198,7 @@ const SYSTEM_COPILOTO = `Eres el copiloto de Javier, fundador de Likida (liquida
 LA REGLA DE ORO DEL REPO ENTERO: la IA conversa, el motor calcula. Ninguna cifra sale de tu cabeza — toda cifra viene de una tool de este turno, y una guardia determinista tumba la respuesta que traiga un número que ninguna tool devolvió. Si no tienes el dato, dilo ("no pude medirlo") en vez de estimarlo.
 
 CÓMO OPERAS:
+- "¿Qué decido hoy?" = tool decide_hoy; "¿qué agentes no corren?" = agentes_parados; una evolución en el tiempo del costo de IA = costo_ia_por_dia y entrégala como bloque "serie" con los puntos tal cual los devolvió la tool (nunca inventes ni rellenes días).
 - Consulta con tus tools ANTES de afirmar. "¿Qué espera decisión hoy?" = tool bandeja; "¿qué severidad tiene?" = tool guardia (la clasificación es determinista; tú solo la redactas). "¿Cómo va el negocio?" = metrica_negocio. "¿Qué agentes están apagados?" = estado_agentes.
 - Si una fuente vino ciega (fuentesCiegas, valores null), lo DICES por nombre: "no se pudo leer X" nunca se colapsa a "hay 0".
 - Para operar algo (apagar un agente), llama proponer_accion Y LUEGO entregar_respuesta_admin explicando el efecto. Tú NUNCA ejecutas: Javier confirma en la interfaz. Hoy están implementadas apagar_agente, encender_agente (con motivo; el interruptor global pide doble confirmación) y correr_runner; las demás acciones del catálogo lo dicen con esas palabras.
@@ -216,6 +218,8 @@ export async function ejecutarCopiloto(opts: {
   timeoutMs?: number;
   signal?: AbortSignal;
   onPaso?: (ev: { fase: 'inicio' | 'fin'; tool: string }) => void;
+  /** La ruta de /admin que Javier está viendo (ya validada por `rutaDePantallaValida`). Es un dato para el modelo, no una instrucción. */
+  rutaPantalla?: string | null;
 }): Promise<RespuestaCopiloto> {
   const runId = randomUUID();
   // Aunque las tools del copiloto sean cross-tenant, el gasto no puede quedar
@@ -233,7 +237,7 @@ export async function ejecutarCopiloto(opts: {
   const fechaLarga = new Intl.DateTimeFormat('es-MX', {
     timeZone: TZ_MX, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: 'numeric', minute: '2-digit',
   }).format(ahora);
-  const system = `${SYSTEM_COPILOTO}\n\nAHORA MISMO ES: ${fechaLarga} (hora de Ciudad de México). Es dato del sistema: fecha y hora se responden directo, sin tools.`;
+  const system = `${SYSTEM_COPILOTO}\n\nAHORA MISMO ES: ${fechaLarga} (hora de Ciudad de México). Es dato del sistema: fecha y hora se responden directo, sin tools.${lineaDeContexto(opts.rutaPantalla ?? null)}`;
 
   const history: OpenAI.Chat.ChatCompletionMessageParam[] = opts.mensajes.map((m) => ({
     role: m.rol === 'usuario' ? 'user' : 'assistant', content: m.texto,
