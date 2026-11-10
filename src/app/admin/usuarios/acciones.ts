@@ -10,6 +10,7 @@ import { pasoExtraSuperadmin } from '@/lib/admin/acciones_riesgo';
 import {
   cambiarRolDesdeAdmin, darDeBajaDesdeAdmin, reactivarDesdeAdmin, reenviarAccesoDesdeAdmin, cerrarSesionesDesdeAdmin,
 } from '@/lib/auth/gestion_admin';
+import { darDeBajaPersonalLikida, reactivarPersonalLikida } from '@/lib/auth/baja_acceso';
 import type { ResultadoAccion } from '../ui/forma';
 
 // Gestión de personas de las flotas desde /admin: cambiar rol, dar de baja, reactivar, reenviar el acceso y cerrar sesiones. Misma lógica
@@ -92,5 +93,40 @@ export async function accionCerrarSesionesUsuario(_previo: ResultadoAccion, fd: 
       : { error: 'No se pudo confirmar el cierre de sesiones — quedó registrado; vuelve a intentarlo.' };
   } catch (e) {
     return { error: mensajeParaPantalla(e, 'cerrar sus sesiones') };
+  }
+}
+
+// ── 4b: PERSONAL DE LIKIDA (superadmin y vendedor). Marcado para revisión del dueño: la lógica y sus candados viven en
+// `lib/auth/baja_acceso.ts` (nunca a uno mismo, nunca el último superadmin) y nace apagada (LIKIDA_BAJA_PERSONAL_LIKIDA).
+const SIN_ASIENTO = ' OJO: el acto ya se hizo, pero NO se pudo escribir en la bitácora; avísale a quien administra la base.';
+
+export async function accionDarDeBajaPersonalLikida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const s = await requireSuperadmin();
+  const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
+  if (pasoMfa) return { error: pasoMfa };
+  try {
+    const r = await darDeBajaPersonalLikida(id(fd), s);
+    refrescar();
+    const sesion = r.sesionRevocada
+      ? ' Sus sesiones quedaron cerradas.'
+      : ' La cuenta quedó de baja, pero NO se pudo confirmar el cierre de sus sesiones: vuelve a intentarlo.';
+    return { ok: `Baja hecha (${nombreDeRol(r.rol)}).${sesion}${r.bitacora ? '' : SIN_ASIENTO}` };
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'dar de baja al personal de Likida') };
+  }
+}
+
+export async function accionReactivarPersonalLikida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const s = await requireSuperadmin();
+  const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
+  if (pasoMfa) return { error: pasoMfa };
+  try {
+    const r = await reactivarPersonalLikida(id(fd), s);
+    refrescar();
+    return r.accesoRestaurado
+      ? { ok: `Cuenta reactivada (${nombreDeRol(r.rol)}): ya puede volver a entrar.${r.bitacora ? '' : SIN_ASIENTO}` }
+      : { error: 'Cuenta reactivada en el panel, pero el servicio de autenticación no confirmó levantar el bloqueo. Vuelve a intentarlo en un minuto.' };
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'reactivar al personal de Likida') };
   }
 }

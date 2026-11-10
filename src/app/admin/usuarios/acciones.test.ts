@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const d = vi.hoisted(() => ({
-  sup: vi.fn(), paso: vi.fn(), rol: vi.fn(), baja: vi.fn(), react: vi.fn(), reenv: vi.fn(), ses: vi.fn(), rev: vi.fn(),
+  sup: vi.fn(), bajaL: vi.fn(), reactL: vi.fn(), paso: vi.fn(), rol: vi.fn(), baja: vi.fn(), react: vi.fn(), reenv: vi.fn(), ses: vi.fn(), rev: vi.fn(),
 }));
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: d.sup }));
 vi.mock('next/cache', () => ({ revalidatePath: d.rev }));
 vi.mock('@/lib/env', () => ({ appUrl: () => 'https://app.test' }));
 vi.mock('@/lib/admin/acciones_riesgo', async (i) => ({ ...(await i<typeof import('@/lib/admin/acciones_riesgo')>()), pasoExtraSuperadmin: d.paso }));
+vi.mock('@/lib/auth/baja_acceso', () => ({ darDeBajaPersonalLikida: d.bajaL, reactivarPersonalLikida: d.reactL }));
 vi.mock('@/lib/auth/gestion_admin', () => ({
   cambiarRolDesdeAdmin: d.rol, darDeBajaDesdeAdmin: d.baja, reactivarDesdeAdmin: d.react, reenviarAccesoDesdeAdmin: d.reenv,
   cerrarSesionesDesdeAdmin: d.ses,
@@ -86,5 +87,28 @@ describe('acciones de personas en /admin', () => {
   it('personal de Likida: el rechazo declarado de gestion_admin sale verbatim', async () => {
     d.rol.mockRejectedValue(new DatoInvalido('Esa cuenta es de Likida (superadmin o vendedor), no de una flota'));
     expect((await accionCambiarRolUsuario(null, fd({ id: 'u-1', rol: 'encargado' }))).error).toMatch(/cuenta es de Likida/);
+  });
+});
+
+describe('4b: personal de Likida', () => {
+  const baja = reales.accionDarDeBajaPersonalLikida as unknown as A;
+  const reac = reales.accionReactivarPersonalLikida as unknown as A;
+  it('re-gatean y piden el segundo factor antes de tocar nada', async () => {
+    d.sup.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
+    await expect(baja(null, fd({ id: 'u' }))).rejects.toThrow('REDIRECT');
+    d.paso.mockResolvedValueOnce('Falta el segundo factor.');
+    expect(await reac(null, fd({ id: 'u' }))).toEqual({ error: 'Falta el segundo factor.' });
+    expect(d.bajaL).not.toHaveBeenCalled();
+    expect(d.reactL).not.toHaveBeenCalled();
+  });
+  it('la baja dice la verdad de la bitácora y de las sesiones', async () => {
+    d.bajaL.mockResolvedValue({ rol: 'vendedor', sesionRevocada: true, bitacora: false, candado: 'rpc' });
+    const r = await baja(null, fd({ id: 'u-9' }));
+    expect(d.bajaL).toHaveBeenCalledWith('u-9', expect.objectContaining({ userId: 'adm-1' }));
+    expect(r.ok).toContain('NO se pudo escribir en la bitácora');
+  });
+  it('un candado que rechaza sale como error en pantalla', async () => {
+    d.bajaL.mockRejectedValue(new DatoInvalido('Es el único superadmin activo.'));
+    expect(await baja(null, fd({ id: 'u' }))).toEqual({ error: expect.stringContaining('único superadmin') });
   });
 });
