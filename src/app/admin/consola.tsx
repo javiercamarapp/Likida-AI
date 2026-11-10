@@ -45,11 +45,10 @@ const FASE_POR_RUTA: Record<string, string> = {
   '/admin/agente-whatsapp': 'whatsapp',
 };
 
-/** Las dos rutas de AGENTES que no son agentes que corran solos — decirlo es
- *  mejor que un "sin corridas" que sugiera que deberían tener. */
+/** La ruta de AGENTES que no es un agente que corra solo — decirlo es
+ *  mejor que un "sin corridas" que sugiera que debería tener. */
 const NOTA_CONSOLA: Record<string, string> = {
   '/admin/model-ops': 'Consola de modelos — no corre sola, no registra corridas.',
-  '/admin/playground': 'Banco de pruebas — corre cuando tú lo corres.',
 };
 
 /** `agente_corrida.estado` (dominio de la 0102) como pill. Un valor fuera

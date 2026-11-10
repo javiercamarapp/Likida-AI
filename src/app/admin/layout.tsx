@@ -4,7 +4,9 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import AdminChrome from './chrome';
 import { ProveedorRequiereAccion } from './cabecera-admin';
-import { obtenerRequiereAccion } from './requiere-accion';
+import { obtenerPanoramaAccion } from './requiere-accion';
+import { conteosDePestanas } from './conteos-pestanas';
+import { ProveedorConteosPestanas } from './conteos-pestanas-contexto';
 import '../ui-v2/tokens.css';
 // Fuente unificada con el dashboard (Hanken Grotesk, decisión de 7-nov-2026; antes D3 la dejaba en Inter).
 import '../ui-v2/fonts.css';
@@ -35,8 +37,10 @@ export const metadata: Metadata = { title: { default: 'Admin · Likida', templat
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { nombre, avatarUrl } = await requireSuperadmin();
-  // La campana de la cabecera: cuántas cosas esperan a un humano (caché de 45 s; nunca lanza, lectura caída = «sin dato»).
-  const requiereAccion = await obtenerRequiereAccion();
+  // UNA lectura (caché de 45 s; nunca lanza, lectura caída = «sin dato») alimenta la campana de la cabecera (cuántas cosas esperan a un
+  // humano) y los números de las pestañas (hoy Escalaciones): así campana y pestaña no pueden discrepar ni leer la base dos veces.
+  const { resumen: requiereAccion, bandeja } = await obtenerPanoramaAccion();
+  const conteosPestanas = conteosDePestanas(bandeja);
 
   async function cerrarSesion() {
     'use server';
@@ -47,9 +51,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <ProveedorRequiereAccion valor={requiereAccion}>
-      <AdminChrome nombre={nombre ?? null} avatarUrl={avatarUrl ?? null} cerrarSesion={cerrarSesion}>
-        {children}
-      </AdminChrome>
+      <ProveedorConteosPestanas valor={conteosPestanas}>
+        <AdminChrome nombre={nombre ?? null} avatarUrl={avatarUrl ?? null} cerrarSesion={cerrarSesion}>
+          {children}
+        </AdminChrome>
+      </ProveedorConteosPestanas>
     </ProveedorRequiereAccion>
   );
 }

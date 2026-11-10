@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge, Workflow, Briefcase, Layers, SlidersHorizontal, Activity } from 'lucide-react';
-import { type Item, AGENTES, NEGOCIO, PLATAFORMA, CONTROL, SISTEMA, entradaDeRuta } from './rutas';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { type Item, SECCIONES, entradaDeRuta } from './rutas';
 import { SelectorTema } from '../selector-tema';
 import LogoV2 from '../dashboard/shell/logo-v2';
 import { ALTO_LOGO_PX } from '../marco-v2';
@@ -21,7 +21,7 @@ import { numero } from '@/lib/formato';
 // Icono de CADA sección: en el riel (72 px) solo se ve una sección abierta a la vez y las demás se reducen a su icono (antes el riel
 // pintaba las 43 páginas seguidas, la lista se cortaba a medias y se encimaba con el pie).
 const ICONO_SECCION: Record<string, typeof Workflow> = {
-  Agentes: Workflow, Negocio: Briefcase, Plataforma: Layers, Control: SlidersHorizontal, Sistema: Activity,
+  Agentes: Workflow, Negocio: Briefcase, Control: SlidersHorizontal, Sistema: Activity,
 };
 
 function idSeccion(titulo: string): string {
@@ -90,10 +90,8 @@ export function MarcaAdmin() {
   );
 }
 
-const TITULOS_ADMIN: Array<[string, Item[]]> = [
-  ['Agentes', AGENTES], ['Negocio', NEGOCIO], ['Plataforma', PLATAFORMA],
-  ['Control', CONTROL], ['Sistema', SISTEMA],
-];
+// Las secciones salen de `rutas.ts` (SECCIONES: Agentes, Negocio, Control, Sistema), la misma fuente del rótulo de área de cada pantalla.
+const TITULOS_ADMIN: Array<[string, Item[]]> = SECCIONES.map((s) => [s.titulo, s.items]);
 
 export default function SidebarNav() {
   const pathname = usePathname();
@@ -144,14 +142,14 @@ export function SidebarAbajoAdmin({ usoIa }: {
             etiqueta={usoIa ? `Costo de IA · ${usoIa.etiquetaMes}` : 'Costo de IA · este mes'}
             valor={usoIa ? usd(usoIa.mesUsd) : null}
             detalle={usoIa ? `${numero(usoIa.llamadas)} ${usoIa.llamadas === 1 ? 'llamada' : 'llamadas'} al modelo` : undefined}
-            href="/admin/costos-facturacion" hrefTexto="Ver costos"
+            href="/admin/consumo" hrefTexto="Ver consumo"
           />
         </div>
       )}
       {usoIa === undefined && (
-        <Link href="/admin/costos-facturacion" aria-label="Costos de IA" title="Costos de IA" className="rv-item">
+        <Link href="/admin/consumo" aria-label="Consumo de IA" title="Consumo de IA" className="rv-item">
           <Gauge className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-          <span className="rv-item__txt">Costos de IA</span>
+          <span className="rv-item__txt">Consumo de IA</span>
         </Link>
       )}
       <Link href="/admin/dev" title="Entrar a los paneles de los otros roles (vive en Dev desde el 17-ago)" aria-label="Ver los otros paneles" className="rv-item">
