@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { resolverSolicitudArco } from '@/lib/likida/repo';
-import { fechaMx, hoyMx, numero } from '@/lib/formato';
+import { fechaMx, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from '@/lib/likida/pg';
