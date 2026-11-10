@@ -12,9 +12,15 @@ import {
  * Next.js la sustituye por una referencia de cliente, no el arreglo real);
  * un módulo plano no tiene ese problema, se ejecuta igual en ambos lados.
  */
-export type Pestana = { href: string; nombre: string };
+export type Pestana = {
+  href: string; nombre: string;
+  /** Número a la derecha de la pestaña (`null` = sin dato, nunca 0 inventado). Lo llena `requiereAccion()` en fases siguientes. */
+  conteo?: number | null;
+  /** El conteo pide acción. */
+  atencion?: boolean;
+};
 /** Una ENTRADA del sidebar. `pestanas`: las páginas hermanas del grupo (cada una conserva su ruta y sus enlaces); la barra de pestañas
- *  de `pestanas-admin.tsx` las pinta sobre cualquiera de ellas y el sidebar marca la entrada como activa en todas. */
+ *  `PestanasHub` (vía `pestanas-admin.tsx`) las pinta bajo el encabezado de cualquiera de ellas y el sidebar marca la entrada como activa en todas. */
 export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid; pestanas?: readonly Pestana[] };
 
 // 16 entradas (antes 43 en el sidebar): el dueño pidió menos páginas pero poder hacer lo mismo o más. Nada se pierde: cada pantalla

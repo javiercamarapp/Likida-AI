@@ -34,7 +34,9 @@ import {
  * páginas se construyen; una categoría vacía no se pinta (un encabezado
  * sin items le anuncia al usuario lo que no existe).
  */
-export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid };
+/** Una pestaña de contexto: pantallas hermanas de un mismo ítem del menú que `PestanasHub` pinta bajo el encabezado. */
+export type Pestana = { href: string; nombre: string; conteo?: number | null; atencion?: boolean };
+export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid; pestanas?: readonly Pestana[] };
 
 /** Las automatizaciones de Likida — nombradas por la TAREA que le quitan al
  *  cliente, no por la tecnología (auditoría 5, 17-ago-2026: el jefe de
