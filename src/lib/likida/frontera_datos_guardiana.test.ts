@@ -333,7 +333,10 @@ import { join, relative } from 'node:path';
 //   · `saas/transferencia.ts` (+1, archivo que ya contaba): `tenantDeFacturaSaas`, para atribuir a su flota el asiento de la conciliación.
 // Integración r19 (s3/slo + s2/runner + s1/dinero): el barrido real mide 342 (+6 sobre 336) por las lecturas nuevas de /admin y del runner (agentes-parados, calidad-agentes,
 // cola-aprobacion, anotaciones-despliegue, slo-quema y soporte-avisos); funcionalidad nueva, no código migrado. Techo subido a lo medido, sin relajar la regla.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 342;
+// w3/cli (Fase 4, Clientes y acceso): +2 archivos (342 → 344) y +8 llamadas (2,514 → 2,522): `admin/personas.ts` (las personas de todas las flotas con su último
+// acceso de Auth, cruce a propósito como `getEquipo`) y `auth/baja_acceso.ts` (baja y reactivación del personal de Likida, tenant nulo, que `usuarios_escritura` rechaza a propósito).
+// Funcionalidad nueva, no código migrado; cada lectura falla cerrada.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 344;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -690,7 +693,7 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 342;
 // Ronda 7: +2 (2,489 -> 2,491), medidas con el guardian: `conectores/tms/prueba_en_seco.ts` (+1, el mapeo activo de una flota) y `dashboard/contador/timbrado.tsx` (+1: el RFC y el
 // modo GUARDADOS al momento de guardar, para decidir si el cambio exige segundo factor; se lee en la accion, no se confia en lo pintado). Funcionalidad nueva, no codigo migrado.
 // Integración r19: +13 llamadas (2,501 -> 2,514) medidas con el guardián, de las mismas lecturas nuevas de /admin y del runner; techo subido a lo medido.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_514;
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_522;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
