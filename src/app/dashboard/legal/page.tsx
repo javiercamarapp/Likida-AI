@@ -6,8 +6,6 @@ import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { EstadoError } from '../estados';
-import { FormaConAviso, type ResultadoAccion } from '@/app/admin/ui/forma';
 import { fechaHoraMx } from '@/lib/formato';
 import {
   aceptacionesDeFlota, registrarAceptacion, revocarMandato, pendientesDeUsuario, mandatoDe,
@@ -18,7 +16,10 @@ import {
   ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
 import type { Metadata } from 'next';
-import { CampoTexto, Disclosure, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  CampoTexto, Disclosure, EstadoError, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import './legal.css';
 export const metadata: Metadata = { title: 'Términos y mandato' };
 
 
@@ -132,20 +133,19 @@ export default async function PaginaLegal({
   const conPerfil = (await perfilDeTenant(tenantId)) !== null;
 
   return (
-    <MarcoPagina titulo="Términos y mandato" apoyo="Aceptación de Términos y Aviso de privacidad y mandato de autofacturación, con su evidencia." ancho="lectura">
+    <MarcoPagina titulo="Legal y privacidad" apoyo="Aceptación de Términos y Aviso de privacidad y mandato de autofacturación, con su evidencia." ancho="lectura">
       {filas === null ? (
-        <EstadoError mensaje="No pude leer el registro de aceptaciones. No significa que no hayas aceptado nada: la consulta falló." />
+        <EstadoError>No pude leer el registro de aceptaciones. No significa que no hayas aceptado nada: la consulta falló.</EstadoError>
       ) : (
         <>
-          <section className="space-y-2" aria-labelledby="h-resp">
-            <TituloRecuadro id="h-resp" info="legal.responsable">Responsable de privacidad de tu flota</TituloRecuadro>
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+          <Tarjeta titulo="Responsable de privacidad de tu flota" info="legal.responsable">
+            <p className="rv-legal__nota">
               El aviso de privacidad que reciben tus choferes nombra a tu empresa como responsable de sus datos. Si
               aún no los capturas, el aviso <strong>sale igual</strong> y dice qué falta: tus choferes no se quedan sin
               servicio, pero conviene completarlo. Al guardar, el aviso se actualiza solo.
             </p>
             {responsable === null ? (
-              <EstadoError mensaje="No pude leer los datos de tu flota. No significa que estén vacíos: la consulta falló." />
+              <EstadoError>No pude leer los datos de tu flota. No significa que estén vacíos: la consulta falló.</EstadoError>
             ) : esDueno ? (
               <FormaConAviso accion={accionGuardarDatos} boton="Guardar datos del responsable" columnas="md:grid-cols-1">
                 <div className="rv-forma__rejilla">
@@ -155,41 +155,40 @@ export default async function PaginaLegal({
                 <CampoTexto id="domicilio" name="domicilio" etiqueta="Domicilio fiscal" defaultValue={responsable.domicilio ?? ''} />
               </FormaConAviso>
             ) : (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
+              <p className="rv-legal__nota">{SOLO_DUENO}</p>
             )}
-          </section>
+          </Tarjeta>
 
-          <section className="space-y-2" aria-labelledby="h-docs">
-            <TituloRecuadro id="h-docs" info="legal.documentos">Documentos vigentes</TituloRecuadro>
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              <Link href="/terminos" className="underline">{ETIQUETA_DOCUMENTO.terminos}</Link> (versión {VERSION_TERMINOS}) y{' '}
-              <Link href="/privacidad" className="underline">{ETIQUETA_DOCUMENTO.aviso_privacidad}</Link> (versión {VERSION_AVISO_PRIVACIDAD}).
+          <Tarjeta titulo="Documentos vigentes" info="legal.documentos">
+            <p className="rv-legal__nota">
+              <Link href="/terminos" className="rv-legal__enlace">{ETIQUETA_DOCUMENTO.terminos}</Link> (versión {VERSION_TERMINOS}) y{' '}
+              <Link href="/privacidad" className="rv-legal__enlace">{ETIQUETA_DOCUMENTO.aviso_privacidad}</Link> (versión {VERSION_AVISO_PRIVACIDAD}).
             </p>
             {pendientes && pendientes.length === 0 ? (
-              <p className="text-[12px]" style={{ color: 'var(--ok)' }}>Ya aceptaste la versión vigente de ambos.</p>
+              <p className="rv-legal__estado"><StatusChip tono="ok">Al día</StatusChip> Ya aceptaste la versión vigente de ambos.</p>
             ) : esDueno ? (
               <FormaConAviso accion={accionAceptarVigentes} boton="Acepto los Términos y el Aviso de privacidad vigentes" columnas="md:grid-cols-1">
                 <span />
               </FormaConAviso>
             ) : (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
+              <p className="rv-legal__nota">{SOLO_DUENO}</p>
             )}
-          </section>
+          </Tarjeta>
 
-          <section className="space-y-2" aria-labelledby="h-mandato">
-            <TituloRecuadro id="h-mandato" info="legal.mandato">Mandato de autofacturación</TituloRecuadro>
+          <Tarjeta titulo="Mandato de autofacturación" info="legal.mandato">
             <Disclosure variante="linea" abierto={!mandato} titulo="Texto del mandato" resumen={`versión ${MANDATO_AUTOFACTURACION.version}`}>
-              <blockquote className="text-[12px] border-l-2 pl-3" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+              <blockquote className="rv-legal__cita">
                 {MANDATO_AUTOFACTURACION.texto}
               </blockquote>
-              <p className="mt-2 text-[11px]" style={{ color: 'var(--faint)' }}>
+              <p className="rv-legal__pie">
                 Versión {MANDATO_AUTOFACTURACION.version}. Sin este mandato Likida prepara las facturas pero no las emite.
                 El texto no ha pasado por revisión legal definitiva.
               </p>
             </Disclosure>
             {mandato ? (
               <>
-                <p className="text-[12px]" style={{ color: 'var(--ok)' }}>
+                <p className="rv-legal__estado">
+                  <StatusChip tono="ok">Vigente</StatusChip>
                   Mandato vigente: otorgado el {fechaHoraMx(mandato.aceptadoEn)}
                   {mandato.userId === null ? ' (la cuenta que lo otorgó ya fue cancelada)' : ''}.
                 </p>
@@ -200,15 +199,15 @@ export default async function PaginaLegal({
                 )}
               </>
             ) : conPerfil ? (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{MANDATO_NO_DISPONIBLE}</p>
+              <p className="rv-legal__nota">{MANDATO_NO_DISPONIBLE}</p>
             ) : esDueno ? (
               <FormaConAviso accion={accionOtorgarMandato} boton="Otorgo el mandato en nombre de mi empresa" columnas="md:grid-cols-1">
                 <span />
               </FormaConAviso>
             ) : (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no está otorgado. {SOLO_DUENO}</p>
+              <p className="rv-legal__nota">Aún no está otorgado. {SOLO_DUENO}</p>
             )}
-          </section>
+          </Tarjeta>
         </>
       )}
     </MarcoPagina>

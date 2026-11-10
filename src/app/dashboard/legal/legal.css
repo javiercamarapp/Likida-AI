@@ -1,0 +1,7 @@
+/* Legal · solo lo que las piezas del sistema no traen. */
+.rv-legal__nota { margin: 0 0 8px; font-size: var(--t-small); color: var(--muted); }
+.rv-legal__nota strong { color: var(--ink); font-weight: 600; }
+.rv-legal__enlace { text-decoration: underline; color: var(--ink); }
+.rv-legal__estado { margin: 8px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: var(--t-small); color: var(--muted); }
+.rv-legal__cita { margin: 0; padding-left: 12px; border-left: 2px solid var(--line); font-size: var(--t-small); color: var(--muted); }
+.rv-legal__pie { margin: 8px 0 0; font-size: var(--t-micro); color: var(--faint); }
