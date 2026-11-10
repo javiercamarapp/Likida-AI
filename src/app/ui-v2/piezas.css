@@ -251,3 +251,6 @@
 /* Controles de barra de herramientas: un <summary> con aspecto de botón mide lo mismo que un filtro (32), no más */
 [data-ui="v2"] summary.rv-btn { box-sizing: border-box; min-height: var(--ctl-h, 32px); }
 @media (max-width: 819px) { [data-ui="v2"] summary.rv-btn { min-height: 44px; } }
+
+/* Pila vertical con el ritmo del sistema: para los grupos de tarjetas que no cuelgan directamente de `.rv-marco` (pestañas de una ficha). */
+[data-ui="v2"] .rv-pila { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
