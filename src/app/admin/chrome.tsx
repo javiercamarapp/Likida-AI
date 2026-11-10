@@ -3,6 +3,7 @@ import { CLASES_V2 } from '../marco-v2';
 import SidebarNav, { PieAdmin, MarcaAdmin, AsideAdmin } from './sidebar-nav';
 import CommandPalette from './command-palette';
 import CabeceraAdmin from './cabecera-admin';
+import NavegacionMovilAdmin, { CabeceraMovilAdmin } from './navegacion-movil-admin';
 import ProveedorMarcoAdmin from './pestanas-admin';
 import CapaCarga from '../dashboard/shell/capa-carga';
 import CopilotoPanel from './copiloto-panel';
@@ -42,6 +43,8 @@ export default function AdminChrome({
       {/* El mismo telón de carga con el logo que el dashboard (una vez por sesión): /admin no lo montaba. */}
       <CapaCarga />
       <CommandPalette />
+      {/* Bajo 768 px: cabecera móvil, barra inferior y hoja «Más» del dashboard con los destinos del admin (el aside no se ve). */}
+      <CabeceraMovilAdmin />
       <div className={`${CLASES_V2.fila} adm-fila`}>
         <AsideAdmin>
           <MarcaAdmin />
@@ -62,6 +65,7 @@ export default function AdminChrome({
 
         <CopilotoPanel />
       </div>
+      <NavegacionMovilAdmin nombre={nombre} avatarUrl={avatarUrl} flotas={flotas} flotaActual={flotaActual} salir={salir} />
     </div>
   );
 }
