@@ -14,3 +14,14 @@
 .rv-sat__fila:first-child { border-top: 0; }
 .rv-sat__cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .rv-sat__acciones { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.rv-sat__nota[data-tono="warn"] { color: var(--warn); }
+.rv-sat__nota[data-tono="bad"] { color: var(--bad); }
+.rv-sat__uuid { margin-left: auto; font-size: var(--t-micro); color: var(--faint); font-variant-numeric: tabular-nums; word-break: break-all; }
+.rv-sat__candidato { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: var(--t-small); }
+.rv-sat__candidato > .rv-btn:last-child, .rv-sat__candidato > button:last-child { margin-left: auto; }
+.rv-sat__candidato--col { display: grid; }
+.rv-sat__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-sat__buscador { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 8px; }
+.rv-sat__cola { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-sat__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: var(--t-small); color: var(--muted); }
+.rv-sat__enlace { text-decoration: underline; }
