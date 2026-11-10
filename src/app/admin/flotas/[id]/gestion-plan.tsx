@@ -1,9 +1,10 @@
-import { FormaConAviso, Selector, type AccionDeForma } from '../../ui/forma';
+import { CampoSelect } from '../../../ui-v2/componentes/campos';
+import { FormaConAviso, type AccionDeForma } from '../../ui/forma';
 
 /**
- * Asignar / cambiar / activar / pausar / cancelar el plan de ESTA flota. Presentacional: la acción de servidor (`accionGestionarPlan`,
- * con su puerta, su segundo factor y su bitácora) llega por prop. Nada de aquí llama a Stripe: crea o mueve la suscripción local que
- * `emitirMensualidad` sabe cobrar por transferencia. Si el plan no tiene price ligado, la acción lo dice y no escribe.
+ * Asignar / cambiar / activar / pausar / cancelar el plan de ESTA flota (sección «Plan y cobro» de la ficha). Presentacional: la acción de
+ * servidor (`accionGestionarPlan`, con su puerta, su segundo factor y su bitácora) llega por prop. Nada de aquí llama a Stripe: crea o mueve
+ * la suscripción local que `emitirMensualidad` sabe cobrar por transferencia. Si el plan no tiene price ligado, la acción lo dice y no escribe.
  */
 export function GestionPlan({ tenantId, planes, accion }: {
   tenantId: string;
@@ -19,22 +20,21 @@ export function GestionPlan({ tenantId, planes, accion }: {
   );
 
   return (
-    <div className="mt-3 pt-3 border-t space-y-2" style={{ borderColor: 'var(--line2)' }}>
-      <div className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--faint)' }}>Plan de esta flota</div>
+    <div>
       {planes === null ? (
-        <p className="m-0 text-[12.5px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los planes ahora mismo — reintenta.</p>
+        <p>No se pudieron leer los planes ahora mismo. Reintenta.</p>
       ) : (
-        <FormaConAviso accion={accion} boton="Asignar / cambiar plan" columnas="md:grid-cols-1">
+        <FormaConAviso accion={accion} boton="Asignar o cambiar plan" columnas="md:grid-cols-1">
           <input type="hidden" name="tenantId" value={tenantId} />
           <input type="hidden" name="operacion" value="asignar" />
-          <Selector
-            nombre="planClave" etiqueta="Plan" requerido
-            opciones={planes.map((p) => ({ valor: p.clave, texto: p.nombre }))}
-            ayuda="Empieza en «prueba»: no cuenta para el MRR hasta que lo actives. Solo se asignan planes con price de Stripe ligado."
-          />
+          <CampoSelect etiqueta="Plan" name="planClave" required defaultValue=""
+            ayuda="Empieza en «prueba»: no cuenta para el MRR hasta que lo actives. Solo se asignan planes con price de Stripe ligado.">
+            <option value="" disabled>Elige un plan</option>
+            {planes.map((p) => <option key={p.clave} value={p.clave}>{p.nombre}</option>)}
+          </CampoSelect>
         </FormaConAviso>
       )}
-      <div className="flex flex-wrap gap-2">
+      <div>
         {operacion('activar', 'Activar')}
         {operacion('pausar', 'Pausar')}
         {operacion('cancelar', 'Cancelar suscripción', {

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -8,12 +9,19 @@ import {
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { leerAgenteChoferHabilitado } from '@/lib/likida/conductor/repo';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { EstadoError } from '../../ui/kit';
+import { EstadoError, MarcoPagina } from '../../../ui-v2/componentes';
 import type { ResultadoAccion } from '../../ui/forma';
+import { getResumenNegocio } from '@/lib/admin/negocio';
+import { getOnboardingFlotas } from '@/lib/admin/onboarding';
+import { casillasDeArranque } from '@/lib/admin/arranque';
+import { getPersonas } from '@/lib/admin/personas';
+import { telefonosJefe } from '@/lib/likida/contactos';
+import { accionFacilidad } from '../acciones';
+import { Declaracion15 } from './declaracion-15';
 import { etiquetaInterruptor } from '../../observabilidad/etiquetas';
 import { getPlanes } from '@/lib/saas/suscripcion';
 import { accionGestionarPlan } from '../acciones-plan';
-import { Ficha360 } from './ficha';
+import { Ficha360, encabezadoFicha } from './ficha';
 import { GestionPlan } from './gestion-plan';
 
 export const dynamic = 'force-dynamic';
@@ -27,10 +35,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * tenant detrás es 404; una BASE caída es error CON reintento — "no existe"
  * y "no se pudo leer" son afirmaciones distintas.
  */
-export default async function PaginaFicha({ params }: { params: Promise<{ id: string }> }) {
+export default async function PaginaFicha({ params, searchParams }: { params: Promise<{ id: string }>; searchParams?: Promise<{ seccion?: string }> }) {
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   const { id } = await params;
+  const seccion = (await searchParams)?.seccion;
   if (!UUID.test(id)) notFound();
 
   // ADM-6 (auditoría 24): la palanca por flota del pipeline del chofer
@@ -80,17 +89,12 @@ export default async function PaginaFicha({ params }: { params: Promise<{ id: st
     };
   }
 
-  let ficha;
-  try {
-    ficha = await getFichaCliente(id);
-  } catch {
-    return (
-      <main className="p-5">
-        <EstadoError mensaje="No se pudo leer la ficha del cliente — la base no respondió." />
-      </main>
-    );
+  // "No existe" (404) y "no se pudo leer" (error con reintento) son afirmaciones distintas.
+  const ficha = await getFichaCliente(id).catch(() => 'error' as const);
+  if (ficha === null) notFound();
+  if (ficha === 'error') {
+    return <PantallaFicha titulo="Cliente" apoyo="No se pudo leer la ficha."><EstadoError reintentar>No se pudo leer la ficha del cliente: la base no respondió.</EstadoError></PantallaFicha>;
   }
-  if (!ficha) notFound();
 
   // Sección aparte, resiliente por su lado: sin la 0297 aplicada, o con la
   // lectura caída, la ficha entera NO debe dejar de mostrarse por esto.
@@ -102,13 +106,45 @@ export default async function PaginaFicha({ params }: { params: Promise<{ id: st
   // Los planes, resiliente por su lado: `null` = no se pudieron leer (se dice), nunca una lista vacía que parezca «no hay planes».
   const planes = await getPlanes().then((l) => l.map((p) => ({ clave: p.clave, nombre: p.nombre }))).catch(() => null);
 
+  // Arranque y equipo, cada lectura por su lado: una que falle deja SU sección en «no se pudo leer» y la ficha sigue.
+  const [resumen, onboarding, telefonos, personasTodas] = await Promise.all([
+    getResumenNegocio().catch(() => null),
+    getOnboardingFlotas().catch(() => null),
+    telefonosJefe([id]).catch(() => null),
+    getPersonas().catch(() => null),
+  ]);
+  const fila = resumen?.flotas.find((x) => x.id === id);
+  const arranque = resumen === null || !fila ? null : {
+    casillas: casillasDeArranque({
+      id, viajes: fila.viajes, politicaPropia: fila.politicaPropia, telefono: telefonos === null ? undefined : telefonos[id] ?? null,
+      telefonosLegibles: telefonos !== null,
+      onboarding: onboarding === null ? null
+        : onboarding.get(id) ?? { credenciales: { total: 0, probadas: 0 }, avisosConfigurados: 0, avisoPrivacidad: { razonSocial: false, domicilio: false } },
+    }),
+    declaracion: (
+      <Declaracion15 flotaId={id} ded={fila.facilidad15?.dedicacionExclusivaCarga} reg={fila.facilidad15?.regimenElegible} accion={accionFacilidad} />
+    ),
+  };
+
+  const enc = encabezadoFicha(ficha);
   return (
+    <PantallaFicha {...enc}>
     <Ficha360
-      f={ficha} interruptoresPipeline={interruptoresPipeline} accionInterruptorPipeline={accionInterruptorPipeline}
+      f={ficha} seccionInicial={seccion}
+      personas={personasTodas === null ? null : personasTodas.personas.filter((p) => p.tenantId === id)}
+      accesoLegible={personasTodas?.accesoLegible ?? false}
+      arranque={arranque}
+      interruptoresPipeline={interruptoresPipeline} accionInterruptorPipeline={accionInterruptorPipeline}
       agenteChofer={agenteChofer} accionAgenteChofer={accionAgenteChofer}
       gestionPlan={<GestionPlan tenantId={id} planes={planes} accion={accionGestionarPlan} />}
     />
+    </PantallaFicha>
   );
+}
+
+/** El marco de la ficha, UNO solo para toda la ruta: el mismo encabezado cuando la lectura falla y cuando carga. */
+function PantallaFicha({ titulo, apoyo, acciones, children }: { titulo: string; apoyo: string; acciones?: ReactNode; children: ReactNode }) {
+  return <MarcoPagina area="Negocio" titulo={titulo} apoyo={apoyo} acciones={acciones}>{children}</MarcoPagina>;
 }
 
 export const metadata: Metadata = { title: 'Flota' };
