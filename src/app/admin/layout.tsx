@@ -3,11 +3,14 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import AdminChrome from './chrome';
+import { ProveedorRequiereAccion } from './cabecera-admin';
+import { obtenerRequiereAccion } from '@/lib/admin/requiere-accion';
 import '../ui-v2/tokens.css';
 // Fuente unificada con el dashboard (Hanken Grotesk, decisión de 7-nov-2026; antes D3 la dejaba en Inter).
 import '../ui-v2/fonts.css';
 import '../ui-v2/shell.css';
 import './admin-shell.css';
+import './campana.css';
 import '../ui-v2/componentes.css';
 import '../ui-v2/overlay.css';
 import '../ui-v2/piezas.css';
@@ -32,6 +35,8 @@ export const metadata: Metadata = { title: { default: 'Admin · Likida', templat
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const { nombre, avatarUrl } = await requireSuperadmin();
+  // La campana de la cabecera: cuántas cosas esperan a un humano (caché de 45 s; nunca lanza, lectura caída = «sin dato»).
+  const requiereAccion = await obtenerRequiereAccion();
 
   async function cerrarSesion() {
     'use server';
@@ -41,8 +46,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <AdminChrome nombre={nombre ?? null} avatarUrl={avatarUrl ?? null} cerrarSesion={cerrarSesion}>
-      {children}
-    </AdminChrome>
+    <ProveedorRequiereAccion valor={requiereAccion}>
+      <AdminChrome nombre={nombre ?? null} avatarUrl={avatarUrl ?? null} cerrarSesion={cerrarSesion}>
+        {children}
+      </AdminChrome>
+    </ProveedorRequiereAccion>
   );
 }
