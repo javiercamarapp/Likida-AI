@@ -1,5 +1,6 @@
 import type { Idioma } from './idioma';
 import type { shell as shellEs } from './es/shell';
+import type { errores as erroresEs } from './es/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGO DE NAMESPACES — el único lugar donde se registra un diccionario nuevo.
@@ -15,6 +16,7 @@ import type { shell as shellEs } from './es/shell';
 /** El tipo de cada namespace, según el diccionario en español (la fuente de verdad). */
 export interface Diccionarios {
   shell: typeof shellEs;
+  errores: typeof erroresEs;
 }
 export type Namespace = keyof Diccionarios;
 
@@ -22,13 +24,13 @@ export type Namespace = keyof Diccionarios;
 export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Diccionarios[N]]: string };
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
-export const NAMESPACES = ['shell'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
 export const CARGADORES: Cargadores = {
-  es: { shell: () => import('./es/shell').then((m) => m.shell) },
-  en: { shell: () => import('./en/shell').then((m) => m.shell) },
+  es: { shell: () => import('./es/shell').then((m) => m.shell), errores: () => import('./es/errores').then((m) => m.errores) },
+  en: { shell: () => import('./en/shell').then((m) => m.shell), errores: () => import('./en/errores').then((m) => m.errores) },
 };
 
 /** Carga SOLO los namespaces pedidos, y SOLO en el idioma pedido. */

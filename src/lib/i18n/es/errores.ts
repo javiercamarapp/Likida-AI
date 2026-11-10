@@ -1,0 +1,25 @@
+// Namespace «errores»: las pantallas de error de los segmentos (panel, consola, agentes). Fuente de verdad en español;
+// `en/errores.ts` lo espeja y el compilador exige las mismas claves. Nunca llevan el mensaje interno del error: solo el digest.
+export const errores = {
+  'panel.titulo': 'No se pudo cargar el panel',
+  'panel.apoyo': 'Hubo un problema al leer los datos, que no es lo mismo que no haya datos. Reintenta; si sigue, comparte el código con soporte.',
+  'admin.titulo': 'No se pudo cargar esta área',
+  'admin.apoyo': 'El resto de la consola puede seguir disponible. Reintenta; si continúa, comparte el código con soporte.',
+  'agente.titulo': 'No se pudo cargar este agente',
+  'agente.apoyo': 'Hubo un problema al leer los datos, que no es lo mismo que no haya datos. Reintenta; si sigue, comparte el código con soporte.',
+  'flota.titulo': 'Cambiaste de flota',
+  'flota.cuerpo': 'La flota que estás viendo cambió desde que abriste esta pantalla (otra pestaña eligió otra flota). No se guardó nada: recarga la página y vuelve a intentarlo.',
+  'chunk.titulo': 'Likida se actualizó',
+  'chunk.apoyo': 'Hay una versión nueva y esta pantalla quedó con código viejo. Recarga la página para continuar.',
+  'recargando.titulo': 'Recargando',
+  'recargando.apoyo': 'Hay una versión nueva de Likida; la página se recarga sola.',
+  'accion.reintentar': 'Reintentar',
+  'accion.recargar': 'Recargar',
+  'accion.inicio': 'Volver al inicio',
+  'accion.resumen': 'Ir al resumen',
+  'codigo.rotulo': 'Código del incidente',
+  'raiz.rotulo': 'Algo se rompió',
+  'raiz.titulo': 'La aplicación no pudo continuar.',
+  'raiz.apoyo': 'Vuelve a intentarlo en un momento. Si sigue igual, el código de abajo es exactamente lo que soporte necesita para encontrar qué pasó.',
+  'raiz.pie': 'Likida · Liquidación de viajes por WhatsApp',
+} as const;
