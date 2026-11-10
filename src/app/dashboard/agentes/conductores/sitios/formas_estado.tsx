@@ -1,6 +1,8 @@
 'use client';
 
 import { useActionState } from 'react';
+import '../conductores.css';
+import { Boton } from '@/app/ui-v2/componentes';
 import { Aviso, type AccionSitio } from './formas';
 
 /**
@@ -10,10 +12,10 @@ import { Aviso, type AccionSitio } from './formas';
 export function FormaEstadoSitio({ accion, id, activa }: { accion: AccionSitio; id: string; activa: boolean }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="inline-flex flex-col gap-1">
+    <form action={enviar} className="rv-cd__pila--s">
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="activa" value={activa ? 'no' : 'si'} />
-      <button type="submit" className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>{activa ? 'Archivar' : 'Reactivar'}</button>
+      <Boton type="submit" variante="ghost" tamano="sm">{activa ? 'Archivar' : 'Reactivar'}</Boton>
       {estado && !estado.ok && <Aviso r={estado} />}
     </form>
   );

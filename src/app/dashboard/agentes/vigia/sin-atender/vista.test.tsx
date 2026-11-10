@@ -37,7 +37,7 @@ describe('conversaciones sin atender (pantalla)', () => {
     const h = pintar();
     expect(h).toContain('Enviar resumen por correo');
     expect(h).toContain('name="fechaCorte"');
-    expect(h).toContain('<label>');
+    expect(h).toMatch(/<label for="[^"]+"[^>]*>Fecha de corte/); // cada control lleva su etiqueta enlazada
   });
   it('sin destinatarios lo dice; con error no enseña un «todo atendido»', () => {
     expect(pintar({ destinatarios: [] })).toContain('Hoy nadie recibiría el resumen');

@@ -3,6 +3,8 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Upload } from 'lucide-react';
+import '../conductores.css';
+import { Boton, CampoArchivo, CampoSelect, CampoTextarea, Icono } from '@/app/ui-v2/componentes';
 import { Aviso, type AccionSitio } from './formas';
 import { MARCAR_IGNORAR, MARCAR_INSTRUCCION } from '@/lib/likida/conductor/sitios';
 
@@ -11,31 +13,23 @@ import { MARCAR_IGNORAR, MARCAR_INSTRUCCION } from '@/lib/likida/conductor/sitio
 // Herramienta NEUTRAL: no trae ningún diccionario, lo llena la flota. Cada fila del archivo se aprueba o se rechaza sola.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
-
-function Boton({ texto, pendiente }: { texto: string; pendiente: string }) {
+function Enviar({ texto, pendiente }: { texto: string; pendiente: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Upload width={14} height={14} strokeWidth={1.75} />{pending ? pendiente : texto}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Upload} tam={14} />}>
+      {pending ? pendiente : texto}
+    </Boton>
   );
 }
 
 export function FormaImportarEquivalencias({ accion }: { accion: AccionSitio }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="space-y-3" aria-label="Importar equivalencias desde CSV" encType="multipart/form-data">
-      <label className="block"><span className={ETIQUETA}>Archivo CSV</span>
-        <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12px]" />
-      </label>
-      <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={4} spellCheck={false} className="h-auto py-2 w-full font-mono text-[12px]"
-          placeholder={'texto,geocerca_codigo,tipo,lado\nSTOP Planta Demo FINAL ACERO,PL-DEMO,sitio,destino'} />
-      </label>
-      <div className="flex items-center gap-3 flex-wrap"><Boton texto="Importar equivalencias" pendiente="Importando…" /></div>
+    <form action={enviar} className="rv-cd__form" aria-label="Importar equivalencias desde CSV" encType="multipart/form-data">
+      <CampoArchivo etiqueta="Archivo CSV" name="archivo" accept=".csv,text/csv,text/plain" />
+      <CampoTextarea etiqueta="…o pega el contenido" name="csv" rows={4} spellCheck={false} claseControl="rv-cd__mono"
+        placeholder={'texto,geocerca_codigo,tipo,lado\nSTOP Planta Demo FINAL ACERO,PL-DEMO,sitio,destino'} />
+      <div className="rv-cd__linea"><Enviar texto="Importar equivalencias" pendiente="Importando…" /></div>
       <Aviso r={estado} />
     </form>
   );
@@ -47,10 +41,10 @@ export function FilaTextoSinSitio({ accion, texto, lado, sitios }: {
 }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="flex items-center gap-2 flex-wrap" aria-label={`Asignar «${texto}»`}>
+    <form action={enviar} className="rv-cd__linea" aria-label={`Asignar «${texto}»`}>
       <input type="hidden" name="texto" value={texto} />
       <input type="hidden" name="lado" value={lado} />
-      <select name="asignar" defaultValue="" className="h-8 text-[12px] max-w-[26ch]" aria-label={`Qué es «${texto}»`}>
+      <CampoSelect etiqueta={`Qué es «${texto}»`} etiquetaOculta name="asignar" defaultValue="">
         <option value="">Elegir…</option>
         <optgroup label="Un sitio de mi catálogo">
           {sitios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -59,14 +53,14 @@ export function FilaTextoSinSitio({ accion, texto, lado, sitios }: {
           <option value={MARCAR_INSTRUCCION}>Es una instrucción</option>
           <option value={MARCAR_IGNORAR}>Ignorar</option>
         </optgroup>
-      </select>
-      <Boton2 />
-      {estado && <span className="basis-full"><Aviso r={estado} /></span>}
+      </CampoSelect>
+      <Guardar />
+      {estado && <Aviso r={estado} />}
     </form>
   );
 }
 
-function Boton2() {
+function Guardar() {
   const { pending } = useFormStatus();
-  return <button type="submit" disabled={pending} className="rv-btn rv-btn--secondary">{pending ? 'Guardando…' : 'Guardar'}</button>;
+  return <Boton type="submit" tamano="sm" loading={pending}>{pending ? 'Guardando…' : 'Guardar'}</Boton>;
 }

@@ -3,6 +3,8 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Upload } from 'lucide-react';
+import '../conductores.css';
+import { Boton, CampoArchivo, CampoTextarea, Icono } from '@/app/ui-v2/componentes';
 import { Aviso, type AccionSitio } from '../sitios/formas';
 import { PLANTILLA_CSV_RUTAS } from '@/lib/likida/conductor/rutas';
 
@@ -12,30 +14,22 @@ import { PLANTILLA_CSV_RUTAS } from '@/lib/likida/conductor/rutas';
 // reimportar el mismo archivo = 0 cambios.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
-
-function Boton() {
+function Enviar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Upload width={14} height={14} strokeWidth={1.75} />{pending ? 'Importando…' : 'Importar rutas'}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Upload} tam={14} />}>
+      {pending ? 'Importando…' : 'Importar rutas'}
+    </Boton>
   );
 }
 
 export function FormaImportarRutas({ accion }: { accion: AccionSitio }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="space-y-3" aria-label="Importar rutas desde CSV" encType="multipart/form-data">
-      <label className="block"><span className={ETIQUETA}>Archivo CSV</span>
-        <input type="file" name="archivo" accept=".csv,text/csv,text/plain" className="text-[12px]" />
-      </label>
-      <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={4} spellCheck={false} className="w-full h-auto py-2 font-mono text-[12px]" placeholder={PLANTILLA_CSV_RUTAS} />
-      </label>
-      <div className="flex items-center gap-3 flex-wrap"><Boton /></div>
+    <form action={enviar} className="rv-cd__form" aria-label="Importar rutas desde CSV" encType="multipart/form-data">
+      <CampoArchivo etiqueta="Archivo CSV" name="archivo" accept=".csv,text/csv,text/plain" />
+      <CampoTextarea etiqueta="…o pega el contenido" name="csv" rows={4} spellCheck={false} claseControl="rv-cd__mono" placeholder={PLANTILLA_CSV_RUTAS} />
+      <div className="rv-cd__linea"><Enviar /></div>
       <Aviso r={estado} />
     </form>
   );

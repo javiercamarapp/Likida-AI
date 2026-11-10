@@ -48,18 +48,9 @@ function etiquetas(src: string, nombre: string): string[] {
  *  cubre, su tope baja o se borra la línea. Un archivo nuevo o un tope superado hace fallar la prueba. */
 const HIJOS_SIN_CUBRIR: Record<string, number> = {
   '[id]/revision-panel.tsx': 1,
-  'agentes/carta-porte/configuracion/seccion_ccp.tsx': 1,
-  'agentes/carta-porte/configuracion/seccion_primer_mes.tsx': 1,
-  'agentes/conductores/configuracion/documentos_cliente.tsx': 1,
-  'agentes/conductores/configuracion/forma.tsx': 1,
-  'agentes/conductores/configuracion/preflight.tsx': 2,
-  'agentes/conductores/constancia-vista.tsx': 1,
-  'agentes/facturas/control-emision.tsx': 3,
-  'agentes/facturas/portales-vinculo.tsx': 1,
   'agentes/insights/panel-insights.tsx': 1,
   'agentes/insights/tarjeta-insight.tsx': 1,
   'agentes/peajes/configuracion/entradas.tsx': 1,
-  'agentes/proveedores/seccion_buzon.tsx': 3,
   'carta-porte/borrador/[viajeId]/page.tsx': 6,
   'carta-porte/documentos/[id]/vista.tsx': 1,
   'conexiones/page.tsx': 1,

@@ -3,6 +3,8 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Upload } from 'lucide-react';
+import '../conductores.css';
+import { Boton, CampoArchivo, CampoSelect, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 import { Aviso, type AccionSitio } from './formas';
 import { CUPO_DEFECTO, CUPO_MAX, CUPO_MIN } from '@/lib/likida/conductor/catalogo_sitios_import';
 
@@ -11,16 +13,12 @@ import { CUPO_DEFECTO, CUPO_MAX, CUPO_MIN } from '@/lib/likida/conductor/catalog
 // validación por terminal con cupo diario. Nada se fusiona solo ni se corrige una coordenada.
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
-
-function Boton({ texto }: { texto: string }) {
+function Enviar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Upload width={14} height={14} strokeWidth={1.75} />{pending ? 'Procesando…' : texto}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Upload} tam={14} />}>
+      {pending ? 'Procesando…' : texto}
+    </Boton>
   );
 }
 
@@ -28,27 +26,19 @@ export function FormaCatalogo({ accion }: { accion: AccionSitio }) {
   const [estado, enviar] = useActionState(accion, null);
   const cupos = Array.from({ length: CUPO_MAX - CUPO_MIN + 1 }, (_, i) => CUPO_MIN + i);
   return (
-    <form action={enviar} className="space-y-3" aria-label="Analizar o importar el catálogo depurado" encType="multipart/form-data">
-      <label className="block"><span className={ETIQUETA}>Archivo CSV o JSON</span>
-        <input type="file" name="archivo" accept=".csv,.json,text/csv,application/json,text/plain" className="text-[12px]" />
-      </label>
-      <div className="flex gap-3 flex-wrap">
-        <label className="block"><span className={ETIQUETA}>Qué hacer</span>
-          <select name="modo" defaultValue="analizar" >
-            <option value="analizar">Solo analizar (no guarda nada)</option>
-            <option value="importar">Analizar e importar las filas listas</option>
-          </select>
-        </label>
-        <label className="block"><span className={ETIQUETA}>Revisiones por terminal al día</span>
-          <select name="cupo" defaultValue={String(CUPO_DEFECTO)} >
-            {cupos.map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-        <label className="block max-w-[28ch]"><span className={ETIQUETA}>Radio por defecto en metros (si falta)</span>
-          <input name="radio_defecto" inputMode="numeric" placeholder="150"  />
-        </label>
+    <form action={enviar} className="rv-cd__pila" aria-label="Analizar o importar el catálogo depurado" encType="multipart/form-data">
+      <CampoArchivo etiqueta="Archivo CSV o JSON" name="archivo" accept=".csv,.json,text/csv,application/json,text/plain" />
+      <div className="rv-cd__cuad">
+        <CampoSelect etiqueta="Qué hacer" name="modo" defaultValue="analizar">
+          <option value="analizar">Solo analizar (no guarda nada)</option>
+          <option value="importar">Analizar e importar las filas listas</option>
+        </CampoSelect>
+        <CampoSelect etiqueta="Revisiones por terminal al día" name="cupo" defaultValue={String(CUPO_DEFECTO)}>
+          {cupos.map((c) => <option key={c} value={c}>{c}</option>)}
+        </CampoSelect>
+        <CampoTexto etiqueta="Radio por defecto en metros (si falta)" name="radio_defecto" inputMode="numeric" placeholder="150" />
       </div>
-      <div className="flex items-center gap-3 flex-wrap"><Boton texto="Procesar catálogo" /></div>
+      <div className="rv-cd__linea"><Enviar texto="Procesar catálogo" /></div>
       <Aviso r={estado} />
     </form>
   );

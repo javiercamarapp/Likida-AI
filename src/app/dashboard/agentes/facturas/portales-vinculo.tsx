@@ -1,4 +1,6 @@
-import { CircleCheck, CircleDashed, TriangleAlert, ExternalLink, ShieldAlert } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
+import './facturas.css';
+import { AvisoCompacto, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { fechaCorta } from '@/lib/formato';
 import type { EstadoVinculo } from '@/lib/likida/facturacion/vinculo_portal';
 import { ControlesRelogin, type AccionRelogin, type EstadoRelogin } from './relogin-controles';
@@ -26,10 +28,10 @@ import { VincularAsistida } from './vincular-asistida';
 //     una vinculación remota que hoy no existe.
 // ════════════════════════════════════════════════════════════════════════════
 
-const PILDORA: Record<EstadoVinculo, { rotulo: string; fg: string; bg: string; Icono: typeof CircleCheck }> = {
-  vinculado: { rotulo: 'Vinculado', fg: 'var(--ok)', bg: 'var(--okbg)', Icono: CircleCheck },
-  caducada: { rotulo: 'Sesión caducada', fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: TriangleAlert },
-  sin_vincular: { rotulo: 'Sin vincular', fg: 'var(--muted)', bg: 'var(--canvas)', Icono: CircleDashed },
+const PILDORA: Record<EstadoVinculo, { rotulo: string; tono: TonoEstado }> = {
+  vinculado: { rotulo: 'Vinculado', tono: 'ok' },
+  caducada: { rotulo: 'Sesión caducada', tono: 'warn' },
+  sin_vincular: { rotulo: 'Sin vincular', tono: 'muted' },
 };
 
 export interface FilaPortal {
@@ -64,97 +66,68 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
   const caducados = filas.filter((f) => f.estado === 'caducada');
 
   return (
-    <section className="card p-4">
-      <h2 className="font-display text-[15px] font-semibold">Tus portales</h2>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-        Portales que piden tu cuenta. Entras UNA vez y el agente factura solo hasta que el portal
-        cierre la sesión — Likida nunca guarda ni teclea tu contraseña, solo la sesión que dejas abierta.
-      </p>
-
-      {!vinculos ? (
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-          No se pudo leer el estado de tus portales ahora mismo. No es que no tengas ninguno vinculado:
-          es que esta pantalla está ciega. Recarga en un momento.
+    <Tarjeta titulo="Tus portales" estado={!vinculos ? 'error' : filas.length === 0 ? 'vacio' : 'ok'}
+      mensaje={!vinculos ? 'No se pudo leer el estado de tus portales ahora mismo. No es que no tengas ninguno vinculado: es que esta pantalla está ciega. Recarga en un momento.' : 'Ningún portal por vincular'}
+      detalle="Ninguno de los comercios de tus tickets pide cuenta de portal — no hay nada que vincular.">
+      <div className="rv-fact__pila">
+        <p className="rv-fact__nota">
+          Portales que piden tu cuenta. Entras UNA vez y el agente factura solo hasta que el portal
+          cierre la sesión — Likida nunca guarda ni teclea tu contraseña, solo la sesión que dejas abierta.
         </p>
-      ) : filas.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          Ninguno de los comercios de tus tickets pide cuenta de portal — no hay nada que vincular.
+        {caducados.length > 0 && (
+          <AvisoCompacto tono="warn" resumen={caducados.length === 1
+            ? `Se cayó la sesión de ${caducados[0].nombre}: sus tickets están esperando a que entres una vez.`
+            : `Se cayeron ${caducados.length} sesiones: sus tickets están esperando a que entres una vez en cada portal.`} />
+        )}
+
+        <ul className="rv-fact__reglones">
+          {filas.map((f) => {
+            const p = PILDORA[f.estado];
+            return (
+              <li key={f.clave} className="rv-fact__portal">
+                <div className="rv-fact__reglon">
+                  <div className="rv-fact__dos">
+                    <strong>{f.nombre}</strong>
+                    <span className="rv-fact__sub">{leyenda(f)}</span>
+                    {f.motivo && f.estado !== 'vinculado' && <span className="rv-fact__nota">{f.motivo}</span>}
+                  </div>
+                  <div className="rv-fact__linea">
+                    <StatusChip tono={p.tono}>{p.rotulo}</StatusChip>
+                    {f.estado !== 'vinculado' && (
+                      <a href={f.portal} target="_blank" rel="noopener noreferrer" className="rv-fact__enlace">
+                        Abrir el portal <Icono icono={ExternalLink} tam={14} />
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {/* 0540: el paso humano del CAPTCHA/MFA con código de un solo uso. También
+                    con el portal vinculado: «re-vincular» antes de que la sesión caduque. */}
+                <VincularAsistida clave={f.clave} nombre={f.nombre} flota={flota} />
+                {/* La casilla del re-login va DEBAJO de cada portal y no en
+                    un ajuste global: el permiso es por portal, porque una
+                    flota puede querer que Likida reconecte sola en la
+                    gasolinera de todos los días y no en el portal donde
+                    guarda su facturación del año. */}
+                <ControlesRelogin
+                  clave={f.clave} nombre={f.nombre} estado={f.relogin}
+                  autorizar={autorizarRelogin} revocar={revocarRelogin}
+                />
+              </li>
+            );
+          })}
+        </ul>
+
+        {/* LO QUE NO SE PROMETE. Un servidor no tiene pantalla donde enseñarte un navegador:
+            «Vincular con código» te da un código de un solo uso y el comando que corres en TU
+            computadora; ahí entras tú. Likida no resuelve ni rodea CAPTCHAs ni guarda tu contraseña. */}
+        <p className="rv-fact__nota" data-tono="faint">
+          «Vincular con código» te da un código de un solo uso (caduca en 15 minutos) y el comando
+          que corres en tu computadora: se abre el portal, entras tú y resuelves el CAPTCHA o el
+          código de dos pasos, y a Likida solo llegan las cookies de ese portal, cifradas — nunca tu
+          contraseña. Si la sesión se cae, el portal aparece como «Sesión caducada» y vuelves a vincular.
         </p>
-      ) : (
-        <>
-          {caducados.length > 0 && (
-            <div className="flex items-start gap-2 mb-3 rounded-lg p-2.5" style={{ background: 'var(--warnbg)' }}>
-              <ShieldAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
-              <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-                {caducados.length === 1
-                  ? `Se cayó la sesión de ${caducados[0].nombre}: sus tickets están esperando a que entres una vez.`
-                  : `Se cayeron ${caducados.length} sesiones: sus tickets están esperando a que entres una vez en cada portal.`}
-              </p>
-            </div>
-          )}
-
-          <ul className="space-y-2">
-            {filas.map((f) => {
-              const p = PILDORA[f.estado];
-              return (
-                <li key={f.clave} className="py-1.5 border-b last:border-0"
-                  style={{ borderColor: 'var(--line2)' }}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="text-[13px] font-medium truncate">{f.nombre}</div>
-                      <div className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                        {leyenda(f)}
-                      </div>
-                      {f.motivo && f.estado !== 'vinculado' && (
-                        <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{f.motivo}</div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]"
-                        style={{ color: p.fg, background: p.bg }}>
-                        <p.Icono width={11} height={11} strokeWidth={2} />
-                        {p.rotulo}
-                      </span>
-                      {f.estado !== 'vinculado' && (
-                        <a href={f.portal} target="_blank" rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-[11px] underline"
-                          style={{ color: 'var(--muted)' }}>
-                          Abrir el portal <ExternalLink width={10} height={10} strokeWidth={2} />
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                  {/* 0540: el paso humano del CAPTCHA/MFA con código de un solo uso. También
-                      con el portal vinculado: «re-vincular» antes de que la sesión caduque. */}
-                  <div className="mt-1.5">
-                    <VincularAsistida clave={f.clave} nombre={f.nombre} flota={flota} />
-                  </div>
-                  {/* La casilla del re-login va DEBAJO de cada portal y no en
-                      un ajuste global: el permiso es por portal, porque una
-                      flota puede querer que Likida reconecte sola en la
-                      gasolinera de todos los días y no en el portal donde
-                      guarda su facturación del año. */}
-                  <ControlesRelogin
-                    clave={f.clave} nombre={f.nombre} estado={f.relogin}
-                    autorizar={autorizarRelogin} revocar={revocarRelogin}
-                  />
-                </li>
-              );
-            })}
-          </ul>
-
-          {/* LO QUE NO SE PROMETE. Un servidor no tiene pantalla donde enseñarte un navegador:
-              «Vincular con código» te da un código de un solo uso y el comando que corres en TU
-              computadora; ahí entras tú. Likida no resuelve ni rodea CAPTCHAs ni guarda tu contraseña. */}
-          <p className="text-[11px] mt-3 pt-2 border-t" style={{ color: 'var(--faint)', borderColor: 'var(--line2)' }}>
-            «Vincular con código» te da un código de un solo uso (caduca en 15 minutos) y el comando
-            que corres en tu computadora: se abre el portal, entras tú y resuelves el CAPTCHA o el
-            código de dos pasos, y a Likida solo llegan las cookies de ese portal, cifradas — nunca tu
-            contraseña. Si la sesión se cae, el portal aparece como «Sesión caducada» y vuelves a vincular.
-          </p>
-        </>
-      )}
-    </section>
+      </div>
+    </Tarjeta>
   );
 }
 

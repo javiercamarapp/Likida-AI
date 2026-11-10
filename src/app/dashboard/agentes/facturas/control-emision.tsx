@@ -2,9 +2,10 @@
 
 import { useActionState, useEffect } from 'react';
 import Link from 'next/link';
-import { ShieldCheck, ShieldOff, ListChecks } from 'lucide-react';
+import { ShieldCheck, ShieldOff } from 'lucide-react';
+import './facturas.css';
 import { mxn, fechaCorta } from '@/lib/formato';
-import { useNotificar } from '../../../admin/ui/notificaciones';
+import { Boton as BotonV2, CampoTexto, Icono, StatusChip, Tarjeta, useNotificar, type TonoEstado } from '@/app/ui-v2/componentes';
 import {
   accionEncenderEmision, accionApagarEmision, accionCambiarLimites, accionDecidirLote, accionPromoverPortal, accionDevolverPortal,
   type RespuestaControl,
@@ -60,10 +61,9 @@ function CampoFlota({ valor }: { valor: string | null }) {
 
 function Boton({ children, pendiente, peligro }: { children: React.ReactNode; pendiente: boolean; peligro?: boolean }) {
   return (
-    <button type="submit" disabled={pendiente} className={`rv-btn ${peligro ? 'rv-btn--danger' : 'rv-btn--secondary'} text-[12px] px-3 py-1.5 rounded-md border disabled:opacity-50`}
-      style={{ borderColor: peligro ? 'var(--bad)' : 'var(--line2)', color: peligro ? 'var(--bad)' : undefined }}>
+    <BotonV2 type="submit" tamano="sm" variante={peligro ? 'danger' : 'secondary'} loading={pendiente}>
       {pendiente ? 'Un momento…' : children}
-    </button>
+    </BotonV2>
   );
 }
 
@@ -72,11 +72,11 @@ function Interruptor({ encendida, esDueno, flota }: { encendida: boolean; esDuen
   const [rAp, apagar, pAp] = useActionState(accionApagarEmision, null);
   useRespuesta(rEn); useRespuesta(rAp);
   return encendida ? (
-    <form action={apagar}><CampoFlota valor={flota} /><Boton pendiente={pAp} peligro><ShieldOff width={12} height={12} className="inline mr-1 -mt-0.5" />Apagar la emisión real</Boton></form>
+    <form action={apagar}><CampoFlota valor={flota} /><Boton pendiente={pAp} peligro><Icono icono={ShieldOff} tam={14} /> Apagar la emisión real</Boton></form>
   ) : esDueno ? (
-    <form action={encender}><CampoFlota valor={flota} /><Boton pendiente={pEn}><ShieldCheck width={12} height={12} className="inline mr-1 -mt-0.5" />Encender la emisión real</Boton></form>
+    <form action={encender}><CampoFlota valor={flota} /><Boton pendiente={pEn}><Icono icono={ShieldCheck} tam={14} /> Encender la emisión real</Boton></form>
   ) : (
-    <p className="text-[11px]" style={{ color: 'var(--faint)' }}>La emisión real la enciende el dueño de la flota.</p>
+    <p className="rv-fact__nota" data-tono="faint">La emisión real la enciende el dueño de la flota.</p>
   );
 }
 
@@ -85,19 +85,17 @@ function Limites({ c, esDueno, flota }: { c: ControlPantalla | 'sin_fila'; esDue
   useRespuesta(r);
   const v = c === 'sin_fila' ? { maxMontoTicket: 1500, maxTicketsLote: 5, maxTicketsDia: 20, maxMontoDia: 20000 } : c;
   const campo = (name: string, rotulo: string, valor: number) => (
-    <label className="text-[11px] flex flex-col gap-0.5" style={{ color: 'var(--muted)' }}>{rotulo}
-      <input name={name} defaultValue={valor} inputMode="decimal" className="rounded border px-2 py-1 text-[12px] w-28" style={{ borderColor: 'var(--line2)', color: 'var(--ink)' }} />
-    </label>
+    <CampoTexto etiqueta={rotulo} name={name} defaultValue={valor} inputMode="decimal" />
   );
   if (!esDueno) {
     return (
-      <p className="text-[11px] mt-3" style={{ color: 'var(--muted)' }}>
+      <p className="rv-fact__nota">
         Límites: {mxn(v.maxMontoTicket)} por ticket · {v.maxTicketsLote} tickets por lote · {v.maxTicketsDia} por día · {mxn(v.maxMontoDia)} por día. Los cambia el dueño de la flota.
       </p>
     );
   }
   return (
-    <form action={guardar} className="flex flex-wrap items-end gap-3 mt-3">
+    <form action={guardar} className="rv-fact__tres">
       <CampoFlota valor={flota} />
       {campo('maxMontoTicket', 'Monto máx. por ticket', v.maxMontoTicket)}
       {campo('maxTicketsLote', 'Tickets por lote', v.maxTicketsLote)}
@@ -112,25 +110,27 @@ function FilaLote({ l, flota }: { l: LotePantalla; flota: string | null }) {
   const [r, decidir, p] = useActionState(accionDecidirLote, null);
   useRespuesta(r);
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 py-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-      <span className="text-[12px]">
+    <li className="rv-fact__reglon">
+      <span className="rv-fact__nota">
         <strong>{l.nombre}</strong> · {l.tickets} ticket{l.tickets === 1 ? '' : 's'} · {mxn(l.montoTotal)}
-        <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
+        <span className="rv-fact__sub">
           {l.estado === 'confirmado' ? 'Confirmado: sale en la próxima corrida' : 'Esperando tu confirmación'} · propuesto {fechaCorta(l.propuestoEn)} · vence {fechaCorta(l.expiraEn)}
         </span>
       </span>
-      <form action={decidir} className="flex items-center gap-2">
+      <form action={decidir} className="rv-fact__linea">
         <CampoFlota valor={flota} />
         <input type="hidden" name="loteId" value={l.id} />
         {/* A37-S29-06: lo que se está viendo; confirmar se rechaza si el lote cambió desde que se pintó */}
         <input type="hidden" name="vistoTickets" value={l.tickets} />
         <input type="hidden" name="vistoMonto" value={l.montoTotal} />
-        {l.estado === 'propuesto'&& <button type="submit" name="decision" value="confirmar" disabled={p} className="rv-btn rv-btn--secondary" style={{ borderColor:'var(--ok)', color: 'var(--ok)' }}>Confirmar lote</button>}
-        <button type="submit" name="decision" value="rechazar" disabled={p} className="rv-btn rv-btn--secondary" style={{ borderColor: 'var(--line2)' }}>Rechazar</button>
+        {l.estado === 'propuesto' && <BotonV2 type="submit" tamano="sm" variante="primary" name="decision" value="confirmar" disabled={p}>Confirmar lote</BotonV2>}
+        <BotonV2 type="submit" tamano="sm" name="decision" value="rechazar" disabled={p}>Rechazar</BotonV2>
       </form>
     </li>
   );
 }
+
+const TONO_VERIF: Record<PortalControlPantalla['verificacion'], TonoEstado> = { verificado: 'ok', exento: 'ok', no_verificado: 'warn', obsoleto: 'warn' };
 
 function FilaPortalControl({ f, minimo, esDueno, flota }: { f: PortalControlPantalla; minimo: number; esDueno: boolean; flota: string | null }) {
   const [rP, promover, pP] = useActionState(accionPromoverPortal, null);
@@ -138,21 +138,21 @@ function FilaPortalControl({ f, minimo, esDueno, flota }: { f: PortalControlPant
   useRespuesta(rP); useRespuesta(rD);
   const puede = f.emisionesConfirmadas >= minimo;
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 py-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-      <span className="text-[12px]">
+    <li className="rv-fact__reglon">
+      <span className="rv-fact__nota">
         <strong>{f.nombre}</strong> · {f.fase === 'autonoma' ? 'Autónomo' : 'Supervisado'} · {f.emisionesConfirmadas} emisión{f.emisionesConfirmadas === 1 ? '' : 'es'} con UUID
-        <span className="block text-[11px]" style={{ color: f.verificacion === 'verificado' || f.verificacion === 'exento' ? 'var(--muted)' : 'var(--warn)' }}>{VERIF[f.verificacion]}</span>
+        <span className="rv-fact__sub"><StatusChip tono={TONO_VERIF[f.verificacion]}>{VERIF[f.verificacion]}</StatusChip></span>
       </span>
       {f.fase === 'autonoma' ? (
         <form action={devolver}><CampoFlota valor={flota} /><input type="hidden" name="comercio" value={f.clave} /><Boton pendiente={pD}>Volver a supervisado</Boton></form>
       ) : !esDueno ? (
-        <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Un portal lo pasa a autónomo el dueño de la flota.</span>
+        <span className="rv-fact__nota" data-tono="faint">Un portal lo pasa a autónomo el dueño de la flota.</span>
       ) : (
-        <form action={promover} className="flex items-center gap-2">
+        <form action={promover} className="rv-fact__linea">
           <CampoFlota valor={flota} />
           <input type="hidden" name="comercio" value={f.clave} />
           <Boton pendiente={pP}>Pasar a autónomo</Boton>
-          {!puede && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>Faltan {minimo - f.emisionesConfirmadas} emisión(es) confirmadas</span>}
+          {!puede && <span className="rv-fact__nota" data-tono="faint">Faltan {minimo - f.emisionesConfirmadas} emisión(es) confirmadas</span>}
         </form>
       )}
     </li>
@@ -163,37 +163,38 @@ export function SeccionControlEmision({ datos }: { datos: DatosControl }) {
   const { control, lotes, portales, minimoParaAutonoma, esDueno, flotaPintada } = datos;
   const encendida = control !== null && control !== 'sin_fila' && control.emisionReal;
   return (
-    <section className="card p-4" aria-label="Control de la emisión real">
-      <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5"><ListChecks width={14} height={14} strokeWidth={2} />Emisión real de facturas</h2>
-      <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
-        Un CFDI emitido no se deshace. Por eso la emisión real es una decisión del dueño de la flota, requiere el mandato otorgado en
-        {' '}<Link className="underline" href="/dashboard/legal">Términos y mandato</Link>, y cada portal arranca supervisado: el agente propone el lote y tú lo confirmas.
-      </p>
-      {control === null ? (
-        <p role="alert" className="text-[12px] mt-3" style={{ color: 'var(--bad)' }}>No se pudo leer el control de emisión: esta sección está ciega y el agente sigue en ensayo. Recarga en un momento.</p>
-      ) : (
-        <>
-          <p className="text-[13px] mt-3">
-            Estado: <strong style={{ color: encendida ? 'var(--ok)' : 'var(--muted)' }}>{encendida ? 'Emisión real ENCENDIDA' : 'Ensayo (llena el portal y no emite)'}</strong>
-          </p>
-          <div className="mt-2"><Interruptor encendida={encendida} esDueno={esDueno} flota={flotaPintada} /></div>
-          <Limites c={control} esDueno={esDueno} flota={flotaPintada} />
-        </>
-      )}
-      <h3 className="text-[12px] font-medium mt-4">Lotes por confirmar</h3>
-      {lotes === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudieron leer los lotes.</p>
-      ) : lotes.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ninguno. Cuando el agente tenga tickets listos en un portal supervisado, el lote aparece aquí.</p>
-      ) : (
-        <ul>{lotes.map((l) => <FilaLote key={l.id} l={l} flota={flotaPintada} />)}</ul>
-      )}
-      <h3 className="text-[12px] font-medium mt-4">Portales</h3>
-      {portales.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ningún portal ha emitido todavía.</p>
-      ) : (
-        <ul>{portales.map((f) => <FilaPortalControl key={f.clave} f={f} minimo={minimoParaAutonoma} esDueno={esDueno} flota={flotaPintada} />)}</ul>
-      )}
-    </section>
+    <Tarjeta titulo="Emisión real de facturas">
+      <div className="rv-fact__pila">
+        <p className="rv-fact__nota">
+          Un CFDI emitido no se deshace. Por eso la emisión real es una decisión del dueño de la flota, requiere el mandato otorgado en
+          {' '}<Link className="rv-fact__enlace" href="/dashboard/legal">Términos y mandato</Link>, y cada portal arranca supervisado: el agente propone el lote y tú lo confirmas.
+        </p>
+        {control === null ? (
+          <p role="alert" className="rv-fact__nota" data-tono="bad">No se pudo leer el control de emisión: esta sección está ciega y el agente sigue en ensayo. Recarga en un momento.</p>
+        ) : (
+          <>
+            <p className="rv-fact__nota">
+              Estado: <strong>{encendida ? 'Emisión real ENCENDIDA' : 'Ensayo (llena el portal y no emite)'}</strong>
+            </p>
+            <Interruptor encendida={encendida} esDueno={esDueno} flota={flotaPintada} />
+            <Limites c={control} esDueno={esDueno} flota={flotaPintada} />
+          </>
+        )}
+        <p className="rv-fact__rotulo">Lotes por confirmar</p>
+        {lotes === null ? (
+          <p className="rv-fact__nota" data-tono="bad">No se pudieron leer los lotes.</p>
+        ) : lotes.length === 0 ? (
+          <p className="rv-fact__nota">Ninguno. Cuando el agente tenga tickets listos en un portal supervisado, el lote aparece aquí.</p>
+        ) : (
+          <ul className="rv-fact__reglones">{lotes.map((l) => <FilaLote key={l.id} l={l} flota={flotaPintada} />)}</ul>
+        )}
+        <p className="rv-fact__rotulo">Portales</p>
+        {portales.length === 0 ? (
+          <p className="rv-fact__nota">Ningún portal ha emitido todavía.</p>
+        ) : (
+          <ul className="rv-fact__reglones">{portales.map((f) => <FilaPortalControl key={f.clave} f={f} minimo={minimoParaAutonoma} esDueno={esDueno} flota={flotaPintada} />)}</ul>
+        )}
+      </div>
+    </Tarjeta>
   );
 }

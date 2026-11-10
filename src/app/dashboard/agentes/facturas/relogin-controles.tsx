@@ -3,6 +3,8 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { KeyRound, RotateCw, ShieldOff, TriangleAlert } from 'lucide-react';
+import './facturas.css';
+import { Boton as BotonV2, Icono } from '@/app/ui-v2/componentes';
 import { fechaCorta } from '@/lib/formato';
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -57,7 +59,7 @@ export function ControlesRelogin({ clave, nombre, estado, autorizar, revocar }: 
 }) {
   if (estado === null) {
     return (
-      <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>
+      <p className="rv-fact__nota" data-tono="bad">
         No se pudo leer si autorizaste la reconexión automática de este portal. No es que no la hayas
         autorizado: esta parte de la pantalla está ciega.
       </p>
@@ -74,31 +76,29 @@ function SinAutorizar({ clave, nombre, autorizar }: { clave: string; nombre: str
   const [estado, accion] = useActionState(autorizar, null);
 
   return (
-    <form action={accion} className="mt-2 rounded-lg p-2.5" style={{ background: 'var(--canvas)' }}>
+    <form action={accion} className="rv-fact__relogin">
       <input type="hidden" name="comercio" value={clave} />
-      <div className="flex items-start gap-2">
-        <KeyRound width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-        <div className="min-w-0">
-          <p className="text-[12px] font-medium">Guardar mi contraseña para reconectar sola</p>
-          <p className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>
-            Si lo activas, Likida guarda tu contraseña de {nombre} <strong>cifrada</strong> y la usa
-            <strong> solo</strong> cuando el portal cierre tu sesión: vuelve a entrar una vez y sigue
-            facturando. Al facturar un ticket <strong>nunca</strong> se abre esa contraseña.
-          </p>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
-            Lo que <strong>no</strong> va a hacer: si el portal pide un CAPTCHA, un código de
-            verificación, una pregunta de seguridad, cambiar la contraseña, o si la cuenta está
-            bloqueada, se detiene y te avisa. Y si el portal dice que la contraseña no sirve, se para
-            en seco — insistir es lo que hace que te bloqueen la cuenta.
-          </p>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-            Máximo 3 reconexiones por día, con 15 minutos entre una y otra. Queda registrado quién lo
-            autorizó y cada vez que se usa. Puedes borrar la contraseña cuando quieras.
-          </p>
-          {estado?.error && (
-            <p className="text-[11px] mt-1.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>
-          )}
-          <Boton icono={<KeyRound width={11} height={11} strokeWidth={2} />}>
+      <Icono icono={KeyRound} tam={16} />
+      <div className="rv-fact__pila">
+        <p className="rv-fact__titulo">Guardar mi contraseña para reconectar sola</p>
+        <p className="rv-fact__nota">
+          Si lo activas, Likida guarda tu contraseña de {nombre} <strong>cifrada</strong> y la usa
+          <strong> solo</strong> cuando el portal cierre tu sesión: vuelve a entrar una vez y sigue
+          facturando. Al facturar un ticket <strong>nunca</strong> se abre esa contraseña.
+        </p>
+        <p className="rv-fact__nota">
+          Lo que <strong>no</strong> va a hacer: si el portal pide un CAPTCHA, un código de
+          verificación, una pregunta de seguridad, cambiar la contraseña, o si la cuenta está
+          bloqueada, se detiene y te avisa. Y si el portal dice que la contraseña no sirve, se para
+          en seco — insistir es lo que hace que te bloqueen la cuenta.
+        </p>
+        <p className="rv-fact__nota" data-tono="faint">
+          Máximo 3 reconexiones por día, con 15 minutos entre una y otra. Queda registrado quién lo
+          autorizó y cada vez que se usa. Puedes borrar la contraseña cuando quieras.
+        </p>
+        {estado?.error && <p role="alert" className="rv-fact__nota" data-tono="bad">{estado.error}</p>}
+        <div>
+          <Boton icono={<Icono icono={KeyRound} tam={14} />}>
             Sí, guarda mi contraseña y reconecta sola
           </Boton>
         </div>
@@ -114,51 +114,45 @@ function Autorizado({ clave, nombre, estado, revocar }: {
   const [res, accion] = useActionState(revocar, null);
 
   return (
-    <div className="mt-2 rounded-lg p-2.5" style={{ background: 'var(--canvas)' }}>
-      <div className="flex items-start gap-2">
-        <RotateCw width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} />
-        <div className="min-w-0 w-full">
-          <p className="text-[12px] font-medium">Reconecta sola</p>
-          <p className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>
-            {estado.permitidoPor
-              ? `Lo autorizó ${estado.permitidoPor}${estado.permitidoEn ? ` el ${fechaCorta(estado.permitidoEn)}` : ''}.`
-              : 'Autorizado.'}
+    <div className="rv-fact__relogin">
+      <Icono icono={RotateCw} tam={16} />
+      <div className="rv-fact__pila">
+        <p className="rv-fact__titulo">Reconecta sola</p>
+        <p className="rv-fact__nota">
+          {estado.permitidoPor
+            ? `Lo autorizó ${estado.permitidoPor}${estado.permitidoEn ? ` el ${fechaCorta(estado.permitidoEn)}` : ''}.`
+            : 'Autorizado.'}
+        </p>
+
+        {/* LA BITÁCORA VISIBLE. Nunca se inventa una fecha: sin
+            `ultimoExitoEn` se dice que todavía no ha hecho falta. */}
+        <p className="rv-fact__nota">
+          {estado.ultimoExitoEn
+            ? `Reconectó sola por última vez el ${fechaCorta(estado.ultimoExitoEn)}.`
+            : `Todavía no ha hecho falta reconectar ${nombre}.`}
+          {estado.intentosDia > 0 && ` ${estado.intentosDia} ${estado.intentosDia === 1 ? 'intento' : 'intentos'} hoy.`}
+        </p>
+
+        {estado.bloqueado && (
+          <p className="rv-fact__nota" data-tono="warn">
+            <Icono icono={TriangleAlert} tam={14} />{' '}
+            <strong>Detenido.</strong> {estado.ultimoMotivo ?? 'Hay que revisarlo.'} Vuelve a
+            guardar la contraseña correcta en Conexiones y autorízalo otra vez.
           </p>
+        )}
+        {!estado.bloqueado && estado.ultimoMotivo && (
+          <p className="rv-fact__nota" data-tono="faint">Último corte: {estado.ultimoMotivo}</p>
+        )}
 
-          {/* LA BITÁCORA VISIBLE. Nunca se inventa una fecha: sin
-              `ultimoExitoEn` se dice que todavía no ha hecho falta. */}
-          <p className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>
-            {estado.ultimoExitoEn
-              ? `Reconectó sola por última vez el ${fechaCorta(estado.ultimoExitoEn)}.`
-              : `Todavía no ha hecho falta reconectar ${nombre}.`}
-            {estado.intentosDia > 0 && ` ${estado.intentosDia} ${estado.intentosDia === 1 ? 'intento' : 'intentos'} hoy.`}
-          </p>
+        {res?.error && <p role="alert" className="rv-fact__nota" data-tono="bad">{res.error}</p>}
+        {res?.ok && <p role="status" className="rv-fact__nota" data-tono="ok">{res.ok}</p>}
 
-          {estado.bloqueado && (
-            <p className="text-[11px] mt-1.5 flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
-              <TriangleAlert width={11} height={11} strokeWidth={2} className="mt-0.5 shrink-0" />
-              <span>
-                <strong>Detenido.</strong> {estado.ultimoMotivo ?? 'Hay que revisarlo.'} Vuelve a
-                guardar la contraseña correcta en Conexiones y autorízalo otra vez.
-              </span>
-            </p>
-          )}
-          {!estado.bloqueado && estado.ultimoMotivo && (
-            <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-              Último corte: {estado.ultimoMotivo}
-            </p>
-          )}
-
-          {res?.error && <p className="text-[11px] mt-1.5" style={{ color: 'var(--bad)' }}>{res.error}</p>}
-          {res?.ok && <p className="text-[11px] mt-1.5" style={{ color: 'var(--ok)' }}>{res.ok}</p>}
-
-          <form action={accion}>
-            <input type="hidden" name="comercio" value={clave} />
-            <Boton icono={<ShieldOff width={11} height={11} strokeWidth={2} />}>
-              Borrar mi contraseña y volver al modo manual
-            </Boton>
-          </form>
-        </div>
+        <form action={accion}>
+          <input type="hidden" name="comercio" value={clave} />
+          <Boton icono={<Icono icono={ShieldOff} tam={14} />}>
+            Borrar mi contraseña y volver al modo manual
+          </Boton>
+        </form>
       </div>
     </div>
   );
@@ -168,11 +162,8 @@ function Autorizado({ clave, nombre, estado, revocar }: {
 function Boton({ children, icono }: { children: React.ReactNode; icono: React.ReactNode }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary rv-btn--sm mt-2"
-      style={{ borderColor: 'var(--line)' }}>
-      {icono}
+    <BotonV2 type="submit" tamano="sm" loading={pending} icono={icono}>
       {pending ? 'Guardando…' : children}
-    </button>
+    </BotonV2>
   );
 }

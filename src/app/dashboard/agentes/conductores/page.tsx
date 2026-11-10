@@ -18,7 +18,8 @@ import { validarHorasEscalacion, guardarEstrategiaAgente } from '@/lib/likida/ag
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { revalidatePath } from 'next/cache';
 import { FormaEstrategiaConductores, type ResultadoEstrategia } from '../estrategia-forma';
-import { Bloque, EsqTabla, vigilar } from '../../bloque';
+import { Bloque, vigilar } from '../../bloque';
+import { EsqTablaV2, EsqTarjetaV2 } from '@/app/ui-v2/componentes';
 import { calcularInsights } from '@/lib/likida/conductor/insights';
 import { mapaReubicaciones } from '@/lib/likida/conductor/reporte_llegada';
 import { csvReubicaciones, reubicacionesPorCliente, reubicacionesPorViaje } from '@/lib/likida/conductor/reubicaciones';
@@ -300,16 +301,16 @@ export default async function PaginaAgenteConductores({
     <VistaAgenteConductores
       tablero={
         <>
-          <Bloque mensaje="No se pudo revisar si la flota está lista." esqueleto={null}>
+          <Bloque mensaje="No se pudo revisar si la flota está lista." esqueleto={<EsqTarjetaV2 alto={60} />}>
             <BloqueBannerPreflight pPreflight={pPreflight} sufijo={sufijoTenant(sp)} />
           </Bloque>
-          <Bloque mensaje="No se pudieron leer los insights." esqueleto={null}>
+          <Bloque mensaje="No se pudieron leer los insights." esqueleto={<EsqTarjetaV2 alto={160} />}>
             <BloqueInsights pInsights={pInsights} pIndicadores={pIndicadores} dias={filtrosVista.dias} />
           </Bloque>
-          <Bloque mensaje="No se pudo leer la constancia de reportes." esqueleto={null}>
+          <Bloque mensaje="No se pudo leer la constancia de reportes." esqueleto={<EsqTarjetaV2 alto={120} />}>
             <BloqueConstancia pConstancia={pConstancia} dias={filtrosVista.dias} />
           </Bloque>
-          <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTabla filas={6} />}>
+          <Bloque mensaje="No se pudo leer el tablero de hitos." esqueleto={<EsqTablaV2 />}>
             <BloqueTableroHitos
               pTablero={pTablero} pIndicadores={pIndicadores} pCatalogos={pCatalogos} pSitios={pSitios} pEpisodios={pEpisodios} filtros={filtrosVista} ocultos={ocultos}
               accionUrl="/dashboard/agentes/conductores" puedeActuar={puedeActuar} accion={accionOficina} accionSitios={accionSitios}
@@ -326,16 +327,16 @@ export default async function PaginaAgenteConductores({
           {/* La estrategia (B4): solo el dueño la edita, y solo con la config
               actual legible — sin ella, la forma guardaría a ciegas. */}
           {puedeAdministrar(rol) && (
-            <Bloque mensaje="No se pudo leer la estrategia del agente." esqueleto={null}>
+            <Bloque mensaje="No se pudo leer la estrategia del agente." esqueleto={<EsqTarjetaV2 alto={120} />}>
               <BloqueEstrategia pConfig={pConfig} accion={guardarEstrategia} />
             </Bloque>
           )}
-          <Bloque mensaje="No se pudo leer la bitácora de corridas." esqueleto={<EsqTabla filas={3} />}>
+          <Bloque mensaje="No se pudo leer la bitácora de corridas." esqueleto={<EsqTablaV2 />}>
             <BloqueCorridas pCorridas={pCorridas} />
           </Bloque>
           {/* Notificaciones hace SUS propias lecturas: en su propio boundary
               no retiene a nadie. */}
-          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTablaV2 />}>
             <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="conductores" />
           </Bloque>
         </>
