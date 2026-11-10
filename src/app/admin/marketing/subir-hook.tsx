@@ -1,8 +1,8 @@
 'use client';
 
 import { useRef, useState, useTransition } from 'react';
-import { CampoArchivo } from '../../ui-v2/componentes/campos';
-import { Film, UploadCloud } from 'lucide-react';
+import { UploadCloud } from 'lucide-react';
+import { Aviso, Boton, CampoArchivo, CampoTextarea, Icono } from '../../ui-v2/componentes';
 import { subirConUrlFirmada } from '@/lib/supabase/browser-storage';
 
 export type ResultadoFirmaHook =
@@ -11,10 +11,9 @@ export type ResultadoFirmaHook =
 export type ResultadoGuardar = { ok: true } | { ok: false; error: string };
 
 /**
- * El banco de hooks: sube el VIDEO directo a Storage (el servidor solo firma
- * la ruta, nunca ve los bytes — ver el porqué en `lib/likida/marketing/
- * estudio.ts`) y, cuando la subida termina, guarda el hook que Javier anotó.
- * Tres pasos, un solo botón: pedir la firma → subir → guardar la fila.
+ * El banco de hooks: sube el VIDEO directo a Storage (el servidor solo firma la ruta, nunca ve los bytes — ver el porqué en
+ * `lib/likida/marketing/estudio.ts`) y, cuando la subida termina, guarda el hook que el dueño anotó. Tres pasos, un solo botón: pedir la
+ * firma → subir → guardar la fila.
  */
 export function SubirHook({
   pedirFirma, guardar,
@@ -58,25 +57,18 @@ export function SubirHook({
   }
 
   return (
-    <div className="hairline rounded-lg p-3 space-y-2.5" style={{ background: 'var(--surface)' }}>
-      <div className="flex items-center gap-2">
-        <Film width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        <span className="text-[13px] font-medium">Subir un video de referencia</span>
-      </div>
-      <CampoArchivo etiqueta="Video de referencia" etiquetaOculta entradaRef={inputRef} accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
+    <div className="adm-din-forma">
+      <CampoArchivo etiqueta="Video de referencia" entradaRef={inputRef} accept="video/mp4,video/quicktime,video/webm,video/x-m4v"
         nombreArchivo={archivo?.name ?? null} onChange={elegirArchivo} disabled={pendiente} />
-      <textarea value={hookTexto} onChange={(e) => setHookTexto(e.target.value)} disabled={pendiente}
-        placeholder="¿Qué hook usa este video? (ej. «la pregunta llega igual en todas las flotas…»)"
-        rows={2} className="w-full text-[12.5px] leading-relaxed px-3 py-2 rounded-lg hairline"
-        style={{ background: 'var(--canvas)' }} />
-      {estado.fase === 'error' && <p className="text-[12px] m-0" style={{ color: 'var(--bad)' }}>{estado.mensaje}</p>}
-      {estado.fase === 'ok' && <p className="text-[12px] m-0" style={{ color: 'var(--ok)' }}>Hook guardado.</p>}
-      <button type="button" onClick={enviar} disabled={pendiente || !archivo}
-        className="inline-flex items-center gap-1.5 text-[12.5px] font-medium px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
-        style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
-        <UploadCloud width={13} height={13} strokeWidth={2} />
-        {estado.fase === 'subiendo' ? 'Subiendo…' : 'Subir y guardar hook'}
-      </button>
+      <CampoTextarea etiqueta="Hook que usa el video" value={hookTexto} onChange={(e) => setHookTexto(e.target.value)} disabled={pendiente}
+        placeholder="¿Qué hook usa este video? (ej. «la pregunta llega igual en todas las flotas…»)" rows={2} />
+      {estado.fase === 'error' ? <Aviso tono="error">{estado.mensaje}</Aviso> : null}
+      {estado.fase === 'ok' ? <Aviso tono="ok">Hook guardado.</Aviso> : null}
+      <div>
+        <Boton variante="primary" tamano="sm" onClick={enviar} disabled={pendiente || !archivo} loading={estado.fase === 'subiendo'} icono={<Icono icono={UploadCloud} tam={14} />}>
+          {estado.fase === 'subiendo' ? 'Subiendo…' : 'Subir y guardar hook'}
+        </Boton>
+      </div>
     </div>
   );
 }

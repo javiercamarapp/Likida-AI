@@ -5,8 +5,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/admin/aprobaciones/forma-pieza.tsx': 2,
   'app/admin/command-palette.tsx': 2,
   'app/admin/consola.tsx': 1,
-  'app/admin/marketing/subir-hook.tsx': 1,
-  'app/admin/marketing/tarjeta-pieza.tsx': 2,
   'app/admin/qa/banco-verdad.tsx': 2,
   'app/admin/qa/lanzar-form.tsx': 2,
   'app/ui-v2/componentes/forma.tsx': 2,

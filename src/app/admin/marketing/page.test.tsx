@@ -127,3 +127,19 @@ it('lecturas caídas: cada sección lo dice y NO afirma que esté vacía', async
   expect(h).not.toContain('Sin personajes ni lugares subidos todavía');
   expect(h).not.toContain('Nada pendiente ahora mismo');
 });
+
+it('la bandeja estancada se declara como dato medido (días desde la pieza más reciente), no como afirmación fija', async () => {
+  dobles.pendientes.mockResolvedValue([{ ...PIEZA, creadoEn: '2020-01-01T00:00:00Z' }]);
+  const h = renderToStaticMarkup(await EstudioMarketingPage());
+  expect(h).toContain('La pieza pendiente más reciente es de hace');
+  dobles.pendientes.mockResolvedValue([{ ...PIEZA, creadoEn: new Date().toISOString() }]);
+  expect(renderToStaticMarkup(await EstudioMarketingPage())).not.toContain('La pieza pendiente más reciente es de hace');
+});
+
+it('borrar pide confirmación que dice que es la baja y no se deshace; un solo h1', async () => {
+  const pagina = await EstudioMarketingPage();
+  const forma = buscar(pagina, FormaConAviso).find((f) => /Borrar/.test(String(f.props.boton)))!;
+  expect(String((forma.props.confirmar as { descripcion: string }).descripcion)).toMatch(/no se puede deshacer/);
+  const h = renderToStaticMarkup(pagina);
+  expect((h.match(/<h1/g) ?? []).length).toBe(1);
+});

@@ -31,7 +31,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
   'app/admin/flotas/[id]/ficha.tsx': 1,
   'app/admin/flotas/page.tsx': 1,
   'app/admin/integraciones/page.tsx': 1,
-  'app/admin/marketing/page.tsx': 1,
   'app/admin/mcp-clientes/page.tsx': 1,
   'app/admin/mi-perfil/page.tsx': 1,
   'app/admin/model-ops/page.tsx': 1,
@@ -54,7 +53,6 @@ export const BASE_H1_PROPIO: Record<string, number> = {
   'app/admin/error.tsx': 1,
   'app/admin/mapa-prospectos/[id]/detalle.tsx': 1,
   'app/admin/mapa-prospectos/cerebro.tsx': 1,
-  'app/admin/marketing/page.tsx': 1,
 };
 export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};
@@ -89,7 +87,6 @@ export const BASE_SIN_MARCO: string[] = [
   'app/admin/integraciones',
   'app/admin/mapa-prospectos',
   'app/admin/mapa-prospectos/[id]',
-  'app/admin/marketing',
   'app/admin/mcp-clientes',
   'app/admin/mi-perfil',
   'app/admin/model-ops',
