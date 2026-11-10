@@ -16,16 +16,13 @@ import { ahoraMs } from '@/lib/saludo';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { ChartCard, StatusPill } from '../../admin/ui/kit';
-import { EstadoVacio } from '../estados';
-import { HBars } from '../../admin/ui/graficas';
-import { Dona } from '../../admin/charts';
 import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
 import { calcularSinCfdi } from './sin-cfdi';
 import type { Metadata } from 'next';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { Disclosure, EstadoError, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { BarList, Cifra, DonaMini, TiraCifras } from '@/app/ui-v2/graficas';
+import './combustible.css';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 export const metadata: Metadata = { title: 'Combustible y casetas' };
 
@@ -189,168 +186,130 @@ export default async function CombustibleCasetasPage({
   const sinCfdiEstado = calcularSinCfdi(docs);
   const anomaliasCombustible = anomalias?.filter((a) => /diesel|caseta/i.test(a.detalle)) ?? [];
 
+  const itemsConcepto = (porConcepto ?? []).map((c) => ({ clave: c.concepto, etiqueta: etiquetaConcepto(c.concepto), valor: c.total }));
+
   return (
-    <MarcoPagina titulo="Combustible y casetas" apoyo="Los dos conceptos que más pesan en un viaje, y qué tanto están facturados." acciones={<>
-        {sp.ok === 'resuelta' && <StatusPill estado="ok">Línea resuelta</StatusPill>}
+    <MarcoPagina titulo="Margen y costos" apoyo="Los dos conceptos que más pesan en un viaje, y qué tanto están facturados." acciones={<>
+        {sp.ok === 'resuelta' && <StatusChip tono="ok">Línea resuelta</StatusChip>}
         {sp.ok?.startsWith('error_') && (
-          <StatusPill estado="bad">
+          <StatusChip tono="bad">
             {MOTIVO_ERROR[sp.ok.slice('error_'.length)] ?? 'No se pudo resolver la línea.'}
-          </StatusPill>
+          </StatusChip>
         )}
       </>}>
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          <TituloRecuadro info="combustible_casetas.el_gasto">El gasto</TituloRecuadro>
-          {porConcepto === null ? (
-            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
-          ) : (
-            <TiraCifras className="mt-3" sello={selloHoy('Gastos de la flota')}>
-              <Cifra icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                // FE-9: `getGastoPorConcepto` no tiene ventana (histórico
-                // completo) — junto al tile vecino, que sí declara la suya
-                // ("últimos 100 comprobantes"), esto se leía como "del mes".
-                // A 15k viajes/mes este acumulado crece sin fin, y ES la
-                // pantalla que el contador abre para el cierre.
-                etiqueta="Gastado en combustible" info="combustible_casetas.gastado_combustible" valor={diesel?.total ?? 0} formato="mxn"
-                nota={diesel ? `histórico · ${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
-              <Cifra icono={<RouteIcon width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                etiqueta="Gastado en casetas" info="combustible_casetas.gastado_casetas" valor={caseta?.total ?? 0} formato="mxn"
-                nota={caseta ? `histórico · ${numero(caseta.n)} casetas registradas` : 'Sin casetas registradas todavía'} />
-              <Cifra icono={<Fuel width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                // A23-ALTO: era `acred?.litrosDiesel ?? 0` — una lectura caída
-                // se pintaba como "0 litros elegibles", una cifra fiscal FALSA
-                // (no es que no haya nada acreditable: es que no se pudo leer).
-                // FE-8: el rótulo ahora dice la ventana del ejercicio en curso,
-                // la misma que usa el contador.
-                etiqueta={vl.rotulo} info="combustible_casetas.litros_elegibles" valor={acred ? acred.litrosDiesel : null} formato="litros"
-                mensaje={acred === null ? 'No se pudo leer lo acreditable' : undefined}
-                nota={vl.nota} />
-              <Cifra icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                // AUDITORÍA 1, ALTO: sin comprobantes, el valor es null — se
-                // PRESERVA para que el encabezado diga "—" y no un "0%" que se
-                // lee como "todo facturado" (buena noticia falsa en un vistazo).
-                // AUDITORÍA 25, MEDIO: "sin comprobantes" (`sin_datos`) y "la
-                // consulta falló" (`error`) ya no comparten el mismo mensaje.
-                etiqueta="Sin CFDI (combustible y casetas)" info="combustible_casetas.sin_cfdi" valor={sinCfdiEstado.pct} formato="porcentaje"
-                mensaje={
-                  sinCfdiEstado.estado === 'error' ? 'No se pudo leer si hay CFDI de estos conceptos'
-                  : sinCfdiEstado.estado === 'sin_datos' ? 'Sin comprobantes de estos conceptos todavía'
-                  : undefined
-                }
-                nota={sinCfdiEstado.estado === 'ok' ? `${sinCfdiEstado.sinCfdi} de ${sinCfdiEstado.total} sin factura entre los últimos ${numero(VENTANA_DOCUMENTOS)} comprobantes registrados — es deducible que se pierde` : undefined} />
-            </TiraCifras>
-          )}
-        </section>
+      {porConcepto === null ? (
+        <EstadoError reintentar>No se pudo cargar el gasto de la flota.</EstadoError>
+      ) : (
+        <TiraCifras sello={selloHoy('Gastos de la flota')}>
+          <Cifra icono={<Icono icono={Fuel} />}
+            // FE-9: `getGastoPorConcepto` no tiene ventana (histórico completo) — junto al tile vecino, que sí declara la suya ("últimos 100 comprobantes"), esto se leía como "del mes". A 15k viajes/mes este acumulado crece sin fin, y ES la pantalla que el contador abre para el cierre.
+            etiqueta="Gastado en combustible" info="combustible_casetas.gastado_combustible" valor={diesel?.total ?? 0} formato="mxn"
+            nota={diesel ? `histórico · ${numero(diesel.n)} cargas registradas` : 'Sin cargas registradas todavía'} />
+          <Cifra icono={<Icono icono={RouteIcon} />}
+            etiqueta="Gastado en casetas" info="combustible_casetas.gastado_casetas" valor={caseta?.total ?? 0} formato="mxn"
+            nota={caseta ? `histórico · ${numero(caseta.n)} casetas registradas` : 'Sin casetas registradas todavía'} />
+          <Cifra icono={<Icono icono={Fuel} />}
+            // A23-ALTO: era `acred?.litrosDiesel ?? 0` — una lectura caída se pintaba como "0 litros elegibles", una cifra fiscal FALSA (no es que no haya nada acreditable: es que no se pudo leer). FE-8: el rótulo dice la ventana del ejercicio en curso, la misma que usa el contador.
+            etiqueta={vl.rotulo} info="combustible_casetas.litros_elegibles" valor={acred ? acred.litrosDiesel : null} formato="litros"
+            mensaje={acred === null ? 'No se pudo leer lo acreditable' : undefined}
+            nota={vl.nota} />
+          <Cifra icono={<Icono icono={Receipt} />}
+            // AUDITORÍA 1, ALTO: sin comprobantes, el valor es null — se PRESERVA para que el encabezado diga "—" y no un "0%" que se lee como "todo facturado". AUDITORÍA 25, MEDIO: "sin comprobantes" (`sin_datos`) y "la consulta falló" (`error`) no comparten mensaje.
+            etiqueta="Sin CFDI (combustible y casetas)" info="combustible_casetas.sin_cfdi" valor={sinCfdiEstado.pct} formato="porcentaje"
+            mensaje={
+              sinCfdiEstado.estado === 'error' ? 'No se pudo leer si hay CFDI de estos conceptos'
+              : sinCfdiEstado.estado === 'sin_datos' ? 'Sin comprobantes de estos conceptos todavía'
+              : undefined
+            }
+            nota={sinCfdiEstado.estado === 'ok' ? `${sinCfdiEstado.sinCfdi} de ${sinCfdiEstado.total} sin factura entre los últimos ${numero(VENTANA_DOCUMENTOS)} comprobantes registrados — es deducible que se pierde` : undefined} />
+        </TiraCifras>
+      )}
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          {porConcepto && porConcepto.length > 1 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-              <ChartCard titulo="Gasto por concepto" tamano="M">
-                <HBars datos={porConcepto.map((c) => ({ etiqueta: etiquetaConcepto(c.concepto), valor: c.total }))} formato="mxn" />
-              </ChartCard>
-              <ChartCard titulo="Reparto del gasto" tamano="M">
-                <Dona segmentos={porConcepto.map((c) => ({ etiqueta: etiquetaConcepto(c.concepto), valor: c.total }))} />
-              </ChartCard>
-            </div>
-          ) : (
-            <ChartCard titulo="Gasto por concepto" tamano="S">
-              <EstadoVacio icono={<Fuel width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Hace falta más de un concepto de gasto registrado para comparar.
-              </EstadoVacio>
-            </ChartCard>
-          )}
-        </section>
+      {porConcepto && porConcepto.length > 1 ? (
+        <FilaTarjetas variante="6-6">
+          <Tarjeta titulo="Gasto por concepto">
+            <BarList etiqueta="Gasto por concepto" items={itemsConcepto} formato={mxn} />
+          </Tarjeta>
+          <Tarjeta titulo="Reparto del gasto">
+            <DonaMini etiqueta="Reparto del gasto por concepto" gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
+          </Tarjeta>
+        </FilaTarjetas>
+      ) : (
+        <Tarjeta titulo="Gasto por concepto" estado="vacio" mensaje="Falta más de un concepto" detalle="Hace falta más de un concepto de gasto registrado para comparar." iconoVacio={Fuel} contenida />
+      )}
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloRecuadro info="combustible_casetas.carga_repetida">Posible carga repetida</TituloRecuadro>
-          {anomalias === null ? (
-            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo revisar.</div>
-          ) : anomaliasCombustible.length === 0 ? (
-            <div className="mt-3">
-              <EstadoVacio icono={<Copy width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Ningún comprobante de combustible o caseta aparece cargado en más de un viaje.
-              </EstadoVacio>
-            </div>
-          ) : (
-            <>
-              <div className="divide-y mt-3" style={{ borderColor: 'var(--line)' }}>
-                {anomaliasCombustible.map((a, i) => (
-                  <div key={i} className="flex items-center justify-between gap-4 py-3">
-                    <div className="min-w-0">
-                      <div className="text-sm">{a.detalle}</div>
-                      <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--muted)' }}>Viajes: {a.viajes.join(' · ')}</div>
-                    </div>
-                    <div className="text-sm font-semibold tabular whitespace-nowrap shrink-0">{mxn(a.monto)}</div>
-                  </div>
-                ))}
+      <Tarjeta titulo="Posible carga repetida" info="combustible_casetas.carga_repetida"
+        estado={anomalias === null ? 'error' : anomaliasCombustible.length === 0 ? 'vacio' : 'ok'}
+        mensaje={anomalias === null ? 'No se pudo revisar' : 'Sin cargas repetidas'}
+        detalle="Ningún comprobante de combustible o caseta aparece cargado en más de un viaje." iconoVacio={Copy} contenida>
+        <ul className="rv-comb__lista">
+          {anomaliasCombustible.map((a, i) => (
+            <li key={i} className="rv-comb__anomalia">
+              <div>
+                <div>{a.detalle}</div>
+                <div className="rv-comb__tenue">Viajes: {a.viajes.join(' · ')}</div>
               </div>
-              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                Coincidencia detectada, no un veredicto: verifica antes de conversarlo con el operador.
-              </p>
-            </>
+              <strong className="rv-comb__monto">{mxn(a.monto)}</strong>
+            </li>
+          ))}
+        </ul>
+        <p className="rv-comb__nota">
+          Coincidencia detectada, no un veredicto: verifica antes de conversarlo con el operador.
+        </p>
+      </Tarjeta>
+
+      {!conciliacion.ok ? (
+        <Tarjeta titulo="CFDI consolidado (monedero y TAG)" info="combustible_casetas.cfdi_consolidado" estado="error" mensaje="No se pudo cargar esta sección" />
+      ) : conciliacion.datos === null ? (
+        <Tarjeta titulo="CFDI consolidado (monedero y TAG)" info="combustible_casetas.cfdi_consolidado" estado="vacio" mensaje="Sin CFDI consolidado todavía" iconoVacio={FileStack} contenida
+          detalle="Todavía no llega ningún CFDI consolidado de esta flota (el que factura el diésel de un monedero o el peaje de un TAG por periodo completo, no ticket por ticket). En cuanto alguien lo reenvíe por WhatsApp, aquí se ve cuánto quedó ligado solo contra cuánto necesita revisión." />
+      ) : (
+        <>
+          <TiraCifras sello={selloHoy('Gastos de la flota')}>
+            <Cifra icono={<Icono icono={FileStack} />}
+              etiqueta="Líneas ligadas automáticamente" info="combustible_casetas.lineas_ligadas" valor={conciliacion.datos.conciliadas} formato="numero"
+              nota={`de ${conciliacion.datos.cfdis} CFDI consolidado${conciliacion.datos.cfdis === 1 ? '' : 's'} recibido${conciliacion.datos.cfdis === 1 ? '' : 's'}`} />
+            <Cifra icono={<Icono icono={Receipt} />}
+              etiqueta="Por revisar a mano" info="combustible_casetas.por_revisar" valor={conciliacion.datos.porConciliar} formato="numero"
+              nota={conciliacion.datos.porConciliar === 0 ? 'Todo lo que llegó, concilió solo' : 'Elige el candidato correcto abajo, o marca que ninguno aplica'} />
+            <Cifra icono={<Icono icono={CircleCheck} />}
+              etiqueta="Revisadas, sin gasto que corresponda" info="combustible_casetas.sin_gasto" valor={conciliacion.datos.sinMatch} formato="numero"
+              nota="Un humano ya las miró — quedan documentadas, sin viaje" />
+          </TiraCifras>
+
+          {conciliacion.datos.porConciliar > 0 && (
+            lineasPendientes === null ? (
+              <EstadoError reintentar>
+                No se pudo cargar la lista para resolver a mano. Los conteos de arriba sí son reales, pero
+                la lista con los candidatos de cada línea no cargó. Recarga la página.
+              </EstadoError>
+            ) : (
+              <Tarjeta titulo="Líneas por resolver a mano" info="combustible_casetas.por_revisar">
+                <p className="rv-comb__nota">
+                  Una línea queda aquí cuando no hubo exactamente un ticket que cuadrara por fecha y monto —cero
+                  candidatos, o más de uno—: se prefiere pedir una revisión a adivinar cuál gasto es. Elige el
+                  viaje correcto o marca &ldquo;ninguno de estos&rdquo; para dejarla documentada.
+                </p>
+                <LineasPorConciliar lineas={lineasPendientes} accion={accionResolverLinea} />
+              </Tarjeta>
+            )
           )}
-        </section>
+        </>
+      )}
 
-        <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <TituloRecuadro info="combustible_casetas.cfdi_consolidado">CFDI consolidado (monedero y TAG)</TituloRecuadro>
-          {!conciliacion.ok ? (
-            <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar esta sección.</div>
-          ) : conciliacion.datos === null ? (
-            <div className="mt-3">
-              <EstadoVacio icono={<FileStack width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Todavía no llega ningún CFDI consolidado de esta flota (el que factura el diésel de un monedero o
-                el peaje de un TAG por periodo completo, no ticket por ticket). En cuanto alguien lo reenvíe por
-                WhatsApp, aquí se ve cuánto quedó ligado solo contra cuánto necesita revisión.
-              </EstadoVacio>
-            </div>
-          ) : (
-            <>
-              <TiraCifras className="mt-3" sello={selloHoy('Gastos de la flota')}>
-                <Cifra icono={<FileStack width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Líneas ligadas automáticamente" info="combustible_casetas.lineas_ligadas" valor={conciliacion.datos.conciliadas} formato="numero"
-                  nota={`de ${conciliacion.datos.cfdis} CFDI consolidado${conciliacion.datos.cfdis === 1 ? '' : 's'} recibido${conciliacion.datos.cfdis === 1 ? '' : 's'}`} />
-                <Cifra icono={<Receipt width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Por revisar a mano" info="combustible_casetas.por_revisar" valor={conciliacion.datos.porConciliar} formato="numero"
-                  nota={conciliacion.datos.porConciliar === 0 ? 'Todo lo que llegó, concilió solo' : 'Elige el candidato correcto abajo, o marca que ninguno aplica'} />
-                <Cifra icono={<CircleCheck width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Revisadas, sin gasto que corresponda" info="combustible_casetas.sin_gasto" valor={conciliacion.datos.sinMatch} formato="numero"
-                  nota="Un humano ya las miró — quedan documentadas, sin viaje" />
-              </TiraCifras>
-
-              {conciliacion.datos.porConciliar > 0 && (
-                lineasPendientes === null ? (
-                  <div className="card p-4 mt-3 text-sm" style={{ color: 'var(--muted)' }}>
-                    No se pudo cargar la lista para resolver a mano — los conteos de arriba sí son reales, pero
-                    la lista con los candidatos de cada línea no cargó. Recarga la página.
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                      Una línea queda aquí cuando no hubo exactamente un ticket que cuadrara por fecha y monto —cero
-                      candidatos, o más de uno—: se prefiere pedir una revisión a adivinar cuál gasto es. Elige el
-                      viaje correcto o marca &ldquo;ninguno de estos&rdquo; para dejarla documentada.
-                    </p>
-                    <LineasPorConciliar lineas={lineasPendientes} accion={accionResolverLinea} />
-                  </>
-                )
-              )}
-            </>
-          )}
-        </section>
-
-        <div className="px-5 pt-4 pb-5 border-t" style={{ borderColor: 'var(--line)' }}>
-          <EstadoVacio>
-            El rendimiento en km/l no aparece porque nadie captura el kilometraje: `viaje` no lo guarda, y el
-            tabulador de la configuración es una calibración de litros esperados por placa, no una medición de
-            campo. Dividir el gasto entre un kilometraje inventado daría un número con cara de medición.
-            <br /><br />
-            El cruce del estado de cuenta del monedero de combustible y del TAG de casetas contra el CFDI —el que
-            detecta la ordeña de verdad, litros comprados contra litros ingresados— YA EXISTE para lo que llega
-            por WhatsApp (ver la sección de arriba). Lo que sigue faltando es una conexión directa al portal del
-            monedero/TAG que traiga ese CFDI sola, sin depender de que alguien en la flota lo reenvíe.
-          </EstadoVacio>
-        </div>
-      </div>
+      <Disclosure titulo="Qué no mide esta pantalla" variante="tarjeta">
+        <p className="rv-comb__nota">
+          El rendimiento en km/l no aparece porque nadie captura el kilometraje: el viaje no lo guarda, y el
+          tabulador de la configuración es una calibración de litros esperados por placa, no una medición de
+          campo. Dividir el gasto entre un kilometraje inventado daría un número con cara de medición.
+        </p>
+        <p className="rv-comb__nota">
+          El cruce del estado de cuenta del monedero de combustible y del TAG de casetas contra el CFDI —el que
+          detecta la ordeña de verdad, litros comprados contra litros ingresados— YA EXISTE para lo que llega
+          por WhatsApp (ver la sección de arriba). Lo que sigue faltando es una conexión directa al portal del
+          monedero/TAG que traiga ese CFDI sola, sin depender de que alguien en la flota lo reenvíe.
+        </p>
+      </Disclosure>
     </MarcoPagina>
   );
 }

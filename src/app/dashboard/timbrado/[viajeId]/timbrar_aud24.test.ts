@@ -22,10 +22,10 @@ describe('FIS-8: el método de pago por defecto es PUE, y PPD dice lo que arrast
     // complemento de pago que un PPD obliga (`pac/sw.ts` lo declara). Ofrecer
     // PPD por defecto dejaba a la flota con una obligación abierta que su
     // propio sistema de facturación no le decía.
-    const selector = FUENTE.match(/<Selector nombre="metodoPago"[\s\S]*?\/>/)?.[0] ?? '';
+    const selector = FUENTE.match(/<CampoSelect[^>]*name="metodoPago"[\s\S]*?<\/CampoSelect>/)?.[0] ?? '';
     expect(selector).not.toBe('');
-    expect(selector).toContain('valorInicial="PUE"');
-    expect(selector).not.toContain('valorInicial="PPD"');
+    expect(selector).toContain('defaultValue="PUE"');
+    expect(selector).not.toContain('defaultValue="PPD"');
   });
 
   it('la pantalla dice que un PPD obliga a un complemento de pago que Likida no emite', () => {
@@ -36,7 +36,7 @@ describe('FIS-8: el método de pago por defecto es PUE, y PPD dice lo que arrast
   });
 
   it('PPD sigue disponible: no se le quita una opción legítima a quien la necesita', () => {
-    expect(FUENTE).toContain("valor: 'PPD'");
+    expect(FUENTE).toContain('value="PPD"');
   });
 });
 

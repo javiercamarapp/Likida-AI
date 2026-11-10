@@ -1,5 +1,4 @@
 import { revalidatePath } from 'next/cache';
-import { Landmark } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -11,7 +10,8 @@ import {
 import { getPerfilCrudo, guardarDeclaracionEstimuloPeaje } from '@/lib/likida/repo';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, Selector, type ResultadoAccion } from '../../admin/ui/forma';
+import { CampoSelect, FormaConAviso, Tarjeta, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import './contador.css';
 
 /**
  * FASE 3 — la pregunta que cierra el hueco H6 (LIF 2026 art. 20-A).
@@ -90,55 +90,36 @@ export async function EstimuloPeaje({
   }
 
   return (
-    <section
-      className="mt-3 rounded-2xl px-5 py-4 flex flex-col gap-3 hairline"
-      style={{ background: 'var(--surface)' }}
-    >
-      <div className="flex items-start gap-2.5">
-        <Landmark width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Estímulo de peaje (LIF 2026 art. 20-A)</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            {!leyoOk
-              ? 'No pude leer si esta flota ya declaró — esto NO significa que no haya declaración. Recarga la página; si sigue igual, avísanos antes de volver a contestar.'
-              : pendiente
-                ? 'Sin esta declaración el estímulo queda en $0. Contéstalo antes del primer cierre; una flota grande o una parte relacionada no puede acreditarlo.'
-                : elegible
-                  ? 'Declarado: ingresos menores a $300M y no parte relacionada. El motor acredita el 50% en casetas de pago electrónico. Dedicación exclusiva y Red Nacional siguen siendo responsabilidad de la flota.'
-                  : 'Declarado: esta flota no califica (ingresos de $300M o más, o parte relacionada). El estímulo de peaje queda en $0.'}
-          </p>
-        </div>
+    <Tarjeta titulo="Estímulo de peaje (LIF 2026 art. 20-A)">
+      <div className="rv-cont__lista">
+        <p className="rv-cont__linea">
+          {!leyoOk
+            ? 'No pude leer si esta flota ya declaró — esto NO significa que no haya declaración. Recarga la página; si sigue igual, avísanos antes de volver a contestar.'
+            : pendiente
+              ? 'Sin esta declaración el estímulo queda en $0. Contéstalo antes del primer cierre; una flota grande o una parte relacionada no puede acreditarlo.'
+              : elegible
+                ? 'Declarado: ingresos menores a $300M y no parte relacionada. El motor acredita el 50% en casetas de pago electrónico. Dedicación exclusiva y Red Nacional siguen siendo responsabilidad de la flota.'
+                : 'Declarado: esta flota no califica (ingresos de $300M o más, o parte relacionada). El estímulo de peaje queda en $0.'}
+        </p>
+        {/* No se ofrece el formulario si no se pudo leer el estado real: dejar contestar aquí es exactamente lo que reescribiría una declaración real existente como "$0" por confusión del usuario. */}
+        {leyoOk && (
+          <FormaConAviso accion={accion} boton={pendiente ? 'Declarar' : 'Corregir declaración'} columnas="md:grid-cols-2">
+            <CampoSelect id="ingresos" name="ingresos" etiqueta="Ingresos totales anuales del último ejercicio" obligatorio
+              defaultValue={umbralInicial}
+              ayuda="El umbral legal es estricto: $300 millones exactos ya no califican.">
+              <option value="">Elige una</option>
+              <option value="menor">Menores a $300 millones</option>
+              <option value="mayor">$300 millones o más</option>
+            </CampoSelect>
+            <CampoSelect id="parte" name="parte" etiqueta="¿Es parte relacionada de otra empresa? (LISR art. 179)" obligatorio
+              defaultValue={parteInicial}>
+              <option value="">Elige una</option>
+              <option value="no">No</option>
+              <option value="si">Sí</option>
+            </CampoSelect>
+          </FormaConAviso>
+        )}
       </div>
-      {/* No se ofrece el formulario si no se pudo leer el estado real: dejar
-          contestar aquí es exactamente lo que reescribiría una declaración
-          real existente como "$0" por confusión del usuario. */}
-      {leyoOk && (
-        <FormaConAviso accion={accion} boton={pendiente ? 'Declarar' : 'Corregir declaración'} columnas="md:grid-cols-2">
-          <Selector
-            nombre="ingresos"
-            etiqueta="Ingresos totales anuales del último ejercicio"
-            requerido
-            valorInicial={umbralInicial}
-            opciones={[
-              { valor: '', texto: 'Elige una' },
-              { valor: 'menor', texto: 'Menores a $300 millones' },
-              { valor: 'mayor', texto: '$300 millones o más' },
-            ]}
-            ayuda="El umbral legal es estricto: $300 millones exactos ya no califican."
-          />
-          <Selector
-            nombre="parte"
-            etiqueta="¿Es parte relacionada de otra empresa? (LISR art. 179)"
-            requerido
-            valorInicial={parteInicial}
-            opciones={[
-              { valor: '', texto: 'Elige una' },
-              { valor: 'no', texto: 'No' },
-              { valor: 'si', texto: 'Sí' },
-            ]}
-          />
-        </FormaConAviso>
-      )}
-    </section>
+    </Tarjeta>
   );
 }

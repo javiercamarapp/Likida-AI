@@ -1,6 +1,4 @@
-import { CheckCircle2, CircleAlert } from 'lucide-react';
-import { EstadoVacio } from '../estados';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
+import { Clock, CircleAlert, Inbox } from 'lucide-react';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -14,7 +12,11 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
 import type { Metadata } from 'next';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  CampoTexto, EstadoError, EstadoVacio, FormaConAviso, Icono, MarcoPagina, StatusChip, Tarjeta,
+  type ResultadoAccion, type TonoEstado,
+} from '@/app/ui-v2/componentes';
+import './arco.css';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 export const metadata: Metadata = { title: 'Solicitudes ARCO' };
@@ -23,6 +25,13 @@ export const dynamic = 'force-dynamic';
 
 const ETIQUETA_TIPO: Record<string, string> = {
   acceso: 'Acceso', rectificacion: 'Rectificación', cancelacion: 'Cancelación', oposicion: 'Oposición',
+};
+
+const ESTADO_ARCO: Record<string, { rotulo: string; tono: TonoEstado }> = {
+  resuelta: { rotulo: 'Resuelta', tono: 'ok' },
+  improcedente: { rotulo: 'Improcedente', tono: 'neutral' },
+  en_proceso: { rotulo: 'En proceso', tono: 'warn' },
+  recibida: { rotulo: 'Recibida', tono: 'warn' },
 };
 
 type Params = { tenant?: string; vista?: string; rol?: string };
@@ -185,127 +194,95 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
 
   return (
     <MarcoPagina titulo="Solicitudes ARCO" apoyo="Solicitudes de tus operadores y cómo responderlas a tiempo (LFPDPPP art. 31: 20 días hábiles).">
-      {/* H7 (auditoría 24): las tres cifras salían de `solicitudes`, que es
-          `[]` TANTO si de verdad no hay solicitudes COMO si la lectura de
-          arriba falló (`errorCarga`, catch → `solicitudes = []`). Antes de
-          este arreglo las tres KPI pintaban "0" en los dos casos: con la
-          base caída, "0 vencidas sin responder" es exactamente la mentira
-          que un responsable obligado por el art. 31 no se puede permitir —
-          puede haber solicitudes vencidas de verdad y la pantalla las
-          esconde bajo un cero con cara de medición. `null` es NO MEDIBLE
-          (KpiTile lo pinta "—", no "0"); la caja roja de `errorCarga` de
-          abajo ya explica por qué. */}
+      {/* H7 (auditoría 24): las tres cifras salían de `solicitudes`, que es `[]` TANTO si de verdad no hay solicitudes COMO si la lectura de arriba falló (`errorCarga`). Con la base caída, "0 vencidas sin responder" es la mentira que un responsable obligado por el art. 31 no se puede permitir. `null` es NO MEDIBLE ("—", no "0"); el aviso de abajo explica por qué. */}
       <TiraCifras sello={selloHoy('Solicitudes ARCO')}>
-        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Por responder" info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
-        <Cifra icono={<CheckCircle2 width={15} height={15} strokeWidth={1.75} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
-        <Cifra icono={<CircleAlert width={15} height={15} strokeWidth={1.75} />} etiqueta="Vencidas sin responder" info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
+        <Cifra icono={<Icono icono={Inbox} />} etiqueta="Por responder" info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
+        <Cifra icono={<Icono icono={Clock} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
+        <Cifra icono={<Icono icono={CircleAlert} />} etiqueta="Vencidas sin responder" info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
       </TiraCifras>
 
-      <div className="glass-panel overflow-hidden">
-        <section className="p-5">
-          <TituloRecuadro info="arco.solicitudes" className="mb-3">Solicitudes de tus operadores</TituloRecuadro>
-          {errorCarga ? (
-            <div className="rounded-lg p-3 text-sm" style={{ background: 'color-mix(in srgb, var(--color-warn) 10%, transparent)', color: 'var(--color-warn)' }}>
-              No se pudieron leer las solicitudes ahora mismo ({errorCarga.slice(0, 120)}). Recarga en un momento — no hay
-              forma de saber si hay solicitudes pendientes hasta que la base responda.
-            </div>
-          ) : solicitudes.length === 0 ? (
-            <EstadoVacio>
-              Ninguna solicitud ARCO registrada. Cuando un operador escribe *PRIVACIDAD* por WhatsApp, la solicitud
-              queda registrada aquí y tú —la responsable— tienes 20 días hábiles para responder.
-            </EstadoVacio>
-          ) : (
-            <div className="overflow-x-auto">
-              <table aria-label="Solicitudes de derechos ARCO" className="w-full text-sm">
-                <thead>
-                  <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th scope="col" className="px-3 py-2.5 font-medium">Recibida</th>
-                    <th scope="col" className="px-3 py-2.5 font-medium">Derecho</th>
-                    <th scope="col" className="px-3 py-2.5 font-medium">Titular</th>
-                    <th scope="col" className="px-3 py-2.5 font-medium">Vence</th>
-                    <th scope="col" className="px-3 py-2.5 font-medium">Estado</th>
-                    <th scope="col" className="px-3 py-2.5 font-medium">Respuesta</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {solicitudes.map((s) => (
-                    <tr key={s.id} className="border-t align-top" style={{ borderColor: 'var(--line)' }}>
-                      <td className="px-3 py-3">{fechaMx(s.recibidaEn)}</td>
-                      <td className="px-3 py-3 font-medium">{ETIQUETA_TIPO[s.tipo] ?? s.tipo}</td>
-                      <td className="px-3 py-3">
-                        {s.operadorNombre ?? '—'}
-                        <span className="block text-xs font-mono" style={{ color: 'var(--muted)' }}>{s.titularRef}</span>
-                      </td>
-                      <td className="px-3 py-3 tabular">{fechaMx(s.venceEn)}</td>
-                      <td className="px-3 py-3">
-                        <span className="text-xs font-semibold" style={{ color: s.estado === 'resuelta' || s.estado === 'improcedente' ? 'var(--color-ok)' : 'var(--color-warn)' }}>
-                          {s.estado === 'resuelta' ? 'Resuelta' : s.estado === 'en_proceso' ? 'En proceso' : s.estado === 'improcedente' ? 'Improcedente' : 'Recibida'}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        {s.estado === 'resuelta' || s.estado === 'improcedente' ? (
-                          <span className="text-xs" style={{ color: 'var(--muted)' }}>{s.resolucion ?? '—'}</span>
-                        ) : s.tipo === 'cancelacion' ? (
-                          <div className="flex flex-col gap-2">
-                            {/* La cancelación NO se resuelve con prosa: se
-                                EJECUTA sobre datos concretos. El botón dice
-                                lo que hace antes de que alguien lo apriete. */}
-                            <FormaConAviso
-                              accion={accionEjecutarCancelacion} boton="Ejecutar cancelación" columnas="auto"
-                              confirmar={{
-                                titulo: 'Ejecutar la cancelación',
-                                descripcion: `Se sustituyen nombre y teléfono de ${s.operadorNombre ?? 'este titular'} (${s.titularRef}) y se eliminan sus conversaciones. Si es una cuenta de oficina, también se da de baja y se borra su acceso. No se puede deshacer.`,
-                                etiquetaConfirmar: 'Sí, ejecutar cancelación',
-                              }}
-                            >
-                              <input type="hidden" name="solicitudId" value={s.id} />
-                            </FormaConAviso>
-                            <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                              Sustituye nombre y teléfono del registro operativo y elimina conversaciones. Se conservan
-                              el identificador del operador, el correo de la cuenta, la referencia del titular en la solicitud,
-                              la documentación fiscal, los eventos de cámara y telemetría ligados a su persona (180 días, o 365
-                              si fueron graves), su contacto de emergencia y su registro de jornada laboral; esas categorías
-                              requieren revisión con el responsable de privacidad. No se puede deshacer la eliminación de conversaciones.
-                              Si el titular es una cuenta de oficina (dueño, contador, encargado), se sustituyen su nombre y
-                              su correo, se da de baja y se borra su acceso, sus conversaciones de WhatsApp, del analista y del
-                              copiloto; se conserva la bitácora de auditoría. No se ejecuta si es el único dueño activo de la
-                              flota: nombra a otro dueño primero.
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex flex-col gap-2">
-                            {/* La oposición SÍ tiene un acto que dejar
-                                asentado antes de la prosa: la constancia de
-                                que está vigente. Se ofrece arriba de
-                                Responder porque ése es el orden — primero la
-                                evidencia, después la contestación. */}
-                            {s.tipo === 'oposicion' && (
-                              <>
-                                <FormaConAviso accion={accionRegistrarOposicion} boton="Registrar la oposición" columnas="auto">
-                                  <input type="hidden" name="solicitudId" value={s.id} />
-                                </FormaConAviso>
-                                <span className="text-xs" style={{ color: 'var(--muted)' }}>
-                                  Deja constancia en el expediente de que la oposición del titular está vigente
-                                  (queda «en proceso»). No cancela ni borra ningún dato y no cierra la solicitud:
-                                  eso lo haces tú al responder.
-                                </span>
-                              </>
-                            )}
-                            <FormaConAviso accion={accionResponder} boton="Responder" columnas="260px auto">
-                              <input type="hidden" name="solicitudId" value={s.id} />
-                              <input name="resolucion" placeholder="Qué se resolvió y cómo se entrega al titular" style={{ width: 260 }} />
-                            </FormaConAviso>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      </div>
+      <Tarjeta titulo="Solicitudes de tus operadores" info="arco.solicitudes">
+        {errorCarga ? (
+          <EstadoError reintentar>
+            No se pudieron leer las solicitudes ahora mismo ({errorCarga.slice(0, 120)}). Recarga en un momento: no hay
+            forma de saber si hay solicitudes pendientes hasta que la base responda.
+          </EstadoError>
+        ) : solicitudes.length === 0 ? (
+          <EstadoVacio titulo="Sin solicitudes ARCO" contenido>
+            Cuando un operador escribe *PRIVACIDAD* por WhatsApp, la solicitud
+            queda registrada aquí y tú, la responsable, tienes 20 días hábiles para responder.
+          </EstadoVacio>
+        ) : (
+          <ul className="rv-arco__lista" aria-label="Solicitudes de derechos ARCO">
+            {solicitudes.map((s) => {
+              const e = ESTADO_ARCO[s.estado] ?? ESTADO_ARCO.recibida;
+              const cerrada = s.estado === 'resuelta' || s.estado === 'improcedente';
+              return (
+                <li key={s.id} className="rv-arco__item">
+                  <div className="rv-arco__cabeza">
+                    <strong>{ETIQUETA_TIPO[s.tipo] ?? s.tipo}</strong>
+                    <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>
+                    {!cerrada && yaVencio(s.venceEn, hoy) && <StatusChip tono="bad">vencida</StatusChip>}
+                  </div>
+                  <dl className="rv-arco__datos">
+                    <div><dt>Recibida</dt><dd>{fechaMx(s.recibidaEn)}</dd></div>
+                    <div><dt>Vence</dt><dd>{fechaMx(s.venceEn)}</dd></div>
+                    <div><dt>Titular</dt><dd>{s.operadorNombre ?? '—'}<span className="rv-arco__ref">{s.titularRef}</span></dd></div>
+                  </dl>
+                  {cerrada ? (
+                    <p className="rv-arco__nota">{s.resolucion ?? '—'}</p>
+                  ) : s.tipo === 'cancelacion' ? (
+                    <div className="rv-arco__acciones">
+                      {/* La cancelación NO se resuelve con prosa: se EJECUTA sobre datos concretos. El botón dice lo que hace antes de que alguien lo apriete. */}
+                      <FormaConAviso
+                        accion={accionEjecutarCancelacion} boton="Ejecutar cancelación" columnas="auto"
+                        confirmar={{
+                          titulo: 'Ejecutar la cancelación',
+                          descripcion: `Se sustituyen nombre y teléfono de ${s.operadorNombre ?? 'este titular'} (${s.titularRef}) y se eliminan sus conversaciones. Si es una cuenta de oficina, también se da de baja y se borra su acceso. No se puede deshacer.`,
+                          etiquetaConfirmar: 'Sí, ejecutar cancelación',
+                        }}
+                      >
+                        <input type="hidden" name="solicitudId" value={s.id} />
+                      </FormaConAviso>
+                      <p className="rv-arco__nota">
+                        Sustituye nombre y teléfono del registro operativo y elimina conversaciones. Se conservan
+                        el identificador del operador, el correo de la cuenta, la referencia del titular en la solicitud,
+                        la documentación fiscal, los eventos de cámara y telemetría ligados a su persona (180 días, o 365
+                        si fueron graves), su contacto de emergencia y su registro de jornada laboral; esas categorías
+                        requieren revisión con el responsable de privacidad. No se puede deshacer la eliminación de conversaciones.
+                        Si el titular es una cuenta de oficina (dueño, contador, encargado), se sustituyen su nombre y
+                        su correo, se da de baja y se borra su acceso, sus conversaciones de WhatsApp, del analista y del
+                        copiloto; se conserva la bitácora de auditoría. No se ejecuta si es el único dueño activo de la
+                        flota: nombra a otro dueño primero.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="rv-arco__acciones">
+                      {/* La oposición SÍ tiene un acto que dejar asentado antes de la prosa: la constancia de que está vigente. Se ofrece arriba de Responder porque ése es el orden: primero la evidencia, después la contestación. */}
+                      {s.tipo === 'oposicion' && (
+                        <>
+                          <FormaConAviso accion={accionRegistrarOposicion} boton="Registrar la oposición" columnas="auto">
+                            <input type="hidden" name="solicitudId" value={s.id} />
+                          </FormaConAviso>
+                          <p className="rv-arco__nota">
+                            Deja constancia en el expediente de que la oposición del titular está vigente
+                            (queda «en proceso»). No cancela ni borra ningún dato y no cierra la solicitud:
+                            eso lo haces tú al responder.
+                          </p>
+                        </>
+                      )}
+                      <FormaConAviso accion={accionResponder} boton="Responder" columnas="md:grid-cols-1">
+                        <input type="hidden" name="solicitudId" value={s.id} />
+                        <CampoTexto name="resolucion" etiqueta="Respuesta al titular" etiquetaOculta placeholder="Qué se resolvió y cómo se entrega al titular" />
+                      </FormaConAviso>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Tarjeta>
     </MarcoPagina>
   );
 }

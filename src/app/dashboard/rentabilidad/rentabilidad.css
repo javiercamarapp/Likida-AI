@@ -1,0 +1,6 @@
+/* Margen y costos · solo lo que las piezas del sistema no traen. */
+.rv-rent__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-rent__nota[data-tono="warn"] { color: var(--warn); }
+.rv-rent__pie { margin: 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-rent__tenue { display: block; font-size: var(--t-micro); color: var(--faint); }
+.rv-rent__pie-lista { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-top: 8px; }

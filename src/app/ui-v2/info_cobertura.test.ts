@@ -84,7 +84,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'conexiones/seccion-gps.tsx': 4,
   'conexiones/seccion-integraciones.tsx': 2,
   'configuracion/forma.tsx': 2,
-  'contador/timbrado.tsx': 1,
   'inicio-cinco-agentes.tsx': 1,
   'onboarding/forma.tsx': 4,
   'opera-whatsapp.tsx': 1,
@@ -93,7 +92,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'reglas/vista.tsx': 2,
   'resumen-visual.tsx': 1,
   'shell/navegacion-v2.tsx': 2,
-  'timbrado/[viajeId]/timbrar.tsx': 4,
 };
 
 describe('ⓘ: cobertura de cifras y recuadros en las páginas migradas', () => {

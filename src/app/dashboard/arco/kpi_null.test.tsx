@@ -16,6 +16,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 
 vi.mock('@/lib/auth/guard', () => ({ requireSessionTenant: async () => ({ userId: 'u-1', tenantId: 't-1', rol: 'flota_admin' }) }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => ({ tenantId: 't-1', rol: 'flota_admin' }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => undefined }) }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({}) }));
 
 let listarFalla = false;

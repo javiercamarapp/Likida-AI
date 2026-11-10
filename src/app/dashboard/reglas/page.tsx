@@ -3,7 +3,6 @@ import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
-import { EstadoError } from '../estados';
 import { logger } from '@/lib/logger';
 import { interpretar, interpretarAMano } from '@/lib/likida/reglas/traductor';
 import {
@@ -15,7 +14,8 @@ import {
   FormaEscribirRegla, FormaElegirAMano, type ResultadoForma, type PlantillaEnPantalla,
 } from './forma';
 import { ListaReglas } from './vista';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Aviso, Disclosure, EstadoError, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import './reglas.css';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Mis reglas' };
 
@@ -207,30 +207,22 @@ export default async function PaginaReglas({
   }
 
   return (
-    <MarcoPagina titulo="Mis reglas" apoyo="Escribe de qué quieres que te avise y se traduce a una vigilancia concreta. Se revisa cada hora y cada caso avisa una vez.">
+    <MarcoPagina titulo="Notificaciones" apoyo="Escribe de qué quieres que te avise y se traduce a una vigilancia concreta. Se revisa cada hora y cada caso avisa una vez.">
       <Aviso tono="info">
         Escribe de qué quieres que te avise y lo traduzco a una vigilancia concreta.
         Te la enseño antes de encenderla: lo que queda guardado es la vigilancia, no
         la frase. Reviso cada hora, y cada caso te suena UNA vez.
       </Aviso>
 
-      <section className="space-y-3">
-        <div className="card p-4">
-          <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
-        </div>
-        <details className="card p-4">
-          <summary className="cursor-pointer text-[12px] font-medium select-none list-none"
-            style={{ color: 'var(--ink2)' }}>
-            …o elígela de la lista, sin pasar por el intérprete
-          </summary>
-          <div className="pt-3">
-            <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
-          </div>
-        </details>
-      </section>
+      <Tarjeta titulo="Escribe una regla">
+        <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
+      </Tarjeta>
+      <Disclosure titulo="…o elígela de la lista, sin pasar por el intérprete">
+        <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
+      </Disclosure>
 
       {reglas === null ? (
-        <EstadoError mensaje="No pude leer tus reglas. No se enseña una lista a medias: media lista se ve igual que la lista entera, y sobre vigilancias eso invita a declarar duplicados." />
+        <EstadoError reintentar>No pude leer tus reglas. No se enseña una lista a medias: media lista se ve igual que la lista entera, y sobre vigilancias eso invita a declarar duplicados.</EstadoError>
       ) : (
         <ListaReglas
           reglas={reglas}
@@ -241,22 +233,14 @@ export default async function PaginaReglas({
         />
       )}
 
-      <section className="space-y-2">
-        <TituloRecuadro info="reglas.vigilancia">Lo que sé vigilar hoy</TituloRecuadro>
-        {/* La lista completa, siempre a la vista y no solo cuando algo
-            falla: es la frontera honesta del producto. Lo que no está
-            aquí, Likida no lo puede prometer. */}
-        <div className="card p-4">
-          <ul className="space-y-1.5">
-            {loQueSiSeVigila(rol).map((linea) => (
-              <li key={linea} className="text-[12px] flex gap-2" style={{ color: 'var(--ink2)' }}>
-                <span style={{ color: 'var(--faint)' }}>·</span>
-                <span>{linea}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      {/* La lista completa, siempre a la vista y no solo cuando algo falla: es la frontera honesta del producto. Lo que no está aquí, Likida no lo puede prometer. */}
+      <Tarjeta titulo="Lo que sé vigilar hoy" info="reglas.vigilancia">
+        <ul className="rv-reglas__lista">
+          {loQueSiSeVigila(rol).map((linea) => (
+            <li key={linea}>{linea}</li>
+          ))}
+        </ul>
+      </Tarjeta>
     </MarcoPagina>
   );
 }

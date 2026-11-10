@@ -1,4 +1,6 @@
-import { StatusPill } from '../../admin/ui/kit';
+import { CamposSistema, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Bullet } from '@/app/ui-v2/graficas';
+import './suscripcion.css';
 import { mxn } from '@/lib/utils';
 import type { Plan } from '@/lib/saas/suscripcion';
 import { etiquetaIva } from '@/lib/saas/iva';
@@ -21,21 +23,17 @@ import { etiquetaIva } from '@/lib/saas/iva';
  * haría ver un plan ilimitado como uno vacío.
  */
 export function Uso({ etiqueta, usado, limite }: { etiqueta: string; usado: number; limite: number | null }) {
-  const pct = limite === null ? null : Math.min(100, Math.round((usado / limite) * 100));
   return (
-    <div className="card p-4">
-      <div className="text-lg font-semibold tabular">
+    <div className="rv-sus__uso">
+      <div className="rv-sus__uso-cifra">
         {usado}
-        {limite !== null && <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}> / {limite}</span>}
+        {limite !== null && <span className="rv-sus__tenue"> / {limite}</span>}
       </div>
-      <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
-      {pct === null ? (
-        <div className="text-xs mt-2" style={{ color: 'var(--muted)' }}>Sin límite en este plan</div>
+      <div className="rv-sus__tenue">{etiqueta}</div>
+      {limite === null ? (
+        <div className="rv-sus__tenue">Sin límite en este plan</div>
       ) : (
-        <div className="h-1.5 rounded-full overflow-hidden mt-2" style={{ background: 'var(--canvas)' }}>
-          <div className="h-full rounded-full"
-            style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--bad)' : 'var(--marca)' }} />
-        </div>
+        <Bullet etiqueta={etiqueta} valor={usado} maximo={Math.max(limite, usado)} meta={limite} />
       )}
     </div>
   );
@@ -68,28 +66,24 @@ export function TarjetaPlan({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="card p-4 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{plan.nombre}</span>
-        {esActual && <StatusPill estado="ok">Tu plan</StatusPill>}
+    <Tarjeta titulo={plan.nombre} acciones={esActual ? <StatusChip tono="ok">Tu plan</StatusChip> : undefined}>
+      <div className="rv-sus__plan">
+        <div className="rv-sus__precio">
+          {plan.precioMensual === null
+            ? <span className="rv-sus__tenue">Sin precio configurado</span>
+            : <>{mxn(plan.precioMensual)}<span className="rv-sus__tenue"> /mes {etiquetaIva(plan.precioIvaIncluido)}</span></>}
+        </div>
+        <ul className="rv-sus__limites">
+          <li>{plan.limiteViajesMes === null ? 'Viajes sin límite' : `Hasta ${plan.limiteViajesMes} viajes al mes`}</li>
+          <li>{plan.limiteOperadores === null ? 'Operadores sin límite' : `Hasta ${plan.limiteOperadores} operadores`}</li>
+        </ul>
+        {!plan.stripePriceId ? (
+          <p className="rv-sus__tenue">Todavía no se puede contratar en línea.</p>
+        ) : (
+          <div>{children}</div>
+        )}
       </div>
-      <div className="text-2xl font-semibold tabular">
-        {plan.precioMensual === null
-          ? <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}>Sin precio configurado</span>
-          : <>{mxn(plan.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes {etiquetaIva(plan.precioIvaIncluido)}</span></>}
-      </div>
-      <ul className="text-xs list-none p-0 m-0 flex flex-col gap-1" style={{ color: 'var(--muted)' }}>
-        <li>{plan.limiteViajesMes === null ? 'Viajes sin límite' : `Hasta ${plan.limiteViajesMes} viajes al mes`}</li>
-        <li>{plan.limiteOperadores === null ? 'Operadores sin límite' : `Hasta ${plan.limiteOperadores} operadores`}</li>
-      </ul>
-      {!plan.stripePriceId ? (
-        <p className="text-xs mt-auto pt-2" style={{ color: 'var(--muted)' }}>
-          Todavía no se puede contratar en línea.
-        </p>
-      ) : (
-        <div className="mt-auto pt-2">{children}</div>
-      )}
-    </div>
+    </Tarjeta>
   );
 }
 
@@ -133,19 +127,12 @@ export function InstruccionesTransferencia({
     ['Referencia (ponla en el concepto)', referencia, true],
   ];
   return (
-    // FE-19: scrollea dentro de la tarjeta, no estira la página.
-    <div className="card p-4 overflow-x-auto">
-      <table aria-label="Datos para la transferencia" className="w-full text-sm">
-        <tbody>
-          {filas.map(([k, v, mono]) => (
-            <tr key={k} className="border-b last:border-0" style={{ borderColor: 'var(--line)' }}>
-              <td className="py-2 pr-4 align-top" style={{ color: 'var(--muted)', width: '45%' }}>{k}</td>
-              <td className={`py-2 font-medium ${mono ? 'font-mono tracking-wide' : ''}`}>{v}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
+    <div className="rv-sus__transf">
+      <CamposSistema etiqueta="Datos para la transferencia" campos={filas.map(([k, v, mono]) => ({
+        etiqueta: k,
+        valor: mono ? <span className="rv-sus__mono">{v}</span> : v,
+      }))} />
+      <p className="rv-sus__tenue">
         Sin la referencia en el concepto no podemos saber de qué mes es tu pago, y la factura se queda como
         pendiente aunque el dinero ya haya salido de tu cuenta.
       </p>
