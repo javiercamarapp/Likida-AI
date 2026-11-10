@@ -4,7 +4,8 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { validarDefinicion, darDeAltaAgente } from '@/lib/likida/agentes/definiciones';
 import { apagar, encender } from '@/lib/likida/interruptores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { type ResultadoAccion } from '../ui/forma';
+import { actualizarAgente } from '@/lib/likida/agentes/config-agente';
+import { type ResultadoAccion } from '@/app/ui-v2/componentes';
 import { PanelAgentesContenido } from './contenido';
 
 export const dynamic = 'force-dynamic';
@@ -51,7 +52,9 @@ async function accionPalanca(_previo: ResultadoAccion, fd: FormData): Promise<Re
     if (operacion === 'apagar') {
       await apagar(id, motivo, userId);
     } else if (operacion === 'encender') {
-      await encender(id, userId);
+      // Simétrico a apagar: encender también exige motivo y lo firma la bitácora.
+      if (!motivo.trim()) return { error: 'Encender exige un motivo: sin nota, en tres semanas nadie sabe por qué se soltó.' };
+      await encender(id, userId, motivo);
     } else {
       return { error: `Operación desconocida: "${operacion}".` };
     }
@@ -66,9 +69,32 @@ async function accionPalanca(_previo: ResultadoAccion, fd: FormData): Promise<Re
   }
 }
 
-export default async function PaginaAgentes() {
-  await requireSuperadmin();
-  return <PanelAgentesContenido accionAlta={accionAlta} accionPalanca={accionPalanca} />;
+/**
+ * Configurar un agente (estado, runner, presupuesto, modelo) con motivo obligatorio y bitácora `agente.config`. Re-gatea superadmin
+ * adentro: el action es un endpoint público en la práctica.
+ */
+async function accionConfig(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  'use server';
+  const { userId } = await requireSuperadmin();
+  const id = String(fd.get('id') ?? '');
+  try {
+    const r = await actualizarAgente(id, {
+      estado: String(fd.get('estado') ?? ''),
+      runnerHabilitado: String(fd.get('runnerHabilitado') ?? ''),
+      presupuestoDiaUsd: String(fd.get('presupuestoDiaUsd') ?? ''),
+      modeloRol: String(fd.get('modeloRol') ?? ''),
+    }, String(fd.get('motivo') ?? ''), userId);
+    revalidatePath('/admin/agentes');
+    revalidatePath('/admin/observabilidad');
+    return { ok: `"${id}" quedó configurado (${Object.keys(r.cambios).length} cambio${Object.keys(r.cambios).length === 1 ? '' : 's'}, firmado en la bitácora).` };
+  } catch (e) {
+    return { error: mensajeParaPantalla(e, 'configurar el agente') };
+  }
 }
 
-export const metadata: Metadata = { title: 'Panel de agentes' };
+export default async function PaginaAgentes() {
+  await requireSuperadmin();
+  return <PanelAgentesContenido accionAlta={accionAlta} accionPalanca={accionPalanca} accionConfig={accionConfig} />;
+}
+
+export const metadata: Metadata = { title: 'Agentes' };
