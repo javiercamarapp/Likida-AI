@@ -1,0 +1,2 @@
+/* Piezas compartidas de las páginas de agentes del cliente. Archivo propio; solo tokens del sistema. */
+.rv-ag-error { display: block; margin-top: 2px; max-width: 380px; font-size: var(--t-micro, 11px); color: var(--bad); }

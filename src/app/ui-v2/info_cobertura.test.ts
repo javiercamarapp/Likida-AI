@@ -58,7 +58,6 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'agentes/estrategia-forma.tsx': 1,
   'agentes/facturas/control-emision.tsx': 3,
   'agentes/facturas/portales-vinculo.tsx': 1,
-  'agentes/ficha-corridas.tsx': 1,
   'agentes/insights/panel-insights.tsx': 1,
   'agentes/insights/tarjeta-insight.tsx': 1,
   'agentes/liquidacion/cargas.tsx': 3,
