@@ -1,7 +1,7 @@
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
-import { Aviso, BotonEnlace, Chip, EncabezadoPagina, Tarjeta } from '@/app/ui-v2/componentes';
-import { TiraKpi } from '@/app/ui-v2/graficas';
+import { Aviso, BotonEnlace, Chip, FilaTarjetas, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { TiraCifras } from '@/app/ui-v2/graficas';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import type { AgenteInsight, Insight } from '@/lib/likida/insights/tipos';
 import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
@@ -11,7 +11,8 @@ import { FiltrosResumen, ListaAtencion, SiguienteAccion } from './resumen-client
 import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo } from './resumen-tarjetas';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// RESUMEN v2 DEL DUEÑO (rediseño, ESTILO-LIKIDA §6): encabezado → barra de periodo (40 px) → tira de 4 KPI → fila 8+4
+// RESUMEN v2 DEL DUEÑO, página CANÓNICA del contrato visual (MarcoPagina + FilaTarjetas + TiraCifras; 0 style=, 0 .card):
+// encabezado → barra de periodo (40 px) → tira de 4 KPI → fila 8+4
 // («Liquidaciones cerradas por semana» · «Requiere tu atención») → fila 4+4+4 («Diferencias vs recuperado» · «Lo que hizo solo» ·
 // «Siguiente mejor acción»). Sin tabla. JAMÁS una cifra inventada: cada número sale de un lector existente; null = «—».
 // El asistente vive en el pie del sidebar y en la primera fila de «Requiere tu atención».
@@ -56,14 +57,12 @@ export async function ResumenV2({
   const ambito = `${tenantId}:${userId}`;
 
   return (
-    <main className="rv-res">
-      <EncabezadoPagina
-        area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
-        titulo="Resumen"
-        apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? 'Tus cinco agentes, de un vistazo.' : 'Tu flota, de un vistazo.'}`}
-        acciones={<Chip>{fechaMx(diaMx)}</Chip>}
-      />
-
+    <MarcoPagina
+      area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
+      titulo="Resumen"
+      apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? 'Tus cinco agentes, de un vistazo.' : 'Tu flota, de un vistazo.'}`}
+      acciones={<Chip>{fechaMx(diaMx)}</Chip>}
+    >
       {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
 
       {avisoFiscalPospuesto && (
@@ -74,22 +73,22 @@ export async function ResumenV2({
 
       <FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />
 
-      <div className="rv-res__kpis"><TiraKpi items={itemsKpi(d, sufijo, puede)} etiqueta="Tu flota en Likida" /></div>
+      <TiraCifras items={itemsKpi(d, sufijo, puede)} etiqueta="Tu flota en Likida" />
 
-      <div className="rv-res__fila rv-res__fila--8-4">
+      <FilaTarjetas variante="8-4">
         <TarjetaCierres d={d} />
-        <Tarjeta titulo="Requiere tu atención" info="resumen.requiere_atencion" className="rv-res__atencion">
+        <Tarjeta titulo="Requiere tu atención" info="resumen.requiere_atencion">
           <ListaAtencion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
         </Tarjeta>
-      </div>
+      </FilaTarjetas>
 
-      <div className="rv-res__fila rv-res__fila--4-4-4">
+      <FilaTarjetas variante="4-4-4" llena>
         <TarjetaDiferencias d={d} />
         <TarjetaHizoSolo d={d} sufijo={sufijo} puede={puede} />
         <Tarjeta titulo="Siguiente mejor acción" info="resumen.siguiente_mejor_accion">
           <SiguienteAccion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} atajos={atajos} />
         </Tarjeta>
-      </div>
-    </main>
+      </FilaTarjetas>
+    </MarcoPagina>
   );
 }
