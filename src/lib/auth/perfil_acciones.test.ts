@@ -1,7 +1,7 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- pruebas que leen el árbol de FUENTE del propio repo; ninguna ruta ni patrón viene de entrada de usuario. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { isValidElement } from 'react';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -103,9 +103,10 @@ const ZONAS = ['dashboard', 'admin', 'vendedor'] as const;
 const DIRECTIVA = /^[ \t]*['"]use server['"];?[ \t]*$/m;
 
 function archivos(dir: string, salida: string[] = []): string[] {
-  for (const nombre of readdirSync(dir)) {
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    const nombre = d.name;
     const ruta = join(dir, nombre);
-    if (statSync(ruta).isDirectory()) archivos(ruta, salida);
+    if (d.isDirectory()) archivos(ruta, salida);
     else if (/\.(ts|tsx)$/.test(nombre) && !/\.test\./.test(nombre) && DIRECTIVA.test(readFileSync(ruta, 'utf8'))) salida.push(relative(SRC, ruta));
   }
   return salida;

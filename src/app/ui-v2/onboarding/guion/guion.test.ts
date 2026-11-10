@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- rutas fijas del propio módulo */
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { validarRecorrido } from '@/app/ui-v2/movimiento/tour/validar';
@@ -13,9 +13,10 @@ import { textosParaRevision } from './textos_revision';
 const TODOS: PasoGuia[] = Object.values(GUION).flat();
 const SRC = join(process.cwd(), 'src');
 function fuente(dir: string, salida: string[] = []): string[] {
-  for (const n of readdirSync(dir)) {
+  for (const d of readdirSync(dir, { withFileTypes: true })) {
+    const n = d.name;
     const r = join(dir, n);
-    if (statSync(r).isDirectory()) { if (n !== 'node_modules') fuente(r, salida); continue; }
+    if (d.isDirectory()) { if (n !== 'node_modules') fuente(r, salida); continue; }
     if (/\.(tsx|ts)$/.test(n) && !/\.test\./.test(n)) salida.push(readFileSync(r, 'utf8'));
   }
   return salida;

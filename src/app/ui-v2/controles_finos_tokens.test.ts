@@ -1,5 +1,5 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- lee el CSS del propio módulo por rutas fijas. */
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -164,9 +164,10 @@ describe('controles finos · reglas de las primitivas (K1-1)', () => {
   it('--ctl-h-lg solo lo leen /login y las páginas públicas', () => {
     const quien: string[] = [];
     const recorrer = (dir: string) => {
-      for (const n of readdirSync(dir)) {
+      for (const d of readdirSync(dir, { withFileTypes: true })) {
+        const n = d.name;
         const f = join(dir, n);
-        if (statSync(f).isDirectory()) { if (n !== 'node_modules') recorrer(f); } else if (/\.(css|tsx?)$/.test(n) && !/\.test\./.test(n) && /var\(--ctl-h-lg/.test(readFileSync(f, 'utf8'))) quien.push(f.replace(join(__dirname, '..'), ''));
+        if (d.isDirectory()) { if (n !== 'node_modules') recorrer(f); } else if (/\.(css|tsx?)$/.test(n) && !/\.test\./.test(n) && /var\(--ctl-h-lg/.test(readFileSync(f, 'utf8'))) quien.push(f.replace(join(__dirname, '..'), ''));
       }
     };
     recorrer(join(__dirname, '..'));
