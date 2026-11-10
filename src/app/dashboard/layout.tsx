@@ -134,8 +134,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
           ruta. El servidor decide tenant (sesión) y pantalla (catálogo
           cerrado); el superadmin en preview se descarta allá. */}
       <PulsoProducto />
-      <AvisoLegalPendiente sesion={sesion} />
       {children}
+      {/* Después de la pantalla, no antes: el aviso no bloquea y no debe quedar por encima del título de cada página. */}
+      <AvisoLegalPendiente sesion={sesion} />
     </>
   );
 
