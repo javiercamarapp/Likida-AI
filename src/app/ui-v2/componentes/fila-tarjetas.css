@@ -4,10 +4,13 @@
 .rv-fila-tarjetas > * { min-width: 0; }
 .rv-fila-tarjetas[data-llena] { flex: 1 1 auto; }
 
-.rv-fila-tarjetas[data-variante="8-4"] > :first-child { grid-column: span 8; }
-.rv-fila-tarjetas[data-variante="8-4"] > :not(:first-child) { grid-column: span 4; }
-.rv-fila-tarjetas[data-variante="4-8"] > :first-child { grid-column: span 4; }
-.rv-fila-tarjetas[data-variante="4-8"] > :not(:first-child) { grid-column: span 8; }
+/* 8-4 y 4-8 solo en escritorio: sus selectores (0,3,0) ganarían a las reglas móviles (0,2,0) y la fila nunca se apilaría. */
+@media (min-width: 1024px) {
+  .rv-fila-tarjetas[data-variante="8-4"] > :first-child { grid-column: span 8; }
+  .rv-fila-tarjetas[data-variante="8-4"] > :not(:first-child) { grid-column: span 4; }
+  .rv-fila-tarjetas[data-variante="4-8"] > :first-child { grid-column: span 4; }
+  .rv-fila-tarjetas[data-variante="4-8"] > :not(:first-child) { grid-column: span 8; }
+}
 .rv-fila-tarjetas[data-variante="4-4-4"] > * { grid-column: span 4; }
 .rv-fila-tarjetas[data-variante="6-6"] > * { grid-column: span 6; }
 .rv-fila-tarjetas[data-variante="12"] > * { grid-column: 1 / -1; }

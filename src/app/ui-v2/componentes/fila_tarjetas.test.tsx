@@ -44,6 +44,14 @@ describe('FilaTarjetas', () => {
     expect(movil).toMatch(/grid-column:\s*1 \/ -1/);
   });
 
+  it('8-4 y 4-8 solo se reparten en escritorio: las reglas móviles ganan por debajo de 1024 px (sin ganarles por especificidad)', () => {
+    const fuera = css.replace(/@media[^{]*\{(?:[^{}]*\{[^{}]*\})*[^{}]*\}/g, '');
+    expect(fuera).not.toMatch(/data-variante="(8-4|4-8)"\]\s*>\s*:/);
+    const escritorio = css.slice(css.indexOf('@media (min-width: 1024px)'), css.indexOf('@media (min-width: 1024px)') + 700);
+    expect(escritorio).toMatch(/data-variante="8-4"\] > :first-child \{ grid-column: span 8/);
+    expect(escritorio).toMatch(/data-variante="4-8"\] > :not\(:first-child\) \{ grid-column: span 8/);
+  });
+
   it('sin hex, sin !important y la animación solo bajo `prefers-reduced-motion: no-preference`', () => {
     expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(css).not.toContain('!important');
