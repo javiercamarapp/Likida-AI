@@ -81,14 +81,22 @@
 [data-ui="v2"] .rv-disc__cab::-webkit-details-marker { display: none; }
 [data-ui="v2"] .rv-disc__cab:hover { background: var(--ui-soft); }
 [data-ui="v2"] .rv-disc__cab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-[data-ui="v2"] .rv-disc__titulo { flex: 1 1 auto; min-width: 0; }
-[data-ui="v2"] .rv-disc__resumen { flex: none; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
+/* El título manda: nunca se aplasta por debajo de su palabra más larga; el resumen cede primero y se recorta con elipsis. */
+[data-ui="v2"] .rv-disc__titulo { flex: 1 1 auto; min-width: min-content; }
+[data-ui="v2"] .rv-disc__resumen { flex: 0 10 auto; min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
 [data-ui="v2"] .rv-disc__chev { flex: none; color: var(--ink2); }
 [data-ui="v2"] .rv-disc[open] > .rv-disc__cab { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 1px solid var(--line); }
 [data-ui="v2"] .rv-disc[open] > .rv-disc__cab .rv-disc__chev { transform: rotate(180deg); }
 [data-ui="v2"] .rv-disc__cuerpo { padding: 14px; min-width: 0; }
 @media (prefers-reduced-motion: no-preference) { [data-ui="v2"] .rv-disc__chev { transition: transform var(--ui-fast) ease; } }
 @media (max-width: 819px) { [data-ui="v2"] .rv-disc__cab { min-height: 44px; } }
+/* Móvil: el resumen pasa DEBAJO del título (ancho completo, una línea con elipsis); el chevron queda junto al título. */
+@media (max-width: 767.98px) {
+  [data-ui="v2"] .rv-disc__cab { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding-block: 6px; }
+  [data-ui="v2"] .rv-disc__titulo { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+  [data-ui="v2"] .rv-disc__chev { grid-column: 2; grid-row: 1; }
+  [data-ui="v2"] .rv-disc__resumen { grid-column: 1 / -1; grid-row: 2; max-width: 100%; }
+}
 
 /* ── SegmentedControl (Vexa .segmented): pista suave + borde, activo blanco con anillo ──────────────────────────────── */
 [data-ui="v2"] .rv-seg { display: inline-flex; width: fit-content; max-width: 100%; padding: 2px; gap: 2px; overflow-x: auto; background: var(--surface); border: var(--borde-w, 1px) solid var(--btn-borde-sec); border-radius: 999px; }

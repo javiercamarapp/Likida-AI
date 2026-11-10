@@ -91,6 +91,16 @@ describe('R9 · Disclosure y AvisoCompacto', () => {
     expect(cerrado).toContain('2 partidas');
     expect(renderToStaticMarkup(<Disclosure titulo="A" abierto>x</Disclosure>)).toContain('open=""');
   });
+  it('Disclosure (CSS): el resumen cede ante el título (shrink + elipsis) y en móvil pasa debajo; ya no es flex:none', () => {
+    const p = css('piezas.css');
+    const resumen = p.match(/\.rv-disc__resumen \{[^}]*\}/)![0];
+    expect(resumen).not.toMatch(/flex:\s*none/);
+    expect(resumen).toMatch(/text-overflow:\s*ellipsis/);
+    expect(resumen).toMatch(/min-width:\s*0/);
+    expect(p.match(/\.rv-disc__titulo \{[^}]*\}/)![0]).toMatch(/min-width:\s*min-content/);
+    const movil = p.slice(p.indexOf('@media (max-width: 767.98px)', p.indexOf('.rv-disc__cab { min-height: 44px')));
+    expect(movil.slice(0, 700)).toMatch(/\.rv-disc__resumen \{[^}]*grid-column:\s*1 \/ -1/);
+  });
   it('AvisoCompacto: resumen recortado a 2 líneas por CSS y «Ver más» en <details> solo si hay detalle', () => {
     const h = renderToStaticMarkup(<AvisoCompacto tono="warn" resumen="Resumen corto" mas={<p>Detalle legal completo</p>} />);
     expect(h).toContain('rv-aviso--compacto');
