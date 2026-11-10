@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename, security/detect-unsafe-regex -- rutas del propio repo y regex sobre código fuente propio (no entrada de usuario) */
 import { describe, it, expect } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
