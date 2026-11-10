@@ -4,7 +4,7 @@ import { CLASES_V2 } from '../marco-v2';
 import SidebarNav, { SidebarAbajoAdmin, MarcaAdmin, AsideAdmin } from './sidebar-nav';
 import CommandPalette from './command-palette';
 import CabeceraAdmin from './cabecera-admin';
-import PestanasAdmin from './pestanas-admin';
+import ProveedorMarcoAdmin from './pestanas-admin';
 import CapaCarga from '../dashboard/shell/capa-carga';
 import CopilotoPanel from './copiloto-panel';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
@@ -71,8 +71,7 @@ export default function AdminChrome({
         <div className={`${CLASES_V2.columna} columna-centro`}>
           <CabeceraAdmin />
           <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
-            <PestanasAdmin />
-            {children}
+            <ProveedorMarcoAdmin>{children}</ProveedorMarcoAdmin>
           </div>
         </div>
 

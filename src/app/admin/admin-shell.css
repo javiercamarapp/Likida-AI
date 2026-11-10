@@ -11,7 +11,9 @@
 
 [data-ui="v2"] .adm-fila { gap: 16px; }
 [data-ui="v2"] .adm-fila .rv-sb { margin-right: 0; }
-[data-ui="v2"] .adm-fila .rv-contenido { padding: 0; }
+/* Sin padding SOLO para las pantallas que aún dibujan su propio lienzo; las que ya vienen en `MarcoPagina` (`.rv-marco`) conservan el
+   relleno del shell. La compatibilidad se retira cuando la última pantalla migre. */
+[data-ui="v2"] .adm-fila .rv-contenido:not(:has(> .rv-marco)) { padding: 0; }
 
 /* La caja de lo que solo cabe con el sidebar ancho (selector de tema, widget de uso). */
 [data-ui="v2"] .adm-solo-ancho { min-width: 0; }
@@ -93,5 +95,10 @@
   }
 }
 
-/* Pestañas de sección (pestanas-admin.tsx): pegadas al borde superior del contenido, sin hueco extra. */
+/* Barra de pestañas de respaldo (pantallas aún sin `MarcoPagina`; ver pestanas-admin.tsx): pegada al borde superior del contenido.
+   Con `MarcoPagina` en la página la pinta el propio marco bajo el encabezado y el respaldo se oculta (nunca dos barras). */
 [data-ui="v2"] .adm-pestanas { margin: 0 0 12px; }
+[data-ui="v2"] .adm-fila .rv-contenido:has(> .rv-marco) > .rv-pestanas-respaldo { display: none; }
+/* Bajo el encabezado del marco: la fila desplaza en horizontal por dentro (360 px con 6 pestañas) y nunca ensancha la página. */
+[data-ui="v2"] .rv-marco > .rv-marco__pestanas { min-width: 0; max-width: 100%; margin: -4px 0 4px; }
+[data-ui="v2"] .rv-pestanas-respaldo, [data-ui="v2"] .rv-marco__pestanas { min-width: 0; max-width: 100%; }
