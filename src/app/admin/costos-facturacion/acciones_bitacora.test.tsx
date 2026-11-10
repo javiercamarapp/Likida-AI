@@ -94,7 +94,7 @@ beforeEach(async () => {
   dobles.conciliar.mockResolvedValue(undefined);
   dobles.timbrarFactura.mockResolvedValue({ uuid: 'abcdef12-0000' });
   dobles.tenantDeFactura.mockResolvedValue('tn-1');
-  pagina = await CostosFacturacionPage();
+  pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
 });
 
 it('guardar price: asienta plan.price_guardado (sin flota; plan como entidad) con lo LEÍDO de Stripe', async () => {

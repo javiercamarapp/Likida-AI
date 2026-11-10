@@ -98,7 +98,7 @@ beforeEach(() => {
 
 it('INTEGRACIÓN — "Enviar por correo" de la página real pasa por FormaEnvio, y confirmar (el type="submit" real) SÍ manda el correo', async () => {
   dobles.enviarPiezaPorCorreo.mockResolvedValue({ ok: true, destinatario: 'contacto@x.mx', providerId: 'resend-1' });
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaEnvio);
   expect(forma).toBeDefined();
   expect((forma.props.pieza as { id: string }).id).toBe('pz-1');
@@ -114,7 +114,7 @@ it('INTEGRACIÓN — "Enviar por correo" de la página real pasa por FormaEnvio,
 });
 
 it('INTEGRACIÓN — re-exige requireSuperadmin aunque la action se invoque directo (segunda puerta)', async () => {
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaEnvio);
   const accion = forma.props.accion as AccionEnviar;
   dobles.requireSuperadmin.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
@@ -124,7 +124,7 @@ it('INTEGRACIÓN — re-exige requireSuperadmin aunque la action se invoque dire
 
 it('INTEGRACIÓN — si enviarPiezaPorCorreo falla, el detalle llega verbatim y NO se revalida', async () => {
   dobles.enviarPiezaPorCorreo.mockRejectedValue(new Error('Solo una pieza APROBADA y aún no enviada se puede enviar'));
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaEnvio);
   const accion = forma.props.accion as AccionEnviar;
   const r = await accion(null, fd({ pieza: 'pz-1' }));
@@ -142,7 +142,7 @@ it('A36-R11-01 — una pieza ambigua en «Últimas resueltas» muestra su motivo
   dobles.aprobadasSinEnviar.mockResolvedValue([]);
   dobles.ultimasResueltas.mockResolvedValue([AMBIGUA]);
   dobles.liberarEnvioAmbiguo.mockResolvedValue({ reservaLiberada: true });
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaLiberarAmbiguo);
   expect(forma).toBeDefined();
   expect(JSON.stringify(pagina)).toContain('Verificar en Resend');
@@ -156,7 +156,7 @@ it('A36-R11-01 — la reserva de cadencia no borrada se DICE en la respuesta', a
   dobles.aprobadasSinEnviar.mockResolvedValue([]);
   dobles.ultimasResueltas.mockResolvedValue([AMBIGUA]);
   dobles.liberarEnvioAmbiguo.mockResolvedValue({ reservaLiberada: false });
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaLiberarAmbiguo);
   const r = await (forma.props.accion as AccionEnviar)(null, fd({ pieza: 'pz-9' }));
   expect(r.ok).toMatch(/48 h/);
@@ -165,14 +165,14 @@ it('A36-R11-01 — la reserva de cadencia no borrada se DICE en la respuesta', a
 it('A36-R11-01 — una pieza enviada con prueba del proveedor NO ofrece liberar', async () => {
   dobles.aprobadasSinEnviar.mockResolvedValue([]);
   dobles.ultimasResueltas.mockResolvedValue([{ ...AMBIGUA, providerMessageId: 're_1' }]);
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   expect(buscarElementos(pagina, FormaLiberarAmbiguo)).toHaveLength(0);
 });
 
 // A37-S05-08
 it('A37-S05-08 — «Aprobar con mi edición» con el cuerpo vaciado NO aprueba el borrador original', async () => {
   dobles.bandejaPendiente.mockResolvedValue([{ ...PIEZA_POR_ENVIAR, estado: 'pendiente' }]);
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [forma] = buscarElementos(pagina, FormaPieza);
   const accion = forma.props.accion as AccionEnviar;
   const r = await accion(null, fd({ pieza: 'pz-1', operacion: 'aprobar', cuerpoEditado: '   ' }));
@@ -192,7 +192,7 @@ type AccionLote = (previo: unknown, fd: FormData) => Promise<Record<string, unkn
 const RESUMEN = { corte: 'x', dias: 30, vencidas: 100, enElLote: 50, limite: 50, porTipo: { parte_diario: 100 }, porAgente: {}, masViejaCreadaEn: null };
 
 async function accionesLote() {
-  const pagina = await PaginaAprobaciones();
+  const pagina = await PaginaAprobaciones({ searchParams: Promise.resolve({}) });
   const [lote] = buscarElementos(pagina, LimpiezaLote);
   expect(lote).toBeDefined();
   return { contar: lote.props.contar as AccionLote, vaciar: lote.props.vaciar as AccionLote };
@@ -259,7 +259,7 @@ it('LOTE — re-exige superadmin dentro de cada acción (segunda puerta)', async
 
 it('el render: un solo h1, sin style= ni .card, y las tres vistas presentes', async () => {
   const { renderToStaticMarkup } = await import('react-dom/server');
-  const html = renderToStaticMarkup(await PaginaAprobaciones());
+  const html = renderToStaticMarkup(await PaginaAprobaciones({ searchParams: Promise.resolve({}) }));
   expect((html.match(/<h1/g) ?? []).length).toBe(1);
   expect(html).not.toContain('style=');
   expect(html).not.toMatch(/class="[^"]*\bcard\b/);

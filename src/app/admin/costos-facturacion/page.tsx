@@ -186,7 +186,7 @@ const sinDato = (s: unknown): s is null => s === null;
  *
  * `null` es «no se pudo leer», `[]` es «no hay nada»: cada lectura cae por su lado y se dice.
  */
-export default async function CostosFacturacionPage({ searchParams }: { searchParams?: Promise<{ estado?: string }> } = {}) {
+export default async function CostosFacturacionPage({ searchParams }: { searchParams: Promise<{ estado?: string }> }) {
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   const sp = (await searchParams) ?? {};

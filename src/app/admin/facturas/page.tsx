@@ -37,7 +37,7 @@ function celdaCfdi(f: FacturaSaasFila) {
   return '—';
 }
 
-export default async function FacturasPage({ searchParams }: { searchParams?: Promise<{ estado?: string; desde?: string; hasta?: string }> } = {}) {
+export default async function FacturasPage({ searchParams }: { searchParams: Promise<{ estado?: string; desde?: string; hasta?: string }> }) {
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   const filtros = leerFiltros((await searchParams) ?? {});

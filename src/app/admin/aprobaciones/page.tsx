@@ -25,7 +25,7 @@ export const dynamic = 'force-dynamic';
 
 const VISTAS: readonly VistaAprobaciones[] = ['aprobar', 'enviar', 'historial'];
 
-export default async function PaginaAprobaciones({ searchParams }: { searchParams?: Promise<{ vista?: string }> } = {}) {
+export default async function PaginaAprobaciones({ searchParams }: { searchParams: Promise<{ vista?: string }> }) {
   await requireSuperadmin();
   const sp = (await searchParams) ?? {};
   const inicial: VistaAprobaciones = VISTAS.find((v) => v === sp.vista) ?? 'aprobar';

@@ -34,7 +34,7 @@ const FASE_ROTULO: Record<string, string> = {
 };
 
 /** Texto del estado del crédito: qué pasa, qué consecuencia tiene y qué hacer. Sin variables de entorno ni jerga. */
-export function textoCredito(c: EstadoCreditoIa): { tono: 'error' | 'warn' | null; titulo: string; texto: string } {
+function textoCredito(c: EstadoCreditoIa): { tono: 'error' | 'warn' | null; titulo: string; texto: string } {
   switch (c.clave) {
     case 'sin_saldo':
       return { tono: 'error', titulo: 'Crédito de IA agotado (402)', texto: 'El proveedor rechaza toda llamada: la IA está caída, el cuadre se degrada y las fotos esperan. Recarga el saldo en OpenRouter.' };

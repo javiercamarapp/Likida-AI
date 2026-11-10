@@ -1,4 +1,4 @@
-import { TriangleAlert, CircleCheck, CircleHelp, Package, Printer } from 'lucide-react';
+import { TriangleAlert, CircleCheck, CircleHelp, Printer } from 'lucide-react';
 import type { EstadoCartaPorte, ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import type { EstadoCampoCcp } from '@/lib/likida/carta_porte';
 import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
@@ -8,7 +8,6 @@ import {
   Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import './carta-porte.css';
-import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 /**
  * CARTA PORTE — la pregunta del minuto tres de cualquier demo (hallazgo A3,

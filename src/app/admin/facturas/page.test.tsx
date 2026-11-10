@@ -17,7 +17,7 @@ const FILA = (n: number, extra: Record<string, unknown> = {}) => ({
   cfdiUuid: 'a1b2c3d4-0000-0000-0000-000000000000', timbradaEn: null, cfdiCanceladoEn: null, cfdiXmlUrl: null, cfdiVerificacionUrl: 'https://verificacfdi.facturaelectronica.sat.gob.mx/x',
   creadaEn: '2026-10-31T00:00:00Z', ...extra,
 });
-const render = async (sp?: Record<string, string>) => renderToStaticMarkup(await FacturasPage({ searchParams: sp ? Promise.resolve(sp) : undefined }));
+const render = async (sp?: Record<string, string>) => renderToStaticMarkup(await FacturasPage({ searchParams: Promise.resolve(sp ?? {}) }));
 
 beforeEach(() => {
   vi.clearAllMocks();

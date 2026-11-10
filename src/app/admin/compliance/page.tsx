@@ -39,7 +39,7 @@ const CHIP_ARCO: Record<string, { tono: TonoEstado; etiqueta: string }> = {
  * respuesta se envía tal cual al titular), lo ya resuelto en una tabla paginada. Una lectura caída se dice; no se pinta como «sin
  * solicitudes».
  */
-export default async function CompliancePage({ searchParams }: { searchParams?: Promise<{ pagina?: string }> } = {}) {
+export default async function CompliancePage({ searchParams }: { searchParams: Promise<{ pagina?: string }> }) {
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   async function accionResolver(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
