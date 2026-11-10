@@ -41,6 +41,11 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 .rv-chat__principal > :not(.rv-chat__pixeles) { position: relative; }
 .rv-chat__pixeles { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; color: var(--ink); }
 .rv-chat[data-has="true"] .rv-chat__pixeles { opacity: .4; }
+/* El campo de puntos pasa por detrás del texto de la portada: más tenue sin hilo y con un halo del color del lienzo en cada texto, para que ningún punto parta una letra. */
+.rv-chat[data-has="false"] .rv-chat__pixeles { opacity: .55; }
+.rv-chat__hero :is(h1, h2), .rv-chat__sub, .rv-chat__pie, .rv-chat__meta {
+  text-shadow: 0 0 3px var(--canvas), 0 0 6px var(--canvas), 0 0 10px var(--canvas), 0 0 14px var(--canvas);
+}
 .rv-chat__fila { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0; margin: 0 0 8px; }
 .rv-chat__fila .rv-chat__hist-boton { margin-left: auto; }
 .rv-chat__cinta {
