@@ -214,7 +214,7 @@ describe('getBandejaEscalaciones', () => {
       href: '/dashboard/agentes/liquidacion?tenant=t1',
     });
     expect(porFuente.get('arco')?.href).toBe('/admin/compliance');
-    expect(porFuente.get('tickets')).toMatchObject({ href: '/admin/soporte', vence: '2026-08-11T00:00:00Z' });
+    expect(porFuente.get('tickets')).toMatchObject({ href: '/admin/soporte?ticket=tk1', vence: '2026-08-11T00:00:00Z' });
     // NULL ≠ $0: la talacha sin monto lo dice con palabras, nunca "$0.00".
     expect(porFuente.get('talachas')?.titulo).toContain('sin monto reportado');
   });

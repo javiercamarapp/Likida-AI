@@ -390,7 +390,8 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
           tenantNombre: t.tenantNombre,
           desde: t.abiertoEn,
           vence: t.venceEn,
-          href: '/admin/soporte',
+          // Lleva al HILO, no a la cola: /admin/soporte abre el ticket con ?ticket=<id>.
+          href: `/admin/soporte?ticket=${encodeURIComponent(t.id)}`,
         })),
     ),
     liquidaciones: 'error' in liquidaciones ? fuente(liquidaciones) : leida(liquidaciones.ok.items.map((l) => ({
