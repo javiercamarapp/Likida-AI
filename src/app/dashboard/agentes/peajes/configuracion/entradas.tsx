@@ -84,8 +84,8 @@ export function SeccionEntradas({ entradas, acciones }: { entradas: EntradasVist
       </section>
 
       <section className="rv-tarjeta" id="pull">
-        <Titulo t="Consulta automática a tu sistema (pull)"
-          nota="Si tu TMS o un script tuyo publica los cortes en una dirección HTTPS, Likida la consulta cada cierto tiempo y lo que traiga entra a la misma cola. Formato en docs/operacion/conciliacion-peajes.md. SFTP no está disponible." />
+        <Titulo t="Consulta automática a tu sistema"
+          nota="Si tu TMS o un script tuyo publica los cortes en una dirección HTTPS, Likida la consulta cada cierto tiempo y lo que traiga entra a la misma cola. Pide al equipo de Likida el formato exacto del archivo. SFTP no está disponible." />
         {config === null ? (
           <p className="text-[12px] rv-pj-c-muted">No se pudo leer esta configuración ahora mismo.</p>
         ) : (

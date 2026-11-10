@@ -302,7 +302,7 @@ export async function getConexiones(tenantId: string): Promise<Conector[]> {
     estado: emite ? 'listo' : 'ensayo',
     detalle: emite
       ? 'Encendido: el agente emite en portales de verdad.'
-      : 'En ensayo por candado legal — decisión de negocio: se enciende al cerrar el primer cliente (runbook en docs/encender-emision.md).',
+      : 'En modo de ensayo: las facturas (CFDI) se preparan pero no se timbran de verdad. La emisión real se activa con el equipo de Likida cuando tu alta fiscal esté lista; escríbele para pedirlo.',
     falta: [],
   });
 
