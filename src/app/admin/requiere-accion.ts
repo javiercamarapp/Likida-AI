@@ -1,4 +1,5 @@
 import { calcularAlertas } from './calcular-alertas';
+import { alertasExtra, leerEntradaAlertasExtra, type AlertaExtra } from '@/lib/admin/fuentes-alerta-extra';
 import { conteoDeFuente, getBandejaEscalaciones, type BandejaEscalaciones, type FuenteEscalacion } from '@/lib/admin/escalaciones';
 
 /**
@@ -26,7 +27,7 @@ const FUENTES: FuenteEscalacion[] = ['arco', 'corridas', 'talachas', 'facturas_p
  * `hayUrgente` sale de `calcularAlertas` (no se reimplementa): hay alguna alerta de atención con pendientes reales; el aviso de
  * «no se pudo leer» no cuenta como urgencia.
  */
-export function resumirRequiereAccion(b: Pick<BandejaEscalaciones, 'conteos'>): RequiereAccion {
+export function resumirRequiereAccion(b: Pick<BandejaEscalaciones, 'conteos'>, extras: ReadonlyArray<AlertaExtra> = []): RequiereAccion {
   let suma = 0;
   let ciegas = 0;
   for (const f of FUENTES) {
@@ -35,11 +36,20 @@ export function resumirRequiereAccion(b: Pick<BandejaEscalaciones, 'conteos'>): 
   }
   const alertas = calcularAlertas(null, [], b.conteos, null);
   const hayUrgente = alertas.some((a) => a.tipo === 'atencion' && !a.texto.startsWith('No se pudo leer'));
-  if (ciegas > 0 && suma === 0) return { pendientes: null, hayUrgente };
-  return { pendientes: suma, hayUrgente };
+  // Fuentes extra (crons caídos o no sanos, crédito de IA agotado): cada alerta suma 1. «No se pudo leer el latido» es ceguera, no
+  // un pendiente: no suma ni es urgente (igual que el aviso de lectura caída de la bandeja).
+  const reales = extras.filter((a) => a.id !== 'crons_ilegibles');
+  const urgente = hayUrgente || reales.length > 0;
+  const total = suma + reales.length;
+  if (ciegas > 0 && total === 0) return { pendientes: null, hayUrgente: urgente };
+  return { pendientes: total, hayUrgente: urgente };
 }
 
 type Lector = (ahoraMs: number) => Promise<BandejaEscalaciones>;
+type LectorExtras = () => Promise<ReadonlyArray<AlertaExtra>>;
+
+/** Nunca lanza: si las fuentes extra no se pueden leer, la campana sigue con la bandeja sola. */
+const leerExtras: LectorExtras = async () => alertasExtra(await leerEntradaAlertasExtra());
 let cache: { valor: RequiereAccion; vence: number } | null = null;
 
 /** Solo para pruebas. */
@@ -52,10 +62,12 @@ export function vaciarCacheRequiereAccion(): void { cache = null; }
 export async function obtenerRequiereAccion(
   ahoraMs: number = Date.now(),
   leer: Lector = getBandejaEscalaciones,
+  leerAlertasExtra: LectorExtras = leerExtras,
 ): Promise<RequiereAccion> {
   if (cache && ahoraMs < cache.vence) return cache.valor;
   try {
-    const valor = resumirRequiereAccion(await leer(ahoraMs));
+    const [bandeja, extras] = await Promise.all([leer(ahoraMs), leerAlertasExtra().catch((): ReadonlyArray<AlertaExtra> => [])]);
+    const valor = resumirRequiereAccion(bandeja, extras);
     cache = { valor, vence: ahoraMs + TTL_REQUIERE_ACCION_MS };
     return valor;
   } catch {

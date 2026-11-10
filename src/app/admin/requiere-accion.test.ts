@@ -6,6 +6,7 @@ vi.mock('@/lib/admin/escalaciones', async (importar) => ({
   getBandejaEscalaciones: vi.fn(),
 }));
 
+import type { AlertaExtra } from '@/lib/admin/fuentes-alerta-extra';
 import {
   obtenerRequiereAccion, resumirRequiereAccion, vaciarCacheRequiereAccion, SIN_DATO, TTL_REQUIERE_ACCION_MS,
 } from './requiere-accion';
@@ -17,6 +18,9 @@ const CAIDO: ConteosEscalaciones = {
   arco: null, corridasFallo: null, talachas: null, facturasProveedor: null, ticketsAbiertos: null, ticketsVencidos: null, liquidacionesRevisar: null,
 };
 const bandeja = (c: Partial<ConteosEscalaciones>) => ({ conteos: { ...CERO, ...c } }) as unknown as BandejaEscalaciones;
+
+const SIN_EXTRAS = async () => [] as AlertaExtra[];
+const extra = (id: AlertaExtra['id']): AlertaExtra => ({ id, tipo: 'atencion', texto: id, href: '/admin/crons', items: [] });
 
 beforeEach(() => vaciarCacheRequiereAccion());
 
@@ -47,15 +51,34 @@ describe('resumirRequiereAccion', () => {
 describe('obtenerRequiereAccion', () => {
   it('guarda el resultado en caché corta y lo recalcula al vencer', async () => {
     const leer = vi.fn().mockResolvedValue(bandeja({ talachas: 3 }));
-    expect((await obtenerRequiereAccion(1_000, leer)).pendientes).toBe(3);
-    await obtenerRequiereAccion(1_000 + TTL_REQUIERE_ACCION_MS - 1, leer);
+    expect((await obtenerRequiereAccion(1_000, leer, SIN_EXTRAS)).pendientes).toBe(3);
+    await obtenerRequiereAccion(1_000 + TTL_REQUIERE_ACCION_MS - 1, leer, SIN_EXTRAS);
     expect(leer).toHaveBeenCalledTimes(1);
-    await obtenerRequiereAccion(1_000 + TTL_REQUIERE_ACCION_MS, leer);
+    await obtenerRequiereAccion(1_000 + TTL_REQUIERE_ACCION_MS, leer, SIN_EXTRAS);
     expect(leer).toHaveBeenCalledTimes(2);
   });
   it('si la bandeja lanza devuelve «sin dato» y no lo cachea', async () => {
     const leer = vi.fn().mockRejectedValueOnce(new Error('red')).mockResolvedValueOnce(bandeja({ talachas: 1 }));
-    expect(await obtenerRequiereAccion(5, leer)).toEqual(SIN_DATO);
-    expect((await obtenerRequiereAccion(6, leer)).pendientes).toBe(1);
+    expect(await obtenerRequiereAccion(5, leer, SIN_EXTRAS)).toEqual(SIN_DATO);
+    expect((await obtenerRequiereAccion(6, leer, SIN_EXTRAS)).pendientes).toBe(1);
+  });
+});
+
+describe('fuentes de alerta extra', () => {
+  it('cada alerta extra suma 1 y es urgente', () => {
+    const r = resumirRequiereAccion(bandeja({ talachas: 2 }), [extra('cron_sin_latido'), extra('ia_credito_agotado')]);
+    expect(r).toEqual({ pendientes: 4, hayUrgente: true });
+  });
+  it('«crons ilegibles» no suma ni es urgente; con bandeja ciega sigue siendo null', () => {
+    expect(resumirRequiereAccion(bandeja({}), [extra('crons_ilegibles')])).toEqual({ pendientes: 0, hayUrgente: false });
+    expect(resumirRequiereAccion(bandeja(CAIDO), [extra('crons_ilegibles')]).pendientes).toBeNull();
+  });
+  it('bandeja ciega pero con alerta real: informa el mínimo legible', () => {
+    expect(resumirRequiereAccion(bandeja(CAIDO), [extra('cron_estado_no_ok')]).pendientes).toBe(1);
+  });
+  it('si leer las extras lanza, la campana sigue con la bandeja sola', async () => {
+    const leer = vi.fn().mockResolvedValue(bandeja({ talachas: 2 }));
+    const r = await obtenerRequiereAccion(9, leer, () => Promise.reject(new Error('x')));
+    expect(r).toEqual({ pendientes: 2, hayUrgente: true });
   });
 });
