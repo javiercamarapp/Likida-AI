@@ -49,7 +49,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/dashboard/inicio-operacion.tsx': 1,
   'app/dashboard/kpi-periodo.tsx': 2,
   'app/dashboard/motor-fiscal-periodo.tsx': 2,
-  'app/dashboard/onboarding/chat.tsx': 5,
   'app/dashboard/primera-liquidacion.tsx': 1,
   'app/dashboard/proximamente/proximamente.tsx': 1,
   'app/dashboard/puesta-en-marcha/vista.tsx': 1,
