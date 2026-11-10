@@ -1,7 +1,6 @@
 import Link from 'next/link';
-import { BellRing, CalendarClock, Download, ShieldQuestion } from 'lucide-react';
+import { CalendarClock, Download } from 'lucide-react';
 import { fechaMx, numero, TZ_MX } from '@/lib/formato';
-import { EstadoVacio, EstadoError } from '../estados';
 import {
   ROTULO_PROCEDENCIA, ALCANCE_PROCEDENCIA, aHoras, fraseDelHueco,
   type JornadaCompuesta,
@@ -16,7 +15,11 @@ import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { AvisoCompacto, BarraPeriodo, hrefConParams, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  Aviso, AvisoCompacto, BarraPeriodo, clasesBoton, EstadoError, EstadoVacio, hrefConParams, Icono, InfoTip, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  type ColumnaBase, type TonoEstado,
+} from '@/app/ui-v2/componentes';
+import './jornada.css';
 
 /**
  * LA PANTALLA DEL CONTRALOR — ver, corregir y cerrar el registro de jornada.
@@ -54,11 +57,11 @@ export interface FilaJornada {
   editable: boolean;
 }
 
-const TONO: Record<string, { fondo: string; texto: string }> = {
-  exceso: { fondo: 'var(--badbg)', texto: 'var(--bad)' },
-  sin_registro_declarado: { fondo: 'var(--warnbg)', texto: 'var(--warn)' },
-  dato_insuficiente: { fondo: 'var(--warnbg)', texto: 'var(--warn)' },
-  sin_senal_de_exceso: { fondo: 'var(--okbg)', texto: 'var(--ok)' },
+const TONO: Record<string, TonoEstado> = {
+  exceso: 'bad',
+  sin_registro_declarado: 'warn',
+  dato_insuficiente: 'warn',
+  sin_senal_de_exceso: 'ok',
 };
 
 function hora(iso: string): string {
@@ -136,17 +139,44 @@ export function VistaJornada({
   if (operador) paramsExport.set('operador', operador);
   const urlExport = `/api/export/jornada?${paramsExport.toString()}`;
 
-  return (
-    <MarcoPagina titulo="Jornada" apoyo="Registro de jornada del art. 132 fr. XXXIV de la LFT, por operador. Registra y avisa; no sustituye la bitácora de horas.">
+  const columnas: ColumnaBase<FilaJornada>[] = [
+    {
+      id: 'dia', titulo: 'Día', principal: true,
+      celda: (f) => <Link href={hrefJornada(f)} className="rv-jn__enlace">{f.dia}</Link>,
+    },
+    { id: 'operador', titulo: 'Operador', celda: (f) => f.operadorNombre },
+    { id: 'inicio', titulo: 'Inicio', celda: (f) => <Marca a={f.jornada.inicio} /> },
+    { id: 'fin', titulo: 'Fin', celda: (f) => <Marca a={f.jornada.fin} /> },
+    {
+      id: 'descanso', titulo: 'Descanso',
+      // `null` NO se pinta como 0: son dos afirmaciones distintas.
+      celda: (f) => (f.jornada.minutosDescanso === null
+        ? <span className="rv-jn__apagado">sin descanso reportado</span>
+        : `${f.jornada.minutosDescanso} min`),
+    },
+    { id: 'total', titulo: 'Total', celda: (f) => <TotalDelDia f={f} /> },
+    { id: 'lectura', titulo: 'Lectura', celda: (f) => <StatusChip tono={TONO[f.riesgo.veredicto] ?? 'warn'}>{ROTULO_VEREDICTO[f.riesgo.veredicto]}</StatusChip> },
+    {
+      id: 'estado', titulo: 'Estado',
+      celda: (f) => (
+        <>
+          {f.estado === 'cerrado' ? `Cerrado · ${f.cerradoPorEmail ?? 'sin firma'}` : 'Abierto'}
+          <span className="rv-jn__tenue">{f.conformeOperadorEn ? 'Con conformidad del operador' : 'Sin conformidad del operador'}</span>
+        </>
+      ),
+    },
+  ];
+  const hrefJornada = (f: FilaJornada) => `/dashboard/jornada${sufijo ? `${sufijo}&` : '?'}desde=${desde}&hasta=${hasta}&abrir=${f.jornadaId}`;
 
-      {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al
-          pie: una flota que crea que esto sustituye la bitácora de horas
-          de servicio se lleva la multa del art. 83 con nuestro archivo en
-          la mano. */}
+  return (
+    <MarcoPagina titulo="Equipo" apoyo="Registro de jornada del art. 132 fr. XXXIV de la LFT, por operador. Registra y avisa; no sustituye la bitácora de horas.">
+
+      {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al pie: una flota que crea que esto sustituye la bitácora de horas
+          de servicio se lleva la multa del art. 83 con nuestro archivo en la mano. */}
       <AvisoCompacto tono="warn" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas="Ver más: alcance legal"
         mas={(
           <>
-            <TituloRecuadro info="jornada.alcance">Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo</TituloRecuadro>
+            <strong>Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo</strong> <InfoTip clave="jornada.alcance" />
             <p>{LEYENDA_NOM_087}</p>
             <p>{LEYENDA_VEREDICTOS}</p>
           </>
@@ -163,20 +193,16 @@ export function VistaJornada({
           nota="el operador no ha confirmado" tono={cuenta && cuenta.sinConformidad > 0 ? 'warn' : undefined} info="jornada.sin_conformidad" />
       </TiraCifras>
 
-      <section className="card p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <TituloRecuadro info="jornada.registro">
-            Del {desde} al {hasta}
-          </TituloRecuadro>
-          <Link href={`${urlExport}`} prefetch={false}
-            className="rv-btn rv-btn--secondary">
-            <Download width={14} height={14} strokeWidth={1.75} />
+      <Tarjeta titulo={`Del ${desde} al ${hasta}`} info="jornada.registro"
+        acciones={(
+          // `<a>` y no `Link`: es un archivo que baja, no una ruta que se precarga (un prefetch dispararía la exportación).
+          <a href={urlExport} className={clasesBoton('secondary', 'sm')}>
+            <Icono icono={Download} />
             Descargar el reporte (CSV)
-          </Link>
-        </div>
+          </a>
+        )}>
 
-        {/* El filtro de fechas por GET: mueve TODO lo que hay debajo,
-            incluida la liga de descarga. Un rótulo que dice «del X al Y»
+        {/* El filtro de fechas por GET: mueve TODO lo que hay debajo, incluida la liga de descarga. Un rótulo que dice «del X al Y»
             tiene que ser cierto para las dos cosas. */}
         <BarraPeriodo etiqueta="Periodo y filtros de la jornada"
           chips={[
@@ -191,62 +217,38 @@ export function VistaJornada({
             campos: operadores && operadores.length > 0 ? { items: [{ tipo: 'select', nombre: 'operador', etiqueta: 'Operador', valor: operador ?? '', opciones: [{ valor: '', rotulo: 'Todos' }, ...operadores.map((o) => ({ valor: o.id, rotulo: o.nombre }))] }] } : undefined,
           }} />
         {operadores === null && (
-          <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+          <p className="rv-jn__aviso">
             No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.
           </p>
         )}
 
         {truncada && (
-          <EstadoError mensaje="Este periodo trae más expedientes de los que caben en una lectura. Lo que se ve NO es el periodo entero: pídelo en rangos más cortos." />
+          <EstadoError>Este periodo trae más expedientes de los que caben en una lectura. Lo que se ve NO es el periodo entero: pídelo en rangos más cortos.</EstadoError>
         )}
 
         {motivoIlegible !== null ? (
-          <EstadoError mensaje={`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`} />
+          <EstadoError reintentar>{`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`}</EstadoError>
         ) : lista.length === 0 ? (
-          <EstadoVacio icono={<CalendarClock width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+          <EstadoVacio icono={CalendarClock} titulo="Sin expedientes en el periodo">
             No hay expedientes de jornada en este periodo. Eso no significa que nadie trabajó:
             significa que todavía no hay registro. Los operadores lo abren por WhatsApp con
             «inicio jornada», y el sistema deriva lo que puede de los viajes y del GPS.
           </EstadoVacio>
         ) : (
-          <div className="overflow-x-auto">
-            <table aria-label="Jornadas por día y operador" className="w-full text-[12px]">
-              <thead>
-                <tr style={{ color: 'var(--muted)' }} className="text-left">
-                  <Th>Día</Th>
-                  <Th>Operador</Th>
-                  <Th>Inicio</Th>
-                  <Th>Fin</Th>
-                  <Th>Descanso</Th>
-                  <Th>Total</Th>
-                  <Th>Lectura</Th>
-                  <Th>Estado</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {lista.map((f) => (
-                  <Renglon key={f.jornadaId} f={f} sufijo={sufijo} desde={desde} hasta={hasta} />
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <TablaBase<FilaJornada> etiqueta="Jornadas por día y operador" columnas={columnas} filas={lista} idFila={(f) => f.jornadaId} tarjetaMovil />
         )}
-      </section>
+      </Tarjeta>
 
       {/* ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ──────────────
-          El tope del decreto es SEMANAL: un contralor podía tener catorce
-          días verdes uno por uno y una semana de 63 h — y esta pantalla
-          nunca lo decía, porque `evaluarRiesgoSemana` no tenía un solo
-          llamador. Solo semanas ENTERAS (lunes a domingo dentro de la
-          ventana): media semana evaluada diría «va bien» con el recorte. */}
+          El tope del decreto es SEMANAL: un contralor podía tener catorce días verdes uno por uno y una semana de 63 h — y esta
+          pantalla nunca lo decía. Solo semanas ENTERAS (lunes a domingo dentro de la ventana): media semana evaluada diría «va
+          bien» con el recorte. */}
       {motivoIlegible === null && (
         <SeccionSemanas semanas={semanas} truncada={truncada} />
       )}
 
-      {/* El detalle y las correcciones del día abierto. Un solo día a la
-          vez: pintar un formulario por cada renglón mete cientos de forms
-          en una pantalla donde se corrige uno (la lección de FE-12 en
-          /dashboard/operadores). */}
+      {/* El detalle y las correcciones del día abierto. Un solo día a la vez: pintar un formulario por cada renglón mete cientos de
+          forms en una pantalla donde se corrige uno (la lección de FE-12 en /dashboard/operadores). */}
       {abrir !== null && lista.some((f) => f.jornadaId === abrir) && (
         <FormasJornada
           fila={lista.find((f) => f.jornadaId === abrir)!}
@@ -278,58 +280,21 @@ export function VistaJornada({
   );
 }
 
-function Renglon({ f, sufijo, desde, hasta }: { f: FilaJornada; sufijo: string; desde: string; hasta: string }) {
+/** Total del día con las horas extraordinarias del art. 61 SOLO cuando están medidas (> 0). */
+function TotalDelDia({ f }: { f: FilaJornada }) {
   const j = f.jornada;
   const horas = aHoras(j.minutosEfectivos ?? j.minutosBrutos);
   const hueco = fraseDelHueco(j);
-  const tono = TONO[f.riesgo.veredicto] ?? TONO.dato_insuficiente;
-  const sep = sufijo ? `${sufijo}&` : '?';
-  const href = `/dashboard/jornada${sep}desde=${desde}&hasta=${hasta}&abrir=${f.jornadaId}`;
-
+  if (horas === null) return <span className="rv-jn__apagado">{hueco ?? 'no se puede calcular'}</span>;
   return (
-    <tr className="hairline-t align-top">
-      <Td><Link href={href} className="underline underline-offset-2">{f.dia}</Link></Td>
-      <Td>{f.operadorNombre}</Td>
-      <Td><Marca a={j.inicio} /></Td>
-      <Td><Marca a={j.fin} /></Td>
-      <Td>
-        {/* `null` NO se pinta como 0: son dos afirmaciones distintas. */}
-        {j.minutosDescanso === null
-          ? <span style={{ color: 'var(--muted)' }}>sin descanso reportado</span>
-          : `${j.minutosDescanso} min`}
-      </Td>
-      <Td>
-        {horas === null
-          ? <span style={{ color: 'var(--muted)' }}>{hueco ?? 'no se puede calcular'}</span>
-          : (
-            <>
-              {horas} h
-              {/* Las extraordinarias del art. 61 se calculaban y se tiraban
-                  (tableros al día, 28-ago-2026): el dato que decide un pago
-                  al triple no llegaba a la pantalla. Solo se pinta MEDIDO
-                  (> 0): null es «no se pudo medir» y 0 es «sin tiempo extra»,
-                  y ninguna de las dos amerita un renglón que confunda. */}
-              {f.riesgo.horasExtraordinarias !== null && f.riesgo.horasExtraordinarias > 0 && (
-                <span className="block text-[11px]" style={{ color: 'var(--warn)' }}>
-                  {f.riesgo.horasExtraordinarias} h extraordinarias (art. 61)
-                </span>
-              )}
-            </>
-          )}
-      </Td>
-      <Td>
-        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium"
-          style={{ background: tono.fondo, color: tono.texto }}>
-          {ROTULO_VEREDICTO[f.riesgo.veredicto]}
-        </span>
-      </Td>
-      <Td>
-        <div>{f.estado === 'cerrado' ? `Cerrado · ${f.cerradoPorEmail ?? 'sin firma'}` : 'Abierto'}</div>
-        <div style={{ color: 'var(--muted)' }} className="text-[11px]">
-          {f.conformeOperadorEn ? 'Con conformidad del operador' : 'Sin conformidad del operador'}
-        </div>
-      </Td>
-    </tr>
+    <>
+      {horas} h
+      {/* Las extraordinarias del art. 61 se calculaban y se tiraban: el dato que decide un pago al triple no llegaba a la pantalla.
+          Solo se pinta MEDIDO (> 0): null es «no se pudo medir» y 0 es «sin tiempo extra», y ninguna de las dos amerita un renglón. */}
+      {f.riesgo.horasExtraordinarias !== null && f.riesgo.horasExtraordinarias > 0 && (
+        <span className="rv-jn__extra">{f.riesgo.horasExtraordinarias} h extraordinarias (art. 61)</span>
+      )}
+    </>
   );
 }
 
@@ -346,115 +311,91 @@ function Renglon({ f, sufijo, desde, hasta }: { f: FilaJornada; sufijo: string; 
  *     `evaluarRiesgoSemana` — aquí no se redacta ley.
  */
 export function SeccionSemanas({ semanas, truncada }: { semanas: SemanaEvaluada[] | null; truncada: boolean }) {
+  const columnas: ColumnaBase<SemanaEvaluada>[] = [
+    { id: 'operador', titulo: 'Operador', principal: true, celda: (s) => s.operadorNombre },
+    { id: 'semana', titulo: 'Semana', celda: (s) => <>{s.desde} → {s.hasta}</> },
+    { id: 'horas', titulo: 'Horas', celda: (s) => <HorasSemana s={s} /> },
+    { id: 'lectura', titulo: 'Lectura', celda: (s) => <StatusChip tono={TONO[s.riesgo.veredicto] ?? 'warn'}>{ROTULO_VEREDICTO[s.riesgo.veredicto]}</StatusChip> },
+    { id: 'que', titulo: 'Qué se ve', celda: (s) => <SenalesSemana s={s} /> },
+  ];
   return (
-    <section className="card p-4 space-y-3">
-      <TituloRecuadro info="jornada.semana">
-        La semana completa, contra el tope del año
-      </TituloRecuadro>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <Tarjeta titulo="La semana completa, contra el tope del año" info="jornada.semana">
+      <p className="rv-jn__nota">
         El decreto del 1 de mayo de 2026 escalona la jornada SEMANAL por año (48 h ordinarias en
         2026). Catorce días verdes uno por uno pueden esconder una semana rebasada — por eso aquí
         se evalúa la semana entera, de lunes a domingo, solo cuando cabe completa en el rango de
         arriba.
       </p>
       {semanas === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
+        <p className="rv-jn__nota" data-tono="warn">
           {truncada
             ? 'No se evaluó ninguna semana: la lectura vino recortada, y una semana evaluada sobre el recorte diría «va bien» con los días que faltan. Pide un rango más corto.'
             : 'No se evaluó ninguna semana: el registro no se pudo leer.'}
         </p>
       ) : semanas.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-jn__nota">
           El rango visible no contiene ninguna semana completa (de lunes a domingo) con registro.
           Amplía el rango de fechas para ver el veredicto semanal.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table aria-label="Veredicto semanal por operador" className="w-full text-[12px]">
-            <thead>
-              <tr style={{ color: 'var(--muted)' }} className="text-left">
-                <Th>Operador</Th>
-                <Th>Semana</Th>
-                <Th>Horas</Th>
-                <Th>Lectura</Th>
-                <Th>Qué se ve</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {semanas.map((s) => <RenglonSemana key={`${s.operadorId}-${s.desde}`} s={s} />)}
-            </tbody>
-          </table>
-        </div>
+        <TablaBase<SemanaEvaluada> etiqueta="Veredicto semanal por operador" columnas={columnas} filas={semanas}
+          idFila={(s) => `${s.operadorId}-${s.desde}`} tarjetaMovil />
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
-function RenglonSemana({ s }: { s: SemanaEvaluada }) {
-  const tono = TONO[s.riesgo.veredicto] ?? TONO.dato_insuficiente;
+function HorasSemana({ s }: { s: SemanaEvaluada }) {
   const faltan = s.riesgo.diasSinDato.length;
+  if (s.riesgo.horasMedidas === null) {
+    return (
+      <span className="rv-jn__apagado">
+        {/* El guion NO quiere decir cero: se escribe la razón. */}
+        no se concluye — {faltan === 1 ? 'falta 1 día' : `faltan ${numero(faltan)} días`} sin
+        registro, y eso no son cero horas
+      </span>
+    );
+  }
   return (
-    <tr className="hairline-t align-top">
-      <Td>{s.operadorNombre}</Td>
-      <Td>{s.desde} → {s.hasta}</Td>
-      <Td>
-        {s.riesgo.horasMedidas === null ? (
-          <span style={{ color: 'var(--muted)' }}>
-            {/* El guion NO quiere decir cero: se escribe la razón. */}
-            no se concluye — {faltan === 1 ? 'falta 1 día' : `faltan ${numero(faltan)} días`} sin
-            registro, y eso no son cero horas
-          </span>
-        ) : (
-          <>
-            {s.riesgo.horasMedidas} h
-            {s.riesgo.topeOrdinariaHoras !== null && (
-              <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
-                tope ordinario del año: {s.riesgo.topeOrdinariaHoras} h
-              </span>
-            )}
-          </>
-        )}
-      </Td>
-      <Td>
-        <span className="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium"
-          style={{ background: tono.fondo, color: tono.texto }}>
-          {ROTULO_VEREDICTO[s.riesgo.veredicto]}
-        </span>
-      </Td>
-      <Td>
-        {s.riesgo.senales.length === 0 ? (
-          <span style={{ color: 'var(--muted)' }}>
-            {s.riesgo.horasMedidas === null
-              ? `sin datos completos no se afirma nada — días sin registro: ${s.riesgo.diasSinDato.join(', ')}`
-              : 'nada rebasado de lo que este motor evalúa'}
-          </span>
-        ) : (
-          <ul className="space-y-1.5">
-            {s.riesgo.senales.map((x, i) => (
-              <li key={i}>
-                <div>{x.dice}</div>
-                {x.fundamento && (
-                  <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{x.fundamento}</div>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Td>
-    </tr>
+    <>
+      {s.riesgo.horasMedidas} h
+      {s.riesgo.topeOrdinariaHoras !== null && (
+        <span className="rv-jn__tenue">tope ordinario del año: {s.riesgo.topeOrdinariaHoras} h</span>
+      )}
+    </>
+  );
+}
+
+function SenalesSemana({ s }: { s: SemanaEvaluada }) {
+  if (s.riesgo.senales.length === 0) {
+    return (
+      <span className="rv-jn__apagado">
+        {s.riesgo.horasMedidas === null
+          ? `sin datos completos no se afirma nada — días sin registro: ${s.riesgo.diasSinDato.join(', ')}`
+          : 'nada rebasado de lo que este motor evalúa'}
+      </span>
+    );
+  }
+  return (
+    <ul className="rv-jn__lista">
+      {s.riesgo.senales.map((x, i) => (
+        <li key={i}>
+          {x.dice}
+          {x.fundamento && <span className="rv-jn__tenue">{x.fundamento}</span>}
+        </li>
+      ))}
+    </ul>
   );
 }
 
 /** Una hora con su origen. NUNCA una hora sola: eso es lo que en un juicio no
  *  prueba nada. */
 function Marca({ a }: { a: JornadaCompuesta['inicio'] }) {
-  if (!a) return <span style={{ color: 'var(--muted)' }}>no lo tengo</span>;
+  if (!a) return <span className="rv-jn__apagado">no lo tengo</span>;
   return (
     <span title={ALCANCE_PROCEDENCIA[a.procedencia]}>
       {hora(a.momento)}
-      <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
-        {ROTULO_PROCEDENCIA[a.procedencia]}
-      </span>
+      <span className="rv-jn__tenue">{ROTULO_PROCEDENCIA[a.procedencia]}</span>
     </span>
   );
 }
@@ -467,26 +408,22 @@ function PoliticaSeccion({
   declararPolitica: AccionJornada;
 }) {
   return (
-    <section className="card p-4 space-y-3">
-      <TituloRecuadro info="jornada.umbrales">
-        <ShieldQuestion width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        Los umbrales de tu flota
-      </TituloRecuadro>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <Tarjeta titulo="Los umbrales de tu flota" info="jornada.umbrales">
+      <p className="rv-jn__nota">
         Likida ya evalúa los topes de la ley (los artículos 61, 63, 68 y 69 de la LFT, y la tabla
         de jornada semanal por año del decreto del 1 de mayo de 2026). Aquí van los tuyos, si tu
         flota se fijó unos más estrictos por contrato colectivo, por póliza o por política interna.
         Dejar un campo vacío significa <strong>no declarado</strong>, no cero.
       </p>
       {politica === null && (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-jn__nota">
           Todavía no has declarado ninguno. El registro y las alertas de ley funcionan igual sin ellos.
         </p>
       )}
       {puedeCorregir && (
         <FormaPolitica politica={politica} declararPolitica={declararPolitica} />
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -518,27 +455,44 @@ export function AlertaTopeSeccion({
 }) {
   const porJornada = new Map(filas.map((f) => [f.jornadaId, f]));
   const ordenadas = alertas === null ? [] : [...alertas].sort((a, b) => b.creadaEn.localeCompare(a.creadaEn));
+  const columnas: ColumnaBase<AlertaDeJornada>[] = [
+    {
+      id: 'cuando', titulo: 'Cuándo', principal: true,
+      celda: (a) => new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(a.creadaEn)),
+    },
+    {
+      id: 'operador', titulo: 'Operador y día',
+      celda: (a) => { const f = porJornada.get(a.jornadaId); return f ? `${f.operadorNombre} · ${f.dia}` : 'Jornada fuera de la tabla'; },
+    },
+    { id: 'nivel', titulo: 'Nivel', celda: (a) => <strong>{ROTULO_NIVEL[a.nivel]}</strong> },
+    {
+      id: 'horas', titulo: 'Horas contra tope',
+      celda: (a) => (
+        <>
+          {horasTexto(a.minutos, a.cotaInferior)} de {numero(a.topeMin / 60)} h
+          <span className="rv-jn__tenue">según {FUENTE_ALERTA[a.fuente] ?? a.fuente}</span>
+        </>
+      ),
+    },
+    { id: 'estado', titulo: 'Estado', celda: (a) => ROTULO_ESTADO_ALERTA[a.estado] ?? a.estado },
+    { id: 'encargado', titulo: 'Encargado', celda: (a) => ROTULO_ESTADO_DESTINO[a.encargadoEstado] ?? a.encargadoEstado },
+    { id: 'operadorEstado', titulo: 'Operador', celda: (a) => ROTULO_ESTADO_DESTINO[a.operadorEstado] ?? a.operadorEstado },
+  ];
   return (
-    <section className="card p-4 space-y-3">
-      <TituloRecuadro info="jornada.alerta_tope">
-        <BellRing width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        Alerta de tope de jornada
-      </TituloRecuadro>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <Tarjeta titulo="Alerta de tope de jornada" info="jornada.alerta_tope">
+      <p className="rv-jn__nota">
         Likida avisa al encargado y al operador cuando una jornada en curso llega a los umbrales que elijas
         (por omisión 80 % y 95 % del tope) y cuando lo rebasa. Solo cuenta lo registrado: sin hora de inicio no
         avisa, y si el inicio no lo declaró el operador el aviso dice «al menos». Es un aviso, no un dictamen.
       </p>
       {configIlegible ? (
-        <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
-          No se pudo leer la configuración de la alerta. No sabemos si está encendida; vuelve a cargar la pantalla.
-        </p>
+        <Aviso tono="error">No se pudo leer la configuración de la alerta. No sabemos si está encendida; vuelve a cargar la pantalla.</Aviso>
       ) : config === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-jn__nota">
           Todavía no la has configurado: <strong>la alerta está apagada</strong> y nadie recibe avisos.
         </p>
       ) : (
-        <p className="text-[12px]">
+        <p className="rv-jn__nota">
           <strong>{config.activa ? 'Encendida' : 'Apagada'}</strong>
           {' · '}tope {config.topeHoras === null ? 'de la ley (12 h)' : `propio de ${numero(config.topeHoras)} h`}
           {' · '}aviso al {config.umbralAvisoPct} %, crítico al {config.umbralCriticoPct} %
@@ -547,56 +501,17 @@ export function AlertaTopeSeccion({
       {puedeConfigurar && !configIlegible && <FormaAlertaTope config={config} guardarAlerta={guardarAlerta} />}
 
       {/* sin-info: subtítulo de la lista dentro de «Alerta de tope de jornada», que ya se explica arriba */}
-      <h3 className="text-[13px] font-semibold pt-1">Alertas emitidas en este periodo</h3>
+      <h3 className="rv-jn__sub">Alertas emitidas en este periodo</h3>
       {alertas === null ? (
-        <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>
-          No se pudieron leer las alertas emitidas. Esto no significa que no haya habido.
-        </p>
+        <Aviso tono="error">No se pudieron leer las alertas emitidas. Esto no significa que no haya habido.</Aviso>
       ) : ordenadas.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-jn__nota">
           Ninguna alerta emitida para las jornadas que se muestran{truncada ? ' (la lista no cupo completa: acota el periodo)' : ''}.
         </p>
       ) : (
-        <div className="overflow-x-auto">
-          <table aria-label="Alertas de jornada emitidas" className="w-full text-[12px]">
-            <thead>
-              <tr style={{ color: 'var(--muted)' }} className="text-left">
-                <Th>Cuándo</Th><Th>Operador y día</Th><Th>Nivel</Th><Th>Horas contra tope</Th><Th>Estado</Th><Th>Encargado</Th><Th>Operador</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {ordenadas.map((a) => {
-                const f = porJornada.get(a.jornadaId);
-                return (
-                  <tr key={`${a.jornadaId}-${a.nivel}`} className="hairline-t align-top">
-                    <Td>{new Intl.DateTimeFormat('es-MX', { timeZone: TZ_MX, day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(a.creadaEn))}</Td>
-                    <Td>{f ? `${f.operadorNombre} · ${f.dia}` : 'Jornada fuera de la tabla'}</Td>
-                    <Td><strong>{ROTULO_NIVEL[a.nivel]}</strong></Td>
-                    <Td>
-                      {horasTexto(a.minutos, a.cotaInferior)} de {numero(a.topeMin / 60)} h
-                      <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
-                        según {FUENTE_ALERTA[a.fuente] ?? a.fuente}
-                      </span>
-                    </Td>
-                    <Td>{ROTULO_ESTADO_ALERTA[a.estado] ?? a.estado}</Td>
-                    <Td>{ROTULO_ESTADO_DESTINO[a.encargadoEstado] ?? a.encargadoEstado}</Td>
-                    <Td>{ROTULO_ESTADO_DESTINO[a.operadorEstado] ?? a.operadorEstado}</Td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <TablaBase<AlertaDeJornada> etiqueta="Alertas de jornada emitidas" columnas={columnas} filas={ordenadas}
+          idFila={(a) => `${a.jornadaId}-${a.nivel}`} tarjetaMovil />
       )}
-    </section>
+    </Tarjeta>
   );
-}
-
-
-
-function Th({ children }: { children: React.ReactNode }) {
-  return <th className="font-medium text-[11px] pb-2 pr-3">{children}</th>;
-}
-function Td({ children }: { children: React.ReactNode }) {
-  return <td className="py-2.5 pr-3">{children}</td>;
 }

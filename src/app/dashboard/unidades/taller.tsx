@@ -1,5 +1,4 @@
 import { revalidatePath } from 'next/cache';
-import { Wrench } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -12,7 +11,8 @@ import {
   type OrdenTaller, type PropuestaRutina,
 } from '@/lib/likida/mantenimiento';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
+import { FormaConAviso, CampoTexto, Tarjeta, Disclosure, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import './unidades.css';
 
 /**
  * EL TALLER (Fase 9, 0209) — la sección de mantenimiento del registro de
@@ -151,17 +151,11 @@ export async function BloqueTaller({
   }
 
   return (
-    <section className="mt-6 flex flex-col gap-4">
-      <div className="flex items-center gap-2">
-        <Wrench className="h-4 w-4" aria-hidden />
-        <h2 className="text-sm font-semibold">Taller — mantenimiento de la flota</h2>
-      </div>
-
+    <section className="rv-un__taller" aria-label="Taller de las unidades">
       {/* ── Órdenes abiertas ── */}
-      <div className="flex flex-col gap-2">
-        <h3 className="text-[13px] font-medium">Órdenes abiertas ({taller.ordenesAbiertas.length})</h3>
+      <Tarjeta titulo={`Taller: órdenes abiertas (${taller.ordenesAbiertas.length})`}>
         {taller.ordenesAbiertas.length === 0 ? (
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          <p className="rv-un__nota">
             {/* c3-5: la promesa completa. Los viajes dados de alta por WhatsApp no
                 traen unidad asignada (0047) y su avería NO puede abrir orden — para
                 una flota 100 % WhatsApp el texto anterior era mentira permanente. */}
@@ -169,82 +163,77 @@ export async function BloqueTaller({
             cuando el viaje tiene unidad asignada; sin unidad, la orden se abre aquí a mano.
           </p>
         ) : (
-          taller.ordenesAbiertas.map((o) => (
-            <details key={o.id} className="rounded-xl hairline px-3.5 py-2.5">
-              <summary className="cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-                <span className="font-medium">unidad {o.unidadEco}</span>
-                <span style={{ color: 'var(--muted)' }}>{o.tipo}</span>
-                <span style={{ color: 'var(--muted)' }}><Origen o={o} /></span>
-                <span className="ml-auto" style={{ color: 'var(--muted)' }}>{fechaHoraMx(o.abiertaEn)}</span>
-              </summary>
-              <div className="mt-2.5 flex flex-col gap-2 text-xs" style={{ color: 'var(--muted)' }}>
-                {o.descripcion && <span>{o.descripcion}</span>}
-                {opera && dentro(o.unidadId) && (
-                  <FormaConAviso accion={accionCerrarOrden} boton="Cerrar orden" columnas="md:grid-cols-2">
-                    <input type="hidden" name="ordenId" value={o.id} />
-                    <Campo
-                      nombre="kmServicio" etiqueta="Km al momento del servicio" tipo="number"
-                      ayuda="Déjalo vacío si no se sabe — un km que no se midió no se inventa. Alimenta el reloj de las rutinas por km."
-                    />
-                  </FormaConAviso>
-                )}
-              </div>
-            </details>
-          ))
+          <div className="rv-un__bloque">
+            {taller.ordenesAbiertas.map((o) => (
+              <Disclosure key={o.id} variante="tarjeta"
+                titulo={<>Unidad {o.unidadEco} · {o.tipo} · <Origen o={o} /></>}
+                resumen={fechaHoraMx(o.abiertaEn)}>
+                <div className="rv-un__detalle">
+                  {o.descripcion && <span>{o.descripcion}</span>}
+                  {opera && dentro(o.unidadId) && (
+                    <FormaConAviso accion={accionCerrarOrden} boton="Cerrar orden" columnas="md:grid-cols-2">
+                      <input type="hidden" name="ordenId" value={o.id} />
+                      <CampoTexto name="kmServicio" tipo="number" etiqueta="Km al momento del servicio"
+                        ayuda="Déjalo vacío si no se sabe: un km que no se midió no se inventa. Alimenta el reloj de las rutinas por km." />
+                    </FormaConAviso>
+                  )}
+                </div>
+              </Disclosure>
+            ))}
+          </div>
         )}
-      </div>
+      </Tarjeta>
 
       {/* ── Propuestas de las rutinas ── */}
-      <div className="flex flex-col gap-2">
-        <h3 className="text-[13px] font-medium">Rutinas preventivas — propuestas ({taller.propuestas.length})</h3>
+      <Tarjeta titulo={`Rutinas preventivas: propuestas (${taller.propuestas.length})`}>
         {taller.rutinas.length === 0 ? (
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
+          <p className="rv-un__nota">
             Sin rutinas declaradas. Declara abajo la primera (p. ej. «Servicio de motor» cada 10,000 km o 180 días) y Likida
             te propone aquí cuál unidad ya la trae vencida.
           </p>
         ) : taller.propuestas.length === 0 ? (
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            Ninguna rutina vencida en las unidades activas — con los relojes que se pueden leer (el km solo cuenta si está
+          <p className="rv-un__nota">
+            Ninguna rutina vencida en las unidades activas, con los relojes que se pueden leer (el km solo cuenta si está
             capturado en la unidad y en el servicio anterior).
           </p>
         ) : (
-          taller.propuestas.map((p) => (
-            <div key={`${p.rutinaId}|${p.unidadId}`} className="rounded-xl hairline px-3.5 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
-              <span className="font-medium">unidad {p.unidadEco}</span>
-              <span>«{p.rutinaNombre}»</span>
-              <span style={{ color: 'var(--muted)' }}>
-                {MOTIVO[p.motivo]}
-                {p.diasDesdeServicio !== null && ` · ${p.diasDesdeServicio} días del último servicio`}
-                {p.kmDesdeServicio !== null && ` · ${numero(p.kmDesdeServicio)} km recorridos`}
-              </span>
-              {/* Los motivos de dato faltante piden capturar el dato, no abrir
-                  una orden que nadie sabe si toca. */}
-              {opera && dentro(p.unidadId) && p.motivo !== 'sin_odometro' && p.motivo !== 'odometro_desactualizado' && (
-                <div className="ml-auto">
+          <div className="rv-un__bloque">
+            {taller.propuestas.map((p) => (
+              <div key={`${p.rutinaId}|${p.unidadId}`} className="rv-un__item">
+                <div className="rv-un__item-cab">
+                  <strong>Unidad {p.unidadEco}</strong>
+                  <span>«{p.rutinaNombre}»</span>
+                  <span className="rv-un__apagado">
+                    {MOTIVO[p.motivo]}
+                    {p.diasDesdeServicio !== null && ` · ${p.diasDesdeServicio} días del último servicio`}
+                    {p.kmDesdeServicio !== null && ` · ${numero(p.kmDesdeServicio)} km recorridos`}
+                  </span>
+                  {opera && p.motivo === 'sin_odometro' && (
+                    <span className="rv-un__fin">captura el km de la unidad para evaluarla</span>
+                  )}
+                </div>
+                {/* Los motivos de dato faltante piden capturar el dato, no abrir una orden que nadie sabe si toca. */}
+                {opera && dentro(p.unidadId) && p.motivo !== 'sin_odometro' && p.motivo !== 'odometro_desactualizado' && (
                   <FormaConAviso accion={accionAbrirOrden} boton="Abrir orden" columnas="md:grid-cols-1">
                     <input type="hidden" name="rutinaId" value={p.rutinaId} />
                     <input type="hidden" name="unidadId" value={p.unidadId} />
                   </FormaConAviso>
-                </div>
-              )}
-              {opera && p.motivo === 'sin_odometro' && (
-                <span className="ml-auto text-xs" style={{ color: 'var(--muted)' }}>captura el km de la unidad para evaluarla</span>
-              )}
-            </div>
-          ))
+                )}
+              </div>
+            ))}
+          </div>
         )}
-      </div>
+      </Tarjeta>
 
       {/* ── Declarar rutina ── */}
       {administra && (
-        <div className="flex flex-col gap-2">
-          <h3 className="text-[13px] font-medium">Declarar una rutina</h3>
+        <Disclosure variante="tarjeta" titulo="Declarar una rutina de mantenimiento">
           <FormaConAviso accion={accionCrearRutina} boton="Declarar rutina">
-            <Campo nombre="nombre" etiqueta="Nombre" placeholder="Servicio de motor" requerido />
-            <Campo nombre="cadaDias" etiqueta="Cada cuántos días" tipo="number" ayuda="Vacío si la rutina no corre por tiempo." />
-            <Campo nombre="cadaKm" etiqueta="Cada cuántos km" tipo="number" ayuda="Vacío si no corre por km. Con ambos, vence lo que ocurra primero." />
+            <CampoTexto name="nombre" etiqueta="Nombre" placeholder="Servicio de motor" obligatorio />
+            <CampoTexto name="cadaDias" tipo="number" etiqueta="Cada cuántos días" ayuda="Vacío si la rutina no corre por tiempo." />
+            <CampoTexto name="cadaKm" tipo="number" etiqueta="Cada cuántos km" ayuda="Vacío si no corre por km. Con ambos, vence lo que ocurra primero." />
           </FormaConAviso>
-        </div>
+        </Disclosure>
       )}
     </section>
   );

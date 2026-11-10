@@ -3,9 +3,10 @@
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Plus, Save, Trash2, Upload } from 'lucide-react';
-import { Casilla, CampoArchivo, Icono, Tooltip } from '@/app/ui-v2/componentes';
+import { Aviso as AvisoDs, Boton, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, CampoFecha, Casilla, Fieldset, Icono, Tooltip } from '@/app/ui-v2/componentes';
+import './convenios.css';
 import { CATEGORIAS, ETIQUETA_CATEGORIA, LUGARES, MAX_INSTRUCCIONES_POR_CONVENIO, MAX_TEXTO_INSTRUCCION, MOMENTOS, type Instruccion } from '@/lib/likida/convenios/tipos';
-import { Aviso, type ResultadoSitio } from '../agentes/conductores/sitios/formas';
+import type { ResultadoSitio } from '../agentes/conductores/sitios/formas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL IMPORTADOR DE CONVENIOS (CSV o Excel) — todo o nada, con la fila de cada problema.
@@ -14,29 +15,33 @@ import { Aviso, type ResultadoSitio } from '../agentes/conductores/sitios/formas
 
 export type AccionConvenio = (previo: ResultadoSitio, fd: FormData) => Promise<ResultadoSitio>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
+/** El resultado de un guardado con el aviso del sistema: ok con su detalle, o el error VERBATIM con lo que hay que corregir. */
+function Aviso({ r }: { r: ResultadoSitio }) {
+  if (!r) return null;
+  const detalles = r.detalles && r.detalles.length > 0 ? r.detalles : null;
+  return (
+    <AvisoDs tono={r.ok ? 'ok' : 'error'}>
+      {r.ok ? r.mensaje : r.error}
+      {detalles && <ul className="rv-cv__detalles">{detalles.map((d, i) => <li key={i}>{d}</li>)}</ul>}
+    </AvisoDs>
+  );
+}
 
 function BotonImportar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Upload width={14} height={14} strokeWidth={1.75} />{pending ? 'Importando…' : 'Importar'}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Upload} />}>{pending ? 'Importando…' : 'Importar'}</Boton>
   );
 }
 
 export function FormaImportarConvenios({ accion }: { accion: AccionConvenio }) {
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="space-y-3" aria-label="Importar convenios desde CSV o Excel" encType="multipart/form-data">
+    <form action={enviar} className="rv-forma" aria-label="Importar convenios desde CSV o Excel" encType="multipart/form-data">
       <CampoArchivo name="archivo" etiqueta="Archivo CSV o Excel (.xlsx)" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-      <label className="block"><span className={ETIQUETA}>…o pega el contenido</span>
-        <textarea name="csv" rows={5} spellCheck={false} className="w-full h-auto py-2 font-mono text-[12px]"
-          placeholder={'cliente,convenio,categoria,instruccion,momento,lugar\nCliente Uno,Ruta norte,puerta,Puerta 3 lado poniente,ambos,destino'} />
-      </label>
-      <div className="flex items-center gap-3 flex-wrap"><BotonImportar /></div>
+      <CampoTextarea name="csv" etiqueta="…o pega el contenido" rows={5} spellCheck={false} claseControl="rv-cv__mono"
+        placeholder={'cliente,convenio,categoria,instruccion,momento,lugar\nCliente Uno,Ruta norte,puerta,Puerta 3 lado poniente,ambos,destino'} />
+      <div className="rv-cv__fila"><BotonImportar /></div>
       <Aviso r={estado} />
     </form>
   );
@@ -50,19 +55,17 @@ export function FormaCorregirConvenio({ accion, viajeId, folio, actual, opciones
 }) {
   const [estado, enviar, pendiente] = useActionState(accion, null);
   return (
-    <form action={enviar} className="flex items-end gap-2 flex-wrap" aria-label={`Corregir el convenio del viaje ${folio}`}>
+    <form action={enviar} className="rv-forma__fila" aria-label={`Corregir el convenio del viaje ${folio}`}>
       <input type="hidden" name="viajeId" value={viajeId} />
-      <label className="block min-w-0"><span className={ETIQUETA}>Convenio del viaje</span>
-        <select name="convenioId" defaultValue={actual ?? ''} className="w-full max-w-[260px]">
-          <option value="">Sin convenio (no mandar instrucciones)</option>
-          {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-        </select>
-      </label>
+      <CampoSelect name="convenioId" etiqueta="Convenio del viaje" defaultValue={actual ?? ''} className="rv-cv__selector">
+        <option value="">Sin convenio (no mandar instrucciones)</option>
+        {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+      </CampoSelect>
       <Casilla name="reenviar" value="si" defaultChecked etiqueta="Mandar de nuevo las instrucciones al operador" />
-      <button type="submit" disabled={pendiente} className="rv-btn rv-btn--secondary" style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
+      <Boton type="submit" variante="secondary" loading={pendiente}>
         {pendiente ? 'Guardando…' : 'Corregir convenio'}
-      </button>
-      <div className="basis-full"><Aviso r={estado} /></div>
+      </Boton>
+      <div className="rv-cv__todo"><Aviso r={estado} /></div>
     </form>
   );
 }
@@ -103,11 +106,7 @@ const FILA_NUEVA: FilaInstruccion = { categoria: 'puerta', texto: '', momento: '
 function BotonGuardar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Save width={14} height={14} strokeWidth={1.75} />{pending ? 'Guardando…' : texto}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />}>{pending ? 'Guardando…' : texto}</Boton>
   );
 }
 
@@ -140,100 +139,71 @@ export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionC
   const etiquetaSitio = (g: { nombre: string; codigo: string | null }) => (g.codigo ? `${g.nombre} (${g.codigo})` : g.nombre);
 
   return (
-    <form action={enviar} className="space-y-3" aria-label={editando ? `Editar el convenio ${convenio?.nombre}` : 'Nuevo convenio'}>
+    <form action={enviar} className="rv-forma" aria-label={editando ? `Editar el convenio ${convenio?.nombre}` : 'Nuevo convenio'}>
       {editando && <input type="hidden" name="convenioId" value={convenio.id} />}
       {editando && <input type="hidden" name="version" value={convenio.version} />}
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="rv-forma__rejilla">
         {editando ? (
-          <div><span className={ETIQUETA}>Cliente</span><p className="text-[13px] h-9 flex items-center">{convenio.cliente}</p></div>
+          <div className="rv-campo"><span className="rv-campo__etq">Cliente</span><p className="rv-cv__fijo">{convenio.cliente}</p></div>
         ) : (
-          <label className="block"><span className={ETIQUETA}>Cliente</span>
-            <select name="clienteId" value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} className="w-full" required>
-              <option value="">Elige un cliente…</option>
-              {catalogos.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-            </select>
-          </label>
+          <CampoSelect name="clienteId" etiqueta="Cliente" value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} obligatorio>
+            <option value="">Elige un cliente…</option>
+            {catalogos.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+          </CampoSelect>
         )}
-        <label className="block"><span className={ETIQUETA}>Nombre del convenio (la ruta)</span>
-          <input name="nombre" value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} required className="w-full" placeholder="Ruta norte" />
-        </label>
-        <label className="block"><span className={ETIQUETA}>Origen (punto A)</span>
-          <input name="origen" value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} className="w-full" />
-        </label>
-        <label className="block"><span className={ETIQUETA}>Destino (punto B)</span>
-          <input name="destino" value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} className="w-full" />
-        </label>
-        <label className="block"><span className={ETIQUETA}>Sitio de carga (catálogo de sitios)</span>
-          <select name="sitioOrigenId" value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)} className="w-full">
-            <option value="">Sin sitio</option>
-            {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
-          </select>
-        </label>
-        <label className="block"><span className={ETIQUETA}>Sitio de descarga (catálogo de sitios)</span>
-          <select name="sitioDestinoId" value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)} className="w-full">
-            <option value="">Sin sitio</option>
-            {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
-          </select>
-        </label>
-        <label className="block"><span className={ETIQUETA}>Vigente desde</span>
-          <input type="date" name="vigenteDesde" value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} className="w-full" />
-        </label>
-        <label className="block"><span className={ETIQUETA}>Vigente hasta</span>
-          <input type="date" name="vigenteHasta" value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} className="w-full" />
-        </label>
+        <CampoTexto name="nombre" etiqueta="Nombre del convenio (la ruta)" value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} obligatorio placeholder="Ruta norte" />
+        <CampoTexto name="origen" etiqueta="Origen (punto A)" value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} />
+        <CampoTexto name="destino" etiqueta="Destino (punto B)" value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} />
+        <CampoSelect name="sitioOrigenId" etiqueta="Sitio de carga (catálogo de sitios)" value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)}>
+          <option value="">Sin sitio</option>
+          {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
+        </CampoSelect>
+        <CampoSelect name="sitioDestinoId" etiqueta="Sitio de descarga (catálogo de sitios)" value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)}>
+          <option value="">Sin sitio</option>
+          {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
+        </CampoSelect>
+        <CampoFecha name="vigenteDesde" etiqueta="Vigente desde" value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} />
+        <CampoFecha name="vigenteHasta" etiqueta="Vigente hasta" value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} />
       </div>
-      <label className="block"><span className={ETIQUETA}>Notas internas (no se mandan al operador)</span>
-        <textarea name="notas" rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} className="w-full h-auto py-2" />
-      </label>
+      <CampoTextarea name="notas" etiqueta="Notas internas (no se mandan al operador)" rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} />
 
-      <fieldset className="space-y-2">
-        <legend className={ETIQUETA}>Instrucciones de operación (la «calle de instrucciones»)</legend>
+      <Fieldset leyenda="Instrucciones de operación (la «calle de instrucciones»)" ayuda="Las filas sin texto se ignoran. Las que quites de la lista se borran del convenio al guardar.">
         {filas.map((f, n) => (
-          <div key={n} className="grid gap-2 sm:grid-cols-[150px_minmax(0,1fr)_170px_150px_auto] items-end">
-            <label className="block"><span className="sr-only">Tema de la instrucción {n + 1}</span>
-              <select name="ins_categoria" value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)} className="w-full">
-                {CATEGORIAS.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
-              </select>
-            </label>
-            <label className="block"><span className="sr-only">Texto de la instrucción {n + 1}</span>
-              <input name="ins_texto" value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} className="w-full" placeholder="Puerta 3, lado poniente" />
-            </label>
-            <label className="block"><span className="sr-only">Cuándo se manda la instrucción {n + 1}</span>
-              <select name="ins_momento" value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)} className="w-full">
-                {MOMENTOS.map((m) => <option key={m} value={m}>{MOMENTO_OPCION[m]}</option>)}
-              </select>
-            </label>
-            <label className="block"><span className="sr-only">A qué planta aplica la instrucción {n + 1}</span>
-              <select name="ins_lugar" value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)} className="w-full">
-                {LUGARES.map((l) => <option key={l} value={l}>{LUGAR_OPCION[l]}</option>)}
-              </select>
-            </label>
+          <div key={n} className="rv-cv__instruccion">
+            <CampoSelect name="ins_categoria" etiqueta={`Tema de la instrucción ${n + 1}`} etiquetaOculta value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)}>
+              {CATEGORIAS.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
+            </CampoSelect>
+            <CampoTexto name="ins_texto" etiqueta={`Texto de la instrucción ${n + 1}`} etiquetaOculta value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} placeholder="Puerta 3, lado poniente" />
+            <CampoSelect name="ins_momento" etiqueta={`Cuándo se manda la instrucción ${n + 1}`} etiquetaOculta value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)}>
+              {MOMENTOS.map((m) => <option key={m} value={m}>{MOMENTO_OPCION[m]}</option>)}
+            </CampoSelect>
+            <CampoSelect name="ins_lugar" etiqueta={`A qué planta aplica la instrucción ${n + 1}`} etiquetaOculta value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)}>
+              {LUGARES.map((l) => <option key={l} value={l}>{LUGAR_OPCION[l]}</option>)}
+            </CampoSelect>
             <Tooltip texto="Quitar esta instrucción del convenio">
-              <button type="button" onClick={() => setFilas((fs) => (fs.length === 1 ? [{ ...FILA_NUEVA }] : fs.filter((_, i) => i !== n)))}
-                aria-label={`Quitar la instrucción ${n + 1}`} className="rv-icono-boton" style={{ color: 'var(--muted)' }}>
+              <Boton variante="ghost" tamano="sm" aria-label={`Quitar la instrucción ${n + 1}`}
+                onClick={() => setFilas((fs) => (fs.length === 1 ? [{ ...FILA_NUEVA }] : fs.filter((_, i) => i !== n)))}>
                 <Icono icono={Trash2} tam={14} />
-              </button>
+              </Boton>
             </Tooltip>
           </div>
         ))}
-        <button type="button" disabled={filas.length >= MAX_INSTRUCCIONES_POR_CONVENIO} onClick={() => setFilas((fs) => [...fs, { ...FILA_NUEVA }])}
-          className="rv-btn rv-btn--secondary" style={{ color: 'var(--ink)' }}>
-          <Plus width={13} height={13} strokeWidth={1.75} />Agregar instrucción
-        </button>
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Las filas sin texto se ignoran. Las que quites de la lista se borran del convenio al guardar.</p>
-      </fieldset>
+        <Boton variante="secondary" disabled={filas.length >= MAX_INSTRUCCIONES_POR_CONVENIO} onClick={() => setFilas((fs) => [...fs, { ...FILA_NUEVA }])} icono={<Icono icono={Plus} />}>
+          Agregar instrucción
+        </Boton>
+      </Fieldset>
 
       {editando && (
-        <div className="space-y-1.5 text-[12px]">
+        <div className="rv-cv__casillas">
           <Casilla name="llevarAViajes" value="si" checked={llevar} onChange={(e) => setLlevar(e.target.checked)}
             etiqueta="Llevar este cambio a los viajes en curso de este convenio (si no, conservan las instrucciones que ya se les dijeron)." />
           {llevar && (
-            <Casilla className="ml-6" name="reenviar" value="si" checked={reenviar} onChange={(e) => setReenviar(e.target.checked)}
+            <Casilla className="rv-cv__sangria" name="reenviar" value="si" checked={reenviar} onChange={(e) => setReenviar(e.target.checked)}
               etiqueta="Volver a mandar las instrucciones de despacho a los operadores que ya las habían recibido." />
           )}
         </div>
       )}
-      <div className="flex items-center gap-3 flex-wrap"><BotonGuardar texto={editando ? 'Guardar cambios' : 'Crear convenio'} /></div>
+      <div className="rv-cv__fila"><BotonGuardar texto={editando ? 'Guardar cambios' : 'Crear convenio'} /></div>
       <Aviso r={estado} />
     </form>
   );

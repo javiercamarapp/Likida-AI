@@ -1,10 +1,9 @@
 import Link from 'next/link';
-import { TriangleAlert } from 'lucide-react';
 import { numero } from '@/lib/formato';
-import { EstadoError } from '../estados';
 import { AccionesEnlace } from './acciones';
 import type { NumeroWhatsApp } from '@/lib/likida/arranque_whatsapp';
-import { MarcaIntegracion, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Aviso, EstadoError, MarcaIntegracion, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import './whatsapp.css';
 
 export interface DatosArranque {
   numero: NumeroWhatsApp;
@@ -49,102 +48,81 @@ export function VistaArranqueWhatsApp({ datos, hrefOperadores, hrefAyuda }: {
 }) {
   const n = datos.numero;
   return (
-    <MarcoPagina titulo="WhatsApp del operador" apoyo="A qué número de WhatsApp escribe cada operador y qué pasa después: avisos de viaje, fotos de tickets y liquidación.">
-      {/* El cartel imprimible es el ÚNICO bloque que sale al imprimir. */}
-      <style>{`@media print { body * { visibility: hidden !important; } #cartel-whatsapp, #cartel-whatsapp * { visibility: visible !important; } #cartel-whatsapp { position: fixed; inset: 0; margin: 0; padding: 32px; border: 0 !important; box-shadow: none !important; background: #fff !important; color: #000 !important; } }`}</style>
+    <MarcoPagina titulo="Equipo" apoyo="A qué número de WhatsApp escribe cada operador y qué pasa después: avisos de viaje, fotos de tickets y liquidación.">
       {n.estado === 'sin_configurar' && (
-        <section className="card p-4" role="alert">
-          <p className="flex items-start gap-2 text-[13px] font-medium" style={{ color: 'var(--warn)' }}>
-            <TriangleAlert aria-hidden width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-            El número de WhatsApp de Likida todavía no está configurado para tu cuenta.
-          </p>
-          <p className="mt-1 text-[12px]" style={{ color: 'var(--muted)' }}>
+        <div role="alert">
+          <Aviso tono="warn" titulo="El número de WhatsApp de Likida todavía no está configurado para tu cuenta.">
             Sin él no hay un número al que tus choferes puedan escribir, y esta pantalla no va a inventar uno.
-            Pídelo desde el <Link href={hrefAyuda} className="underline">Centro de ayuda</Link>: es un dato que Likida activa en tu cuenta.
-          </p>
-        </section>
+            Pídelo desde el <Link href={hrefAyuda} className="rv-wa__enlace">Centro de ayuda</Link>: es un dato que Likida activa en tu cuenta.
+          </Aviso>
+        </div>
       )}
 
       {n.estado === 'invalido' && (
-        <EstadoError mensaje={`El número de WhatsApp configurado no es válido. ${n.motivo} Avísale a soporte para que lo corrija.`} />
+        <EstadoError>{`El número de WhatsApp configurado no es válido. ${n.motivo} Avísale a soporte para que lo corrija.`}</EstadoError>
       )}
 
       {n.estado === 'configurado' && datos.enlace && (
-        <section id="cartel-whatsapp" aria-labelledby="titulo-cartel" className="card p-5">
-          {/* A36-R15-06: la leyenda va DENTRO del cartel; el CSS de impresión oculta todo lo
-              de fuera, y un cartel de prueba sin marca se pegaba en los patios. */}
-          {n.esPrueba && (
-            <p className="mb-3 text-[15px] font-bold uppercase" style={{ color: 'var(--warn)' }}>
-              Número de PRUEBA — no escribir, no atiende
-            </p>
-          )}
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center">
-            {datos.qrSvg && (
-              // El SVG lo arma `lib/qr.ts` en el servidor desde un texto que SALE de
-              // nuestra configuración (número + nombre de la flota, ya codificados):
-              // no es HTML de un usuario.
-              <div className="shrink-0 self-center rounded-lg" style={{ background: '#fff', padding: 4, border: '1px solid var(--line)' }}
-                dangerouslySetInnerHTML={{ __html: datos.qrSvg }} />
-            )}
-            <div className="min-w-0 space-y-2">
-              <TituloRecuadro id="titulo-cartel" info="whatsapp.cartel">
-                <MarcaIntegracion id="whatsapp" />
-                Escríbele a Likida por WhatsApp
-              </TituloRecuadro>
-              <p className="font-display text-[26px] font-semibold tabular" style={{ color: 'var(--ink)' }}>{n.visible}</p>
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                Escanea el código o toca el enlace desde el celular que diste de alta en {datos.nombreFlota}. Se abre el chat con el mensaje
-                ya escrito: solo hay que enviarlo.
-              </p>
-              <p className="break-all text-[12px]" style={{ color: 'var(--faint)' }}>
-                <a href={datos.enlace} className="underline" rel="noopener noreferrer">{datos.enlace}</a>
-              </p>
+        // El cartel imprimible es el ÚNICO bloque que sale al imprimir (whatsapp.css).
+        <div id="cartel-whatsapp">
+          <Tarjeta titulo="Escríbele a Likida por WhatsApp" info="whatsapp.cartel">
+            {/* A36-R15-06: la leyenda va DENTRO del cartel; el CSS de impresión oculta todo lo de fuera, y un cartel de prueba sin marca se pegaba en los patios. */}
+            {n.esPrueba && <p className="rv-wa__prueba">Número de PRUEBA — no escribir, no atiende</p>}
+            <div className="rv-wa__cartel">
+              {datos.qrSvg && (
+                // El SVG lo arma `lib/qr.ts` en el servidor desde un texto que SALE de nuestra configuración (número + nombre de la
+                // flota, ya codificados): no es HTML de un usuario.
+                <div className="rv-wa__qr" dangerouslySetInnerHTML={{ __html: datos.qrSvg }} />
+              )}
+              <div className="rv-wa__texto">
+                <p className="rv-wa__numero"><MarcaIntegracion id="whatsapp" /> {n.visible}</p>
+                <p className="rv-wa__nota">
+                  Escanea el código o toca el enlace desde el celular que diste de alta en {datos.nombreFlota}. Se abre el chat con el mensaje
+                  ya escrito: solo hay que enviarlo.
+                </p>
+                <p className="rv-wa__enlace-largo">
+                  <a href={datos.enlace} className="rv-wa__enlace" rel="noopener noreferrer">{datos.enlace}</a>
+                </p>
+              </div>
             </div>
-          </div>
-          <div className="mt-4 print:hidden"><AccionesEnlace enlace={datos.enlace} esPrueba={n.esPrueba} /></div>
-        </section>
+            <div className="rv-wa__acciones"><AccionesEnlace enlace={datos.enlace} esPrueba={n.esPrueba} /></div>
+          </Tarjeta>
+        </div>
       )}
 
       {n.estado === 'configurado' && n.esPrueba && (
-        <p role="alert" className="flex items-start gap-2 rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
-          <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+        <Aviso tono="warn">
           Este es un número de PRUEBA: no atiende a choferes reales. No lo repartas hasta que Likida active el número comercial verificado.
-        </p>
+        </Aviso>
       )}
 
-      <section aria-labelledby="titulo-flujo" className="card p-4">
-        <TituloRecuadro id="titulo-flujo" info="whatsapp.flujo" className="mb-3">Qué pasa con cada chofer</TituloRecuadro>
-        <ol className="space-y-3">
-          {((datos.perfil === 'cinco_agentes' ? PASOS_CHOFER_CINCO_AGENTES : PASOS_CHOFER) as ReadonlyArray<readonly [string, string]>).map(([titulo, detalle], i) => (
-            <li key={titulo} className="flex items-start gap-3">
-              <span aria-hidden className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold"
-                style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>{i + 1}</span>
-              <div>
-                <p className="text-[13px] font-medium">{titulo}</p>
-                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{detalle}</p>
-              </div>
+      <Tarjeta titulo="Qué pasa con cada chofer" info="whatsapp.flujo">
+        <ol className="rv-wa__pasos">
+          {((datos.perfil === 'cinco_agentes' ? PASOS_CHOFER_CINCO_AGENTES : PASOS_CHOFER) as ReadonlyArray<readonly [string, string]>).map(([titulo, detalle]) => (
+            <li key={titulo}>
+              <p className="rv-wa__paso">{titulo}</p>
+              <p className="rv-wa__nota">{detalle}</p>
             </li>
           ))}
         </ol>
-      </section>
+      </Tarjeta>
 
-      <section aria-labelledby="titulo-estado" className="card p-4">
-        <TituloRecuadro id="titulo-estado" info="whatsapp.avance" className="mb-1">Dónde vas con tus operadores</TituloRecuadro>
+      <Tarjeta titulo="Dónde vas con tus operadores" info="whatsapp.avance">
         {datos.operadores === null ? (
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude contar a tus operadores en este momento.</p>
+          <p className="rv-wa__nota">No pude contar a tus operadores en este momento.</p>
         ) : datos.operadores.activos === 0 ? (
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-            Todavía no has dado de alta a ningún operador. <Link href={hrefOperadores} className="underline">Dalos de alta en Operadores</Link>: es el primer paso.
+          <p className="rv-wa__nota">
+            Todavía no has dado de alta a ningún operador. <Link href={hrefOperadores} className="rv-wa__enlace">Dalos de alta en Operadores</Link>: es el primer paso.
           </p>
         ) : (
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-            Tienes <strong style={{ color: 'var(--ink)' }}>{numero(datos.operadores.activos)}</strong> operadores activos
+          <p className="rv-wa__nota">
+            Tienes <strong>{numero(datos.operadores.activos)}</strong> operadores activos
             {datos.operadores.pendientesDeInvitar > 0
-              ? <> y <strong style={{ color: 'var(--ink)' }}>{numero(datos.operadores.pendientesDeInvitar)}</strong> todavía sin invitación por WhatsApp. <Link href={hrefOperadores} className="underline">Invítalos desde Operadores</Link>, o mándales el enlace de arriba.</>
+              ? <> y <strong>{numero(datos.operadores.pendientesDeInvitar)}</strong> todavía sin invitación por WhatsApp. <Link href={hrefOperadores} className="rv-wa__enlace">Invítalos desde Operadores</Link>, o mándales el enlace de arriba.</>
               : '. Todos ya fueron invitados.'}
           </p>
         )}
-      </section>
+      </Tarjeta>
     </MarcoPagina>
   );
 }

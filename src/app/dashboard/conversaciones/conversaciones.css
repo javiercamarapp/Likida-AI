@@ -1,0 +1,9 @@
+/* Conversaciones · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-cv__hilos { display: grid; gap: 8px; }
+.rv-cv__sub { display: block; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
+.rv-cv__turnos { display: grid; gap: 8px; }
+.rv-cv__turno { display: flex; justify-content: flex-start; }
+.rv-cv__turno[data-rol="bot"] { justify-content: flex-end; }
+.rv-cv__burbuja { max-width: 80%; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--canvas); font-size: var(--t-body); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rv-cv__turno[data-rol="bot"] .rv-cv__burbuja { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.rv-cv__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }

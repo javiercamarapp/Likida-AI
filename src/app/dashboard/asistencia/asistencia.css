@@ -1,0 +1,14 @@
+/* Mesa de control · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-as__cuerpo { display: grid; gap: 10px; min-width: 0; }
+.rv-as__etiquetas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rv-as__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-as__camara { margin: 0; display: flex; align-items: center; gap: 6px; font-size: var(--t-small); color: var(--warn); }
+.rv-as__descripcion { margin: 0; font-size: var(--t-small); font-style: italic; color: var(--muted); }
+.rv-as__atencion { margin: 0; font-size: var(--t-small); color: var(--warn); }
+.rv-as__atencion[data-atendida] { color: var(--ok); }
+.rv-as__acciones { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 8px; }
+.rv-as__nivel { display: grid; gap: 4px; max-width: 16rem; }
+.rv-as__nivel .rv-as__nota { font-size: var(--t-micro); text-align: right; }
+.rv-as__boton { display: grid; gap: 6px; justify-items: end; }
+.rv-as__linea { list-style: none; margin: 0; padding: 0 0 0 12px; display: grid; gap: 4px; border-left: 1px solid var(--line); font-size: var(--t-small); }
+.rv-as__hora { color: var(--muted); font-variant-numeric: tabular-nums; }

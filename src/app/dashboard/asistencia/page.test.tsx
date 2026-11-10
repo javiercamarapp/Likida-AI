@@ -177,3 +177,19 @@ it('A37-S16-07: gate() no es una server action (ni endpoint invocable): vive a n
   expect(fuente).not.toMatch(/function gate\([^)]*\)[^{]*\{\s*'use server'/);
   expect(fuente).toMatch(/^async function gate\(/m);
 });
+
+it('sin emoji ni claves del sistema a la vista: la clase, la prioridad y los eventos salen en palabras de la oficina', async () => {
+  dobles.listarMesaAsistencia.mockResolvedValue([{
+    ...INC, tipo: 'emergencia_medica', prioridad: 'critica', hayLesionados: true,
+    eventos: [{ tipo: 'evento_nuevo_sin_rotulo', detalle: null, creadoEn: '2026-01-01T00:00:00Z' }],
+  }]);
+  const html = renderToStaticMarkup((await PaginaMesaControl({ searchParams: SP })) as ReactElement);
+  expect(html).toContain('Emergencia médica');
+  expect(html).toContain('Con lesionados');
+  expect(html).toContain('Prioridad crítica');
+  expect(html).toContain('Evento nuevo sin rotulo');
+  expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
+  expect(html).not.toContain('emergencia_medica');
+  expect(html).not.toContain('evento_nuevo_sin_rotulo');
+  expect(html).not.toMatch(/prioridad critica/);
+});

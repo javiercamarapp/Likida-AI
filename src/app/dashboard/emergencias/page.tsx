@@ -18,9 +18,12 @@ import {
 } from '@/lib/likida/emergencias';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import type { Metadata } from 'next';
-import { Disclosure, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import {
+  CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoVacio, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import { AccionFila } from './accion-fila';
+import './emergencias.css';
 export const metadata: Metadata = { title: 'Emergencias' };
 
 export const dynamic = 'force-dynamic';
@@ -122,28 +125,34 @@ export default async function PaginaEmergencias({
     return { ok: 'Proveedor capturado. Queda "sin confirmar" hasta que alguien marque y le contesten — el botón Verificado es esa afirmación.' };
   }
 
-  async function verificarProveedor(fd: FormData): Promise<void> {
+  // Las acciones de FILA devuelven su resultado (antes eran `void`: un fallo se quedaba en el registro y la pantalla seguía como si
+  // nada). Quitar algo del directorio de emergencia pasa por un diálogo que dice qué se pierde (`AccionFila`).
+  async function verificarProveedor(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const g = await gate(sp, tenantId);
-    if ('error' in g) return;
+    if ('error' in g) return { error: g.error };
     try {
       await marcarProveedorVerificado(g.tenantId, String(fd.get('id') ?? ''), g.userId);
-      revalidatePath(RUTA);
     } catch (e) {
       logger.warn('emergencias.verificar_fallo', { err: e instanceof Error ? e.message : String(e) });
+      return { error: mensajeParaPantalla(e, 'marcar el proveedor como verificado') };
     }
+    revalidatePath(RUTA);
+    return { ok: 'Proveedor marcado como verificado con tu nombre.' };
   }
 
-  async function borrarProveedor(fd: FormData): Promise<void> {
+  async function borrarProveedor(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const g = await gate(sp, tenantId);
-    if ('error' in g) return;
+    if ('error' in g) return { error: g.error };
     try {
       await borrarProveedorEmergencia(g.tenantId, String(fd.get('id') ?? ''));
-      revalidatePath(RUTA);
     } catch (e) {
       logger.warn('emergencias.borrar_proveedor_fallo', { err: e instanceof Error ? e.message : String(e) });
+      return { error: mensajeParaPantalla(e, 'quitar el proveedor') };
     }
+    revalidatePath(RUTA);
+    return { ok: 'Proveedor quitado del directorio.' };
   }
 
   async function guardarPolizaAction(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -183,18 +192,19 @@ export default async function PaginaEmergencias({
     return { ok: 'Contacto guardado.' };
   }
 
-  async function borrarContacto(fd: FormData): Promise<void> {
+  async function borrarContacto(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
     const g = await gate(sp, tenantId);
-    if ('error' in g) return;
+    if ('error' in g) return { error: g.error };
     try {
       await borrarContactoEmergencia(g.tenantId, String(fd.get('id') ?? ''));
-      revalidatePath(RUTA);
     } catch (e) {
       logger.warn('emergencias.borrar_contacto_fallo', { err: e instanceof Error ? e.message : String(e) });
+      return { error: mensajeParaPantalla(e, 'quitar el contacto') };
     }
+    revalidatePath(RUTA);
+    return { ok: 'Contacto quitado.' };
   }
-
 
   const polizaVencida = poliza?.vigenciaHasta ? poliza.vigenciaHasta < hoyMx() : false;
   const sinConfirmar = proveedores.filter((p) => !p.verificadoEn).length;
@@ -223,17 +233,17 @@ export default async function PaginaEmergencias({
             mensaje="Sin póliza capturada"
             detalle="El 800 de siniestros es EL dato de un siniestro: sin él, el tercer nivel de escalamiento solo puede decir que falta.">
             {poliza && (
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>
+              <p className="rv-em__nota">
                 {`${poliza.aseguradora} · póliza ${poliza.numeroPoliza} · siniestros ${poliza.telefonoSiniestros}${poliza.vigenciaHasta ? (polizaVencida ? ` · VENCIDA el ${fechaMx(poliza.vigenciaHasta)} — si ya la renovaste, reemplázala aquí; el aviso de emergencia la rotula vencida mientras tanto` : ` · vigente hasta ${fechaMx(poliza.vigenciaHasta)}`) : ''}. Guardar de nuevo la reemplaza (la anterior queda en la historia).`}
               </p>
             )}
             <Disclosure variante="linea" titulo={poliza ? 'Reemplazar póliza' : 'Capturar la póliza'} abierto={!poliza}>
               <FormaConAviso accion={guardarPolizaAction} boton={poliza ? 'Reemplazar póliza' : 'Guardar póliza'} columnas="md:grid-cols-2">
-                <Campo nombre="aseguradora" etiqueta="Aseguradora" requerido valorInicial={poliza?.aseguradora ?? ''} />
-                <Campo nombre="numeroPoliza" etiqueta="Número de póliza" requerido valorInicial={poliza?.numeroPoliza ?? ''} />
-                <Campo nombre="telefonoSiniestros" etiqueta="Teléfono de siniestros (el 800)" requerido valorInicial={poliza?.telefonoSiniestros ?? ''}
+                <CampoTexto name="aseguradora" etiqueta="Aseguradora" obligatorio defaultValue={poliza?.aseguradora ?? ''} />
+                <CampoTexto name="numeroPoliza" etiqueta="Número de póliza" obligatorio defaultValue={poliza?.numeroPoliza ?? ''} />
+                <CampoTexto name="telefonoSiniestros" etiqueta="Teléfono de siniestros (el 800)" obligatorio defaultValue={poliza?.telefonoSiniestros ?? ''}
                   ayuda="Solo números. Es el que el dueño va a marcar a las 3 a.m. — revísalo dos veces." />
-                <Campo nombre="vigenciaHasta" etiqueta="Vigente hasta" tipo="date" valorInicial={poliza?.vigenciaHasta ?? ''} />
+                <CampoFecha name="vigenciaHasta" etiqueta="Vigente hasta" defaultValue={poliza?.vigenciaHasta ?? ''} />
               </FormaConAviso>
             </Disclosure>
           </Tarjeta>
@@ -244,25 +254,25 @@ export default async function PaginaEmergencias({
             mensaje="Sin proveedores capturados"
             detalle="Grúas, llanteras y mecánicos de confianza de TU flota. El agente jamás inventa un teléfono: solo usa los de aquí, y rotula los que nadie ha confirmado.">
             {proveedores.length > 0 && (
-              <ul className="flex flex-col gap-1.5">
+              <ul className="rv-em__lista">
                 {proveedores.map((p) => (
-                  <li key={p.id} className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 hairline flex-wrap">
-                    <span className="font-medium">{p.nombre}</span>
-                    <span style={{ color: 'var(--muted)' }}>{p.tipo} · {p.telefono}{p.radioKm ? ` · ~${p.radioKm} km` : ''}</span>
-                    <span style={{ color: p.verificadoEn ? 'var(--ok)' : 'var(--warn)' }}>
+                  <li key={p.id} className="rv-em__fila">
+                    <span className="rv-em__nombre">{p.nombre}</span>
+                    <span className="rv-em__dato">{p.tipo} · {p.telefono}{p.radioKm ? ` · ~${p.radioKm} km` : ''}</span>
+                    <StatusChip tono={p.verificadoEn ? 'ok' : 'warn'}>
                       {p.verificadoEn ? `verificado ${fechaMx(p.verificadoEn)}` : 'sin confirmar'}
-                    </span>
-                    <span className="ml-auto flex gap-1.5">
+                    </StatusChip>
+                    <span className="rv-em__acciones">
                       {!p.verificadoEn && (
-                        <form action={verificarProveedor}>
-                          <input type="hidden" name="id" value={p.id} />
-                          <button type="submit" className="rv-btn rv-btn--sm" title="Afirmo que marqué y contestaron">Verificado ✓</button>
-                        </form>
+                        <AccionFila accion={verificarProveedor} id={p.id} etiqueta="Verificado"
+                          titulo="Afirmo que marqué y contestaron" />
                       )}
-                      <form action={borrarProveedor}>
-                        <input type="hidden" name="id" value={p.id} />
-                        <button type="submit" className="rv-btn rv-btn--sm">Quitar</button>
-                      </form>
+                      <AccionFila accion={borrarProveedor} id={p.id} etiqueta="Quitar" tono="peligro"
+                        confirmar={{
+                          titulo: `Quitar a ${p.nombre}`,
+                          descripcion: 'Sale del directorio: el escalamiento ya no lo ofrece cuando un chofer reporte un siniestro. Si lo necesitas de nuevo, lo capturas otra vez y queda sin confirmar.',
+                          etiquetaConfirmar: 'Sí, quitarlo',
+                        }} />
                     </span>
                   </li>
                 ))}
@@ -270,19 +280,19 @@ export default async function PaginaEmergencias({
             )}
             <Disclosure variante="linea" titulo="Agregar proveedor" abierto={proveedores.length === 0}>
               <FormaConAviso accion={altaProveedor} boton="Agregar proveedor" columnas="md:grid-cols-3">
-                <Selector nombre="tipo" etiqueta="Tipo" requerido valorInicial=""
-                  opciones={[{ valor: '', texto: 'Elige uno' }, ...TIPOS_PROVEEDOR.map((t) => ({ valor: t, texto: t }))]} />
-                <Campo nombre="nombre" etiqueta="Nombre" requerido placeholder="Grúas García" />
-                <Campo nombre="telefono" etiqueta="Teléfono" requerido placeholder="10 dígitos" />
-                <Campo nombre="radioKm" etiqueta="Radio de cobertura (km)" tipo="number" />
-                {/* Posición del proveedor (Capa C): con ella la cascada mide la
-                    cercanía real al incidente. Opcional en pareja — sin las dos,
-                    el proveedor se lista sin ordenar y el aviso lo dice. Campos
-                    de texto a propósito: el tipo number de Campo trae min=0 y
-                    las longitudes de México son negativas. */}
-                <Campo nombre="lat" etiqueta="Latitud (opcional)" placeholder="19.4326" />
-                <Campo nombre="lng" etiqueta="Longitud (opcional)" placeholder="-99.1332" />
-                <Campo nombre="notas" etiqueta="Notas" placeholder="Zona, horario, condiciones" />
+                <CampoSelect name="tipo" etiqueta="Tipo" obligatorio defaultValue="">
+                  <option value="">Elige uno</option>
+                  {TIPOS_PROVEEDOR.map((t) => <option key={t} value={t}>{t}</option>)}
+                </CampoSelect>
+                <CampoTexto name="nombre" etiqueta="Nombre" obligatorio placeholder="Grúas García" />
+                <CampoTexto name="telefono" etiqueta="Teléfono" obligatorio placeholder="10 dígitos" />
+                <CampoTexto name="radioKm" tipo="number" etiqueta="Radio de cobertura (km)" min={0} />
+                {/* Posición del proveedor (Capa C): con ella la cascada mide la cercanía real al incidente. Opcional en pareja — sin las
+                    dos, el proveedor se lista sin ordenar y el aviso lo dice. Campos de texto a propósito: las longitudes de México son
+                    negativas y un number con min=0 las rechazaría. */}
+                <CampoTexto name="lat" etiqueta="Latitud (opcional)" placeholder="19.4326" />
+                <CampoTexto name="lng" etiqueta="Longitud (opcional)" placeholder="-99.1332" />
+                <CampoTexto name="notas" etiqueta="Notas" placeholder="Zona, horario, condiciones" />
               </FormaConAviso>
             </Disclosure>
           </Tarjeta>
@@ -293,39 +303,45 @@ export default async function PaginaEmergencias({
             mensaje="Sin contactos capturados"
             detalle="Un familiar que nunca aceptó ningún aviso: por eso «avisar si hay lesionados» nace apagado. Likida no le marca a nadie; con lesionados, el dato le llega al dueño, que decide.">
             {contactos.length > 0 && (
-              <ul className="flex flex-col gap-1.5">
+              <ul className="rv-em__lista">
                 {contactos.map((c) => (
-                  <li key={c.id} className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 hairline flex-wrap">
-                    <span className="font-medium">{c.nombre}</span>
-                    <span style={{ color: 'var(--muted)' }}>
+                  <li key={c.id} className="rv-em__fila">
+                    <span className="rv-em__nombre">{c.nombre}</span>
+                    <span className="rv-em__dato">
                       {c.operadorNombre}{c.parentesco ? ` · ${c.parentesco}` : ''} · {c.telefono}
                     </span>
-                    <span style={{ color: c.avisarSiLesionados ? 'var(--ok)' : 'var(--muted)' }}>
+                    <StatusChip tono={c.avisarSiLesionados ? 'ok' : 'muted'}>
                       {c.avisarSiLesionados ? 'avisar si hay lesionados' : 'solo expediente'}
-                    </span>
-                    <span className="ml-auto">
-                      <form action={borrarContacto}>
-                        <input type="hidden" name="id" value={c.id} />
-                        <button type="submit" className="rv-btn rv-btn--sm">Quitar</button>
-                      </form>
+                    </StatusChip>
+                    <span className="rv-em__acciones">
+                      <AccionFila accion={borrarContacto} id={c.id} etiqueta="Quitar" tono="peligro"
+                        confirmar={{
+                          titulo: `Quitar a ${c.nombre}`,
+                          descripcion: `Deja de ser contacto de emergencia de ${c.operadorNombre}: si hay lesionados, el dato ya no se le podrá hacer llegar a esta persona.`,
+                          etiquetaConfirmar: 'Sí, quitarlo',
+                        }} />
                     </span>
                   </li>
                 ))}
               </ul>
             )}
             {operadores.length === 0 ? (
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>Esta flota aún no tiene operadores dados de alta — el contacto se ata a un operador.</p>
+              <p className="rv-em__nota">Esta flota aún no tiene operadores dados de alta — el contacto se ata a un operador.</p>
             ) : (
               <Disclosure variante="linea" titulo="Agregar contacto" abierto={contactos.length === 0}>
                 <FormaConAviso accion={altaContacto} boton="Agregar contacto" columnas="md:grid-cols-3">
-                  <Selector nombre="operadorId" etiqueta="Operador" requerido valorInicial=""
-                    opciones={[{ valor: '', texto: 'Elige uno' }, ...operadores.map((o) => ({ valor: o.id, texto: o.nombre }))]} />
-                  <Campo nombre="nombre" etiqueta="Nombre del contacto" requerido />
-                  <Campo nombre="telefono" etiqueta="Teléfono" requerido placeholder="10 dígitos" />
-                  <Campo nombre="parentesco" etiqueta="Parentesco" placeholder="esposa, hermano…" />
-                  <Selector nombre="avisarSiLesionados" etiqueta="¿Avisar si hay lesionados?" valorInicial="no"
-                    opciones={[{ valor: 'no', texto: 'No — solo expediente' }, { valor: 'si', texto: 'Sí — el contacto lo aceptó' }]}
-                    ayuda="Actívalo solo si el contacto aceptó recibir esta clase de aviso." />
+                  <CampoSelect name="operadorId" etiqueta="Operador" obligatorio defaultValue="">
+                    <option value="">Elige uno</option>
+                    {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+                  </CampoSelect>
+                  <CampoTexto name="nombre" etiqueta="Nombre del contacto" obligatorio />
+                  <CampoTexto name="telefono" etiqueta="Teléfono" obligatorio placeholder="10 dígitos" />
+                  <CampoTexto name="parentesco" etiqueta="Parentesco" placeholder="esposa, hermano…" />
+                  <CampoSelect name="avisarSiLesionados" etiqueta="¿Avisar si hay lesionados?" defaultValue="no"
+                    ayuda="Actívalo solo si el contacto aceptó recibir esta clase de aviso.">
+                    <option value="no">No — solo expediente</option>
+                    <option value="si">Sí — el contacto lo aceptó</option>
+                  </CampoSelect>
                 </FormaConAviso>
               </Disclosure>
             )}
