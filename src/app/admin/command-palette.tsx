@@ -174,6 +174,11 @@ export default function CommandPalette() {
     };
   }, [router, abierto, abrirEn]);
 
+  // La fila activa se mantiene a la vista cuando la lista scrollea con las flechas.
+  useEffect(() => {
+    if (abierto) document.getElementById(`command-palette-op-${activo}`)?.scrollIntoView({ block: 'nearest' });
+  }, [abierto, activo]);
+
   useEffect(() => {
     if (!abierto) return;
     // Un tick para que el input ya esté montado antes de enfocarlo.
@@ -286,8 +291,13 @@ export default function CommandPalette() {
           : <Search width={16} height={16} strokeWidth={1.75} aria-hidden="true" />}
         <input
           ref={inputRef}
+          role="combobox"
+          aria-expanded="true"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
           aria-label={modo === 'motivo' ? 'Motivo de la acción' : 'Buscar una acción, interruptor o flota'}
           aria-controls="command-palette-results"
+          aria-activedescendant={modo !== 'motivo' && resultados[activo] ? `command-palette-op-${activo}` : undefined}
           value={consulta}
           onChange={(e) => setConsulta(e.target.value)}
           onKeyDown={onInputKeyDown}
@@ -322,7 +332,7 @@ export default function CommandPalette() {
           resultados.map((item, i) => {
             const { key, etiqueta, detalle, Icono, apagado, correr } = item;
             return (
-              <button key={key} type="button" role="option" aria-selected={i === activo} onClick={correr} disabled={enviando}
+              <button key={key} id={`command-palette-op-${i}`} type="button" role="option" aria-selected={i === activo} tabIndex={-1} onClick={correr} disabled={enviando}
                 className="rv-paleta__fila" data-apagado={apagado || undefined}
                 onMouseEnter={() => setActivo(i)}
               >

@@ -8,6 +8,7 @@ import ProveedorMarcoAdmin from './pestanas-admin';
 import CapaCarga from '../dashboard/shell/capa-carga';
 import CopilotoPanel from './copiloto-panel';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
+import { Tooltip } from '../ui-v2/componentes/overlay';
 
 /**
  * El marco de /admin sobre el MISMO sistema que el dashboard (7-nov-2026, ronda R8): `.rv-app`, `.rv-fila`, `.rv-sb`, `.rv-col` y
@@ -33,9 +34,11 @@ export default function AdminChrome({
   // El <form> de salir se arma AQUÍ (servidor) y baja como elemento: ninguna función cruza al cliente.
   const salir = cerrarSesion ? (
     <form action={cerrarSesion} className="rv-cuenta__salir">
-      <button type="submit" title="Cerrar sesión" aria-label="Cerrar sesión" className="rv-icono-boton">
-        <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-      </button>
+      <Tooltip texto="Cerrar sesión">
+        <button type="submit" aria-label="Cerrar sesión" className="rv-icono-boton">
+          <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+        </button>
+      </Tooltip>
     </form>
   ) : null;
   return (

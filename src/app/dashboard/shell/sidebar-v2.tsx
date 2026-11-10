@@ -7,6 +7,9 @@ import LogoV2 from './logo-v2';
 import { ALTO_LOGO_PX } from '../../marco-v2';
 import { ArbolMenu, PieMenu, useMenuV2 } from './navegacion-v2';
 import { useRiel } from './colapso';
+import { Tooltip } from '../../ui-v2/componentes/overlay';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
@@ -24,6 +27,7 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   const { riel, alternar } = useRiel();
+  const { t } = useT('shell', shellEs);
   // El logo lleva a la «casa» del rol (su primer ítem), no a un `/dashboard` que el rol podría no abrir (el contador, bajo el perfil).
   const casa = menu.resumen[0]?.href ?? menu.grupos[0]?.items[0]?.href ?? '/dashboard';
   return (
@@ -34,9 +38,11 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
           <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
           <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
         </Link>
-        <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
-          <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        </button>
+        <Tooltip texto={t('cab.plegar')}>
+          <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={t('cab.plegar')} aria-expanded={!riel}>
+            <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+          </button>
+        </Tooltip>
       </div>
       <nav aria-label="Navegación principal" className="rv-sb__nav">
         <ArbolMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} insignias={insignias} />

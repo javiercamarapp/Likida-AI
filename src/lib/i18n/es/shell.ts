@@ -34,4 +34,24 @@ export const shell = {
   'pie.cuenta.menu': 'Menú de la cuenta',
   'pie.cuenta.etiqueta': 'Cuenta',
   'pie.cuenta.salir': 'Cerrar sesión',
+  // Cabecera de escritorio y buscador (⌘K)
+  'cab.plegar': 'Plegar el menú',
+  'cab.expandir': 'Expandir el menú',
+  'cab.buscar': 'Buscar',
+  'cab.buscar.etiqueta': 'Buscar una pantalla ({atajo})',
+  'cab.guia': 'Guía',
+  'cab.guia.ayuda': 'Centro de ayuda',
+  'cab.guia.paneles': 'Ver los otros paneles',
+  'cab.guia.novedad': 'Guía, hay algo nuevo',
+  // Navegación: bloque que muestra la pantalla abierta cuando su grupo está cerrado
+  'nav.paginaActual': 'Página actual',
+  'nav.proximamente': '{nombre} (próximamente)',
+  // Buscador de pantallas (⌘K)
+  'paleta.titulo': 'Buscar una pantalla',
+  'paleta.subtitulo': 'Escribe el nombre de una pantalla o usa las flechas para recorrer la lista.',
+  'paleta.placeholder': 'Buscar una pantalla… (Viajes, Facturación, ARCO)',
+  'paleta.resultados': 'Resultados',
+  'paleta.recientes': 'Recientes',
+  'paleta.todas': 'Pantallas',
+  'paleta.sinResultados': 'Sin resultados.',
 } as const;
