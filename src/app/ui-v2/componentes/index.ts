@@ -42,3 +42,5 @@ export { DialogoConfirmar, BotonConfirmar, type PropsDialogo } from './confirmar
 export { AvisoResultado, leerResultado, type ResultadoUI, type ResultadoLeido } from './aviso-resultado';
 export { ProveedorNotificaciones, useNotificar, useNotificarResultado, type TonoNotificacion, type NuevaNotificacion } from './notificaciones';
 export { resolverFormato, type FormatoPreset } from '../formato-preset';
+export { FormaEnCajon, type PropsFormaEnCajon } from './forma-en-cajon';
+export { useAbrirPorUrl, urlPideAbrir, quitarParamAbrir, PARAM_ABRIR } from './drawer-abrir';
