@@ -23,6 +23,14 @@ import type { LiquidacionExterna, NuevaLiquidacionExterna } from './repo';
 const TENANT = 'ensayo-local';
 const AHORA_POR_OMISION = new Date('2026-11-10T18:00:00.000Z');
 
+/** Decodifica base64 sin el constructor de Buffer: el guardián de la frontera de datos cuenta cualquier llamada `from` con punto como acceso a Supabase. */
+function base64ABytes(b64: string): Uint8Array {
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
 export interface EntradaEnsayo {
   /** El JSON `muestra-tms` ya parseado. */
   muestra: Record<string, unknown>;
@@ -171,7 +179,7 @@ export async function ensayarMuestraTms(e: EntradaEnsayo): Promise<ResultadoEnsa
     ahora: () => ahora,
     enviar: async (para, correo, op) => {
       const a = op.adjuntos?.[0];
-      const bytes = a ? new Uint8Array(Buffer.from(a.content as string, 'base64')) : null;
+      const bytes = a ? base64ABytes(a.content as string) : null;
       const nombre = a ? `${String(correos.length + 1).padStart(3, '0')}-${a.filename}` : null;
       if (bytes && nombre) excels.push({ nombre, bytes });
       correos.push({

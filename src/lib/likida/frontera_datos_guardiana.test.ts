@@ -710,7 +710,12 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 347;
 // F7 «seguridad y sistema» (/admin, 10-nov-2026): +7 llamadas (2,519 -> 2,526), todas por `acotada` y de solo lectura: `admin/bitacora.ts` +6 (la página filtrada de la bitácora, las listas de
 // flotas y personas para los filtros y la tabla de accesos del equipo con sus dos resoluciones de nombre) y `admin/soporte-escalado.ts` +1 (el aviso de SLA vencido por ticket).
 // Pie de sidebar (r19): +2 llamadas en los layouts de /admin y /dashboard (lectura de `tenant`) y -1 en inicio-contador.tsx = +1 neto (2,536 -> 2,537); ver el techo de archivos.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_537;
+// Integración w5 (r19): +2 llamadas netas (2,537 -> 2,539), 0 archivos netos (347). Entran 2 archivos de w5/pil y salen 2 llamadas-archivo por migración a piezas de Rovaq:
+//   `dashboard/puesta-en-marcha/listo_lecturas.ts` +2 (conteo de `tms_mapeo` activo y de `tenant_api_key` vigentes del asistente «¿Estoy listo?»; head:true, por `acotada`, filtradas por `tenant_id`
+//   que sale de la sesión en `puesta-en-marcha/page.tsx` -> `leerLecturasListo(s.tenantId)`) y `liquidacion_externa/poliza_provisional.ts` +2 (leer y guardar la perilla `poliza_provisional` de
+//   `liquidacion_correo_config`, por `acotada` y `.eq('tenant_id')`); -1 en agentes/liquidacion/vista.tsx y -1 en agentes/conductores/vista.tsx (w5/liq y w5/cpv ya no consultan ahí).
+//   `ensayo_local.ts` dejó de contar: era un `from` de Buffer (falso positivo), ahora decodifica base64 con `atob`.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_539;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.
