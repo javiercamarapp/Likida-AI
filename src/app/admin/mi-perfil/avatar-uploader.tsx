@@ -12,37 +12,33 @@ const TIPOS_PERMITIDOS = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export default function AvatarUploader({
   nombre, avatarUrl, accion,
 }: { nombre: string; avatarUrl: string | null; accion: (formData: FormData) => void }) {
-  const [preview, setPreview] = useState<string | null>(null);
+  // Sin vista previa local: la imagen que se pinta es SIEMPRE la que ya guardó el servidor (`avatarUrl`), nunca una URL
+  // derivada del archivo que el usuario eligió (CodeQL js/xss-through-dom). Elegir la foto envía el form; al revalidar,
+  // la página trae la foto nueva. Mientras tanto se dice «Subiendo…».
+  const [subiendo, setSubiendo] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function onChange(e: React.ChangeEvent<HTMLInputElement>) {
     const archivo = e.target.files?.[0];
-    if (!archivo) return;
-    // Solo imágenes permitidas y una URL de objeto local (blob:) — nunca contenido arbitrario en el DOM.
-    if (!TIPOS_PERMITIDOS.has(archivo.type)) return;
-    const url = URL.createObjectURL(archivo);
-    if (!url.startsWith('blob:')) return;
-    setPreview((anterior) => {
-      if (anterior) URL.revokeObjectURL(anterior);
-      return url;
-    });
+    if (!archivo || !TIPOS_PERMITIDOS.has(archivo.type)) return;
+    setSubiendo(true);
     formRef.current?.requestSubmit();
   }
 
-  const mostrar = preview ?? avatarUrl;
-
   return (
-    <form ref={formRef} action={accion} className="adm-perfil-avatar">
-      {mostrar ? (
+    <form ref={formRef} action={async (fd) => { try { await accion(fd); } finally { setSubiendo(false); } }} className="adm-perfil-avatar">
+      {avatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- avatar de usuario, no next/image en el resto del repo
-        <img src={mostrar} alt={nombre} className="adm-perfil-avatar__img" />
+        <img src={avatarUrl} alt={nombre} className="adm-perfil-avatar__img" />
       ) : (
         <Monograma id={nombre} nombre={nombre} tamano={40} />
       )}
       <div className="adm-perfil-avatar__texto">
         <strong>{nombre}</strong>
-        <Boton tamano="sm" variante="secondary" onClick={() => inputRef.current?.click()}>Cambiar foto</Boton>
+        <Boton tamano="sm" variante="secondary" onClick={() => inputRef.current?.click()} disabled={subiendo}>
+          {subiendo ? 'Subiendo…' : 'Cambiar foto'}
+        </Boton>
       </div>
       <input ref={inputRef} type="file" name="avatar" accept="image/jpeg,image/png,image/webp" hidden onChange={onChange} />
     </form>
