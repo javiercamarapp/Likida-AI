@@ -1,12 +1,15 @@
 import Link from 'next/link';
 import { ArrowRight, ExternalLink } from 'lucide-react';
 import { Disclosure, StatusChip, type TonoEstado } from '../ui-v2/componentes';
+import { MarcaIntegracion, type MarcaId } from '../ui-v2/componentes/marca-integracion';
 import './sistema.css';
 
 /** Un renglón de Salud o de Integraciones: lo que se mide, su estado en palabras, qué significa y, aparte y plegado, cómo se arregla (ahí
  *  sí pueden ir los nombres que usa quien configura). Cada renglón está MEDIDO o dice que no lo está. */
 export interface RenglonSistema {
   titulo: string;
+  /** Marca original del servicio (si la hay). */
+  marca?: MarcaId;
   tono: TonoEstado;
   etiqueta: string;
   detalle: string;
@@ -20,7 +23,7 @@ export function TarjetaRenglon({ r }: { r: RenglonSistema }) {
   return (
     <div className="adm-sis-fila">
       <div className="adm-sis-fila__cab">
-        <span>{r.titulo}</span>
+        <span className="adm-sis-fila__nombre">{r.marca ? <MarcaIntegracion id={r.marca} tam={16} /> : null}{r.titulo}</span>
         <StatusChip tono={r.tono}>{r.etiqueta}</StatusChip>
       </div>
       <p className="adm-sis-fila__texto">{r.detalle}</p>

@@ -30,3 +30,4 @@
 [data-ui="v2"] .adm-sis-pie nav { display: flex; flex-wrap: wrap; gap: 8px; }
 [data-ui="v2"] .adm-sis-error-fila { display: block; max-width: 60ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 [data-ui="v2"] .adm-sis-dato { display: block; overflow-wrap: anywhere; }
+[data-ui="v2"] .adm-sis-fila__nombre { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
