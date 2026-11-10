@@ -9,6 +9,7 @@ import {
   crearInsumoArchivo, crearInsumoTexto, subirArchivoInsumo,
   esTipoInsumo, TIPOS_ARCHIVO, TIPOS_TEXTO, type InsumoAgente,
 } from '@/lib/likida/agentes/insumos';
+import { AGENTES_FINANCIEROS } from '@/lib/likida/agentes/finanzas';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { BarraPagina, TituloSeccion } from '../../../../dashboard/resumen-visual';
@@ -37,6 +38,8 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
   // límite de función), así que ambas leen esta constante ya angosta.
   const departamento = agente.departamento;
 
+  // Honestidad (auditoría 10-nov, P1): solo los agentes financieros consumen insumos; para los demás el mensaje «se procesa en la siguiente corrida» era falso.
+  const LEE_INSUMOS = (AGENTES_FINANCIEROS as readonly string[]).includes(agente.id);
   const tiposAceptados = tiposAceptadosPorAgente(agente.id, departamento);
   const insumos = await listarInsumosDeAgente(agente.id);
   const totalInsumos = await contarInsumosDeAgente(agente.id);
@@ -59,7 +62,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
         storagePath: ruta, subidoPor: userId,
       });
       revalidatePath(`/admin/agentes/${id}/insumos`);
-      return { ok: `"${titulo}" quedó guardado — se procesa en la siguiente corrida de este agente.` };
+      return { ok: (AGENTES_FINANCIEROS as readonly string[]).includes(id) ? `"${titulo}" quedó guardado — se procesa en la siguiente corrida de este agente.` : `"${titulo}" quedó guardado. Este agente aún no lee insumos, así que ninguna corrida lo usa todavía.` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'subir el insumo') };
     }
@@ -80,7 +83,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
         contenido, subidoPor: userId,
       });
       revalidatePath(`/admin/agentes/${id}/insumos`);
-      return { ok: `"${titulo}" quedó guardado — se procesa en la siguiente corrida de este agente.` };
+      return { ok: (AGENTES_FINANCIEROS as readonly string[]).includes(id) ? `"${titulo}" quedó guardado — se procesa en la siguiente corrida de este agente.` : `"${titulo}" quedó guardado. Este agente aún no lee insumos, así que ninguna corrida lo usa todavía.` };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'guardar el insumo') };
     }
@@ -101,7 +104,9 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
         <div className="px-5 py-5 flex-1 space-y-4">
           <EstadoVacio>
             {rotuloDepartamento} · id <code className="cifra-mono">{agente.id}</code> — entre más le das, más entiende.
-            Todo lo que sueltes aquí se procesa en la SIGUIENTE corrida de este agente; sesión actual: {s.nombre ?? 'superadmin'}.
+            {LEE_INSUMOS
+              ? <>Todo lo que sueltes aquí se procesa en la SIGUIENTE corrida de este agente; sesión actual: {s.nombre ?? 'superadmin'}.</>
+              : <><strong>Este agente aún no lee insumos.</strong> Lo que subas se guarda, pero ninguna corrida lo usa todavía: hoy solo los leen los cuatro agentes financieros. Sesión actual: {s.nombre ?? 'superadmin'}.</>}
           </EstadoVacio>
 
           <div className="card p-4">
