@@ -89,3 +89,16 @@
 .rv-pj-det { display: grid; gap: 8px; }
 .rv-pj-det__cab { cursor: pointer; font-size: var(--t-body, 13px); font-weight: 600; }
 .rv-pj-que--ancho { max-width: 40rem; display: grid; gap: 4px; justify-items: start; }
+
+/* Configuración del conciliador: colores de texto por tono y piezas pequeñas. */
+.rv-pj-c-faint { color: var(--faint); }
+.rv-pj-c-muted { color: var(--muted); }
+.rv-pj-c-warn { color: var(--warn); }
+.rv-pj-c-bad { color: var(--bad); }
+.rv-pj-c-ok { color: var(--ok); }
+.rv-pj-c-ink { color: var(--ink); }
+.rv-pj-c-marca { color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
+.rv-pj-pill { display: inline-flex; padding: 2px 8px; border-radius: 8px; background: var(--canvas); color: var(--muted); }
+.rv-pj-pill[data-tono="ok"] { color: var(--ok); }
+.rv-pj-codigo { margin: 8px 0 0; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: var(--t-micro, 11px); background: var(--canvas); color: var(--ink); }
+.rv-pj-fila[data-apagada] { opacity: .55; }
