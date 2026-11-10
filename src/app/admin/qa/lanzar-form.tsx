@@ -102,7 +102,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       const nuevas: string[] = [];
       for (const r of cuerpo.resultados ?? []) {
         if (r.error) avisos.push(`${r.nombre}: ${r.error}`);
-        else if (r.duplicadoDe) avisos.push(`${r.nombre}: ya estaba en el banco (dedup por hash) — se reusa`);
+        else if (r.duplicadoDe) avisos.push(`${r.nombre}: ya estaba en el banco: se reutiliza`);
         if (r.id) nuevas.push(r.id);
       }
       // Lo recién subido queda seleccionado solo: subir → lanzar sin dar 40 clics.
@@ -175,19 +175,19 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
 
   return (
     <div className="card p-4 space-y-4">
-      <TituloSeccion>Lanzar una corrida — carril rápido (en proceso, pipeline real)</TituloSeccion>
+      <TituloSeccion>Lanzar una corrida de prueba</TituloSeccion>
 
       {/* ── Escenario ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {ESCENARIOS_QA.map((e) => (
           <button key={e.id} type="button" onClick={() => elegirEscenario(e.id)}
-            className="text-left hairline rounded-lg px-3 py-1.5 transition-colors rv-qa-fs rv-qa-escenario" data-activo={escenario === e.id}>
+            className="text-left hairline rounded-lg px-3 py-1.5 transition-colors rv-qa-fs rv-qa-escenario" data-activo={escenario === e.id}
+            title={`Reglas que verifica: ${e.invariantes.join(', ')}`}>
             <div className="text-sm font-semibold">{e.nombre}</div>
             <div className={escenario === e.id ? 'text-xs mt-1' : 'text-xs mt-1 rv-qa-ink2'}>{e.descripcion}</div>
-            <div className={escenario === e.id ? 'text-[11px] mt-1.5 font-mono' : 'text-[11px] mt-1.5 font-mono rv-qa-mut'}>
-              invariantes {e.invariantes.join(' · ')}
-              {e.minFotos > 1 ? ` — mínimo ${e.minFotos} fotos` : ''}
-            </div>
+            {e.minFotos > 1 ? (
+              <div className={escenario === e.id ? 'text-[11px] mt-1.5' : 'text-[11px] mt-1.5 rv-qa-mut'}>Mínimo {e.minFotos} fotos</div>
+            ) : null}
           </button>
         ))}
       </div>
@@ -221,7 +221,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
             </>
           ) : (
             <>
-              Corre entero dentro de UNA función serverless. Hasta {MAX_FOTOS_CARRIL_RAPIDO} fotos;
+              Corre completa en un solo proceso. Hasta {MAX_FOTOS_CARRIL_RAPIDO} fotos;
               con más, la corrida se va sola al carril completo (varias pasadas, sin tope de fotos).
             </>
           )}
@@ -230,14 +230,14 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
           onDragOver={(ev) => { ev.preventDefault(); setArrastrando(true); }}
           onDragLeave={() => setArrastrando(false)}
           onDrop={(ev) => { ev.preventDefault(); setArrastrando(false); void subirArchivos(ev.dataTransfer.files); }}
-          className="rounded-xl border border-dashed px-4 py-4 text-center cursor-pointer rv-qa-zona" data-arrastrando={arrastrando}
+          className="rounded-xl border px-4 py-4 text-center cursor-pointer rv-qa-zona" data-arrastrando={arrastrando}
           onClick={() => inputRef.current?.click()}
         >
           <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple className="hidden"
             onChange={(ev) => { if (ev.target.files) void subirArchivos(ev.target.files); }} />
           <div className="inline-flex items-center gap-2 text-sm rv-qa-mut">
             {subiendo ? <Loader2 width={15} height={15} strokeWidth={1.75} className="animate-spin" /> : <Upload width={15} height={15} strokeWidth={1.75} />}
-            {subiendo ? 'Subiendo al banco…' : 'Suelta aquí todas las fotos que quieras (JPEG/PNG/WebP) o da clic — se deduplican por hash'}
+            {subiendo ? 'Subiendo al banco…' : 'Suelta aquí todas las fotos que quieras (JPEG, PNG o WebP) o da clic; las repetidas se reutilizan'}
           </div>
         </div>
         {avisosSubida.length > 0 && (
@@ -300,7 +300,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       {/* ── Política de gasto ──────────────────────────────────────────────── */}
       <div>
         <div className="text-xs font-medium mb-1.5 rv-qa-mut">
-          Política de gasto del tenant sintético (concepto · tope · CFDI)
+          Política de gasto de la flota de prueba (concepto · tope · CFDI)
         </div>
         <div className="space-y-1.5">
           {politica.map((p, i) => (
@@ -336,7 +336,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
         </button>
         <label className="text-xs inline-flex items-center gap-1.5 rv-qa-mut">
           <input type="checkbox" checked={conservar} onChange={(e) => setConservar(e.target.checked)} />
-          conservar el tenant sintético al terminar (para inspección)
+          conservar la flota de prueba al terminar (para inspección)
         </label>
         {motivoBloqueo && (
           <span className="text-xs rv-qa-mut">Bloqueado: {motivoBloqueo}</span>

@@ -61,7 +61,7 @@ export function PantallaQa({
     <MarcoPagina
       area="Calidad"
       titulo="Calidad"
-      apoyo="Pruebas reales: fotos reales contra el pipeline real, con el costo real de cada corrida."
+      apoyo="Pruebas reales: fotos de comprobantes procesadas como en producción, con el costo real de cada corrida."
     >
       <TiraCifras
         etiqueta="Pruebas reales"
@@ -73,7 +73,7 @@ export function PantallaQa({
             ? { etiqueta: 'Corridas lanzadas', valor: corridas.length, formato: 'entero' }
             : { etiqueta: 'Corridas lanzadas', valor: null, estado: 'error', mensaje: `No se pudo leer: ${historialError}` },
           gastoError === null && gastoHoy !== null
-            ? { etiqueta: 'Gasto real de hoy', valor: usd4(gastoHoy), nota: `de ${usd(topeDiaUsd)} de tope diario; suma de llm_costo, nunca estimado` }
+            ? { etiqueta: 'Gasto real de hoy', valor: usd4(gastoHoy), nota: `de ${usd(topeDiaUsd)} de tope diario; suma del costo registrado, nunca estimado` }
             : { etiqueta: 'Gasto de hoy', valor: null, estado: 'error', mensaje: `No se pudo leer: ${gastoError ?? 'sin dato'}` },
         ]}
       />
@@ -102,7 +102,7 @@ export function PantallaQa({
           <TablaBase etiqueta="Historial de corridas" columnas={columnas} filas={corridas} idFila={(c) => c.id} tarjetaMovil />
           <p className="text-xs rv-qa-mut">
             {numero(corridas.length)} {corridas.length === 1 ? 'corrida' : 'corridas'}, las más nuevas primero. Cada una corrió contra un
-            tenant sintético «ZZZ QA …» propio, borrado al terminar salvo retención; jamás contra datos reales.
+            flota de prueba «ZZZ QA …» propia, borrada al terminar salvo que pidas conservarla; jamás contra datos reales.
           </p>
         </Tarjeta>
       )}

@@ -210,7 +210,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
             <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
               <div className="text-xs rv-qa-mut">Carril</div>
               <div className="mt-1 text-sm font-medium">
-                {corrida.carril === 'completo' ? 'completo — en varias pasadas' : 'rápido — en proceso, pipeline real'}
+                {corrida.carril === 'completo' ? 'completo — en varias pasadas' : 'rápido — en un solo proceso'}
               </div>
               {corrida.carril === 'completo' && (
                 <div className="text-[10px] mt-0.5 rv-qa-mut">
@@ -221,10 +221,10 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
             <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
               <div className="text-xs rv-qa-mut">Costo hasta ahora (real)</div>
               <div className="mt-1 text-sm font-medium tabular">{usd4(corrida.costoUsdTotal ?? 0)}</div>
-              <div className="text-[10px] mt-0.5 rv-qa-mut">leído de llm_costo — nunca estimado</div>
+              <div className="text-[10px] mt-0.5 rv-qa-mut">costo registrado — nunca estimado</div>
             </div>
             <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">Tenant sintético</div>
+              <div className="text-xs rv-qa-mut">Flota de prueba</div>
               <div className="mt-1 text-xs font-mono break-all">{corrida.tenantNombre}</div>
               <div className="text-[10px] mt-0.5 rv-qa-mut">
                 {corrida.inicio ? `inicio ${fechaHoraMx(corrida.inicio)}` : 'sin arrancar'}{corrida.fin ? ` · fin ${fechaHoraMx(corrida.fin)}` : ''}

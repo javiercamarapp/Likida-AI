@@ -18,7 +18,8 @@
 .rv-qa-zona { border-color: var(--line); background: transparent; }
 .rv-qa-zona[data-arrastrando="true"] { border-color: var(--marca); background: var(--canvas); }
 .rv-qa-activa { outline: 2px solid var(--marca); outline-offset: -2px; }
-.rv-qa-escenario[data-activo="true"] { background: var(--marca); color: var(--marca-fg); }
+.rv-qa-escenario[data-activo="true"] { background: var(--ui-activo-bg); color: var(--ui-activo-ink); border-color: var(--ui-activo-barra); box-shadow: inset 3px 0 0 var(--ui-activo-barra); }
+.rv-qa-escenario[data-activo="true"] .rv-qa-ink2 { color: var(--ui-activo-ink); }
 .rv-qa-burbuja-user { background: var(--marca); color: var(--marca-fg); }
 .rv-qa-burbuja-bot { background: var(--surface); }
 
