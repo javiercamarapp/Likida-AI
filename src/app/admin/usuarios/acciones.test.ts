@@ -13,9 +13,15 @@ vi.mock('@/lib/auth/gestion_admin', () => ({
 }));
 
 import { DatoInvalido } from '@/lib/likida/errores';
-import {
-  accionCambiarRolUsuario, accionDarDeBajaUsuario, accionReactivarUsuario, accionReenviarAccesoUsuario, accionCerrarSesionesUsuario,
-} from './acciones';
+import * as reales from './acciones';
+
+type R = { ok?: string; error?: string };
+type A = (previo: unknown, fd: FormData) => Promise<R>;
+const accionCambiarRolUsuario = reales.accionCambiarRolUsuario as unknown as A;
+const accionDarDeBajaUsuario = reales.accionDarDeBajaUsuario as unknown as A;
+const accionReactivarUsuario = reales.accionReactivarUsuario as unknown as A;
+const accionReenviarAccesoUsuario = reales.accionReenviarAccesoUsuario as unknown as A;
+const accionCerrarSesionesUsuario = reales.accionCerrarSesionesUsuario as unknown as A;
 
 const fd = (c: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(c)) f.set(k, v); return f; };
 const TODAS = [accionCambiarRolUsuario, accionDarDeBajaUsuario, accionReactivarUsuario, accionReenviarAccesoUsuario, accionCerrarSesionesUsuario];

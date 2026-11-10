@@ -37,7 +37,7 @@ vi.mock('@/lib/supabase/admin', () => ({
         if (err) return { data: null, error: err };
         const filas = (bd.tablas[tabla] ??= []);
         if (op === 'insert') {
-          const f = { id: `id-${++bd.seq}`, ...valores };
+          const f: Fila = { id: `id-${++bd.seq}`, ...valores };
           // suscripcion_una_viva
           if (tabla === 'suscripcion' && filas.some((x) => x.tenant_id === f.tenant_id && ['prueba', 'activa', 'morosa', 'pausada'].includes(String(x.estado)))) {
             return { data: null, error: { message: 'duplicate key', code: '23505' } };
