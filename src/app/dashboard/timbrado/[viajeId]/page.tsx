@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getBorradorViaje } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
+import { Aviso, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 import { SeccionTimbrado } from './timbrar';
 
 export const dynamic = 'force-dynamic';
@@ -51,36 +51,28 @@ export default async function PaginaTimbradoViaje({
   const rotulo = v.folio ?? v.viajeId.slice(0, 8);
 
   return (
-    <main className="max-w-3xl mx-auto px-6 py-8 space-y-5">
-      <div className="flex items-start justify-between gap-4">
-        <Link href={`${RUTA}${sufijoTenant(sp)}`} className="text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
-          ← Volver a Timbrado
-        </Link>
-        <Link
-          href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`}
-          className="text-[12px] font-medium hover:opacity-75"
-          style={{ color: 'var(--marca)' }}
-        >
-          Ver el borrador completo →
-        </Link>
-      </div>
-
-      <header className="space-y-1">
-        <h1 className="font-display text-[20px] font-semibold">Timbrado — viaje {rotulo}</h1>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          {v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'Ruta sin capturar'}
-          {v.unidadEconomico ? ` · Unidad ${v.unidadEconomico}` : ''}
-          {' · '}{numero(v.mercancias.length)} mercancía(s)
-        </p>
-        <p className="text-[12px] px-3 py-2 rounded-lg hairline" style={{ color: 'var(--warn)' }}>
-          Timbrar EMITE un CFDI real ante el SAT a nombre de tu flota. Cancelarlo después tiene
-          ventana, motivo y, a veces, la aceptación del receptor: se aprieta una vez y con los datos
-          revisados.
-        </p>
-      </header>
+    <MarcoPagina
+      area="Carta Porte"
+      titulo={`Timbrado — viaje ${rotulo}`}
+      ancho="lectura"
+      apoyo={`${v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'Ruta sin capturar'}${v.unidadEconomico ? ` · Unidad ${v.unidadEconomico}` : ''} · ${numero(v.mercancias.length)} mercancía(s)`}
+      acciones={(
+        <>
+          <BotonEnlace href={`${RUTA}${sufijoTenant(sp)}`} variante="ghost" tamano="sm">Volver a Timbrado</BotonEnlace>
+          <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
+            Ver el borrador completo
+          </BotonEnlace>
+        </>
+      )}
+    >
+      <Aviso tono="warn">
+        Timbrar EMITE un CFDI real ante el SAT a nombre de tu flota. Cancelarlo después tiene
+        ventana, motivo y, a veces, la aceptación del receptor: se aprieta una vez y con los datos
+        revisados.
+      </Aviso>
 
       <SeccionTimbrado v={v} searchParams={sp} />
-    </main>
+    </MarcoPagina>
   );
 }
 
