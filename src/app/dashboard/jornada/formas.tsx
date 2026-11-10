@@ -6,7 +6,8 @@ import { Lock, Plus, Ban } from 'lucide-react';
 import { TZ_MX } from '@/lib/formato';
 import { ROTULO_PROCEDENCIA, type Asiento, type JornadaCompuesta } from '@/lib/likida/jornada/modelo';
 import type { RiesgoDia, PoliticaFlota } from '@/lib/likida/jornada/riesgo';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
+import { AvisoResultado, Boton as BotonDs, Campo, Casilla, CampoSelect, CampoTexto, Disclosure, Icono, Tarjeta } from '@/app/ui-v2/componentes';
+import './jornada.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS CORRECCIONES DEL CONTRALOR — y por qué ninguna sobreescribe una hora.
@@ -31,17 +32,12 @@ export type AccionJornada = (previo: ResultadoAccion, fd: FormData) => Promise<R
 
 const VACIO: ResultadoAccion = { ok: true };
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
-
 function Boton({ texto, cargando, icono }: { texto: string; cargando: string; icono?: React.ReactNode }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      {icono}
+    <BotonDs type="submit" variante="primary" loading={pending} icono={icono}>
       {pending ? cargando : texto}
-    </button>
+    </BotonDs>
   );
 }
 
@@ -96,12 +92,9 @@ export function FormasJornada({
   ];
 
   return (
-    <section className="card p-4 space-y-4">
-      <div>
-        <h2 className="font-display text-[15px] font-semibold">
-          {fila.operadorNombre} · {fila.dia}
-        </h2>
-        <p className="text-[12px] mt-0.5" style={{ color: 'var(--muted)' }}>
+    <Tarjeta titulo={`${fila.operadorNombre} · ${fila.dia}`} info="jornada.registro">
+      <div className="rv-jn__bloque">
+        <p className="rv-jn__nota">
           {fila.estado === 'cerrado'
             ? `Día cerrado por ${fila.cerradoPorEmail ?? 'sin firma'}. Sigue siendo corregible, y la corrección queda anotada.`
             : 'Día abierto.'}
@@ -110,51 +103,48 @@ export function FormasJornada({
             ? 'El operador confirmó este registro.'
             : 'El operador todavía no lo ha confirmado.'}
         </p>
+
+        {/* LO QUE EL MOTOR VIO, CON SU ARTÍCULO. Cada señal trae su fundamento para que el contralor pueda ir a leerlo, no para adornar. */}
+        {(fila.riesgo.senales.length > 0 || fila.jornada.huecos.length > 0) && (
+          <ul className="rv-jn__senales">
+            {fila.jornada.huecos.map((h) => (
+              <li key={h.clase} data-tono="warn">{h.dice}</li>
+            ))}
+            {fila.riesgo.senales.map((s, i) => (
+              <li key={`${s.clase}-${i}`} data-tono={s.esExceso ? 'bad' : undefined}>
+                {s.dice}
+                {s.fundamento && <span className="rv-jn__tenue">{s.fundamento}</span>}
+              </li>
+            ))}
+            {fila.riesgo.noEvaluado.map((n) => (
+              <li key={n} data-tono="tenue">{n}</li>
+            ))}
+          </ul>
+        )}
+
+        <MarcasDelDia
+          vivos={vivos}
+          anulados={fila.jornada.anulados}
+          jornadaId={fila.jornadaId}
+          puedeCorregir={puedeCorregir}
+          anularMarca={anularMarca}
+        />
+
+        {puedeCorregir && (
+          <>
+            <FormaCaptura
+              jornadaId={fila.jornadaId}
+              dia={fila.dia}
+              anulados={fila.jornada.anulados}
+              capturarMarca={capturarMarca}
+            />
+            {fila.estado === 'abierto' && (
+              <FormaCierre jornadaId={fila.jornadaId} cerrarElDia={cerrarElDia} />
+            )}
+          </>
+        )}
       </div>
-
-      {/* LO QUE EL MOTOR VIO, CON SU ARTÍCULO. Cada señal trae su fundamento
-          para que el contralor pueda ir a leerlo, no para adornar. */}
-      {(fila.riesgo.senales.length > 0 || fila.jornada.huecos.length > 0) && (
-        <ul className="space-y-1.5 text-[12px]">
-          {fila.jornada.huecos.map((h) => (
-            <li key={h.clase} style={{ color: 'var(--warn)' }}>• {h.dice}</li>
-          ))}
-          {fila.riesgo.senales.map((s, i) => (
-            <li key={`${s.clase}-${i}`} style={{ color: s.esExceso ? 'var(--bad)' : 'var(--muted)' }}>
-              • {s.dice}
-              {s.fundamento && (
-                <span className="block text-[11px] pl-3" style={{ color: 'var(--muted)' }}>{s.fundamento}</span>
-              )}
-            </li>
-          ))}
-          {fila.riesgo.noEvaluado.map((n) => (
-            <li key={n} className="text-[11px]" style={{ color: 'var(--muted)' }}>• {n}</li>
-          ))}
-        </ul>
-      )}
-
-      <MarcasDelDia
-        vivos={vivos}
-        anulados={fila.jornada.anulados}
-        jornadaId={fila.jornadaId}
-        puedeCorregir={puedeCorregir}
-        anularMarca={anularMarca}
-      />
-
-      {puedeCorregir && (
-        <>
-          <FormaCaptura
-            jornadaId={fila.jornadaId}
-            dia={fila.dia}
-            anulados={fila.jornada.anulados}
-            capturarMarca={capturarMarca}
-          />
-          {fila.estado === 'abierto' && (
-            <FormaCierre jornadaId={fila.jornadaId} cerrarElDia={cerrarElDia} />
-          )}
-        </>
-      )}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -170,20 +160,21 @@ function MarcasDelDia({
   const [estado, accion] = useActionState(anularMarca, VACIO);
 
   return (
-    <div className="space-y-2">
-      <h3 className="text-[13px] font-medium">Las marcas del día</h3>
+    <div className="rv-jn__bloque">
+      {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
+      <h3 className="rv-jn__sub">Las marcas del día</h3>
       {vivos.length === 0 && (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <p className="rv-jn__nota">
           No hay ninguna marca viva. Nadie reportó y no hubo de dónde derivarla: eso no son cero horas.
         </p>
       )}
       <Aviso estado={estado} />
-      <ul className="space-y-2">
+      <ul className="rv-jn__marcas">
         {vivos.map((a) => (
-          <li key={a.id} className="hairline rounded-lg p-3">
-            <div className="text-[12px]">
+          <li key={a.id} className="rv-jn__marca">
+            <div>
               <strong>{ROTULO_TIPO[a.tipo] ?? a.tipo}</strong> · {hora(a.momento)}
-              <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
+              <span className="rv-jn__tenue">
                 {ROTULO_PROCEDENCIA[a.procedencia]}
                 {a.registradoPorEmail ? ` · ${a.registradoPorEmail}` : ''}
                 {a.nota ? ` · ${a.nota}` : ''}
@@ -191,41 +182,34 @@ function MarcasDelDia({
               </span>
             </div>
             {puedeCorregir && (
-              <form action={accion} className="flex items-end gap-2 mt-2 flex-wrap">
+              <form action={accion} className="rv-forma__fila">
                 <input type="hidden" name="asientoId" value={a.id} />
                 <input type="hidden" name="jornadaId" value={jornadaId} />
-                <label className="flex-1 min-w-[220px]">
-                  <span className={ETIQUETA}>Motivo de la corrección</span>
-                  <input name="motivo" className="w-full" minLength={5} required
-                    placeholder="Por qué esta marca no es correcta" />
-                </label>
-                <Boton texto="Anular" cargando="Anulando…" icono={<Ban width={14} height={14} strokeWidth={1.75} />} />
+                <CampoTexto name="motivo" etiqueta="Motivo de la corrección" minLength={5} obligatorio
+                  placeholder="Por qué esta marca no es correcta" className="rv-forma__crece" />
+                <Boton texto="Anular" cargando="Anulando…" icono={<Icono icono={Ban} />} />
               </form>
             )}
           </li>
         ))}
       </ul>
 
-      {/* LAS ANULADAS SE ENSEÑAN. Esconderlas dejaría la pantalla más limpia y
-          el expediente incompleto: la historia de las correcciones es parte de
-          lo que hace creíble al documento. */}
+      {/* LAS ANULADAS SE ENSEÑAN. Esconderlas dejaría la pantalla más limpia y el expediente incompleto: la historia de las
+          correcciones es parte de lo que hace creíble al documento. */}
       {anulados.length > 0 && (
-        <details className="text-[12px]">
-          <summary className="cursor-pointer" style={{ color: 'var(--muted)' }}>
-            {anulados.length} marca(s) anulada(s) — siguen en el expediente
-          </summary>
-          <ul className="mt-2 space-y-1.5">
+        <Disclosure variante="linea" titulo={`${anulados.length} marca(s) anulada(s) — siguen en el expediente`}>
+          <ul className="rv-jn__marcas">
             {anulados.map((a) => (
-              <li key={a.id} style={{ color: 'var(--muted)' }}>
+              <li key={a.id} className="rv-jn__anulada">
                 <s>{ROTULO_TIPO[a.tipo] ?? a.tipo} · {hora(a.momento)}</s>
-                <span className="block text-[11px]">
+                <span className="rv-jn__tenue">
                   Anulada por {a.anuladoPorEmail ?? 'sin firma'}
                   {a.anuladoEn ? ` el ${hora(a.anuladoEn)}` : ''} · {a.anuladoMotivo}
                 </span>
               </li>
             ))}
           </ul>
-        </details>
+        </Disclosure>
       )}
     </div>
   );
@@ -247,54 +231,43 @@ function FormaCaptura({
   const corregibles = anulados;
 
   return (
-    <form action={accion} className="space-y-2">
-      <h3 className="text-[13px] font-medium">Capturar una marca</h3>
-      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+    <form action={accion} className="rv-forma">
+      {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
+      <h3 className="rv-jn__sub">Capturar una marca</h3>
+      <p className="rv-jn__nota">
         Queda con tu nombre y la hora en que la capturaste. Escribe la hora en horario del
         centro de México (hora de CDMX, sin horario de verano): si el operador está en otra zona
         (Pacífico, Sonora, frontera), conviértela antes de capturarla.
       </p>
       <Aviso estado={estado} />
       <input type="hidden" name="jornadaId" value={jornadaId} />
-      <div className="flex items-end gap-2 flex-wrap">
-        <label>
-          <span className={ETIQUETA}>Qué</span>
-          <select name="tipo" className="w-full" defaultValue="inicio_jornada">
-            <option value="inicio_jornada">Inicio de jornada</option>
-            <option value="fin_jornada">Fin de jornada</option>
-            <option value="inicio_descanso">Inicio de descanso</option>
-            <option value="fin_descanso">Fin de descanso</option>
-          </select>
-        </label>
-        <label>
-          <span className={ETIQUETA}>Cuándo (expediente del {dia})</span>
-          {/* A37-S19-02: SIN hora precargada. Una hora por omisión firmada sin mirar es una cifra inventada. */}
-          <input type="datetime-local" name="momento" required className="w-full" />
-        </label>
-        {/* LA OTRA MITAD DE LA CORRECCIÓN. Anular deja el motivo y la firma;
-            esto deja el VÍNCULO — `corrige_a` — que dice cuál de las marcas
-            anuladas sustituye esta hora. Sin él, el expediente enseña una
-            anulada y una nueva sin decir que son la misma marca corregida, y
-            reconstruir la historia queda a criterio de quien la lea. */}
+      <div className="rv-forma__rejilla">
+        <CampoSelect name="tipo" etiqueta="Qué" defaultValue="inicio_jornada">
+          <option value="inicio_jornada">Inicio de jornada</option>
+          <option value="fin_jornada">Fin de jornada</option>
+          <option value="inicio_descanso">Inicio de descanso</option>
+          <option value="fin_descanso">Fin de descanso</option>
+        </CampoSelect>
+        {/* A37-S19-02: SIN hora precargada. Una hora por omisión firmada sin mirar es una cifra inventada. */}
+        <Campo etiqueta={`Cuándo (expediente del ${dia})`} obligatorio>
+          <input name="momento" type="datetime-local" className="rv-ctl rv-ctl--fecha" />
+        </Campo>
+        {/* LA OTRA MITAD DE LA CORRECCIÓN. Anular deja el motivo y la firma; esto deja el VÍNCULO — `corrige_a` — que dice cuál de las
+            marcas anuladas sustituye esta hora. Sin él, el expediente enseña una anulada y una nueva sin decir que son la misma marca
+            corregida, y reconstruir la historia queda a criterio de quien la lea. */}
         {corregibles.length > 0 && (
-          <label className="min-w-[220px]">
-            <span className={ETIQUETA}>¿Corrige una marca anulada?</span>
-            <select name="corrigeA" className="w-full" defaultValue="">
-              <option value="">No, es una marca nueva</option>
-              {corregibles.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {ROTULO_TIPO[a.tipo] ?? a.tipo} · {hora(a.momento)}
-                </option>
-              ))}
-            </select>
-          </label>
+          <CampoSelect name="corrigeA" etiqueta="¿Corrige una marca anulada?" defaultValue="">
+            <option value="">No, es una marca nueva</option>
+            {corregibles.map((a) => (
+              <option key={a.id} value={a.id}>
+                {ROTULO_TIPO[a.tipo] ?? a.tipo} · {hora(a.momento)}
+              </option>
+            ))}
+          </CampoSelect>
         )}
-        <label className="flex-1 min-w-[220px]">
-          <span className={ETIQUETA}>Nota (de dónde sacaste la hora, obligatoria)</span>
-          <input name="nota" required minLength={5} className="w-full" placeholder="Ej.: me lo dijo por teléfono a las 8:05" />
-        </label>
-        <Boton texto="Capturar" cargando="Guardando…" icono={<Plus width={14} height={14} strokeWidth={1.75} />} />
+        <CampoTexto name="nota" etiqueta="Nota (de dónde sacaste la hora, obligatoria)" obligatorio minLength={5} placeholder="Ej.: me lo dijo por teléfono a las 8:05" />
       </div>
+      <Boton texto="Capturar" cargando="Guardando…" icono={<Icono icono={Plus} />} />
     </form>
   );
 }
@@ -302,15 +275,16 @@ function FormaCaptura({
 function FormaCierre({ jornadaId, cerrarElDia }: { jornadaId: string; cerrarElDia: AccionJornada }) {
   const [estado, accion] = useActionState(cerrarElDia, VACIO);
   return (
-    <form action={accion} className="space-y-2">
-      <h3 className="text-[13px] font-medium">Cerrar el día</h3>
-      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+    <form action={accion} className="rv-forma">
+      {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
+      <h3 className="rv-jn__sub">Cerrar el día</h3>
+      <p className="rv-jn__nota">
         Cerrar es firmar que revisaste este día. No borra ni congela nada: si después hay que
         corregir algo, se puede, y la corrección queda anotada con quién la hizo.
       </p>
       <Aviso estado={estado} />
       <input type="hidden" name="jornadaId" value={jornadaId} />
-      <Boton texto="Cerrar el día" cargando="Cerrando…" icono={<Lock width={14} height={14} strokeWidth={1.75} />} />
+      <Boton texto="Cerrar el día" cargando="Cerrando…" icono={<Icono icono={Lock} />} />
     </form>
   );
 }
@@ -323,31 +297,19 @@ export function FormaPolitica({
 }) {
   const [estado, accion] = useActionState(declararPolitica, VACIO);
   return (
-    <form action={accion} className="space-y-2">
+    <form action={accion} className="rv-forma">
       <Aviso estado={estado} />
-      <div className="flex items-end gap-2 flex-wrap">
-        <label>
-          <span className={ETIQUETA}>Jornada máxima (horas)</span>
-          <input name="horasMaxJornada" type="number" step="0.25" min="0.25" max="24"
-            defaultValue={politica?.horasMaxJornada ?? ''} className="w-full" placeholder="sin declarar" />
-        </label>
-        <label>
-          <span className={ETIQUETA}>Descanso mínimo (minutos)</span>
-          <input name="minutosMinDescanso" type="number" step="1" min="0" max="1440"
-            defaultValue={politica?.minutosMinDescanso ?? ''} className="w-full" placeholder="sin declarar" />
-        </label>
-        <label>
-          <span className={ETIQUETA}>Entre jornadas (horas)</span>
-          <input name="horasMinEntreJornadas" type="number" step="0.25" min="0" max="24"
-            defaultValue={politica?.horasMinEntreJornadas ?? ''} className="w-full" placeholder="sin declarar" />
-        </label>
-        <label className="flex-1 min-w-[260px]">
-          <span className={ETIQUETA}>En qué se fundan (lo transcribimos sin validarlo)</span>
-          <input name="fundamento" defaultValue={politica?.fundamento ?? ''} className="w-full"
-            placeholder="Ej.: cláusula 14 del contrato colectivo" />
-        </label>
-        <Boton texto="Guardar umbrales" cargando="Guardando…" />
+      <div className="rv-forma__rejilla">
+        <CampoTexto name="horasMaxJornada" tipo="number" etiqueta="Jornada máxima (horas)" step="0.25" min="0.25" max="24"
+          defaultValue={politica?.horasMaxJornada ?? ''} placeholder="sin declarar" />
+        <CampoTexto name="minutosMinDescanso" tipo="number" etiqueta="Descanso mínimo (minutos)" step="1" min="0" max="1440"
+          defaultValue={politica?.minutosMinDescanso ?? ''} placeholder="sin declarar" />
+        <CampoTexto name="horasMinEntreJornadas" tipo="number" etiqueta="Entre jornadas (horas)" step="0.25" min="0" max="24"
+          defaultValue={politica?.horasMinEntreJornadas ?? ''} placeholder="sin declarar" />
+        <CampoTexto name="fundamento" etiqueta="En qué se fundan (lo transcribimos sin validarlo)"
+          defaultValue={politica?.fundamento ?? ''} placeholder="Ej.: cláusula 14 del contrato colectivo" />
       </div>
+      <Boton texto="Guardar umbrales" cargando="Guardando…" />
     </form>
   );
 }
@@ -377,51 +339,30 @@ export function FormaAlertaTope({
 }) {
   const [estado, accion] = useActionState(guardarAlerta, VACIO);
   return (
-    <form action={accion} className="space-y-2">
+    <form action={accion} className="rv-forma">
       <Aviso estado={estado} />
-      <label className="flex items-center gap-2 text-[13px]">
-        <input name="activa" type="checkbox" defaultChecked={config?.activa ?? false} />
-        <span>Avisar cuando una jornada en curso se acerque al tope</span>
-      </label>
-      <div className="flex items-end gap-2 flex-wrap">
-        <label>
-          <span className={ETIQUETA}>Tope propio (horas, máx. 12)</span>
-          <input name="topeHoras" type="number" step="0.25" min="0.25" max="12"
-            defaultValue={config?.topeHoras ?? ''} className="w-full" placeholder="el de la ley (12 h)" />
-        </label>
-        <label>
-          <span className={ETIQUETA}>Aviso al (%)</span>
-          <input name="umbralAvisoPct" type="number" step="1" min="1" max="98" required
-            defaultValue={config?.umbralAvisoPct ?? 80} className="w-full" />
-        </label>
-        <label>
-          <span className={ETIQUETA}>Crítico al (%)</span>
-          <input name="umbralCriticoPct" type="number" step="1" min="2" max="99" required
-            defaultValue={config?.umbralCriticoPct ?? 95} className="w-full" />
-        </label>
-        <label>
-          <span className={ETIQUETA}>Avisar al encargado por</span>
-          <select name="canalEncargado" defaultValue={config?.canalEncargado ?? 'whatsapp'} className="w-full">
-            <option value="whatsapp">WhatsApp</option>
-            <option value="correo">Correo</option>
-            <option value="ambos">WhatsApp y correo</option>
-            <option value="ninguno">No avisarle</option>
-          </select>
-        </label>
-        <label>
-          <span className={ETIQUETA}>Avisar al operador por</span>
-          <select name="canalOperador" defaultValue={config?.canalOperador ?? 'whatsapp'} className="w-full">
-            <option value="whatsapp">WhatsApp</option>
-            <option value="ninguno">No avisarle</option>
-          </select>
-        </label>
-        <label className="flex-1 min-w-[220px]">
-          <span className={ETIQUETA}>Correo del encargado (si el canal incluye correo)</span>
-          <input name="correoEncargado" type="email" maxLength={254}
-            defaultValue={config?.correoEncargado ?? ''} className="w-full" placeholder="encargado@tu-flota.mx" />
-        </label>
-        <Boton texto="Guardar la alerta" cargando="Guardando…" />
+      <Casilla name="activa" etiqueta="Avisar cuando una jornada en curso se acerque al tope" defaultChecked={config?.activa ?? false} />
+      <div className="rv-forma__rejilla">
+        <CampoTexto name="topeHoras" tipo="number" etiqueta="Tope propio (horas, máx. 12)" step="0.25" min="0.25" max="12"
+          defaultValue={config?.topeHoras ?? ''} placeholder="el de la ley (12 h)" />
+        <CampoTexto name="umbralAvisoPct" tipo="number" etiqueta="Aviso al (%)" step="1" min="1" max="98" obligatorio
+          defaultValue={config?.umbralAvisoPct ?? 80} />
+        <CampoTexto name="umbralCriticoPct" tipo="number" etiqueta="Crítico al (%)" step="1" min="2" max="99" obligatorio
+          defaultValue={config?.umbralCriticoPct ?? 95} />
+        <CampoSelect name="canalEncargado" etiqueta="Avisar al encargado por" defaultValue={config?.canalEncargado ?? 'whatsapp'}>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="correo">Correo</option>
+          <option value="ambos">WhatsApp y correo</option>
+          <option value="ninguno">No avisarle</option>
+        </CampoSelect>
+        <CampoSelect name="canalOperador" etiqueta="Avisar al operador por" defaultValue={config?.canalOperador ?? 'whatsapp'}>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="ninguno">No avisarle</option>
+        </CampoSelect>
+        <CampoTexto name="correoEncargado" tipo="email" etiqueta="Correo del encargado (si el canal incluye correo)" maxLength={254}
+          defaultValue={config?.correoEncargado ?? ''} placeholder="encargado@tu-flota.mx" />
       </div>
+      <Boton texto="Guardar la alerta" cargando="Guardando…" />
     </form>
   );
 }

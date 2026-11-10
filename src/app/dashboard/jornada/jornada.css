@@ -1,0 +1,22 @@
+/* Jornada · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-jn__bloque { display: grid; gap: 12px; min-width: 0; }
+.rv-jn__sub { margin: 0; font-size: var(--t-body); font-weight: 600; color: var(--ink); }
+.rv-jn__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-jn__nota[data-tono="warn"] { color: var(--warn); }
+.rv-jn__nota[data-tono="bad"] { color: var(--bad); }
+.rv-jn__tenue { display: block; font-size: var(--t-micro); color: var(--muted); }
+.rv-jn__senales { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: var(--t-small); color: var(--muted); }
+.rv-jn__senales li[data-tono="warn"] { color: var(--warn); }
+.rv-jn__senales li[data-tono="bad"] { color: var(--bad); }
+.rv-jn__senales li[data-tono="tenue"] { font-size: var(--t-micro); }
+.rv-jn__marcas { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: var(--t-small); }
+.rv-jn__marca { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-jn__anulada { color: var(--muted); }
+.rv-jn__aviso { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-jn__aviso[data-tono="warn"] { color: var(--warn); }
+.rv-jn__aviso[data-tono="bad"] { color: var(--bad); }
+.rv-jn__enlace { text-decoration: underline; text-underline-offset: 2px; }
+.rv-jn__bar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.rv-jn__extra { display: block; font-size: var(--t-micro); color: var(--warn); }
+.rv-jn__apagado { color: var(--muted); }
+.rv-jn__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
