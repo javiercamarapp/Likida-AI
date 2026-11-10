@@ -25,6 +25,7 @@ const dobles = vi.hoisted(() => ({
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
 vi.mock('next/cache', () => ({ revalidatePath: dobles.revalidatePath }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/compliance', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/likida/repo', async (importar) => ({
   ...(await importar<typeof import('@/lib/likida/repo')>()),
   resolverSolicitudArco: dobles.resolverSolicitudArco,
@@ -177,4 +178,27 @@ it('A37-S05-04: cancelación y oposición no ofrecen "Responder": enlazan a la b
   const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
   expect(html).toContain('/dashboard/arco?tenant=t-1');
   expect(html).toContain('Ejecutar cancelación');
+});
+
+it('F7: una lectura caída se DICE (no es «ninguna solicitud») y las cifras no inventan un cero', async () => {
+  dobles.from.mockReturnValue({ select: () => ({ order: () => ({ order: () => ({ range: async () => ({ data: null, error: { message: 'caída' }, count: null }) }) }) }) });
+  const pagina = await CompliancePage();
+  const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
+  expect(html).toContain('No se pudieron leer las solicitudes ARCO');
+  expect(html).toContain('NO quiere decir que no haya ninguna');
+  expect(html).not.toContain('Ninguna solicitud ARCO registrada');
+});
+
+it('F7: una pendiente cuyo plazo ya pasó se marca «Vencida» y el formulario de responder sigue ahí (ARCO no se cierra por vencer)', async () => {
+  dobles.from.mockReturnValue(encadenar([{ ...SOLICITUD_PENDIENTE, vence_en: '2000-01-01' }]));
+  const pagina = await CompliancePage();
+  const html = (await import('react-dom/server')).renderToStaticMarkup(pagina);
+  expect(html).toContain('Vencida');
+  expect(buscar(pagina, FormaConAviso)).toHaveLength(1);
+});
+
+it('F7: la pantalla no imprime nombres internos (tablas, plantillas ni variables)', async () => {
+  dobles.from.mockReturnValue(encadenar([SOLICITUD_PENDIENTE]));
+  const html = (await import('react-dom/server')).renderToStaticMarkup(await CompliancePage());
+  expect(html).not.toMatch(/respuesta_arco|solicitud_arco|LIKIDA_/);
 });

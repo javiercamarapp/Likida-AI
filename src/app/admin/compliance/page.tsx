@@ -1,41 +1,45 @@
 import type { Metadata } from 'next';
-import { ShieldCheck, FileWarning, CheckCircle2, CircleAlert } from 'lucide-react';
-import { EstadoVacio, StatCard, StatusPill, type Estado } from '../ui/kit';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
-import { requireSuperadmin } from '@/lib/auth/guard';
 import { revalidatePath } from 'next/cache';
+import { requireSuperadmin } from '@/lib/auth/guard';
 import { resolverSolicitudArco } from '@/lib/likida/repo';
-import { fechaMx, hoyMx } from '@/lib/formato';
+import { fechaMx, hoyMx, numero } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from '@/lib/likida/pg';
+import { logger } from '@/lib/logger';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
 import { agregarDiasHabiles } from '@/lib/admin/dias-habiles';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
+import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
+import { TiraCifras } from '../../ui-v2/graficas';
+import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
+import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
+import '../sistema.css';
 
 export const dynamic = 'force-dynamic';
 
 const ETIQUETA_TIPO: Record<string, string> = {
   acceso: 'Acceso', rectificacion: 'Rectificación', cancelacion: 'Cancelación', oposicion: 'Oposición',
 };
-/** `solicitud_arco.estado` como pill del kit — resuelta en verde, pendiente en
- *  ámbar, improcedente en neutro. Un estado fuera del catálogo se pinta crudo
- *  en neutro: visible, no roto. */
-const PILL_ARCO: Record<string, { estado: Estado; etiqueta: string }> = {
-  recibida: { estado: 'warn', etiqueta: 'Recibida' },
-  en_proceso: { estado: 'warn', etiqueta: 'En proceso' },
-  resuelta: { estado: 'ok', etiqueta: 'Resuelta' },
-  improcedente: { estado: 'neutral', etiqueta: 'Improcedente' },
+/** El estado de la solicitud como chip: resuelta en verde, pendiente en ámbar, improcedente en neutro. Un estado fuera del catálogo se
+ *  pinta crudo en neutro: visible, no roto. */
+const CHIP_ARCO: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+  recibida: { tono: 'warn', etiqueta: 'Recibida' },
+  en_proceso: { tono: 'warn', etiqueta: 'En proceso' },
+  resuelta: { tono: 'ok', etiqueta: 'Resuelta' },
+  improcedente: { tono: 'neutral', etiqueta: 'Improcedente' },
 };
 
 /**
- * Compliance & Datos — la flota ve sus solicitudes ARCO (registradas cuando un
- * operador escribe PRIVACIDAD por WhatsApp) y responde la que le toca. AUDITORÍA
- * 14: las solicitudes se registraban pero nadie podía verlas; la responsable
- * obligada a contestar en 20 días hábiles (LFPDPPP art. 31) estaba ciega.
+ * Compliance y datos — la flota ve sus solicitudes ARCO (registradas cuando un operador escribe PRIVACIDAD por WhatsApp) y responde la
+ * que le toca. AUDITORÍA 14: las solicitudes se registraban pero nadie podía verlas; la responsable obligada a contestar en 20 días
+ * hábiles (LFPDPPP art. 31) estaba ciega.
+ *
+ * F7: la pantalla se rehízo con ui-v2 SIN tocar la lógica de ARCO. Lo pendiente va en tarjetas con su formulario DENTRO (cada
+ * respuesta se envía tal cual al titular), lo ya resuelto en una tabla paginada. Una lectura caída se dice; no se pinta como «sin
+ * solicitudes».
  */
-export default async function CompliancePage() {
+export default async function CompliancePage({ searchParams }: { searchParams?: Promise<{ pagina?: string }> } = {}) {
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   async function accionResolver(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -70,105 +74,102 @@ export default async function CompliancePage() {
       : { ok: `Solicitud resuelta. La respuesta NO se pudo enviar por WhatsApp${r.error ? ` (${r.error})` : ''} — entrégala al titular por otro canal.` };
   }
 
-  const { solicitudes, pendientesVencen } = await datosDeCompliance();
-  const pendientes = solicitudes.filter((s) => s.estado === 'recibida' || s.estado === 'en_proceso');
-  // AUDITORÍA 15, CRÍTICO: la pantalla vive en /admin (superadmin), cuyo
-  // tenant de sesión es null — filtrar por tenant dejaba la pantalla SIEMPRE
-  // vacía. El superadmin ve TODAS las flotas, con una columna de flota. La
-  // flota responsable tendrá su propia ruta en /dashboard (decisión de la 16).
+  let lectura: { solicitudes: SolicitudArcoPanel[]; pendientesVencen: number } | null;
+  try {
+    lectura = await datosDeCompliance();
+  } catch (e) {
+    logger.error('admin.compliance', { err: e instanceof Error ? e.message : String(e) });
+    lectura = null;
+  }
+  const solicitudes = lectura?.solicitudes ?? [];
+  // Lo más próximo a vencer primero (el plazo legal es lo que ordena el trabajo).
+  const pendientes = solicitudes.filter((s) => s.estado === 'recibida' || s.estado === 'en_proceso').sort((a, b) => a.venceEn.localeCompare(b.venceEn));
+  const resueltas = solicitudes.filter((s) => s.estado !== 'recibida' && s.estado !== 'en_proceso');
+  // AUDITORÍA 15, CRÍTICO: la pantalla vive en /admin (superadmin), cuyo tenant de sesión es null — filtrar por tenant dejaba la
+  // pantalla SIEMPRE vacía. El superadmin ve TODAS las flotas, con la flota en cada solicitud.
+  const hoy = hoyMx(new Date(ahoraMs()));
+  const pagina = Math.max(1, Number.parseInt((await searchParams)?.pagina ?? '1', 10) || 1);
 
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
+  const columnas: ColumnaTabla<SolicitudArcoPanel>[] = [
+    { id: 'recibida', titulo: 'Recibida', corta: true, celda: (s) => fechaMx(s.recibidaEn) },
+    { id: 'flota', titulo: 'Flota', principal: true, celda: (s) => s.flotaNombre },
+    { id: 'derecho', titulo: 'Derecho', celda: (s) => ETIQUETA_TIPO[s.tipo] ?? s.tipo },
+    { id: 'estado', titulo: 'Estado', celda: (s) => { const c = CHIP_ARCO[s.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: s.estado }; return <StatusChip tono={c.tono}>{c.etiqueta}</StatusChip>; } },
+    { id: 'resolucion', titulo: 'Resolución', celda: (s) => s.resolucion ?? '—' },
+  ];
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<ShieldCheck {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo="Compliance & Datos"
-        />
+    <MarcoPagina titulo="Compliance y datos" apoyo="Las solicitudes de derechos de los titulares (ARCO): quién pide qué y cuánto falta para contestar.">
+      <TiraCifras etiqueta="Solicitudes ARCO" items={lectura === null ? [
+        { etiqueta: 'Por responder', valor: null, estado: 'error', mensaje: 'No se pudieron leer las solicitudes.', reintentar: true },
+        { etiqueta: 'Vencen pronto', valor: null, estado: 'error', mensaje: 'No se pudieron leer las solicitudes.', reintentar: true },
+      ] : [
+        { etiqueta: 'Por responder', valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: 'Recibidas o en proceso, de todas las flotas.' },
+        { etiqueta: 'Vencen pronto', valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: 'Plazo en 5 días hábiles o menos.' },
+      ]} />
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <div className="kit-kpis">
-            <StatCard icono={<CircleAlert {...ICONO} />}
-              etiqueta="Solicitudes ARCO por responder" valor={pendientes.length} formato="entero"
+      {lectura === null ? (
+        <EstadoError reintentar>No se pudieron leer las solicitudes ARCO. Esto NO quiere decir que no haya ninguna: la responsable tiene 20 días hábiles para contestar y una pendiente puede estar corriendo sin verse.</EstadoError>
+      ) : solicitudes.length === 0 ? (
+        <EstadoVacio titulo="Ninguna solicitud ARCO registrada">
+          Cuando un operador escribe PRIVACIDAD por WhatsApp, la solicitud queda registrada aquí y la flota, que es la responsable, tiene 20 días hábiles para responder.
+        </EstadoVacio>
+      ) : (
+        <>
+          <section className="adm-sis-bloque" aria-labelledby="arco-pendientes">
+            <h2 className="adm-sis-titulo" id="arco-pendientes">Por responder</h2>
+            {pendientes.length === 0 ? (
+              <EstadoVacio titulo="Nada por responder">Todas las solicitudes registradas ya tienen su respuesta.</EstadoVacio>
+            ) : pendientes.map((s) => {
+              const chip = CHIP_ARCO[s.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: s.estado };
+              const vencida = s.venceEn < hoy;
+              return (
+                <Tarjeta key={s.id} titulo={`${ETIQUETA_TIPO[s.tipo] ?? s.tipo} · ${s.flotaNombre}`}
+                  acciones={<><StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip>{vencida ? <StatusChip tono="bad">Vencida</StatusChip> : null}</>}>
+                  <ul className="adm-sis-lista">
+                    <li><span>Recibida</span><span>{fechaMx(s.recibidaEn)}</span></li>
+                    <li><span>Vence</span><span>{fechaMx(s.venceEn)}</span></li>
+                    <li><span>Titular</span><span>{s.operadorNombre ?? '—'}<span className="adm-sis-sub">{s.titularRef}</span></span></li>
+                  </ul>
+                  {s.tipo === 'cancelacion' || s.tipo === 'oposicion' ? (
+                    // A37-S05-04: una cancelación se EJECUTA (anonimiza al titular) y una oposición lleva su propio trámite; ninguna se
+                    // cierra con texto. La ejecución real vive en /dashboard/arco.
+                    <div className="adm-sis-acciones">
+                      <BotonEnlace href={`/dashboard/arco?tenant=${encodeURIComponent(s.tenantId)}`} variante="secondary" tamano="sm">
+                        {s.tipo === 'cancelacion' ? 'Ejecutar cancelación en la bandeja ARCO' : 'Atender la oposición en la bandeja ARCO'}
+                      </BotonEnlace>
+                    </div>
+                  ) : (
+                    <FormaConAviso accion={accionResolver} boton="Responder" columnas="md:grid-cols-1">
+                      <input type="hidden" name="solicitudId" value={s.id} />
+                      <CampoTextarea etiqueta="Respuesta al titular" name="resolucion" obligatorio rows={3}
+                        placeholder="Qué se resolvió y cómo"
+                        ayuda="Se envía tal cual por WhatsApp al titular. Escribe lo que quieres que lea." />
+                    </FormaConAviso>
+                  )}
+                </Tarjeta>
+              );
+            })}
+          </section>
+
+          <section className="adm-sis-bloque" aria-labelledby="arco-resueltas">
+            <h2 className="adm-sis-titulo" id="arco-resueltas">Ya resueltas</h2>
+            <TablaLista<SolicitudArcoPanel>
+              etiqueta="Solicitudes de derechos de los titulares resueltas" columnas={columnas} filas={resueltas} idFila={(s) => s.id}
+              base="/admin/compliance" params={{ pagina: pagina > 1 ? String(pagina) : undefined }} paginacion={{ tamano: 25 }}
+              vacio={{ titulo: 'Aún no hay resueltas', texto: 'Aparecen aquí en cuanto se contesta la primera.' }}
             />
-            <StatCard icono={<CheckCircle2 {...ICONO} />}
-              etiqueta="Vencen pronto (≤ 5 días hábiles)" valor={pendientesVencen} formato="entero"
-            />
-          </div>
+          </section>
+        </>
+      )}
 
-          <div className="card p-3">
-            <TituloSeccion>Solicitudes ARCO del operador</TituloSeccion>
-            {solicitudes.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio>
-                  Ninguna solicitud ARCO registrada. Cuando un operador escribe *PRIVACIDAD* por WhatsApp, la solicitud
-                  queda registrada aquí y la flota —la responsable— tiene 20 días hábiles para responder.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <div className="overflow-x-auto mt-1">
-                <table aria-label="Solicitudes de derechos de los titulares" className="w-full text-sm">
-                  <thead>
-                    <tr style={{ color: 'var(--muted)' }} className="text-left">
-                      <th scope="col" className="px-3 py-2 font-medium">Recibida</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Flota</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Derecho</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Titular</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Vence</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Estado</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Resolución</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {solicitudes.map((s) => {
-                      const pill = PILL_ARCO[s.estado] ?? { estado: 'neutral' as Estado, etiqueta: s.estado };
-                      return (
-                        <tr key={s.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                          <td className="px-3 py-2.5">{fechaMx(s.recibidaEn)}</td>
-                          <td className="px-3 py-2.5">{s.flotaNombre}</td>
-                          <td className="px-3 py-2.5 font-medium">{ETIQUETA_TIPO[s.tipo] ?? s.tipo}</td>
-                          <td className="px-3 py-2.5">
-                            {s.operadorNombre ?? '—'}
-                            <span className="block text-xs font-mono" style={{ color: 'var(--muted)' }}>{s.titularRef}</span>
-                          </td>
-                          <td className="px-3 py-2.5 tabular">{fechaMx(s.venceEn)}</td>
-                          <td className="px-3 py-2.5"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
-                          <td className="px-3 py-2.5">
-                            {s.estado === 'resuelta' || s.estado === 'improcedente' ? (
-                              <span className="text-xs" style={{ color: 'var(--muted)' }}>{s.resolucion ?? '—'}</span>
-                            ) : s.tipo === 'cancelacion' || s.tipo === 'oposicion' ? (
-                              // A37-S05-04: una cancelación se EJECUTA (anonimiza al
-                              // titular) y una oposición lleva su RPC; ninguna se cierra
-                              // con texto. La ejecución real vive en /dashboard/arco.
-                              <a href={`/dashboard/arco?tenant=${encodeURIComponent(s.tenantId)}`} className="text-xs underline">
-                                {s.tipo === 'cancelacion' ? 'Ejecutar cancelación en la bandeja ARCO' : 'Atender la oposición en la bandeja ARCO'}
-                              </a>
-                            ) : (
-                              <FormaConAviso accion={accionResolver} boton="Responder" columnas="220px auto">
-                                <input type="hidden" name="solicitudId" value={s.id} />
-                                <input name="resolucion" placeholder="Texto que recibe el titular por WhatsApp" aria-label="Respuesta al titular (se envía tal cual por WhatsApp)" style={{ width: 220 }} />
-                              </FormaConAviso>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <EstadoVacio icono={<FileWarning width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-            La retención de comprobantes (CFF 30: conservar 5 años) y el catálogo de avisos por versión siguen sin
-            flujo construido — se documenta en lugar de inventarlo. Las solicitudes ARCO están operativas: las
-            registra el webhook cuando un operador escribe PRIVACIDAD, se resuelven aquí, y la respuesta se intenta
-            enviar al titular por WhatsApp (plantilla `respuesta_arco` en revisión de Meta).
-          </EstadoVacio>
-        </div>
-      </div>
-    </main>
+      <Disclosure titulo="Lo que aún no existe aquí" resumen="Retención de comprobantes y avisos por versión">
+        <p className="adm-sis-nota">
+          La retención de comprobantes (CFF art. 30: conservar cinco años) y el catálogo de avisos de privacidad por versión siguen sin flujo construido; se dejan dichos en lugar de inventarlos.
+          Las solicitudes ARCO sí están operativas: las registra el webhook cuando un operador escribe PRIVACIDAD, se resuelven aquí y la respuesta se intenta enviar al titular por WhatsApp (la plantilla de respuesta está en revisión de Meta).
+        </p>
+      </Disclosure>
+    </MarcoPagina>
   );
 }
 
