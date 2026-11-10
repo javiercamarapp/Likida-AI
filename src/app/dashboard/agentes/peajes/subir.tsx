@@ -5,7 +5,8 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Upload } from 'lucide-react';
-import { CampoArchivo } from '@/app/ui-v2/componentes';
+import { Boton, CampoArchivo, Icono } from '@/app/ui-v2/componentes';
+import './peajes.css';
 
 export type AccionSubir = (
   prev: { error?: string; resumen?: { totalLineas: number; conciliadas: number; porConciliar: number } } | null,
@@ -27,15 +28,15 @@ export function SubirDesglose({ subirDesglose }: { subirDesglose: AccionSubir })
   }, [estado, router]);
 
   return (
-    <div>
-      <form action={accion} className="flex items-center gap-2 flex-wrap">
+    <div className="rv-pj-control">
+      <form action={accion} className="rv-pj-forma">
         <CampoArchivo etiqueta="XML del CFDI consolidado" name="archivo" accept=".xml,text/xml,application/xml" required />
         <BotonSubir />
       </form>
-      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
       {estado?.resumen && (
-        <p className="text-[12px] mt-2" style={{ color: 'var(--muted)' }}>
-          Cruce corrido: <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{estado.resumen.conciliadas}</span> de{' '}
+        <p className="rv-pj-sub" role="status">
+          Cruce corrido: <strong className="cifra-mono">{estado.resumen.conciliadas}</strong> de{' '}
           <span className="cifra-mono">{estado.resumen.totalLineas}</span> líneas conciliadas solas
           {estado.resumen.porConciliar > 0 && <> · {estado.resumen.porConciliar} esperan a un humano en la mesa</>}.
         </p>
@@ -47,11 +48,8 @@ export function SubirDesglose({ subirDesglose }: { subirDesglose: AccionSubir })
 function BotonSubir() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Upload width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Upload} />}>
       {pending ? 'Cruzando…' : 'Cruzar contra los viajes'}
-    </button>
+    </Boton>
   );
 }

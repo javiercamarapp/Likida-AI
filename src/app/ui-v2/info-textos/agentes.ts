@@ -339,6 +339,52 @@ export const INFO_AGENTES = {
     'Consulta a tu contador antes de usar el monto: es ingreso acumulable.',
   ),
 
+  // ═══ Peajes · revisión de cobros ═══════════════════════════════════════
+  'peajes_cobros.por_vencer': V(
+    'Por vencer', 'Cruces candidatos a reclamo cuyo plazo para reclamar está por terminar.',
+    'Suma los cruces del archivo abierto que ningún reclamo enviado cubre y cuyo plazo de reclamo vence pronto, con su dinero. Si falta la fecha base del plazo, muestra «sin dato» y no un cero.',
+    'El archivo del proveedor abierto, sus reclamos enviados y el plazo declarado de reclamo, al abrir la página.',
+    'Prepara el reclamo de esos cruces antes de que venza el plazo.',
+  ),
+  'peajes_cobros.reclamado': V(
+    'Reclamado al proveedor', 'Suma de los reclamos que registraste de este archivo.',
+    'Suma el monto de los reclamos de este archivo en el seguimiento. Sin reclamos registrados lo dice, no pinta una medición.',
+    'Seguimiento de reclamos y notas de crédito del archivo abierto.',
+  ),
+  'peajes_cobros.acreditado': V(
+    'Acreditado por el proveedor', 'Lo que el proveedor ya acreditó con notas de crédito de este archivo.',
+    'Suma las notas de crédito registradas contra los reclamos de este archivo.',
+    'Seguimiento de reclamos y notas de crédito del archivo abierto.',
+  ),
+  'peajes_cobros.pendiente': V(
+    'Pendiente de acreditar', 'Lo reclamado que el proveedor todavía no acredita.',
+    'Resta lo acreditado de lo reclamado en este archivo. Un saldo en cero significa que no falta nada por acreditar.',
+    'Seguimiento de reclamos y notas de crédito del archivo abierto.',
+    'Da seguimiento con el proveedor a lo que falta.',
+  ),
+  'peajes_cobros.pct_revisado': V(
+    'Candidatos revisados por una persona', 'Parte de los candidatos que una persona ya reclamó, descartó o justificó.',
+    'Divide los candidatos atendidos entre todos los candidatos del archivo. Es una medida distinta de lo que el sistema evalúa solo y no se suman.',
+    'Revisión de cobros del archivo del proveedor abierto.',
+  ),
+  'peajes_cobros.cruces_evaluados': V(
+    'Cruces evaluados automáticamente', 'Parte de los cruces a los que el sistema pudo aplicar al menos una regla.',
+    'Divide los cruces con alguna regla aplicable entre todos los cruces del archivo. No dice que el cobro sea correcto ni incorrecto.',
+    'Revisión de cobros del archivo del proveedor abierto.',
+  ),
+  'peajes_cobros.atipicos_nuevos': V(
+    'Cruces atípicos nuevos', 'Cruces que el detector marca como atípicos en este archivo y aún no revisas.',
+    'Cuenta los hallazgos del detector de atípicos en esta lectura. Si el detector no se ha corrido, muestra «sin dato».',
+    'Detector de cruces atípicos sobre el archivo abierto.',
+    'Revisa cada hallazgo; marcarlo no es una acusación.',
+  ),
+  'peajes_cobros.sin_viaje': V(
+    'Cruces sin viaje', 'Cruces que no se pudieron ligar a ningún viaje.',
+    'Cuenta los vínculos cruce-viaje del archivo en estado sin viaje. Si el cruce con viajes no está disponible, muestra «sin dato».',
+    'Cruce de casetas con viajes del archivo abierto.',
+    'Revisa si el viaje existe y la fecha del cobro.',
+  ),
+
   // ═══ Peajes · configuración ═════════════════════════════════════════════
   'peajes_config.buzon': V(
     'Buzón automático del proveedor', 'Buzón firmado por donde el proveedor o un script manda el archivo de cada corte.',

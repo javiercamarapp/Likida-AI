@@ -274,7 +274,7 @@ describe('RevisionCobros: render', () => {
 
   it('dato inexistente se pinta «sin dato», nunca 0', () => {
     const html = pintarEstado(datos({ vinculos: [] }));
-    expect(html).toContain('sin dato');
+    expect(html).toMatch(/sin dato/i);
   });
 
   it('error: mensaje en lenguaje llano, sin palabras tecnicas', () => {

@@ -5,6 +5,8 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import type { ResumenBarrido } from '@/lib/likida/intake/consolidado';
+import { Boton, Icono } from '@/app/ui-v2/componentes';
+import './peajes.css';
 
 export type EstadoBarrer = { error?: string; resumen?: ResumenBarrido } | null;
 export type AccionBarrer = (prev: EstadoBarrer, fd: FormData) => Promise<EstadoBarrer>;
@@ -41,33 +43,27 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
   const r = estado?.resumen;
 
   return (
-    <div className="shrink-0">
+    <div className="rv-pj-control">
       {confirmando ? (
-        <form action={accion} onSubmit={() => setConfirmando(false)} className="inline-flex items-center gap-2">
-          <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-pj-confirmar">
+          <span className="rv-pj-sub">
             {pendientes === null
               ? '¿Barrer las líneas pendientes contra los gastos de hoy?'
               : `¿Barrer ${pendientes === 1 ? 'la línea pendiente' : `las ${pendientes} líneas pendientes`} contra los gastos de hoy?`}
           </span>
           <BotonConfirmar />
-          <button type="button" onClick={() => setConfirmando(false)}
-            className="rv-btn rv-btn--secondary"
-            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            Cancelar
-          </button>
+          <Boton onClick={() => setConfirmando(false)}>Cancelar</Boton>
         </form>
       ) : (
-        <button type="button" onClick={() => setConfirmando(true)}
-          title="Volver a cruzar las líneas pendientes contra los gastos que llegaron después"
-          className="rv-btn rv-btn--primary"
-          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-          <RefreshCw width={13} height={13} strokeWidth={2} /> Ejecutar ahora
-        </button>
+        <Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}
+          title="Volver a cruzar las líneas pendientes contra los gastos que llegaron después">
+          Ejecutar ahora
+        </Boton>
       )}
 
-      {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
       {r && !confirmando && (
-        <p className="text-[12px] mt-1.5" style={{ color: 'var(--muted)' }}>
+        <p className="rv-pj-sub" role="status">
           {/* REN-31C-C1: `revisadas === 0` dejó de significar «la cola está
               vacía» cuando el barrido ganó reloj (REN-30-C1) — un corte antes
               de la primera línea da 0 revisadas sobre 1,000 pendientes. La
@@ -77,22 +73,22 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
           ) : r.revisadas === 0 ? (
             <>
               No alcancé a revisar ninguna en esta pasada: quedaron{' '}
-              <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cortadosPorReloj}</span>{' '}
+              <strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}
               {r.cortadosPorReloj === 1 ? 'línea pendiente' : 'líneas pendientes'} fuera por tiempo.
               Vuelve a ejecutar para seguir donde se quedó.
             </>
           ) : (
             <>
-              Revisé <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.revisadas}</span>{' '}
+              Revisé <strong className="cifra-mono">{r.revisadas}</strong>{' '}
               {r.revisadas === 1 ? 'línea pendiente' : 'líneas pendientes'}; amarré{' '}
-              <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.conciliadas}</span> contra
+              <strong className="cifra-mono">{r.conciliadas}</strong> contra
               gastos nuevos; refresqué candidatos de <span className="cifra-mono">{r.candidatosRefrescados}</span>;
               {' '}{r.siguenPendientes === 1 ? 'sigue' : 'siguen'} <span className="cifra-mono">{r.siguenPendientes}</span>.
               {/* REN-30-C1: sin esta línea, «revisé 40» sobre una cola de 1,000
                   se lee como que la cola quedó limpia. */}
               {r.cortadosPorReloj > 0 && (
                 <>
-                  {' '}Quedaron <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cortadosPorReloj}</span>{' '}
+                  {' '}Quedaron <strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}
                   fuera de esta pasada por tiempo: vuelve a ejecutar para seguir donde se quedó.
                 </>
               )}
@@ -107,11 +103,8 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
 function BotonConfirmar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <RefreshCw width={13} height={13} strokeWidth={2} className={pending ? 'animate-spin' : ''} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={RefreshCw} />}>
       {pending ? 'Barriendo…' : 'Sí, barrer'}
-    </button>
+    </Boton>
   );
 }
