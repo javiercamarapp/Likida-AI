@@ -47,11 +47,17 @@ export function FormaEnCajon({ id, titulo, descripcion, accion, boton, disparado
   const idForma = useId();
   const forma = useRef<HTMLFormElement>(null);
   const { abierto, abrir, cerrar } = useAbrirPorUrl({ id, param, abiertoInicial });
-  const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
+  // Cierra apenas la acción responde `{ ok }` (dentro del propio envío, no en un efecto): el cajón no queda abierto sobre un alta ya hecha.
+  const accionYCierre: AccionDeForma = async (previo, datos) => {
+    const r = await accion(previo, datos);
+    if (cerrarAlOk && r?.ok !== undefined) cerrar();
+    return r;
+  };
+  const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accionYCierre, null);
   // Un aviso viejo (de una apertura anterior) no se muestra al reabrir: se descarta el estado que ya había.
   const [descartado, setDescartado] = useState<ResultadoAccion>(null);
-  const [confirmado, setConfirmado] = useState<string | null>(null);
-  const visible = estado !== descartado ? estado : null;
+  const vigente = estado !== descartado ? estado : null;
+  const confirmado = vigente?.ok ?? '';
 
   // React 19 REINICIA el <form> al terminar la acción (también cuando rechazó). Se guarda lo escrito al enviar y, si la respuesta es un
   // rechazo, se devuelve a los campos: corregir un dígito no obliga a recapturar todo (la razón de ser de `FormaConAviso`).
@@ -61,19 +67,13 @@ export function FormaEnCajon({ id, titulo, descripcion, accion, boton, disparado
     restaurar(forma.current, escrito.current);
   }, [estado, descartado]);
 
-  useEffect(() => {
-    if (estado?.ok === undefined || estado === descartado) return;
-    setConfirmado(estado.ok);
-    if (cerrarAlOk) { setDescartado(estado); forma.current?.reset(); cerrar(); }
-  }, [estado, descartado, cerrarAlOk, cerrar]);
-
-  const alAbrir = () => { setDescartado(estado); setConfirmado(null); abrir(); };
+  const alAbrir = () => { setDescartado(estado); abrir(); };
 
   return (
     <>
       {disparador ? <Boton type="button" variante="secondary" tamano="sm" aria-haspopup="dialog" onClick={alAbrir}>{disparador}</Boton> : null}
       {/* Región viva SIEMPRE presente: un aria-live que nace con su texto no se anuncia. */}
-      <span className="sr-only" role="status" aria-live="polite">{confirmado ?? ''}</span>
+      <span className="sr-only" role="status" aria-live="polite">{confirmado}</span>
       <Drawer
         abierto={abierto} onCerrar={cerrar} titulo={titulo} descripcion={descripcion} tamano={tamano} cierraConFondo={false}
         pie={(
@@ -85,7 +85,7 @@ export function FormaEnCajon({ id, titulo, descripcion, accion, boton, disparado
       >
         <form id={idForma} ref={forma} action={enviar} onSubmit={(e) => { escrito.current = new FormData(e.currentTarget); }} className="flex flex-col gap-3" data-forma-cajon={id}>
           {children}
-          <Aviso estado={visible} />
+          <Aviso estado={abierto ? vigente : null} />
         </form>
       </Drawer>
     </>

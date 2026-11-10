@@ -27,10 +27,10 @@ export function quitarParamAbrir(param: string = PARAM_ABRIR): void {
 }
 
 export function useAbrirPorUrl({ id, param = PARAM_ABRIR, abiertoInicial = false }: { id: string; param?: string; abiertoInicial?: boolean }) {
-  const [abierto, setAbierto] = useState(abiertoInicial);
-  // Al montar y en «atrás/adelante»: la URL manda. (No se cierra solo por no verla: abrir con el botón no toca la URL.)
+  // La URL manda al montar (el estado inicial la lee; el `open` del <dialog> no es parte del HTML que React hidrata, así que no hay desajuste)
+  // y en «atrás/adelante». No se cierra solo por no verla: abrir con el botón no toca la URL.
+  const [abierto, setAbierto] = useState(() => abiertoInicial || urlPideAbrir(id, param));
   useEffect(() => {
-    if (urlPideAbrir(id, param)) setAbierto(true);
     const alNavegar = () => { if (urlPideAbrir(id, param)) setAbierto(true); };
     window.addEventListener('popstate', alNavegar);
     return () => window.removeEventListener('popstate', alNavegar);
