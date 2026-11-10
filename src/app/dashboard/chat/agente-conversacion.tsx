@@ -12,6 +12,7 @@ import { comportamientoScroll, useMovimientoReducido } from './movimiento';
 import type { Motor, ModoAgente } from './motor';
 import { PERFILES, type TemaAgente, type TextosAgente } from './perfiles';
 import TemasRapidos from './sugerencias';
+import BriefingDecideHoy from './briefing-decide-hoy';
 import { useAnalista } from './use-analista';
 import { useCopiloto } from './use-copiloto';
 
@@ -214,6 +215,7 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
           <div className="rv-chat__dock">{composer}</div>
           {!hay && (
             <>
+              {modo === 'superadmin' && !panel && <BriefingDecideHoy onPreguntar={preguntar} deshabilitado={a.ocupado} endpoint={endpointAccion} />}
               <TemasRapidos temas={listaTemas} onPreguntar={preguntar} deshabilitado={a.ocupado} />
               <p className="rv-chat__meta">
                 {tx.chips.map((c) => <span key={c.texto} className="rv-chip" title={c.ayuda}>{c.texto}</span>)}

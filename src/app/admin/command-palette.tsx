@@ -234,6 +234,15 @@ export default function CommandPalette() {
         key: 'acc-copiloto', etiqueta: 'Abrir el copiloto (panel lateral)', detalle: '⌘J', Icono: Sparkles,
         correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); },
       },
+      // Verbos del Copiloto (F5, mejora 6): abren el panel lateral y le hacen la pregunta; no ejecutan nada por sí solos.
+      {
+        key: 'acc-copiloto-decide', etiqueta: 'Preguntar al copiloto: ¿qué decido hoy?', Icono: Sparkles,
+        correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); window.dispatchEvent(new CustomEvent('likida:copiloto-preguntar', { detail: { pregunta: '¿Qué espera mi decisión hoy?' } })); },
+      },
+      {
+        key: 'acc-copiloto-resumen', etiqueta: 'Preguntar al copiloto: resumen del día', Icono: Sparkles,
+        correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); window.dispatchEvent(new CustomEvent('likida:copiloto-preguntar', { detail: { pregunta: 'Dame el resumen del día: negocio, agentes y costo de IA.' } })); },
+      },
     ];
     const rutas = TODAS_LAS_RUTAS.map((r): Item => ({
       key: r.href, etiqueta: r.nombre, Icono: r.Icono, alias: r.alias, correr: () => ir(r.href),

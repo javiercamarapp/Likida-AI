@@ -295,7 +295,7 @@ export async function apagar(nombre: string, motivo: string, userId: string): Pr
  * se limpia: la fila dice el estado VIGENTE; el historial vive en la
  * bitácora. LANZA si la escritura falla, por la misma razón que `apagar`.
  */
-export async function encender(nombre: string, userId: string): Promise<void> {
+export async function encender(nombre: string, userId: string, motivo?: string): Promise<void> {
   if (!esNombreValido(nombre)) {
     throw new DatoInvalido(`"${nombre}" no es un interruptor del catálogo.`);
   }
@@ -307,7 +307,9 @@ export async function encender(nombre: string, userId: string): Promise<void> {
     ), 'encender');
   if (error) throw new Error(`encender(${nombre}): ${error.message}`);
   olvidarInterruptores();
-  await anotarEnBitacora('interruptor.encendido', nombre, userId, {});
+  // El motivo (opcional aquí; el Copiloto y el panel de agentes lo exigen) viaja a la bitácora: encender es tan auditable como apagar.
+  const m = (motivo ?? '').trim();
+  await anotarEnBitacora('interruptor.encendido', nombre, userId, m ? { motivo: m } : {});
 }
 
 /**

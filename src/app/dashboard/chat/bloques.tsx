@@ -12,7 +12,7 @@ import type { Visual } from './respuestas';
 export default function BloqueRespuesta({ v, indice }: { v: Visual; indice: number }) {
   if (v.tipo === 'cifra') {
     return (
-      <section className="card rv-chat__bloque rv-chat__bloque--cifra" data-i={Math.min(indice, 3)} data-tipo="cifra">
+      <section className="rv-tarjeta rv-chat__bloque rv-chat__bloque--cifra" data-i={Math.min(indice, 3)} data-tipo="cifra">
         <p className="rv-chat__kpi">{v.valor}</p>
         {v.nota && <p className="rv-chat__nota">{v.nota}</p>}
       </section>
@@ -21,21 +21,21 @@ export default function BloqueRespuesta({ v, indice }: { v: Visual; indice: numb
   if (v.tipo === 'dona') {
     const total = v.segmentos.reduce((s, x) => s + x.valor, 0);
     return (
-      <section className="card rv-chat__bloque" data-i={Math.min(indice, 3)} data-tipo="dona">
+      <section className="rv-tarjeta rv-chat__bloque" data-i={Math.min(indice, 3)} data-tipo="dona">
         <DonaMini matiz={5} gajos={v.segmentos} etiqueta="Gráfica de dona de la respuesta" centro={numero(total)} formato="numero" />
       </section>
     );
   }
   if (v.tipo === 'serie') {
     return (
-      <section className="card rv-chat__bloque" data-i={Math.min(indice, 3)} data-tipo="serie">
+      <section className="rv-tarjeta rv-chat__bloque" data-i={Math.min(indice, 3)} data-tipo="serie">
         <AreaMini matiz={5} valores={v.puntos.map((p) => p.valor)} etiquetas={v.puntos.map((p) => p.dia)} etiqueta="Serie de la respuesta" formato={v.formato === 'mxn' ? 'mxn' : 'numero'} />
       </section>
     );
   }
   return (
     // FE-19: la tabla que devuelve el asistente es de ancho DESCONOCIDO (la arma una consulta): scrollea dentro de la tarjeta.
-    <section className="card rv-chat__bloque rv-chat__bloque--tabla" data-i={Math.min(indice, 3)} data-tipo="tabla">
+    <section className="rv-tarjeta rv-chat__bloque rv-chat__bloque--tabla" data-i={Math.min(indice, 3)} data-tipo="tabla">
       <div className="rv-chat__tabla" tabIndex={0} role="region" aria-label="Tabla de la respuesta">
         <table aria-label="Datos de la respuesta del asistente" data-densa>
           <tbody>

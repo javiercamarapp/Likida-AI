@@ -1,0 +1,7 @@
+/* Panel de agentes (F5): solo lo que el kit ui-v2 no trae. Variables del sistema, sin colores sueltos. */
+.rv-agente-fila-accion { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rv-agente-forma { display: flex; flex-direction: column; gap: 12px; }
+.rv-agente-sub { display: block; margin-top: 2px; font-size: var(--t-small); color: var(--muted); }
+.rv-agente-acciones { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.rv-agente-alta { display: grid; gap: 12px; }
+@media (min-width: 768px) { .rv-agente-alta { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

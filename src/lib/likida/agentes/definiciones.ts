@@ -120,6 +120,8 @@ export interface AgenteDefinido {
    *  agente `vivo` con `experimental = true` se pintaba idéntico a uno que
    *  sí corre, y nadie podía saber por qué nunca aparecía una corrida. */
   experimental: boolean;
+  /** ¿El runner nivel 2 lo despacha? (`runner_habilitado`; los 9 con cron propio van en false). */
+  runnerHabilitado: boolean;
   creadoEn: string;
 }
 
@@ -128,7 +130,7 @@ export interface AgenteDefinido {
 export async function listarAgentes(): Promise<AgenteDefinido[]> {
   const filas = await traerTodo<Record<string, unknown>>(
     (d, h) => acotada(supabaseAdmin().from('agente_definicion')
-      .select('id, nombre, departamento, descripcion, disparador, estado, presupuesto_dia_usd, prompt_ref, modelo_rol, experimental, creado_en', conteo(d))
+      .select('id, nombre, departamento, descripcion, disparador, estado, presupuesto_dia_usd, prompt_ref, modelo_rol, experimental, runner_habilitado, creado_en', conteo(d))
       .order('id').range(d, h), 'listarAgentes'),
     'listarAgentes',
   );
@@ -144,6 +146,7 @@ export async function listarAgentes(): Promise<AgenteDefinido[]> {
     promptRef: (f.prompt_ref as string) ?? null,
     modeloRol: (f.modelo_rol as string) ?? null,
     experimental: f.experimental === true,
+    runnerHabilitado: f.runner_habilitado === true,
     creadoEn: String(f.creado_en),
   })).sort((a, b) => orden[a.estado] - orden[b.estado] || a.departamento.localeCompare(b.departamento) || a.id.localeCompare(b.id));
 }

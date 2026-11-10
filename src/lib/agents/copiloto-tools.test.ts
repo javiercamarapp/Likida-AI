@@ -45,6 +45,13 @@ vi.mock('@/lib/admin/negocio', () => ({
   }),
   getConteosPlataforma: async () => ({ operadores: 5, liquidaciones: 4, conversaciones: 6, usuariosPorRol: { superadmin: 1 } }),
   getCostoPorFaseModelo: async () => ([{ fase: 'ocr', modelo: 'gemini', costoUsd: 0.5 }]),
+  costoIaPorDiaDesde: async () => ([{ dia: '2026-11-09', costoUsd: 1.23456 }]),
+}));
+vi.mock('@/lib/admin/agentes-parados', () => ({
+  getAgentesParados: async () => ({ parados: [], habilitados: 49, umbralHoras: 72, latidoDelRunner: null }),
+}));
+vi.mock('@/lib/admin/copiloto-briefing', () => ({
+  armarBriefing: async () => ({ tarjetas: [], fuentesCiegas: [] }),
 }));
 vi.mock('@/lib/admin/escalaciones', () => ({
   getBandejaEscalaciones: async () => ({
@@ -104,7 +111,7 @@ const { executeTool, toolSchemas } = await import('@/lib/llm/tool-executor');
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-describe('el contrato de las 14 tools del copiloto', () => {
+describe('el contrato de las tools del copiloto', () => {
   it('toda pantalla citada EXISTE como page.tsx — el chip jamás apunta a un 404', () => {
     const raiz = join(process.cwd(), 'src/app');
     for (const [tool, { ruta }] of Object.entries(PANTALLA_POR_TOOL)) {
@@ -120,7 +127,7 @@ describe('el contrato de las 14 tools del copiloto', () => {
     expect(PANTALLA_POR_TOOL.traza_corrida.ruta).toBe('/admin/corridas');
   });
 
-  it('las 14 se ejecutan sin lanzar y todas devuelven su `pantalla`', async () => {
+  it('todas se ejecutan sin lanzar y todas devuelven su `pantalla`', async () => {
     const conArgs: Record<string, Record<string, unknown>> = {
       traza_corrida: { id: '11111111-1111-4111-8111-111111111111' },
       ficha_cliente: { nombre: 'DEMO' },
@@ -285,5 +292,16 @@ describe('copiloto-tools.ts — invariante estructural (auditoría 21, MEDIO)', 
         expect(Object.keys(params?.properties ?? {}), tool).toContain(p);
       }
     }
+  });
+});
+
+describe('las tools nuevas de F5', () => {
+  it('costo_ia_por_dia devuelve puntos {dia, valor} listos para el bloque serie, sin rellenar días', async () => {
+    const r = await executeTool('costo_ia_por_dia', {}, { tenantId: 'likida' });
+    const c = r.result as { puntos: Array<{ dia: string; valor: number }> };
+    expect(c.puntos).toEqual([{ dia: '2026-11-09', valor: 1.2346 }]);
+  });
+  it('están en el sandbox del copiloto y citan una pantalla que existe', () => {
+    for (const t of ['decide_hoy', 'agentes_parados', 'costo_ia_por_dia']) expect(TOOLS_COPILOTO_LECTURA).toContain(t);
   });
 });

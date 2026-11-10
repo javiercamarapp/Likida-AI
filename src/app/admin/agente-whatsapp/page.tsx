@@ -1,113 +1,61 @@
 import type { Metadata } from 'next';
-import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import {
-  getResumenNegocio, getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES,
-} from '@/lib/admin/negocio';
-import { MessagesSquare, MessageCircle, ChevronDown, DollarSign } from 'lucide-react';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { StatCard, EstadoVacio } from '../ui/kit';
+import { getResumenNegocio, getCostoPorFaseModelo, contarConversacionesActivas } from '@/lib/admin/negocio';
+import { MarcoPagina, FilaTarjetas, Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { TiraCifras } from '@/app/ui-v2/graficas';
+import { TarjetaFase } from '../tarjeta-fase';
 
 export const dynamic = 'force-dynamic';
 
-const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
-
 /**
- * Agente de WhatsApp — la capa de conversación que lleva al operador de
- * principio a fin. Real: `llm_costo` filtrado por `fase === 'whatsapp'`
- * (`getResumenNegocio`) y `wa_conversacion.estado` para las conversaciones
- * activas (mismo render que Inicio, con más espacio para leerlas).
- *
- * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
- * con el ícono de `rutas.ts` (MessagesSquare, el mismo del sidebar) +
- * `StatCard` del kit. Cifras y fuente no cambian. Un cero aquí es MEDIDO:
- * cero filas en `llm_costo` para la fase es cero gasto real, no un relleno.
+ * Agente de WhatsApp: la conversación con el operador de principio a fin. Real: `llm_costo` filtrado por la fase `whatsapp` y
+ * `wa_conversacion.estado` para CUÁNTAS conversaciones hay activas. La lista de conversaciones vive solo en Agentes › Conversaciones
+ * (con el teléfono enmascarado); aquí NO se repite: una cifra y un enlace. Un cero de costo es MEDIDO, no un relleno.
  */
 export default async function AgenteWhatsappPage() {
-  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
-  const [r, conversaciones, total] = await Promise.all([
-    getResumenNegocio(), getConversacionesActivas(), contarConversacionesActivas(),
+  const [r, porFaseModelo, activas] = await Promise.all([
+    getResumenNegocio(), getCostoPorFaseModelo().catch(() => []), contarConversacionesActivas(),
   ]);
-  // FE-9: "Conversaciones activas" listaba 20 sin decir que eran 20 de N.
-  const recortado = total !== null && total > conversaciones.length;
   const whatsapp = r.porFase.find((f) => f.fase === 'whatsapp');
+  const modelos = porFaseModelo.filter((m) => m.fase === 'whatsapp');
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Agente de WhatsApp"
+    <MarcoPagina
+      area="Agentes"
+      titulo="Agentes"
+      apoyo="WhatsApp: la conversación completa con el operador. Costo real, histórico."
+      acciones={<BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm">Ver conversaciones</BotonEnlace>}
+    >
+      <Aviso tono="info">
+        El WhatsApp del producto sigue en el número de prueba de Meta: las cifras de aquí son de esa operación, no de un número de producción.
+      </Aviso>
+
+      <TiraCifras
+        etiqueta="WhatsApp"
+        items={[
+          { etiqueta: 'Gastado en WhatsApp', valor: whatsapp ? whatsapp.costoUsd : 0, formato: 'usd', nota: 'Costo medido en llm_costo' },
+          { etiqueta: 'Llamadas de WhatsApp', valor: whatsapp ? whatsapp.n : 0, formato: 'entero' },
+          { etiqueta: 'Conversaciones activas', valor: activas, estado: activas === null ? 'error' : 'ok', formato: 'entero', href: '/admin/conversaciones' },
+        ]}
+      />
+
+      <FilaTarjetas variante="6-6">
+        <TarjetaFase
+          titulo="Costo por modelo, WhatsApp"
+          queHace="Lleva la conversación con el operador de principio a fin: recibe fotos, confirma y cierra la liquidación."
+          datos={whatsapp}
+          modelos={modelos}
         />
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>La conversación completa con el operador — costo real, histórico</p>
-
-          <div className="kit-kpis">
-            <StatCard icono={<DollarSign {...ICONO_KPI} />}
-              etiqueta="Gastado en WhatsApp" valor={whatsapp ? whatsapp.costoUsd : 0} formato="usd"
-            />
-            <StatCard icono={<MessageCircle {...ICONO_KPI} />}
-              etiqueta="Llamadas de WhatsApp" valor={whatsapp ? whatsapp.n : 0} formato="entero"
-            />
-          </div>
-
-          {/* Mismo render que la sección "Conversaciones de WhatsApp" de
-              Inicio (consola.tsx) — misma fuente, más espacio para leerlas. */}
-          <div className="card p-3">
-            <TituloSeccion>
-              {recortado ? `Conversaciones activas — las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Conversaciones activas'}
-            </TituloSeccion>
-            {conversaciones.length === 0 ? (
-              <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin conversaciones activas.</p>
-            ) : (
-              <div className="space-y-1.5 mt-2">
-                {conversaciones.map((c) => (
-                  <details key={`${c.tenantId ?? "sin-flota"}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
-                    <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
-                      <div>
-                        {/* Minimización (LFPDPPP): el número sale enmascarado; el completo vive en el detalle de la conversación. */}
-                        <div className="text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
-                      </div>
-                      <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
-                        {c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
-                        <ChevronDown width={14} height={14} className="transition-transform group-open:rotate-180" />
-                      </div>
-                    </summary>
-                    {c.turns.length > 0 && (
-                      <div className="px-3 pb-3 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-                        {c.turns.slice(-6).map((t, i) => (
-                          <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                            <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
-                              style={t.role === 'user'
-                                ? { background: 'var(--canvas)', border: '1px solid var(--line2)' }
-                                : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                              {t.content}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </details>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="card p-3">
-            <TituloSeccion>Lo que falta</TituloSeccion>
-            <div className="mt-2">
-              <EstadoVacio>
-                Entrega (enviados/entregados/leídos), ventana de 24h, opt-ins — requiere integrar la Meta WhatsApp
-                Business API más a fondo de lo que Likida usa hoy.
-              </EstadoVacio>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
+        <Tarjeta
+          titulo="Lo que falta medir"
+          estado="vacio"
+          mensaje="Entrega y ventana de 24 horas"
+          detalle="Enviados, entregados y leídos, la ventana de 24 horas y los opt-ins requiere integrar la Meta WhatsApp Business API más a fondo de lo que Likida usa hoy."
+        />
+      </FilaTarjetas>
+    </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Agente de WhatsApp' };
+export const metadata: Metadata = { title: 'WhatsApp' };

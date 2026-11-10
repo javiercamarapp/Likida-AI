@@ -22,10 +22,11 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   const [estado, setEstado] = useState<Estado>('lista');
   const [error, setError] = useState<string | null>(null);
   const apagar = a.accion === 'apagar_agente';
+  const encender = a.accion === 'encender_agente';
 
   if (!a.implementada) {
     return (
-      <section className="card rv-chat__bloque rv-accion" data-estado="no-implementada" aria-label="Acción no disponible">
+      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="no-implementada" aria-label="Acción no disponible">
         <p className="rv-accion__titulo"><ShieldAlert width={14} height={14} strokeWidth={1.75} aria-hidden="true" />{a.accion} — todavía no está implementada desde el copiloto</p>
         <p className="rv-accion__linea">{a.efecto}</p>
         <p className="rv-chat__nota">Hoy se hace desde su pantalla del panel.</p>
@@ -35,15 +36,15 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   // Sin intent no hay botón (defensa: una propuesta vieja re-pintada sin su llave no puede fingir que ejecuta).
   if (!a.intentId) {
     return (
-      <section className="card rv-chat__bloque rv-accion" data-estado="sin-llave">
+      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="sin-llave">
         <p className="rv-accion__linea">Esta propuesta ya no trae su llave de ejecución. Pídela de nuevo — el copiloto la re-propone con el estado de hoy.</p>
       </section>
     );
   }
   if (estado === 'hecha' || estado === 'cancelada') {
     return (
-      <section className="card rv-chat__bloque rv-accion" data-estado={estado} role="status">
-        <p className="rv-accion__linea">{estado === 'hecha' ? 'Acción ejecutada — el resultado quedó abajo.' : 'Acción cancelada. La palanca no se movió.'}</p>
+      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} role="status">
+        <p className="rv-accion__linea">{estado === 'hecha' ? 'Acción ejecutada — el resultado quedó abajo.' : 'Acción cancelada. Nada se movió.'}</p>
       </section>
     );
   }
@@ -75,11 +76,11 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   }
 
   return (
-    <section className="card rv-chat__bloque rv-accion" data-estado={estado} aria-label="Confirmar acción">
-      <p className="rv-accion__titulo">Voy a {apagar ? 'apagar' : 'ejecutar'} <span className="rv-accion__objetivo">{a.objetivo}</span></p>
+    <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} aria-label="Confirmar acción">
+      <p className="rv-accion__titulo">Voy a {apagar ? 'apagar' : encender ? 'encender' : 'ejecutar'} <span className="rv-accion__objetivo">{a.objetivo}</span></p>
       <label className="rv-accion__campo">
         <span>Motivo (obligatorio)</span>
-        <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Por qué se apaga — queda en la bitácora" />
+        <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={encender ? 'Por qué se enciende — queda en la bitácora' : 'Por qué se apaga — queda en la bitácora'} />
       </label>
       <p className="rv-accion__linea"><b>Efecto:</b> {a.efecto}</p>
       <p className="rv-accion__linea"><b>Revertir:</b> {a.revertir}</p>
@@ -90,7 +91,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
       <div className="rv-accion__botones">
         <button type="button" className="rv-btn rv-btn--secondary rv-btn--sm" onClick={() => setEstado('cancelada')}>Cancelar</button>
         <button type="button" className="rv-btn rv-btn--primary rv-btn--sm" disabled={estado === 'ejecutando'} onClick={() => void ejecutar()}>
-          {estado === 'ejecutando' ? (apagar ? 'Apagando…' : 'Ejecutando…') : estado === 'armada' ? 'Confirmar de nuevo' : (apagar ? 'Apagar' : 'Ejecutar')}
+          {estado === 'ejecutando' ? (apagar ? 'Apagando…' : encender ? 'Encendiendo…' : 'Ejecutando…') : estado === 'armada' ? 'Confirmar de nuevo' : (apagar ? 'Apagar' : encender ? 'Encender' : 'Ejecutar')}
         </button>
       </div>
     </section>

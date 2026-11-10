@@ -140,10 +140,10 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
   if (bancoError !== null) {
     return (
       <div className="card p-4 flex items-start gap-3">
-        <AlertTriangle {...ICONO} style={{ color: 'var(--bad)' }} />
+        <AlertTriangle {...ICONO} className="rv-qa-bad" />
         <p className="text-sm m-0">
           <span className="font-semibold">El banco de comprobantes no se pudo leer.</span>
-          <span className="block text-xs mt-0.5 font-mono" style={{ color: 'var(--muted)' }}>{bancoError}</span>
+          <span className="block text-xs mt-0.5 font-mono rv-qa-mut">{bancoError}</span>
         </p>
       </div>
     );
@@ -163,7 +163,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
         />
         <Cifra
           etiqueta="Campos medidos"
-          valor={resumen.medidos === 0 ? 'sin medir' : `${numero(resumen.ok)} ✅ · ${numero(resumen.mal)} ❌`}
+          valor={resumen.medidos === 0 ? 'sin medir' : `${numero(resumen.ok)} acertados · ${numero(resumen.mal)} fallados`}
           nota={resumen.medidos === 0
             ? 'todavía no se ha corrido el OCR contra ninguna foto'
             : `${numero(resumen.noMedidos)} sin medir (ilegibles o fallo técnico) — fuera del denominador`}
@@ -179,7 +179,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
       </div>
 
       {lecturasError !== null && (
-        <p className="text-xs m-0" style={{ color: 'var(--bad)' }}>
+        <p className="text-xs m-0 rv-qa-bad">
           Las lecturas guardadas del OCR no se pudieron leer, así que arriba falta lo ya medido: {lecturasError}
         </p>
       )}
@@ -187,47 +187,46 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
       {/* ── El botón ───────────────────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center gap-3 pb-1">
         <button type="button" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo) || corriendo}
-          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40"
-          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+          className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40 rv-qa-marca">
           {corriendo ? <Loader2 width={14} height={14} strokeWidth={2} className="animate-spin" /> : <ScanLine width={14} height={14} strokeWidth={2} />}
           {corriendo ? 'Corriendo el OCR real…' : `Correr el OCR contra ${seleccion.size} foto${seleccion.size === 1 ? '' : 's'}`}
         </button>
         <button type="button"
           onClick={() => setSeleccion(new Set(etiquetadas.slice(0, MAX_FOTOS_OCR).map((f) => f.id)))}
-          className="text-xs font-medium hover:opacity-70" style={{ color: 'var(--muted)' }}>
+          className="text-xs font-medium hover:opacity-70 rv-qa-mut">
           elegir las primeras {MAX_FOTOS_OCR} etiquetadas
         </button>
         <button type="button" onClick={() => setSeleccion(new Set())}
-          className="text-xs font-medium hover:opacity-70" style={{ color: 'var(--muted)' }}>
+          className="text-xs font-medium hover:opacity-70 rv-qa-mut">
           limpiar selección
         </button>
-        {motivoBloqueo && <span className="text-xs" style={{ color: 'var(--muted)' }}>⛔ {motivoBloqueo}</span>}
-        {errorCorrida && <span className="text-xs font-medium" style={{ color: 'var(--bad)' }}>{errorCorrida}</span>}
+        {motivoBloqueo && <span className="text-xs rv-qa-mut">Bloqueado: {motivoBloqueo}</span>}
+        {errorCorrida && <span className="text-xs font-medium rv-qa-bad">{errorCorrida}</span>}
       </div>
 
       {/* Lo que no alcanzó turno se DICE por su nombre: el reloj de la
           invocación cortó y esas fotos ni se intentaron. */}
       {sinTurno.length > 0 && (
-        <p className="text-xs m-0" style={{ color: 'var(--warn)' }}>
-          ⏱ {numero(sinTurno.length)} foto{sinTurno.length === 1 ? '' : 's'} se quedaron sin turno: el reloj de la
+        <p className="text-xs m-0 rv-qa-warn">
+          {numero(sinTurno.length)} foto{sinTurno.length === 1 ? '' : 's'} se quedaron sin turno: el reloj de la
           invocación se agotó antes de llegar a ellas y NO se corrieron. Vuelve a apretar el botón con ellas
           seleccionadas.
         </p>
       )}
       {avisos.length > 0 && (
-        <ul className="text-xs space-y-0.5 m-0" style={{ color: 'var(--muted)' }}>
+        <ul className="text-xs space-y-0.5 m-0 rv-qa-mut">
           {avisos.map((a, i) => <li key={i}>· {a}</li>)}
         </ul>
       )}
 
       {/* ── La lista ───────────────────────────────────────────────────────── */}
       {fotos.length === 0 ? (
-        <p className="text-xs m-0" style={{ color: 'var(--muted)' }}>
+        <p className="text-xs m-0 rv-qa-mut">
           El banco está vacío de verdad (el índice se leyó completo): sube comprobantes en el formulario de arriba.
         </p>
       ) : (
         <>
-          <p className="text-xs m-0" style={{ color: 'var(--muted)' }}>
+          <p className="text-xs m-0 rv-qa-mut">
             {numero(fotos.length)} comprobante{fotos.length === 1 ? '' : 's'} en el banco, todos listados. Abre uno para
             ver su ficha y su última medición.
           </p>
@@ -252,10 +251,10 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
 
 function Cifra({ etiqueta, valor, nota }: { etiqueta: string; valor: string; nota: string }) {
   return (
-    <div className="rounded-xl px-3 py-2 min-w-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
-      <div className="text-[11px]" style={{ color: 'var(--ink2)' }}>{etiqueta}</div>
+    <div className="rounded-xl px-3 py-2 min-w-0 rv-qa-caja">
+      <div className="text-[11px] rv-qa-ink2">{etiqueta}</div>
       <div className="font-display text-[17px] leading-tight font-semibold tabular mt-0.5">{valor}</div>
-      <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{nota}</div>
+      <div className="text-[11px] mt-0.5 rv-qa-mut">{nota}</div>
     </div>
   );
 }
@@ -270,15 +269,15 @@ function FilaFoto({ foto, lectura, elegida, abierta, onElegir, onAbrir }: {
 }) {
   const verdad = foto.ocrEsperado;
   return (
-    <div className="rounded-xl hairline overflow-hidden" style={{ background: 'var(--surface)' }}>
+    <div className="rounded-xl hairline overflow-hidden rv-qa-fs">
       <div className="flex items-center gap-2.5 px-2.5 py-2">
         <input type="checkbox" checked={elegida} onChange={onElegir} aria-label={`elegir ${foto.etiqueta}`} />
         {foto.url ? (
           // eslint-disable-next-line @next/next/no-img-element -- URL firmada de 60 s de un bucket privado: next/image no puede optimizarla (expira) y cachearla la rompería
           <img src={foto.url} alt={foto.etiqueta} className="w-10 h-10 rounded object-cover shrink-0" />
         ) : (
-          <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)' }}>
-            <Camera {...ICONO} style={{ color: 'var(--faint)' }} />
+          <div className="w-10 h-10 rounded flex items-center justify-center shrink-0 rv-qa-fc">
+            <Camera {...ICONO} className="rv-qa-faint" />
           </div>
         )}
         <button type="button" onClick={onAbrir} className="flex-1 min-w-0 text-left inline-flex items-center gap-1.5">
@@ -288,23 +287,23 @@ function FilaFoto({ foto, lectura, elegida, abierta, onElegir, onAbrir }: {
         {verdad === null ? (
           <StatusPill estado="neutral">Sin etiquetar</StatusPill>
         ) : (
-          <span className="text-xs whitespace-nowrap" style={{ color: 'var(--muted)' }}>
+          <span className="text-xs whitespace-nowrap rv-qa-mut">
             {CLASE_ES[verdad.clase]}
           </span>
         )}
         {lectura === null ? (
-          <span className="text-xs whitespace-nowrap" style={{ color: 'var(--faint)' }}>sin medir</span>
+          <span className="text-xs whitespace-nowrap rv-qa-faint">sin medir</span>
         ) : (
           <span className="text-xs whitespace-nowrap tabular">
-            ✅ {lectura.medicion.camposOk} · ❌ {lectura.medicion.camposMal} · — {lectura.medicion.camposNoMedidos}
+            {lectura.medicion.camposOk} acertados · {lectura.medicion.camposMal} fallados · {lectura.medicion.camposNoMedidos} sin medir
           </span>
         )}
       </div>
 
       {abierta && (
-        <div className="px-2.5 pb-2.5 pt-1 border-t" style={{ borderColor: 'var(--line2)' }}>
+        <div className="px-2.5 pb-2.5 pt-1 border-t rv-qa-bl2">
           {verdad === null ? (
-            <p className="text-xs m-0" style={{ color: 'var(--muted)' }}>
+            <p className="text-xs m-0 rv-qa-mut">
               Nadie ha confirmado qué dice este comprobante, así que no hay vara contra la que medir el OCR. Una foto
               sin verdad de terreno NO cuenta como acierto ni como error: queda fuera de la medición.
             </p>
@@ -336,11 +335,11 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
   );
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]" style={{ color: 'var(--muted)' }}>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] rv-qa-mut">
         <span>
           Comercio:{' '}
           {verdad.comercioClave === null
-            ? <span style={{ color: 'var(--warn)' }}>fuera del catálogo COMERCIOS (hallazgo, no hueco)</span>
+            ? <span className="rv-qa-warn">fuera del catálogo COMERCIOS (hallazgo, no hueco)</span>
             : <span className="font-mono">{verdad.comercioClave}</span>}
         </span>
         <span>Clase: {CLASE_ES[verdad.clase]}</span>
@@ -351,7 +350,7 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
       <div className="overflow-x-auto">
         <table aria-label="Campo esperado contra campo leído por el OCR" className="w-full text-xs">
           <thead>
-            <tr className="text-left" style={{ color: 'var(--muted)' }}>
+            <tr className="text-left rv-qa-mut">
               <th scope="col" className="py-1 pr-3 font-medium">Campo</th>
               <th scope="col" className="py-1 pr-3 font-medium">Esperado (la persona)</th>
               <th scope="col" className="py-1 pr-3 font-medium">Leído (el OCR)</th>
@@ -362,19 +361,19 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
             {CLAVES_VERDAD.map((clave) => {
               const m = porClave.get(clave) ?? null;
               return (
-                <tr key={clave} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
+                <tr key={clave} className="border-t align-top rv-qa-bl2">
                   <td className="py-1 pr-3 whitespace-nowrap">{NOMBRE_CLAVE_VERDAD[clave]}</td>
                   <td className="py-1 pr-3"><Esperado verdad={verdad} clave={clave} /></td>
                   <td className="py-1 pr-3">
                     {m === null
-                      ? <span style={{ color: 'var(--faint)' }}>sin medir</span>
+                      ? <span className="rv-qa-faint">sin medir</span>
                       : <Valor clave={clave} v={m.leido} />}
                   </td>
                   <td className="py-1">
                     {m === null
-                      ? <span style={{ color: 'var(--faint)' }}>—</span>
+                      ? <span className="rv-qa-faint">—</span>
                       : <span title={m.motivo ?? ''}>
-                          {m.veredicto === 'ok' ? '✅ acertó' : m.veredicto === 'mal' ? '❌ falló' : '— no medido'}
+                          {m.veredicto === 'ok' ? 'acertó' : m.veredicto === 'mal' ? 'falló' : 'no medido'}
                         </span>}
                   </td>
                 </tr>
@@ -385,10 +384,10 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
       </div>
 
       {verdad.notas && (
-        <p className="text-[11px] m-0" style={{ color: 'var(--muted)' }}>Notas de quien etiquetó: {verdad.notas}</p>
+        <p className="text-[11px] m-0 rv-qa-mut">Notas de quien etiquetó: {verdad.notas}</p>
       )}
       {lectura?.motivo && (
-        <p className="text-[11px] m-0" style={{ color: 'var(--warn)' }}>{lectura.motivo}</p>
+        <p className="text-[11px] m-0 rv-qa-warn">{lectura.motivo}</p>
       )}
     </div>
   );
@@ -398,10 +397,10 @@ function Ficha({ verdad, lectura, confirmadoEn }: {
  *  como celda vacía es la mentira que este panel existe para no contar. */
 function Esperado({ verdad, clave }: { verdad: VerdadTerreno; clave: ClaveVerdad }) {
   if (verdad.ilegibles.includes(clave)) {
-    return <span className="font-medium" style={{ color: 'var(--warn)' }}>ilegible en la foto</span>;
+    return <span className="font-medium rv-qa-warn">ilegible en la foto</span>;
   }
   if (verdad.noAplica.includes(clave)) {
-    return <span style={{ color: 'var(--faint)' }}>el papel no lo imprime</span>;
+    return <span className="rv-qa-faint">el papel no lo imprime</span>;
   }
   return <Valor clave={clave} v={verdad[clave]} />;
 }
@@ -409,7 +408,7 @@ function Esperado({ verdad, clave }: { verdad: VerdadTerreno; clave: ClaveVerdad
 /** Moneda y fecha SOLO por lib/formato.ts. */
 function Valor({ clave, v }: { clave: ClaveVerdad; v: string | number | null }) {
   if (v === null || v === undefined || v === '') {
-    return <span style={{ color: 'var(--faint)' }}>no leyó nada</span>;
+    return <span className="rv-qa-faint">no leyó nada</span>;
   }
   if (clave === 'monto') return <span className="tabular">{mxn(Number(v))}</span>;
   if (clave === 'fecha') return <span className="whitespace-nowrap">{fechaCorta(String(v))}</span>;
