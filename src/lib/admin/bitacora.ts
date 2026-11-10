@@ -186,10 +186,10 @@ export interface OpcionesBitacora {
 /** Las flotas y las personas de Likida para los filtros. Cada lista falla sola: `null` = no se pudo leer (el filtro se oculta, no se vacía). */
 export async function opcionesBitacora(): Promise<{ flotas: OpcionesBitacora['flotas'] | null; personas: OpcionesBitacora['personas'] | null }> {
   const [flotas, personas] = await Promise.all([
-    acotada(supabaseAdmin().from('tenant').select('id, nombre').order('nombre').limit(500), 'opcionesBitacora.flotas')
+    acotada(supabaseAdmin().from('tenant').select('id, nombre').order('nombre').order('id').limit(500), 'opcionesBitacora.flotas')
       .then(({ data, error }) => (error ? null : ((data ?? []) as Array<{ id: string; nombre: string }>)))
       .catch(() => null),
-    acotada(supabaseAdmin().from('app_user').select('id, nombre').in('rol', ['superadmin', 'vendedor']).order('nombre').limit(200), 'opcionesBitacora.personas')
+    acotada(supabaseAdmin().from('app_user').select('id, nombre').in('rol', ['superadmin', 'vendedor']).order('nombre').order('id').limit(200), 'opcionesBitacora.personas')
       .then(({ data, error }) => (error ? null : ((data ?? []) as Array<{ id: string; nombre: string | null }>).map((u) => ({ id: u.id, nombre: u.nombre ?? 'Sin nombre' }))))
       .catch(() => null),
   ]);

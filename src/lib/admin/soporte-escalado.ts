@@ -17,7 +17,7 @@ export async function avisosDeSlaPorTicket(ticketIds: readonly string[]): Promis
   try {
     const { data, error } = await acotada(
       supabaseAdmin().from('bitacora_auditoria').select('entidad_id, ocurrio_en')
-        .eq('accion', ACCIONES_AVISO.sla).in('entidad_id', [...ticketIds].slice(0, 200)).order('ocurrio_en', { ascending: false }).limit(500),
+        .eq('accion', ACCIONES_AVISO.sla).in('entidad_id', [...ticketIds].slice(0, 200)).order('ocurrio_en', { ascending: false }).order('id', { ascending: false }).limit(500),
       'soporteEscalado.avisos',
     );
     if (error) { logger.warn('admin.soporte.escalado_ilegible', { err: error.message }); return null; }
