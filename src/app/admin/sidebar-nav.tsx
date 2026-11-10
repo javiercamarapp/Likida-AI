@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge, Workflow, Briefcase, Layers, ShieldCheck, Activity } from 'lucide-react';
-import { type Item, AGENTES, NEGOCIO, PLATAFORMA, CONTROL, SISTEMA } from './rutas';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge, Workflow, Briefcase, Layers, SlidersHorizontal, Activity } from 'lucide-react';
+import { type Item, AGENTES, NEGOCIO, PLATAFORMA, CONTROL, SISTEMA, entradaDeRuta } from './rutas';
 import { SelectorTema } from '../selector-tema';
 import LogoV2 from '../dashboard/shell/logo-v2';
 import { ALTO_LOGO_PX } from '../marco-v2';
@@ -21,7 +21,7 @@ import { numero } from '@/lib/formato';
 // Icono de CADA sección: en el riel (72 px) solo se ve una sección abierta a la vez y las demás se reducen a su icono (antes el riel
 // pintaba las 43 páginas seguidas, la lista se cortaba a medias y se encimaba con el pie).
 const ICONO_SECCION: Record<string, typeof Workflow> = {
-  Agentes: Workflow, Negocio: Briefcase, Plataforma: Layers, Control: ShieldCheck, Sistema: Activity,
+  Agentes: Workflow, Negocio: Briefcase, Plataforma: Layers, Control: SlidersHorizontal, Sistema: Activity,
 };
 
 function idSeccion(titulo: string): string {
@@ -29,7 +29,8 @@ function idSeccion(titulo: string): string {
 }
 
 function Fila({ item, pathname }: { item: Item; pathname: string }) {
-  const activo = pathname === item.href;
+  // La entrada está activa en su ruta Y en la de cualquiera de sus pestañas (p. ej. «Agentes» también en /admin/agente-ocr).
+  const activo = entradaDeRuta(pathname)?.href === item.href;
   return (
     <li>
       <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={item.nombre} aria-label={item.nombre}>
@@ -101,7 +102,7 @@ export default function SidebarNav() {
   // sobre la abierta la cierra (null = todas plegadas, también válido).
   const [abierta, setAbierta] = useState<string | null>(() => {
     for (const [titulo, items] of TITULOS_ADMIN) {
-      if (items.some((it) => it.href === pathname)) return titulo;
+      if (items.some((it) => it.href === entradaDeRuta(pathname)?.href)) return titulo;
     }
     return 'Agentes';
   });

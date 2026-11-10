@@ -92,3 +92,6 @@
             mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
   }
 }
+
+/* Pestañas de sección (pestanas-admin.tsx): pegadas al borde superior del contenido, sin hueco extra. */
+[data-ui="v2"] .adm-pestanas { margin: 0 0 12px; }
