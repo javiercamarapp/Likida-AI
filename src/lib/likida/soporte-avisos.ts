@@ -67,7 +67,7 @@ export interface Aviso {
   titulo: string;
   parrafo: string;
   datos: Array<[string, string]>;
-  tono: 'normal' | 'urgente';
+  tono: 'neutral' | 'atencion' | 'urgente';
   textoWa: string;
 }
 
@@ -173,7 +173,7 @@ export async function avisarTicketNuevo(t0: TicketParaAviso): Promise<ResultadoA
     titulo: 'Un cliente abrió un ticket de soporte',
     parrafo: `${flota(t)} abrió un ticket${t.prioridad ? ` de prioridad ${t.prioridad}` : ''}: «${asuntoCorto(t.asunto)}».`,
     datos: [['Flota', flota(t)], ['Prioridad', t.prioridad ?? '—'], ['SLA vence', t.venceEn ?? 'sin SLA pactado']],
-    tono: t.prioridad === 'urgente' || t.prioridad === 'alta' ? 'urgente' : 'normal',
+    tono: t.prioridad === 'urgente' || t.prioridad === 'alta' ? 'urgente' : 'atencion',
     textoWa: `Likida - ticket nuevo de ${flota(t)}: ${asuntoCorto(t.asunto)}\n${enlaceTicket(t.ticketId)}`,
   });
 }
@@ -187,7 +187,7 @@ export async function avisarRespuestaDelCliente(t0: TicketParaAviso, mensajeId: 
     titulo: 'Un cliente respondió en su ticket',
     parrafo: `${flota(t)} escribió en el ticket «${asuntoCorto(t.asunto)}». Espera respuesta de Likida.`,
     datos: [['Flota', flota(t)], ['Prioridad', t.prioridad ?? '—']],
-    tono: 'normal',
+    tono: 'atencion',
     textoWa: `Likida - ${flota(t)} respondió en su ticket: ${asuntoCorto(t.asunto)}\n${enlaceTicket(t.ticketId)}`,
   });
 }
