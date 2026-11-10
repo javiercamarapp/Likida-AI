@@ -41,8 +41,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/dashboard/chat/composer.tsx': 1,
   'app/dashboard/chat/historial.tsx': 1,
   'app/dashboard/chat/traza.tsx': 1,
-  'app/dashboard/conexiones/seccion-credenciales.tsx': 1,
-  'app/dashboard/conexiones/seccion-gps.tsx': 1,
   'app/dashboard/forma-viaje.tsx': 1,
   'app/dashboard/importador-masivo.tsx': 3,
   'app/dashboard/inicio-contenido.tsx': 1,

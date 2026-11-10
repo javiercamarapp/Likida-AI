@@ -21,6 +21,7 @@ import { SeccionIntegraciones } from './seccion-integraciones';
 import { SeccionGps, type ResultadoSecreto, type ResultadoImportGeocercas } from './seccion-gps';
 import { importarGeocercasDeTablaPropia } from '@/lib/likida/conectores/tabla_propia/importar_geocercas';
 import { VistaConexiones } from './vista';
+import { EstadoError } from '@/app/ui-v2/componentes';
 import { armarPanelGps } from '@/lib/likida/gps_push/panel';
 import { generarSecretoPush } from '@/lib/likida/gps_push/datos';
 import { mapearGpsDesdeArchivo } from '@/lib/likida/importacion/panel';
@@ -116,7 +117,7 @@ export default async function PaginaConexiones({
       revalidatePath(RUTA);
       // "Guardada" y no "conectada": nadie la ha probado contra el sistema
       // real — decir otra cosa sería fingir una conexión viva.
-      return { ok: true, mensaje: 'Guardada y cifrada en el cofre — SIN PROBAR contra el sistema real todavía. La prueba de conexión se hace contigo en el arranque.' };
+      return { ok: true, mensaje: 'Guardada y cifrada en el cofre — SIN PROBAR contra el sistema real todavía. Usa «Probar conexión» para verificarla.' };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la credencial') };
     }
@@ -240,8 +241,7 @@ export default async function PaginaConexiones({
       conectores={conectores}
       integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo }).filter((i) => perfil === null || integracionPermitidaEnPerfil(perfil, i.id))} />}
       gps={panelGps.error !== null ? (
-        <section className="card p-4"><h2 className="font-display text-[15px] font-semibold">GPS</h2>
-          <p role="alert" className="mt-1 text-[12px]" style={{ color: 'var(--warn)' }}>{panelGps.error}</p></section>
+        <EstadoError titulo="GPS no disponible ahora" reintentar>{panelGps.error}</EstadoError>
       ) : (
         <SeccionGps
           salud={panelGps.salud} push={panelGps.push} endpoint={panelGps.endpoint}

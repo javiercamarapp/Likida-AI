@@ -1,4 +1,6 @@
-import { Vault, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
+import { Icono, Tarjeta } from '@/app/ui-v2/componentes';
+import './conexiones.css';
 import { fechaCorta } from '@/lib/formato';
 import { CONECTORES, conectorPorId } from '@/lib/likida/conectores/registro';
 import { CATEGORIAS } from '@/lib/likida/conectores/tipos';
@@ -108,10 +110,6 @@ export function estadoDePrueba(c: { activo: boolean; probadaEn: string | null; u
   return { texto: 'guardada — sin probar contra el sistema real', tono: 'warn' };
 }
 
-const TONO_ESTADO: Record<'ok' | 'bad' | 'warn' | 'faint', string> = {
-  ok: 'var(--ok)', bad: 'var(--bad)', warn: 'var(--warn)', faint: 'var(--faint)',
-};
-
 export interface CredencialPantalla {
   conectorId: string;
   /** El nombre del catálogo, o el id crudo si el conector ya no está en él —
@@ -143,19 +141,15 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
   acciones: { guardar: AccionCredencial; desactivar: AccionCredencial; probar: AccionCredencial };
 }) {
   return (
-    <section className="card p-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Vault width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-        <h2 className="font-display text-[14px] font-semibold">Credenciales de tus sistemas</h2>
-      </div>
-      <p className="text-[12px] mb-3 max-w-2xl" style={{ color: 'var(--faint)' }}>
+    <Tarjeta titulo="Credenciales de tus sistemas">
+      <p className="rv-cx__apoyo">
         Los accesos de tu ERP, tu GPS y tus monederos se guardan cifrados en el servidor — al
         panel solo vuelven pistas (los últimos 4 de cada secreto). Guardar una credencial NO la
         conecta todavía: hay que apretar <strong>Probar conexión</strong>, que llama de verdad al
         sistema y sella aquí lo que contestó.
       </p>
       {ipSalida && (
-        <p className="text-[12px] mb-3 max-w-2xl" style={{ color: 'var(--muted)' }}>
+        <p className="rv-cx__apoyo">
           Si tu área de sistemas usa firewall o lista de IP permitidas, pídeles que autoricen la
           IP de salida de Likida: <span className="cifra-mono">{ipSalida}</span>.
         </p>
@@ -164,61 +158,51 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
       {guardadas === null ? (
         // Lectura caída ≠ "no tienes credenciales": pintarlo vacío invitaría a
         // capturar de nuevo encima de lo que sí existe.
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
+        <p className="rv-cx__texto" data-tono="bad">
           No se pudieron leer las credenciales guardadas ahora mismo. Recarga la página; si se
           repite, avísale a Likida.
         </p>
       ) : (
-        <>
+        <div className="rv-cx__stack">
           {guardadas.length === 0 ? (
-            <p className="text-[12px] mb-3" style={{ color: 'var(--faint)' }}>
-              Aún no hay credenciales guardadas.
-            </p>
+            <p className="rv-cx__texto" data-tono="faint">Aún no hay credenciales guardadas.</p>
           ) : (
-            <ul className="space-y-2 mb-3">
+            <ul className="rv-cx__lista rv-cx__stack">
               {guardadas.map((c) => {
                 const estado = estadoDePrueba(c);
                 return (
-                <li key={c.conectorId} className="rounded-lg hairline p-3" style={{ background: 'var(--surface)' }}>
-                  <div className="flex items-start justify-between gap-3 flex-wrap">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-[13px] font-medium">{c.nombre}</span>
-                        <span className="text-[11px]" style={{ color: TONO_ESTADO[estado.tono] }}>
-                          {estado.texto}
-                        </span>
+                  <li key={c.conectorId} className="rv-cx__cred">
+                    <div className="rv-cx__cred-cab">
+                      <div className="rv-cx__cred-info">
+                        <div className="rv-cx__cred-nombre">
+                          <span>{c.nombre}</span>
+                          <span className="rv-cx__estado" data-tono={estado.tono}>{estado.texto}</span>
+                        </div>
+                        {c.pistas.map((p) => (
+                          <p key={p.rotulo} className="rv-cx__pista">
+                            {p.rotulo}: <span className="cifra-mono">{p.valor}</span>
+                          </p>
+                        ))}
+                        <p className="rv-cx__nota">Capturada el {fechaCorta(c.creadaEn)}</p>
+                        {c.ultimoError && (
+                          <p className="rv-cx__error">
+                            <Icono icono={TriangleAlert} tam={14} />
+                            {c.ultimoError}
+                          </p>
+                        )}
                       </div>
-                      {c.pistas.length > 0 && (
-                        <div className="mt-1 space-y-0.5">
-                          {c.pistas.map((p) => (
-                            <div key={p.rotulo} className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                              {p.rotulo}: <span className="cifra-mono">{p.valor}</span>
-                            </div>
-                          ))}
+                      {c.activo && puedeAdministrarCofre && (
+                        // Probar y desactivar son las dos acciones del dueño sobre
+                        // una credencial viva. Probar va primero porque es la que
+                        // se aprieta seguido; desactivar sigue detrás de su
+                        // confirmación de dos pasos.
+                        <div className="rv-cx__acciones">
+                          <FormaProbar conectorId={c.conectorId} probar={acciones.probar} />
+                          <FormaDesactivar conectorId={c.conectorId} nombre={c.nombre} desactivar={acciones.desactivar} />
                         </div>
                       )}
-                      <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-                        Capturada el {fechaCorta(c.creadaEn)}
-                      </p>
-                      {c.ultimoError && (
-                        <p className="text-[12px] mt-1 flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
-                          <TriangleAlert width={12} height={12} strokeWidth={2} className="mt-0.5 shrink-0" />
-                          {c.ultimoError}
-                        </p>
-                      )}
                     </div>
-                    {c.activo && puedeAdministrarCofre && (
-                      // Probar y desactivar son las dos acciones del dueño sobre
-                      // una credencial viva. Probar va primero porque es la que
-                      // se aprieta seguido; desactivar sigue detrás de su
-                      // confirmación de dos pasos.
-                      <div className="shrink-0 space-y-2">
-                        <FormaProbar conectorId={c.conectorId} probar={acciones.probar} />
-                        <FormaDesactivar conectorId={c.conectorId} nombre={c.nombre} desactivar={acciones.desactivar} />
-                      </div>
-                    )}
-                  </div>
-                </li>
+                  </li>
                 );
               })}
             </ul>
@@ -229,7 +213,7 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
             // secreto que va a tronar al guardar (y guardarlo en claro no es
             // una opción). Se dice qué falta, que es configuración del
             // sistema, no de la flota.
-            <p className="text-[12px] max-w-xl" style={{ color: 'var(--warn)' }}>
+            <p className="rv-cx__texto" data-tono="warn">
               El cofre de credenciales no está configurado en este entorno
               (lo configura el equipo de Likida): la captura está
               deshabilitada hasta que exista. Es configuración del sistema, no de tu flota.
@@ -237,12 +221,12 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
           ) : puedeAdministrarCofre ? (
             <FormaCredenciales grupos={grupos} guardar={acciones.guardar} />
           ) : (
-            <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
+            <p className="rv-cx__texto" data-tono="faint">
               Capturar accesos es una acción del dueño de la flota — pídesela a tu administrador.
             </p>
           )}
-        </>
+        </div>
       )}
-    </section>
+    </Tarjeta>
   );
 }
