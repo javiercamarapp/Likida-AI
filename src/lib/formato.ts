@@ -34,6 +34,18 @@
 export const TZ_MX = 'America/Mexico_City';
 
 /**
+ * IDIOMA DE LA INTERFAZ (i18n, P0). Este archivo NO importa nada (lo fija formato.test.ts), así que repite aquí el tipo y la
+ * configuración regional de `lib/i18n/idioma.ts`; una prueba exige que sean idénticos.
+ *
+ * Qué cambia con el idioma y qué NO: cambia la ortografía (`04 ago 2026` / `Aug 4, 2026`) y la etiqueta de la moneda
+ * (`$1,234.50` / `$1,234.50 MXN`). NO cambia la moneda (siempre MXN), ni la zona (siempre `TZ_MX`), ni la cifra: es-MX y en-US
+ * comparten coma de miles y punto decimal, así que el número impreso es idéntico en los dos. Sin el argumento, todo es `'es'`:
+ * los ~420 importadores de este archivo no cambian.
+ */
+export type IdiomaFormato = 'es' | 'en';
+export const LOCALE_FORMATO: Record<IdiomaFormato, string> = { es: 'es-MX', en: 'en-US' };
+
+/**
  * HOY en México como `AAAA-MM-DD` (o el día de México de la fecha que se pase).
  * `en-CA` es el locale cuyo formato corto YA es ISO: no hay que rearmar.
  *
@@ -221,12 +233,17 @@ export function pctCambio(actual: number, base: number | null): number | null {
 }
 
 /** Pesos mexicanos como los espera un contador: `$1,234.56`. */
-export function mxn(n: number): string {
+export function mxn(n: number, idioma: IdiomaFormato = 'es'): string {
   // A37-S25-08: -0 y las diferencias menores a medio centavo (que Intl
   // redondea a cero conservando el signo) se pintaban «-$0.00», que parece un
   // saldo negativo. Se normalizan a cero antes de formatear.
   if (Math.abs(n) < 0.005) n = 0;
-  return n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN' });
+  if (idioma === 'en') {
+    // `style: 'currency'` en en-US imprimiría «MX$1,234.50» (CLDR): se arma a mano para que el pesos de siempre lleve «MXN» explícito
+    // y no se confunda con dólares. La cifra es la misma que en español.
+    return `${n < 0 ? '-' : ''}$${Math.abs(n).toLocaleString(LOCALE_FORMATO.en, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} MXN`;
+  }
+  return n.toLocaleString(LOCALE_FORMATO.es, { style: 'currency', currency: 'MXN' });
 }
 
 /**
@@ -294,36 +311,38 @@ const COMPACTO_DESDE = 1_000_000;
  * que FE-17 vino a cerrar. Declarando el mínimo vuelve a `"$9,000 M"`, y
  * `$1.5 M` sigue enseñando su decimal.
  */
-export function mxnCompacto(n: number): string {
-  if (Math.abs(n) < COMPACTO_DESDE) return mxn(n);
+export function mxnCompacto(n: number, idioma: IdiomaFormato = 'es'): string {
+  if (Math.abs(n) < COMPACTO_DESDE) return mxn(n, idioma);
   // ORQ-32C10-A1 (AUDITORÍA 32 c10, ALTO): la MAGNITUD la sigue formateando
   // Intl —agrupación, decimal y el NBSP antes de la M son suyos— pero el signo
   // de pesos lo ponemos nosotros. Con `style: 'currency'` la POSICIÓN del
   // símbolo la decidía CLDR, y en CLDR 47 el patrón compacto de es-MX la movió
   // al final: `$999,999.00` en una tarjeta y `1.2 M$` en la de al lado.
   // El valor numérico nunca estuvo mal; lo que cambiaba era de qué lado se lee.
-  const magnitud = Math.abs(n).toLocaleString('es-MX', {
+  const magnitud = Math.abs(n).toLocaleString(LOCALE_FORMATO[idioma], {
     notation: 'compact',
     minimumFractionDigits: 0, maximumFractionDigits: 1,
     useGrouping: true,
   });
   // El `-` antes del `$`, igual que `mxn(-1234567)` → `-$1,234,567.00`.
-  return `${n < 0 ? '-' : ''}$${magnitud}`;
+  return `${n < 0 ? '-' : ''}$${magnitud}${idioma === 'en' ? ' MXN' : ''}`;
 }
 
 /**
  * Pesos SIN decimales (ESTILO-LIKIDA: «dinero sin decimales salvo columnas de cuadre»): `$482,311`; desde un millón, el
  * compacto de siempre (`$1.5 M`). Para tarjetas y KPI; las columnas de cuadre siguen con `mxn` (2 decimales).
  */
-export function mxnEntero(n: number): string {
-  if (Math.abs(n) >= COMPACTO_DESDE) return mxnCompacto(n);
+export function mxnEntero(n: number, idioma: IdiomaFormato = 'es'): string {
+  if (Math.abs(n) >= COMPACTO_DESDE) return mxnCompacto(n, idioma);
   const r = Math.round(n);
-  return (Object.is(r, -0) ? 0 : r).toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
+  const entero = Object.is(r, -0) ? 0 : r;
+  if (idioma === 'en') return `${entero < 0 ? '-' : ''}$${Math.abs(entero).toLocaleString(LOCALE_FORMATO.en)} MXN`;
+  return entero.toLocaleString(LOCALE_FORMATO.es, { style: 'currency', currency: 'MXN', maximumFractionDigits: 0, minimumFractionDigits: 0 });
 }
 
 /** Un entero con separador de millares, sin moneda ni unidad — tokens, conteos. */
-export function numero(n: number): string {
-  return n.toLocaleString('es-MX');
+export function numero(n: number, idioma: IdiomaFormato = 'es'): string {
+  return n.toLocaleString(LOCALE_FORMATO[idioma]);
 }
 
 /**
@@ -347,8 +366,8 @@ export function numero(n: number): string {
  * ausencia del decimal en una columna que sí los lleva se lee como otra
  * precisión.
  */
-export function porcentaje(n: number, decimales = 1): string {
-  return `${n.toLocaleString('es-MX', {
+export function porcentaje(n: number, decimales = 1, idioma: IdiomaFormato = 'es'): string {
+  return `${n.toLocaleString(LOCALE_FORMATO[idioma], {
     minimumFractionDigits: decimales, maximumFractionDigits: decimales,
   })}%`;
 }
@@ -360,8 +379,8 @@ export function porcentaje(n: number, decimales = 1): string {
  * información: solo evita que un `1234.5600000001` de coma flotante salga con
  * tres cifras donde el papel enseña dos.
  */
-export function litros(n: number): string {
-  return `${n.toLocaleString('es-MX', { maximumFractionDigits: 2 })} L`;
+export function litros(n: number, idioma: IdiomaFormato = 'es'): string {
+  return `${n.toLocaleString(LOCALE_FORMATO[idioma], { maximumFractionDigits: 2 })} L`;
 }
 
 /**
@@ -377,7 +396,7 @@ export function litros(n: number): string {
  * terminar el viaje, así que en el corte mensual una del 31 de julio aparecía en
  * agosto.
  */
-export function fechaMx(iso?: string | null): string {
+export function fechaMx(iso?: string | null, idioma: IdiomaFormato = 'es'): string {
   if (!iso) return '—';
 
   // UNA FECHA SIN HORA NO TIENE ZONA, Y CONVERTIRLA LA CORRE UN DÍA.
@@ -402,8 +421,8 @@ export function fechaMx(iso?: string | null): string {
   const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(iso.trim());
   const d = soloFecha ? new Date(`${iso.trim()}T00:00:00Z`) : new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-MX', {
-    day: '2-digit', month: 'short', year: 'numeric',
+  return d.toLocaleDateString(LOCALE_FORMATO[idioma], {
+    day: idioma === 'en' ? 'numeric' : '2-digit', month: 'short', year: 'numeric',
     timeZone: soloFecha ? 'UTC' : TZ_MX,
   });
 }
@@ -414,13 +433,13 @@ export function fechaMx(iso?: string | null): string {
  * salida, para etiquetas de espacio angosto como el rango de una tarjeta de
  * KPI ("27 jul – 02 ago") donde el año ya es obvio por contexto.
  */
-export function fechaCorta(iso?: string | null): string {
+export function fechaCorta(iso?: string | null, idioma: IdiomaFormato = 'es'): string {
   if (!iso) return '—';
   const soloFecha = /^\d{4}-\d{2}-\d{2}$/.test(iso.trim());
   const d = soloFecha ? new Date(`${iso.trim()}T00:00:00Z`) : new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleDateString('es-MX', {
-    day: '2-digit', month: 'short',
+  return d.toLocaleDateString(LOCALE_FORMATO[idioma], {
+    day: idioma === 'en' ? 'numeric' : '2-digit', month: 'short',
     timeZone: soloFecha ? 'UTC' : TZ_MX,
   });
 }
@@ -443,13 +462,13 @@ export function fechaCorta(iso?: string | null): string {
  * se corra un día. Las cuatro columnas de la 0058 son `timestamptz`, así que en
  * la práctica esa rama no se usa; existe para que no pueda mentir si se usa.
  */
-export function fechaHoraMx(iso?: string | null): string {
+export function fechaHoraMx(iso?: string | null, idioma: IdiomaFormato = 'es'): string {
   if (!iso) return '—';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) return fechaMx(iso);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso.trim())) return fechaMx(iso, idioma);
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString('es-MX', {
-    day: '2-digit', month: 'short', year: 'numeric',
+  return d.toLocaleString(LOCALE_FORMATO[idioma], {
+    day: idioma === 'en' ? 'numeric' : '2-digit', month: 'short', year: 'numeric',
     hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
     timeZone: TZ_MX,
   });
@@ -458,11 +477,11 @@ export function fechaHoraMx(iso?: string | null): string {
 /**
  * Solo la HORA en México, `07:02` (24 h). Para rótulos que ya dicen el día aparte («hoy 07:02»). Ausente o ilegible: `—`.
  */
-export function horaMx(iso?: string | null): string {
+export function horaMx(iso?: string | null, idioma: IdiomaFormato = 'es'): string {
   if (!iso) return '—';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: TZ_MX });
+  return d.toLocaleTimeString(LOCALE_FORMATO[idioma], { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: TZ_MX });
 }
 
 /**
