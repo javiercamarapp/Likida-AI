@@ -126,7 +126,7 @@ describe('scoreCierre — alcanzabilidad + fit + embudo', () => {
 describe('la paleta del embudo cubre el dominio completo del CHECK 0105', () => {
   it('los 6 estados tienen color y nombre — un estado sin color sería un pin invisible', () => {
     for (const e of ['nuevo', 'contactado', 'demo', 'negociacion', 'cerrado', 'perdido']) {
-      expect(COLOR_EMBUDO[e]?.color).toMatch(/^#/);
+      expect(COLOR_EMBUDO[e]?.color).toMatch(/^var\(--/);
       expect(COLOR_EMBUDO[e]?.nombre.length).toBeGreaterThan(3);
     }
   });

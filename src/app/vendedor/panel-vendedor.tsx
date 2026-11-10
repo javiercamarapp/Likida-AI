@@ -215,7 +215,9 @@ export async function PanelVendedor({
                   <div className="text-[13px] space-y-1">
                     <p className="m-0 font-medium">{comision.primerMes}</p>
                     <p className="m-0 font-medium">{comision.recurrente}</p>
-                    <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>{comision.aclaracion}</p>
+                    <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>
+                      Falta el cálculo: aún no hay registro de comisiones ni la liga de cada prospecto cerrado con su flota y su factura pagada, así que no se muestra ninguna cifra.
+                    </p>
                   </div>
                 </div>
               </div>
