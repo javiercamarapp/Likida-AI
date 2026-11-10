@@ -31,4 +31,7 @@ export const shell: Record<keyof typeof shellEs, string> = {
   'pie.cuenta.menu': 'Account menu',
   'pie.cuenta.etiqueta': 'Account',
   'pie.cuenta.salir': 'Sign out',
+  'vendedor.rotulo': 'Sales reps',
+  'vendedor.soporte': 'Viewing as superadmin · all prospects',
+  'vendedor.salir': 'Sign out',
 };

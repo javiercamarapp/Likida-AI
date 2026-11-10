@@ -34,4 +34,8 @@ export const shell = {
   'pie.cuenta.menu': 'Menú de la cuenta',
   'pie.cuenta.etiqueta': 'Cuenta',
   'pie.cuenta.salir': 'Cerrar sesión',
+  // Cabecera de /vendedor
+  'vendedor.rotulo': 'Vendedores',
+  'vendedor.soporte': 'Viendo como superadmin · todos los prospectos',
+  'vendedor.salir': 'Salir',
 } as const;

@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Inbox } from 'lucide-react';
 import { numero } from '@/lib/formato';
+import { Boton, Drawer } from '../../ui-v2/componentes';
 import './tablero.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -110,6 +111,7 @@ function Tarjeta({
 
   const destinos = transiciones[t.estado] ?? [];
   const idx = orden.indexOf(t.estado);
+  const [abierto, setAbierto] = useState(false);
   const etiquetaDe = (a: string): string => {
     if (a === 'lost' || a === 'perdido') return 'Perdido';
     if (a === 'won' || a === 'cerrado') return 'Ganado';
@@ -119,60 +121,67 @@ function Tarjeta({
 
   return (
     <div className="ven-tarjeta" data-pendiente={pendiente || undefined}>
-      <div className="ven-tarjeta__empresa">{t.empresa}</div>
-      {/* La vacante es LA señal del censo: si existe, se enseña siempre. */}
-      {t.vacante && <p className="ven-tarjeta__tenue">Vacante: {t.vacante}</p>}
-      {(t.ciudad || conVendedor) && (
-        <div className="ven-tarjeta__linea">
-          {t.ciudad && <span>{t.ciudad}</span>}
-          {t.ciudad && conVendedor && <span aria-hidden>·</span>}
-          {conVendedor && <span>{t.vendedorNombre ?? 'Sin asignar'}</span>}
+      {/* La tarjeta es un botón: el detalle (mover, asignar, nota, redactar) vive en el cajón, como en Rovaq. */}
+      <button type="button" className="ven-tarjeta__abrir" onClick={() => setAbierto(true)} aria-haspopup="dialog">
+        <span className="ven-tarjeta__empresa">{t.empresa}</span>
+        {/* La vacante es LA señal del censo: si existe, se enseña siempre. */}
+        {t.vacante && <span className="ven-tarjeta__tenue">Vacante: {t.vacante}</span>}
+        {(t.ciudad || conVendedor) && (
+          <span className="ven-tarjeta__linea">
+            {t.ciudad && <span>{t.ciudad}</span>}
+            {t.ciudad && conVendedor && <span aria-hidden>·</span>}
+            {conVendedor && <span>{t.vendedorNombre ?? 'Sin asignar'}</span>}
+          </span>
+        )}
+        {t.notas && <span className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t.notas}</span>}
+      </button>
+
+      <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={t.empresa}
+        descripcion={[t.vacante ? `Vacante: ${t.vacante}` : null, t.ciudad].filter(Boolean).join(' · ') || undefined}>
+        <div className="ven-detalle">
+          {destinos.length > 0 && (
+            <div className="ven-tarjeta__acciones">
+              {destinos.map((a) => (
+                <Boton key={a} tamano="sm" disabled={pendiente}
+                  variante={a === 'lost' || a === 'perdido' ? 'danger-soft' : a === 'won' || a === 'cerrado' ? 'primary' : 'secondary'}
+                  onClick={() => correr(() => mover(t.id, a))}>
+                  {etiquetaDe(a)}
+                </Boton>
+              ))}
+            </div>
+          )}
+
+          {/* El Redactor solo para etapas vivas: el servidor lo re-valida (un botón escondido no es una regla, misma nota del encabezado). */}
+          {redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado) && (
+            <Boton tamano="sm" disabled={pendiente} className="ven-btn--ancho" onClick={() => correr(() => redactar(t.id))}>
+              {pendiente ? 'Redactando…' : 'Redactar correo → cola de aprobación'}
+            </Boton>
+          )}
+
+          {hecho && <p className="ven-tarjeta__ok">{hecho}</p>}
+
+          {asignar && (
+            <select aria-label={`Vendedor de ${t.empresa}`} value={t.vendedorId ?? ''} disabled={pendiente} className="ven-select"
+              onChange={(e) => correr(() => asignar(t.id, e.target.value))}>
+              <option value="">Sin asignar</option>
+              {vendedores.map((v) => (
+                <option key={v.id} value={v.id}>{v.nombre}</option>
+              ))}
+            </select>
+          )}
+
+          {guardarNota && (
+            <div className="ven-nota">
+              <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={4} maxLength={2000} aria-label={`Nota de ${t.empresa}`} />
+              <Boton tamano="sm" disabled={pendiente} onClick={() => correr(() => guardarNota(t.id, nota))}>
+                Guardar nota
+              </Boton>
+            </div>
+          )}
+
+          {error && <p className="ven-tarjeta__error" role="alert">{error}</p>}
         </div>
-      )}
-      {t.notas && <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t.notas}</p>}
-
-      {destinos.length > 0 && (
-        <div className="ven-tarjeta__acciones">
-          {destinos.map((a) => (
-            <button key={a} type="button" disabled={pendiente} className="ven-btn"
-              data-sentido={a === 'lost' || a === 'perdido' ? 'perdido' : a === 'won' || a === 'cerrado' ? 'ganado' : undefined}
-              onClick={() => correr(() => mover(t.id, a))}>
-              {etiquetaDe(a)}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* El Redactor solo para etapas vivas: el servidor lo re-valida (un botón escondido no es una regla, misma nota del encabezado). */}
-      {redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado) && (
-        <button type="button" disabled={pendiente} className="ven-btn ven-btn--ancho" onClick={() => correr(() => redactar(t.id))}>
-          {pendiente ? 'Redactando…' : 'Redactar correo → cola de aprobación'}
-        </button>
-      )}
-
-      {hecho && <p className="ven-tarjeta__ok">{hecho}</p>}
-
-      {asignar && (
-        <select aria-label={`Vendedor de ${t.empresa}`} value={t.vendedorId ?? ''} disabled={pendiente} className="ven-select"
-          onChange={(e) => correr(() => asignar(t.id, e.target.value))}>
-          <option value="">Sin asignar</option>
-          {vendedores.map((v) => (
-            <option key={v.id} value={v.id}>{v.nombre}</option>
-          ))}
-        </select>
-      )}
-
-      {guardarNota && (
-        <details className="ven-nota">
-          <summary>Nota</summary>
-          <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={2} maxLength={2000} aria-label={`Nota de ${t.empresa}`} />
-          <button type="button" disabled={pendiente} className="ven-btn" onClick={() => correr(() => guardarNota(t.id, nota))}>
-            Guardar nota
-          </button>
-        </details>
-      )}
-
-      {error && <p className="ven-tarjeta__error" role="alert">{error}</p>}
+      </Drawer>
     </div>
   );
 }

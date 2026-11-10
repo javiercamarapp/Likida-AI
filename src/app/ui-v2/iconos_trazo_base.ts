@@ -53,5 +53,4 @@ export const BASE_SIN_TRAZO: Record<string, number> = {
   'app/dashboard/sidebar-nav.tsx': 2,
   'app/ui-v2/movimiento/tour/globo.tsx': 1,
   'app/ui-v2/movimiento/tour/lanzador.tsx': 2,
-  'app/vendedor/panel-vendedor.tsx': 5,
 };

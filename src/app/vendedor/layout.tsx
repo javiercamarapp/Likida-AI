@@ -1,10 +1,22 @@
 import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
-import { LogOut } from 'lucide-react';
 import { requireVendedor } from '@/lib/auth/guard';
 import { supabaseServer } from '@/lib/supabase/server';
-import Fondo from '../fondo';
-import { Logo } from '../logo';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
+import { CLASES_V2 } from '../marco-v2';
+import CabeceraVendedor from './cabecera-vendedor';
+import '../ui-v2/tokens.css';
+import '../ui-v2/fonts.css';
+import '../ui-v2/shell.css';
+import '../ui-v2/pie-sidebar.css';
+import '../ui-v2/componentes.css';
+import '../ui-v2/overlay.css';
+import '../ui-v2/piezas.css';
+import '../ui-v2/graficas.css';
+import '../ui-v2/datos.css';
+import '../ui-v2/movimiento.css';
+import '../ui-v2/paginas.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -12,16 +24,11 @@ export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: { default: 'Vendedores · Likida', template: '%s · Vendedores · Likida' } };
 
 /**
- * El chrome de /vendedor — MÍNIMO a propósito: una barra con logo, quién
- * eres y salir. El vendedor tiene UNA pantalla (su tablero); un sidebar
- * anunciaría secciones que no existen, y un link que no lleva a nada es un
- * rótulo que miente.
+ * El chrome de /vendedor — sobre el MISMO sistema que /dashboard y /admin (`data-ui="v2"`, hojas de ui-v2, `.rv-*`), pero sin
+ * sidebar a propósito: el vendedor tiene UNA pantalla, y un menú anunciaría secciones que no existen.
  *
- * `requireVendedor()` vive AQUÍ, como `requireSuperadmin()` en
- * admin/layout.tsx: gatea el layout entero y ninguna página futura bajo
- * /vendedor puede olvidarlo. Es la SEGUNDA capa — la primera es el proxy
- * (`RUTAS_CON_SESION` incluye /vendedor) — y las dos tienen que fallar a la
- * vez para servir esto sin autorización.
+ * `requireVendedor()` vive AQUÍ, como `requireSuperadmin()` en admin/layout.tsx: gatea el layout entero y ninguna página futura
+ * bajo /vendedor puede olvidarlo. Es la SEGUNDA capa — la primera es el proxy (`RUTAS_CON_SESION` incluye /vendedor).
  */
 export default async function VendedorLayout({ children }: { children: React.ReactNode }) {
   const { nombre, rol } = await requireVendedor();
@@ -33,34 +40,23 @@ export default async function VendedorLayout({ children }: { children: React.Rea
     redirect('/login');
   }
 
+  const idioma = await datosParaProveedor(['shell']);
+  // El superadmin entra por soporte y la cabecera lo dice: sin ella, esta pantalla se confundiría con la vista real de un vendedor.
+  const esSoporte = rol === 'superadmin';
+
   return (
-    <div className="min-h-dvh tema-neutro" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
-      <Fondo />
-      <div className="relative z-10 max-w-6xl mx-auto p-4 space-y-3">
-        <header className="glass-panel rounded-2xl px-4 h-14 flex items-center gap-2.5">
-          <Logo alto="h-5" />
-          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded" style={{ background: 'var(--surface)', color: 'var(--muted)', border: '1px solid var(--line)' }}>
-            VENDEDORES
-          </span>
-          {/* El superadmin entra por soporte y la cinta lo dice: sin ella,
-              esta pantalla se confundiría con la vista real de un vendedor. */}
-          {rol === 'superadmin' && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full font-medium" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>
-              viendo como superadmin · todos los prospectos
-            </span>
-          )}
-          <span className="ml-auto text-[13px] font-medium truncate">{nombre ?? ''}</span>
-          <form action={cerrarSesion}>
-            <button type="submit" title="Cerrar sesión"
-              className="h-8 px-3 rounded-lg text-[12px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85"
-              style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-              <LogOut width={14} height={14} strokeWidth={1.75} />
-              Salir
-            </button>
-          </form>
-        </header>
-        {children}
+    <IdiomaProvider idioma={idioma.idioma} diccionarios={idioma.diccionarios}>
+      <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
+        <CabeceraVendedor movil nombre={nombre ?? null} esSoporte={esSoporte} salir={cerrarSesion} />
+        <div className={`${CLASES_V2.fila} vnd-fila`}>
+          <div className={CLASES_V2.columna}>
+            <CabeceraVendedor nombre={nombre ?? null} esSoporte={esSoporte} salir={cerrarSesion} />
+            <div id="contenido-principal" tabIndex={-1} className={CLASES_V2.contenido}>
+              {children}
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
+    </IdiomaProvider>
   );
 }
