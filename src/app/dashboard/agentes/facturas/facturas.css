@@ -1,0 +1,5 @@
+/* Facturas en automático · archivo propio de la pantalla. Solo tokens del sistema. */
+.rv-fact__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; }
+.rv-fact__grande { display: block; font-size: var(--t-kpi, 26px); font-weight: 600; color: var(--ink); }
+.rv-fact__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-fact__lista li { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-small, 12px); color: var(--muted); }

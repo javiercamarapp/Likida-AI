@@ -5,6 +5,8 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Play, Pause, Send } from 'lucide-react';
 import type { ResultadoCobranza } from '@/lib/likida/agentes/cobranza';
+import { AvisoCompacto, Boton, Icono } from '@/app/ui-v2/componentes';
+import '../agentes.css';
 
 export type AccionSimple = (
   prev: { error?: string } | null,
@@ -41,53 +43,43 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
   const r = estado?.resultado;
 
   return (
-    <div className="text-right shrink-0">
+    <div className="rv-ag-accion">
       {confirmando ? (
-        <form action={accion} onSubmit={() => setConfirmando(false)} className="inline-flex items-center gap-2">
-          <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
+        <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-ag-accion__confirmar">
+          <span className="rv-ag-notif__nota">
             ¿Mandar WhatsApp a {enCola} {enCola === 1 ? 'chofer' : 'choferes'} ahora?
           </span>
           <BotonConfirmar />
-          <button type="button" onClick={() => setConfirmando(false)}
-            className="rv-btn rv-btn--secondary"
-            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            Cancelar
-          </button>
+          <Boton variante="ghost" onClick={() => setConfirmando(false)}>Cancelar</Boton>
         </form>
       ) : (
-        <button type="button" onClick={() => setConfirmando(true)}
+        <Boton variante="primary" onClick={() => setConfirmando(true)}
           disabled={!activo || enCola === 0}
           title={!activo ? 'El agente está pausado' : enCola === 0 ? 'No hay a quién contactar' : 'Correr la cobranza ahora, sin esperar la ventana'}
-          className="rv-btn rv-btn--primary"
-          style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-          <Send width={13} height={13} strokeWidth={2} /> Ejecutar ahora
-        </button>
+          icono={<Icono icono={Send} tam={14} />}>
+          Ejecutar ahora
+        </Boton>
       )}
 
-      {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
       {r && !confirmando && (
-        <div className="text-[12px] mt-1.5 space-y-0.5">
+        <div className="rv-ag-accion__resultado">
           {r.omitido ? (
-            <p style={{ color: 'var(--warn)' }}>El agente no corrió: {r.omitido}.</p>
+            <AvisoCompacto tono="warn" resumen={`El agente no corrió: ${r.omitido}.`} />
           ) : (
-            <p style={{ color: 'var(--muted)' }}>
-              Contactó a <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.contactados}</span> de{' '}
-              <span className="cifra-mono">{r.revisados}</span>
+            <p className="rv-ag-notif__nota">
+              Contactó a <strong>{r.contactados}</strong> de <span className="cifra-mono">{r.revisados}</span>
               {r.sinTelefono > 0 && <> · {r.sinTelefono} sin teléfono</>}
-              {r.fallos.length > 0 && <span style={{ color: 'var(--bad)' }}> · {r.fallos.length} fallos</span>}
+              {r.fallos.length > 0 && <> · <span className="rv-ag-malo">{r.fallos.length} fallos</span></>}
             </p>
           )}
-          {/* FE-14: el reloj de corte (25 s) puede dejar folios sin tocar
-              en una cola grande — se dice, para que el humano sepa que hay
-              que volver a apretar "Ejecutar ahora" en vez de asumir que ya
-              se contactó a todos. */}
+          {/* FE-14: el reloj de corte (25 s) puede dejar folios sin tocar en una cola grande: se dice, para que el humano sepa que hay
+              que volver a apretar "Ejecutar ahora" en vez de asumir que ya se contactó a todos. */}
           {r.cortadosPorReloj > 0 && (
-            <p style={{ color: 'var(--warn)' }}>
-              El reloj cortó la corrida — {r.cortadosPorReloj} sin tocar todavía. Vuelve a apretar &quot;Ejecutar ahora&quot; para seguir.
-            </p>
+            <AvisoCompacto tono="warn" resumen={`El reloj cortó la corrida — ${r.cortadosPorReloj} sin tocar todavía. Vuelve a apretar "Ejecutar ahora" para seguir.`} />
           )}
           {r.fallos.map((f, i) => (
-            <p key={i} style={{ color: 'var(--bad)' }}>{f}</p>
+            <AvisoCompacto key={i} tono="error" resumen={f} />
           ))}
         </div>
       )}
@@ -98,12 +90,9 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
 function BotonConfirmar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Send width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
+    <Boton type="submit" variante="primary" loading={pending} disabled={pending} icono={pending ? undefined : <Icono icono={Send} tam={14} />}>
       {pending ? 'Mandando…' : 'Sí, mandar'}
-    </button>
+    </Boton>
   );
 }
 
@@ -112,13 +101,13 @@ function BotonConfirmar() {
 export function BotonPausa({ alternarPausa, activo }: { alternarPausa: AccionSimple; activo: boolean }) {
   const [estado, accion] = useActionState(alternarPausa, null);
   return (
-    <div className="text-right shrink-0">
-      <form action={accion} className="inline">
+    <div className="rv-ag-accion">
+      <form action={accion}>
         {/* A37-S12-04: el estado DESEADO viaja en el form; el servidor no invierte. */}
         <input type="hidden" name="deseado" value={activo ? 'pausado' : 'activo'} />
         <BotonPausaInterno activo={activo} />
       </form>
-      {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
     </div>
   );
 }
@@ -126,13 +115,10 @@ export function BotonPausa({ alternarPausa, activo }: { alternarPausa: AccionSim
 function BotonPausaInterno({ activo }: { activo: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
+    <Boton type="submit" variante="secondary" loading={pending} disabled={pending}
       title={activo ? 'El agente deja de contactar hasta que lo reanudes' : 'El agente vuelve a contactar en su ventana'}
-      className="rv-btn rv-btn--secondary"
-      style={{ background: 'var(--surface)', color: activo ? 'var(--ink2)' : 'var(--ok)' }}>
-      {activo
-        ? <><Pause width={13} height={13} strokeWidth={2} /> {pending ? 'Pausando…' : 'Pausar agente'}</>
-        : <><Play width={13} height={13} strokeWidth={2} /> {pending ? 'Reanudando…' : 'Reanudar agente'}</>}
-    </button>
+      icono={pending ? undefined : <Icono icono={activo ? Pause : Play} tam={14} />}>
+      {activo ? (pending ? 'Pausando…' : 'Pausar agente') : (pending ? 'Reanudando…' : 'Reanudar agente')}
+    </Boton>
   );
 }

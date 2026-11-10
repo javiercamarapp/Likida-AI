@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Mail, MailX, UserX, TriangleAlert, BellOff } from 'lucide-react';
+import { AvisoCompacto, Boton, Casilla, Fieldset } from '@/app/ui-v2/componentes';
+import './agentes.css';
 // SOLO TIPOS, y no es una preferencia de estilo: `notificaciones.ts` importa
 // `supabaseAdmin` y, por `correo/enviar.ts`, el PNG del logo en base64. Un
 // import de valor metería las dos cosas —el cliente de service-role y un
@@ -117,196 +118,138 @@ export function FormaNotificaciones({ datos, guardar }: {
   }
 
   return (
-    <div className="space-y-3.5">
+    <div className="rv-ag-notif">
       {apagado && (
-        <Banda tono="warn" Icono={MailX}>
-          El correo no está configurado en este entorno: <strong>no sale ningún aviso</strong>, se
-          marque lo que se marque. Se enciende conectando Resend en Conexiones — hasta entonces
-          esta pantalla prefiere decirlo a ofrecer un interruptor que no hace nada.
-        </Banda>
+        <AvisoCompacto tono="warn" resumen={<>El correo no está configurado en este entorno: <strong>no sale ningún aviso</strong>, se marque lo que se marque.</>}
+          mas="Se enciende conectando Resend en Conexiones. Hasta entonces esta pantalla prefiere decirlo a ofrecer un interruptor que no hace nada." />
       )}
 
-      {datos.errorConfig && (
-        <Banda tono="bad" Icono={TriangleAlert}>
-          {datos.errorConfig}
-        </Banda>
-      )}
+      {datos.errorConfig && <AvisoCompacto tono="error" resumen={datos.errorConfig} />}
 
-      <div className="grid lg:grid-cols-2 gap-5">
-        <form action={accion} className="space-y-4">
+      <div className="rv-ag-notif__rejilla">
+        <form action={accion} className="rv-ag-notif__forma">
           <input type="hidden" name="agente" value={datos.agente.id} />
 
-          {/* ── DE QUÉ avisa ── */}
-          <fieldset disabled={apagado} className="disabled:opacity-50">
-            <legend className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
-              {/* «el» a mano: los seis se llaman "Agente de …", así que el
-                  artículo siempre cuadra. Sin él se lee "De qué te avisa
-                  Agente de Cobranza", que suena a traducción automática. */}
-              De qué te avisa el {datos.agente.nombre}
-            </legend>
-            <div className="space-y-2.5">
+          {/* ── DE QUÉ avisa ── «el» a mano: los seis se llaman "Agente de …", así que el artículo siempre cuadra. */}
+          <Fieldset leyenda={`De qué te avisa el ${datos.agente.nombre}`}
+            ayuda="No hay casilla para «la corrida salió bien»: un aviso que llega cuando todo está en orden es el que más rápido enseña a ignorar los que sí piden algo.">
+            <div className="rv-ag-notif__lista" data-apagado={apagado || undefined}>
               {datos.eventos.map((e) => {
-                // `conectado === false` = este agente declara el evento pero
-                // todavía no hay código que lo emita. Se enseña APAGADO y con
-                // el porqué, en vez de ofrecer una casilla que se marca, se
-                // guarda, y no dispara nada: quien la marcara se quedaría
-                // esperando un correo que no existe, creyéndose cubierto.
+                // `conectado === false` = este agente declara el evento pero todavía no hay código que lo emita. Se enseña APAGADO y
+                // con el porqué, en vez de ofrecer una casilla que se marca, se guarda, y no dispara nada.
                 const muerto = e.conectado === false;
                 return (
-                  <label key={e.id}
-                    className={`flex items-start gap-2.5 ${muerto ? 'cursor-default' : 'cursor-pointer'}`}>
-                    <input
-                      type="checkbox" name="eventos" value={e.id}
-                      checked={!muerto && eventos.includes(e.id)}
-                      disabled={muerto}
-                      onChange={() => alternar(eventos, setEventos, e.id)}
-                      className="mt-0.5 w-3.5 h-3.5 shrink-0"
-                      style={{ accentColor: 'var(--marca)' }}
-                    />
-                    <span className="min-w-0" style={muerto ? { opacity: 0.55 } : undefined}>
-                      <span className="block text-[13px] font-medium">{e.titulo}</span>
-                      <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>{e.cuando}</span>
-                      {muerto ? (
-                        <span className="block text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
-                          Todavía no está conectado: este agente aún no detecta esa situación, así que
-                          encenderlo no mandaría nada. Aparece aquí porque es lo siguiente que le toca.
-                        </span>
-                      ) : (
-                        <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{e.porQue}</span>
-                      )}
-                    </span>
-                  </label>
+                  <Casilla
+                    key={e.id}
+                    name="eventos"
+                    value={e.id}
+                    checked={!muerto && eventos.includes(e.id)}
+                    disabled={muerto || apagado}
+                    onChange={() => alternar(eventos, setEventos, e.id)}
+                    etiqueta={e.titulo}
+                    ayuda={
+                      <>
+                        <span className="rv-ag-notif__linea">{e.cuando}</span>
+                        {muerto ? (
+                          <span className="rv-ag-notif__linea" data-tono="warn">
+                            Todavía no está conectado: este agente aún no detecta esa situación, así que encenderlo no mandaría nada.
+                            Aparece aquí porque es lo siguiente que le toca.
+                          </span>
+                        ) : (
+                          <span className="rv-ag-notif__linea">{e.porQue}</span>
+                        )}
+                      </>
+                    }
+                  />
                 );
               })}
             </div>
-            <p className="text-[11px] mt-2.5" style={{ color: 'var(--faint)' }}>
-              No hay casilla para «la corrida salió bien»: un aviso que llega cuando todo está
-              en orden es el que más rápido enseña a ignorar los que sí piden algo.
-            </p>
-          </fieldset>
+          </Fieldset>
 
           {/* ── A QUIÉN ── */}
-          <fieldset disabled={apagado} className="disabled:opacity-50">
-            <legend className="etiqueta-mono text-[11px] uppercase mb-1.5" style={{ color: 'var(--faint)' }}>
-              A quién le llega
-            </legend>
-            <div className="space-y-2">
+          <Fieldset leyenda="A quién le llega"
+            ayuda="Solo cuentas del panel de esta flota. No se puede teclear una dirección suelta: cada destinatario es alguien que ya puede ver este dato adentro. Los operadores no aparecen: no tienen cuenta ni correo, hablan por WhatsApp.">
+            <div className="rv-ag-notif__lista" data-apagado={apagado || undefined}>
               {datos.rolesPosibles.map((rol) => {
                 const c = porRol[rol];
                 return (
-                  <label key={rol} className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox" name="roles" value={rol}
-                      checked={roles.includes(rol)}
-                      onChange={() => alternar(roles, setRoles, rol)}
-                      className="mt-0.5 w-3.5 h-3.5 shrink-0"
-                      style={{ accentColor: 'var(--marca)' }}
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-[13px] font-medium">{ROTULO_ROL[rol] ?? rol}</span>
-                      <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
-                        {!c || c.total === 0
-                          ? 'nadie con este rol en la flota'
-                          : c.sinCorreo > 0
-                            ? `${c.total} ${c.total === 1 ? 'cuenta' : 'cuentas'} · ${c.sinCorreo} sin correo`
-                            : `${c.total} ${c.total === 1 ? 'cuenta' : 'cuentas'}`}
-                      </span>
-                    </span>
-                  </label>
+                  <Casilla
+                    key={rol}
+                    name="roles"
+                    value={rol}
+                    checked={roles.includes(rol)}
+                    disabled={apagado}
+                    onChange={() => alternar(roles, setRoles, rol)}
+                    etiqueta={ROTULO_ROL[rol] ?? rol}
+                    ayuda={!c || c.total === 0
+                      ? 'nadie con este rol en la flota'
+                      : c.sinCorreo > 0
+                        ? `${c.total} ${c.total === 1 ? 'cuenta' : 'cuentas'} · ${c.sinCorreo} sin correo`
+                        : `${c.total} ${c.total === 1 ? 'cuenta' : 'cuentas'}`}
+                  />
                 );
               })}
             </div>
-            <p className="text-[11px] mt-2.5" style={{ color: 'var(--faint)' }}>
-              Solo cuentas del panel de esta flota. No se puede teclear una dirección suelta:
-              cada destinatario es alguien que ya puede ver este dato adentro. Los operadores
-              no aparecen — no tienen cuenta ni correo, hablan por WhatsApp.
-            </p>
-          </fieldset>
+          </Fieldset>
 
-          {sinNadie && (
-            <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-              Tienes avisos encendidos y nadie que los reciba. Marca un rol, o apaga los avisos.
-            </p>
-          )}
+          {sinNadie && <AvisoCompacto tono="warn" resumen="Tienes avisos encendidos y nadie que los reciba. Marca un rol, o apaga los avisos." />}
 
-          <div className="flex items-center gap-3 pt-0.5">
+          <div className="rv-ag-notif__acciones">
             <BotonGuardar apagado={apagado} sucio={sucio} />
-            {estado?.error && <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+            {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
           </div>
         </form>
 
         {/* ── La verdad medida: a quién le llega hoy y a quién no ── */}
-        <div className="space-y-3">
-          <div>
-            <div className="etiqueta-mono text-[11px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
-              <Mail width={11} height={11} strokeWidth={2} />
-              Hoy le llega a
-            </div>
-            <div className="rounded-xl hairline p-3.5" style={{ background: 'var(--surface)' }}>
-              {apagado ? (
-                <Nota>Hoy no le llega a nadie: el canal de correo está apagado en este entorno.</Nota>
-              ) : datos.config === null ? (
-                <Nota>No se pudo leer la configuración, así que no sale ningún aviso. Guarda de
-                  nuevo para reactivarlos.</Nota>
-              ) : datos.reparto.reciben.length === 0 ? (
-                <Nota>{datos.config.eventos.length === 0
-                  ? 'Este agente no manda ningún correo: todos sus avisos están apagados.'
-                  : 'Nadie lo recibe todavía. Revisa los roles marcados y que esas cuentas tengan correo.'}</Nota>
-              ) : (
-                <ul className="space-y-1.5">
-                  {datos.reparto.reciben.map((d) => (
-                    <li key={d.id} className="text-[12px] flex items-baseline gap-2">
-                      <span className="font-medium truncate">{d.nombre ?? d.email}</span>
-                      <span className="truncate" style={{ color: 'var(--muted)' }}>{d.email}</span>
-                      <span className="ml-auto shrink-0 text-[11px]" style={{ color: 'var(--faint)' }}>
-                        {ROTULO_ROL[d.rol] ?? d.rol}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {sucio && !apagado && (
-                <p className="text-[11px] mt-2.5" style={{ color: 'var(--warn)' }}>
-                  Esta lista es la de la configuración guardada. Guarda para que aplique lo que acabas de marcar.
-                </p>
-              )}
-            </div>
-          </div>
+        <div className="rv-ag-notif__verdad">
+          <section className="rv-ag-notif__bloque" aria-label="Hoy le llega a">
+            {/* sin-info: rótulo de bloque de lectura dentro de la sección Notificaciones */}
+            <h3 className="rv-ag-notif__rotulo">Hoy le llega a</h3>
+            {apagado ? (
+              <Nota>Hoy no le llega a nadie: el canal de correo está apagado en este entorno.</Nota>
+            ) : datos.config === null ? (
+              <Nota>No se pudo leer la configuración, así que no sale ningún aviso. Guarda de nuevo para reactivarlos.</Nota>
+            ) : datos.reparto.reciben.length === 0 ? (
+              <Nota>{datos.config.eventos.length === 0
+                ? 'Este agente no manda ningún correo: todos sus avisos están apagados.'
+                : 'Nadie lo recibe todavía. Revisa los roles marcados y que esas cuentas tengan correo.'}</Nota>
+            ) : (
+              <ul className="rv-ag-notif__personas">
+                {datos.reparto.reciben.map((d) => (
+                  <li key={d.id}>
+                    <strong>{d.nombre ?? d.email}</strong>
+                    <span>{d.email}</span>
+                    <em>{ROTULO_ROL[d.rol] ?? d.rol}</em>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {sucio && !apagado && <Nota tono="warn">Esta lista es la de la configuración guardada. Guarda para que aplique lo que acabas de marcar.</Nota>}
+          </section>
 
           {datos.reparto.excluidos.length > 0 && (
-            <div>
-              <div className="etiqueta-mono text-[11px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
-                <UserX width={11} height={11} strokeWidth={2} />
-                A quién no, y por qué
-              </div>
-              <div className="rounded-xl hairline p-3.5 space-y-1.5" style={{ background: 'var(--surface)' }}>
-                {datos.reparto.excluidos.map((x) => (
-                  <p key={x.id} className="text-[12px]">
-                    <span className="font-medium">{x.nombre ?? ROTULO_ROL[x.rol] ?? x.rol}</span>
-                    <span style={{ color: 'var(--muted)' }}> — {x.porque}</span>
-                  </p>
-                ))}
-              </div>
-            </div>
+            <section className="rv-ag-notif__bloque" aria-label="A quién no, y por qué">
+              {/* sin-info: rótulo de bloque de lectura dentro de la sección Notificaciones */}
+            <h3 className="rv-ag-notif__rotulo">A quién no, y por qué</h3>
+              {datos.reparto.excluidos.map((x) => (
+                <p key={x.id} className="rv-ag-notif__nota">
+                  <strong>{x.nombre ?? ROTULO_ROL[x.rol] ?? x.rol}</strong> — {x.porque}
+                </p>
+              ))}
+            </section>
           )}
 
-          {/* El anti-ruido, con los números del motor: es la pregunta que
-              sigue a "¿lo enciendo?" y la razón por la que se puede encender. */}
-          <div>
-            <div className="etiqueta-mono text-[11px] uppercase mb-1.5 flex items-center gap-1.5" style={{ color: 'var(--faint)' }}>
-              <BellOff width={11} height={11} strokeWidth={2} />
-              Cuántos correos, como máximo
-            </div>
-            <div className="rounded-xl hairline p-3.5 text-[12px] leading-relaxed" style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-              Si algo se rompe y sigue roto, no llega un correo por corrida.
-              Llegan <strong style={{ color: 'var(--ink)' }}>{datos.antiRuido.marcas.length} como máximo</strong>{' '}
-              por incidente: el primero, y luego solo cuando la cosa empeora de verdad
-              ({datos.antiRuido.marcas.join(', ')} veces). Entre dos avisos siempre
-              pasan al menos {datos.antiRuido.pisoMinutos} minutos — también cuando algo
-              se rompe, se arregla y se vuelve a romper. La cuenta vuelve a cero en cuanto
-              el problema se resuelve, así que el siguiente incidente te avisa desde el primero.
-            </div>
-          </div>
+          {/* El anti-ruido, con los números del motor: es la pregunta que sigue a "¿lo enciendo?" y la razón por la que se puede encender. */}
+          <section className="rv-ag-notif__bloque" aria-label="Cuántos correos, como máximo">
+            {/* sin-info: rótulo de bloque de lectura dentro de la sección Notificaciones */}
+            <h3 className="rv-ag-notif__rotulo">Cuántos correos, como máximo</h3>
+            <p className="rv-ag-notif__nota">
+              Si algo se rompe y sigue roto, no llega un correo por corrida. Llegan <strong>{datos.antiRuido.marcas.length} como máximo</strong>{' '}
+              por incidente: el primero, y luego solo cuando la cosa empeora de verdad ({datos.antiRuido.marcas.join(', ')} veces). Entre dos
+              avisos siempre pasan al menos {datos.antiRuido.pisoMinutos} minutos, también cuando algo se rompe, se arregla y se vuelve a
+              romper. La cuenta vuelve a cero en cuanto el problema se resuelve, así que el siguiente incidente te avisa desde el primero.
+            </p>
+          </section>
         </div>
       </div>
     </div>
@@ -316,30 +259,13 @@ export function FormaNotificaciones({ datos, guardar }: {
 function BotonGuardar({ apagado, sucio }: { apagado: boolean; sucio: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit" disabled={pending || apagado}
-      title={apagado ? 'El correo no está configurado en este entorno' : undefined}
-      className="rv-btn rv-btn--primary px-3.5"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
+    <Boton type="submit" variante="primary" loading={pending} disabled={pending || apagado}
+      title={apagado ? 'El correo no está configurado en este entorno' : undefined}>
       {pending ? 'Guardando…' : sucio ? 'Guardar cambios' : 'Guardar notificaciones'}
-    </button>
+    </Boton>
   );
 }
 
-function Nota({ children }: { children: React.ReactNode }) {
-  return <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>;
-}
-
-function Banda({ tono, Icono, children }: {
-  tono: 'warn' | 'bad';
-  Icono: typeof Mail;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-xl hairline px-3.5 py-2.5 flex items-start gap-2.5 text-[12px]"
-      style={{ background: 'var(--surface)' }}>
-      <Icono width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: `var(--${tono})` }} />
-      <span style={{ color: 'var(--muted)' }}>{children}</span>
-    </div>
-  );
+function Nota({ children, tono }: { children: React.ReactNode; tono?: 'warn' }) {
+  return <p className="rv-ag-notif__nota" data-tono={tono}>{children}</p>;
 }

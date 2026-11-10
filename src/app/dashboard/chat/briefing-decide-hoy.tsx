@@ -48,6 +48,7 @@ export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint
 
   return (
     <section className="rv-chat__briefing" aria-label="Decide hoy" aria-busy={b === null || undefined}>
+      {/* sin-info: portada del Copiloto, no es una cifra del dashboard del cliente */}
       <h2 className="rv-chat__briefing-titulo">Decide hoy</h2>
       {b === null && <p className="rv-chat__nota">Leyendo lo que espera tu decisión…</p>}
       {b === 'error' && (
