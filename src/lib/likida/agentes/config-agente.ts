@@ -92,6 +92,7 @@ export async function actualizarAgente(id: string, crudo: CambioConfigCrudo, mot
   const nuevo = validarCambioConfig(crudo);
 
   const previo = await acotada(
+    // orden-no-importa: filtra por `id` exacto (clave primaria), la consulta deja una sola fila.
     supabaseAdmin().from('agente_definicion').select('estado, runner_habilitado, presupuesto_dia_usd, modelo_rol').eq('id', id).limit(1),
     'actualizarAgente.leer',
   );

@@ -70,6 +70,7 @@ async function leerPersonal(usuarioId: string): Promise<FilaPersonal & { rol: Ro
 async function superadminsActivos(excluyendo?: string): Promise<number> {
   let q = supabaseAdmin().from('app_user').select('id').eq('rol', 'superadmin').eq('activo', true);
   if (excluyendo) q = q.neq('id', excluyendo);
+  // orden-no-importa: solo se cuenta si hay uno o dos superadmins activos, no cuáles; cualquier par de filas da la misma respuesta.
   const { data, error } = await acotada(q.limit(2), 'baja_acceso.contar_superadmins');
   // Falla CERRADA: si no se puede contar, no se afirma que "hay otro".
   if (error) throw new Error(`baja_acceso.contar_superadmins: ${error.message}`);
