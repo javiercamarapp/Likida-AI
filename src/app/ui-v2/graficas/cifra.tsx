@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Children, cloneElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { numero } from '@/lib/formato';
-import { resolverFormato, type FormatoPreset } from '../../admin/ui/formato-preset';
+import { resolverFormato, type FormatoPreset } from '../formato-preset';
 import { metrica, type MetricaId } from '../metricas';
 import type { InfoClave } from '../info-catalogo';
 import { InfoTip } from '../componentes/info-tip';
