@@ -1,16 +1,16 @@
-import { CheckCircle2, Cog, CircleAlert, ShieldAlert } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
+import './facturas.css';
 import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { enrutar, type Ruta } from '@/lib/likida/facturacion/enrutar';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { Dona } from '@/app/admin/charts';
 import { ColaJefe, type FilaJefe, type AccionMarcarFacturada } from './cola-jefe';
 import { SeccionPortales, type FilaPortal } from './portales-vinculo';
 import type { AccionRelogin } from './relogin-controles';
 import { SeccionControlEmision, type DatosControl } from './control-emision';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
  *  silencio (los encabezados suman la lista COMPLETA). */
@@ -124,78 +124,68 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
         <Cifra info="facturas.vencidos" etiqueta="Vencidos" valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
       </TiraCifras>
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      {/* En ensayo no se promete emisión: el aviso va arriba, a la vista, no escondido en un párrafo. */}
+      {!extra.emite && (
+        <AvisoCompacto tono="warn" resumen="La emisión automática hoy está en ensayo: llena el portal sin emitir la factura."
+          mas="Si tu empresa aún no otorgó el mandato, el dueño lo hace en Términos y mandato. Mientras tanto puedes capturar los tickets tú con los datos ya listos." />
+      )}
+
+      <FilaTarjetas variante="8-4">
         {/* ── TU COLA: lo único de esta página que espera una acción tuya ── */}
-        <section className="card p-4 lg:col-span-2 flex flex-col">
-          <TituloRecuadro info="facturas.te_toca">Te toca a ti</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        <Tarjeta titulo="Te toca a ti" info="facturas.te_toca"
+          estado={teToca.length === 0 ? 'vacio' : 'ok'} iconoVacio={CheckCircle2}
+          mensaje="Hoy no te toca capturar nada"
+          detalle="Lo demás lo trae la máquina o le falta un dato.">
+          <p className="rv-fact__nota">
             Portales que piden TU cuenta, o donde la máquina se topó con un muro — con los datos ya leídos
             {monto(teToca) > 0 && <> · <span className="cifra-mono">{mxn(monto(teToca))}</span></>}
           </p>
-          {teToca.length === 0 ? (
-            <Leyenda icono={<CheckCircle2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ok)' }} />}>
-              Hoy no te toca capturar nada — lo demás lo trae la máquina o le falta un dato.
-            </Leyenda>
-          ) : (
-            <ColaJefe
-              filas={teToca.slice(0, MAX_TE_TOCA).map(({ t, r }): FilaJefe => {
-                const m = r as Extract<Ruta, { via: 'mensaje' }>;
-                return {
-                  gastoId: t.gastoId,
-                  fecha: t.fecha,
-                  comercio: t.comercio?.nombre ?? 'Sin identificar',
-                  portal: m.portal,
-                  urlTicket: t.urlTicket,
-                  concepto: etiquetaConcepto(t.concepto),
-                  monto: t.monto,
-                  caducidad: t.caducidad,
-                  motivo: m.motivo,
-                  detalle: m.detalle ?? t.bloqueo?.motivo,
-                  campos: m.campos.map((c) => ({ etiqueta: c.etiqueta, valor: c.valor, requerido: c.requerido })),
-                };
-              })}
-              marcarFacturada={marcarFacturada}
-              maxFilas={MAX_TE_TOCA}
-              totalFilas={teToca.length}
-            />
-          )}
-        </section>
+          <ColaJefe
+            filas={teToca.slice(0, MAX_TE_TOCA).map(({ t, r }): FilaJefe => {
+              const m = r as Extract<Ruta, { via: 'mensaje' }>;
+              return {
+                gastoId: t.gastoId,
+                fecha: t.fecha,
+                comercio: t.comercio?.nombre ?? 'Sin identificar',
+                portal: m.portal,
+                urlTicket: t.urlTicket,
+                concepto: etiquetaConcepto(t.concepto),
+                monto: t.monto,
+                caducidad: t.caducidad,
+                motivo: m.motivo,
+                detalle: m.detalle ?? t.bloqueo?.motivo,
+                campos: m.campos.map((c) => ({ etiqueta: c.etiqueta, valor: c.valor, requerido: c.requerido })),
+              };
+            })}
+            marcarFacturada={marcarFacturada}
+            maxFilas={MAX_TE_TOCA}
+            totalFilas={teToca.length}
+          />
+        </Tarjeta>
 
         {/* ── Lo que hizo solo ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.hizo_solo" className="mb-3">Lo que hizo solo</TituloRecuadro>
+        <Tarjeta titulo="Lo que hizo solo" info="facturas.hizo_solo"
+          estado={extra.conCfdi === null && bloqueados.length === 0 ? 'error' : 'ok'}
+          mensaje="No se pudo leer el acumulado ahora mismo.">
           {extra.conCfdi !== null && (
-            <p className="text-[12px] mb-2">
-              <span className="cifra-mono text-[20px] font-medium block">{numero(extra.conCfdi)}</span>
-              <span style={{ color: 'var(--faint)' }}>tickets con factura ya amarrada — emitida sola, pescada
-                del XML que mandaron o capturada a mano (el folio tecleado solo se valida de forma, no contra el SAT), histórico.</span>
+            <p className="rv-fact__nota">
+              <span className="cifra-mono rv-fact__grande">{numero(extra.conCfdi)}</span>
+              tickets con factura ya amarrada — emitida sola, pescada del XML que mandaron o capturada a mano (el folio tecleado solo
+              se valida de forma, no contra el SAT), histórico.
             </p>
           )}
-          {bloqueados.length > 0 && (
-            <div className="space-y-2 text-[12px] pt-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-              {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
-                <div key={t.gastoId} className="flex items-start gap-2">
-                  <ShieldAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
-                  <span>
-                    Se rindió a propósito con <span className="font-medium">{t.comercio?.nombre}</span>{' '}
-                    ({(r as Extract<Ruta, { via: 'mensaje' }>).detalle ?? 'muro del portal'}) y te lo dejó listo
-                    {t.bloqueo && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(t.bloqueo.desde)}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {extra.conCfdi === null && bloqueados.length === 0 && (
-            <Leyenda>No se pudo leer el acumulado ahora mismo.</Leyenda>
-          )}
+          {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
+            <p key={t.gastoId} className="rv-fact__nota">
+              <StatusChip tono="warn">Se rindió a propósito</StatusChip>{' '}
+              con <strong>{t.comercio?.nombre}</strong> ({(r as Extract<Ruta, { via: 'mensaje' }>).detalle ?? 'muro del portal'}) y te lo dejó listo
+              {t.bloqueo && <> · {fechaCorta(t.bloqueo.desde)}</>}
+            </p>
+          ))}
           {extra.conCfdi === 0 && bloqueados.length === 0 && (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Aún no amarra su primera factura en esta flota — en cuanto emita una o pesque un
-              XML, aquí se cuenta.
-            </p>
+            <p className="rv-fact__nota">Aún no amarra su primera factura en esta flota — en cuanto emita una o pesque un XML, aquí se cuenta.</p>
           )}
-        </section>
-      </div>
+        </Tarjeta>
+      </FilaTarjetas>
 
       {/* ── El VÍNCULO por portal: lo que decide si esta cola crece sola ── */}
       <SeccionPortales filas={portales} vinculos={vinculosLeidos}
@@ -204,99 +194,51 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
       {/* ── La emisión real: encender, límites, lotes por confirmar, fase por portal (0542) ── */}
       <SeccionControlEmision datos={control} />
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <FilaTarjetas variante="4-4-4">
         {/* ── Monitoreo: lo que NO tienes que hacer ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.maquina">La máquina se encarga</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        <Tarjeta titulo="La máquina se encarga" info="facturas.maquina"
+          estado={maquina.length === 0 ? 'vacio' : 'ok'} mensaje="Nada en la cola automática" detalle="No hay tickets que la máquina pueda facturar ahora mismo.">
+          <p className="rv-fact__nota">
             {extra.emite
               ? 'Sin cuenta y con todo leído: los factura sola en la próxima corrida'
-              : 'La emisión hoy está en ensayo (llena el portal sin emitir): si tu empresa aún no otorgó el mandato, el dueño lo hace en Términos y mandato. Mientras tanto puedes capturarlos tú con los datos ya listos'}
+              : 'Hoy en ensayo: puedes capturarlos tú con los datos ya listos'}
           </p>
-          {maquina.length === 0 ? (
-            <Leyenda>Nada en la cola automática ahora mismo.</Leyenda>
-          ) : (
-            <>
-              <div className="cifra-mono text-[20px] font-medium mb-2">{numero(maquina.length)} · {mxn(monto(maquina))}</div>
-              <div className="space-y-1.5">
-                {maquina.slice(0, MAX_MINI).map(({ t }) => (
-                  <div key={t.gastoId} className="flex items-center justify-between gap-2 text-[12px]">
-                    <span className="truncate" style={{ color: 'var(--muted)' }}>
-                      <Cog width={11} height={11} strokeWidth={2} className="inline mr-1 -mt-0.5" />
-                      {t.comercio?.nombre} · {etiquetaConcepto(t.concepto)}
-                    </span>
-                    <span className="cifra-mono shrink-0">{mxn(t.monto)}</span>
-                  </div>
-                ))}
-                {maquina.length > MAX_MINI && (
-                  <p className="text-[11px]" style={{ color: 'var(--faint)' }}>y {numero(maquina.length - MAX_MINI)} más — el total de arriba los suma todos.</p>
-                )}
-              </div>
-            </>
+          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(maquina.length)} · {mxn(monto(maquina))}</span></p>
+          <ul className="rv-fact__lista">
+            {maquina.slice(0, MAX_MINI).map(({ t }) => (
+              <li key={t.gastoId}>
+                <span>{t.comercio?.nombre} · {etiquetaConcepto(t.concepto)}</span>
+                <span className="cifra-mono">{mxn(t.monto)}</span>
+              </li>
+            ))}
+          </ul>
+          {maquina.length > MAX_MINI && (
+            <p className="rv-fact__nota">y {numero(maquina.length - MAX_MINI)} más — el total de arriba los suma todos.</p>
           )}
-        </section>
+        </Tarjeta>
 
         {/* ── Incompletos: se dice QUÉ falta ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.incompletos">Incompletos</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Ni tú ni la máquina pueden con lo que hay — esto es lo que falta</p>
-          {incompletos.length === 0 ? (
-            <Leyenda>Ninguno — todo ticket sin factura tiene con qué facturarse.</Leyenda>
-          ) : (
-            <>
-              <div className="cifra-mono text-[20px] font-medium mb-2">{numero(incompletos.length)} · {mxn(monto(incompletos))}</div>
-              <div className="space-y-1.5">
-                {faltasTop.map(([f, n]) => (
-                  <div key={f} className="flex items-start justify-between gap-2 text-[12px]">
-                    <span style={{ color: 'var(--muted)' }}>
-                      <CircleAlert width={11} height={11} strokeWidth={2} className="inline mr-1 -mt-0.5" />
-                      {f}
-                    </span>
-                    <span className="cifra-mono shrink-0">{numero(n)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
+        <Tarjeta titulo="Incompletos" info="facturas.incompletos"
+          estado={incompletos.length === 0 ? 'vacio' : 'ok'} mensaje="Ninguno incompleto" detalle="Todo ticket sin factura tiene con qué facturarse.">
+          <p className="rv-fact__nota">Ni tú ni la máquina pueden con lo que hay — esto es lo que falta</p>
+          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(incompletos.length)} · {mxn(monto(incompletos))}</span></p>
+          <ul className="rv-fact__lista">
+            {faltasTop.map(([f, n]) => (
+              <li key={f}><span>{f}</span><span className="cifra-mono">{numero(n)}</span></li>
+            ))}
+          </ul>
+        </Tarjeta>
 
         {/* ── Dónde está el dinero sin factura ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.por_comercio">Sin factura, por comercio</TituloRecuadro>
-          <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>Dónde se concentra el monto pendiente</p>
-          {donaComercios.length === 0 ? (
-            <Leyenda>Ningún gasto sin factura — cuando entre un comprobante sin CFDI, aquí se reparte.</Leyenda>
-          ) : (
-            <>
-              <Dona segmentos={donaComercios} />
-              <div className="mt-2 space-y-1">
-                {donaComercios.map((c) => (
-                  <div key={c.etiqueta} className="flex items-center justify-between text-[12px]">
-                    <span style={{ color: 'var(--muted)' }}>{c.etiqueta}</span>
-                    <span className="cifra-mono">{mxn(c.valor)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
-      </div>
+        <Tarjeta titulo="Sin factura, por comercio" info="facturas.por_comercio"
+          estado={donaComercios.length === 0 ? 'vacio' : 'ok'} mensaje="Ningún gasto sin factura" detalle="Cuando entre un comprobante sin CFDI, aquí se reparte.">
+          <p className="rv-fact__nota">Dónde se concentra el monto pendiente</p>
+          <BarList etiqueta="Monto sin factura por comercio" formato={mxn}
+            items={donaComercios.map((c) => ({ clave: c.etiqueta, etiqueta: c.etiqueta, valor: c.valor, texto: mxn(c.valor) }))} />
+        </Tarjeta>
+      </FilaTarjetas>
 
       {notificaciones}
     </MarcoPagina>
   );
 }
-
-/** Leyenda de vacío/pendiente — centrada por alto y ancho, como TODAS las
- *  leyendas del panel. */
-function Leyenda({ children, icono }: { children: React.ReactNode; icono?: React.ReactNode }) {
-  return (
-    <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <div className="text-center max-w-[32ch]">
-        {icono && <div className="flex justify-center mb-2">{icono}</div>}
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>
-      </div>
-    </div>
-  );
-}
-
