@@ -39,6 +39,8 @@ const horas = (min: number): string => (min < 60 ? `${min} min` : `${Math.floor(
 
 export function parrafosDelResumen(r: ResultadoSinAtender): string[] {
   const { resumen } = r;
+  // Sin nada pendiente: una sola línea, sin cifras ni grupos. Solo se listan grupos con algo sin atender (el detector nunca devuelve otros).
+  if (r.alertas.length === 0) return ['No hay conversaciones sin atender por ahora.'];
   const encabezado = `Hay ${resumen.alertas} conversaciones sin atender en ${resumen.chatsConAlerta} grupos (${resumen.altas} de prioridad alta). Se midió contra la hora de la última exportación de cada chat, no contra este momento.`;
   // Se empacan las líneas en a lo más MAX_BLOQUES bloques; lo que no cabe se cuenta como «resto» (nunca se descarta en silencio).
   const bloques: string[] = [];

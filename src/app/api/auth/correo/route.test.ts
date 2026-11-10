@@ -162,7 +162,7 @@ describe('el magic link, de punta a punta', () => {
     expect(enviados).toHaveLength(1);
     expect(enviados[0].para).toBe('contralor@flota.mx');
     expect(enviados[0].correo.asunto).toBe('Tu acceso a Likida');
-    expect(enviados[0].op).toEqual({ remitenteLocal: 'acceso' });
+    expect(enviados[0].op).toEqual({ remitenteLocal: 'acceso', idempotencyKey: expect.stringMatching(/^acceso-/) });
   });
 
   it('la liga apunta al verificador de Supabase con el token del payload', async () => {

@@ -87,4 +87,18 @@ describe('resumen por correo', () => {
       else expect(pie).not.toContain('más en la pantalla');
     }
   });
+  it('solo lista grupos con algo sin atender: los revisados sin pendientes no aparecen', () => {
+    const r = resultado([alerta({ chatId: 'g1', chatNombre: 'Grupo Con Pendiente' })]);
+    r.resumen.chatsRevisados = 9;
+    const texto = parrafosDelResumen(r).join('\n');
+    expect(texto).toContain('Grupo Con Pendiente');
+    expect(texto).toContain('en 1 grupos');
+    expect(texto).not.toContain('9');
+  });
+  it('sin pendientes: una sola línea que lo dice, sin cifras ni grupos inventados', () => {
+    const p = parrafosDelResumen(resultado([]));
+    expect(p).toHaveLength(1);
+    expect(p[0]).toMatch(/No hay conversaciones sin atender/);
+    expect(p[0]).not.toMatch(/\d/);
+  });
 });

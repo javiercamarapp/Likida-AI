@@ -3,6 +3,7 @@ import { NextResponse, after } from 'next/server';
 import { logger } from '@/lib/logger';
 import { verificarFirma } from '@/lib/correo/firma_entrante';
 import { enviarCorreo } from '@/lib/correo/enviar';
+import { conReintentoTransitorio } from '@/lib/correo/reintento';
 import {
   correoDeAuth,
   minutosDeCaducidad,
@@ -267,7 +268,12 @@ export async function POST(req: Request) {
   // prefiera ese costo; ver docs/correo-de-acceso.md.
   const enviarYSellar = async (): Promise<ReturnType<typeof fallo> | null> => {
     // `acceso@`, no `avisos@`: es la llave de la cuenta, no un aviso del sistema.
-    const envio = await enviarCorreo(destino, correo, { remitenteLocal: 'acceso' });
+    // Reintento acotado solo ante fallos transitorios; todos los intentos llevan la MISMA llave de idempotencia
+    // (la entrega de Supabase, o una aleatoria por llamada) para que Resend no duplique un envío que sí salió.
+    const llaveEnvio = idEntrega ? `acceso-${idEntrega}` : `acceso-${crypto.randomUUID()}`;
+    const envio = await conReintentoTransitorio(() =>
+      enviarCorreo(destino, correo, { remitenteLocal: 'acceso', idempotencyKey: llaveEnvio }),
+    );
     if (!envio.ok) {
       logger.error('auth.correo.no_salio', { accion, motivo: envio.motivo });
       return fallo(

@@ -217,6 +217,22 @@ function hrefDeCorrida(agente: string, tenantId: string | null): string | null {
 }
 
 /**
+ * Cuántas corridas fallidas siguen VIGENTES: las posteriores a la última corrida que salió bien de su agente+flota (la misma regla
+ * que `agruparRachasDeFallo` usa para armar la cola). Antes el cuadro «Corridas en fallo» contaba TODOS los fallos de la historia
+ * (191 en nov-2026, casi todos de agosto a octubre y ya superados por corridas buenas) mientras la cola decía 0: un rótulo que no era
+ * verdad y que mandaba cada día a «revisar 191 corridas» que ya no fallaban. Pura y exportada para su prueba.
+ */
+export function contarFallosVigentes(fallos: readonly CorridaReciente[], ultimoSinFallo: ReadonlyMap<string, string>): number {
+  let n = 0;
+  for (const c of fallos) {
+    const rotura = ultimoSinFallo.get(llaveRacha(c.agente, c.tenantId));
+    if (rotura && new Date(c.inicio).getTime() <= new Date(rotura).getTime()) continue;
+    n++;
+  }
+  return n;
+}
+
+/**
  * UNA RACHA DE FALLOS = UN ITEM (23-oct-2026). Cada corrida fallida era una
  * fila de la cola con su propio `desde`: el enriquecedor, que fallaba en cada
  * vuelta de 4 h, producía un incidente «nuevo» por vuelta (32 correos).
@@ -294,11 +310,12 @@ export async function getBandejaEscalaciones(ahoraMs: number): Promise<BandejaEs
     // cae por valor (conteo null ≠ 0), igual que las liquidaciones de abajo.
     porValor(async () => {
       // A37-P-06: ventana por agente+flota (0870). Sin la función en base cae a la ventana global de siempre.
-      const [porGrupo, total] = await Promise.all([getFallosVigentesPorGrupo(), contarCorridasFallidas()]);
-      if (porGrupo) return { items: agruparRachasDeFallo(porGrupo.fallos, porGrupo.ultimoSinFallo), total };
+      const [porGrupo, totalHistorico] = await Promise.all([getFallosVigentesPorGrupo(), contarCorridasFallidas()]);
+      // El conteo cuenta lo VIGENTE (igual que la cola). Si el conteo histórico falló (null) la fuente sigue cayendo por valor.
+      if (porGrupo) return { items: agruparRachasDeFallo(porGrupo.fallos, porGrupo.ultimoSinFallo), total: totalHistorico === null ? null : contarFallosVigentes(porGrupo.fallos, porGrupo.ultimoSinFallo) };
       const fallos = await getCorridasFallidas(TOPE_CORRIDAS_PARA_AGRUPAR);
       const ultimoSinFallo = await getUltimoInicioSinFalloPorAgente(fallos.map((c) => ({ agente: c.agente, tenantId: c.tenantId })));
-      return { items: agruparRachasDeFallo(fallos, ultimoSinFallo), total };
+      return { items: agruparRachasDeFallo(fallos, ultimoSinFallo), total: totalHistorico === null ? null : Math.min(totalHistorico, contarFallosVigentes(fallos, ultimoSinFallo)) };
     }),
     porValor(() => getTalachasPendientes()),
     porValor(() => getFacturasProveedorPendientes()),
