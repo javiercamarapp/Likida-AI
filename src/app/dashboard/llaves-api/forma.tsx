@@ -3,13 +3,12 @@
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { KeyRound, Check, Copy, ShieldAlert } from 'lucide-react';
-import { CampoSelect } from '@/app/ui-v2/componentes';
+import { Boton, BotonConfirmar, CampoSelect, CampoTexto, AvisoResultado, Icono, clasesBoton } from '@/app/ui-v2/componentes';
 // SOLO TIPOS de `llave-api-escritura.ts`: ese módulo importa `supabaseAdmin`,
 // que no puede acabar en el bundle del navegador. El catálogo de áreas viaja
 // como PROP desde la página, igual que `MODOS_TARIFA` en /dashboard/clientes.
 import type { OpcionArea } from '@/lib/auth/llave-api-escritura';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
+import './llaves-api.css';
 
 /** El resultado del alta trae el SECRETO — es el único momento en que existe
  *  fuera de la base (y en la base solo vive su hash). */
@@ -19,18 +18,12 @@ export type ResultadoForma =
   | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
-const AYUDA = 'text-[11px] mt-1';
-
-function Boton({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
+function BotonEmitir({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <KeyRound width={14} height={14} strokeWidth={1.75} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={KeyRound} />}>
       {pending ? ocupado : etiqueta}
-    </button>
+    </Boton>
   );
 }
 
@@ -55,22 +48,20 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
   }
 
   return (
-    <div className="rounded-lg hairline p-3.5 space-y-2" style={{ background: 'var(--warnbg)' }}>
-      <div className="flex items-start gap-2 text-[12px] font-medium" style={{ color: 'var(--warn)' }}>
-        <ShieldAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+    <div className="rv-lla__secreto">
+      <div className="rv-lla__alerta">
+        <Icono icono={ShieldAlert} />
         Guárdala ahora. No se puede volver a ver: solo guardamos su huella.
       </div>
-      <div className="flex items-center gap-2 rounded-lg hairline px-3 py-2" style={{ background: 'var(--surface)' }}>
+      <div className="rv-lla__clave">
         {/* `break-all` y no truncate: si el copiado falla, que al menos se
             pueda leer y transcribir completa. */}
-        <code className="cifra-mono text-[12px] break-all flex-1">{enClaro}</code>
-        <button type="button" aria-label="Copiar la llave" onClick={copiar}
-          className="rv-icono-boton"
-          style={{ color: copiado ? 'var(--ok)' : 'var(--muted)' }}>
-          {copiado ? <Check width={14} height={14} strokeWidth={2} /> : <Copy width={14} height={14} strokeWidth={2} />}
+        <code className="cifra-mono">{enClaro}</code>
+        <button type="button" aria-label="Copiar la llave" onClick={copiar} className="rv-icono-boton">
+          <Icono icono={copiado ? Check : Copy} />
         </button>
       </div>
-      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
+      <p className="rv-lla__nota">
         Se manda en cada petición como <code className="cifra-mono">Authorization: Bearer …</code>.
         Si se pierde o se filtra, revócala aquí y emite otra.
       </p>
@@ -93,20 +84,13 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
   const [estado, despachar] = useActionState(accion, null);
 
   return (
-    <div className="space-y-3">
+    <div className="rv-lla__forma">
       {estado?.ok && estado.secreto && <SecretoUnaVez enClaro={estado.secreto.enClaro} />}
 
-      <form action={despachar} className="space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="llave-nombre" className={ETIQUETA}>Para qué sistema es</label>
-            <input id="llave-nombre" name="nombre" type="text" required maxLength={80}
-              placeholder="TMS propio, tablero de Tableau…"
-              className="w-full" style={{ background: 'var(--surface)' }} />
-            <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-              El nombre es lo que te va a dejar saber cuál revocar.
-            </p>
-          </div>
+      <form action={despachar} className="rv-lla__forma">
+        <div className="rv-lla__rejilla">
+          <CampoTexto etiqueta="Para qué sistema es" id="llave-nombre" name="nombre" required maxLength={80}
+            placeholder="TMS propio, tablero de Tableau…" ayuda="El nombre es lo que te va a dejar saber cuál revocar." />
 
           <CampoSelect etiqueta="Área que puede leer" id="llave-area" name="area" defaultValue={areas[0]?.valor}
             ayuda={`${areas.map((a) => `${a.rotulo}: ${a.detalle}`).join(' ')} Cada área alcanza también las de abajo — dale a cada sistema la más angosta que le sirva.`}>
@@ -124,7 +108,7 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
         </div>
 
         {estado && !estado.ok && <AvisoError error={estado.error} />}
-        <Boton etiqueta="Emitir llave" ocupado="Emitiendo…" />
+        <div><BotonEmitir etiqueta="Emitir llave" ocupado="Emitiendo…" /></div>
       </form>
     </div>
   );
@@ -144,14 +128,13 @@ export function FormaRevocar({ accion, id, nombre }: {
   const [estado, despachar] = useActionState(accion, null);
 
   return (
-    <form action={despachar} className="space-y-2">
+    <form action={despachar} className="rv-lla__revocar">
       <input type="hidden" name="id" value={id} />
       <BotonConfirmar
         etiqueta="Revocar" tono="peligro" etiquetaConfirmar="Sí, revocar esta llave"
         titulo={`Revocar la llave «${nombre}»`}
         descripcion="El sistema que use esta llave deja de poder leer en ese instante, y no hay deshacer: si hace falta otra vez, se emite una llave nueva."
-        className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--bad)' }}
+        className={clasesBoton('danger', 'sm')}
       />
       {estado && !estado.ok && <AvisoError error={estado.error} />}
     </form>
