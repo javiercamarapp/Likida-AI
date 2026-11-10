@@ -38,7 +38,9 @@ vi.mock('@/lib/saas/suscripcion', async (importar) => ({
   ...(await importar<typeof import('@/lib/saas/suscripcion')>()),
   getPlanes: dobles.getPlanes,
   guardarPriceDePlan: dobles.guardarPriceDePlan,
+  listarSuscripcionesVivas: async () => [],
 }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock('@/lib/saas/stripe', () => ({ stripeConfigurado: () => true, modoStripe: () => 'produccion', webhookConfigurado: () => true }));
 vi.mock('@/lib/saas/transferencia', async (importar) => ({
   ...(await importar<typeof import('@/lib/saas/transferencia')>()),

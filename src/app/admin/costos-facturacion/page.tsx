@@ -1,13 +1,11 @@
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { getResumenNegocio } from '@/lib/admin/negocio';
-import { usd, mxn } from '@/lib/utils';
-import { hoyMx } from '@/lib/formato';
-import { DollarSign, Calculator, CreditCard, TriangleAlert, Landmark } from 'lucide-react';
+import { hoyMx, mxn } from '@/lib/formato';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { anotarAccionAdmin, pasoExtraSuperadmin, AVISO_SIN_BITACORA } from '@/lib/admin/acciones_riesgo';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
-import { getPlanes, guardarPriceDePlan, type Plan } from '@/lib/saas/suscripcion';
+import { getPlanes, guardarPriceDePlan, listarSuscripcionesVivas, type Plan, type Suscripcion } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
   datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, tenantDeFacturaSaas, type FacturaPorCobrar,
@@ -15,12 +13,12 @@ import {
 import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
 import { logger } from '@/lib/logger';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { AreaChartSimple, Dona } from '../charts';
-import { IconoProveedor } from '../proveedor-icono';
-import { ChartCard, EstadoVacio, KpiTile, StatusPill } from '../ui/kit';
-import { FormaConAviso, Campo, type ResultadoAccion } from '../ui/forma';
+import { Aviso, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { TiraCifras } from '@/app/ui-v2/graficas';
+import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
+import { accionGestionarPlan } from '../flotas/acciones-plan';
 import { FormaEmitirMensualidad } from './forma-emitir';
+import '../dinero.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,34 +70,6 @@ async function accionPrecio(_previo: ResultadoAccion, fd: FormData): Promise<Res
   }
 }
 
-// Mismo diccionario de admin/consola.tsx (no se exporta de ahí) — solo las
-// etiquetas legibles para la dona de "Costo por fase".
-const FASE_LABEL: Record<string, string> = {
-  ocr: 'Agente OCR', cuadre: 'Agente de Cuadre', escalacion: 'Agente de Escalación',
-  chat: 'Agente de Chat', router: 'Agente Router', whatsapp: 'Agente de WhatsApp',
-};
-
-/**
- * Costos & Facturación — todo lo real que existe hoy sobre el gasto de IA
- * (`getResumenNegocio()`), más un costo unitario honesto (costo total de
- * IA ÷ viajes procesados, presentado como estimación, no como precisión
- * falsa). El COBRO ya existe aquí mismo (emitir mensualidad, conciliar
- * contra el banco, timbrar CFDI — planes/suscripcion/factura_saas, 0057),
- * pero Likida no cobra a ningún cliente todavía: margen por cliente y
- * MRR/ARR tienen tablas y cero filas, así que se dicen como empty-state
- * honesto en vez de pintarse en $0.
- *
- * Ni `Waterfall` ni `MarginDivergingBars` (graficas.tsx) aplican aquí a
- * propósito: ambos piden una forma de dato que Likida no tiene — un saldo
- * que se reconcilia paso a paso (Waterfall, tipo MRR bridge) o un valor
- * con signo ± (margen de rentabilidad por cliente) — y hoy solo existen
- * magnitudes no-negativas por fase/modelo. `Dona` y la lista con
- * `IconoProveedor` ya son el mejor ajuste real para esa forma de dato.
- *
- * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
- * (--g1), como consola.tsx — solo cambió la envoltura visual; las server
- * actions y toda la lógica de cobro quedaron tal cual.
- */
 /**
  * El periodo del MES EN CURSO (México) — compartido entre `accionEmitir` (el
  * cálculo real que se emite) y la página (lo que el diálogo de confirmación
@@ -202,339 +172,275 @@ async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<
   }
 }
 
-export default async function CostosFacturacionPage() {
+
+const ESTADOS_SUSCRIPCION = ['prueba', 'activa', 'morosa', 'pausada'] as const;
+const TONO_SUSCRIPCION: Record<Suscripcion['estado'], TonoEstado> = { prueba: 'info', activa: 'ok', morosa: 'bad', pausada: 'warn', cancelada: 'muted' };
+const ROTULO_SUSCRIPCION: Record<Suscripcion['estado'], string> = { prueba: 'En prueba', activa: 'Activa', morosa: 'Morosa', pausada: 'Pausada', cancelada: 'Cancelada' };
+
+const sinDato = (s: unknown): s is null => s === null;
+
+/**
+ * Facturación › Planes y cobro. Lo que Likida cobra a sus flotas: asignar y mover el plan de una flota, emitir la mensualidad del
+ * mes, marcar un pago recibido (que dispara el timbrado del CFDI) y ligar cada plan con su precio de Stripe. El gasto de IA vive en
+ * Consumo de IA. Las acciones de servidor NO cambiaron: solo se les agregó su huella en la bitácora (ver `acciones_bitacora.test.tsx`).
+ *
+ * `null` es «no se pudo leer», `[]` es «no hay nada»: cada lectura cae por su lado y se dice.
+ */
+export default async function CostosFacturacionPage({ searchParams }: { searchParams?: Promise<{ estado?: string }> } = {}) {
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
-  const r = await getResumenNegocio();
-  const costoPorViaje = r.viajesProcesados > 0 ? r.costoIaUsd / r.viajesProcesados : null;
-  // Mismo cálculo que corre `accionEmitir` — el diálogo de confirmación le
-  // anuncia al superadmin el periodo REAL que se va a emitir.
+  const sp = (await searchParams) ?? {};
+  const filtroEstado = sp.estado ?? '';
+  const r = await getResumenNegocio().catch((e) => { logger.error('admin.resumen_negocio', { err: e instanceof Error ? e.message : String(e) }); return null; });
+  const flotas = r ? r.flotas.map((f) => ({ id: f.id, nombre: f.nombre })) : null;
+  // Mismo cálculo que corre `accionEmitir` — el diálogo de confirmación le anuncia al superadmin el periodo REAL que se va a emitir.
   const periodoActual = periodoMesActualMx();
 
   const hayStripe = stripeConfigurado();
   const modo = modoStripe();
 
   // ── `null` ES "NO SE PUDO LEER", `[]` ES "NO HAY NADA" ────────────────────
-  //
-  // Los dos `catch` de aquí devolvían `[]`, y con eso la pantalla decía "Nada
-  // pendiente de cobro" con la base caída. Esa frase es una AFIRMACIÓN sobre el
-  // dinero que Likida tiene por cobrar, y es exactamente la que hace que nadie
-  // vaya a cobrar. `getPorCobrar` ya falla cerrado (lanza si PostgREST devuelve
-  // error); el `catch` deshacía ese trabajo un piso más arriba.
-  //
-  // Sin Stripe no se piden los planes: la sección entera se reemplaza por el
-  // aviso de qué falta, y una consulta que nadie va a mirar solo puede fallar.
+  // Esa frase («Nada pendiente de cobro») es una AFIRMACIÓN sobre el dinero que Likida tiene por cobrar, y es exactamente la que hace
+  // que nadie vaya a cobrar. Sin Stripe no se piden los planes: la sección se reemplaza por el aviso de qué falta.
   let planes: Plan[] | null = hayStripe ? null : [];
   if (hayStripe) {
     try { planes = await getPlanes(); } catch (e) { logger.error('admin.planes', { err: e instanceof Error ? e.message : String(e) }); }
   }
+  let suscripciones: Suscripcion[] | null = null;
+  try { suscripciones = await listarSuscripcionesVivas(); } catch (e) { logger.error('admin.suscripciones', { err: e instanceof Error ? e.message : String(e) }); }
 
   const banco = datosBancarios();
   let porCobrar: FacturaPorCobrar[] | null = null;
   // A37-S06-07: la lectura completa trae además el total exacto de la base; si rebasa lo mostrado, se avisa.
   let totalPorCobrar = 0;
-  try { const r = await getPorCobrarTodas(); porCobrar = r.facturas; totalPorCobrar = r.total; } catch (e) { logger.error('admin.por_cobrar', { err: e instanceof Error ? e.message : String(e) }); }
+  try { const lectura = await getPorCobrarTodas(); porCobrar = lectura.facturas; totalPorCobrar = lectura.total; } catch (e) { logger.error('admin.por_cobrar', { err: e instanceof Error ? e.message : String(e) }); }
+  const recortada = porCobrar !== null && totalPorCobrar > porCobrar.length;
+
+  const porTenant = new Map((suscripciones ?? []).map((s) => [s.tenantId, s]));
+  const filasFlota = (flotas ?? []).map((f) => ({ ...f, suscripcion: porTenant.get(f.id) ?? null }))
+    .filter((f) => (filtroEstado === 'sin' ? f.suscripcion === null : filtroEstado ? f.suscripcion?.estado === filtroEstado : true));
+  const conSuscripcion = (flotas ?? []).filter((f) => porTenant.has(f.id)).length;
+  const contables = planes ? planes.filter((p) => p.stripePriceId && p.precioIvaIncluido !== null).length : null;
+  const sumaPorCobrar = porCobrar && !recortada ? porCobrar.reduce((s, f) => s + f.monto, 0) : null;
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Costos & Facturación"
-        />
+    <MarcoPagina titulo="Facturación" apoyo="Lo que Likida cobra a sus flotas: planes, mensualidad, pagos recibidos y su CFDI.">
+      {!banco ? (
+        <Aviso tono="warn" titulo="Sin cuenta de cobro configurada">
+          Faltan la CLABE, el banco o el beneficiario de la cuenta de Likida, o la CLABE no pasa su dígito verificador. Sin las tres, la pantalla del cliente no enseña
+          instrucciones de pago: una cuenta a medias manda el dinero al vacío.
+        </Aviso>
+      ) : null}
+      {!hayStripe ? (
+        <Aviso tono="warn" titulo="Stripe sin conectar">Sin la llave de Stripe no se puede leer un precio ni cobrar con tarjeta, y la pantalla del cliente esconde el botón de pago a propósito.</Aviso>
+      ) : !webhookConfigurado() ? (
+        <Aviso tono="error" titulo="Falta el secreto del webhook de Stripe">
+          Se puede mandar a pagar, pero nadie se entera del pago: el webhook contesta 503 y la suscripción nunca pasa a activa. El cliente pagaría y seguiría viéndose sin plan.
+        </Aviso>
+      ) : null}
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <section>
-            <TituloSeccion>Costo total de IA</TituloSeccion>
-            {/* KpiTile necesita un `valor` numérico real siempre — cuando
-                `costoPorViaje` es `null` (sin viajes procesados) no hay
-                número honesto que mostrarle (ni siquiera 0: 0 viajes ÷ 0
-                costo no es "costo por viaje = $0", es indefinido), así que
-                ese caso se queda con el card de texto en vez de forzar un
-                0 engañoso dentro de KpiTile. */}
-            {costoPorViaje !== null ? (
-              <div className="kit-kpis mt-2">
-                <KpiTile
-                  icono={<DollarSign width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Gastado en IA — todo el histórico" valor={r.costoIaUsd} formato="usd"
-                />
-                <KpiTile
-                  icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-                  etiqueta="Costo estimado de IA por viaje procesado (costo total ÷ viajes procesados)"
-                  valor={costoPorViaje} formato="usd"
-                />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 mt-2">
-                <div className="card p-4">
-                  <div className="text-2xl font-semibold tracking-tight tabular">{usd(r.costoIaUsd)}</div>
-                  <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>Gastado en IA — todo el histórico</div>
-                </div>
-                <div className="card p-4">
-                  <div className="text-2xl font-semibold tracking-tight tabular">—</div>
-                  <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                    Sin viajes procesados todavía para estimar un costo por viaje
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
+      <TiraCifras etiqueta="Cobro de la mensualidad" items={[
+        porCobrar === null
+          ? { etiqueta: 'Por cobrar', valor: null, estado: 'error', mensaje: 'No se pudo leer lo que está por cobrarse.', reintentar: true }
+          : recortada
+            ? { etiqueta: 'Por cobrar', valor: null, estado: 'error', mensaje: 'La lista está recortada: no se suma un total parcial.', reintentar: true }
+            : { etiqueta: 'Por cobrar', valor: sumaPorCobrar, formato: 'mxn', nota: `${totalPorCobrar} ${totalPorCobrar === 1 ? 'factura pendiente o fallida' : 'facturas pendientes o fallidas'}.`, tono: totalPorCobrar > 0 ? 'warn' : undefined },
+        sinDato(suscripciones) || flotas === null
+          ? { etiqueta: 'Flotas con plan asignado', valor: null, estado: 'error', mensaje: 'No se pudo leer las suscripciones.', reintentar: true }
+          : { etiqueta: 'Flotas con plan asignado', valor: `${conSuscripcion} de ${flotas.length}`, nota: 'Sin plan asignado no hay mensualidad que emitir.', tono: conSuscripcion < flotas.length ? 'warn' : 'ok' },
+        sinDato(planes) || contables === null
+          ? { etiqueta: 'Planes que se pueden contratar', valor: null, estado: 'error', mensaje: 'No se pudieron leer los planes.', reintentar: true }
+          : !hayStripe
+            ? { etiqueta: 'Planes que se pueden contratar', valor: null, estado: 'vacio', mensaje: 'Stripe sin conectar' }
+            : { etiqueta: 'Planes que se pueden contratar', valor: `${contables} de ${planes.length}`, nota: 'Necesitan precio ligado y criterio de IVA.' },
+        {
+          etiqueta: 'Timbrado de CFDI',
+          valor: facturapiConfigurado() ? (modoFacturapi() === 'produccion' ? 'Producción' : 'En prueba') : 'Sin conectar',
+          nota: facturapiConfigurado() ? 'Se timbra al marcar un pago como recibido.' : 'El pago queda válido con el CFDI pendiente.',
+          tono: facturapiConfigurado() && modoFacturapi() === 'produccion' ? 'ok' : 'warn',
+        },
+      ]} />
 
-          {r.porDia.length > 1 ? (
-            <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
-              <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={usd} />
-            </ChartCard>
-          ) : (
-            <ChartCard titulo="Costo de IA en el tiempo" tamano="L">
-              <EstadoVacio icono={<DollarSign width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                Sin historial suficiente todavía.
-              </EstadoVacio>
-            </ChartCard>
-          )}
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-            {r.porFase.length > 0 ? (
-              <ChartCard titulo="Costo por fase" tamano="S">
-                <Dona segmentos={r.porFase.map((f) => ({ etiqueta: FASE_LABEL[f.fase] ?? f.fase, valor: f.costoUsd }))} />
-              </ChartCard>
-            ) : (
-              <ChartCard titulo="Costo por fase" tamano="S">
-                <EstadoVacio>Todavía no hay actividad de IA registrada.</EstadoVacio>
-              </ChartCard>
-            )}
-
-            {r.porModelo.length === 0 ? (
-              <ChartCard titulo="Costo por modelo" tamano="S">
-                <EstadoVacio>Sin llamadas registradas todavía.</EstadoVacio>
-              </ChartCard>
-            ) : (
-              <ChartCard titulo="Costo por modelo" tamano="M">
-                <div className="divide-y" style={{ borderColor: 'var(--line2)' }}>
-                  {r.porModelo.map((m) => (
-                    <div key={m.modelo} className="py-3 flex items-center gap-3">
-                      <IconoProveedor modelo={m.modelo} />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-mono truncate">{m.modelo}</div>
-                        <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{m.n} llamadas</div>
-                      </div>
-                      <div className="text-sm font-semibold tabular shrink-0">{usd(m.costoUsd)}</div>
-                    </div>
-                  ))}
-                </div>
-              </ChartCard>
-            )}
-          </div>
-
-          {/* ── Cobro por transferencia ── */}
-          <section className="card p-4">
-            <div className="flex items-center gap-2">
-              <Landmark width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              <TituloSeccion>Cobro por transferencia</TituloSeccion>
-              {banco
-                ? <StatusPill estado="ok">Cuenta ···{banco.clabeUltimos4}</StatusPill>
-                : <StatusPill estado="bad">Sin cuenta configurada</StatusPill>}
-            </div>
-
-            {!banco ? (
-              <div className="mt-3">
-                <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
-                  Faltan <code>LIKIDA_CLABE</code>, <code>LIKIDA_BANCO</code> y <code>LIKIDA_BENEFICIARIO</code> en el
-                  entorno, o la CLABE no pasa su dígito verificador. Sin las tres, la pantalla del cliente no enseña
-                  instrucciones de pago — una cuenta a medias manda el dinero al vacío.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                Las flotas transfieren a {banco.beneficiario} · {banco.banco} · CLABE terminada en{' '}
-                <span className="font-mono">{banco.clabeUltimos4}</span>. Un banco no manda webhooks: cuando veas el
-                depósito, márcalo aquí con su referencia.
-              </p>
-            )}
-
-            <div className="mt-3">
-              <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--muted)' }}>Emitir la mensualidad de este mes</h3>
-              <FormaEmitirMensualidad
-                accion={accionEmitir}
-                flotas={r.flotas.map((f) => ({ id: f.id, nombre: f.nombre }))}
-                periodoIni={periodoActual.ini}
-                periodoFin={periodoActual.fin}
+      <FilaTarjetas variante="8-4">
+        <Tarjeta titulo="Por cobrar" estado={porCobrar === null ? 'error' : porCobrar.length === 0 ? 'vacio' : 'ok'} mensaje={porCobrar === null ? 'No se pudo leer lo que está por cobrarse' : 'Nada pendiente de cobro'}
+          detalle={porCobrar === null ? 'Esto NO quiere decir que no haya nada pendiente: quiere decir que no se sabe. Recarga en un momento.' : 'Aparece aquí en cuanto emitas una mensualidad.'} reintentar>
+          {porCobrar !== null ? (
+            <>
+              {recortada ? (
+                <Aviso tono="warn">Se muestran {porCobrar.length} de {totalPorCobrar} facturas por cobrar: la lista está recortada. Las más viejas no aparecen aquí.</Aviso>
+              ) : null}
+              {/* El total manda (es lo que entra al banco) y el desglose va debajo: es lo que va a salir en el CFDI. Sin desglose se dice, porque esa factura NO se va a poder timbrar. */}
+              <TablaBase
+                etiqueta="Facturas por cobrar" idFila={(f) => f.id} tarjetaMovil densa filas={porCobrar}
+                columnas={[
+                  { id: 'flota', titulo: 'Flota', principal: true, celda: (f) => f.tenantNombre },
+                  { id: 'periodo', titulo: 'Periodo', celda: (f) => `${f.periodoInicio} a ${f.periodoFin}` },
+                  { id: 'ref', titulo: 'Referencia', celda: (f) => f.referencia ?? '—' },
+                  { id: 'estado', titulo: 'Estado', celda: (f) => <StatusChip tono={f.estado === 'fallida' ? 'bad' : 'warn'}>{f.estado === 'fallida' ? 'Fallida' : 'Pendiente'}</StatusChip> },
+                  {
+                    id: 'total', titulo: 'Total a transferir', alinear: 'der',
+                    celda: (f) => (
+                      <>
+                        {mxn(f.monto)}
+                        <span className="adm-din-sub">{f.subtotal === null || f.iva === null ? 'sin desglose: no se puede timbrar' : `${mxn(f.subtotal)} + IVA ${mxn(f.iva)}`}</span>
+                      </>
+                    ),
+                  },
+                ]}
               />
-            </div>
-
-            <div className="mt-5">
-              <h3 className="text-xs font-medium mb-2" style={{ color: 'var(--muted)' }}>Por cobrar</h3>
-              {porCobrar === null ? (
-                <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
-                  No se pudo leer lo que está por cobrarse. Esto NO quiere decir que no haya nada pendiente: quiere decir
-                  que no se sabe. Recarga en un momento.
-                </EstadoVacio>
-              ) : porCobrar.length === 0 ? (
-                <EstadoVacio>Nada pendiente de cobro. Aparece aquí en cuanto emitas una mensualidad.</EstadoVacio>
-              ) : (
-                <div className="overflow-x-auto">
-                  {totalPorCobrar > porCobrar.length && (
-                    <p className="text-xs mb-2" role="status" style={{ color: 'var(--bad)' }}>
-                      Se muestran {porCobrar.length} de {totalPorCobrar} facturas por cobrar: la lista está recortada. Las más
-                      viejas no aparecen aquí.
-                    </p>
-                  )}
-                  <table aria-label="Facturas por cobrar" className="w-full text-sm">
-                    <thead>
-                      <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th scope="col" className="py-2.5 pr-4 font-medium">Flota</th>
-                        <th scope="col" className="py-2.5 pr-4 font-medium">Periodo</th>
-                        <th scope="col" className="py-2.5 pr-4 font-medium">Referencia</th>
-                        <th scope="col" className="py-2.5 pr-4 font-medium text-right">Total a transferir</th>
-                        <th scope="col" className="py-2.5 font-medium">Marcar pagada</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {porCobrar.map((f) => (
-                        <tr key={f.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                          <td className="py-2.5 pr-4 font-medium">{f.tenantNombre}</td>
-                          <td className="py-2.5 pr-4" style={{ color: 'var(--muted)' }}>{f.periodoInicio} — {f.periodoFin}</td>
-                          <td className="py-2.5 pr-4 font-mono text-xs">{f.referencia ?? '—'}</td>
-                          {/* El total manda (es lo que entra al banco) y el
-                              desglose va debajo: es lo que va a salir en el CFDI,
-                              y verlos juntos es lo que deja cachar un IVA del
-                              lado equivocado antes de timbrar. Sin desglose se
-                              dice, porque esa factura NO se va a poder timbrar. */}
-                          <td className="py-2.5 pr-4 text-right tabular">
-                            {mxn(f.monto)}
-                            <span className="block text-[11px]" style={{ color: 'var(--muted)' }}>
-                              {f.subtotal === null || f.iva === null
-                                ? 'sin desglose: no se puede timbrar'
-                                : `${mxn(f.subtotal)} + IVA ${mxn(f.iva)}`}
-                            </span>
-                          </td>
-                          <td className="py-2.5" style={{ minWidth: 260 }}>
-                            <FormaConAviso accion={accionConciliar} boton="Marcar pagada" columnas="md:grid-cols-1">
-                              <input type="hidden" name="facturaId" value={f.id} />
-                              <Campo nombre="referenciaBanco" etiqueta="Referencia del banco" requerido
-                                placeholder="Folio del movimiento" />
-                            </FormaConAviso>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </section>
-
-          {/* ── Planes y precios ── */}
-          <section className="card p-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <CreditCard width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              <TituloSeccion>Planes y precios</TituloSeccion>
-              {modo === null ? (
-                <StatusPill estado="bad">Stripe sin conectar</StatusPill>
-              ) : modo === 'prueba' ? (
-                <StatusPill estado="warn">Llave de prueba</StatusPill>
-              ) : (
-                <StatusPill estado="ok">Producción</StatusPill>
-              )}
-              {modo !== null && !webhookConfigurado() && <StatusPill estado="bad">Sin webhook</StatusPill>}
-              {facturapiConfigurado()
-                ? <StatusPill estado={modoFacturapi() === 'produccion' ? 'ok' : 'warn'}>
-                    {modoFacturapi() === 'produccion' ? 'Timbra CFDI' : 'CFDI en prueba'}
-                  </StatusPill>
-                : <StatusPill estado="warn">Sin timbrar CFDI</StatusPill>}
-            </div>
-
-            {!hayStripe ? (
-              <div className="mt-3">
-                <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--warn)' }} />}>
-                  Falta <code>STRIPE_SECRET_KEY</code>. Sin ella no se puede leer un price ni cobrar, y la pantalla del
-                  cliente esconde el botón de pago a propósito — uno que no cobra es peor que ninguno.
-                </EstadoVacio>
+              <div className="adm-din-forma">
+                <FormaConAviso accion={accionConciliar} boton="Marcar pagada" columnas="md:grid-cols-1">
+                  <CampoSelect etiqueta="Factura que ya se pagó" name="facturaId" obligatorio defaultValue="">
+                    <option value="">Elige…</option>
+                    {porCobrar.map((f) => <option key={f.id} value={f.id}>{f.tenantNombre} · {f.periodoInicio} a {f.periodoFin} · {mxn(f.monto)}</option>)}
+                  </CampoSelect>
+                  <CampoTexto etiqueta="Referencia del banco" name="referenciaBanco" obligatorio placeholder="Folio del movimiento" ayuda="Un banco no manda avisos: cuando veas el depósito en el estado de cuenta, márcalo aquí." />
+                </FormaConAviso>
               </div>
-            ) : (
-              <>
-                {!webhookConfigurado() && (
-                  <div className="mt-3">
-                    <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
-                      Falta <code>STRIPE_WEBHOOK_SECRET</code>. Se puede mandar a pagar, pero NADIE se entera del pago:
-                      el webhook contesta 503 y la suscripción nunca pasa a activa. El cliente pagaría y seguiría
-                      viéndose sin plan.
-                    </EstadoVacio>
-                  </div>
-                )}
-                {planes === null ? (
-                  <div className="mt-3">
-                    <EstadoVacio icono={<TriangleAlert width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--bad)' }} />}>
-                      No se pudieron leer los planes. Una grilla vacía diría que no hay planes configurados, y no es lo
-                      mismo: es que no se sabe. Recarga en un momento.
-                    </EstadoVacio>
-                  </div>
-                ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 mt-3">
-                  {planes.map((p) => (
-                    // Lámina interior (hairline sobre --surface), no `card`:
-                    // una tarjeta dentro de una tarjeta duplica sombra — mismo
-                    // material que las fichas de agente de consola.tsx.
-                    <div key={p.clave} className="hairline rounded-xl p-4 flex flex-col gap-2" style={{ background: 'var(--surface)' }}>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium">{p.nombre}</span>
-                        {/* El criterio del IVA gatea el cobro igual que el price:
-                            un plan con precio y sin criterio NO se puede emitir, y
-                            "Se puede contratar" ahí sería falso. */}
-                        {!p.stripePriceId
-                          ? <StatusPill estado="neutral">Sin precio</StatusPill>
-                          : p.precioIvaIncluido === null
-                            ? <StatusPill estado="bad">IVA sin declarar</StatusPill>
-                            : <StatusPill estado="ok">Se puede contratar</StatusPill>}
-                      </div>
-                      <div className="text-xl font-semibold tabular">
-                        {p.precioMensual === null
-                          ? <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}>Sin configurar</span>
-                          : <>{mxn(p.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes {etiquetaIva(p.precioIvaIncluido)}</span></>}
-                      </div>
-                      {p.precioMensual !== null && p.precioIvaIncluido === null && (
-                        <p className="text-xs m-0" style={{ color: 'var(--bad)' }}>
-                          Su price de Stripe no dice si el precio trae el IVA (<code>tax_behavior</code> =
-                          {' '}<code>unspecified</code>). Emitir la mensualidad está bloqueado: no se sabe si cobrar
-                          {' '}{mxn(p.precioMensual)} o {mxn(p.precioMensual * 1.16)}.
-                        </p>
-                      )}
-                      <FormaConAviso accion={accionPrecio} boton="Guardar price" columnas="md:grid-cols-1">
-                        <input type="hidden" name="plan" value={p.clave} />
-                        <Campo nombre="price" etiqueta="Price ID de Stripe" requerido
-                          valorInicial={p.stripePriceId ?? ''} placeholder="price_1Abc..." />
-                      </FormaConAviso>
-                    </div>
-                  ))}
-                </div>
-                )}
-                <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-                  El monto <strong>no se teclea</strong>: se lee de Stripe al guardar el price, junto con su{' '}
-                  <code>tax_behavior</code> — de qué lado del precio está el IVA es la otra mitad de &quot;cuánto se
-                  cobra&quot;, y capturada aparte diverge igual que el monto. Sin ese dato no se emite nada: un CFDI
-                  por 16% de más solo se corrige cancelándolo ante el SAT.
-                </p>
-              </>
-            )}
-          </section>
+            </>
+          ) : null}
+        </Tarjeta>
 
-          {/* La versión anterior de este texto decía "el CFDI sigue sin
-              timbrarse" — ya no es verdad: `timbrarFactura` corre al conciliar
-              y el pill de arriba dice en qué modo está (apagado/prueba hasta el
-              primer cliente, ver docs/encender-emision.md). */}
-          <EstadoVacio>
-            MRR/ARR, waterfall de MRR y margen por cliente ya tienen de dónde salir (planes, suscripcion y
-            factura_saas) pero necesitan clientes cobrando de verdad: con cero suscripciones activas, cualquier
-            cifra aquí sería un cero de encuadre.
-            <br /><br />
-            El timbrado del CFDI ya está cableado y se dispara solo al conciliar un pago; mientras no haya llave
-            de Facturapi (o esté en prueba — el pill de arriba lo dice), el cobro queda válido con el CFDI
-            pendiente. Lo que sí sigue sin existir: dunning automático y conciliación automática — marcar pagada
-            una factura es un paso manual contra el estado de cuenta del banco, a propósito.
-          </EstadoVacio>
-        </div>
-      </div>
-    </main>
+        <Tarjeta titulo="Emitir la mensualidad de este mes" estado={flotas === null ? 'error' : flotas.length === 0 ? 'vacio' : 'ok'} mensaje={flotas === null ? 'No se pudo leer la lista de flotas' : 'Sin flotas dadas de alta'} detalle="Cada flota aparece aquí cuando se da de alta." reintentar>
+          {flotas !== null ? (
+            <>
+              <p className="adm-din-nota">Genera el cobro del periodo con el precio del plan de la flota. Hay un solo cobro por periodo y no se deshace desde aquí.</p>
+              <FormaEmitirMensualidad accion={accionEmitir} flotas={flotas} periodoIni={periodoActual.ini} periodoFin={periodoActual.fin} />
+            </>
+          ) : null}
+        </Tarjeta>
+      </FilaTarjetas>
+
+      <Tarjeta titulo="Plan de cada flota" estado={flotas === null || suscripciones === null ? 'error' : flotas.length === 0 ? 'vacio' : 'ok'}
+        mensaje={flotas === null || suscripciones === null ? 'No se pudo leer el plan de las flotas' : 'Sin flotas dadas de alta'} detalle="Cada flota aparece aquí cuando se da de alta." reintentar>
+        {flotas !== null && suscripciones !== null ? (
+          <>
+            <BarraFiltros accion="/admin/costos-facturacion" enLinea etiqueta="Filtrar flotas por estado del plan" nActivos={filtroEstado ? 1 : 0} limpiarHref="/admin/costos-facturacion">
+              <FiltroOpciones
+                etiqueta="Estado del plan" nombre="estado" valor={filtroEstado}
+                opciones={[{ valor: 'sin', rotulo: 'Sin plan asignado' }, ...ESTADOS_SUSCRIPCION.map((e) => ({ valor: e, rotulo: ROTULO_SUSCRIPCION[e] }))]}
+              />
+            </BarraFiltros>
+            <TablaBase
+              etiqueta="Plan y estado de cada flota" idFila={(f) => f.id} tarjetaMovil densa filas={filasFlota}
+              vacio={{ titulo: 'Ninguna flota con ese estado', texto: 'Quita el filtro para ver todas.' }}
+              columnas={[
+                { id: 'flota', titulo: 'Flota', principal: true, celda: (f) => f.nombre },
+                { id: 'plan', titulo: 'Plan', celda: (f) => f.suscripcion?.planNombre ?? '—' },
+                {
+                  id: 'estado', titulo: 'Estado',
+                  celda: (f) => (f.suscripcion
+                    ? <StatusChip tono={TONO_SUSCRIPCION[f.suscripcion.estado]}>{ROTULO_SUSCRIPCION[f.suscripcion.estado]}</StatusChip>
+                    : <StatusChip tono="muted">Sin plan asignado</StatusChip>),
+                },
+                { id: 'corte', titulo: 'Corte del periodo', celda: (f) => (f.suscripcion?.periodoFin ? <>{f.suscripcion.periodoFin}{f.suscripcion.vencida ? <StatusChip tono="warn">Vencido</StatusChip> : null}</> : '—') },
+                { id: 'gestion', titulo: 'Se gestiona', celda: (f) => (f.suscripcion ? (f.suscripcion.stripeSubscriptionId ? 'En Stripe' : 'Aquí') : '—') },
+              ]}
+            />
+            <Disclosure titulo="Asignar, activar, pausar o cancelar un plan" resumen="Con huella en la bitácora">
+              <div className="adm-din-forma">
+                <p className="adm-din-nota">
+                  Asignar crea la suscripción en estado «prueba»: ya se le puede emitir la mensualidad, pero no cuenta como ingreso recurrente hasta activarla.
+                  Una suscripción que se cobra con Stripe se gestiona en Stripe, no aquí.
+                </p>
+                {planes === null ? (
+                  <Aviso tono="warn">No se pudieron leer los planes: reintenta antes de asignar uno.</Aviso>
+                ) : (
+                  <FormaConAviso accion={accionGestionarPlan} boton="Asignar o cambiar plan" columnas="md:grid-cols-1">
+                    <input type="hidden" name="operacion" value="asignar" />
+                    <CampoSelect etiqueta="Flota" name="tenantId" obligatorio defaultValue="">
+                      <option value="">Elige…</option>
+                      {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+                    </CampoSelect>
+                    <CampoSelect etiqueta="Plan" name="planClave" obligatorio defaultValue="" ayuda="Solo se asignan planes con precio ligado y criterio de IVA.">
+                      <option value="">Elige…</option>
+                      {planes.map((p) => <option key={p.clave} value={p.clave}>{p.nombre}</option>)}
+                    </CampoSelect>
+                  </FormaConAviso>
+                )}
+                <FormaConAviso accion={accionGestionarPlan} boton="Aplicar" columnas="md:grid-cols-1">
+                  <CampoSelect etiqueta="Flota" name="tenantId" obligatorio defaultValue="">
+                    <option value="">Elige…</option>
+                    {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+                  </CampoSelect>
+                  <CampoSelect etiqueta="Qué hacer" name="operacion" obligatorio defaultValue="activar" ayuda="Activar la cuenta para el ingreso recurrente, o pausarla.">
+                    <option value="activar">Activar la suscripción</option>
+                    <option value="pausar">Pausar la suscripción</option>
+                  </CampoSelect>
+                </FormaConAviso>
+                <FormaConAviso
+                  accion={accionGestionarPlan} boton="Cancelar suscripción" columnas="md:grid-cols-1"
+                  confirmar={{
+                    titulo: 'Cancelar la suscripción de una flota',
+                    descripcion: 'La suscripción queda cancelada y la flota vuelve al plan de demostración. No se borra su historial de cobro. Para volver a cobrarle habrá que asignarle un plan de nuevo.',
+                    etiquetaConfirmar: 'Sí, cancelar',
+                  }}
+                >
+                  <input type="hidden" name="operacion" value="cancelar" />
+                  <CampoSelect etiqueta="Flota" name="tenantId" obligatorio defaultValue="">
+                    <option value="">Elige…</option>
+                    {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+                  </CampoSelect>
+                </FormaConAviso>
+              </div>
+            </Disclosure>
+          </>
+        ) : null}
+      </Tarjeta>
+
+      <Tarjeta titulo="Planes y precios" estado={!hayStripe ? 'vacio' : planes === null ? 'error' : 'ok'}
+        mensaje={!hayStripe ? 'Falta conectar Stripe' : 'No se pudieron leer los planes'}
+        detalle={!hayStripe ? 'Sin la llave de Stripe no se puede leer un precio ni cobrar: la pantalla del cliente esconde el botón de pago a propósito.' : undefined} reintentar
+        acciones={modo === null ? <StatusChip tono="bad">Stripe sin conectar</StatusChip> : modo === 'prueba' ? <StatusChip tono="warn">Llave de prueba</StatusChip> : <StatusChip tono="ok">Producción</StatusChip>}>
+        {planes !== null && hayStripe ? (
+          <>
+            <div className="adm-din-rejilla">
+              {planes.map((p) => (
+                <div key={p.clave} className="adm-din-plan">
+                  <div className="adm-din-plan__cab">
+                    <span>{p.nombre}</span>
+                    {/* El criterio del IVA gatea el cobro igual que el precio: un plan con precio y sin criterio NO se puede emitir, y «Se puede contratar» ahí sería falso. */}
+                    {!p.stripePriceId
+                      ? <StatusChip tono="muted">Sin precio</StatusChip>
+                      : p.precioIvaIncluido === null
+                        ? <StatusChip tono="bad">IVA sin declarar</StatusChip>
+                        : <StatusChip tono="ok">Se puede contratar</StatusChip>}
+                  </div>
+                  <div className="adm-din-plan__precio">
+                    {p.precioMensual === null
+                      ? <small>Sin configurar</small>
+                      : <>{mxn(p.precioMensual)} <small>al mes {etiquetaIva(p.precioIvaIncluido)}</small></>}
+                  </div>
+                  {p.precioMensual !== null && p.precioIvaIncluido === null ? (
+                    <p className="adm-din-nota">
+                      Su precio en Stripe no dice si trae el IVA. Emitir la mensualidad está bloqueado: no se sabe si cobrar {mxn(p.precioMensual)} o {mxn(p.precioMensual * 1.16)}.
+                    </p>
+                  ) : null}
+                  <FormaConAviso accion={accionPrecio} boton="Guardar price" columnas="md:grid-cols-1">
+                    <input type="hidden" name="plan" value={p.clave} />
+                    <CampoTexto etiqueta="Price ID de Stripe" name="price" obligatorio defaultValue={p.stripePriceId ?? ''} placeholder="price_1Abc..." />
+                  </FormaConAviso>
+                </div>
+              ))}
+            </div>
+            <p className="adm-din-nota">
+              El monto <strong>no se teclea</strong>: se lee de Stripe al guardar el precio, junto con el lado del IVA. Capturados aparte, el panel podría decir una cifra y Stripe cobrar otra.
+              Sin ese dato no se emite nada: un CFDI por 16 % de más solo se corrige cancelándolo ante el SAT.
+            </p>
+          </>
+        ) : null}
+      </Tarjeta>
+
+      <Disclosure titulo="Lo que aún no existe aquí" resumen="MRR por plan, descuentos, cobranza automática">
+        <p className="adm-din-nota">
+          El ingreso recurrente por plan, su evolución y el margen por cliente tienen de dónde salir, pero necesitan flotas cobrando de verdad: con cero suscripciones activas
+          cualquier cifra sería un cero de encuadre. Tampoco hay descuentos ni periodos de gracia por flota, ni cobro automático al cliente: marcar pagada una factura es un paso
+          manual contra el estado de cuenta del banco, a propósito. El timbrado del CFDI sí está conectado y se dispara solo al marcar un pago.
+        </p>
+      </Disclosure>
+      {r === null ? <EstadoError reintentar>No se pudo leer la lista de flotas: las acciones que necesitan elegir una flota no se ofrecen. Recarga en un momento.</EstadoError> : null}
+    </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Costos & Facturación' };
+export const metadata: Metadata = { title: 'Planes y cobro' };
