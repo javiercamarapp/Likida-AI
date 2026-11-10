@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { validarRecorrido } from '@/app/ui-v2/movimiento/tour/validar';
-import { hrefsDelMenu, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
+import { hrefsConPestanas, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { PANTALLAS } from './pantallas';
 import { AGENTES, construirRecorridoAgente } from './agentes';
@@ -16,7 +16,7 @@ describe('recorrido derivado del menú', () => {
     const etiqueta = `${rol} / ${perfil ?? 'flota'}`;
     it(`${etiqueta}: válido, o sin recorrido si el rol no tiene panel`, () => {
       const r = construirRecorrido(rol, perfil, 'completo');
-      const sinPanel = !pistaDeRol(rol) || hrefsDelMenu(menuPorPerfil(rol, perfil)).length === 0;
+      const sinPanel = !pistaDeRol(rol) || hrefsConPestanas(menuPorPerfil(rol, perfil)).length === 0;
       if (sinPanel) { expect(r).toBeNull(); return; }
       expect(validarRecorrido(r!)).toEqual([]);
       expect(r!.pasos.at(-1)!.tipo).toBe('cierre');
@@ -27,7 +27,7 @@ describe('recorrido derivado del menú', () => {
     for (const { rol, perfil } of COMBOS) {
       const r = construirRecorrido(rol, perfil, 'completo');
       if (!r) continue;
-      const menu = hrefsDelMenu(menuPorPerfil(rol, perfil));
+      const menu = hrefsConPestanas(menuPorPerfil(rol, perfil));
       for (const p of r.pasos) {
         if (p.pantalla) {
           expect(puedeVerRuta(rol, p.pantalla, perfil), `${rol} ${p.id}`).toBe(true);

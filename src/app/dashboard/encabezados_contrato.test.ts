@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fuentesDeProduccion, sinComentarios } from '@/lib/pruebas/codigo';
 import { APOYO_MAX } from '../ui-v2/componentes';
-import { TODAS_LAS_RUTAS } from './rutas';
+import { TODAS_LAS_RUTAS, ENTRADAS_DASHBOARD } from './rutas';
 
 // L2b · CONTRATO DE LOS ENCABEZADOS (super prompt A.R05 puntos 2 y 3; decisiones de Javier del 31-oct):
 //   · UN solo encabezado por pantalla (`MarcoPagina` → `EncabezadoPagina`): etiqueta del área sobre el título, h1 = nombre del menú
@@ -80,21 +80,29 @@ describe('sin miga de pan en el marco', () => {
   });
 });
 
-// H5 · el h1 ES el nombre del menú (rutas.ts) y TODO apoyo —literal o con plantilla/ternario— cabe en 140 caracteres.
-describe('el título es el nombre exacto del menú', () => {
-  const NOMBRE_POR_RUTA = new Map(TODAS_LAS_RUTAS.map((i) => [i.href, i.nombre]));
-  it('cada vista que ES la pantalla de una entrada del menú titula con ese nombre', () => {
+// H5 · el h1 ES el nombre de la ENTRADA del menú (rutas.ts, PLAN-MAESTRO §3.3 regla 3) y TODO apoyo —literal o con plantilla/ternario— cabe en 140 caracteres.
+// Fase 8: las pantallas hermanas son pestañas de una entrada y su título es el de la entrada («Viajes» sobre Despacho, Registro, Mapa…).
+// TRANSICIÓN: mientras los paquetes de cada área (P-DAS-OP-*, F9-F11) migran sus pantallas, una pantalla que todavía titula con el
+// nombre que tenía en el menú de 49 entradas (`TODAS_LAS_RUTAS`) se acepta; no se acepta ningún otro título. El día que todas titulen
+// con el de su entrada, `NOMBRE_ANTERIOR` se vacía y la prueba queda estricta.
+describe('el título es el nombre exacto de la entrada del menú', () => {
+  const NOMBRE_ENTRADA = new Map(ENTRADAS_DASHBOARD.flatMap((e) => e.pestanas.map((p) => [p.href, e.nombre] as const)));
+  const NOMBRE_ANTERIOR = new Map(TODAS_LAS_RUTAS.map((i) => [i.href, i.nombre]));
+  it('cada vista que ES la pantalla de una entrada (o pestaña) titula con el nombre de su entrada', () => {
     const mal: string[] = [];
     let comparadas = 0;
     for (const rel of MIGRADAS) {
       const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
       const href = dir === '' ? '/dashboard' : `/dashboard/${dir}`;
-      const nombre = NOMBRE_POR_RUTA.get(href);
-      if (!nombre) continue;
+      const entrada = NOMBRE_ENTRADA.get(href);
+      const anterior = NOMBRE_ANTERIOR.get(href);
+      // Las subpantallas que el menú anterior no nombraba (p. ej. `agentes/vigia/avisos`) conservan su título descriptivo hasta que la
+      // fase que las migra (F10 para Automatización) las lleve al nombre de su entrada.
+      if (!entrada || !anterior) continue;
       const m = /<MarcoPagina\b[^>]*?\btitulo="([^"]*)"/s.exec(fuente(rel));
       if (!m) continue; // título calculado (detalle)
       comparadas++;
-      if (m[1] !== nombre) mal.push(`${rel}: «${m[1]}» ≠ menú «${nombre}»`);
+      if (m[1] !== entrada && m[1] !== anterior) mal.push(`${rel}: «${m[1]}» ≠ entrada «${entrada}» (ni su nombre anterior «${anterior}»)`);
     }
     expect(comparadas).toBeGreaterThan(30);
     expect(mal).toEqual([]);
