@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Eye, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
+import { Aviso } from '../ui-v2/componentes/aviso';
 import { ROTULOS_ROL } from '@/lib/auth/roles';
 
 /** Los tres roles que un superadmin puede previsualizar (`PREVISUALIZABLES`
@@ -66,38 +67,27 @@ export default function AvisoRol({ rolReal }: { rolReal: string }) {
   const qs = restantes.toString();
 
   return (
-    <div
-      className="flex items-center gap-2.5 px-4 py-2 rounded-xl mb-3 text-xs"
-      style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}
-    >
-      <Eye width={13} height={13} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-      <span style={{ color: 'var(--muted)' }}>
-        {comoRol ? (
-          <>
-            Estás viendo el panel como <strong style={{ color: 'var(--ink)' }}>{comoRol}</strong>.
-            Solo cambia lo que se te enseña, no lo que puedes hacer.
-          </>
-        ) : (
-          <>
-            Estás previsualizando <strong style={{ color: 'var(--ink)' }}>el panel del cliente</strong> con
-            tu sesión de superadmin. Lo que ves es lo que vería el dueño de la flota.
-          </>
-        )}
-      </span>
-      <span className="ml-auto flex items-center gap-3 shrink-0">
-        {comoRol && (
-          <Link href={`${pathname}${qs ? `?${qs}` : ''}`} className="underline" style={{ color: 'var(--muted)' }}>
-            Quitar el rol
+    <Aviso
+      tono="info"
+      className="mb-3"
+      acciones={(
+        <>
+          {comoRol && <Link href={`${pathname}${qs ? `?${qs}` : ''}`} className="underline">Quitar el rol</Link>}
+          <Link href="/admin" className="inline-flex items-center gap-1 font-medium underline">
+            <ArrowLeft width={11} height={11} strokeWidth={2} aria-hidden="true" /> Volver a mi consola
           </Link>
-        )}
-        <Link
-          href="/admin"
-          className="inline-flex items-center gap-1 font-medium underline"
-          style={{ color: 'var(--ink)' }}
-        >
-          <ArrowLeft width={11} height={11} strokeWidth={2} /> Volver a mi consola
-        </Link>
-      </span>
-    </div>
+        </>
+      )}
+    >
+      {comoRol ? (
+        <>
+          Estás viendo el panel como <strong>{comoRol}</strong>. Solo cambia lo que se te enseña, no lo que puedes hacer.
+        </>
+      ) : (
+        <>
+          Estás previsualizando <strong>el panel del cliente</strong> con tu sesión de superadmin. Lo que ves es lo que vería el dueño de la flota.
+        </>
+      )}
+    </Aviso>
   );
 }
