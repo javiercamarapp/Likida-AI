@@ -27,6 +27,7 @@ export const shell = {
   'pie.idioma.titulo': 'Idioma',
   'pie.idioma.es': 'Español (México)',
   'pie.idioma.en': 'English (US)',
+  'pie.idioma.proximamente': 'Inglés: próximamente',
   'pie.idioma.error': 'No se pudo guardar el idioma. Inténtalo de nuevo.',
   // Pie del sidebar: tarjeta de usuario
   'pie.cuenta.fallback': 'Mi cuenta',

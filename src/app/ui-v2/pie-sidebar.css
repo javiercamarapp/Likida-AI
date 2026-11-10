@@ -73,6 +73,8 @@
 [data-ui="v2"] .rv-ps-seg svg { display: block; flex: none; }
 [data-ui="v2"] .rv-ps-bandera { display: block; flex: none; width: 16px; height: 16px; border-radius: 50%; filter: grayscale(1); opacity: .55; }
 [data-ui="v2"] .rv-ps-seg label:has(input:checked) .rv-ps-bandera { filter: none; opacity: 1; }
+[data-ui="v2"] .rv-ps-seg label[data-no-disponible] { cursor: not-allowed; opacity: .45; }
+[data-ui="v2"] .rv-ps-seg label[data-no-disponible]:hover { color: var(--muted); }
 [data-ui="v2"] .rv-ps-seg:disabled { opacity: .7; }
 [data-ui="v2"] .rv-ps-seg:disabled label { cursor: not-allowed; }
 

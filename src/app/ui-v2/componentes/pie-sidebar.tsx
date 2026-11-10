@@ -11,7 +11,7 @@ import { crearTraductor, type Traductor } from '@/lib/i18n/traducir';
 import type { DiccionarioDe } from '@/lib/i18n/catalogo';
 import { useIdioma, useT } from '@/lib/i18n/proveedor';
 import { solicitarCambioIdioma } from '@/lib/i18n/cambiar';
-import { IDIOMAS, type Idioma } from '@/lib/i18n/idioma';
+import { IDIOMAS, idiomaElegible, type Idioma } from '@/lib/i18n/idioma';
 
 type TraductorShell = Traductor<DiccionarioDe<'shell'>>;
 /** El traductor en español: lo que dice el pie sin proveedor de idioma (y lo que usan las pruebas y `etiquetaAvisos` por omisión). */
@@ -174,7 +174,7 @@ export function ConmutadorIdioma() {
   const [pendiente, setPendiente] = useState(false);
   const [fallo, setFallo] = useState(false);
   async function elegir(nuevo: Idioma) {
-    if (nuevo === activo || pendiente) return;
+    if (nuevo === activo || pendiente || !idiomaElegible(nuevo)) return;
     setPendiente(true);
     setFallo(false);
     if (await solicitarCambioIdioma(nuevo)) {
@@ -188,12 +188,17 @@ export function ConmutadorIdioma() {
   return (
     <fieldset className="rv-ps-seg" data-conmutador="idioma" disabled={pendiente} aria-busy={pendiente || undefined} title={t('pie.idioma.titulo')}>
       <legend className="rv-ps-sr">{t('pie.idioma.titulo')}</legend>
-      {IDIOMAS.map((idioma) => (
-        <label key={idioma} title={t(`pie.idioma.${idioma}`)}>
-          <input type="radio" className="rv-ps-sr" name={nombre} value={idioma} checked={activo === idioma} onChange={() => { void elegir(idioma); }} aria-label={t(`pie.idioma.${idioma}`)} />
-          <Bandera pais={idioma === 'es' ? 'mx' : 'us'} />
-        </label>
-      ))}
+      {IDIOMAS.map((idioma) => {
+        const bloqueado = !idiomaElegible(idioma);
+        const nombreIdioma = bloqueado ? t('pie.idioma.proximamente') : t(`pie.idioma.${idioma}`);
+        return (
+          <label key={idioma} title={nombreIdioma} data-no-disponible={bloqueado || undefined}>
+            <input type="radio" className="rv-ps-sr" name={nombre} value={idioma} checked={activo === idioma} disabled={bloqueado}
+              onChange={() => { void elegir(idioma); }} aria-label={nombreIdioma} />
+            <Bandera pais={idioma === 'es' ? 'mx' : 'us'} />
+          </label>
+        );
+      })}
       <span className="rv-ps-sr" role="status">{fallo ? t('pie.idioma.error') : ''}</span>
     </fieldset>
   );

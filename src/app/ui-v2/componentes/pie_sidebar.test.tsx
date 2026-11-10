@@ -5,6 +5,7 @@ import { Settings } from 'lucide-react';
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(), usePathname: () => '/dashboard' }));
 const { default: PieSidebar, TarjetaUsuario, etiquetaAvisos, inicialesDe, ConmutadorIdioma } = await import('./pie-sidebar');
 const { IdiomaProvider } = await import('@/lib/i18n/proveedor');
+const { IDIOMA_EN_DISPONIBLE, idiomaElegible } = await import('@/lib/i18n/idioma');
 const { shell: shellEn } = await import('@/lib/i18n/en/shell');
 
 const tarjeta = <TarjetaUsuario nombre="Ana Pérez" rolEtiqueta="Administrador" iniciales="AP" href="/mi" />;
@@ -58,15 +59,24 @@ describe('PieSidebar: conmutadores', () => {
     for (const r of ['Tema claro', 'Seguir al sistema', 'Tema oscuro']) expect(bloque).toContain(`aria-label="${r}"`);
     expect(bloque).toMatch(/checked=""[^>]*value="claro"|value="claro"[^>]*checked=""/);
   });
-  it('idioma: dos radios activos (MX y US), español marcado por omisión y sin «Próximamente»', () => {
+  it('idioma: MX activo y marcado; US visible pero DESHABILITADO («Inglés: próximamente») mientras no haya traducción completa', () => {
     const bloque = renderToStaticMarkup(<ConmutadorIdioma />);
     expect(bloque.match(/type="radio"/g)).toHaveLength(2);
-    expect(bloque).not.toContain('disabled');
-    expect(bloque).not.toContain('Próximamente');
+    expect(bloque.match(/disabled=""/g)).toHaveLength(1);
+    expect(bloque).toMatch(/value="en"[^>]*disabled=""|disabled=""[^>]*value="en"/);
+    expect(bloque).not.toMatch(/value="es"[^>]*disabled=""|disabled=""[^>]*value="es"/);
+    expect(bloque).toContain('aria-label="Inglés: próximamente"');
+    expect(bloque).toContain('title="Inglés: próximamente"');
+    expect(bloque).not.toContain('aria-label="English (US)"');
     expect(bloque).toMatch(/value="es"[^>]*checked|checked=""[^>]*value="es"/);
     expect(bloque).not.toMatch(/value="en"[^>]*checked=""|checked=""[^>]*value="en"/);
     expect(bloque).toContain('aria-label="Español (México)"');
-    expect(bloque).toContain('aria-label="English (US)"');
+  });
+  it('la bandera IDIOMA_EN_DISPONIBLE está apagada y con ella apagada el inglés no es elegible (no hay POST)', () => {
+    expect(IDIOMA_EN_DISPONIBLE).toBe(false);
+    expect(idiomaElegible('en')).toBe(false);
+    expect(idiomaElegible('es')).toBe(true);
+    expect(idiomaElegible('en', true)).toBe(true); // el día que F15 termine, basta con encender la bandera
   });
   it('idioma: con el proveedor en inglés marca US y la interfaz del pie está en inglés', () => {
     const bloque = renderToStaticMarkup(

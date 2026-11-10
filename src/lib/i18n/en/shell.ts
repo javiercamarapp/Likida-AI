@@ -25,6 +25,7 @@ export const shell: Record<keyof typeof shellEs, string> = {
   'pie.idioma.titulo': 'Language',
   'pie.idioma.es': 'Español (México)',
   'pie.idioma.en': 'English (US)',
+  'pie.idioma.proximamente': 'English: coming soon',
   'pie.idioma.error': 'Could not save the language. Please try again.',
   'pie.cuenta.fallback': 'My account',
   'pie.cuenta.menu': 'Account menu',

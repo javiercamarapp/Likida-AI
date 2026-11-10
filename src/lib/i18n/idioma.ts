@@ -11,6 +11,18 @@ export type Idioma = (typeof IDIOMAS)[number];
 
 export const IDIOMA_POR_OMISION: Idioma = 'es';
 
+/**
+ * ¿Ya se puede ELEGIR inglés? Mientras la traducción completa no exista (F15; hoy solo `en/shell.ts`), el conmutador del pie
+ * muestra la bandera US DESHABILITADA («Inglés: próximamente») y no hace POST: un «inglés» que cambia tres textos es peor que
+ * no tenerlo. Cuando F15 termine, basta ponerla en `true`. La infraestructura (ruta, cookie, proveedor) sigue intacta.
+ */
+export const IDIOMA_EN_DISPONIBLE = false;
+
+/** Un idioma se puede elegir si tiene traducción completa: el español siempre; el inglés solo con `IDIOMA_EN_DISPONIBLE`. */
+export function idiomaElegible(idioma: Idioma, enDisponible: boolean = IDIOMA_EN_DISPONIBLE): boolean {
+  return idioma === 'es' || enDisponible;
+}
+
 /** La cookie del idioma elegido (1 año). La escribe `POST /api/preferencias/idioma`; httpOnly: el cliente no la lee. */
 export const COOKIE_IDIOMA = 'likida_lang';
 export const VIGENCIA_COOKIE_IDIOMA_S = 60 * 60 * 24 * 365;
