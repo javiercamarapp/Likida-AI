@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
 import { type Item, SECCIONES, entradaDeRuta } from './rutas';
 import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
 import { useRequiereAccion } from './cabecera-admin';
@@ -150,7 +150,15 @@ export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir, alNave
       }}
       avisos={{ href: '/admin/notificaciones', pendientes: r ? r.pendientes : undefined, urgente: r?.hayUrgente }}
       acceso={{ href: '/dashboard', texto: 'Panel del cliente', Icono: ArrowLeftRight }}
-      tarjeta={<TarjetaUsuario nombre={nombre} rolEtiqueta="Superadmin" iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} href="/admin/mi-perfil" salir={salir} />}
+      tarjeta={(
+        <TarjetaUsuario nombre={nombre} rolEtiqueta="Superadmin" iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} salir={salir} alElegir={alNavegar}
+          menu={(
+            <Link role="menuitem" tabIndex={-1} href="/admin/mi-perfil" className="rv-menu__item" onClick={() => alNavegar?.()}>
+              <span className="rv-menu__icono" aria-hidden><UserRound width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
+              <span>Mi perfil</span>
+            </Link>
+          )} />
+      )}
     />
   );
 }
