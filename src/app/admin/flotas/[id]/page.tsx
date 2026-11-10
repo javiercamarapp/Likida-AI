@@ -23,6 +23,7 @@ import { getPlanes } from '@/lib/saas/suscripcion';
 import { accionGestionarPlan } from '../acciones-plan';
 import { Ficha360, encabezadoFicha } from './ficha';
 import { GestionPlan } from './gestion-plan';
+import { AvisoPlanEnPausa } from '../../../dashboard/aviso-plan-en-pausa';
 
 export const dynamic = 'force-dynamic';
 
@@ -129,6 +130,7 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
   const enc = encabezadoFicha(ficha);
   return (
     <PantallaFicha {...enc}>
+    <AvisoPlanEnPausa tenantId={id} />
     <Ficha360
       f={ficha} seccionInicial={seccion}
       personas={personasTodas === null ? null : personasTodas.personas.filter((p) => p.tenantId === id)}

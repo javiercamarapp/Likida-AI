@@ -54,11 +54,11 @@ export type MotivoSinAviso = 'sin_tenant' | 'sin_destinatarios' | 'asunto_insegu
 export type ResultadoAvisoCorreo = { ok: true; destinatarios: number } | { ok: false; motivo: MotivoSinAviso; detalle?: string };
 
 export interface DepsAvisoCorreo {
-  enviar(para: string[], correo: Correo, idempotencyKey?: string): Promise<ResultadoEnvio>;
+  enviar(para: string[], correo: Correo, idempotencyKey?: string, tenantId?: string): Promise<ResultadoEnvio>;
 }
 
 const depsReales: DepsAvisoCorreo = {
-  enviar: (para, correo, idempotencyKey) => enviarCorreo(para, correo, { ...(idempotencyKey ? { idempotencyKey } : {}) }),
+  enviar: (para, correo, idempotencyKey, tenantId) => enviarCorreo(para, correo, { ...(idempotencyKey ? { idempotencyKey } : {}), ...(tenantId ? { tenantId } : {}) }),
 };
 
 const CORREO = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]{2,}$/;
@@ -111,7 +111,7 @@ export async function enviarAvisoCorreo(a: AvisoCorreo, deps: DepsAvisoCorreo = 
     porQueLoRecibes: 'Eres destinatario de los avisos de esta flota en Likida.',
   };
   try {
-    const r = await deps.enviar(para, correo, llaveIdempotencia(a));
+    const r = await deps.enviar(para, correo, llaveIdempotencia(a), a.tenantId);
     if (r.ok) return { ok: true, destinatarios: para.length };
     if (r.motivo === 'sin_configurar') return { ok: false, motivo: 'sin_configurar' };
     // El detalle del proveedor puede citar el destinatario: no se propaga, solo la categoría.

@@ -1071,7 +1071,7 @@ export async function avisar(
       cuando: fechaHoraMx(ahora.toISOString()),
     });
 
-    const envio = await enviarCorreo(reparto.reciben.map((d) => d.email), correo);
+    const envio = await enviarCorreo(reparto.reciben.map((d) => d.email), correo, { tenantId });
     if (!envio.ok) {
       // AG-A5(b): el claim de `reclamarAviso` ya selló la huella como si el
       // correo hubiera salido. Un envío que rebota (Resend 429, dominio

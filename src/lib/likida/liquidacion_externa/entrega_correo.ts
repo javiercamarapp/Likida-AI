@@ -428,6 +428,7 @@ async function procesarUna(
   const { correo, nombreAdjunto } = armarCorreoDesglose(ctx, revision);
   const res = await deps.enviar(e.correo, correo, {
     idempotencyKey: llaveIdempotencia(e),
+    tenantId: e.tenantId,
     adjuntos: [{ filename: nombreAdjunto, content: Buffer.from(bytes).toString('base64'), contentType: TIPO_XLSX_CORREO }],
     sobrio: true,
     ...(config.remitenteNombre ? { remitenteNombre: config.remitenteNombre } : {}),
