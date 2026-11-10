@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import type { Metadata } from 'next';
 import AdminChrome from './chrome';
 import { ProveedorRequiereAccion } from './cabecera-admin';
-import { obtenerRequiereAccion } from '@/lib/admin/requiere-accion';
+import { obtenerRequiereAccion } from './requiere-accion';
 import '../ui-v2/tokens.css';
 // Fuente unificada con el dashboard (Hanken Grotesk, decisión de 7-nov-2026; antes D3 la dejaba en Inter).
 import '../ui-v2/fonts.css';

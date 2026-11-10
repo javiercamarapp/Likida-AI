@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { BandejaEscalaciones, ConteosEscalaciones } from './escalaciones';
+import type { BandejaEscalaciones, ConteosEscalaciones } from '@/lib/admin/escalaciones';
 
-vi.mock('./escalaciones', async (importar) => ({
-  ...(await importar<typeof import('./escalaciones')>()),
+vi.mock('@/lib/admin/escalaciones', async (importar) => ({
+  ...(await importar<typeof import('@/lib/admin/escalaciones')>()),
   getBandejaEscalaciones: vi.fn(),
 }));
 

@@ -17,8 +17,8 @@ describe('una_barra_de_pestanas', () => {
   it('ninguna pantalla pinta una barra de pestañas propia más allá de la base', () => {
     expect(problemasDeTrinquete(medirPestanas(), BASE_PESTANAS_PROPIAS)).toEqual([]);
   });
-  it('el chrome monta la barra automática exactamente una vez', () => {
+  it('el chrome monta el marco con la barra automática exactamente una vez', () => {
     const chrome = leer(join(ADMIN, 'chrome.tsx'));
-    expect(chrome.match(/<PestanasAdmin(?=[\s/>])/g)).toHaveLength(1);
+    expect(chrome.match(/<ProveedorMarcoAdmin(?=[\s/>])/g)).toHaveLength(1);
   });
 });

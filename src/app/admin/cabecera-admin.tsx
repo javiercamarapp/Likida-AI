@@ -6,7 +6,7 @@ import { Bell, ChevronsLeft } from 'lucide-react';
 import { useRiel } from '../dashboard/shell/colapso';
 import FechaHoy from '../dashboard/shell/fecha-hoy';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
-import type { RequiereAccion } from '@/lib/admin/requiere-accion';
+import type { RequiereAccion } from './requiere-accion';
 
 const ContextoRequiereAccion = createContext<RequiereAccion | undefined>(undefined);
 

@@ -1,5 +1,5 @@
-import { calcularAlertas } from '@/app/admin/calcular-alertas';
-import { conteoDeFuente, getBandejaEscalaciones, type BandejaEscalaciones, type FuenteEscalacion } from './escalaciones';
+import { calcularAlertas } from './calcular-alertas';
+import { conteoDeFuente, getBandejaEscalaciones, type BandejaEscalaciones, type FuenteEscalacion } from '@/lib/admin/escalaciones';
 
 /**
  * Lo que la campana de la cabecera de /admin necesita saber: cuántas cosas esperan a un humano y si alguna es urgente.
