@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { atribucionDe as atribucion, canalDe as canal } from '@/lib/marketing/atribucion';
 import { mezclaQueSoloRellena, notaConLoNoAplicado } from './mezcla';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
@@ -50,12 +51,6 @@ const UNIDADES = new Set(['5-30', '31-100', '101-250', '250+']);
 const EMPLEADOS = new Set(['1-3', '4-10', '11-30', '30+']);
 const URGENCIAS = new Set(['inmediata', 'trimestre', 'explorando']);
 
-/** Lo único que se guarda de la URL. Lo que no está aquí se descarta. */
-const CLAVES_ATRIBUCION = [
-  'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
-  'fbclid', 'gclid', 'msclkid', 'referrer', 'ruta',
-] as const;
-
 function cors(origen: string | null): Record<string, string> {
   // Solo se refleja un origen de la lista. Reflejar el que venga es igual que
   // poner `*`, pero disfrazado.
@@ -90,46 +85,6 @@ function claveNatural(empresa: string, correo: string | null): string {
 function deDominio(v: unknown, dominio: Set<string>): string | null {
   const t = texto(v, 40);
   return t && dominio.has(t) ? t : null;
-}
-
-/** Se queda solo con las claves conocidas, ya recortadas. `{}` → null. */
-function atribucion(v: unknown): Record<string, string> | null {
-  if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
-  const src = v as Record<string, unknown>;
-  const out: Record<string, string> = {};
-  for (const k of CLAVES_ATRIBUCION) {
-    const t = texto(src[k], 300);
-    if (t) out[k] = t;
-  }
-  return Object.keys(out).length ? out : null;
-}
-
-/**
- * EL CANAL, que es lo que se agrupa en el tablero de adquisición.
- *
- * `fuente` se mantiene como un conjunto CHICO Y CERRADO a propósito: si cada
- * `utm_source` inventara su propio valor, la gráfica de adquisición se
- * fragmentaría en cincuenta rebanadas de una fila y dejaría de contestar "¿de
- * dónde vienen mis prospectos?". El detalle fino vive en `atribucion`.
- *
- * Un `fbclid`/`gclid` es prueba dura de clic pagado —lo pega la plataforma, no
- * el que armó la URL—, así que manda sobre el `utm_source`, que cualquiera
- * puede escribir a mano.
- */
-function canal(atr: Record<string, string> | null): string {
-  if (!atr) return 'landing';
-  // Los click id PRIMERO, los dos, antes de mirar un solo utm_*. Mezclados en
-  // el mismo `if` que el texto, un `gclid` que llegara con `utm_source=facebook`
-  // —una URL mal armada, o armada a propósito— se contaría como Meta.
-  if (atr.fbclid) return 'ads-meta';
-  if (atr.gclid) return 'ads-google';
-  const s = (atr.utm_source ?? '').toLowerCase();
-  if (/facebook|instagram|meta|\bfb\b/.test(s)) return 'ads-meta';
-  if (/google|youtube|adwords/.test(s)) return 'ads-google';
-  // Trae marcas de campaña pero no se sabe de quién: 'campana', no 'ads'.
-  // Decir "ads" de un correo etiquetado con utm sería inventar un gasto.
-  if (atr.utm_source || atr.utm_campaign || atr.msclkid) return 'campana';
-  return 'landing';
 }
 
 export async function POST(req: Request) {

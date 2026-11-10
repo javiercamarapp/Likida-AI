@@ -17,6 +17,7 @@ import {
 } from '@/lib/likida/marketing/calculadora';
 import { mxn, numero as litrosFmt, hoyMx } from '@/lib/formato';
 import { Boton } from '../ui-v2/componentes/boton';
+import { atribucionDeUrl } from '@/lib/marketing/atribucion';
 
 const num = (s: string): number | null => {
   const n = Number(s.replace(/[,$\s]/g, ''));
@@ -60,6 +61,7 @@ export function Calculadora() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           nombre, empresa, correo, telefono, sitioWeb,
+          atribucion: atribucionDeUrl(window.location.search, document.referrer, window.location.pathname),
           cifras: {
             litrosDieselMes: num(litros), gastoDieselMesMxn: num(gastoDiesel),
             gastoCasetasMesMxn: num(casetas), unidades: num(unidades),
