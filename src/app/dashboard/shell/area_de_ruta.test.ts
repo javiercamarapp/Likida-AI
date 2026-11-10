@@ -15,7 +15,7 @@ describe('areaDeRuta', () => {
   it('una pantalla toma el título del grupo del menú que la contiene', () => {
     expect(areaDeRuta('/dashboard/viajes', dueno)).toBe('Operación');
     expect(areaDeRuta('/dashboard/facturacion', dueno)).toBe('Dinero y fiscal');
-    expect(areaDeRuta('/dashboard/agentes/liquidacion', dueno)).toBe('Automatizaciones');
+    expect(areaDeRuta('/dashboard/agentes/liquidacion', dueno)).toBe('Automatización');
   });
 
   it('el MISMO destino cambia de área con el perfil cinco_agentes (como cambia el menú)', () => {
@@ -24,8 +24,16 @@ describe('areaDeRuta', () => {
   });
 
   it('una subpágina hereda el área de su entrada de menú (prefijo más largo)', () => {
-    expect(areaDeRuta('/dashboard/agentes/liquidacion/formato', dueno)).toBe('Automatizaciones');
-    expect(areaDeRuta('/dashboard/carta-porte/documentos/abc', dueno)).toBe('Operación');
+    expect(areaDeRuta('/dashboard/agentes/liquidacion/formato', dueno)).toBe('Automatización');
+    expect(areaDeRuta('/dashboard/carta-porte/documentos/abc', dueno)).toBe('Dinero y fiscal');
+  });
+
+  it('una pestaña toma el área de su ENTRADA, no la de su carpeta (Sin viaje → Viajes → Operación; Normas → Legal → Cuenta)', () => {
+    expect(areaDeRuta('/dashboard/huerfanos', dueno)).toBe('Operación');
+    expect(areaDeRuta('/dashboard/agentes/vigia/avisos', dueno)).toBe('Automatización');
+    expect(areaDeRuta('/dashboard/conocimiento', dueno)).toBe('Cuenta');
+    expect(areaDeRuta('/dashboard/politicas', dueno)).toBe('Cuenta');
+    expect(areaDeRuta('/dashboard/llaves-api', dueno)).toBe('Cuenta');
   });
 
   it('una ruta que no está en el menú del rol no inventa área (la pantalla pasa la suya)', () => {

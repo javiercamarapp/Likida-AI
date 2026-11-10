@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { redirect } from 'next/navigation';
+import { permanentRedirect } from 'next/navigation';
 import { sufijoTenant } from '../sufijo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -9,6 +9,9 @@ import { sufijoTenant } from '../sufijo';
 // pregunta —«¿con qué está conectada mi flota?»— con dos consultas distintas
 // contra la misma tabla y dos textos que podían contradecirse. Su contenido
 // vive ahora como una sección de Conexiones (`seccion-integraciones.tsx`).
+//
+// Fase 8: pasa de `redirect()` (307, temporal) a `permanentRedirect()` (308): la fusión es definitiva y los buscadores y
+// marcadores deben actualizar la dirección.
 //
 // Queda el REDIRECT y no un 404: la ruta lleva meses en el sidebar, está en
 // correos y en documentos, y un enlace guardado tiene que seguir llevando a
@@ -27,7 +30,7 @@ export default async function PaginaIntegraciones({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
-  redirect(`/dashboard/conexiones${sufijoTenant(await searchParams)}`);
+  permanentRedirect(`/dashboard/conexiones${sufijoTenant(await searchParams)}`);
 }
 
 export const metadata: Metadata = { title: 'Integraciones' };

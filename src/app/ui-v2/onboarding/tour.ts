@@ -1,5 +1,5 @@
 import type { Recorrido, PasoTour } from '@/app/ui-v2/movimiento/tour/tipos';
-import { menuPorPerfil, hrefsDelMenu, type MenuV2 } from '@/app/dashboard/shell/menu-por-perfil';
+import { menuPorPerfil, hrefsConPestanas, hrefActivo, type MenuV2 } from '@/app/dashboard/shell/menu-por-perfil';
 import { nombreDeRol } from '@/lib/auth/roles';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { ANCLA_TITULO, PANTALLAS } from './pantallas';
@@ -21,7 +21,8 @@ const HREF_ASISTENTE_FLOTA = '/dashboard/arranque';
 
 /** Pantallas del menú de un rol/perfil que tienen contenido de recorrido, en el orden del menú. */
 export function pantallasDelMenu(menu: MenuV2): string[] {
-  return hrefsDelMenu(menu).filter((h) => Object.hasOwn(PANTALLAS, h));
+  // Entradas Y pestañas: cada pantalla que el menú alcanza tiene su recorrido (una entrada del menú agrupa varias pantallas).
+  return hrefsConPestanas(menu).filter((h) => Object.hasOwn(PANTALLAS, h));
 }
 
 type Clave = 'ir' | 'que' | 'clave' | 'accion';
@@ -71,13 +72,23 @@ export function accionDe(href: string, rol: string): TextosPantalla['accion'] | 
   return acc && rolTienePermiso(rol, acc.permiso) ? acc : null;
 }
 
+/** La entrada del menú que contiene la pantalla (por su href o por una de sus pestañas). */
+function entradaDe(menu: MenuV2, href: string) {
+  const entradaHref = hrefActivo(href, menu);
+  return [...menu.resumen, ...menu.grupos.flatMap((g) => g.items), ...menu.pie].find((i) => i.href === entradaHref);
+}
+
+/** «Entrada · Pestaña» cuando la entrada agrupa varias pantallas; el nombre de la entrada si la pantalla es su única (o su misma) cara. */
 export function nombreDePantalla(menu: MenuV2, href: string): string {
-  return [...menu.resumen, ...menu.grupos.flatMap((g) => g.items), ...menu.pie].find((i) => i.href === href)?.nombre ?? href;
+  const e = entradaDe(menu, href);
+  if (!e) return href;
+  const pestana = (e.pestanas ?? []).find((p) => p.href === href);
+  return pestana && (e.pestanas?.length ?? 0) > 1 && pestana.nombre !== e.nombre ? `${e.nombre} · ${pestana.nombre}` : e.nombre;
 }
 
 /** El paso de cierre; ofrece pasar al asistente (Puesta en marcha / Arranque) si el rol lo ve. */
 function cierre(menu: MenuV2): PasoTour {
-  const hrefs = hrefsDelMenu(menu);
+  const hrefs = hrefsConPestanas(menu);
   const asistente = hrefs.includes(HREF_ASISTENTE_PERFIL) ? HREF_ASISTENTE_PERFIL : hrefs.includes(HREF_ASISTENTE_FLOTA) ? HREF_ASISTENTE_FLOTA : null;
   return {
     id: 'cierre', tipo: 'cierre', ilu: 'cierre',
@@ -92,15 +103,19 @@ function cierre(menu: MenuV2): PasoTour {
 /** Los pasos de UNA pantalla (ir, que, clave, accion), con `previa` como ruta donde está el menú al llegar. */
 function pasosDePantalla(href: string, rol: string, perfil: PerfilTenant | null | undefined, menu: MenuV2, previa: string | undefined): Record<Clave, PasoTour | null> {
   const t = textosDe(href, rol, perfil), def = PANTALLAS[href], slug = slugDe(href), nombre = nombreDePantalla(menu, href);
+  // El menú pinta ENTRADAS: la ancla `nav-…` y el texto del clic son los de la entrada que contiene la pantalla (una pestaña no tiene ítem propio en el menú).
+  const entrada = entradaDe(menu, href), nombreMenu = entrada?.nombre ?? nombre;
   const base = { pantalla: href, nombrePantalla: nombre, ilu: def.ilu, tipo: 'info' as const };
   const acc = accionDe(href, rol);
   return {
     ir: {
-      ...base, tipo: 'ir', id: `${slug}.ir`, ruta: previa, ancla: anclaNav(href), lado: 'derecha',
+      ...base, tipo: 'ir', id: `${slug}.ir`, ruta: previa, ancla: anclaNav(entrada?.href ?? href), lado: 'derecha',
       titulo: `Ve a ${nombre}`,
-      texto: `Haz clic en «${nombre}» en el menú. Si prefieres, pulsa Llévame y lo hago por ti.`,
+      texto: nombre === nombreMenu
+        ? `Haz clic en «${nombreMenu}» en el menú. Si prefieres, pulsa Llévame y lo hago por ti.`
+        : `Abre «${nombreMenu}» en el menú y elige la pestaña «${nombre.slice(nombreMenu.length + 3)}». Si prefieres, pulsa Llévame y lo hago por ti.`,
       avance: { tipo: 'accion', evento: 'click' },
-      accion: { verbo: 'Aprieta', objetivo: nombre },
+      accion: { verbo: 'Aprieta', objetivo: nombreMenu },
     },
     que: { ...base, id: `${slug}.que`, ruta: href, ancla: ANCLA_TITULO, lado: 'abajo', titulo: nombre, texto: t.que },
     clave: { ...base, id: `${slug}.clave`, ruta: href, ancla: def.clave.ancla, lado: 'abajo', titulo: t.claveTitulo, texto: t.claveTexto },

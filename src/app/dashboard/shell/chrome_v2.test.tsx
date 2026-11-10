@@ -52,9 +52,12 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(html).toContain('<p>contenido</p>');
   });
 
-  it('el ítem activo lleva aria-current="page" y es uno solo', () => {
-    expect(html.match(/aria-current="page"/g)).toHaveLength(1);
+  it('el ítem activo del menú lleva aria-current="page" y es uno solo; la pestaña activa de su entrada, otro', () => {
+    // El menú (`rv-item`) tiene UN activo: la entrada «Conciliación de peajes». Aparte, la barra de pestañas del hub (respaldo,
+    // porque el contenido de la prueba no trae `MarcoPagina`) marca su pestaña «Conciliación».
+    expect(html.match(/<a[^>]*rv-item[^>]*aria-current="page"/g)).toHaveLength(1);
     expect(html).toMatch(/aria-current="page"[^>]*>(?:(?!<\/a>).)*Conciliación de peajes/);
+    expect(html.match(/<a[^>]*rv-tabs__tab[^>]*aria-current="page"/g)).toHaveLength(1);
   });
 
   it('A4/A5 están en el menú con su enlace real (hoy el perfil los tiene encendidos)', () => {
@@ -153,8 +156,11 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
   });
 
   it('contrato e2e: UNA sola navegación visible a la vez (el sidebar y la barra móvil se excluyen por CSS) y la hoja se llama «Menú completo»', () => {
-    // En el HTML hay dos landmarks: el del sidebar (≥768) y el de la barra inferior (<768). `shell.css` los hace disjuntos (display: none).
-    expect(html.match(/<nav/g)).toHaveLength(2);
+    // En el HTML hay dos landmarks de NAVEGACIÓN: el del sidebar (≥768) y el de la barra inferior (<768). `shell.css` los hace disjuntos
+    // (display: none). La barra de pestañas del hub es un tercer <nav> con su propia etiqueta («Secciones de …»): es contexto de la
+    // pantalla, no navegación principal, y existe una sola vez.
+    expect(html.match(/<nav/g)).toHaveLength(3);
+    expect(html.match(/aria-label="Secciones de [^"]+"/g)).toHaveLength(1);
     expect(html.match(/aria-label="Navegación principal"/g)).toHaveLength(1);
     expect(html.match(/aria-label="Navegación móvil"/g)).toHaveLength(1);
     expect(html).toContain('>Menú completo</h2>');

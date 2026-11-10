@@ -1,4 +1,4 @@
-import { hrefsDelMenu, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
+import { hrefsConPestanas, menuPorPerfil } from '@/app/dashboard/shell/menu-por-perfil';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 
 // El asistente de configuración que corresponde a un rol/perfil: Puesta en marcha (flotas con los cinco agentes) o Arranque
@@ -7,7 +7,7 @@ import type { PerfilTenant } from '@/lib/auth/visibilidad';
 export interface AsistenteDe { href: string; nombre: string }
 
 export function asistenteDe(rol: string, perfil: PerfilTenant | null | undefined): AsistenteDe | null {
-  const hrefs = hrefsDelMenu(menuPorPerfil(rol, perfil));
+  const hrefs = hrefsConPestanas(menuPorPerfil(rol, perfil));
   if (hrefs.includes('/dashboard/puesta-en-marcha')) return { href: '/dashboard/puesta-en-marcha', nombre: 'Puesta en marcha' };
   if (hrefs.includes('/dashboard/arranque')) return { href: '/dashboard/arranque', nombre: 'Arranque' };
   return null;

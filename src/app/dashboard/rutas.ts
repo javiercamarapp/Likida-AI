@@ -20,6 +20,10 @@ import {
   QrCode,
   ListChecks,
   Activity,
+  Headset,
+  UserCog,
+  FileCheck,
+  Landmark,
 } from 'lucide-react';
 
 /**
@@ -35,7 +39,11 @@ import {
  * sin items le anuncia al usuario lo que no existe).
  */
 /** Una pestaña de contexto: pantallas hermanas de un mismo ítem del menú que `PestanasHub` pinta bajo el encabezado. */
-export type Pestana = { href: string; nombre: string; conteo?: number | null; atencion?: boolean };
+export type Pestana = {
+  href: string; nombre: string; conteo?: number | null; atencion?: boolean;
+  /** Solo existe para una flota CON perfil (`cinco_agentes`): sin perfil esa pantalla no es para ella y el menú no la ofrece. */
+  soloConPerfil?: boolean;
+};
 export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid; pestanas?: readonly Pestana[] };
 
 /** Las automatizaciones de Likida — nombradas por la TAREA que le quitan al
@@ -208,6 +216,118 @@ export const ABAJO: Item[] = [
  *  solo el shell v2 (`shell/menu-por-perfil.ts`) lo ofrece, y el ⌘K y el pulso de producto lo conocen por `TODAS_LAS_RUTAS`.
  *  El nombre ya no choca con `/dashboard/arranque` porque esa ruta es otra pantalla (lista de arranque de una flota nueva). */
 export const PUESTA_EN_MARCHA: Item = { href: '/dashboard/puesta-en-marcha', nombre: 'Puesta en marcha', Icono: ListChecks };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL MENÚ DE 26 ENTRADAS (Fase 8, P-DAS-NAV; PLAN-MAESTRO §2.2 y §3.2).
+//
+// Cada ENTRADA del menú agrupa pantallas hermanas como PESTAÑAS (`PestanasHub`, bajo el encabezado). La regla del árbol: cada
+// ruta de arriba SIGUE SIENDO una página (nada se renombra en la URL, ningún literal `/dashboard/<ruta>` se rompe); lo que cambia
+// es que el menú ofrece una entrada por TAREA y las pantallas hermanas cuelgan de ella.
+//
+// Los datos de abajo son el catálogo COMPLETO (todas las pestañas). Lo que ve cada quien lo recorta `menu-por-perfil.ts`:
+// una pestaña solo existe para un rol y perfil si `puedeVerRuta(rol, href, perfil)` la abre, y el `href` de la entrada es la
+// PRIMERA pestaña visible —así el clic en la entrada nunca rebota—. Este módulo es plano (sin 'use client' ni auth): lo importan
+// Client y Server Components.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type GrupoEntrada = 'inicio' | 'operacion' | 'dinero' | 'automatizacion' | 'cuenta' | 'pie' | 'contador';
+
+/** Una entrada del menú con TODAS sus pestañas (sin recortar por rol). `href` = la primera pestaña. */
+export type Entrada = Item & {
+  /** Estable (para los perfiles y las pruebas): no cambia si se renombra la entrada. */
+  clave: string;
+  grupo: GrupoEntrada;
+  pestanas: readonly Pestana[];
+  /** Palabras con que ⌘K encuentra la entrada además de su nombre. */
+  alias?: readonly string[];
+};
+
+function entrada(clave: string, grupo: GrupoEntrada, nombre: string, Icono: Item['Icono'], pestanas: readonly Pestana[], alias?: readonly string[]): Entrada {
+  return { clave, grupo, nombre, Icono, pestanas, href: pestanas[0].href, ...(alias ? { alias } : {}) };
+}
+const p = (href: string, nombre: string): Pestana => ({ href, nombre });
+
+export const ENTRADAS_DASHBOARD: readonly Entrada[] = [
+  // Inicio (2): los dos van arriba, sin título de grupo.
+  entrada('resumen', 'inicio', 'Resumen', LayoutGrid, [p('/dashboard', 'Resumen')], ['inicio', 'tablero']),
+  entrada('chat', 'inicio', 'Pregunta a tus datos', MessageCircle, [p('/dashboard/chat', 'Pregunta a tus datos')], ['chat', 'asistente', 'preguntar']),
+
+  // Operación (4)
+  entrada('viajes', 'operacion', 'Viajes', Truck, [
+    p('/dashboard/despacho', 'Despacho'), p('/dashboard/viajes-en-vivo', 'En vivo'), p('/dashboard/mapa', 'Mapa'),
+    p('/dashboard/viajes', 'Registro'), p('/dashboard/huerfanos', 'Sin viaje'),
+  ], ['nuevo viaje', 'asignar', 'anticipo', 'comprobantes sin viaje', 'huérfanos']),
+  entrada('equipo', 'operacion', 'Equipo', Users, [
+    p('/dashboard/operadores', 'Operadores'), p('/dashboard/unidades', 'Unidades'), p('/dashboard/patios', 'Patios'),
+    p('/dashboard/jornada', 'Jornada'), p('/dashboard/whatsapp', 'WhatsApp'), p('/dashboard/conversaciones', 'Conversaciones'),
+  ], ['choferes', 'tractores', 'jornada laboral', 'lft']),
+  entrada('emergencias', 'operacion', 'Emergencias', Siren, [
+    p('/dashboard/asistencia', 'Mesa de control'), p('/dashboard/emergencias', 'Directorio'),
+  ], ['grúa', 'siniestro', 'incidencias']),
+  entrada('clientes', 'operacion', 'Clientes', Handshake, [
+    p('/dashboard/clientes', 'Clientes y tarifas'), p('/dashboard/convenios', 'Convenios'),
+  ], ['tarifas', 'convenios de clientes']),
+
+  // Dinero y fiscal (4)
+  entrada('facturacion', 'dinero', 'Facturación', FileText, [p('/dashboard/facturacion', 'Facturación')], ['cartera', 'cobranza', 'por facturar', 'estadías', 'pago en línea']),
+  entrada('margen', 'dinero', 'Margen y costos', ChartNoAxesCombined, [
+    p('/dashboard/rentabilidad', 'Rentabilidad'), p('/dashboard/cotizaciones', 'Cotizador'), p('/dashboard/combustible-casetas', 'Combustible y casetas'),
+  ], ['rentabilidad', 'cotizar', 'diésel', 'diesel', 'casetas', 'peajes']),
+  entrada('carta-porte', 'dinero', 'Carta Porte', ScrollText, [
+    p('/dashboard/carta-porte', 'Viajes'), p('/dashboard/timbrado', 'Timbrado'), p('/dashboard/carta-porte/documentos', 'Documentos'),
+  ], ['cfdi', 'timbrar', 'complemento', 'documentos de clientes']),
+  entrada('sat', 'dinero', 'SAT', Landmark, [
+    p('/dashboard/descarga-sat', 'Descarga'), p('/dashboard/descarga-sat/bandeja', 'Conciliación'),
+  ], ['descarga del sat', 'cfdi recibidos', 'buzón']),
+
+  // Automatización (6) — nombradas por la tarea que le quitan al cliente
+  entrada('liquidacion', 'automatizacion', 'Liquidación automática', Route, [
+    p('/dashboard/agentes/liquidacion', 'Panel'), p('/dashboard/agentes/liquidacion/configuracion', 'Entrega'), p('/dashboard/agentes/liquidacion/formato', 'Formato'),
+  ], ['liquidar', 'desglose', 'nómina']),
+  entrada('peajes', 'automatizacion', 'Conciliación de peajes', Scale, [
+    p('/dashboard/agentes/peajes', 'Conciliación'), p('/dashboard/agentes/peajes/reclamacion', 'Reclamación'), p('/dashboard/agentes/peajes/configuracion', 'Configuración'),
+  ], ['tag', 'telepeaje', 'casetas']),
+  entrada('carta-porte-auto', 'automatizacion', 'Carta Porte automática', FileCheck, [
+    p('/dashboard/agentes/carta-porte', 'Agente'), p('/dashboard/agentes/carta-porte/catalogo', 'Catálogo'),
+    p('/dashboard/agentes/carta-porte/referencia', 'Referencia'), p('/dashboard/agentes/carta-porte/configuracion', 'Salida'),
+  ], ['borrador', 'complemento']),
+  entrada('servicio-cliente', 'automatizacion', 'Servicio al cliente', Headset, [
+    p('/dashboard/agentes/vigia', 'Panel'), p('/dashboard/agentes/vigia/avisos', 'Avisos'), p('/dashboard/agentes/vigia/programa', 'Programa'),
+    p('/dashboard/agentes/vigia/importacion', 'Importación'), p('/dashboard/agentes/vigia/sin-atender', 'Sin atender'), p('/dashboard/agentes/vigia/historial', 'Histórico'),
+  ], ['vigía', 'vigia', 'atención a clientes']),
+  entrada('comunicacion', 'automatizacion', 'Comunicación con operadores', MessagesSquare, [
+    p('/dashboard/agentes/conductores', 'Panel'), p('/dashboard/agentes/conductores/sitios', 'Sitios'),
+    p('/dashboard/agentes/conductores/estadias', 'Estadías'), p('/dashboard/agentes/conductores/configuracion', 'Configuración'),
+  ], ['conductores', 'hitos', 'avisos a choferes']),
+  entrada('comprobantes', 'automatizacion', 'Comprobantes y facturas', ReceiptText, [
+    p('/dashboard/agentes/facturas', 'Facturas'), p('/dashboard/agentes/cobranza', 'Seguimiento'), p('/dashboard/agentes/proveedores', 'Proveedores'),
+  ], ['facturas de proveedores', 'seguimiento de comprobantes', 'cobranza']),
+
+  // Cuenta (5)
+  entrada('puesta-en-marcha', 'cuenta', 'Puesta en marcha', ListChecks, [
+    // «Pasos» es el asistente de las flotas con los cinco agentes; las demás usan el «Checklist» (Arranque). Cada flota ve UNO de los dos.
+    { ...p('/dashboard/puesta-en-marcha', 'Pasos'), soloConPerfil: true }, p('/dashboard/arranque', 'Checklist'), p('/dashboard/onboarding', 'Perfil de la flota'),
+  ], ['arranque', 'onboarding', 'perfil de la flota']),
+  entrada('configuracion', 'cuenta', 'Configuración', Settings, [
+    p('/dashboard/configuracion', 'Configuración'), p('/dashboard/politicas', 'Topes de gasto'),
+  ], ['políticas', 'politicas', 'empresa', 'rfc']),
+  entrada('conexiones', 'cuenta', 'Conexiones', Plug, [
+    p('/dashboard/conexiones', 'Estado'), p('/dashboard/llaves-api', 'Llaves de API'), p('/dashboard/sesiones-mcp', 'Sesiones MCP'),
+  ], ['integraciones', 'api', 'mcp', 'gps']),
+  entrada('usuarios', 'cuenta', 'Usuarios del equipo', UserCog, [p('/dashboard/usuarios', 'Usuarios del equipo')], ['invitar', 'accesos', 'roles']),
+  entrada('legal', 'cuenta', 'Legal y privacidad', Scale3d, [
+    p('/dashboard/legal', 'Términos y mandato'), p('/dashboard/arco', 'ARCO'), p('/dashboard/conocimiento', 'Normas'),
+  ], ['arco', 'privacidad', 'términos', 'mandato', 'conocimiento normativo']),
+
+  // Pie (4)
+  entrada('notificaciones', 'pie', 'Notificaciones', BellRing, [p('/dashboard/notificaciones', 'Ahora'), p('/dashboard/reglas', 'Mis reglas')], ['alertas', 'avisos', 'reglas']),
+  entrada('mi-perfil', 'pie', 'Mi perfil', UserRound, [p('/dashboard/mi-perfil', 'Mi perfil')], ['cuenta', 'foto']),
+  entrada('plan', 'pie', 'Plan y facturación', CreditCard, [p('/dashboard/suscripcion', 'Plan y facturación')], ['suscripción', 'suscripcion', 'plan']),
+  entrada('ayuda', 'pie', 'Centro de ayuda', LifeBuoy, [p('/dashboard/soporte', 'Centro de ayuda')], ['soporte', 'tickets']),
+
+  // Rol contador (1): es el Resumen de quien solo ve dinero (ver `menuPorPerfil`).
+  entrada('contador', 'contador', 'Contador', Calculator, [p('/dashboard/contador', 'Contador')], ['resumen del contador']),
+];
 
 /** Lista plana — punto de extensión del ⌘K de este panel. */
 export const TODAS_LAS_RUTAS: Item[] = [
