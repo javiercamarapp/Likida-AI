@@ -1,3 +1,4 @@
+/* eslint-disable security/detect-non-literal-fs-filename -- comprueba stubs dentro del propio repo */
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -10,8 +11,22 @@ const paginas = archivos(ADMIN, /^page\.tsx$/);
 const usa308 = (f: string) => /\b(redirigirPermanente|permanentRedirect)\s*\(/.test(sinComentarios(leer(f)));
 const direccion = (f: string) => ruta(f).replace(/^app/, '').replace(/\/page\.tsx$/, '');
 
-/** `export default function X(...) { ...; redirect(...)` sin devolver JSX: una página que SOLO redirige. */
-const soloRedirige = (f: string) => /export\s+default\s+(?:async\s+)?function\s+\w*\([^)]*\)\s*\{\s*(?:(?:const|let)\s[^;]+;\s*)*(?:await\s+)?redirect\s*\(/.test(sinComentarios(leer(f)));
+/** Detector de alias: `export default function X(...) {` seguido (tras declaraciones simples) de `redirect(`. Por pasos, sin regex anidada. */
+function detectaAlias(codigo: string): boolean {
+  const plano = codigo.split(/\s+/).join(' ');
+  const ini = plano.indexOf('export default ');
+  if (ini < 0) return false;
+  const llave = plano.indexOf('{', ini);
+  const cabecera = plano.slice(ini, llave);
+  if (llave < 0 || !cabecera.includes('function')) return false;
+  for (const sent of plano.slice(llave + 1).split(';')) {
+    const t = sent.trim().replace(/^await /, '');
+    if (t.startsWith('redirect(') || t.startsWith('redirect (')) return true;
+    if (!t.startsWith('const ') && !t.startsWith('let ')) return false;
+  }
+  return false;
+}
+const soloRedirige = (f: string) => detectaAlias(sinComentarios(leer(f)));
 
 describe('redirecciones_308', () => {
   it('cada entrada del registro tiene su stub 308 y su destino existe', () => {
@@ -33,8 +48,8 @@ describe('redirecciones_308', () => {
   });
   it('el detector de alias distingue una página real de un stub', () => {
     const stub = "export default async function P() { redirect('/admin/x'); }";
-    expect(/export\s+default\s+(?:async\s+)?function\s+\w*\([^)]*\)\s*\{\s*(?:(?:const|let)\s[^;]+;\s*)*(?:await\s+)?redirect\s*\(/.test(stub)).toBe(true);
+    expect(detectaAlias(stub)).toBe(true);
     const real = "export default async function P() { const x = await leer(); return <div/>; }";
-    expect(/export\s+default\s+(?:async\s+)?function\s+\w*\([^)]*\)\s*\{\s*(?:(?:const|let)\s[^;]+;\s*)*(?:await\s+)?redirect\s*\(/.test(real)).toBe(false);
+    expect(detectaAlias(real)).toBe(false);
   });
 });
