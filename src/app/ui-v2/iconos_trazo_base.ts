@@ -3,8 +3,6 @@
 export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/admin/agentes/[id]/insumos/zona-insumos.tsx': 1,
   'app/admin/command-palette.tsx': 2,
-  'app/admin/marketing/subir-hook.tsx': 1,
-  'app/admin/marketing/tarjeta-pieza.tsx': 2,
   'app/admin/qa/banco-verdad.tsx': 2,
   'app/admin/qa/lanzar-form.tsx': 2,
   'app/ui-v2/componentes/forma.tsx': 2,
@@ -90,7 +88,6 @@ export const BASE_SIN_TRAZO: Record<string, number> = {
   'app/admin/agente-whatsapp/page.tsx': 3,
   'app/admin/capacidad-forecast/page.tsx': 3,
   'app/admin/compliance/page.tsx': 3,
-  'app/admin/consumo/page.tsx': 5,
   'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
   'app/admin/conversaciones/page.tsx': 1,
   'app/admin/corridas/[id]/page.tsx': 2,

@@ -31,6 +31,7 @@ const dobles = vi.hoisted(() => ({
   modoFacturapi: vi.fn(),
   revalidatePath: vi.fn(),
   hoyMx: vi.fn(),
+  listarSuscripciones: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
@@ -40,7 +41,9 @@ vi.mock('@/lib/saas/suscripcion', async (importar) => ({
   ...(await importar<typeof import('@/lib/saas/suscripcion')>()),
   getPlanes: dobles.getPlanes,
   guardarPriceDePlan: dobles.guardarPriceDePlan,
+  listarSuscripcionesVivas: dobles.listarSuscripciones,
 }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock('@/lib/saas/stripe', () => ({
   stripeConfigurado: dobles.stripeConfigurado, modoStripe: dobles.modoStripe, webhookConfigurado: dobles.webhookConfigurado,
 }));
@@ -60,6 +63,7 @@ vi.mock('@/lib/formato', async (importar) => ({
 
 import { FormaConAviso, type AccionDeForma } from '../ui/forma';
 import { FormaEmitirMensualidad } from './forma-emitir';
+import { accionGestionarPlan } from '../flotas/acciones-plan';
 import CostosFacturacionPage from './page';
 
 type AccionEmitir = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string }>;
@@ -105,6 +109,7 @@ beforeEach(() => {
   dobles.datosBancarios.mockReturnValue(null);
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [], total: 0 });
   dobles.hoyMx.mockReturnValue('2026-03-15');
+  dobles.listarSuscripciones.mockResolvedValue([]);
 });
 
 it('accionPrecio: no-superadmin — requireSuperadmin ya redirige (guard.test.ts la prueba); confirmamos que se invoca antes de tocar Stripe', async () => {
@@ -282,4 +287,90 @@ it('A37-S06-07 — si hay más facturas por cobrar que las mostradas, la tabla D
   expect(html).toContain('Se muestran 1 de 1200 facturas por cobrar');
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [f], total: 1 });
   expect(renderToStaticMarkup(await CostosFacturacionPage())).not.toContain('recortada');
+});
+
+// ── Planes y cobro: el plan de cada flota, las cifras y los estados (Fase 3) ───────────────────────────────────────────────
+
+const DOS_FLOTAS = { ...RESUMEN, flotas: [{ id: 'tn-1', nombre: 'ACME' }, { id: 'tn-2', nombre: 'Beta' }] };
+
+const SUSCRIPCION = (extra: Record<string, unknown> = {}) => ({
+  id: 's-1', tenantId: 'tn-1', planClave: 'flota', planNombre: 'Flota', estado: 'activa', inicio: '2026-01-01', periodoFin: null,
+  stripeCustomerId: null, stripeSubscriptionId: null, vencida: false, ...extra,
+});
+
+it('cada flota dice su plan y estado, y la que no tiene suscripción dice «Sin plan asignado» (no un guion mudo)', async () => {
+  dobles.getResumenNegocio.mockResolvedValue(DOS_FLOTAS);
+  dobles.listarSuscripciones.mockResolvedValue([SUSCRIPCION({ estado: 'morosa' })]);
+  const html = renderToStaticMarkup(await CostosFacturacionPage());
+  expect(html).toContain('Morosa');
+  expect(html).toContain('Sin plan asignado');
+  expect(html).toContain('Flotas con plan asignado');
+  expect(html).toContain('1 de 2');
+});
+
+it('si las suscripciones no se pudieron leer, NO se afirma que ninguna flota tenga plan', async () => {
+  dobles.listarSuscripciones.mockRejectedValue(new Error('caída'));
+  const html = renderToStaticMarkup(await CostosFacturacionPage());
+  expect(html).toContain('No se pudo leer el plan de las flotas');
+  expect(html).not.toContain('Sin plan asignado</span>');
+});
+
+it('el filtro por estado deja solo las flotas de ese estado', async () => {
+  dobles.getResumenNegocio.mockResolvedValue(DOS_FLOTAS);
+  dobles.listarSuscripciones.mockResolvedValue([SUSCRIPCION({ estado: 'morosa' })]);
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({ estado: 'morosa' }) }));
+  expect(html).toContain('data-label="Flota">ACME');
+  expect(html).not.toContain('data-label="Flota">Beta');
+});
+
+it('asignar, activar/pausar y cancelar el plan usan la acción de servidor de las flotas (con su puerta, su bitácora y su paso extra)', async () => {
+  dobles.getPlanes.mockResolvedValue([{ clave: 'flota', nombre: 'Flota', precioMensual: 17500, precioIvaIncluido: false, stripePriceId: 'price_1' }]);
+  const pagina = await CostosFacturacionPage();
+  for (const boton of [/Asignar o cambiar plan/, /^Aplicar$/, /Cancelar suscripción/]) {
+    const forma = buscarElementos(pagina, FormaConAviso).find((f) => boton.test(String(f.props.boton)));
+    expect(forma, String(boton)).toBeDefined();
+    expect(forma!.props.accion).toBe(accionGestionarPlan);
+  }
+});
+
+it('cancelar una suscripción pide confirmación que dice el alcance', async () => {
+  const pagina = await CostosFacturacionPage();
+  const forma = buscarElementos(pagina, FormaConAviso).find((f) => /Cancelar suscripción/.test(String(f.props.boton)));
+  const confirmar = forma!.props.confirmar as { descripcion: string };
+  expect(confirmar.descripcion).toMatch(/plan de demostración/);
+  expect(confirmar.descripcion).toMatch(/No se borra su historial de cobro/);
+});
+
+it('la cifra «Por cobrar» suma lo pendiente; con la lista recortada NO suma un total parcial', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [
+    { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R1', monto: 1000, subtotal: 862.07, iva: 137.93, estado: 'pendiente' },
+    { id: 'f-2', tenantNombre: 'Beta', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R2', monto: 500, subtotal: 431.03, iva: 68.97, estado: 'fallida' },
+  ], total: 2 });
+  expect(renderToStaticMarkup(await CostosFacturacionPage())).toContain('$1,500.00');
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [
+    { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R1', monto: 1000, subtotal: null, iva: null, estado: 'pendiente' },
+  ], total: 40 });
+  const recortada = renderToStaticMarkup(await CostosFacturacionPage());
+  expect(recortada).toContain('no se suma un total parcial');
+  expect(recortada).not.toContain('$1,000.00</div>');
+});
+
+it('una factura sin desglose lo dice en su fila: no se puede timbrar', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [
+    { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R1', monto: 1000, subtotal: null, iva: null, estado: 'pendiente' },
+  ], total: 1 });
+  expect(renderToStaticMarkup(await CostosFacturacionPage())).toContain('sin desglose: no se puede timbrar');
+});
+
+it('sin cuenta bancaria configurada se avisa arriba, sin nombrar variables de entorno', async () => {
+  const html = renderToStaticMarkup(await CostosFacturacionPage());
+  expect(html).toContain('Sin cuenta de cobro configurada');
+  expect(html).not.toMatch(/LIKIDA_CLABE|STRIPE_SECRET_KEY/);
+});
+
+it('si la lista de flotas no se pudo leer, no se ofrece emitir a ciegas y se dice', async () => {
+  dobles.getResumenNegocio.mockRejectedValue(new Error('caída'));
+  const html = renderToStaticMarkup(await CostosFacturacionPage());
+  expect(html).toContain('No se pudo leer la lista de flotas');
+  expect(html).not.toContain('Sin flotas dadas de alta');
 });

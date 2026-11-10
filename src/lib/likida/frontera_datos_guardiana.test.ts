@@ -692,7 +692,10 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 342;
 // Integración r19: +13 llamadas (2,501 -> 2,514) medidas con el guardián, de las mismas lecturas nuevas de /admin y del runner; techo subido a lo medido.
 // W3 P-BAN: +2 (2,514 -> 2,516), medidas con el guardián; 0 archivos nuevos. `lib/admin/cola-aprobacion.ts#leerResumenBandeja` (conteo de pendientes y conteo de urgentes, un solo `contarPendientes`) y `#leerMasVieja`
 // (la pieza pendiente más vieja, `limit(1)` con desempate por id): solo consulta, por `acotada`, sin tenant porque `cola_aprobacion` es del superadmin; alimentan los números de las pestañas de la Bandeja. No escriben.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_516;
+// W3 Dinero del admin: +3 llamadas (2,514 -> 2,517), medidas con el guardián: `saas/transferencia.ts` `listarFacturasSaas` (la lista de facturas de la mensualidad para /admin/facturas y el CSV del contador),
+// `llm/repo.ts` `listarAlertasTopeRecientes` (los avisos de tope de /admin/consumo) y `saas/suscripcion.ts` `listarSuscripcionesVivas` (el plan de cada flota en Planes y cobro). Lecturas nuevas del superadmin, no código migrado.
+// Integración de la Ola 3: +2 (Bandeja) +3 (Dinero) = 2,519 sobre 2,514.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_519;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

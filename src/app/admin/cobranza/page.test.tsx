@@ -14,6 +14,7 @@ vi.mock('@/lib/likida/repo', async (importar) => ({
 }));
 vi.mock('@/lib/formato', async (importar) => ({ ...(await importar<typeof import('@/lib/formato')>()), hoyMx: () => '2026-09-13' }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 
 import CobranzaPage from './page';
@@ -125,4 +126,19 @@ it('M4: las piezas se piden por los títulos de los toques de las facturas (no �
   expect(titulos).toContain('Cobranza SaaS — LK1 — f1 — D+15');
   expect(h).not.toContain('· sin propuesta');
   expect(h).toContain('propuesta pendiente');
+});
+
+it('contrato visual: un solo h1 con el nombre de la entrada del menú, sin <table> a mano y sin .card ni style= en la página', async () => {
+  const h = await html();
+  expect((h.match(/<h1/g) ?? []).length).toBe(1);
+  expect(h).toContain('>Facturación</h1>');
+  const fuente = (await import('node:fs')).readFileSync(new URL('./page.tsx', import.meta.url), 'utf8');
+  expect(fuente).not.toMatch(/className="card|style=\{\{|<table/);
+});
+
+it('una lectura de la última corrida caída se dice y no se pinta como «nunca ha corrido»', async () => {
+  dobles.getUltimaCorridaDunningPlataforma.mockRejectedValue(new Error('caída'));
+  const h = await html();
+  expect(h).toContain('La última corrida del agente no cargó');
+  expect(h).not.toContain('Nunca ha corrido');
 });

@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
-import { Clapperboard, Film, UserSquare2, ListChecks } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { aprobarPieza, rechazarPieza } from '@/lib/likida/agentes/cola';
@@ -10,9 +9,9 @@ import {
   esTipoReferencia, exigirConsentimientoReferencia, borrarReferencia, type UrlFirmadaSubida,
 } from '@/lib/likida/marketing/estudio';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { fechaHoraMx } from '@/lib/formato';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { EstadoVacio } from '../ui/kit';
+import { fechaHoraMx, hoyMx } from '@/lib/formato';
+import { Aviso, AvisoCompacto, Disclosure, EstadoError, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import '../dinero.css';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { SubirHook, type ResultadoFirmaHook, type ResultadoGuardar } from './subir-hook';
 import { SubirReferencia, type ResultadoReferencia } from './subir-referencia';
@@ -127,7 +126,7 @@ export default async function EstudioMarketingPage() {
     try {
       await aprobarPieza(String(fd.get('pieza') ?? ''), s.userId);
       revalidatePath('/admin/marketing');
-      return { ok: 'Publicada — quedó aprobada en cola_aprobacion.' };
+      return { ok: 'Publicada: quedó aprobada en la bandeja.' };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'publicar la pieza') };
     }
@@ -145,155 +144,105 @@ export default async function EstudioMarketingPage() {
     }
   }
 
+  // La bandeja no se declara «estancada» como hecho fijo: se mide con la pieza pendiente más reciente.
+  const DIAS_ESTANCADA = 7;
+  const masReciente = pendientes && pendientes.length > 0 ? pendientes.map((p) => p.creadoEn).sort().at(-1)! : null;
+  const diasSinPiezas = masReciente ? Math.floor((Date.parse(`${hoyMx()}T00:00:00Z`) - Date.parse(`${masReciente.slice(0, 10)}T00:00:00Z`)) / 86_400_000) : null;
+
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Clapperboard width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Estudio de marketing"
-        />
-        <div className="px-5 py-5 flex-1 space-y-3">
-          <div className="card p-4">
-            <h1 className="text-base font-semibold tracking-tight">Entre más le das, más entienden</h1>
-            <p className="text-sm mt-1.5 leading-relaxed" style={{ color: 'var(--muted)' }}>
-              Sube lo que te sirve de insumo — el video que te gustó, la foto del chofer o del patio — y lo demás lo
-              lees abajo: el guion, el carrusel, la promo del día, los encargos de imagen y video. Ninguno se genera
-              solo (no hay pipeline de render en el servidor); publicar sigue siendo tu tap.
-            </p>
+    <MarcoPagina titulo="Crecimiento" apoyo="Estudio de marketing: los insumos que subes y las piezas que esperan tu aprobación.">
+      {diasSinPiezas !== null && diasSinPiezas >= DIAS_ESTANCADA ? (
+        <Aviso tono="warn" titulo={`La pieza pendiente más reciente es de hace ${diasSinPiezas} días`}>
+          No han llegado piezas nuevas a la bandeja. Puede ser que los agentes de contenido no estén entregando; la causa no se conoce desde aquí.
+        </Aviso>
+      ) : null}
+      <AvisoCompacto
+        tono="info"
+        resumen="Entre más insumo le das, mejor salen las piezas. Ninguna se genera sola; publicar sigue siendo tu aprobación."
+        mas="Sube el video que te gustó o la foto del chofer o del patio, y abajo lees el guion, el carrusel, la promo del día y los encargos de imagen y video. No hay render en el servidor."
+      />
+
+      <Tarjeta titulo={`Banco de hooks${hooks !== null ? ` (${hooks.length})` : ''}`}>
+        <p className="adm-din-nota">Sube un video que te gustó y anota el hook que usa. No hay transcripción automática todavía: la anotación es tuya.</p>
+        <SubirHook pedirFirma={accionPedirFirmaHook} guardar={accionGuardarHook} />
+        {hooks === null ? (
+          <EstadoError compacto>No se pudo leer el banco de hooks — esto NO significa que esté vacío.</EstadoError>
+        ) : hooks.length === 0 ? (
+          <p className="adm-din-nota">Sin hooks guardados todavía.</p>
+        ) : (
+          <div className="adm-din-rejilla">
+            {hooks.map((h) => (
+              <div key={h.id} className="adm-din-plan">
+                {h.videoUrl ? <video src={h.videoUrl} controls className="adm-din-video" /> : <Aviso tono="error">No se pudo firmar la vista previa del video.</Aviso>}
+                <p className="adm-din-nota">{h.hookTexto}</p>
+                <span className="adm-din-sub">{fechaHoraMx(h.creadoEn)}</span>
+              </div>
+            ))}
           </div>
+        )}
+      </Tarjeta>
 
-          {/* ── 1. BANCO DE HOOKS ────────────────────────────────────────── */}
-          <section className="card p-4">
-            <div className="flex items-center gap-2">
-              <Film width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              <TituloSeccion>Banco de hooks</TituloSeccion>
-              {hooks !== null && (
-                <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
-                  {hooks.length}
-                </span>
-              )}
-            </div>
-            <p className="text-[12.5px] mt-1.5 mb-2.5" style={{ color: 'var(--muted)' }}>
-              Sube un video que te gustó y anota el hook que usa. No hay transcripción automática todavía — la
-              anotación es tuya (crecimiento.ts destila hooks de los artículos ya publicados mientras tanto).
-            </p>
-            <SubirHook pedirFirma={accionPedirFirmaHook} guardar={accionGuardarHook} />
-            {hooks === null ? (
-              <p className="text-[12.5px] mt-2.5" style={{ color: 'var(--bad)' }}>No se pudo leer el banco de hooks — esto NO significa que esté vacío.</p>
-            ) : hooks.length === 0 ? (
-              <p className="text-[12.5px] mt-2.5" style={{ color: 'var(--muted)' }}>Sin hooks guardados todavía.</p>
-            ) : (
-              <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {hooks.map((h) => (
-                  <div key={h.id} className="hairline rounded-lg p-2.5" style={{ background: 'var(--surface)' }}>
-                    {h.videoUrl ? (
-                      <video src={h.videoUrl} controls className="w-full rounded-md max-h-40" />
-                    ) : (
-                      <p className="text-[11.5px]" style={{ color: 'var(--bad)' }}>No se pudo firmar la vista previa del video.</p>
-                    )}
-                    <p className="text-[12px] mt-1.5 m-0 leading-relaxed">{h.hookTexto}</p>
-                    <p className="text-[10.5px] mt-1 m-0" style={{ color: 'var(--faint)' }}>{fechaHoraMx(h.creadoEn)}</p>
-                  </div>
-                ))}
+      <Tarjeta titulo={`Personajes y lugares${referencias !== null ? ` (${referencias.length})` : ''}`}>
+        <p className="adm-din-nota">El pipeline de video usa estas fotos tal cual y produce solo lo que falta.</p>
+        <SubirReferencia accion={accionSubirReferencia} />
+        {referencias === null ? (
+          <EstadoError compacto>No se pudo leer el archivo de referencias — esto NO significa que esté vacío.</EstadoError>
+        ) : referencias.length === 0 ? (
+          <p className="adm-din-nota">Sin personajes ni lugares subidos todavía.</p>
+        ) : (
+          <div className="adm-din-rejilla">
+            {referencias.map((r) => (
+              <div key={r.id} className="adm-din-plan">
+                {r.fotoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- referencia interna del estudio, no next/image en el resto del repo
+                  <img src={r.fotoUrl} alt={r.nombre} className="adm-din-miniatura" />
+                ) : (
+                  <Aviso tono="warn">Sin vista previa de la foto.</Aviso>
+                )}
+                <div className="adm-din-plan__cab"><span>{r.nombre}</span></div>
+                <span className="adm-din-sub">{r.tipo}</span>
+                <FormaConAviso
+                  accion={accionBorrarReferencia} boton="Borrar" columnas="md:grid-cols-1"
+                  confirmar={{ titulo: `Borrar «${r.nombre}»`, descripcion: 'Se borran la fila y la foto, y no se puede deshacer. Es la baja de quien dio su consentimiento para usar su imagen.', etiquetaConfirmar: 'Sí, borrar' }}
+                >
+                  <input type="hidden" name="referencia" value={r.id} />
+                </FormaConAviso>
               </div>
-            )}
-          </section>
+            ))}
+          </div>
+        )}
+      </Tarjeta>
 
-          {/* ── 2. PERSONAJES Y LUGARES ──────────────────────────────────── */}
-          <section className="card p-4">
-            <div className="flex items-center gap-2">
-              <UserSquare2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              <TituloSeccion>Personajes y lugares</TituloSeccion>
-              {referencias !== null && (
-                <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
-                  {referencias.length}
-                </span>
-              )}
-            </div>
-            <p className="text-[12.5px] mt-1.5 mb-2.5" style={{ color: 'var(--muted)' }}>
-              El pipeline de video (MARCA.md §6: character sheets → lugares sheets → sequence sheets → animación) usa
-              estas fotos tal cual y produce solo lo que falta.
-            </p>
-            <SubirReferencia accion={accionSubirReferencia} />
-            {referencias === null ? (
-              <p className="text-[12.5px] mt-2.5" style={{ color: 'var(--bad)' }}>No se pudo leer el archivo de referencias — esto NO significa que esté vacío.</p>
-            ) : referencias.length === 0 ? (
-              <p className="text-[12.5px] mt-2.5" style={{ color: 'var(--muted)' }}>Sin personajes ni lugares subidos todavía.</p>
-            ) : (
-              <div className="mt-2.5 grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {referencias.map((r) => (
-                  <div key={r.id} className="hairline rounded-lg p-2 text-center" style={{ background: 'var(--surface)' }}>
-                    {r.fotoUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- referencia interna del estudio, no next/image en el resto del repo
-                      <img src={r.fotoUrl} alt={r.nombre} className="w-full h-20 object-cover rounded-md" />
-                    ) : (
-                      <div className="w-full h-20 rounded-md flex items-center justify-center text-[10.5px]" style={{ background: 'var(--canvas)', color: 'var(--bad)' }}>
-                        sin preview
-                      </div>
-                    )}
-                    <p className="text-[11.5px] font-medium mt-1 m-0 truncate">{r.nombre}</p>
-                    <p className="text-[10px] m-0" style={{ color: 'var(--faint)' }}>{r.tipo}</p>
-                    <FormaConAviso accion={accionBorrarReferencia} boton="Borrar" columnas="md:grid-cols-1">
-                      <input type="hidden" name="referencia" value={r.id} />
-                    </FormaConAviso>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+      <Tarjeta titulo={`Piezas del día${pendientes !== null ? ` (${pendientes.length})` : ''}`}>
+        <p className="adm-din-nota">
+          Lo que el agente de crecimiento ya redactó hacia la bandeja: guiones, carrusel del mercado, promo del día y encargos de imagen y video. Publicar es la misma
+          aprobación de siempre, la que también ves en <a href="/admin/aprobaciones">Aprobaciones</a>.
+        </p>
+        {pendientes === null ? (
+          <EstadoError compacto>No se pudieron leer las piezas del día — esto NO significa que no haya.</EstadoError>
+        ) : pendientes.length === 0 ? (
+          <p className="adm-din-nota">Nada pendiente ahora mismo. Las piezas llegan aquí cuando el reloj de crecimiento las redacta.</p>
+        ) : (
+          <div className="adm-din-rejilla">
+            {pendientes.map((p) => <TarjetaPieza key={p.id} pieza={p} publicar={accionPublicarPieza} rechazar={accionRechazarPieza} />)}
+          </div>
+        )}
+        {aprobadas !== null && aprobadas.length > 0 ? (
+          <>
+            <p className="adm-din-nota">Ya publicadas</p>
+            <ul className="adm-din-lista">
+              {aprobadas.map((p) => <li key={p.id}>{p.titulo} <span>{p.agente}</span></li>)}
+            </ul>
+          </>
+        ) : null}
+      </Tarjeta>
 
-          {/* ── 3. PIEZAS DEL DÍA ────────────────────────────────────────── */}
-          <section className="card p-4">
-            <div className="flex items-center gap-2">
-              <ListChecks width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-              <TituloSeccion>Piezas del día</TituloSeccion>
-              {pendientes !== null && (
-                <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
-                  {pendientes.length}
-                </span>
-              )}
-            </div>
-            <p className="text-[12.5px] mt-1.5 mb-2.5" style={{ color: 'var(--muted)' }}>
-              Lo que `crecimiento.ts` ya redactó hacia la cola de aprobación — guiones, carrusel del mercado, promo del
-              día y los encargos de imagen/video. Publicar es la misma aprobación de siempre (`aprobarPieza`), la que
-              también ves en <a href="/admin/aprobaciones" className="underline">Aprobaciones</a>.
-            </p>
-            {pendientes === null ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>No se pudieron leer las piezas del día — esto NO significa que no haya.</p>
-            ) : pendientes.length === 0 ? (
-              <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-                Nada pendiente ahora mismo. Las piezas llegan aquí solas cuando corre el reloj de crecimiento (cada 4 horas).
-              </p>
-            ) : (
-              <div className="space-y-2.5">
-                {pendientes.map((p) => (
-                  <TarjetaPieza key={p.id} pieza={p} publicar={accionPublicarPieza} rechazar={accionRechazarPieza} />
-                ))}
-              </div>
-            )}
-            {aprobadas !== null && aprobadas.length > 0 && (
-              <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--line2)' }}>
-                <p className="text-[11px] uppercase font-semibold tracking-wide mb-1.5" style={{ color: 'var(--muted)' }}>Ya publicadas</p>
-                <div className="space-y-1">
-                  {aprobadas.map((p) => (
-                    <div key={p.id} className="flex items-center gap-2 text-[12px] flex-wrap">
-                      <span className="truncate">{p.titulo}</span>
-                      <span className="shrink-0" style={{ color: 'var(--faint)' }}>{p.agente}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </section>
-
-          <EstadoVacio>
-            La generación real de imagen y video (Higgsfield/Canva) sigue siendo un punto de extensión explícito, no
-            algo activado aquí: el estudio entrega el insumo y la aprobación, el render vive en el flujo local de
-            Javier hasta que se decida lo contrario.
-          </EstadoVacio>
-        </div>
-      </div>
-    </main>
+      <Disclosure titulo="Qué no hace el estudio todavía" resumen="Generación de imagen y video">
+        <p className="adm-din-nota">
+          La generación real de imagen y video sigue siendo un punto de extensión explícito, no algo activado aquí: el estudio entrega el insumo y la aprobación; el render vive en el flujo local del dueño.
+        </p>
+      </Disclosure>
+    </MarcoPagina>
   );
 }
 
