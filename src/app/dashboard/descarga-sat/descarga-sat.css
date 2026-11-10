@@ -1,0 +1,16 @@
+/* SAT · solo lo que las piezas del sistema no traen. */
+.rv-sat__bloque { display: grid; gap: 8px; }
+.rv-sat__texto { margin: 0 0 8px; font-size: var(--t-small); color: var(--muted); }
+.rv-sat__bloque .rv-sat__texto { margin: 0; }
+.rv-sat__texto strong { color: var(--ink); font-weight: 600; }
+.rv-sat__tenue { font-size: var(--t-small); color: var(--faint); }
+.rv-sat__filas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-sat__pasos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-sat__paso { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; display: grid; gap: 4px; }
+.rv-sat__paso .rv-sat__texto { margin: 0; }
+.rv-sat__que { margin: 0; font-size: var(--t-body); font-weight: 500; }
+.rv-sat__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-sat__fila { display: grid; gap: 6px; padding: 12px 0; border-top: 1px solid var(--line); }
+.rv-sat__fila:first-child { border-top: 0; }
+.rv-sat__cab { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-sat__acciones { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
