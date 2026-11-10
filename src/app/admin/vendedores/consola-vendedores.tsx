@@ -245,7 +245,7 @@ async function BloqueDesempeno() {
   // Cifras REALES de la tabla prospecto.
   return (
     <Tarjeta titulo="Desempeño por vendedor">
-      <TablaBase etiqueta="Prospectos por vendedor y estado" columnas={columnas} filas={vendedores} idFila={(v) => v.id} densa />
+      <TablaBase etiqueta="Prospectos por vendedor y estado" columnas={columnas} filas={vendedores} idFila={(v) => v.id} densa tarjetaMovil className="ven-desempeno" />
     </Tarjeta>
   );
 }
