@@ -620,8 +620,7 @@ export async function listarFacturasSaas(
   let q = supabaseAdmin()
     .from('factura_saas')
     .select(
-      'id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, metodo_cobro, referencia_banco, pagada_en, conciliada_en, '
-      + 'cfdi_uuid, timbrada_en, cfdi_cancelado_en, cfdi_xml_url, cfdi_verificacion_url, creada_en, tenant(nombre)',
+      'id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, metodo_cobro, referencia_banco, pagada_en, conciliada_en, cfdi_uuid, timbrada_en, cfdi_cancelado_en, cfdi_xml_url, cfdi_verificacion_url, creada_en, tenant(nombre)',
       { count: 'exact' },
     );
   if (opts.estado) q = q.eq('estado', opts.estado);

@@ -34,7 +34,7 @@ const cohortesAdmin = cache(() => getCohortesUso().catch(() => null));
 export async function BloqueIntro() {
   const r = await resumenNegocio();
   if (r === null) {
-    return <Aviso tono="error" titulo="No se pudo leer el número de flotas">Esto NO significa que no haya ninguna: la base no respondió. Sin ese dato no se dice cuánto "crecimiento" hay que medir.</Aviso>;
+    return <Aviso tono="error" titulo="No se pudo leer el número de flotas">Esto NO significa que no haya ninguna: la base no respondió. Sin ese dato no se dice cuánto «crecimiento» hay que medir.</Aviso>;
   }
   // AUDITORÍA 10, ALTO — el título y el párrafo afirmaban una sola flota y "solo existe el tenant demo" como texto fijo: con la base en 0 tenants seguían afirmando que había una.
   const esSoloDemo = r.tenants === 1 && r.flotas[0]?.id === tenantDemo();
