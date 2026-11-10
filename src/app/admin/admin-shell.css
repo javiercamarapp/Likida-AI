@@ -70,3 +70,25 @@
 /* Tarjetas del kit anterior (`.card`): radio 12, sin sombra, borde del sistema, padding de 14 cuando solo traen `p-3`/`p-3.5` de Tailwind. */
 [data-ui="v2"] .adm-fila .card { border-radius: 12px; border-color: var(--ui-border); background: var(--ui-surface); box-shadow: none; }
 [data-ui="v2"] .adm-fila a.card:hover { background: var(--ui-soft); transform: none; box-shadow: none; }
+
+
+/* ── Riel del admin (72 px): UNA sección abierta a la vez; las demás se reducen a su icono ──
+   El CSS compartido (shell.css) abre TODOS los grupos en el riel: con las 43 páginas del admin la lista se salía del alto, se cortaba
+   a medias y se encimaba con el pie. Aquí (solo /admin, para no tocar el dashboard) el encabezado de cada sección vuelve como un
+   icono y solo la sección activa o elegida muestra sus páginas. La lista scrollea por dentro y se desvanece al fondo. */
+.rv-grupo__ico { display: none; }
+@media (min-width: 1024px) {
+  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__h { display: block; }
+  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo { margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--ui-border); }
+  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__tog {
+    width: calc(100% - 16px); height: 40px; margin: 0 8px; padding: 0; display: flex; align-items: center; justify-content: center; border-radius: 10px;
+  }
+  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__tog .rv-grupo__ico { display: block; flex: none; }
+  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__tog[aria-expanded="true"] { background: var(--ui-hover, rgba(0, 0, 0, 0.05)); color: var(--ink); }
+  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo__cuerpo { grid-template-rows: 0fr; visibility: hidden; }
+  [data-ui="v2"] .adm-fila .rv-sb[data-riel] .rv-grupo[data-abierto] .rv-grupo__cuerpo { grid-template-rows: 1fr; visibility: visible; }
+  [data-ui="v2"] .adm-fila .rv-sb .rv-sb__nav {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+            mask-image: linear-gradient(to bottom, #000 calc(100% - 22px), transparent);
+  }
+}

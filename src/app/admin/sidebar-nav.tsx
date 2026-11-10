@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge } from 'lucide-react';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge, Workflow, Briefcase, Layers, ShieldCheck, Activity } from 'lucide-react';
 import { type Item, AGENTES, NEGOCIO, PLATAFORMA, CONTROL, SISTEMA } from './rutas';
 import { SelectorTema } from '../selector-tema';
 import LogoV2 from '../dashboard/shell/logo-v2';
@@ -17,6 +17,12 @@ import { numero } from '@/lib/formato';
 // El sidebar de /admin usa las clases del sistema (`.rv-sb`, `.rv-item`, `.rv-grupo` de ui-v2/shell.css), las MISMAS que el del
 // dashboard (7-nov-2026, R8): ancho, hover, activo, colapso a riel y animación de entrada vienen de ahí. Lo único distinto es el
 // contenido: las secciones salen de `admin/rutas.ts` y aquí no hay sufijo de superadmin.
+
+// Icono de CADA sección: en el riel (72 px) solo se ve una sección abierta a la vez y las demás se reducen a su icono (antes el riel
+// pintaba las 43 páginas seguidas, la lista se cortaba a medias y se encimaba con el pie).
+const ICONO_SECCION: Record<string, typeof Workflow> = {
+  Agentes: Workflow, Negocio: Briefcase, Plataforma: Layers, Control: ShieldCheck, Sistema: Activity,
+};
 
 function idSeccion(titulo: string): string {
   return `nav-seccion-${titulo.toLowerCase().split(' ').join('-')}`;
@@ -46,8 +52,9 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
     <section className="rv-grupo" data-abierto={esta ? '' : undefined} aria-labelledby={id}>
       <h2 className="rv-grupo__h">
         <button type="button" id={id} className="rv-grupo__t rv-grupo__tog" onClick={() => onAbrir(titulo)}
-          aria-expanded={esta} aria-controls={`${id}-items`}>
-          {titulo}
+          aria-expanded={esta} aria-controls={`${id}-items`} title={titulo}>
+          {(() => { const Ico = ICONO_SECCION[titulo]; return Ico ? <Ico className="rv-grupo__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden /> : null; })()}
+          <span className="rv-grupo__tt">{titulo}</span>
           <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
         </button>
       </h2>
