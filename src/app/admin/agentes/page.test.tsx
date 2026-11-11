@@ -45,12 +45,12 @@ beforeEach(() => {
 
 it('un no-superadmin es redirigido por el propio requireSuperadmin al renderizar', async () => {
   dobles.requireSuperadmin.mockImplementationOnce(() => { throw new Error('REDIRECT:/dashboard'); });
-  await expect(PaginaAgentes()).rejects.toThrow('REDIRECT:/dashboard');
+  await expect(PaginaAgentes({ searchParams: Promise.resolve({}) })).rejects.toThrow('REDIRECT:/dashboard');
 });
 
 it('alta de agente: llega DISEÑADO, sin migración — usa el userId del actor real', async () => {
   dobles.darDeAltaAgente.mockResolvedValue(undefined);
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   const r = await pagina.props.accionAlta(null, fd({
     id: 'nuevo_agente', nombre: 'Nuevo agente', departamento: 'exito', descripcion: 'x',
     disparador: 'manual', presupuestoDiaUsd: '1',
@@ -62,14 +62,14 @@ it('alta de agente: llega DISEÑADO, sin migración — usa el userId del actor 
 
 it('alta de agente: un DatoInvalido llega verbatim, no genérico', async () => {
   dobles.validarDefinicion.mockImplementationOnce(() => { throw new DatoInvalido('El id del agente va en minúsculas.'); });
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   const r = await pagina.props.accionAlta(null, fd({ id: 'MAL', nombre: 'x', departamento: 'exito', descripcion: 'x', disparador: 'manual', presupuestoDiaUsd: '1' }));
   expect(r).toEqual(expect.objectContaining({ error: expect.stringContaining('minúsculas') }));
   expect(dobles.darDeAltaAgente).not.toHaveBeenCalled();
 });
 
 it('alta de agente: la server action re-chequea superadmin, aunque el render haya sido autorizado', async () => {
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   dobles.requireSuperadmin.mockImplementationOnce(() => { throw new Error('REDIRECT:/dashboard'); });
   await expect(pagina.props.accionAlta(null, fd({ id: 'x', nombre: 'x', departamento: 'exito', descripcion: 'x', disparador: 'manual', presupuestoDiaUsd: '1' })))
     .rejects.toThrow('REDIRECT:/dashboard');
@@ -78,7 +78,7 @@ it('alta de agente: la server action re-chequea superadmin, aunque el render hay
 
 it('palanca: apagar manda motivo y el actorId real, revalida las DOS pantallas (agentes y observabilidad, misma palanca)', async () => {
   dobles.apagar.mockResolvedValue(undefined);
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   const r = await pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'apagar', motivo: 'ruido en producción' }));
   expect(dobles.apagar).toHaveBeenCalledWith('cazador', 'ruido en producción', 'u-1');
   expect(r).toEqual({ ok: '"cazador" quedó APAGADO.' });
@@ -88,14 +88,14 @@ it('palanca: apagar manda motivo y el actorId real, revalida las DOS pantallas (
 
 it('palanca: encender manda el actorId real y el motivo (simétrico a apagar)', async () => {
   dobles.encender.mockResolvedValue(undefined);
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   const r = await pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'encender', motivo: 'ya se corrigió' }));
   expect(dobles.encender).toHaveBeenCalledWith('cazador', 'u-1', 'ya se corrigió');
   expect(r).toEqual({ ok: '"cazador" quedó encendido.' });
 });
 
 it('palanca: encender sin motivo no mueve nada', async () => {
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   const r = await pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'encender' }));
   expect(r).toEqual({ error: expect.stringContaining('motivo') });
   expect(dobles.encender).not.toHaveBeenCalled();
@@ -103,7 +103,7 @@ it('palanca: encender sin motivo no mueve nada', async () => {
 
 it('configurar: delega en actualizarAgente con el motivo y el actor real, y revalida; un DatoInvalido llega verbatim', async () => {
   dobles.actualizarAgente.mockResolvedValue({ cambios: { estado: { antes: 'vivo', despues: 'pausado' } } });
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   const r = await pagina.props.accionConfig(null, fd({ id: 'cobranza', estado: 'pausado', motivo: 'incidente' }));
   expect(dobles.actualizarAgente).toHaveBeenCalledWith('cobranza', { estado: 'pausado', runnerHabilitado: '', presupuestoDiaUsd: '', modeloRol: '' }, 'incidente', 'u-1');
   expect(r).toEqual({ ok: expect.stringContaining('configurado') });
@@ -113,14 +113,14 @@ it('configurar: delega en actualizarAgente con el motivo y el actor real, y reva
 });
 
 it('configurar: re-chequea superadmin', async () => {
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   dobles.requireSuperadmin.mockImplementationOnce(() => { throw new Error('REDIRECT:/dashboard'); });
   await expect(pagina.props.accionConfig(null, fd({ id: 'x', estado: 'pausado', motivo: 'x' }))).rejects.toThrow('REDIRECT:/dashboard');
   expect(dobles.actualizarAgente).not.toHaveBeenCalled();
 });
 
 it('palanca: una operación desconocida no se adivina — error explícito, ninguna palanca se mueve', async () => {
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   const r = await pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'reiniciar' }));
   expect(r).toEqual({ error: 'Operación desconocida: "reiniciar".' });
   expect(dobles.apagar).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ it('palanca: una operación desconocida no se adivina — error explícito, ning
 });
 
 it('palanca: re-chequea superadmin de forma independiente al render', async () => {
-  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const pagina = await PaginaAgentes({ searchParams: Promise.resolve({}) }) as unknown as { props: PropsAgentes };
   dobles.requireSuperadmin.mockImplementationOnce(() => { throw new Error('REDIRECT:/dashboard'); });
   await expect(pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'apagar', motivo: 'x' })))
     .rejects.toThrow('REDIRECT:/dashboard');

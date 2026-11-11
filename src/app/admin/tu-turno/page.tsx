@@ -51,11 +51,11 @@ const errores = (t: TrDe<'admin_inicio'>): Record<string, string> => ({
 export default async function PaginaTuTurno({
   searchParams,
 }: {
-  searchParams: Promise<{ aviso?: string; error?: string }>;
+  searchParams: Promise<{ aviso?: string; error?: string; fuente?: string }>;
 }) {
   const sesion = await requireSuperadmin();
   const { t } = await getT('admin_inicio');
-  const { aviso, error } = await searchParams;
+  const { aviso, error, fuente } = await searchParams;
   const ahora = ahoraMs();
 
   const [bus, escalaciones, urgentes, normales, prs, parados, cola] = await Promise.all([
@@ -128,6 +128,7 @@ export default async function PaginaTuTurno({
       sesionNombre={sesion.nombre ?? sesion.userId}
       accionPieza={accionPieza}
       accionOrden={accionOrden}
+      fuente={['piezas', 'envios', 'cambios', 'escalaciones', 'rutinas'].includes(fuente ?? '') ? fuente : ''}
     />
   );
 }

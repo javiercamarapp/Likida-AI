@@ -13,10 +13,11 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, Chip, Disclosure, FormaConAviso, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
+  Aviso, BotonEnlace, Chip, Disclosure, FormaEnCajon, StatusChip, Tarjeta, CampoTexto, CampoSelect,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
-import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { AccionesAgente } from './acciones-agente';
 import { getT } from '@/lib/i18n/servidor';
 import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
@@ -62,8 +63,10 @@ type Corrida = { inicio: string; estado: string } | null | 'error';
 interface Fila { a: AgenteDefinido; real: EstadoReal; motivo: string | null; corrida: Corrida; apagado: boolean | null | undefined }
 
 /** El contenido REAL del panel, exportado aparte: la puerta vive en page.tsx y el preview monta ESTO. Las server actions llegan por props. */
-export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionConfig }: {
+export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionConfig, params = {} }: {
   accionAlta: AccionAlta; accionPalanca: AccionPalanca; accionConfig: AccionConfig;
+  /** Los parámetros de la URL: `pag` (página de 25) y `ver` (el agente del cajón de vista rápida). */
+  params?: { pag?: string; ver?: string };
 }) {
   const { t } = await getT('admin_agentes');
   const { t: ts } = await getT('admin_sistema');
@@ -107,7 +110,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   const rotuloDepto = new Map<string, string>(DEPARTAMENTOS.map((d) => [d.valor, d.rotulo]));
   const estadosRotulo = ESTADOS_AGENTE.map((e) => ({ valor: e.valor as string, rotulo: e.rotulo as string }));
 
-  const columnas: ColumnaBase<Fila>[] = [
+  const columnas: ColumnaTabla<Fila>[] = [
     {
       id: 'agente', titulo: t('agentes_contenido.agente'), principal: true,
       celda: ({ a }) => {
@@ -175,27 +178,67 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
             : <StatusChip tono={apagado ? 'bad' : 'ok'}>{apagado ? 'Apagado' : 'Encendido'}</StatusChip>,
     },
     {
-      id: 'acciones', titulo: t('agentes_contenido.acciones'),
+      id: 'acciones', titulo: t('agentes_contenido.acciones'), alinear: 'der', tituloOculto: true,
       celda: ({ a, apagado }) => (
-        <AccionesAgente
-          id={a.id} nombre={a.nombre} palanca={`agente:${a.id}`}
-          apagado={a.estado === 'vivo' && typeof apagado === 'boolean' ? apagado : null}
-          accionPalanca={accionPalanca} accionConfig={accionConfig} estados={estadosRotulo}
-          actual={{
-            estado: a.estado, runnerHabilitado: a.runnerHabilitado,
-            presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
-          }}
-          etiquetaInsumos={insumosPendientes === null ? t('agentes_contenido.insumos_2') : (insumosPendientes.get(a.id) ?? 0) > 0 ? t('agentes_contenido.insumos', { insumosPendientes: insumosPendientes.get(a.id) ?? 0 }) : t('agentes_contenido.insumos_2')}
-        />
+        <span className="rv-agente-acciones">
+          <BotonEnlace href={`/admin/agentes?${new URLSearchParams({ ...(params.pag ? { pag: params.pag } : {}), ver: a.id })}`} variante="ghost" tamano="sm">{t('agentes_contenido.vista_rapida')}</BotonEnlace>
+          <AccionesAgente
+            id={a.id} nombre={a.nombre} palanca={`agente:${a.id}`}
+            apagado={a.estado === 'vivo' && typeof apagado === 'boolean' ? apagado : null}
+            accionPalanca={accionPalanca} accionConfig={accionConfig} estados={estadosRotulo}
+            actual={{
+              estado: a.estado, runnerHabilitado: a.runnerHabilitado,
+              presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
+            }}
+            etiquetaInsumos={insumosPendientes === null ? t('agentes_contenido.insumos_2') : (insumosPendientes.get(a.id) ?? 0) > 0 ? t('agentes_contenido.insumos', { insumosPendientes: insumosPendientes.get(a.id) ?? 0 }) : t('agentes_contenido.insumos_2')}
+          />
+        </span>
       ),
     },
   ];
+
+  const posicion = params.ver ? filas.findIndex((f) => f.a.id === params.ver) : -1;
+  const sel = posicion >= 0 ? filas[posicion] : null;
+  const hrefCerrar = params.pag ? `/admin/agentes?pag=${encodeURIComponent(params.pag)}` : '/admin/agentes';
+  const exitoSel = sel ? exito?.get(sel.a.id) : undefined;
 
   return (
     <EsqueletoTablaMaestra
       area="Agentes"
       titulo={t('agentes_contenido.agentes')}
       apoyo={t('agentes_contenido.que_agentes_hay_cuales')}
+      acciones={(
+        <FormaEnCajon id="alta-agente" titulo={t('agentes_contenido.dar_de_alta_un')} descripcion={t('agentes_contenido.un_agente_nuevo_nace')} accion={accionAlta} boton={t('agentes_contenido.dar_de_alta')} disparador={t('agentes_contenido.dar_de_alta')} tamano="m">
+          <div className="rv-agente-forma">
+            <CampoTexto etiqueta={t('agentes_contenido.id_tecnico')} name="id" required obligatorio placeholder="cazador_censo" ayuda={t('agentes_contenido.minusculas_numeros_y_guion')} />
+            <CampoTexto etiqueta={t('agentes_contenido.nombre')} name="nombre" required obligatorio placeholder={t('agentes_contenido.cazador_de_censo')} />
+            <CampoSelect etiqueta={t('agentes_contenido.departamento')} name="departamento" defaultValue="leads">
+              {DEPARTAMENTOS.map((d) => <option key={d.valor} value={d.valor}>{d.rotulo}</option>)}
+            </CampoSelect>
+            <CampoSelect etiqueta={t('agentes_contenido.disparador')} name="disparador" defaultValue="manual">
+              {DISPARADORES.map((d) => <option key={d} value={d}>{d}</option>)}
+            </CampoSelect>
+            <CampoTexto etiqueta={t('agentes_contenido.que_hace')} name="descripcion" placeholder={t('agentes_contenido.una_linea_honesta')} />
+            <CampoTexto etiqueta={t('agentes_contenido.donde_vive_su_prompt')} name="promptRef" placeholder="13-Agentes-de-AI/…/prompts/x.md" />
+            <CampoTexto etiqueta={t('agentes_contenido.presupuesto_por_dia_usd')} name="presupuestoDiaUsd" placeholder={t('agentes_contenido.vacio_sin_tope_declarado')} ayuda={t('agentes_contenido.el_tope_se_declara')} />
+          </div>
+        </FormaEnCajon>
+      )}
+      vistaRapida={sel ? (
+        <CajonVistaRapida
+          titulo={sel.a.nombre} subtitulo={t('agentes_contenido.vr_subtitulo', { n: posicion + 1, total: filas.length })} hrefCerrar={hrefCerrar}
+          cifras={[
+            { etiqueta: t('agentes_contenido.estado_real'), valor: rotuloEstadoRealTr(sel.real, ts) },
+            { etiqueta: t('agentes_contenido.autonomia'), valor: `${autonomiaDe(sel.a.id).nivel}` },
+            { etiqueta: t('agentes_contenido.vr_exito'), valor: exitoSel && exitoSel.total > 0 ? `${Math.round((exitoSel.ok / exitoSel.total) * 100)} %` : '—' },
+            { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: consumo === null ? '—' : usd(costoDe.get(sel.a.id) ?? 0) },
+          ]}
+          pie={<BotonEnlace variante="suave" href={`/admin/agentes/${sel.a.id}/insumos`}>{t('agentes_contenido.vr_abrir')}</BotonEnlace>}
+        >
+          <p className="rv-agente-sub">{sel.a.descripcion || t('agentes_contenido.vr_sin_descripcion')}</p>
+          <p className="rv-agente-sub">{sel.a.modeloRol ?? t('agentes_contenido.vr_modelo_sin_declarar')} · {sel.a.presupuestoDiaUsd === null ? t('agentes_contenido.sin_tope_declarado') : t('agentes_contenido.dia', { presupuestoDiaUsd: usd(sel.a.presupuestoDiaUsd) })}</p>
+        </CajonVistaRapida>
+      ) : null}
       avisos={parados === null ? (
         <Aviso tono="warn">{t('agentes_contenido.no_se_pudo_leer_2')}</Aviso>
       ) : bloqueados + parados72 > 0 ? (
@@ -220,35 +263,17 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         mensaje={t('agentes_contenido.el_catalogo_esta_vacio')}
         detalle={t('agentes_contenido.da_de_alta_un')}
       >
-        <TablaBase
+        <TablaLista
           etiqueta={t('agentes_contenido.agentes_del_catalogo')}
           columnas={columnas}
           filas={filas}
           idFila={(f) => f.a.id}
-          tarjetaMovil
-          altoMaximo={false}
+          base="/admin/agentes"
+          params={{ pag: params.pag }}
+          paginacion={{ tamano: 25 }}
           vacio={{ titulo: t('agentes_contenido.sin_agentes') }}
         />
       </Tarjeta>
-
-      <Disclosure titulo={t('agentes_contenido.dar_de_alta_un')} resumen="Nace diseñado, nunca vivo">
-        <FormaConAviso accion={accionAlta} boton="Dar de alta" columnas="md:grid-cols-1">
-          <div className="rv-agente-alta">
-            <CampoTexto etiqueta={t('agentes_contenido.id_tecnico')} name="id" required obligatorio placeholder="cazador_censo" ayuda={t('agentes_contenido.minusculas_numeros_y_guion')} />
-            <CampoTexto etiqueta={t('agentes_contenido.nombre')} name="nombre" required obligatorio placeholder={t('agentes_contenido.cazador_de_censo')} />
-            <CampoSelect etiqueta={t('agentes_contenido.departamento')} name="departamento" defaultValue="leads">
-              {DEPARTAMENTOS.map((d) => <option key={d.valor} value={d.valor}>{d.rotulo}</option>)}
-            </CampoSelect>
-            <CampoSelect etiqueta={t('agentes_contenido.disparador')} name="disparador" defaultValue="manual">
-              {DISPARADORES.map((d) => <option key={d} value={d}>{d}</option>)}
-            </CampoSelect>
-            <CampoTexto etiqueta={t('agentes_contenido.que_hace')} name="descripcion" placeholder={t('agentes_contenido.una_linea_honesta')} />
-            <CampoTexto etiqueta={t('agentes_contenido.donde_vive_su_prompt')} name="promptRef" placeholder="13-Agentes-de-AI/…/prompts/x.md" />
-            <CampoTexto etiqueta={t('agentes_contenido.presupuesto_por_dia_usd')} name="presupuestoDiaUsd" placeholder={t('agentes_contenido.vacio_sin_tope_declarado')} ayuda={t('agentes_contenido.el_tope_se_declara')} />
-          </div>
-        </FormaConAviso>
-        <p className="rv-agente-sub">{t('agentes_contenido.un_agente_nuevo_nace')}</p>
-      </Disclosure>
 
       <Disclosure titulo={t('agentes_contenido.como_se_lee_el')} resumen="Qué significa cada rótulo">
         <ul>

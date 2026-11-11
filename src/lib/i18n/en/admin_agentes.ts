@@ -134,4 +134,11 @@ export const admin_agentes: Record<keyof typeof admin_agentesEs, string> = {
   'agente_ocr.aparecen_cuando_una_flota': 'They appear when a fleet sends receipts over WhatsApp.',
   'agente_ocr.facturas_procesadas_por_dia': 'Invoices processed per day',
   'agente_ocr.el_costo_por_modelo': 'The cost per model above covers all phases: with today’s data only the OCR share cannot be isolated.',
+  'agentes_contenido.dar_de_alta': 'Add agent',
+  'agentes_contenido.vista_rapida': 'Quick view',
+  'agentes_contenido.vr_subtitulo': 'Agent {n} of {total}',
+  'agentes_contenido.vr_exito': 'Success (30 days)',
+  'agentes_contenido.vr_abrir': 'Open inputs',
+  'agentes_contenido.vr_sin_descripcion': 'No description declared.',
+  'agentes_contenido.vr_modelo_sin_declarar': 'Model not declared',
 };
