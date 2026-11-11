@@ -1,3 +1,4 @@
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { TriangleAlert } from 'lucide-react';
 import type { MetaExtraccion } from '@/lib/likida/carta_porte_docs/repo';
 import { etiquetaCampo } from '@/lib/likida/carta_porte_docs/campos';
@@ -10,7 +11,7 @@ import { etiquetaCampo } from '@/lib/likida/carta_porte_docs/campos';
  * cuadrar) se GUARDABAN pero ninguna pantalla los mostraba. Aquí se pintan arriba de la revisión, antes de que alguien
  * apruebe pensando que el archivo se procesó completo.
  */
-export function AvisosLectura({ meta }: { meta: MetaExtraccion | undefined | null }) {
+export function AvisosLectura({ meta, tr = trEs }: { meta: MetaExtraccion | undefined | null; tr?: Tr }) {
   if (!meta) return null;
   const avisos = [...new Set((meta.avisos ?? []).filter((a) => a.trim() !== ''))];
   const notas = [...new Set((meta.notasModelo ?? []).filter((a) => a.trim() !== ''))];
@@ -20,34 +21,34 @@ export function AvisosLectura({ meta }: { meta: MetaExtraccion | undefined | nul
   const otros = avisos.filter((a) => !perdidas.has(a));
   if (otros.length === 0 && notas.length === 0 && revision.length === 0 && perdidas.size === 0) return null;
   return (
-    <section className="text-[12px] px-3 py-2 rounded-lg space-y-1.5" role="status" aria-label="Avisos de la lectura" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
+    <section className="text-[12px] px-3 py-2 rounded-lg space-y-1.5" role="status" aria-label={tr('cartaPorte.documentos.id.avisosLectura.avisosDeLaLectura')} style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
       <p className="font-semibold flex items-center gap-1.5">
         <TriangleAlert width={14} height={14} strokeWidth={1.75} className="shrink-0" />
-        La lectura de este archivo avisó de lo siguiente: revísalo antes de aprobar
+        {tr('cartaPorte.documentos.id.avisosLectura.laLecturaDeEste')}
       </p>
       {perdidas.size > 0 && (
-        <ul className="list-disc pl-5 space-y-0.5" aria-label="Lo que no se leyó">
-          {[...perdidas].map((m) => <li key={m}><strong>No se leyó completo:</strong> {m}</li>)}
+        <ul className="list-disc pl-5 space-y-0.5" aria-label={tr('cartaPorte.documentos.id.avisosLectura.loQueNoSe')}>
+          {[...perdidas].map((m) => <li key={m}><strong>{tr('cartaPorte.documentos.id.avisosLectura.noSeLeyoCompleto')}</strong> {m}</li>)}
         </ul>
       )}
       {revision.length > 0 && (
-        <ul className="list-disc pl-5 space-y-0.5" aria-label="Revisión humana">
+        <ul className="list-disc pl-5 space-y-0.5" aria-label={tr('cartaPorte.documentos.id.avisosLectura.revisionHumana')}>
           {revision.map((h) => (
             <li key={`${h.renglon ?? 'doc'}|${h.campo}|${h.codigo}`}>
-              <strong>{h.campo === 'documento' ? 'Documento' : etiquetaCampo(h.campo, h.renglon)}:</strong> {h.motivo}
-              {h.valores.length > 0 ? ` Valores en conflicto: ${h.valores.map((v) => `«${v}»`).join(', ')}.` : ''}
+              <strong>{h.campo === 'documento' ? tr('cartaPorte.documentos.id.avisosLectura.documento') : etiquetaCampo(h.campo, h.renglon)}:</strong> {h.motivo}
+              {h.valores.length > 0 ? ' ' + tr('cartaPorte.documentos.id.avisosLectura.valoresEnConflicto', { valores: h.valores.map((v) => `«${v}»`).join(', ') }) : ''}
             </li>
           ))}
         </ul>
       )}
       {otros.length > 0 && (
-        <ul className="list-disc pl-5 space-y-0.5" aria-label="Avisos">
+        <ul className="list-disc pl-5 space-y-0.5" aria-label={tr('cartaPorte.documentos.id.avisosLectura.avisos')}>
           {otros.map((a) => <li key={a}>{a}</li>)}
         </ul>
       )}
       {notas.length > 0 && (
-        <ul className="list-disc pl-5 space-y-0.5" aria-label="Notas del modelo">
-          {notas.map((n) => <li key={n}><strong>El modelo anotó:</strong> {n}</li>)}
+        <ul className="list-disc pl-5 space-y-0.5" aria-label={tr('cartaPorte.documentos.id.avisosLectura.notasDelModelo')}>
+          {notas.map((n) => <li key={n}><strong>{tr('cartaPorte.documentos.id.avisosLectura.elModeloAnoto')}</strong> {n}</li>)}
         </ul>
       )}
     </section>

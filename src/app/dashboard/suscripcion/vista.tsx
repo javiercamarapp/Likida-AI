@@ -1,3 +1,4 @@
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { CamposSistema, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { Bullet } from '@/app/ui-v2/graficas';
 import './suscripcion.css';
@@ -22,7 +23,7 @@ import { etiquetaIva } from '@/lib/saas/iva';
  * `null` es SIN LÍMITE y se dice con palabras. Pintarlo como una barra al 0%
  * haría ver un plan ilimitado como uno vacío.
  */
-export function Uso({ etiqueta, usado, limite }: { etiqueta: string; usado: number; limite: number | null }) {
+export function Uso({ etiqueta, usado, limite, tr = trEs }: { etiqueta: string; usado: number; limite: number | null; tr?: Tr }) {
   return (
     <div className="rv-sus__uso">
       <div className="rv-sus__uso-cifra">
@@ -31,7 +32,7 @@ export function Uso({ etiqueta, usado, limite }: { etiqueta: string; usado: numb
       </div>
       <div className="rv-sus__tenue">{etiqueta}</div>
       {limite === null ? (
-        <div className="rv-sus__tenue">Sin límite en este plan</div>
+        <div className="rv-sus__tenue">{tr('suscripcion.vista.sinLimiteEnEste')}</div>
       ) : (
         <Bullet etiqueta={etiqueta} valor={usado} maximo={Math.max(limite, usado)} meta={limite} />
       )}
@@ -59,26 +60,26 @@ export function Uso({ etiqueta, usado, limite }: { etiqueta: string; usado: numb
  * `children` para que el preview pueda pintar la tarjeta sin uno.
  */
 export function TarjetaPlan({
-  plan, esActual, children,
+  plan, esActual, children, tr = trEs,
 }: {
   plan: Plan;
   esActual: boolean;
-  children?: React.ReactNode;
+  children?: React.ReactNode; tr?: Tr;
 }) {
   return (
-    <Tarjeta titulo={plan.nombre} acciones={esActual ? <StatusChip tono="ok">Tu plan</StatusChip> : undefined}>
+    <Tarjeta titulo={plan.nombre} acciones={esActual ? <StatusChip tono="ok">{tr('suscripcion.vista.tuPlan')}</StatusChip> : undefined}>
       <div className="rv-sus__plan">
         <div className="rv-sus__precio">
           {plan.precioMensual === null
-            ? <span className="rv-sus__tenue">Sin precio configurado</span>
-            : <>{mxn(plan.precioMensual)}<span className="rv-sus__tenue"> /mes {etiquetaIva(plan.precioIvaIncluido)}</span></>}
+            ? <span className="rv-sus__tenue">{tr('suscripcion.vista.sinPrecioConfigurado')}</span>
+            : <>{mxn(plan.precioMensual)}<span className="rv-sus__tenue"> {tr('suscripcion.vista.alMes')} {etiquetaIva(plan.precioIvaIncluido)}</span></>}
         </div>
         <ul className="rv-sus__limites">
-          <li>{plan.limiteViajesMes === null ? 'Viajes sin límite' : `Hasta ${plan.limiteViajesMes} viajes al mes`}</li>
-          <li>{plan.limiteOperadores === null ? 'Operadores sin límite' : `Hasta ${plan.limiteOperadores} operadores`}</li>
+          <li>{plan.limiteViajesMes === null ? tr('suscripcion.vista.viajesSinLimite') : tr('suscripcion.vista.hastaViajesAlMes', { limiteViajesMes: plan.limiteViajesMes })}</li>
+          <li>{plan.limiteOperadores === null ? tr('suscripcion.vista.operadoresSinLimite') : tr('suscripcion.vista.hastaOperadores', { limiteOperadores: plan.limiteOperadores })}</li>
         </ul>
         {!plan.stripePriceId ? (
-          <p className="rv-sus__tenue">Todavía no se puede contratar en línea.</p>
+          <p className="rv-sus__tenue">{tr('suscripcion.vista.todaviaNoSePuede')}</p>
         ) : (
           <div>{children}</div>
         )}
@@ -100,7 +101,7 @@ export function TarjetaPlan({
  * que no puede pasar es que viva en el código de un repo público.
  */
 export function InstruccionesTransferencia({
-  beneficiario, banco, clabe, monto, subtotal, iva, moneda, referencia,
+  beneficiario, banco, clabe, monto, subtotal, iva, moneda, referencia, tr = trEs,
 }: {
   beneficiario: string;
   banco: string;
@@ -111,7 +112,7 @@ export function InstruccionesTransferencia({
   subtotal?: number | null;
   iva?: number | null;
   moneda: string;
-  referencia: string;
+  referencia: string; tr?: Tr;
 }) {
   const filas: Array<[string, string, boolean?]> = [
     ['Beneficiario', beneficiario],
@@ -120,21 +121,20 @@ export function InstruccionesTransferencia({
     // "Monto" a secas no dice si el IVA está dentro, y ese es justo el número
     // que el contralor cruza contra el total del CFDI. Se rotula como TOTAL y,
     // cuando hay desglose, se enseña de qué se compone.
-    ['Total a transferir', `${mxn(monto)} ${moneda}`],
+    [tr('suscripcion.vista.totalATransferir'), `${mxn(monto)} ${moneda}`],
     ...(subtotal !== null && subtotal !== undefined && iva !== null && iva !== undefined
-      ? [['Se desglosa como', `${mxn(subtotal)} + ${mxn(iva)} de IVA`] as [string, string]]
+      ? [[tr('suscripcion.vista.seDesglosaComo'), `${mxn(subtotal)} + ${mxn(iva)} de IVA`] as [string, string]]
       : []),
-    ['Referencia (ponla en el concepto)', referencia, true],
+    [tr('suscripcion.vista.referenciaPonlaEnEl'), referencia, true],
   ];
   return (
     <div className="rv-sus__transf">
-      <CamposSistema etiqueta="Datos para la transferencia" campos={filas.map(([k, v, mono]) => ({
+      <CamposSistema etiqueta={tr('suscripcion.vista.datosParaLaTransferencia')} campos={filas.map(([k, v, mono]) => ({
         etiqueta: k,
         valor: mono ? <span className="rv-sus__mono">{v}</span> : v,
       }))} />
       <p className="rv-sus__tenue">
-        Sin la referencia en el concepto no podemos saber de qué mes es tu pago, y la factura se queda como
-        pendiente aunque el dinero ya haya salido de tu cuenta.
+        {tr('suscripcion.vista.sinLaReferenciaEn')}
       </p>
     </div>
   );

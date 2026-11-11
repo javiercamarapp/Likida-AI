@@ -32,6 +32,9 @@ vi.mock('@/lib/likida/carta_porte_datos', async (importar) => ({
 
 import PaginaCartaPorte from './page';
 
+// La página envuelve la vista en el proveedor de idioma (i18n P3): la vista es el hijo del proveedor.
+const vista = async () => (await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: { children: { props: Props } } }).props.children;
+
 const SP = Promise.resolve({});
 const fd = (campos: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(campos)) f.set(k, v); return f; };
 type Props = { declarar: Accion; agregarMercancia: Accion; quitarMercancia: Accion; guardarDatosCliente: Accion; datos: unknown };
@@ -51,13 +54,13 @@ it.each(['contador', 'vendedor'])('%s no puede ver la página: redirect antes de
 
 it('una lectura caída no finge "nada pendiente" — pasa `datos: null` a la vista', async () => {
   dobles.getEstadoCartaPorte.mockRejectedValueOnce(new Error('caída'));
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   expect(pagina.props.datos).toBeNull();
 });
 
 it('declarar: manda tenant/usuario de la SESIÓN, no del form', async () => {
   dobles.declararCcp.mockResolvedValue(undefined);
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   const r = await pagina.props.declarar(null, fd({
     pisaFederal: 'si', radioKm: '150', viajeId: 'v-1', tenantId: 'OTRO', userId: 'OTRO-U',
   }));
@@ -67,14 +70,14 @@ it('declarar: manda tenant/usuario de la SESIÓN, no del form', async () => {
 });
 
 it('declarar: un dato inválido llega verbatim (mensajeParaPantalla), no genérico', async () => {
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   const r = await pagina.props.declarar(null, fd({ pisaFederal: 'tal-vez', radioKm: '150', viajeId: 'v-1' }));
   expect(r.ok).toBe(false);
   expect(dobles.declararCcp).not.toHaveBeenCalled();
 });
 
 it.each(['contador', 'vendedor'])('declarar: %s rechazado aunque invoque la server action directo (sesión re-resuelta en el momento)', async (rol) => {
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   sesion = { tenantId: 't-1', rol, userId: 'u-1' };
   const r = await pagina.props.declarar(null, fd({ pisaFederal: 'si', radioKm: '150', viajeId: 'v-1' }));
   expect(r).toEqual({ ok: false, error: 'Tu rol no puede declarar rutas.' });
@@ -83,7 +86,7 @@ it.each(['contador', 'vendedor'])('declarar: %s rechazado aunque invoque la serv
 
 it('agregar mercancía: manda tenant/usuario de la SESIÓN', async () => {
   dobles.guardarMercancia.mockResolvedValue(undefined);
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   const r = await pagina.props.agregarMercancia(null, fd({
     descripcion: 'Refrigeradores', bienesTransp: '78101800', cantidad: '10', claveUnidad: 'H87', pesoKg: '500', materialPeligroso: 'no', viajeId: 'v-1', tenantId: 'OTRO',
   }));
@@ -93,7 +96,7 @@ it('agregar mercancía: manda tenant/usuario de la SESIÓN', async () => {
 
 it('quitar mercancía: id viaja por el form, tenant/usuario por la sesión', async () => {
   dobles.borrarMercancia.mockResolvedValue(undefined);
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   const r = await pagina.props.quitarMercancia(null, fd({ mercanciaId: 'm-1', tenantId: 'OTRO' }));
   expect(dobles.borrarMercancia).toHaveBeenCalledWith('t-1', 'm-1', { id: 'u-1' });
   expect(r).toEqual({ ok: true, mensaje: 'Renglón quitado.' });
@@ -101,7 +104,7 @@ it('quitar mercancía: id viaja por el form, tenant/usuario por la sesión', asy
 
 it('datos del cliente: manda tenant/usuario de la SESIÓN', async () => {
   dobles.guardarDatosCliente.mockResolvedValue(undefined);
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   const r = await pagina.props.guardarDatosCliente(null, fd({
     origenCp: '97000', destinoCp: '44100', origenEstado: 'YUC', destinoEstado: 'JAL',
     rfcDestinatario: 'TIN010101AB1', transpInternac: 'no', viajeId: 'v-1', tenantId: 'OTRO',
@@ -111,7 +114,7 @@ it('datos del cliente: manda tenant/usuario de la SESIÓN', async () => {
 });
 
 it.each(['contador', 'vendedor'])('las cuatro acciones rechazan a %s aunque se invoquen directo', async (rol) => {
-  const pagina = await PaginaCartaPorte({ searchParams: SP }) as unknown as { props: Props };
+  const pagina = await vista();
   sesion = { tenantId: 't-1', rol, userId: 'u-1' };
   const r1 = await pagina.props.agregarMercancia(null, fd({ descripcion: 'x', bienesTransp: '1', cantidad: '1', claveUnidad: 'H87', pesoKg: '1', materialPeligroso: 'no', viajeId: 'v-1' }));
   const r2 = await pagina.props.quitarMercancia(null, fd({ mercanciaId: 'm-1' }));

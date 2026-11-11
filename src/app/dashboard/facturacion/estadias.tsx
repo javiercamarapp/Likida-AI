@@ -1,3 +1,6 @@
+import { getT } from '@/lib/i18n/servidor';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
 import { Hourglass } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -38,48 +41,45 @@ function duracion(minutos: number): string {
   return `${h}:${String(m).padStart(2, '0')} h`;
 }
 
-const ROTULO_FASE: Record<FaseEpisodio, string> = {
-  corriendo: 'el reloj corre',
-  cerrado: 'cerrado',
-  sin_salida_medible: 'sin salida medible',
-  sellos_incoherentes: 'sellos incoherentes',
-};
-
-const ROTULO_SIN_MONTO: Record<MotivoSinMonto, string> = {
-  sin_minutos: 'sin ventana medible — el viaje cerró sin hito de regreso, los minutos no se inventan',
-  sin_horas_libres_pactadas: 'sin horas libres pactadas — captura el pacto abajo para que el excedente se pueda afirmar',
-  dentro_de_horas_libres: 'dentro de las horas libres pactadas — no hay cobro que proponer',
-  sin_tarifa_pactada: 'excedido, pero sin tarifa pactada — el monto no se inventa',
-};
-
-function Evidencia({ e }: { e: EpisodioEstadia }) {
+const rotuloFase = (tr: Tr): Record<FaseEpisodio, string> => ({
+  corriendo: tr('facturacion.estadias.faseCorriendo'),
+  cerrado: tr('facturacion.estadias.faseCerrado'),
+  sin_salida_medible: tr('facturacion.estadias.faseSinSalida'),
+  sellos_incoherentes: tr('facturacion.estadias.faseSellos'),
+});
+const rotuloSinMonto = (tr: Tr): Record<MotivoSinMonto, string> => ({
+  sin_minutos: tr('facturacion.estadias.sinVentanaMedibleEl'),
+  sin_horas_libres_pactadas: tr('facturacion.estadias.sinHorasLibresPactadas'),
+  dentro_de_horas_libres: tr('facturacion.estadias.dentroDeLasHoras'),
+  sin_tarifa_pactada: tr('facturacion.estadias.excedidoPeroSinTarifa'),
+});
+function Evidencia({ e, tr = trEs }: { e: EpisodioEstadia; tr?: Tr }) {
   if (e.evidencia.tipo === 'medida') {
     return (
       <span>
-        GPS en {e.sitioNombre ?? 'el sitio'}: primera posición {fechaHoraMx(e.evidencia.primeraEnSitio)},
-        {' '}última {fechaHoraMx(e.evidencia.ultimaEnSitio)} ({e.evidencia.posiciones} posiciones en el radio).
+        {tr('facturacion.estadias.gpsEnPrimeraPosicion', { v: e.sitioNombre ?? tr('facturacion.estadias.elSitio'), v2: fechaHoraMx(e.evidencia.primeraEnSitio), v3: fechaHoraMx(e.evidencia.ultimaEnSitio), posiciones: e.evidencia.posiciones })}
       </span>
     );
   }
   const motivo = {
-    sin_sitio_del_cliente: 'el cliente no tiene sitio dibujado — vincúlale una geocerca abajo para medir con GPS',
-    sin_unidad: 'el viaje no tiene unidad asignada',
-    sin_posiciones_en_sitio: 'sin posiciones GPS dentro del radio del sitio en la ventana — GPS sin conectar, o hueco de señal',
+    sin_sitio_del_cliente: tr('facturacion.estadias.elClienteNoTiene'),
+    sin_unidad: tr('facturacion.estadias.elViajeNoTiene'),
+    sin_posiciones_en_sitio: tr('facturacion.estadias.sinPosicionesGpsDentro'),
   }[e.evidencia.motivo];
-  return <span>Sin medición GPS: {motivo}. El reloj mostrado es el de los avisos por WhatsApp.</span>;
+  return <span>{tr('facturacion.estadias.sinMedicionGpsEl', { motivo })}</span>;
 }
 
-function Renglon({ e }: { e: EpisodioEstadia }) {
+function Renglon({ e, tr = trEs }: { e: EpisodioEstadia; tr?: Tr }) {
   const d = e.detencion;
   return (
     <details className="rounded-xl hairline px-3.5 py-2.5">
       <summary className="cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
         <span className="font-medium">{e.folio ?? `viaje ${e.viajeId.slice(0, 8)}`}</span>
-        <span style={{ color: 'var(--muted)' }}>{e.clienteNombre ?? 'sin cliente'}</span>
-        {e.unidadEconomico && <span style={{ color: 'var(--muted)' }}>unidad {e.unidadEconomico}</span>}
+        <span style={{ color: 'var(--muted)' }}>{e.clienteNombre ?? tr('facturacion.estadias.sinCliente')}</span>
+        {e.unidadEconomico && <span style={{ color: 'var(--muted)' }}>{tr('facturacion.estadias.unidad', { unidadEconomico: e.unidadEconomico })}</span>}
         <span style={{ color: 'var(--muted)' }}>
-          {e.minutosSitio !== null ? duracion(e.minutosSitio) : ROTULO_FASE[e.fase]}
-          {e.fase === 'corriendo' && ' · corriendo'}
+          {e.minutosSitio !== null ? duracion(e.minutosSitio) : rotuloFase(tr)[e.fase]}
+          {e.fase === 'corriendo' && ' ' + tr('facturacion.estadias.corriendo')}
         </span>
         <span className="ml-auto font-medium">
           {d.monto !== null ? `${mxn(d.monto)} propuestos` : '—'}
@@ -87,22 +87,22 @@ function Renglon({ e }: { e: EpisodioEstadia }) {
       </summary>
       <div className="mt-2.5 flex flex-col gap-1 text-xs" style={{ color: 'var(--muted)' }}>
         <span>
-          Ruta: {e.origen ?? '—'} → {e.destino ?? '—'}. Sitio: {e.sitioNombre ?? 'sin sitio dibujado'}.
+          {tr('facturacion.estadias.rutaSitio', { origen: e.origen ?? '—', destino: e.destino ?? '—', sitio: e.sitioNombre ?? tr('facturacion.estadias.sinSitioDibujado') })}
         </span>
         <span>
-          Llegada (aviso del chofer): {fechaHoraMx(e.llegadaEn)}.
-          {e.descargaEn && <> Descargando desde: {fechaHoraMx(e.descargaEn)}.</>}
-          {' '}Salida: {e.regresoEn ? fechaHoraMx(e.regresoEn) : ROTULO_FASE[e.fase]}.
+          {tr('facturacion.estadias.llegadaAvisoDelChofer')} {fechaHoraMx(e.llegadaEn)}.
+          {e.descargaEn && <> {tr('facturacion.estadias.descargandoDesde', { v: fechaHoraMx(e.descargaEn) })}</>}
+          {' '}{tr('facturacion.estadias.salida', { cuando: e.regresoEn ? fechaHoraMx(e.regresoEn) : rotuloFase(tr)[e.fase] })}
         </span>
-        <span><Evidencia e={e} /></span>
+        <span><Evidencia tr={tr} e={e} /></span>
         {d.monto !== null ? (
           <span>
-            Horas libres pactadas: {d.horasLibres} h ({e.origenPolitica === 'cliente' ? 'pacto del cliente' : 'pacto de flota'}).
-            {' '}Excedente: {duracion(d.minutosExcedentes as number)} → {d.horasCobrables} h cobrables (hora o fracción)
-            {' '}× tarifa pactada = <strong>{mxn(d.monto)}</strong>. Renglón PROPUESTO: lo factura el contralor, no el agente.
+            {tr('facturacion.estadias.horasLibresPactadas')} {d.horasLibres} h ({e.origenPolitica === 'cliente' ? tr('facturacion.estadias.pactoDelCliente') : tr('facturacion.estadias.pactoDeFlota')}).
+            {' '}{tr('facturacion.estadias.excedente', { duracion: duracion(d.minutosExcedentes as number), horas: d.horasCobrables ?? '' })}
+            {' '}{rico(tr('facturacion.estadias.tarifaRenglon', { monto: mxn(d.monto) }), { strong: (c) => <strong>{c}</strong> })}
           </span>
         ) : (
-          <span>{ROTULO_SIN_MONTO[d.motivoSinMonto as MotivoSinMonto]}</span>
+          <span>{rotuloSinMonto(tr)[d.motivoSinMonto as MotivoSinMonto]}</span>
         )}
       </div>
     </details>
@@ -122,6 +122,7 @@ export async function BloqueEstadias({
 }: {
   sp: { tenant?: string; rol?: string; vista?: string };
 }) {
+  const { t: tr } = await getT('dinero');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) return null;
 
@@ -145,9 +146,10 @@ export async function BloqueEstadias({
 
   async function pactarFlota(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede pactar la detención.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.estadias.tuRolNoPuede') };
     try {
       await guardarPoliticaDetencion(s.tenantId, null, {
         horasLibres: perilla(fd.get('horasLibres')),
@@ -157,16 +159,17 @@ export async function BloqueEstadias({
       return { error: mensajeParaPantalla(e, 'pactar la detención de flota') };
     }
     revalidatePath(RUTA);
-    return { ok: 'Pacto de flota guardado. Los episodios sin pacto propio ya se valoran contra él.' };
+    return { ok: tr('facturacion.estadias.pactoDeFlotaGuardado') };
   }
 
   async function pactarCliente(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede pactar la detención.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.estadias.tuRolNoPuede') };
     const clienteId = String(fd.get('clienteId') ?? '');
-    if (!clienteId) return { error: 'Elige el cliente del pacto.' };
+    if (!clienteId) return { error: tr('facturacion.estadias.eligeElClienteDel') };
     try {
       await guardarPoliticaDetencion(s.tenantId, clienteId, {
         horasLibres: perilla(fd.get('horasLibres')),
@@ -185,11 +188,11 @@ export async function BloqueEstadias({
       } catch (e) {
         revalidatePath(RUTA);
         const motivo = mensajeParaPantalla(e, 'vincular el sitio del cliente');
-        return { error: `El pacto del cliente sí se guardó, pero el sitio no se pudo vincular: ${motivo}` };
+        return { error: tr('facturacion.estadias.elPactoDelCliente', { motivo }) };
       }
     }
     revalidatePath(RUTA);
-    return { ok: 'Pacto del cliente guardado — gana sobre el de flota.' };
+    return { ok: tr('facturacion.estadias.pactoDelClienteGuardado') };
   }
 
   return (
@@ -197,50 +200,45 @@ export async function BloqueEstadias({
       <div className="flex items-start gap-2.5">
         <Hourglass width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
         <div className="min-w-0">
-          <p className="text-sm font-medium">Estadías y detención</p>
+          <p className="text-sm font-medium">{tr('facturacion.estadias.estadiasYDetencion')}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            El reloj abre con el aviso del chofer (&ldquo;ya llegué&rdquo;) y cierra con &ldquo;voy de
-            regreso&rdquo; — hora del mensaje, no telemetría. Al exceder las horas libres pactadas, el
-            excedente sale como renglón propuesto: facturarlo lo decides tú. Ventana: llegadas de los
-            últimos {VENTANA_ESTADIAS_DIAS} días{panel ? ` (${panel.ventana.desde} → ${panel.ventana.hasta})` : ''}.
+            {tr('facturacion.estadias.relojExplica', { dias: VENTANA_ESTADIAS_DIAS, rango: panel ? ` (${panel.ventana.desde} → ${panel.ventana.hasta})` : '' })}
           </p>
         </div>
       </div>
 
       {!leyoOk || panel === null ? (
         <p className="text-xs" style={{ color: 'var(--bad)' }}>
-          No pude leer las estadías — recarga. Sin lectura no se afirma que no haya episodios.
+          {tr('facturacion.estadias.noPudeLeerLas')}
         </p>
       ) : (
         <>
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: 'var(--muted)' }}>
-            <span><strong>{panel.resumen.total}</strong> episodios en la ventana</span>
-            <span><strong>{panel.resumen.corriendo}</strong> con el reloj corriendo</span>
+            <span>{rico(tr('facturacion.estadias.strongStrongEpisodiosEn', { total: panel.resumen.total }), { strong: (c) => <strong>{c}</strong> })}</span>
+            <span>{rico(tr('facturacion.estadias.strongStrongConEl', { corriendo: panel.resumen.corriendo }), { strong: (c) => <strong>{c}</strong> })}</span>
             <span>
-              detención propuesta:{' '}
-              <strong>{panel.resumen.montoPropuesto !== null ? mxn(panel.resumen.montoPropuesto) : 'sin montos que proponer'}</strong>
-              {panel.resumen.conMonto > 0 && ` (${panel.resumen.conMonto} episodios)`}
+              {tr('facturacion.estadias.detencionPropuesta')}{' '}
+              <strong>{panel.resumen.montoPropuesto !== null ? mxn(panel.resumen.montoPropuesto) : tr('facturacion.estadias.sinMontosQueProponer')}</strong>
+              {panel.resumen.conMonto > 0 && ' ' + tr('facturacion.estadias.episodios', { conMonto: panel.resumen.conMonto })}
             </span>
             {panel.resumen.sinPolitica > 0 && (
-              <span>{panel.resumen.sinPolitica} sin pacto — se miden pero no se valoran</span>
+              <span>{tr('facturacion.estadias.sinPactoSeMiden', { sinPolitica: panel.resumen.sinPolitica })}</span>
             )}
             {panel.resumen.sinSalidaMedible > 0 && (
-              <span>{panel.resumen.sinSalidaMedible} sin salida medible</span>
+              <span>{tr('facturacion.estadias.sinSalidaMedible', { sinSalidaMedible: panel.resumen.sinSalidaMedible })}</span>
             )}
           </div>
 
           {panel.episodios.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              Ningún viaje selló llegada en la ventana. Los hitos del chofer por WhatsApp son los que
-              abren episodios.
+              {tr('facturacion.estadias.ningunViajeSelloLlegada')}
             </p>
           ) : (
             <div className="flex flex-col gap-1.5">
-              {panel.episodios.slice(0, 40).map((e) => <Renglon key={e.viajeId} e={e} />)}
+              {panel.episodios.slice(0, 40).map((e) => <Renglon tr={tr} key={e.viajeId} e={e} />)}
               {panel.episodios.length > 40 && (
                 <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                  Se muestran los primeros 40 de {panel.episodios.length} (ordenados por monto propuesto);
-                  el resumen de arriba cuenta TODOS.
+                  {tr('facturacion.estadias.seMuestranLosPrimeros', { length: panel.episodios.length })}
                 </p>
               )}
             </div>
@@ -248,49 +246,48 @@ export async function BloqueEstadias({
 
           <details className="rounded-xl hairline px-4 py-3">
             <summary className="text-xs font-medium cursor-pointer">
-              Pactos de detención — flota y por cliente
+              {tr('facturacion.estadias.pactosDeDetencionFlota')}
             </summary>
             <div className="mt-3 flex flex-col gap-4">
               <div>
                 <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-                  Pacto de flota (aplica a cualquier cliente sin pacto propio).
+                  {tr('facturacion.estadias.pactoDeFlotaAplica')}
                   {panel.politicaFlota
-                    ? ` Vigente: ${panel.politicaFlota.horasLibres ?? 'sin'} h libres, tarifa ${panel.politicaFlota.tarifaHora !== null ? mxn(panel.politicaFlota.tarifaHora) : 'sin pactar'}/h.`
-                    : ' Sin pacto de flota todavía.'}
+                    ? ' ' + tr('facturacion.estadias.vigenteHLibresTarifa', { v: panel.politicaFlota.horasLibres ?? 'sin', v2: panel.politicaFlota.tarifaHora !== null ? mxn(panel.politicaFlota.tarifaHora) : tr('facturacion.estadias.sinPactar') })
+                    : ' ' + tr('facturacion.estadias.sinPactoDeFlota')}
                 </p>
                 <FormaConAviso accion={pactarFlota} boton="Guardar pacto de flota">
-                  <Campo nombre="horasLibres" etiqueta="Horas libres" tipo="number"
+                  <Campo nombre="horasLibres" etiqueta={tr('facturacion.estadias.horasLibres')} tipo="number"
                     valorInicial={panel.politicaFlota?.horasLibres?.toString() ?? ''}
-                    ayuda="Vacío = no pactado: el episodio se mide, no se valora." />
-                  <Campo nombre="tarifaHora" etiqueta="Tarifa MXN por hora (o fracción) excedente" tipo="number"
+                    ayuda={tr('facturacion.estadias.vacioNoPactadoEl')} />
+                  <Campo nombre="tarifaHora" etiqueta={tr('facturacion.estadias.tarifaMxnPorHora')} tipo="number"
                     valorInicial={panel.politicaFlota?.tarifaHora?.toString() ?? ''}
-                    ayuda="Vacío = sin tarifa: el excedente se dice en minutos, sin monto." />
+                    ayuda={tr('facturacion.estadias.vacioSinTarifaEl')} />
                 </FormaConAviso>
               </div>
               <div>
                 <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-                  Pacto por cliente — gana sobre el de flota. Vincular su sitio (geocerca) permite
-                  medir la llegada/salida con GPS, además del aviso por WhatsApp.
+                  {tr('facturacion.estadias.pactoPorClienteGana')}
                 </p>
                 {clientes.length === 0 ? (
                   <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                    No tienes clientes dados de alta — el pacto por cliente se captura cuando exista alguno.
+                    {tr('facturacion.estadias.noTienesClientesDados')}
                   </p>
                 ) : (
                   <FormaConAviso accion={pactarCliente} boton="Guardar pacto del cliente">
-                    <Selector nombre="clienteId" etiqueta="Cliente" requerido
+                    <Selector nombre="clienteId" etiqueta={tr('facturacion.estadias.cliente')} requerido
                       opciones={[{ valor: '', texto: 'Elige…' }, ...clientes.map((c) => ({ valor: c.id, texto: c.nombre }))]} />
-                    <Campo nombre="horasLibres" etiqueta="Horas libres" tipo="number"
-                      ayuda="Vacío = no pactado." />
-                    <Campo nombre="tarifaHora" etiqueta="Tarifa MXN por hora excedente" tipo="number"
-                      ayuda="Vacío = sin tarifa." />
-                    <Selector nombre="geocercaId" etiqueta="Sitio del cliente (geocerca)"
+                    <Campo nombre="horasLibres" etiqueta={tr('facturacion.estadias.horasLibres')} tipo="number"
+                      ayuda={tr('facturacion.estadias.vacioNoPactado')} />
+                    <Campo nombre="tarifaHora" etiqueta={tr('facturacion.estadias.tarifaMxnPorHora2')} tipo="number"
+                      ayuda={tr('facturacion.estadias.vacioSinTarifa')} />
+                    <Selector nombre="geocercaId" etiqueta={tr('facturacion.estadias.sitioDelClienteGeocerca')}
                       opciones={[
-                        { valor: '', texto: 'No cambiar' },
-                        { valor: 'ninguno', texto: 'Quitar vínculo' },
+                        { valor: '', texto: tr('facturacion.estadias.noCambiar') },
+                        { valor: 'ninguno', texto: tr('facturacion.estadias.quitarVinculo') },
                         ...geocercas.map((g) => ({ valor: g.id, texto: g.nombre })),
                       ]}
-                      ayuda="Se dibujan en el mapa; sin sitio, la estadía se mide solo con los hitos." />
+                      ayuda={tr('facturacion.estadias.seDibujanEnEl')} />
                   </FormaConAviso>
                 )}
               </div>

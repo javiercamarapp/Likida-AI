@@ -1,5 +1,7 @@
 'use client';
 
+import { useT } from '@/lib/i18n/proveedor';
+import { dinero } from '@/lib/i18n/es/dinero';
 import { useActionState, useState } from 'react';
 import { Archive, Link2, RotateCcw, Search } from 'lucide-react';
 import { fechaMx, fechaHoraMx, mxn } from '@/lib/formato';
@@ -35,27 +37,26 @@ export type AccionFila = (previo: ResultadoFila, fd: FormData) => Promise<Result
 
 /** Qué dice un candidato HOY, sin adivinar cuando no se pudo comprobar. */
 function EstadoCandidato({ c }: { c: CandidatoVista }) {
+  const { t: tr } = useT('dinero', dinero);
   if (c.vive === null) {
-    return <span className="rv-sat__nota" data-tono="warn">no se pudo comprobar si este gasto sigue ahí</span>;
+    return <span className="rv-sat__nota" data-tono="warn">{tr('descargaSat.bandeja.fila.noSePudoComprobar')}</span>;
   }
   if (c.vive === false) {
-    return <span className="rv-sat__nota" data-tono="bad">ese gasto ya no existe (se borró el viaje del que colgaba)</span>;
+    return <span className="rv-sat__nota" data-tono="bad">{tr('descargaSat.bandeja.fila.eseGastoYaNo')}</span>;
   }
   if (c.yaTieneCfdi === true) {
-    return <span className="rv-sat__nota" data-tono="warn">ya tiene comprobante — le llegó por otro camino</span>;
+    return <span className="rv-sat__nota" data-tono="warn">{tr('descargaSat.bandeja.fila.yaTieneComprobanteLe')}</span>;
   }
   // EL GASTO CAMBIÓ DESDE EL CRUCE — y solo entonces se dice. Repetir «hoy: …» debajo de un candidato idéntico llena la fila de ruido y entierra justo el caso que importa: el gasto al que alguien le movió el monto o la fecha entre que el motor lo propuso y hoy.
   const cambio = c.montoHoy !== c.montoOfrecido
     || c.fechaHoy !== c.fechaOfrecida
     || c.conceptoHoy !== c.conceptoOfrecido;
   if (!cambio) {
-    return <span className="rv-sat__nota">sin cambios desde el cruce</span>;
+    return <span className="rv-sat__nota">{tr('descargaSat.bandeja.fila.sinCambiosDesdeEl')}</span>;
   }
   return (
     <span className="rv-sat__nota" data-tono="warn">
-      cambió — hoy: {c.montoHoy === null ? 'sin monto legible' : mxn(c.montoHoy)}
-      {c.fechaHoy ? ` · ${fechaMx(c.fechaHoy)}` : ''}
-      {c.conceptoHoy ? ` · ${c.conceptoHoy}` : ''}
+      {tr('descargaSat.bandeja.fila.cambioHoy', { v: c.montoHoy === null ? tr('descargaSat.bandeja.fila.sinMontoLegible') : mxn(c.montoHoy), v2: c.fechaHoy ? ` · ${fechaMx(c.fechaHoy)}` : '', v3: c.conceptoHoy ? ` · ${c.conceptoHoy}` : '' })}
     </span>
   );
 }
@@ -80,6 +81,7 @@ export function FilaComprobante({
     campoPagina: Array<{ nombre: string; valor: string }>;
   } | null;
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, enviar, pendiente] = useActionState<ResultadoFila, FormData>(accion, null);
   const [motivando, setMotivando] = useState<null | 'ignorar' | 'revertir'>(null);
 
@@ -89,7 +91,7 @@ export function FilaComprobante({
       <div className="rv-sat__cab">
         <strong>
           {/* `null` ≠ 0: un CFDI sin total legible lo dice. */}
-          {fila.total === null ? <span className="rv-sat__nota" data-tono="warn">sin total legible</span> : mxn(fila.total)}
+          {fila.total === null ? <span className="rv-sat__nota" data-tono="warn">{tr('descargaSat.bandeja.fila.sinTotalLegible')}</span> : mxn(fila.total)}
         </strong>
         <StatusChip tono={
           fila.estatus === 'casado' ? 'ok'
@@ -99,12 +101,12 @@ export function FilaComprobante({
           {fila.estatus}
         </StatusChip>
         <span className="rv-sat__tenue">
-          {fila.rfcEmisor ?? 'sin RFC de emisor'}
+          {fila.rfcEmisor ?? tr('descargaSat.bandeja.fila.sinRfcDeEmisor')}
           {' · '}
-          {fila.fecha ? fechaMx(fila.fecha) : 'sin fecha'}
-          {fila.tipoComprobante ? ` · tipo ${fila.tipoComprobante}` : ''}
+          {fila.fecha ? fechaMx(fila.fecha) : tr('descargaSat.bandeja.fila.sinFecha')}
+          {fila.tipoComprobante ? ' ' + tr('descargaSat.bandeja.fila.tipo', { tipoComprobante: fila.tipoComprobante }) : ''}
         </span>
-        <span className="rv-sat__uuid" title="Folio fiscal — la llave del comprobante ante el SAT">{fila.cfdiUuid}</span>
+        <span className="rv-sat__uuid" title={tr('descargaSat.bandeja.fila.folioFiscalLaLlave')}>{fila.cfdiUuid}</span>
       </div>
 
       {/* Lo que el motor dijo, TAL CUAL. */}
@@ -113,12 +115,11 @@ export function FilaComprobante({
       {/* La firma viva: quién dejó esta fila como está. */}
       {fila.resueltoPorEmail && (
         <p className="rv-sat__nota">
-          Lo dejó así {fila.resueltoPorEmail}
-          {fila.resueltoEn ? ` el ${fechaHoraMx(fila.resueltoEn)}` : ''}.
+          {tr('descargaSat.bandeja.fila.loDejoAsi', { resueltoPorEmail: fila.resueltoPorEmail, v: fila.resueltoEn ? ` el ${fechaHoraMx(fila.resueltoEn)}` : '' })}
         </p>
       )}
       {!fila.resueltoPorEmail && fila.estatus === 'casado' && (
-        <p className="rv-sat__nota">Casó solo: lo decidió el cruce automático, no una persona.</p>
+        <p className="rv-sat__nota">{tr('descargaSat.bandeja.fila.casoSoloLoDecidio')}</p>
       )}
 
       {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
@@ -130,18 +131,17 @@ export function FilaComprobante({
         {/* ── AMBIGUO: los candidatos, y se ELIGE uno ─────────────────── */}
         {fila.estatus === 'ambiguo' && (
           fila.candidatos.length === 0 ? (
-            <AvisoCompacto tono="warn" resumen="Está marcado como ambiguo pero no quedó ninguna lista de candidatos legible."
-              mas="No se puede elegir a ciegas: archívalo con motivo, o pídele a soporte que revise por qué se quedó así." />
+            <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.fila.estaMarcadoComoAmbiguo')}
+              mas={tr('descargaSat.bandeja.fila.noSePuedeElegir')} />
           ) : (
             <div className="rv-sat__bloque">
               <p className="rv-sat__nota">
-                Varios gastos empataron con este importe y Likida no adivina cuál es.
-                Elige tú — y quedará firmado con tu correo.
+                {tr('descargaSat.bandeja.fila.variosGastosEmpataronCon')}
               </p>
               {fila.candidatos.map((c) => (
                 <div key={c.gastoId} className="rv-sat__candidato">
                   <span>
-                    {c.montoOfrecido === null ? 'sin monto anotado' : mxn(c.montoOfrecido)}
+                    {c.montoOfrecido === null ? tr('descargaSat.bandeja.fila.sinMontoAnotado') : mxn(c.montoOfrecido)}
                     {c.fechaOfrecida ? ` · ${fechaMx(c.fechaOfrecida)}` : ''}
                     {c.conceptoOfrecido ? ` · ${c.conceptoOfrecido}` : ''}
                   </span>
@@ -149,7 +149,7 @@ export function FilaComprobante({
                   <Boton type="submit" name="operacion" value={`ligar:${c.gastoId}`} variante="primary" tamano="sm"
                     disabled={pendiente || c.vive !== true || c.yaTieneCfdi === true}
                     icono={<Icono icono={Link2} />}>
-                    Es éste
+                    {tr('descargaSat.bandeja.fila.esEste')}
                   </Boton>
                 </div>
               ))}
@@ -161,18 +161,15 @@ export function FilaComprobante({
         {fila.estatus === 'disponible' && busqueda !== null && (
           <div className="rv-sat__candidato rv-sat__candidato--col">
             <p className="rv-sat__nota">
-              Solo se ofrecen gastos de tu flota que TODAVÍA no tienen comprobante. El
-              importe viene prellenado con el total del CFDI (± $1). Desde aquí no se crea
-              un gasto: si nadie lo reportó, ése es el hallazgo.
+              {tr('descargaSat.bandeja.fila.soloSeOfrecenGastos')}
             </p>
             {busqueda.error !== null ? (
-              <AvisoCompacto tono="error" resumen={`No se pudo buscar — eso NO significa que no haya gastos que correspondan: ${busqueda.error}`} />
+              <AvisoCompacto tono="error" resumen={tr('descargaSat.bandeja.fila.noSePudoBuscar', { error: busqueda.error })} />
             ) : (
               <>
                 {busqueda.gastos.length === 0 ? (
                   <p className="rv-sat__texto">
-                    Ningún gasto sin comprobante coincide con esos filtros. Amplía el rango de
-                    fechas o quita el importe — o archívalo, si de verdad nadie lo reportó.
+                    {tr('descargaSat.bandeja.fila.ningunGastoSinComprobante')}
                   </p>
                 ) : (
                   <ul className="rv-sat__lista">
@@ -180,21 +177,21 @@ export function FilaComprobante({
                       <li key={g.id} className="rv-sat__candidato">
                         <span>
                           {mxn(g.monto)}
-                          {g.fecha ? ` · ${fechaMx(g.fecha)}` : ' · sin fecha'}
+                          {g.fecha ? ` · ${fechaMx(g.fecha)}` : ' ' + tr('descargaSat.bandeja.fila.sinFecha2')}
                           {` · ${g.concepto}`}
-                          {g.folio ? ` · folio ${g.folio}` : ''}
+                          {g.folio ? ' ' + tr('descargaSat.bandeja.fila.folio', { folio: g.folio }) : ''}
                           {g.rfcEmisor ? ` · ${g.rfcEmisor}` : ''}
                         </span>
                         <Boton type="submit" name="operacion" value={`ligar:${g.id}`} variante="primary" tamano="sm" disabled={pendiente}
                           icono={<Icono icono={Link2} />}>
-                          Ligar a este gasto
+                          {tr('descargaSat.bandeja.fila.ligarAEsteGasto')}
                         </Boton>
                       </li>
                     ))}
                   </ul>
                 )}
                 {busqueda.truncada && (
-                  <AvisoCompacto tono="warn" resumen="Hay más gastos que cumplen esos filtros de los que caben aquí — esta lista está recortada. Acota la fecha o el importe para verlos todos." />
+                  <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.fila.hayMasGastosQue')} />
                 )}
               </>
             )}
@@ -203,33 +200,33 @@ export function FilaComprobante({
 
         {/* El motivo, cuando la operación quita una afirmación. */}
         {motivando !== null && (
-          <CampoTexto name="motivo" autoFocus required etiqueta={motivando === 'ignorar' ? 'Por qué se archiva' : 'Por qué se deshace'} etiquetaOculta
+          <CampoTexto name="motivo" autoFocus required etiqueta={motivando === 'ignorar' ? tr('descargaSat.bandeja.fila.porQueSeArchiva') : tr('descargaSat.bandeja.fila.porQueSeDeshace')} etiquetaOculta
             placeholder={motivando === 'ignorar'
-              ? 'Por qué se archiva (obligatorio) — «no es de esta flota», «duplicado del folio X»…'
-              : 'Por qué se deshace (obligatorio) — «era del ticket de la otra unidad»…'} />
+              ? tr('descargaSat.bandeja.fila.porQueSeArchiva2')
+              : tr('descargaSat.bandeja.fila.porQueSeDeshace2')} />
         )}
 
         <div className="rv-sat__acciones">
           {fila.estatus === 'disponible' && hrefBuscar !== null && busqueda === null && (
             <BotonEnlace href={hrefBuscar} variante="secondary" tamano="sm" icono={<Icono icono={Search} />}>
-              Buscar el gasto que le toca
+              {tr('descargaSat.bandeja.fila.buscarElGastoQue')}
             </BotonEnlace>
           )}
           {busqueda !== null && hrefCerrarBusqueda !== null && (
-            <BotonEnlace href={hrefCerrarBusqueda} variante="ghost" tamano="sm">Cerrar el buscador</BotonEnlace>
+            <BotonEnlace href={hrefCerrarBusqueda} variante="ghost" tamano="sm">{tr('descargaSat.bandeja.fila.cerrarElBuscador')}</BotonEnlace>
           )}
 
           {(fila.estatus === 'disponible' || fila.estatus === 'ambiguo') && (
             motivando === 'ignorar' ? (
               <>
                 <Boton type="submit" name="operacion" value="ignorar" disabled={pendiente} variante="danger" tamano="sm" icono={<Icono icono={Archive} />}>
-                  Archivar
+                  {tr('descargaSat.bandeja.fila.archivar')}
                 </Boton>
-                <Boton type="button" onClick={() => setMotivando(null)} variante="secondary" tamano="sm">Cancelar</Boton>
+                <Boton type="button" onClick={() => setMotivando(null)} variante="secondary" tamano="sm">{tr('descargaSat.bandeja.fila.cancelar')}</Boton>
               </>
             ) : (
               <Boton type="button" onClick={() => setMotivando('ignorar')} variante="secondary" tamano="sm" icono={<Icono icono={Archive} />}>
-                Archivar con motivo…
+                {tr('descargaSat.bandeja.fila.archivarConMotivo')}
               </Boton>
             )
           )}
@@ -238,13 +235,13 @@ export function FilaComprobante({
             motivando === 'revertir' ? (
               <>
                 <Boton type="submit" name="operacion" value="revertir" disabled={pendiente} variante="primary" tamano="sm" icono={<Icono icono={RotateCcw} />}>
-                  {fila.estatus === 'casado' ? 'Deshacer el cruce' : 'Devolver a la bandeja'}
+                  {fila.estatus === 'casado' ? tr('descargaSat.bandeja.fila.deshacerElCruce') : tr('descargaSat.bandeja.fila.devolverALaBandeja')}
                 </Boton>
-                <Boton type="button" onClick={() => setMotivando(null)} variante="secondary" tamano="sm">Cancelar</Boton>
+                <Boton type="button" onClick={() => setMotivando(null)} variante="secondary" tamano="sm">{tr('descargaSat.bandeja.fila.cancelar')}</Boton>
               </>
             ) : (
               <Boton type="button" onClick={() => setMotivando('revertir')} variante="secondary" tamano="sm" icono={<Icono icono={RotateCcw} />}>
-                {fila.estatus === 'casado' ? 'Deshacer el cruce…' : 'Devolver a la bandeja…'}
+                {fila.estatus === 'casado' ? tr('descargaSat.bandeja.fila.deshacerElCruce2') : tr('descargaSat.bandeja.fila.devolverALaBandeja2')}
               </Boton>
             )
           )}
@@ -258,24 +255,24 @@ export function FilaComprobante({
             <input key={c.nombre} type="hidden" name={c.nombre} value={c.valor} />
           ))}
           <input type="hidden" name="buscar" value={fila.id} />
-          <CampoTexto name="bimporte" etiqueta="Importe" defaultValue={busqueda.importe} inputMode="decimal" />
-          <CampoFecha name="bdesde" etiqueta="Desde" defaultValue={busqueda.desde} />
-          <CampoFecha name="bhasta" etiqueta="Hasta" defaultValue={busqueda.hasta} />
-          <CampoTexto name="btexto" etiqueta="Folio o RFC del ticket" defaultValue={busqueda.texto} placeholder="A-1234 · XAXX010101000" />
-          <Boton type="submit" variante="secondary" tamano="sm">Buscar</Boton>
+          <CampoTexto name="bimporte" etiqueta={tr('descargaSat.bandeja.fila.importe')} defaultValue={busqueda.importe} inputMode="decimal" />
+          <CampoFecha name="bdesde" etiqueta={tr('descargaSat.bandeja.fila.desde')} defaultValue={busqueda.desde} />
+          <CampoFecha name="bhasta" etiqueta={tr('descargaSat.bandeja.fila.hasta')} defaultValue={busqueda.hasta} />
+          <CampoTexto name="btexto" etiqueta={tr('descargaSat.bandeja.fila.folioORfcDel')} defaultValue={busqueda.texto} placeholder={tr('descargaSat.bandeja.fila.a1234Xaxx010101000')} />
+          <Boton type="submit" variante="secondary" tamano="sm">{tr('descargaSat.bandeja.fila.buscar')}</Boton>
         </form>
       )}
 
       {/* ── EL EXPEDIENTE: lo que hace que deshacer no sea borrar ────── */}
       {fila.historial.length > 0 && (
-        <Disclosure variante="linea" titulo={`Qué se ha decidido sobre este comprobante (${fila.historial.length})`}>
+        <Disclosure variante="linea" titulo={tr('descargaSat.bandeja.fila.queSeHaDecidido', { length: fila.historial.length })}>
           <ul className="rv-sat__lista">
             {fila.historial.map((h, i) => (
               <li key={i} className="rv-sat__nota">
                 <strong>{h.acto}</strong>{' '}
                 {h.estatusAntes} → {h.estatusDespues} ·{' '}
                 {/* `null` en actorEmail SOLO ocurre en 'degradado': lo hizo la base, no una persona, y se dice con esas palabras. */}
-                {h.actorEmail ?? 'lo hizo la base, no una persona'} ·{' '}
+                {h.actorEmail ?? tr('descargaSat.bandeja.fila.loHizoLaBase')} ·{' '}
                 {fechaHoraMx(h.creadoEn)}
                 {h.motivo ? ` — ${h.motivo}` : ''}
               </li>

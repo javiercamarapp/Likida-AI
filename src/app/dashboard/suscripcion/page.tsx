@@ -1,3 +1,6 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -26,7 +29,10 @@ import {
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import './suscripcion.css';
-export const metadata: Metadata = { title: 'Plan y facturación' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.suscripcion') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -62,14 +68,13 @@ async function tenantDelAction(
   return { t, email: (u?.email as string) ?? null, rol: s.rol };
 }
 
-const ESTADO_PILL: Record<Suscripcion['estado'], { tono: 'ok' | 'warn' | 'bad' | 'neutral'; texto: string }> = {
-  prueba: { tono: 'neutral', texto: 'En prueba' },
-  activa: { tono: 'ok', texto: 'Activa' },
-  morosa: { tono: 'bad', texto: 'Pago pendiente' },
-  pausada: { tono: 'warn', texto: 'Pausada' },
-  cancelada: { tono: 'neutral', texto: 'Cancelada' },
-};
-
+const estadoPill = (tr: Tr): Record<Suscripcion['estado'], { tono: 'ok' | 'warn' | 'bad' | 'neutral'; texto: string }> => ({
+  prueba: { tono: 'neutral', texto: tr('suscripcion.page.enPrueba') },
+  activa: { tono: 'ok', texto: tr('suscripcion.page.activa') },
+  morosa: { tono: 'bad', texto: tr('suscripcion.page.pagoPendiente') },
+  pausada: { tono: 'warn', texto: tr('suscripcion.page.pausada') },
+  cancelada: { tono: 'neutral', texto: tr('suscripcion.page.cancelada') },
+});
 /**
  * Plan & Facturación — lo que Likida le cobra a ESTA flota.
  *
@@ -96,6 +101,7 @@ export default async function SuscripcionPage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; ok?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/suscripcion', sp);
   const puedeContratar = puedeAdministrar(rol);
@@ -154,6 +160,7 @@ export default async function SuscripcionPage({
    */
   async function accionContratar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const clave = String(fd.get('plan') ?? '');
     let destino: string | null;
     let huboCambioDePrice: boolean;
@@ -161,15 +168,15 @@ export default async function SuscripcionPage({
       // H26: `tenantDelAction` ahora lanza si falla la lectura del correo —
       // dentro del try se convierte en un aviso, no en la pantalla caída.
       const { t, email, rol: r } = await tenantDelAction(sp, tenantId);
-      if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede contratar o cambiar de plan.' };
+      if (!puedeAdministrar(r)) return { error: tr('suscripcion.page.soloElDuenoDe') };
       const f = await getDatosFiscales(t);
       if (!estanCompletos(f)) {
-        return { error: 'Antes de contratar hay que capturar los datos fiscales de arriba: sin ellos no se te puede emitir el CFDI de la mensualidad.' };
+        return { error: tr('suscripcion.page.antesDeContratarHay') };
       }
       const p = (await getPlanes()).find((x) => x.clave === clave);
-      if (!p) return { error: 'Ese plan ya no existe.' };
+      if (!p) return { error: tr('suscripcion.page.esePlanYaNo') };
       if (!p.stripePriceId) {
-        return { error: `El plan ${p.nombre} todavía no tiene precio configurado en Stripe. Avísale a Likida.` };
+        return { error: tr('suscripcion.page.elPlanTodaviaNo', { nombre: p.nombre }) };
       }
       const s = await getSuscripcion(t);
       const r2 = await cambiarPlan({
@@ -195,12 +202,12 @@ export default async function SuscripcionPage({
     // Cambiar el price de una suscripción existente no genera una URL de pago
     // nueva a la que mandar al cliente: se actualizó, no se creó.
     if (huboCambioDePrice) {
-      return { ok: 'Plan cambiado. El ajuste llega en tu próxima factura de Likida.' };
+      return { ok: tr('suscripcion.page.planCambiadoElAjuste') };
     }
     // Sin URL la suscripción SÍ quedó creada: se dice, en vez de fingir que
     // falló y provocar que la contrate dos veces.
     if (!destino) {
-      return { ok: 'Suscripción creada. Stripe te va a mandar la factura con los datos para la transferencia por correo.' };
+      return { ok: tr('suscripcion.page.suscripcionCreadaStripeTe') };
     }
     redirect(destino);
   }
@@ -208,8 +215,9 @@ export default async function SuscripcionPage({
   /** Guarda con qué datos se le va a facturar a esta flota. */
   async function accionFiscales(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const { t, rol: r } = await tenantDelAction(sp, tenantId);
-    if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede cambiar los datos fiscales.' };
+    if (!puedeAdministrar(r)) return { error: tr('suscripcion.page.soloElDuenoDe2') };
     try {
       await guardarDatosFiscales(t, {
         rfc: String(fd.get('rfc') ?? ''),
@@ -232,18 +240,19 @@ export default async function SuscripcionPage({
       return { error: mensajeParaPantalla(e, 'guardar los datos fiscales') };
     }
     revalidatePath('/dashboard/suscripcion');
-    return { ok: 'Datos fiscales guardados. Con estos se te va a emitir el CFDI de cada mensualidad.' };
+    return { ok: tr('suscripcion.page.datosFiscalesGuardadosCon') };
   }
 
   async function accionPortal(): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const { t, rol: r } = await tenantDelAction(sp, tenantId);
-    if (!puedeAdministrar(r)) return { error: 'Solo el dueño de la flota puede administrar el cobro.' };
+    if (!puedeAdministrar(r)) return { error: tr('suscripcion.page.soloElDuenoDe3') };
 
     let destino: string;
     try {
       const s = await getSuscripcion(t);
-      if (!s?.stripeCustomerId) return { error: 'Esta flota todavía no tiene un cliente en Stripe: no hay nada que administrar.' };
+      if (!s?.stripeCustomerId) return { error: tr('suscripcion.page.estaFlotaTodaviaNo') };
       destino = await crearPortal(s.stripeCustomerId, `${appUrl()}/dashboard/suscripcion`);
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'abrir el portal de cobro') };
@@ -251,20 +260,20 @@ export default async function SuscripcionPage({
     redirect(destino);
   }
 
-  const pill = suscripcion ? ESTADO_PILL[suscripcion.estado] : null;
+  const pill = suscripcion ? estadoPill(tr)[suscripcion.estado] : null;
 
   const columnasFacturas: ColumnaBase<FacturaSaas>[] = [
-    { id: 'periodo', titulo: 'Periodo', principal: true, celda: (f) => `${fechaMx(f.periodoInicio)} — ${fechaMx(f.periodoFin)}` },
-    { id: 'monto', titulo: 'Monto', alinear: 'der', celda: (f) => mxn(f.monto) },
+    { id: 'periodo', titulo: tr('suscripcion.page.periodo'), principal: true, celda: (f) => `${fechaMx(f.periodoInicio)} — ${fechaMx(f.periodoFin)}` },
+    { id: 'monto', titulo: tr('suscripcion.page.monto'), alinear: 'der', celda: (f) => mxn(f.monto) },
     {
-      id: 'estado', titulo: 'Estado',
+      id: 'estado', titulo: tr('suscripcion.page.estado'),
       celda: (f) => (
         <>
           <StatusChip tono={f.estado === 'pagada' ? 'ok' : f.estado === 'fallida' ? 'bad' : 'neutral'}>
-            {f.estado === 'pagada' ? 'Pagada' : f.estado === 'fallida' ? 'Falló el cobro' : f.estado === 'pendiente' ? 'Pendiente' : 'Cancelada'}
+            {f.estado === 'pagada' ? tr('suscripcion.page.pagada') : f.estado === 'fallida' ? tr('suscripcion.page.falloElCobro') : f.estado === 'pendiente' ? tr('suscripcion.page.pendiente') : tr('suscripcion.page.cancelada')}
           </StatusChip>
           {f.estado !== 'pagada' && f.urlPago && (
-            <a href={f.urlPago} target="_blank" rel="noopener noreferrer" className="rv-sus__enlace">Ver datos para transferir</a>
+            <a href={f.urlPago} target="_blank" rel="noopener noreferrer" className="rv-sus__enlace">{tr('suscripcion.page.verDatosParaTransferir')}</a>
           )}
         </>
       ),
@@ -275,47 +284,44 @@ export default async function SuscripcionPage({
       celda: (f) => (f.cfdiUuid
         ? <span className="rv-sus__mono">{f.cfdiUuid.slice(0, 8)}…</span>
         : f.estado === 'pagada'
-          ? <StatusChip tono="warn">Sin timbrar</StatusChip>
+          ? <StatusChip tono="warn">{tr('suscripcion.page.sinTimbrar')}</StatusChip>
           : <span className="rv-sus__tenue">—</span>),
     },
   ];
 
   return (
-    <MarcoPagina titulo="Plan y facturación" apoyo="Tu plan de Likida, lo que llevas usado y tus facturas." acciones={<>
+    <MarcoPagina titulo={tr('suscripcion.page.planYFacturacion')} apoyo={tr('suscripcion.page.tuPlanDeLikida')} acciones={<>
         {/* H8 (auditoría 24): aquí decía "Pago recibido" solo porque la URL traía `?ok=contratado` — un query string lo escribe cualquiera, no una lectura del cobro. El estado real se pinta con `pill` (lee `suscripcion.estado` de la base). */}
         {/* La fecha de corte ya pasó (DAT-40): una prueba con corte vencido se leía como cliente al corriente y nadie le cobraba nunca. Se DICE, no se apaga nada — el mismo criterio que el límite del plan. */}
-        {suscripcion?.vencida && <StatusChip tono="warn">Venció el {fechaMx(suscripcion.periodoFin!)}</StatusChip>}
+        {suscripcion?.vencida && <StatusChip tono="warn">{tr('suscripcion.page.vencioEl', { v: fechaMx(suscripcion.periodoFin!) })}</StatusChip>}
         {pill && <StatusChip tono={pill.tono}>{pill.texto}</StatusChip>}
       </>}>
       {modo === 'prueba' && (
         <Aviso tono="warn">
-          Stripe está en modo <strong>prueba</strong>: los pagos de esta pantalla no cobran dinero real. Es lo
-          correcto para ensayar, y hay que cambiar la llave a <code>sk_live</code> antes de cobrarle a un cliente.
+          {rico(tr('suscripcion.page.stripeEstaEnModo'), { strong: (c) => <strong>{c}</strong>, code: (c) => <code>{c}</code> })}
         </Aviso>
       )}
 
       {/* ── Cómo pagar: lo primero cuando hay algo pendiente ── */}
       {porPagar && (
-        <Tarjeta titulo="Cómo pagar tu mensualidad" info="suscripcion.como_pagar" acciones={<StatusChip tono="warn">Pendiente</StatusChip>}>
+        <Tarjeta titulo={tr('suscripcion.page.comoPagarTuMensualidad')} info="suscripcion.como_pagar" acciones={<StatusChip tono="warn">{tr('suscripcion.page.pendiente')}</StatusChip>}>
           {banco === null ? (
-            <EstadoVacio titulo="Datos de pago sin configurar" icono={TriangleAlert} contenido>
-              Los datos para transferir todavía no están configurados, así que no se muestran a medias: una
-              cuenta incompleta manda el dinero al vacío. Escríbele a Likida para que te los pase.
+            <EstadoVacio titulo={tr('suscripcion.page.datosDePagoSin')} icono={TriangleAlert} contenido>
+              {tr('suscripcion.page.losDatosParaTransferir')}
             </EstadoVacio>
           ) : !porPagar.referencia ? (
-            <EstadoVacio titulo="Factura sin referencia de pago" contenido>
-              Pídesela a Likida antes de transferir: sin ella no se puede saber de qué mes es tu depósito.
+            <EstadoVacio titulo={tr('suscripcion.page.facturaSinReferenciaDe')} contenido>
+              {tr('suscripcion.page.pideselaALikidaAntes')}
             </EstadoVacio>
           ) : (
             <>
-              <InstruccionesTransferencia
+              <InstruccionesTransferencia tr={tr}
                 beneficiario={banco.beneficiario} banco={banco.banco} clabe={banco.clabe}
                 monto={porPagar.monto} subtotal={porPagar.subtotal} iva={porPagar.iva}
                 moneda={porPagar.moneda} referencia={porPagar.referencia}
               />
               <p className="rv-sus__nota">
-                Un banco no nos avisa cuando entra un depósito, así que tu factura pasa a &quot;pagada&quot; en
-                cuanto Likida lo ve en el estado de cuenta — normalmente el mismo día hábil.
+                {tr('suscripcion.page.unBancoNoNos')}
               </p>
             </>
           )}
@@ -323,100 +329,97 @@ export default async function SuscripcionPage({
       )}
 
       {/* ── Estado ── */}
-      <Tarjeta titulo="Tu plan" info="suscripcion.plan">
+      <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan">
         {suscripcionCaida ? (
-          <EstadoError reintentar>No se pudo leer tu suscripción ahora mismo. Esto no significa que no tengas una: vuelve a intentarlo antes de contratar un plan nuevo.</EstadoError>
+          <EstadoError reintentar>{tr('suscripcion.page.noSePudoLeer')}</EstadoError>
         ) : suscripcion === null ? (
-          <EstadoVacio titulo="Sin suscripción todavía" icono={CreditCard} contenido>
-            Esta flota todavía no tiene una suscripción. Abajo están los planes disponibles.
+          <EstadoVacio titulo={tr('suscripcion.page.sinSuscripcionTodavia')} icono={CreditCard} contenido>
+            {tr('suscripcion.page.estaFlotaTodaviaNo2')}
           </EstadoVacio>
         ) : (
-          <CamposSistema etiqueta="Tu plan" campos={[
+          <CamposSistema etiqueta={tr('suscripcion.page.tuPlan')} campos={[
             { etiqueta: 'Plan', valor: suscripcion.planNombre },
-            { etiqueta: 'Mensualidad', valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? 'Sin precio configurado' : mxn(planActual.precioMensual) },
+            { etiqueta: tr('suscripcion.page.mensualidad'), valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
             { etiqueta: 'Desde', valor: fechaMx(suscripcion.inicio) },
-            { etiqueta: 'Próximo corte', valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : 'Sin fecha de corte' },
+            { etiqueta: tr('suscripcion.page.proximoCorte'), valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : tr('suscripcion.page.sinFechaDeCorte') },
           ]} />
         )}
       </Tarjeta>
 
       {/* ── Uso ── */}
       {uso && (
-        <Tarjeta titulo="Lo que llevas este mes" info="suscripcion.uso">
+        <Tarjeta titulo={tr('suscripcion.page.loQueLlevasEste')} info="suscripcion.uso">
           <div className="rv-sus__rejilla">
-            <Uso etiqueta="Viajes creados este mes" usado={uso.viajesMes} limite={uso.limiteViajesMes} />
-            <Uso etiqueta="Operadores activos" usado={uso.operadores} limite={uso.limiteOperadores} />
+            <Uso tr={tr} etiqueta={tr('suscripcion.page.viajesCreadosEsteMes')} usado={uso.viajesMes} limite={uso.limiteViajesMes} />
+            <Uso tr={tr} etiqueta={tr('suscripcion.page.operadoresActivos')} usado={uso.operadores} limite={uso.limiteOperadores} />
           </div>
           <p className="rv-sus__nota">
-            Pasarse del límite no apaga nada: tus choferes siguen mandando comprobantes y el motor sigue
-            liquidando. Es la señal para hablar de subir de plan, no un candado.
+            {tr('suscripcion.page.pasarseDelLimiteNo')}
           </p>
         </Tarjeta>
       )}
 
       {/* ── Datos fiscales ── */}
-      <Tarjeta titulo="Datos para tu factura" info="suscripcion.datos_factura"
-        acciones={puedeFacturar ? <StatusChip tono="ok">Completos</StatusChip> : <StatusChip tono="warn">Faltan</StatusChip>}>
+      <Tarjeta titulo={tr('suscripcion.page.datosParaTuFactura')} info="suscripcion.datos_factura"
+        acciones={puedeFacturar ? <StatusChip tono="ok">{tr('suscripcion.page.completos')}</StatusChip> : <StatusChip tono="warn">{tr('suscripcion.page.faltan')}</StatusChip>}>
         <p className="rv-sus__nota">
-          Con estos se emite el CFDI de cada mensualidad. Cópialos <strong>tal cual</strong> de tu Constancia de
-          Situación Fiscal: el SAT los compara contra tu RFC y rechaza el timbrado por diferencias que se ven
-          inofensivas.
+          {rico(tr('suscripcion.page.conEstosSeEmite'), { strong: (c) => <strong>{c}</strong> })}
         </p>
 
         {!puedeContratar ? (
-          <EstadoVacio titulo="Solo el dueño los captura" contenido>
-            {!puedeFacturar ? 'Todavía faltan, así que no se puede facturar la mensualidad.' : 'Los datos ya están completos.'}
+          <EstadoVacio titulo={tr('suscripcion.page.soloElDuenoLos')} contenido>
+            {!puedeFacturar ? tr('suscripcion.page.todaviaFaltanAsiQue') : tr('suscripcion.page.losDatosYaEstan')}
           </EstadoVacio>
         ) : (
           <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales">
             <CampoTexto id="rfc" name="rfc" etiqueta="RFC" obligatorio defaultValue={fiscales?.rfc ?? ''}
-              placeholder="TIN010101AB1" ayuda="Se valida el dígito verificador." />
-            <CampoTexto id="razonSocial" name="razonSocial" etiqueta="Razón social" obligatorio
-              defaultValue={fiscales?.razonSocial ?? ''} placeholder="MI FLOTA SA DE CV"
-              ayuda="Exacta, como en tu constancia." />
-            <CampoTexto id="codigoPostal" name="codigoPostal" etiqueta="Código postal fiscal" obligatorio
+              placeholder="TIN010101AB1" ayuda={tr('suscripcion.page.seValidaElDigito')} />
+            <CampoTexto id="razonSocial" name="razonSocial" etiqueta={tr('suscripcion.page.razonSocial')} obligatorio
+              defaultValue={fiscales?.razonSocial ?? ''} placeholder={tr('suscripcion.page.miFlotaSaDe')}
+              ayuda={tr('suscripcion.page.exactaComoEnTu')} />
+            <CampoTexto id="codigoPostal" name="codigoPostal" etiqueta={tr('suscripcion.page.codigoPostalFiscal')} obligatorio
               defaultValue={fiscales?.codigoPostal ?? ''} placeholder="97000" />
-            <CampoSelect id="regimenFiscal" name="regimenFiscal" etiqueta="Régimen fiscal" obligatorio
+            <CampoSelect id="regimenFiscal" name="regimenFiscal" etiqueta={tr('suscripcion.page.regimenFiscal')} obligatorio
               defaultValue={fiscales?.regimenFiscal ?? '601'}>
               {REGIMENES.map((r) => <option key={r.clave} value={r.clave}>{`${r.clave} — ${r.nombre}`}</option>)}
             </CampoSelect>
-            <CampoSelect id="usoCfdi" name="usoCfdi" etiqueta="Uso del CFDI" obligatorio
+            <CampoSelect id="usoCfdi" name="usoCfdi" etiqueta={tr('suscripcion.page.usoDelCfdi')} obligatorio
               defaultValue={fiscales?.usoCfdi ?? 'G03'}
-              ayuda="G03 es como se deduce una suscripción de software.">
+              ayuda={tr('suscripcion.page.g03EsComoSe')}>
               {USOS_CFDI.map((u) => <option key={u.clave} value={u.clave}>{`${u.clave} — ${u.nombre}`}</option>)}
             </CampoSelect>
-            <CampoTexto id="emailFacturacion" name="emailFacturacion" etiqueta="Correo para tu factura"
+            <CampoTexto id="emailFacturacion" name="emailFacturacion" etiqueta={tr('suscripcion.page.correoParaTuFactura')}
               defaultValue={fiscales?.email ?? ''} placeholder="contabilidad@miflota.com"
-              ayuda="Ahí te llega el CFDI de cada mensualidad. Si lo dejas vacío, se timbra igual pero no te llega a nadie." />
+              ayuda={tr('suscripcion.page.ahiTeLlegaEl')} />
             {/* AUDITORÍA 19, CRÍTICO (legal C3 / C.16): la columna existía desde la 0018 y ninguna pantalla la llenaba, así que el aviso de privacidad de TODA flota real respondía 404. Este es el lugar: los mismos datos de la constancia, capturados juntos. */}
-            <CampoTexto id="domicilioFiscal" name="domicilioFiscal" etiqueta="Domicilio fiscal"
+            <CampoTexto id="domicilioFiscal" name="domicilioFiscal" etiqueta={tr('suscripcion.page.domicilioFiscal')}
               defaultValue={fiscales?.domicilioFiscal ?? ''}
-              placeholder="Calle 60 #123, Col. Centro, 97000 Mérida, Yuc."
-              ayuda="Completo, como en tu constancia. Es el que aparece en el aviso de privacidad de tus operadores; sin él, tus choferes no pueden mandar comprobantes — la ley obliga a decirles quién es responsable de sus datos y dónde." />
+              placeholder={tr('suscripcion.page.calle60123Col')}
+              ayuda={tr('suscripcion.page.completoComoEnTu')} />
           </FormaConAviso>
         )}
       </Tarjeta>
 
       {/* ── Planes ── */}
-      <Tarjeta titulo="Planes" info="suscripcion.planes">
+      <Tarjeta titulo={tr('suscripcion.page.planes')} info="suscripcion.planes">
         {!hayStripe ? (
-          <EstadoVacio titulo="Cobro en línea sin conectar" icono={TriangleAlert} contenido>
-            Aquí no hay botón de pago: uno que no cobra es peor que ninguno. Los planes y sus límites sí son reales. Para contratar, escríbele a Likida.
+          <EstadoVacio titulo={tr('suscripcion.page.cobroEnLineaSin')} icono={TriangleAlert} contenido>
+            {tr('suscripcion.page.aquiNoHayBoton')}
           </EstadoVacio>
         ) : planes === null ? (
-          <EstadoError reintentar>No se pudieron leer los planes.</EstadoError>
+          <EstadoError reintentar>{tr('suscripcion.page.noSePudieronLeer')}</EstadoError>
         ) : (
           <div className="rv-sus__rejilla">
             {planes.map((p) => {
               const esActual = p.clave === suscripcion?.planClave;
               return (
-                <TarjetaPlan key={p.clave} plan={p} esActual={esActual}>
+                <TarjetaPlan tr={tr} key={p.clave} plan={p} esActual={esActual}>
                   {esActual ? null : !puedeContratar ? (
-                    <p className="rv-sus__tenue">Solo el dueño de la flota puede cambiar de plan.</p>
+                    <p className="rv-sus__tenue">{tr('suscripcion.page.soloElDuenoDe4')}</p>
                   ) : !puedeFacturar ? (
-                    <p className="rv-sus__tenue">Captura primero tus datos fiscales, arriba.</p>
+                    <p className="rv-sus__tenue">{tr('suscripcion.page.capturaPrimeroTusDatos')}</p>
                   ) : (
-                    <FormaConAviso accion={accionContratar} boton={suscripcion ? `Cambiar a ${p.nombre}` : `Contratar por transferencia`} columnas="md:grid-cols-1">
+                    <FormaConAviso accion={accionContratar} boton={suscripcion ? tr('suscripcion.page.cambiarA', { nombre: p.nombre }) : tr('suscripcion.page.contratarPorTransferencia')} columnas="md:grid-cols-1">
                       <input type="hidden" name="plan" value={p.clave} />
                     </FormaConAviso>
                   )}
@@ -429,27 +432,27 @@ export default async function SuscripcionPage({
         {hayStripe && puedeContratar && suscripcion?.stripeCustomerId && (
           <FormaConAviso accion={accionPortal} boton="Administrar cobro y tarjeta" columnas="md:grid-cols-1">
             <p className="rv-sus__tenue">
-              Cambiar tarjeta, ver recibos de Stripe o cancelar — sin escribirle a nadie.
+              {tr('suscripcion.page.cambiarTarjetaVerRecibos')}
             </p>
           </FormaConAviso>
         )}
       </Tarjeta>
 
       {/* ── Facturas ── */}
-      <Tarjeta titulo="Tus facturas de Likida" info="suscripcion.facturas">
+      <Tarjeta titulo={tr('suscripcion.page.tusFacturasDeLikida')} info="suscripcion.facturas">
         {facturas === null ? (
-          <EstadoError reintentar>No se pudieron leer las facturas.</EstadoError>
+          <EstadoError reintentar>{tr('suscripcion.page.noSePudieronLeer2')}</EstadoError>
         ) : facturas.length === 0 ? (
-          <EstadoVacio titulo="Sin facturas todavía" contenido>
-            Aparecen aquí en cuanto se cobre el primer periodo.
+          <EstadoVacio titulo={tr('suscripcion.page.sinFacturasTodavia')} contenido>
+            {tr('suscripcion.page.aparecenAquiEnCuanto')}
           </EstadoVacio>
         ) : (
           <>
-            <TablaBase<FacturaSaas> etiqueta="Pagos por periodo y monto" columnas={columnasFacturas} filas={facturas}
+            <TablaBase<FacturaSaas> etiqueta={tr('suscripcion.page.pagosPorPeriodoY')} columnas={columnasFacturas} filas={facturas}
               idFila={(f) => f.id} altoMaximo={false} tarjetaMovil />
             {/* H41 (auditoría 24): `getFacturasSaas` topa a 12 sin decirlo — el tope se declara, como en el resto del panel. */}
             {facturas.length >= LIMITE_FACTURAS_SAAS && (
-              <p className="rv-sus__nota">Se muestran las {LIMITE_FACTURAS_SAAS} más recientes.</p>
+              <p className="rv-sus__nota">{tr('suscripcion.page.seMuestranLasMas', { LIMITE_FACTURAS_SAAS })}</p>
             )}
           </>
         )}
@@ -458,10 +461,9 @@ export default async function SuscripcionPage({
       {/* H27 (auditoría 24): antes esta leyenda decía "el CFDI no se timbra todavía" SIEMPRE, aunque la columna CFDI ya mostrara un UUID real — dos rótulos contradiciéndose sobre el mismo dato. La leyenda genérica solo aparece cuando de verdad ninguna factura trae CFDI; si alguna sí lo tiene, la columna ya lo dice por fila. */}
       {facturas !== null && facturas.length > 0 && facturas.some((f) => f.cfdiUuid) ? null : (
         <Aviso tono="info">
-          El CFDI de estas facturas no se timbra todavía: Stripe cobra, pero la factura fiscal mexicana se emite
-          aparte. Si necesitas CFDI de tu mensualidad, pídeselo a Likida.
+          {tr('suscripcion.page.elCfdiDeEstas')}
           {suscripcion?.stripeCustomerId && (
-            <> Los recibos de Stripe sí están en el portal de arriba.</>
+            <> {tr('suscripcion.page.losRecibosDeStripe')}</>
           )}
         </Aviso>
       )}

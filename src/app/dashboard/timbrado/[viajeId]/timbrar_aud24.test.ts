@@ -15,6 +15,9 @@ import { fileURLToPath } from 'node:url';
 
 // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee el archivo HERMANO de esta prueba, resuelto de `import.meta.url` en tiempo de prueba; la ruta no viene de ninguna entrada de usuario.
 const FUENTE = readFileSync(fileURLToPath(new URL('./timbrar.tsx', import.meta.url)), 'utf8');
+// Desde i18n P3 los textos visibles viven en el diccionario es, no en el componente: se afirman contra él.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const DICCIONARIO = readFileSync(fileURLToPath(new URL('../../../../lib/i18n/es/dinero.ts', import.meta.url)), 'utf8');
 
 describe('FIS-8: el método de pago por defecto es PUE, y PPD dice lo que arrastra', () => {
   it('el selector arranca en PUE, no en PPD', () => {
@@ -31,8 +34,8 @@ describe('FIS-8: el método de pago por defecto es PUE, y PPD dice lo que arrast
   it('la pantalla dice que un PPD obliga a un complemento de pago que Likida no emite', () => {
     // El hueco estaba declarado en el PAC y NO en la pantalla, que es donde
     // alguien elige. Un rótulo tiene que ser verdad.
-    expect(FUENTE).toMatch(/complemento de pago/i);
-    expect(FUENTE).toMatch(/todav[íi]a no lo emite/i);
+    expect(DICCIONARIO).toMatch(/complemento de pago/i);
+    expect(DICCIONARIO).toMatch(/todav[íi]a no lo emite/i);
   });
 
   it('PPD sigue disponible: no se le quita una opción legítima a quien la necesita', () => {
@@ -80,8 +83,9 @@ describe('FE-24: un fallo de red con el PAC no tira la página ni se traga el ti
 
   it('el mensaje no afirma que el CFDI no se emitió — nadie lo sabe todavía', () => {
     const accion = FUENTE.match(/async function timbrar\([\s\S]*?\n  \}/)?.[0] ?? '';
-    expect(accion).toMatch(/No des el timbre por fallido/);
-    expect(accion).toMatch(/panel de tu PAC/);
+    expect(accion).toContain("timbrado.viajeId.timbrar.errorPac");
+    expect(DICCIONARIO).toMatch(/No des el timbre por fallido/);
+    expect(DICCIONARIO).toMatch(/panel de tu PAC/);
   });
 });
 
@@ -91,7 +95,7 @@ describe('#26: la reserva ambigua del PAC y la duración de la ruta', () => {
   it('la sección de reserva ofrece liberar el bloqueo SOLO con la declaración de haber verificado en el PAC', () => {
     expect(FUENTE).toContain('liberarReservaTimbre');
     expect(FUENTE).toMatch(/name="verificadoEnPac"/);
-    expect(FUENTE).toMatch(/Verifiqué en el panel de mi PAC que NO existe un CFDI/);
+    expect(DICCIONARIO).toMatch(/Verifiqué en el panel de mi PAC que NO existe un CFDI/);
     // el verbo: dueño o contador, no el jefe de tráfico
     const accion = FUENTE.slice(FUENTE.indexOf('async function liberarReserva'));
     expect(accion).toContain('puedeTimbrar(s.rol)');

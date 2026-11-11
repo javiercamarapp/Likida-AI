@@ -1,3 +1,5 @@
+import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
@@ -38,6 +40,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
   /** El `?tenant=`/`?vista=`/`?rol=` del superadmin; vacío para roles reales. */
   sufijo?: string;
 }) {
+  const { t: tr } = await getT('dinero');
   if (!tenantExiste) return null;
 
   const { tenantId } = await resolverTenantEfectivo('/dashboard/contador', searchParams);
@@ -60,10 +63,11 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
 
   async function guardar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
-      return { error: 'Tu rol no puede declarar el perfil fiscal del timbrado.' };
+      return { error: tr('contador.timbrado.tuRolNoPuede') };
     }
     const nuevo = {
       rfc: t(fd.get('rfc'))?.toUpperCase() ?? null,
@@ -92,24 +96,23 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
       return { error: mensajeParaPantalla(e, 'guardar el perfil de timbrado') };
     }
     revalidatePath('/dashboard/contador');
-    return { ok: 'Perfil de timbrado guardado. El botón «Timbrar» del borrador de Carta Porte lo usa tal cual.' };
+    return { ok: tr('contador.timbrado.perfilDeTimbradoGuardado') };
   }
 
   const modoActual = perfil?.modo === 'produccion' ? 'produccion' : 'sandbox';
 
   return (
-    <Tarjeta titulo="Timbrado (Carta Porte vía PAC)">
+    <Tarjeta titulo={tr('contador.timbrado.timbradoCartaPorteVia')}>
       <div className="rv-cont__lista">
       {pac.configurado ? (
-        <CamposSistema etiqueta="Estado del PAC" campos={[
+        <CamposSistema etiqueta={tr('contador.timbrado.estadoDelPac')} campos={[
           { etiqueta: 'PAC conectado', valor: String(pac.proveedor ?? '').toUpperCase() },
-          { etiqueta: 'Ambiente', valor: pac.pareceSandbox ? 'Pruebas' : 'Producción', nota: pac.pareceSandbox ? 'Los timbres no amparan nada.' : 'Timbres fiscales reales.' },
-          { etiqueta: 'CSD de la flota', valor: 'En la bóveda del PAC', nota: 'Se carga en SU portal, nunca en Likida.' },
+          { etiqueta: 'Ambiente', valor: pac.pareceSandbox ? 'Pruebas' : tr('contador.timbrado.produccion'), nota: pac.pareceSandbox ? tr('contador.timbrado.losTimbresNoAmparan') : 'Timbres fiscales reales.' },
+          { etiqueta: tr('contador.timbrado.csdDeLaFlota'), valor: tr('contador.timbrado.enLaBovedaDel'), nota: tr('contador.timbrado.seCargaEnSu') },
         ]} />
       ) : (
         <p className="rv-cont__linea">
-          Sin PAC configurado: el timbrado está apagado. Se enciende desde la configuración del servidor (contrato con el PAC y sus credenciales) — sin eso, Likida no timbra y jamás simula un timbre.
-          {' '}El CSD de la flota vive en la bóveda del PAC (se carga en SU portal), nunca en Likida.
+          {tr('contador.timbrado.sinPacConfiguradoEl')}
         </p>
       )}
 
@@ -118,29 +121,27 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
           área `operacion` — o sea, la pantalla donde este rol rebota. Declarar
           el perfil aquí y no poder usarlo era la mitad de un flujo. */}
       <p className="rv-cont__linea">
-        <BotonEnlace href={`/dashboard/timbrado${sufijo}`} variante="secondary" tamano="sm">Ir a la cola de Timbrado</BotonEnlace>
-        {' '}Ahí se emite el CFDI de cada viaje con su complemento. El borrador (los 37 datos y la
-        declaración de ruta) lo trabaja el jefe de tráfico en Carta Porte; emitirlo es de este lado.
+        {rico(tr('contador.timbrado.botonenlaceIrALa'), { botonenlace: (c) => <BotonEnlace href={`/dashboard/timbrado${sufijo}`} variante="secondary" tamano="sm">{c}</BotonEnlace> })}
       </p>
 
       {!leyoOk ? (
-        <AvisoCompacto tono="warn" resumen="No se pudo leer el perfil guardado — reintenta antes de capturar encima." />
+        <AvisoCompacto tono="warn" resumen={tr('contador.timbrado.noSePudoLeer')} />
       ) : (
         <FormaConAviso accion={guardar} boton="Declarar mi perfil fiscal" columnas="md:grid-cols-1">
-          <Fieldset leyenda="Emisor">
+          <Fieldset leyenda={tr('contador.timbrado.emisor')}>
             <div className="rv-forma__rejilla">
-              <CampoTexto id="rfc" name="rfc" etiqueta="RFC del emisor" defaultValue={String(perfil?.rfc ?? '')} placeholder="EKU9003173C9 (el de pruebas del SAT, en sandbox)" />
-              <CampoTexto id="razonSocial" name="razonSocial" etiqueta="Razón social (exacta a la constancia)" defaultValue={String(perfil?.razon_social ?? '')} placeholder="ESCUELA KEMPER URGATE" />
-              <CampoTexto id="regimenFiscal" name="regimenFiscal" etiqueta="Régimen fiscal (clave)" defaultValue={String(perfil?.regimen_fiscal ?? '')} placeholder="601" />
-              <CampoTexto id="lugarExpedicion" name="lugarExpedicion" etiqueta="CP de expedición" defaultValue={String(perfil?.lugar_expedicion ?? '')} placeholder="42501" />
+              <CampoTexto id="rfc" name="rfc" etiqueta={tr('contador.timbrado.rfcDelEmisor')} defaultValue={String(perfil?.rfc ?? '')} placeholder={tr('contador.timbrado.eku9003173c9ElDePruebas')} />
+              <CampoTexto id="razonSocial" name="razonSocial" etiqueta={tr('contador.timbrado.razonSocialExactaA')} defaultValue={String(perfil?.razon_social ?? '')} placeholder={tr('contador.timbrado.escuelaKemperUrgate')} />
+              <CampoTexto id="regimenFiscal" name="regimenFiscal" etiqueta={tr('contador.timbrado.regimenFiscalClave')} defaultValue={String(perfil?.regimen_fiscal ?? '')} placeholder="601" />
+              <CampoTexto id="lugarExpedicion" name="lugarExpedicion" etiqueta={tr('contador.timbrado.cpDeExpedicion')} defaultValue={String(perfil?.lugar_expedicion ?? '')} placeholder="42501" />
             </div>
           </Fieldset>
-          <Fieldset leyenda="Emisión">
+          <Fieldset leyenda={tr('contador.timbrado.emision')}>
             <div className="rv-forma__rejilla">
-              <CampoTexto id="serie" name="serie" etiqueta="Serie (opcional)" defaultValue={String(perfil?.serie ?? '')} placeholder="CCP" />
-              <CampoSelect id="modo" name="modo" etiqueta="Ambiente" defaultValue={modoActual}>
-                <option value="sandbox">Sandbox — timbres de prueba</option>
-                <option value="produccion">Producción — timbres fiscales reales</option>
+              <CampoTexto id="serie" name="serie" etiqueta={tr('contador.timbrado.serieOpcional')} defaultValue={String(perfil?.serie ?? '')} placeholder="CCP" />
+              <CampoSelect id="modo" name="modo" etiqueta={tr('contador.timbrado.ambiente')} defaultValue={modoActual}>
+                <option value="sandbox">{tr('contador.timbrado.sandboxTimbresDePrueba')}</option>
+                <option value="produccion">{tr('contador.timbrado.produccionTimbresFiscalesRea')}</option>
               </CampoSelect>
             </div>
           </Fieldset>
