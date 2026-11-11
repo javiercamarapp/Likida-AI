@@ -1493,4 +1493,13 @@ export const admin_sistema = {
   'model_ops.kpi_llamadas': 'Llamadas a modelos',
   'model_ops.kpi_fases': 'Fases con gasto',
   'model_ops.kpi_modelos': 'Modelos que han corrido',
+  'a1r4.observado': 'Observado',
+  'a1r4.acercar': 'Acercar el mapa',
+  'a1r4.alejar': 'Alejar el mapa',
+  'a1r4.col_estado': 'Estado',
+  'a1r4.familia_cierre': 'Cerrado o ganado',
+  'a1r4.familia_avanzado': 'Avanzado (negociación, propuesta, piloto, demo)',
+  'a1r4.familia_contacto': 'En contacto (cita o contactado)',
+  'a1r4.familia_nuevo': 'Nuevo',
+  'a1r4.familia_caida': 'Caído (no llegó, cancelado, perdido)',
 } as const;

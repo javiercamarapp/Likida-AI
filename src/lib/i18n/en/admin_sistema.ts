@@ -1495,4 +1495,13 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'model_ops.kpi_llamadas': 'Model calls',
   'model_ops.kpi_fases': 'Phases with spend',
   'model_ops.kpi_modelos': 'Models that have run',
+  'a1r4.observado': 'Observed',
+  'a1r4.acercar': 'Zoom in',
+  'a1r4.alejar': 'Zoom out',
+  'a1r4.col_estado': 'State',
+  'a1r4.familia_cierre': 'Closed or won',
+  'a1r4.familia_avanzado': 'Advanced (negotiation, proposal, pilot, demo)',
+  'a1r4.familia_contacto': 'In contact (appointment or contacted)',
+  'a1r4.familia_nuevo': 'New',
+  'a1r4.familia_caida': 'Dropped (no-show, cancelled, lost)',
 };
