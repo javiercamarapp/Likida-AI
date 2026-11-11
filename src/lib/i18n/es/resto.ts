@@ -1310,4 +1310,5 @@ export const resto = {
   'e26b.vend_propuesta_nota': 'en la etapa de propuesta o de piloto',
   'r4.vend_area': 'Ventas',
   'r4.vend_apoyo': 'Tu cartera de prospectos por etapa, lo que cuenta de tu comisión y lo que sigue.',
+  'r6.con_mas': 'Ver más',
 } as const;
