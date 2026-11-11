@@ -24,7 +24,9 @@ import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
 import { FilaComprobante, type ResultadoFila } from './fila';
 import { EnlacePagina, NavPaginas } from '../../paginador';
-import { Aviso, AvisoCompacto, BotonEnlace, Chip, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BarraPeriodo, Chip, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import '../descarga-sat.css';
 
 /**
@@ -190,37 +192,7 @@ export async function PanelBandeja({
     : Math.min(Math.max(1, Math.ceil(bandeja.total / bandeja.porPagina)), PAGINA_MAX);
   const cola = colas(tr)[estatus];
 
-  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
-  return (
-    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
-    <MarcoPagina titulo="SAT" apoyo={tr('descargaSat.bandeja.vista.loQueBajoDel')}>
-      {/* ── LAS CUATRO COLAS, con su conteo EXACTO de la base ──────── */}
-      <Tarjeta titulo={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}>
-        <div className="rv-sat__cola">
-          {ESTATUS_CFDI.map((e) => {
-            const activo = e === estatus;
-            // `null` = la consulta de conteos se cayó. La cola no pinta un 0 que nadie midió: pinta un guion.
-            const n = c === null ? null
-              : e === 'ambiguo' ? c.ambiguos
-                : e === 'disponible' ? c.disponibles
-                  : e === 'casado' ? c.casados : c.ignorados;
-            return (
-              <BotonEnlace key={e} href={enlace(searchParams, { estatus: e, pag: null, buscar: null })}
-                aria-current={activo ? 'page' : undefined}
-                variante={activo ? 'primary' : 'secondary'} tamano="sm">
-                {colas(tr)[e].titulo} {n === null ? '—' : numero(n)}
-              </BotonEnlace>
-            );
-          })}
-        </div>
-        {c === null && (
-          <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losConteosDeArriba')} />
-        )}
-        <p className="rv-sat__texto">{cola.explica}</p>
-      </Tarjeta>
-
-      {/* ── QUÉ FALTA PARA QUE HAYA ALGO QUE CONCILIAR ─────────────── */}
-      {(!proveedor.configurado || datos.config === null) && (
+  const avisoFalta = (!proveedor.configurado || datos.config === null) ? (
         <Aviso tono="warn" titulo={tr('descargaSat.bandeja.vista.todaviaNoHayDe')}>
           {!proveedor.configurado && <>{tr('descargaSat.bandeja.vista.loDestrabaLikidaNo', { motivo: proveedor.motivo ?? '' })} </>}
           {datos.config === null && (
@@ -232,10 +204,47 @@ export async function PanelBandeja({
               : tr('descargaSat.bandeja.vista.tuEFirmaNo')
           )}
         </Aviso>
-      )}
+      ) : null;
 
+  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
+  return (
+    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
+    <EsqueletoTablaMaestra
+      titulo="SAT"
+      apoyo={tr('descargaSat.bandeja.vista.loQueBajoDel')}
+      filtros={(
+        <BarraPeriodo
+          etiqueta={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}
+          periodo={{
+            etiqueta: tr('descargaSat.bandeja.vista.queBajoDelBuzon'),
+            valor: estatus,
+            opciones: ESTATUS_CFDI.map((e) => ({ valor: e, etiqueta: colas(tr)[e].titulo, href: enlace(searchParams, { estatus: e, pag: null, buscar: null }) })),
+          }}
+        />
+      )}
+      avisos={(
+        <>
+          {c === null && <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losConteosDeArriba')} />}
+          {avisoFalta}
+        </>
+      )}
+      cifras={ESTATUS_CFDI.map((e): PropsCifra => {
+        // `null` = la consulta de conteos se cayó. La cola no pinta un 0 que nadie midió: pinta un guion.
+        const n = c === null ? null
+          : e === 'ambiguo' ? c.ambiguos
+            : e === 'disponible' ? c.disponibles
+              : e === 'casado' ? c.casados : c.ignorados;
+        return {
+          etiqueta: colas(tr)[e].titulo, valor: n, formato: 'entero', nota: colas(tr)[e].explica,
+          href: enlace(searchParams, { estatus: e, pag: null, buscar: null }),
+          ...(n === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.bandeja.vista.noSePudoLeer', { error: '' }) } : {}),
+        };
+      })}
+      etiquetaCifras={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}
+    >
       {/* ── LA LISTA ───────────────────────────────────────────────── */}
       <Tarjeta titulo={cola.titulo} acciones={bandeja.total !== null ? <Chip>{numero(bandeja.total)}</Chip> : undefined}>
+        <p className="rv-sat__texto">{cola.explica}</p>
         {bandeja.incompleta && (
           <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losComprobantesEstanPero')} />
         )}
@@ -297,7 +306,7 @@ export async function PanelBandeja({
       <EstadoVacio titulo={tr('descargaSat.bandeja.vista.nadaDeEstoBorra')} icono={CloudDownload} contenido>
         {tr('descargaSat.bandeja.vista.archivarYDeshacerDejan')}
       </EstadoVacio>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
     </IdiomaProvider>
   );
 }

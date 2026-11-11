@@ -13,7 +13,8 @@ import {
   contarVencidas, vaciarVencidas, leerResumenBandeja, normalizarParametros,
 } from '@/lib/admin/cola-aprobacion';
 import { ahoraMs } from '@/lib/saludo';
-import { Aviso, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { Aviso, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FormaPieza, FormaEnvio, FormaLiberarAmbiguo, type ResultadoPieza } from './forma-pieza';
 import { RebotesYBajas } from './rebotes';
 import { LimpiezaLote, type ResultadoConteo, type ResultadoVaciado } from './lote';
@@ -239,7 +240,11 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   );
 
   return (
-    <MarcoPagina titulo={t('aprobaciones.aprobaciones')} apoyo={t('aprobaciones.lo_que_los_agentes')}>
+    <EsqueletoTablaMaestra
+      titulo={t('aprobaciones.aprobaciones')}
+      apoyo={t('aprobaciones.lo_que_los_agentes')}
+      avisos={<Aviso tono="info">{t('aprobaciones.el_candado_es_de')}</Aviso>}
+    >
       <VistasAprobaciones
         inicial={inicial}
         conteos={{
@@ -250,11 +255,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
         porEnviar={paraEnviar}
         historial={historial}
       />
-      <Aviso tono="info">
-        
-        {t('aprobaciones.el_candado_es_de')}
-      </Aviso>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

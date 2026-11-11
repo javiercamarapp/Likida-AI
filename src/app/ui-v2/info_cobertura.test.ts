@@ -50,9 +50,7 @@ const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'agentes/insights/panel-insights.tsx': 1,
   'agentes/insights/tarjeta-insight.tsx': 1,
   'carta-porte/borrador/[viajeId]/page.tsx': 6,
-  'carta-porte/documentos/[id]/vista.tsx': 1,
   'puesta-en-marcha/vista.tsx': 3,
-  'reglas/vista.tsx': 2,
   'resumen-visual.tsx': 1,
   'shell/navegacion-v2.tsx': 2,
 };

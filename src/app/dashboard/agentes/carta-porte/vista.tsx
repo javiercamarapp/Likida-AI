@@ -10,9 +10,10 @@ import { DireccionBuzon } from '../proveedores/controles';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import {
-  Aviso, AvisoCompacto, clasesBoton, Disclosure, EstadoError, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, AvisoCompacto, clasesBoton, Disclosure, EstadoError, EstadoVacio, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { TR_ES, rico, type TrAgentes, type TAgentes, selloHoyTr } from '../i18n-agentes';
 
 /**
@@ -72,28 +73,34 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   const cola = datos === null ? [] : datos.viajes.filter((v) => v.decision.necesita === 'falta_declarar');
   const esperan = conteo('falta_declarar');
 
+  const sinConteo = conteo('si');
   return (
-    <MarcoPagina titulo={tx('cartaporte.vista.carta_porte_en_automatico')} apoyo={tx('cartaporte.vista.al_despachar_corre_el_arbol')}>
-
-      <AvisoCompacto
-        tono="info"
-        resumen={tx('cartaporte.vista.al_despachar_un_viaje_el')}
-        mas={tx('cartaporte.vista.corre_el_arbol_legal_rmf')}
-      />
-
-      {catalogosSat !== undefined && <AvisoCatalogosSat tr={tr} catalogosSat={catalogosSat} />}
-
+    <EsqueletoTablaMaestra
+      titulo={tx('cartaporte.vista.carta_porte_en_automatico')}
+      apoyo={tx('cartaporte.vista.al_despachar_corre_el_arbol')}
+      avisos={(
+        <>
+          <AvisoCompacto
+            tono="info"
+            resumen={tx('cartaporte.vista.al_despachar_un_viaje_el')}
+            mas={tx('cartaporte.vista.corre_el_arbol_legal_rmf')}
+          />
+          {catalogosSat !== undefined && <AvisoCatalogosSat tr={tr} catalogosSat={catalogosSat} />}
+        </>
+      )}
+      cifras={datos === null ? undefined : [
+        { info: 'carta_porte_agente.en_curso', etiqueta: tx('cartaporte.vista.viajes_en_curso'), valor: numero(datos.total) },
+        { info: 'carta_porte_agente.esperan', etiqueta: tx('cartaporte.vista.esperan_declaracion'), valor: esperan === null ? null : numero(esperan), tono: esperan !== null && esperan > 0 ? 'bad' : undefined },
+        { info: 'carta_porte_agente.necesitan', etiqueta: tx('cartaporte.vista.necesitan_complemento'), valor: sinConteo === null ? null : numero(sinConteo), tono: (sinConteo ?? 0) > 0 ? 'warn' : undefined },
+        { info: 'carta_porte_agente.borradores', etiqueta: tx('cartaporte.vista.borradores_sin_fallas'), valor: armables === null ? null : numero(armables) },
+      ]}
+      etiquetaCifras={tx('cartaporte.vista.carta_porte_en_automatico')}
+      selloCifras={selloHoyTr(tr, tx('cartaporte.vista.sello_viajes_en_curso'))}
+    >
       {datos === null ? (
         <EstadoError>{tx('cartaporte.vista.no_se_pudieron_leer_los')}</EstadoError>
       ) : (
         <>
-          <TiraCifras sello={selloHoyTr(tr, tx('cartaporte.vista.sello_viajes_en_curso'))}>
-            <Cifra info="carta_porte_agente.en_curso" etiqueta={tx('cartaporte.vista.viajes_en_curso')} valor={numero(datos.total)} />
-            <Cifra info="carta_porte_agente.esperan" etiqueta={tx('cartaporte.vista.esperan_declaracion')} valor={esperan === null ? null : numero(esperan)} tono={esperan !== null && esperan > 0 ? 'bad' : undefined} />
-            <Cifra info="carta_porte_agente.necesitan" etiqueta={tx('cartaporte.vista.necesitan_complemento')} valor={conteo('si') === null ? null : numero(conteo('si') as number)} tono={(conteo('si') ?? 0) > 0 ? 'warn' : undefined} />
-            <Cifra info="carta_porte_agente.borradores" etiqueta={tx('cartaporte.vista.borradores_sin_fallas')} valor={armables === null ? null : numero(armables)} />
-          </TiraCifras>
-
           <Tarjeta titulo={tx('cartaporte.vista.esperando_al_jefe')} info="carta_porte_agente.cola"
             estado={cola.length === 0 ? 'vacio' : 'ok'} iconoVacio={ScrollText} mensaje={tx('cartaporte.vista.nada_pendiente_de_declarar')}
             detalle={tx('cartaporte.vista.cada_viaje_en_curso_ya')}
@@ -147,7 +154,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       </Tarjeta>
 
       {notificaciones}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

@@ -10,7 +10,7 @@ import { opcionesBitacora } from '@/lib/admin/bitacora';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
 import {
-  BarraFiltros, EstadoError, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta, type OpcionFiltro, type TonoEstado,
+  BarraFiltros, EstadoError, FiltroOpciones, StatusChip, Tarjeta, type OpcionFiltro, type TonoEstado,
 } from '../../ui-v2/componentes';
 import { MapaCalor } from '../../ui-v2/graficas';
 import { getT } from '@/lib/i18n/servidor';
@@ -19,6 +19,7 @@ import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { etiquetaInterruptorTr, etiquetaInterruptor } from '../observabilidad/etiquetas';
 import { BloqueAgentesParados } from '../escalaciones/agentes-parados';
 import { PiePaginas } from '../pie-paginas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import '../sistema.css';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
@@ -113,13 +114,17 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
   const calor = resultado !== null && resultado.corridas.length > 0 ? matrizDeCorridas(resultado.corridas.map((c) => c.inicio), t('corridas.calor.dias').split(',')) : null;
 
   return (
-    <MarcoPagina titulo={tx('corridas.corridas')} apoyo={tx('corridas.las_corridas_de_los_agentes_en')}>
+    <EsqueletoTablaMaestra
+      titulo={tx('corridas.corridas')}
+      apoyo={tx('corridas.las_corridas_de_los_agentes_en')}
+      cifras={resultado === null ? undefined : [{ etiqueta: tx('corridas.corridas'), valor: resultado.total, formato: 'entero' }]}
+      filtros={
       <BarraFiltros accion="/admin/corridas" enLinea buscar etiqueta={tx('corridas.filtrar_corridas')} nActivos={[agente, estado, tenant].filter(Boolean).length} limpiarHref="/admin/corridas">
         <FiltroOpciones etiqueta={tx('observabilidad.agente')} nombre="agente" valor={agente} opciones={opcionesAgente(tx)} />
         <FiltroOpciones etiqueta={tx('salud_sistema.estado')} nombre="estado" valor={estado} opciones={[{ valor: '', rotulo: tx('corridas.cualquier_estado') }, ...ESTADOS_CORRIDA.map((e) => ({ valor: e, rotulo: chipTr(tx)[e].etiqueta }))]} />
         {flotas ? <FiltroOpciones etiqueta={tx('observabilidad.flota')} nombre="tenant" valor={tenant} opciones={flotas} /> : null}
-      </BarraFiltros>
-
+      </BarraFiltros>}
+    >
       {resultado === null ? (
         <EstadoError reintentar>{tx('corridas.no_se_pudieron_leer_las_corridas')}</EstadoError>
       ) : (
@@ -143,7 +148,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
       )}
 
       <BloqueAgentesParados datos={parados} cola={cola} />
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

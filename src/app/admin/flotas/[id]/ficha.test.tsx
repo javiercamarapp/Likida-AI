@@ -3,7 +3,7 @@ import { expect, it, vi } from 'vitest';
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: vi.fn() }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
 
-import { Ficha360, encabezadoFicha } from './ficha';
+import { Ficha360, encabezadoFicha, cifrasFicha } from './ficha';
 import type { FichaCliente } from '@/lib/admin/ficha-cliente';
 import { armarPersonas } from '@/lib/admin/personas';
 import { casillasDeArranque } from '@/lib/admin/arranque';
@@ -21,13 +21,20 @@ it('trae las seis secciones y el slot de plan reubicado en "Plan y cobro"', () =
   expect(html).toContain('SLOT-PLAN');
 });
 
-it('el encabezado lleva el nombre de la flota, el volver y los dos accesos', () => {
+it('el encabezado lleva el nombre de la flota, el volver (lo pone el esqueleto) y el acceso a su panel', () => {
   const e = encabezadoFicha(FICHA);
   const html = renderToStaticMarkup(<>{e.acciones}</>);
   expect(e.titulo).toBe('ACME');
   expect(e.apoyo).toContain('Plan demo');
-  expect(html).toContain('/admin/flotas');
+  expect(e.volver.href).toBe('/admin/flotas');
   expect(html).toContain('/dashboard?tenant=t-1&amp;rol=flota_admin');
+});
+
+it('las cuatro cifras de la ficha dicen "no disponible" cuando la lectura falló, nunca cero', () => {
+  const cifras = cifrasFicha({ ...FICHA, operacion: null, consumoIa: null });
+  expect(cifras).toHaveLength(4);
+  expect(cifras.every((c) => c.valor === null && c.estado === 'error')).toBe(true);
+  expect(cifrasFicha(FICHA)[0].valor).toBe(3);
 });
 
 it('lo que no se pudo leer dice "no disponible", no cero', () => {

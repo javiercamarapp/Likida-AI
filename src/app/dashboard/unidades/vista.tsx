@@ -8,10 +8,12 @@ import { FormaUnidad, type AccionForma, type ProveedorGps, type PatioOpcion } fr
 import { ImportadorMasivo, type AccionImportacion } from '../importador-masivo';
 import { AccionesEstadoUnidad, ReactivarUnidad, type AccionEstado } from './estado';
 import {
-  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, AvisoCompacto, BotonEnlace, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { CajonAlta } from '../cajon-alta';
 import './unidades.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -149,31 +151,24 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
   const hrefUnidad = (id: string | null) => urlRegistro('/dashboard/unidades', sufijo, { q: pag.q || null, p: pag.pagina, editar: id });
   const editada = pag.editando ? pag.filas.find((u) => u.id === pag.editando) : undefined;
 
-  // Altas (formulario y carga masiva): con datos van DESPUÉS de la lista, plegadas; sin unidades, primero y abiertas.
-  // El alta va ANTES del estado vacío a propósito: con cero unidades, esta sección es la única forma de que deje de haber cero.
-  // Solo se pinta a quien puede administrar: el encargado la lee, no la escribe (misma puerta que clientes).
-  const alta = (
+  // Altas (formulario y carga masiva): cada una en su cajón lateral, abierto desde la cabecera de página (primario = alta). Sin unidades
+  // el alta nace abierta: es la única forma de que deje de haber cero. Solo se pinta a quien puede administrar: el encargado la lee, no la escribe.
+  const acciones = puedeEditar ? (
     <>
-      {puedeEditar && (
-        <Disclosure variante="tarjeta" titulo={t('un.alta.titulo')} resumen={t('un.alta.resumen')} abierto={vacio}>
-          <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
-            patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
-        </Disclosure>
-      )}
-      {puedeEditar && (
-        <div id="importar">
-          <Disclosure variante="tarjeta" titulo={t('un.carga.titulo')} abierto={vacio}>
-            <ImportadorMasivo
-              entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
-              archivoPlantilla="plantilla-unidades.csv"
-              columnas={t('un.carga.cols')}
-              hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
-            />
-          </Disclosure>
-        </div>
-      )}
+      <CajonAlta id="importar" titulo={t('un.carga.titulo')} disparador={t('un.carga.titulo')} tamano="xl">
+        <ImportadorMasivo
+          entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
+          archivoPlantilla="plantilla-unidades.csv"
+          columnas={t('un.carga.cols')}
+          hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
+        />
+      </CajonAlta>
+      <CajonAlta id="alta" titulo={t('un.alta.titulo')} descripcion={t('un.alta.resumen')} disparador={t('un.alta.titulo')} primario>
+        <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
+          patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
+      </CajonAlta>
     </>
-  );
+  ) : undefined;
 
   const columnas: ColumnaBase<UnidadRow>[] = [
     {
@@ -219,80 +214,84 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       ) : <span className="rv-un__tenue">{t('un.sinrastreo')}</span>),
     },
   ];
-  if (puedeEditar) {
-    columnas.push({
-      // El estado operativo NO vive en la forma de edición: es una acción de un clic sobre un hecho del mundo («se fue al taller»,
-      // «la vendimos»), no un campo que se captura junto a las placas. Va siempre visible, no solo en la fila que `?editar=` abrió.
-      id: 'acciones', titulo: t('un.col.acciones'), alinear: 'der',
-      celda: (u) => (editablePorUnidad[u.id] ? (
-        <span className="rv-un__acciones">
-          <BotonEnlace href={hrefUnidad(pag.editando === u.id ? null : u.id)} variante="ghost" tamano="sm">
-            {pag.editando === u.id ? t('un.cerrar') : t('un.editar')}
-          </BotonEnlace>
+  columnas.push({
+    // El estado operativo NO vive en la forma de edición: es una acción de un clic sobre un hecho del mundo («se fue al taller»,
+    // «la vendimos»), no un campo que se captura junto a las placas. Va siempre visible, no solo en la fila que `?editar=` abrió.
+    id: 'acciones', titulo: t('un.col.acciones'), alinear: 'der',
+    celda: (u) => (
+      <span className="rv-un__acciones">
+        <BotonEnlace href={hrefUnidad(u.id)} variante="ghost" tamano="sm">{t('un.vr.ver')}</BotonEnlace>
+        {puedeEditar && editablePorUnidad[u.id] ? (
           <AccionesEstadoUnidad accion={cambiarEstado} unidadId={u.id} estado={u.estado} numeroEconomico={u.numeroEconomico} />
-        </span>
-      ) : null),
-    });
-  }
+        ) : null}
+      </span>
+    ),
+  });
+
+  // `—` y no 0 cuando no se pudo contar: un 0 aquí diría «no hay ninguna vencida», que es la afirmación más cara que esta pantalla puede
+  // hacer en falso. `unidades` y no `activas`: con todo el parque dado de baja, «todavía no hay unidades» sería falso.
+  const cifras: PropsCifra[] | undefined = vacio ? undefined : [
+    { etiqueta: t('un.cifra.vencidos'), valor: conteos?.vencidos, tono: conteos && conteos.vencidos > 0 ? 'bad' : undefined, info: 'unidades.vencidas' },
+    { etiqueta: t('un.cifra.vencen', { n: DIAS_AVISO }), valor: conteos?.porVencer, tono: conteos && conteos.porVencer > 0 ? 'warn' : undefined, info: 'unidades.por_vencer' },
+    { etiqueta: t('un.cifra.enregla'), valor: conteos?.vigentes, info: 'unidades.en_regla' },
+    { etiqueta: t('un.cifra.sinpapeles'), valor: conteos?.sinDato, info: 'unidades.sin_papeles' },
+  ];
+  const puedeCorregir = puedeEditar && editada !== undefined && editablePorUnidad[editada.id];
 
   return (
-    <MarcoPagina titulo={t('un.titulo')} apoyo={t('un.apoyo')}>
-      {aviso && <Aviso tono="error" titulo={t('un.aviso.titulo')}>{aviso}</Aviso>}
-
-      {vacio && (
-        <EstadoVacio pantalla contenido icono={Truck} titulo={t('un.vacio.titulo')}
-          accion={puedeEditar ? <BotonEnlace tamano="sm" href="#importar">{t('un.vacio.cargar')}</BotonEnlace> : undefined}>
+    <EsqueletoTablaMaestra
+      titulo={t('un.titulo')}
+      apoyo={t('un.apoyo')}
+      acciones={acciones}
+      cifras={cifras}
+      filtros={vacio ? undefined : (
+        <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
+          sustantivo="unidades" camposOcultos={camposOcultos} />
+      )}
+      avisos={(
+        <>
+          {aviso && <Aviso tono="error" titulo={t('un.aviso.titulo')}>{aviso}</Aviso>}
+          {!vacio && hayFiltro && !totalActivasConocido && (
+            // No se pudo contar el parque entero, así que el «de N» del pie sería un número inventado. Se dice.
+            <AvisoCompacto tono="warn" resumen={t('un.aviso.parque')} />
+          )}
+        </>
+      )}
+      vistaRapida={editada ? (
+        <CajonVistaRapida
+          titulo={editada.numeroEconomico}
+          subtitulo={[editada.placas, editada.marca, editada.modelo, editada.anio].filter(Boolean).join(' · ') || undefined}
+          hrefCerrar={hrefUnidad(null)}
+          cifras={[
+            { etiqueta: t('un.col.estado'), valor: ESTADO_UNIDAD[editada.estado] ?? editada.estado },
+            { etiqueta: t('un.col.papeles'), valor: clasificarVigencia(editada.diasAlVencimiento, editada.queVence).rotulo },
+            { etiqueta: 'Km', valor: editada.kmActual !== null ? `${numero(editada.kmActual, idioma)} km` : '—' },
+            { etiqueta: t('un.col.taller'), valor: editada.ordenesAbiertas > 0 ? tp('un.orden', editada.ordenesAbiertas) : t('un.sinordenes') },
+          ]}
+        >
+          {puedeCorregir ? (
+            <div className="rv-un__editor">
+              <p className="rv-un__nota">{t('un.corregir', { eco: editada.numeroEconomico })}</p>
+              <FormaUnidad accion={guardar} id={editada.id} inicial={aInicial(editada)} idPrefijo={`u-${editada.id}`}
+                proveedoresGps={proveedoresGps} gpsVistoEn={editada.gpsVistoEn}
+                patios={patios} terminalId={terminalPorUnidad[editada.id] ?? ''} patioFijo={patioDelJefe !== null} />
+            </div>
+          ) : null}
+        </CajonVistaRapida>
+      ) : null}
+    >
+      {vacio ? (
+        <EstadoVacio pantalla contenido icono={Truck} titulo={t('un.vacio.titulo')}>
           {t('un.vacio.nota')}
           {puedeEditar ? t('un.vacio.manual') : ''}
         </EstadoVacio>
-      )}
-
-      {vacio && alta}
-
-      {/* `unidades` y no `activas`: con todo el parque dado de baja, "todavía no hay unidades dadas de alta" sería falso, y mandaría
-          a capturar de nuevo camiones que ya están en la base, abajo. */}
-      {!vacio && (
+      ) : (
         <>
-          {/* `—` y no 0 cuando no se pudo contar: un 0 aquí diría «no hay ninguna vencida», que es la afirmación más cara que esta
-              pantalla puede hacer en falso. `Cifra` pinta «—» con valor undefined. */}
-          <TiraCifras>
-            <Cifra etiqueta={t('un.cifra.vencidos')} valor={conteos?.vencidos} tono={conteos && conteos.vencidos > 0 ? 'bad' : undefined} info="unidades.vencidas" />
-            <Cifra etiqueta={t('un.cifra.vencen', { n: DIAS_AVISO })} valor={conteos?.porVencer} tono={conteos && conteos.porVencer > 0 ? 'warn' : undefined} info="unidades.por_vencer" />
-            <Cifra etiqueta={t('un.cifra.enregla')} valor={conteos?.vigentes} info="unidades.en_regla" />
-            <Cifra etiqueta={t('un.cifra.sinpapeles')} valor={conteos?.sinDato} info="unidades.sin_papeles" />
-          </TiraCifras>
-
-          {puedeEditar && editada && editablePorUnidad[editada.id] && (
-            <Tarjeta titulo={t('un.corregir', { eco: editada.numeroEconomico })}>
-              <div className="rv-un__editor">
-                <FormaUnidad accion={guardar} id={editada.id} inicial={aInicial(editada)} idPrefijo={`u-${editada.id}`}
-                  proveedoresGps={proveedoresGps} gpsVistoEn={editada.gpsVistoEn}
-                  patios={patios} terminalId={terminalPorUnidad[editada.id] ?? ''} patioFijo={patioDelJefe !== null} />
-                <BotonEnlace href={hrefUnidad(null)} variante="ghost" tamano="sm">{t('un.cerrar')}</BotonEnlace>
-              </div>
-            </Tarjeta>
-          )}
-
-          <Tarjeta titulo={t('un.parque')} info="unidades.ficha">
-            <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
-              sustantivo="unidades" camposOcultos={camposOcultos} />
-
-            {hayFiltro && !totalActivasConocido && (
-              // No se pudo contar el parque entero, así que el «de N» del pie sería un número inventado. Se dice.
-              <AvisoCompacto tono="warn" resumen={t('un.aviso.parque')} />
-            )}
-
-            <TablaBase<UnidadRow> etiqueta={t('un.tabla.etiqueta')} columnas={columnas} filas={pag.filas} idFila={(u) => u.id} tarjetaMovil
-              vacio={{ titulo: t('un.vacio.sincoincidencias'), texto: t('un.vacio.busqueda', { q: pag.q }) }} />
-
-            <p className="rv-un__nota">
-              {t('un.nota.papel')}
-            </p>
-          </Tarjeta>
+          <TablaBase<UnidadRow> etiqueta={t('un.tabla.etiqueta')} columnas={columnas} filas={pag.filas} idFila={(u) => u.id} tarjetaMovil
+            vacio={{ titulo: t('un.vacio.sincoincidencias'), texto: t('un.vacio.busqueda', { q: pag.q }) }} />
+          <p className="rv-un__nota">{t('un.nota.papel')}</p>
         </>
       )}
-
-      {!vacio && alta}
 
       {/* LAS QUE YA NO ESTÁN EN EL PARQUE. Aparte y al final: no cuentan en los cuatro contadores de arriba (una póliza vencida de un
           camión vendido no es un pendiente) ni se ofrecen en Despacho. Pero SE VEN: un activo dado de baja que desaparece de la
@@ -318,6 +317,6 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
           </ul>
         </Tarjeta>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

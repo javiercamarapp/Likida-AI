@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function ElegirFlotaPage({
   searchParams,
-}: { searchParams: Promise<{ next?: string; error?: string }> }) {
+}: { searchParams: Promise<{ next?: string; error?: string; q?: string }> }) {
   await requireSuperadmin();
   const sp = await searchParams;
   const next = destinoSeguro(sp.next);
@@ -81,6 +81,7 @@ export default async function ElegirFlotaPage({
       next={next}
       error={sp.error ?? null}
       errorLista={Boolean(error)}
+      consulta={(sp.q ?? '').trim().slice(0, 80)}
       accionElegir={elegirFlota}
       accionQuitar={quitarSeleccion}
     />

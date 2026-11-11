@@ -5,11 +5,12 @@ import { getEstadoEvals } from '@/lib/admin/evals';
 import { getCalidadCorridas, getCalidadOcr } from '@/lib/admin/calidad';
 import { ahoraMs } from '@/lib/saludo';
 import { numero, porcentaje, fechaHoraMx } from '@/lib/formato';
-import { Aviso, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { Aviso, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import type { Idioma } from '@/lib/i18n/idioma';
 export const dynamic = 'force-dynamic';
 
@@ -117,28 +118,25 @@ export default async function CalidadEvalsPage() {
   ]);
 
   return (
-    <MarcoPagina titulo={t('calidad_evals.calidad_evals')}>
-      <Tarjeta titulo={t('calidad_evals.la_calidad_que_ya')}>
-        <p className="m-0 text-sm leading-relaxed text-muted">
-          
-          {t('calidad_evals.cuatro_fuentes_reales_el')}
-        </p>
-      </Tarjeta>
-
-      {/* ── 1 · El examen del analista (EVALOPS 0134) ─────────────────── */}
-      <TarjetaExamen tx={tx} idioma={idioma}
-        titulo={t('calidad_evals.el_examen_del_analista')}
-        estado={evals}
-        avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el')}
-      />
-
-      {/* ── 1b · El examen fiscal del contador (E.26, 0254) ───────────── */}
-      <TarjetaExamen tx={tx} idioma={idioma}
-        titulo={t('calidad_evals.el_examen_del_contador')}
-        estado={evalsContador}
-        avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el_2')}
-        conNotas
-      />
+    <EsqueletoPanelCifras
+      titulo={t('calidad_evals.calidad_evals')}
+      titular={t('calidad_evals.cuatro_fuentes_reales_el')}
+      graficas={[
+        /* ── 1 · El examen del analista (EVALOPS 0134) ── */
+        <TarjetaExamen key="analista" tx={tx} idioma={idioma}
+          titulo={t('calidad_evals.el_examen_del_analista')}
+          estado={evals}
+          avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el')}
+        />,
+        /* ── 1b · El examen fiscal del contador (E.26, 0254) ── */
+        <TarjetaExamen key="contador" tx={tx} idioma={idioma}
+          titulo={t('calidad_evals.el_examen_del_contador')}
+          estado={evalsContador}
+          avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el_2')}
+          conNotas
+        />,
+      ]}
+    >
 
       {/* ── 2 · Los veredictos de las corridas de agentes (0102) ──────── */}
       <Tarjeta titulo={t('calidad_evals.corridas_de_agentes_ultimos', { DIAS_VENTANA })}>
@@ -221,7 +219,7 @@ export default async function CalidadEvalsPage() {
           ))}
         </ul>
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

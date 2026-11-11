@@ -801,6 +801,7 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'agente_whatsapp.entrega_y_ventana_de_24_horas': 'Delivery and the 24-hour window',
   'agente_whatsapp.enviados_entregados_y_leidos_la_ventana': 'Sent, delivered and read, the 24-hour window and opt-ins require integrating the Meta WhatsApp Business API more deeply than Likida uses it today.',
   'agentes_insumos.insumos_del_agente': 'Agent inputs',
+  'agentes_insumos.volver_a_agentes': 'Back to Agents',
   'agentes_insumos.quedo_guardado_se_procesa_en_la': '"{titulo}" was saved: it is processed on this agent\'s next run.',
   'agentes_insumos.quedo_guardado_este_agente_aun_no': '"{titulo}" was saved. This agent does not read inputs yet, so no run uses it for now.',
   'agentes_insumos.id': '{rotuloDepartamento} · id',
@@ -1347,4 +1348,8 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'rotulos.estado_prospecto.pilot': 'Pilot',
   'rotulos.estado_prospecto.won': 'Won',
   'rotulos.estado_prospecto.lost': 'Lost',
+  'mapa_prospectos_detalle.eyebrow': 'Prospect record',
+  'mapa_prospectos_detalle.etiqueta_chips': 'Stage and context',
+  'mapa_prospectos_detalle.etiqueta_resumen': 'Prospect summary',
+  'mapa_prospectos_detalle.etiqueta_cifras': 'Prospect scores',
 };

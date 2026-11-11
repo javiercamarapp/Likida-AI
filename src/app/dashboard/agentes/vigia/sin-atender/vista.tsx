@@ -2,7 +2,8 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import type { ResultadoSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/motor';
 import type { DestinatarioResumen } from '@/lib/likida/vigia/sin_atender_aviso/destinatarios';
 import '../vigia.css';
-import { Aviso, BotonEnlace, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import type { ConfigGuardadaSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/motor';
 import { FormaRevision, type AccionEnviar, type AccionRevisar } from './formas';
@@ -43,16 +44,26 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
   const r = resultado?.resumen;
   const horario = textoHorario(guardada.horarioAtencion);
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       titulo={tx('rest.conversaciones_sin_atender')}
       apoyo={tx('rest.vigia_por_exportacion_de_chats_sin')}
       acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
+      avisos={(
+        <>
+          <Aviso tono="info">{ricoT(tx('rest.esta_lista_sale_de_los_chats'), { e0: (c) => <a className="rv-vg__enlace" href={`/dashboard/agentes/vigia/historial${sufijo}`}>{c}</a> })}</Aviso>
+          {error !== null ? <Aviso tono="error">{error}</Aviso> : null}
+        </>
+      )}
+      // Tira de cifras (Rovaq «Acciones»): solo con lectura real; sin ella no se pinta ninguna (nunca un cero que parezca «todo atendido»).
+      cifras={error === null && r ? [
+        { etiqueta: tx('rest.sin_atender'), valor: numero(r.alertas), tono: r.alertas > 0 ? 'warn' : undefined },
+        { etiqueta: tx('f26d.sin_atender.prioridad_alta'), valor: numero(r.altas), tono: r.altas > 0 ? 'bad' : undefined },
+        { etiqueta: tx('f26d.sin_atender.mas_antigua'), valor: r.masAntiguaMin !== null ? duracion(r.masAntiguaMin) : null },
+        { etiqueta: tx('f26d.sin_atender.grupos_revisados'), valor: numero(gruposRevisados), nota: gruposOmitidos > 0 ? tx('rest.quedaron_fuera_grupos_por_el_tope', { numero: numero(gruposOmitidos) }) : undefined },
+      ] : undefined}
+      etiquetaCifras={tx('rest.sin_atender')}
     >
-      <Aviso tono="info">{ricoT(tx('rest.esta_lista_sale_de_los_chats'), { e0: (c) => <a className="rv-vg__enlace" href={`/dashboard/agentes/vigia/historial${sufijo}`}>{c}</a> })}</Aviso>
-
-      {error !== null ? (
-        <Aviso tono="error">{error}</Aviso>
-      ) : (
+      {error === null && (
         <>
           <Seccion id="sin-atender-lista" titulo={tx('rest.sin_atender')} info="vigia_sin_atender.lista">
             {r && (
@@ -98,6 +109,6 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
           </Seccion>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

@@ -7,7 +7,8 @@ import { FormaCatalogo } from './formas_catalogo';
 import { FormaEstadoSitio } from './formas_estado';
 import { FormaImportar, FormaSitio, SITIO_VACIO, type AccionSitio, type SitioEditable } from './formas';
 import '../conductores.css';
-import { AvisoCompacto, BarraFiltros, BotonEnlace, Disclosure, FiltroBusqueda, MarcoPagina, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraFiltros, BotonEnlace, Disclosure, FiltroBusqueda, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -79,21 +80,36 @@ export function VistaSitios(p: PropsVistaSitios) {
       celda: (x: TextoSinSitio) => (p.accionAsignarEquivalencia ? <FilaTextoSinSitio accion={p.accionAsignarEquivalencia} texto={x.texto} lado={x.lado} sitios={padres} /> : null),
     } satisfies ColumnaBase<TextoSinSitio>] : []),
   ];
+  // Con «hay más» el recuento es parcial: se rotula con «+» y nunca se presenta como total.
+  const mas = p.hayMas ? '+' : '';
+  const lista = p.sitios ?? [];
   return (
-    <MarcoPagina titulo={tx('rest.catalogo_de_sitios')} apoyo={tx('rest.clientes_plantas_y_andenes_con_su')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${p.sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
-      <AvisoCompacto
-        tono="info"
-        resumen={tx('rest.el_agente_compara_cada_ya_llegue')}
-        mas={<>{ricoT(tx('rest.compara_contra_el_pin_de_whatsapp'), { strong: (c) => <strong>{c}</strong> })}</>}
-      />
-
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.catalogo_de_sitios')}
+      apoyo={tx('rest.clientes_plantas_y_andenes_con_su')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${p.sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
+      filtros={(
+        <BarraFiltros buscar accion="?" enLinea etiqueta={tx('rest.buscar_sitios')} ocultos={p.sufijo.startsWith('?') ? [...new URLSearchParams(p.sufijo.slice(1))] : []}
+          nActivos={p.busqueda ? 1 : 0} limpiarHref={p.sufijo || '?'}>
+          <FiltroBusqueda nombre="q" valor={p.busqueda} placeholder={tx('rest.buscar_por_nombre_o_codigo')} etiqueta={tx('rest.buscar_sitios')} />
+        </BarraFiltros>
+      )}
+      avisos={(
+        <AvisoCompacto
+          tono="info"
+          resumen={tx('rest.el_agente_compara_cada_ya_llegue')}
+          mas={<>{ricoT(tx('rest.compara_contra_el_pin_de_whatsapp'), { strong: (c) => <strong>{c}</strong> })}</>}
+        />
+      )}
+      cifras={p.sitios === null ? undefined : [
+        { etiqueta: tx('f26d.sitios.registrados'), valor: `${numero(lista.length)}${mas}` },
+        { etiqueta: tx('f26d.sitios.activos'), valor: `${numero(lista.filter((s) => s.activa).length)}${mas}` },
+        { etiqueta: tx('f26d.sitios.archivados'), valor: `${numero(lista.filter((s) => !s.activa).length)}${mas}` },
+        ...(p.textosSinSitio !== undefined ? [{ etiqueta: tx('f26d.sitios.textos_pendientes'), valor: p.textosSinSitio ? `${numero(p.textosSinSitio.length)}${p.textosTruncado ? '+' : ''}` : null }] : []),
+      ]}
+      etiquetaCifras={tx('rest.sitios_registrados')}
+    >
       <Tarjeta titulo={tx('rest.sitios_registrados')} info="conductores_sitios.registrados"
-        acciones={
-          <BarraFiltros buscar accion="?" enLinea etiqueta={tx('rest.buscar_sitios')} ocultos={p.sufijo.startsWith('?') ? [...new URLSearchParams(p.sufijo.slice(1))] : []}
-            nActivos={p.busqueda ? 1 : 0} limpiarHref={p.sufijo || '?'}>
-            <FiltroBusqueda nombre="q" valor={p.busqueda} placeholder={tx('rest.buscar_por_nombre_o_codigo')} etiqueta={tx('rest.buscar_sitios')} />
-          </BarraFiltros>
-        }
         estado={p.sitios === null ? 'error' : p.sitios.length === 0 ? 'vacio' : 'ok'}
         mensaje={p.sitios === null ? tx('rest.no_se_pudo_leer_el_catalogo_3') : p.busqueda ? tx('rest.ningun_sitio_coincide_con_esa_busqueda') : tx('rest.aun_sin_sitios')}
         detalle={p.busqueda ? undefined : tx('rest.todavia_no_hay_sitios_crea_uno')}>
@@ -161,6 +177,6 @@ export function VistaSitios(p: PropsVistaSitios) {
           </div>
         </Tarjeta>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

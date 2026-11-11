@@ -18,12 +18,14 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, BotonEnlace, CampoSelect, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, Tarjeta, type TonoEstado,
+  Aviso, BotonEnlace, CampoSelect, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, StatusChip, Tarjeta, type TonoEstado,
 } from '../../ui-v2/componentes';
-import { TiraCifras } from '../../ui-v2/graficas';
+import type { PropsCifra } from '../../ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { HiloTicket } from './hilo';
+import { CajonTicket } from './cajon-ticket';
 // El rótulo del estado del ticket vivía aquí, privado, y /dashboard/soporte imprimía `t.estado` crudo (auditoría 21, MEDIO 1). Ahora
 // las dos pantallas importan el MISMO mapa — el patrón de `dashboard/estatus.ts`.
 import { pillTicket } from '../../dashboard/soporte/estatus';
@@ -274,8 +276,15 @@ export default async function SoportePage({
   const sinActividad = tickets !== null && tickets.length === 0
     && conteos.abiertos === 0 && conteos.vencidos === 0 && conteos.sinSla === 0 && conteos.cerrados === 0;
 
+  const cifras: PropsCifra[] | undefined = tickets === null || (sinActividad && pedido === '') ? undefined : [
+      { etiqueta: ta('soporte.abiertos'), valor: conteos.abiertos, formato: 'entero', nota: ta('soporte.de_todas_las_flotas'), ...(conteos.abiertos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
+      { etiqueta: ta('soporte.con_sla_vencido'), valor: conteos.vencidos, formato: 'entero', tono: (conteos.vencidos ?? 0) > 0 ? 'bad' : undefined, nota: ta('soporte.paso_el_plazo_y'), ...(conteos.vencidos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
+      { etiqueta: ta('soporte.sin_sla_pactado'), valor: conteos.sinSla, formato: 'entero', nota: ta('soporte.no_estan_vencidos_nadie'), ...(conteos.sinSla === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
+      { etiqueta: ta('soporte.resueltos_o_cerrados'), valor: conteos.cerrados, formato: 'entero', nota: ta('soporte.historico'), ...(conteos.cerrados === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
+    ];
+
   return (
-    <MarcoPagina titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')}>
+    <EsqueletoTablaMaestra titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')} etiquetaCifras={ta('soporte.tickets_de_soporte')} cifras={cifras}>
       {tickets === null ? (
         <EstadoError reintentar>{ta('soporte.no_se_pudo_leer')}</EstadoError>
       ) : (
@@ -284,13 +293,6 @@ export default async function SoportePage({
           <Tarjeta titulo={ta('soporte.cola_de_soporte')} estado="vacio" mensaje={ta('soporte.la_cola_esta_vacia')} detalle={ta('soporte.ninguna_flota_tiene_nada')} />
         ) : (
         <>
-          <TiraCifras etiqueta={ta('soporte.tickets_de_soporte')} items={[
-            { etiqueta: ta('soporte.abiertos'), valor: conteos.abiertos, formato: 'entero', nota: ta('soporte.de_todas_las_flotas'), ...(conteos.abiertos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
-            { etiqueta: ta('soporte.con_sla_vencido'), valor: conteos.vencidos, formato: 'entero', tono: (conteos.vencidos ?? 0) > 0 ? 'bad' : undefined, nota: ta('soporte.paso_el_plazo_y'), ...(conteos.vencidos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
-            { etiqueta: ta('soporte.sin_sla_pactado'), valor: conteos.sinSla, formato: 'entero', nota: ta('soporte.no_estan_vencidos_nadie'), ...(conteos.sinSla === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
-            { etiqueta: ta('soporte.resueltos_o_cerrados'), valor: conteos.cerrados, formato: 'entero', nota: ta('soporte.historico'), ...(conteos.cerrados === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
-          ]} />
-
           {/* ── EL HILO Y LAS ACCIONES ───────────────────────────────────── */}
           {pedido !== '' && (
             hiloFallo ? (
@@ -301,7 +303,8 @@ export default async function SoportePage({
                 {ta('soporte.puede_que_se_haya')}
               </EstadoVacio>
             ) : (
-              <Tarjeta titulo={detalle.asunto} acciones={<><StatusChip tono={tonoDe(detalle.estado)}>{pillTicket(detalle.estado).etiqueta}</StatusChip><BotonEnlace href="/admin/soporte" variante="ghost" tamano="sm">{ta('soporte.volver_a_la_cola')}</BotonEnlace></>}>
+              <CajonTicket titulo={detalle.asunto} descripcion={flotaDelDetalle ?? undefined} hrefCerrar="/admin/soporte">
+                <p><StatusChip tono={tonoDe(detalle.estado)}>{pillTicket(detalle.estado).etiqueta}</StatusChip></p>
                 <ul className="adm-sis-lista">
                   <li><span>Flota</span><span>{flotaDelDetalle}</span></li>
                   <li><span>{ta('soporte.categoria_y_prioridad')}</span><span>{capital(detalle.categoria)} · {capital(detalle.prioridad)}</span></li>
@@ -357,7 +360,7 @@ export default async function SoportePage({
                     </FormaConAviso>
                   </div>
                 </div>
-              </Tarjeta>
+              </CajonTicket>
             )
           )}
 
@@ -390,7 +393,7 @@ export default async function SoportePage({
         </>
         )
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

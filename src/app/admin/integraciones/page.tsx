@@ -7,8 +7,9 @@ import { sentryActivo } from '@/lib/observability/sentry';
 import { correoConfigurado } from '@/lib/correo/enviar';
 import { hookDeCorreoConfigurado } from '@/lib/correo/auth';
 import { envHealth, faltantes } from '@/lib/env';
-import { Disclosure, EstadoError, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { Disclosure, EstadoError, Tarjeta } from '../../ui-v2/componentes';
 import { TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TarjetaRenglon, type RenglonSistema } from '../renglon-sistema';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
@@ -83,7 +84,11 @@ export default async function IntegracionesPage() {
   ];
 
   return (
-    <MarcoPagina titulo={t('integraciones.integraciones')} apoyo={t('integraciones.los_servicios_reales_de_los_que')}>
+    <EsqueletoTablaMaestra
+      titulo={t('integraciones.integraciones')}
+      apoyo={t('integraciones.los_servicios_reales_de_los_que')}
+      cifras={[{ etiqueta: t('integraciones.conectores'), valor: conectores.length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : conectores.some((c) => c.tono === 'warn') ? 'warn' : 'ok' }]}
+    >
       <section className="adm-sis-bloque" aria-labelledby="conectores">
         <h2 className="adm-sis-titulo" id="conectores">{t('integraciones.conectores')}</h2>
         <div className="adm-sis-rejilla">
@@ -103,7 +108,7 @@ export default async function IntegracionesPage() {
       <Disclosure titulo={t('compliance.lo_que_aun_no_existe_aqui')} resumen={t('integraciones.rotacion_de_llaves')}>
         <p className="adm-sis-nota">{t('integraciones.la_rotacion_de_llaves_de_api')}</p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

@@ -142,7 +142,8 @@ describe('Resumen v2 · página canónica del contrato visual', () => {
     datos = completos();
     const h = await pintar();
     expect((h.match(/<h1/g) ?? []).length).toBe(1);
-    expect(h).toMatch(/^<main class="rv-marco"/);
+    // F26: el marco único lo pone el esqueleto de portada (`rv-esq rv-esq--portada` solo añade disposición).
+    expect(h).toMatch(/^<main class="rv-marco rv-esq rv-esq--portada"/);
     expect((h.match(/class="rv-fila-tarjetas"/g) ?? []).length).toBe(2);
     expect(h).toContain('data-variante="8-4"');
     expect(h).toContain('data-variante="4-4-4"');
