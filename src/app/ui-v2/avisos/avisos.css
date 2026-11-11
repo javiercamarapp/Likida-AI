@@ -22,3 +22,16 @@
 [data-ui="v2"] .av-silencio { display: flex; flex-direction: column; gap: 12px; max-width: 520px; }
 [data-ui="v2"] .av-horas { display: flex; flex-wrap: wrap; gap: 12px; }
 [data-ui="v2"] .av-pila { display: flex; flex-direction: column; gap: 12px; }
+[data-ui="v2"] .av-cambio { display: flex; justify-content: flex-end; }
+/* Las casillas caen CENTRADAS bajo la cabecera de su columna (antes quedaban pegadas a la izquierda de la celda). */
+[data-ui="v2"] .av-matriz td .rv-marca { display: flex; justify-content: center; }
+[data-ui="v2"] .av-matriz td .rv-marca__fila { justify-content: center; gap: 0; }
+/* Teléfono: los filtros ocupan el ancho y se tocan con el pulgar (alto ≥ 40 px); la matriz no obliga a scrollear de lado. */
+@media (max-width: 640px) {
+  [data-ui="v2"] .av-barra, [data-ui="v2"] .av-filtros { width: 100%; }
+  [data-ui="v2"] .av-filtros > * { flex: 1 1 140px; }
+  [data-ui="v2"] .av-filtros .rv-ctl { min-width: 0; width: 100%; min-height: 40px; }
+  [data-ui="v2"] .av-matriz th, [data-ui="v2"] .av-matriz td { padding: 10px 4px; }
+  [data-ui="v2"] .av-fila { flex-wrap: wrap; }
+  [data-ui="v2"] .av-acciones { width: 100%; justify-content: flex-start; padding-left: 20px; }
+}
