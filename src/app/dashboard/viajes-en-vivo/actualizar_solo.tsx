@@ -6,6 +6,8 @@ import { RefreshCw } from 'lucide-react';
 import { Boton, Icono } from '@/app/ui-v2/componentes';
 import './en-vivo.css';
 import { CADA_SEG_POR_OMISION, puedeRefrescar } from './refresco';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 /**
  * «Viajes en vivo» se refresca solo (P6): cada `cadaSeg` segundos pide al servidor el tablero de nuevo (`router.refresh()`, que conserva lo que la persona
@@ -16,6 +18,7 @@ import { CADA_SEG_POR_OMISION, puedeRefrescar } from './refresco';
  *   · Lleva su botón «Actualizar ahora» y dice cuándo fue la última vez, de modo que un tablero detenido no se vea como vivo.
  */
 export function ActualizarSolo({ cadaSeg = CADA_SEG_POR_OMISION }: { cadaSeg?: number }) {
+  const { t } = useT('operacion', operacionEs);
   const router = useRouter();
   const [ultima, setUltima] = useState<Date | null>(null);
   const [pausado, setPausado] = useState(false);
@@ -41,9 +44,9 @@ export function ActualizarSolo({ cadaSeg = CADA_SEG_POR_OMISION }: { cadaSeg?: n
 
   return (
     <div className="rv-vv__estado" aria-live="off">
-      <span>{pausado ? 'Actualización automática en pausa' : `Se actualiza solo cada ${cadaSeg} s`}{ultima ? ` · última vez ${ultima.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}</span>
-      <Boton tamano="sm" icono={<Icono icono={RefreshCw} tam={16} />} onClick={() => refrescar(true)}>Actualizar ahora</Boton>
-      <Boton tamano="sm" variante="ghost" onClick={() => setPausado((p) => !p)}>{pausado ? 'Reanudar' : 'Pausar'}</Boton>
+      <span>{pausado ? t('vv.act.pausa') : t('vv.act.cada', { n: cadaSeg })}{ultima ? t('vv.act.ultima', { hora: ultima.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) }) : ''}</span>
+      <Boton tamano="sm" icono={<Icono icono={RefreshCw} tam={16} />} onClick={() => refrescar(true)}>{t('vv.act.ahora')}</Boton>
+      <Boton tamano="sm" variante="ghost" onClick={() => setPausado((p) => !p)}>{pausado ? t('vv.act.reanudar') : t('vv.act.pausar')}</Boton>
     </div>
   );
 }

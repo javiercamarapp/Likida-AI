@@ -28,7 +28,7 @@ export function TarjetaAgente({ ficha, estado, cifra, href, sufijo }: {
   href: string | null; sufijo: string;
 }) {
   return (
-    <Tarjeta titulo={TITULO_CORTO[ficha.clave] ?? ficha.nombre} info={INFO_AGENTE[ficha.clave]} className="rv-ic__agente" >
+    <Tarjeta titulo={TITULO_CORTO[ficha.clave] ?? ficha.nombre} info={INFO_AGENTE[ficha.clave]} className="rv-ic__agente" elevar entra="tarjeta">
       <div data-agente-resumen={ficha.clave} className="rv-ic__agente-cuerpo">
         <p className="rv-ic__estado">
           <ficha.Icono width={16} height={16} strokeWidth={1.75} aria-hidden="true" />
@@ -71,7 +71,7 @@ function SinValor({ titulo, info, c }: { titulo: string; info: InfoClave; c: Cif
 export function TarjetaImporteIave({ c, leidoEn, ahora }: { c: CifraImporteDecena; leidoEn: string; ahora: number }) {
   if (c.valor === null) return <SinValor titulo="Importe IAVE por decena" info="inicio.importe_iave" c={c} />;
   return (
-    <Tarjeta titulo="Importe IAVE por decena" info="inicio.importe_iave" acciones={<span className="rv-res__nota">Solo dueño y finanzas</span>} className="rv-ic__pesos">
+    <Tarjeta titulo="Importe IAVE por decena" info="inicio.importe_iave" acciones={<span className="rv-res__nota">Solo dueño y finanzas</span>} className="rv-ic__pesos" elevar entra="tarjeta">
       <p className="rv-ic__cifra-fila">
         <span className="rv-ic__cifra" data-pesos="">{pesosCompletos(c.valor)}</span>
         <StatusChip tono={TONO_SELLO[c.sello]}>{c.sello}</StatusChip>
@@ -88,7 +88,7 @@ export function TarjetaImporteIave({ c, leidoEn, ahora }: { c: CifraImporteDecen
 export function TarjetaExtemporaneos({ c, leidoEn, ahora }: { c: CifraExtemporaneos; leidoEn: string; ahora: number }) {
   if (c.valor === null) return <SinValor titulo="Cobros extemporáneos" info="inicio.extemporaneos" c={c} />;
   return (
-    <Tarjeta titulo="Cobros extemporáneos" info="inicio.extemporaneos" acciones={<span className="rv-res__nota">Candidatos</span>} className="rv-ic__pesos">
+    <Tarjeta titulo="Cobros extemporáneos" info="inicio.extemporaneos" acciones={<span className="rv-res__nota">Candidatos</span>} className="rv-ic__pesos" elevar entra="tarjeta">
       <p className="rv-ic__cifra-fila">
         <span className="rv-ic__cifra" data-pesos="">{pesosCompletos(c.valor)}</span>
         <StatusChip tono={TONO_SELLO[c.sello]}>{c.sello}</StatusChip>

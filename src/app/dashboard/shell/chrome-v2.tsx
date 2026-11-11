@@ -10,6 +10,7 @@ import NavegacionMovil from './navegacion-movil';
 import CapaCarga from './capa-carga';
 import ProveedorArea from './proveedor-area';
 import PaletaDashboard from './paleta';
+import SaltarAlContenido from './saltar-contenido';
 
 /**
  * El marco visual de /dashboard v2. Mismo contrato de props que `DashboardChrome` (el de siempre, que NO se toca):
@@ -48,7 +49,7 @@ export default function DashboardChromeV2({
     <ProveedorNotificaciones>
       <div className={CLASES_V2.raiz} data-ui="v2" style={{ fontFamily: 'var(--font-sans-ui), var(--font-sans)' }}>
         <CapaCarga />
-        <a href="#contenido-principal" className={CLASES_V2.saltar}>Saltar al contenido</a>
+        <SaltarAlContenido className={CLASES_V2.saltar} />
         <PaletaDashboard rol={rol} perfil={perfil} />
         <CabeceraMovil rol={rol} perfil={perfil} />
         <div className={CLASES_V2.fila}>

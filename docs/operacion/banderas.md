@@ -17,6 +17,7 @@ Cada variable de entorno que cambia lo que el sistema hace. La fuente es `src/li
 | `LIKIDA_TOTP_ESCALONADO` | `obligatorio` | Javier | 2026-11-10 | Deploy 1 | pendiente | Dueño y contador necesitan TOTP inscrito y AAL2 reciente para emitir/cancelar CFDI, llaves de API, cambio de roles y exportes de dinero. | Decisión D8; que quienes cambian dinero tengan el factor inscrito antes, o se quedan fuera. |
 | `LIKIDA_BITACORA_ACCESO_SUPERADMIN` | `activo` | Javier | 2026-11-10 | Deploy 1 | pendiente | Registra lecturas, «ver como» y descargas del superadmin en `superadmin_acceso`. | Migración 0997 aplicada por Javier y la retención D7 decidida. |
 | `FACTURACION_PILOTO` | `si` | Javier | 2026-11-10 | Deploy 1 | pendiente | El piloto de visión opera portales de facturación sin adaptador escrito; nunca emite (se detiene antes del botón que crea el CFDI). | Gasto por paso en llamadas de visión (tope de IA por flota) y credencial compartida de la flota si el portal la pide. |
+| `DIAGNOSTICO_ALERTAS` | `encendido` | Javier | 2026-11-11 | Deploy 1 | pendiente | Ante una alerta S1/S2 nueva, un agente de SOLO LECTURA escribe un diagnóstico (causa, evidencia, arreglo propuesto) en Aprobaciones; nunca ejecuta nada. | Tope de IA aprobado: US$20 al mes (`DIAGNOSTICO_TOPE_USD`, opcional). Sin migración. |
 
 ## Pruebas de humo (ya desplegada la bandera)
 
@@ -26,6 +27,7 @@ Cada variable de entorno que cambia lo que el sistema hace. La fuente es `src/li
 - **`LIKIDA_TOTP_ESCALONADO`**: con un usuario sin TOTP, cambiar un rol redirige a inscribir el factor; con TOTP vigente la acción procede.
 - **`LIKIDA_BITACORA_ACCESO_SUPERADMIN`**: abrir una flota como superadmin deja una fila en `superadmin_acceso` con la ruta (solo rutas, sin contenido).
 - **`FACTURACION_PILOTO`**: un comercio con ficha completa pasa a «operable» en `/dashboard/conexiones`; una corrida de prueba termina en captura sin emitir.
+- **`DIAGNOSTICO_ALERTAS`**: con una alerta S2 de prueba aparece una pieza «Diagnóstico propuesto» en `/admin/aprobaciones` y el latido de `guardia` trae `diagnostico.estado = "ok"` con el gasto del mes. Al llegar a US$20 el estado pasa a `tope`, deja de llamar al modelo y la campana lo dice; si el gasto no se puede leer, `gasto_ilegible` y tampoco llama.
 
 ## Cómo añadir una bandera
 

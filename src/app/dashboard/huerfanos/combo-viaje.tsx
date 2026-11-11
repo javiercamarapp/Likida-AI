@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { OpcionViaje } from '@/lib/likida/repo_paginado';
 import './huerfanos.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-3 (auditoría 24) — el mismo remedio de `ComboCatalogo` (FE-2, 22-ago),
@@ -28,6 +30,7 @@ export function ComboViaje({
   className?: string;
   'aria-label'?: string;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const listaId = useId();
   const [texto, setTexto] = useState('');
   const [id, setId] = useState<string | null>(null);
@@ -68,7 +71,7 @@ export function ComboViaje({
         value={texto}
         required={requerido}
         autoComplete="off"
-        placeholder="Folio u operador…"
+        placeholder={t('hf.combo.ph')}
         onFocus={() => { if (opciones.length === 0) pedir(texto); }}
         onChange={(e) => alEscribir(e.target.value)}
         className={className}
@@ -77,9 +80,9 @@ export function ComboViaje({
         {opciones.map((o) => <option key={o.id} value={o.etiqueta} />)}
       </datalist>
       {fallo ? (
-        <p className="rv-hf__aviso" data-tono="bad" role="status">No se pudo buscar — vuelve a escribir en un momento.</p>
+        <p className="rv-hf__aviso" data-tono="bad" role="status">{t('hf.combo.error')}</p>
       ) : sinResolver ? (
-        <p className="rv-hf__aviso" data-tono="warn" role="status">Elige uno de la lista: se guarda el viaje, no el texto.</p>
+        <p className="rv-hf__aviso" data-tono="warn" role="status">{t('hf.combo.elige')}</p>
       ) : null}
     </div>
   );

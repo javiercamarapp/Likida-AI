@@ -8,13 +8,15 @@ import {
   type ProspectoRow, type VendedorRow,
 } from '@/lib/likida/vendedores';
 import { ultimasCorridasNegocio, duracionLegible, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
-import { fechaHoraMx } from '@/lib/formato';
+import { fechaHoraMx, numero } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
 import {
   AvisoCompacto, BarraFiltros, EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, FiltroBusqueda, FiltroOpciones, Icono,
   MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
 } from '../../ui-v2/componentes';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { Embudo, TiraCifras } from '../../ui-v2/graficas';
+import { getT } from '@/lib/i18n/servidor';
+import { embudoDeVentas } from './embudo-ventas';
 import { TableroProspectos, type ColumnaTablero } from './tablero';
 import { FormaProspecto, FormaInvitarVendedor, BotonRepartir } from './formas';
 import {
@@ -52,6 +54,7 @@ export function ConsolaVendedores({ sp }: { nombre?: string | null; sp: { vended
   return (
     <MarcoPagina titulo="Ventas" apoyo="El pipeline del censo, el equipo de vendedores y el asignador. Las comisiones se calculan solo con cobros reales.">
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis /></Suspense>
+      <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
       <FilaTarjetas variante="6-6">
         <Tarjeta titulo="Agente asignador">
@@ -156,6 +159,21 @@ async function BloqueKpis() {
         ? { etiqueta: 'Vendedores con cuenta', valor: vendedores.length, formato: 'entero', icono: <Icono icono={Users} /> }
         : { etiqueta: 'Vendedores con cuenta', valor: null, estado: 'error', mensaje: 'No se pudo leer el equipo de vendedores.', icono: <Icono icono={Users} /> },
     ]} />
+  );
+}
+
+/** El embudo de la ruta principal (ver `embudo-ventas.ts`: cada etapa cuenta a quien está en ella o más adelante). Sin la lectura: lo dice, no pinta ceros. */
+async function BloqueEmbudo() {
+  const [{ prospectos, totales }, { t }] = await Promise.all([derivarPipeline({}), getT('graficas')]);
+  const titulo = t('ventas.embudo.titulo');
+  if (prospectos === null) return <Tarjeta titulo={titulo} estado="error" mensaje={t('ventas.embudo.error')} reintentar elevar entra="tarjeta" />;
+  const { etapas, fuera, enRuta } = embudoDeVentas(totales);
+  if (enRuta === 0) return <Tarjeta titulo={titulo} estado="vacio" mensaje={t('ventas.embudo.vacio')} contenida elevar entra="tarjeta" />;
+  return (
+    <Tarjeta titulo={titulo} elevar entra="tarjeta">
+      <Embudo etapas={etapas} etiqueta={t('ventas.embudo.etiqueta')} formato="numero" />
+      <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t('ventas.embudo.nota', { enRuta: numero(enRuta), fuera: numero(fuera) })}</p>
+    </Tarjeta>
   );
 }
 

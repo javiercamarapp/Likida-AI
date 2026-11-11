@@ -75,6 +75,19 @@ describe('activación y cohortes', () => {
     const h = await html(BloqueActivacion);
     expect(h).toContain('El cero de «de pago» es un conteo real');
   });
+  it('el embudo de activación es la gráfica Embudo con la cifra exacta de cada etapa y la conversión contra la anterior', async () => {
+    const h = await html(BloqueActivacion);
+    expect(h).toContain('rv-embudo');
+    expect(h).toContain('25.0% de la etapa anterior');
+    expect(h).toContain('0.0% de la etapa anterior'); // de pago: 0 de 1 activada; es un cero real, no un faltante
+    expect(h).toContain('data-lift');
+  });
+  it('con los tres conteos en cero dice que el cero es real, no «sin datos»', async () => {
+    dobles.getEmbudoActivacion.mockResolvedValue({ altas: 0, activadas: 0, dePago: 0 });
+    const h = await html(BloqueActivacion);
+    expect(h).toContain('las tres etapas valen cero');
+    expect(h).not.toContain('rv-embudo');
+  });
   it('lecturas caídas: no se pintan como cero flotas ni como cero uso', async () => {
     dobles.getEmbudoActivacion.mockResolvedValue(null);
     dobles.getCohortesUso.mockResolvedValue(null);

@@ -21,6 +21,8 @@ import { SeccionIntegraciones } from './seccion-integraciones';
 import { SeccionGps, type ResultadoSecreto, type ResultadoImportGeocercas } from './seccion-gps';
 import { importarGeocercasDeTablaPropia } from '@/lib/likida/conectores/tabla_propia/importar_geocercas';
 import { VistaConexiones } from './vista';
+import { SeccionEstado } from './seccion-estado';
+import { leerFuentesDeFlota, leerSilencioWebhook } from '@/lib/likida/fuentes/leer';
 import { EstadoError } from '@/app/ui-v2/componentes';
 import { armarPanelGps } from '@/lib/likida/gps_push/panel';
 import { generarSecretoPush } from '@/lib/likida/gps_push/datos';
@@ -236,9 +238,14 @@ export default async function PaginaConexiones({
   }
   const tieneTablaPropia = (guardadasCrudas ?? []).some((c) => c.conectorId === 'tabla_propia' && c.activo);
 
+  // F19: estado por fuente. Cada fuente se lee por su lado y nunca lanza: lo que no se pudo leer sale como «sin dato».
+  const ahora = ahoraMs();
+  const [fuentes, silencio] = await Promise.all([leerFuentesDeFlota(tenantId, ahora), leerSilencioWebhook(ahora, tenantId)]);
+
   return (
     <VistaConexiones
       conectores={conectores}
+      estado={<SeccionEstado entradas={fuentes} silencio={silencio} ahoraMs={ahora} />}
       integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo }).filter((i) => perfil === null || integracionPermitidaEnPerfil(perfil, i.id))} />}
       gps={panelGps.error !== null ? (
         <EstadoError titulo="GPS no disponible ahora" reintentar>{panelGps.error}</EstadoError>

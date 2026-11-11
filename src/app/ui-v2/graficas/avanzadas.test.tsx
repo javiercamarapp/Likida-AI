@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
-import { ColumnasApiladas, Columnas, Embudo, MapaCalor, nivelCalor } from './index';
+import { ColumnasApiladas, Columnas, Embudo, MapaCalor, TiraCifras, nivelCalor } from './index';
 
 describe('gráficas avanzadas (B2)', () => {
   it('nivelCalor: nulo = sin dato, 0 = nivel 0, cuartiles del máximo', () => {
@@ -61,5 +61,18 @@ describe('gráficas avanzadas (B2)', () => {
     const datos = [{ etiqueta: 'a', valor: 1 }, { etiqueta: 'b', valor: 2 }];
     expect(renderToStaticMarkup(<Columnas datos={datos} etiqueta="C" tinta="neutra" />)).toContain('data-tinta="neutra"');
     expect(renderToStaticMarkup(<Columnas datos={datos} etiqueta="C" />)).not.toContain('data-tinta');
+  });
+  it('Tarjeta y TiraCifras marcan elevación y entrada solo si se piden (Rovaq data-lift / data-entra)', async () => {
+    const { Tarjeta } = await import('../componentes');
+    const con = renderToStaticMarkup(<Tarjeta titulo="T" elevar entra="tarjeta">x</Tarjeta>);
+    expect(con).toContain('data-lift="true"');
+    expect(con).toContain('data-entra="tarjeta"');
+    const sin = renderToStaticMarkup(<Tarjeta titulo="T">x</Tarjeta>);
+    expect(sin).not.toContain('data-lift');
+    expect(sin).not.toContain('data-entra');
+    const tira = renderToStaticMarkup(<TiraCifras items={[{ etiqueta: 'A', valor: 1 }]} elevar entra="tarjeta" />);
+    expect(tira).toContain('data-lift="true"');
+    expect(tira).toContain('data-entra="tarjeta"');
+    expect(renderToStaticMarkup(<TiraCifras items={[{ etiqueta: 'A', valor: 1 }]} />)).not.toContain('data-lift');
   });
 });

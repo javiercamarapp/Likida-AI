@@ -3,6 +3,7 @@ import { getResumenNegocio, getConteosPlataforma, getMrr, costoIaMesActual } fro
 import { obtenerPanoramaAccion } from './requiere-accion';
 import { clasificarBandeja, estadoDeDetalle } from '@/lib/admin/guardia';
 import { alertasExtra, leerEntradaAlertasExtra } from '@/lib/admin/fuentes-alerta-extra';
+import { evaluarSlosEnQuema } from '@/lib/admin/slo-quema';
 import { getSLOs } from '@/lib/admin/slo';
 import { getAgentesParados } from '@/lib/admin/agentes-parados';
 import { getCalidadAgentes } from '@/lib/admin/calidad-agentes';
@@ -30,6 +31,7 @@ export const panorama = cache(() => obtenerPanoramaAccion(ahoraMs()));
 export const slos = cache(() => sinLanzar(getSLOs()));
 export const parados = cache(() => getAgentesParados(ahoraMs()));
 export const calidadAgentes = cache(() => sinLanzar(getCalidadAgentes(30)));
+export const quema = cache(() => evaluarSlosEnQuema().catch(() => null));
 export const despliegues = cache(() => getAnotacionesDespliegue({ dias: 30 }));
 const entradaExtras = cache(() => leerEntradaAlertasExtra());
 

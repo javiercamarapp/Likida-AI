@@ -1,7 +1,11 @@
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
+import { getT } from '@/lib/i18n/servidor';
 import { VistaBandejaSat } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Conciliación del SAT' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.descargaSat.bandeja') };
+}
 
 export const dynamic = 'force-dynamic';
 

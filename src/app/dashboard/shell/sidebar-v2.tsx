@@ -33,7 +33,7 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
   return (
     <aside className="rv-sb" data-riel={riel ? '' : undefined}>
       <div className="rv-sb__marca">
-        <Link href={`${casa}${sufijo}`} className="rv-sb__logo" aria-label="Likida, ir al inicio">
+        <Link href={`${casa}${sufijo}`} className="rv-sb__logo" aria-label={t('marca.irInicio')}>
           {/* Una sola marca visible a la vez: horizontal con el sidebar completo, símbolo en el riel (alturas en `ALTO_LOGO_PX`). */}
           <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
           <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
@@ -44,7 +44,7 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
           </button>
         </Tooltip>
       </div>
-      <nav aria-label="Navegación principal" className="rv-sb__nav">
+      <nav aria-label={t('nav.principal')} className="rv-sb__nav">
         <ArbolMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} insignias={insignias} />
       </nav>
       <div className="rv-sb__pie">

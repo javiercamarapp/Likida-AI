@@ -7,6 +7,8 @@ import type { LucideIcon } from 'lucide-react';
 import { AvisoCompacto, Boton, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import './despacho.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type AccionDespacho = (
   prev: { error?: string } | null,
@@ -43,6 +45,7 @@ export function AsignarFila({ viajeId, buscarCatalogo, totalOperadores, asignarY
   totalOperadores: number | null;
   asignarYAvisar: AccionDespacho;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(asignarYAvisar, null);
   return (
     <div>
@@ -50,10 +53,10 @@ export function AsignarFila({ viajeId, buscarCatalogo, totalOperadores, asignarY
         <input type="hidden" name="viajeId" value={viajeId} />
         <div className="rv-dsp__crece">
           <ComboCatalogo tipo="operador" name="operadorId" buscar={buscarCatalogo} requerido
-            aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
+            aria-label={t('dsp.operador')} etiquetaVacia="Escribe el nombre del chofer…"
             total={totalOperadores} className="rv-ctl" />
         </div>
-        <BotonEnviar texto="Asignar y avisar" pendienteTexto="Asignando…" icono={Send} />
+        <BotonEnviar texto={t('dsp.asignar.avisar')} pendienteTexto="Asignando…" icono={Send} />
       </form>
       <ErrorDeAccion estado={estado} />
     </div>
@@ -77,6 +80,7 @@ export function AsignarUnidadFila({ viajeId, unidadId, unidadEco, buscarCatalogo
   totalUnidades: number | null;
   asignarUnidadViaje: AccionDespacho;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(asignarUnidadViaje, null);
   return (
     <div>
@@ -84,11 +88,11 @@ export function AsignarUnidadFila({ viajeId, unidadId, unidadEco, buscarCatalogo
         <input type="hidden" name="viajeId" value={viajeId} />
         <div className="rv-dsp__crece">
           <ComboCatalogo tipo="unidad" name="unidadId" buscar={buscarCatalogo}
-            aria-label="Unidad" etiquetaVacia="Sin unidad"
+            aria-label={t('dsp.unidad')} etiquetaVacia="Sin unidad"
             valorInicial={unidadId} textoInicial={unidadEco ?? ''} total={totalUnidades}
             className="rv-ctl" />
         </div>
-        <BotonAsignarUnidad texto={unidadId ? 'Cambiar' : 'Asignar'} />
+        <BotonAsignarUnidad texto={unidadId ? t('dsp.cambiar') : t('dsp.asignar')} />
       </form>
       <ErrorDeAccion estado={estado} />
     </div>
@@ -96,10 +100,11 @@ export function AsignarUnidadFila({ viajeId, unidadId, unidadEco, buscarCatalogo
 }
 
 function BotonAsignarUnidad({ texto }: { texto: string }) {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" tamano="sm" disabled={pending} title="Amarrar la unidad al viaje" aria-label={`${texto} la unidad del viaje`}>
-      {pending ? 'Asignando…' : texto}
+    <Boton type="submit" tamano="sm" disabled={pending} title={t('dsp.unidad.titulo')} aria-label={t('dsp.unidad.aria', { texto })}>
+      {pending ? t('dsp.asignando') : texto}
     </Boton>
   );
 }
@@ -113,12 +118,13 @@ export function BotonReenviar({ viajeId, yaAvisado, reenviarAviso }: {
   yaAvisado: boolean;
   reenviarAviso: AccionDespacho;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(reenviarAviso, null);
   return (
     <div className="rv-dsp__der">
       <form action={accion}>
         <input type="hidden" name="viajeId" value={viajeId} />
-        <BotonInsistir texto={yaAvisado ? 'Reavisar' : 'Avisar'} />
+        <BotonInsistir texto={yaAvisado ? t('dsp.reavisar') : t('dsp.avisar')} />
       </form>
       <ErrorDeAccion estado={estado} />
     </div>
@@ -126,11 +132,12 @@ export function BotonReenviar({ viajeId, yaAvisado, reenviarAviso }: {
 }
 
 function BotonInsistir({ texto }: { texto: string }) {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" tamano="sm" disabled={pending} title="Mandar el aviso por WhatsApp" aria-label={`${texto} al chofer por WhatsApp`}
+    <Boton type="submit" tamano="sm" disabled={pending} title={t('dsp.aviso.titulo')} aria-label={t('dsp.aviso.aria', { texto })}
       icono={<Icono icono={RefreshCw} tam={16} />}>
-      {pending ? 'Enviando…' : texto}
+      {pending ? t('dsp.enviando') : texto}
     </Boton>
   );
 }
@@ -139,13 +146,14 @@ function BotonInsistir({ texto }: { texto: string }) {
  *  media captura. La validación fuerte (lada 52, duplicados ENTRE flotas)
  *  vive en el servidor y sus mensajes se enseñan tal cual. */
 export function AltaOperador({ altaOperador }: { altaOperador: AccionDespacho }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(altaOperador, null);
   return (
     <form action={accion} className="rv-forma">
-      <CampoTexto etiqueta="Nombre del operador" name="nombre" required />
+      <CampoTexto etiqueta={t('dsp.alta.nombre')} name="nombre" required />
       <div className="rv-forma__fila">
-        <CampoTexto etiqueta="WhatsApp (10 dígitos)" name="telefono" required inputMode="tel" className="rv-forma__crece" />
-        <BotonEnviar texto="Dar de alta" pendienteTexto="Guardando…" icono={UserPlus} />
+        <CampoTexto etiqueta={t('dsp.alta.whatsapp')} name="telefono" required inputMode="tel" className="rv-forma__crece" />
+        <BotonEnviar texto={t('dsp.alta.boton')} pendienteTexto="Guardando…" icono={UserPlus} />
       </div>
       <ErrorDeAccion estado={estado} />
     </form>

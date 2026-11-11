@@ -1,3 +1,4 @@
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { mxn, fechaMx } from '@/lib/utils';
 import { Boton, CampoSelect } from '@/app/ui-v2/componentes';
 import './combustible.css';
@@ -21,38 +22,38 @@ export const NINGUNO_VALOR = '__ninguno__';
 /** Por qué una línea NO se ligó sola, en una frase — la misma distinción que
  *  hace `conciliarLineas`: cero candidatos es "nadie cuadra", dos o más es
  *  "cuadran varios y no se adivina cuál". */
-function motivoPorConciliar(n: number): string {
-  if (n === 0) return 'Sin candidato — ningún gasto capturado cuadra por fecha y monto';
-  return `${n} candidatos — cuadran varios por fecha y monto, no se adivina cuál`;
+function motivoPorConciliar(tr: Tr, n: number): string {
+  if (n === 0) return tr('combustibleCasetas.vistaConsolidado.sinCandidatoNingunGasto');
+  return tr('combustibleCasetas.vistaConsolidado.candidatosCuadranVariosPor', { n });
 }
 
 export function LineasPorConciliar({
-  lineas, accion,
+  lineas, accion, tr = trEs,
 }: {
   lineas: LineaPorConciliar[];
-  accion: (fd: FormData) => Promise<void>;
+  accion: (fd: FormData) => Promise<void>; tr?: Tr;
 }) {
   if (lineas.length === 0) return null;
 
   return (
-    <ul className="rv-comb__lineas" aria-label="Líneas por resolver a mano">
+    <ul className="rv-comb__lineas" aria-label={tr('combustibleCasetas.vistaConsolidado.lineasPorResolverA')}>
       {lineas.map((l) => (
         <li key={l.id} className="rv-comb__linea">
           <strong className="rv-comb__monto">{mxn(l.monto)}</strong>
           <span className="rv-comb__tenue">
-            {l.fecha ? fechaMx(l.fecha) : 'sin fecha en el CFDI'}
-            {l.estacionRfc ? ` · estación ${l.estacionRfc}` : ''}
-            {l.folioOperacion ? ` · folio ${l.folioOperacion}` : ''}
+            {l.fecha ? fechaMx(l.fecha) : tr('combustibleCasetas.vistaConsolidado.sinFechaEnEl')}
+            {l.estacionRfc ? ' ' + tr('combustibleCasetas.vistaConsolidado.estacion', { estacionRfc: l.estacionRfc }) : ''}
+            {l.folioOperacion ? ' ' + tr('combustibleCasetas.vistaConsolidado.folio', { folioOperacion: l.folioOperacion }) : ''}
             {l.descripcion ? ` · ${l.descripcion}` : ''}
           </span>
           {l.cfdiUuid && (
-            <span className="rv-comb__tenue rv-comb__mono">CFDI {l.cfdiUuid} · línea {l.indice}</span>
+            <span className="rv-comb__tenue rv-comb__mono">{tr('combustibleCasetas.vistaConsolidado.cfdiLinea', { cfdiUuid: l.cfdiUuid, indice: l.indice })}</span>
           )}
 
           <span className="rv-comb__tenue">
-            {motivoPorConciliar(l.candidatos.length)}
+            {motivoPorConciliar(tr, l.candidatos.length)}
             {l.candidatos.length > 0 && ': ' + l.candidatos
-              .map((c) => `viaje ${c.viajeFolio ?? '(sin folio)'} (${mxn(c.monto)}, ${c.fecha ? fechaMx(c.fecha) : 'sin fecha'})`)
+              .map((c) => tr('combustibleCasetas.vistaConsolidado.viaje2', { v: c.viajeFolio ?? tr('combustibleCasetas.vistaConsolidado.sinFolio'), v2: mxn(c.monto), v3: c.fecha ? fechaMx(c.fecha) : tr('combustibleCasetas.vistaConsolidado.sinFecha') }))
               .join(' · ')}
           </span>
 
@@ -61,20 +62,20 @@ export function LineasPorConciliar({
             {/* A37-S17-01: con VARIOS candidatos empatados no se adivina cuál: nada viene preseleccionado y hay que elegir. */}
             <CampoSelect
               name="eleccion"
-              etiqueta="Con qué gasto ligar esta línea"
+              etiqueta={tr('combustibleCasetas.vistaConsolidado.conQueGastoLigar')}
               etiquetaOculta
               required
               defaultValue={l.candidatos.length === 0 ? NINGUNO_VALOR : l.candidatos.length === 1 ? l.candidatos[0].gastoId : ''}
             >
-              {l.candidatos.length > 1 && <option value="" disabled>Elige con qué gasto ligar…</option>}
+              {l.candidatos.length > 1 && <option value="" disabled>{tr('combustibleCasetas.vistaConsolidado.eligeConQueGasto')}</option>}
               {l.candidatos.map((c) => (
                 <option key={c.gastoId} value={c.gastoId}>
-                  Viaje {c.viajeFolio ?? '(sin folio)'} — {mxn(c.monto)}, {c.fecha ? fechaMx(c.fecha) : 'sin fecha'}
+                  {tr('combustibleCasetas.vistaConsolidado.viaje', { v: c.viajeFolio ?? tr('combustibleCasetas.vistaConsolidado.sinFolio'), v2: mxn(c.monto), v3: c.fecha ? fechaMx(c.fecha) : tr('combustibleCasetas.vistaConsolidado.sinFecha') })}
                 </option>
               ))}
-              <option value={NINGUNO_VALOR}>Ninguno de estos — no ligar a nada</option>
+              <option value={NINGUNO_VALOR}>{tr('combustibleCasetas.vistaConsolidado.ningunoDeEstosNo')}</option>
             </CampoSelect>
-            <Boton type="submit" variante="primary">Resolver</Boton>
+            <Boton type="submit" variante="primary">{tr('combustibleCasetas.vistaConsolidado.resolver')}</Boton>
           </form>
         </li>
       ))}

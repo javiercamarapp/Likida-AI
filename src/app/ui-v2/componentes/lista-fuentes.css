@@ -1,0 +1,15 @@
+/* ListaFuentes · estado por fuente de datos (F19). Una pieza para Conexiones y la Salud del admin.
+   Solo tokens del sistema; escala 11/12/13; el estado va con texto (nunca solo color). */
+.rv-fuentes { list-style: none; margin: 0; padding: 0; display: grid; }
+.rv-fuentes__fila { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); min-width: 0; }
+.rv-fuentes__fila:first-child { border-top: 0; padding-top: 0; }
+.rv-fuentes__cuerpo { min-width: 0; flex: 1; display: grid; gap: 2px; }
+.rv-fuentes__nombre { font-size: var(--t-body); font-weight: 600; overflow-wrap: anywhere; }
+.rv-fuentes__detalle { margin: 0; font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
+.rv-fuentes__nota { margin: 0; font-size: 11px; color: var(--muted); }
+.rv-fuentes__estado { flex: none; }
+.rv-fuentes__resumen { margin: 0 0 12px; display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: var(--t-small); font-weight: 600; }
+.rv-fuentes__aviso { margin: 0 0 12px; padding: 8px 12px; border-radius: 8px; font-size: var(--t-small); background: var(--warnbg); color: var(--warn); }
+@media (max-width: 480px) {
+  .rv-fuentes__fila { flex-direction: column; gap: 6px; }
+}

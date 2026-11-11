@@ -291,7 +291,9 @@ import { join, relative, sep } from 'node:path';
 //   mismo sitio (`vieneDeNuestroSitio`), `getSessionTenant()` obligatoria (401 sin ella), límite 20/min por usuario, lista cerrada de
 //   idiomas (400 si no); solo escribe la cookie `likida_lang` y `user_metadata.idioma` del propio usuario. Prueba:
 //   `preferencias/idioma/route.test.ts`.
-const RUTAS_APP_REVISADAS = 117;
+// 117 → 118 (F14-B): `api/admin/caso-examen/route.ts` — GET de solo lectura que descarga un caso de examen REDACTADO de un renglón de Escalaciones.
+// Su puerta: `sesionSuperadmin()`; no escribe nada y falla cerrado (422) si tras redactar queda un dato con forma personal.
+const RUTAS_APP_REVISADAS = 118;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

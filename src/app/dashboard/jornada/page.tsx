@@ -24,7 +24,11 @@ import { evaluarSemanas, type SemanaEvaluada } from '@/lib/likida/jornada/semana
 import { sufijoTenant } from '../sufijo';
 import { VistaJornada, type FilaJornada } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Jornada' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.jornada') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -59,21 +63,22 @@ async function puerta(
   sp: ParamsPuerta, tenantId: string,
   nivel: 'correccion' | 'politica' = 'correccion',
 ): Promise<{ tenantId: string; userId: string; alcance: AlcancePatio } | ResultadoAccion> {
+  const { t } = await getT('operacion');
   const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no ve el registro de jornada.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('jor.a.rolver') };
   if (nivel === 'politica') {
     // Los UMBRALES de la flota son configuración de la cuenta: solo el dueño.
-    if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota declara los umbrales de jornada.' };
+    if (!puedeAdministrar(s.rol)) return { ok: false, error: t('jor.a.umbrales') };
     return { tenantId: s.tenantId, userId: s.userId, alcance: { tipo: 'flota' } };
   }
   // Corregir una marca, capturarla o cerrar el día: el dueño y el JEFE DE TRÁFICO
   // (W2) — este último solo en los operadores de su patio (se comprueba por
   // operación con `fueraDeAlcance`). Con la bitácora y la firma de siempre.
   if (!puedeEditarCatalogoOperativo(s.rol)) {
-    return { ok: false, error: 'Solo quien administra la flota o el jefe de tráfico de ese patio corrige el registro de jornada.' };
+    return { ok: false, error: t('jor.a.corregir') };
   }
   const alcance = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-  if (!alcance) return { ok: false, error: 'No pude comprobar tu patio — no se corrigió nada. Vuelve a intentarlo.' };
+  if (!alcance) return { ok: false, error: t('jor.a.patio') };
   return { tenantId: s.tenantId, userId: s.userId, alcance };
 }
 
@@ -98,11 +103,12 @@ async function resolverAlcance(
   alcance: AlcancePatio,
   ref: { jornadaId: string } | { asientoId: string },
 ): Promise<{ rechazo: ResultadoAccion } | { jornadaId: string | null }> {
+  const { t } = await getT('operacion');
   try {
-    const t = await terminalDeJornada(tenantId, ref);
-    if (!t.encontrado) return { rechazo: { ok: false, error: 'Esa jornada no existe en tu flota. Recarga la pantalla.' } };
-    exigirDentroDelAlcance(alcance, t.terminalId);
-    return { jornadaId: t.jornadaId ?? null };
+    const ter = await terminalDeJornada(tenantId, ref);
+    if (!ter.encontrado) return { rechazo: { ok: false, error: t('jor.a.noexiste') } };
+    exigirDentroDelAlcance(alcance, ter.terminalId);
+    return { jornadaId: ter.jornadaId ?? null };
   } catch (e) {
     return { rechazo: { ok: false, error: mensajeParaPantalla(e, 'comprobar el patio del operador') } };
   }
@@ -155,6 +161,7 @@ export default async function PaginaJornada({
     desde?: string; hasta?: string; operador?: string; abrir?: string;
   }>;
 }) {
+  const { t } = await getT('operacion');
   const sp = await searchParams;
   // El `userId` del render NO se saca aquí A PROPÓSITO: cada server action
   // vuelve a resolver la sesión con `puerta(sp, tenantId)` y firma con ESE id. Arrastrar
@@ -201,7 +208,7 @@ export default async function PaginaJornada({
     lectura = null;
     nombres = null;
     truncada = false;
-    motivoIlegible = e instanceof JornadaIlegible ? e.message : 'No se pudo leer el registro de jornada.';
+    motivoIlegible = e instanceof JornadaIlegible ? e.message : t('jor.a.noleyo');
   }
 
   if (lectura !== null && nombres !== null) {
@@ -254,20 +261,21 @@ export default async function PaginaJornada({
 
   async function anularMarca(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('operacion');
     const p = await puerta(sp, tenantId);
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) {
-      return { ok: false, error: 'No pude confirmar tu correo, y una corrección sin firma no queda anotada. Vuelve a intentarlo.' };
+      return { ok: false, error: t('jor.a.correo.anota') };
     }
 
     const asientoId = String(fd.get('asientoId') ?? '').trim();
     const alcanceAsiento = await resolverAlcance(p.tenantId, p.alcance, { asientoId });
     if ('rechazo' in alcanceAsiento) return alcanceAsiento.rechazo;
     const motivo = String(fd.get('motivo') ?? '').trim();
-    if (!asientoId) return { ok: false, error: 'Falta la marca que se va a anular.' };
+    if (!asientoId) return { ok: false, error: t('jor.a.faltamarca') };
     if (motivo.length < 5) {
-      return { ok: false, error: 'Escribe el motivo de la corrección. Una anulación sin explicación no sirve como anotación.' };
+      return { ok: false, error: t('jor.a.motivo') };
     }
 
     const r = await anularAsiento({
@@ -286,16 +294,17 @@ export default async function PaginaJornada({
     }, { evento: 'jornada.bitacora_no_escribio' });
 
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Marca anulada. Queda en el expediente con tu nombre, la hora y el motivo.' };
+    return { ok: true, mensaje: t('jor.a.anulada') };
   }
 
   async function capturarMarca(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('operacion');
     const p = await puerta(sp, tenantId);
     if ('ok' in p) return p;
     const f = await firma(p.userId);
     if (!f) {
-      return { ok: false, error: 'No pude confirmar tu correo, y una captura sin firma no queda anotada. Vuelve a intentarlo.' };
+      return { ok: false, error: t('jor.a.correo.captura') };
     }
 
     const jornadaId = String(fd.get('jornadaId') ?? '').trim();
@@ -308,16 +317,16 @@ export default async function PaginaJornada({
     const cuando = String(fd.get('momento') ?? '').trim();
     const nota = String(fd.get('nota') ?? '').trim();
 
-    if (!jornadaId) return { ok: false, error: 'Falta el día al que va la marca.' };
-    if (!TIPOS_VALIDOS.includes(tipo)) return { ok: false, error: 'Ese tipo de marca no existe.' };
+    if (!jornadaId) return { ok: false, error: t('jor.a.faltadia') };
+    if (!TIPOS_VALIDOS.includes(tipo)) return { ok: false, error: t('jor.a.tipo') };
     // A37-S19-01/02: la hora debe existir, caer en el día del expediente (leído
     // de la base, no del formulario), llevar su fuente, y `corrigeA` ser una
     // marca anulada de ESTA jornada. Cualquier lectura caída falla cerrado.
     const diaExp = await diaDeJornada(p.tenantId, jornadaId);
-    if (diaExp === null) return { ok: false, error: 'No pude leer el día del expediente — no se anotó nada. Vuelve a intentarlo.' };
+    if (diaExp === null) return { ok: false, error: t('jor.a.nodia') };
     const corrigeSolicitado = String(fd.get('corrigeA') ?? '').trim() || null;
     const asientosExp = corrigeSolicitado ? await asientosDeJornada(p.tenantId, jornadaId) : [];
-    if (asientosExp === null) return { ok: false, error: 'No pude leer las marcas del día — no se anotó nada. Vuelve a intentarlo.' };
+    if (asientosExp === null) return { ok: false, error: t('jor.a.nomarcas') };
     const v = validarCapturaMarca({ cuando, dia: diaExp, nota, corrigeA: corrigeSolicitado, asientos: asientosExp });
     if (!v.ok) return { ok: false, error: v.error };
     const { momento, corrigeA } = v;
@@ -332,11 +341,11 @@ export default async function PaginaJornada({
       nota: v.nota,
       corrigeA,
     });
-    if (res === 'fallo') return { ok: false, error: 'No se pudo guardar la marca. Intenta de nuevo en un momento.' };
+    if (res === 'fallo') return { ok: false, error: t('jor.a.noguardo') };
     if (res === 'ya_estaba') {
       return {
         ok: false,
-        error: 'Ya hay una marca viva de ese tipo en ese día. Anúlala primero (con su motivo) y luego captura la correcta.',
+        error: t('jor.a.duplicada'),
       };
     }
 
@@ -350,18 +359,19 @@ export default async function PaginaJornada({
     }, { evento: 'jornada.bitacora_no_escribio' });
 
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Marca capturada, con tu nombre y la hora en que la capturaste.' };
+    return { ok: true, mensaje: t('jor.a.capturada') };
   }
 
   async function cerrarElDia(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('operacion');
     const p = await puerta(sp, tenantId);
     if ('ok' in p) return p;
     const f = await firma(p.userId);
-    if (!f) return { ok: false, error: 'No pude confirmar tu correo, y el cierre lleva firma. Vuelve a intentarlo.' };
+    if (!f) return { ok: false, error: t('jor.a.correo.cierre') };
 
     const jornadaId = String(fd.get('jornadaId') ?? '').trim();
-    if (!jornadaId) return { ok: false, error: 'Falta el día que se va a cerrar.' };
+    if (!jornadaId) return { ok: false, error: t('jor.a.faltacierre') };
     const rechazoPatio = await fueraDeAlcance(p.tenantId, p.alcance, { jornadaId });
     if (rechazoPatio) return rechazoPatio;
 
@@ -377,15 +387,16 @@ export default async function PaginaJornada({
     }, { evento: 'jornada.bitacora_no_escribio' });
 
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Día cerrado con tu firma. Si algo cambia después, se corrige y queda anotado.' };
+    return { ok: true, mensaje: t('jor.a.cerrado') };
   }
 
   async function declararPolitica(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('operacion');
     const p = await puerta(sp, tenantId, 'politica');
     if ('ok' in p) return p;
     const f = await firma(p.userId);
-    if (!f) return { ok: false, error: 'No pude confirmar tu correo, y declarar un umbral lleva firma. Vuelve a intentarlo.' };
+    if (!f) return { ok: false, error: t('jor.a.correo.umbral') };
 
     // VACÍO SIGNIFICA «NO DECLARADO», Y SE GUARDA COMO NULL. Convertirlo en 0
     // pondría un tope de cero horas que marcaría excedido todo — el `null`
@@ -417,17 +428,18 @@ export default async function PaginaJornada({
     }, { evento: 'jornada.bitacora_no_escribio' });
 
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Umbrales de la flota guardados, con tu nombre y la fecha.' };
+    return { ok: true, mensaje: t('jor.a.umbrales.ok') };
   }
 
   async function guardarAlerta(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('operacion');
     // Quién recibe los avisos de una flota es configuración de la cuenta: la misma puerta que los umbrales (solo quien
     // administra). Se re-resuelve la sesión aquí; el rol del render no decide nada.
     const p = await puerta(sp, tenantId, 'politica');
     if ('ok' in p) return p;
     const f = await firma(p.userId);
-    if (!f) return { ok: false, error: 'No pude confirmar tu correo, y configurar la alerta lleva firma. Vuelve a intentarlo.' };
+    if (!f) return { ok: false, error: t('jor.a.correo.alerta') };
 
     // VACÍO = «NO DECLARADO» (null), nunca 0. Un número ilegible se manda como NaN y el esquema lo rechaza con palabras.
     const num = (k: string): number | null => {
@@ -436,7 +448,7 @@ export default async function PaginaJornada({
     };
     const aviso = num('umbralAvisoPct');
     const critico = num('umbralCriticoPct');
-    if (aviso === null || critico === null) return { ok: false, error: 'Escribe los dos umbrales (aviso y crítico) en porcentaje.' };
+    if (aviso === null || critico === null) return { ok: false, error: t('jor.a.dosumbrales') };
     const correo = String(fd.get('correoEncargado') ?? '').trim();
     const motivo = await guardarConfigAlerta(p.tenantId, {
       activa: fd.get('activa') === 'on',
@@ -458,7 +470,7 @@ export default async function PaginaJornada({
     }, { evento: 'jornada.bitacora_no_escribio' });
 
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Alerta de tope guardada, con tu nombre y la fecha.' };
+    return { ok: true, mensaje: t('jor.a.alerta.ok') };
   }
 
   // La alerta de tope (0502): configuración y alertas emitidas. Lecturas propias y aparte, cada una con su `catch`: que
@@ -497,6 +509,7 @@ export default async function PaginaJornada({
 
   return (
     <VistaJornada
+      tr={await getT('operacion')}
       filas={filas}
       semanas={semanas}
       motivoIlegible={motivoIlegible}

@@ -2,6 +2,7 @@
 
 import type { Matiz } from '../metricas';
 import { TablaGrafica } from './partes';
+import { resolverFormato, type FormatoGrafica } from './formatos';
 import { useT } from '@/lib/i18n/proveedor';
 import { graficas as graficasEs } from '@/lib/i18n/es/graficas';
 
@@ -13,15 +14,17 @@ export interface PeriodoApilado {
 
 /** Columnas apiladas de UN matiz (tonos 100/72/52/34/20 %) por fase o canal. Cada columna mide su total contra el mayor; cada tramo lleva
  *  su cifra en el `title` y en «Ver como tabla», y la leyenda nombra cada serie (el tono nunca es la única señal). Nulos no se pintan. */
-export function ColumnasApiladas({ periodos, series, matiz = 8, etiqueta, formato = (v) => String(v), alto = 168 }: {
+export function ColumnasApiladas({ periodos, series, matiz = 8, etiqueta, formato: formatoProp, alto = 168 }: {
   periodos: readonly PeriodoApilado[];
   series: readonly string[];
   matiz?: Matiz;
   etiqueta: string;
-  formato?: (v: number) => string;
+  /** Un id serializable (`'numero'`, `'usd'`…) desde un componente de servidor; una función solo desde otro componente de cliente. */
+  formato?: FormatoGrafica;
   alto?: number;
 }) {
   const { t } = useT('graficas', graficasEs);
+  const formato = resolverFormato(formatoProp);
   const totales = periodos.map((p) => p.partes.reduce<number>((s, v) => s + (v !== null && v > 0 ? v : 0), 0));
   const max = Math.max(0, ...totales);
   if (max <= 0) {

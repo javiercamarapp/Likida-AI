@@ -11,8 +11,12 @@ import { ahoraMs } from '@/lib/saludo';
 import { proyectar } from './mexico-geo';
 import { VistaMapa, type SinUbicar, type Rastreo } from './vista';
 import type { ViajeEnMapa, PinUnidad } from './mapa-vivo';
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Mapa' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.mapa') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -230,7 +234,7 @@ export default async function PaginaMapa({
   ubicados.sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
 
   return (
-    <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} totalVivos={totalVivos} tope={TOPE_MAPA}
+    <VistaMapa tr={await getT('operacion')} ubicados={ubicados} sinUbicar={sinUbicar} totalVivos={totalVivos} tope={TOPE_MAPA}
       rastreo={rastreo} />
   );
 }

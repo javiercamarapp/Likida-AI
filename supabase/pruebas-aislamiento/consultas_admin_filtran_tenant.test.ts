@@ -328,7 +328,11 @@ const BAJA_CONTAR_SUPERADMINS = ".from('app_user').select('id').eq('rol', 'super
 const BITACORA_PERSONAS_LIKIDA = ".from('app_user').select('id, nombre').in('rol', ['superadmin', 'vendedor']).order('nombre').order('id').limit(200)";
 const BITACORA_NOMBRES_ACTORES = ".from('app_user').select('id, nombre').in('id', actores)";
 const SOPORTE_AVISOS_SLA = ".from('bitacora_auditoria').select('entidad_id, ocurrio_en').eq('accion', ACCIONES_AVISO.sla).in('entidad_id', [...ticketIds].slice(0, 200)).order('ocurrio_en', { ascending: false }).order('id', { ascending: false }).limit(500)";
+const SILENCIO_VIAJES_ABIERTOS = ".from('viaje').select('id', { count: 'exact', head: true }).eq('estatus', 'abierto')";
 const EXENCIONES_CONSULTA = [{
+  archivo: 'src/lib/likida/fuentes/leer.ts', tabla: 'viaje', cadena: SILENCIO_VIAJES_ABIERTOS,
+  razon: 'F19, regla de silencio del webhook de WhatsApp: el webhook es UNO para todas las flotas (un solo número de Likida), así que cuenta (head:true, sin devolver filas ni datos de nadie) los viajes abiertos de TODAS las flotas para decidir si el canal callado es una alerta; la pantalla de salud de /admin (superadmin) la llama sin flota; el panel de una flota (conexiones) pasa su tenant_id y la consulta se acota a sus viajes. Las demás lecturas de leer.ts llevan .eq(tenant_id).'
+}, {
   archivo: 'src/lib/auth/baja_acceso.ts', tabla: 'app_user', cadena: BAJA_CONTAR_SUPERADMINS,
   razon: 'El candado «nunca el último superadmin activo» cuenta superadmins de LIKIDA, que no tienen flota (app_user.tenant_id es NULL para ellos): un filtro por tenant_id devolvería siempre 0 y el candado no protegería nada. Solo lo alcanza la acción de baja de /admin/usuarios, detrás de requireSuperadmin y del segundo factor reciente.'
 }, {

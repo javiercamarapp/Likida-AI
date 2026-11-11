@@ -1,0 +1,38 @@
+import type { login as loginEs } from '../es/login';
+
+// «login» en inglés (US). El tipo exige EXACTAMENTE las claves de es. Glosario: «Iniciar sesión / acceso» = Sign in; «aviso de
+// privacidad» = privacy notice; el español prevalece en los textos legales (traducción de cortesía, decisión del dueño).
+export const login: Record<keyof typeof loginEs, string> = {
+  'kicker': 'Dashboard access',
+  'titulo': 'Welcome to Likida',
+  'intro': 'The settlement dashboard for your fleet.',
+  'google.reposo': 'Continue with Google',
+  'google.enVuelo': 'Opening Google…',
+  'separador': 'or',
+  'correo.formulario': 'Sign in with email',
+  'correo.etiqueta': 'Your email',
+  'correo.placeholder': 'you@yourfleet.com',
+  'correo.reposo': 'Continue with email',
+  'correo.enVuelo': 'Requesting…',
+  'enviado.titulo': 'We sent a link to your email.',
+  'enviado.detalle': 'Open it on this same device.',
+  'reenviado.titulo': 'That link was already used or has expired — we sent you a new one.',
+  'reenviado.detalle': 'Open the most recent email, on this same device.',
+  'enviado.nota': 'Not arriving, or typed the wrong email? Enter it again above.',
+  'ayuda.resumen': 'Need help signing in?',
+  'ayuda.cuerpo': 'You do not need a password. Use the email your fleet registered you with and open the secure link you receive. Also check your spam folder.',
+  'alta.pregunta': 'Your email has no access?',
+  'alta.accion': 'Ask your fleet to add you.',
+  'pie.reservado': 'Access is reserved for authorized teams. Sign in without a password using Google or a secure link sent to your email.',
+  'pie.aceptas': 'By continuing, you accept Likida’s {terminos} and {privacidad}.',
+  'pie.terminos': 'Terms of Service',
+  'pie.privacidad': 'Privacy Notice',
+  'historia.aria': 'From receipts to settlements',
+  'historia.kicker': 'Likida · Settlement',
+  'historia.titulo': 'Freight fleets in Mexico. The end-of-day close, over WhatsApp.',
+  'historia.descripcion': 'The driver sends their receipts; an engine reconciles them against the advance and the policy, and delivers the settlement as a PDF.',
+  'error.caducado': 'That link was already used or has expired. Request a new one with your email.',
+  'error.caducado_reciente': 'That link was already used or has expired, and we sent you a new one a few minutes ago. Open the most recent email.',
+  'error.navegador': 'That link was requested from another browser. Open it in the browser where you typed your email, or request a new one from here.',
+  'error.generico': 'Something went wrong. Please try again.',
+};

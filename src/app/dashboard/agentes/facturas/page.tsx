@@ -22,7 +22,10 @@ import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { ultimasCorridas } from '@/lib/likida/agentes/corridas';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Facturas en automático' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('facturas.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -42,6 +45,7 @@ export default async function PaginaAgenteFacturas({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   const { tenantId, rol, userId } = await resolverTenantEfectivo('/dashboard/agentes/facturas', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/facturas')) redirect('/dashboard');
 
@@ -265,6 +269,7 @@ export default async function PaginaAgenteFacturas({
 
   return (
     <VistaAgenteFacturas
+      tr={tr}
       tickets={tickets}
       portalesConAdaptador={PORTALES_CONOCIDOS}
       portales={portales}

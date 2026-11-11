@@ -1,3 +1,5 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -21,7 +23,10 @@ import { sufijoTenant } from '../../sufijo';
 import { VistaDocumentos, filtroEnvioDe, type DatosDocumentos } from './vista';
 import type { ResultadoAccion } from './forma_accion';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Documentos de clientes' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.cartaPorte.documentos') };
+}
 
 export const dynamic = 'force-dynamic';
 // Subir un documento lo lee en la misma petición (visión + posible escalamiento): puede tardar.
@@ -32,8 +37,8 @@ const DIAS_VENTANA = 90;
 /** Las server actions de Next aceptan hasta 10 MB de cuerpo (next.config.ts): 9 MB deja lugar al multipart. */
 const MAX_BYTES_SUBIDA = 9 * 1024 * 1024;
 /** Lo que se le dice a quien subió un archivo que traía varios embarques. */
-const mensajeDeDivision = (n: number): string =>
-  `El archivo trae ${n} embarques: lo separé en ${n} documentos, uno por embarque. Se van leyendo y los verás en la bandeja para revisar; el archivo original queda como constancia.`;
+const mensajeDeDivision = (tr: Tr, n: number): string =>
+  tr('cartaPorte.documentos.page.divisionEmbarques', { n });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -42,14 +47,14 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * cuerpo del componente y usada dentro de un `'use server'` se captura por closure y Next no puede serializarla.
  */
 async function sesionDeAccion(
-  sp: { tenant?: string; rol?: string; vista?: string }, tenantId: string, opts: { configuracion?: boolean } = {},
+  tr: Tr, sp: { tenant?: string; rol?: string; vista?: string }, tenantId: string, opts: { configuracion?: boolean } = {},
 ): Promise<{ tenantId: string; userId: string } | { error: string }> {
   // MX-002: la flota que se pintó es la que escribe.
   const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-  if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede administrar los documentos de Carta Porte.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('cartaPorte.documentos.page.tuRolNoPuede') };
   // A37-S16-03: la configuración (buzón, remitentes, formatos de exportación, versión del perfil que lee los documentos de cada
   // cliente) es del dueño de la cuenta, no de quien solo ve la ruta (el encargado). Mismo criterio que /dashboard/arco.
-  if (opts.configuracion && !puedeAdministrar(s.rol)) return { error: 'Configurar los documentos de Carta Porte es del dueño de la flota.' };
+  if (opts.configuracion && !puedeAdministrar(s.rol)) return { error: tr('cartaPorte.documentos.page.configurarLosDocumentosDe') };
   return { tenantId: s.tenantId, userId: s.userId };
 }
 
@@ -117,6 +122,7 @@ export default async function PaginaDocumentos({
 }: {
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; envio?: string; mios?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -126,25 +132,26 @@ export default async function PaginaDocumentos({
 
   async function subir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, tenantId);
+    const { t: tr } = await getT('dinero');
+    const s = await sesionDeAccion(tr, sp, tenantId);
     if ('error' in s) return { ok: false, error: s.error };
     try {
-      if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiados documentos en poco tiempo. Espera un minuto.' };
+      if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: tr('cartaPorte.documentos.page.demasiadosDocumentosEnPoco') };
       const archivo = fd.get('archivo');
-      if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: 'Elige un archivo.' };
-      if (archivo.size > MAX_BYTES_SUBIDA) return { ok: false, error: 'El archivo pesa más de 9 MB. Mándalo por correo (hasta 8 MB por adjunto) o reduce su tamaño.' };
+      if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: tr('cartaPorte.documentos.page.eligeUnArchivo') };
+      if (archivo.size > MAX_BYTES_SUBIDA) return { ok: false, error: tr('cartaPorte.documentos.page.elArchivoPesaMas') };
       const clienteId = String(fd.get('clienteId') ?? '');
       const r = await recibirDocumento(s.tenantId, {
         canal: 'manual', nombre: archivo.name, bytes: new Uint8Array(await archivo.arrayBuffer()), clienteId: UUID.test(clienteId) ? clienteId : null, actorId: s.userId,
       });
       if (!r.ok) return { ok: false, error: r.mensaje };
-      if (r.duplicado && r.archivoPurgado) { revalidatePath(RUTA); return { ok: false, error: 'Ese archivo ya se había recibido y su archivo se purgó por retención, así que no se volvió a leer. Captura el viaje a mano o pide cargarlo de nuevo.' }; }
-      if (r.duplicado) { revalidatePath(RUTA); return { ok: true, mensaje: 'Ese archivo ya estaba en la bandeja: no se duplicó.' }; }
+      if (r.duplicado && r.archivoPurgado) { revalidatePath(RUTA); return { ok: false, error: tr('cartaPorte.documentos.page.eseArchivoYaSe') }; }
+      if (r.duplicado) { revalidatePath(RUTA); return { ok: true, mensaje: tr('cartaPorte.documentos.page.eseArchivoYaEstaba') }; }
       const p = r.estado === 'recibido' ? await procesarDocumento(s.tenantId, r.documentoId, {}) : null;
       revalidatePath(RUTA);
-      if (p && !p.ok) return { ok: false, error: `Se guardó, pero no se pudo leer: ${p.mensaje} Queda en la bandeja para reintentar.` };
-      if (p && p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(p.embarques) };
-      return { ok: true, mensaje: 'Documento leído. Ya está en la bandeja para revisar.' };
+      if (p && !p.ok) return { ok: false, error: tr('cartaPorte.documentos.page.seGuardoPeroNo', { mensaje: p.mensaje }) };
+      if (p && p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(tr, p.embarques) };
+      return { ok: true, mensaje: tr('cartaPorte.documentos.page.documentoLeidoYaEsta') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'subir el documento') };
     }
@@ -152,17 +159,18 @@ export default async function PaginaDocumentos({
 
   async function procesar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, tenantId);
+    const { t: tr } = await getT('dinero');
+    const s = await sesionDeAccion(tr, sp, tenantId);
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('documentoId') ?? '');
-      if (!UUID.test(id)) return { ok: false, error: 'No se reconoce ese documento.' };
-      if (!(await repo.leerDocumento(s.tenantId, id))) return { ok: false, error: 'Ese documento no está en tu flota.' };
-      if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: 'Demasiadas lecturas en poco tiempo. Espera un minuto.' };
+      if (!UUID.test(id)) return { ok: false, error: tr('cartaPorte.documentos.page.noSeReconoceEse') };
+      if (!(await repo.leerDocumento(s.tenantId, id))) return { ok: false, error: tr('cartaPorte.documentos.page.eseDocumentoNoEsta') };
+      if (!(await rateLimit(`cp-docs-subir:${s.tenantId}`, 30, 60_000))) return { ok: false, error: tr('cartaPorte.documentos.page.demasiadasLecturasEnPoco') };
       const p = await procesarDocumento(s.tenantId, id, {});
       revalidatePath(RUTA);
-      if (p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(p.embarques) };
-      return p.ok ? { ok: true, mensaje: 'Documento leído.' } : { ok: false, error: p.mensaje };
+      if (p.ok && p.estado === 'dividido') return { ok: true, mensaje: mensajeDeDivision(tr, p.embarques) };
+      return p.ok ? { ok: true, mensaje: tr('cartaPorte.documentos.page.documentoLeido') } : { ok: false, error: p.mensaje };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'leer el documento') };
     }
@@ -170,12 +178,13 @@ export default async function PaginaDocumentos({
 
   async function activarBuzon(): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
+    const { t: tr } = await getT('dinero');
+    const s = await sesionDeAccion(tr, sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       await repo.crearBuzon(s.tenantId, generarTokenCp());
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Buzón activado.' };
+      return { ok: true, mensaje: tr('cartaPorte.documentos.page.buzonActivado') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'activar el buzón') };
     }
@@ -183,16 +192,17 @@ export default async function PaginaDocumentos({
 
   async function guardarRemitentes(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
+    const { t: tr } = await getT('dinero');
+    const s = await sesionDeAccion(tr, sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const lista = String(fd.get('remitentes') ?? '').split(/\r?\n/).map((x) => x.trim().toLowerCase()).filter(Boolean);
-      if (lista.length > 50) return { ok: false, error: 'Máximo 50 remitentes.' };
+      if (lista.length > 50) return { ok: false, error: tr('cartaPorte.documentos.page.maximo50Remitentes') };
       const mala = lista.find((x) => !/^@?[a-z0-9._%+-]*@?[a-z0-9.-]+\.[a-z]{2,}$/.test(x) || x.length > 120);
-      if (mala) return { ok: false, error: `«${mala.slice(0, 60)}» no parece un correo ni un dominio.` };
+      if (mala) return { ok: false, error: tr('cartaPorte.documentos.page.noPareceUnCorreo', { v: mala.slice(0, 60) }) };
       await repo.configurarBuzon(s.tenantId, { remitentesPermitidos: [...new Set(lista)] });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: lista.length === 0 ? 'Sin lista: el buzón no recibe ningún correo hasta que agregues al menos un correo o dominio de tus clientes.' : `Guardados ${lista.length} remitentes.` };
+      return { ok: true, mensaje: lista.length === 0 ? tr('cartaPorte.documentos.page.sinListaElBuzon') : `Guardados ${lista.length} remitentes.` };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar los remitentes') };
     }
@@ -200,20 +210,21 @@ export default async function PaginaDocumentos({
 
   async function guardarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
+    const { t: tr } = await getT('dinero');
+    const s = await sesionDeAccion(tr, sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const nombre = String(fd.get('nombre') ?? '').trim();
       const formato = String(fd.get('formato') ?? '');
-      if (nombre === '' || nombre.length > 80) return { ok: false, error: 'El nombre es obligatorio (hasta 80 caracteres).' };
-      if (formato !== 'csv' && formato !== 'json') return { ok: false, error: 'El formato es CSV o JSON.' };
+      if (nombre === '' || nombre.length > 80) return { ok: false, error: tr('cartaPorte.documentos.page.elNombreEsObligatorio') };
+      if (formato !== 'csv' && formato !== 'json') return { ok: false, error: tr('cartaPorte.documentos.page.elFormatoEsCsv') };
       let crudo: unknown;
-      try { crudo = JSON.parse(String(fd.get('config') ?? '')); } catch { return { ok: false, error: 'El mapeo no es un JSON válido.' }; }
+      try { crudo = JSON.parse(String(fd.get('config') ?? '')); } catch { return { ok: false, error: tr('cartaPorte.documentos.page.elMapeoNoEs') }; }
       const v = validarConfigExport(crudo);
-      if (!v.ok) return { ok: false, error: `El mapeo no es válido: ${v.errores.slice(0, 4).join(' · ')}` };
+      if (!v.ok) return { ok: false, error: tr('cartaPorte.documentos.page.elMapeoNoEs2', { v: v.errores.slice(0, 4).join(' · ') }) };
       await repo.guardarExportConfig(s.tenantId, { nombre, formato, config: v.config as unknown as Record<string, unknown> });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `Formato «${nombre}» guardado. Ya aparece en las descargas.` };
+      return { ok: true, mensaje: tr('cartaPorte.documentos.page.formatoGuardadoYaAparece', { nombre }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar el formato') };
     }
@@ -221,14 +232,15 @@ export default async function PaginaDocumentos({
 
   async function borrarExport(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
+    const { t: tr } = await getT('dinero');
+    const s = await sesionDeAccion(tr, sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const id = String(fd.get('id') ?? '');
-      if (!UUID.test(id)) return { ok: false, error: 'No se reconoce ese formato.' };
+      if (!UUID.test(id)) return { ok: false, error: tr('cartaPorte.documentos.page.noSeReconoceEse2') };
       await repo.borrarExportConfig(s.tenantId, id);
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Formato quitado.' };
+      return { ok: true, mensaje: tr('cartaPorte.documentos.page.formatoQuitado') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'quitar el formato') };
     }
@@ -236,23 +248,24 @@ export default async function PaginaDocumentos({
 
   async function volverVersion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const s = await sesionDeAccion(sp, tenantId, { configuracion: true });
+    const { t: tr } = await getT('dinero');
+    const s = await sesionDeAccion(tr, sp, tenantId, { configuracion: true });
     if ('error' in s) return { ok: false, error: s.error };
     try {
       const perfilId = String(fd.get('perfilId') ?? '');
       const version = Number(fd.get('version'));
-      if (!UUID.test(perfilId) || !Number.isInteger(version) || version < 1) return { ok: false, error: 'No se reconoce esa versión.' };
+      if (!UUID.test(perfilId) || !Number.isInteger(version) || version < 1) return { ok: false, error: tr('cartaPorte.documentos.page.noSeReconoceEsa') };
       const ok = await repo.activarVersionPerfil(s.tenantId, perfilId, version);
-      if (!ok) return { ok: false, error: 'Esa versión no existe en tu flota.' };
+      if (!ok) return { ok: false, error: tr('cartaPorte.documentos.page.esaVersionNoExiste') };
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `El perfil volvió a la versión ${version}. Las versiones nuevas no se borran.` };
+      return { ok: true, mensaje: tr('cartaPorte.documentos.page.elPerfilVolvioA', { version }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'cambiar la versión') };
     }
   }
 
   return (
-    <VistaDocumentos
+    <VistaDocumentos tr={tr}
       datos={datos}
       sufijo={sufijoTenant(sp)}
       filtroEnvio={filtroEnvioDe(sp.envio)}

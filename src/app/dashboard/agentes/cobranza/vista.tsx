@@ -5,8 +5,8 @@ import { numero, fechaCorta } from '@/lib/formato';
 import { BotonEjecutar, BotonPausa, type AccionSimple, type AccionEjecutar } from './controles';
 import { FormaEstrategia } from './estrategia';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { Disclosure, EstadoVacio, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { TR_ES, rico, selloHoyTr, rotuloDiasTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
 
 export interface ExtraAgenteCobranza {
@@ -19,15 +19,6 @@ export interface ExtraAgenteCobranza {
   ejemplo: { folio: string | null; dias: number } | null;
 }
 
-/** Los días ISO como los lee un humano de tráfico. */
-const DIA_CORTO = ['', 'L', 'M', 'X', 'J', 'V', 'S', 'D'];
-function rotuloDias(dias: number[]): string {
-  // Contiguos → rango ("L–S"); salteados → lista ("L, X, V").
-  const contiguos = dias.every((d, i) => i === 0 || d === dias[i - 1] + 1);
-  if (contiguos && dias.length > 2) return `${DIA_CORTO[dias[0]]}–${DIA_CORTO[dias[dias.length - 1]]}`;
-  return dias.map((d) => DIA_CORTO[d]).join(', ');
-}
-
 /**
  * El render del Agente de Cobranza (Fase 1 del plan). Tres zonas: la
  * cola honesta (a quién va a insistir Y a quién no puede,
@@ -38,7 +29,7 @@ function rotuloDias(dias: number[]): string {
  * Sus cifras son días y contactos, todas medidas.
  */
 export function VistaAgenteCobranza({
-  cola, config, bitacora, extra, acciones, notificaciones, porGasto, gastosParaContactar = 0,
+  cola, config, bitacora, extra, acciones, notificaciones, porGasto, gastosParaContactar = 0, tr = TR_ES,
 }: {
   cola: ColaCobranza;
   config: ConfigCobranza;
@@ -53,26 +44,30 @@ export function VistaAgenteCobranza({
   porGasto?: React.ReactNode;
   /** Choferes con gastos en tier hoy: «Ejecutar ahora» también los cubre. */
   gastosParaContactar?: number;
+  /** El traductor del namespace `agentes` (la página lo arma con `getT`). Sin él, español. */
+  tr?: TrAgentes;
 }) {
-  const ventana = `${rotuloDias(config.diasSemana)} · ${config.horaInicio}–${config.horaFin} h`;
+  const { t: tx } = tr;
+  const idioma = tr.idioma;
+  const ventana = `${rotuloDiasTr(config.diasSemana, tx)} · ${config.horaInicio}–${config.horaFin} ${tx('comun.horas_sufijo')}`;
 
   return (
-    <MarcoPagina titulo="Seguimiento de comprobantes" apoyo="A quién insistirá el agente por comprobantes y a quién no puede, con el porqué. Cobra comprobantes, no dinero.">
+    <MarcoPagina titulo={tx('cobranza.vista.seguimiento_de_comprobantes')} apoyo={tx('cobranza.vista.a_quien_insistira_el_agente')}>
 
-      <TiraCifras sello={selloHoy('Cola de seguimiento')}>
-        <Cifra info="cobranza.para_contactar" etiqueta="Para contactar" valor={numero(cola.paraContactar.length)}
-          nota="alcanzaron un tier sin contacto" />
-        <Cifra info="cobranza.no_puede_contactar" etiqueta="No puede contactar" valor={numero(cola.sinTelefono.length)}
-          nota="sin teléfono capturado" tono={cola.sinTelefono.length > 0 ? 'warn' : undefined} />
-        <Cifra info="cobranza.viajes_vigilados" etiqueta="Viajes vigilados" valor={numero(cola.vigilados)} nota="abiertos o en cuadre" />
-        <Cifra info="cobranza.estado" etiqueta="Estado" valor={config.activo ? 'Activo' : 'Pausado'} nota={ventana}
+      <TiraCifras sello={selloHoyTr(tr, tx('cobranza.vista.cola_de_seguimiento'))}>
+        <Cifra info="cobranza.para_contactar" etiqueta={tx('cobranza.vista.para_contactar')} valor={numero(cola.paraContactar.length)}
+          nota={tx('cobranza.vista.alcanzaron_un_tier_sin_contacto')} />
+        <Cifra info="cobranza.no_puede_contactar" etiqueta={tx('cobranza.vista.no_puede_contactar')} valor={numero(cola.sinTelefono.length)}
+          nota={tx('cobranza.vista.sin_telefono_capturado')} tono={cola.sinTelefono.length > 0 ? 'warn' : undefined} />
+        <Cifra info="cobranza.viajes_vigilados" etiqueta={tx('cobranza.vista.viajes_vigilados')} valor={numero(cola.vigilados)} nota={tx('cobranza.vista.abiertos_o_en_cuadre')} />
+        <Cifra info="cobranza.estado" etiqueta={tx('cobranza.vista.estado')} valor={config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado')} nota={ventana}
           tono={config.activo ? undefined : 'warn'} />
       </TiraCifras>
 
       <FilaTarjetas variante="8-4">
         {/* ── La cola honesta ── */}
         <Tarjeta
-          titulo="Los va a contactar"
+          titulo={tx('cobranza.vista.los_va_a_contactar')}
           info="cobranza.cola"
           acciones={
             <BotonEjecutar
@@ -84,36 +79,35 @@ export function VistaAgenteCobranza({
         >
           <p className="rv-ag-notif__nota">
             {!config.activo
-              ? 'El agente está pausado: no contacta a nadie, ni con Ejecutar ahora.'
+              ? tx('cobranza.vista.el_agente_esta_pausado_no')
               : extra.enVentana
-                ? 'Dentro de la ventana — la próxima corrida de la hora los contacta sola.'
-                : `Fuera de la ventana (${ventana}) — los contacta cuando abra, o ahora si tú se lo pides.`}
+                ? tx('cobranza.vista.dentro_de_la_ventana_la')
+                : tx('cobranza.vista.fuera_de_la_ventana_los', { ventana })}
           </p>
           {cola.paraContactar.length === 0 ? (
-            <EstadoVacio titulo="Nadie con comprobantes atrasados" icono={Inbox} contenido>
-              Nadie trae comprobantes atrasados a los tiers de hoy — cuando un viaje cruce los {config.tiers[0]} días sin comprobar, aparece aquí antes de que el agente le escriba.
-            </EstadoVacio>
+            <EstadoVacio titulo={tx('cobranza.vista.nadie_con_comprobantes_atrasados')} icono={Inbox} contenido>
+              {tx('cobranza.vista.nadie_trae_comprobantes_atrasados_a', { dias: config.tiers[0] })}</EstadoVacio>
           ) : (
-            <TablaBase etiqueta="Viajes en cobranza con su operador" columnas={COLUMNAS_COLA} filas={cola.paraContactar} idFila={(f) => f.viajeId} densa tarjetaMovil />
+            <TablaBase etiqueta={tx('cobranza.vista.viajes_en_cobranza_con_su')} columnas={columnasCola(tx)} filas={cola.paraContactar} idFila={(f) => f.viajeId} densa tarjetaMovil />
           )}
         </Tarjeta>
 
         {/* A quién NO puede — la mitad honesta de la cola */}
         <Tarjeta
-          titulo="A quién no puede escribirle"
+          titulo={tx('cobranza.vista.a_quien_no_puede_escribirle')}
           info="cobranza.sin_telefono"
           estado={cola.sinTelefono.length === 0 ? 'vacio' : 'ok'}
-          mensaje="Todos tienen teléfono"
-          detalle="Todos los operadores con viajes atrasados tienen teléfono — el agente no trae las manos atadas con nadie."
+          mensaje={tx('cobranza.vista.todos_tienen_telefono')}
+          detalle={tx('cobranza.vista.todos_los_operadores_con_viajes')}
         >
-          <p className="rv-ag-notif__nota">Alcanzaron un tier, pero el operador no tiene teléfono capturado</p>
+          <p className="rv-ag-notif__nota">{tx('cobranza.vista.alcanzaron_un_tier_pero_el')}</p>
           <ul className="rv-ag-notif__personas">
             {cola.sinTelefono.map((f) => (
               <li key={f.viajeId}>
-                <StatusChip tono="warn">Sin teléfono</StatusChip>
-                <strong>{f.folio ?? 'Sin folio'}</strong>
-                <span>{f.operadorNombre ?? 'Operador sin nombre'}</span>
-                <em>{numero(f.dias)} días</em>
+                <StatusChip tono="warn">{tx('cobranza.vista.sin_telefono')}</StatusChip>
+                <strong>{f.folio ?? tx('cobranza.vista.sin_folio')}</strong>
+                <span>{f.operadorNombre ?? tx('cobranza.vista.operador_sin_nombre')}</span>
+                <em>{tx('cobranza.vista.dias', { dias: numero(f.dias) })}</em>
               </li>
             ))}
           </ul>
@@ -122,16 +116,16 @@ export function VistaAgenteCobranza({
 
       {/* Bitácora — lo que ya hizo, con sus fallos a la vista */}
       <Tarjeta
-        titulo="Bitácora de contactos"
+        titulo={tx('cobranza.vista.bitacora_de_contactos')}
         info="cobranza.bitacora"
         estado={bitacora === null ? 'error' : bitacora.length === 0 ? 'vacio' : 'ok'}
-        mensaje={bitacora === null ? 'No se pudo leer la bitácora ahora mismo.' : 'Aún sin contactos'}
-        detalle="Cada intento del agente queda escrito aquí, incluidos los que no salieron y su porqué."
+        mensaje={bitacora === null ? tx('cobranza.vista.no_se_pudo_leer_la') : tx('cobranza.vista.aun_sin_contactos')}
+        detalle={tx('cobranza.vista.cada_intento_del_agente_queda')}
       >
-        <p className="rv-ag-notif__nota">Los últimos intentos, salieran o no</p>
+        <p className="rv-ag-notif__nota">{tx('cobranza.vista.los_ultimos_intentos_salieran_o')}</p>
         <TablaBase
-          etiqueta="Bitácora de contactos"
-          columnas={COLUMNAS_BITACORA}
+          etiqueta={tx('cobranza.vista.bitacora_de_contactos')}
+          columnas={columnasBitacora(tx, idioma)}
           filas={bitacora ?? []}
           idFila={(c) => `${c.cuando}-${c.folio ?? ''}-${c.operadorNombre ?? ''}`}
           densa
@@ -142,9 +136,9 @@ export function VistaAgenteCobranza({
       {porGasto}
 
       {/* ── La estrategia del cliente, con vista previa (las "Pruebas") ── */}
-      <Tarjeta titulo="Su estrategia" info="cobranza.estrategia" acciones={<BotonPausa alternarPausa={acciones.alternarPausa} activo={config.activo} />}>
-        <p className="rv-ag-notif__nota">Cuándo insiste, en qué horario y con qué palabras — la vista previa es el mensaje literal</p>
-        <Disclosure titulo="Editar la estrategia" resumen={ventana} abierto>
+      <Tarjeta titulo={tx('cobranza.vista.su_estrategia')} info="cobranza.estrategia" acciones={<BotonPausa alternarPausa={acciones.alternarPausa} activo={config.activo} />}>
+        <p className="rv-ag-notif__nota">{tx('cobranza.vista.cuando_insiste_en_que_horario')}</p>
+        <Disclosure titulo={tx('cobranza.vista.editar_la_estrategia')} resumen={ventana} abierto>
           <FormaEstrategia
             config={config}
             ejemplo={extra.ejemplo}
@@ -158,21 +152,21 @@ export function VistaAgenteCobranza({
   );
 }
 
-const COLUMNAS_COLA: readonly ColumnaBase<FilaCola>[] = [
-  { id: 'viaje', titulo: 'Viaje', principal: true, celda: (f) => f.folio ?? 'Sin folio' },
-  { id: 'operador', titulo: 'Operador', celda: (f) => f.operadorNombre ?? 'Sin nombre' },
-  { id: 'dias', titulo: 'Sin comprobar', alinear: 'der', celda: (f) => `${numero(f.dias)} días` },
-  { id: 'tier', titulo: 'Tier que toca', alinear: 'der', celda: (f) => <StatusChip tono="warn">{f.tier} días</StatusChip> },
-  { id: 'previos', titulo: 'Contactos previos', alinear: 'der', celda: (f) => numero(f.contactosPrevios) },
+const columnasCola = (tx: TAgentes): readonly ColumnaBase<FilaCola>[] => [
+  { id: 'viaje', titulo: tx('cobranza.vista.viaje'), principal: true, celda: (f) => f.folio ?? tx('cobranza.vista.sin_folio') },
+  { id: 'operador', titulo: tx('cobranza.vista.operador'), celda: (f) => f.operadorNombre ?? tx('cobranza.vista.sin_nombre') },
+  { id: 'dias', titulo: tx('cobranza.vista.sin_comprobar'), alinear: 'der', celda: (f) => tx('cobranza.vista.dias', { dias: numero(f.dias) }) },
+  { id: 'tier', titulo: tx('cobranza.vista.tier_que_toca'), alinear: 'der', celda: (f) => <StatusChip tono="warn">{tx('cobranza.vista.dias_2', { tier: f.tier })}</StatusChip> },
+  { id: 'previos', titulo: tx('cobranza.vista.contactos_previos'), alinear: 'der', celda: (f) => numero(f.contactosPrevios) },
 ];
 
-const COLUMNAS_BITACORA: readonly ColumnaBase<ContactoBitacora>[] = [
-  { id: 'cuando', titulo: 'Fecha', principal: true, celda: (c) => fechaCorta(c.cuando) },
-  { id: 'estado', titulo: 'Resultado', celda: (c) => (c.enviado ? <StatusChip tono="ok">Enviado</StatusChip> : <StatusChip tono="bad">No salió</StatusChip>) },
+const columnasBitacora = (tx: TAgentes, idioma: TrAgentes['idioma']): readonly ColumnaBase<ContactoBitacora>[] => [
+  { id: 'cuando', titulo: tx('cobranza.vista.fecha'), principal: true, celda: (c) => fechaCorta(c.cuando, idioma) },
+  { id: 'estado', titulo: tx('cobranza.vista.resultado'), celda: (c) => (c.enviado ? <StatusChip tono="ok">{tx('cobranza.vista.enviado')}</StatusChip> : <StatusChip tono="bad">{tx('cobranza.vista.no_salio')}</StatusChip>) },
   {
-    id: 'detalle', titulo: 'Qué pasó',
+    id: 'detalle', titulo: tx('cobranza.vista.que_paso'),
     celda: (c) => c.enviado
-      ? <span>Le insistió a <strong>{c.operadorNombre ?? 'el operador'}</strong> por el viaje <strong>{c.folio ?? 'sin folio'}</strong> (tier de {c.tier} días)</span>
-      : <span>No le pudo escribir a <strong>{c.operadorNombre ?? 'el operador'}</strong> por el viaje <strong>{c.folio ?? 'sin folio'}</strong>{c.detalle ? ` — ${c.detalle}` : ''}</span>,
+      ? <span>{rico(tx('cobranza.vista.le_insistio_a_por_el'), { strong: <strong>{c.operadorNombre ?? tx('cobranza.vista.el_operador')}</strong>, strong2: <strong>{c.folio ?? tx('cobranza.vista.sin_folio_2')}</strong>, tier: c.tier })}</span>
+      : <span>{rico(tx('cobranza.vista.no_le_pudo_escribir_a'), { strong: <strong>{c.operadorNombre ?? tx('cobranza.vista.el_operador')}</strong>, strong2: <strong>{c.folio ?? tx('cobranza.vista.sin_folio_2')}</strong>, detalle: c.detalle ? ` — ${c.detalle}` : '' })}</span>,
   },
 ];

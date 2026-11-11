@@ -1,3 +1,5 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
 import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -37,15 +39,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TTL_FIRMA_S = 300;
 
 /** Dónde falló el envío (hoja, fila, campo, código): el repositorio solo guarda la ubicación, nunca el valor. */
-function motivoDeRechazo(e: ErrorEnvio | null): string | null {
+function motivoDeRechazo(tr: Tr, e: ErrorEnvio | null): string | null {
   if (!e) return null;
-  const partes = [e.hoja ? `hoja ${e.hoja}` : null, e.fila !== undefined ? `fila ${e.fila}` : null, e.campo ? `campo ${e.campo}` : null].filter(Boolean);
+  const partes = [e.hoja ? tr('cartaPorte.documentos.id.page.hoja', { hoja: e.hoja }) : null, e.fila !== undefined ? tr('cartaPorte.documentos.id.page.fila', { fila: e.fila }) : null, e.campo ? tr('cartaPorte.documentos.id.page.campo', { campo: e.campo }) : null].filter(Boolean);
   const donde = partes.join(', ');
-  return [donde, e.codigo ? `código ${e.codigo}` : null].filter(Boolean).join(' · ') || null;
+  return [donde, e.codigo ? tr('cartaPorte.documentos.id.page.codigo', { codigo: e.codigo }) : null].filter(Boolean).join(' · ') || null;
 }
-async function originalDe(d: repo.DocumentoFila): Promise<OriginalVista> {
-  if (d.purgadoEn || !d.storageRuta) return { tipo: 'nada', motivo: 'El archivo ya se borró por retención; solo quedan los datos leídos.' };
-  if (d.estado === 'dividido') return { tipo: 'nada', motivo: 'El archivo se dividió en un documento por embarque; el contenido de cada uno está en su propia revisión.' };
+async function originalDe(tr: Tr, d: repo.DocumentoFila): Promise<OriginalVista> {
+  if (d.purgadoEn || !d.storageRuta) return { tipo: 'nada', motivo: tr('cartaPorte.documentos.id.page.elArchivoYaSe') };
+  if (d.estado === 'dividido') return { tipo: 'nada', motivo: tr('cartaPorte.documentos.id.page.elArchivoSeDividio') };
   try {
     if (d.formato === 'imagen') return { tipo: 'imagen', url: await repo.firmarArchivo(d.storageRuta, TTL_FIRMA_S) };
     if (d.formato === 'pdf_escaneado') {
@@ -53,13 +55,13 @@ async function originalDe(d: repo.DocumentoFila): Promise<OriginalVista> {
       const bytes = await repo.descargarArchivo(d.storageRuta);
       const f = detectarFormato(bytes);
       if (f.ok) { const c = await prepararContenido(bytes, f.clase); if (c.imagenes.length > 0) return { tipo: 'imagenes', urls: c.imagenes }; }
-      return { tipo: 'nada', motivo: 'No se pudo mostrar el escaneo.' };
+      return { tipo: 'nada', motivo: tr('cartaPorte.documentos.id.page.noSePudoMostrar') };
     }
     if (d.textoExtracto) return { tipo: 'texto', texto: d.textoExtracto };
-    return { tipo: 'nada', motivo: 'Este documento no tiene texto que mostrar.' };
+    return { tipo: 'nada', motivo: tr('cartaPorte.documentos.id.page.esteDocumentoNoTiene') };
   } catch (e) {
     logger.warn('carta_porte_docs.original_no_disponible', { documentoId: d.id, err: e instanceof Error ? e.message : String(e) });
-    return { tipo: 'nada', motivo: 'No se pudo cargar el documento original. Los datos leídos sí están.' };
+    return { tipo: 'nada', motivo: tr('cartaPorte.documentos.id.page.noSePudoCargar') };
   }
 }
 
@@ -69,6 +71,7 @@ export default async function PaginaRevision({
   params: Promise<{ id: string }>;
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA_PADRE, sp);
   if (!puedeVerRuta(rol, RUTA_PADRE)) redirect('/dashboard');
@@ -81,7 +84,7 @@ export default async function PaginaRevision({
   const doc = previo.estado === 'por_revisar' ? await abrirRevision(tenantId, id, userId) : previo;
 
   const [original, operadores, eventos, viaje, linaje, hijos, envios, restringido] = await Promise.all([
-    originalDe(doc),
+    originalDe(tr, doc),
     repo.operadoresDeFlota(tenantId),
     repo.listarEventos(tenantId, id),
     doc.viajeId ? repo.viajePorId(tenantId, doc.viajeId) : Promise.resolve(null),
@@ -128,15 +131,16 @@ export default async function PaginaRevision({
 
   async function reasignar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede reasignar documentos de Carta Porte.' };
+    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: tr('cartaPorte.documentos.id.page.tuRolNoPuede') };
     try {
-      if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
+      if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: tr('cartaPorte.documentos.id.page.laFormaNoCorresponde') };
       const crudo = String(fd.get('revisorId') ?? '');
-      if (crudo !== '' && !UUID.test(crudo)) return { ok: false, error: 'No se reconoce a esa persona.' };
+      if (crudo !== '' && !UUID.test(crudo)) return { ok: false, error: tr('cartaPorte.documentos.id.page.noSeReconoceA') };
       const r = await reasignarRevisor(s.tenantId, id, crudo === '' ? null : crudo, { id: s.userId });
       revalidatePath(ruta); revalidatePath(RUTA_PADRE);
-      return { ok: true, mensaje: r.cambio ? (r.usuarioId ? 'Caso reasignado.' : 'El caso quedó sin persona asignada: le toca a todos los revisores.') : 'Ya estaba asignado así.' };
+      return { ok: true, mensaje: r.cambio ? (r.usuarioId ? 'Caso reasignado.' : tr('cartaPorte.documentos.id.page.elCasoQuedoSin')) : tr('cartaPorte.documentos.id.page.yaEstabaAsignadoAsi') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'reasignar el caso') };
     }
@@ -144,17 +148,18 @@ export default async function PaginaRevision({
 
   async function asignarClienteAccion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' };
+    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: tr('cartaPorte.documentos.id.page.tuRolNoPuede2') };
     try {
-      if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
+      if (String(fd.get('documentoId') ?? '') !== id) return { ok: false, error: tr('cartaPorte.documentos.id.page.laFormaNoCorresponde') };
       const version = Number(fd.get('version'));
-      if (!Number.isInteger(version) || version < 1) return { ok: false, error: 'Falta la versión del documento. Recarga la pantalla.' };
+      if (!Number.isInteger(version) || version < 1) return { ok: false, error: tr('cartaPorte.documentos.id.page.faltaLaVersionDel') };
       const crudo = String(fd.get('clienteId') ?? '');
-      if (crudo !== '' && !UUID.test(crudo)) return { ok: false, error: 'No se reconoce a ese cliente.' };
+      if (crudo !== '' && !UUID.test(crudo)) return { ok: false, error: tr('cartaPorte.documentos.id.page.noSeReconoceA2') };
       await asignarCliente(s.tenantId, id, version, crudo === '' ? null : crudo, s.userId);
       revalidatePath(ruta); revalidatePath(RUTA_PADRE);
-      return { ok: true, mensaje: crudo === '' ? 'Cliente quitado del documento.' : 'Cliente asignado: se aplicó su catálogo a lo que faltaba.' };
+      return { ok: true, mensaje: crudo === '' ? 'Cliente quitado del documento.' : tr('cartaPorte.documentos.id.page.clienteAsignadoSeAplico') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'asignar el cliente') };
     }
@@ -168,13 +173,14 @@ export default async function PaginaRevision({
   /** Una sola acción atiende todos los botones: `intencion` dice cuál se apretó. */
   async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA_PADRE, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: 'Tu rol no puede revisar documentos de Carta Porte.' };
+    if (!puedeVerRuta(s.rol, RUTA_PADRE)) return { ok: false, error: tr('cartaPorte.documentos.id.page.tuRolNoPuede2') };
     try {
       const docId = String(fd.get('documentoId') ?? '');
-      if (docId !== id) return { ok: false, error: 'La forma no corresponde a este documento. Recarga la pantalla.' };
+      if (docId !== id) return { ok: false, error: tr('cartaPorte.documentos.id.page.laFormaNoCorresponde') };
       const version = Number(fd.get('version'));
-      if (!Number.isInteger(version) || version < 1) return { ok: false, error: 'Falta la versión del documento. Recarga la pantalla.' };
+      if (!Number.isInteger(version) || version < 1) return { ok: false, error: tr('cartaPorte.documentos.id.page.faltaLaVersionDel') };
       const intencion = String(fd.get('intencion') ?? '');
       const operadorId = String(fd.get('operadorId') ?? '');
       const actor = { id: s.userId };
@@ -197,14 +203,14 @@ export default async function PaginaRevision({
       if (intencion === 'guardar') {
         await aplicarForma(version);
         revalidatePath(ruta);
-        return { ok: true, mensaje: 'Cambios guardados. La validación ya los refleja.' };
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.cambiosGuardadosLaValidacion') };
       }
       if (intencion.startsWith('quitar:')) {
         const i = Number(intencion.slice(7));
         const nueva = await aplicarForma(version);
         await quitarRenglon(s.tenantId, id, nueva, i, s.userId);
         revalidatePath(ruta);
-        return { ok: true, mensaje: `Se quitó la mercancía ${i + 1}.` };
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.seQuitoLaMercancia', { v: i + 1 }) };
       }
       if (intencion === 'aprobar') {
         const nueva = await aplicarForma(version);
@@ -212,35 +218,35 @@ export default async function PaginaRevision({
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         const detalles: string[] = [];
         if (r.salida?.ok) {
-          detalles.push(r.salida.accion === 'creado' ? `Viaje ${r.salida.folio} creado con ${r.salida.mercancias} mercancía(s).` : `El viaje ${r.salida.folio} ya existía: se le completaron ${r.salida.columnasCompletadas} datos y ${r.salida.mercancias} mercancía(s).`);
+          detalles.push(r.salida.accion === 'creado' ? tr('cartaPorte.documentos.id.page.viajeCreadoConMercancia', { folio: r.salida.folio, mercancias: r.salida.mercancias }) : tr('cartaPorte.documentos.id.page.elViajeYaExistia', { folio: r.salida.folio, columnasCompletadas: r.salida.columnasCompletadas, mercancias: r.salida.mercancias }));
           detalles.push(...r.salida.advertencias);
-          if (r.salida.borrador) detalles.push(r.salida.borrador.armado ? 'El borrador del complemento Carta Porte 3.1 ya se puede armar.' : `Al complemento todavía le falta: ${r.salida.borrador.faltantes.slice(0, 3).join(' · ') || 'revisar el checklist'}.`);
-        } else if (r.salida) detalles.push(`Sin viaje todavía: ${r.salida.mensaje}`);
-        if (r.perfil.accion === 'creado') detalles.push('Likida recordó el formato de este cliente: la próxima vez lo lee sin modelo.');
-        else if (r.perfil.accion === 'nueva_version') detalles.push(`El perfil del cliente aprendió de tus correcciones (versión ${r.perfil.version}).`);
-        return { ok: true, mensaje: 'Documento aprobado.', detalles };
+          if (r.salida.borrador) detalles.push(r.salida.borrador.armado ? tr('cartaPorte.documentos.id.page.elBorradorDelComplemento') : tr('cartaPorte.documentos.id.page.alComplementoTodaviaLe', { v: r.salida.borrador.faltantes.slice(0, 3).join(' · ') || 'revisar el checklist' }));
+        } else if (r.salida) detalles.push(tr('cartaPorte.documentos.id.page.sinViajeTodavia', { mensaje: r.salida.mensaje }));
+        if (r.perfil.accion === 'creado') detalles.push(tr('cartaPorte.documentos.id.page.likidaRecordoElFormato'));
+        else if (r.perfil.accion === 'nueva_version') detalles.push(tr('cartaPorte.documentos.id.page.elPerfilDelCliente', { version: r.perfil.version ?? '' }));
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.documentoAprobado'), detalles };
       }
       if (intencion === 'rechazar') {
         await rechazarDocumento(s.tenantId, id, version, String(fd.get('motivo') ?? ''), s.userId, new Date(), String(fd.get('causa') ?? ''));
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
-        return { ok: true, mensaje: 'Documento rechazado.' };
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.documentoRechazado') };
       }
       if (intencion === 'reintentar') {
         await reintentarLectura(s.tenantId, id, version, s.userId);
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
-        return { ok: true, mensaje: 'Listo: el documento volvió a la cola y se vuelve a leer en unos minutos.' };
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.listoElDocumentoVolvio') };
       }
       if (intencion === 'reabrir') {
         await reabrirDocumento(s.tenantId, id, version, s.userId);
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
-        return { ok: true, mensaje: 'Documento reabierto: ya se puede corregir.' };
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.documentoReabiertoYaSe') };
       }
       if (intencion === 'eliminar') {
         // Borrar datos personales de terceros es un acto de administración, no de revisión.
-        if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota puede eliminar un documento.' };
+        if (!puedeAdministrar(s.rol)) return { ok: false, error: tr('cartaPorte.documentos.id.page.soloQuienAdministraLa') };
         await eliminarDocumento(s.tenantId, id, actor);
         revalidatePath(RUTA_PADRE);
-        return { ok: true, mensaje: 'Documento y archivo eliminados. Vuelve a la bandeja.' };
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.documentoYArchivoEliminados') };
       }
       if (intencion === 'subido_a_mano') {
         const d = await repo.leerDocumento(s.tenantId, id);
@@ -248,7 +254,7 @@ export default async function PaginaRevision({
         const r = await marcarSubidoAMano(s.tenantId, d, version, actor, String(fd.get('referenciaTms') ?? ''));
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         return r.ok
-          ? { ok: true, mensaje: r.yaEstaba ? 'Ya estaba marcada como subida a mano.' : 'Listo: quedó registrado que la plantilla se subió a mano. Likida no la volverá a enviar.' }
+          ? { ok: true, mensaje: r.yaEstaba ? tr('cartaPorte.documentos.id.page.yaEstabaMarcadaComo') : tr('cartaPorte.documentos.id.page.listoQuedoRegistradoQue') }
           : { ok: false, error: r.mensaje };
       }
       if (intencion === 'preparar_envio') {
@@ -256,7 +262,7 @@ export default async function PaginaRevision({
         if (!restringidoAccion) return { ok: false, error: MENSAJE_FUNCION_NO_DISPONIBLE };
         const d = await repo.leerDocumento(s.tenantId, id);
         if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
-        if (d.version !== version) return { ok: false, error: 'Otra persona cambió este documento mientras lo revisabas. Recarga la pantalla y vuelve a intentarlo.' };
+        if (d.version !== version) return { ok: false, error: tr('cartaPorte.documentos.id.page.otraPersonaCambioEste') };
         const r = await prepararEnvioTms(s.tenantId, d, actor);
         revalidatePath(ruta); revalidatePath(RUTA_PADRE);
         const conexion = estadoConexionTms(await salidaDeFlota(s.tenantId));
@@ -267,7 +273,7 @@ export default async function PaginaRevision({
         // marcaron y el SKU que la persona confirmó.
         const d = await repo.leerDocumento(s.tenantId, id);
         if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
-        if (d.estado !== 'aprobado' || !d.clienteId || !d.extraccion) return { ok: false, error: 'Solo se guarda en el catálogo lo de un documento aprobado y ligado a un cliente.' };
+        if (d.estado !== 'aprobado' || !d.clienteId || !d.extraccion) return { ok: false, error: tr('cartaPorte.documentos.id.page.soloSeGuardaEn') };
         if (d.version !== version) throw new DatoInvalido('Otra persona cambió este documento mientras lo revisabas. Recarga la pantalla y vuelve a intentarlo.');
         const propuesta = proponerCatalogo(d.extraccion, await repo.cargarCatalogoCliente(s.tenantId, d.clienteId));
         const productos = fd.getAll('cat_prod').map((v) => Number(v)).filter((n) => Number.isInteger(n) && n >= 0)
@@ -284,7 +290,7 @@ export default async function PaginaRevision({
           { evento: 'carta_porte_docs.bitacora_no_escribio' },
         );
         revalidatePath(ruta);
-        return { ok: true, mensaje: `Guardado en el catálogo: ${r.productos.length} producto(s) y ${r.partes.length} remitente(s) o destinatario(s). El próximo documento igual saldrá con estos datos.` };
+        return { ok: true, mensaje: tr('cartaPorte.documentos.id.page.guardadoEnElCatalogo', { length: r.productos.length, length2: r.partes.length }) };
       }
       if (intencion === 'viaje') {
         // Doble defensa: aunque la pantalla no ofrezca el botón, la acción se niega bajo el perfil (y `crearViajeDeDocumento` también).
@@ -295,14 +301,14 @@ export default async function PaginaRevision({
           ? { ok: true, mensaje: r.accion === 'creado' ? `Viaje ${r.folio} creado.` : `Viaje ${r.folio} actualizado.`, detalles: r.advertencias }
           : { ok: false, error: r.mensaje };
       }
-      return { ok: false, error: 'No reconozco esa acción.' };
+      return { ok: false, error: tr('cartaPorte.documentos.id.page.noReconozcoEsaAccion') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la revisión') };
     }
   }
 
   return (
-    <VistaRevision
+    <VistaRevision tr={tr}
       doc={doc}
       revision={revisionDe(doc)}
       original={original}
@@ -312,7 +318,7 @@ export default async function PaginaRevision({
       clientes={clientes}
       revisor={revisor}
       sufijo={sufijoTenant(sp)}
-      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}), ...(conexion === 'por_conectar' ? { sinConexion: true } : {}), ...(conexion === 'no_disponible' ? { salidaNoDisponible: true } : {}) } : null}
+      envio={envio ? { estado: envio.estado, proximaRevision: envio.proximaRevision, motivo: motivoDeRechazo(tr, envio.ultimoError), ...(esFlotaSimulada(tenantId) ? { simulado: true } : {}), ...(conexion === 'por_conectar' ? { sinConexion: true } : {}), ...(conexion === 'no_disponible' ? { salidaNoDisponible: true } : {}) } : null}
       perfilRestringido={restringido}
       catalogo={catalogo}
       salida={viaje ? { folio: viaje.folio ?? viaje.id.slice(0, 8) } : null}
@@ -323,4 +329,7 @@ export default async function PaginaRevision({
   );
 }
 
-export const metadata: Metadata = { title: 'Revisión de documento' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.cartaPorte.documentos.id') };
+}

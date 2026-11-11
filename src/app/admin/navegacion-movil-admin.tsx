@@ -11,6 +11,8 @@ import { BarraInferiorVista } from '../dashboard/shell/barra-inferior';
 import { HojaMasVista } from '../dashboard/shell/hoja-mas';
 import { hrefActivo, type MenuV2 } from '../dashboard/shell/menu-por-perfil';
 import type { DestinoMovil } from '../dashboard/shell/barra-inferior-destinos';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA NAVEGACIÓN MÓVIL DE /admin (<768 px): las MISMAS piezas del dashboard (cabecera móvil, barra inferior flotante y hoja «Más»),
@@ -47,7 +49,8 @@ export function destinosBarraAdmin(): DestinoMovil[] {
 /** La cabecera móvil del admin: logo, fecha y campana (mismo conteo real de «Avisos»; lectura caída = «sin dato», sin punto). */
 export function CabeceraMovilAdmin() {
   const r = useRequiereAccion();
-  return <CabeceraMovilVista hrefCasa="/admin" hrefAvisos="/admin/notificaciones" etiquetaAvisos={etiquetaCampana(r)} punto={!!r && (r.pendientes ?? 0) > 0} />;
+  const tr = useT('shell', shellEs);
+  return <CabeceraMovilVista hrefCasa="/admin" hrefAvisos="/admin/notificaciones" etiquetaAvisos={etiquetaCampana(r, tr)} punto={!!r && (r.pendientes ?? 0) > 0} />;
 }
 
 export default function NavegacionMovilAdmin({ nombre, avatarUrl, flotas, flotaActual, salir }: {

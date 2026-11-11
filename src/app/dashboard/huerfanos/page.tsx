@@ -13,7 +13,11 @@ import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
 import { VistaHuerfanos } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Comprobantes sin viaje' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.huerfanos') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -52,9 +56,10 @@ async function viajeSigueVivo(tenantId: string, viajeId: string): Promise<boolea
 /** El gateo que ambas actions repiten adentro. Helper de módulo y no
  *  closure: una action solo captura VALORES serializables (tenantId). */
 async function exigirPermiso(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<string | null> {
+  const { t } = await getT('operacion');
   const sesion = await resolverTenantAtadoOLanza('/dashboard/huerfanos', sp, tenantId);
-  if (!puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede resolver comprobantes.';
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta bandeja no es de tu flota.';
+  if (!puedeVerArea(sesion.rol, 'dinero')) return t('hf.a.rol');
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return t('hf.a.ajena');
   return null;
 }
 
@@ -110,16 +115,17 @@ export default async function PaginaHuerfanos({
 
   async function adjuntar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+  const { t } = await getT('operacion');
     const negado = await exigirPermiso(sp, tenantId);
     if (negado) return { error: negado };
 
     const huerfanoId = typeof fd.get('huerfanoId') === 'string' ? (fd.get('huerfanoId') as string).trim().slice(0, 64) : '';
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
-    if (!huerfanoId) return { error: 'Falta el comprobante.' };
-    if (!viajeId) return { error: 'Elige el viaje al que va.' };
+    if (!huerfanoId) return { error: t('hf.a.falta') };
+    if (!viajeId) return { error: t('hf.a.elige') };
 
     const h = await traerHuerfanoPendiente(tenantId, huerfanoId);
-    if (!h) return { error: 'Ese comprobante ya no está pendiente — alguien más lo resolvió. Recarga la página.' };
+    if (!h) return { error: t('hf.a.yano') };
 
     // El guardia que el flujo gemelo de WhatsApp ya tiene (processor solo
     // ofrece lo que trae monto): un fallo de OCR guarda el huérfano con
@@ -127,7 +133,7 @@ export default async function PaginaHuerfanos({
     // midió— en la liquidación del contralor. Number() porque `gasto` es una
     // columna JSON: un monto ausente o raro también se rebota.
     if (!(Number(h.gasto.monto) > 0)) {
-      return { error: 'Ese comprobante no trae monto legible — pídele al chofer que reenvíe la foto; adjuntarlo metería $0.00 a la liquidación.' };
+      return { error: t('hf.a.sinmonto') };
     }
 
     // El viaje destino se re-verifica ADENTRO (un viajeId ajeno o liquidado
@@ -135,9 +141,9 @@ export default async function PaginaHuerfanos({
     // VIAJE, no por los 100 más recientes — ver `viajeSigueVivo`.
     const destinoOk = await viajeSigueVivo(tenantId, viajeId);
     if (destinoOk === null) {
-      return { error: 'No se pudo comprobar el viaje destino ahora mismo — inténtalo de nuevo.' };
+      return { error: t('hf.a.nocomprobo') };
     }
-    if (!destinoOk) return { error: 'Ese viaje ya no está abierto. Recarga la página.' };
+    if (!destinoOk) return { error: t('hf.a.cerrado') };
 
     try {
       await addGasto(tenantId, viajeId, h.gasto);
@@ -146,10 +152,10 @@ export default async function PaginaHuerfanos({
       if (code === '23505') {
         // El gasto YA vive en algún viaje (misma foto, mismo id). No se
         // resuelve como adjuntado a ESTE viaje: sería un rótulo falso.
-        return { error: 'Ese comprobante ya vive en un viaje — si aquí sobra, descártalo.' };
+        return { error: t('hf.a.yaviaje') };
       }
       logger.error('huerfano.oficina_adjuntar_fallo', { huerfanoId, err: e instanceof Error ? e.message : String(e) });
-      return { error: 'No se pudo adjuntar. Inténtalo de nuevo.' };
+      return { error: t('hf.a.nopudo') };
     }
 
     const r = await resolverHuerfanoDesdeOficina(tenantId, huerfanoId, 'adjuntado', viajeId);
@@ -160,11 +166,12 @@ export default async function PaginaHuerfanos({
 
   async function descartar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+  const { t } = await getT('operacion');
     const negado = await exigirPermiso(sp, tenantId);
     if (negado) return { error: negado };
 
     const huerfanoId = typeof fd.get('huerfanoId') === 'string' ? (fd.get('huerfanoId') as string).trim().slice(0, 64) : '';
-    if (!huerfanoId) return { error: 'Falta el comprobante.' };
+    if (!huerfanoId) return { error: t('hf.a.falta') };
 
     const r = await resolverHuerfanoDesdeOficina(tenantId, huerfanoId, 'descartado', null);
     if (r.error) return { error: r.error };
@@ -181,18 +188,20 @@ export default async function PaginaHuerfanos({
    */
   async function buscarViajeAccion(q: string): Promise<OpcionViaje[]> {
     'use server';
+  const { t } = await getT('operacion');
     const negado = await exigirPermiso(sp, tenantId);
     if (negado) throw new Error(negado);
     try {
       return await buscarViajesVivos(tenantId, typeof q === 'string' ? q : '');
     } catch (err) {
       logger.error('huerfanos.buscar_viaje.fallo', { err: err instanceof Error ? err.message : String(err) });
-      throw new Error('No se pudo buscar en los viajes vivos.');
+      throw new Error(t('hf.a.busqueda'));
     }
   }
 
   return (
     <VistaHuerfanos
+      tr={await getT('operacion')}
       pendientes={pendientes}
       hayViajesVivos={hayViajesVivos}
       buscarViaje={buscarViajeAccion}

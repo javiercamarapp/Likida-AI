@@ -3,6 +3,7 @@
 import type { Matiz } from '../metricas';
 import { porcentaje } from '@/lib/formato';
 import { TablaGrafica } from './partes';
+import { resolverFormato, type FormatoGrafica } from './formatos';
 import { useT } from '@/lib/i18n/proveedor';
 import { graficas as graficasEs } from '@/lib/i18n/es/graficas';
 
@@ -15,13 +16,15 @@ export interface EtapaEmbudo {
 /** Embudo (Rovaq): etapas de mayor a menor, cada una con su cifra EXACTA impresa, su parte de la primera etapa medible y la conversión
  *  contra la etapa anterior. Una etapa sin dato no se compara (ni como origen ni como destino): no se inventa una tasa. El ancho es la
  *  parte del mayor; el color es un solo matiz y la cifra siempre va escrita (el color nunca es la única señal). Entra una vez (rv-crece). */
-export function Embudo({ etapas, matiz = 8, etiqueta, formato = (v) => String(v) }: {
+export function Embudo({ etapas, matiz = 8, etiqueta, formato: formatoProp }: {
   etapas: readonly EtapaEmbudo[];
   matiz?: Matiz;
   etiqueta: string;
-  formato?: (v: number) => string;
+  /** Un id serializable (`'numero'`, `'usd'`…) desde un componente de servidor; una función solo desde otro componente de cliente. */
+  formato?: FormatoGrafica;
 }) {
   const { t } = useT('graficas', graficasEs);
+  const formato = resolverFormato(formatoProp);
   const tope = Math.max(0, ...etapas.map((e) => e.valor ?? 0));
   const base = etapas.find((e) => e.valor !== null && e.valor > 0)?.valor ?? null;
   const filas = etapas.map((e, i) => {

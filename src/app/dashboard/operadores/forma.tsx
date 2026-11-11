@@ -5,6 +5,8 @@ import { useFormStatus } from 'react-dom';
 import { Save, UserPlus } from 'lucide-react';
 import { AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, CampoFecha, Disclosure, Icono, clasesBoton } from '@/app/ui-v2/componentes';
 import './operadores.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
@@ -31,10 +33,11 @@ export interface OperadorCrudo {
 }
 
 function BotonGuardar() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />}>
-      {pending ? 'Guardando…' : 'Guardar'}
+      {pending ? t('op.f.guardando') : t('op.f.guardar')}
     </Boton>
   );
 }
@@ -70,6 +73,7 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
   /** Un jefe con patio no puede mover al operador a otro patio: el selector se enseña bloqueado (el servidor lo vuelve a exigir). */
   patioFijo?: boolean;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
@@ -78,36 +82,36 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
       <input type="hidden" name="operadorId" value={operadorId} />
 
       <div className="rv-forma__rejilla">
-        <CampoTexto id={campo('nombre')} name="nombre" etiqueta="Nombre" obligatorio minLength={3} maxLength={120} defaultValue={inicial.nombre} />
+        <CampoTexto id={campo('nombre')} name="nombre" etiqueta={t('op.f.nombre')} obligatorio minLength={3} maxLength={120} defaultValue={inicial.nombre} />
 
         {/* El teléfono es la IDENTIDAD del chofer frente al bot: un dígito mal tecleado lo deja sin poder reportar un gasto. Se avisa de
             las dos consecuencias porque ninguna se ve desde aquí: el número viejo deja de funcionar en el acto, y el nuevo tiene que
             estar libre en la flota (`comprobarTelefonoLibre`). Un operador sin WhatsApp (desglose por correo, 0932) llega con el
             teléfono vacío: no se le exige uno al corregir otro dato. */}
-        <CampoTexto id={campo('telefono')} name="telefono" tipo="tel" etiqueta="WhatsApp del operador" obligatorio={inicial.telefono !== ''}
+        <CampoTexto id={campo('telefono')} name="telefono" tipo="tel" etiqueta={t('op.f.whatsapp')} obligatorio={inicial.telefono !== ''}
           maxLength={25} defaultValue={inicial.telefono} placeholder="55 1234 5678"
-          ayuda="Es con lo que el bot lo reconoce. Si lo cambias, el número anterior deja de funcionar de inmediato y el chofer tiene que escribir desde el nuevo." />
+          ayuda={t('op.f.whatsapp.ayuda')} />
 
-        <CampoTexto id={campo('numeroEmpleado')} name="numeroEmpleado" etiqueta="Nº de empleado (opcional)" maxLength={40} defaultValue={inicial.numeroEmpleado} />
+        <CampoTexto id={campo('numeroEmpleado')} name="numeroEmpleado" etiqueta={t('op.f.empleado.opc')} maxLength={40} defaultValue={inicial.numeroEmpleado} />
 
-        <CampoTexto id={campo('rfc')} name="rfc" etiqueta="RFC del operador (opcional)" maxLength={13} defaultValue={inicial.rfc}
+        <CampoTexto id={campo('rfc')} name="rfc" etiqueta={t('op.f.rfc')} maxLength={13} defaultValue={inicial.rfc}
           placeholder="GODE561231GR8" claseControl="rv-eq__mayus"
-          ayuda="Sin él, un viático timbrado a su nombre se queda en revisar (RLISR 57) aunque el reglamento lo conceda." />
+          ayuda={t('op.f.rfc.ayuda')} />
 
         {patios.length > 0 && (
           <>
-            <CampoSelect id={campo('terminalId')} name="terminalId" etiqueta="Patio" defaultValue={inicial.terminalId ?? ''} disabled={patioFijo}
-              ayuda={patioFijo ? 'Solo quien administra la flota mueve a un operador de patio.' : 'Con el patio, su jefe de tráfico lo ve y lo corrige.'}>
-              <option value="">Sin patio</option>
+            <CampoSelect id={campo('terminalId')} name="terminalId" etiqueta={t('op.f.patio')} defaultValue={inicial.terminalId ?? ''} disabled={patioFijo}
+              ayuda={patioFijo ? t('op.f.patio.soloadmin') : t('op.f.patio.ayuda')}>
+              <option value="">{t('op.f.sinpatio')}</option>
               {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </CampoSelect>
             {patioFijo && <input type="hidden" name="terminalId" value={inicial.terminalId ?? ''} />}
           </>
         )}
 
-        <CampoTexto id={campo('licencia')} name="licencia" etiqueta="Licencia (opcional)" maxLength={40} defaultValue={inicial.licencia} />
-        <CampoTexto id={campo('licenciaTipo')} name="licenciaTipo" etiqueta="Tipo (opcional)" maxLength={10} defaultValue={inicial.licenciaTipo} placeholder="B, C, E…" />
-        <CampoFecha id={campo('licenciaVence')} name="licenciaVence" etiqueta="Vence (opcional)" defaultValue={inicial.licenciaVence} ayuda="Vacío = sin registrar, no vencida." />
+        <CampoTexto id={campo('licencia')} name="licencia" etiqueta={t('op.f.licencia')} maxLength={40} defaultValue={inicial.licencia} />
+        <CampoTexto id={campo('licenciaTipo')} name="licenciaTipo" etiqueta={t('op.f.tipo')} maxLength={10} defaultValue={inicial.licenciaTipo} placeholder="B, C, E…" />
+        <CampoFecha id={campo('licenciaVence')} name="licenciaVence" etiqueta={t('op.f.vence')} defaultValue={inicial.licenciaVence} ayuda={t('op.f.vence.ayuda')} />
       </div>
 
       {/* LA BAJA DEL CHOFER: un botón con su diálogo, que dice los efectos. Reactivar no necesita diálogo: devuelve, no corta. */}
@@ -116,14 +120,14 @@ export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios =
         <BotonGuardar />
         {inicial.activo ? (
           <BotonConfirmar
-            etiqueta="Dar de baja" tono="peligro" nombreConfirmar="accion" valorConfirmar="baja"
-            titulo={`Dar de baja a ${inicial.nombre}`}
-            descripcion="Deja de recibir mensajes del bot como operador de tu flota, sale de los buscadores de Despacho y su teléfono queda libre para darlo de alta en otra flota. Su historial de viajes y liquidaciones se conserva completo: no se borra nada."
-            etiquetaConfirmar="Sí, dar de baja"
+            etiqueta={t('op.f.baja')} tono="peligro" nombreConfirmar="accion" valorConfirmar="baja"
+            titulo={t('op.f.baja.titulo', { nombre: inicial.nombre })}
+            descripcion={t('op.f.baja.cuerpo')}
+            etiquetaConfirmar={t('op.f.baja.si')}
             className={clasesBoton('danger')}
           />
         ) : (
-          <Boton type="submit" name="accion" value="reactivar" variante="secondary">Reactivar operador</Boton>
+          <Boton type="submit" name="accion" value="reactivar" variante="secondary">{t('op.f.reactivar')}</Boton>
         )}
       </div>
     </form>
@@ -142,28 +146,29 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, si
   /** Un jefe con patio da de alta SOLO en el suyo (nombre del patio). */
   terminalFijo?: string | null;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-forma">
       <div className="rv-forma__rejilla">
-        <CampoTexto id="alta-op-nombre" name="nombre" etiqueta="Nombre" obligatorio minLength={3} maxLength={120} autoComplete="off" />
-        <CampoTexto id="alta-op-telefono" name="telefono" tipo="tel" etiqueta={`WhatsApp del operador${sinWhatsApp ? ' (opcional)' : ''}`}
+        <CampoTexto id="alta-op-nombre" name="nombre" etiqueta={t('op.f.nombre')} obligatorio minLength={3} maxLength={120} autoComplete="off" />
+        <CampoTexto id="alta-op-telefono" name="telefono" tipo="tel" etiqueta={sinWhatsApp ? t('op.f.wa.opc') : t('op.f.wa')}
           obligatorio={!sinWhatsApp} maxLength={25} autoComplete="off" placeholder="55 1234 5678"
           ayuda={sinWhatsApp
-            ? 'Tu flota recibe el desglose por correo: sin WhatsApp, el operador necesita su nº de empleado y su correo.'
-            : 'Es con lo que el bot lo reconoce: desde este número tiene que escribirle a Likida.'} />
-        <CampoTexto id="alta-op-empleado" name="numeroEmpleado" etiqueta={`Nº de empleado${sinWhatsApp ? '' : ' (opcional)'}`} maxLength={40} />
+            ? t('op.f.sinwa.ayuda')
+            : t('op.f.wa.ayuda')} />
+        <CampoTexto id="alta-op-empleado" name="numeroEmpleado" etiqueta={sinWhatsApp ? t('op.f.empleado') : t('op.f.empleado.opc')} maxLength={40} />
         {sinWhatsApp && (
-          <CampoTexto id="alta-op-correo" name="correo" tipo="email" etiqueta="Correo del operador" maxLength={254} autoComplete="off" />
+          <CampoTexto id="alta-op-correo" name="correo" tipo="email" etiqueta={t('op.f.correo')} maxLength={254} autoComplete="off" />
         )}
         {terminalFijo ? (
           <div className="rv-campo">
-            <span className="rv-campo__etq">Patio</span>
+            <span className="rv-campo__etq">{t('op.f.patio')}</span>
             <p id="alta-op-patio" className="rv-eq__fijo">{terminalFijo}</p>
           </div>
         ) : patios.length > 0 ? (
-          <CampoSelect id="alta-op-patio" name="terminalId" etiqueta="Patio" defaultValue="">
-            <option value="">Sin patio</option>
+          <CampoSelect id="alta-op-patio" name="terminalId" etiqueta={t('op.f.patio')} defaultValue="">
+            <option value="">{t('op.f.sinpatio')}</option>
             {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
           </CampoSelect>
         ) : null}
@@ -175,10 +180,11 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, si
 }
 
 function BotonAlta() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={UserPlus} />} className="rv-eq__alta">
-      {pending ? 'Dando de alta…' : 'Dar de alta'}
+      {pending ? t('op.f.dando') : t('op.f.alta')}
     </Boton>
   );
 }

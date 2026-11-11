@@ -157,13 +157,16 @@ export function selloDe(fuente: string, corte?: string | null): string {
 const MATIZ_NEUTRO = 8 as const;
 
 /** Tira de indicadores en UNA sola tarjeta (112 px): celdas separadas por filetes. Recibe `Cifra` como hijos o una lista `items`. */
-export function TiraCifras({ items, children, etiqueta = 'Indicadores', sello, className }: {
+export function TiraCifras({ items, children, etiqueta = 'Indicadores', sello, className, elevar, entra }: {
   items?: PropsCifra[];
   children?: ReactNode;
   etiqueta?: string;
   /** Sello de procedencia por omisión de las celdas que no traen el suyo («Registro de viajes · corte 31 oct 2026»). */
   sello?: string;
   className?: string;
+  /** Rovaq `[data-lift]` y `[data-entra]` sobre la tira (una sola tarjeta): ver `Tarjeta`. */
+  elevar?: boolean;
+  entra?: 'tarjeta' | 'seccion';
 }) {
   const hijos = Children.map(children, (c) => {
     if (!isValidElement(c)) return c;
@@ -174,7 +177,7 @@ export function TiraCifras({ items, children, etiqueta = 'Indicadores', sello, c
     return Object.keys(extra).length ? cloneElement(el, extra) : c;
   });
   return (
-    <section className={className ? `rv-kpis ${className}` : 'rv-kpis'} aria-label={etiqueta}>
+    <section className={className ? `rv-kpis ${className}` : 'rv-kpis'} aria-label={etiqueta} data-lift={elevar || undefined} data-entra={entra}>
       {items ? items.map((it) => <Cifra key={it.etiqueta} {...it} sello={it.sello ?? sello} matiz={it.metrica === undefined && it.matiz === undefined && it.tono === undefined ? MATIZ_NEUTRO : it.matiz} />) : null}
       {hijos}
     </section>

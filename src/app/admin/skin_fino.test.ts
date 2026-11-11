@@ -29,8 +29,9 @@ describe('/admin: skin fino (K3)', () => {
     expect(s).not.toMatch(/background:\s*'var\(--marca\)'/);
   });
   it('el botón de cerrar sesión usa .rv-icono-boton (32x32, zona táctil de 44 px por ::after en shell.css)', () => {
-    const c = leer('chrome.tsx');
-    expect(c).toMatch(/aria-label="Cerrar sesión"[\s\S]{0,200}rv-icono-boton/);
+    // El botón vive en un componente de cliente (para leer el idioma activo); el <form> sigue en el servidor.
+    expect(leer('chrome.tsx')).toMatch(/<form action=\{cerrarSesion\}[\s\S]{0,120}<BotonSalirAdmin \/>/);
+    expect(leer('salir-admin.tsx')).toMatch(/aria-label=\{t\('pie\.cuenta\.salir'\)\}[\s\S]{0,100}rv-icono-boton/);
   });
   it('tokens.css no cambia nada fuera de un marco data-ui="v2" (el fondo global solo con :has)', () => {
     const t = readFileSync(join(__dirname, '../ui-v2/tokens.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

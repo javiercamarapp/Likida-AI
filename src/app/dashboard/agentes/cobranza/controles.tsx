@@ -7,6 +7,9 @@ import { Play, Pause, Send } from 'lucide-react';
 import type { ResultadoCobranza } from '@/lib/likida/agentes/cobranza';
 import { AvisoCompacto, Boton, Icono } from '@/app/ui-v2/componentes';
 import '../agentes.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { rico } from '../i18n-agentes';
 
 export type AccionSimple = (
   prev: { error?: string } | null,
@@ -28,6 +31,8 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
   enCola: number;
   activo: boolean;
 }) {
+  const tr = useT('agentes', agentesEs);
+  const { t } = tr;
   const [estado, accion] = useActionState(ejecutarAhora, null);
   const [confirmando, setConfirmando] = useState(false);
   const router = useRouter();
@@ -47,17 +52,16 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
       {confirmando ? (
         <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-ag-accion__confirmar">
           <span className="rv-ag-notif__nota">
-            ¿Mandar WhatsApp a {enCola} {enCola === 1 ? 'chofer' : 'choferes'} ahora?
-          </span>
+            {tr.tp('cobranza.controles.mandar', enCola)}</span>
           <BotonConfirmar />
-          <Boton variante="ghost" onClick={() => setConfirmando(false)}>Cancelar</Boton>
+          <Boton variante="ghost" onClick={() => setConfirmando(false)}>{t('cobranza.controles.cancelar')}</Boton>
         </form>
       ) : (
         <Boton variante="primary" onClick={() => setConfirmando(true)}
           disabled={!activo || enCola === 0}
-          title={!activo ? 'El agente está pausado' : enCola === 0 ? 'No hay a quién contactar' : 'Correr la cobranza ahora, sin esperar la ventana'}
+          title={!activo ? t('cobranza.controles.el_agente_esta_pausado') : enCola === 0 ? t('cobranza.controles.no_hay_a_quien_contactar') : t('cobranza.controles.correr_la_cobranza_ahora_sin')}
           icono={<Icono icono={Send} tam={14} />}>
-          Ejecutar ahora
+          {t('cobranza.controles.ejecutar_ahora')}
         </Boton>
       )}
 
@@ -65,18 +69,16 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
       {r && !confirmando && (
         <div className="rv-ag-accion__resultado">
           {r.omitido ? (
-            <AvisoCompacto tono="warn" resumen={`El agente no corrió: ${r.omitido}.`} />
+            <AvisoCompacto tono="warn" resumen={t('cobranza.controles.el_agente_no_corrio', { omitido: r.omitido })} />
           ) : (
             <p className="rv-ag-notif__nota">
-              Contactó a <strong>{r.contactados}</strong> de <span className="cifra-mono">{r.revisados}</span>
-              {r.sinTelefono > 0 && <> · {r.sinTelefono} sin teléfono</>}
-              {r.fallos.length > 0 && <> · <span className="rv-ag-malo">{r.fallos.length} fallos</span></>}
+              {rico(t('cobranza.controles.contacto_a_de'), { contactados: <strong>{r.contactados}</strong>, revisados: <span className="cifra-mono">{r.revisados}</span>, sinTelefono: r.sinTelefono > 0 && <> {t('cobranza.controles.sin_telefono', { n: r.sinTelefono })}</>, fallos: r.fallos.length > 0 && <> <span className="rv-ag-malo">{t('cobranza.controles.fallos', { n: r.fallos.length })}</span></> })}
             </p>
           )}
           {/* FE-14: el reloj de corte (25 s) puede dejar folios sin tocar en una cola grande: se dice, para que el humano sepa que hay
               que volver a apretar "Ejecutar ahora" en vez de asumir que ya se contactó a todos. */}
           {r.cortadosPorReloj > 0 && (
-            <AvisoCompacto tono="warn" resumen={`El reloj cortó la corrida — ${r.cortadosPorReloj} sin tocar todavía. Vuelve a apretar "Ejecutar ahora" para seguir.`} />
+            <AvisoCompacto tono="warn" resumen={t('cobranza.controles.el_reloj_corto_la_corrida', { cortadosPorReloj: r.cortadosPorReloj })} />
           )}
           {r.fallos.map((f, i) => (
             <AvisoCompacto key={i} tono="error" resumen={f} />
@@ -88,10 +90,11 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
 }
 
 function BotonConfirmar() {
+  const { t } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} disabled={pending} icono={pending ? undefined : <Icono icono={Send} tam={14} />}>
-      {pending ? 'Mandando…' : 'Sí, mandar'}
+      {pending ? t('cobranza.controles.mandando') : t('cobranza.controles.si_mandar')}
     </Boton>
   );
 }
@@ -113,12 +116,13 @@ export function BotonPausa({ alternarPausa, activo }: { alternarPausa: AccionSim
 }
 
 function BotonPausaInterno({ activo }: { activo: boolean }) {
+  const { t } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="secondary" loading={pending} disabled={pending}
-      title={activo ? 'El agente deja de contactar hasta que lo reanudes' : 'El agente vuelve a contactar en su ventana'}
+      title={activo ? t('cobranza.controles.el_agente_deja_de_contactar') : t('cobranza.controles.el_agente_vuelve_a_contactar')}
       icono={pending ? undefined : <Icono icono={activo ? Pause : Play} tam={14} />}>
-      {activo ? (pending ? 'Pausando…' : 'Pausar agente') : (pending ? 'Reanudando…' : 'Reanudar agente')}
+      {activo ? (pending ? t('cobranza.controles.pausando') : t('cobranza.controles.pausar_agente')) : (pending ? t('cobranza.controles.reanudando') : t('cobranza.controles.reanudar_agente'))}
     </Boton>
   );
 }

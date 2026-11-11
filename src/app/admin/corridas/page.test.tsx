@@ -110,3 +110,19 @@ it('F7: no imprime ids de corrida ni nombres internos de columnas', async () => 
   const html = await renderizar();
   expect(html).not.toMatch(/costo_usd|agente_corrida|\bNULL\b/);
 });
+
+it('con corridas pinta el mapa de calor por día y bloque de 3 horas, y dice que cuenta solo la página', async () => {
+  dobles.corridasFiltradas.mockResolvedValue({ corridas: [CORRIDA_OK, { ...CORRIDA_OK, id: 'c-2', inicio: '2026-01-01T01:00:00Z' }], pagina: 1, paginas: 1, total: 2 });
+  const html = await renderizar();
+  expect(html).toContain('Cuándo corren los agentes');
+  expect(html).toContain('rv-calor');
+  expect(html).toContain('Cuenta las 2 corridas de la página');
+  // 00:00 y 01:00 UTC del 1-ene-2026 (jueves) son 18:00 y 19:00 del miércoles 31-dic en México: bloque 18.
+  expect(html).toContain('Mié · 18: 2');
+});
+
+it('sin corridas (o lectura caída) no hay mapa de calor', async () => {
+  expect(await renderizar()).not.toContain('rv-calor');
+  dobles.corridasFiltradas.mockRejectedValue(new Error('x'));
+  expect(await renderizar()).not.toContain('rv-calor');
+});

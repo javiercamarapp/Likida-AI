@@ -1,5 +1,7 @@
 'use client';
 
+import { useT } from '@/lib/i18n/proveedor';
+import { dinero } from '@/lib/i18n/es/dinero';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Sparkles, ShieldQuestion } from 'lucide-react';
@@ -46,13 +48,14 @@ export type ResultadoForma =
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
 function AvisoError({ estado }: { estado: { error: string; puedoVigilar?: string[] } }) {
+  const { t: tr } = useT('dinero', dinero);
   return (
     <div className="rv-reglas__avisos">
       <AvisoResultado estado={{ ok: false, error: estado.error }} />
       {/* La mitad honesta de la negativa. Un "no puedo" a secas deja a la persona adivinando qué sí; esta lista es lo que evita que se rinda. */}
       {estado.puedoVigilar && estado.puedoVigilar.length > 0 && (
         <div className="rv-reglas__puedo">
-          <p className="rv-reglas__rotulo">Esto es lo que sí sé vigilar hoy</p>
+          <p className="rv-reglas__rotulo">{tr('reglas.forma.estoEsLoQue')}</p>
           <ul className="rv-reglas__lista">
             {estado.puedoVigilar.map((linea) => (
               <li key={linea}>{linea}</li>
@@ -90,16 +93,17 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
   accion: AccionForma;
   ejemplos: readonly string[];
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   const [texto, setTexto] = useState('');
 
   return (
     <form action={despachar} className="rv-reglas__forma">
       <CampoTextarea id="regla-texto" name="texto" required maxLength={400} rows={3}
-        etiqueta="¿De qué quieres que te avise?"
+        etiqueta={tr('reglas.forma.deQueQuieresQue')}
         value={texto} onChange={(e) => setTexto(e.target.value)}
-        placeholder="avísame si un gasto de caseta pasa de $3,000"
-        ayuda="Escríbelo como se lo dirías a tu jefe de tráfico. Lo voy a traducir a una vigilancia concreta y te la voy a enseñar ANTES de encenderla." />
+        placeholder={tr('reglas.forma.avisameSiUnGasto')}
+        ayuda={tr('reglas.forma.escribeloComoSeLo')} />
 
       <div className="rv-reglas__ejemplos">
         {ejemplos.map((e) => (
@@ -111,7 +115,7 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
 
       {estado && !estado.ok && <AvisoError estado={estado} />}
       {estado?.ok && <AvisoOk mensaje={estado.mensaje} />}
-      <BotonEnvio etiqueta="Interpretar" ocupado="Interpretando…" icono={Sparkles} />
+      <BotonEnvio etiqueta={tr('reglas.forma.interpretar')} ocupado="Interpretando…" icono={Sparkles} />
     </form>
   );
 }
@@ -125,6 +129,7 @@ export function FormaElegirAMano({ accion, plantillas }: {
   accion: AccionForma;
   plantillas: readonly PlantillaEnPantalla[];
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   const [elegida, setElegida] = useState(plantillas[0]?.id ?? '');
   const plantilla = plantillas.find((p) => p.id === elegida) ?? plantillas[0];
@@ -133,7 +138,7 @@ export function FormaElegirAMano({ accion, plantillas }: {
 
   return (
     <form action={despachar} className="rv-reglas__forma">
-      <CampoSelect id="regla-plantilla" name="plantilla" etiqueta="Vigilancia" value={elegida}
+      <CampoSelect id="regla-plantilla" name="plantilla" etiqueta={tr('reglas.forma.vigilancia')} value={elegida}
         onChange={(e) => setElegida(e.target.value)} ayuda={plantilla.queVigila}>
         {plantillas.map((p) => (
           <option key={p.id} value={p.id}>{p.titulo}</option>
@@ -158,7 +163,7 @@ export function FormaElegirAMano({ accion, plantillas }: {
 
       {estado && !estado.ok && <AvisoError estado={estado} />}
       {estado?.ok && <AvisoOk mensaje={estado.mensaje} />}
-      <BotonEnvio etiqueta="Preparar la regla" ocupado="Preparando…" tono="suave" icono={ShieldQuestion} />
+      <BotonEnvio etiqueta={tr('reglas.forma.prepararLaRegla')} ocupado="Preparando…" tono="suave" icono={ShieldQuestion} />
     </form>
   );
 }
@@ -188,14 +193,15 @@ export function BotonDeRegla({ accion, id, etiqueta, ocupado, tono = 'suave' }: 
  * que se pierde —la regla y la memoria de lo que ya avisó— antes de confirmar.
  */
 export function BorrarRegla({ accion, id }: { accion: AccionForma; id: string }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-reglas__avisos">
       <input type="hidden" name="id" value={id} />
       <BotonConfirmar
-        etiqueta="Borrar" tono="peligro" etiquetaConfirmar="Sí, borrarla"
-        titulo="Borrar esta regla"
-        descripcion="Se va la regla y también la memoria de lo que ya te avisó. Si la vuelves a declarar, los mismos casos te van a sonar otra vez."
+        etiqueta={tr('reglas.forma.borrar')} tono="peligro" etiquetaConfirmar={tr('reglas.forma.siBorrarla')}
+        titulo={tr('reglas.forma.borrarEstaRegla')}
+        descripcion={tr('reglas.forma.seVaLaRegla')}
         className={clasesBoton('danger-soft', 'sm')}
       />
       {estado && !estado.ok && <AvisoError estado={estado} />}
@@ -212,16 +218,17 @@ export function BorrarRegla({ accion, id }: { accion: AccionForma; id: string })
 export function FormaFrecuencia({ accion, id, maxAvisosDia, minHorasEntreAvisos }: {
   accion: AccionForma; id: string; maxAvisosDia: number; minHorasEntreAvisos: number;
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-reglas__avisos">
       <input type="hidden" name="id" value={id} />
       <div className="rv-reglas__frecuencia">
         <CampoTexto tipo="number" name="maxAvisosDia" min={1} max={24} step={1} required
-          etiqueta="Máximo de avisos en 24 h" defaultValue={maxAvisosDia} />
+          etiqueta={tr('reglas.forma.maximoDeAvisosEn')} defaultValue={maxAvisosDia} />
         <CampoTexto tipo="number" name="minHorasEntreAvisos" min={0} max={168} step={1} required
-          etiqueta="Horas entre un aviso y otro" defaultValue={minHorasEntreAvisos} />
-        <BotonEnvio etiqueta="Guardar límite" ocupado="Guardando…" tono="suave" />
+          etiqueta={tr('reglas.forma.horasEntreUnAviso')} defaultValue={minHorasEntreAvisos} />
+        <BotonEnvio etiqueta={tr('reglas.forma.guardarLimite')} ocupado="Guardando…" tono="suave" />
       </div>
       {estado && <AvisoResultado estado={estado.ok ? { ok: true, mensaje: estado.mensaje } : { ok: false, error: estado.error }} />}
     </form>

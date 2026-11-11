@@ -2,6 +2,7 @@ import { StatusChip, type TonoEstado } from '@/app/ui-v2/componentes';
 import { PILL_ESTATUS } from '../resumen-visual';
 import type { ViajeEnCursoRow } from '@/lib/likida/repo_paginado';
 import type { Semaforo } from '@/lib/likida/conductor/tablero';
+import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS TRES PASTILLAS DE ESTADO DE LA OPERACIÓN DE VIAJES, en un solo archivo (`pill_estatus_unico.test.ts` lo vigila):
@@ -12,30 +13,36 @@ import type { Semaforo } from '@/lib/likida/conductor/tablero';
 // crudo en neutro — visible, no roto. Dos copias de este mapa se separan en el primer estatus nuevo.
 // ═══════════════════════════════════════════════════════════════════════════
 
+const CLAVE_ESTATUS = {
+  liquidado: 'viajes.estatus.liquidado', en_cuadre: 'viajes.estatus.en_cuadre', abierto: 'viajes.estatus.abierto',
+} as const;
+
 /** `viaje.estatus`: la fuente es `PILL_ESTATUS` (resumen-visual); aquí solo se pinta. */
-export function PillEstatusViaje({ estatus }: { estatus: string }) {
+export function PillEstatusViaje({ estatus, tr = TR_OPERACION_ES }: { estatus: string; tr?: TrOperacion }) {
   const e = PILL_ESTATUS[estatus] ?? { etiqueta: estatus, estado: 'neutral' as TonoEstado };
-  return <StatusChip tono={e.estado}>{e.etiqueta}</StatusChip>;
+  const clave = (CLAVE_ESTATUS as Record<string, (typeof CLAVE_ESTATUS)[keyof typeof CLAVE_ESTATUS]>)[estatus];
+  return <StatusChip tono={e.estado}>{clave ? tr.t(clave) : e.etiqueta}</StatusChip>;
 }
 
 /** El estado del aviso, con las marcas reales de la confirmación (0058): sin avisar → avisado (con el conteo) → aceptó / escalado. */
-export function PillAviso({ v }: { v: Pick<ViajeEnCursoRow, 'aceptadoEn' | 'escaladoEn' | 'avisadoEn' | 'avisosEnviados'> }) {
-  if (v.aceptadoEn) return <StatusChip tono="ok">Aceptó</StatusChip>;
-  if (v.escaladoEn) return <StatusChip tono="bad">Escalado</StatusChip>;
-  if (v.avisadoEn) return <StatusChip tono="warn">{v.avisosEnviados > 1 ? `Avisado ×${v.avisosEnviados}` : 'Avisado'}</StatusChip>;
-  return <StatusChip tono="muted">Sin avisar</StatusChip>;
+export function PillAviso({ v, tr = TR_OPERACION_ES }: { v: Pick<ViajeEnCursoRow, 'aceptadoEn' | 'escaladoEn' | 'avisadoEn' | 'avisosEnviados'>; tr?: TrOperacion }) {
+  const { t } = tr;
+  if (v.aceptadoEn) return <StatusChip tono="ok">{t('viajes.aviso.acepto')}</StatusChip>;
+  if (v.escaladoEn) return <StatusChip tono="bad">{t('viajes.aviso.escalado')}</StatusChip>;
+  if (v.avisadoEn) return <StatusChip tono="warn">{v.avisosEnviados > 1 ? t('viajes.aviso.avisadoN', { n: v.avisosEnviados }) : t('viajes.aviso.avisado')}</StatusChip>;
+  return <StatusChip tono="muted">{t('viajes.aviso.sinavisar')}</StatusChip>;
 }
 
-const SEMAFORO: Record<Semaforo, { etiqueta: string; tono: TonoEstado }> = {
-  sin_reporte: { etiqueta: 'Sin reporte', tono: 'bad' },
-  atrasado: { etiqueta: 'Atrasado', tono: 'warn' },
-  a_tiempo: { etiqueta: 'A tiempo', tono: 'ok' },
-  sin_ancla: { etiqueta: 'Sin ancla', tono: 'muted' },
-  completo: { etiqueta: 'Completo', tono: 'muted' },
-};
+const SEMAFORO = {
+  sin_reporte: { etiqueta: 'viajes.semaforo.sin_reporte', tono: 'bad' },
+  atrasado: { etiqueta: 'viajes.semaforo.atrasado', tono: 'warn' },
+  a_tiempo: { etiqueta: 'viajes.semaforo.a_tiempo', tono: 'ok' },
+  sin_ancla: { etiqueta: 'viajes.semaforo.sin_ancla', tono: 'muted' },
+  completo: { etiqueta: 'viajes.semaforo.completo', tono: 'muted' },
+} as const satisfies Record<Semaforo, { etiqueta: string; tono: TonoEstado }>;
 
 /** El semáforo del viaje en el tablero en vivo. */
-export function PillSemaforo({ semaforo }: { semaforo: Semaforo }) {
+export function PillSemaforo({ semaforo, tr = TR_OPERACION_ES }: { semaforo: Semaforo; tr?: TrOperacion }) {
   const s = SEMAFORO[semaforo];
-  return <StatusChip tono={s.tono}>{s.etiqueta}</StatusChip>;
+  return <StatusChip tono={s.tono}>{tr.t(s.etiqueta)}</StatusChip>;
 }

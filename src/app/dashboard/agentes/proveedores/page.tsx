@@ -30,7 +30,10 @@ import { VistaAgenteProveedores } from './vista';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Facturas de proveedores' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('proveedores.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -82,6 +85,7 @@ export default async function PaginaAgenteProveedores({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; orden?: string; dir?: string; pag?: string }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/proveedores', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/proveedores')) redirect('/dashboard');
   const sufijo = sufijoTenant(sp);
@@ -353,6 +357,7 @@ export default async function PaginaAgenteProveedores({
 
   return (
     <VistaAgenteProveedores
+      tr={tr}
       facturas={facturas}
       rfcFlota={rfcFlota}
       sufijo={sufijo}

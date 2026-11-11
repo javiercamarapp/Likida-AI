@@ -1,11 +1,15 @@
 import { redirect } from 'next/navigation';
+import { getT } from '@/lib/i18n/servidor';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getRentabilidad, getCobranza } from '@/lib/likida/comercial';
 import { VistaRentabilidad } from './vista';
 import { sufijoTenant } from '../sufijo';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Rentabilidad y cobranza' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.rentabilidad') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -42,5 +46,6 @@ export default async function PaginaRentabilidad({
     getCobranza(tenantId, { pagina }).catch(() => null),
   ]);
 
-  return <VistaRentabilidad rentabilidad={rentabilidad} cobranza={cobranza} sufijo={sufijoTenant(sp)} />;
+  const { t: tr } = await getT('dinero');
+  return <VistaRentabilidad tr={tr} rentabilidad={rentabilidad} cobranza={cobranza} sufijo={sufijoTenant(sp)} />;
 }

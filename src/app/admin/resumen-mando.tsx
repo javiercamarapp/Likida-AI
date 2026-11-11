@@ -7,7 +7,9 @@ import {
 import { agentePorId } from '@/lib/likida/agentes/notificaciones';
 import { NOMBRE_NIVEL } from '@/lib/likida/agentes/autonomia';
 import { ahoraMs } from '@/lib/saludo';
-import { calidadAgentes, costoIaMes, despliegues, entradaSemaforo, entradaTuTurno, parados, resumenNegocio, slos } from './resumen-lecturas';
+import { getT } from '@/lib/i18n/servidor';
+import { QuemaSlo } from './quema-slo';
+import { quema, calidadAgentes, costoIaMes, despliegues, entradaSemaforo, entradaTuTurno, parados, resumenNegocio, slos } from './resumen-lecturas';
 import './resumen.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -57,7 +59,7 @@ export async function BloqueTuTurno() {
     return <Tarjeta titulo="Tu turno" estado="vacio" mensaje="Nada espera tu decisión" detalle="Cuando algo necesite tu visto bueno aparece aquí, la más urgente primero." />;
   }
   return (
-    <Tarjeta titulo="Tu turno" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/tu-turno">Ver todo</BotonEnlace>}>
+    <Tarjeta titulo="Tu turno" elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/tu-turno">Ver todo</BotonEnlace>}>
       <ul className="adm-res-lista">
         {t.filas.map((f) => (
           <li key={f.clave} className="adm-res-fila">
@@ -81,7 +83,7 @@ export async function BloqueCaja() {
   const [r, mes] = await Promise.all([resumenNegocio(), costoIaMes()]);
   if (r === null && mes === null) return <Tarjeta titulo="Caja y clientes" estado="error" reintentar />;
   return (
-    <Tarjeta titulo="Caja y clientes">
+    <Tarjeta titulo="Caja y clientes" elevar entra="tarjeta">
       <dl className="adm-res-pares">
         <dt>{mes ? `Gasto de IA en ${mes.etiquetaMes}` : 'Gasto de IA del mes'}</dt>
         <dd>{mes ? usd(mes.mesUsd) : '—'}</dd>
@@ -138,7 +140,7 @@ export async function BloqueCalidad() {
 
 /** 6. Plataforma y qué cambió: plegado, para correlacionar causas. */
 export async function BloquePlataforma() {
-  const [s, d] = await Promise.all([slos(), despliegues()]);
+  const [s, d, q, { t: tMon }] = await Promise.all([slos(), despliegues(), quema(), getT('monitoreo')]);
   return (
     <Disclosure titulo="Plataforma y qué cambió" resumen={d.estado === 'ok' ? `${d.anotaciones.length} despliegues en 30 días` : 'despliegues sin medir'}>
       <h3 className="rv-recuadro-tit__texto">Objetivos de servicio</h3>
@@ -155,6 +157,7 @@ export async function BloquePlataforma() {
           ))}
         </ul>
       )}
+      <QuemaSlo evaluaciones={q} t={tMon} />
       <h3 className="rv-recuadro-tit__texto">Despliegues recientes</h3>
       {d.estado === 'ok' ? (
         <ul className="adm-res-lista">

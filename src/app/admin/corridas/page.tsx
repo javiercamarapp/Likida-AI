@@ -10,8 +10,11 @@ import { opcionesBitacora } from '@/lib/admin/bitacora';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
 import {
-  BarraFiltros, EstadoError, FiltroOpciones, MarcoPagina, StatusChip, type OpcionFiltro, type TonoEstado,
+  BarraFiltros, EstadoError, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta, type OpcionFiltro, type TonoEstado,
 } from '../../ui-v2/componentes';
+import { MapaCalor } from '../../ui-v2/graficas';
+import { getT } from '@/lib/i18n/servidor';
+import { BLOQUES_HORA, matrizDeCorridas } from './calor';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { ETIQUETA_INTERRUPTOR, etiquetaInterruptor } from '../observabilidad/etiquetas';
 import { BloqueAgentesParados } from '../escalaciones/agentes-parados';
@@ -103,6 +106,8 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
   ]);
   const flotas: OpcionFiltro[] | null = opciones.flotas === null ? null : [{ valor: '', rotulo: 'Todas las flotas' }, ...opciones.flotas.map((f) => ({ valor: f.id, rotulo: f.nombre }))];
   const params = { agente: agente || undefined, estado: estado || undefined, tenant: tenant || undefined };
+  const { t } = await getT('graficas');
+  const calor = resultado !== null && resultado.corridas.length > 0 ? matrizDeCorridas(resultado.corridas.map((c) => c.inicio), t('corridas.calor.dias').split(',')) : null;
 
   return (
     <MarcoPagina titulo="Corridas" apoyo="Las corridas de los agentes en todas las flotas, y qué agentes no corrieron y por qué. Cada corrida abre su traza completa.">
@@ -122,6 +127,12 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
               ? { titulo: 'Ninguna corrida coincide', texto: 'Ninguna corrida coincide con el filtro. Quita un filtro o cambia el agente.' }
               : { titulo: 'Aún no hay corridas', texto: 'Cada corrida de un agente deja aquí su fila; la primera aparecerá cuando un agente trabaje.' }}
           />
+          {calor !== null && calor.contadas > 0 ? (
+            <Tarjeta titulo={t('corridas.calor.titulo')} elevar entra="tarjeta">
+              <MapaCalor etiqueta={t('corridas.calor.etiqueta')} columnas={BLOQUES_HORA} filas={calor.filas} mostrarValores />
+              <p className="adm-sis-sub">{t('corridas.calor.nota', { n: calor.contadas })}</p>
+            </Tarjeta>
+          ) : null}
           {resultado.total > 0 ? (
             <PiePaginas base="/admin/corridas" params={params} pagina={resultado.pagina} paginas={resultado.paginas} total={resultado.total} tamano={CORRIDAS_POR_PAGINA} unidad="corridas" />
           ) : null}

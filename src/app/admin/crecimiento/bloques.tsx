@@ -10,8 +10,9 @@ import { contarProspectosPorEstado, ESTADOS_PROSPECTO, COMISION_PRIMER_MES, COMI
 import { getEmbudoActivacion, getCohortesUso } from '@/lib/admin/instrumentacion';
 import { numero, fechaCorta, usd } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
+import { getT } from '@/lib/i18n/servidor';
 import { AvisoCompacto, Aviso, Disclosure, FilaTarjetas, StatusChip, Tarjeta, TablaBase } from '../../ui-v2/componentes';
-import { BarList, Columnas, TiraCifras } from '../../ui-v2/graficas';
+import { BarList, Columnas, Embudo, TiraCifras } from '../../ui-v2/graficas';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BLOQUES DE CRECIMIENTO (R9c): cada bloque es un componente de servidor async con su propia lectura, envuelto por `page.tsx` en su
@@ -134,23 +135,26 @@ export async function BloqueCostoYCampanas() {
 }
 
 export async function BloqueActivacion() {
-  const embudoActivacion = await embudoActivacionAdmin();
+  const [embudoActivacion, { t }] = await Promise.all([embudoActivacionAdmin(), getT('graficas')]);
   // El embudo de ACTIVACIÓN — la mitad de producto (0251), contado en la base: altas → con al menos una liquidación → con suscripción de pago
   // activa. Con null se dice «no se pudo leer»; con ceros se dicen los ceros — son conteos reales, no encuadre.
   if (embudoActivacion === null) {
     return <Tarjeta titulo="Embudo de activación" estado="error" mensaje="No se pudo leer el embudo de activación. Esto NO significa que haya cero flotas." reintentar />;
   }
   return (
-    <Tarjeta titulo="Embudo de activación, de alta a de pago">
-      <BarList
+    <Tarjeta titulo="Embudo de activación, de alta a de pago" elevar entra="tarjeta">
+      {/* Con los tres conteos en cero el embudo se pinta «vacío»; aquí el cero es un dato real y se dice como tal. */}
+      {embudoActivacion.altas + embudoActivacion.activadas + embudoActivacion.dePago === 0 ? (
+        <p className="adm-din-nota">{t('crecimiento.activacion.ceros')}</p>
+      ) : <Embudo
         etiqueta="Flotas por etapa de activación"
-        items={[
-          { clave: 'altas', etiqueta: 'Flotas dadas de alta', valor: embudoActivacion.altas, texto: numero(embudoActivacion.altas) },
-          { clave: 'activadas', etiqueta: 'Activadas (con al menos una liquidación)', valor: embudoActivacion.activadas, texto: numero(embudoActivacion.activadas) },
-          { clave: 'pago', etiqueta: 'De pago (suscripción activa)', valor: embudoActivacion.dePago, texto: numero(embudoActivacion.dePago) },
+        formato="numero"
+        etapas={[
+          { etiqueta: 'Flotas dadas de alta', valor: embudoActivacion.altas },
+          { etiqueta: 'Activadas (con al menos una liquidación)', valor: embudoActivacion.activadas },
+          { etiqueta: 'De pago (suscripción activa)', valor: embudoActivacion.dePago },
         ]}
-        formato={numero}
-      />
+      />}
       <p className="adm-din-nota">
         Contado en la base sobre flotas, liquidaciones y suscripciones; las altas incluyen la flota de demostración.
         {embudoActivacion.dePago === 0 && ' El cero de «de pago» es un conteo real: ninguna suscripción está en estado activo todavía.'}
