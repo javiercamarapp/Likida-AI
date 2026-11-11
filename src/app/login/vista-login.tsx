@@ -4,7 +4,20 @@ import { Logo, GlifoAdorno } from '../logo';
 import { LoginArtwork } from '@/components/login/artwork';
 import { BotonEnvio } from './boton-envio';
 import { TurnstileWidget } from './turnstile-widget';
-import { mensajeDeError } from '@/lib/auth/motivo_login';
+import { login as loginEs } from '@/lib/i18n/es/login';
+import { crearTraductor, type Traductor } from '@/lib/i18n/traducir';
+import type { DiccionarioDe } from '@/lib/i18n/catalogo';
+
+type TraductorLogin = Traductor<DiccionarioDe<'login'>>;
+/** El traductor en español: lo que dice /login sin idioma elegido (y lo que usan las pruebas que recorren `VistaLogin`). */
+const TRADUCTOR_ES: TraductorLogin = crearTraductor<DiccionarioDe<'login'>>('es', loginEs, loginEs);
+
+const MOTIVOS_ERROR = ['caducado', 'caducado_reciente', 'navegador'] as const;
+/** El texto del motivo de fallo (`?error=…`): el parámetro desconocido o `1` cae al mensaje genérico, como `mensajeDeError`. */
+function textoDeError(parametro: string, t: TraductorLogin['t']): string {
+  const motivo = (MOTIVOS_ERROR as readonly string[]).includes(parametro) ? (parametro as (typeof MOTIVOS_ERROR)[number]) : 'generico';
+  return t(`error.${motivo}`);
+}
 
 /**
  * Presentación de /login, idéntica en composición a la entrada de Vexa AI: columna de formulario (máx. 530 px)
@@ -24,6 +37,8 @@ export type PropsVistaLogin = {
   entrarConEmail: (formData: FormData) => void | Promise<void>;
   /** Clase de las variables de fuente (next/font) que el `page` carga solo para esta ruta. */
   claseFuentes?: string;
+  /** El traductor del namespace `login` (la página lo arma en el servidor con `getT`). Sin él, español. */
+  tr?: TraductorLogin;
 };
 
 function IconoGoogle(): ReactNode {
@@ -37,9 +52,12 @@ function IconoGoogle(): ReactNode {
   );
 }
 
-export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, entrarConEmail, claseFuentes = '' }: PropsVistaLogin) {
+export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, entrarConEmail, claseFuentes = '', tr = TRADUCTOR_ES }: PropsVistaLogin) {
+  const { t } = tr;
+  // El aviso legal lleva dos enlaces: la frase completa es UNA clave con `{terminos}` y `{privacidad}`, y aquí solo se parte donde están.
+  const piezasLegal = t('pie.aceptas').split(/(\{terminos\}|\{privacidad\})/);
   return (
-    <main className={`login login-editorial tema-neutro ${claseFuentes}`}>
+    <main className={`login login-editorial tema-neutro ${claseFuentes}`} lang={tr.idioma === 'es' ? undefined : tr.idioma}>
       <section className="login-column">
         <div className="login-inner">
           <header className="auth-brand">
@@ -47,9 +65,9 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
           </header>
 
           <div className="login-copy">
-            <p className="login-kicker login-entra">Acceso al panel</p>
-            <h1 className="login-serif login-entra">Bienvenido a Likida</h1>
-            <p className="login-intro login-entra">El panel de liquidación de tu flota.</p>
+            <p className="login-kicker login-entra">{t('kicker')}</p>
+            <h1 className="login-serif login-entra">{t('titulo')}</h1>
+            <p className="login-intro login-entra">{t('intro')}</p>
             <div className="login-divider" />
 
             {/* `role="alert"` y texto por motivo (`mensajeDeError`): un enlace usado o caducado no dice «intenta
@@ -57,25 +75,25 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
             {error && (
               <div className="login-message" data-tipo="error" role="alert">
                 <OctagonAlert width={16} height={16} strokeWidth={2} aria-hidden="true" />
-                <p>{mensajeDeError(error)}</p>
+                <p>{textoDeError(error, t)}</p>
               </div>
             )}
 
             <form action={entrarConGoogle} className="login-google login-entra">
               <input type="hidden" name="next" value={next} />
-              <BotonEnvio className="login-btn login-btn-borde" reposo="Continuar con Google" enVuelo="Abriendo Google…" icono={<IconoGoogle />} />
+              <BotonEnvio className="login-btn login-btn-borde" reposo={t('google.reposo')} enVuelo={t('google.enVuelo')} icono={<IconoGoogle />} />
             </form>
 
             <div className="login-separator">
               <span />
-              <p>o</p>
+              <p>{t('separador')}</p>
               <span />
             </div>
 
-            <form action={entrarConEmail} className="login-email login-entra" aria-label="Acceder por correo">
+            <form action={entrarConEmail} className="login-email login-entra" aria-label={t('correo.formulario')}>
               <input type="hidden" name="next" value={next} />
               <label className="sr-only" htmlFor="login-email">
-                Tu correo
+                {t('correo.etiqueta')}
               </label>
               <input
                 id="login-email"
@@ -83,15 +101,15 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
                 type="email"
                 required
                 maxLength={254}
-                placeholder="tu@flota.com"
+                placeholder={t('correo.placeholder')}
                 autoComplete="email"
                 className="login-campo"
               />
               <TurnstileWidget />
               <BotonEnvio
                 className="login-btn login-btn-tinta"
-                reposo="Continuar con correo"
-                enVuelo="Solicitando…"
+                reposo={t('correo.reposo')}
+                enVuelo={t('correo.enVuelo')}
                 icono={
                   <span aria-hidden className="login-glifo">
                     <GlifoAdorno color="#ffffff" />
@@ -106,16 +124,12 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
                     <MailCheck width={16} height={16} strokeWidth={2} aria-hidden="true" />
                     <div>
                     <p className="login-estado-titulo">
-                      {reenviado
-                        ? 'Ese enlace ya se había usado o caducado — te mandamos uno nuevo.'
-                        : 'Te mandamos un enlace a tu correo.'}
+                      {reenviado ? t('reenviado.titulo') : t('enviado.titulo')}
                     </p>
                     <p>
-                      {reenviado
-                        ? 'Abre el correo más reciente, desde este mismo dispositivo.'
-                        : 'Ábrelo desde este mismo dispositivo.'}
+                      {reenviado ? t('reenviado.detalle') : t('enviado.detalle')}
                     </p>
-                    <p className="login-estado-nota">¿No llega o te equivocaste de correo? Vuelve a escribirlo arriba.</p>
+                    <p className="login-estado-nota">{t('enviado.nota')}</p>
                     </div>
                   </>
                 )}
@@ -123,33 +137,28 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
             </form>
 
             <details className="login-access-help">
-              <summary>¿Necesitas ayuda para entrar?</summary>
-              <p>
-                No necesitas contraseña. Usa el correo con el que tu flota te dio de alta y abre el enlace seguro que
-                recibas. Revisa también la carpeta de correo no deseado.
-              </p>
+              <summary>{t('ayuda.resumen')}</summary>
+              <p>{t('ayuda.cuerpo')}</p>
             </details>
             <p className="login-help">
-              ¿Tu correo no tiene acceso? <strong>Pídele a tu flota que te dé de alta.</strong>
+              {t('alta.pregunta')} <strong>{t('alta.accion')}</strong>
             </p>
             <p className="login-footnote">
-              Acceso reservado a equipos autorizados. Inicia sesión sin contraseña con Google o un enlace seguro en tu
-              correo. Al continuar, aceptas los <a href="/terminos">Términos de Servicio</a> y el{' '}
-              <a href="/privacidad">Aviso de Privacidad</a> de Likida.
+              {t('pie.reservado')}{' '}
+              {piezasLegal.map((pieza, i) => (pieza === '{terminos}'
+                ? <a key={i} href="/terminos">{t('pie.terminos')}</a>
+                : pieza === '{privacidad}' ? <a key={i} href="/privacidad">{t('pie.privacidad')}</a> : pieza))}
             </p>
           </div>
         </div>
       </section>
 
-      <aside className="login-visual" aria-label="De comprobantes a liquidaciones">
+      <aside className="login-visual" aria-label={t('historia.aria')}>
         <div className="login-story-surface">
           <div className="login-story-copy">
-            <p className="login-kicker">Likida · Liquidación</p>
-            <h2 className="login-serif">Flotas de carga en México. El cierre del día, por WhatsApp.</h2>
-            <p className="login-story-description">
-              El operador manda sus comprobantes; un motor los cuadra contra el anticipo y la política, y entrega la
-              liquidación en PDF.
-            </p>
+            <p className="login-kicker">{t('historia.kicker')}</p>
+            <h2 className="login-serif">{t('historia.titulo')}</h2>
+            <p className="login-story-description">{t('historia.descripcion')}</p>
           </div>
           <LoginArtwork />
         </div>
