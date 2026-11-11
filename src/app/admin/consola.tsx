@@ -93,7 +93,7 @@ async function BloqueNorte() {
       {esSoloDemo && (
         <Aviso tono="info">Cifras reales, no de ejemplo: Likida todavía no tiene clientes, así que son bajas a propósito.</Aviso>
       )}
-      <TiraCifras items={cifras} etiqueta="Número norte" />
+      <TiraCifras items={cifras} etiqueta="Número norte" elevar entra="tarjeta" />
     </>
   );
 }
@@ -114,10 +114,10 @@ async function BloqueSeries() {
   return (
     <FilaTarjetas variante="6-6">
       {r.porDia.length > 1
-        ? <Tarjeta titulo="Gasto de IA por día"><Columnas datos={costo} etiqueta="Gasto de IA por día" formato="usd" matiz={2} /></Tarjeta>
+        ? <Tarjeta titulo="Gasto de IA por día" elevar entra="tarjeta"><Columnas datos={costo} etiqueta="Gasto de IA por día" formato="usd" matiz={2} /></Tarjeta>
         : <Tarjeta titulo="Gasto de IA por día" estado="vacio" mensaje="Sin historial suficiente" detalle="Se dibuja cuando haya al menos dos días con llamadas al modelo." />}
       {r.facturasPorDia.some((d) => d.n > 0)
-        ? <Tarjeta titulo={`Facturas procesadas por día — últimos ${VENTANA_FACTURAS_DIAS} días`}><Columnas datos={facturas} etiqueta="Facturas procesadas por día" formato="numero" matiz={1} /></Tarjeta>
+        ? <Tarjeta titulo={`Facturas procesadas por día — últimos ${VENTANA_FACTURAS_DIAS} días`} elevar entra="tarjeta"><Columnas datos={facturas} etiqueta="Facturas procesadas por día" formato="numero" matiz={1} /></Tarjeta>
         : <Tarjeta titulo={`Facturas procesadas por día — últimos ${VENTANA_FACTURAS_DIAS} días`} estado="vacio" mensaje="Sin facturas en el periodo" detalle="Cada comprobante que pasa por el pipeline suma aquí." />}
     </FilaTarjetas>
   );

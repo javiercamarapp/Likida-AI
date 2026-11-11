@@ -2,6 +2,7 @@
 
 import type { Matiz } from '../metricas';
 import { TablaGrafica } from './partes';
+import { resolverFormato, type FormatoGrafica } from './formatos';
 import { useT } from '@/lib/i18n/proveedor';
 import { graficas as graficasEs } from '@/lib/i18n/es/graficas';
 
@@ -20,15 +21,17 @@ export function nivelCalor(valor: number | null, max: number): 0 | 1 | 2 | 3 | 4
 }
 
 /** Mapa de calor (Rovaq) de UN matiz: filas × columnas, 5 pasos de intensidad. Las celdas sin dato llevan trama y «s/d» en el título. */
-export function MapaCalor({ columnas, filas, matiz = 8, etiqueta, formato = (v) => String(v), mostrarValores = false }: {
+export function MapaCalor({ columnas, filas, matiz = 8, etiqueta, formato: formatoProp, mostrarValores = false }: {
   columnas: readonly string[];
   filas: readonly FilaMapaCalor[];
   matiz?: Matiz;
   etiqueta: string;
-  formato?: (v: number) => string;
+  /** Un id serializable (`'numero'`, `'usd'`…) desde un componente de servidor; una función solo desde otro componente de cliente. */
+  formato?: FormatoGrafica;
   mostrarValores?: boolean;
 }) {
   const { t } = useT('graficas', graficasEs);
+  const formato = resolverFormato(formatoProp);
   const max = Math.max(0, ...filas.flatMap((f) => f.valores.map((v) => v ?? 0)));
   const hayDato = filas.some((f) => f.valores.some((v) => v !== null));
   if (!hayDato || filas.length === 0) {

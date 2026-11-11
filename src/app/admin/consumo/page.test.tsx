@@ -111,7 +111,7 @@ it('sin flotas dadas de alta (lectura ok, arreglo vacío) dice eso, no "no se pu
 });
 
 it('las flotas se ordenan por costo de IA descendente, no por orden de llegada', async () => {
-  const html = await renderizar();
+  const html = (await renderizar()).split('Por flota, costo de IA histórico')[1];
   expect(html.indexOf('Flota B')).toBeLessThan(html.indexOf('Flota A')); // B ($15) antes que A ($5)
 });
 
@@ -202,4 +202,18 @@ it('el costo por viaje se estima y se rotula estimado; sin viajes procesados es 
   dobles.getResumenNegocio.mockResolvedValue({ ...R_OK, viajesProcesados: 0 });
   const sinViajes = await renderizar();
   expect(sinViajes).toContain('Aún no hay viajes procesados para estimarlo');
+});
+
+it('el gasto de hoy por flota y propósito se pinta apilado, con el aviso de que la fase por día no se mide', async () => {
+  const html = await renderizar();
+  expect(html).toContain('Gasto de hoy por flota y propósito');
+  expect(html).toContain('rv-apcol');
+  expect(html).toContain('Interactivo (chofer y chats)');
+  expect(html).toContain('no se mide todavía');
+});
+
+it('sin gasto por propósito leído no se monta el apilado (tampoco con datos inventados)', async () => {
+  dobles.getPresupuestoPorProposito.mockRejectedValueOnce(new Error('caída'));
+  const html = await renderizar();
+  expect(html).not.toContain('rv-apcol');
 });

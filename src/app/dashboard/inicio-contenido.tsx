@@ -600,7 +600,7 @@ async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal 
   return (
     <>
       {seriesKpis ? (
-        <TiraCifras sello={selloHoy('Gastos y liquidaciones de la flota')}>
+        <TiraCifras sello={selloHoy('Gastos y liquidaciones de la flota')} elevar entra="tarjeta">
           <KpiPeriodo icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
             nombre="Gasto total" campo="gastoTotal" formato="mxn" subeEsBueno={false} series={seriesKpis} />
           <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
