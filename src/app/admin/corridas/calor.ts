@@ -1,11 +1,12 @@
 import type { FilaMapaCalor } from '@/app/ui-v2/graficas';
+import { TZ_MX } from '@/lib/formato';
 
 /** Bloques de 3 horas: la etiqueta es la hora en que empieza («00», «03»… «21»). 24 columnas no caben en un teléfono. */
 export const BLOQUES_HORA = ['00', '03', '06', '09', '12', '15', '18', '21'] as const;
 
 const SEMANA: Record<string, number> = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
 
-const PARTES = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Mexico_City', weekday: 'short', hour: '2-digit', hourCycle: 'h23' });
+const PARTES = new Intl.DateTimeFormat('en-US', { timeZone: TZ_MX, weekday: 'short', hour: '2-digit', hourCycle: 'h23' });
 
 /** Día de la semana (lunes = 0) y hora (0-23) de un instante en hora de México; `null` si la fecha no se puede leer. */
 export function diaYHoraMx(iso: string): { dia: number; hora: number } | null {
