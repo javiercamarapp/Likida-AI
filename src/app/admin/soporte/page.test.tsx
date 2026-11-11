@@ -218,9 +218,22 @@ it('la pantalla no imprime claves internas (tablas ni columnas)', async () => {
   expect(salida).not.toMatch(/vence_en|ticket_mensaje|ticket_soporte|bitacora_auditoria/);
 });
 
-it('D11/D12 (auditoría 11-nov): una cola sin un solo ticket NO pinta cuatro ceros: un solo estado vacío dentro de una tarjeta', async () => {
+it('ronda 2: una cola sin tickets conserva el esqueleto (pestañas con contador y tira en cero real) y dice que la cola está vacía', async () => {
   dobles.getTicketsCruzados.mockResolvedValue([]);
   const h = await html();
-  expect(h).not.toContain('Con SLA vencido');
+  expect(h).toContain('Abiertos');
+  expect(h).toContain('Esperando');
+  expect(h).toContain('Cerrados');
+  expect(h).toContain('Con SLA vencido');
   expect(h).toMatch(/rv-tarjeta[\s\S]*La cola está vacía/);
+});
+
+it('las pestañas filtran la cola: un ticket «esperando» no sale en Abiertos y sí en Esperando', async () => {
+  dobles.getTicketsCruzados.mockResolvedValue([FILA({ id: 't-9', asunto: 'Pendiente del cliente', estado: 'esperando', horasRestantes: 5 })]);
+  const { renderToStaticMarkup } = await import('react-dom/server');
+  const ab = renderToStaticMarkup(await SoportePage({ searchParams: Promise.resolve({}) }));
+  const es = renderToStaticMarkup(await SoportePage({ searchParams: Promise.resolve({ vista: 'esperando' }) }));
+  expect(ab).not.toContain('Pendiente del cliente');
+  expect(es).toContain('Pendiente del cliente');
+  expect(es).toContain('Vista rápida');
 });

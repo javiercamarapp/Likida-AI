@@ -307,4 +307,8 @@ export const admin_flotas: Record<keyof typeof admin_flotasEs, string> = {
   'flotas_alta.dar_de_alta': 'Create',
   'flotas_ficha.personas_activas': 'Active people',
   'flotas_ficha.de_personas': 'of {total} in the fleet',
+  'soporte.esperando': 'Waiting',
+  'soporte.cerrados': 'Closed',
+  'soporte.vistas_de_la_cola': 'Support queue views',
+  'soporte.nada_en_esta_vista': 'No tickets in this view',
 };

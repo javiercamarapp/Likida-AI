@@ -305,4 +305,8 @@ export const admin_flotas = {
   'flotas_alta.dar_de_alta': 'Dar de alta',
   'flotas_ficha.personas_activas': 'Personas activas',
   'flotas_ficha.de_personas': 'de {total} en la flota',
+  'soporte.esperando': 'Esperando',
+  'soporte.cerrados': 'Cerrados',
+  'soporte.vistas_de_la_cola': 'Vistas de la cola de soporte',
+  'soporte.nada_en_esta_vista': 'Ningún ticket en esta vista',
 } as const;
