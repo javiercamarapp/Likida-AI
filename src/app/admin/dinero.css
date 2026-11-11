@@ -51,3 +51,6 @@
 [data-ui="v2"] .adm-fecha-es:not([data-activo]) input:not(:focus)::-webkit-datetime-edit { opacity: 0; }
 [data-ui="v2"] .adm-fecha-es:not([data-activo]):not(:focus-within) input { color: transparent; }
 [data-ui="v2"] .adm-fecha-es:not([data-activo]):not(:focus-within)::after { content: "—"; position: absolute; left: 10px; bottom: 6px; color: var(--muted); pointer-events: none; }
+/* Fila cuyas tarjetas miden lo que dice su contenido (un vacío de una línea no se estira al alto del formulario vecino). */
+[data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > .rv-tarjeta { height: auto; }
