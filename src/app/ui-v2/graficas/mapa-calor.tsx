@@ -1,5 +1,9 @@
+'use client';
+
 import type { Matiz } from '../metricas';
 import { TablaGrafica } from './partes';
+import { useT } from '@/lib/i18n/proveedor';
+import { graficas as graficasEs } from '@/lib/i18n/es/graficas';
 
 export interface FilaMapaCalor {
   etiqueta: string;
@@ -24,10 +28,11 @@ export function MapaCalor({ columnas, filas, matiz = 8, etiqueta, formato = (v) 
   formato?: (v: number) => string;
   mostrarValores?: boolean;
 }) {
+  const { t } = useT('graficas', graficasEs);
   const max = Math.max(0, ...filas.flatMap((f) => f.valores.map((v) => v ?? 0)));
   const hayDato = filas.some((f) => f.valores.some((v) => v !== null));
   if (!hayDato || filas.length === 0) {
-    return <figure className="rv-gr rv-calor" data-matiz={matiz} data-vacio aria-label={etiqueta}><p className="rv-calor__vacio">Sin datos en el periodo</p></figure>;
+    return <figure className="rv-gr rv-calor" data-matiz={matiz} data-vacio aria-label={etiqueta}><p className="rv-calor__vacio">{t('vacio')}</p></figure>;
   }
   return (
     <figure className="rv-gr rv-calor" data-matiz={matiz} aria-label={etiqueta}>
@@ -51,9 +56,9 @@ export function MapaCalor({ columnas, filas, matiz = 8, etiqueta, formato = (v) 
         ))}
       </div>
       <ul className="rv-calor__escala" aria-hidden="true">
-        <li>menos</li>{[0, 1, 2, 3, 4].map((n) => <li key={n}><i className="rv-calor__celda" data-nivel={n} /></li>)}<li>más</li>
+        <li>{t('calor.menos')}</li>{[0, 1, 2, 3, 4].map((n) => <li key={n}><i className="rv-calor__celda" data-nivel={n} /></li>)}<li>{t('calor.mas')}</li>
       </ul>
-      <TablaGrafica titulo={etiqueta} primera="Fila" encabezados={columnas}
+      <TablaGrafica titulo={etiqueta} primera={t('calor.fila')} encabezados={columnas}
         filas={filas.map((f) => ({ rotulo: f.etiqueta, celdas: columnas.map((_, j) => (f.valores[j] ?? null) === null ? '—' : formato(f.valores[j] as number)) }))} />
     </figure>
   );

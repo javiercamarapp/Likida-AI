@@ -1,6 +1,10 @@
+'use client';
+
 import type { Matiz } from '../metricas';
 import { porcentaje } from '@/lib/formato';
 import { TablaGrafica } from './partes';
+import { useT } from '@/lib/i18n/proveedor';
+import { graficas as graficasEs } from '@/lib/i18n/es/graficas';
 
 export interface EtapaEmbudo {
   etiqueta: string;
@@ -17,6 +21,7 @@ export function Embudo({ etapas, matiz = 8, etiqueta, formato = (v) => String(v)
   etiqueta: string;
   formato?: (v: number) => string;
 }) {
+  const { t } = useT('graficas', graficasEs);
   const tope = Math.max(0, ...etapas.map((e) => e.valor ?? 0));
   const base = etapas.find((e) => e.valor !== null && e.valor > 0)?.valor ?? null;
   const filas = etapas.map((e, i) => {
@@ -26,7 +31,7 @@ export function Embudo({ etapas, matiz = 8, etiqueta, formato = (v) => String(v)
     return { ...e, conversion, parte };
   });
   if (tope <= 0) {
-    return <figure className="rv-gr rv-embudo" data-matiz={matiz} data-vacio aria-label={etiqueta}><p className="rv-embudo__vacio">Sin datos en el periodo</p></figure>;
+    return <figure className="rv-gr rv-embudo" data-matiz={matiz} data-vacio aria-label={etiqueta}><p className="rv-embudo__vacio">{t('vacio')}</p></figure>;
   }
   return (
     <figure className="rv-gr rv-embudo" data-matiz={matiz} aria-label={etiqueta}>
@@ -41,14 +46,14 @@ export function Embudo({ etapas, matiz = 8, etiqueta, formato = (v) => String(v)
               {f.valor !== null ? <span className="rv-embudo__barra" data-r={Math.min(i, 9)} style={{ width: `${Math.min(100, Math.max(0, (f.valor / tope) * 100)).toFixed(2)}%` }} /> : null}
             </div>
             <small className="rv-embudo__nota">
-              {f.parte !== null && i > 0 ? `${porcentaje(f.parte, 1)} de «${filas[0].etiqueta}»` : null}
-              {f.conversion !== null ? `${f.parte !== null && i > 0 ? ' · ' : ''}${porcentaje(f.conversion, 1)} de la etapa anterior` : null}
-              {f.valor === null ? 'sin dato' : null}
+              {f.parte !== null && i > 0 ? t('embudo.parteDe', { pct: porcentaje(f.parte, 1), etapa: filas[0].etiqueta }) : null}
+              {f.conversion !== null ? `${f.parte !== null && i > 0 ? ' · ' : ''}${t('embudo.convAnterior', { pct: porcentaje(f.conversion, 1) })}` : null}
+              {f.valor === null ? t('embudo.sinDato') : null}
             </small>
           </li>
         ))}
       </ol>
-      <TablaGrafica titulo={etiqueta} primera="Etapa" encabezados={['Valor', 'De la anterior']}
+      <TablaGrafica titulo={etiqueta} primera={t('embudo.etapa')} encabezados={[t('embudo.valor'), t('embudo.anterior')]}
         filas={filas.map((f) => ({ rotulo: f.etiqueta, celdas: [f.valor === null ? '—' : formato(f.valor), f.conversion === null ? '—' : porcentaje(f.conversion, 1)] }))} />
     </figure>
   );
