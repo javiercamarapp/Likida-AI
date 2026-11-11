@@ -14,7 +14,7 @@ import type { MenuV2 } from './menu-por-perfil';
 export const MAX_DESTINOS = 4;
 
 /** Etiquetas cortas (11 px, una línea) para los nombres largos del menú. El resto usa el nombre del menú tal cual. */
-const ETIQUETA_CORTA: Readonly<Record<string, string>> = {
+export const ETIQUETA_CORTA: Readonly<Record<string, string>> = {
   '/dashboard/contador': 'Resumen',
   '/dashboard/agentes/liquidacion': 'Liquidación',
   '/dashboard/agentes/peajes': 'Peajes',
