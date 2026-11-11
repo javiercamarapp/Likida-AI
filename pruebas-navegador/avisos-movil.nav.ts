@@ -7,7 +7,7 @@ import { test, expect, type Page } from './apoyo/fixture';
 import { CORREOS, ESTADOS } from './apoyo/sesion';
 import { fijarVersionUi, limpiarCondiciones, reiniciarEstado, sembrarCondiciones, TENANT_A, usuarioId, leidasEnBase } from './apoyo/avisos-datos';
 import { abrirNavegacion } from './apoyo/navegacion';
-import { botonLeido, conteoPestana, esperarAviso, filas, irAPestana, listaLista, numeroPie, vigilarConsola } from './apoyo/avisos-ui';
+import { botonLeido, esperarChromeV2, conteoPestana, esperarAviso, filas, irAPestana, listaLista, numeroPie, vigilarConsola } from './apoyo/avisos-ui';
 
 test.use({ storageState: ESTADOS.duena });
 test.describe.configure({ mode: 'serial' });
@@ -26,7 +26,7 @@ test.afterAll(async () => {
   await reiniciarEstado(userId);
   if (versionAnterior) await fijarVersionUi(TENANT_A, versionAnterior);
 });
-test.beforeEach(async ({ page }) => { await reiniciarEstado(userId); consola = vigilarConsola(page); });
+test.beforeEach(async ({ page }) => { await reiniciarEstado(userId); await esperarChromeV2(page); consola = vigilarConsola(page); });
 test.afterEach(() => { expect(consola.errores, 'errores de consola o de página').toEqual([]); });
 
 async function sinDesborde(page: Page): Promise<void> {

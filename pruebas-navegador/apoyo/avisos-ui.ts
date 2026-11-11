@@ -91,3 +91,11 @@ export function vigilarConsola(page: Page): { errores: string[] } {
   page.on('pageerror', (e) => errores.push(`pageerror: ${e.message}`));
   return { errores };
 }
+
+/** La versión de interfaz se lee con caché de 30 s (perfil_tenant): tras fijar v2 en la base, espera a que el chrome ya sea v2. */
+export async function esperarChromeV2(page: Page, ruta = '/dashboard'): Promise<void> {
+  await expect.poll(async () => {
+    await page.goto(ruta);
+    return page.locator('[data-ui="v2"]').count();
+  }, { message: 'el chrome v2 no llegó (caché de la versión de interfaz)', timeout: 60_000, intervals: [2_000] }).toBeGreaterThan(0);
+}
