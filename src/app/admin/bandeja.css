@@ -70,3 +70,12 @@
 /* Fuente de una escalación: el icono va a la IZQUIERDA del nombre (antes se apilaba encima cuando el nombre envolvía). */
 .bj-fuente { display: inline-flex; align-items: flex-start; gap: 6px; }
 .bj-fuente > svg { flex: none; margin-top: 3px; }
+
+/* ── F26 ronda 2: Tu turno. Piezas compactas dentro de la tarjeta 8-4 (miniatura a la izquierda, sin blanco); siguiente acción; vistas de Aprobaciones como pestañas subrayadas. ── */
+.bj-piezas--compacta { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+.bj-piezas--compacta .bj-pieza { flex-direction: row; border-radius: 8px; }
+.bj-piezas--compacta .bj-pieza__marco { width: 96px; flex: none; aspect-ratio: 1; max-height: none; }
+.bj-piezas--compacta .bj-pieza__cuerpo { padding: 8px 10px; gap: 6px; }
+.bj-piezas--compacta .bj-pieza__titulo { min-height: 0; }
+.bj-siguiente { margin: 0; font: 600 13px/1.4 var(--font-sans-ui, inherit); color: var(--ink); }
+@media (max-width: 479px) { .bj-piezas--compacta .bj-pieza__marco { width: 72px; } }
