@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
@@ -41,7 +42,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   if (q) {
     const resultado = await buscarConversaciones({ q, pagina });
     return (
-      <MarcoPagina titulo="Conversaciones de WhatsApp">
+      <PantallaConversaciones>
         <CajaBusqueda q={q} />
         <Tarjeta titulo={`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}>
           {resultado.filas.length === 0 ? (
@@ -53,7 +54,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
           )}
           <PaginadorConversaciones q={q} pagina={resultado.pagina} paginas={resultado.paginas} />
         </Tarjeta>
-      </MarcoPagina>
+      </PantallaConversaciones>
     );
   }
 
@@ -68,7 +69,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   const recortado = total !== null && total > conversaciones.length;
 
   return (
-    <MarcoPagina titulo="Conversaciones de WhatsApp">
+    <PantallaConversaciones>
       <CajaBusqueda q="" />
 
       <TiraCifras etiqueta="Conversaciones de WhatsApp">
@@ -104,8 +105,12 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
         <br /><br />
         Volumen por canal, heatmap hora×día, histograma de mensajes por conversación — con 1 tenant y pocos días de historia no dicen nada real todavía.
       </EstadoVacio>
-    </MarcoPagina>
+    </PantallaConversaciones>
   );
+}
+
+function PantallaConversaciones({ children }: { children: ReactNode }) {
+  return <MarcoPagina titulo="Conversaciones de WhatsApp">{children}</MarcoPagina>;
 }
 
 /**
@@ -131,7 +136,7 @@ function CajaBusqueda({ q }: { q: string }) {
 function ListaConversaciones({ conversaciones }: { conversaciones: ConversacionActiva[] }) {
   return (
     <div className="space-y-1.5">
-      {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} completo />)}
+      {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} completo textoEnlace="Abrir en su propia página →" />)}
     </div>
   );
 }

@@ -23,7 +23,7 @@ export function HiloMensajes({ turnos }: { turnos: readonly Turno[] }) {
 
 /** Una conversación plegable: teléfono ENMASCARADO (LFPDPPP), flota y cuántos mensajes; abierta, el hilo. `completo` muestra todos
  *  los turnos y el enlace a su propia página; sin él, los últimos 6. */
-export function FilaConversacion({ c, completo = false }: { c: ConversacionActiva; completo?: boolean }) {
+export function FilaConversacion({ c, completo = false, textoEnlace }: { c: ConversacionActiva; completo?: boolean; textoEnlace?: string }) {
   return (
     <Disclosure
       titulo={
@@ -35,9 +35,9 @@ export function FilaConversacion({ c, completo = false }: { c: ConversacionActiv
       resumen={c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
     >
       {c.turns.length > 0 && <HiloMensajes turnos={completo ? c.turns : c.turns.slice(-6)} />}
-      {completo && c.tenantId && (
+      {completo && c.tenantId && textoEnlace && (
         <Link href={`/admin/conversaciones/${c.tenantId}/${encodeURIComponent(c.telefono)}`} className="mt-2 inline-block text-xs text-[var(--marca)]">
-          Abrir en su propia página →
+          {textoEnlace}
         </Link>
       )}
     </Disclosure>

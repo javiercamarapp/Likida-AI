@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import { Aviso, Boton, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
@@ -45,13 +46,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   } catch {
     datos = null;
   }
-  if (datos === null) {
-    return (
-      <MarcoPagina titulo="Techo diario de IA — por flota">
-        <EstadoError mensaje="No se pudo leer la lista de flotas ni sus techos — la base no respondió. Esto NO significa que no haya techos: la IA sigue frenada por el techo que cada flota ya tiene." />
-      </MarcoPagina>
-    );
-  }
+  if (datos === null) return <PantallaTecho><EstadoError mensaje="No se pudo leer la lista de flotas ni sus techos — la base no respondió. Esto NO significa que no haya techos: la IA sigue frenada por el techo que cada flota ya tiene." /></PantallaTecho>;
 
   const columnas: ColumnaBase<FilaTechoIa>[] = [
     { id: 'flota', titulo: 'Flota', principal: true, celda: (f) => f.nombre },
@@ -90,7 +85,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   ];
 
   return (
-    <MarcoPagina titulo="Techo diario de IA — por flota">
+    <PantallaTecho>
       {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}
       {sp.error && MENSAJE_ERROR[sp.error] && <Aviso tono="error">{MENSAJE_ERROR[sp.error]}</Aviso>}
 
@@ -119,8 +114,12 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
           vacio={{ titulo: 'Sin flotas', texto: 'Todavía no hay flotas dadas de alta.' }}
         />
       </Tarjeta>
-    </MarcoPagina>
+    </PantallaTecho>
   );
+}
+
+function PantallaTecho({ children }: { children: ReactNode }) {
+  return <MarcoPagina titulo="Techo diario de IA — por flota">{children}</MarcoPagina>;
 }
 
 export const metadata: Metadata = { title: 'Techo de IA' };

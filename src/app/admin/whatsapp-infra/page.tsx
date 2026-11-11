@@ -57,10 +57,7 @@ export default async function WhatsappInfraPage() {
       </TiraCifras>
 
       <Tarjeta titulo="Número operativo">
-        <p className="m-0 text-xs text-muted">
-          El número real que opera el bot, y lo que falta para tratarlo como infraestructura a escala
-        </p>
-        <div className="mt-2 flex items-center gap-2.5 rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-3 py-2.5">
+        <div className="flex items-center gap-2.5 rounded-lg border border-[var(--line2)] bg-[var(--surface)] px-3 py-2.5">
           <Smartphone width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" />
           <div className="min-w-0">
             <div className="text-[13px] font-semibold">1 número operativo</div>

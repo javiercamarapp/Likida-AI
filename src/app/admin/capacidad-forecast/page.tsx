@@ -37,12 +37,12 @@ export default async function CapacidadForecastPage() {
           No se pudo leer el costo de la ventana de 30 días — esto NO significa que no haya gasto.
         </EstadoVacio>
       ) : proyeccion === null ? (
-        <EstadoVacio titulo="Sin datos de costo">
+        <EstadoVacio titulo="Sin datos">
           Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
         </EstadoVacio>
       ) : (
         <>
-          <TiraCifras etiqueta="Costo de IA y proyección">
+          <TiraCifras>
             <Cifra
               etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
               valor={usd(proyeccion.promedioDiario)}

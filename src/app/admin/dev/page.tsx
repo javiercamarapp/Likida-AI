@@ -34,7 +34,7 @@ const COLUMNAS_SLO: ColumnaBase<Slo>[] = [
 
 const COLUMNAS_SEGURIDAD: ColumnaBase<FilaSeguridad>[] = [
   {
-    id: 'tipo', titulo: 'Qué y de dónde', principal: true,
+    id: 'tipo', titulo: 'Evento', principal: true,
     celda: (e) => (
       <>
         <StatusChip tono={e.severidad === 'alta' ? 'bad' : e.severidad === 'media' ? 'warn' : 'neutral'}>{e.tipo.replace(/_/g, ' ')}</StatusChip>
@@ -43,7 +43,7 @@ const COLUMNAS_SEGURIDAD: ColumnaBase<FilaSeguridad>[] = [
       </>
     ),
   },
-  { id: 'cuando', titulo: 'Cuándo', alinear: 'der', celda: (e) => <span className="tabular text-muted">{fechaHoraMx(e.creadoEn)}</span> },
+  { id: 'cuando', titulo: 'Fecha', alinear: 'der', celda: (e) => <span className="tabular text-muted">{fechaHoraMx(e.creadoEn)}</span> },
 ];
 
 /**

@@ -122,7 +122,7 @@ function FormaTexto({ tipo, accion }: { tipo: 'link' | 'texto'; accion: AccionDe
       <input type="hidden" name="tipo" value={tipo} />
       <CampoTexto name="titulo" required obligatorio etiqueta="Título del insumo" />
       {tipo === 'link' ? (
-        <CampoTexto name="contenido" required obligatorio tipo="url" etiqueta="Dirección del link" placeholder="https://…" />
+        <CampoTexto name="contenido" required obligatorio tipo="url" etiqueta={ROTULO_TIPO.link} placeholder="https://…" />
       ) : (
         <CampoTextarea name="contenido" required obligatorio rows={4} etiqueta="La idea, en tus palabras — el agente la lee en su siguiente corrida" />
       )}

@@ -114,7 +114,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
 
       <Tarjeta titulo={`Qué le has dado — ${totalInsumos > insumos.length ? `${insumos.length} de ${totalInsumos}` : insumos.length}`}>
         {insumos.length === 0 ? (
-          <EstadoVacio titulo="Sin insumos todavía" contenido>Sin insumos todavía — suelta el primero arriba.</EstadoVacio>
+          <EstadoVacio titulo="Sin insumos" contenido>Sin insumos todavía — suelta el primero arriba.</EstadoVacio>
         ) : (
           <ListaInsumos insumos={insumosConUrl} />
         )}

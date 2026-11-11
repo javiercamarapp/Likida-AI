@@ -75,7 +75,7 @@ const COLUMNAS_COBERTURA: ColumnaBase<CoberturaFuente>[] = [
   { id: 'fuente', titulo: 'Fuente', principal: true, celda: (f) => f.titulo },
   { id: 'estado', titulo: 'Estado', celda: (f) => <StatusChip tono={f.emite ? 'ok' : 'warn'}>{f.emite ? 'Emite' : 'Pendiente'}</StatusChip> },
   {
-    id: 'filas', titulo: 'Filas · 30 días', etiquetaMovil: 'Filas · 30 días',
+    id: 'filas', titulo: 'Filas · 30 días',
     celda: (f) => {
       const medida = f.filas30d === null ? 'sin evento' : f.emite && f.filas30d === 0 ? '0 en 30 días' : numero(f.filas30d);
       return <span className={`tabular whitespace-nowrap ${f.emite && f.filas30d === 0 ? 'text-muted' : ''}`}>{medida}</span>;
@@ -146,7 +146,7 @@ export default async function TrustSafetyPage() {
             No se pudieron leer los eventos — que no es lo mismo que «no hay eventos».
           </p>
         ) : eventos.length === 0 ? (
-          <EstadoVacio titulo="Ningún evento registrado" icono={ShieldAlert} contenido>
+          <EstadoVacio titulo="Sin eventos" icono={ShieldAlert} contenido>
             Ningún evento registrado. Eso NO prueba que no haya pasado nada: solo cubre lo que las
             fuentes de la sección de cobertura emiten; las pendientes no escriben nada. Una fuente que emite y marca
             cero puede ser silencio real o una fuente rota; este panel no las distingue.
