@@ -8,7 +8,7 @@ import AdminChrome from './chrome';
 import { ProveedorRequiereAccion } from './cabecera-admin';
 import { obtenerPanoramaAccion, SIN_DATO, type RequiereAccion } from './requiere-accion';
 import { resolverBandeja } from '@/lib/avisos/bandeja';
-import { leerAvisosAdmin } from '@/lib/avisos/fuente-admin';
+import { leerAvisosAdmin } from '@/app/ui-v2/avisos/fuente-admin';
 import { conteosDePestanas } from './conteos-pestanas';
 import { ProveedorConteosPestanas } from './conteos-pestanas-contexto';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';

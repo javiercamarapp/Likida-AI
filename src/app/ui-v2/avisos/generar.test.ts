@@ -4,7 +4,7 @@ import type { AlertaExtra } from '@/lib/admin/fuentes-alerta-extra';
 import type { AlertaFlota } from '@/app/dashboard/calcular-alertas-flota';
 import { avisosDeAdmin } from './generar-admin';
 import { avisosDeFlota } from './generar-flota';
-import { contarNoLeidos, filtrarAvisos, FILTROS_INICIALES } from './modelo';
+import { contarNoLeidos, filtrarAvisos, FILTROS_INICIALES } from '@/lib/avisos/modelo';
 
 const CEROS: ConteosEscalaciones = { arco: 0, corridasFallo: 0, talachas: 0, facturasProveedor: 0, ticketsAbiertos: 0, ticketsVencidos: 0, liquidacionesRevisar: 0 };
 const item = (fuente: ItemEscalacion['fuente'], desde: string, titulo = 't'): ItemEscalacion => ({ fuente, titulo, detalle: null, tenantNombre: 'Flota X', desde, vence: null, href: '/x' });

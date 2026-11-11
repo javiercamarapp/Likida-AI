@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { leerAvisosAdmin } from '@/lib/avisos/fuente-admin';
+import { leerAvisosAdmin } from '@/app/ui-v2/avisos/fuente-admin';
 import { MarcoPagina } from '@/app/ui-v2/componentes';
 import PaginaAvisos from '@/app/ui-v2/avisos/pagina-avisos';
 import { getT } from '@/lib/i18n/servidor';

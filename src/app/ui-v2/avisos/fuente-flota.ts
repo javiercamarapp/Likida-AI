@@ -12,7 +12,7 @@ import { rolPuedeLeerTarea } from '@/lib/likida/orquestador/permisos';
 import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
 import { calcularAlertasFlota } from '@/app/dashboard/calcular-alertas-flota';
 import { avisosDeFlota } from './generar-flota';
-import type { FuenteAvisos } from './bandeja';
+import type { FuenteAvisos } from '@/lib/avisos/bandeja';
 
 const TTL_MS = 45_000;
 const cache = new Map<string, { valor: FuenteAvisos; vence: number }>();

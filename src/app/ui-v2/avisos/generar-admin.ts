@@ -5,7 +5,7 @@ import { calcularAlertas } from '@/app/admin/calcular-alertas';
 import type { ConteosEscalaciones, FuenteEscalacion, ItemEscalacion } from '@/lib/admin/escalaciones';
 import type { AlertaExtra, IdAlertaExtra } from '@/lib/admin/fuentes-alerta-extra';
 import type { ResumenNegocio } from '@/lib/admin/negocio';
-import type { Aviso, Categoria, Severidad } from './modelo';
+import type { Aviso, Categoria, Severidad } from '@/lib/avisos/modelo';
 
 export interface EntradaAvisosAdmin {
   /** `null` = la bandeja entera no se pudo leer (se dice con un aviso crítico; nunca «sin pendientes»). */

@@ -5,8 +5,8 @@
 import { supabaseServer } from '@/lib/supabase/server';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
-import { leerAvisosAdmin } from '@/lib/avisos/fuente-admin';
-import { leerAvisosFlota } from '@/lib/avisos/fuente-flota';
+import { leerAvisosAdmin } from '@/app/ui-v2/avisos/fuente-admin';
+import { leerAvisosFlota } from '@/app/ui-v2/avisos/fuente-flota';
 import { guardarPreferencia, guardarSilencio, marcarLeidas } from '@/lib/avisos/estado';
 import { esCanal, esCategoriaDe, type Ambito } from '@/lib/avisos/modelo';
 import type { FuenteAvisos } from '@/lib/avisos/bandeja';

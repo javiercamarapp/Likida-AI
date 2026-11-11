@@ -1,6 +1,6 @@
 // Avisos del panel del cliente: PURO. Convierte las alertas de la flota (`calcularAlertasFlota`, ya filtradas por rol) en `Aviso`.
 import type { AlertaFlota } from '@/app/dashboard/calcular-alertas-flota';
-import type { Aviso, Categoria } from './modelo';
+import type { Aviso, Categoria } from '@/lib/avisos/modelo';
 
 const CATEGORIA_POR_FUENTE: Record<string, Categoria> = {
   ilegibles: 'sistema_flota',

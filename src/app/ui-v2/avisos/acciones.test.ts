@@ -10,8 +10,8 @@ const d = vi.hoisted(() => ({
 vi.mock('@/lib/supabase/server', () => ({ supabaseServer: async () => ({ db: true }) }));
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: d.guard }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: d.tenant }));
-vi.mock('@/lib/avisos/fuente-admin', () => ({ leerAvisosAdmin: d.avisosAdmin }));
-vi.mock('@/lib/avisos/fuente-flota', () => ({ leerAvisosFlota: vi.fn() }));
+vi.mock('@/app/ui-v2/avisos/fuente-admin', () => ({ leerAvisosAdmin: d.avisosAdmin }));
+vi.mock('@/app/ui-v2/avisos/fuente-flota', () => ({ leerAvisosFlota: vi.fn() }));
 vi.mock('@/lib/avisos/estado', () => ({ marcarLeidas: d.marcar, guardarPreferencia: d.guardarPref, guardarSilencio: vi.fn() }));
 
 const { marcarAvisos, guardarPreferenciaAviso } = await import('./acciones');

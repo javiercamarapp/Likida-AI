@@ -3,7 +3,7 @@
 import { obtenerPanoramaAccion } from '@/app/admin/requiere-accion';
 import { getResumenNegocio, type ResumenNegocio } from '@/lib/admin/negocio';
 import { avisosDeAdmin } from './generar-admin';
-import type { FuenteAvisos } from './bandeja';
+import type { FuenteAvisos } from '@/lib/avisos/bandeja';
 
 const TTL_MS = 45_000;
 let cacheResumen: { valor: ResumenNegocio; vence: number } | null = null;

@@ -5,7 +5,7 @@
 // extra; la lista de /admin/notificaciones pintaba otras alertas (sin las extra) y descartaba con localStorage; y la campana del
 // panel del cliente no llevaba cifra. Resultado: «19» arriba y una lista que no mostraba esos 19.
 //
-// Ahora hay UNA lista de avisos (`Aviso`), generada por las fuentes que ya existían (`generar-admin.ts`, `generar-flota.ts`), y UNA
+// Ahora hay UNA lista de avisos (`Aviso`), generada por las fuentes que ya existían (`ui-v2/avisos/generar-admin.ts`, `generar-flota.ts`), y UNA
 // regla de lectura: el número del pie es EXACTAMENTE `contarNoLeidos(avisos, leidas)` y la pestaña «No leídas» pinta esos mismos
 // avisos. Este archivo es la parte pura (sin red, sin base): se prueba sin mocks.
 //
@@ -16,6 +16,8 @@
 //    como leído, se queda como no leído y sigue contando hasta que se resuelva;
 //  · una lectura caída se dice (avisos «No se pudo leer…»), nunca se vuelve «0».
 // ═══════════════════════════════════════════════════════════════════════════
+
+import { TZ_MX } from '@/lib/formato';
 
 export type Severidad = 'critica' | 'atencion' | 'info';
 export const SEVERIDADES: readonly Severidad[] = ['critica', 'atencion', 'info'];
@@ -153,7 +155,7 @@ export function aplicarPreferencias(avisos: readonly Aviso[], apagadas: Readonly
 export interface Silencio { activo: boolean; desde: string; hasta: string; permiteCriticos: boolean }
 
 export const SILENCIO_POR_OMISION: Silencio = { activo: false, desde: '22:00', hasta: '07:00', permiteCriticos: true };
-export const ZONA_SILENCIO = 'America/Mexico_City';
+export const ZONA_SILENCIO = TZ_MX;
 
 const HORA = /^([01]\d|2[0-3]):[0-5]\d$/;
 
