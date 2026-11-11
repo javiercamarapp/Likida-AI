@@ -3220,4 +3220,10 @@ export const agentes = {
   'f26d4.soltar.pista': 'o suelta el archivo aquí',
   'f26d4.cajon.cancelar': 'Cancelar',
   'f26d4.liq.nota_enviados_detalle': 'Entregados {e} · rebotados {r}',
+  'f26d5.cd.indicadores_hitos': 'Indicadores de hitos',
+  'f26d5.cd.sin_viajes_titulo': 'Sin viajes en seguimiento',
+  'f26d5.liq.periodo_etq': 'Periodo',
+  'f26d5.liq.periodo_todo': 'Todo',
+  'f26d5.liq.periodo_hoy': 'Hoy',
+  'f26d5.vg.ajustes_revision': 'Ajustes de la revisión',
 } as const;
