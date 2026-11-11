@@ -1,3 +1,5 @@
+import { publico as publicoEs } from '@/lib/i18n/es/publico';
+import { TR_PUBLICO_ES, type TrPublico } from '@/lib/i18n/publico_tr';
 import { createHash, randomBytes } from 'node:crypto';
 import { DatoInvalido } from './errores';
 import { hoyMx, mxn, round2, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
@@ -154,8 +156,7 @@ export function estadoLiga(
  * decisión que toma `resolverLlave` con su 401 uniforme, y la que toma
  * `/aviso/[tenant]` al no distinguir "no existe" de "está a medias".
  */
-export const TEXTO_LIGA_NO_VALIDA =
-  'Este enlace no está disponible. Puede haber caducado o haber sido reemplazado por uno nuevo. Pídele a quien te lo envió que te comparta el enlace vigente.';
+export const TEXTO_LIGA_NO_VALIDA = publicoEs['pg.enlace.texto'];
 
 // ── EL FORMULARIO DEL CLIENTE ──────────────────────────────────────────────
 
@@ -392,10 +393,11 @@ export function esCarnada(valor: unknown): boolean {
  */
 export function identificaFactura(
   f: { serie: string | null; folio: string | null; cfdiUuid: string | null },
+  sinFolio: string = publicoEs['pg.sin_folio'],
 ): string {
   if (f.folio) return f.serie ? `${f.serie}-${f.folio}` : f.folio;
   if (f.cfdiUuid) return f.cfdiUuid;
-  return 'sin folio';
+  return sinFolio;
 }
 
 /**
@@ -413,24 +415,19 @@ export function identificaFactura(
  * el IVA de esos meses— no tenían ninguna ruta que los entregara, y la página
  * ni siquiera decía que existían.
  */
-export function textoDelRep(reps: Array<{ cfdi_uuid: string; tieneXml: boolean }>): string {
-  if (reps.length === 0) {
-    return 'Cuando tu pago quede conciliado y su complemento (REP) esté timbrado, aparecerá aquí.';
-  }
+export function textoDelRep(
+  reps: Array<{ cfdi_uuid: string; tieneXml: boolean }>,
+  tr: TrPublico = TR_PUBLICO_ES,
+): string {
+  if (reps.length === 0) return tr.t('pg.rep.ninguno');
   if (reps.length > 1) {
     const conXml = reps.filter((r) => r.tieneXml).length;
-    const cuantos = `Esta factura tiene ${reps.length} complementos de pago: uno por cada pago que se le aplicó.`;
-    if (conXml === reps.length) {
-      return `${cuantos} Abajo está cada uno con su folio fiscal, y puedes descargar su XML por separado.`;
-    }
-    if (conXml === 0) {
-      return `${cuantos} Abajo está cada uno con su folio fiscal citable. Los archivos XML no están cargados en Likida: pídeselos a quien te emitió la factura citando esos folios.`;
-    }
-    return `${cuantos} Abajo está cada uno con su folio fiscal. De ${conXml} hay XML para descargar aquí; el resto tienes que pedírselo a quien te emitió la factura, citando su folio.`;
+    const cuantos = tr.t('pg.rep.varios', { n: reps.length });
+    if (conXml === reps.length) return tr.t('pg.rep.varios.todos', { cuantos });
+    if (conXml === 0) return tr.t('pg.rep.varios.ninguno', { cuantos });
+    return tr.t('pg.rep.varios.algunos', { cuantos, conXml });
   }
   const rep = reps[0];
-  if (rep.tieneXml) {
-    return 'Tu complemento de pago ya está listo. Puedes descargar el XML desde esta misma página.';
-  }
-  return `Tu complemento de pago ya está timbrado. Su folio fiscal (UUID) es ${rep.cfdi_uuid}. El archivo XML no está cargado en Likida: pídeselo a quien te emitió la factura citando ese folio.`;
+  if (rep.tieneXml) return tr.t('pg.rep.uno.xml');
+  return tr.t('pg.rep.uno.sinxml', { uuid: rep.cfdi_uuid });
 }
