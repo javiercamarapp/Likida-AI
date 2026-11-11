@@ -1347,4 +1347,8 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'rotulos.estado_prospecto.pilot': 'Pilot',
   'rotulos.estado_prospecto.won': 'Won',
   'rotulos.estado_prospecto.lost': 'Lost',
+  'mapa_prospectos_detalle.eyebrow': 'Prospect record',
+  'mapa_prospectos_detalle.etiqueta_chips': 'Stage and context',
+  'mapa_prospectos_detalle.etiqueta_resumen': 'Prospect summary',
+  'mapa_prospectos_detalle.etiqueta_cifras': 'Prospect scores',
 };

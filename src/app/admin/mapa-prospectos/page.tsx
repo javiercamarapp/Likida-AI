@@ -2,7 +2,8 @@ import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenProspectos, type ResumenProspectos } from '@/lib/admin/prospectos-mapa';
 import { logger } from '@/lib/logger';
-import { AvisoCompacto, MarcoPagina } from '../../ui-v2/componentes';
+import { AvisoCompacto } from '../../ui-v2/componentes';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { Cerebro } from './cerebro';
 import { getT } from '@/lib/i18n/servidor';
 
@@ -28,16 +29,18 @@ export default async function PaginaMapaProspectos() {
     logger.error('mapa_prospectos.resumen', { err: e instanceof Error ? e.message : String(e) });
   }
   return (
-    <MarcoPagina titulo={t('mapa_prospectos.ventas')} apoyo={t('mapa_prospectos.tu_cartera_de_prospectos_en_un')}>
-      {resumen === null && (
+    <EsqueletoPanelCifras
+      titulo={t('mapa_prospectos.ventas')} apoyo={t('mapa_prospectos.tu_cartera_de_prospectos_en_un')} variante="8-4"
+      avisos={resumen === null ? (
         <AvisoCompacto
           tono="error"
           resumen={t('mapa_prospectos.la_cartera_no_se_pudo_leer')}
           mas={t('mapa_prospectos.cada_pagina_de_la_cartera_se')}
         />
-      )}
+      ) : null}
+    >
       <Cerebro resumen={resumen} />
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 
