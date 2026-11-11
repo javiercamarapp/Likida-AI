@@ -1,10 +1,11 @@
 'use client';
 
 import { useActionState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
-import { AvisoResultado, Boton as BotonDs, CampoFecha, CampoSelect, CampoTexto, Casilla, Disclosure, Icono } from '@/app/ui-v2/componentes';
+import { AvisoResultado, Boton as BotonDs, Drawer, CampoFecha, CampoSelect, CampoTexto, Casilla, Disclosure, Icono } from '@/app/ui-v2/componentes';
 import './clientes.css';
 // SOLO TIPOS DE `clientes.ts`, y es una restricción real, no un gusto: ese
 // módulo importa `supabaseAdmin`, cuyo encabezado dice textualmente "NUNCA
@@ -15,6 +16,17 @@ import './clientes.css';
 import type { ClienteCrudo, TarifaCruda } from '@/lib/likida/clientes';
 import { useT } from '@/lib/i18n/proveedor';
 import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
+
+/** Cajón del alta (Rovaq: «Nuevo …» abre un cajón, no un bloque plegado en la página). Nace abierto cuando la URL trae `?nuevo=`; al cerrar
+ *  navega a la misma pantalla sin ese parámetro (`hrefCerrar`). Foco, Esc, fondo y hoja inferior en móvil los da `Drawer`. */
+export function CajonAlta({ titulo, hrefCerrar, ancho = 'm', children }: { titulo: string; hrefCerrar: string; ancho?: 'm' | 'xl'; children: React.ReactNode }) {
+  const router = useRouter();
+  return (
+    <Drawer abierto onCerrar={() => router.replace(hrefCerrar, { scroll: false })} titulo={titulo} tamano={ancho}>
+      {children}
+    </Drawer>
+  );
+}
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;

@@ -1,5 +1,5 @@
 import {
-  Handshake, Banknote, Wallet, Users, Route, TriangleAlert, CircleDashed,
+  Handshake, Banknote, Wallet, Users, Route, TriangleAlert, CircleDashed, UserX,
 } from 'lucide-react';
 import type {
   PanelClientes, ClienteConMetricas, TarifaRow, ViajeSinIngreso,
@@ -11,11 +11,11 @@ import { mxn, numero, fechaMx } from '@/lib/formato';
 import { paginarRegistro, urlRegistro, type ParamsRegistro } from '../paginar-registro';
 import { FiltroRegistro } from '../registro-filtro';
 import type { BuscarCatalogo } from '../combo-catalogo';
-import { FormaCliente, FormaTarifa, type AccionForma, type OpcionModo } from './forma';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { CajonAlta, FormaCliente, FormaTarifa, type AccionForma, type OpcionModo } from './forma';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra, CajonVistaRapida } from '@/app/ui-v2/esqueletos';
 import {
-  BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, BotonEnlace, EstadoError, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import './clientes.css';
@@ -54,17 +54,32 @@ export function VistaClientes({
   buscarCliente: BuscarCatalogo;
   totalClientes: number | null;
   /** `?q=`/`?p=`/`?editar=` (clientes) y `?qt=`/`?pt=`/`?editarT=` (tarifas). */
-  sp: ParamsRegistro & { qt?: string; pt?: string; editarT?: string };
+  sp: ParamsRegistro & { qt?: string; pt?: string; editarT?: string; nuevo?: string };
   sufijo: string;
   camposOcultos: Array<[string, string]>; t?: TResto;
 }) {
+  const hrefNuevo = (que: 'cliente' | 'tarifa') => urlRegistro(RUTA, sufijo, { nuevo: que });
+  const hrefSinNuevo = urlRegistro(RUTA, sufijo, { nuevo: null });
+  const cifras = panel === null || panel.clientes.length === 0 ? undefined : cifrasDeCartera(t, panel);
+  const avisos = panel === null ? undefined : avisosDeCartera(t, panel);
   return (
-    <MarcoPagina titulo={t('op.clientes')} apoyo={t('op.quien_paga_el_flete_y_cuanto')}>
+    <EsqueletoTablaMaestra
+      titulo={t('op.clientes')}
+      apoyo={t('op.quien_paga_el_flete_y_cuanto')}
+      acciones={puedeEditar && panel !== null ? (
+        <>
+          <BotonEnlace href={hrefNuevo('tarifa')} variante="secondary" tamano="sm" scroll={false}>{t('op.cl.nueva_tarifa')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('cliente')} variante="primary" tamano="sm" scroll={false}>{t('op.cl.nuevo_cliente')}</BotonEnlace>
+        </>
+      ) : undefined}
+      avisos={avisos}
+      cifras={cifras}
+      etiquetaCifras={t('op.cl.cartera')}
+    >
       {panel === null ? (
         <EstadoError reintentar>{t('op.no_pude_leer_tus_clientes_tarifas')}</EstadoError>
       ) : (
-        <>
-          <BloqueCartera t={t} panel={panel} />
+        <div className="rv-cl__bloques">
           <BloqueClientes t={t} panel={panel} puedeEditar={puedeEditar} guardarCliente={guardarCliente}
             sp={sp} sufijo={sufijo} camposOcultos={camposOcultos} />
           <BloqueTarifas t={t} panel={panel} puedeEditar={puedeEditar} modos={modos} guardarTarifa={guardarTarifa}
@@ -74,69 +89,97 @@ export function VistaClientes({
           {!puedeEditar && (
             <p className="rv-cl__pie">{t('op.tu_rol_ve_esta_pantalla_pero')}</p>
           )}
-        </>
+          {puedeEditar && sp.nuevo === 'cliente' && (
+            <CajonAlta titulo={t('op.dar_de_alta_un_cliente')} hrefCerrar={hrefSinNuevo}>
+              <FormaCliente accion={guardarCliente} idPrefijo="alta-cliente" inicial={{ nombre: '', rfc: '', contacto: '', correo: '', telefono: '', diasCredito: '', activo: true }} />
+            </CajonAlta>
+          )}
+          {puedeEditar && sp.nuevo === 'tarifa' && (
+            <CajonAlta titulo={t('op.agregar_una_tarifa')} hrefCerrar={hrefSinNuevo} ancho="xl">
+              {panel.clientes.length === 0 ? (
+                <p className="rv-cl__nota">{t('op.puedes_capturar_tarifas_de_lista_sin')}</p>
+              ) : null}
+              <FormaTarifa
+                accion={guardarTarifa} idPrefijo="alta-tarifa"
+                buscarCliente={buscarCliente} totalClientes={totalClientes}
+                modos={modos}
+                inicial={{
+                  clienteId: '', origen: '', destino: '', modo: modos[0]?.valor ?? 'por_viaje',
+                  precio: '', moneda: 'MXN', vigenteDesde: panel.hoy, vigenteHasta: '', activa: true,
+                }}
+              />
+            </CajonAlta>
+          )}
+        </div>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
-// ── Los tres números de arriba ─────────────────────────────────────────────
+// ── Las cifras y los avisos de arriba ──────────────────────────────────────
 
-function BloqueCartera({ panel, t = T_RESTO_ES }: { panel: PanelClientes; t?: TResto }) {
-  // Sin un solo cliente no hay nada que medir, y tres tarjetas en cero se leen
-  // como "esta flota no cobra nada". El bloque entero se calla.
-  if (panel.clientes.length === 0) return null;
-
+/** Cuatro cifras de la cartera. Sin un solo cliente no hay nada que medir, y cifras en cero se leen como «esta flota no cobra nada»: la tira se
+ *  calla (el que llama pasa `undefined`). */
+function cifrasDeCartera(t: TResto, panel: PanelClientes): PropsCifra[] {
   const activos = panel.clientes.filter((c) => c.activo).length;
   const conFacturas = panel.clientes.filter((c) => c.facturas > 0);
   const porCobrar = conFacturas.reduce((s, c) => s + (c.saldoPorCobrar ?? 0), 0);
+  return [
+    {
+      icono: <Icono icono={Banknote} />,
+      etiqueta: t('op.ingreso_de_fletes_capturado'), valor: panel.ingresoTotal, formato: 'mxn',
+      nota: panel.conIngreso === 0
+        ? t('op.ningun_viaje_trae_ingreso_capturado_todavia')
+        : t(panel.conIngreso === 1 ? 'op.de_n_viaje_con_el_dato.uno' : 'op.de_n_viaje_con_el_dato.otros', { n: numero(panel.conIngreso) }),
+      info: 'clientes.ingreso',
+    },
+    {
+      icono: <Icono icono={Users} />,
+      etiqueta: t('op.clientes_activos'), valor: activos, formato: 'numero',
+      nota: panel.clientes.length !== activos
+        ? t(panel.clientes.length - activos === 1 ? 'op.dado_de_baja.uno' : 'op.dado_de_baja.otros', { n: numero(panel.clientes.length - activos) })
+        : undefined,
+      info: 'clientes.activos',
+    },
+    conFacturas.length > 0
+      ? {
+        icono: <Icono icono={Wallet} />,
+        etiqueta: t('op.por_cobrar_a_clientes'), valor: porCobrar, formato: 'mxn',
+        nota: t(conFacturas.length === 1 ? 'op.de_n_cliente_con_facturas.uno' : 'op.de_n_cliente_con_facturas.otros', { n: numero(conFacturas.length) }),
+        info: 'clientes.por_cobrar',
+      }
+      : {
+        icono: <Icono icono={Wallet} />,
+        etiqueta: t('op.por_cobrar'), valor: null, estado: 'vacio',
+        mensaje: t('op.ninguno_de_tus_clientes_tiene_facturas'),
+        info: 'clientes.por_cobrar',
+      },
+    {
+      // Es un conteo real de `viaje.cliente_id IS NULL`: sin cliente asignado no hay margen por cliente.
+      icono: <Icono icono={UserX} />,
+      etiqueta: t('op.cl.k.sin_cliente'), valor: panel.viajesSinCliente, formato: 'entero',
+      nota: t('op.cl.k.sin_cliente.nota'),
+      ...(panel.viajesSinCliente > 0 ? { tono: 'warn' as const } : {}),
+    },
+  ];
+}
 
+/** A lo sumo DOS avisos (Rovaq): la concentración (siempre medida solo sobre los viajes con ingreso) y los viajes sin cliente. */
+function avisosDeCartera(t: TResto, panel: PanelClientes) {
+  if (panel.clientes.length === 0) return undefined;
   return (
     <>
-      <TiraCifras sello={selloHoy('Cartera de clientes')}>
-        <Cifra
-          icono={<Icono icono={Banknote} />}
-          etiqueta={t('op.ingreso_de_fletes_capturado')} valor={panel.ingresoTotal} formato="mxn"
-          nota={panel.conIngreso === 0
-            ? t('op.ningun_viaje_trae_ingreso_capturado_todavia')
-            : t(panel.conIngreso === 1 ? 'op.de_n_viaje_con_el_dato.uno' : 'op.de_n_viaje_con_el_dato.otros', { n: numero(panel.conIngreso) })}
-          info="clientes.ingreso"
-        />
-        <Cifra
-          icono={<Icono icono={Users} />}
-          etiqueta={t('op.clientes_activos')} valor={activos} formato="numero"
-          nota={panel.clientes.length !== activos
-            ? t(panel.clientes.length - activos === 1 ? 'op.dado_de_baja.uno' : 'op.dado_de_baja.otros', { n: numero(panel.clientes.length - activos) })
-            : undefined}
-          info="clientes.activos"
-        />
-        {conFacturas.length > 0 ? (
-          <Cifra
-            icono={<Icono icono={Wallet} />}
-            etiqueta={t('op.por_cobrar_a_clientes')} valor={porCobrar} formato="mxn"
-            nota={t(conFacturas.length === 1 ? 'op.de_n_cliente_con_facturas.uno' : 'op.de_n_cliente_con_facturas.otros', { n: numero(conFacturas.length) })}
-            info="clientes.por_cobrar"
-          />
-        ) : (
-          <Cifra
-            icono={<Icono icono={Wallet} />}
-            etiqueta={t('op.por_cobrar')} valor={null}
-            mensaje={t('op.ninguno_de_tus_clientes_tiene_facturas')}
-            info="clientes.por_cobrar"
-          />
-        )}
-      </TiraCifras>
-
       {panel.concentracion !== null && (
-        <p className="rv-cl__nota">{rico(t('op.el_cliente_mas_grande_representa_el', { concentracion: panel.concentracion }), { strong: (c) => <strong>{c}</strong> })}{panel.concentracion > 50 && t('op.mas_de_la_mitad_de_lo')}{t('op.medido_solo_sobre_los_viajes_que')}</p>
+        <Aviso tono={panel.concentracion > 50 ? 'warn' : 'info'}>
+          {rico(t('op.el_cliente_mas_grande_representa_el', { concentracion: panel.concentracion }), { strong: (c) => <strong>{c}</strong> })}{panel.concentracion > 50 && t('op.mas_de_la_mitad_de_lo')}{t('op.medido_solo_sobre_los_viajes_que')}
+        </Aviso>
       )}
-
       {panel.viajesSinCliente > 0 && (
-        <p className="rv-cl__nota" data-tono="warn">
+        <Aviso tono="warn">
           {panel.viajesSinCliente === 1
             ? t('op.1_viaje_no_tiene_cliente_asignado')
             : t('op.viajes_no_tienen_cliente_asignado_asi', { numero: numero(panel.viajesSinCliente) })}
-        </p>
+        </Aviso>
       )}
     </>
   );
@@ -160,9 +203,6 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
     sp,
     (c) => c.id,
   );
-  const VACIO = {
-    nombre: '', rfc: '', contacto: '', correo: '', telefono: '', diasCredito: '', activo: true,
-  };
   const hrefEditar = (c: ClienteConMetricas) => urlRegistro(RUTA, sufijo, {
     q: pagClientes.q || null, p: pagClientes.pagina,
     editar: pagClientes.editando === c.id ? null : c.id,
@@ -220,27 +260,34 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
   return (
     <>
       {puedeEditar && editado && (
-        <Tarjeta titulo={`Corregir a ${editado.nombre}`}>
-          <div className="rv-cl__editor">
-            <FormaCliente
-              accion={guardarCliente}
-              id={editado.id}
-              idPrefijo={`cliente-${editado.id}`}
-              // La fila COMPLETA, no solo lo que se ve en la tabla: el guardado reemplaza el renglón entero, y un formulario que no
-              // trajera contacto/correo/teléfono los borraría en silencio al corregir los días de crédito.
-              inicial={{
-                nombre: editado.nombre,
-                rfc: editado.rfc ?? '',
-                contacto: editado.contacto ?? '',
-                correo: editado.correo ?? '',
-                telefono: editado.telefono ?? '',
-                diasCredito: editado.diasCredito === null ? '' : String(editado.diasCredito),
-                activo: editado.activo,
-              }}
-            />
-            <BotonEnlace href={hrefEditar(editado)} variante="ghost" tamano="sm">{t('op.cerrar')}</BotonEnlace>
-          </div>
-        </Tarjeta>
+        <CajonVistaRapida
+          titulo={t('op.cl.corregir_a', { nombre: editado.nombre })}
+          subtitulo={t('op.cl.vr.cliente')}
+          hrefCerrar={hrefEditar(editado)}
+          cifras={[
+            { etiqueta: t('op.viajes'), valor: numero(editado.viajes) },
+            { etiqueta: t('op.ingreso'), valor: editado.viajes === 0 || editado.viajes === editado.viajesSinIngreso ? '—' : mxn(editado.ingreso) },
+            { etiqueta: t('op.por_cobrar'), valor: editado.saldoPorCobrar === null ? '—' : mxn(editado.saldoPorCobrar) },
+            { etiqueta: t('op.credito'), valor: editado.diasCredito === null ? '—' : t('op.dias', { numero: numero(editado.diasCredito) }) },
+          ]}
+        >
+          <FormaCliente
+            accion={guardarCliente}
+            id={editado.id}
+            idPrefijo={`cliente-${editado.id}`}
+            // La fila COMPLETA, no solo lo que se ve en la tabla: el guardado reemplaza el renglón entero, y un formulario que no
+            // trajera contacto/correo/teléfono los borraría en silencio al corregir los días de crédito.
+            inicial={{
+              nombre: editado.nombre,
+              rfc: editado.rfc ?? '',
+              contacto: editado.contacto ?? '',
+              correo: editado.correo ?? '',
+              telefono: editado.telefono ?? '',
+              diasCredito: editado.diasCredito === null ? '' : String(editado.diasCredito),
+              activo: editado.activo,
+            }}
+          />
+        </CajonVistaRapida>
       )}
 
       <Tarjeta titulo={t('op.clientes')} info="clientes.lista">
@@ -258,11 +305,6 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
         )}
       </Tarjeta>
 
-      {puedeEditar && (
-        <Disclosure variante="tarjeta" titulo={t('op.dar_de_alta_un_cliente')}>
-          <FormaCliente accion={guardarCliente} idPrefijo="alta-cliente" inicial={VACIO} />
-        </Disclosure>
-      )}
     </>
   );
 }
@@ -304,7 +346,7 @@ function BloqueTarifas({
   guardarTarifa: AccionForma;
   buscarCliente: BuscarCatalogo;
   totalClientes: number | null;
-  sp: ParamsRegistro & { qt?: string; pt?: string; editarT?: string };
+  sp: ParamsRegistro & { qt?: string; pt?: string; editarT?: string; nuevo?: string };
   sufijo: string;
   camposOcultos: Array<[string, string]>; t?: TResto;
 }) {
@@ -319,10 +361,6 @@ function BloqueTarifas({
     { q: sp.qt, p: sp.pt, editar: sp.editarT },
     (t) => t.id,
   );
-  const VACIA = {
-    clienteId: '', origen: '', destino: '', modo: modos[0]?.valor ?? 'por_viaje',
-    precio: '', moneda: 'MXN', vigenteDesde: panel.hoy, vigenteHasta: '', activa: true,
-  };
   const hrefEditar = (t: TarifaRow) => urlRegistro(RUTA, sufijo, {
     qt: pagTarifas.q || null, pt: pagTarifas.pagina,
     editarT: pagTarifas.editando === t.id ? null : t.id,
@@ -360,31 +398,38 @@ function BloqueTarifas({
   return (
     <>
       {puedeEditar && editada && (
-        <Tarjeta titulo={t('op.corregir_la_tarifa')}>
-          <div className="rv-cl__editor">
-            <FormaTarifa
-              accion={guardarTarifa}
-              id={editada.id}
-              idPrefijo={`tarifa-${editada.id}`}
-              clienteNombre={editada.clienteNombre ?? ''}
-              buscarCliente={buscarCliente}
-              totalClientes={totalClientes}
-              modos={modos}
-              inicial={{
-                clienteId: editada.clienteId ?? '',
-                origen: editada.origen ?? '',
-                destino: editada.destino ?? '',
-                modo: editada.modo,
-                precio: String(editada.precio),
-                moneda: editada.moneda,
-                vigenteDesde: editada.vigenteDesde,
-                vigenteHasta: editada.vigenteHasta ?? '',
-                activa: editada.activa,
-              }}
-            />
-            <BotonEnlace href={hrefEditar(editada)} variante="ghost" tamano="sm">{t('op.cerrar')}</BotonEnlace>
-          </div>
-        </Tarjeta>
+        <CajonVistaRapida
+          titulo={t('op.corregir_la_tarifa')}
+          subtitulo={editada.clienteNombre ?? t('op.de_lista')}
+          hrefCerrar={hrefEditar(editada)}
+          cifras={[
+            { etiqueta: t('op.precio'), valor: `${mxn(editada.precio)}${unidadModo(editada.modo) ? ` ${unidadModo(editada.modo)}` : ''}` },
+            { etiqueta: t('op.como_se_cobra'), valor: rotuloModo(editada.modo) },
+            { etiqueta: t('op.vigencia'), valor: `${fechaMx(editada.vigenteDesde)} — ${editada.vigenteHasta ? fechaMx(editada.vigenteHasta) : t('op.sin_termino')}` },
+            { etiqueta: t('llaves.estado'), valor: tonoTarifa(t)[estadoDe(editada, panel.hoy)].rotulo },
+          ]}
+        >
+          <FormaTarifa
+            accion={guardarTarifa}
+            id={editada.id}
+            idPrefijo={`tarifa-${editada.id}`}
+            clienteNombre={editada.clienteNombre ?? ''}
+            buscarCliente={buscarCliente}
+            totalClientes={totalClientes}
+            modos={modos}
+            inicial={{
+              clienteId: editada.clienteId ?? '',
+              origen: editada.origen ?? '',
+              destino: editada.destino ?? '',
+              modo: editada.modo,
+              precio: String(editada.precio),
+              moneda: editada.moneda,
+              vigenteDesde: editada.vigenteDesde,
+              vigenteHasta: editada.vigenteHasta ?? '',
+              activa: editada.activa,
+            }}
+          />
+        </CajonVistaRapida>
       )}
 
       <Tarjeta titulo={t('op.tarifas')} info="clientes.tarifas">
@@ -402,18 +447,6 @@ function BloqueTarifas({
         )}
       </Tarjeta>
 
-      {puedeEditar && (
-        <Disclosure variante="tarjeta" titulo={t('op.agregar_una_tarifa')}>
-          {panel.clientes.length === 0 ? (
-            <p className="rv-cl__nota">{t('op.puedes_capturar_tarifas_de_lista_sin')}</p>
-          ) : null}
-          <FormaTarifa
-            accion={guardarTarifa} idPrefijo="alta-tarifa"
-            buscarCliente={buscarCliente} totalClientes={totalClientes}
-            modos={modos} inicial={VACIA}
-          />
-        </Disclosure>
-      )}
     </>
   );
 }
