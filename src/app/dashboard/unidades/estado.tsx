@@ -5,6 +5,8 @@ import { useFormStatus } from 'react-dom';
 import { Wrench, CircleCheck, Ban, RotateCcw } from 'lucide-react';
 import { Boton, BotonConfirmar, Icono, clasesBoton, useNotificarResultado } from '@/app/ui-v2/componentes';
 import './unidades.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type ResultadoEstado = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionEstado = (previo: ResultadoEstado, fd: FormData) => Promise<ResultadoEstado>;
@@ -31,16 +33,18 @@ export type AccionEstado = (previo: ResultadoEstado, fd: FormData) => Promise<Re
  */
 
 const DESTINOS = {
-  disponible: { etiqueta: 'Marcar disponible', Glifo: CircleCheck },
-  taller: { etiqueta: 'Mandar a taller', Glifo: Wrench },
-  baja: { etiqueta: 'Dar de baja', Glifo: Ban },
+  disponible: { etiqueta: 'un.dest.disponible', Glifo: CircleCheck },
+  taller: { etiqueta: 'un.dest.taller', Glifo: Wrench },
+  baja: { etiqueta: 'un.dest.baja', Glifo: Ban },
 } as const;
 
 type Destino = keyof typeof DESTINOS;
 
 function BotonEstado({ destino, numeroEconomico }: { destino: Destino; numeroEconomico?: string }) {
   const { pending } = useFormStatus();
-  const { etiqueta, Glifo } = DESTINOS[destino];
+  const { t } = useT('operacion', operacionEs);
+  const { etiqueta: claveEtiqueta, Glifo } = DESTINOS[destino];
+  const etiqueta = t(claveEtiqueta);
   // La BAJA pide confirmación (W2): es el único destino que saca a la unidad del
   // parque —no se ofrece para viajes nuevos y sale del conteo de papeles— y
   // antes salía de un clic. Taller y «disponible» se deshacen con otro clic.
@@ -49,16 +53,16 @@ function BotonEstado({ destino, numeroEconomico }: { destino: Destino; numeroEco
       <BotonConfirmar
         etiqueta={etiqueta} icono={<Icono icono={Glifo} tam={14} />}
         nombreConfirmar="estado" valorConfirmar="baja" deshabilitado={pending}
-        titulo={`Dar de baja ${numeroEconomico ? `la unidad ${numeroEconomico}` : 'la unidad'}`}
-        descripcion="Deja de ofrecerse para viajes nuevos y sale del conteo de papeles. Su historial de viajes y de taller se conserva completo; puedes devolverla al parque cuando quieras."
-        etiquetaConfirmar="Sí, dar de baja"
+        titulo={numeroEconomico ? t('un.baja.titulo.eco', { eco: numeroEconomico }) : t('un.baja.titulo')}
+        descripcion={t('un.baja.cuerpo')}
+        etiquetaConfirmar={t('un.baja.si')}
         className={clasesBoton('danger', 'sm')}
       />
     );
   }
   return (
     <Boton type="submit" name="estado" value={destino} variante="secondary" tamano="sm" loading={pending} icono={<Icono icono={Glifo} tam={14} />}>
-      {pending ? 'Guardando…' : etiqueta}
+      {pending ? t('un.guardando') : etiqueta}
     </Boton>
   );
 }
@@ -116,10 +120,11 @@ export function ReactivarUnidad({ accion, unidadId }: { accion: AccionEstado; un
 }
 
 function BotonReactivar() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" name="estado" value="disponible" variante="secondary" tamano="sm" loading={pending} icono={<Icono icono={RotateCcw} tam={14} />}>
-      {pending ? 'Guardando…' : 'Regresó al parque'}
+      {pending ? t('un.guardando') : t('un.regreso')}
     </Boton>
   );
 }

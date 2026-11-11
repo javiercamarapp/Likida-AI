@@ -13,15 +13,18 @@ import './clientes.css';
 // navegador aunque el componente no la use. Los `import type` se borran al
 // compilar; el catálogo viaja como PROP desde la página, que sí es servidor.
 import type { ClienteCrudo, TarifaCruda } from '@/lib/likida/clientes';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
 function Boton({ etiqueta }: { etiqueta: string }) {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
     <BotonDs type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />} className="rv-cl__guardar">
-      {pending ? 'Guardando…' : etiqueta}
+      {pending ? t('cli.f.guardando') : etiqueta}
     </BotonDs>
   );
 }
@@ -57,6 +60,7 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
    *  `<label for="nombre">` en la misma página apuntan al primero. */
   idPrefijo: string;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
@@ -65,24 +69,24 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
       <input type="hidden" name="id" value={id} />
 
       <div className="rv-forma__rejilla">
-        <CampoTexto id={campo('nombre')} name="nombre" etiqueta="Nombre o razón social" obligatorio maxLength={120}
-          defaultValue={inicial.nombre} placeholder="Cementos del Bajío S.A. de C.V." className="rv-cl__ancho" />
-        <CampoTexto id={campo('rfc')} name="rfc" etiqueta="RFC" maxLength={13} defaultValue={inicial.rfc} placeholder="Opcional"
-          ayuda="Se le revisa el dígito verificador. Es el RFC con el que le vas a facturar." />
+        <CampoTexto id={campo('nombre')} name="nombre" etiqueta={t('cli.f.nombre')} obligatorio maxLength={120}
+          defaultValue={inicial.nombre} placeholder={t('cli.f.nombre.ph')} className="rv-cl__ancho" />
+        <CampoTexto id={campo('rfc')} name="rfc" etiqueta="RFC" maxLength={13} defaultValue={inicial.rfc} placeholder={t('cli.f.opcional')}
+          ayuda={t('cli.f.rfc.ayuda')} />
         {/* La distinción que sostiene la cobranza entera: vacío ≠ 0. */}
-        <CampoTexto id={campo('dias')} name="diasCredito" tipo="number" etiqueta="Días de crédito" min={0} max={365} step={1}
-          defaultValue={inicial.diasCredito} placeholder="Déjalo vacío si no hay crédito pactado"
-          ayuda="Vacío = sin condiciones pactadas (sus facturas no llevan fecha de vencimiento). Un 0 significa contado." />
-        <CampoTexto id={campo('contacto')} name="contacto" etiqueta="Contacto" maxLength={120} defaultValue={inicial.contacto} placeholder="Quién autoriza pagos" />
-        <CampoTexto id={campo('correo')} name="correo" tipo="email" etiqueta="Correo" maxLength={160} defaultValue={inicial.correo} placeholder="cuentasporpagar@empresa.com" />
-        <CampoTexto id={campo('telefono')} name="telefono" etiqueta="Teléfono" maxLength={40} defaultValue={inicial.telefono}
-          placeholder="477 123 4567 ext. 210" className="rv-cl__ancho" />
+        <CampoTexto id={campo('dias')} name="diasCredito" tipo="number" etiqueta={t('cli.f.credito')} min={0} max={365} step={1}
+          defaultValue={inicial.diasCredito} placeholder={t('cli.f.credito.ph')}
+          ayuda={t('cli.f.credito.ayuda')} />
+        <CampoTexto id={campo('contacto')} name="contacto" etiqueta={t('cli.f.contacto')} maxLength={120} defaultValue={inicial.contacto} placeholder={t('cli.f.contacto.ph')} />
+        <CampoTexto id={campo('correo')} name="correo" tipo="email" etiqueta={t('cli.f.correo')} maxLength={160} defaultValue={inicial.correo} placeholder="cuentasporpagar@empresa.com" />
+        <CampoTexto id={campo('telefono')} name="telefono" etiqueta={t('cli.f.telefono')} maxLength={40} defaultValue={inicial.telefono}
+          placeholder={t('cli.f.telefono.ph')} className="rv-cl__ancho" />
       </div>
 
-      <Casilla name="activo" defaultChecked={inicial.activo} etiqueta="Cliente activo" />
+      <Casilla name="activo" defaultChecked={inicial.activo} etiqueta={t('cli.f.activo')} />
 
       <Aviso estado={estado} />
-      <Boton etiqueta={id ? 'Guardar cambios' : 'Dar de alta'} />
+      <Boton etiqueta={id ? t('cli.f.guardar') : t('cli.f.alta')} />
     </form>
   );
 }
@@ -123,6 +127,7 @@ export function FormaTarifa({
   totalClientes: number | null;
   modos: ReadonlyArray<OpcionModo>;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
@@ -133,40 +138,40 @@ export function FormaTarifa({
 
       <div className="rv-forma__rejilla">
         <div className="rv-campo rv-cl__ancho">
-          <label htmlFor={campo('cliente')} className="rv-campo__etq">Cliente</label>
+          <label htmlFor={campo('cliente')} className="rv-campo__etq">{t('cli.f.cliente')}</label>
           <ComboCatalogo tipo="cliente" name="clienteId" campoId={campo('cliente')}
-            buscar={buscarCliente} aria-label="Cliente"
+            buscar={buscarCliente} aria-label={t('cli.f.cliente')}
             etiquetaVacia="Tarifa de lista — aplica a cualquier cliente"
             valorInicial={inicial.clienteId || null} textoInicial={clienteNombre}
             total={totalClientes} className="rv-ctl" />
           <span className="rv-campo__ayuda">
-            Una tarifa con cliente es negociada, y le gana a la de lista. Déjalo vacío para una tarifa de lista.
+            {t('cli.f.tarifa.ayuda')}
           </span>
         </div>
 
-        <CampoTexto id={campo('origen')} name="origen" etiqueta="Origen" maxLength={120} defaultValue={inicial.origen} placeholder="Vacío = cualquiera" />
-        <CampoTexto id={campo('destino')} name="destino" etiqueta="Destino" maxLength={120} defaultValue={inicial.destino} placeholder="Vacío = cualquiera" />
+        <CampoTexto id={campo('origen')} name="origen" etiqueta={t('cli.f.origen')} maxLength={120} defaultValue={inicial.origen} placeholder={t('cli.f.cualquiera')} />
+        <CampoTexto id={campo('destino')} name="destino" etiqueta={t('cli.f.destino')} maxLength={120} defaultValue={inicial.destino} placeholder={t('cli.f.cualquiera')} />
 
-        <CampoSelect id={campo('modo')} name="modo" etiqueta="Cómo se cobra" defaultValue={inicial.modo}
+        <CampoSelect id={campo('modo')} name="modo" etiqueta={t('cli.f.comocobra')} defaultValue={inicial.modo}
           ayuda={modos.map((m) => `${m.rotulo}: ${m.detalle}`).join(' ')}>
           {modos.map((m) => (
             <option key={m.valor} value={m.valor}>{m.rotulo}</option>
           ))}
         </CampoSelect>
 
-        <CampoTexto id={campo('precio')} name="precio" etiqueta="Precio (MXN)" obligatorio inputMode="decimal"
+        <CampoTexto id={campo('precio')} name="precio" etiqueta={t('cli.f.precio')} obligatorio inputMode="decimal"
           defaultValue={inicial.precio} placeholder="28,500.00"
-          ayuda="En la unidad que elegiste arriba. Solo pesos: Likida todavía no convierte moneda." />
+          ayuda={t('cli.f.precio.ayuda')} />
 
-        <CampoFecha id={campo('desde')} name="vigenteDesde" etiqueta="Rige desde" obligatorio defaultValue={inicial.vigenteDesde} />
-        <CampoFecha id={campo('hasta')} name="vigenteHasta" etiqueta="Rige hasta" defaultValue={inicial.vigenteHasta}
-          ayuda="Vacío = sin fecha de término. El último día pactado la tarifa todavía rige." />
+        <CampoFecha id={campo('desde')} name="vigenteDesde" etiqueta={t('cli.f.desde')} obligatorio defaultValue={inicial.vigenteDesde} />
+        <CampoFecha id={campo('hasta')} name="vigenteHasta" etiqueta={t('cli.f.hasta')} defaultValue={inicial.vigenteHasta}
+          ayuda={t('cli.f.hasta.ayuda')} />
       </div>
 
-      <Casilla name="activa" defaultChecked={inicial.activa} etiqueta="Tarifa activa" />
+      <Casilla name="activa" defaultChecked={inicial.activa} etiqueta={t('cli.f.tarifa.activa')} />
 
       <Aviso estado={estado} />
-      <Boton etiqueta={id ? 'Guardar cambios' : 'Agregar tarifa'} />
+      <Boton etiqueta={id ? t('cli.f.guardar') : t('cli.f.tarifa.agregar')} />
     </form>
   );
 }

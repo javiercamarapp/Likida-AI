@@ -14,8 +14,12 @@ import { ahoraMs } from '@/lib/saludo';
 import { calcularAlertasFlota } from '../calcular-alertas-flota';
 import { sufijoTenant } from '../sufijo';
 import { ListaAlertas } from './lista';
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Notificaciones' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.notificaciones') };
+}
 
 export const dynamic = 'force-dynamic';
 

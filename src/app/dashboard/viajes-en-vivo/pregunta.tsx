@@ -7,6 +7,8 @@ import { leerRespuesta, PREGUNTAS_OPERACION, textoDeBloques, type BloqueVista } 
 import { Boton, CampoTexto } from '@/app/ui-v2/componentes';
 import { Dona, Serie } from './graficas';
 import './en-vivo.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 /**
  * La caja de preguntas del asistente DENTRO de la pantalla de viajes en vivo: el jefe de tráfico le pregunta a la
@@ -15,6 +17,7 @@ import './en-vivo.css';
  * Lo delicado el asistente lo deriva a una persona (aparece abajo, en «Tareas del asistente»: la caja pide el tablero de nuevo al terminar cada respuesta).
  */
 export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | null }) {
+  const { t } = useT('operacion', operacionEs);
   const router = useRouter();
   const [texto, setTexto] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -31,7 +34,7 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
       const resp = await fetch(`/api/dashboard/chat${tenantParam ? `?tenant=${encodeURIComponent(tenantParam)}` : ''}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mensajes }),
       });
-      if (!resp.ok) throw new Error(resp.status === 429 ? 'Demasiadas preguntas seguidas; espera un momento.' : 'No se pudo consultar al asistente.');
+      if (!resp.ok) throw new Error(resp.status === 429 ? 'Demasiadas preguntas seguidas; espera un momento.' : t('vv.preg.error'));
       const r = leerRespuesta(await resp.text());
       if (r.ok) {
         setBloques(r.bloques);
@@ -42,14 +45,14 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
         router.refresh();
       } else setError(r.error);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo consultar al asistente.');
+      setError(e instanceof Error ? e.message : t('vv.preg.error'));
     } finally {
       setOcupado(false);
     }
   }
 
   return (
-    <section aria-label="Pregúntale al asistente sobre la operación" className="rv-vv__preg">
+    <section aria-label={t('vv.preg.titulo')} className="rv-vv__preg">
       <div className="rv-vv__sugerencias">
         {PREGUNTAS_OPERACION.map((p) => (
           <button key={p} type="button" disabled={ocupado} onClick={() => void preguntar(p)} className="rv-chip">{p}</button>
@@ -57,10 +60,10 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
       </div>
       <form onSubmit={(e) => { e.preventDefault(); void preguntar(texto); }} className="rv-vv__forma">
         <CampoTexto
-          etiqueta="Tu pregunta" etiquetaOculta value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={500}
-          placeholder="Ej. ¿cómo va la terminal de Guadalajara?"
+          etiqueta={t('vv.preg.label')} etiquetaOculta value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={500}
+          placeholder={t('vv.preg.ph')}
         />
-        <Boton type="submit" disabled={ocupado || !texto.trim()}>{ocupado ? 'Consultando…' : 'Preguntar'}</Boton>
+        <Boton type="submit" disabled={ocupado || !texto.trim()}>{ocupado ? t('vv.preg.consultando') : t('vv.preg.preguntar')}</Boton>
       </form>
       {error && <p role="alert" className="rv-vv__sub">{error}</p>}
       {bloques && (
@@ -72,13 +75,13 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
               : b.tipo === 'dona' ? <Dona key={i} b={b} />
               : b.tipo === 'serie' ? <Serie key={i} b={b} />
               : (
-                <dl key={i} className="rv-vv__datos" aria-label="Datos de la respuesta">
+                <dl key={i} className="rv-vv__datos" aria-label={t('vv.preg.datos')}>
                   {b.filas.flatMap(([k, v]) => [<dt key={`${k}-k`}>{k}</dt>, <dd key={`${k}-v`}>{v}</dd>])}
                 </dl>
               ))}
         </div>
       )}
-      <p className="rv-vv__sub" data-tenue>El asistente solo lee y, si algo es delicado, deja una tarea para una persona; no decide ni mueve nada por su cuenta.</p>
+      <p className="rv-vv__sub" data-tenue>{t('vv.preg.nota')}</p>
     </section>
   );
 }

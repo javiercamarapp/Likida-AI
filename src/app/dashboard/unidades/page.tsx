@@ -29,7 +29,11 @@ import { BloqueTaller } from './taller';
 import type { ResultadoForma } from './forma';
 import type { ResultadoEstado } from './estado';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Unidades' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.unidades') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -147,13 +151,14 @@ export default async function PaginaUnidades({
 
   async function guardarUnidad(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('un.a.rolver') };
     if (!puedeEditarCatalogoOperativo(s.rol)) {
-      return { ok: false, error: 'Tu rol no puede dar de alta ni editar unidades.' };
+      return { ok: false, error: t('un.a.rolalta') };
     }
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se guardó nada. Vuelve a intentar.' };
+    if (!alcanceAccion) return { ok: false, error: t('un.a.patio.guardar') };
 
     const id = String(fd.get('id') ?? '').trim();
     const eco = String(fd.get('numeroEconomico') ?? '').trim();
@@ -163,12 +168,12 @@ export default async function PaginaUnidades({
       let terminalId: string | null | undefined;
       if (id) {
         const actual = await terminalDeRegistro('unidad', s.tenantId, id);
-        if (!actual.encontrado) return { ok: false, error: 'No se encontró esa unidad en tu flota. Recarga la pantalla.' };
+        if (!actual.encontrado) return { ok: false, error: t('un.a.noencontro') };
         exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
         if (fd.has('terminalId')) {
           const pedido = String(fd.get('terminalId') ?? '').trim() || null;
           if (pedido !== actual.terminalId) {
-            if (!movimientoPermitido(alcanceAccion, pedido)) return { ok: false, error: 'Solo quien administra la flota mueve una unidad de patio.' };
+            if (!movimientoPermitido(alcanceAccion, pedido)) return { ok: false, error: t('un.a.patio.mover') };
             terminalId = pedido;
           }
         }
@@ -202,10 +207,8 @@ export default async function PaginaUnidades({
       return {
         ok: true,
         mensaje: id
-          ? `La unidad ${valores.numeroEconomico} quedó actualizada.`
-          : `La unidad ${valores.numeroEconomico} ya está dada de alta.${sinPapeles
-            ? ' Sin fechas de papeles sale como "sin papeles" — captúralas para que Likida avise antes de que venzan.'
-            : ''}`,
+          ? t('un.a.actualizada', { eco: valores.numeroEconomico })
+          : t(sinPapeles ? 'un.a.alta.sinpapeles' : 'un.a.alta', { eco: valores.numeroEconomico }),
       };
     } catch (e) {
       // El choque contra `unidad_economico_unico` llega como Error plano
@@ -213,13 +216,13 @@ export default async function PaginaUnidades({
       // nombre del índice en el mensaje). Aquí sí se dice en palabras de
       // quien capturó; el resto va por `mensajeParaPantalla`.
       if (e instanceof Error && e.message.includes('unidad_economico_unico')) {
-        return { ok: false, error: `Ya tienes una unidad con el número económico "${eco}". Búscala en la lista en vez de darla de alta otra vez.` };
+        return { ok: false, error: t('un.a.duplicada', { eco }) };
       }
       // El otro índice que un alta puede chocar desde la 0176: `uq_unidad_gps`
       // (un dispositivo = un camión por flota). `crearUnidad` tampoco lo
       // traduce, por el mismo motivo que el anterior.
       if (e instanceof Error && e.message.includes('uq_unidad_gps')) {
-        return { ok: false, error: 'Ese número de dispositivo de GPS ya está ligado a otra unidad de tu flota con el mismo proveedor. Un dispositivo solo puede pertenecer a un camión.' };
+        return { ok: false, error: t('un.a.gps.dup') };
       }
       return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : 'dar de alta la unidad') };
     }
@@ -242,20 +245,21 @@ export default async function PaginaUnidades({
    */
   async function cambiarEstado(_previo: ResultadoEstado, fd: FormData): Promise<ResultadoEstado> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver las unidades.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('un.a.rolver') };
     if (!puedeEditarCatalogoOperativo(s.rol)) {
-      return { ok: false, error: 'Tu rol no puede cambiar el estado de una unidad.' };
+      return { ok: false, error: t('un.a.rolestado') };
     }
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se cambió nada. Vuelve a intentar.' };
+    if (!alcanceAccion) return { ok: false, error: t('un.a.patio.estado') };
 
     const unidadId = String(fd.get('unidadId') ?? '').trim();
     const estado = String(fd.get('estado') ?? '').trim();
     try {
       // El patio de la unidad sale de la BASE: el jefe de otro patio no la da de baja.
       const actual = await terminalDeRegistro('unidad', s.tenantId, unidadId);
-      if (!actual.encontrado) return { ok: false, error: 'No se encontró esa unidad en tu flota. Recarga la pantalla.' };
+      if (!actual.encontrado) return { ok: false, error: t('un.a.noencontro') };
       exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
       // El actor viaja para que la bitácora pueda contestar "quién dio de baja
       // este camión y cuándo" — la pregunta del seguro y la del contador que
@@ -265,7 +269,7 @@ export default async function PaginaUnidades({
       return {
         ok: true,
         mensaje: estado === 'baja'
-          ? 'Unidad dada de baja. Deja de ofrecerse para viajes nuevos y sale del conteo de papeles; su historial queda completo.'
+          ? t('un.a.baja')
           : `Unidad en «${ESTADOS_UNIDAD[estado] ?? estado}».`,
       };
     } catch (e) {
@@ -276,15 +280,16 @@ export default async function PaginaUnidades({
   /** La carga masiva: revisar (no escribe) y confirmar. Mismo motor que `POST /v1/unidades`. */
   async function cargarUnidades(_previo: ResultadoImportacionUI | null, fd: FormData): Promise<ResultadoImportacionUI | null> {
     'use server';
+  const { t } = await getT('operacion');
     const vacio = (error: string): ResultadoImportacionUI => ({
       error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
       muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
     });
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return vacio('Tu rol no puede ver las unidades.');
-    if (!puedeEditarCatalogoOperativo(s.rol)) return vacio('Tu rol no puede dar de alta unidades.');
+    if (!puedeVerRuta(s.rol, RUTA)) return vacio(t('un.a.rolver'));
+    if (!puedeEditarCatalogoOperativo(s.rol)) return vacio(t('un.a.rolalta2'));
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-    if (!alcanceAccion) return vacio('No pude comprobar tu patio — no se cargó nada. Vuelve a intentar.');
+    if (!alcanceAccion) return vacio(t('un.a.patio.carga'));
     const r = await cargarUnidadesDesdeArchivo({ tenantId: s.tenantId, alcance: alcanceAccion, actor: { id: s.userId }, datos: fd });
     if (r.confirmado) revalidatePath(RUTA);
     return r;
@@ -293,6 +298,7 @@ export default async function PaginaUnidades({
   return (
     <>
       <VistaUnidades
+      tr={await getT('operacion')}
         pag={pag}
         bajas={bajas.filas}
         totalBajas={bajas.total}

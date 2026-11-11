@@ -13,6 +13,7 @@ import {
 } from '@/app/ui-v2/componentes';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import './unidades.css';
+import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 /** El tono de cada estado de vigencia: vencido y sin dato NO se pintan igual (sin dato no es vigente, es sin verificar). */
 const TONO_VIGENCIA: Record<'vencido' | 'por_vencer' | 'vigente' | 'sin_dato', TonoEstado> = {
@@ -84,10 +85,10 @@ const INICIAL_VACIO: UnidadCruda = {
  * de edición existe SOLO para la fila que `?editar=<id>` nombra. Las demás
  * llevan un link — que es lo que un `<details>` cerrado siempre debió ser.
  */
-export function VistaUnidades({
+export function VistaUnidades({ tr = TR_OPERACION_ES,
   pag, bajas, totalBajas, conteos, totalActivasConocido, puedeEditar, guardar, cambiarEstado, sufijo, camposOcultos, proveedoresGps,
   patios, patioDelJefe, terminalPorUnidad, editablePorUnidad, cargarUnidades, plantillaCsv, hrefPatios,
-}: {
+}: { tr?: TrOperacion;
   /** La página del parque ACTIVO, ya cortada y ordenada por la base
    *  (auditoría 24). El `total` y el `filtrados` los CONTÓ la base; el largo
    *  de esta página no es ninguno de los dos. */
@@ -128,6 +129,7 @@ export function VistaUnidades({
   plantillaCsv: string;
   hrefPatios: string;
 }) {
+  const { t, tp, idioma } = tr;
   const nombrePatio = new Map(patios.map((p) => [p.id, p.nombre] as const));
   // AUDITORÍA 20 (H4): las bajas ya no se pierden. Esta vista SIEMPRE filtró
   // `activo`, así que hasta hoy una unidad inactiva desaparecía de la pantalla
@@ -153,18 +155,18 @@ export function VistaUnidades({
   const alta = (
     <>
       {puedeEditar && (
-        <Disclosure variante="tarjeta" titulo="Dar de alta una unidad" resumen="Con sus vigencias capturadas, Likida avisa qué papel vence primero" abierto={vacio}>
+        <Disclosure variante="tarjeta" titulo={t('un.alta.titulo')} resumen={t('un.alta.resumen')} abierto={vacio}>
           <FormaUnidad accion={guardar} inicial={INICIAL_VACIO} idPrefijo="alta" proveedoresGps={proveedoresGps}
             patios={patios} terminalId="" patioFijo={patioDelJefe !== null} />
         </Disclosure>
       )}
       {puedeEditar && (
         <div id="importar">
-          <Disclosure variante="tarjeta" titulo="Cargar unidades desde Excel o CSV" abierto={vacio}>
+          <Disclosure variante="tarjeta" titulo={t('un.carga.titulo')} abierto={vacio}>
             <ImportadorMasivo
               entidad="unidades" accion={cargarUnidades} plantillaCsv={plantillaCsv}
               archivoPlantilla="plantilla-unidades.csv"
-              columnas="Obligatoria: placas. Número económico (si no lo traes, se usa la placa), marca, modelo, año, vencimiento de póliza, permiso SICT y verificación, y patio."
+              columnas={t('un.carga.cols')}
               hrefPatios={hrefPatios} patioDelJefe={patioDelJefe} tope={2_000}
             />
           </Disclosure>
@@ -175,7 +177,7 @@ export function VistaUnidades({
 
   const columnas: ColumnaBase<UnidadRow>[] = [
     {
-      id: 'unidad', titulo: 'Unidad', principal: true,
+      id: 'unidad', titulo: t('un.col.unidad'), principal: true,
       celda: (u) => (
         <>
           {u.numeroEconomico}
@@ -185,47 +187,47 @@ export function VistaUnidades({
       ),
     },
     ...(patios.length > 0 ? [{
-      id: 'patio', titulo: 'Patio',
-      celda: (u: UnidadRow) => nombrePatio.get(terminalPorUnidad[u.id] ?? '') ?? <span className="rv-un__tenue">Sin patio</span>,
+      id: 'patio', titulo: t('un.col.patio'),
+      celda: (u: UnidadRow) => nombrePatio.get(terminalPorUnidad[u.id] ?? '') ?? <span className="rv-un__tenue">{t('un.sinpatio')}</span>,
     } satisfies ColumnaBase<UnidadRow>] : []),
-    { id: 'estado', titulo: 'Estado', celda: (u) => <StatusChip tono={TONO_ESTADO[u.estado] ?? 'neutral'}>{ESTADO_UNIDAD[u.estado] ?? u.estado}</StatusChip> },
+    { id: 'estado', titulo: t('un.col.estado'), celda: (u) => <StatusChip tono={TONO_ESTADO[u.estado] ?? 'neutral'}>{ESTADO_UNIDAD[u.estado] ?? u.estado}</StatusChip> },
     {
-      id: 'papeles', titulo: 'Papeles',
+      id: 'papeles', titulo: t('un.col.papeles'),
       celda: (u) => {
         const v = clasificarVigencia(u.diasAlVencimiento, u.queVence);
         return <StatusChip tono={TONO_VIGENCIA[v.estado]}>{v.rotulo}</StatusChip>;
       },
     },
     {
-      id: 'taller', titulo: 'Taller',
+      id: 'taller', titulo: t('un.col.taller'),
       celda: (u) => (u.ordenesAbiertas > 0
-        ? <StatusChip tono="warn">{u.ordenesAbiertas === 1 ? '1 orden abierta' : `${u.ordenesAbiertas} órdenes abiertas`}</StatusChip>
-        : <span className="rv-un__tenue">Sin órdenes</span>),
+        ? <StatusChip tono="warn">{tp('un.orden', u.ordenesAbiertas)}</StatusChip>
+        : <span className="rv-un__tenue">{t('un.sinordenes')}</span>),
     },
     // Sin lectura de odómetro NO es 0 km: «—».
-    { id: 'km', titulo: 'Km', alinear: 'der', celda: (u) => (u.kmActual !== null ? `${numero(u.kmActual)} km` : '—') },
+    { id: 'km', titulo: 'Km', alinear: 'der', celda: (u) => (u.kmActual !== null ? `${numero(u.kmActual, idioma)} km` : '—') },
     {
       // El GPS a la vista en la fila: «ligada» y «entrando» son cosas distintas. Sin dispositivo no se dice nada: no toda flota tiene
       // rastreo. La FECHA y no «al día»: `gps_visto_en` puede ser de hace tres semanas, y «conectado» a secas taparía justo a la
       // unidad que dejó de reportar.
-      id: 'gps', titulo: 'Rastreo',
+      id: 'gps', titulo: t('un.col.rastreo'),
       celda: (u) => (u.gpsDeviceId ? (
         <span className="rv-un__gps" data-vivo={u.gpsVistoEn ? '' : undefined}>
           <Icono icono={Satellite} tam={14} />
-          {u.gpsProveedor}{u.gpsVistoEn ? ` · última posición ${u.gpsVistoEn.slice(0, 10)}` : ' · ligada, sin posición todavía'}
+          {u.gpsProveedor}{u.gpsVistoEn ? t('un.gps.ultima', { fecha: u.gpsVistoEn.slice(0, 10) }) : t('un.gps.ligada')}
         </span>
-      ) : <span className="rv-un__tenue">Sin rastreo</span>),
+      ) : <span className="rv-un__tenue">{t('un.sinrastreo')}</span>),
     },
   ];
   if (puedeEditar) {
     columnas.push({
       // El estado operativo NO vive en la forma de edición: es una acción de un clic sobre un hecho del mundo («se fue al taller»,
       // «la vendimos»), no un campo que se captura junto a las placas. Va siempre visible, no solo en la fila que `?editar=` abrió.
-      id: 'acciones', titulo: 'Acciones', alinear: 'der',
+      id: 'acciones', titulo: t('un.col.acciones'), alinear: 'der',
       celda: (u) => (editablePorUnidad[u.id] ? (
         <span className="rv-un__acciones">
           <BotonEnlace href={hrefUnidad(pag.editando === u.id ? null : u.id)} variante="ghost" tamano="sm">
-            {pag.editando === u.id ? 'Cerrar' : 'Editar unidad'}
+            {pag.editando === u.id ? t('un.cerrar') : t('un.editar')}
           </BotonEnlace>
           <AccionesEstadoUnidad accion={cambiarEstado} unidadId={u.id} estado={u.estado} numeroEconomico={u.numeroEconomico} />
         </span>
@@ -234,14 +236,14 @@ export function VistaUnidades({
   }
 
   return (
-    <MarcoPagina titulo="Equipo" apoyo="Tus unidades con las vigencias que pide la ley. Lo vencido o por vencer aparece primero.">
-      {aviso && <Aviso tono="error" titulo="Papeles que requieren atención">{aviso}</Aviso>}
+    <MarcoPagina titulo={t('un.titulo')} apoyo={t('un.apoyo')}>
+      {aviso && <Aviso tono="error" titulo={t('un.aviso.titulo')}>{aviso}</Aviso>}
 
       {vacio && (
-        <EstadoVacio pantalla contenido icono={Truck} titulo="Todavía no hay unidades"
-          accion={puedeEditar ? <BotonEnlace tamano="sm" href="#importar">Cargar mi flota desde Excel</BotonEnlace> : undefined}>
-          Registra tus tractocamiones con póliza, permiso SICT y verificación y aquí verás cuál vence primero.
-          {puedeEditar ? ' Dalas de alta una por una en el formulario de abajo.' : ''}
+        <EstadoVacio pantalla contenido icono={Truck} titulo={t('un.vacio.titulo')}
+          accion={puedeEditar ? <BotonEnlace tamano="sm" href="#importar">{t('un.vacio.cargar')}</BotonEnlace> : undefined}>
+          {t('un.vacio.nota')}
+          {puedeEditar ? t('un.vacio.manual') : ''}
         </EstadoVacio>
       )}
 
@@ -254,39 +256,37 @@ export function VistaUnidades({
           {/* `—` y no 0 cuando no se pudo contar: un 0 aquí diría «no hay ninguna vencida», que es la afirmación más cara que esta
               pantalla puede hacer en falso. `Cifra` pinta «—» con valor undefined. */}
           <TiraCifras>
-            <Cifra etiqueta="Vencidos" valor={conteos?.vencidos} tono={conteos && conteos.vencidos > 0 ? 'bad' : undefined} info="unidades.vencidas" />
-            <Cifra etiqueta={`Vencen en ${DIAS_AVISO} días`} valor={conteos?.porVencer} tono={conteos && conteos.porVencer > 0 ? 'warn' : undefined} info="unidades.por_vencer" />
-            <Cifra etiqueta="En regla" valor={conteos?.vigentes} info="unidades.en_regla" />
-            <Cifra etiqueta="Sin papeles" valor={conteos?.sinDato} info="unidades.sin_papeles" />
+            <Cifra etiqueta={t('un.cifra.vencidos')} valor={conteos?.vencidos} tono={conteos && conteos.vencidos > 0 ? 'bad' : undefined} info="unidades.vencidas" />
+            <Cifra etiqueta={t('un.cifra.vencen', { n: DIAS_AVISO })} valor={conteos?.porVencer} tono={conteos && conteos.porVencer > 0 ? 'warn' : undefined} info="unidades.por_vencer" />
+            <Cifra etiqueta={t('un.cifra.enregla')} valor={conteos?.vigentes} info="unidades.en_regla" />
+            <Cifra etiqueta={t('un.cifra.sinpapeles')} valor={conteos?.sinDato} info="unidades.sin_papeles" />
           </TiraCifras>
 
           {puedeEditar && editada && editablePorUnidad[editada.id] && (
-            <Tarjeta titulo={`Corregir la unidad ${editada.numeroEconomico}`}>
+            <Tarjeta titulo={t('un.corregir', { eco: editada.numeroEconomico })}>
               <div className="rv-un__editor">
                 <FormaUnidad accion={guardar} id={editada.id} inicial={aInicial(editada)} idPrefijo={`u-${editada.id}`}
                   proveedoresGps={proveedoresGps} gpsVistoEn={editada.gpsVistoEn}
                   patios={patios} terminalId={terminalPorUnidad[editada.id] ?? ''} patioFijo={patioDelJefe !== null} />
-                <BotonEnlace href={hrefUnidad(null)} variante="ghost" tamano="sm">Cerrar</BotonEnlace>
+                <BotonEnlace href={hrefUnidad(null)} variante="ghost" tamano="sm">{t('un.cerrar')}</BotonEnlace>
               </div>
             </Tarjeta>
           )}
 
-          <Tarjeta titulo="Parque activo" info="unidades.ficha">
+          <Tarjeta titulo={t('un.parque')} info="unidades.ficha">
             <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
               sustantivo="unidades" camposOcultos={camposOcultos} />
 
             {hayFiltro && !totalActivasConocido && (
               // No se pudo contar el parque entero, así que el «de N» del pie sería un número inventado. Se dice.
-              <AvisoCompacto tono="warn" resumen="No pude contar el parque completo en este momento: el total de al lado es el de las que coinciden con la búsqueda, no el de la flota." />
+              <AvisoCompacto tono="warn" resumen={t('un.aviso.parque')} />
             )}
 
-            <TablaBase<UnidadRow> etiqueta="Unidades y sus papeles" columnas={columnas} filas={pag.filas} idFila={(u) => u.id} tarjetaMovil
-              vacio={{ titulo: 'Sin coincidencias', texto: `Ninguna unidad coincide con «${pag.q}».` }} />
+            <TablaBase<UnidadRow> etiqueta={t('un.tabla.etiqueta')} columnas={columnas} filas={pag.filas} idFila={(u) => u.id} tarjetaMovil
+              vacio={{ titulo: t('un.vacio.sincoincidencias'), texto: t('un.vacio.busqueda', { q: pag.q }) }} />
 
             <p className="rv-un__nota">
-              Se avisa del papel MÁS próximo a vencer de los tres (póliza, permiso SICT, verificación).
-              Una unidad sin fecha capturada sale como «sin papeles», no como vigente: no sabemos
-              si está en regla, y decir que sí sería inventarlo.
+              {t('un.nota.papel')}
             </p>
           </Tarjeta>
         </>
@@ -298,9 +298,9 @@ export function VistaUnidades({
           camión vendido no es un pendiente) ni se ofrecen en Despacho. Pero SE VEN: un activo dado de baja que desaparece de la
           pantalla se lee como borrado, y no lo está: su historial de viajes y de taller sigue completo. */}
       {totalBajas > 0 && (
-        <Tarjeta titulo={`Dadas de baja (${numero(totalBajas)})`} info="unidades.bajas">
+        <Tarjeta titulo={t('un.bajas', { n: numero(totalBajas, idioma) })} info="unidades.bajas">
           <p className="rv-un__nota">
-            Fuera del parque: no se ofrecen para viajes nuevos y no cuentan en los papeles de arriba. Su historial se conserva.
+            {t('un.bajas.nota')}
           </p>
           <ul className="rv-un__lista">
             {bajas.map((u) => (

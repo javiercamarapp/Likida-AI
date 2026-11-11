@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Send, UserCog, CircleSlash, Plus, Users, History } from 'lucide-react';
-import { saludo, ahoraMs } from '@/lib/saludo';
+import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import {
   getViajes, getOperadoresDetalle, getSerieComparativa,
@@ -23,6 +23,8 @@ import { getPrimerosPasos, type PrimerosPasos } from '@/lib/likida/primeros-paso
 import { PrimeraLiquidacion } from './primera-liquidacion';
 import { OperaWhatsApp } from './opera-whatsapp';
 import { Bloque, Barra, EsqTabla } from './bloque';
+import { getT } from '@/lib/i18n/servidor';
+import { TR_OPERACION_ES, saludoTr, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CASA DEL ENCARGADO.
@@ -81,6 +83,8 @@ export async function InicioOperacion({
    *  tiene los searchParams. */
   sufijo?: string;
 }) {
+  const tr = await getT('operacion');
+  const { t } = tr;
   const ahora = ahoraMs();
   // El DÍA DE MÉXICO, no el UTC: a las 6pm de CDMX el chip de fecha decía
   // mañana (capturado el 12-ago), y una licencia que vence "hoy" salía
@@ -116,19 +120,19 @@ export async function InicioOperacion({
     // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
     // misma anatomía en toda la app; la barra y el saludo van sobre blanco.
     <MarcoPagina
-      titulo="Resumen"
+      titulo={t('ini.titulo')}
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
-      apoyo={`${saludo()}, ${nombre ?? 'jefe'}. Lo que hay que despachar y perseguir hoy.`}
+      apoyo={t('ini.op.apoyo', { saludo: saludoTr(tr), nombre: nombre ?? t('ini.op.jefe') })}
       acciones={(
         <>
           {/* Secundario a Operadores — "¿a quién le cargo el siguiente?" es la otra pregunta de la mañana. */}
           <BotonEnlace variante="secondary" tamano="sm" href={`/dashboard/operadores${sufijo}`} icono={<Users width={15} height={15} strokeWidth={1.75} />}>
-            Operadores
+            {t('ini.op.drivers')}
           </BotonEnlace>
           {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto con asignar, avisar y el alta de operadores. La página
               suelta /viajes/nuevo se retiró: era la misma forma con menos contexto, y dos puertas se desincronizan. */}
           <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/despacho${sufijo}`} icono={<Plus width={15} height={15} strokeWidth={2} />}>
-            Nuevo viaje
+            {t('ini.nuevoviaje')}
           </BotonEnlace>
         </>
       )}
@@ -146,12 +150,12 @@ export async function InicioOperacion({
               primera liquidación. Condicional de verdad: sin esqueleto, para
               no reservar un hueco que casi siempre queda vacío. */}
           {tenantExiste && (
-            <Bloque mensaje="No se pudo leer el avance del arranque." esqueleto={null}>
+            <Bloque mensaje={t('ini.err.arranque')} esqueleto={null}>
               <BloqueArranque pPasos={pPasos} sufijo={sufijo} />
             </Bloque>
           )}
 
-          <Bloque mensaje="No se pudieron leer las alertas de la mañana." esqueleto={null}>
+          <Bloque mensaje={t('ini.op.err.alertas')} esqueleto={null}>
             <BloqueAlertas pSinAsignar={pSinAsignar} pIncidencias={pIncidencias} pTablero={pTablero}
               pUnidades={pUnidades} pOperadores={pOperadores} diaMx={diaMx} sufijo={sufijo} />
           </Bloque>
@@ -161,14 +165,14 @@ export async function InicioOperacion({
               mismo. Las dos piezas fallan por separado: un `—` con su "no se
               pudo leer" nunca se disfraza de cero. */}
           <div>
-            <Bloque mensaje="No se pudo leer el avance de cierre." esqueleto={<EsqAvance />}>
+            <Bloque mensaje={t('ini.op.err.cierre')} esqueleto={<EsqAvance tr={tr} />}>
               <BloqueAvance pViajesPorDia={pViajesPorDia} pHistorico={pHistorico} pTablero={pTablero} />
             </Bloque>
           </div>
 
           {/* ── Los 6 números de operación (StatCard, caja interna) ──────── */}
           <div>
-            <Bloque mensaje="No se pudo leer el estado de la operación." esqueleto={<EsqTablero />}>
+            <Bloque mensaje={t('ini.op.err.operacion')} esqueleto={<EsqTablero tr={tr} />}>
               <BloqueTablero pTablero={pTablero} />
             </Bloque>
           </div>
@@ -181,17 +185,17 @@ export async function InicioOperacion({
               una agregación pesada y no tiene por qué retener la lista de
               viajes sin chofer, que es la urgencia real de la mañana. */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-            <Bloque mensaje="No se pudo leer la lista de viajes sin chofer." esqueleto={<EsqTabla filas={4} />}>
+            <Bloque mensaje={t('ini.op.err.sinchofer')} esqueleto={<EsqTabla filas={4} />}>
               <BloqueSinAsignar pSinAsignar={pSinAsignar} sufijo={sufijo} />
             </Bloque>
-            <Bloque mensaje="No se pudo leer la carga por operador." esqueleto={<EsqTabla filas={4} />}>
+            <Bloque mensaje={t('ini.op.err.carga')} esqueleto={<EsqTabla filas={4} />}>
               <BloqueCarga pCarga={pCarga} sufijo={sufijo} />
             </Bloque>
           </div>
 
           {/* ── Viajes recientes, SIN pesos (ver TablaViajesOperacion) ───── */}
           <div>
-            <Bloque mensaje="No se pudieron leer los viajes recientes." esqueleto={<EsqTabla filas={8} />}>
+            <Bloque mensaje={t('ini.err.recientes')} esqueleto={<EsqTabla filas={8} />}>
               <BloqueViajes pViajes={pViajes} sufijo={sufijo} />
             </Bloque>
           </div>
@@ -227,6 +231,7 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
   diaMx: string;
   sufijo: string;
 }) {
+  const { t, tp } = await getT('operacion');
   const [sinAsignar, incidencias, tablero, unidades, operadores] =
     await Promise.all([pSinAsignar, pIncidencias, pTablero, pUnidades, pOperadores]);
 
@@ -240,20 +245,20 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
 
   if (sinAsignar && sinAsignar.total > 0) {
     alertas.push({
-      texto: `${sinAsignar.total} viaje${sinAsignar.total === 1 ? '' : 's'} sin chofer — se asigna en Despacho`,
+      texto: tp('ini.op.sinchofer', sinAsignar.total),
       href: `/dashboard/despacho${sufijo}`,
     });
   }
   const vencidas = (incidencias ?? []).filter((i) => i.slaVencido);
   if (vencidas.length > 0) {
     alertas.push({
-      texto: `${vencidas.length} incidencia${vencidas.length === 1 ? '' : 's'} pasada${vencidas.length === 1 ? '' : 's'} de su tiempo comprometido`,
+      texto: tp('ini.op.sla', vencidas.length),
       href: null,
     });
   }
   if (tablero && tablero.podPendientes > 0) {
     alertas.push({
-      texto: `${tablero.podPendientes} viaje${tablero.podPendientes === 1 ? '' : 's'} en curso sin evidencia de entrega`,
+      texto: tp('ini.op.pod', tablero.podPendientes),
       href: null,
     });
   }
@@ -275,12 +280,10 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
     const licPorVencer = activos.filter((o) => estadoDe(o) === 'por_vencer').length;
     const partes: string[] = [];
     if (licVencidas > 0) {
-      partes.push(licVencidas === 1 ? '1 chofer con la licencia vencida' : `${licVencidas} choferes con la licencia vencida`);
+      partes.push(tp('ini.op.licvencida', licVencidas));
     }
     if (licPorVencer > 0) {
-      partes.push(licPorVencer === 1
-        ? `1 licencia vence en los próximos ${DIAS_AVISO} días`
-        : `${licPorVencer} licencias vencen en los próximos ${DIAS_AVISO} días`);
+      partes.push(tp('ini.op.licporvencer', licPorVencer, { dias: DIAS_AVISO }));
     }
     if (partes.length > 0) {
       alertas.push({ texto: partes.join(' · '), href: `/dashboard/operadores${sufijo}` });
@@ -291,11 +294,11 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
   // pudo leer, se dice ANTES de la banda — una banda vacía sobre una fuente
   // caída afirmaría "todo en orden" estando ciega.
   const ciegas: string[] = [];
-  if (sinAsignar === null) ciegas.push('los viajes sin chofer');
-  if (incidencias === null) ciegas.push('las incidencias');
-  if (tablero === null) ciegas.push('el estado de la operación');
-  if (unidades === null) ciegas.push('los papeles de las unidades');
-  if (operadores === null) ciegas.push('las licencias');
+  if (sinAsignar === null) ciegas.push(t('ini.op.ciega.sinasignar'));
+  if (incidencias === null) ciegas.push(t('ini.op.ciega.incidencias'));
+  if (tablero === null) ciegas.push(t('ini.op.ciega.operacion'));
+  if (unidades === null) ciegas.push(t('ini.op.ciega.unidades'));
+  if (operadores === null) ciegas.push(t('ini.op.ciega.licencias'));
 
   if (ciegas.length === 0 && alertas.length === 0) return null;
 
@@ -303,7 +306,7 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
     <>
       {ciegas.length > 0 && (
         <AvisoCompacto tono="warn"
-          resumen={`No se pudo leer: ${ciegas.join(' · ')}.`}
+          resumen={t('ini.op.nosepudo', { lista: ciegas.join(' · ') })}
           mas="Las alertas de esa parte pueden faltar. Es un fallo de lectura, no un «todo en orden»." />
       )}
 
@@ -315,7 +318,7 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
               style={{ borderColor: 'var(--warn)' }}>
               <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
               <span className="text-[13px]">{a.texto}</span>
-              <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+              <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>{t('ini.ver')}</span>
             </Link>
           ) : (
             <div key={a.texto} className="card p-3 flex items-center gap-2.5" style={{ borderColor: 'var(--warn)' }}>
@@ -331,9 +334,10 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
 
 /** El mismo bulto que la tarjeta de avance: la barra de progreso a la
  *  izquierda y la cifra grande a la derecha. */
-function EsqAvance() {
+function EsqAvance({ tr = TR_OPERACION_ES }: { tr?: TrOperacion }) {
+  const { t } = tr;
   return (
-    <div className="card p-4 flex flex-wrap items-start gap-x-8 gap-y-3" role="status" aria-label="Cargando">
+    <div className="card p-4 flex flex-wrap items-start gap-x-8 gap-y-3" role="status" aria-label={t('ini.cargando')}>
       <div className="flex-1 min-w-[260px]">
         <Barra alto={13} ancho="40%" />
         <div className="mt-2"><Barra alto={10} /></div>
@@ -352,13 +356,14 @@ async function BloqueAvance({ pViajesPorDia, pHistorico, pTablero }: {
   pHistorico: Promise<ComparativoPeriodo[] | null>;
   pTablero: Promise<TableroOperacion | null>;
 }) {
+  const { t } = await getT('operacion');
   const [viajesPorDia, historico, tablero] = await Promise.all([pViajesPorDia, pHistorico, pTablero]);
   return (
     <div className="card p-4 flex flex-wrap items-start gap-x-8 gap-y-3">
       <div className="flex-1 min-w-[260px]">
         {viajesPorDia === null ? (
           <p className="text-sm m-0" style={{ color: 'var(--muted)' }}>
-            No se pudo leer el avance de cierre — no significa que no haya viajes.
+            {t('ini.op.cierre.error')}
           </p>
         ) : (
           <AvanceCierre
@@ -374,10 +379,10 @@ async function BloqueAvance({ pViajesPorDia, pHistorico, pTablero }: {
           {tablero?.viajesActivos ?? '—'}
         </div>
         <div className="text-[11px] font-semibold uppercase tracking-wide mt-0.5" style={{ color: 'var(--muted)' }}>
-          Viajes activos
+          {t('ini.op.activos')}
         </div>
         <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>
-          {tablero === null ? 'No se pudo leer' : 'Abiertos y en cuadre'}
+          {tablero === null ? t('ini.op.noleyo') : t('ini.op.abiertos')}
         </div>
       </div>
     </div>
@@ -387,9 +392,10 @@ async function BloqueAvance({ pViajesPorDia, pHistorico, pTablero }: {
 /** El mismo bulto que `TableroCifras`: el rótulo, la fila flexible de tres y
  *  la rejilla de seis (2 columnas, 3 desde `md`) — sus mismas clases, para
  *  que el aterrizaje no mueva un pixel. */
-function EsqTablero() {
+function EsqTablero({ tr = TR_OPERACION_ES }: { tr?: TrOperacion }) {
+  const { t } = tr;
   return (
-    <div role="status" aria-label="Cargando">
+    <div role="status" aria-label={t('ini.cargando')}>
       <Barra alto={13} ancho="30%" />
       <div className="mt-2 flex flex-wrap gap-2.5 items-stretch">
         {Array.from({ length: 3 }).map((_, i) => (
@@ -406,11 +412,12 @@ function EsqTablero() {
 }
 
 async function BloqueTablero({ pTablero }: { pTablero: Promise<TableroOperacion | null> }) {
+  const { t } = await getT('operacion');
   const tablero = await pTablero;
   if (tablero === null) {
     return (
       <div className="card p-6 text-sm" style={{ color: 'var(--muted)' }}>
-        No se pudo leer el estado de la operación.
+        {t('ini.op.estado.error')}
       </div>
     );
   }
@@ -418,19 +425,20 @@ async function BloqueTablero({ pTablero }: { pTablero: Promise<TableroOperacion 
 }
 
 async function BloqueSinAsignar({ pSinAsignar, sufijo }: { pSinAsignar: Promise<ViajesSinAsignar | null>; sufijo: string }) {
+  const { t, idioma } = await getT('operacion');
   const sinAsignar = await pSinAsignar;
   return (
     <section className="card overflow-hidden">
       <div className="px-5 pt-4 pb-2 flex items-center gap-2">
         <CircleSlash {...ICONO_SECCION} />
-        <TituloSeccion>Sin asignar</TituloSeccion>
+        <TituloSeccion>{t('ini.op.sinasignar')}</TituloSeccion>
       </div>
       {sinAsignar === null ? (
-        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la lista.</div>
+        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>{t('ini.op.lista.error')}</div>
       ) : sinAsignar.total === 0 ? (
         <div className="px-5 pb-4">
           <EstadoVacio icono={<Send width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-            Todo lo que está en curso ya trae chofer.
+            {t('ini.op.todos')}
           </EstadoVacio>
         </div>
       ) : (
@@ -439,15 +447,15 @@ async function BloqueSinAsignar({ pSinAsignar, sufijo }: { pSinAsignar: Promise<
             <li key={v.id} className="px-5 py-2 border-t flex items-center gap-3 text-sm" style={{ borderColor: 'var(--line2)' }}>
               <span className="font-medium">{v.folio ?? '—'}</span>
               <span className="truncate" style={{ color: 'var(--muted)' }}>
-                {v.origen && v.destino ? `${v.origen} → ${v.destino}` : (v.origen ?? v.destino ?? 'sin ruta')}
+                {v.origen && v.destino ? `${v.origen} → ${v.destino}` : (v.origen ?? v.destino ?? t('ini.op.sinruta'))}
               </span>
-              <span className="ml-auto shrink-0 text-[12px]" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</span>
+              <span className="ml-auto shrink-0 text-[12px]" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio, idioma)}</span>
             </li>
           ))}
           {sinAsignar.total > sinAsignar.filas.length && (
             <li className="px-5 py-2 border-t text-[12px]" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
               Se muestran {sinAsignar.filas.length} — hay {sinAsignar.total - sinAsignar.filas.length} más sin chofer.{' '}
-              <Link href={`/dashboard/despacho${sufijo}`} className="underline">Ver en Despacho</Link>
+              <Link href={`/dashboard/despacho${sufijo}`} className="underline">{t('ini.op.endespacho')}</Link>
             </li>
           )}
         </ul>
@@ -457,15 +465,16 @@ async function BloqueSinAsignar({ pSinAsignar, sufijo }: { pSinAsignar: Promise<
 }
 
 async function BloqueCarga({ pCarga, sufijo }: { pCarga: Promise<CargaOperador[] | null>; sufijo: string }) {
+  const { t } = await getT('operacion');
   const carga = await pCarga;
   return (
     <section className="card overflow-hidden">
       <div className="px-5 pt-4 pb-2 flex items-center gap-2">
         <UserCog {...ICONO_SECCION} />
-        <TituloSeccion>Carga por operador</TituloSeccion>
+        <TituloSeccion>{t('ini.op.cargaop')}</TituloSeccion>
       </div>
       {carga === null ? (
-        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer la carga.</div>
+        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>{t('ini.op.carga.error')}</div>
       ) : (
         <TablaCarga carga={carga} sufijo={sufijo} />
       )}
@@ -476,6 +485,7 @@ async function BloqueCarga({ pCarga, sufijo }: { pCarga: Promise<CargaOperador[]
 async function BloqueViajes({ pViajes, sufijo }: {
   pViajes: Promise<ViajeRow[] | null>; sufijo: string;
 }) {
+  const { t } = await getT('operacion');
   const viajes = await pViajes;
   // Las 100 filas MÁS RECIENTES (tope de `getViajes`), SIN el anticipo: el
   // tipo de la tabla no tiene campo donde ponerlo — ver `FilaViajeOperacion`.
@@ -489,15 +499,15 @@ async function BloqueViajes({ pViajes, sufijo }: {
     <section className="card overflow-hidden">
       <div className="px-5 pt-4 pb-2 flex items-center gap-2">
         <History {...ICONO_SECCION} />
-        <TituloSeccion>Viajes recientes</TituloSeccion>
+        <TituloSeccion>{t('ini.op.recientes')}</TituloSeccion>
         {viajes !== null && viajes.length >= 100 && (
           <Link href={`/dashboard/viajes${sufijo}`} className="ml-auto text-[11px] shrink-0 hover:opacity-70 transition-opacity" style={{ color: 'var(--muted)' }}>
-            Los 100 más recientes · ver el registro completo →
+            {t('ini.op.recientes.link')}
           </Link>
         )}
       </div>
       {viajes === null ? (
-        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer los viajes.</div>
+        <div className="px-5 pb-4 text-sm" style={{ color: 'var(--muted)' }}>{t('ini.op.recientes.error')}</div>
       ) : (
         <TablaViajesOperacion viajes={filasViajes} />
       )}

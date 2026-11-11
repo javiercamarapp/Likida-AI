@@ -14,6 +14,7 @@ import {
   AvisoCompacto, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, BotonEnlace, type ColumnaBase,
 } from '@/app/ui-v2/componentes';
 import './operadores.css';
+import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 /** La fila del registro — SIN el dinero que `OperadorDetalle` trae (ver
  *  encabezado de page.tsx: la fuga del 4-ago). `licencia` y `rfc` SÍ viajan:
@@ -67,10 +68,10 @@ function diasParaVencer(vence: string, hoy: string): number {
  * formularios en el HTML de una pantalla donde se corrige UNO. Ahora `?q=` y
  * `?p=` acotan lo que se pinta y la forma existe solo para `?editar=<id>`.
  */
-export function VistaOperadores({
+export function VistaOperadores({ tr = TR_OPERACION_ES,
   filas, pag, conteos, totalConocido, hoy, puedeEditar, guardarOperador, ilegible = false, sufijo, camposOcultos,
   patios, patioDelJefe, altaOperador, sinWhatsApp = false, cargarOperadores, invitar, plantillaCsv, invitaciones, hrefPatios, hrefGuia,
-}: {
+}: { tr?: TrOperacion;
   /** Las filas de ESTA página. Ya vienen cortadas por la base. */
   filas: FilaOperador[];
   /** La página, con el `total` y el `filtrados` que CONTÓ la base (auditoría
@@ -111,10 +112,11 @@ export function VistaOperadores({
   hrefPatios: string;
   hrefGuia: string;
 }) {
+  const { t, idioma } = tr;
   // Los KPIs son de la FLOTA ENTERA y los cuenta la base. Contarlos aquí sobre
   // `filas` diría que no hay licencias vencidas porque cayeron en la página 12.
   // `null` NO se convierte en 0: `—` dice «no lo sé», un 0 dice «no hay».
-  const kpi = (v: number | undefined) => (v === undefined ? '—' : numero(v));
+  const kpi = (v: number | undefined) => (v === undefined ? '—' : numero(v, idioma));
   const hayFiltro = pag.q !== '';
   // Sin operadores el alta es lo único útil: se abre sola; con datos, la lista va primero y las altas quedan plegadas debajo.
   const sinOperadores = !ilegible && pag.filtrados === 0 && !hayFiltro;
@@ -126,7 +128,7 @@ export function VistaOperadores({
   });
   const columnas: ColumnaBase<FilaOperador>[] = [
     {
-      id: 'operador', titulo: 'Operador', principal: true,
+      id: 'operador', titulo: t('op.col.operador'), principal: true,
       celda: (f) => (
         <>
           {f.nombre}
@@ -135,32 +137,32 @@ export function VistaOperadores({
       ),
     },
     {
-      id: 'telefono', titulo: 'Teléfono',
+      id: 'telefono', titulo: t('op.col.telefono'),
       celda: (f) => (f.telefono ? (
         <span className="rv-eq__tel"><Icono icono={Phone} tam={14} /> {f.telefono}</span>
       ) : (
-        <span className="rv-eq__tel" data-falta><Icono icono={PhoneOff} tam={14} /> Sin teléfono</span>
+        <span className="rv-eq__tel" data-falta><Icono icono={PhoneOff} tam={14} /> {t('op.sintelefono')}</span>
       )),
     },
-    { id: 'patio', titulo: 'Patio', celda: (f) => f.terminalNombre ?? <span className="rv-eq__tenue">Sin patio</span> },
-    { id: 'viajes', titulo: 'Viajes', alinear: 'der', celda: (f) => numero(f.viajes) },
-    { id: 'licencia', titulo: 'Licencia', celda: (f) => <PillLicencia f={f} hoy={hoy} /> },
+    { id: 'patio', titulo: t('op.col.patio'), celda: (f) => f.terminalNombre ?? <span className="rv-eq__tenue">{t('op.sinpatio')}</span> },
+    { id: 'viajes', titulo: t('op.col.viajes'), alinear: 'der', celda: (f) => numero(f.viajes, idioma) },
+    { id: 'licencia', titulo: t('op.col.licencia'), celda: (f) => <PillLicencia f={f} hoy={hoy} tr={tr} /> },
     {
-      id: 'estado', titulo: 'Estado',
+      id: 'estado', titulo: t('op.col.estado'),
       celda: (f) => (
         <span className="rv-eq__estados">
-          <StatusChip tono={f.activo ? 'ok' : 'muted'}>{f.activo ? 'Activo' : 'Inactivo'}</StatusChip>
-          {f.activo && f.invitacion && <PillInvitacion i={f.invitacion} />}
+          <StatusChip tono={f.activo ? 'ok' : 'muted'}>{f.activo ? t('op.activo') : t('op.inactivo')}</StatusChip>
+          {f.activo && f.invitacion && <PillInvitacion i={f.invitacion} tr={tr} />}
         </span>
       ),
     },
   ];
   if (puedeEditar) {
     columnas.push({
-      id: 'acciones', titulo: 'Acciones', alinear: 'der',
+      id: 'acciones', titulo: t('op.col.acciones'), alinear: 'der',
       celda: (f) => (f.editable ? (
         <span className="rv-eq__acciones">
-          <BotonEnlace href={hrefDe(f)} variante="ghost" tamano="sm">{pag.editando === f.operadorId ? 'Cerrar' : 'Editar'}</BotonEnlace>
+          <BotonEnlace href={hrefDe(f)} variante="ghost" tamano="sm">{pag.editando === f.operadorId ? t('op.cerrar') : t('op.editar')}</BotonEnlace>
           {f.activo && f.telefono && f.invitacion && f.invitacion.estado !== 'enviada' && (
             <InvitarUno operadorId={f.operadorId} nombre={f.nombre} reintento={f.invitacion.estado === 'fallo'} accion={invitar} />
           )}
@@ -170,16 +172,16 @@ export function VistaOperadores({
   }
 
   return (
-    <MarcoPagina titulo="Equipo" apoyo="Tu padrón de operadores con teléfono y vigencia de licencia. Sin teléfono capturado, los agentes no pueden escribirles.">
+    <MarcoPagina titulo={t('op.titulo')} apoyo={t('op.apoyo')}>
 
-      <TiraCifras sello={selloHoy('Padrón de operadores')}>
-        <Cifra etiqueta="Activos" valor={kpi(conteos?.activos)}
-          nota={conteos ? `${numero(conteos.total)} en total` : 'no se pudo contar la flota'} info="operadores.activos" />
-        <Cifra etiqueta="Sin teléfono" valor={kpi(conteos?.sinTelefono)} nota="los agentes no pueden escribirles"
+      <TiraCifras sello={selloHoy(t('op.sello'))}>
+        <Cifra etiqueta={t('op.cifra.activos')} valor={kpi(conteos?.activos)}
+          nota={conteos ? t('op.cifra.total', { n: numero(conteos.total, idioma) }) : t('op.nocontar')} info="operadores.activos" />
+        <Cifra etiqueta={t('op.cifra.sintel')} valor={kpi(conteos?.sinTelefono)} nota={t('op.cifra.sintel.nota')}
           tono={conteos && conteos.sinTelefono > 0 ? 'warn' : undefined} info="operadores.sin_telefono" />
-        <Cifra etiqueta="Licencias vencidas" valor={kpi(conteos?.licenciasVencidas)}
+        <Cifra etiqueta={t('op.cifra.vencidas')} valor={kpi(conteos?.licenciasVencidas)}
           tono={conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined} info="operadores.licencias_vencidas" />
-        <Cifra etiqueta={`Vencen en ${DIAS_AVISO} días`} valor={kpi(conteos?.licenciasPorVencer)}
+        <Cifra etiqueta={t('op.cifra.vencen', { n: DIAS_AVISO })} valor={kpi(conteos?.licenciasPorVencer)}
           tono={conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined} info="operadores.licencias_por_vencer" />
       </TiraCifras>
 
@@ -189,7 +191,7 @@ export function VistaOperadores({
       )}
 
       {puedeEditar && editado && editado.editable && (
-        <Tarjeta titulo={`Corregir los datos de ${editado.nombre}`}>
+        <Tarjeta titulo={t('op.corregir', { nombre: editado.nombre })}>
           <div className="rv-eq__editor">
             <FormaOperador
               accion={guardarOperador}
@@ -211,51 +213,48 @@ export function VistaOperadores({
               patios={patios}
               patioFijo={patioDelJefe !== null}
             />
-            <BotonEnlace href={hrefDe(editado)} variante="ghost" tamano="sm">Cerrar</BotonEnlace>
+            <BotonEnlace href={hrefDe(editado)} variante="ghost" tamano="sm">{t('op.cerrar')}</BotonEnlace>
           </div>
         </Tarjeta>
       )}
 
-      <Tarjeta titulo="El registro" info="operadores.registro">
+      <Tarjeta titulo={t('op.registro')} info="operadores.registro">
         {!ilegible && (pag.filtrados > 0 || hayFiltro) && (
           <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
             sustantivo="operadores" camposOcultos={camposOcultos} />
         )}
         {!ilegible && hayFiltro && !totalConocido && (
           // No se pudo contar el padrón entero, así que el «de N» del pie sería un número inventado. Se dice.
-          <AvisoCompacto tono="warn" resumen="No pude contar el padrón completo en este momento: el total de al lado es el de los que coinciden con la búsqueda, no el de la flota." />
+          <AvisoCompacto tono="warn" resumen={t('op.aviso.padron')} />
         )}
         {ilegible ? (
-          <EstadoError reintentar>No pude leer el registro de operadores. No se enseña media lista: media lista se ve igual que la lista entera, solo que más corta.</EstadoError>
+          <EstadoError reintentar>{t('op.error')}</EstadoError>
         ) : pag.filtrados === 0 && !hayFiltro ? (
-          <EstadoVacio pantalla contenido icono={UserPlus} titulo="Aún no hay operadores"
-            accion={puedeEditar ? <BotonEnlace tamano="sm" href="#alta">Dar de alta al primero</BotonEnlace> : undefined}>
+          <EstadoVacio pantalla contenido icono={UserPlus} titulo={t('op.vacio.titulo')}
+            accion={puedeEditar ? <BotonEnlace tamano="sm" href="#alta">{t('op.vacio.alta')}</BotonEnlace> : undefined}>
             {puedeEditar
-              ? 'Dalos de alta uno por uno abajo, o carga a toda tu flota de una vez desde un Excel o CSV.'
-              : 'Quien administra tu flota los da de alta.'}
+              ? t('op.vacio.admin')
+              : t('op.vacio.otro')}
           </EstadoVacio>
         ) : (
-          <TablaBase<FilaOperador> etiqueta="Operadores y su teléfono" columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
-            vacio={{ titulo: 'Sin coincidencias', texto: `Ningún operador coincide con «${pag.q}».` }} />
+          <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
+            vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
         )}
       </Tarjeta>
 
       {puedeEditar && (
         <>
-          <Disclosure variante="tarjeta" titulo="Dar de alta un operador" abierto={sinOperadores}>
+          <Disclosure variante="tarjeta" titulo={t('op.alta.titulo')} abierto={sinOperadores}>
             <div id="alta" className="rv-eq__bloque">
-              <p className="rv-eq__texto">Uno por uno. Para toda tu flota de una vez, usa la carga desde Excel o CSV de abajo.</p>
+              <p className="rv-eq__texto">{t('op.alta.nota')}</p>
               <FormaAltaOperador accion={altaOperador} patios={patios} terminalFijo={patioDelJefe} sinWhatsApp={sinWhatsApp} />
             </div>
           </Disclosure>
-          <Disclosure variante="tarjeta" titulo="Cargar operadores desde Excel o CSV" abierto={sinOperadores}>
+          <Disclosure variante="tarjeta" titulo={t('op.carga.titulo')} abierto={sinOperadores}>
             <ImportadorMasivo
               entidad="operadores" accion={cargarOperadores} plantillaCsv={plantillaCsv}
               archivoPlantilla="plantilla-operadores.csv"
-              columnas={(sinWhatsApp
-                ? 'Obligatorias: nombre y, o bien teléfono, o bien número de empleado y correo (tu flota recibe el desglose por correo). Opcionales: correo con teléfono,'
-                : 'Obligatorias: nombre y teléfono (el WhatsApp con el que el chofer le escribirá a Likida). Opcionales:')
-                + ' número de empleado, RFC, licencia, tipo y vencimiento de licencia, y patio.'}
+              columnas={sinWhatsApp ? t('op.carga.cols.sinwa') : t('op.carga.cols.wa')}
               hrefPatios={hrefPatios} ofrecerInvitacion patioDelJefe={patioDelJefe} tope={2_000}
             />
           </Disclosure>
@@ -266,21 +265,23 @@ export function VistaOperadores({
 }
 
 /** El estado de la invitación por WhatsApp. Cada estado dice la verdad: «enviada» es que Meta ACEPTÓ el mensaje (no que el chofer lo haya leído). */
-function PillInvitacion({ i }: { i: InvitacionDeOperador }) {
+function PillInvitacion({ i, tr }: { i: InvitacionDeOperador; tr: TrOperacion }) {
+  const { t } = tr;
   const tono = i.estado === 'enviada' ? 'ok' : i.estado === 'fallo' ? 'bad' : 'muted';
-  const texto = i.estado === 'enviada' ? 'Invitación enviada' : i.estado === 'fallo' ? 'Invitación falló' : 'Sin invitar';
+  const texto = i.estado === 'enviada' ? t('op.inv.enviada') : i.estado === 'fallo' ? t('op.inv.fallo') : t('op.inv.sininvitar');
   return <StatusChip tono={tono} title={i.estado === 'fallo' && i.fallo ? i.fallo : undefined}>{texto}</StatusChip>;
 }
 
 /** La vigencia que ancla. Cuatro estados y los cuatro son verdad: vencida / por vencer (≤30 días) / vigente / SIN REGISTRAR — el null no marca a nadie. */
-function PillLicencia({ f, hoy }: { f: FilaOperador; hoy: string }) {
+function PillLicencia({ f, hoy, tr }: { f: FilaOperador; hoy: string; tr: TrOperacion }) {
+  const { t, idioma } = tr;
   if (f.licenciaVence === null) {
-    return <span className="rv-eq__tel"><Icono icono={IdCard} tam={14} /> Sin registrar</span>;
+    return <span className="rv-eq__tel"><Icono icono={IdCard} tam={14} /> {t('op.lic.sinregistrar')}</span>;
   }
   const dias = diasParaVencer(f.licenciaVence, hoy);
   const estado = clasificarVigencia(dias, 'Licencia').estado;
   const tipo = f.licenciaTipo ? `${f.licenciaTipo} · ` : '';
-  if (estado === 'vencido') return <StatusChip tono="bad">{`${tipo}vencida ${fechaCorta(f.licenciaVence)}`}</StatusChip>;
-  if (estado === 'por_vencer') return <StatusChip tono="warn">{dias === 0 ? `${tipo}vence hoy` : `${tipo}vence en ${numero(dias)} días`}</StatusChip>;
-  return <StatusChip tono="ok">{`${tipo}vigente hasta ${fechaCorta(f.licenciaVence)}`}</StatusChip>;
+  if (estado === 'vencido') return <StatusChip tono="bad">{t('op.lic.vencida', { tipo, fecha: fechaCorta(f.licenciaVence, idioma) })}</StatusChip>;
+  if (estado === 'por_vencer') return <StatusChip tono="warn">{dias === 0 ? t('op.lic.hoy', { tipo }) : t('op.lic.dias', { tipo, n: numero(dias, idioma) })}</StatusChip>;
+  return <StatusChip tono="ok">{t('op.lic.vigente', { tipo, fecha: fechaCorta(f.licenciaVence, idioma) })}</StatusChip>;
 }

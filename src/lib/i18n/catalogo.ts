@@ -6,6 +6,7 @@ import type { avisos as avisosEs } from './es/avisos';
 import type { monitoreo as monitoreoEs } from './es/monitoreo';
 import type { fuentes as fuentesEs } from './es/fuentes';
 import type { login as loginEs } from './es/login';
+import type { operacion as operacionEs } from './es/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGO DE NAMESPACES — el único lugar donde se registra un diccionario nuevo.
@@ -27,6 +28,7 @@ export interface Diccionarios {
   monitoreo: typeof monitoreoEs;
   fuentes: typeof fuentesEs;
   login: typeof loginEs;
+  operacion: typeof operacionEs;
 }
 export type Namespace = keyof Diccionarios;
 
@@ -35,6 +37,7 @@ export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Dicciona
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
 export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'login', 'operacion'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
@@ -49,6 +52,10 @@ export const CARGADORES: Cargadores = {
     monitoreo: () => import('./en/monitoreo').then((m) => m.monitoreo),
     fuentes: () => import('./en/fuentes').then((m) => m.fuentes),
     login: () => import('./en/login').then((m) => m.login) },
+    login: () => import('./es/login').then((m) => m.login), operacion: () => import('./es/operacion').then((m) => m.operacion) },
+  en: { shell: () => import('./en/shell').then((m) => m.shell), errores: () => import('./en/errores').then((m) => m.errores),
+    graficas: () => import('./en/graficas').then((m) => m.graficas), avisos: () => import('./en/avisos').then((m) => m.avisos),
+    login: () => import('./en/login').then((m) => m.login), operacion: () => import('./en/operacion').then((m) => m.operacion) },
 };
 
 /** Carga SOLO los namespaces pedidos, y SOLO en el idioma pedido. */
