@@ -287,4 +287,5 @@ export const shell = {
   'nav.n.vistas-de-rol': 'Vistas de rol',
   'nav.n.codigo': 'Código',
   'nav.n.ver-como-una-flota': 'Ver como una flota',
+  'vendedor.prospectos': 'Mis prospectos',
 } as const;

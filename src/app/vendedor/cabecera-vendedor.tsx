@@ -1,4 +1,4 @@
-import { LogOut } from 'lucide-react';
+import { LogOut, Users } from 'lucide-react';
 import { getT } from '@/lib/i18n/servidor';
 import LogoV2 from '../dashboard/shell/logo-v2';
 import { ConmutadorTema } from '../ui-v2/componentes/pie-sidebar';
@@ -7,12 +7,12 @@ import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 import './vendedor.css';
 
 /**
- * La cabecera de /vendedor sobre el sistema nuevo: logo, quién eres, tema y salir. UNA sola pantalla, así que sin sidebar (un menú
- * anunciaría secciones que no existen). Escritorio: la topbar de 44 px (`.rv-cab-esc`); bajo 768 px: la cabecera móvil de 56
- * (`.rv-cab-movil`). El texto sale del diccionario `shell` (es/en); el formulario de salir lo arma el layout (server action).
+ * Las cabeceras de /vendedor sobre el caparazón de Rovaq. Escritorio: la topbar de 44 px (`.rv-cab-esc`) con el título de la pantalla
+ * (el logo, el tema, el idioma y salir viven en el sidebar, `sidebar-vendedor.tsx`); bajo 768 px: la cabecera móvil de 56
+ * (`.rv-cab-movil`) con logo, tema y salir. El texto sale del diccionario `shell` (es/en); el formulario de salir lo arma el layout (server action).
  */
 export default async function CabeceraVendedor({ nombre, esSoporte, salir, movil }: {
-  nombre: string | null;
+  nombre?: string | null;
   esSoporte: boolean;
   /** Server action de cerrar sesión; opcional para renderizar el marco sin sesión. */
   salir?: () => Promise<void>;
@@ -41,13 +41,13 @@ export default async function CabeceraVendedor({ nombre, esSoporte, salir, movil
   }
   return (
     <header className="rv-cab-esc">
-      <LogoV2 alto={20} />
-      <Chip>{t('vendedor.rotulo')}</Chip>
-      {esSoporte ? <Chip tono="warn">{t('vendedor.soporte')}</Chip> : null}
-      <div className="rv-cab-esc__der vnd-acciones">
-        <span className="vnd-nombre">{nombre ?? ''}</span>
-        <ConmutadorTema />
-        {boton}
+      <div className="rv-cab-esc__izq">
+        <span className="rv-cab-esc__titulo" aria-hidden>
+          <Users width={15} height={15} strokeWidth={TRAZO_ICONO} aria-hidden />
+          <span>{t('vendedor.prospectos')}</span>
+        </span>
+        <Chip>{t('vendedor.rotulo')}</Chip>
+        {esSoporte ? <Chip tono="warn">{t('vendedor.soporte')}</Chip> : null}
       </div>
     </header>
   );
