@@ -6,7 +6,6 @@ import type { Conector } from '@/lib/likida/conexiones';
 import { EstadoVacio, Icono, InfoTip, MarcaIntegracion, SegmentedControl, StatusChip } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
-import { type TResto } from '@/lib/i18n/resto_tr';
 import { estadoConector } from './estado-conector';
 import '../estados.css';
 import './conexiones.css';
