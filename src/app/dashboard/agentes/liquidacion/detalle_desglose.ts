@@ -10,6 +10,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { POLIZA_PROVISIONAL } from '@/lib/likida/liquidacion_externa/poliza_provisional';
+import { bitacoraVisible } from '@/lib/likida/liquidacion_externa/desglose_contrato';
 import type { LiquidacionExterna } from '@/lib/likida/liquidacion_externa/repo';
 import type { Desglose, EntregaCorreo, Excepcion, TipoExcepcion } from '@/lib/likida/liquidacion_externa/repo_correo';
 import type { DestinoVista, EstadoDestino } from './desgloses';
@@ -138,13 +139,13 @@ export function armarDetalle(e: EntradaDetalle): DetalleDesglose {
     : null;
 
   return {
-    liquidacionId: liq.id, bitacora: desglose.bitacora, terminal: desglose.terminal, operador: liq.operadorNombre,
+    liquidacionId: liq.id, bitacora: bitacoraVisible(desglose), terminal: desglose.terminal, operador: liq.operadorNombre,
     periodoDesde: liq.periodoDesde, periodoHasta: liq.periodoHasta, moneda: liq.moneda, neto: liq.total, totalOrigen: desglose.totalOrigen,
     percepciones: liq.conceptos.filter((c) => c.tipo === 'percepcion').map((c) => ({ descripcion: c.descripcion, monto: c.monto })),
     deducciones: liq.conceptos.filter((c) => c.tipo === 'deduccion').map((c) => ({ descripcion: c.descripcion, monto: c.monto })),
     destinatarios, generaciones, enCurso, retenido,
     excepciones: abiertas.map((x) => ({ tipo: x.tipo, desde: x.primeraVez, ...(x.detalle && typeof x.detalle.motivo === 'string' ? { detalle: { motivo: x.detalle.motivo } } : {}) })),
-    descargaUrl: e.descargaUrl, descargaNombre: nombreDescarga(desglose.bitacora),
+    descargaUrl: e.descargaUrl, descargaNombre: nombreDescarga(bitacoraVisible(desglose)),
   };
 }
 
@@ -176,7 +177,7 @@ export async function cargarDetalle(tenantId: string, id: string): Promise<Lectu
     const ruta = conArchivo?.xlsxRuta ?? rc.rutaXlsxDesglose(tenantId, liq.claveExterna, liq.huella);
     let descargaUrl: string | null = null;
     try {
-      descargaUrl = await rc.firmarXlsx(tenantId, ruta, DIA_SEG, nombreDescarga(cab.valor.bitacora));
+      descargaUrl = await rc.firmarXlsx(tenantId, ruta, DIA_SEG, nombreDescarga(bitacoraVisible(cab.valor)));
     } catch {
       descargaUrl = null;
     }

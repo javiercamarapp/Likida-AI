@@ -13,20 +13,31 @@
 // convierte lo que ya se leyó. Cableado a la ruta/lector: pendiente de confirmar esos datos (ver informe de la ronda).
 //
 // ── Reglas (nada se inventa) ────────────────────────────────────────────────
-//   · Lo que la muestra NO trae queda «no disponible» (`noDisponible`): nº de liquidación, nº de pago, póliza, terminal,
-//     nº de empleado, tipo de operador, ID de concepto, correo/mensajería, marca «enviado», neto de origen. Ninguno se rellena.
-//     Los que las guardas existentes ya vigilan siguen su camino normal: póliza nula ⇒ excepción `sin_poliza` (no se
-//     envía); tipo de operador ausente ⇒ `tipo_sin_regla` (retenido) — ver `desglose_recibir.ts` / `desglose_reglas.ts`.
-//   · El operador viene solo por NOMBRE. Se resuelve contra el padrón INYECTADO por coincidencia exacta normalizada
-//     (sin acentos, mayúsculas ni espacios de más): una única persona ⇒ su nº de empleado; ninguna o varias ⇒ REVISIÓN
-//     HUMANA (`operador_no_encontrado` / `operador_homonimo`). Jamás se adivina entre homónimos ni por parecido.
+//   · CAMPOS OPCIONALES del piloto (11-nov-2026, todos dentro de cada bitácora, junto a los seis de la muestra):
+//       `NumeroEmpleado` (texto/entero ≤40), `TipoOperador` (local|foraneo|permisionario; se aceptan mayúsculas y acento),
+//       `Poliza` (texto ≤40 o null), `NumeroPago` (≤40, [A-Za-z0-9._/-]), `Neto` (número ≤2 decimales, puede ser negativo) y
+//       `Folio` (texto/entero ≤40, el número que conoce el operador; solo se guarda y se muestra).
+//     Un valor INVÁLIDO manda ESA bitácora a revisión con su motivo; jamás tumba el lote. Ausente o null = no vino (sigue igual que
+//     antes: póliza nula ⇒ `sin_poliza`/provisional; tipo ausente ⇒ `tipo_sin_regla`).
+//   · `NumeroLiquidacion` se IGNORA a propósito (campo extra): cablearlo cambia la clave de idempotencia de `BIT-<id>` a
+//     `LIQ-<n>` y el índice único parcial del número por flota; si una liquidación junta varias bitácoras y llegan como objetos
+//     separados con el mismo número, la segunda caería en `correccion_pendiente`/`bitacora_duplicada`. Hasta confirmar con el
+//     cliente que 1 liquidación = 1 bitácora (y que el número existe desde el primer envío) no se lee.
+//   · Lo que la muestra NO trae sigue «no disponible» (`noDisponible`): nº de liquidación, terminal, ID de concepto,
+//     correo/mensajería, marca «enviado». Ninguno se rellena. Los opcionales ausentes también se listan ahí.
+//   · El operador se resuelve contra el padrón INYECTADO. Con `NumeroEmpleado`, MANDA el número: se busca por igualdad exacta
+//     (sin espacios de más); si además viene `Operador` y su nombre normalizado no coincide con el del padrón para ese número ⇒
+//     REVISIÓN `operador_no_coincide` (no se adivina cuál de los dos datos está mal). Sin `NumeroEmpleado` se cruza por NOMBRE:
+//     coincidencia exacta normalizada (sin acentos, mayúsculas ni espacios de más), una única persona ⇒ su nº de empleado; ninguna o
+//     varias ⇒ REVISIÓN HUMANA (`operador_no_encontrado` / `operador_homonimo`). Jamás se adivina entre homónimos ni por parecido.
 //   · Montos: llegan como número JSON con ≤ 2 decimales. Se leen por su representación en TEXTO (`String(n)`, que es la
 //     más corta que ida y vuelta), sin multiplicar flotantes. Más de 2 decimales, negativo, null, NaN/Infinity o texto ⇒
 //     revisión (no se redondea ni se interpreta). CONVENCIÓN: ambos bloques traen montos POSITIVOS; el bloque da el signo
 //     (Percepciones suman, Deducciones restan), igual que `DesgloseBitacora`. Monto 0 ⇒ renglón ignorado con nota.
-//   · Cuadre: la muestra no trae neto de origen, así que Σ percepciones − Σ deducciones se calcula en CENTAVOS y el
-//     chequeo posterior (`aLiquidacionExterna`) es tautológico (`totalOrigen: 'calculado'`). No demuestra que el TMS lo
-//     calculó igual; la UI debe decirlo así. Un neto negativo lo retiene la guarda existente `neto_negativo`.
+//   · Cuadre: sin `Neto`, Σ percepciones − Σ deducciones se calcula en CENTAVOS y el chequeo posterior (`aLiquidacionExterna`) es
+//     tautológico (`totalOrigen: 'calculado'`): no demuestra que el TMS lo calculó igual; la UI debe decirlo así. CON `Neto`, el
+//     cuadre es real (`totalOrigen: 'tms'`): si no coincide con los renglones ⇒ revisión `total_no_cuadra`. Un neto negativo lo
+//     retiene la guarda existente `neto_negativo`.
 //   · Fechas: `yyyy-MM-dd HH:mm:ss` SIN zona se interpreta como hora de México (zona del TMS). El periodo del desglose son
 //     los días locales de inicio y fin. Fecha ilegible, imposible o `Termina` < `Inicia` ⇒ revisión.
 //   · Conceptos: texto libre. Se reconocen con `normalizarConcepto` y un catálogo de alias (abajo). Descripción desconocida
@@ -39,7 +50,7 @@
 import { TZ_MX, hoyMx } from '../../formato';
 import { CampoInvalido } from '@/lib/http/campos_cuerpo';
 import { aInstanteMx } from '../peajes/formatos';
-import { aLiquidacionExterna, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora } from './desglose_contrato';
+import { aLiquidacionExterna, TIPOS_OPERADOR, validarDesgloseBitacora, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose } from './desglose_contrato';
 import { leerRuta, normalizarUnidad } from './desglose_mapeo_tms';
 import { normalizarConcepto } from './desglose_reglas';
 
@@ -49,9 +60,9 @@ const SISTEMA_ORIGEN_MUESTRA = 'tms-muestra-tms';
 
 /** Lo que este contrato NO trae y por tanto queda marcado «no disponible» en cada resultado. */
 export const NO_DISPONIBLE_MUESTRA = [
-  'numeroLiquidacion', 'numeroPago', 'poliza', 'terminal', 'numeroEmpleado', 'tipoOperador', 'idConcepto',
-  'correoOperador', 'mensajeriaOperador', 'enviadoOrigen', 'neto',
+  'numeroLiquidacion', 'terminal', 'idConcepto', 'correoOperador', 'mensajeriaOperador', 'enviadoOrigen',
 ] as const;
+
 
 /** Registro de contratos de desglose del TMS que el software sabe leer. Elegir uno es configuración, no código. */
 export const CONTRATOS_DESGLOSE_TMS = {
@@ -65,6 +76,8 @@ export const CONTRATOS_DESGLOSE_TMS = {
 
 export type CodigoRevision =
   | 'fila_invalida' | 'bitacora_invalida' | 'operador_vacio' | 'operador_sin_padron' | 'operador_no_encontrado' | 'operador_homonimo' | 'operador_sin_numero'
+  | 'operador_no_coincide' | 'numero_empleado_invalido' | 'tipo_operador_invalido' | 'poliza_invalida' | 'numero_pago_invalido' | 'folio_invalido'
+  | 'neto_invalido' | 'total_no_cuadra'
   | 'unidad_invalida' | 'fecha_invalida' | 'fechas_invertidas' | 'bitacora_repetida'
   | 'estructura_invalida' | 'sin_renglones' | 'descripcion_vacia'
   | 'monto_nulo' | 'monto_no_numerico' | 'monto_negativo' | 'monto_decimales' | 'monto_excesivo'
@@ -92,8 +105,10 @@ export interface ConfigMuestraTms {
   envoltorio?: 'auto' | 'arreglo' | 'envuelto';
   /** Ruta de la lista con `envuelto`/`auto`. Defecto `data`. */
   rutaLista?: string;
-  /** Padrón de operadores contra el que se resuelve el NOMBRE. Sin padrón, ningún desglose queda listo. */
+  /** Padrón de operadores contra el que se resuelve el operador (por número de empleado si viene, si no por NOMBRE). Sin padrón, ningún desglose queda listo. */
   padron?: PadronOperadores;
+  /** Conceptos adicionales (alias por flota) que se suman al catálogo base. Hoy nadie los inyecta: ver «P0-3» sobre el catálogo. */
+  conceptosAdicionales?: CatalogoConceptos;
 }
 
 export interface ResultadoBitacoraMuestra {
@@ -131,6 +146,17 @@ interface Concepto { categoria: string; lado: Lado; patron: RegExp }
  * Alias sobre el texto YA normalizado (sin acentos, minúsculas). Es heurístico y editable: lo que no case NO se descarta, pasa
  * a revisión. «diésel/urea» es categoría `otros` (la presentación lo renombra con la regla del contralor, `RENOMBRE_EJEMPLO`).
  */
+export type CatalogoConceptos = readonly Concepto[];
+export type { Concepto as ConceptoMuestra };
+
+// ── P0-3 · PUNTO ÚNICO donde se agregan conceptos ───────────────────────────
+// El catálogo de abajo es CERRADO y vive en código: un concepto fuera de él manda la bitácora a revisión (`concepto_desconocido`).
+// El catálogo REAL (texto exacto de `Descripcion` y su lado) lo entrega el cliente; NO se inventa aquí. Para agregar conceptos:
+//   1. una entrada nueva en `CATALOGO_CONCEPTOS_MUESTRA` (categoría, lado, patrón sobre texto YA normalizado);
+//   2. su caso en `desglose_muestra_tms.test.ts`.
+// Es un cambio de código + deploy. Alias por flota SIN deploy (columna jsonb en `liquidacion_correo_config` + pantalla de
+// configuración + migración) es tamaño M y NO se hizo: `reconocer` ya acepta un catálogo adicional (`CatalogoConceptos`) para que
+// esa pieza futura solo tenga que inyectarlo desde la configuración de la flota.
 export const CATALOGO_CONCEPTOS_MUESTRA: readonly Concepto[] = [
   { categoria: 'sueldo', lado: 'percepcion', patron: /\b(sueldo|salario|pago de viaje|complemento)\b/ },
   { categoria: 'bono', lado: 'percepcion', patron: /\bbonos?\b/ },
@@ -145,9 +171,9 @@ export const CATALOGO_CONCEPTOS_MUESTRA: readonly Concepto[] = [
   { categoria: 'otros', lado: 'deduccion', patron: /\b(diesel|urea)\b/ },
 ];
 
-function reconocer(descripcion: string): Concepto | null {
+function reconocer(descripcion: string, adicional: CatalogoConceptos = []): Concepto | null {
   const n = normalizarConcepto(descripcion);
-  return CATALOGO_CONCEPTOS_MUESTRA.find((c) => c.patron.test(n)) ?? null;
+  return [...CATALOGO_CONCEPTOS_MUESTRA, ...adicional].find((c) => c.patron.test(n)) ?? null;
 }
 
 // ── Montos: texto, no flotantes ─────────────────────────────────────────────
@@ -211,6 +237,17 @@ export function resolverOperadorPorNombre(nombre: string, padron: PadronOperador
   return { ok: true, operador: coinciden[0] };
 }
 
+/** El operador por NÚMERO DE EMPLEADO (igualdad exacta, sin espacios de más). Misma persona listada dos veces no es homonimia. */
+export function resolverOperadorPorNumero(numero: string, padron: PadronOperadores | undefined): Resolucion {
+  if (padron === undefined) return { ok: false, codigo: 'operador_sin_padron' };
+  const buscado = numero.trim();
+  const coinciden = padron.filter((o) => o.numeroEmpleado.trim() === buscado);
+  if (coinciden.length === 0) return { ok: false, codigo: 'operador_no_encontrado' };
+  // El mismo número con DOS nombres distintos es un padrón ambiguo: no se adivina.
+  if (new Set(coinciden.map((o) => normalizarNombre(o.nombre))).size > 1) return { ok: false, codigo: 'operador_homonimo' };
+  return { ok: true, operador: coinciden[0] };
+}
+
 // ── Una bitácora ────────────────────────────────────────────────────────────
 
 const esObjeto = (v: unknown): v is Record<string, unknown> => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -221,20 +258,55 @@ function textoPlano(v: unknown): string | null {
   return null;
 }
 
+/** Entero > 0 (hasta 18 dígitos) o texto alfanumérico `[A-Za-z0-9._-]` de 1 a 40. La clave es `BIT-<id>`: dos IDs distintos nunca chocan. */
+export const PATRON_BITACORA_ID = /^[A-Za-z0-9._-]{1,40}$/;
 function bitacoraIdDe(v: unknown): string | null {
   if (typeof v === 'number') return Number.isSafeInteger(v) && v > 0 ? String(v) : null;
-  if (typeof v === 'string' && /^[1-9]\d{0,17}$/.test(v.trim())) return v.trim();
+  if (typeof v === 'string' && PATRON_BITACORA_ID.test(v.trim())) return v.trim();
   return null;
 }
 
+const CONTROL = /[\u0000-\u001f\u007f]/;
+const PATRON_NUMERO_PAGO = /^[A-Za-z0-9._/-]{1,40}$/;
+type Opcional<T> = { ok: true; valor: T | undefined } | { ok: false; detalle: string };
+const ausente = (v: unknown): boolean => v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+
+/** Texto o entero seguro, ≤ `max`, sin caracteres de control. Ausente/null/vacío ⇒ `undefined` (no vino). */
+function textoOpcional(v: unknown, max: number, nombre: string): Opcional<string> {
+  if (ausente(v)) return { ok: true, valor: undefined };
+  const t = typeof v === 'string' ? v.trim() : typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? String(v) : null;
+  if (t === null) return { ok: false, detalle: `${nombre} tiene que ser texto o un entero.` };
+  if (t.length > max) return { ok: false, detalle: `${nombre} no puede pasar de ${max} caracteres.` };
+  if (CONTROL.test(t)) return { ok: false, detalle: `${nombre} no puede traer saltos de línea ni caracteres de control.` };
+  return { ok: true, valor: t };
+}
+
+function tipoOperadorDe(v: unknown): Opcional<TipoOperadorDesglose> {
+  if (ausente(v)) return { ok: true, valor: undefined };
+  const t = typeof v === 'string' ? v.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() : '';
+  return (TIPOS_OPERADOR as readonly string[]).includes(t)
+    ? { ok: true, valor: t as TipoOperadorDesglose }
+    : { ok: false, detalle: `TipoOperador tiene que ser ${TIPOS_OPERADOR.map((x) => `«${x}»`).join(', ')}.` };
+}
+
+/** `Neto`: número JSON con ≤ 2 decimales, el signo se admite (un neto negativo lo retiene la guarda `neto_negativo`). */
+function netoCentavosDe(v: unknown): Opcional<number> {
+  if (v === undefined || v === null) return { ok: true, valor: undefined };
+  if (typeof v !== 'number') return { ok: false, detalle: 'Neto tiene que ser un número JSON (no texto).' };
+  const c = centavosDeMontoMuestra(Math.abs(v));
+  if (!c.ok) return { ok: false, detalle: c.detalle.replace(/^El monto/, 'Neto') };
+  return { ok: true, valor: v < 0 ? -c.centavos : c.centavos };
+}
+
 /** Convierte UNA bitácora de la muestra. Nunca lanza por datos malos: los reporta en `revision`. */
-export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestraTms, 'padron'> = {}): ResultadoBitacoraMuestra {
+export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestraTms, 'padron' | 'conceptosAdicionales'> = {}): ResultadoBitacoraMuestra {
   const revision: MotivoRevision[] = [];
   const ignorados: Array<{ donde: string; motivo: string }> = [];
   const categorias: Array<{ donde: string; categoria: string }> = [];
+  const ausentes: string[] = [];
   const motivo = (codigo: CodigoRevision, campo: string, detalle: string) => { revision.push({ codigo, campo, detalle }); };
   const vacio = (bitacoraId: string): ResultadoBitacoraMuestra => ({
-    bitacoraId, desglose: null, revision, requiereRevision: true, noDisponible: NO_DISPONIBLE_MUESTRA, ignorados, periodoMx: null, netoCentavos: null, categorias,
+    bitacoraId, desglose: null, revision, requiereRevision: true, noDisponible: [...NO_DISPONIBLE_MUESTRA, ...ausentes], ignorados, periodoMx: null, netoCentavos: null, categorias,
   });
 
   if (!esObjeto(raw)) {
@@ -244,11 +316,37 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
 
   // BitacoraID
   const bitacora = bitacoraIdDe(raw.BitacoraID);
-  if (bitacora === null) motivo('bitacora_invalida', 'BitacoraID', 'BitacoraID tiene que ser un entero mayor que cero.');
+  if (bitacora === null) motivo('bitacora_invalida', 'BitacoraID', 'BitacoraID tiene que ser un entero mayor que cero o un texto de letras, números y . _ - (hasta 40 caracteres).');
 
-  // Operador (solo nombre)
+  // Operador: por NumeroEmpleado si viene (manda); si no, por nombre.
   const nombreCrudo = textoPlano(raw.Operador);
-  if (nombreCrudo === null || nombreCrudo === '') motivo('operador_vacio', 'Operador', 'El nombre del operador viene vacío.');
+  const empleado = textoOpcional(raw.NumeroEmpleado, 40, 'NumeroEmpleado');
+  if (!empleado.ok) motivo('numero_empleado_invalido', 'NumeroEmpleado', empleado.detalle);
+  const numeroEmpleadoCrudo = empleado.ok ? empleado.valor : undefined;
+  const nombreDado: string = nombreCrudo ?? '';
+  const sinNombre = nombreDado === '';
+  if (sinNombre && numeroEmpleadoCrudo === undefined && empleado.ok) motivo('operador_vacio', 'Operador', 'El nombre del operador viene vacío (y no se mandó NumeroEmpleado).');
+
+  // Campos opcionales del piloto (inválido ⇒ revisión de ESTA bitácora)
+  const tipo = tipoOperadorDe(raw.TipoOperador);
+  if (!tipo.ok) motivo('tipo_operador_invalido', 'TipoOperador', tipo.detalle);
+  let poliza: string | null = null;
+  const pol = textoOpcional(raw.Poliza, 40, 'Poliza');
+  if (!pol.ok) motivo('poliza_invalida', 'Poliza', pol.detalle);
+  else if (pol.valor !== undefined) poliza = pol.valor;
+  const pago = textoOpcional(raw.NumeroPago, 40, 'NumeroPago');
+  if (!pago.ok) motivo('numero_pago_invalido', 'NumeroPago', pago.detalle);
+  else if (pago.valor !== undefined && !PATRON_NUMERO_PAGO.test(pago.valor)) motivo('numero_pago_invalido', 'NumeroPago', 'NumeroPago solo admite letras, números y . _ / - (hasta 40 caracteres).');
+  const folio = textoOpcional(raw.Folio, 40, 'Folio');
+  if (!folio.ok) motivo('folio_invalido', 'Folio', folio.detalle);
+  const neto = netoCentavosDe(raw.Neto);
+  if (!neto.ok) motivo('neto_invalido', 'Neto', neto.detalle);
+  if (numeroEmpleadoCrudo === undefined) ausentes.push('numeroEmpleado');
+  if (!tipo.ok || tipo.valor === undefined) ausentes.push('tipoOperador');
+  if (poliza === null) ausentes.push('poliza');
+  if (!pago.ok || pago.valor === undefined) ausentes.push('numeroPago');
+  if (!neto.ok || neto.valor === undefined) ausentes.push('neto');
+  if (!folio.ok || folio.valor === undefined) ausentes.push('folio');
 
   // Unidad
   let unidad: string | undefined;
@@ -292,7 +390,7 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
       if (!m.ok) { motivo(m.codigo, `${donde}.Monto`, m.detalle); montosMalos = true; return; }
       if (m.centavos === 0) { ignorados.push({ donde, motivo: 'monto en cero' }); return; }
       if (desc === '') { motivo('descripcion_vacia', `${donde}.Descripcion`, 'El renglón no trae descripción.'); montosMalos = true; return; }
-      const c = reconocer(desc);
+      const c = reconocer(desc, config.conceptosAdicionales);
       if (c === null) motivo('concepto_desconocido', `${donde}.Descripcion`, 'Descripción que no está en el catálogo de conceptos; revisar (el renglón se conserva).');
       else {
         categorias.push({ donde, categoria: c.categoria });
@@ -308,29 +406,49 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
     motivo('sin_renglones', 'Percepciones', 'La bitácora no trae ningún renglón con valor (arreglos vacíos o todo en cero).');
   }
 
-  // Operador contra padrón (solo si el nombre es legible)
+  // Operador contra padrón
   let operador: OperadorPadron | null = null;
-  if (nombreCrudo !== null && nombreCrudo !== '') {
-    const r = resolverOperadorPorNombre(nombreCrudo, config.padron);
+  const textoResolucion = (codigo: string, porNumero: boolean): string => (codigo === 'operador_homonimo'
+    ? (porNumero ? 'Más de un nombre distinto del padrón comparte ese número de empleado; no se adivina: revisión humana.'
+      : 'Más de una persona del padrón coincide con ese nombre; no se adivina: revisión humana.')
+    : codigo === 'operador_sin_padron' ? 'No hay padrón de operadores contra el cual resolver al operador.'
+      : codigo === 'operador_sin_numero' ? 'El operador del padrón que coincide no tiene número de empleado; hay que capturarlo.'
+        : porNumero ? 'Ningún operador del padrón tiene ese número de empleado.' : 'Ningún operador del padrón coincide con ese nombre.');
+  if (numeroEmpleadoCrudo !== undefined) {
+    const r = resolverOperadorPorNumero(numeroEmpleadoCrudo, config.padron);
+    if (!r.ok) motivo(r.codigo, 'NumeroEmpleado', textoResolucion(r.codigo, true));
+    else if (!sinNombre && normalizarNombre(r.operador.nombre) !== normalizarNombre(nombreDado)) {
+      motivo('operador_no_coincide', 'Operador', 'El nombre que llegó no coincide con el del padrón para ese número de empleado; no se adivina cuál de los dos está mal.');
+    } else operador = r.operador;
+  } else if (empleado.ok && !sinNombre) {
+    const r = resolverOperadorPorNombre(nombreDado, config.padron);
     if (r.ok) operador = r.operador;
-    else motivo(r.codigo, 'Operador', r.codigo === 'operador_homonimo'
-      ? 'Más de una persona del padrón coincide con ese nombre; no se adivina: revisión humana.'
-      : r.codigo === 'operador_sin_padron' ? 'No hay padrón de operadores contra el cual resolver el nombre.'
-        : r.codigo === 'operador_sin_numero' ? 'El operador del padrón que coincide no tiene número de empleado; hay que capturarlo.'
-          : 'Ningún operador del padrón coincide con ese nombre.');
+    else motivo(r.codigo, 'Operador', textoResolucion(r.codigo, false));
+  }
+
+  // Neto de origen: si viene, tiene que cuadrar con los renglones (sin él, el total se calcula y no hay cuadre real)
+  const netoCalculado = centavosPorBloque.percepcion - centavosPorBloque.deduccion;
+  let netoValido: number | undefined;
+  if (neto.ok && neto.valor !== undefined && !montosMalos) {
+    if (neto.valor === netoCalculado) netoValido = neto.valor;
+    else motivo('total_no_cuadra', 'Neto', 'El Neto no coincide con Percepciones − Deducciones; revisar en el origen.');
   }
 
   // ¿Hay lo mínimo para armar un desglose interno válido?
-  if (bitacora === null || operador === null || desde === null || hasta === null || montosMalos || bloques.percepcion.length + bloques.deduccion.length === 0) {
+  if (bitacora === null || operador === null || !tipo.ok || !folio.ok || !empleado.ok || desde === null || hasta === null || montosMalos || bloques.percepcion.length + bloques.deduccion.length === 0) {
     return vacio(bitacora ?? '');
   }
   let desglose: DesgloseBitacora;
   try {
     desglose = validarDesgloseBitacora({
       bitacora,
-      poliza: null, // no disponible: la guarda `sin_poliza` existente decide, no se inventa
-      operador: { numeroEmpleado: operador.numeroEmpleado.trim(), nombre: nombreCrudo },
+      poliza, // null si no vino (o vino inválida, que ya va a revisión): la guarda `sin_poliza` existente decide, no se inventa
+      operador: { numeroEmpleado: operador.numeroEmpleado.trim(), nombre: sinNombre ? operador.nombre : nombreDado },
       ...(unidad !== undefined ? { unidad } : {}),
+      ...(tipo.ok && tipo.valor !== undefined ? { tipoOperador: tipo.valor } : {}),
+      ...(pago.ok && pago.valor !== undefined && PATRON_NUMERO_PAGO.test(pago.valor) ? { numeroPago: pago.valor } : {}),
+      ...(folio.ok && folio.valor !== undefined ? { folio: folio.valor } : {}),
+      ...(netoValido !== undefined ? { neto: netoValido / 100 } : {}),
       desde, hasta,
       percepciones: bloques.percepcion,
       deducciones: bloques.deduccion,
@@ -342,8 +460,8 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
     return vacio(bitacora);
   }
   return {
-    bitacoraId: bitacora, desglose, revision, requiereRevision: revision.length > 0, noDisponible: NO_DISPONIBLE_MUESTRA, ignorados, periodoMx,
-    netoCentavos: centavosPorBloque.percepcion - centavosPorBloque.deduccion, categorias,
+    bitacoraId: bitacora, desglose, revision, requiereRevision: revision.length > 0, noDisponible: [...NO_DISPONIBLE_MUESTRA, ...ausentes], ignorados, periodoMx,
+    netoCentavos: netoCalculado, categorias,
   };
 }
 

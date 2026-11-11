@@ -123,6 +123,8 @@ export interface MetaDesglose {
   numeroLiquidacion?: string | null;
   numeroPago?: string | null;
   bitacoras?: string[] | null;
+  /** 1003: el número de bitácora que conoce el operador (`Folio` del webhook). NULL = no vino: se muestra `bitacora`. */
+  folioOrigen?: string | null;
   /**
    * 0929 (A39-A1-01): 0 = la bitácora original; n ≥ 1 = su corrección `-R<n>` (A37-A1-02). Los índices únicos de la bitácora
    * y del número de liquidación incluyen este número: sin él la corrección (misma bitácora, mismo terminal, mismo número) chocaba
@@ -130,7 +132,8 @@ export interface MetaDesglose {
    */
   correccionN?: number;
 }
-export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' | 'numeroLiquidacion' | 'numeroPago' | 'bitacoras' | 'correccionN'>> {
+export interface Desglose extends Required<Omit<MetaDesglose, 'retenidaMotivo' | 'numeroLiquidacion' | 'numeroPago' | 'bitacoras' | 'correccionN' | 'folioOrigen'>> {
+  folioOrigen?: string | null;
   numeroLiquidacion?: string | null;
   numeroPago?: string | null;
   bitacoras?: string[] | null;
@@ -555,6 +558,8 @@ export async function insertarDesglose(tenantId: string, m: MetaDesglose): Promi
     // 0789: solo si vienen, para no exigir las columnas nuevas a quien no las usa.
     ...(m.numeroLiquidacion != null ? { numero_liquidacion: m.numeroLiquidacion } : {}),
     ...(m.numeroPago != null ? { numero_pago: m.numeroPago } : {}),
+    // 1003: solo si viene (sin la columna, quien no manda folio sigue insertando como siempre).
+    ...(m.folioOrigen != null ? { folio_origen: m.folioOrigen } : {}),
     ...(m.bitacoras != null ? { bitacoras: m.bitacoras } : {}),
     // 0929: solo una corrección lo manda (sin la columna, la original sigue insertándose como siempre).
     ...(m.correccionN ? { correccion_n: m.correccionN } : {}),
@@ -567,11 +572,11 @@ export async function insertarDesglose(tenantId: string, m: MetaDesglose): Promi
 }
 
 const COLS_DESGLOSE =
-  'liquidacion_externa_id, bitacora, terminal, poliza, unidad, tipo_operador, dias, total_origen, enviado_origen_en, retenida_motivo, created_at';
+  'liquidacion_externa_id, bitacora, folio_origen, terminal, poliza, unidad, tipo_operador, dias, total_origen, enviado_origen_en, retenida_motivo, created_at';
 
 function aDesglose(r: Fila): Desglose {
   return {
-    liquidacionExternaId: String(r.liquidacion_externa_id), bitacora: String(r.bitacora),
+    liquidacionExternaId: String(r.liquidacion_externa_id), bitacora: String(r.bitacora), folioOrigen: (r.folio_origen as string | null) ?? null,
     terminal: (r.terminal as string | null) ?? null, poliza: (r.poliza as string | null) ?? null,
     unidad: (r.unidad as string | null) ?? null, tipoOperador: (r.tipo_operador as Desglose['tipoOperador']) ?? null,
     dias: r.dias == null ? null : Number(r.dias), totalOrigen: r.total_origen as 'tms' | 'calculado',
@@ -713,6 +718,8 @@ export async function recibirDesgloseAtomico(tenantId: string, p: PedidoRecepcio
       tipo_operador: m.tipoOperador ?? null, dias: m.dias ?? null, total_origen: m.totalOrigen,
       retenida_motivo: recortar(m.retenidaMotivo), numero_liquidacion: m.numeroLiquidacion ?? null,
       numero_pago: m.numeroPago ?? null, bitacoras: m.bitacoras ?? null,
+      // 1003: la RPC anterior ignora esta llave (el folio no se guarda, pero la recepción no falla).
+      folio_origen: m.folioOrigen ?? null,
       // 0929 (A39-A1-01): la RPC anterior ignora esta llave; la corrección entonces choca con el índice (23505) como antes.
       correccion_n: m.correccionN ?? 0,
     },

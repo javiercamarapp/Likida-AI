@@ -49,6 +49,11 @@ export interface DesgloseBitacora {
   numeroLiquidacion?: string;
   numeroPago?: string;
   /**
+   * 1003: el número de bitácora que conoce el operador (campo `Folio` del webhook). Solo se GUARDA y se MUESTRA (Excel, asunto del
+   * correo, panel); nunca entra en la clave ni en la huella: la identidad sigue siendo `bitacora` (única por flota).
+   */
+  folio?: string;
+  /**
    * T-A1-41: todas las bitácoras que la liquidación junta (una unidad con dos viajes se liquida junta). La fuente manda
    * los renglones YA agregados: Likida no recalcula. Cada elemento es el folio o `{ bitacora, unidad }`.
    */
@@ -96,6 +101,14 @@ function sinControl(valor: string, campo: string): string {
     throw new CampoInvalido(campo, `\`${campo}\` no puede traer saltos de línea ni caracteres de control.`);
   }
   return valor;
+}
+
+/**
+ * El número de bitácora que VE el operador y la oficina (Excel, asunto del correo, panel): el `Folio` de origen si vino, y si no el
+ * identificador único de la bitácora, como siempre. La clave de idempotencia y las consultas siguen usando `bitacora`.
+ */
+export function bitacoraVisible(d: { bitacora: string; folioOrigen?: string | null }): string {
+  return d.folioOrigen && d.folioOrigen.trim() !== '' ? d.folioOrigen : d.bitacora;
 }
 
 /** Días inclusivos entre dos fechas AAAA-MM-DD (9 → 14 = 6). */
@@ -197,7 +210,7 @@ function validarBitacoras(crudo: unknown, principal: string, unidadEncabezado: s
   return { bitacoras: folios, unidades: unidades.size };
 }
 
-const CAMPOS = ['terminal', 'bitacora', 'numeroLiquidacion', 'numeroPago', 'bitacoras', 'poliza', 'operador', 'unidad', 'tipoOperador', 'desde', 'hasta', 'dias', 'percepciones', 'deducciones', 'neto', 'enviadoOrigen'] as const;
+const CAMPOS = ['terminal', 'bitacora', 'folio', 'numeroLiquidacion', 'numeroPago', 'bitacoras', 'poliza', 'operador', 'unidad', 'tipoOperador', 'desde', 'hasta', 'dias', 'percepciones', 'deducciones', 'neto', 'enviadoOrigen'] as const;
 
 /** Validador estricto del desglose: campo desconocido, montos ≤ 0, texto con control o fechas mal formadas son error. */
 export function validarDesgloseBitacora(crudo: unknown): DesgloseBitacora {
@@ -211,6 +224,8 @@ export function validarDesgloseBitacora(crudo: unknown): DesgloseBitacora {
   if (terminalT !== null) sinControl(terminalT, 'terminal');
   const polizaT = texto(crudo, 'poliza', { max: 40 });
   if (polizaT !== null) sinControl(polizaT, 'poliza');
+  const folioT = texto(crudo, 'folio', { max: 40 });
+  if (folioT !== null) sinControl(folioT, 'folio');
 
   if (!esObjeto(crudo.operador)) throw new CampoInvalido('operador', '`operador` es obligatorio: `{ numeroEmpleado, nombre? }`.');
   soloCampos(crudo.operador, ['numeroEmpleado', 'nombre'], '`operador`');
@@ -267,6 +282,7 @@ export function validarDesgloseBitacora(crudo: unknown): DesgloseBitacora {
   return {
     ...(terminalT !== null ? { terminal: terminalT } : {}),
     bitacora,
+    ...(folioT !== null ? { folio: folioT } : {}),
     ...(numeroLiquidacion !== undefined ? { numeroLiquidacion } : {}),
     ...(numeroPago !== undefined ? { numeroPago } : {}),
     ...(lista ? { bitacoras: lista.bitacoras } : {}),

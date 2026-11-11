@@ -1270,6 +1270,8 @@ export const agentes = {
   'rest.este_operador_esta_dado_de_baja': 'Este operador está dado de baja en Likida: reactívalo (o corrige su número de empleado) y el desglose se procesa en la siguiente lectura.',
   'rest.el_sistema_de_tu_empresa_manda': 'El sistema de tu empresa manda al operador solo por nombre y hay más de un operador con ese nombre en Likida: no se sabe a quién corresponde, así que no se recibió. Distingue los nombres en Operadores y vuelve a mandar la bitácora.',
   'rest.el_sistema_de_tu_empresa_manda_2': 'El sistema de tu empresa manda al operador solo por nombre y ninguno de Operadores coincide (o al que coincide le falta el número de empleado): no se recibió. Revisa que esté escrito igual y con su número de empleado, y vuelve a mandar la bitácora.',
+  'rest.el_numero_de_empleado_de_la_bitacora_no_existe': 'El número de empleado de la bitácora no existe en Operadores: no se recibió. Dalo de alta con ese número (o corrige el número en el sistema de tu empresa) y vuelve a mandar la bitácora.',
+  'rest.el_numero_de_empleado_y_el_nombre_no_coinciden': 'El número de empleado y el nombre que mandó el sistema de tu empresa no corresponden a la misma persona en Operadores: no se recibió, porque no se adivina cuál de los dos está mal. Corrige el dato equivocado y vuelve a mandar la bitácora.',
   'rest.el_numero_de_empleado_el_telefono': 'El número de empleado, el teléfono o el id apuntan a más de un operador, o a operadores distintos: no se sabe a quién entregárselo. Corrige el duplicado en Operadores; no lo des de alta otra vez.',
   'rest.e0_desde_e0': '<e0> · desde {fechaHoraMx}</e0>',
   'rest.no_se_pudo_leer_este_desglose': 'No se pudo leer este desglose. No es que no exista: no pudimos consultarlo ahora.',

@@ -561,6 +561,9 @@ export function ayudaExcepcion(tipo: TipoExcepcion, detalle: Record<string, unkn
     if (detalle.motivo === 'nombre_ambiguo') return tx('rest.el_sistema_de_tu_empresa_manda');
     if (detalle.motivo === 'nombre_sin_alta') return tx('rest.el_sistema_de_tu_empresa_manda_2');
     if (detalle.motivo === 'ambiguo') return tx('rest.el_numero_de_empleado_el_telefono');
+    // Formato con NumeroEmpleado (piloto, 11-nov): el número manda sobre el nombre.
+    if (detalle.motivo === 'numero_sin_alta') return tx('rest.el_numero_de_empleado_de_la_bitacora_no_existe');
+    if (detalle.motivo === 'numero_no_coincide') return tx('rest.el_numero_de_empleado_y_el_nombre_no_coinciden');
   }
   return excepcion(tx)[tipo]?.ayuda ?? '';
 }

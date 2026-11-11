@@ -25,7 +25,7 @@ import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja, datoInvalido } from '../
 import { huellaContenido, huellaDesglose } from './esquema';
 import type { LiquidacionExternaNormalizada } from './esquema';
 import {
-  aLiquidacionExterna, claveDeBitacora, claveDeLiquidacion, UnidadesMezcladas, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose,
+  aLiquidacionExterna, bitacoraVisible, claveDeBitacora, claveDeLiquidacion, UnidadesMezcladas, type DesgloseBitacora, type RenglonBitacora, type TipoOperadorDesglose,
 } from './desglose_contrato';
 import {
   aplicarRenombres, colapsarRenglonViaje, guardasPreEnvio,
@@ -157,7 +157,7 @@ export type ResultadoDesglose =
    * Solo con `opciones.simular` (vista previa de la carga del panel): lo que PASARÍA, sin escribir nada (ni Storage, ni base, ni excepciones).
    * `correos` = correos que saldrían de verdad (0 si se omite); `omitidas` = entregas que nacerían `omitida`.
    */
-  | { estado: 'simulada'; claveExterna: string; correos: number; omitidas: number; retenida: boolean; omitida: MotivoOmision | null }
+  | { estado: 'simulada'; claveExterna: string; correos: number; omitidas: number; retenida: boolean; omitida: MotivoOmision | null; /** Por qué quedaría retenida (vacío si no). */ motivos?: MotivoRetencion[] }
   /** Misma clave y mismo contenido: no se hizo nada. */
   | { estado: 'idempotente'; liquidacionId: string; claveExterna: string }
   /** Misma clave, otro contenido: nada se sobrescribió ni se envió; hay una excepción abierta. */
@@ -389,7 +389,8 @@ export async function recibirDesglose(
     const bytes = generarDesgloseXlsx({
       operador: operador.nombre,
       ...(d.unidad !== undefined ? { unidad: d.unidad } : {}),
-      bitacora: `${d.bitacoras !== undefined ? liq.viajes.join(', ') : d.bitacora}${correccionDe ? ' — CORRECCIÓN' : ''}`,
+      // 1003: el folio de origen (el número que conoce el operador) manda sobre el identificador interno.
+      bitacora: `${d.bitacoras !== undefined ? liq.viajes.join(', ') : bitacoraVisible({ bitacora: d.bitacora, folioOrigen: d.folio })}${correccionDe ? ' — CORRECCIÓN' : ''}`,
       ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
       ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
       desde: d.desde, hasta: d.hasta, dias: conversion.dias,
@@ -428,7 +429,7 @@ export async function recibirDesglose(
   }));
   if (opciones.simular) {
     return {
-      estado: 'simulada', claveExterna, retenida, omitida: omision,
+      estado: 'simulada', claveExterna, retenida, omitida: omision, motivos: retenida ? decision.motivos : [],
       correos: omision ? 0 : entregasPedidas.length, omitidas: omision ? entregasPedidas.length : 0,
     };
   }
@@ -445,6 +446,7 @@ export async function recibirDesglose(
   const meta = {
     bitacora: d.bitacora, terminal: d.terminal ?? null, poliza: provisional ? POLIZA_PROVISIONAL : d.poliza,
     unidad: d.unidad ?? null, tipoOperador: d.tipoOperador ?? null, dias: conversion.dias,
+    ...(d.folio !== undefined ? { folioOrigen: d.folio } : {}),
     ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
     ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
     ...(d.bitacoras !== undefined ? { bitacoras: liq.viajes } : {}),

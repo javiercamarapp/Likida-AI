@@ -1272,6 +1272,8 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'rest.este_operador_esta_dado_de_baja': 'This driver is deactivated in Likida: reactivate them (or fix their employee number) and the breakdown is processed on the next read.',
   'rest.el_sistema_de_tu_empresa_manda': 'Your company\'s system sends the driver by name only and there is more than one driver with that name in Likida: it is not known whom it belongs to, so it was not received. Tell the names apart in Drivers and send the log again.',
   'rest.el_sistema_de_tu_empresa_manda_2': 'Your company\'s system sends the driver by name only and none in Drivers matches (or the one that matches lacks an employee number): it was not received. Check that it is written the same way and has its employee number, and send the log again.',
+  'rest.el_numero_de_empleado_de_la_bitacora_no_existe': 'The employee number on the log does not exist in Drivers: it was not received. Add the driver with that number (or fix the number in your company\'s system) and send the log again.',
+  'rest.el_numero_de_empleado_y_el_nombre_no_coinciden': 'The employee number and the name sent by your company\'s system do not belong to the same person in Drivers: it was not received, because it is not guessed which of the two is wrong. Fix the wrong one and send the log again.',
   'rest.el_numero_de_empleado_el_telefono': 'The employee number, phone or id point to more than one driver, or to different drivers: it is not known who to deliver it to. Fix the duplicate in Drivers; do not register them again.',
   'rest.e0_desde_e0': '<e0> · since {fechaHoraMx}</e0>',
   'rest.no_se_pudo_leer_este_desglose': 'This breakdown could not be read. It is not that it does not exist: we could not query it right now.',

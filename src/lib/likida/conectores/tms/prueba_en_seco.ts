@@ -31,7 +31,7 @@ import { instanteDeCursor } from './lector_desgloses';
 import {
   CONFIG_PULL_MUESTRA_TMS, fechaDeParametro, type ConfigPullMuestraTms,
 } from '../../liquidacion_externa/desglose_muestra_pull_config';
-import { convertirBitacoraMuestra, listaDeMuestra, EnvoltorioInvalido, NO_DISPONIBLE_MUESTRA, normalizarNombre } from '../../liquidacion_externa/desglose_muestra_tms';
+import { convertirBitacoraMuestra, listaDeMuestra, EnvoltorioInvalido, normalizarNombre } from '../../liquidacion_externa/desglose_muestra_tms';
 import { SesionTms } from './sesion';
 import { loginDe, RECURSOS_SINCRONIZABLES, urlBaseHttps, type RecursoSincronizable } from './acceso';
 
@@ -379,9 +379,13 @@ async function probarDesgloses(sesion: SesionTms, cfg: ConfigApiDesglose, desde:
   return reporte;
 }
 
-const LLAVES_MUESTRA: ReadonlySet<string> = new Set(['BitacoraID', 'Operador', 'Unidad', 'Fecha', 'Percepciones', 'Deducciones']);
+const LLAVES_MUESTRA: ReadonlySet<string> = new Set([
+  'BitacoraID', 'Operador', 'Unidad', 'Fecha', 'Percepciones', 'Deducciones',
+  // Opcionales del piloto (11-nov-2026): se leen si vienen. `NumeroLiquidacion` NO se lee a propósito y sigue saliendo como campo desconocido.
+  'NumeroEmpleado', 'TipoOperador', 'Poliza', 'NumeroPago', 'Neto', 'Folio',
+]);
 /** Los campos que la muestra NO trae y que hay que pedirle al cliente (nombres, no valores). */
-const PIDE_AL_CLIENTE = NO_DISPONIBLE_MUESTRA.filter((c) => ['numeroLiquidacion', 'numeroPago', 'poliza', 'tipoOperador', 'terminal', 'numeroEmpleado'].includes(c));
+const PIDE_AL_CLIENTE = ['numeroLiquidacion', 'numeroPago', 'poliza', 'tipoOperador', 'terminal', 'numeroEmpleado'];
 
 /** UNA página del contrato `muestra-tms` con la configuración del pull; mismo reporte, sin valores ni nombres de operador. */
 async function probarMuestra(sesion: SesionTms, cfg: ConfigPullMuestraTms, desde: string, hasta: string, maxFilas: number): Promise<ReporteMapeoEnSeco> {
@@ -404,8 +408,14 @@ async function probarMuestra(sesion: SesionTms, cfg: ConfigPullMuestraTms, desde
   }
   const muestra = lista.slice(0, maxFilas);
   // El padrón se arma con los propios nombres de la muestra: así solo se juzga la FORMA (el nombre jamás sale de aquí).
-  const padron = muestra.flatMap((f) => (esObjeto(f) && typeof f.Operador === 'string' && f.Operador.trim() !== '' ? [f.Operador] : []))
-    .filter((n, i, a) => a.findIndex((m) => normalizarNombre(m) === normalizarNombre(n)) === i).map((n, i) => ({ numeroEmpleado: String(i + 1), nombre: n }));
+  // Si la fila trae `NumeroEmpleado`, ese número es el del padrón de juguete (el cruce por número manda); si no, uno consecutivo.
+  const padron = muestra.flatMap((f) => {
+    if (!esObjeto(f) || typeof f.Operador !== 'string' || f.Operador.trim() === '') return [];
+    const n = typeof f.NumeroEmpleado === 'string' && f.NumeroEmpleado.trim() !== '' ? f.NumeroEmpleado.trim()
+      : typeof f.NumeroEmpleado === 'number' && Number.isSafeInteger(f.NumeroEmpleado) ? String(f.NumeroEmpleado) : null;
+    return [{ numero: n, nombre: f.Operador }];
+  }).filter((o, k, a) => a.findIndex((m) => normalizarNombre(m.nombre) === normalizarNombre(o.nombre) && m.numero === o.numero) === k)
+    .map((o, k) => ({ numeroEmpleado: o.numero ?? String(k + 1), nombre: o.nombre }));
   const invalidos = new Map<string, number>();
   const desconocidos = new Map<string, number>();
   let buenas = 0;
