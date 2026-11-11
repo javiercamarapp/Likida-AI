@@ -524,6 +524,7 @@ export const dinero = {
   'cartaPorte.vista.los37DatosUno': 'Los 37 datos, uno por uno',
   'cartaPorte.vista.materialPeligroso': 'material peligroso',
   'cartaPorte.vista.mercanciaDelViaje': 'Mercancía del viaje ({v} {v2})',
+  'cartaPorte.vista.cifra.mercancia': 'Mercancía',
   'cartaPorte.vista.necesitaComplemento': 'Necesita complemento',
   'cartaPorte.vista.noHayViajesEn': 'No hay viajes en curso',
   'cartaPorte.vista.noPudeLeerLos': 'No pude leer los viajes en curso ni sus datos de unidad y operador. No se pinta un semáforo a medias: un «no necesita» sobre datos incompletos vale una presunción de contrabando.',

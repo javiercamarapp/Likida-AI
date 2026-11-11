@@ -524,6 +524,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'cartaPorte.vista.los37DatosUno': 'The 37 data items, one by one',
   'cartaPorte.vista.materialPeligroso': 'hazardous material',
   'cartaPorte.vista.mercanciaDelViaje': 'Trip cargo ({v} {v2})',
+  'cartaPorte.vista.cifra.mercancia': 'Cargo',
   'cartaPorte.vista.necesitaComplemento': 'Needs complement',
   'cartaPorte.vista.noHayViajesEn': 'There are no trips in progress',
   'cartaPorte.vista.noPudeLeerLos': 'The trips in progress and their unit and driver data could not be read. A half-drawn traffic light is not shown: a “not needed” over incomplete data is worth a presumption of smuggling.',
