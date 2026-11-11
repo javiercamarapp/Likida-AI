@@ -18,7 +18,7 @@
 begin;
 
 create table if not exists public.aviso_leido (
-  usuario_id uuid not null references auth.users(id) on delete cascade,
+  usuario_id uuid not null,
   ambito text not null,
   clave text not null,
   leido_en timestamptz not null default now(),
@@ -29,7 +29,7 @@ create table if not exists public.aviso_leido (
 create index if not exists idx_aviso_leido_reciente on public.aviso_leido (usuario_id, ambito, leido_en desc);
 
 create table if not exists public.aviso_preferencia (
-  usuario_id uuid not null references auth.users(id) on delete cascade,
+  usuario_id uuid not null,
   ambito text not null,
   categoria text not null,
   canal text not null,
@@ -44,7 +44,7 @@ create table if not exists public.aviso_preferencia (
 );
 
 create table if not exists public.aviso_silencio (
-  usuario_id uuid not null references auth.users(id) on delete cascade,
+  usuario_id uuid not null,
   ambito text not null,
   activo boolean not null default false,
   desde time not null default '22:00',
@@ -55,6 +55,23 @@ create table if not exists public.aviso_silencio (
   constraint aviso_silencio_ambito_forma check (ambito = 'admin' or ambito ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'),
   constraint aviso_silencio_rango check (desde <> hasta)
 );
+
+-- Llave a auth.users SOLO donde existe el esquema auth de Supabase (producción y pila local). El Postgres efímero del CI no lo trae
+-- (convención del repo: app_user.id = auth.users.id sin FK). Los nombres son los que Postgres puso en producción (aplicada 11-nov con la
+-- FK en línea), así que reaplicar no duplica nada.
+do $$
+declare t text;
+begin
+  if to_regclass('auth.users') is null then
+    return;
+  end if;
+  foreach t in array array['aviso_leido', 'aviso_preferencia', 'aviso_silencio'] loop
+    if not exists (select 1 from pg_constraint where conname = t || '_usuario_id_fkey' and conrelid = ('public.' || t)::regclass) then
+      execute format('alter table public.%I add constraint %I foreign key (usuario_id) references auth.users(id) on delete cascade',
+                     t, t || '_usuario_id_fkey');
+    end if;
+  end loop;
+end $$;
 
 alter table public.aviso_leido enable row level security;
 alter table public.aviso_preferencia enable row level security;
