@@ -811,6 +811,8 @@ export const operacion = {
   'jor.sem.veredicto': 'Veredicto semanal por operador',
   'jor.nadarebasado': 'nada rebasado de lo que este motor evalúa',
   'jor.umbrales.titulo': 'Los umbrales de tu flota',
+  'jor.umbrales.editar': 'Editar umbrales',
+  'jor.alerta.configurar': 'Configurar alerta',
   'jor.umbrales.ninguno': 'Todavía no has declarado ninguno. El registro y las alertas de ley funcionan igual sin ellos.',
   'jor.al.cuando': 'Cuándo',
   'jor.al.operadordia': 'Operador y día',

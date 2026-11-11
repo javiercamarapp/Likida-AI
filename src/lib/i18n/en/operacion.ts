@@ -811,6 +811,8 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'jor.sem.veredicto': 'Weekly verdict per driver',
   'jor.nadarebasado': 'nothing exceeded among what this engine evaluates',
   'jor.umbrales.titulo': 'Your fleet’s thresholds',
+  'jor.umbrales.editar': 'Edit thresholds',
+  'jor.alerta.configurar': 'Configure alert',
   'jor.umbrales.ninguno': 'You have not declared any yet. The record and the legal alerts work the same without them.',
   'jor.al.cuando': 'When',
   'jor.al.operadordia': 'Driver and day',
