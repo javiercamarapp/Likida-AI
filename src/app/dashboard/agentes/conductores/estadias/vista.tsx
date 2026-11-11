@@ -59,9 +59,9 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
     { id: 'viaje', titulo: tx('liquidacion.vista.viaje'), principal: true, celda: (f) => <><span className="rv-cd__medio">{f.viaje.folio ?? tx('cobranza.vista.sin_folio_2')}</span><span className="rv-cd__micro rv-cd__bloquear">{f.viaje.clienteNombre ?? ''}</span></> },
     { id: 'chofer', titulo: tx('cobranza.gasto.chofer'), celda: (f) => <>{f.viaje.operadorNombre ?? '—'}<span className="rv-cd__micro rv-cd__bloquear">{f.viaje.terminalNombre ?? ''}</span></> },
     { id: 'parada', titulo: tx('rest.parada'), celda: (f) => <>{f.estancia.lugar === 'carga' ? tx('rest.carga') : tx('rest.descarga')}<span className="rv-cd__micro rv-cd__bloquear">{f.sitio ?? ''}</span></> },
-    { id: 'llegada', titulo: tx('rest.llegada_hora_del_mensaje'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
-    { id: 'salida', titulo: tx('rest.salida'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
-    { id: 'tiempo', titulo: tx('rest.tiempo'), alinear: 'der', celda: (f) => <span className="cifra-mono">{minutos(f.estancia.minutos)}</span> },
+    { id: 'llegada', titulo: tx('rest.llegada_hora_del_mensaje'), celda: (f) => <><span className="rv-ag-num">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
+    { id: 'salida', titulo: tx('rest.salida'), celda: (f) => <><span className="rv-ag-num">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
+    { id: 'tiempo', titulo: tx('rest.tiempo'), alinear: 'der', celda: (f) => <span className="rv-ag-num">{minutos(f.estancia.minutos)}</span> },
     { id: 'estado', titulo: tx('proveedores.vista.estado'), celda: (f) => <StatusChip tono={f.estancia.fase === 'cerrada' ? 'ok' : f.estancia.fase === 'en_curso' ? 'warn' : 'muted'}>{faseTr(tx)[f.estancia.fase]}</StatusChip> },
     {
       id: 'respaldo', titulo: tx('rest.respaldo'),

@@ -163,7 +163,7 @@ export function VistaAgentePeajes({
                 <li key={l.id} className="rv-pj-lista__fila">
                   <span className="rv-pj-apagado rv-pj-fijo">{l.fecha ? fechaCorta(l.fecha, tr.idioma) : 'sin fecha'}</span>
                   <span className="rv-pj-corto" title={l.descripcion ?? undefined}>{l.descripcion ?? tx('peajes.vista.sin_descripcion')}</span>
-                  <span className="rv-pj-der rv-pj-fijo cifra-mono">{mxn(l.monto, tr.idioma)}</span>
+                  <span className="rv-pj-der rv-pj-fijo rv-ag-num">{mxn(l.monto, tr.idioma)}</span>
                   <span className="rv-pj-fijo rv-pj-nota">
                     {l.candidatos.length === 0 ? 'sin candidatos' : `${numero(l.candidatos.length)} candidato${l.candidatos.length === 1 ? '' : 's'}`}
                   </span>
@@ -189,7 +189,7 @@ export function VistaAgentePeajes({
             <ul className="rv-pj-lista">
               {desgloses.map((d) => (
                 <li key={d.cfdiXmlId} className="rv-pj-lista__fila">
-                  <span className="cifra-mono rv-pj-nota rv-pj-fijo">{d.uuidCorto}</span>
+                  <span className="rv-ag-num rv-pj-nota rv-pj-fijo">{d.uuidCorto}</span>
                   <span className="rv-pj-apagado rv-pj-fijo">{d.recibido ? fechaCorta(d.recibido, tr.idioma) : '—'}</span>
                   {d.parcial && (
                     <span className="rv-pj-der rv-pj-fijo"
@@ -197,7 +197,7 @@ export function VistaAgentePeajes({
                       <StatusChip tono="warn">{tx('peajes.vista.parcial')}</StatusChip>
                     </span>
                   )}
-                  <span className={`${d.parcial ? '' : 'rv-pj-der '}rv-pj-fijo cifra-mono`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto, tr.idioma)}</span>
+                  <span className={`${d.parcial ? '' : 'rv-pj-der '}rv-pj-fijo rv-ag-num`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto, tr.idioma)}</span>
                   <span className="rv-pj-fijo rv-pj-conteo" data-tono="ok">
                     <Icono icono={CircleCheck} tam={14} /> {numero(d.conciliadas)}
                   </span>
@@ -266,11 +266,11 @@ export function VistaAgentePeajes({
                   id: 'periodo', titulo: tx('rest.periodo'),
                   celda: (d) => <span className="rv-pj-apagado">{d.periodoDesde && d.periodoHasta ? `${fechaCorta(d.periodoDesde, tr.idioma)} – ${fechaCorta(d.periodoHasta, tr.idioma)}` : tx('peajes.vista.periodo_sin_medir_lineas_sin')}</span>,
                 },
-                { id: 'total', titulo: tx('f26d2.peajes.col_lineas'), alinear: 'der', celda: (d) => <span className="cifra-mono">{numero(d.total)}</span> },
-                { id: 'cuadra', titulo: tx('peajes.vista.cuadran'), alinear: 'der', celda: (d) => <span className="cifra-mono">{numero(d.cuadra)}</span> },
-                { id: 'pct', titulo: tx('f26d2.peajes.col_pct'), alinear: 'der', celda: (d) => <span className="cifra-mono" data-tono={d.pctCuadra !== null && d.pctCuadra >= 100 ? 'ok' : undefined}>{d.pctCuadra === null ? '—' : `${numero(d.pctCuadra)}%`}</span> },
-                { id: 'no', titulo: tx('peajes.vista.no_cuadran'), alinear: 'der', celda: (d) => <span className="cifra-mono">{numero(d.noCuadra)}</span> },
-                { id: 'sin', titulo: tx('peajes.vista.sin_contraparte'), alinear: 'der', celda: (d) => <span className="cifra-mono">{numero(d.sinContraparte)}</span> },
+                { id: 'total', titulo: tx('f26d2.peajes.col_lineas'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.total)}</span> },
+                { id: 'cuadra', titulo: tx('peajes.vista.cuadran'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.cuadra)}</span> },
+                { id: 'pct', titulo: tx('f26d2.peajes.col_pct'), alinear: 'der', celda: (d) => <span className="rv-ag-num" data-tono={d.pctCuadra !== null && d.pctCuadra >= 100 ? 'ok' : undefined}>{d.pctCuadra === null ? '—' : `${numero(d.pctCuadra)}%`}</span> },
+                { id: 'no', titulo: tx('peajes.vista.no_cuadran'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.noCuadra)}</span> },
+                { id: 'sin', titulo: tx('peajes.vista.sin_contraparte'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.sinContraparte)}</span> },
               ]}
             />
 
@@ -373,7 +373,7 @@ export function VistaAgentePeajes({
         </div>
         {peajeAcreditable !== null && (
           <p className="rv-pj-pie">
-            {rico(tx('peajes.vista.peaje_con_el_factor_ya'), { v0: ' ', strong: <strong className="cifra-mono">{mxn(peajeAcreditable, tr.idioma)}</strong>, v2: ' ' })}
+            {rico(tx('peajes.vista.peaje_con_el_factor_ya'), { v0: ' ', strong: <strong className="rv-ag-num">{mxn(peajeAcreditable, tr.idioma)}</strong>, v2: ' ' })}
           </p>
         )}
         <p className="rv-pj-nota">{LEYENDA_CORTA}</p>
@@ -503,7 +503,7 @@ function EvidenciaGpsResumen({ resumen, tr = TR_ES }: { resumen: ResumenEvidenci
     <div className="rv-pj-caja">
       <div className="rv-pj-caja__cab">
         <strong>{tx('peajes.vista.evidencia_gps_del_periodo')}</strong>
-        <span className="cifra-mono rv-pj-der">
+        <span className="rv-ag-num rv-pj-der">
           {tx('peajes.vista.de_cruces_con_posiciones_de', { conEvidencia: numero(resumen.conEvidencia), total: numero(resumen.total) })}
         </span>
       </div>
@@ -545,7 +545,7 @@ function CubetaDesglose({ titulo, total, nota, tono, lineas, evidencia, tr = TR_
     <div className="rv-pj-caja">
       <div className="rv-pj-caja__cab">
         <strong>{titulo}</strong>
-        <span className="cifra-mono rv-pj-der rv-pj-caja__total" data-tono={tono}>{numero(total)}</span>
+        <span className="rv-ag-num rv-pj-der rv-pj-caja__total" data-tono={tono}>{numero(total)}</span>
       </div>
       <p className="rv-pj-nota">{nota}</p>
       {lineas.length === 0 ? (
@@ -557,7 +557,7 @@ function CubetaDesglose({ titulo, total, nota, tono, lineas, evidencia, tr = TR_
               <div className="rv-pj-lista__fila">
                 <span className="rv-pj-apagado rv-pj-fijo">{l.fecha ? fechaCorta(l.fecha, tr.idioma) : 'sin fecha'}</span>
                 <span className="rv-pj-corto" title={l.caseta ?? undefined}>{l.caseta ?? tx('peajes.vista.sin_caseta')}</span>
-                <span className="rv-pj-der rv-pj-fijo cifra-mono">{mxn(l.monto, tr.idioma)}</span>
+                <span className="rv-pj-der rv-pj-fijo rv-ag-num">{mxn(l.monto, tr.idioma)}</span>
               </div>
               <MetaLinea tr={tr} linea={l} evidencia={evidencia?.[l.id]} />
             </li>

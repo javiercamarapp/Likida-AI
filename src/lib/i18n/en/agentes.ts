@@ -3185,4 +3185,12 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'f26d2.peajes.ningun_gasto': 'No matching toll expense',
   'f26d2.peajes.col_lineas': 'Lines',
   'f26d2.peajes.col_pct': '% matches',
+  'f26d2.liq.poliza_provisional': 'Provisional policy',
+  'f26d2.liq.nota_poliza_provisional': 'A breakdown with a provisional policy is held with the «Provisional policy» mark until a person reviews and releases it: nothing goes out without human review.',
+  'f26d2.liq.nota_enviados': 'Sent and not yet confirmed as delivered',
+  'f26d2.liq.nota_entregados': 'Confirmed as delivered',
+  'f26d2.liq.nota_rebotados': 'Bounced, complained or failed',
+  'f26d2.liq.nota_retenidos': 'Held before sending',
+  'f26d2.liq.nota_retenidos_provisional': '{n} with a provisional policy: human review before sending',
+  'f26d2.liq.nota_sin_poliza': 'Waiting for their policy to go out',
 };

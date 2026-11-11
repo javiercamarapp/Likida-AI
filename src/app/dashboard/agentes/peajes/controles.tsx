@@ -71,16 +71,16 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
           {r.revisadas === 0 && r.cortadosPorReloj === 0 ? (
             tx('rest.no_habia_nada_pendiente_que_barrer')
           ) : r.revisadas === 0 ? (
-            <>{tx('rest.no_alcance_a_revisar_ninguna_en')}{' '}<strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}
+            <>{tx('rest.no_alcance_a_revisar_ninguna_en')}{' '}<strong className="rv-ag-num">{r.cortadosPorReloj}</strong>{' '}
               {r.cortadosPorReloj === 1 ? tx('rest.linea_pendiente') : tx('rest.lineas_pendientes')}{' '}{tx('rest.fuera_por_tiempo_vuelve_a_ejecutar')}</>
           ) : (
-            <>{tx('rest.revise')}{' '}<strong className="cifra-mono">{r.revisadas}</strong>{' '}
-              {r.revisadas === 1 ? tx('rest.linea_pendiente') : tx('rest.lineas_pendientes')}{tx('rest.amarre')}{' '}<strong className="cifra-mono">{r.conciliadas}</strong>{' '}{tx('rest.contra_gastos_nuevos_refresque_candidatos_de')}{' '}<span className="cifra-mono">{r.candidatosRefrescados}</span>;
-              {' '}{r.siguenPendientes === 1 ? 'sigue' : 'siguen'} <span className="cifra-mono">{r.siguenPendientes}</span>.
+            <>{tx('rest.revise')}{' '}<strong className="rv-ag-num">{r.revisadas}</strong>{' '}
+              {r.revisadas === 1 ? tx('rest.linea_pendiente') : tx('rest.lineas_pendientes')}{tx('rest.amarre')}{' '}<strong className="rv-ag-num">{r.conciliadas}</strong>{' '}{tx('rest.contra_gastos_nuevos_refresque_candidatos_de')}{' '}<span className="rv-ag-num">{r.candidatosRefrescados}</span>;
+              {' '}{r.siguenPendientes === 1 ? 'sigue' : 'siguen'} <span className="rv-ag-num">{r.siguenPendientes}</span>.
               {/* REN-30-C1: sin esta línea, «revisé 40» sobre una cola de 1,000
                   se lee como que la cola quedó limpia. */}
               {r.cortadosPorReloj > 0 && (
-                <>{tx('rest.quedaron')}{' '}<strong className="cifra-mono">{r.cortadosPorReloj}</strong>{' '}{tx('rest.fuera_de_esta_pasada_por_tiempo')}</>
+                <>{tx('rest.quedaron')}{' '}<strong className="rv-ag-num">{r.cortadosPorReloj}</strong>{' '}{tx('rest.fuera_de_esta_pasada_por_tiempo')}</>
               )}
             </>
           )}

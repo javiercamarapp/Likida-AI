@@ -81,3 +81,6 @@
 .rv-cd__paso-datos dt { color: var(--muted); font-weight: 500; }
 .rv-cd__paso-datos dd { margin: 0; color: var(--ink); }
 @media (max-width: 599.98px) { .rv-cd__paso-datos > div { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+/* Cifras de tabla y de texto: numerales tabulares en la tipografía de la interfaz (Rovaq usa monoespaciada solo en los rótulos del menú). */
+.rv-ag-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }

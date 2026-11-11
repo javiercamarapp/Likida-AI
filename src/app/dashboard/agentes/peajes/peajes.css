@@ -109,3 +109,6 @@
 .rv-pj-forma--rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); align-items: end; gap: 10px 12px; width: 100%; }
 .rv-pj-forma--rejilla > :last-child { justify-self: start; }
 .rv-pj-enlace[aria-current="true"] { font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Cifras de tabla y de texto: numerales tabulares en la tipografía de la interfaz (Rovaq usa monoespaciada solo en los rótulos del menú). */
+.rv-ag-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }

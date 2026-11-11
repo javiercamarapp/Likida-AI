@@ -227,7 +227,7 @@ export async function BloqueCola({ cola, sufijo }: {
                 <span className="rv-cd__medio">{v.folio}</span>
                 {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
                 <span className="rv-cd__recorta">{v.operadorNombre ?? tx('conductores.vista.sin_operador')}</span>
-                <span className="rv-cd__fin cifra-mono" data-tono={v.horasDesdeAviso >= HORAS_PARA_ESCALAR ? 'warn' : undefined}>
+                <span className="rv-cd__fin rv-ag-num" data-tono={v.horasDesdeAviso >= HORAS_PARA_ESCALAR ? 'warn' : undefined}>
                   {v.horasDesdeAviso === 0 ? 'hace menos de 1 h' : `hace ${numero(v.horasDesdeAviso)} h`}
                 </span>
                 {v.avisos > 1 && <StatusChip tono="muted">×{v.avisos}</StatusChip>}

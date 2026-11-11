@@ -58,9 +58,9 @@ export function VistaSitios(p: PropsVistaSitios) {
   const columnasSitios: readonly ColumnaBase<SitioFila>[] = [
     { id: 'nombre', titulo: tx('conductores.forma.nombre'), principal: true, celda: (s) => <><span className="rv-cd__medio">{s.nombre}</span>{!s.activa && <span className="rv-cd__micro"> (archivado)</span>}</> },
     { id: 'tipo', titulo: tx('rest.tipo'), celda: (s) => tipoTexto(tx)[s.tipo] ?? s.tipo },
-    { id: 'codigo', titulo: tx('rest.codigo'), celda: (s) => <span className="cifra-mono">{s.codigo ?? '—'}</span> },
-    { id: 'centro', titulo: tx('rest.centro_lat_lng'), celda: (s) => <span className="cifra-mono">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</span> },
-    { id: 'radio', titulo: tx('rest.radio'), alinear: 'der', celda: (s) => <span className="cifra-mono">{numero(s.radioM)} m</span> },
+    { id: 'codigo', titulo: tx('rest.codigo'), celda: (s) => <span className="rv-ag-num">{s.codigo ?? '—'}</span> },
+    { id: 'centro', titulo: tx('rest.centro_lat_lng'), celda: (s) => <span className="rv-ag-num">{s.lat.toFixed(5)}, {s.lng.toFixed(5)}</span> },
+    { id: 'radio', titulo: tx('rest.radio'), alinear: 'der', celda: (s) => <span className="rv-ag-num">{numero(s.radioM)} m</span> },
     { id: 'cliente', titulo: tx('vigia.vista.cliente'), celda: (s) => s.clienteNombre ?? '—' },
     { id: 'fuente', titulo: tx('rest.origen_del_dato'), celda: (s) => (s.fuente === 'csv' ? 'importado de CSV' : 'captura manual') },
     {
@@ -74,7 +74,7 @@ export function VistaSitios(p: PropsVistaSitios) {
   const columnasTextos: readonly ColumnaBase<TextoSinSitio>[] = [
     { id: 'texto', titulo: tx('rest.texto'), principal: true, celda: (x) => <span className="rv-cd__medio rv-cd__romper">{x.texto}</span> },
     { id: 'lado', titulo: tx('rest.lado'), celda: (x) => (x.lado === 'ambos' ? 'origen y destino' : x.lado) },
-    { id: 'viajes', titulo: tx('rest.viajes'), alinear: 'der', celda: (x) => <span className="cifra-mono">{numero(x.frecuencia)}</span> },
+    { id: 'viajes', titulo: tx('rest.viajes'), alinear: 'der', celda: (x) => <span className="rv-ag-num">{numero(x.frecuencia)}</span> },
     ...(p.puedeEditar ? [{
       id: 'que', titulo: tx('rest.que_es_2'),
       celda: (x: TextoSinSitio) => (p.accionAsignarEquivalencia ? <FilaTextoSinSitio accion={p.accionAsignarEquivalencia} texto={x.texto} lado={x.lado} sitios={padres} /> : null),

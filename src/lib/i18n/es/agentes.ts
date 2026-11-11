@@ -3183,4 +3183,12 @@ export const agentes = {
   'f26d2.peajes.ningun_gasto': 'Ningún gasto de caseta que corresponda',
   'f26d2.peajes.col_lineas': 'Líneas',
   'f26d2.peajes.col_pct': '% cuadra',
+  'f26d2.liq.poliza_provisional': 'Póliza provisional',
+  'f26d2.liq.nota_poliza_provisional': 'Un desglose con póliza provisional se retiene con la marca «Póliza provisional» hasta que una persona lo revise y lo libere: nada sale sin revisión humana.',
+  'f26d2.liq.nota_enviados': 'Salieron y aún sin acuse de entrega',
+  'f26d2.liq.nota_entregados': 'Con acuse de entrega',
+  'f26d2.liq.nota_rebotados': 'Rebotaron, con queja o fallaron',
+  'f26d2.liq.nota_retenidos': 'Detenidos antes de enviarse',
+  'f26d2.liq.nota_retenidos_provisional': '{n} con póliza provisional: revisión humana antes de enviar',
+  'f26d2.liq.nota_sin_poliza': 'Esperan su póliza para salir',
 } as const;

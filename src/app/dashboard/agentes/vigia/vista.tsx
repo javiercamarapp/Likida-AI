@@ -575,7 +575,7 @@ export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntr
           {tarjetas.map((t) => (
             <article key={t.id} className="rv-vg__tarjeta" data-tarjeta={t.id}>
               <p className="rv-vg__rotulo">{t.titulo}</p>
-              <div className="rv-vg__cifra cifra-mono">{t.valor}</div>
+              <div className="rv-vg__cifra rv-ag-num">{t.valor}</div>
               {t.rotulo && <div><Chip tono="warn">{t.rotulo}</Chip></div>}
               <dl className="rv-vg__pila--s">
                 <div><dt className="rv-vg__medio">{tx('vigia.vista.que_paso')} </dt><dd className="rv-vg__nota">{t.quePaso}</dd></div>

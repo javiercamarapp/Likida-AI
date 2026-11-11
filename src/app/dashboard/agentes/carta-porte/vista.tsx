@@ -37,7 +37,7 @@ export const FRASE_SIN_GRUPOS = TR_ES.t('cartaporte.vista.los_grupos_de_whatsapp
 type ViajeEnCola = EstadoCartaPorte['viajes'][number];
 
 const COLUMNAS_COLA = (tx: TAgentes): readonly ColumnaBase<ViajeEnCola>[] => [
-  { id: 'folio', titulo: tx('cartaporte.vista.viaje'), principal: true, celda: (v) => <span className="cifra-mono">{v.folio ?? v.viajeId.slice(0, 8)}</span> },
+  { id: 'folio', titulo: tx('cartaporte.vista.viaje'), principal: true, celda: (v) => <span className="rv-ag-num">{v.folio ?? v.viajeId.slice(0, 8)}</span> },
   { id: 'ruta', titulo: tx('cartaporte.vista.ruta'), celda: (v) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : tx('cartaporte.vista.sin_ruta_capturada')) },
   {
     id: 'falta', titulo: tx('cartaporte.vista.lo_que_falta_declarar'),
@@ -294,13 +294,13 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana, tr = TR_ES }
             {i.causasRechazo === null ? <p className="rv-cp__nota">{tx('cartaporte.vista.no_disponible_todavia_en_esta')}</p>
               : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p className="rv-cp__nota">{tx('cartaporte.vista.no_hubo_rechazos')}</p>
               : <ul className="rv-cp__lista">
-                  {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="cifra-mono">{numero(c.documentos)}</span></li>)}
-                  {(i.rechazadosSinCausa ?? 0) > 0 && <li>{rico(tx('cartaporte.vista.sin_clasificar'), { span: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span> })}</li>}
+                  {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="rv-ag-num">{numero(c.documentos)}</span></li>)}
+                  {(i.rechazadosSinCausa ?? 0) > 0 && <li>{rico(tx('cartaporte.vista.sin_clasificar'), { span: <span className="rv-ag-num">{numero(i.rechazadosSinCausa ?? 0)}</span> })}</li>}
                 </ul>}
           </Tarjeta>
           <Tarjeta titulo={tx('cartaporte.vista.lo_que_mas_se_corrige')}>
             {i.topCamposCorregidos.length === 0 ? <p className="rv-cp__nota">{tx('cartaporte.vista.nadie_ha_corregido_campos_en')}</p>
-              : <ol className="rv-cp__lista rv-cp__lista--num">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
+              : <ol className="rv-cp__lista rv-cp__lista--num">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="rv-ag-num">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
           </Tarjeta>
         </FilaTarjetas>
       </div>
@@ -316,7 +316,7 @@ interface FilaSinCcp { clave: string; cliente: string; folio: string; horas: num
 const COLUMNAS_SIN_CCP = (tx: TAgentes): readonly ColumnaBase<FilaSinCcp>[] => [
   { id: 'cliente', titulo: tx('cartaporte.vista.cliente'), principal: true, celda: (f) => f.cliente },
   { id: 'folio', titulo: tx('cartaporte.vista.viaje'), celda: (f) => f.folio },
-  { id: 'horas', titulo: tx('cartaporte.vista.sin_carta_porte'), alinear: 'der', celda: (f) => <span className="cifra-mono">{numero(f.horas)} h ({numero(f.dias)} d)</span> },
+  { id: 'horas', titulo: tx('cartaporte.vista.sin_carta_porte'), alinear: 'der', celda: (f) => <span className="rv-ag-num">{numero(f.horas)} h ({numero(f.dias)} d)</span> },
   { id: 'estado', titulo: tx('cartaporte.vista.antiguedad'), celda: (f) => <StatusChip tono={TONO_ANTIGUEDAD[f.color]}>{ROTULO_ANTIGUEDAD(tx)[f.color]}</StatusChip> },
 ];
 

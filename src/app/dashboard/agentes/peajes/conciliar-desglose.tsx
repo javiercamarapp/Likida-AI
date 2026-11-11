@@ -60,9 +60,9 @@ export function BotonConciliar({ conciliar, desgloseId }: {
 
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
       {r && !confirmando && (
-        <p className="rv-pj-sub" role="status">{tx('rest.cruce')}{' '}<strong className="cifra-mono">{r.total}</strong>{' '}{tx('rest.lineas')}{' '}<strong className="cifra-mono">{r.cuadra}</strong> cuadran,{' '}
-          <span className="cifra-mono">{r.noCuadra}</span>{' '}{tx('rest.con_discrepancia')}{' '}<span className="cifra-mono">{r.sinContraparte}</span>{' '}{tx('rest.sin_contraparte')}{r.gpsConfirma !== undefined && (
-            <>{tx('rest.gps')}{' '}<span className="cifra-mono">{r.gpsConfirma}</span> confirman, <span className="cifra-mono">{r.gpsNoCoincide ?? 0}</span>{' '}{tx('rest.no_coinciden')}{' '}<span className="cifra-mono">{r.gpsSinDatos ?? 0}</span>{' '}{tx('rest.sin_datos')}</>
+        <p className="rv-pj-sub" role="status">{tx('rest.cruce')}{' '}<strong className="rv-ag-num">{r.total}</strong>{' '}{tx('rest.lineas')}{' '}<strong className="rv-ag-num">{r.cuadra}</strong> cuadran,{' '}
+          <span className="rv-ag-num">{r.noCuadra}</span>{' '}{tx('rest.con_discrepancia')}{' '}<span className="rv-ag-num">{r.sinContraparte}</span>{' '}{tx('rest.sin_contraparte')}{r.gpsConfirma !== undefined && (
+            <>{tx('rest.gps')}{' '}<span className="rv-ag-num">{r.gpsConfirma}</span> confirman, <span className="rv-ag-num">{r.gpsNoCoincide ?? 0}</span>{' '}{tx('rest.no_coinciden')}{' '}<span className="rv-ag-num">{r.gpsSinDatos ?? 0}</span>{' '}{tx('rest.sin_datos')}</>
           )}
           {r.noEscritas > 0 && (
             <span className="rv-pj-malo">{tx('rest.no_se_pudieron_escribir_vuelve_a', { noEscritas: r.noEscritas })}</span>
