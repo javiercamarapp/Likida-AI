@@ -25,7 +25,7 @@ export type AccionGuardar = (previo: ResultadoGuardar, fd: FormData) => Promise<
 function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />}>
+    <Boton type="submit" variante="primary" tamano="sm" loading={pending} icono={<Icono icono={Save} />}>
       {pending ? 'Guardando…' : 'Guardar ajustes'}
     </Boton>
   );
