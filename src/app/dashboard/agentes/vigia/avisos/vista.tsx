@@ -1,7 +1,7 @@
 'use client';
 
 import '../vigia.css';
-import { AvisoCompacto, Boton as BotonV2, CampoSelect, CampoFecha, CampoTexto, CampoTextarea, Casilla, Disclosure, Fieldset, FiltroChip, Icono, MarcoPagina, EstadoVacio, StatusChip, Tarjeta, AvisoResultado, type TonoEstado } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton as BotonV2, CampoSelect, CampoFecha, CampoTexto, CampoTextarea, Casilla, Disclosure, Fieldset, FiltroChip, Icono, EstadoVacio, StatusChip, Tarjeta, AvisoResultado, type TonoEstado } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -10,6 +10,7 @@ import type { GrupoDia, TarjetaAviso } from '@/lib/likida/vigia/aviso/bandeja';
 import { AVISO_AUTOMATICO_CONECTADO, TEXTO_AVISO_AUTOMATICO_POR_CONECTAR, VACIO_BANDEJA_POR_CONECTAR } from '@/lib/likida/vigia/aviso/conexion';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -237,28 +238,44 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
   const { t: tx } = useT('agentes', agentesEs);
   const base = `/dashboard/agentes/vigia/avisos${sufijo}`;
   const conPendientes = `${base}${sufijo ? '&' : '?'}pendientes=1`;
+  const hayLista = !sinMigrar && !errorLectura && total > 0;
+  const tarjetas = grupos.flatMap((g) => g.clientes.flatMap((c) => c.tarjetas));
+  const mas = hayMas ? '+' : '';
   return (
-    <MarcoPagina titulo={tx('vigia.vista.sello_avisos_de_viaje')} apoyo={tx('rest.los_avisos_que_el_vigia_arma')}>
-      <nav aria-label={tx('rest.navegacion')} className="rv-vg__herr">{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}<FiltroChip href={soloPendientes ? base : conPendientes} activo={soloPendientes}>{tx('rest.solo_pendientes')}</FiltroChip>
+    <EsqueletoTablaMaestra
+      titulo={tx('vigia.vista.sello_avisos_de_viaje')}
+      apoyo={tx('rest.los_avisos_que_el_vigia_arma')}
+      filtros={(
+        <nav aria-label={tx('rest.navegacion')} className="rv-vg__herr">{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}<FiltroChip href={soloPendientes ? base : conPendientes} activo={soloPendientes}>{tx('rest.solo_pendientes')}</FiltroChip>
       </nav>
-
+      )}
+      avisos={(
+        <>
+          {!AVISO_AUTOMATICO_CONECTADO ? (
+            <div data-testid="por-conectar"><AvisoCompacto tono="warn" resumen={TEXTO_AVISO_AUTOMATICO_POR_CONECTAR} /></div>
+          ) : null}
+          {avisoEncendido === false ? (
+            <AvisoCompacto tono="warn" resumen={tx('rest.el_aviso_de_viaje_esta_apagado_4')} />
+          ) : null}
+          {sinMigrar ? <Aviso>{tx('rest.la_base_de_datos_todavia_no')}</Aviso> : null}
+          {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
+        </>
+      )}
+      // Tira de cifras solo con lista real (nunca ceros sin lectura); con el tope de la bandeja las cuentas son parciales y se rotulan con «+».
+      cifras={hayLista ? [
+        { etiqueta: tx('f26d.avisos.en_lista'), valor: `${total}${mas}` },
+        { etiqueta: tx('f26d.avisos.con_faltantes'), valor: `${tarjetas.filter((t) => t.faltan.length > 0).length}${mas}`, tono: tarjetas.some((t) => t.faltan.length > 0) ? 'warn' : undefined },
+        { etiqueta: tx('f26d.avisos.actualizaciones'), valor: `${tarjetas.filter((t) => t.cambio !== null).length}${mas}` },
+      ] : undefined}
+      etiquetaCifras={tx('vigia.vista.sello_avisos_de_viaje')}
+    >
       <p className="rv-vg__nota" data-testid="ayuda">{ayudaReglaProvisional(tx)}</p>
-
-      {!AVISO_AUTOMATICO_CONECTADO ? (
-        <div data-testid="por-conectar"><AvisoCompacto tono="warn" resumen={TEXTO_AVISO_AUTOMATICO_POR_CONECTAR} /></div>
-      ) : null}
-      {avisoEncendido === false ? (
-        <AvisoCompacto tono="warn" resumen={tx('rest.el_aviso_de_viaje_esta_apagado_4')} />
-      ) : null}
       {avisoEncendido === null && !sinMigrar && !errorLectura ? (
         <p className="rv-vg__nota">{tx('rest.no_pude_confirmar_si_el_aviso')}</p>
       ) : null}
       {!puedeDecidir ? (
         <p className="rv-vg__nota">{tx('rest.solo_el_dueno_o_el_encargado_4')}</p>
       ) : null}
-
-      {sinMigrar ? <Aviso>{tx('rest.la_base_de_datos_todavia_no')}</Aviso> : null}
-      {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
 
       {!sinMigrar && !errorLectura && total === 0 ? (
         <div data-testid="vacio"><EstadoVacio titulo={tx('rest.sin_avisos_que_revisar')} contenido>{soloPendientes ? vacioPendientes(tx) : vacioTodos(tx)}</EstadoVacio></div>
@@ -281,6 +298,6 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
           </div>
         </Tarjeta>
       ))}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
