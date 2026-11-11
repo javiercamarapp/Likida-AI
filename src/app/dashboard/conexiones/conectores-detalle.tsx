@@ -61,7 +61,10 @@ export function ConectoresDetalle({ conectores }: { conectores: Conector[] }) {
                 <button type="button" className="rv-cx__tab" data-activo={c.id === actual.id || undefined} aria-pressed={c.id === actual.id}
                   onClick={() => setElegido(c.id)}>
                   <span className="rv-cx__marca"><Marca id={c.id} /></span>
-                  <span className="rv-cx__tab-nombre">{c.nombre}</span>
+                  <span className="rv-cx__tab-texto">
+                    <span className="rv-cx__tab-nombre">{c.nombre}</span>
+                    <span className="rv-cx__tab-sub" title={c.detalle}>{c.detalle}</span>
+                  </span>
                   <StatusChip tono={rotulos[c.estado].tono}>{rotulos[c.estado].rotulo}</StatusChip>
                 </button>
               </li>
@@ -80,6 +83,7 @@ export function ConectoresDetalle({ conectores }: { conectores: Conector[] }) {
           </section>
         </div>
       )}
+      <p className="rv-cx__solo-lectura">{t('cfg.solo_lectura_estado_medido')}</p>
     </div>
   );
 }
