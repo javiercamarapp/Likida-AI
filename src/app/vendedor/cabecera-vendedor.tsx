@@ -45,7 +45,6 @@ export default async function CabeceraVendedor({ esSoporte, salir, movil }: {
           <Users width={15} height={15} strokeWidth={TRAZO_ICONO} aria-hidden />
           <span>{t('vendedor.prospectos')}</span>
         </span>
-        <Chip>{t('vendedor.rotulo')}</Chip>
         {esSoporte ? <Chip tono="warn">{t('vendedor.soporte')}</Chip> : null}
       </div>
     </header>
