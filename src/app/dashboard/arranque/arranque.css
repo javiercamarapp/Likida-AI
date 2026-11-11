@@ -34,3 +34,6 @@
 /* Ronda 5: el estado del paso es el chip con contorno del kit (Hecho / Para revisar), a su ancho, en una columna fija a la izquierda. */
 .rv-ar__estado { flex: none; min-width: 96px; display: inline-flex; }
 @media (max-width: 640px) { .rv-ar__estado { min-width: 0; } }
+
+/* Ronda 6 (Rovaq /setup): chips de estado de contorno, sin relleno de color. */
+.rv-ar__estado .rv-estado { background: transparent; border: 1px solid var(--line2); color: var(--ink); }
