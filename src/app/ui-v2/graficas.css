@@ -548,3 +548,13 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
   [data-ui="v2"] .rv-embudo__barra:is([data-r="5"], [data-r="6"], [data-r="7"], [data-r="8"], [data-r="9"]) { animation-delay: 200ms; }
   [data-ui="v2"] .rv-apcol__pila { animation: rv-crece-y var(--t-bar) var(--ui-ease) both; }
 }
+
+
+/* ── PALETA DE ALTO CONTRASTE (11-nov-2026, punto 10 del dueño) ─────────────────────────────────────────────────────────────────────────────
+   1) Filete de las tiras de KPI: NEGRO (--kpi-filete) para toda métrica y todo tono; el color por métrica y por semáforo queda anulado. El estado
+      sigue diciéndose con la píldora de texto (.rv-kpi__atencion / .rv-kpi__delta), nunca por el filete.
+   2) Series CLARAS (matices 4, 6 y 8: no llegan a 3:1 contra la tarjeta): se identifican por CONTORNO --chart-borde (≥3:1) además de la etiqueta. */
+[data-ui="v2"] .rv-kpi[data-matiz], [data-ui="v2"] .rv-kpi[data-tono] { border-top-color: var(--kpi-filete); }
+[data-ui="v2"] :is([data-matiz="4"], [data-matiz="6"], [data-matiz="8"]) :is(.rv-colum__barra, .rv-dona__gajo, .rv-area__linea, .rv-spark__linea) { stroke: var(--chart-borde); stroke-width: 1; }
+[data-ui="v2"] :is([data-matiz="4"], [data-matiz="6"], [data-matiz="8"]) :is(.rv-embudo__barra, .rv-bullet__relleno, .rv-barlist__relleno, .rv-apilada__tramo) { box-shadow: inset 0 0 0 1px var(--chart-borde); }
+[data-ui="v2"] :is([data-matiz="4"], [data-matiz="6"], [data-matiz="8"]) .rv-kpi__cab::before { box-shadow: inset 0 0 0 1px var(--chart-borde); }

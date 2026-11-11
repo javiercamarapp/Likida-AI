@@ -1,4 +1,4 @@
-/* ═══ R8 · BarraPeriodo y cajón de filtros (estilo Rovaq). Una fila, gap 8, azul solo en estado activo (--seg-activo-*). ═══ */
+/* ═══ R8 · BarraPeriodo y cajón de filtros (estilo Rovaq). Una fila, gap 8, estado activo en alto contraste neutro (--seg-activo-*). ═══ */
 [data-ui="v2"] .rv-bp { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
 [data-ui="v2"] .rv-bp__accion { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 [data-ui="v2"] .rv-bp__seg { text-decoration: none; }

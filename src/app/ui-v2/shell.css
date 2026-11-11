@@ -103,9 +103,9 @@
 [data-ui="v2"] .rv-item:hover { background: var(--ui-soft); color: var(--ink); }
 [data-ui="v2"] .rv-item__ico { flex: none; color: var(--muted); }
 [data-ui="v2"] .rv-item__txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-/* ◆ Activo estilo Rovaq (R8): barra izquierda INSET de 2 px (--nav-activo-barra, un solo token para el color), fondo tinta al 7 % (--nav-activo-bg),
+/* ◆ Activo de alto contraste (11-nov, punto 10 del dueño): barra izquierda INSET de 3 px NEGRA (blanca en oscuro) (--nav-activo-barra, un solo token para el color), fondo tinta al 7 % (--nav-activo-bg),
    texto --nav-activo-fg y peso 500 (--nav-activo-peso). Sin bloque negro ni blanco; el burdeos (--senal) sigue siendo solo «requiere acción». */
-[data-ui="v2"] .rv-item[aria-current="page"] { background: var(--nav-activo-bg); color: var(--nav-activo-fg); font-weight: var(--nav-activo-peso); box-shadow: inset 2px 0 0 var(--nav-activo-barra); }
+[data-ui="v2"] .rv-item[aria-current="page"] { background: var(--nav-activo-bg); color: var(--nav-activo-fg); font-weight: var(--nav-activo-peso); box-shadow: inset 3px 0 0 var(--nav-activo-barra); }
 [data-ui="v2"] .rv-item[aria-current="page"] .rv-item__ico { color: var(--nav-activo-fg); }
 [data-ui="v2"] .rv-item:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
 [data-ui="v2"] .rv-icono-boton:focus-visible,
