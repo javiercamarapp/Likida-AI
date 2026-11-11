@@ -55,3 +55,23 @@
 [data-ui="v2"] .adm-bit-panel__id { flex: none; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--canvas); font: 500 11px/1 var(--font-mono, ui-monospace, monospace); letter-spacing: .04em; text-transform: uppercase; color: var(--ink2, var(--muted)); }
 [data-ui="v2"] .adm-bit-panel .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
 [data-ui="v2"] .adm-bit-panel > .adm-sis-pie, [data-ui="v2"] .adm-bit-panel > nav { padding: 8px 16px; border-top: 1px solid var(--line); }
+
+/* ── F26 ronda 4: todo bloque va en una tarjeta (radio 12, borde 1 px, padding 14), y el vacío dentro de ella va punteado (Rovaq `ac-vacio`) ── */
+[data-ui="v2"] .adm-sis-caja { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+[data-ui="v2"] .adm-sis-caja .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+/* Vacío de una línea (1.5 px punteado, 12×14) cuando no hay serie que graficar: sin tarjetas altas medio vacías. */
+[data-ui="v2"] .adm-sis-vacio-linea { margin: 0; padding: 12px 14px; border: 1.5px dotted var(--line2, var(--line)); border-radius: 8px; font-size: 12px; line-height: 1.4; color: var(--muted); }
+[data-ui="v2"] .adm-sis-vacio-linea > b { font-weight: 600; color: var(--ink); }
+[data-ui="v2"] .adm-sis-caja .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .adm-sis-cab-caja { display: flex; flex-direction: column; gap: 2px; }
+[data-ui="v2"] .adm-sis-eyebrow { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+[data-ui="v2"] .adm-sis-celda-una { display: block; max-width: 56ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
+
+/* ── F26 ronda 4 · Bitácora: id-chip de Rovaq (28 px, radio 8, mono) con «Copiar» ── */
+[data-ui="v2"] .adm-bit-chip { display: inline-flex; align-items: center; gap: 8px; height: 28px; max-width: 100%; padding: 0 4px 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: 12px; color: var(--ink); }
+[data-ui="v2"] .adm-bit-chip[data-mono] .adm-bit-chip__texto { font-family: var(--font-mono, ui-monospace, monospace); letter-spacing: .02em; }
+[data-ui="v2"] .adm-bit-chip__texto { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-ui="v2"] .adm-bit-chip__copiar { flex: none; height: 20px; padding: 0 8px; border: 0; border-radius: 6px; background: transparent; font: 500 11px/1 var(--font-sans-ui, inherit); color: var(--muted); cursor: pointer; }
+[data-ui="v2"] .adm-bit-chip__copiar:hover { background: var(--surface); color: var(--ink); }
+[data-ui="v2"] .adm-bit-chip__copiar:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
