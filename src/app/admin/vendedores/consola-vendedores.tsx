@@ -64,8 +64,10 @@ export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string |
       filtros={<Suspense fallback={null}><BloqueFiltros sp={sp} /></Suspense>}
     >
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis sp={sp} /></Suspense>
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo sp={sp} /></Suspense>
+        {/* Las dos tarjetas de la derecha miden lo que dice su contenido y juntas llenan el alto del embudo: sin 140 px de aire. */}
+        <div className="adm-pila">
         <Tarjeta titulo={tx('vendedores_consola_vendedores.agente_asignador')}>
           <p className="ven-tarjeta__tenue">{tx('vendedores_consola_vendedores.reparte_los_prospectos_sin_vendedor_en')}</p>
           <BotonRepartir accion={accionRepartir} />
@@ -73,10 +75,11 @@ export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string |
           {/* Lo que NO existe no se pinta como si existiera: los agentes que buscan leads y hacen el primer acercamiento son roadmap. */}
           <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{tx('vendedores_consola_vendedores.proximamente_agentes_que_busquen_leads_nuevos')}</p>
         </Tarjeta>
+        <BloqueComisiones tx={tx} />
+        </div>
       </FilaTarjetas>
       <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
       <Suspense fallback={<EsqTablaV2 filas={4} />}><BloqueDesempeno /></Suspense>
-      <BloqueComisiones tx={tx} />
       <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueAltas /></Suspense>
     </EsqueletoTablaMaestra>
   );
@@ -89,7 +92,7 @@ export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string |
 function BloqueComisiones({ tx = T_SISTEMA_ES }: { tx?: TSistema }) {
   const regla = reglaComision();
   return (
-    <Tarjeta titulo={tx('vendedores_consola_vendedores.comisiones_de_vendedores')} estado="vacio" mensaje={tx('vendedores_consola_vendedores.falta_aun_no_hay_base_para')}
+    <Tarjeta titulo={tx('vendedores_consola_vendedores.comisiones_de_vendedores')} estado="vacio" contenida mensaje={tx('vendedores_consola_vendedores.falta_aun_no_hay_base_para')}
       detalle={tx('vendedores_consola_vendedores.hace_falta_ligar_cada_prospecto_cerrado')}>
       <p className="ven-regla"><span>{regla.primerMes}</span><span>{regla.recurrente}</span></p>
     </Tarjeta>
