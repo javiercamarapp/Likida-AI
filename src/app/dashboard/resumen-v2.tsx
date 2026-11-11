@@ -88,7 +88,7 @@ export async function ResumenV2({
       cifras={cifrasUniformes(itemsKpi(d, sufijo, puede, t))}
       etiquetaCifras={t('op.tu_flota_en_likida')}
     >
-      <FilaTarjetas variante="4-4-4">
+      <FilaTarjetas variante="4-4-4" className="rv-res-fila">
         <Tarjeta titulo={t('op.requiere_tu_atencion')} info="resumen.requiere_atencion">
           <ListaAtencion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
         </Tarjeta>
@@ -98,7 +98,7 @@ export async function ResumenV2({
         </Tarjeta>
       </FilaTarjetas>
 
-      <FilaTarjetas variante="6-6" llena>
+      <FilaTarjetas variante="6-6" className="rv-res-fila">
         <TarjetaCierres t={t} d={d} />
         <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
       </FilaTarjetas>
