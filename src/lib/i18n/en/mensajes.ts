@@ -1,4 +1,5 @@
 import type { mensajes as mensajesEs } from '../es/mensajes';
+import { datosEn } from '../datos/en';
 
 // «mensajes» in English (US). Keys must match es exactly.
 export const mensajes: Record<keyof typeof mensajesEs, string> = {
@@ -53,4 +54,6 @@ export const mensajes: Record<keyof typeof mensajesEs, string> = {
   'dash.onb.ya_guardada': 'Your previous answer was already saved, so this question is a different one. I did not apply what you just wrote; check your profile if in doubt.\n\n{pregunta}',
   'dash.onb.nada_pendiente': 'That statement was already saved and nothing is pending. I did not apply what you just wrote.',
   'dash.onb.no_guardo': 'I could not save that statement',
+
+  ...datosEn,
 };

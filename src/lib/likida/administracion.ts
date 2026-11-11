@@ -27,9 +27,10 @@ import { regimenElegiblePorClave } from './perfil/preguntas';
 import type { PoliticaGasto } from './cuadre/engine';
 import { logger } from '@/lib/logger';
 import { rateLimit } from '@/lib/ratelimit';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido } from './errores';
+import { trMensajes } from '@/lib/i18n/mensajes_tr';
 import {
-  nuevoMarcadorSinTelefono, correoDeOperador, telefonoVisible, esMarcadorSinTelefono, MENSAJE_SIN_TELEFONO_NO_PERMITIDO,
+  nuevoMarcadorSinTelefono, correoDeOperador, telefonoVisible, esMarcadorSinTelefono,
 } from './operador_sin_telefono';
 import type { AjustesValidos } from './ajustes_operativos';
 import { acotada } from './presupuesto';
@@ -74,7 +75,7 @@ async function mezclarConfig(
   if (!error) return { error: null };
   // CU013: la flota no existe. Es dato de entrada, no una caída.
   if ((error as { code?: string }).code === 'CU013') {
-    return { error: new DatoInvalido('No se encontró tu flota. Recarga la pantalla.') };
+    return { error: datoInvalido('adm.no_se_encontro_tu_flota') };
   }
   return { error: new Error(`${etiqueta}: ${error.message}`) };
 }
@@ -143,16 +144,13 @@ export async function crearFlota(
   actor?: { id?: string; email?: string },
 ): Promise<{ tenantId: string; userId?: string }> {
   const nombre = f.nombre.trim();
-  if (nombre.length < 3) throw new DatoInvalido('El nombre de la flota necesita al menos 3 caracteres.');
+  if (nombre.length < 3) throw datoInvalido('adm.el_nombre_de_la_flota');
 
   let rfc: string | undefined;
   if (f.rfc?.trim()) {
     rfc = f.rfc.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
     if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
-      throw new DatoInvalido(
-        `El RFC "${f.rfc}" no pasa el dígito verificador. Revísalo: con un RFC inválido, ` +
-        `la validación de facturas a nombre de la flota queda apagada y ninguna se rechaza por estar a nombre de otro.`,
-      );
+      throw datoInvalido('adm.el_rfc_no_pasa_el', { rfc: f.rfc });
     }
   }
 
@@ -272,7 +270,7 @@ async function comprobarEmpleadoLibre(tenantId: string, numeroEmpleado: string):
     .eq('tenant_id', tenantId).eq('numero_empleado', numeroEmpleado).order('id').limit(1);
   if (error) throw new Error(`comprobarEmpleadoLibre: ${error.message}`);
   const ya = (data ?? [])[0] as { nombre?: string } | undefined;
-  if (ya) throw new DatoInvalido(`Ya hay un operador con el número de empleado ${numeroEmpleado} en tu flota (${ya.nombre ?? 'sin nombre'}). Búscalo en el registro en vez de darlo de alta otra vez.`);
+  if (ya) throw datoInvalido('adm.ya_hay_un_operador_con', { numeroEmpleado, v: ya.nombre ?? 'sin nombre' });
 }
 
 /** Un buzón no recibe el desglose de dos personas. Falla CERRADO. */
@@ -283,7 +281,7 @@ async function comprobarCorreoLibre(tenantId: string, correo: string): Promise<v
   const { data, error } = await supabaseAdmin().from('operador').select('id')
     .eq('tenant_id', tenantId).ilike('correo', patron).order('id').limit(1);
   if (error) throw new Error(`comprobarCorreoLibre: ${error.message}`);
-  if ((data ?? []).length > 0) throw new DatoInvalido('Ese correo ya lo usa otro operador de tu flota: el desglose le llegaría a otra persona. Corrígelo o quítaselo al otro operador.');
+  if ((data ?? []).length > 0) throw datoInvalido('adm.ese_correo_ya_lo_usa');
 }
 
 export interface NuevoOperador {
@@ -327,16 +325,13 @@ export interface NuevoOperador {
 export function normalizarTelefonoOperador(crudo: string): string {
   const soloDigitos = (crudo ?? '').replace(/[^\d]/g, '');
   if (soloDigitos.length < 10) {
-    throw new DatoInvalido(`El teléfono "${crudo}" tiene ${soloDigitos.length} dígitos; un número mexicano necesita 10 más la lada 52.`);
+    throw datoInvalido('adm.el_telefono_tiene_digitos_un', { crudo, length: soloDigitos.length });
   }
   // 10 dígitos sueltos = número nacional sin lada: se le antepone 52. Con más,
   // se respeta lo tecleado y solo se quita el "1" que Meta ya no usa al enviar.
   const telefono = destinatarioWhatsApp(soloDigitos.length === 10 ? `52${soloDigitos}` : soloDigitos);
   if (!/^52\d{10}$/.test(telefono)) {
-    throw new DatoInvalido(
-      `El teléfono "${crudo}" no es un celular mexicano (lada 52 + 10 dígitos). ` +
-      'Captúralo como 10 dígitos, o como 52 seguido de los 10 dígitos.',
-    );
+    throw datoInvalido('adm.el_telefono_no_es_un', { crudo });
   }
   return telefono;
 }
@@ -368,7 +363,7 @@ export function normalizarTelefonoOperador(crudo: string): string {
  */
 /** A37-L-seguridad-tenant-02: el rechazo por un teléfono activo en OTRA flota NO dice de quién es ni en dónde — contestar
  *  «está en otra flota» convertía el alta y la importación en un oráculo de qué choferes trabajan para la competencia. */
-export const TELEFONO_NO_DISPONIBLE = 'Ese teléfono no se puede registrar en tu flota. Revisa que el número esté bien escrito; si es correcto, escribe a soporte de Likida para validarlo.';
+export const TELEFONO_NO_DISPONIBLE = trMensajes('es').t('adm.telefono_no_disponible');
 
 /** Tope de comprobaciones de duplicado por flota y hora (A37-L-seguridad-tenant-02): acota el barrido de números. */
 const COMPROBACIONES_TELEFONO_POR_HORA = 120;
@@ -379,7 +374,7 @@ export async function comprobarTelefonoLibre(
   excluirOperadorId?: string,
 ): Promise<void> {
   if (!(await rateLimit(`tel-libre:${tenantId}`, COMPROBACIONES_TELEFONO_POR_HORA, 3_600_000))) {
-    throw new DatoInvalido('Demasiadas comprobaciones de teléfonos en la última hora. Espera un rato e inténtalo de nuevo.');
+    throw datoInvalido('adm.demasiadas_comprobaciones_de_telefonos_en');
   }
   const admin = supabaseAdmin();
   const { data: choque, error: errBusca } = await admin
@@ -397,11 +392,9 @@ export async function comprobarTelefonoLibre(
     .filter((c) => !excluirOperadorId || c.id !== excluirOperadorId);
   const yaActivo = filas.find((c) => c.activo);
   if (yaActivo) {
-    throw new DatoInvalido(
-      yaActivo.tenant_id === tenantId
-        ? `Ese teléfono ya está registrado en esta flota, a nombre de ${yaActivo.nombre}.`
-        : TELEFONO_NO_DISPONIBLE,
-    );
+    throw yaActivo.tenant_id === tenantId
+      ? datoInvalido('adm.telefono_ya_en_flota', { nombre: String(yaActivo.nombre) })
+      : datoInvalido('adm.telefono_no_disponible');
   }
   // F1 lote B, L1H (CT-SEG-07 / X-01): el bot resuelve el mismo número contra `app_user` (cuenta de oficina) y `vigia_contacto`
   // (cliente del Vigía) además de `operador`. Un número activo ahí, en OTRA flota, también es un número que el bot no sabría a
@@ -416,13 +409,11 @@ export async function comprobarTelefonoLibre(
   const cuentaAjena = ((cuentas.data ?? []) as Array<{ tenant_id: string | null; activo?: boolean | null }>)
     .some((c) => c.activo !== false && c.tenant_id !== tenantId);
   const contactoAjeno = ((contactos.data ?? []) as Array<{ tenant_id: string | null }>).some((c) => c.tenant_id !== tenantId);
-  if (cuentaAjena || contactoAjeno) throw new DatoInvalido(TELEFONO_NO_DISPONIBLE);
+  if (cuentaAjena || contactoAjeno) throw datoInvalido('adm.telefono_no_disponible');
 
   const propioDeBaja = filas.find((c) => c.tenant_id === tenantId);
   if (propioDeBaja) {
-    throw new DatoInvalido(
-      `Ese teléfono es de ${propioDeBaja.nombre}, que está dado de baja en tu flota. Si volvió a trabajar contigo, vuelve a marcarlo como activo en Operadores en vez de darlo de alta otra vez — así conserva su historial de viajes.`,
-    );
+    throw datoInvalido('adm.ese_telefono_es_de_que', { nombre: propioDeBaja.nombre });
   }
 }
 
@@ -434,7 +425,7 @@ export function normalizarRfcOperador(crudo: string | null | undefined): string 
   if (!t) return null;
   const rfc = t.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
   if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
-    throw new DatoInvalido(`El RFC "${crudo}" no pasa el dígito verificador. Revísalo antes de guardar.`);
+    throw datoInvalido('adm.el_rfc_no_pasa_el_2', { crudo: String(crudo) });
   }
   return rfc;
 }
@@ -459,7 +450,7 @@ export function normalizarFechaLicencia(crudo: string | null | undefined): strin
   const v = (crudo ?? '').trim();
   if (!v) return null;
   if (!esFechaIsoReal(v)) {
-    throw new DatoInvalido(`"${crudo}" no es una fecha válida (AAAA-MM-DD).`);
+    throw datoInvalido('adm.no_es_una_fecha_valida', { crudo: String(crudo) });
   }
   return v;
 }
@@ -486,18 +477,18 @@ export async function crearOperador(
   actor?: { id?: string; email?: string },
 ): Promise<string> {
   const nombre = o.nombre.trim();
-  if (nombre.length < 3) throw new DatoInvalido('El nombre del operador necesita al menos 3 caracteres.');
+  if (nombre.length < 3) throw datoInvalido('adm.el_nombre_del_operador_necesita');
 
   const sinTelefono = !(o.telefono ?? '').trim();
   const correo = correoDeOperador(o.correo);
-  if (correo === undefined) throw new DatoInvalido('El correo del operador no tiene forma de correo (falta la @ o el dominio).');
+  if (correo === undefined) throw datoInvalido('adm.el_correo_del_operador_no');
   const numeroEmpleado = o.numeroEmpleado?.trim() || null;
   if (sinTelefono) {
     // Alta SIN WhatsApp (0932): solo si el desglose de esta flota sale por correo, y con número de empleado + correo.
     // Import perezoso: la compuerta lee el perfil y la configuración (sesión y base) y este archivo lo cargan también scripts de Node.
     const { permiteAltaSinTelefono } = await import('./operador_sin_telefono_canal');
-    if (!(await permiteAltaSinTelefono(tenantId))) throw new DatoInvalido(MENSAJE_SIN_TELEFONO_NO_PERMITIDO);
-    if (!numeroEmpleado || !correo) throw new DatoInvalido('Sin teléfono, el operador necesita número de empleado y correo: con ellos se le encuentra y se le entrega el desglose.');
+    if (!(await permiteAltaSinTelefono(tenantId))) throw datoInvalido('adm.sin_telefono_no_permitido');
+    if (!numeroEmpleado || !correo) throw datoInvalido('adm.sin_telefono_el_operador_necesita');
   }
   const telefono = sinTelefono ? nuevoMarcadorSinTelefono() : normalizarTelefonoOperador(o.telefono);
   const rfc = normalizarRfcOperador(o.rfc);
@@ -609,14 +600,14 @@ export async function actualizarOperador(
   actor?: { id?: string; email?: string },
 ): Promise<void> {
   if (!esUuidValido(operadorId)) {
-    throw new DatoInvalido('No se reconoce ese operador. Vuelve a abrir la pantalla.');
+    throw datoInvalido('adm.no_se_reconoce_ese_operador');
   }
 
   const fila: Record<string, unknown> = {};
 
   if (cambios.nombre !== undefined) {
     const nombre = cambios.nombre.trim();
-    if (nombre.length < 3) throw new DatoInvalido('El nombre del operador necesita al menos 3 caracteres.');
+    if (nombre.length < 3) throw datoInvalido('adm.el_nombre_del_operador_necesita');
     fila.nombre = nombre;
   }
 
@@ -641,7 +632,7 @@ export async function actualizarOperador(
       // se pueda interpretar tal cual se guardaría vencida o vigente sin
       // serlo — ninguna de las dos es honesta si lo tecleado no es una fecha.
       if (!esFechaIsoReal(v)) {
-        throw new DatoInvalido(`"${cambios.licenciaVence}" no es una fecha válida (AAAA-MM-DD).`);
+        throw datoInvalido('adm.no_es_una_fecha_valida_2', { licenciaVence: String(cambios.licenciaVence) });
       }
       fila.licencia_vence = v;
     }
@@ -685,7 +676,7 @@ export async function actualizarOperador(
   }
 
   if (Object.keys(fila).length === 0) {
-    throw new DatoInvalido('No hay ningún cambio que guardar.');
+    throw datoInvalido('adm.no_hay_ningun_cambio_que');
   }
 
   // ── EL TELÉFONO ANTERIOR, para saber si de verdad cambió (FE-4) ──────────
@@ -758,7 +749,7 @@ export async function actualizarOperador(
 
   if (error) throw new Error(`actualizarOperador: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró ese operador en tu flota. Puede que alguien lo haya borrado — recarga la pantalla.');
+    throw datoInvalido('adm.no_se_encontro_ese_operador');
   }
 
   // La baja y la reactivación se anotan CON SU PROPIO NOMBRE, no escondidas
@@ -943,13 +934,13 @@ export async function guardarPolitica(
   politica: PoliticaGasto[],
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!Array.isArray(politica)) throw new DatoInvalido('La política tiene que ser una lista de conceptos.');
+  if (!Array.isArray(politica)) throw datoInvalido('adm.la_politica_tiene_que_ser');
 
   for (const p of politica) {
-    if (!p.concepto?.trim()) throw new DatoInvalido('Hay un renglón de la política sin concepto.');
+    if (!p.concepto?.trim()) throw datoInvalido('adm.hay_un_renglon_de_la');
     if (p.topeMonto != null) {
       if (!Number.isFinite(p.topeMonto) || p.topeMonto < 0) {
-        throw new DatoInvalido(`El tope de "${p.concepto}" tiene que ser un número mayor o igual a 0.`);
+        throw datoInvalido('adm.el_tope_de_tiene_que', { concepto: p.concepto });
       }
       // Un tope de 0 es una decisión válida (no se permite el concepto), pero
       // se distingue de "sin tope", que es `undefined`. Escribir 0 creyendo que
@@ -1076,24 +1067,24 @@ export function parsearRfcsAdicionales(crudo: string, rfcPrincipal: string): str
     const rfc = trozo.trim().toUpperCase();
     if (rfc === '') continue;
     if (!esRfcValido(rfc)) {
-      throw new DatoInvalido(`"${rfc}" no tiene forma de RFC (12 o 13 caracteres, como AAA010101AAA).`);
+      throw datoInvalido('adm.no_tiene_forma_de_rfc', { rfc });
     }
     if (!rfcChecksumOk(rfc)) {
-      throw new DatoInvalido(`El RFC "${rfc}" no pasa el dígito verificador — revísalo contra la Constancia de Situación Fiscal.`);
+      throw datoInvalido('adm.el_rfc_no_pasa_el_3', { rfc });
     }
     if (rfc === principal) {
       // Silenciarlo lo dejaría duplicado en la lista de aceptados, que no
       // rompe nada pero le enseña al contador un RFC de más y le hace dudar.
-      throw new DatoInvalido(`"${rfc}" ya es el RFC principal de la flota; aquí van SOLO las otras razones sociales.`);
+      throw datoInvalido('adm.ya_es_el_rfc_principal', { rfc });
     }
     if (salida.includes(rfc)) {
-      throw new DatoInvalido(`"${rfc}" está repetido.`);
+      throw datoInvalido('adm.esta_repetido', { rfc });
     }
     salida.push(rfc);
   }
 
   if (salida.length > MAX_RFCS_ADICIONALES) {
-    throw new DatoInvalido(`Son ${salida.length} RFC y el máximo aquí es ${MAX_RFCS_ADICIONALES}. Con más de eso ya no es una flota con varias razones sociales: háblanos y lo montamos bien.`);
+    throw datoInvalido('adm.son_rfc_y_el_maximo', { length: salida.length, MAX_RFCS_ADICIONALES });
   }
   return salida;
 }
@@ -1162,14 +1153,14 @@ export function armarPolitica(
 
   for (const r of renglones) {
     const concepto = r.concepto.trim();
-    if (!concepto) throw new DatoInvalido('Hay un renglón de la política sin concepto.');
+    if (!concepto) throw datoInvalido('adm.hay_un_renglon_de_la');
 
     const crudo = r.tope.trim();
     let topeMonto: number | undefined;
     if (crudo !== '') {
       const n = Number(crudo);
       if (!Number.isFinite(n) || n < 0) {
-        throw new DatoInvalido(`El tope de "${concepto}" tiene que ser un número mayor o igual a 0.`);
+        throw datoInvalido('adm.el_tope_de_tiene_que', { concepto });
       }
       topeMonto = n;
     }
@@ -1234,7 +1225,7 @@ export async function reabrirViaje(
   actor?: { id?: string; email?: string },
 ): Promise<{ pdfPerdido: string | null }> {
   if (!confirmar) {
-    throw new DatoInvalido('Reabrir retira la liquidación anterior y su PDF (queda archivada, pero deja de valer). Hay que confirmarlo explícitamente.');
+    throw datoInvalido('adm.reabrir_retira_la_liquidacion_anterior');
   }
 
   const admin = supabaseAdmin();
@@ -1246,7 +1237,7 @@ export async function reabrirViaje(
     .maybeSingle();
 
   if (errViaje) throw new Error(`reabrirViaje: ${errViaje.message}`);
-  if (!viaje) throw new DatoInvalido(`No existe el viaje ${folio} en esta flota.`);
+  if (!viaje) throw datoInvalido('adm.no_existe_el_viaje_en', { folio });
 
   const viajeId = viaje.id as string;
 
@@ -1255,10 +1246,7 @@ export async function reabrirViaje(
   // podría dejar de existir un instante después, por un cierre en vuelo).
   const lock = await acquireViajeLock(viajeId);
   if (!lock) {
-    throw new DatoInvalido(
-      `El viaje ${folio} está siendo procesado en este momento (un cierre o un XML en curso). ` +
-      `Espera unos segundos y vuelve a intentar reabrirlo.`,
-    );
+    throw datoInvalido('adm.el_viaje_esta_siendo_procesado', { folio });
   }
 
   try {
@@ -1285,14 +1273,10 @@ export async function reabrirViaje(
     );
     if (error) {
       if ((error as { code?: string }).code === '23505') {
-        throw new DatoInvalido(
-          `No se puede reabrir ${folio}: su operador ya tiene otro viaje abierto. ` +
-          'Cierra o cancela ese viaje primero — un operador solo puede tener uno abierto a la vez. ' +
-          'La liquidación de este viaje NO se tocó.',
-        );
+        throw datoInvalido('adm.no_se_puede_reabrir_su', { folio });
       }
       if ((error as { code?: string }).code === 'CU012') {
-        throw new DatoInvalido(`No existe el viaje ${folio} en esta flota.`);
+        throw datoInvalido('adm.no_existe_el_viaje_en', { folio });
       }
       throw new Error(`reabrirViaje: ${error.message}`);
     }

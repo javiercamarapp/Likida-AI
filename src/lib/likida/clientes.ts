@@ -49,7 +49,7 @@ import { acotada } from './presupuesto';
 // sería una segunda oportunidad de escribir mal exactamente el conteo que da
 // la concentración.
 import { leerCarteraRpc, armarCartera, type ClienteRow } from './comercial';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido, etiqueta } from './errores';
 import { esRfcValido, esUuidValido, rfcChecksumOk } from './intake/cfdi';
 import { round2, hoyMx, masDeDosDecimales } from '@/lib/formato';
 
@@ -139,7 +139,7 @@ export interface ClienteValido {
 function opcional(crudo: string, campo: string, max: number): string | null {
   const t = crudo.trim();
   if (t === '') return null;
-  if (t.length > max) throw new DatoInvalido(`${campo} no puede pasar de ${max} caracteres.`);
+  if (t.length > max) throw datoInvalido('adm.no_puede_pasar_de_caracteres', { campo, max });
   return t;
 }
 
@@ -160,8 +160,8 @@ export function validarCliente(c: ClienteCrudo): ClienteValido {
   // Mismo piso que `crearFlota`: con menos de 3 caracteres no hay a quién
   // buscar en la lista, y el índice único por (tenant, nombre) haría chocar
   // dos clientes distintos capturados como "A" y "A ".
-  if (nombre.length < 3) throw new DatoInvalido('El nombre del cliente necesita al menos 3 caracteres.');
-  if (nombre.length > 120) throw new DatoInvalido('El nombre del cliente no puede pasar de 120 caracteres.');
+  if (nombre.length < 3) throw datoInvalido('adm.el_nombre_del_cliente_necesita');
+  if (nombre.length > 120) throw datoInvalido('adm.el_nombre_del_cliente_no');
 
   let rfc: string | null = null;
   if (c.rfc.trim() !== '') {
@@ -173,16 +173,13 @@ export function validarCliente(c: ClienteCrudo): ClienteValido {
       // Este RFC es el del RECEPTOR de las facturas que la flota va a emitir.
       // Un dígito verificador malo no se descubre aquí: se descubre cuando el
       // PAC rechaza el CFDI, con el viaje ya entregado y el cobro detenido.
-      throw new DatoInvalido(
-        `El RFC "${c.rfc.trim()}" no pasa el dígito verificador. Revísalo: es el RFC con el que le vas a facturar, ` +
-        `y un CFDI a nombre de un RFC que no existe lo rebota el SAT.`,
-      );
+      throw datoInvalido('adm.el_rfc_no_pasa_el_4', { v: c.rfc.trim() });
     }
   }
 
-  const correo = opcional(c.correo, 'El correo', 160);
+  const correo = opcional(c.correo, etiqueta('etq.el_correo'), 160);
   if (correo !== null && !CORREO_RE.test(correo)) {
-    throw new DatoInvalido(`"${correo}" no se ve como un correo. Escríbelo completo (nombre@empresa.com) o déjalo vacío.`);
+    throw datoInvalido('adm.no_se_ve_como_un', { correo });
   }
 
   // El teléfono se guarda COMO SE TECLEÓ (solo recortado), no normalizado a
@@ -191,11 +188,11 @@ export function validarCliente(c: ClienteCrudo): ClienteValido {
   // de cobranza contra el que nada se empareja, y aplanarlo a dígitos borraría
   // la extensión ("55 1234 5678 ext. 210") que es justo lo que hace falta para
   // que alguien conteste.
-  const telefono = opcional(c.telefono, 'El teléfono', 40);
+  const telefono = opcional(c.telefono, etiqueta('etq.el_telefono'), 40);
   if (telefono !== null) {
     const digitos = telefono.replace(/\D/g, '');
     if (digitos.length < 10 || digitos.length > 15) {
-      throw new DatoInvalido('El teléfono necesita entre 10 y 15 dígitos (con lada). Déjalo vacío si no lo tienes.');
+      throw datoInvalido('adm.el_telefono_necesita_entre_10');
     }
   }
 
@@ -209,17 +206,17 @@ export function validarCliente(c: ClienteCrudo): ClienteValido {
   const dc = c.diasCredito.trim();
   if (dc !== '') {
     const n = Number(dc);
-    if (!Number.isInteger(n)) throw new DatoInvalido('Los días de crédito tienen que ser un número entero de días.');
+    if (!Number.isInteger(n)) throw datoInvalido('adm.los_dias_de_credito_tienen');
     // Espeja `cliente_dias_credito_sano` (0048). Si el constraint rebota, el
     // usuario ve un mensaje de Postgres con el nombre del check.
-    if (n < 0 || n > 365) throw new DatoInvalido('Los días de crédito tienen que estar entre 0 y 365.');
+    if (n < 0 || n > 365) throw datoInvalido('adm.los_dias_de_credito_tienen_2');
     diasCredito = n;
   }
 
   return {
     nombre,
     rfc,
-    contacto: opcional(c.contacto, 'El contacto', 120),
+    contacto: opcional(c.contacto, etiqueta('etq.el_contacto'), 120),
     correo,
     telefono,
     diasCredito,
@@ -258,15 +255,15 @@ const FECHA_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function fecha(crudo: string, campo: string): string {
   const t = crudo.trim();
-  if (t === '') throw new DatoInvalido(`Falta ${campo}.`);
-  if (!FECHA_RE.test(t)) throw new DatoInvalido(`${campo} tiene que venir como AAAA-MM-DD.`);
+  if (t === '') throw datoInvalido('adm.falta', { campo });
+  if (!FECHA_RE.test(t)) throw datoInvalido('adm.tiene_que_venir_como_aaaa', { campo });
   // `new Date('2026-02-31')` no truena: rueda al 3 de marzo. Un rango de
   // vigencia que empieza tres días después de lo que alguien tecleó desaparece
   // sin avisar del cotizador, que es exactamente lo que el constraint
   // `tarifa_vigencia_coherente` se propuso evitar por el otro lado.
   const d = new Date(`${t}T00:00:00Z`);
   if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== t) {
-    throw new DatoInvalido(`${campo} no es una fecha que exista.`);
+    throw datoInvalido('adm.no_es_una_fecha_que', { campo });
   }
   return t;
 }
@@ -275,24 +272,24 @@ export function validarTarifa(t: TarifaCruda): TarifaValida {
   const modo = t.modo.trim();
   // Espeja `tarifa_modo_dominio` (0048): sin esto el error llega como un check
   // constraint de Postgres, con el nombre del constraint en pantalla.
-  if (!esModoTarifa(modo)) throw new DatoInvalido('Elige cómo se cobra la tarifa: por viaje, por kilómetro o por tonelada.');
+  if (!esModoTarifa(modo)) throw datoInvalido('adm.elige_como_se_cobra_la');
 
   const crudoPrecio = t.precio.trim();
-  if (crudoPrecio === '') throw new DatoInvalido('Falta el precio de la tarifa.');
+  if (crudoPrecio === '') throw datoInvalido('adm.falta_el_precio_de_la');
   // La coma decimal es como se teclea en México — mismo trato que
   // `ajustes_operativos.ts`. Se quitan también los separadores de millar: un
   // precio pegado desde Excel llega como "28,500.00" y `Number` daría NaN.
   const precio = Number(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'));
-  if (!Number.isFinite(precio)) throw new DatoInvalido('El precio tiene que ser un número.');
+  if (!Number.isFinite(precio)) throw datoInvalido('adm.el_precio_tiene_que_ser');
   // A37-S64-02: `precio` es numeric(12,2): más de dos decimales se redondearían en silencio («28.500» → 28.50).
-  if (masDeDosDecimales(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'))) throw new DatoInvalido('El precio no puede traer más de dos decimales. Si el punto es separador de miles, escríbelo sin él (28500 o 28,500.00).');
+  if (masDeDosDecimales(crudoPrecio.replace(/\s/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.'))) throw datoInvalido('adm.el_precio_no_puede_traer');
   // Espeja `tarifa_precio_positivo`. Un precio de 0 no es una tarifa barata:
   // es una tarifa que cotizaría el flete gratis y se vería como una medición.
-  if (precio <= 0) throw new DatoInvalido('El precio tiene que ser mayor que cero.');
+  if (precio <= 0) throw datoInvalido('adm.el_precio_tiene_que_ser_2');
   const tope = PRECIO_MAX[modo];
   if (precio > tope) {
     const m = MODOS_TARIFA.find((x) => x.valor === modo)!;
-    throw new DatoInvalido(`${precio} es demasiado para una tarifa ${m.rotulo.toLowerCase()} (${m.unidad}). Revisa si sobra un cero.`);
+    throw datoInvalido('adm.es_demasiado_para_una_tarifa', { precio, v: m.rotulo.toLowerCase(), unidad: m.unidad });
   }
 
   const moneda = (t.moneda.trim() || 'MXN').toUpperCase();
@@ -303,7 +300,7 @@ export function validarTarifa(t: TarifaCruda): TarifaValida {
   // signo de pesos siendo dólares. Eso no es una limitación de pantalla, es
   // una cifra falsa. Se abre cuando exista tipo de cambio, no antes.
   if (!(MONEDAS_TARIFA as readonly string[]).includes(moneda)) {
-    throw new DatoInvalido('Por ahora las tarifas solo se capturan en pesos: Likida todavía no convierte moneda, y mezclar dólares con pesos daría un ingreso que no es de nadie.');
+    throw datoInvalido('adm.por_ahora_las_tarifas_solo');
   }
 
   let clienteId: string | null = null;
@@ -311,23 +308,23 @@ export function validarTarifa(t: TarifaCruda): TarifaValida {
     clienteId = t.clienteId.trim();
     // Un id con basura llega a Postgres como `22P02 invalid input syntax for
     // type uuid`, que en pantalla no le dice nada a nadie.
-    if (!esUuidValido(clienteId)) throw new DatoInvalido('El cliente de la tarifa no es válido. Vuelve a elegirlo de la lista.');
+    if (!esUuidValido(clienteId)) throw datoInvalido('adm.el_cliente_de_la_tarifa');
   }
 
-  const vigenteDesde = fecha(t.vigenteDesde, 'la fecha desde la que rige la tarifa');
-  const vigenteHasta = t.vigenteHasta.trim() === '' ? null : fecha(t.vigenteHasta, 'la fecha hasta la que rige la tarifa');
+  const vigenteDesde = fecha(t.vigenteDesde, etiqueta('etq.fecha_desde_tarifa'));
+  const vigenteHasta = t.vigenteHasta.trim() === '' ? null : fecha(t.vigenteHasta, etiqueta('etq.fecha_hasta_tarifa'));
   // Espeja `tarifa_vigencia_coherente`, con la razón que da la propia
   // migración: una vigencia al revés deja la tarifa fuera de TODO rango y
   // desaparece sin avisar — quien la capturó cree que puso un precio y el
   // cotizador no encuentra ninguno.
   if (vigenteHasta !== null && vigenteHasta < vigenteDesde) {
-    throw new DatoInvalido('La tarifa no puede terminar antes de empezar: revisa las dos fechas.');
+    throw datoInvalido('adm.la_tarifa_no_puede_terminar');
   }
 
   return {
     clienteId,
-    origen: opcional(t.origen, 'El origen', 120),
-    destino: opcional(t.destino, 'El destino', 120),
+    origen: opcional(t.origen, etiqueta('etq.el_origen'), 120),
+    destino: opcional(t.destino, etiqueta('etq.el_destino'), 120),
     modo,
     precio: round2(precio),
     moneda,
@@ -773,10 +770,10 @@ async function anotar(
 /** Los índices únicos de la 0048, dichos en palabras de quien capturó. */
 function traducirChoque(mensaje: string, c: ClienteValido): DatoInvalido | null {
   if (mensaje.includes('cliente_nombre_unico')) {
-    return new DatoInvalido(`Ya tienes un cliente que se llama "${c.nombre}". Si es otro, distínguelo en el nombre (razón social, plaza).`);
+    return datoInvalido('adm.ya_tienes_un_cliente_que', { nombre: c.nombre });
   }
   if (mensaje.includes('cliente_rfc_unico')) {
-    return new DatoInvalido(`Ya tienes un cliente con el RFC ${c.rfc}. Búscalo en la lista en vez de darlo de alta otra vez.`);
+    return datoInvalido('adm.ya_tienes_un_cliente_con', { rfc: String(c.rfc) });
   }
   return null;
 }
@@ -819,7 +816,7 @@ export async function editarCliente(
   c: ClienteValido,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(clienteId)) throw new DatoInvalido('No se reconoce ese cliente. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(clienteId)) throw datoInvalido('adm.no_se_reconoce_ese_cliente');
 
   // ── EL `.eq('tenant_id')` NO BASTA SI NADIE MIRA LO QUE DEVOLVIÓ ─────────
   // Con el id de un cliente de OTRA flota, este UPDATE toca cero filas y
@@ -842,7 +839,7 @@ export async function editarCliente(
     throw new Error(`editarCliente: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró ese cliente en tu flota. Puede que alguien lo haya borrado — recarga la pantalla.');
+    throw datoInvalido('adm.no_se_encontro_ese_cliente');
   }
 
   await anotar(tenantId, 'cliente.editado', 'cliente', clienteId, {
@@ -890,7 +887,7 @@ export async function crearTarifa(
   actor?: { id?: string; email?: string },
 ): Promise<string> {
   if (t.clienteId && !(await clientePropio(tenantId, t.clienteId))) {
-    throw new DatoInvalido('Ese cliente no es de tu flota. Vuelve a elegirlo de la lista.');
+    throw datoInvalido('adm.ese_cliente_no_es_de');
   }
 
   const { data, error } = await acotada(
@@ -914,9 +911,9 @@ export async function editarTarifa(
   t: TarifaValida,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(tarifaId)) throw new DatoInvalido('No se reconoce esa tarifa. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(tarifaId)) throw datoInvalido('adm.no_se_reconoce_esa_tarifa');
   if (t.clienteId && !(await clientePropio(tenantId, t.clienteId))) {
-    throw new DatoInvalido('Ese cliente no es de tu flota. Vuelve a elegirlo de la lista.');
+    throw datoInvalido('adm.ese_cliente_no_es_de');
   }
 
   const { data, error } = await acotada(
@@ -926,7 +923,7 @@ export async function editarTarifa(
   );
   if (error) throw new Error(`editarTarifa: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró esa tarifa en tu flota. Puede que alguien la haya borrado — recarga la pantalla.');
+    throw datoInvalido('adm.no_se_encontro_esa_tarifa');
   }
 
   // El detalle guarda los VALORES, no "se editó": lo que hay que poder
