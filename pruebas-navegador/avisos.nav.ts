@@ -361,7 +361,7 @@ for (const id of IDENTIDADES) {
       await cuerpo.getByRole('link', { name: 'Configuración', exact: true }).click();
       await expect(page).toHaveURL(/seccion=configuracion/);
       await expect(page.getByRole('button', { name: 'Guardar horario' })).toBeVisible();
-      await page.locator('#contenido-principal').getByRole('link', { name: 'Avisos', exact: true }).click();
+      await page.locator('#contenido-principal').getByRole('link', { name: /^Avisos/ }).last().click();
       await listaLista(page);
     });
 
