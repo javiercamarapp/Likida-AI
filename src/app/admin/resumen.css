@@ -77,3 +77,6 @@
 [data-ui="v2"] .adm-nosabe { border-style: dashed; background: transparent; }
 [data-ui="v2"] .adm-nosabe p { margin: 0 0 8px; font-size: var(--t-body, 13px); line-height: 1.5; color: var(--muted); text-align: left; }
 [data-ui="v2"] .adm-nosabe p:last-child { margin-bottom: 0; }
+
+/* Eyebrow de un panel (Rovaq): 12/500, mayúsculas, tracking 1.2, sobre el contenido de la tarjeta. */
+[data-ui="v2"] .adm-eyebrow { margin: 0 0 8px; font: 500 12px/1.2 var(--font-sans-ui, inherit); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
