@@ -1558,4 +1558,5 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'actividad_codigo.sin_conexion_detalle': 'Ask the technical team to connect read access to the repository (read-only). Until then this screen states nothing: it is not that there are no commits, they could not be read.',
   'actividad_codigo.calculando_detalle': 'GitHub is still computing the repository statistics; reload in a few seconds.',
   'actividad_codigo.error_detalle': 'The activity could not be read: {detalle}. This does NOT mean there are no commits.',
+  'trust_safety.apoyo': 'What the security detectors catch: which sources write here and what happened in the last 30 days.',
 };

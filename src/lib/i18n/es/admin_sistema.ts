@@ -1556,4 +1556,5 @@ export const admin_sistema = {
   'actividad_codigo.sin_conexion_detalle': 'Pídele al equipo técnico que conecte la lectura del repositorio (solo lectura). Mientras tanto esta pantalla no afirma nada: no es que no haya commits, es que no se pudieron leer.',
   'actividad_codigo.calculando_detalle': 'GitHub todavía está calculando la estadística del repositorio; recarga en unos segundos.',
   'actividad_codigo.error_detalle': 'No se pudo leer la actividad: {detalle}. Esto NO significa que no haya commits.',
+  'trust_safety.apoyo': 'Lo que los detectores de seguridad atrapan: qué fuentes escriben aquí y qué pasó en los últimos 30 días.',
 } as const;
