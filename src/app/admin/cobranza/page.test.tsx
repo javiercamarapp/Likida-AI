@@ -23,7 +23,7 @@ const factura = {
   id: 'f1', tenantId: 't1', tenantNombre: 'Flota Demo', periodoInicio: '2026-09-01', periodoFin: '2026-09-30',
   monto: 11600, subtotal: 10000, iva: 1600, moneda: 'MXN', estado: 'pendiente', referencia: 'LK202609', cfdiUuid: null,
 };
-const html = async () => renderToStaticMarkup(await CobranzaPage());
+const html = async () => renderToStaticMarkup(await CobranzaPage({}));
 
 beforeEach(() => {
   dobles.requireSuperadmin.mockReset().mockResolvedValue({ nombre: 'Javier' });
@@ -91,7 +91,7 @@ it('si no se pudo leer algo, lo dice y NO afirma que no hay facturas ni propuest
 
 it('A1: la propia página exige superadmin (no descansa solo en el layout) y sin sesión no lee ningún dato', async () => {
   dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT'));
-  await expect(CobranzaPage()).rejects.toThrow('NEXT_REDIRECT');
+  await expect(CobranzaPage({})).rejects.toThrow('NEXT_REDIRECT');
   expect(dobles.requireSuperadmin).toHaveBeenCalled();
   expect(dobles.getPorCobrarTodas).not.toHaveBeenCalled();
   expect(dobles.getPiezasDunningPlataforma).not.toHaveBeenCalled();
