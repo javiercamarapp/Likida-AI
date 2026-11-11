@@ -5,7 +5,7 @@ import { type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
-import { CloudDownload, FileQuestion } from 'lucide-react';
+import { FileQuestion } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
@@ -194,7 +194,8 @@ export async function PanelBandeja({
 
   const avisoFalta = (!proveedor.configurado || datos.config === null) ? (
         <Aviso tono="warn" titulo={tr('descargaSat.bandeja.vista.todaviaNoHayDe')}>
-          {!proveedor.configurado && <>{tr('descargaSat.bandeja.vista.loDestrabaLikidaNo', { motivo: proveedor.motivo ?? '' })} </>}
+          {/* Solo el estado: el motivo técnico (variables de entorno, quién lo destraba) es del equipo de Likida, no del contador. */}
+          {!proveedor.configurado && <>{tr('descargaSat.panel.proveedorPendiente')} </>}
           {datos.config === null && (
             <>{rico(tr('descargaSat.bandeja.vista.noHasDeclaradoDe'), { link: (c) => <Link href={`/dashboard/descarga-sat${sufijoTenant(searchParams)}`} className="rv-sat__enlace">{c}</Link> })} </>
           )}
@@ -235,7 +236,7 @@ export async function PanelBandeja({
             : e === 'disponible' ? c.disponibles
               : e === 'casado' ? c.casados : c.ignorados;
         return {
-          etiqueta: colas(tr)[e].titulo, valor: n, formato: 'entero', nota: colas(tr)[e].explica,
+          etiqueta: colas(tr)[e].titulo, valor: n, formato: 'entero', matiz: 8,
           href: enlace(searchParams, { estatus: e, pag: null, buscar: null }),
           ...(n === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.bandeja.vista.noSePudoLeer', { error: '' }) } : {}),
         };
@@ -301,11 +302,8 @@ export async function PanelBandeja({
             )}
           </>
         )}
+        <p className="rv-sat__nota"><strong>{tr('descargaSat.bandeja.vista.nadaDeEstoBorra')}.</strong> {tr('descargaSat.bandeja.vista.archivarYDeshacerDejan')}</p>
       </Tarjeta>
-
-      <EstadoVacio titulo={tr('descargaSat.bandeja.vista.nadaDeEstoBorra')} icono={CloudDownload} contenido>
-        {tr('descargaSat.bandeja.vista.archivarYDeshacerDejan')}
-      </EstadoVacio>
     </EsqueletoTablaMaestra>
     </IdiomaProvider>
   );
