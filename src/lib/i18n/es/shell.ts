@@ -36,6 +36,18 @@ export const shell = {
   // Mapa de prospectos (Cerebro de ventas)
   'mapa.sinPunto.uno': '{n} prospecto sin coordenadas: cuenta en su estado pero no tiene punto en el mapa.',
   'mapa.sinPunto.otros': '{n} prospectos sin coordenadas: cuentan en su estado pero no tienen punto en el mapa.',
+  'mapa.sinLectura': 'No se pudo leer la cartera. No es cero.',
+  'mapa.cargando': 'Cargando el detalle de la cartera…',
+  'mapa.errorCarga': 'No se pudo cargar el detalle de la cartera.',
+  'mapa.cargandoEstado': 'Cargando los prospectos de {estado}…',
+  'mapa.reintentar': 'Reintentar',
+  'mapa.rankingTitulo': 'Estados con más prospectos',
+  'mapa.rankingVacio': 'Todavía no hay prospectos con plaza conocida.',
+  'mapa.leyendaTitulo': 'Prospectos por estado, de menos a más',
+  'mapa.sinPlaza': '{n} sin plaza conocida: se dice, no se les inventa estado.',
+  'mapa.prospectos': 'prospectos',
+  'mapa.detalleContacto': '{tel} con teléfono · {dec} con decisor',
+  'mapa.lucesTitulo': 'Etapa de cada luz',
   'pie.cuenta.salir': 'Cerrar sesión',
   // Cabecera de /vendedor
   'vendedor.rotulo': 'Vendedores',
