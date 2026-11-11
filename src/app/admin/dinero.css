@@ -38,3 +38,9 @@
    compartida lo pinta con borde solo en la variante `contenido`; mientras no se unifique allí (pedido_compartido: componentes.css `.rv-vacio`),
    esta regla evita los dos vacíos distintos en la misma página (p. ej. «Facturado por mes» sin borde y «Por cobrar» punteado). */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* Formulario a todo el ancho de su tarjeta (Rovaq: filas rótulo-control, nunca una columna de 340 px con la otra mitad vacía):
+   los campos se reparten en columnas de ≥220 px; avisos y botón ocupan la fila completa. */
+[data-ui="v2"] .adm-din-forma--ancha { max-width: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; align-items: start; }
+[data-ui="v2"] .adm-din-forma--ancha > :is(.rv-aviso, [role="alert"], [role="status"], div:last-child, .rv-campo--casilla) { grid-column: 1 / -1; }
+[data-ui="v2"] .adm-din-rejilla--compacta { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
