@@ -70,7 +70,10 @@ const GRUPOS_GENERICOS: ReadonlyArray<{ id: string; titulo: string; grupo: Entra
   { id: 'automatizacion', titulo: 'Automatización', grupo: 'automatizacion' },
   { id: 'cuenta', titulo: 'Cuenta', grupo: 'cuenta' },
 ];
-const PIE_GENERICO = ['notificaciones', 'mi-perfil', 'ayuda', 'plan'];
+// «Configuración» es un ítem SUELTO bajo los grupos (como en Rovaq, junto a Avisos), no del grupo «Cuenta»: vive en `pie` para que
+// todo consumidor del menú (cabecera, pestañas, recorrido, ⌘K) la siga encontrando, y `ArbolMenu` la pinta bajo los grupos.
+// Mismo filtro por rol que antes (`entradaParaRol`): quien no abre /dashboard/configuracion sigue sin verla.
+const PIE_GENERICO = ['notificaciones', 'mi-perfil', 'ayuda', 'plan', 'configuracion'];
 
 /**
  * Grupos por PROPÓSITO del rol (identidad Rovaq): un grupo con una sola entrada que no es de lo que el rol hace mal rotula. Sin perfil:
@@ -86,6 +89,8 @@ const GRUPO_POR_ROL: Readonly<Record<string, Readonly<Record<string, Entrada['gr
 /** La ruta del asistente: fila del pie mientras va <6/6, ítem de «Cuenta y conexiones» cuando termina. */
 export const HREF_PUESTA_EN_MARCHA = '/dashboard/puesta-en-marcha';
 export const HREF_NOTIFICACIONES = '/dashboard/notificaciones';
+/** El ítem suelto bajo los grupos (sin perfil): «Configuración». */
+export const HREF_CONFIGURACION = '/dashboard/configuracion';
 
 /**
  * El menú que ve un rol con un perfil de tenant. `rol` es el rol con el que se FILTRA (el previsualizado, si el real es
@@ -116,7 +121,7 @@ export function menuPorPerfil(rol: string, perfil?: PerfilTenant | null): MenuV2
   return {
     resumen,
     grupos: GRUPOS_GENERICOS
-      .map((g) => ({ id: g.id, titulo: g.titulo, items: veTodas(ENTRADAS_DASHBOARD.filter((e) => (GRUPO_POR_ROL[rol]?.[e.clave] ?? e.grupo) === g.grupo).map((e) => e.clave)) }))
+      .map((g) => ({ id: g.id, titulo: g.titulo, items: veTodas(ENTRADAS_DASHBOARD.filter((e) => e.clave !== 'configuracion' && (GRUPO_POR_ROL[rol]?.[e.clave] ?? e.grupo) === g.grupo).map((e) => e.clave)) }))
       .filter((g) => g.items.length > 0),
     pie: veTodas(PIE_GENERICO),
   };

@@ -111,7 +111,9 @@ describe('sin perfil: el menú de entradas con pestañas', () => {
     // «Integraciones» ya no es pantalla: es redirección permanente a Conexiones (no está en los listados de v1 desde agosto).
     for (const h of [...antes, '/dashboard', '/dashboard/chat']) expect(alcanzables.has(h), h).toBe(true);
     expect(menu.grupos.map((g) => g.titulo)).toEqual(['Operación', 'Dinero y fiscal', 'Automatización', 'Cuenta']);
-    expect(menu.pie.map((i) => i.nombre)).toEqual(['Notificaciones', 'Mi perfil', 'Centro de ayuda', 'Plan y facturación']);
+    expect(menu.pie.map((i) => i.nombre)).toEqual(['Notificaciones', 'Mi perfil', 'Centro de ayuda', 'Plan y facturación', 'Configuración']);
+    // Configuración es un ítem suelto bajo los grupos: ya no está en «Cuenta».
+    expect(menu.grupos.flatMap((g) => g.items.map((i) => i.href))).not.toContain('/dashboard/configuracion');
   });
 
   it('el dueño cuenta 25 entradas visibles (las 26 del catálogo menos «Contador», que es su Resumen solo para quien no ve /dashboard)', () => {
@@ -136,5 +138,20 @@ describe('hrefActivo', () => {
   it('/dashboard solo es activo en la raíz exacta', () => {
     expect(hrefActivo('/dashboard', menu)).toBe('/dashboard');
     expect(hrefActivo('/dashboard/lo-que-sea', menu)).toBeNull();
+  });
+});
+
+describe('Configuración como ítem suelto (sidebar idéntico a Rovaq)', () => {
+  const sueltoPara = (rol: string, perfil: 'cinco_agentes' | null) => menuPorPerfil(rol, perfil).pie.some((i) => i.href === '/dashboard/configuracion');
+  it('misma visibilidad que el filtro de rutas: quien no abre /dashboard/configuracion no la ve', () => {
+    for (const rol of ['flota_admin', 'contador', 'encargado', 'superadmin', 'nomina', 'vendedor']) {
+      expect(sueltoPara(rol, null), rol).toBe(puedeVerRuta(rol, '/dashboard/configuracion', null) && menuPorPerfil(rol, null).pie.length > 0);
+    }
+    expect(sueltoPara('flota_admin', 'cinco_agentes')).toBe(false);
+  });
+  it('nunca está también en un grupo', () => {
+    for (const rol of ['flota_admin', 'contador', 'encargado', 'superadmin']) {
+      expect(menuPorPerfil(rol, null).grupos.flatMap((g) => g.items).map((i) => i.href), rol).not.toContain('/dashboard/configuracion');
+    }
   });
 });
