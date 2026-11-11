@@ -7,6 +7,7 @@ import { getBorradorViaje } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
 import { Aviso, BotonEnlace, Chip } from '@/app/ui-v2/componentes';
+import '../timbrado.css';
 import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import { SeccionTimbrado } from './timbrar';
 
@@ -52,11 +53,14 @@ export default async function PaginaTimbradoViaje({
   if (!v) notFound();
 
   const rotulo = v.folio ?? v.viajeId.slice(0, 8);
+  // El paso 1 es un hecho leído del propio borrador, no una promesa: armado y sin fallas del validador.
+  const borradorListo = v.borrador.borrador !== null && v.borrador.fallas.length === 0;
 
   return (
     <EsqueletoFicha
-      area="Carta Porte"
+      area={tr('e26b.timb_ficha')}
       titulo={tr('timbrado.viajeId.page.tituloViaje', { rotulo })}
+      apoyo={tr('e26b.timb_apoyo')}
       volver={{ href: `${RUTA}${sufijoTenant(sp)}`, etiqueta: tr('timbrado.viajeId.page.volverATimbrado') }}
       acciones={(
         <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
@@ -68,6 +72,8 @@ export default async function PaginaTimbradoViaje({
           <li><Chip>{v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('timbrado.viajeId.page.rutaSinCapturar')}</Chip></li>
           <li><Chip>{tr('e26.timb_mercancias', { n: numero(v.mercancias.length) })}</Chip></li>
           {v.unidadEconomico ? <li><Chip>{tr('e26.timb_unidad', { u: v.unidadEconomico })}</Chip></li> : null}
+          {v.operadorNombre ? <li><Chip>{tr('e26b.timb_operador', { n: v.operadorNombre })}</Chip></li> : null}
+          {v.clienteNombre ? <li><Chip>{tr('e26b.timb_cliente', { n: v.clienteNombre })}</Chip></li> : null}
         </>
       )}
       avisos={(
@@ -76,6 +82,13 @@ export default async function PaginaTimbradoViaje({
         </Aviso>
       )}
     >
+      <section className="rv-esq__paso rv-timb__paso" aria-label={tr('e26b.timb_paso_borrador')}>
+        <div className="rv-esq__paso-cab">
+          <h2>{tr('e26b.timb_paso_borrador')}</h2>
+          <Chip tono={borradorListo ? 'ok' : 'warn'} tamano="estado">{borradorListo ? tr('e26b.timb_paso_hecho') : tr('e26b.timb_paso_revisar')}</Chip>
+        </div>
+        <p className="rv-esq__paso-quien">{borradorListo ? tr('e26b.timb_borrador_ok') : tr('e26b.timb_borrador_falta', { n: numero(v.borrador.faltantes.length + v.borrador.fallas.length) })}</p>
+      </section>
       <SeccionTimbrado v={v} searchParams={sp} />
     </EsqueletoFicha>
   );
