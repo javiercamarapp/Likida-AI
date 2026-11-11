@@ -50,7 +50,7 @@ export default async function ActividadCodigoPage() {
             nota: mejor ? `semana del ${fechaCorta(new Date(mejor.semana * 1000).toISOString())}` : undefined };
         })(),
       ] : undefined}
-      avisos={<>
+      avisos={a.estado === 'ok' ? null : <>
         {a.estado === 'sin_token' && <AvisoGitHub causa="sin_token" />}
         {a.estado === 'calculando' && (
           <Aviso tono="info">GitHub todavía está calculando la estadística del repo (contestó 202) — recarga en unos segundos.</Aviso>

@@ -116,7 +116,7 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
         <FiltroFecha nombre="hasta" etiqueta={t('bitacora.hasta')} valor={filtro.hasta} />
       </BarraFiltros>
       </>}
-      avisos={<>
+      avisos={(opciones.flotas === null || opciones.personas === null || alReves || (vista === 'accesos' && accesos !== null && !accesos.existe)) ? <>
       {opciones.flotas === null || opciones.personas === null ? (
         <Aviso tono="warn" titulo={t('bitacora.falta_una_lista_de')}>
           
@@ -127,7 +127,7 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
       {vista === 'accesos' && accesos !== null && !accesos.existe ? (
         <Aviso tono="info" titulo={t('bitacora.este_registro_todavia_no')}>{t('bitacora.los_accesos_del_equipo')}</Aviso>
       ) : null}
-      </>}
+      </> : null}
     >
       {alReves ? null : lecturaActual === null ? (
         <EstadoError reintentar>{t('bitacora.no_se_pudo_leer_2')}</EstadoError>

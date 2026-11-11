@@ -14,8 +14,8 @@ import { getAgentesParados } from '@/lib/admin/agentes-parados';
 import { leerResumenBandeja } from '@/lib/admin/cola-aprobacion';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaHoraMx, fechaMx, numero } from '@/lib/formato';
-import { Aviso, BotonEnlace, EstadoVacio, MarcoPagina, StatusChip, TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { Aviso, BotonEnlace, EstadoVacio, StatusChip, TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { BloqueAgentesParados } from './agentes-parados';
 import '../bandeja.css';
 
@@ -98,22 +98,21 @@ export default async function EscalacionesPage() {
   ];
 
   return (
-    <MarcoPagina titulo={t('escalaciones.escalaciones')} apoyo={t('escalaciones.todo_lo_que_espera')}>
-      <TiraCifras
-        etiqueta={t('escalaciones.escalaciones_por_fuente')}
-        items={legibles.map((f) => {
-          const Icono = ICONO_FUENTE[f];
-          return { etiqueta: nombreFuenteTr(f, tSis), valor: conteoDeFuente(f, bandeja.conteos), formato: 'entero' as const, icono: <Icono width={15} height={15} strokeWidth={1.75} /> };
-        })}
-      />
-
-      {/* Fuentes que NO se pudieron leer — dicho, nunca un 0. */}
-      {ilegibles.map((f) => (
+    <EsqueletoTablaMaestra
+      titulo={t('escalaciones.escalaciones')}
+      apoyo={t('escalaciones.todo_lo_que_espera')}
+      etiquetaCifras={t('escalaciones.escalaciones_por_fuente')}
+      cifras={legibles.map((f) => {
+        const Icono = ICONO_FUENTE[f];
+        return { etiqueta: nombreFuenteTr(f, tSis), valor: conteoDeFuente(f, bandeja.conteos), formato: 'entero' as const, icono: <Icono width={15} height={15} strokeWidth={1.75} /> };
+      })}
+      /* Fuentes que NO se pudieron leer — dicho, nunca un 0. */
+      avisos={ilegibles.length === 0 ? null : ilegibles.map((f) => (
         <Aviso key={f} tono="error" titulo={t('escalaciones.no_se_pudo_leer', { NOMBRE_FUENTE: nombreFuenteTr(f, tSis) })}>
-          
           {t('escalaciones.no_es_que_haya')} {bandeja.fuentes[f].error}
         </Aviso>
       ))}
+    >
 
       {bandeja.cola.length === 0 ? (
         legibles.length > 0 && (
@@ -148,7 +147,7 @@ export default async function EscalacionesPage() {
       )}
 
       <BloqueAgentesParados datos={parados} cola={cola} t={t} />
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
