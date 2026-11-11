@@ -267,11 +267,28 @@ describe('el latido se escribe SIEMPRE, y dice la verdad de la pasada', () => {
     correrRunner.mockResolvedValue(conCorte(['kpi_whatsapp', 'documentacion'], ['redactor', 'enriquecedor']));
     const r = await GET(peticion('Bearer secreto-de-prueba'));
     expect(r.status).toBe(200);
-    expect(registrarLatido).toHaveBeenCalledWith('runner', 'parcial', {
+    expect(registrarLatido).toHaveBeenCalledWith('runner', 'parcial', expect.objectContaining({
       agentes: 4, despachados: 2, saltadosPorReloj: ['redactor', 'enriquecedor'], cortesSeguidos: 1,
-    });
+      saltadosPorCausa: { reloj: 2 },
+    }));
     // Y la respuesta que ve Vercel trae la lista, no un 200 mudo.
     expect((await r.json()).saltadosPorReloj).toEqual(['redactor', 'enriquecedor']);
+  });
+
+  it('contrapresión de la bandeja: `parcial` con el motivo expuesto aunque el reloj no cortó', async () => {
+    correrRunner.mockResolvedValue({
+      apagadoGlobal: false,
+      saltadosPorReloj: [],
+      agentes: [
+        { agente: 'enriquecedor', resultado: 'corrio', piezas: 1 },
+        { agente: 'guiones', resultado: 'saltado', motivo: 'bandeja con ≥ 40 piezas pendientes (cualquier tipo) — aprobar es humano; el runner no fabrica encima ("bandeja sin atender")' },
+      ],
+    });
+    await GET(peticion('Bearer secreto-de-prueba'));
+    const [, estado, detalle] = registrarLatido.mock.calls[0] as [string, string, Record<string, unknown>];
+    expect(estado).toBe('parcial');
+    expect(String(detalle.motivo)).toMatch(/contrapresión de la bandeja: 1 de 2/);
+    expect(detalle.saltadosPorCausa).toEqual({ contrapresion_bandeja: 1 });
   });
 
   it('fallo: `fallo` con el código estable, y sin racha previa NO se inventa un cero', async () => {

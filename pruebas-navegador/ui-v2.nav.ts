@@ -23,11 +23,18 @@ test.describe('con la UI v2 forzada', () => {
   test('una sola navegación visible, aria-current en el ítem activo y salto al contenido', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/dashboard/viajes');
-    await expect(page.getByRole('navigation')).toHaveCount(1);
+    // Una sola navegación de SHELL visible (la móvil se oculta por breakpoint); la pantalla puede traer además sus pestañas
+    // «Secciones de …», que son navegación de la página y no del shell.
+    await expect(page.getByRole('navigation', { name: /^(?!Secciones de)/ })).toHaveCount(1);
     await expect(page.getByRole('navigation', { name: 'Navegación principal' })).toBeVisible();
+    await expect(page.getByRole('navigation', { name: 'Secciones de Viajes' })).toBeVisible();
+    // «Viajes» del menú es hoy el grupo Despacho: el registro vive como pestaña dentro de él y el ítem activo es el del grupo.
     const activo = page.locator('aside a[aria-current="page"]');
     await expect(activo).toHaveCount(1);
-    await expect(activo).toHaveAttribute('href', /^\/dashboard\/viajes/);
+    await expect(activo).toHaveAttribute('href', /^\/dashboard\/despacho/);
+    // La capa de carga única (ui-v2/carga.css) deja el marco, incluido el enlace de salto, en visibility:hidden hasta soltarse: antes de ese
+    // momento el primer Tab cae en el sidebar. El teclado se prueba con el marco ya liberado.
+    await expect(page.locator('#rv-carga')).toHaveAttribute('data-estado', 'oculta');
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Saltar al contenido' })).toBeFocused();
     await expect(page.locator('#contenido-principal')).toBeVisible();
@@ -48,16 +55,21 @@ test.describe('con la UI v2 forzada', () => {
     expect((await page.locator('aside').boundingBox())?.width).toBe(232);
   });
 
-  test('pie del sidebar: UN solo bloque (≤ 100 px) con la tarjeta de cuenta; Guía y Notificaciones en la topbar', async ({ page }) => {
+  test('pie del sidebar: UN solo bloque compartido (organización, Avisos, tema, idioma y tarjeta de cuenta); la topbar solo trae plegar y Guía', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/dashboard/viajes');
     const pie = await page.locator('.rv-sb__pie').boundingBox();
-    expect(pie?.height).toBeLessThanOrEqual(100);
-    await expect(page.locator('.rv-sb__pie [role="radiogroup"]')).toHaveCount(0); // el tema vive en el menú de la tarjeta
-    await expect(page.locator('.rv-sb__pie .rv-contador')).toHaveCount(0); // sin contador de avisos en el pie
+    // Pie compartido con /admin (Rovaq): organización 32 + Avisos + acceso cruzado + tema/idioma + tarjeta ≈ 215 px medidos.
+    expect(pie?.height).toBeLessThanOrEqual(260);
+    const enPie = page.locator('.rv-sb__pie');
+    await expect(enPie.getByText('Organización', { exact: true })).toBeVisible();
+    await expect(enPie.getByRole('link', { name: /Avisos/ })).toHaveAttribute('href', /\/dashboard\/notificaciones/);
+    expect(await enPie.locator('input[type="radio"]').count()).toBeGreaterThanOrEqual(3); // tema (3) + idioma (2)
+    await expect(enPie.getByRole('button', { name: /cerrar sesión|salir/i })).toBeVisible();
+    // La campana y la fecha salieron de la cabecera: Avisos vive solo en el pie.
     const topbar = page.locator('header.rv-cab-esc');
     await expect(topbar.getByRole('button', { name: 'Guía' })).toBeVisible();
-    await expect(topbar.getByRole('link', { name: /Notificaciones/ })).toBeVisible();
+    await expect(topbar.getByRole('link', { name: /Notificaciones|Avisos/ })).toHaveCount(0);
     await expect(page.locator('.rv-migas')).toHaveCount(0);
     await topbar.getByRole('button', { name: 'Guía' }).click();
     await expect(page.getByRole('menu', { name: 'Guía' })).toBeVisible();

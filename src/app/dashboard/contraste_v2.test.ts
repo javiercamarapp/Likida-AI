@@ -79,6 +79,8 @@ const PARES_TEXTO: Array<[string, string]> = [
   ['--btn-fg', '--btn-bg'], ['--btn-fg', '--btn-hover'], ['--btn-soft-fg', '--btn-soft'], ['--btn-soft-fg', '--btn-soft-hover'],
   ['--tabla-cab-ink', '--tabla-cab-bg'], ['--ink', '--ui-elevated'], ['--ink', '--ui-soft'], ['--muted', '--ui-soft'],
   ['--ink', '--carga-fondo'], ['--ink-6', '--ui-soft'],
+  // Identidad Rovaq (10-nov-2026): el contenido va sobre el fondo hundido (--ui-sunken) y el tooltip es tarjeta (superficie/tinta).
+  ['--ink', '--ui-sunken'], ['--ink2', '--ui-sunken'], ['--muted', '--ui-sunken'], ['--tip-fg', '--tip-bg'],
   // Azul de Rovaq (7-nov-2026): estado activo de segmentados/chips/filtros y acción primaria del cajón, en reposo y en hover.
   ['--seg-activo-fg', '--seg-activo-bg'], ['--seg-activo-fg', '--seg-activo-hover'],
   ['--accion-cajon-fg', '--accion-cajon-bg'], ['--accion-cajon-fg', '--accion-cajon-hover'],
@@ -130,7 +132,7 @@ describe('tokens v2: cobertura', () => {
   it('el oscuro redefine todo color base (si no, hereda un valor pensado para el claro)', () => {
     const base = ['--bg', '--surface', '--canvas', '--ink', '--ink2', '--muted', '--faint', '--line', '--line2', '--input',
       '--marca', '--marca-fg', '--btn-bg', '--btn-borde', '--btn-hover', '--btn-soft', '--btn-soft-fg', '--ui-elevated',
-      '--carga-fondo', '--tabla-cab-bg', '--chart-barra', '--chart-fuerte', '--chart-rejilla', '--chart-eje',
+      '--carga-fondo', '--ui-sunken', '--tabla-cab-bg', '--chart-barra', '--chart-fuerte', '--chart-rejilla', '--chart-eje',
       '--heat-0', '--heat-1', '--heat-2', '--heat-3', '--heat-4', '--prov-obs', '--prov-est-bg', '--prov-est-borde',
       '--prov-inf-bg', '--prov-inf-borde', '--prov-sin-borde', '--on-1', '--on-5', '--on-6', '--ok', '--okbg', '--warn', '--warnbg', '--bad', '--badbg', '--info', '--infobg', '--senal'];
     const oscuroPropio = variables(bloque(':root[data-theme="dark"] [data-ui="v2"].tema-neutro,'));

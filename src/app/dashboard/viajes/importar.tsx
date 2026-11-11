@@ -5,8 +5,12 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { FileUp } from 'lucide-react';
+import { AvisoCompacto, Boton, CampoArchivo, Icono } from '@/app/ui-v2/componentes';
+import './registro.css';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
 import { frasesSeguimiento } from '@/lib/likida/importacion/resultado_ui';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export interface ResultadoImportarUI {
   error?: string;
@@ -45,6 +49,7 @@ export type AccionImportar = (prev: ResultadoImportarUI | null, fd: FormData) =>
  * la inserción viven en el servidor; NADIE recibe WhatsApp por un import.
  */
 export function ImportarViajes({ importar, verDinero = false }: { importar: AccionImportar; verDinero?: boolean }) {
+  const { t, tp } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(importar, null);
   const router = useRouter();
 
@@ -55,79 +60,63 @@ export function ImportarViajes({ importar, verDinero = false }: { importar: Acci
   const r = estado?.resumen;
 
   return (
-    <div className="min-w-0">
-      <form action={accion} className="flex items-center gap-2 flex-wrap">
-        <input type="file" name="archivo" accept=".csv,.xlsx,.xls" required
-          onChange={(e) => validarArchivoElegido(e.currentTarget)}
-          aria-label="CSV o Excel con los viajes"
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer"
-          style={{ color: 'var(--muted)' }} />
+    <div className="rv-imp">
+      <form action={accion} className="rv-imp__forma">
+        <CampoArchivo etiqueta={t('imp.archivo')} etiquetaOculta name="archivo" accept=".csv,.xlsx,.xls" required
+          onChange={(e) => validarArchivoElegido(e.currentTarget)} />
         <BotonImportar />
       </form>
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
-        Máximo 4 MB por archivo.{' '}
-        {verDinero ? <>
-          Columnas: folio (obligatoria), origen, destino, fecha, anticipo, operador, unidad, cliente, ingreso, km.
-          La unidad y el cliente se amarran contra el catálogo; ingreso vacío no es cero.
-        </> : <>
-          Columnas: folio (obligatoria), origen, destino, fecha, operador, unidad y km.
-          Sube únicamente estas columnas operativas. La unidad se amarra contra su catálogo.
-        </>}{' '}
-        Sin avisos de WhatsApp; los folios que ya existen se saltan solos.
+      <p className="rv-reg__nota">
+        {t('imp.maximo')}{' '}
+        {verDinero ? t('imp.cols.dinero') : t('imp.cols.operativo')}{' '}
+        {t('imp.sinavisos')}
       </p>
-      {estado?.error && <p className="text-[12px] mt-1.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
       {r && (
-        <div className="text-[12px] mt-1.5 space-y-0.5" style={{ color: 'var(--muted)' }}>
+        <div className="rv-imp__res">
           <p>
-            <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.creados}</span> viajes creados
-            {r.saltados > 0 && <> · {r.saltados} saltados (el folio ya existía)</>}
-            {r.descartadas.length > 0 && <span style={{ color: 'var(--warn)' }}> · {r.descartadas.length} filas descartadas</span>}
+            <strong className="rv-reg__mono">{r.creados}</strong> {t('imp.creados')}
+            {r.saltados > 0 && <>{t('imp.saltados', { n: r.saltados })}</>}
+            {r.descartadas.length > 0 && <span className="rv-imp__warn">{t('imp.descartadas', { n: r.descartadas.length })}</span>}
           </p>
           {frasesSeguimiento(r).length > 0 && <p data-testid="seguimiento-agente">{frasesSeguimiento(r).join(' ')}</p>}
           {r.descartadas.slice(0, 5).map((d) => (
-            <p key={d.fila} style={{ color: 'var(--warn)' }}>fila {d.fila}: {d.motivo}</p>
+            <p key={d.fila} className="rv-imp__warn">{t('imp.fila', { fila: d.fila, motivo: d.motivo })}</p>
           ))}
-          {r.descartadas.length > 5 && <p style={{ color: 'var(--faint)' }}>y {r.descartadas.length - 5} más.</p>}
+          {r.descartadas.length > 5 && <p>{t('imp.masfilas', { n: r.descartadas.length - 5 })}</p>}
           {r.sinOperador.length > 0 && (
-            <p style={{ color: 'var(--warn)' }}>
-              {r.sinOperador.length === 1 ? '1 viaje NO se creó' : `${r.sinOperador.length} viajes NO se crearon`} por
-              no traer operador amarrable ({r.sinOperador.join(', ')})
-              {r.operadoresSinAmarrar.length > 0 && <> — nombres sin amarrar: {r.operadoresSinAmarrar.join(', ')}</>}.
-              Da de alta o corrige el nombre en Operadores y vuelve a subir el archivo: los ya creados se saltan solos.
+            <p className="rv-imp__warn">
+              {tp('imp.sinoperador', r.sinOperador.length, {
+                folios: r.sinOperador.join(', '),
+                extra: r.operadoresSinAmarrar.length > 0 ? t('imp.sinamarrar.nombres', { lista: r.operadoresSinAmarrar.join(', ') }) : '',
+              })}
             </p>
           )}
           {r.operadorOcupado.length > 0 && (
-            <p style={{ color: 'var(--warn)' }}>
-              {r.operadorOcupado.length === 1 ? '1 viaje saltado' : `${r.operadorOcupado.length} viajes saltados`} porque
-              su operador ya trae un viaje abierto ({r.operadorOcupado.join(', ')}) — ciérralo o liquídalo primero.
-            </p>
+            <p className="rv-imp__warn">{tp('imp.opocupado', r.operadorOcupado.length, { folios: r.operadorOcupado.join(', ') })}</p>
           )}
           {(r.unidadOcupada?.length ?? 0) > 0 && (
-            <p style={{ color: 'var(--warn)' }}>
-              {r.unidadOcupada!.length === 1 ? '1 viaje saltado' : `${r.unidadOcupada!.length} viajes saltados`} porque
-              su unidad ya tiene un viaje abierto ({r.unidadOcupada!.join(', ')}): ciérralo o reasígnalo antes de importar este.
-            </p>
+            <p className="rv-imp__warn">{tp('imp.unocupada', r.unidadOcupada!.length, { folios: r.unidadOcupada!.join(', ') })}</p>
           )}
           {(r.rechazadasPorBase?.length ?? 0) > 0 && (
-            <p style={{ color: 'var(--warn)' }}>
-              {r.rechazadasPorBase!.length === 1 ? '1 viaje NO se creó' : `${r.rechazadasPorBase!.length} viajes NO se crearon`} porque
-              la base rechazó su fecha o un importe ({r.rechazadasPorBase!.map((x) => x.folio).join(', ')}). Corrige esas filas y vuelve a subir el archivo: los ya creados se saltan solos.
+            <p className="rv-imp__warn">
+              {tp('imp.rechazadas', r.rechazadasPorBase!.length, { folios: r.rechazadasPorBase!.map((x) => x.folio).join(', ') })}
             </p>
           )}
           {r.sinUnidad.length > 0 && (
-            <p style={{ color: 'var(--warn)' }}>
-              {r.sinUnidad.length === 1 ? '1 viaje NO se creó' : `${r.sinUnidad.length} viajes NO se crearon`} porque
-              su unidad no está dada de alta ({r.sinUnidad.join(', ')})
-              {r.unidadesSinAmarrar.length > 0 && <> — números sin amarrar: {r.unidadesSinAmarrar.join(', ')}</>}.
-              Regístrala en Unidades y vuelve a subir el archivo: los ya creados se saltan solos.
+            <p className="rv-imp__warn">
+              {tp('imp.sinunidad', r.sinUnidad.length, {
+                folios: r.sinUnidad.join(', '),
+                extra: r.unidadesSinAmarrar.length > 0 ? t('imp.sinamarrar.numeros', { lista: r.unidadesSinAmarrar.join(', ') }) : '',
+              })}
             </p>
           )}
           {verDinero && r.sinCliente.length > 0 && (
-            <p style={{ color: 'var(--warn)' }}>
-              {r.sinCliente.length === 1 ? '1 viaje NO se creó' : `${r.sinCliente.length} viajes NO se crearon`} porque
-              su cliente no está dado de alta ({r.sinCliente.join(', ')})
-              {r.clientesSinAmarrar.length > 0 && <> — nombres sin amarrar: {r.clientesSinAmarrar.join(', ')}</>}.
-              Regístralo en Clientes y tarifas y vuelve a subir el archivo.
+            <p className="rv-imp__warn">
+              {tp('imp.sincliente', r.sinCliente.length, {
+                folios: r.sinCliente.join(', '),
+                extra: r.clientesSinAmarrar.length > 0 ? t('imp.sinamarrar.nombres', { lista: r.clientesSinAmarrar.join(', ') }) : '',
+              })}
             </p>
           )}
         </div>
@@ -137,13 +126,11 @@ export function ImportarViajes({ importar, verDinero = false }: { importar: Acci
 }
 
 function BotonImportar() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <FileUp width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
-      {pending ? 'Importando…' : 'Importar viajes'}
-    </button>
+    <Boton type="submit" variante="primary" disabled={pending} icono={<Icono icono={FileUp} tam={16} />}>
+      {pending ? t('imp.importando') : t('imp.importar')}
+    </Boton>
   );
 }

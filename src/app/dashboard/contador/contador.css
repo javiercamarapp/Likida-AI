@@ -1,0 +1,17 @@
+/* Contador · solo lo que las piezas del sistema no traen. */
+.rv-cont__pantallas { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; }
+.rv-cont__pantalla { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: var(--t-body); color: var(--ink); text-decoration: none; }
+.rv-cont__pantalla:hover { background: var(--canvas); }
+.rv-cont__pantalla span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-cont__pie { margin: 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-cont__nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
+.rv-cont__alertas { display: grid; gap: 6px; }
+.rv-cont__alerta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 8px; font-size: var(--t-body); color: var(--ink); text-decoration: none; }
+.rv-cont__alerta:hover { background: var(--canvas); }
+.rv-cont__ver { font-size: var(--t-micro); color: var(--muted); }
+.rv-cont__motor { display: flex; flex-wrap: wrap; gap: 8px; align-items: stretch; margin-bottom: 8px; }
+.rv-cont__seccion { display: grid; gap: 8px; }
+.rv-cont__linea { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-cont__estimulo, .rv-cont__tenue { font-size: var(--t-small); color: var(--muted); }
+.rv-cont__lista { display: grid; gap: 8px; }
+.rv-cont__tareas { display: grid; gap: 8px; padding: 0 24px 24px; }

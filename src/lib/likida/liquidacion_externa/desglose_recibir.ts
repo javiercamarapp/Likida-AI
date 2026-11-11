@@ -32,6 +32,7 @@ import {
   MARCA_RETENIDA_OMITIDA, type ConfigGuardasEnvio, type MotivoRetencion, type Renombre,
 } from './desglose_reglas';
 import { generarDesgloseXlsx } from './desglose_xlsx';
+import { leerPolizaProvisional, POLIZA_PROVISIONAL, MOTIVO_POLIZA_PROVISIONAL, MARCA_POLIZA_PROVISIONAL } from './poliza_provisional';
 import { resolverDestinatarios, resolverRevisores, type MotivoFaltante } from './correo_destinatarios';
 import { hoyMx } from '@/lib/formato';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
@@ -79,6 +80,11 @@ export interface DependenciasDesglose {
    * sin ella (pruebas) no se omite nada aparte; la corrección y el corte dependen de ella para ser a prueba de una RPC anterior a la 0940.
    */
   omitirPendientes?: (tenantId: string, liquidacionIds: string[], motivo: string) => Promise<number>;
+  /**
+   * Perilla «póliza provisional» de la flota (apagada por omisión). Opcional: sin ella (pruebas anteriores) vale `false`. Una lectura
+   * que falla vale `false`: sigue reteniéndose como antes.
+   */
+  leerPolizaProvisional?: (tenantId: string) => Promise<boolean>;
 }
 
 export const dependenciasDesglosePorOmision: DependenciasDesglose = {
@@ -121,6 +127,7 @@ export const dependenciasDesglosePorOmision: DependenciasDesglose = {
   recibirAtomico: recibirDesgloseAtomico,
   desgloseIncompleto,
   omitirPendientes: omitirEntregasPendientes,
+  leerPolizaProvisional,
 };
 
 // ── Resultado ───────────────────────────────────────────────────────────────
@@ -342,7 +349,10 @@ export async function recibirDesglose(
 
   // (2b) sin póliza no se envía (misma regla que el pull). Nada se guarda: la póliza no entra en la huella, y una fila
   // guardada ahora haría «idempotente» a la misma bitácora cuando la póliza llegue.
-  if (d.poliza === null || d.poliza === '') {
+  // Póliza provisional (decisión del dueño): con la perilla de la flota encendida el desglose SÍ se guarda, marcado y SIEMPRE retenido.
+  const sinPoliza = d.poliza === null || d.poliza === '';
+  const provisional = sinPoliza && ((deps.leerPolizaProvisional ? await deps.leerPolizaProvisional(tenantId) : false) === true);
+  if (sinPoliza && !provisional) {
     await deps.abrirExcepcion(tenantId, claveExterna, 'sin_poliza', { bitacora: d.bitacora, desde: d.desde }, ahora);
     logger.warn('liqcorreo.sin_poliza', { clave: claveExterna });
     return { estado: 'sin_poliza', claveExterna };
@@ -365,7 +375,11 @@ export async function recibirDesglose(
   const config = await deps.leerConfig(tenantId);
   const omision = motivoDeOmision(d, config);
   const vista = presentar(d, config);
-  const decision = guardasPreEnvio({ ...d, ...vista }, guardasDeConfig(config));
+  const base = guardasPreEnvio({ ...d, ...vista }, guardasDeConfig(config));
+  // Provisional ⇒ retención obligatoria: la revisión humana (liberarEnvio) es lo único que lo deja salir.
+  const decision = provisional
+    ? { decision: 'retener' as const, motivos: [...base.motivos, 'sin_poliza' as const], detalle: [MOTIVO_POLIZA_PROVISIONAL, ...base.detalle] }
+    : base;
   const retenida = decision.decision === 'retener';
 
   // (5) Excel → Storage (primero el archivo; si falla, lanza y no queda fila). En la vista previa no se genera ni se sube nada.
@@ -381,6 +395,7 @@ export async function recibirDesglose(
       desde: d.desde, hasta: d.hasta, dias: conversion.dias,
       percepciones: vista.percepciones, deducciones: vista.deducciones,
       neto: liq.total,
+      ...(provisional ? { marca: `PÓLIZA PROVISIONAL — pendiente de revisión` } : {}),
     });
     xlsxRuta = await deps.subirXlsx(tenantId, claveExterna, huella, bytes);
     xlsxSha256 = sha256Hex(bytes);
@@ -428,7 +443,7 @@ export async function recibirDesglose(
     pdfRuta: null, pdfOrigen: 'generado', pdfSha256: null,
   };
   const meta = {
-    bitacora: d.bitacora, terminal: d.terminal ?? null, poliza: d.poliza,
+    bitacora: d.bitacora, terminal: d.terminal ?? null, poliza: provisional ? POLIZA_PROVISIONAL : d.poliza,
     unidad: d.unidad ?? null, tipoOperador: d.tipoOperador ?? null, dias: conversion.dias,
     ...(d.numeroLiquidacion !== undefined ? { numeroLiquidacion: d.numeroLiquidacion } : {}),
     ...(d.numeroPago !== undefined ? { numeroPago: d.numeroPago } : {}),
@@ -439,6 +454,7 @@ export async function recibirDesglose(
   };
   const detalleEvento = {
     origen: liq.sistemaOrigen, canal: 'correo', renglones: liq.conceptos.length, retenida, viajesEnLikida: viajeIds.length,
+    ...(provisional ? { poliza: MARCA_POLIZA_PROVISIONAL } : {}),
     ...(omision ? { omitida: omision } : {}),
     ...(correccionDe && opciones.correccion
       ? { correccion_de: correccionDe, motivo_correccion: opciones.correccion.motivo.slice(0, 300), actor: opciones.correccion.actor.slice(0, 120) }
@@ -483,7 +499,8 @@ export async function recibirDesglose(
   }
 
   // La póliza ya llegó: la excepción `sin_poliza` de esta clave (si la hubo) se cierra sola.
-  if (deps.resolverExcepciones) {
+  // (Un desglose provisional conserva su excepción `sin_poliza`: es la que pide la revisión.)
+  if (deps.resolverExcepciones && !provisional) {
     try { await deps.resolverExcepciones(tenantId, claveExterna, 'sin_poliza', ahora); } catch (e) {
       logger.warn('liqcorreo.sin_poliza_no_resolvio', { clave: claveExterna, err: e instanceof Error ? e.message : String(e) });
     }
@@ -511,7 +528,7 @@ export async function recibirDesglose(
   // excepciones (subir 1,000 viejos producía cientos de «sin correo de operador» / retenciones sobre datos que nadie va a enviar); su retenida_motivo
   // lleva la marca que impide liberarlo (`liberarEnvio`).
   if (retenida) {
-    if (!omision) for (const m of decision.motivos) await abrir(MOTIVO_A_EXCEPCION[m], { motivo: m });
+    if (!omision) for (const m of decision.motivos) await abrir(MOTIVO_A_EXCEPCION[m], { motivo: m, ...(m === 'sin_poliza' && provisional ? { provisional: true } : {}) });
     return { estado: 'creada', liquidacionId, claveExterna, entregas: 0, retenida: true, motivos: decision.motivos, excepciones, ...(correccionDe ? { correccionDe } : {}), ...(omision ? { omitida: omision } : {}) };
   }
 

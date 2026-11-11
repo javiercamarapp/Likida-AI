@@ -45,7 +45,7 @@ const ok = (filas: FilaDesglose[], o: Partial<Extract<LecturaDesgloses, { ok: tr
 describe('estados vacíos honestos', () => {
   it('sin desgloses dice cuándo llegan, no un cero mudo', async () => {
     const html = await pintar(ok([]));
-    expect(html).toContain('Aún no hay desgloses: llegan cuando una bitácora tiene póliza');
+    expect(html).toContain('Aún no hay desgloses. Llegan cuando está conectado el sistema de transporte (TMS), los operadores tienen correo y la bitácora trae póliza.');
     expect(html).not.toContain('<table');
   });
 

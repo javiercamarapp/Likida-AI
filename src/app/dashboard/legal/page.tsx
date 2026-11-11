@@ -1,3 +1,6 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
@@ -6,8 +9,6 @@ import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { EstadoError } from '../estados';
-import { FormaConAviso, type ResultadoAccion } from '@/app/admin/ui/forma';
 import { fechaHoraMx } from '@/lib/formato';
 import {
   aceptacionesDeFlota, registrarAceptacion, revocarMandato, pendientesDeUsuario, mandatoDe,
@@ -18,18 +19,24 @@ import {
   ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
 import type { Metadata } from 'next';
-import { CampoTexto, Disclosure, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
-export const metadata: Metadata = { title: 'Términos y mandato' };
+import {
+  CampoTexto, Disclosure, EstadoError, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import './legal.css';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.legal') };
+}
 
 
 export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/legal';
-const SOLO_DUENO = 'Solo el dueño de la flota acepta los documentos y otorga el mandato en nombre de la empresa.';
+const soloDueno = (tr: Tr): string => tr('legal.page.soloElDuenoDe');
 // El mandato da poder de operar portales de facturación (Facturas), que un perfil restringido deja en stand-by.
 // Otorgarlo se niega bajo perfil; RETIRARLO sigue disponible: quitarle a la flota la forma de retirar un mandato ya
 // otorgado sería peor que el hueco original.
-const MANDATO_NO_DISPONIBLE = 'El mandato de autofacturación no está disponible en el plan de esta flota.';
+const mandatoNoDisponible = (tr: Tr): string => tr('legal.page.elMandatoDeAutofacturacion');
 
 /**
  * TÉRMINOS, AVISO Y MANDATO DE LA FLOTA (auditoría ola 1, #48).
@@ -55,47 +62,52 @@ export default async function PaginaLegal({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
   async function accionAceptarVigentes(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionDeDueno(sp, tenantId);
-    if (!s) return { error: SOLO_DUENO };
+    if (!s) return { error: soloDueno(tr) };
     const r1 = await registrarAceptacion(s.tenantId, s.userId, 'terminos');
-    if (!r1.ok) return { error: r1.motivo ?? 'No se pudo registrar la aceptación.' };
+    if (!r1.ok) return { error: r1.motivo ?? tr('legal.page.noSePudoRegistrar') };
     const r2 = await registrarAceptacion(s.tenantId, s.userId, 'aviso_privacidad');
-    if (!r2.ok) return { error: r2.motivo ?? 'No se pudo registrar la aceptación.' };
+    if (!r2.ok) return { error: r2.motivo ?? tr('legal.page.noSePudoRegistrar') };
     revalidatePath(RUTA);
-    return { ok: 'Quedó registrada tu aceptación de la versión vigente de los Términos y del Aviso de privacidad.' };
+    return { ok: tr('legal.page.quedoRegistradaTuAceptacion') };
   }
 
   async function accionOtorgarMandato(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionDeDueno(sp, tenantId);
-    if (!s) return { error: SOLO_DUENO };
-    if (await perfilDeTenant(s.tenantId)) return { error: MANDATO_NO_DISPONIBLE };
+    if (!s) return { error: soloDueno(tr) };
+    if (await perfilDeTenant(s.tenantId)) return { error: mandatoNoDisponible(tr) };
     const r = await registrarAceptacion(s.tenantId, s.userId, 'mandato_autofacturacion');
-    if (!r.ok) return { error: r.motivo ?? 'No se pudo registrar el mandato.' };
+    if (!r.ok) return { error: r.motivo ?? tr('legal.page.noSePudoRegistrar2') };
     revalidatePath(RUTA);
-    return { ok: r.registrada ? 'Mandato otorgado: quedó registrado quién, cuándo y con qué texto.' : 'El mandato ya estaba otorgado.' };
+    return { ok: r.registrada ? tr('legal.page.mandatoOtorgadoQuedoRegistra') : tr('legal.page.elMandatoYaEstaba') };
   }
 
   async function accionRetirarMandato(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionDeDueno(sp, tenantId);
-    if (!s) return { error: SOLO_DUENO };
+    if (!s) return { error: soloDueno(tr) };
     const r = await revocarMandato(s.tenantId, s.userId);
-    if (!r.ok) return { error: r.motivo ?? 'No se pudo retirar el mandato.' };
+    if (!r.ok) return { error: r.motivo ?? tr('legal.page.noSePudoRetirar') };
     revalidatePath(RUTA);
-    return { ok: 'Mandato retirado. Likida vuelve a preparar las facturas sin emitirlas.' };
+    return { ok: tr('legal.page.mandatoRetiradoLikidaVuelve') };
   }
 
   async function accionGuardarDatos(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionDeDueno(sp, tenantId);
-    if (!s) return { error: SOLO_DUENO };
+    if (!s) return { error: soloDueno(tr) };
     // El tenant sale de la SESIÓN; del formulario solo vienen los tres textos.
     const r = await guardarDatosResponsable(s.tenantId, {
       razonSocial: fd.get('razonSocial'),
@@ -105,12 +117,12 @@ export default async function PaginaLegal({
     if (!r.ok) return { error: r.error };
     revalidatePath(RUTA);
     // A37-S19-07: no se promete un reenvío que no ocurrió (sin cambios) ni se calla que el aviso saldrá incompleto.
-    const ROTULO = { razonSocial: 'la razón social', domicilio: 'el domicilio', contactoPrivacidad: 'el contacto de privacidad' } as const;
+    const ROTULO = { razonSocial: tr('legal.page.laRazonSocial'), domicilio: tr('legal.page.elDomicilio'), contactoPrivacidad: tr('legal.page.elContactoDePrivacidad') } as const;
     const falta = (r.vacios ?? []).length > 0
-      ? ` Ojo: falta ${(r.vacios ?? []).map((c) => ROTULO[c]).join(', ')}; el aviso de privacidad saldrá sin ese dato (LFPDPPP art. 15).`
+      ? ' ' + tr('legal.page.ojoFalta', { datos: (r.vacios ?? []).map((c) => ROTULO[c]).join(', ') })
       : '';
-    if (r.sinCambios) return { ok: `No hubo cambios: los datos ya eran esos, no se reenvió nada.${falta}` };
-    return { ok: `Datos guardados. El aviso de privacidad de tus choferes se actualiza solo y se les reenvía.${falta}` };
+    if (r.sinCambios) return { ok: tr('legal.page.noHuboCambiosLos', { falta }) };
+    return { ok: tr('legal.page.datosGuardadosElAviso', { falta }) };
   }
 
   // Error DICHO: una base caída no se pinta como «no has aceptado nada».
@@ -132,66 +144,60 @@ export default async function PaginaLegal({
   const conPerfil = (await perfilDeTenant(tenantId)) !== null;
 
   return (
-    <MarcoPagina titulo="Términos y mandato" apoyo="Aceptación de Términos y Aviso de privacidad y mandato de autofacturación, con su evidencia." ancho="lectura">
+    <MarcoPagina titulo={tr('legal.page.legalYPrivacidad')} apoyo={tr('legal.page.aceptacionDeTerminosY')} ancho="lectura">
       {filas === null ? (
-        <EstadoError mensaje="No pude leer el registro de aceptaciones. No significa que no hayas aceptado nada: la consulta falló." />
+        <EstadoError>{tr('legal.page.noPudeLeerEl')}</EstadoError>
       ) : (
         <>
-          <section className="space-y-2" aria-labelledby="h-resp">
-            <TituloRecuadro id="h-resp" info="legal.responsable">Responsable de privacidad de tu flota</TituloRecuadro>
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              El aviso de privacidad que reciben tus choferes nombra a tu empresa como responsable de sus datos. Si
-              aún no los capturas, el aviso <strong>sale igual</strong> y dice qué falta: tus choferes no se quedan sin
-              servicio, pero conviene completarlo. Al guardar, el aviso se actualiza solo.
+          <Tarjeta titulo={tr('legal.page.responsableDePrivacidadDe')} info="legal.responsable">
+            <p className="rv-legal__nota">
+              {rico(tr('legal.page.elAvisoDePrivacidad'), { strong: (c) => <strong>{c}</strong> })}
             </p>
             {responsable === null ? (
-              <EstadoError mensaje="No pude leer los datos de tu flota. No significa que estén vacíos: la consulta falló." />
+              <EstadoError>{tr('legal.page.noPudeLeerLos')}</EstadoError>
             ) : esDueno ? (
               <FormaConAviso accion={accionGuardarDatos} boton="Guardar datos del responsable" columnas="md:grid-cols-1">
                 <div className="rv-forma__rejilla">
-                  <CampoTexto id="razonSocial" name="razonSocial" etiqueta="Razón social (como en tu RFC)" defaultValue={responsable.razonSocial ?? ''} />
-                  <CampoTexto id="contactoPrivacidad" name="contactoPrivacidad" etiqueta="Contacto de privacidad (correo o teléfono)" defaultValue={responsable.contactoPrivacidad ?? ''} />
+                  <CampoTexto id="razonSocial" name="razonSocial" etiqueta={tr('legal.page.razonSocialComoEn')} defaultValue={responsable.razonSocial ?? ''} />
+                  <CampoTexto id="contactoPrivacidad" name="contactoPrivacidad" etiqueta={tr('legal.page.contactoDePrivacidadCorreo')} defaultValue={responsable.contactoPrivacidad ?? ''} />
                 </div>
-                <CampoTexto id="domicilio" name="domicilio" etiqueta="Domicilio fiscal" defaultValue={responsable.domicilio ?? ''} />
+                <CampoTexto id="domicilio" name="domicilio" etiqueta={tr('legal.page.domicilioFiscal')} defaultValue={responsable.domicilio ?? ''} />
               </FormaConAviso>
             ) : (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
+              <p className="rv-legal__nota">{soloDueno(tr)}</p>
             )}
-          </section>
+          </Tarjeta>
 
-          <section className="space-y-2" aria-labelledby="h-docs">
-            <TituloRecuadro id="h-docs" info="legal.documentos">Documentos vigentes</TituloRecuadro>
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              <Link href="/terminos" className="underline">{ETIQUETA_DOCUMENTO.terminos}</Link> (versión {VERSION_TERMINOS}) y{' '}
-              <Link href="/privacidad" className="underline">{ETIQUETA_DOCUMENTO.aviso_privacidad}</Link> (versión {VERSION_AVISO_PRIVACIDAD}).
+          <Tarjeta titulo={tr('legal.page.documentosVigentes')} info="legal.documentos">
+            <p className="rv-legal__nota">
+              {rico(tr('legal.page.linkLinkVersionY', { terminos: ETIQUETA_DOCUMENTO.terminos, VERSION_TERMINOS, aviso_privacidad: ETIQUETA_DOCUMENTO.aviso_privacidad, VERSION_AVISO_PRIVACIDAD }), { link: (c) => <Link href="/terminos" className="rv-legal__enlace">{c}</Link>, link2: (c) => <Link href="/privacidad" className="rv-legal__enlace">{c}</Link> })}
             </p>
             {pendientes && pendientes.length === 0 ? (
-              <p className="text-[12px]" style={{ color: 'var(--ok)' }}>Ya aceptaste la versión vigente de ambos.</p>
+              <p className="rv-legal__estado">{rico(tr('legal.page.statuschipAlDiaStatuschip'), { statuschip: (c) => <StatusChip tono="ok">{c}</StatusChip> })}</p>
             ) : esDueno ? (
-              <FormaConAviso accion={accionAceptarVigentes} boton="Acepto los Términos y el Aviso de privacidad vigentes" columnas="md:grid-cols-1">
+              <FormaConAviso accion={accionAceptarVigentes} boton={tr('legal.page.aceptoLosTerminosY')} columnas="md:grid-cols-1">
                 <span />
               </FormaConAviso>
             ) : (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{SOLO_DUENO}</p>
+              <p className="rv-legal__nota">{soloDueno(tr)}</p>
             )}
-          </section>
+          </Tarjeta>
 
-          <section className="space-y-2" aria-labelledby="h-mandato">
-            <TituloRecuadro id="h-mandato" info="legal.mandato">Mandato de autofacturación</TituloRecuadro>
-            <Disclosure variante="linea" abierto={!mandato} titulo="Texto del mandato" resumen={`versión ${MANDATO_AUTOFACTURACION.version}`}>
-              <blockquote className="text-[12px] border-l-2 pl-3" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+          <Tarjeta titulo={tr('legal.page.mandatoDeAutofacturacion')} info="legal.mandato">
+            <Disclosure variante="linea" abierto={!mandato} titulo={tr('legal.page.textoDelMandato')} resumen={tr('legal.page.version', { version: MANDATO_AUTOFACTURACION.version })}>
+              <blockquote className="rv-legal__cita">
                 {MANDATO_AUTOFACTURACION.texto}
               </blockquote>
-              <p className="mt-2 text-[11px]" style={{ color: 'var(--faint)' }}>
-                Versión {MANDATO_AUTOFACTURACION.version}. Sin este mandato Likida prepara las facturas pero no las emite.
-                El texto no ha pasado por revisión legal definitiva.
+              <p className="rv-legal__pie">
+                {tr('legal.page.versionSinEsteMandato', { version: MANDATO_AUTOFACTURACION.version })}
               </p>
             </Disclosure>
             {mandato ? (
               <>
-                <p className="text-[12px]" style={{ color: 'var(--ok)' }}>
-                  Mandato vigente: otorgado el {fechaHoraMx(mandato.aceptadoEn)}
-                  {mandato.userId === null ? ' (la cuenta que lo otorgó ya fue cancelada)' : ''}.
+                <p className="rv-legal__estado">
+                  <StatusChip tono="ok">{tr('legal.page.vigente')}</StatusChip>
+                  {tr('legal.page.mandatoVigenteOtorgadoEl')} {fechaHoraMx(mandato.aceptadoEn)}
+                  {mandato.userId === null ? ' ' + tr('legal.page.laCuentaQueLo') : ''}.
                 </p>
                 {esDueno && (
                   <FormaConAviso accion={accionRetirarMandato} boton="Retirar el mandato" columnas="md:grid-cols-1">
@@ -200,15 +206,15 @@ export default async function PaginaLegal({
                 )}
               </>
             ) : conPerfil ? (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{MANDATO_NO_DISPONIBLE}</p>
+              <p className="rv-legal__nota">{mandatoNoDisponible(tr)}</p>
             ) : esDueno ? (
-              <FormaConAviso accion={accionOtorgarMandato} boton="Otorgo el mandato en nombre de mi empresa" columnas="md:grid-cols-1">
+              <FormaConAviso accion={accionOtorgarMandato} boton={tr('legal.page.otorgoElMandatoEn')} columnas="md:grid-cols-1">
                 <span />
               </FormaConAviso>
             ) : (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no está otorgado. {SOLO_DUENO}</p>
+              <p className="rv-legal__nota">{tr('legal.page.aunNoEstaOtorgado', { SOLO_DUENO: soloDueno(tr) })}</p>
             )}
-          </section>
+          </Tarjeta>
         </>
       )}
     </MarcoPagina>

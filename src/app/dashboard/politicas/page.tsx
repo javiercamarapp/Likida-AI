@@ -1,5 +1,6 @@
+import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
-import { Route } from 'lucide-react';
 import { getConfig } from '@/lib/likida/config';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { guardarPolitica, armarPolitica, mensajeParaPantalla } from '@/lib/likida/administracion';
@@ -8,12 +9,17 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { StatusPill } from '../../admin/ui/kit';
-import { EstadoVacio } from '../estados';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
 import type { Metadata } from 'next';
-import { AvisoCompacto, CamposSistema, CampoTexto, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
-export const metadata: Metadata = { title: 'Políticas de gasto' };
+import {
+  AvisoCompacto, CamposSistema, CampoTexto, Casilla, EstadoError, EstadoVacio, FormaConAviso, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  type ColumnaBase, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import type { PoliticaGasto } from '@/lib/likida/cuadre/engine';
+import './politicas.css';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.politicas') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +56,7 @@ export default async function PoliticasPage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/politicas', sp);
   const puedeEditar = puedeAdministrar(rol);
@@ -91,13 +98,14 @@ export default async function PoliticasPage({
 
   async function accionGuardar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     // A37-S20-02: el MISMO resolutor que la página (con `sp`): `?vista=demo`,
     // `?tenant=` y la cookie del selector se resuelven igual al pintar y al
     // guardar. Antes la action leía solo la sesión y, con `?vista=demo`,
     // escribía la política de la demo en la flota elegida en el selector.
     const s = await resolverTenantAtadoOLanza('/dashboard/politicas', sp, tenantId);
     if (!puedeAdministrar(s.rol)) {
-      return { error: 'Tu rol no puede editar la política de gastos.' };
+      return { error: tr('politicas.page.tuRolNoPuede') };
     }
     const t = s.tenantId;
 
@@ -128,172 +136,113 @@ export default async function PoliticasPage({
     revalidatePath('/dashboard/politicas');
     const propios = completa.length - porRutaVigente.length;
     return {
-      ok: `Política guardada: ${propios} concepto(s) con regla${porRutaVigente.length > 0 ? `, más ${porRutaVigente.length} por ruta que se conservaron` : ''}. El motor la aplica desde el próximo cuadre.`,
+      ok: tr('politicas.page.politicaGuardadaConceptoS', { propios, v: porRutaVigente.length > 0 ? tr('politicas.page.masPorRutaQue', { length: porRutaVigente.length }) : '' }),
     };
   }
 
-  return (
-    <MarcoPagina titulo="Políticas de gasto" apoyo="Los topes contra los que el motor cuadra cada viaje de tu flota.">
-      {config === null ? (
-        <div className="glass-panel p-8 text-sm" style={{ color: 'var(--muted)' }}>
-          No se pudo leer la configuración de esta flota.
-        </div>
-      ) : (
-        <div className="glass-panel overflow-hidden">
-          <div className="pt-5 pb-2 px-5 flex items-center gap-2">
-            <TituloRecuadro info="politicas.topes">Topes por concepto</TituloRecuadro>
-            {politicaPropiaFalloLectura ? (
-              <StatusPill estado="warn">No se pudo saber si es propia</StatusPill>
-            ) : (
-              !politicaPropia && <StatusPill estado="neutral">Heredada de la base</StatusPill>
-            )}
-          </div>
+  const columnasEditor: ColumnaBase<(typeof CONCEPTOS)[number]>[] = [
+    { id: 'concepto', titulo: tr('politicas.page.concepto'), principal: true, celda: (c) => etiquetaConcepto(c) },
+    {
+      id: 'tope', titulo: tr('politicas.page.topePorComprobanteMxn'),
+      celda: (c) => (
+        <CampoTexto
+          id={`tope_${c}`}
+          name={`tope_${c}`}
+          tipo="number"
+          step="0.01"
+          min="0"
+          etiqueta={tr('politicas.page.topeDe', { concepto: etiquetaConcepto(c) })}
+          etiquetaOculta
+          defaultValue={deConcepto(c)?.topeMonto ?? ''}
+          placeholder={tr('politicas.page.sinTope')}
+          className="rv-pol__tope"
+        />
+      ),
+    },
+    {
+      id: 'cfdi', titulo: tr('politicas.page.exigeFacturaCfdi'),
+      celda: (c) => (
+        <Casilla
+          id={`cfdi_${c}`}
+          name={`cfdi_${c}`}
+          etiqueta={tr('politicas.page.exigirCfdiPara', { concepto: etiquetaConcepto(c) })}
+          defaultChecked={deConcepto(c)?.requiereCfdi ?? false}
+        />
+      ),
+    },
+  ];
+  const columnasLectura: ColumnaBase<PoliticaGasto>[] = [
+    { id: 'concepto', titulo: tr('politicas.page.concepto'), principal: true, celda: (p) => etiquetaConcepto(p.concepto) },
+    { id: 'tope', titulo: tr('politicas.page.topePorComprobante'), alinear: 'der', celda: (p) => (p.topeMonto === undefined ? <span className="rv-pol__sin">{tr('politicas.page.sinTope')}</span> : mxn(p.topeMonto)) },
+    { id: 'cfdi', titulo: tr('politicas.page.exigeFacturaCfdi'), celda: (p) => (p.requiereCfdi ? <StatusChip tono="warn">{tr('politicas.page.si')}</StatusChip> : <span className="rv-pol__sin">{tr('politicas.page.no')}</span>) },
+  ];
+  const columnasRuta: ColumnaBase<PoliticaGasto>[] = [
+    { id: 'concepto', titulo: tr('politicas.page.concepto'), principal: true, celda: (p) => etiquetaConcepto(p.concepto) },
+    { id: 'ruta', titulo: tr('politicas.page.ruta'), celda: (p) => p.ruta },
+    { id: 'tope', titulo: tr('politicas.page.tope'), alinear: 'der', celda: (p) => (p.topeMonto === undefined ? '—' : mxn(p.topeMonto)) },
+  ];
 
-          {puedeEditar ? (
-            <section className="px-5 pb-5">
-              <FormaConAviso accion={accionGuardar} boton="Guardar política" columnas="md:grid-cols-1">
-                <div className="overflow-x-auto">
-                  <table aria-label="Topes por comprobante (MXN)" className="w-full text-sm">
-                    <thead>
-                      <tr style={{ color: 'var(--muted)' }} className="text-left">
-                        <th scope="col" className="py-2.5 pr-4 font-medium">Concepto</th>
-                        <th scope="col" className="py-2.5 pr-4 font-medium">Tope por comprobante (MXN)</th>
-                        <th scope="col" className="py-2.5 font-medium">Exige factura (CFDI)</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {CONCEPTOS.map((c) => {
-                        const p = deConcepto(c);
-                        return (
-                          <tr key={c} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                            <td className="py-2.5 pr-4 font-medium">
-                              {etiquetaConcepto(c)}
-                            </td>
-                            <td className="py-2.5 pr-4">
-                              <CampoTexto
-                                id={`tope_${c}`}
-                                name={`tope_${c}`}
-                                tipo="number"
-                                step="0.01"
-                                min="0"
-                                etiqueta={`Tope de ${etiquetaConcepto(c)}`}
-                                etiquetaOculta
-                                defaultValue={p?.topeMonto ?? ''}
-                                placeholder="Sin tope"
-                                className="w-40"
-                              />
-                            </td>
-                            <td className="py-2.5">
-                              <input
-                                id={`cfdi_${c}`}
-                                name={`cfdi_${c}`}
-                                type="checkbox"
-                                defaultChecked={p?.requiereCfdi ?? false}
-                                className="w-4 h-4"
-                                aria-label={`Exigir CFDI para ${etiquetaConcepto(c)}`}
-                              />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </FormaConAviso>
-              <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-                Vacío es <strong>sin tope</strong>; un 0 es <strong>tope de cero</strong> — el concepto deja de
-                permitirse. No es lo mismo y el motor los trata distinto.
-                {politicaPropiaFalloLectura
-                  ? ' No se pudo leer si esta flota ya tiene su propia política o sigue la base — recarga antes de decidir si hace falta guardar.'
-                  : !politicaPropia && ' Esta flota todavía usa la política base: al guardar queda con la suya y deja de seguirla.'}
-              </p>
-            </section>
-          ) : politica.length === 0 ? (
-            <div className="px-5 pb-5">
-              <EstadoVacio>Esta flota no tiene topes configurados — el motor no marcará nada por política.</EstadoVacio>
-            </div>
-          ) : (
-            <div className="overflow-x-auto mt-1 pb-2">
-              <table aria-label="Topes por comprobante por concepto" className="w-full text-sm">
-                <thead>
-                  <tr style={{ color: 'var(--muted)' }} className="text-left">
-                    <th scope="col" className="px-5 py-2.5 font-medium">Concepto</th>
-                    <th scope="col" className="px-5 py-2.5 font-medium text-right">Tope por comprobante</th>
-                    <th scope="col" className="px-5 py-2.5 font-medium">Exige factura (CFDI)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {politica.map((p) => (
-                    <tr key={`${p.concepto}-${p.ruta ?? ''}`} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                      <td className="px-5 py-3 font-medium">{etiquetaConcepto(p.concepto)}</td>
-                      <td className="px-5 py-3 text-right tabular">
-                        {p.topeMonto === undefined
-                          ? <span style={{ color: 'var(--muted)' }}>Sin tope</span>
-                          : mxn(p.topeMonto)}
-                      </td>
-                      <td className="px-5 py-3">
-                        {p.requiereCfdi
-                          ? <StatusPill estado="warn">Sí</StatusPill>
-                          : <span style={{ color: 'var(--muted)' }}>No</span>}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+  return (
+    <MarcoPagina titulo={tr('politicas.page.configuracion')} apoyo={tr('politicas.page.losTopesContraLos')}>
+      {config === null ? (
+        <EstadoError reintentar>{tr('politicas.page.noSePudoLeer')}</EstadoError>
+      ) : (
+        <>
+          <Tarjeta
+            titulo={tr('politicas.page.topesPorConcepto')} info="politicas.topes"
+            acciones={politicaPropiaFalloLectura ? (
+              <StatusChip tono="warn">{tr('politicas.page.noSePudoSaber')}</StatusChip>
+            ) : (
+              !politicaPropia && <StatusChip tono="neutral">{tr('politicas.page.heredadaDeLaBase')}</StatusChip>
+            )}
+          >
+            {puedeEditar ? (
+              <>
+                <FormaConAviso accion={accionGuardar} boton={tr('politicas.page.guardarPolitica')} columnas="md:grid-cols-1">
+                  <TablaBase<(typeof CONCEPTOS)[number]> etiqueta={tr('politicas.page.topesPorComprobanteMxn')} columnas={columnasEditor} filas={CONCEPTOS}
+                    idFila={(c) => c} altoMaximo={false} />
+                </FormaConAviso>
+                <p className="rv-pol__nota">
+                  {rico(tr('politicas.page.vacioEsNota'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
+                  {politicaPropiaFalloLectura
+                    ? ' ' + tr('politicas.page.noSePudoLeer2')
+                    : !politicaPropia && ' ' + tr('politicas.page.estaFlotaTodaviaUsa')}
+                </p>
+              </>
+            ) : politica.length === 0 ? (
+              <EstadoVacio titulo={tr('politicas.page.sinTopesConfigurados')} contenido>
+                {tr('politicas.page.estaFlotaNoTiene')}
+              </EstadoVacio>
+            ) : (
+              <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.topesPorComprobantePor')} columnas={columnasLectura} filas={politica}
+                idFila={(p) => `${p.concepto}-${p.ruta ?? ''}`} altoMaximo={false} />
+            )}
+          </Tarjeta>
 
           {porRuta.length > 0 && (
-            <section className="px-5 pb-5 pt-4 border-t" style={{ borderColor: 'var(--line)' }}>
-              <div className="flex items-center gap-2 mb-2">
-                <Route width={15} height={15} strokeWidth={1.75} />
-                <TituloRecuadro info="politicas.reglas_ruta">Reglas por ruta</TituloRecuadro>
-              </div>
-              {/* H39 (auditoría 24): las otras dos tablas de esta página van
-                  envueltas en overflow-x-auto — ésta no, y con nombres de
-                  ruta largos ("CDMX - Nuevo Laredo, Tamaulipas") en un
-                  celular la fila se corta sin forma de deslizar para leer
-                  el resto. Mismo patrón que las dos tablas de arriba. */}
-              <div className="overflow-x-auto">
-                <table aria-label="Reglas por ruta" className="w-full text-sm">
-                  <tbody>
-                    {porRuta.map((p) => (
-                      <tr key={`${p.concepto}-${p.ruta}`} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                        <td className="py-2.5 font-medium">{etiquetaConcepto(p.concepto)}</td>
-                        <td className="py-2.5" style={{ color: 'var(--muted)' }}>{p.ruta}</td>
-                        <td className="py-2.5 text-right tabular">
-                          {p.topeMonto === undefined ? '—' : mxn(p.topeMonto)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-                De solo lectura: el editor de arriba trabaja por concepto y no tiene dónde poner la ruta. Se conservan
-                intactas al guardar — no se editan desde aquí todavía.
+            <Tarjeta titulo={tr('politicas.page.reglasPorRuta')} info="politicas.reglas_ruta">
+              {/* H39 (auditoría 24): con nombres de ruta largos en un celular la fila se cortaba sin forma de deslizar; la región de TablaBase desliza y se alcanza con teclado. */}
+              <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.reglasPorRuta')} columnas={columnasRuta} filas={porRuta}
+                idFila={(p) => `${p.concepto}-${p.ruta}`} altoMaximo={false} />
+              <p className="rv-pol__nota">
+                {tr('politicas.page.deSoloLecturaEl')}
               </p>
-            </section>
+            </Tarjeta>
           )}
 
-          <section className="p-5 border-t" style={{ borderColor: 'var(--line)' }}>
-            <TituloRecuadro info="politicas.topes_fiscales">Topes fiscales que aplica el motor</TituloRecuadro>
-            <div className="mt-3">
-              <CamposSistema etiqueta="Topes fiscales" campos={[
-                { etiqueta: 'Tope diario de alimentación nacional', valor: mxn(config.estimulos.viaticosTopeFiscalDiarioMxn), nota: 'LISR Art. 28-V. Lo que exceda sale marcado como no deducible.' },
-                { etiqueta: 'Tope de gasto en efectivo (no combustible)', valor: mxn(config.estimulos.efectivoTopeMxn), nota: 'LISR Art. 27-III. Arriba de esto exige otra forma de pago.' },
-                { etiqueta: 'Peaje acreditable', valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: 'Estímulo de autopistas, LIF 2026 Art. 20-A, sujeto a elegibilidad.' },
-                { etiqueta: 'Desviación de consumo', valor: `${Math.round(config.tabulador.umbralDesviacion * 100)}%`, nota: 'A partir de aquí el motor levanta la mano.' },
-              ]} />
-            </div>
-          </section>
+          <Tarjeta titulo={tr('politicas.page.topesFiscalesQueAplica')} info="politicas.topes_fiscales">
+            <CamposSistema etiqueta={tr('politicas.page.topesFiscales')} campos={[
+              { etiqueta: tr('politicas.page.topeDiarioDeAlimentacion'), valor: mxn(config.estimulos.viaticosTopeFiscalDiarioMxn), nota: tr('politicas.page.lisrArt28V') },
+              { etiqueta: tr('politicas.page.topeDeGastoEn'), valor: mxn(config.estimulos.efectivoTopeMxn), nota: tr('politicas.page.lisrArt27Iii') },
+              { etiqueta: 'Peaje acreditable', valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: tr('politicas.page.estimuloDeAutopistasLif') },
+              { etiqueta: tr('politicas.page.desviacionDeConsumo'), valor: `${Math.round(config.tabulador.umbralDesviacion * 100)}%`, nota: tr('politicas.page.aPartirDeAqui') },
+            ]} />
+          </Tarjeta>
 
-          <div className="px-5 pt-3 pb-5">
-            <AvisoCompacto tono="info"
-              resumen="Los topes fiscales de arriba NO se editan desde aquí: los fija la ley, no la flota."
-              mas="Los viáticos por ruta/día y el plazo de comprobación del anticipo tampoco están en el esquema como reglas configurables." />
-          </div>
-        </div>
+          <AvisoCompacto tono="info"
+            resumen={tr('politicas.page.losTopesFiscalesDe')}
+            mas={tr('politicas.page.losViaticosPorRuta')} />
+        </>
       )}
     </MarcoPagina>
   );

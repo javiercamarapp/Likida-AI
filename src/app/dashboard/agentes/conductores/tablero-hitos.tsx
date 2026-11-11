@@ -8,7 +8,8 @@ import type { Estancia } from '@/lib/likida/conductor/estadias_anden';
 import type { ReubicacionesCliente } from '@/lib/likida/conductor/reubicaciones';
 import { AccionesHito, FormaAsignarSitios, type AccionOficinaServidor, type ModoAccion, type OpcionSitio } from './acciones-forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { BarraFiltros, FiltroOpciones, TituloRecuadro } from '@/app/ui-v2/componentes';
+import './conductores.css';
+import { BarraFiltros, Disclosure, FiltroOpciones, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -27,12 +28,12 @@ export interface FiltrosVista {
   dias: number;
 }
 
-const SEMAFORO: Record<Semaforo, { etiqueta: string; color: string; fondo: string }> = {
-  sin_reporte: { etiqueta: 'Sin reporte', color: 'var(--bad)', fondo: 'var(--badbg)' },
-  atrasado: { etiqueta: 'Atrasado', color: 'var(--warn)', fondo: 'var(--warnbg)' },
-  a_tiempo: { etiqueta: 'A tiempo', color: 'var(--ok)', fondo: 'var(--okbg)' },
-  sin_ancla: { etiqueta: 'Sin ancla', color: 'var(--muted)', fondo: 'var(--canvas)' },
-  completo: { etiqueta: 'Completo', color: 'var(--muted)', fondo: 'var(--canvas)' },
+const SEMAFORO: Record<Semaforo, { etiqueta: string; tono: TonoEstado }> = {
+  sin_reporte: { etiqueta: 'Sin reporte', tono: 'bad' },
+  atrasado: { etiqueta: 'Atrasado', tono: 'warn' },
+  a_tiempo: { etiqueta: 'A tiempo', tono: 'ok' },
+  sin_ancla: { etiqueta: 'Sin ancla', tono: 'muted' },
+  completo: { etiqueta: 'Completo', tono: 'neutral' },
 };
 export const ORDEN_SEMAFORO: Semaforo[] = ['sin_reporte', 'atrasado', 'a_tiempo', 'sin_ancla', 'completo'];
 
@@ -42,25 +43,16 @@ const EXCEPCION: Record<TipoExcepcion, string> = {
   estadia_excedida: 'Estadía excedida', horas_incoherentes: 'Horas incoherentes', sin_a_quien_escalar: 'Sin a quién escalar', patio_entrega_distinto: 'Patio de entrega distinto',
   pendiente_cruce_largo: 'Pendiente de cruce por mucho tiempo', salida_tms_discrepante: 'Salida del TMS sin confirmar', local_abierto_sin_ccp: 'Sin Carta Porte (viaje local abierto)', sin_ruta_autorizada: 'Sin ruta autorizada',
 };
-const GRAVEDAD: Record<1 | 2 | 3, { texto: string; color: string }> = {
-  3: { texto: 'Urgente', color: 'var(--bad)' }, 2: { texto: 'Revisar', color: 'var(--warn)' }, 1: { texto: 'Vigilar', color: 'var(--muted)' },
-};
+const GRAVEDAD: Record<1 | 2 | 3, string> = { 3: 'Urgente', 2: 'Revisar', 1: 'Vigilar' };
 
 /** T-A5-26: rótulo de los datos de demostración del seed. Nunca se mezclan con reales sin decirlo. */
 export function EtiquetaSimulado() {
-  return (
-    <span className="inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-semibold tracking-wide" style={{ color: 'var(--warn)', background: 'var(--warnbg)' }}>SIMULADO</span>
-  );
+  return <span className="rv-cd__simulado">SIMULADO</span>;
 }
 
 export function PuntoSemaforo({ s }: { s: Semaforo }) {
   const c = SEMAFORO[s];
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: c.color, background: c.fondo }}>
-      <span aria-hidden className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: c.color }} />
-      {c.etiqueta}
-    </span>
-  );
+  return <StatusChip tono={c.tono}>{c.etiqueta}</StatusChip>;
 }
 
 
@@ -73,7 +65,7 @@ const minutos = (m: number): string => (m < 60 ? `${numero(Math.round(m))} min` 
 
 export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias: number }) {
   if (i === null) {
-    return <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudieron calcular los indicadores ahora mismo.</p>;
+    return <p className="rv-cd__nota">No se pudieron calcular los indicadores ahora mismo.</p>;
   }
   return (
     <div>
@@ -91,7 +83,7 @@ export function IndicadoresHitos({ i, dias }: { i: IndicadoresVista | null; dias
           tono={i.tasaValidacionDegradada !== null && i.tasaValidacionDegradada > 0 ? 'warn' : undefined}
           nota={i.llegadasValidables === 0 ? 'ninguna llegada validable en el periodo' : `${numero(i.validacionDegradada)} de ${numero(i.llegadasValidables)} llegadas: sin geocerca o solo con el pin del chofer (sin GPS real)`} />
       </TiraCifras>
-      <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
+      <p className="rv-cd__micro">
         Hitos con actividad en los últimos {dias} {dias === 1 ? 'día' : 'días'}, con los mismos filtros de abajo.
         {i.capturadosOficina > 0 ? ` ${numero(i.capturadosOficina)} los capturó la oficina a mano.` : ''}
         {i.omitidos > 0 ? ` ${numero(i.omitidos)} se dieron por omitidos (el chofer avisó el siguiente).` : ''}
@@ -133,34 +125,27 @@ function modosDeExcepcion(e: Excepcion): ModoAccion[] {
 
 export function ColaExcepciones({ excepciones, puedeActuar, accion }: { excepciones: Excepcion[]; puedeActuar: boolean; accion: AccionOficinaServidor }) {
   return (
-    <section className="card p-4" aria-label="Cola de excepciones">
-      <TituloRecuadro info="conductores_tablero.excepciones" className="mb-1">Cola de excepciones</TituloRecuadro>
-      <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Lo que pide una decisión tuya, lo más urgente primero.</p>
-      {excepciones.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Nada pendiente: ningún hito escalado, atrasado ni sin coincidencia en los viajes que se listan.</p>
-      ) : (
-        <ul className="space-y-3">
-          {excepciones.slice(0, 50).map((e, i) => {
-            const g = GRAVEDAD[e.gravedad];
-            return (
-              <li key={`${e.viajeId}-${e.tipo}-${e.hitoId ?? i}`} className="text-[12px] pb-3 border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: g.color }}>{g.texto}</span>
-                  <span className="font-medium">{EXCEPCION[e.tipo]}</span>
-                  <span className="font-medium">{e.folio ?? 'viaje sin folio'}</span>
-                  {e.desde && <span className="ml-auto text-[11px]" style={{ color: 'var(--faint)' }}>desde {fechaHoraMx(e.desde)}</span>}
-                </div>
-                <p className="mt-0.5" style={{ color: 'var(--muted)' }}>{e.texto}</p>
-                {puedeActuar && <AccionesHito accion={accion} modos={modosDeExcepcion(e)} hitoId={e.hitoId} viajeId={e.viajeId} />}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+    <Tarjeta titulo="Cola de excepciones" info="conductores_tablero.excepciones" estado={excepciones.length === 0 ? 'vacio' : 'ok'}
+      mensaje="Nada pendiente" detalle="Nada pendiente: ningún hito escalado, atrasado ni sin coincidencia en los viajes que se listan.">
+      <p className="rv-cd__micro">Lo que pide una decisión tuya, lo más urgente primero.</p>
+      <ul className="rv-cd__lista">
+        {excepciones.slice(0, 50).map((e, i) => (
+          <li key={`${e.viajeId}-${e.tipo}-${e.hitoId ?? i}`} className="rv-cd__item">
+            <div className="rv-cd__linea">
+              <span className="rv-cd__grav" data-g={e.gravedad}>{GRAVEDAD[e.gravedad]}</span>
+              <span className="rv-cd__medio">{EXCEPCION[e.tipo]}</span>
+              <span className="rv-cd__medio">{e.folio ?? 'viaje sin folio'}</span>
+              {e.desde && <span className="rv-cd__micro rv-cd__fin">desde {fechaHoraMx(e.desde)}</span>}
+            </div>
+            <p className="rv-cd__nota">{e.texto}</p>
+            {puedeActuar && <AccionesHito accion={accion} modos={modosDeExcepcion(e)} hitoId={e.hitoId} viajeId={e.viajeId} />}
+          </li>
+        ))}
+      </ul>
       {excepciones.length > 50 && (
-        <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>Se muestran las 50 más urgentes de {numero(excepciones.length)}.</p>
+        <p className="rv-cd__micro">Se muestran las 50 más urgentes de {numero(excepciones.length)}.</p>
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -180,61 +165,59 @@ function textoOmitido(h: HitoVista): string {
 
 function CeldaHito({ h, puedeActuar, accion, viajeId }: { h: HitoVista; puedeActuar: boolean; accion: AccionOficinaServidor; viajeId: string }) {
   const resuelto = h.estado === 'recibido' || h.estado === 'validado';
-  const Icono = h.estado === 'validado' ? CheckCircle2 : resuelto ? CheckCircle2 : h.estado === 'escalado' ? Flag : h.estado === 'omitido' ? CircleDashed : Clock;
-  const color = h.estado === 'validado' ? 'var(--ok)' : resuelto ? 'var(--ok)' : h.estado === 'escalado' ? 'var(--bad)' : 'var(--faint)';
+  const icono = h.estado === 'validado' ? CheckCircle2 : resuelto ? CheckCircle2 : h.estado === 'escalado' ? Flag : h.estado === 'omitido' ? CircleDashed : Clock;
+  const tono = resuelto ? 'ok' : h.estado === 'escalado' ? 'bad' : 'faint';
   const modos: ModoAccion[] = [];
   if (puedeActuar) {
     if (h.estado === 'esperado' || h.estado === 'escalado' || h.estado === 'omitido') modos.push('capturar');
     if (h.estado === 'recibido') modos.push('validar');
   }
   return (
-    <li className="min-w-[150px] flex-1 text-[12px] space-y-0.5">
-      <div className="flex items-center gap-1.5 font-medium">
-        <Icono width={13} height={13} strokeWidth={1.75} style={{ color }} aria-hidden />
+    <li className="rv-cd__hito">
+      <div className="rv-cd__hito-cab" data-e={tono}>
+        <Icono icono={icono} tam={14} />
         <span>{h.etiqueta}</span>
       </div>
       {resuelto && h.horaMensaje ? (
         <div className="cifra-mono" title="Hora del mensaje del chofer (no del evento físico)">{fechaHoraMx(h.horaMensaje)}</div>
       ) : (
-        <div style={{ color: 'var(--faint)' }}>
+        <div className="rv-cd__faint">
           {h.estado === 'omitido' ? textoOmitido(h) : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
         </div>
       )}
       {resuelto && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]" style={{ color: 'var(--muted)' }}>
+        <div className="rv-cd__linea rv-cd__micro" data-tono="muted">
           {h.fuente && <span>vía {FUENTE_TEXTO[h.fuente] ?? 'otro medio'}</span>}
-          {h.validadoPor && <span style={{ color: 'var(--ok)' }}>validado ({h.validadoPor === 'gps' ? 'ubicación' : h.validadoPor === 'oficina' ? 'oficina' : 'sistema'})</span>}
+          {h.validadoPor && <span data-tono="ok" className="rv-cd__micro">validado ({h.validadoPor === 'gps' ? 'ubicación' : h.validadoPor === 'oficina' ? 'oficina' : 'sistema'})</span>}
           {h.fotos.map((f) => (
-            <a key={f.id} href={`/api/v1/evidencias/${f.id}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 underline"
-              title={f.reusoTenant ? 'Abrir la foto (el enlace dura 10 minutos) — ALERTA: esta misma foto ya se usó como evidencia de OTRO viaje/hito de la flota. Revísala.' : 'Abrir la foto (el enlace dura 10 minutos)'}
-              style={f.reusoTenant ? { color: 'var(--warn)' } : undefined}>
-              <Camera width={11} height={11} aria-hidden />{FOTO_TEXTO[f.tipo]}
-              {f.reusoTenant && <CircleAlert width={11} height={11} aria-hidden />}
+            <a key={f.id} href={`/api/v1/evidencias/${f.id}`} target="_blank" rel="noopener noreferrer" className="rv-cd__foto" data-alerta={f.reusoTenant || undefined}
+              title={f.reusoTenant ? 'Abrir la foto (el enlace dura 10 minutos) — ALERTA: esta misma foto ya se usó como evidencia de OTRO viaje/hito de la flota. Revísala.' : 'Abrir la foto (el enlace dura 10 minutos)'}>
+              <Icono icono={Camera} tam={14} />{FOTO_TEXTO[f.tipo]}
+              {f.reusoTenant && <Icono icono={CircleAlert} tam={14} />}
             </a>
           ))}
         </div>
       )}
-      {h.contacto && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>Lo atiende {h.contacto}</div>}
-      {h.sinContacto && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>sin contacto en andén</div>}
-      {h.reporte?.rampa && <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{h.reporte.rampa}</div>}
+      {h.contacto && <div className="rv-cd__micro" data-tono="muted">Lo atiende {h.contacto}</div>}
+      {h.sinContacto && <div className="rv-cd__micro">sin contacto en andén</div>}
+      {h.reporte?.rampa && <div className="rv-cd__micro" data-tono="muted">{h.reporte.rampa}</div>}
       {h.reporte && h.reporte.reubicaciones > 0 && (
-        <details className="text-[11px]" style={{ color: 'var(--muted)' }}>
-          <summary className="cursor-pointer">{h.reporte.reubicaciones === 1 ? '1 cambio' : `${h.reporte.reubicaciones} cambios`} de rampa o contacto</summary>
-          <ol className="mt-0.5 space-y-0.5">
-            {h.reporte.historial.map((r) => <li key={r.en}><span className="cifra-mono">{fechaHoraMx(r.en)}</span> · {r.rampa ?? 'sin rampa registrada'}</li>)}
+        <Disclosure titulo={h.reporte.reubicaciones === 1 ? '1 cambio de rampa o contacto' : `${h.reporte.reubicaciones} cambios de rampa o contacto`} variante="linea">
+          <ol className="rv-cd__lista">
+            {h.reporte.historial.map((r) => <li key={r.en} className="rv-cd__micro" data-tono="muted"><span className="cifra-mono">{fechaHoraMx(r.en)}</span> · {r.rampa ?? 'sin rampa registrada'}</li>)}
           </ol>
-        </details>
+        </Disclosure>
       )}
       {h.validacion && h.validacion.resultado !== 'sin_dato' && (
-        <div className="text-[11px] flex items-start gap-1" style={{ color: h.validacion.resultado === 'validado' ? 'var(--ok)' : 'var(--warn)' }} title={h.validacion.texto}>
-          {h.validacion.resultado === 'validado' ? <MapPin width={11} height={11} aria-hidden className="mt-0.5 shrink-0" /> : <MapPinOff width={11} height={11} aria-hidden className="mt-0.5 shrink-0" />}
+        <div className="rv-cd__icono-linea rv-cd__micro" data-tono={h.validacion.resultado === 'validado' ? 'ok' : 'warn'} title={h.validacion.texto}>
+          <Icono icono={h.validacion.resultado === 'validado' ? MapPin : MapPinOff} tam={14} />
           <span>{h.validacion.resultado === 'validado' ? `en el sitio (${numero(h.validacion.distanciaM ?? 0)} m)` : `fuera del sitio (${numero(h.validacion.distanciaM ?? 0)} m)`}</span>
         </div>
       )}
-      {h.validacion?.resultado === 'sin_dato' && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>ubicación sin dato</div>}
+      {h.validacion?.resultado === 'sin_dato' && <div className="rv-cd__micro">ubicación sin dato</div>}
       {h.accionesOficina.length > 0 && (
-        <div className="text-[11px] flex items-start gap-1" style={{ color: 'var(--muted)' }}>
-          <UserCog width={11} height={11} aria-hidden className="mt-0.5 shrink-0" />
+        <div className="rv-cd__icono-linea rv-cd__micro" data-tono="muted">
+          <Icono icono={UserCog} tam={14} />
           <span>{h.accionesOficina[0].email}: «{h.accionesOficina[0].motivo}»</span>
         </div>
       )}
@@ -253,15 +236,14 @@ function DocumentosCierreFila({ r }: { r: ResumenDocumentosCierre }) {
   if (!r.usaCatalogo) return null;
   const faltan = r.faltantes.length;
   const porRevisar = r.conProblemaDeCalidad.length;
-  const color = faltan > 0 ? 'var(--warn)' : 'var(--ok)';
   return (
-    <p className="text-[12px] flex items-start gap-1.5" style={{ color }} aria-label="Documentos de cierre">
-      {faltan > 0 ? <FileWarning width={13} height={13} aria-hidden className="mt-0.5 shrink-0" /> : <FileCheck2 width={13} height={13} aria-hidden className="mt-0.5 shrink-0" />}
+    <p className="rv-cd__icono-linea" data-tono={faltan > 0 ? 'warn' : 'ok'} aria-label="Documentos de cierre">
+      <Icono icono={faltan > 0 ? FileWarning : FileCheck2} tam={14} />
       <span>
-        <span className="font-medium">Documentos de cierre:</span>{' '}
+        <span className="rv-cd__medio">Documentos de cierre:</span>{' '}
         <span className="cifra-mono">{numero(r.recibidos)}</span> de <span className="cifra-mono">{numero(r.total)}</span> recibidos
         {faltan > 0 && <> · faltan: {r.faltantes.map((f) => f.nombreSolicitado).join(', ')}</>}
-        {porRevisar > 0 && <span style={{ color: 'var(--warn)' }}> · {numero(porRevisar)} {porRevisar === 1 ? 'con foto por revisar (calidad)' : 'con fotos por revisar (calidad)'}</span>}
+        {porRevisar > 0 && <span> · {numero(porRevisar)} {porRevisar === 1 ? 'con foto por revisar (calidad)' : 'con fotos por revisar (calidad)'}</span>}
       </span>
     </p>
   );
@@ -279,51 +261,51 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sit
 }) {
   const v = f.viaje;
   return (
-    <li className="card p-3.5 space-y-2.5" aria-label={`Viaje ${v.folio ?? 'sin folio'}`}>
-      <div className="flex items-center gap-2.5 flex-wrap">
+    <li className="rv-cd__viaje" aria-label={`Viaje ${v.folio ?? 'sin folio'}`}>
+      <div className="rv-cd__semaforo-linea">
         <PuntoSemaforo s={f.semaforo} />
-        <span className="font-medium text-[13px]">{v.folio ?? 'sin folio'}</span>
+        <span className="rv-cd__medio">{v.folio ?? 'sin folio'}</span>
         {esFolioSimulado(v.folio) && <EtiquetaSimulado />}
-        <span className="text-[12px]" style={{ color: 'var(--muted)' }}>{v.operadorNombre ?? 'Sin operador'}</span>
-        <span className="text-[12px]" style={{ color: 'var(--faint)' }}>
+        <span className="rv-cd__nota">{v.operadorNombre ?? 'Sin operador'}</span>
+        <span className="rv-cd__nota" data-tono="faint">
           {[v.terminalNombre, v.clienteNombre].filter(Boolean).join(' · ')}
         </span>
-        <span className="ml-auto text-[12px]" style={{ color: 'var(--muted)' }}>{v.origen ?? '—'} → {v.destino ?? '—'}</span>
+        <span className="rv-cd__nota rv-cd__fin">{v.origen ?? '—'} → {v.destino ?? '—'}</span>
       </div>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{f.motivo}</p>
+      <p className="rv-cd__nota">{f.motivo}</p>
       {v.operadorSinTelefono === true && (
-        <p role="note" className="text-[12px] flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
-          <CircleAlert width={13} height={13} aria-hidden className="mt-0.5 shrink-0" />{TEXTO_SIN_TELEFONO}
+        <p role="note" className="rv-cd__icono-linea" data-tono="warn">
+          <Icono icono={CircleAlert} tam={14} />{TEXTO_SIN_TELEFONO}
         </p>
       )}
-      <p className="text-[12px] flex items-center gap-1.5" style={{ color: f.ubicacion.obsoleta ? 'var(--warn)' : 'var(--muted)' }}>
-        {f.ubicacion.fuente === 'sin_dato' ? <MapPinOff size={13} aria-hidden /> : <MapPin size={13} aria-hidden />}
+      <p className="rv-cd__icono-linea" data-tono={f.ubicacion.obsoleta ? 'warn' : 'muted'}>
+        <Icono icono={f.ubicacion.fuente === 'sin_dato' ? MapPinOff : MapPin} tam={14} />
         {f.ubicacion.texto}
       </p>
       {f.transito && (
-        <p className="text-[12px] flex items-center gap-1.5" style={{ color: 'var(--muted)' }} aria-label="Tránsito">
-          <Flag size={13} aria-hidden />
-          <span className="font-medium">Tránsito:</span> {f.transito.texto}
+        <p className="rv-cd__icono-linea" data-tono="muted" aria-label="Tránsito">
+          <Icono icono={Flag} tam={14} />
+          <span><span className="rv-cd__medio">Tránsito:</span> {f.transito.texto}</span>
         </p>
       )}
       {f.salidaTms && (
-        <p className="text-[12px] flex items-center gap-1.5" style={{ color: f.salidaTms.estado === 'discrepancia' ? 'var(--warn)' : 'var(--muted)' }} aria-label="Salida del TMS">
-          <Flag size={13} aria-hidden />
+        <p className="rv-cd__icono-linea" data-tono={f.salidaTms.estado === 'discrepancia' ? 'warn' : 'muted'} aria-label="Salida del TMS">
+          <Icono icono={Flag} tam={14} />
           {f.salidaTms.texto}
         </p>
       )}
       {(f.sitioCarga || f.sitioDescarga) ? (
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Se valida contra: {f.sitioCarga ?? 'carga sin sitio asignado'} → {f.sitioDescarga ?? 'descarga sin sitio asignado'}</p>
+        <p className="rv-cd__micro">Se valida contra: {f.sitioCarga ?? 'carga sin sitio asignado'} → {f.sitioDescarga ?? 'descarga sin sitio asignado'}</p>
       ) : (
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Sin sitios asignados: las llegadas de este viaje no se pueden validar contra la ubicación.</p>
+        <p className="rv-cd__micro">Sin sitios asignados: las llegadas de este viaje no se pueden validar contra la ubicación.</p>
       )}
       {f.documentosCierre && <DocumentosCierreFila r={f.documentosCierre} />}
       {puedeActuar && <FormaAsignarSitios accion={accionSitios} viajeId={v.id} sitios={sitios} hayMas={sitiosHayMas} />}
-      <ol className="flex flex-wrap gap-x-4 gap-y-3">
+      <ol className="rv-cd__hitos">
         {f.hitos.map((h) => <CeldaHito key={h.id} h={h} puedeActuar={puedeActuar} accion={accion} viajeId={v.id} />)}
       </ol>
       {f.estancias.length > 0 && (
-        <p className="text-[12px] flex flex-wrap gap-x-4" style={{ color: 'var(--muted)' }}>
+        <p className="rv-cd__linea rv-cd__nota">
           {f.estancias.map((e) => <ResumenEstancia key={e.lugar} e={e} />)}
         </p>
       )}
@@ -337,28 +319,24 @@ export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sit
  */
 export function EpisodiosSenalVida({ episodios, dias, hayMas }: { episodios: EpisodioVista[] | null; dias: number; hayMas?: boolean }) {
   return (
-    <section className="card p-4 space-y-3" aria-label="Sin señal de vida">
-      <TituloRecuadro info="conductores_tablero.sin_senal">Sin señal de vida</TituloRecuadro>
-      {episodios === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los episodios ahora mismo.</p>
-      ) : episodios.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          Ningún tractor quedó sin señal de vida en los últimos {dias} {dias === 1 ? 'día' : 'días'} (o la flota no tiene encendido este aviso: se enciende en la configuración del Conductor).
-        </p>
-      ) : (
-        <ul className="space-y-2">
+    <Tarjeta titulo="Sin señal de vida" info="conductores_tablero.sin_senal"
+      estado={episodios === null ? 'error' : episodios.length === 0 ? 'vacio' : 'ok'}
+      mensaje={episodios === null ? 'No se pudieron leer los episodios ahora mismo.' : 'Ningún episodio sin señal'}
+      detalle={`Ningún tractor quedó sin señal de vida en los últimos ${dias} ${dias === 1 ? 'día' : 'días'} (o la flota no tiene encendido este aviso: se enciende en la configuración del Conductor).`}>
+      {episodios !== null && (
+        <ul className="rv-cd__lista">
           {episodios.map((e) => (
-            <li key={e.id} className="hairline rounded-lg p-3 text-[12px] space-y-1" style={e.urgente ? { borderColor: 'var(--bad)' } : undefined}>
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                <span className="font-medium">{e.folio}</span>
-                <span style={{ color: 'var(--muted)' }}>{e.chofer}</span>
-                <span className="text-[11px] px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>{e.motivo}</span>
-                <span className="cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>desde {fechaHoraMx(e.abiertoEn)}</span>
-                <span className="text-[11px] font-medium" style={{ color: e.urgente ? 'var(--bad)' : e.abierto ? 'var(--warn)' : 'var(--ok)' }}>{e.abierto ? 'Abierto' : 'Cerrado'}</span>
+            <li key={e.id} className="rv-cd__bloque" data-urgente={e.urgente || undefined}>
+              <div className="rv-cd__linea">
+                <span className="rv-cd__medio">{e.folio}</span>
+                <span className="rv-cd__muted">{e.chofer}</span>
+                <StatusChip tono="muted">{e.motivo}</StatusChip>
+                <span className="cifra-mono rv-cd__micro">desde {fechaHoraMx(e.abiertoEn)}</span>
+                <StatusChip tono={e.urgente ? 'bad' : e.abierto ? 'warn' : 'ok'}>{e.abierto ? 'Abierto' : 'Cerrado'}</StatusChip>
               </div>
               <div>{e.estado}</div>
               {e.pasos.length > 0 && (
-                <ol className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]" style={{ color: 'var(--muted)' }}>
+                <ol className="rv-cd__linea rv-cd__micro" data-tono="muted">
                   {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="cifra-mono">{fechaHoraMx(p.en)}</span></li>)}
                 </ol>
               )}
@@ -366,8 +344,8 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas }: { episodios: Epi
           ))}
         </ul>
       )}
-      {hayMas && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Hay más episodios en el periodo de los que se listan: se muestran los más recientes.</p>}
-    </section>
+      {hayMas && <p className="rv-cd__micro">Hay más episodios en el periodo de los que se listan: se muestran los más recientes.</p>}
+    </Tarjeta>
   );
 }
 
@@ -378,37 +356,35 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas }: { episodios: Epi
 export function ReubicacionesPorCliente({ filas, csv }: { filas: ReubicacionesCliente[]; csv: string }) {
   const hayCsv = filas.some((f) => f.viajesConDato > 0);
   return (
-    <section className="card p-4 space-y-3" aria-label="Reubicaciones por cliente">
-      <div className="flex items-center gap-2 flex-wrap">
-        <TituloRecuadro info="conductores_tablero.reubicaciones" className="mr-2">Reubicaciones por cliente</TituloRecuadro>
-        {hayCsv && (
-          <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`} download="reubicaciones-por-cliente.csv" className="text-[12px] underline" style={{ color: 'var(--muted)' }}>
-            Descargar evidencia (CSV)
-          </a>
-        )}
-      </div>
-      {filas.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Aún no hay llegadas con reporte del chofer en los viajes en curso.</p>
-      ) : (
-        <ul className="space-y-1.5">
+    <Tarjeta titulo="Reubicaciones por cliente" info="conductores_tablero.reubicaciones" estado={filas.length === 0 ? 'vacio' : 'ok'}
+      mensaje="Sin llegadas con reporte" detalle="Aún no hay llegadas con reporte del chofer en los viajes en curso."
+      acciones={hayCsv ? (
+        <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`} download="reubicaciones-por-cliente.csv" className="rv-cd__enlace">
+          Descargar evidencia (CSV)
+        </a>
+      ) : undefined}>
+      <div className="rv-cd__pila">
+        <ul className="rv-cd__lista">
           {filas.map((f) => (
-            <li key={f.clienteId ?? 'sin-cliente'} className="hairline rounded-lg p-2.5 text-[12px] flex flex-wrap items-center gap-x-3 gap-y-0.5">
-              <span className="font-medium">{f.clienteNombre}</span>
-              {f.viajesConDato === 0 ? (
-                <span style={{ color: 'var(--muted)' }}>Sin dato ({numero(f.viajes)} {f.viajes === 1 ? 'viaje' : 'viajes'} sin respuesta del chofer)</span>
-              ) : (
-                <>
-                  <span><span className="cifra-mono">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? 'reubicación' : 'reubicaciones'}</span>
-                  <span><span className="cifra-mono">{numero(f.minutos ?? 0)}</span> min</span>
-                  <span style={{ color: 'var(--muted)' }}>en {numero(f.viajesReubicados ?? 0)} de {numero(f.viajesConDato)} {f.viajesConDato === 1 ? 'viaje con dato' : 'viajes con dato'}</span>
-                </>
-              )}
+            <li key={f.clienteId ?? 'sin-cliente'} className="rv-cd__bloque">
+              <div className="rv-cd__linea">
+                <span className="rv-cd__medio">{f.clienteNombre}</span>
+                {f.viajesConDato === 0 ? (
+                  <span className="rv-cd__muted">Sin dato ({numero(f.viajes)} {f.viajes === 1 ? 'viaje' : 'viajes'} sin respuesta del chofer)</span>
+                ) : (
+                  <>
+                    <span><span className="cifra-mono">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? 'reubicación' : 'reubicaciones'}</span>
+                    <span><span className="cifra-mono">{numero(f.minutos ?? 0)}</span> min</span>
+                    <span className="rv-cd__muted">en {numero(f.viajesReubicados ?? 0)} de {numero(f.viajesConDato)} {f.viajesConDato === 1 ? 'viaje con dato' : 'viajes con dato'}</span>
+                  </>
+                )}
+              </div>
             </li>
           ))}
         </ul>
-      )}
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>Los minutos van del primer al último cambio registrado: es lo que se puede probar con horas guardadas, no el tiempo total de espera.</p>
-    </section>
+        <p className="rv-cd__micro">Los minutos van del primer al último cambio registrado: es lo que se puede probar con horas guardadas, no el tiempo total de espera.</p>
+      </div>
+    </Tarjeta>
   );
 }
 
@@ -425,44 +401,46 @@ export function TableroHitos({
   sitiosHayMas?: boolean;
 }) {
   return (
-    <div className="space-y-4">
+    <>
       <IndicadoresHitos i={indicadores} dias={dias} />
-      <section className="card p-4 space-y-3" aria-label="Viajes y semáforo">
-        <div className="flex items-center gap-2 flex-wrap">
-          <TituloRecuadro info="conductores_tablero.viajes_en_curso" className="mr-2">Viajes en curso</TituloRecuadro>
+      <Tarjeta titulo="Viajes en curso" info="conductores_tablero.viajes_en_curso" acciones={
+        <span className="rv-cd__linea">
           {ORDEN_SEMAFORO.map((s) => (
-            <span key={s} className="inline-flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--muted)' }}>
-              <PuntoSemaforo s={s} /><span className="cifra-mono">{numero(tablero.conteos[s])}</span>
+            <span key={s} className="rv-cd__linea">
+              <PuntoSemaforo s={s} /><span className="cifra-mono rv-cd__muted">{numero(tablero.conteos[s])}</span>
             </span>
           ))}
+        </span>
+      }>
+        <div className="rv-cd__pila">
+          <FiltrosTablero f={filtros} catalogos={catalogos} ocultos={ocultos} accionUrl={accionUrl} />
+          {tablero.sinGps && (
+            <p role="note" className="rv-cd__icono-linea" data-tono="warn">
+              <Icono icono={MapPinOff} tam={14} />{TEXTO_SIN_GPS}
+            </p>
+          )}
+          {tablero.hayMas && (
+            <p className="rv-cd__nota" data-tono="warn">
+              Hay más viajes en curso de los que este tablero lista: usa los filtros (patio, cliente o chofer) para ver el resto.
+            </p>
+          )}
         </div>
-        <FiltrosTablero f={filtros} catalogos={catalogos} ocultos={ocultos} accionUrl={accionUrl} />
-        {tablero.sinGps && (
-          <p role="note" className="text-[12px] flex items-start gap-1.5" style={{ color: 'var(--warn)' }}>
-            <MapPinOff width={13} height={13} aria-hidden className="mt-0.5 shrink-0" />{TEXTO_SIN_GPS}
-          </p>
-        )}
-        {tablero.hayMas && (
-          <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-            Hay más viajes en curso de los que este tablero lista: usa los filtros (patio, cliente o chofer) para ver el resto.
-          </p>
-        )}
-      </section>
+      </Tarjeta>
       <ColaExcepciones excepciones={tablero.excepciones} puedeActuar={puedeActuar} accion={accion} />
       {tablero.reubicaciones && <ReubicacionesPorCliente filas={tablero.reubicaciones.porCliente} csv={tablero.reubicaciones.csv} />}
       {episodios !== undefined && <EpisodiosSenalVida episodios={episodios} dias={dias} hayMas={hayMasEpisodios} />}
       {tablero.filas.length === 0 ? (
-        <section className="card p-4 text-[12px] flex items-center gap-2" style={{ color: 'var(--muted)' }}>
-          <CircleAlert width={14} height={14} aria-hidden />
+        <p className="rv-cd__icono-linea" data-tono="muted">
+          <Icono icono={CircleAlert} tam={14} />
           {filtros.terminalId || filtros.clienteId || filtros.operadorId || filtros.semaforo
             ? 'Ningún viaje en curso cumple esos filtros.'
             : TEXTO_SIN_VIAJES}
-        </section>
+        </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="rv-cd__viajes">
           {tablero.filas.map((f) => <TarjetaViaje key={f.viaje.id} f={f} puedeActuar={puedeActuar} accion={accion} accionSitios={accionSitios} sitios={sitios} sitiosHayMas={sitiosHayMas} />)}
         </ul>
       )}
-    </div>
+    </>
   );
 }

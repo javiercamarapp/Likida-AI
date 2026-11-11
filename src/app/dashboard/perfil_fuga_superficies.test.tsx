@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToStaticMarkup, renderToReadableStream } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 import { join } from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -108,6 +109,10 @@ describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
     for (const m of fuenteContenido.matchAll(/\betiqueta="([^"]+)"/g)) t.add(m[1]);
     for (const m of fuenteContenido.matchAll(/\betiqueta=\{`([^$`]+)/g)) t.add(m[1].replace(/\s*[—-]\s*$/, '').trim());
     for (const m of fuenteContenido.matchAll(/<TituloSeccion>([^<{]+)/g)) t.add(m[1].replace(/\s*[—-]\s*$/, '').trim());
+    // Desde el paquete i18n P2 los rótulos salen del diccionario: se leen en español, antes de la primera `{variable}`.
+    const delDiccionario = (clave: string) => { const v = (operacionEs as Record<string, string>)[clave]; if (v) t.add(v.split('{')[0].replace(/\s*[—-]\s*$/, '').trim()); };
+    for (const m of fuenteContenido.matchAll(/\b(?:etiqueta|nombre)=\{t\('([^']+)'/g)) delDiccionario(m[1]);
+    for (const m of fuenteContenido.matchAll(/<TituloSeccion>\{t\('([^']+)'\)/g)) delDiccionario(m[1]);
     // Rótulos que no son dinero: el saludo y la banda de semana del Resumen de siempre no son tarjetas fiscales.
     for (const ok of ['Esta semana', 'Resumen']) t.delete(ok);
     return [...t].filter((s) => s.length >= 4);

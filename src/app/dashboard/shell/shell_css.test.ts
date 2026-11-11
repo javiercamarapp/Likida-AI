@@ -214,6 +214,30 @@ describe('riel, topbar y barra inferior móvil (lote L2a)', () => {
   });
 });
 
+describe('identidad Rovaq en la topbar y el árbol (S1)', () => {
+  it('Guía es una píldora de 28 px, radio 999, sobre --ui-soft, con texto 12/500 muted', () => {
+    const r = regla('[data-ui="v2"] .rv-guia__btn');
+    expect(r).toContain('height: 28px');
+    expect(r).toContain('border-radius: 999px');
+    expect(r).toContain('background: var(--ui-soft)');
+    expect(r).toContain('font: 500 12px');
+  });
+
+  it('el título de la topbar y el disparador ⌘K tienen sus reglas, con foco visible', () => {
+    expect(sinComentarios).toContain('.rv-cab-esc__titulo');
+    expect(sinComentarios).toContain('.rv-cab-esc__buscar');
+    expect(sinComentarios).toMatch(/\.rv-cab-esc__buscar:focus-visible/);
+  });
+
+  it('el árbol del sidebar trae sombras de scroll arriba y abajo (solo CSS) y «Página actual» no se pinta en el riel', () => {
+    const nav = regla('[data-ui="v2"] .rv-sb__nav', sinComentarios.indexOf('@media (min-width: 768px)'));
+    expect(nav).toContain('local');
+    expect(nav).toContain('radial-gradient');
+    expect(sinComentarios).toMatch(/\.rv-sb\[data-riel\] \.rv-pagina-actual \{ display: none; \}/);
+    expect(sinComentarios).toMatch(/\.rv-sb \.rv-pagina-actual \{ display: none; \}/);
+  });
+});
+
 describe('marco y logo finos (controles finos K2-2, SPEC §1.6 y §2.7)', () => {
   const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
   const tok = (k: string) => Number(new RegExp(`${k}:\\s*(\\d+)px`).exec(tokens)?.[1]);

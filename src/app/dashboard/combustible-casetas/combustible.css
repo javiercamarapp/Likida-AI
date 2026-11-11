@@ -1,0 +1,12 @@
+/* Combustible y casetas · solo lo que las piezas del sistema no traen. */
+.rv-comb__nota { margin: 0 0 8px; font-size: var(--t-small); color: var(--muted); }
+.rv-comb__tenue { font-size: var(--t-small); color: var(--muted); }
+.rv-comb__mono { font-variant-numeric: tabular-nums; word-break: break-all; }
+.rv-comb__monto { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rv-comb__lista { list-style: none; margin: 0; padding: 0; display: grid; }
+.rv-comb__anomalia { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 10px 0; border-top: 1px solid var(--line); font-size: var(--t-body); }
+.rv-comb__anomalia:first-child { border-top: 0; }
+.rv-comb__lineas { list-style: none; margin: 0; padding: 0; display: grid; }
+.rv-comb__linea { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--line); }
+.rv-comb__linea:first-child { border-top: 0; }
+.rv-comb__forma { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 4px; }

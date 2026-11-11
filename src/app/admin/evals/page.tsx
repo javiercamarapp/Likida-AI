@@ -1,15 +1,14 @@
 import type { Metadata } from 'next';
-import { Boton } from '../../ui-v2/componentes/boton';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import { Bug } from 'lucide-react';
 import { getEstadoEvals, veredictoAgregado, type AgenteExaminado, type EstadoEvals } from '@/lib/admin/evals';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { BarraPagina, TituloSeccion } from '@/app/dashboard/resumen-visual';
-import { EstadoVacio } from '../ui/kit';
+import { Aviso, Boton, Chip, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { TiraCifras } from '@/app/ui-v2/graficas';
+import './evals.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +77,9 @@ const AGENTES: ReadonlyArray<{ agente: AgenteExaminado; titulo: string; comando:
 
 interface PorCaso { id: string; veredicto: string; detalle: string | null; pregunta: string; tipo: string; clave: string | null }
 
-const COLOR: Record<string, string> = { paso: 'var(--ok)', fallo: 'var(--bad)', revisar: '#d97706' };
+const TONO: Record<string, TonoEstado> = { paso: 'ok', fallo: 'bad', revisar: 'warn' };
+
+interface CorridaFila { id: string; agente: string; veredicto: string | null; iniciada_en: string; casos: number | null; costo_usd: number | null; prompt_hash: string }
 
 /**
  * EVALOPS (0134 + 0254) — el estado del examen de CADA agente examinado y la
@@ -94,7 +95,7 @@ export default async function Evals({
   const sp = await searchParams;
   const admin = supabaseAdmin();
   const secciones: Array<{ agente: AgenteExaminado; titulo: string; comando: string; estado: EstadoEvals | null; porCaso: PorCaso[] }> = [];
-  let corridas: Array<{ id: string; agente: string; veredicto: string | null; iniciada_en: string; casos: number | null; costo_usd: number | null; prompt_hash: string }> = [];
+  let corridas: CorridaFila[] = [];
   // ADM-14 (auditoría 24, MEDIO): `r.data ?? []` sin comprobar `r.error` —
   // una lectura caída se pintaba idéntica a "ninguna corrida todavía", que
   // es justo lo contrario ("no se sabe" ≠ "no hay"). `corridasError` guarda
@@ -141,123 +142,109 @@ export default async function Evals({
     return { ...def, estado, porCaso };
   })));
 
-  return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<Bug width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />} titulo="Evals — los exámenes de los agentes" />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          {sp.error === 'marcar' && (
-            <p className="text-sm rounded-xl px-4 py-2.5" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-              No se pudo registrar el veredicto — la escritura falló. Vuelve a marcarlo.
-            </p>
-          )}
-          {secciones.map(({ agente, titulo, comando, estado, porCaso }) => (
-            <section key={agente} className="space-y-3">
-              <TituloSeccion>{titulo}</TituloSeccion>
-              {estado === null && (
-                <EstadoVacio icono={<Bug width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  No se pudo leer el estado del examen del {agente} — que no es lo mismo que «todo pasó».
-                </EstadoVacio>
-              )}
-              {estado !== null && (
-                <>
-                  {/* ── EL GATE, con cara ── */}
-                  {estado.driftDePrompt ? (
-                    <div className="card p-4" style={{ borderLeft: '3px solid var(--bad)' }}>
-                      <p className="text-[14px] font-semibold" style={{ color: 'var(--bad)' }}>
-                        El prompt del {agente} cambió desde el último examen{estado.ultima ? '' : ' (nunca se ha examinado)'} — re-examina antes de desplegar cambios del agente.
-                      </p>
-                      <p className="text-[12.5px] mt-1" style={{ color: 'var(--muted)' }}>
-                        Regla de 22-evaluacion.md{agente === 'contador' ? ' (el hash cubre reglas + corpus de normas/)' : ''}. Corre: <code className="tabular">{comando}</code> (llamadas reales, se corre a mano).
-                      </p>
-                      <p className="text-[11px] mt-2 tabular" style={{ color: 'var(--faint)' }}>
-                        prompt vivo {estado.hashVivo.slice(0, 12)}… · último examinado {estado.ultima ? `${estado.ultima.promptHash.slice(0, 12)}…` : 'ninguno'}
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="card p-4" style={{ borderLeft: '3px solid var(--ok)' }}>
-                      <p className="text-[14px] font-semibold" style={{ color: 'var(--ok)' }}>
-                        El prompt vivo es el examinado — veredicto: {estado.ultima?.veredicto ?? 'sin veredicto'}.
-                      </p>
-                      <p className="text-[11px] mt-1 tabular" style={{ color: 'var(--faint)' }}>prompt {estado.hashVivo.slice(0, 12)}…</p>
-                    </div>
-                  )}
+  const sinLeer = secciones.filter((x) => x.estado === null).length;
+  const sinReexaminar = secciones.filter((x) => x.estado?.driftDePrompt).length;
 
-                  {/* La calificación desglosada que dejó el runner (trampas,
-                      inventos, falsa cautela) — se enseña tal cual, buena o mala. */}
-                  {estado.ultima?.notas && (
-                    <div className="card p-4">
-                      <TituloSeccion>Calificación de la última corrida</TituloSeccion>
-                      <p className="text-[12.5px] mt-2" style={{ color: 'var(--ink)' }}>{estado.ultima.notas}</p>
-                    </div>
-                  )}
-
-                  <div className="card p-4">
-                    <TituloSeccion>Última corrida — caso por caso</TituloSeccion>
-                    <div className="mt-2">
-                      {porCaso.length === 0 && (
-                        <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>
-                          Aún no hay corrida registrada. El examen son {numero(estado.casosActivos)} casos sembrados en eval_caso.
-                        </p>
-                      )}
-                      {porCaso.map((c, i) => (
-                        <div key={i} className="flex items-start gap-2 py-1.5 text-[12.5px]" style={{ borderBottom: '1px solid var(--line)' }}>
-                          <span className="mt-1 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: COLOR[c.veredicto] ?? 'var(--muted)' }} />
-                          <div className="min-w-0 flex-1">
-                            <p style={{ color: 'var(--ink)' }}>{c.clave ? `${c.clave} · ` : ''}{c.pregunta}</p>
-                            {c.detalle && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{c.detalle}</p>}
-                          </div>
-                          <span className="etiqueta-mono text-[10px] uppercase shrink-0" style={{ color: 'var(--muted)' }}>{c.tipo}</span>
-                          <span className="text-[11px] font-medium shrink-0" style={{ color: COLOR[c.veredicto] ?? 'var(--muted)' }}>{c.veredicto}</span>
-                          {c.veredicto === 'revisar' && estado.ultima && (
-                            <span className="flex gap-1 shrink-0">
-                              {(['paso', 'fallo'] as const).map((v) => (
-                                <form key={v} action={marcarResultado}>
-                                  <input type="hidden" name="id" value={c.id} />
-                                  <input type="hidden" name="corridaId" value={estado.ultima?.id ?? ''} />
-                                  <input type="hidden" name="veredicto" value={v} />
-                                  <Boton type="submit" variante="secondary" tamano="sm" style={{ color: v === 'paso' ? 'var(--ok)' : 'var(--bad)' }}>
-                                    {v === 'paso' ? 'Pasó' : 'Falló'}
-                                  </Boton>
-                                </form>
-                              ))}
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </section>
+  const columnasCaso = (ultimaId: string | undefined): ColumnaBase<PorCaso>[] => [
+    {
+      id: 'caso', titulo: 'Caso', principal: true,
+      celda: (c) => (
+        <>
+          <span>{c.clave ? `${c.clave} · ` : ''}{c.pregunta}</span>
+          {c.detalle ? <span className="rv-evals__sub">{c.detalle}</span> : null}
+        </>
+      ),
+    },
+    { id: 'tipo', titulo: 'Tipo', celda: (c) => <Chip>{c.tipo}</Chip> },
+    { id: 'veredicto', titulo: 'Veredicto', celda: (c) => <StatusChip tono={TONO[c.veredicto] ?? 'neutral'}>{c.veredicto}</StatusChip> },
+    {
+      id: 'juez', titulo: 'Juez humano',
+      celda: (c) => c.veredicto === 'revisar' && ultimaId ? (
+        <span className="rv-evals__juez">
+          {(['paso', 'fallo'] as const).map((v) => (
+            <form key={v} action={marcarResultado}>
+              <input type="hidden" name="id" value={c.id} />
+              <input type="hidden" name="corridaId" value={ultimaId} />
+              <input type="hidden" name="veredicto" value={v} />
+              <Boton type="submit" variante={v === 'paso' ? 'secondary' : 'danger'} tamano="sm">{v === 'paso' ? 'Pasó' : 'Falló'}</Boton>
+            </form>
           ))}
+        </span>
+      ) : <span>—</span>,
+    },
+  ];
 
-          <div className="card p-4">
-            <TituloSeccion>Corridas (todos los agentes)</TituloSeccion>
-            <div className="mt-2">
-              {corridasError !== null && (
-                <p className="text-[12.5px]" style={{ color: 'var(--bad)' }}>
-                  No se pudo leer — {corridasError}. Esto NO significa que no haya corridas.
-                </p>
+  const columnasCorrida: ColumnaBase<CorridaFila>[] = [
+    { id: 'agente', titulo: 'Agente', principal: true, celda: (c) => <Chip>{c.agente}</Chip> },
+    { id: 'veredicto', titulo: 'Veredicto', celda: (c) => c.veredicto ? <StatusChip tono={TONO[c.veredicto] ?? 'neutral'}>{c.veredicto}</StatusChip> : <StatusChip tono="muted">en curso</StatusChip> },
+    { id: 'casos', titulo: 'Casos', alinear: 'der', celda: (c) => (c.casos === null ? '—' : numero(c.casos)) },
+    { id: 'huella', titulo: 'Prompt', celda: (c) => <span className="rv-evals__huella">{c.prompt_hash.slice(0, 10)}…</span> },
+    { id: 'cuando', titulo: 'Cuándo', alinear: 'der', celda: (c) => fechaHoraMx(c.iniciada_en) },
+  ];
+
+  return (
+    <MarcoPagina
+      area="Calidad"
+      titulo="Calidad"
+      apoyo="Exámenes: el estado del examen de cada agente y la regla de re-examen antes de desplegar."
+    >
+      {sp.error === 'marcar' && (
+        <Aviso tono="error">No se pudo registrar el veredicto: la escritura falló. Vuelve a marcarlo.</Aviso>
+      )}
+
+      <TiraCifras
+        etiqueta="Exámenes"
+        items={[
+          { etiqueta: 'Agentes examinados', valor: AGENTES.length, estado: 'ok' },
+          { etiqueta: 'Con prompt sin re-examinar', valor: sinLeer > 0 ? null : sinReexaminar, estado: sinLeer > 0 ? 'error' : 'ok', tono: sinReexaminar > 0 ? 'bad' : undefined, nota: 'El prompt vivo no es el examinado' },
+          { etiqueta: 'Corridas recientes', valor: corridasError === null ? corridas.length : null, estado: corridasError === null ? 'ok' : 'error', nota: 'Las últimas 10, todos los agentes' },
+        ]}
+      />
+
+      {secciones.map(({ agente, titulo, comando, estado, porCaso }) => (
+        <Tarjeta key={agente} titulo={titulo} estado={estado === null ? 'error' : 'ok'} mensaje={`No se pudo leer el estado del examen del ${agente}, que no es lo mismo que «todo pasó».`} reintentar>
+          {estado !== null && (
+            <>
+              {/* ── EL GATE, con cara ── */}
+              {estado.driftDePrompt ? (
+                <Aviso tono="error" titulo={`El prompt del ${agente} cambió desde el último examen${estado.ultima ? '' : ' (nunca se ha examinado)'}`}>
+                  Re-examina antes de desplegar cambios del agente. Regla de 22-evaluacion.md{agente === 'contador' ? ' (el hash cubre reglas + corpus de normas/)' : ''}. Corre: <code className="tabular">{comando}</code> (llamadas reales, se corre a mano).
+                  <span className="rv-evals__sub">prompt vivo {estado.hashVivo.slice(0, 12)}… · último examinado {estado.ultima ? `${estado.ultima.promptHash.slice(0, 12)}…` : 'ninguno'}</span>
+                </Aviso>
+              ) : (
+                <Aviso tono="ok" titulo={`El prompt vivo es el examinado. Veredicto: ${estado.ultima?.veredicto ?? 'sin veredicto'}.`}>
+                  <span className="rv-evals__sub">prompt {estado.hashVivo.slice(0, 12)}…</span>
+                </Aviso>
               )}
-              {corridasError === null && corridas.length === 0 && (
-                <p className="text-[12.5px]" style={{ color: 'var(--muted)' }}>Ninguna todavía.</p>
-              )}
-              {corridas.map((c) => (
-                <div key={c.id} className="flex items-center gap-3 py-1 text-[12px]" style={{ borderBottom: '1px solid var(--line)' }}>
-                  <span className="etiqueta-mono text-[10px] uppercase" style={{ color: 'var(--muted)' }}>{c.agente}</span>
-                  <span className="font-medium" style={{ color: COLOR[c.veredicto ?? ''] ?? 'var(--muted)' }}>{c.veredicto ?? 'en curso'}</span>
-                  <span style={{ color: 'var(--muted)' }}>{c.casos ?? '—'} casos</span>
-                  <span className="tabular" style={{ color: 'var(--faint)' }}>{c.prompt_hash.slice(0, 10)}…</span>
-                  <span className="ml-auto tabular" style={{ color: 'var(--muted)' }}>{fechaHoraMx(c.iniciada_en)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
+
+              {/* La calificación desglosada que dejó el runner (trampas, inventos, falsa cautela), tal cual, buena o mala. */}
+              {estado.ultima?.notas ? <p className="rv-evals__nota"><strong>Calificación de la última corrida:</strong> {estado.ultima.notas}</p> : null}
+
+              <TablaBase
+                etiqueta={`Última corrida del ${agente}, caso por caso`}
+                columnas={columnasCaso(estado.ultima?.id)}
+                filas={porCaso}
+                idFila={(c) => c.id}
+                tarjetaMovil
+                vacio={{ titulo: 'Sin corrida registrada', texto: `El examen son ${numero(estado.casosActivos)} casos sembrados en eval_caso. Aún no hay corrida registrada.` }}
+              />
+            </>
+          )}
+        </Tarjeta>
+      ))}
+
+      <Tarjeta titulo="Corridas, todos los agentes" estado={corridasError !== null ? 'error' : 'ok'} mensaje={`No se pudo leer: ${corridasError}. Esto NO significa que no haya corridas.`} reintentar>
+        <TablaBase
+          etiqueta="Corridas de exámenes"
+          columnas={columnasCorrida}
+          filas={corridas}
+          idFila={(c) => c.id}
+          tarjetaMovil
+          vacio={{ titulo: 'Ninguna todavía' }}
+        />
+      </Tarjeta>
+    </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Evals' };
+export const metadata: Metadata = { title: 'Calidad' };

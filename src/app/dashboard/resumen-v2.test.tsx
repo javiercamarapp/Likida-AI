@@ -136,3 +136,18 @@ describe('Resumen v2 del dueño', () => {
     expect(h).not.toContain('.50');
   });
 });
+
+describe('Resumen v2 · página canónica del contrato visual', () => {
+  it('usa el marco único: un h1, rejilla de FilaTarjetas, sin contenedor ni rejilla heredados', async () => {
+    datos = completos();
+    const h = await pintar();
+    expect((h.match(/<h1/g) ?? []).length).toBe(1);
+    expect(h).toMatch(/^<main class="rv-marco"/);
+    expect((h.match(/class="rv-fila-tarjetas"/g) ?? []).length).toBe(2);
+    expect(h).toContain('data-variante="8-4"');
+    expect(h).toContain('data-variante="4-4-4"');
+    // ni el contenedor ni la rejilla ni la envoltura de cifras heredados (las piezas hijas conservan sus propias clases)
+    expect(h).not.toMatch(/class="rv-res"|rv-res__fila|rv-res__kpis/);
+    expect(h).not.toMatch(/class="[^"]*\bcard\b/);
+  });
+});

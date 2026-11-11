@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { qrSvg } from '@/lib/qr';
 import { enlaceWaMe, textoDeArranque } from '@/lib/likida/arranque_whatsapp';
@@ -23,7 +25,6 @@ describe('la guía de arranque del chofer', () => {
     expect(html).toContain('Copiar enlace');
     expect(html).toContain('Imprimir cartel');
     expect(html).toContain('id="cartel-whatsapp"');
-    expect(html).toContain('@media print');
     expect(html).toContain('250');
     expect(html).toContain('37');
   });
@@ -74,6 +75,16 @@ describe('la guía de arranque del chofer', () => {
     expect(todos).toContain('Todos ya fueron invitados');
     const ilegible = pintar({ numero: CONFIGURADO, nombreFlota: 'X', enlace, qrSvg: null, operadores: null });
     expect(ilegible).toContain('No pude contar a tus operadores');
+  });
+});
+
+describe('el cartel imprimible', () => {
+  it('solo el cartel sale al imprimir (regla de impresión en la hoja de la pantalla, no en un <style> en línea)', () => {
+    const css = readFileSync(join(process.cwd(), 'src/app/dashboard/whatsapp/whatsapp.css'), 'utf8');
+    expect(css).toContain('@media print');
+    expect(css).toContain('#cartel-whatsapp');
+    const html = pintar({ numero: CONFIGURADO, nombreFlota: 'X', enlace, qrSvg: null, operadores: null });
+    expect(html).not.toContain('<style');
   });
 });
 

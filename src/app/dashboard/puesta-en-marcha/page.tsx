@@ -5,6 +5,8 @@ import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import { sufijoTenant } from '../sufijo';
 import type { IdPaso } from '@/lib/likida/asistente/pasos_cinco_agentes';
 import { VistaPuestaEnMarcha } from './vista';
+import { SeccionListo } from './seccion_listo';
+import { leerLecturasListo } from './listo_lecturas';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Puesta en marcha' };
 
@@ -31,12 +33,12 @@ export default async function PaginaPuestaEnMarcha({
   const s = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(s.rol, RUTA)) redirect('/dashboard');
 
-  const senales = await leerSenalesAsistente(s.tenantId);
+  const [senales, lecturasListo] = await Promise.all([leerSenalesAsistente(s.tenantId), leerLecturasListo(s.tenantId)]);
   // Viendo como otra persona (superadmin con ?tenant/?vista/?rol): se mira, pero no se escribe progreso.
   const soloLectura = Boolean(sp.tenant || sp.vista || sp.rol || s.tenantNombre);
 
   return (
-    <main className="h-full">
+    <main className="rv-marco" aria-labelledby="puesta-titulo">
       <VistaPuestaEnMarcha
         senales={senales}
         ambito={`${s.tenantId}:${s.userId}`}
@@ -45,6 +47,9 @@ export default async function PaginaPuestaEnMarcha({
         soloLectura={soloLectura}
         pasoInicial={PASOS.find((x) => x === sp.paso)}
       />
+      <div className="rv-pem rv-pem--listo">
+        <SeccionListo lecturas={lecturasListo} sufijo={sufijoTenant(sp)} />
+      </div>
     </main>
   );
 }

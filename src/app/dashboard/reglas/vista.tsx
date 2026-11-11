@@ -1,6 +1,7 @@
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { fechaHoraMx } from '@/lib/formato';
-import { StatusPill } from '@/app/admin/ui/kit';
-import { EstadoVacio } from '../estados';
+import { Disclosure, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import './reglas.css';
 import type { ReglaEnPantalla } from '@/lib/likida/reglas/repo';
 import { BotonDeRegla, BorrarRegla, FormaFrecuencia, type AccionForma } from './forma';
 
@@ -21,29 +22,26 @@ export interface AccionesRegla {
   frecuencia: AccionForma;
 }
 
-const CANAL: Record<string, string> = {
-  dinero: 'Te llega a ti (dueño/contador)',
-  operacion: 'Le llega al jefe de tráfico',
-};
-
-function Evidencias({ regla }: { regla: ReglaEnPantalla }) {
+const canal = (tr: Tr): Record<string, string> => ({
+  dinero: tr('reglas.vista.teLlegaATi'),
+  operacion: tr('reglas.vista.leLlegaAlJefe'),
+});
+function Evidencias({ regla, tr = trEs }: { regla: ReglaEnPantalla; tr?: Tr }) {
   if (regla.ultimasEvidencias.length === 0) {
     return (
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+      <p className="rv-reglas__tenue">
         {regla.ultimaCorridaEn
-          ? `Revisada el ${fechaHoraMx(regla.ultimaCorridaEn)} — todavía no ha sonado.`
-          : 'Todavía no la reviso: el barrido corre cada hora.'}
+          ? tr('reglas.vista.revisadaElTodaviaNo', { v: fechaHoraMx(regla.ultimaCorridaEn) })
+          : tr('reglas.vista.todaviaNoLaReviso')}
       </p>
     );
   }
   return (
-    <div className="space-y-1">
-      <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-        Últimas veces que sonó
-      </p>
+    <div className="rv-reglas__avisos">
+      <p className="rv-reglas__rotulo">{tr('reglas.vista.ultimasVecesQueSono')}</p>
       {regla.ultimasEvidencias.map((e) => (
-        <p key={`${e.disparadoEn}-${e.evidencia.slice(0, 24)}`} className="text-[11px]" style={{ color: 'var(--ink2)' }}>
-          <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{fechaHoraMx(e.disparadoEn)}</span>{' '}
+        <p key={`${e.disparadoEn}-${e.evidencia.slice(0, 24)}`} className="rv-reglas__renglon">
+          <span className="rv-reglas__fecha">{fechaHoraMx(e.disparadoEn)}</span>{' '}
           {e.evidencia}
         </p>
       ))}
@@ -51,126 +49,108 @@ function Evidencias({ regla }: { regla: ReglaEnPantalla }) {
   );
 }
 
-const VIA: Record<string, string> = {
-  texto: 'mensaje de WhatsApp', botones: 'mensaje con botones', plantilla: 'plantilla (ventana de 24 h cerrada)',
-};
-
+const via = (tr: Tr): Record<string, string> => ({
+  texto: tr('reglas.vista.mensajeDeWhatsapp'), botones: tr('reglas.vista.viaBotones'), plantilla: tr('reglas.vista.viaPlantilla'),
+});
 /** El historial de AVISOS (0520): cada vez que la regla intentó avisar, salió o
  *  no, y por qué canal. Distinto de «Últimas veces que sonó», que cita los casos. */
-function HistorialAvisos({ regla }: { regla: ReglaEnPantalla }) {
+function HistorialAvisos({ regla, tr = trEs }: { regla: ReglaEnPantalla; tr?: Tr }) {
   if (regla.ultimosAvisos.length === 0) {
-    return (
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-        Todavía no ha mandado ningún aviso.
-      </p>
-    );
+    return <p className="rv-reglas__tenue">{tr('reglas.vista.todaviaNoHaMandado')}</p>;
   }
   return (
-    <div className="space-y-1">
+    <div className="rv-reglas__avisos">
       {regla.ultimosAvisos.map((a) => (
-        <p key={`${a.enviadoEn}-${a.resultado}`} className="text-[11px]" style={{ color: 'var(--ink2)' }}>
-          <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{fechaHoraMx(a.enviadoEn)}</span>{' '}
+        <p key={`${a.enviadoEn}-${a.resultado}`} className="rv-reglas__renglon">
+          <span className="rv-reglas__fecha">{fechaHoraMx(a.enviadoEn)}</span>{' '}
           {a.resultado === 'enviado'
-            ? `Avisó ${a.casos} caso${a.casos === 1 ? '' : 's'} por ${VIA[a.via ?? ''] ?? 'WhatsApp'}.`
-            : <span style={{ color: 'var(--bad)' }}>No salió ({a.casos} caso{a.casos === 1 ? '' : 's'}): {a.error ?? 'WhatsApp lo rechazó'}. Se reintenta.</span>}
+            ? tr('reglas.vista.avisoCasoPor', { casos: a.casos, v: a.casos === 1 ? '' : 's', v2: via(tr)[a.via ?? ''] ?? 'WhatsApp' })
+            : <span className="rv-reglas__error">{tr('reglas.vista.noSalioCasoSe', { casos: a.casos, v: a.casos === 1 ? '' : 's', v2: a.error ?? tr('reglas.vista.whatsappLoRechazo') })}</span>}
         </p>
       ))}
     </div>
   );
 }
 
-function Ficha({ regla, acciones }: { regla: ReglaEnPantalla; acciones: AccionesRegla }) {
+function Ficha({ regla, acciones, tr = trEs }: { regla: ReglaEnPantalla; acciones: AccionesRegla; tr?: Tr }) {
   const pendiente = regla.estado === 'pendiente';
   return (
-    <div className="card p-4 space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 min-w-0">
-          <p className="text-[13px] font-medium" style={{ color: 'var(--ink)' }}>{regla.frase}</p>
-          {/* La cita de lo que la persona escribió. Está aquí para que pueda
-              juzgar la traducción — no porque el sistema la vuelva a leer. */}
-          <p className="text-[11px] italic" style={{ color: 'var(--muted)' }}>
-            Tú escribiste: &ldquo;{regla.textoOriginal}&rdquo;
-          </p>
-          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-            {regla.titulo} · {CANAL[regla.canal] ?? regla.canal}
-          </p>
-        </div>
-        <div className="shrink-0">
-          <StatusPill estado={pendiente ? 'warn' : regla.estado === 'activa' ? 'ok' : 'neutral'}>
-            {pendiente ? 'Esperando tu confirmación' : regla.estado === 'activa' ? 'Vigilando' : 'Pausada'}
-          </StatusPill>
-        </div>
-      </div>
+    <Tarjeta titulo={regla.frase} acciones={
+      <StatusChip tono={pendiente ? 'warn' : regla.estado === 'activa' ? 'ok' : 'neutral'}>
+        {pendiente ? tr('reglas.vista.esperandoTuConfirmacion') : regla.estado === 'activa' ? tr('reglas.vista.vigilando') : tr('reglas.vista.pausada')}
+      </StatusChip>
+    }>
+      <div className="rv-reglas__ficha">
+        {/* La cita de lo que la persona escribió. Está aquí para que pueda juzgar la traducción — no porque el sistema la vuelva a leer. */}
+        <p className="rv-reglas__cita">
+          {tr('reglas.vista.tuEscribiste', { texto: regla.textoOriginal })}
+        </p>
+        <p className="rv-reglas__tenue">
+          {regla.titulo} · {canal(tr)[regla.canal] ?? regla.canal}
+        </p>
 
-      {!pendiente && <Evidencias regla={regla} />}
+        {!pendiente && <Evidencias tr={tr} regla={regla} />}
 
-      {!pendiente && (
-        <details className="rounded-lg hairline p-3">
-          <summary className="cursor-pointer text-[12px] font-medium select-none list-none" style={{ color: 'var(--ink2)' }}>
-            Historial de avisos y límite de frecuencia
-          </summary>
-          <div className="pt-3 space-y-3">
-            <HistorialAvisos regla={regla} />
-            <FormaFrecuencia accion={acciones.frecuencia} id={regla.id}
-              maxAvisosDia={regla.maxAvisosDia} minHorasEntreAvisos={regla.minHorasEntreAvisos} />
-          </div>
-        </details>
-      )}
-
-      <div className="flex flex-wrap items-start gap-2 pt-1">
-        {pendiente ? (
-          <>
-            <BotonDeRegla accion={acciones.confirmar} id={regla.id}
-              etiqueta="Sí, vigílalo" ocupado="Encendiendo…" tono="marca" />
-            <BorrarRegla accion={acciones.borrar} id={regla.id} />
-          </>
-        ) : regla.estado === 'activa' ? (
-          <>
-            <BotonDeRegla accion={acciones.pausar} id={regla.id} etiqueta="Pausar" ocupado="Pausando…" />
-            <BorrarRegla accion={acciones.borrar} id={regla.id} />
-          </>
-        ) : (
-          <>
-            <BotonDeRegla accion={acciones.reanudar} id={regla.id} etiqueta="Reanudar" ocupado="Reanudando…" />
-            <BorrarRegla accion={acciones.borrar} id={regla.id} />
-          </>
+        {!pendiente && (
+          <Disclosure variante="linea" titulo={tr('reglas.vista.historialDeAvisosY')}>
+            <div className="rv-reglas__avisos">
+              <HistorialAvisos tr={tr} regla={regla} />
+              <FormaFrecuencia accion={acciones.frecuencia} id={regla.id}
+                maxAvisosDia={regla.maxAvisosDia} minHorasEntreAvisos={regla.minHorasEntreAvisos} />
+            </div>
+          </Disclosure>
         )}
+
+        <div className="rv-reglas__botones">
+          {pendiente ? (
+            <>
+              <BotonDeRegla accion={acciones.confirmar} id={regla.id}
+                etiqueta={tr('reglas.vista.siVigilalo')} ocupado="Encendiendo…" tono="marca" />
+              <BorrarRegla accion={acciones.borrar} id={regla.id} />
+            </>
+          ) : regla.estado === 'activa' ? (
+            <>
+              <BotonDeRegla accion={acciones.pausar} id={regla.id} etiqueta={tr('reglas.vista.pausar')} ocupado="Pausando…" />
+              <BorrarRegla accion={acciones.borrar} id={regla.id} />
+            </>
+          ) : (
+            <>
+              <BotonDeRegla accion={acciones.reanudar} id={regla.id} etiqueta={tr('reglas.vista.reanudar')} ocupado="Reanudando…" />
+              <BorrarRegla accion={acciones.borrar} id={regla.id} />
+            </>
+          )}
+        </div>
       </div>
-    </div>
+    </Tarjeta>
   );
 }
 
-export function ListaReglas({ reglas, acciones }: {
+export function ListaReglas({ reglas, acciones, tr = trEs }: {
   reglas: readonly ReglaEnPantalla[];
-  acciones: AccionesRegla;
+  acciones: AccionesRegla; tr?: Tr;
 }) {
   const pendientes = reglas.filter((r) => r.estado === 'pendiente');
   const resto = reglas.filter((r) => r.estado !== 'pendiente');
 
   return (
-    <div className="space-y-5">
+    <>
       {pendientes.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--warn)' }}>
-            Esperando tu confirmación — todavía no vigilan nada
+        <>
+          <h2 className="rv-reglas__seccion" data-tono="warn">
+            {tr('reglas.vista.esperandoTuConfirmacionTodav')}
           </h2>
-          {pendientes.map((r) => <Ficha key={r.id} regla={r} acciones={acciones} />)}
-        </section>
+          {pendientes.map((r) => <Ficha tr={tr} key={r.id} regla={r} acciones={acciones} />)}
+        </>
       )}
 
-      <section className="space-y-2">
-        <h2 className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-          Tus reglas
-        </h2>
-        {resto.length === 0 ? (
-          <EstadoVacio>
-            Todavía no tienes ninguna regla confirmada. Escribe arriba de qué quieres
-            que te avise y te enseño cómo lo entendí antes de encenderla.
-          </EstadoVacio>
-        ) : (
-          resto.map((r) => <Ficha key={r.id} regla={r} acciones={acciones} />)
-        )}
-      </section>
-    </div>
+      <h2 className="rv-reglas__seccion">{tr('reglas.vista.tusReglas')}</h2>
+      {resto.length === 0 ? (
+        <EstadoVacio titulo={tr('reglas.vista.sinReglasConfirmadas')} contenido>
+          {tr('reglas.vista.escribeArribaDeQue')}
+        </EstadoVacio>
+      ) : (
+        resto.map((r) => <Ficha tr={tr} key={r.id} regla={r} acciones={acciones} />)
+      )}
+    </>
   );
 }

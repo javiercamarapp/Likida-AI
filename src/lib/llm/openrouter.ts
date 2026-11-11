@@ -153,6 +153,14 @@ export function modelosAisladosDeFallback(): string[] {
   return Object.keys(PRICES).filter((modelo) => !enLaRed.has(modelo));
 }
 
+/** ¿El modelo tiene precio y respaldo entre proveedores? La prueba de la lista de modelos evaluados (F16) lo exige. */
+export function modeloTienePrecio(modelo: string): boolean {
+  return Object.prototype.hasOwnProperty.call(PRICES, modelo);
+}
+export function modeloTieneRespaldo(modelo: string): boolean {
+  return Object.prototype.hasOwnProperty.call(FALLBACK, modelo);
+}
+
 /**
  * Un resumen legible de POR QUÉ falló una llamada al modelo, cavando en la
  * cadena de `.cause` (el SDK de OpenAI entierra ahí el detalle real: status,

@@ -4,7 +4,10 @@ import { useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { BellOff, CircleHelp, Compass, LifeBuoy, ListChecks, Play, RotateCcw, Zap } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
-import { Popover, MenuList } from '../../ui-v2/componentes/overlay';
+import { Popover, MenuList, Tooltip } from '../../ui-v2/componentes/overlay';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
+import { etiquetaNav } from '@/lib/i18n/nav';
 import { useTourOpcional, useProgresoTour } from '../../ui-v2/movimiento/tour';
 import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
@@ -18,7 +21,9 @@ const HREF_AYUDA = '/dashboard/soporte';
  * Primeros pasos · Centro de ayuda · No volver a mostrar. Vive en la topbar de escritorio (con texto) y en la cabecera móvil (solo
  * icono, 44 px). Solo ofrece lo que existe y el rol puede abrir; una entrada vacía no se pinta, y sin ninguna fila el botón no existe.
  */
-export default function MenuGuia({ rol, perfil, compacto = false }: { rol: string; perfil?: PerfilTenant | null; compacto?: boolean }) {
+export default function MenuGuia({ rol, perfil, compacto = false, alineacion = 'fin' }: { rol: string; perfil?: PerfilTenant | null; compacto?: boolean; alineacion?: 'inicio' | 'fin' }) {
+  const tr = useT('shell', shellEs);
+  const { t } = tr;
   const [abierto, setAbierto] = useState(false);
   const gatillo = useRef<HTMLButtonElement>(null);
   const idMenu = useId();
@@ -33,32 +38,38 @@ export default function MenuGuia({ rol, perfil, compacto = false }: { rol: strin
   if (!(hayRecorrido || asistente || ayuda)) return null;
   return (
     <div className="rv-guia">
-      <button ref={gatillo} type="button" className={compacto ? 'rv-icono-boton' : 'rv-guia__btn'} aria-haspopup="menu" aria-expanded={abierto}
-        aria-controls={abierto ? idMenu : undefined} aria-label={compacto ? 'Guía' : undefined} title="Guía" data-onboarding="recorrido.boton"
-        onClick={() => setAbierto((a) => !a)}>
-        <CircleHelp width={compacto ? 18 : 16} height={compacto ? 18 : 16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        {!compacto && <span>Guía</span>}
-        {tour?.nuevo ? <span className="rv-guia__punto" aria-hidden /> : null}
-      </button>
-      <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta="Guía" alineacion="fin">
+      {(() => {
+        const boton = (
+          <button ref={gatillo} type="button" className={compacto ? 'rv-icono-boton' : 'rv-guia__btn'} aria-haspopup="menu" aria-expanded={abierto}
+            aria-controls={abierto ? idMenu : undefined} aria-label={compacto ? t('cab.guia') : undefined} data-onboarding="recorrido.boton"
+            onClick={() => setAbierto((a) => !a)}>
+            <CircleHelp width={compacto ? 18 : 14} height={compacto ? 18 : 14} strokeWidth={TRAZO_ICONO} aria-hidden />
+            {!compacto && <span>{t('cab.guia')}</span>}
+            {tour?.nuevo ? <span className="rv-guia__punto" aria-hidden /> : null}
+          </button>
+        );
+        // Solo el botón de icono (móvil) necesita tooltip: el de escritorio ya dice «Guía» con texto.
+        return compacto ? <Tooltip texto={t('cab.guia')}>{boton}</Tooltip> : boton;
+      })()}
+      <Popover abierto={abierto} onCerrar={cerrar} ancla={gatillo} etiqueta={t('cab.guia')} alineacion={alineacion}>
         <div id={idMenu} onKeyDownCapture={(e) => {
           if (e.key === 'Tab') { cerrar(); return; }
           const lista = [...e.currentTarget.querySelectorAll<HTMLElement>('[role="menuitem"]')].filter((x) => x.getClientRects().length > 0);
           const nuevo = indiceDeMenu(e.key, lista.indexOf(document.activeElement as HTMLElement), lista.length);
           if (nuevo !== null) { e.preventDefault(); e.stopPropagation(); lista[nuevo]?.focus(); }
         }}>
-          <MenuList etiqueta="Guía">
+          <MenuList etiqueta={t('cab.guia')}>
             {hayRecorrido ? <FilasRecorrido alElegir={cerrar} hrefs={hrefs} /> : null}
             {asistente && (
               <Link role="menuitem" tabIndex={-1} href={`${asistente.href}${sufijo}`} className="rv-menu__item" onClick={cerrar}>
                 <span className="rv-menu__icono" aria-hidden><ListChecks width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
-                <span>Primeros pasos</span>
+                <span>{t('guia.primerosPasos')}</span>
               </Link>
             )}
             {ayuda && (
               <Link role="menuitem" tabIndex={-1} href={`${HREF_AYUDA}${sufijo}`} className="rv-menu__item" onClick={cerrar}>
                 <span className="rv-menu__icono" aria-hidden><LifeBuoy width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
-                <span>Centro de ayuda</span>
+                <span>{etiquetaNav(tr, 'Centro de ayuda')}</span>
               </Link>
             )}
             {hayRecorrido ? <FilaNoVolver alElegir={cerrar} /> : null}
@@ -80,6 +91,7 @@ function Fila({ icono, texto, onClick }: { icono: React.ReactNode; texto: string
 
 /** Corto · Completo (o Retomar) · Saltar a una pantalla · un recorrido por agente. Cada grupo desaparece si no tiene filas. */
 export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; hrefs?: readonly string[] }) {
+  const { t } = useT('shell', shellEs);
   const tour = useTourOpcional();
   const p = tour?.principal ?? '';
   const corto = useProgresoTour(`${p}.corto`);
@@ -95,13 +107,13 @@ export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; href
   return (
     <>
       {retoma ? (
-        <Fila icono={<RotateCcw width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={`Retomar donde lo dejé (paso ${retoma.prog.indice + 1} de ${retoma.prog.total})`} onClick={ir(() => tour.reanudar(retoma.id))} />
+        <Fila icono={<RotateCcw width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={t('guia.retomar', { n: retoma.prog.indice + 1, total: retoma.prog.total })} onClick={ir(() => tour.reanudar(retoma.id))} />
       ) : null}
-      {hayCorto ? <Fila icono={<Zap width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto="Recorrido corto" onClick={ir(() => tour.reiniciar(`${p}.corto`))} /> : null}
-      <Fila icono={<Play width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={retoma ? 'Repetir recorrido completo' : 'Recorrido completo'} onClick={ir(() => tour.reiniciar(`${p}.completo`))} />
+      {hayCorto ? <Fila icono={<Zap width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={t('guia.corto')} onClick={ir(() => tour.reiniciar(`${p}.corto`))} /> : null}
+      <Fila icono={<Play width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={retoma ? t('guia.repetir') : t('guia.completo')} onClick={ir(() => tour.reiniciar(`${p}.completo`))} />
       {pantallas.length > 0 ? (
         <>
-          <p className="rv-guia-sub" id="rv-guia-pantallas">Saltar a una pantalla</p>
+          <p className="rv-guia-sub" id="rv-guia-pantallas">{t('guia.saltar')}</p>
           <div className="rv-guia-pantallas" role="group" aria-labelledby="rv-guia-pantallas">
             {pantallas.map((s) => (
               <Fila key={s.href} icono={null} texto={s.nombre} onClick={ir(() => tour.irAPantalla(`${p}.completo`, s.href))} />
@@ -111,7 +123,7 @@ export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; href
       ) : null}
       {agentes.length > 0 ? (
         <>
-          <p className="rv-guia-sub">Recorrido por agente</p>
+          <p className="rv-guia-sub">{t('guia.porAgente')}</p>
           {agentes.map((a) => (
             <Fila key={a.id} icono={<Compass width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={a.titulo.replace(/^Agente: /, '')} onClick={ir(() => tour.reiniciar(a.id))} />
           ))}
@@ -122,7 +134,8 @@ export function FilasRecorrido({ alElegir, hrefs }: { alElegir: () => void; href
 }
 
 export function FilaNoVolver({ alElegir }: { alElegir: () => void }) {
+  const { t } = useT('shell', shellEs);
   const tour = useTourOpcional();
   if (!tour) return null;
-  return <Fila icono={<BellOff width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto="No volver a mostrar invitaciones" onClick={() => { alElegir(); tour.noVolver(); }} />;
+  return <Fila icono={<BellOff width={16} height={16} strokeWidth={TRAZO_ICONO} />} texto={t('guia.noVolver')} onClick={() => { alElegir(); tour.noVolver(); }} />;
 }

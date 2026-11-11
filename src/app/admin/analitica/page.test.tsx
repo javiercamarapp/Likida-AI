@@ -1,66 +1,26 @@
-import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
-// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
-vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// /admin/analitica — CERO cobertura. Sólo lectura (puerta en layout.tsx). Lo
-// real que se vigila: los umbrales de "hay suficiente historia" están
-// escritos a propósito por encima de cero — un solo día de costo NO alcanza
-// para una gráfica de tendencia (necesita >1 punto), y eso es fácil de
-// romper por accidente si alguien "simplifica" el `> 1` a `> 0`.
-// ═══════════════════════════════════════════════════════════════════════════
+// Stub 308 de /admin/analitica (Fase 2): la pantalla se retiró y su dirección vieja sigue sirviendo, hacia el Resumen. Contrato que se fija:
+// (1) la puerta de superadmin se llama ANTES de redirigir, (2) la redirección es permanente (308, no 307) y (3) conserva la consulta.
+const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn(), permanente: vi.fn((destino: string): never => { throw new Error(`NEXT_REDIRECT:${destino}`); }) }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
+vi.mock('next/navigation', () => ({ permanentRedirect: dobles.permanente, redirect: vi.fn() }));
 
-const dobles = vi.hoisted(() => ({ getResumenNegocio: vi.fn() }));
-vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: dobles.getResumenNegocio }));
+import Pagina from './page';
 
-import AnaliticaPage from './page';
+beforeEach(() => { vi.clearAllMocks(); dobles.requireSuperadmin.mockResolvedValue({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' }); });
 
-async function renderizar() { return renderToStaticMarkup(await AnaliticaPage()); }
-const BASE = { facturasTotal: 0, porDia: [], porFase: [], porModelo: [], facturasPorDia: [], tenants: 1 };
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE });
+it('redirige de forma permanente al Resumen', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/admin');
+  expect(dobles.permanente).toHaveBeenCalledTimes(1);
 });
 
-it('un solo día de costo NO es "suficiente historial" para la tendencia — el umbral es >1, no >0', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE, porDia: [{ dia: '2026-01-01', costoUsd: 5 }] });
-  const html = await renderizar();
-  expect(html).toContain('Sin historial suficiente todavía');
+it('conserva la consulta de la dirección vieja', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({ tenant: 't-1' }) })).rejects.toThrow('NEXT_REDIRECT:/admin?tenant=t-1');
 });
 
-it('dos días sí muestran la gráfica de tendencia', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE, porDia: [{ dia: '2026-01-01', costoUsd: 5 }, { dia: '2026-01-02', costoUsd: 7 }] });
-  const html = await renderizar();
-  expect(html).not.toContain('Sin historial suficiente todavía');
-});
-
-it('facturas por día en cero de verdad (todas n=0) dice "aún sin datos", no una barra en cero que parezca medida', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE, facturasPorDia: [{ dia: '2026-01-01', n: 0 }, { dia: '2026-01-02', n: 0 }] });
-  const html = await renderizar();
-  expect(html).toContain('Aún sin datos suficientes');
-});
-
-it('si AL MENOS un día tiene facturas reales, sí se grafica (no exige que todos los días tengan datos)', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE, facturasPorDia: [{ dia: '2026-01-01', n: 0 }, { dia: '2026-01-02', n: 3 }] });
-  const html = await renderizar();
-  expect(html).not.toContain('Aún sin datos suficientes');
-});
-
-it('declara honestamente por qué faltan histogramas/mapa de calor — cita el número real de flotas, singular/plural correcto', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE, tenants: 1 });
-  let html = await renderizar();
-  expect(html).toContain('1 flota');
-  expect(html).not.toContain('1 flotas');
-
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE, tenants: 3 });
-  html = await renderizar();
-  expect(html).toContain('3 flotas');
-});
-
-it('el total histórico de facturas es la cifra real de getResumenNegocio, sin filtro de fecha', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE, facturasTotal: 12345 });
-  await renderizar();
-  expect(dobles.getResumenNegocio).toHaveBeenCalledWith();
+it('llama la puerta de superadmin antes de redirigir; sin sesión no redirige', async () => {
+  dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT:/login'));
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/login');
+  expect(dobles.permanente).not.toHaveBeenCalled();
 });

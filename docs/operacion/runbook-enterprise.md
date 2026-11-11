@@ -11,7 +11,7 @@ no se pudo verificar se dice en la sección 6.
    `apagado` es neutro a propósito; `degraded` y `unknown` no.
 2. **Issue `salud-produccion`** en GitHub: abierto = el pulso falló en el workflow «Salud de producción» (cada 30 min nominales; la
    cadencia real es menor). Se cierra solo al volver a verde.
-3. **`/admin/salud-sistema`**: latido de cada uno de los 20 crons de `vercel.json` (todos están en `CRONS` de `src/lib/admin/salud.ts`).
+3. **`/admin/salud-sistema`** (menú «Salud › Estado»; los correos de alerta aterrizan aquí): latido de cada uno de los 20 crons de `vercel.json` (todos están en `CRONS` de `src/lib/admin/salud.ts`).
    Un latido `parcial` o `fallo` trae su `detalle`.
 4. **`/admin/escalaciones`**: la bandeja que clasifica la guardia (S1/S2/S3).
 5. **Correo a `ALERTA_EMAIL`**: un correo por evento y por hora como máximo. Sin `ALERTA_EMAIL` o sin `RESEND_API_KEY` /
@@ -69,7 +69,7 @@ reversa más segura.
 
 ## 5. Cómo apagar cada agente o modo (nombres reales del código)
 
-**Interruptores de la tabla `interruptor`** (`src/lib/likida/interruptores.ts`; panel `/admin/observabilidad` o ⌘K). Sin fila =
+**Interruptores de la tabla `interruptor`** (`src/lib/likida/interruptores.ts`; panel `/admin/observabilidad` (menú «Salud › Observabilidad») o ⌘K). Sin fila =
 encendido; ilegible = apagado y avisa. `global` corta todos los crons de agentes. Por agente: `agente:liquidacion`, `agente:facturas`,
 `agente:cobranza`, `agente:conductores`, `agente:peajes`, `agente:proveedores`, `agente:ventas`, `agente:redactor`, `agente:vigia`,
 `agente:carta_porte`, `agente:carta_porte_salida_tms`, `agente:descarga_sat`, `agente:orquestador`, `agente:orquestador_semanal`, entre

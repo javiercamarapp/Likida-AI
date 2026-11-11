@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
-import { LifeBuoy, AlertTriangle, Timer, Plus, MessagesSquare } from 'lucide-react';
+import { LifeBuoy, AlertTriangle, Timer } from 'lucide-react';
 import { exigirVerRuta } from '@/lib/auth/guard';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -10,20 +10,21 @@ import {
   type MensajeHilo, type TicketDetalle,
 } from '@/lib/likida/soporte';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { FormaConAviso, Campo, CampoTexto, type ResultadoAccion } from '../../admin/ui/forma';
 import { HiloSoporte } from '../../admin/ui/hilo-soporte';
 import { ahoraMs } from '@/lib/saludo';
-import { StatusPill } from '../../admin/ui/kit';
-import { EstadoVacio } from '../estados';
 // El rótulo del estado del ticket es COMPARTIDO con /admin/soporte (auditoría
 // 21, MEDIO 1): imprimir `t.estado` crudo aquí enseñaba "en_proceso" con guion
 // bajo al flota_admin mientras el admin sí lo traducía con su mapa privado.
 import { pillTicket } from './estatus';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { Metadata } from 'next';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import {
+  MarcoPagina, Tarjeta, TablaBase, StatusChip, BotonEnlace, FormaConAviso, CampoTexto, CampoTextarea, CampoSelect, EstadoError,
+  type ColumnaBase, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
+import './soporte.css';
 export const metadata: Metadata = { title: 'Centro de ayuda' };
 
 export const dynamic = 'force-dynamic';
@@ -190,196 +191,115 @@ export default async function SoportePage({
   }
   const cerrado = detalle !== null && (detalle.estado === 'resuelto' || detalle.estado === 'cerrado');
 
+  const columnas: ColumnaBase<TicketRow>[] = [
+    { id: 'asunto', titulo: 'Asunto', principal: true, celda: (t) => <Link href={enlaceHilo(t.id)} className="rv-sop__enlace">{t.asunto}</Link> },
+    { id: 'categoria', titulo: 'Categoría', celda: (t) => <span className="rv-sop__tenue">{t.categoria}</span> },
+    { id: 'prioridad', titulo: 'Prioridad', celda: (t) => t.prioridad },
+    {
+      id: 'estado', titulo: 'Estado',
+      celda: (t) => { const pill = pillTicket(t.estado); return <StatusChip tono={pill.estado}>{pill.etiqueta}</StatusChip>; },
+    },
+    { id: 'abierto', titulo: 'Abierto', celda: (t) => <span className="rv-sop__tenue">{fechaMx(t.abiertoEn)}</span> },
+    {
+      id: 'sla', titulo: 'SLA', alinear: 'der',
+      celda: (t) => (
+        <span className={t.horasRestantes != null && t.horasRestantes < 0 ? 'rv-sop__vencido tabular' : 'rv-sop__tenue tabular'}>
+          {t.horasRestantes == null
+            ? 'sin SLA'
+            : t.horasRestantes < 0
+              ? `vencido hace ${Math.abs(Math.round(t.horasRestantes))} h`
+              : `${Math.round(t.horasRestantes)} h`}
+        </span>
+      ),
+    },
+  ];
+
   return (
     <MarcoPagina titulo="Centro de ayuda" apoyo="Tickets, prioridad, reloj de SLA y la conversación con Likida.">
       {!tickets ? (
-        <div className="glass-panel p-5">
-          <EstadoVacio>
-            No se pudo leer la cola. La consulta falló — no es que no haya tickets.
-          </EstadoVacio>
-        </div>
+        <EstadoError reintentar>No se pudo leer la cola. La consulta falló — no es que no haya tickets.</EstadoError>
       ) : tickets.length === 0 ? (
-        <div className="glass-panel p-5">
-          <EstadoVacio icono={<LifeBuoy width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-            <span className="font-semibold">No hay tickets abiertos.</span> La cola ya existe y
-            registra prioridad, categoría y reloj de SLA. Si necesitas algo de Likida ahora, sigue
-            siendo por WhatsApp — que es donde ya está tu operación.
-          </EstadoVacio>
-        </div>
+        <Tarjeta titulo="Tus solicitudes" estado="vacio" mensaje="No hay tickets abiertos"
+          detalle="La cola registra prioridad, categoría y reloj de SLA. Si necesitas algo de Likida ahora, sigue siendo por WhatsApp, que es donde ya está tu operación." />
       ) : (
         <>
-          <div className="glass-panel p-5">
-            <TiraCifras sello={selloHoy('Tickets de soporte')}>
-              <Cifra
-                icono={<LifeBuoy width={15} height={15} strokeWidth={1.75} />}
-                etiqueta="Abiertos"
-                info="soporte.abiertos"
-                valor={abiertos.length}
-              />
-              <Cifra
-                icono={<AlertTriangle width={15} height={15} strokeWidth={1.75} />}
-                etiqueta="SLA vencido"
-                info="soporte.sla_vencido"
-                valor={vencidos.length}
-                tono={vencidos.length > 0 ? 'bad' : undefined}
-              />
-              <Cifra
-                icono={<Timer width={15} height={15} strokeWidth={1.75} />}
-                etiqueta="Sin SLA pactado"
-                info="soporte.sin_sla"
-                valor={sinSla.length}
-                nota="No están vencidos: nadie les puso plazo"
-              />
-            </TiraCifras>
-          </div>
+          <TiraCifras sello={selloHoy('Tickets de soporte')}>
+            <Cifra icono={<LifeBuoy width={16} height={16} strokeWidth={1.75} />} etiqueta="Abiertos" info="soporte.abiertos" valor={abiertos.length} />
+            <Cifra icono={<AlertTriangle width={16} height={16} strokeWidth={1.75} />} etiqueta="SLA vencido" info="soporte.sla_vencido"
+              valor={vencidos.length} tono={vencidos.length > 0 ? 'bad' : undefined} />
+            <Cifra icono={<Timer width={16} height={16} strokeWidth={1.75} />} etiqueta="Sin SLA pactado" info="soporte.sin_sla"
+              valor={sinSla.length} nota="No están vencidos: nadie les puso plazo" />
+          </TiraCifras>
 
-          <div className="glass-panel overflow-hidden">
-            <div className="overflow-x-auto">
-              <table aria-label="Solicitudes de soporte" className="w-full text-sm">
-                <thead>
-                  <tr className="text-xs uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-                    <th scope="col" className="text-left font-medium px-5 py-3">Asunto</th>
-                    <th scope="col" className="text-left font-medium px-5 py-3">Categoría</th>
-                    <th scope="col" className="text-left font-medium px-5 py-3">Prioridad</th>
-                    <th scope="col" className="text-left font-medium px-5 py-3">Estado</th>
-                    <th scope="col" className="text-left font-medium px-5 py-3">Abierto</th>
-                    <th scope="col" className="text-right font-medium px-5 py-3">SLA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tickets.map((t) => {
-                    const pill = pillTicket(t.estado);
-                    return (
-                    <tr key={t.id} style={{ borderTop: '1px solid var(--line)' }}>
-                      <td className="px-5 py-3 font-medium">
-                        <Link href={enlaceHilo(t.id)} style={{ color: 'var(--marca)' }}>{t.asunto}</Link>
-                      </td>
-                      <td className="px-5 py-3" style={{ color: 'var(--muted)' }}>{t.categoria}</td>
-                      <td className="px-5 py-3">{t.prioridad}</td>
-                      <td className="px-5 py-3">
-                        <StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill>
-                      </td>
-                      <td className="px-5 py-3 text-xs" style={{ color: 'var(--muted)' }}>{fechaMx(t.abiertoEn)}</td>
-                      <td className="px-5 py-3 text-right text-xs tabular"
-                        style={{ color: t.horasRestantes != null && t.horasRestantes < 0 ? 'var(--bad)' : 'var(--muted)' }}>
-                        {t.horasRestantes == null
-                          ? 'sin SLA'
-                          : t.horasRestantes < 0
-                            ? `vencido hace ${Math.abs(Math.round(t.horasRestantes))} h`
-                            : `${Math.round(t.horasRestantes)} h`}
-                      </td>
-                    </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <p className="text-xs px-5 py-3" style={{ color: 'var(--muted)' }}>
-              El asunto abre la conversación con Likida.
-            </p>
-          </div>
+          <Tarjeta titulo="Tus solicitudes">
+            <TablaBase etiqueta="Solicitudes de soporte" columnas={columnas} filas={tickets} idFila={(t) => t.id} altoMaximo={false} tarjetaMovil />
+            <p className="rv-sop__pie">El asunto abre la conversación con Likida.</p>
+          </Tarjeta>
         </>
       )}
 
       {/* ── EL HILO ───────────────────────────────────────────────────────── */}
       {pedido !== '' && (
-        <div className="glass-panel p-5 space-y-3">
-          <div className="flex items-center gap-2">
-            <MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-            <span className="text-sm font-medium">
-              {detalle ? detalle.asunto : 'Conversación'}
-            </span>
-          </div>
-
-          {hiloFallo ? (
-            <EstadoVacio>
-              No se pudo leer la conversación. La consulta falló — no es que no haya respuestas.
-            </EstadoVacio>
-          ) : detalle === null ? (
-            <EstadoVacio>
-              Ese ticket no es de tu flota, o ya no existe. La lista de arriba es la de tus tickets.
-            </EstadoVacio>
-          ) : (
-            <>
-              <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                {detalle.categoria}/{detalle.prioridad} · abierto {fechaHoraMx(detalle.abiertoEn)}
-                {detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn)}` : ' · sin SLA pactado'}
-                {detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn)}` : ''}
-              </p>
-
-              {detalle.descripcion && (
-                <p className="text-[13px] whitespace-pre-wrap rounded-lg px-3 py-2.5"
-                  style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
-                  {detalle.descripcion}
+        <Tarjeta titulo={detalle ? detalle.asunto : 'Conversación'}
+          acciones={<BotonEnlace href={enlaceVolver} variante="ghost" tamano="sm">Volver a mis tickets</BotonEnlace>}>
+          <div className="rv-sop__hilo">
+            {hiloFallo ? (
+              <EstadoError reintentar>No se pudo leer la conversación. La consulta falló — no es que no haya respuestas.</EstadoError>
+            ) : detalle === null ? (
+              <p className="rv-sop__nota">Ese ticket no es de tu flota, o ya no existe. La lista de arriba es la de tus tickets.</p>
+            ) : (
+              <>
+                <p className="rv-sop__nota">
+                  {detalle.categoria}/{detalle.prioridad} · abierto {fechaHoraMx(detalle.abiertoEn)}
+                  {detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn)}` : ' · sin SLA pactado'}
+                  {detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn)}` : ''}
                 </p>
-              )}
 
-              <HiloSoporte
-                mensajes={hilo ?? []}
-                vacio="Todavía no hay respuesta de Likida en este ticket. Cuando la haya, aparece aquí — no en otro lado."
-              />
+                {detalle.descripcion && <p className="rv-sop__descripcion">{detalle.descripcion}</p>}
 
-              {cerrado ? (
-                <FormaConAviso accion={accionEstado} boton="Reabrir el ticket" columnas="md:grid-cols-1">
-                  <input type="hidden" name="ticket" value={detalle.id} />
-                  <input type="hidden" name="estado" value="abierto" />
-                  <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                    Este ticket está cerrado. Si el problema sigue, reábrelo y vuelve a la cola de Likida.
-                  </p>
-                </FormaConAviso>
-              ) : (
-                <div className="grid gap-3 md:grid-cols-2">
-                  <FormaConAviso accion={accionResponder} boton="Enviar" columnas="md:grid-cols-1">
+                <HiloSoporte
+                  mensajes={hilo ?? []}
+                  vacio="Todavía no hay respuesta de Likida en este ticket. Cuando la haya, aparece aquí — no en otro lado."
+                />
+
+                {cerrado ? (
+                  <FormaConAviso accion={accionEstado} boton="Reabrir el ticket" columnas="md:grid-cols-1">
                     <input type="hidden" name="ticket" value={detalle.id} />
-                    <CampoTexto
-                      nombre="cuerpo"
-                      etiqueta="Escribir en el ticket"
-                      requerido
-                      maxLargo={LARGO_MAX_MENSAJE}
-                      placeholder="Agrega un dato, un folio, o contesta lo que te preguntaron"
-                    />
+                    <input type="hidden" name="estado" value="abierto" />
+                    <p className="rv-sop__nota">Este ticket está cerrado. Si el problema sigue, reábrelo y vuelve a la cola de Likida.</p>
                   </FormaConAviso>
-                  <FormaConAviso accion={accionEstado} boton="Cerrar el ticket" columnas="md:grid-cols-1">
-                    <input type="hidden" name="ticket" value={detalle.id} />
-                    <input type="hidden" name="estado" value="cerrado" />
-                    <p className="text-xs" style={{ color: 'var(--muted)' }}>
-                      Si ya quedó, ciérralo. Se puede reabrir después: cerrarlo no borra nada de la
-                      conversación.
-                    </p>
-                  </FormaConAviso>
-                </div>
-              )}
-            </>
-          )}
-
-          <Link href={enlaceVolver} className="text-xs inline-block" style={{ color: 'var(--marca)' }}>
-            ← Volver a mis tickets
-          </Link>
-        </div>
+                ) : (
+                  <div className="rv-sop__acciones">
+                    <FormaConAviso accion={accionResponder} boton="Enviar" columnas="md:grid-cols-1">
+                      <input type="hidden" name="ticket" value={detalle.id} />
+                      <CampoTextarea etiqueta="Escribir en el ticket" name="cuerpo" required rows={3} maxLength={LARGO_MAX_MENSAJE}
+                        placeholder="Agrega un dato, un folio, o contesta lo que te preguntaron" />
+                    </FormaConAviso>
+                    <FormaConAviso accion={accionEstado} boton="Cerrar el ticket" columnas="md:grid-cols-1">
+                      <input type="hidden" name="ticket" value={detalle.id} />
+                      <input type="hidden" name="estado" value="cerrado" />
+                      <p className="rv-sop__nota">Si ya quedó, ciérralo. Se puede reabrir después: cerrarlo no borra nada de la conversación.</p>
+                    </FormaConAviso>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </Tarjeta>
       )}
 
-      <div className="glass-panel p-5">
-        <div className="flex items-center gap-2 mb-3">
-          <Plus width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          <span className="text-sm font-medium">Abrir un ticket</span>
-        </div>
+      <Tarjeta titulo="Abrir un ticket">
         <FormaConAviso accion={accionAbrirTicket} boton="Abrir ticket">
-          <Campo nombre="asunto" etiqueta="Asunto" requerido placeholder="Qué pasó, en una línea" />
-          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--muted)' }}>
-            Categoría
-            <select name="categoria" className="text-sm" defaultValue="otro">
-              {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
-          <label className="flex flex-col gap-1 text-xs" style={{ color: 'var(--muted)' }}>
-            Prioridad
-            <select name="prioridad" className="text-sm" defaultValue="media">
-              {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </label>
-          <Campo nombre="descripcion" etiqueta="Detalle" placeholder="Opcional — folios, pantalla, qué esperabas" />
+          <CampoTexto etiqueta="Asunto" name="asunto" required placeholder="Qué pasó, en una línea" />
+          <CampoSelect etiqueta="Categoría" name="categoria" defaultValue="otro">
+            {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
+          </CampoSelect>
+          <CampoSelect etiqueta="Prioridad" name="prioridad" defaultValue="media">
+            {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
+          </CampoSelect>
+          <CampoTexto etiqueta="Detalle" name="descripcion" placeholder="Opcional — folios, pantalla, qué esperabas" />
         </FormaConAviso>
-      </div>
+      </Tarjeta>
     </MarcoPagina>
   );
 }

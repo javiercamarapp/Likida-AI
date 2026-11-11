@@ -34,6 +34,13 @@
 /* Móvil: el margen de 16 px lo ponen HOY las páginas (C); sumar el del shell dejaba 32 y ensanchaba el documento en /agentes/liquidacion
    a 462 px (e2e «recorrido móvil»). Se desactiva aquí; desde 768 el padding único es del shell. */
 [data-ui="v2"] .rv-contenido { min-width: 0; padding: 0; }
+/* PESTAÑAS DEL HUB (Fase 8, dashboard): la barra de respaldo (`rv-pestanas-dash`, pantallas aún sin `MarcoPagina`) va pegada al borde
+   superior; con `MarcoPagina` en la página la pinta el propio marco bajo el encabezado y el respaldo se oculta (nunca dos barras).
+   La fila desplaza en horizontal por dentro (360 px con 6 pestañas) y nunca ensancha la página. */
+[data-ui="v2"] .rv-pestanas-dash { margin: 0 0 12px; }
+[data-ui="v2"] .rv-contenido:has(> .rv-marco) > .rv-pestanas-respaldo { display: none; }
+[data-ui="v2"] .rv-marco > .rv-marco__pestanas { min-width: 0; max-width: 100%; margin: -4px 0 4px; }
+[data-ui="v2"] .rv-pestanas-respaldo, [data-ui="v2"] .rv-marco__pestanas { min-width: 0; max-width: 100%; }
 
 /* ── Móvil (<768): sin aside, documento que scrollea ──────────────────────── */
 [data-ui="v2"] .rv-sb { display: none; }
@@ -176,14 +183,41 @@
 [data-ui="v2"] .rv-cab-esc__der { display: flex; align-items: center; gap: 8px; margin-left: auto; min-width: 0; }
 [data-ui="v2"] .rv-guia { position: relative; display: inline-flex; }
 [data-ui="v2"] .rv-guia__btn {
-  position: relative; display: inline-flex; align-items: center; gap: 6px; height: 32px; box-sizing: border-box; padding: 0 10px;
-  border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--ink);
-  font: 600 13px/1 var(--font-sans-ui, inherit); cursor: pointer;
+  position: relative; display: inline-flex; align-items: center; gap: 6px; height: 28px; box-sizing: border-box; padding: 0 10px 0 8px;
+  border: 0; border-radius: 999px; background: var(--ui-soft); color: var(--muted);
+  font: 500 12px/1 var(--font-sans-ui, inherit); cursor: pointer;
 }
 [data-ui="v2"] .rv-guia__btn::after { content: ""; position: absolute; inset: -6px; }
 [data-ui="v2"] .rv-guia__btn:hover,
-[data-ui="v2"] .rv-guia__btn[aria-expanded="true"] { background: var(--ui-soft); border-color: var(--ui-line-strong); }
+[data-ui="v2"] .rv-guia__btn[aria-expanded="true"] { background: var(--ui-border); color: var(--ink); }
 [data-ui="v2"] .rv-guia__btn:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+/* Punto de invitación (hay un recorrido nuevo): 6 px arriba a la derecha de la píldora, como Rovaq */
+[data-ui="v2"] .rv-guia__punto { position: absolute; top: -2px; right: -2px; width: 6px; height: 6px; border-radius: 50%; background: var(--senal); box-shadow: 0 0 0 2px var(--ui-surface); }
+/* Título de la topbar (icono de 15 px + nombre exacto de la entrada del menú) y disparador visible del buscador ⌘K */
+[data-ui="v2"] .rv-cab-esc__izq { display: flex; align-items: center; gap: 8px; min-width: 0; }
+[data-ui="v2"] .rv-cab-esc__titulo { display: inline-flex; align-items: center; gap: 8px; min-width: 0; margin-left: 4px; color: var(--ink); font: 600 13px/1 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .rv-cab-esc__titulo > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+[data-ui="v2"] .rv-cab-esc__titulo > svg { flex: none; color: var(--muted); }
+[data-ui="v2"] .rv-cab-esc__buscar {
+  position: relative; display: inline-flex; align-items: center; gap: 8px; height: 28px; box-sizing: border-box; padding: 0 6px 0 10px;
+  border: 1px solid var(--ui-border); border-radius: 8px; background: var(--ui-surface); color: var(--muted);
+  font: 500 12px/1 var(--font-sans-ui, inherit); cursor: pointer;
+}
+[data-ui="v2"] .rv-cab-esc__buscar::after { content: ""; position: absolute; inset: -6px; }
+[data-ui="v2"] .rv-cab-esc__buscar:hover { background: var(--ui-soft); color: var(--ink); }
+[data-ui="v2"] .rv-cab-esc__buscar:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+[data-ui="v2"] .rv-cab-esc__buscar-txt { padding-right: 18px; }
+[data-ui="v2"] .rv-cab-esc__buscar kbd { padding: 2px 6px; border: 1px solid var(--ui-border); border-radius: 6px; background: var(--ui-soft); color: var(--muted); font: 500 11px/1.2 var(--font-sans-ui, inherit); }
+/* Bajo 1024 px la topbar se queda con lo esencial: el campo del buscador se reduce a la lupa y el título cede ante la Guía */
+@media (max-width: 1023.98px) {
+  [data-ui="v2"] .rv-cab-esc__buscar-txt, [data-ui="v2"] .rv-cab-esc__buscar kbd { display: none; }
+  [data-ui="v2"] .rv-cab-esc__buscar { padding: 0 8px; }
+}
+/* Buscador ⌘K: cabecera con título y subtítulo y rótulos de grupo (Recientes / Pantallas) */
+.rv-paleta__cab { padding: 14px 16px 0; }
+.rv-paleta__titulo { margin: 0; font: 600 13px/1.3 var(--font-sans-ui, system-ui, sans-serif); color: var(--ink); }
+.rv-paleta__sub { margin: 2px 0 0; font: 400 12px/1.4 var(--font-sans-ui, system-ui, sans-serif); color: var(--muted); }
+.rv-paleta__grupo { margin: 0; padding: 8px 16px 4px; font: 500 11px/1.2 var(--font-mono-ui, var(--font-sans-ui, system-ui, sans-serif)); letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
 [data-ui="v2"] .rv-campana[aria-current="page"] { background: var(--ui-soft); color: var(--ink); }
 /* Aviso de pendientes: un punto de 8 px en la señal (acento puntual de atención), sin cifra */
 [data-ui="v2"] .rv-campana__punto { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border-radius: 50%; background: var(--senal); box-shadow: 0 0 0 2px var(--ui-surface); }
@@ -274,15 +308,27 @@
   [data-ui="v2"] .rv-sb__logo::after { content: ""; position: absolute; inset: -11px 0; }
   [data-ui="v2"] .rv-sb__logo:focus-visible { outline: 2px solid var(--ui-focus); outline-offset: 3px; }
   [data-ui="v2"] .rv-logo-s { display: none; }
-  [data-ui="v2"] .rv-sb__plegar { width: 32px; height: 32px; }
+  /* UN solo botón de plegar en escritorio: el de la cabecera, junto a «Guía» (como Rovaq). El del sidebar queda en el árbol (sin él los tests de contrato
+     y el riel pierden su gancho) pero no se pinta. */
+  [data-ui="v2"] .rv-sb__plegar { display: none; }
   /* El contenido del sidebar scrollea por dentro; el pie queda fijo abajo. */
-  [data-ui="v2"] .rv-sb__nav { flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 8px; }
+  [data-ui="v2"] .rv-sb__nav {
+    flex: 1 1 auto; min-height: 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 6px 0 8px;
+    /* Sombras de scroll (solo CSS): aparecen arriba/abajo cuando HAY más lista oculta y se funden con la superficie al llegar al borde. */
+    background:
+      linear-gradient(var(--ui-surface) 30%, transparent) top / 100% 24px no-repeat local,
+      linear-gradient(transparent, var(--ui-surface) 70%) bottom / 100% 24px no-repeat local,
+      radial-gradient(farthest-side at 50% 0, rgb(0 0 0 / 0.14), transparent) top / 100% 8px no-repeat scroll,
+      radial-gradient(farthest-side at 50% 100%, rgb(0 0 0 / 0.14), transparent) bottom / 100% 8px no-repeat scroll;
+  }
+  /* «Página actual» (la pantalla abierta cuando su categoría está cerrada) no tiene sentido en el riel: ahí todo está a la vista */
+  [data-ui="v2"] .rv-pagina-actual { margin-top: 2px; padding-bottom: 6px; border-bottom: 1px solid var(--ui-border); }
   [data-ui="v2"] .rv-sb__pie { flex: none; box-sizing: border-box; padding: 8px; border-top: 1px solid var(--ui-border); }
 
   /* La columna del contenido es una tarjeta: topbar fija arriba y contenido que scrollea por dentro */
   [data-ui="v2"] .rv-col {
     display: flex; flex-direction: column; height: 100%; box-sizing: border-box; overflow: hidden;
-    border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-canvas); box-shadow: var(--sh-marco);
+    border: 1px solid var(--ui-border); border-radius: 12px; background: var(--ui-sunken); box-shadow: var(--sh-marco);
   }
   [data-ui="v2"] .rv-contenido { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 24px 24px 28px; }
 
@@ -313,6 +359,7 @@
   [data-ui="v2"] .rv-sb .rv-grupo__h,
   [data-ui="v2"] .rv-sb .rv-grupo[data-estatico] .rv-grupo__t { display: none; }
   [data-ui="v2"] .rv-sb .rv-grupo { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--ui-border); }
+  [data-ui="v2"] .rv-sb .rv-pagina-actual { display: none; }
   [data-ui="v2"] .rv-sb .rv-sb__marca { justify-content: center; padding: 0; }
   [data-ui="v2"] .rv-sb .rv-logo-h,
   [data-ui="v2"] .rv-sb .rv-sb__plegar { display: none; }
@@ -350,6 +397,7 @@
   [data-ui="v2"] .rv-sb[data-riel] .rv-grupo__h,
   [data-ui="v2"] .rv-sb[data-riel] .rv-grupo[data-estatico] .rv-grupo__t { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-grupo { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--ui-border); }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-pagina-actual { display: none; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-sb__marca { justify-content: center; padding: 0; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-logo-h,
   [data-ui="v2"] .rv-sb[data-riel] .rv-sb__plegar { display: none; }

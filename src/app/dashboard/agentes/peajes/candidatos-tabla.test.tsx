@@ -73,7 +73,8 @@ describe('la tabla de candidatos en pantalla', () => {
     expect(html).toContain('Acciones en lote');
     expect(html).toContain('Confirmo: marcar como reclamados 2 cruces');
     expect(html).toContain('name="esperado" value="2"');
-    expect(html).toContain('type="checkbox" required="" name="confirmar"');
+    // La casilla del sistema pone `required` antes y `name` al final: se prueba que es una casilla obligatoria llamada «confirmar».
+    expect(html).toMatch(/<input required="" [^>]*type="checkbox"[^>]*name="confirmar"/);
     expect(html).toContain('name="f_cat" value="clase_fuera_de_3_5"');
     expect(html).toContain('name="f_unidad" value="TC9001"');
   });

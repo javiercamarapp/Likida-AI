@@ -21,6 +21,8 @@ const SUR = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const flota = { tipo: 'flota' } as const;
 
 beforeEach(() => {
+  process.env.WHATSAPP_ACCESS_TOKEN = 'token-de-prueba';
+  process.env.WHATSAPP_PHONE_NUMBER_ID = 'numero-de-prueba';
   base = crearBaseEnMemoria({
     tenant: [{ id: T, nombre: 'Transportes del Norte' }],
     terminal: [{ id: NORTE, tenant_id: T, nombre: 'Patio Norte', ciudad: null }, { id: SUR, tenant_id: T, nombre: 'Patio Sur', ciudad: null }],

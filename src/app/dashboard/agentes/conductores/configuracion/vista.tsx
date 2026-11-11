@@ -1,4 +1,3 @@
-import { TriangleAlert } from 'lucide-react';
 import type { ConfigConductor } from '@/lib/likida/conductor/config';
 import type { ContactoTrafico } from '@/lib/likida/conductor/escalamiento';
 import type { ResultadoPreflight } from '@/lib/likida/conductor/preflight_piloto';
@@ -9,7 +8,8 @@ import { DocumentosCliente } from './documentos_cliente';
 import type { DocumentoCliente } from '@/lib/likida/conductor/documentos_cliente';
 import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
-import { MarcoPagina, AvisoCompacto, BotonEnlace, TituloRecuadro } from '@/app/ui-v2/componentes';
+import '../conductores.css';
+import { MarcoPagina, AvisoCompacto, BotonEnlace, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
 
 export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento }: {
   sufijo: string;
@@ -50,48 +50,44 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
       {legible ? (
         <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} puedeForzarPreflight={puedeForzarPreflight} />
       ) : (
-        <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-          <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          No se pudo leer la configuración ahora mismo. No se muestra un formulario con valores por omisión para no confundirlos con lo guardado; intenta de nuevo en un momento.
-        </p>
+        <EstadoError compacto>No se pudo leer la configuración ahora mismo. No se muestra un formulario con valores por omisión para no confundirlos con lo guardado; intenta de nuevo en un momento.</EstadoError>
       )}
       {voluntarios === null && (
-        <p role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-          <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          No se pudo leer la lista de operadores del piloto ahora mismo; intenta de nuevo en un momento. Si se repite, avísale a Likida.
-        </p>
+        <EstadoError compacto>No se pudo leer la lista de operadores del piloto ahora mismo; intenta de nuevo en un momento. Si se repite, avísale a Likida.</EstadoError>
       )}
       {voluntarios && accionAlta && accionBaja && (
         <SeccionVoluntarios datos={voluntarios} puedeEditar={puedeEditar} accionAlta={accionAlta} accionBaja={accionBaja}
           parametros={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].filter(([k]) => k !== 'q')} />
       )}
       {accionImportarRutas && (
-        <section aria-labelledby="rutas-titulo" className="space-y-2">
-          <TituloRecuadro id="rutas-titulo" info="conductores_config.rutas">Rutas autorizadas de Google Maps</TituloRecuadro>
-          <p className="text-[12px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
-            La base de rutas hechas con anticipación, por corredor (y, si quieres, por sitio de origen y de destino). El agente nunca arma ni
-            corrige un link: solo se aceptan links de maps.app.goo.gl o google.com/maps, y una ruta vencida se trata como si no existiera.
-            Cada fila se aprueba o se rechaza sola; volver a subir el mismo archivo no cambia nada.
-          </p>
-          <FormaImportarRutas accion={accionImportarRutas} />
-          {rutasPendientes && (
-            <div className="space-y-2 pt-2">
-              <TituloRecuadro nivel="h3" id="rutas-pendientes-titulo" info="conductores_config.rutas_por_revisar">Rutas por revisar</TituloRecuadro>
-              <PendientesRutas pendientes={rutasPendientes} totalRutas={totalRutas} dias={diasRevisionRutas} accionRevisada={accionRutaRevisada} />
-            </div>
-          )}
-        </section>
+        <Tarjeta titulo="Rutas autorizadas de Google Maps" info="conductores_config.rutas">
+          <div className="rv-cd__pila">
+            <p className="rv-cd__nota">
+              La base de rutas hechas con anticipación, por corredor (y, si quieres, por sitio de origen y de destino). El agente nunca arma ni
+              corrige un link: solo se aceptan links de maps.app.goo.gl o google.com/maps, y una ruta vencida se trata como si no existiera.
+              Cada fila se aprueba o se rechaza sola; volver a subir el mismo archivo no cambia nada.
+            </p>
+            <FormaImportarRutas accion={accionImportarRutas} />
+            {rutasPendientes && (
+              <div className="rv-cd__pila">
+                <p className="rv-cd__rotulo">Rutas por revisar</p>
+                <PendientesRutas pendientes={rutasPendientes} totalRutas={totalRutas} dias={diasRevisionRutas} accionRevisada={accionRutaRevisada} />
+              </div>
+            )}
+          </div>
+        </Tarjeta>
       )}
       {documentosCliente !== undefined && (
-        <section aria-labelledby="documentos-cliente-titulo" className="space-y-2">
-          <TituloRecuadro id="documentos-cliente-titulo" info="conductores_config.documentos_cliente">Documentos que pide cada cliente</TituloRecuadro>
-          <p className="text-[12px] max-w-[80ch]" style={{ color: 'var(--muted)' }}>
-            Cada cliente pide papeles distintos al cerrar el viaje: unos solo la carta porte firmada y sellada, otros además pedimento, DODA,
-            fitosanitario o tickets de báscula. Aquí dices cuáles son y cuáles son indispensables. Un cliente sin documentos propios sigue como hoy:
-            solo se le pide el comprobante de entrega.
-          </p>
-          <DocumentosCliente clientes={clientes ?? []} documentos={documentosCliente} accionAlta={accionAltaDocumento} accionBaja={accionBajaDocumento} />
-        </section>
+        <Tarjeta titulo="Documentos que pide cada cliente" info="conductores_config.documentos_cliente">
+          <div className="rv-cd__pila">
+            <p className="rv-cd__nota">
+              Cada cliente pide papeles distintos al cerrar el viaje: unos solo la carta porte firmada y sellada, otros además pedimento, DODA,
+              fitosanitario o tickets de báscula. Aquí dices cuáles son y cuáles son indispensables. Un cliente sin documentos propios sigue como hoy:
+              solo se le pide el comprobante de entrega.
+            </p>
+            <DocumentosCliente clientes={clientes ?? []} documentos={documentosCliente} accionAlta={accionAltaDocumento} accionBaja={accionBajaDocumento} />
+          </div>
+        </Tarjeta>
       )}
     </MarcoPagina>
   );

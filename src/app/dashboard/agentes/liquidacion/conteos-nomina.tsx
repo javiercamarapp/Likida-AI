@@ -1,6 +1,7 @@
-import { Mail } from 'lucide-react';
 import { hoyMx, inicioDiaMx } from '@/lib/formato';
 import { contarParaNomina, type ConteosNomina } from '@/lib/likida/liquidacion_externa/repo';
+import { Tarjeta } from '@/app/ui-v2/componentes';
+import './liquidacion.css';
 import { Ficha, VistaDesgloses } from './desgloses';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -12,7 +13,7 @@ import { Ficha, VistaDesgloses } from './desgloses';
 // operador para armar las filas): lee SOLO `contarParaNomina` (seis `count` con `head: true`, ninguna columna de dinero) y pinta
 // las fichas SIN enlace (la lista a la que llevarían tiene nombres y netos).
 //
-// Cero CSS nuevo: las mismas clases de la pantalla del dueño. La ficha se reutiliza de `desgloses.tsx` (sin `href` no es enlace).
+// Mismas piezas y clases (`liquidacion.css`) que la pantalla del dueño. Sin ⓘ a propósito: el ⓘ es un botón y esta vista no lleva ninguno. La ficha se reutiliza de `desgloses.tsx` (sin `href` no es enlace).
 // ═══════════════════════════════════════════════════════════════════════════
 
 const DIA_MS = 24 * 3600 * 1000;
@@ -35,25 +36,21 @@ export async function leerConteosNomina(tenantId: string): Promise<ConteosNomina
 
 export function SeccionConteosNomina({ conteos }: { conteos: ConteosNomina }) {
   return (
-    <section className="card p-4" id="desgloses">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
-        <h2 className="font-display text-[15px] font-semibold flex items-center gap-1.5">
-          <Mail width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          Desgloses de pago
-        </h2>
-      </div>
-      <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
-        Cuántos desgloses de pago hay en cada estado. Este resumen solo muestra conteos.
-      </p>
-      <div className="grid grid-cols-2 lg:grid-cols-6 gap-2">
-        <Ficha etiqueta="Recibidos hoy" valor={conteos.recibidosHoy} ayuda="Desgloses que llegaron hoy del sistema de tu empresa." />
-        <Ficha etiqueta="Enviados · 30 días" valor={conteos.enviados} ayuda="Correos que salieron en los últimos 30 días y esperan confirmación de entrega. Se cuenta un correo por destinatario." />
-        <Ficha etiqueta="Entregados · 30 días" valor={conteos.entregados} ayuda="Correos de los últimos 30 días que el buzón de destino ya recibió. Se cuenta un correo por destinatario." />
-        <Ficha etiqueta="Rebotados · 30 días" valor={conteos.rebotados} tono="bad" ayuda="Correos de los últimos 30 días que no llegaron. Se cuenta un correo por destinatario." />
-        <Ficha etiqueta="Retenidos" valor={conteos.retenidos} tono="bad" ayuda="Desgloses detenidos antes de enviarse." />
-        <Ficha etiqueta="Sin póliza" valor={conteos.sinPoliza} tono="bad" ayuda="Bitácoras que esperan su póliza para poder enviarse." />
-      </div>
-    </section>
+    <div id="desgloses">
+      <Tarjeta titulo="Desgloses de pago">
+        <p className="rv-liq-sub">
+          Cuántos desgloses de pago hay en cada estado. Este resumen solo muestra conteos.
+        </p>
+        <div className="rv-liq-fichas">
+          <Ficha etiqueta="Recibidos hoy" valor={conteos.recibidosHoy} ayuda="Desgloses que llegaron hoy del sistema de tu empresa." />
+          <Ficha etiqueta="Enviados · 30 días" valor={conteos.enviados} ayuda="Correos que salieron en los últimos 30 días y esperan confirmación de entrega. Se cuenta un correo por destinatario." />
+          <Ficha etiqueta="Entregados · 30 días" valor={conteos.entregados} ayuda="Correos de los últimos 30 días que el buzón de destino ya recibió. Se cuenta un correo por destinatario." />
+          <Ficha etiqueta="Rebotados · 30 días" valor={conteos.rebotados} tono="bad" ayuda="Correos de los últimos 30 días que no llegaron. Se cuenta un correo por destinatario." />
+          <Ficha etiqueta="Retenidos" valor={conteos.retenidos} tono="bad" ayuda="Desgloses detenidos antes de enviarse." />
+          <Ficha etiqueta="Sin póliza" valor={conteos.sinPoliza} tono="bad" ayuda="Bitácoras que esperan su póliza para poder enviarse." />
+        </div>
+      </Tarjeta>
+    </div>
   );
 }
 

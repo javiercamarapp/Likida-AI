@@ -11,8 +11,12 @@ import { ConveniosNoDisponibles, listarCatalogosConvenio, listarConvenios, lista
 import { sufijoTenant } from '../sufijo';
 import { VistaConvenios } from './vista';
 import type { ResultadoSitio } from '../agentes/conductores/sitios/formas';
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Convenios de clientes' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.convenios') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -56,8 +60,9 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
 
   async function accionGuardar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('conv.a.rol') };
     const campo = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string) : '');
     const categorias = fd.getAll('ins_categoria'), textos = fd.getAll('ins_texto'), momentos = fd.getAll('ins_momento'), lugares = fd.getAll('ins_lugar');
     const texto = (v: FormDataEntryValue | undefined): string => (typeof v === 'string' ? v : '');
@@ -76,8 +81,9 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
 
   async function accionCorregir(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('conv.a.rol') };
     const campo = (k: string): string => (typeof fd.get(k) === 'string' ? (fd.get(k) as string) : '');
     const r = await corregirConvenioDelViajeDelPanel({ tenantId: s.tenantId, rol: s.rol }, { viajeId: campo('viajeId'), convenioId: campo('convenioId'), reenviar: campo('reenviar') === 'si' });
     if (r.ok) revalidatePath(RUTA);
@@ -86,12 +92,13 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
 
   async function accionImportar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('conv.a.rol') };
     const archivo = fd.get('archivo');
     let bytes: ArrayBuffer | null = null;
     if (archivo instanceof File && archivo.size > 0) {
-      if (archivo.size > MAX_ARCHIVO_BYTES) return { ok: false, error: 'El archivo pesa más de 4 MB: divídelo en partes.' };
+      if (archivo.size > MAX_ARCHIVO_BYTES) return { ok: false, error: t('conv.a.grande') };
       bytes = await archivo.arrayBuffer();
     }
     const texto = typeof fd.get('csv') === 'string' ? (fd.get('csv') as string) : '';

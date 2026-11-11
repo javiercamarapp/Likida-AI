@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 import { estadoPanel, liquidacionesDeViajes } from './estado';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -181,7 +182,9 @@ describe('dashboard/inicio-contenido.tsx: las secciones filtradas dicen su perio
   });
 
   it('el motor fiscal declara SU periodo (ejercicio), no el operativo', () => {
-    expect(PAGINA).toMatch(/Tu motor fiscal — \{periodoFiscal\.etiqueta\}/);
+    // El rótulo sale del diccionario (i18n P2): «Tu motor fiscal —» + el periodo del ejercicio, nunca el operativo.
+    expect(PAGINA).toMatch(/\{t\('ini\.motor'\)\} \{periodoFiscal\.etiqueta\}/);
+    expect(operacionEs['ini.motor']).toBe('Tu motor fiscal —');
   });
 });
 

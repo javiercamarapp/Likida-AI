@@ -16,8 +16,11 @@ export const dynamic = 'force-dynamic';
  */
 export default async function PaginaCopiloto() {
   await requireSuperadmin();
+  // El MISMO contenedor que «Pregunta a tus datos» del dashboard (`.rv-chat-pagina`, ui-v2/chat.css): llena el alto del marco, el hilo
+  // scrollea por dentro y el chat queda con los márgenes del sistema. El envoltorio anterior (`.rv-agente-pagina`: borde, radio y
+  // altura fija) hacía una tarjeta dentro de otra y dejaba el botón «Historial» pegado a la esquina.
   return (
-    <main className="rv-agente-pagina">
+    <main className="rv-chat-pagina">
       <AgenteConversacion modo="superadmin" variante="pagina" />
     </main>
   );

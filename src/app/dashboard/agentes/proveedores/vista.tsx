@@ -1,11 +1,10 @@
-import { Inbox, Download, TriangleAlert, Mail } from 'lucide-react';
+import { Inbox, Download, Mail } from 'lucide-react';
+import './proveedores.css';
 import type { FacturaProveedor } from '@/lib/likida/proveedores';
 import type { BuzonDeFlota } from '@/lib/correo/buzon_escritura';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Disclosure, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { SelloDato, TablaLista, type ColumnaTabla, type ParamsURL } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
@@ -21,6 +20,7 @@ import {
   SubirFactura, SubirFotoFactura, BotonesDecision, DireccionBuzon, GenerarBuzon, RotarBuzon,
   type AccionProveedores,
 } from './controles';
+import { TR_ES, type TrAgentes, rico, selloHoyTr } from '../i18n-agentes';
 
 /**
  * La ventana del Agente de Proveedores (F6): la bandeja donde el XML del
@@ -30,7 +30,7 @@ import {
  */
 export function VistaAgenteProveedores({
   facturas, rfcFlota, sufijo, acciones, notificaciones, ficha,
-  buzon, dominioConfigurado, puedeAdministrarBuzon, entrega, recepcion, params = {},
+  buzon, dominioConfigurado, puedeAdministrarBuzon, entrega, recepcion, params = {}, tr = TR_ES,
 }: {
   /** Los parámetros de la URL (`searchParams`): la bandeja ordena y pagina por ellos (`orden`, `dir`, `pag`) y los conserva todos. */
   params?: ParamsURL;
@@ -63,8 +63,9 @@ export function VistaAgenteProveedores({
   /** La sección de Notificaciones, ya renderizada en el servidor
    *  (`SeccionNotificaciones`). Entra como ReactNode y no como datos: esta
    *  vista no debe importar el motor de avisos, que trae `supabaseAdmin`. */
-  notificaciones?: React.ReactNode;
+  notificaciones?: React.ReactNode; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   // FE-13: `listarFacturasProveedor` trae las `TOPE_FACTURAS` más recientes.
   // Los cuatro KPIs de abajo se calculan sobre ESAS, así que cuando la lectura
   // viene llena hay que decirlo — si no, "Esperan tu decisión: 100" se lee
@@ -78,61 +79,47 @@ export function VistaAgenteProveedores({
   const exportadas = aprobadas.length - sinExportar;
 
   return (
-    <MarcoPagina titulo="Facturas de proveedores" apoyo="La bandeja donde el XML del taller espera tu decisión, y el export que evita capturarlo a mano en el ERP.">
+    <MarcoPagina titulo={tx('proveedores.vista.facturas_de_proveedores')} apoyo={tx('proveedores.vista.la_bandeja_donde_el_xml')}>
 
-      <TiraCifras sello={selloHoy('Facturas de proveedores')}>
-        <Cifra info="proveedores.esperan_decision" etiqueta="Esperan tu decisión" valor={numero(pendientes.length)}
+      <TiraCifras sello={selloHoyTr(tr, tx('proveedores.vista.sello_facturas_de_proveedores'))}>
+        <Cifra info="proveedores.esperan_decision" etiqueta={tx('proveedores.vista.esperan_tu_decision')} valor={numero(pendientes.length)}
           tono={pendientes.length > 0 ? 'warn' : undefined} />
-        <Cifra info="proveedores.aprobadas" etiqueta="Aprobadas" valor={numero(aprobadas.length)}
+        <Cifra info="proveedores.aprobadas" etiqueta={tx('proveedores.vista.aprobadas')} valor={numero(aprobadas.length)}
           nota={aprobadas.length === 0 ? undefined
-            : `${numero(sinExportar)} sin exportar · ${numero(exportadas)} ya exportadas`} />
-        <Cifra info="proveedores.rechazadas" etiqueta="Rechazadas" valor={numero(rechazadas.length)} />
-        <Cifra info="proveedores.receptor_ajeno" etiqueta="Con receptor ajeno" valor={numero(receptorAjeno)}
-          nota="el CFDI no es a tu RFC" tono={receptorAjeno > 0 ? 'bad' : undefined} />
+            : tx('proveedores.vista.sin_exportar_ya_exportadas', { sinExportar: numero(sinExportar), exportadas: numero(exportadas) })} />
+        <Cifra info="proveedores.rechazadas" etiqueta={tx('proveedores.vista.rechazadas')} valor={numero(rechazadas.length)} />
+        <Cifra info="proveedores.receptor_ajeno" etiqueta={tx('proveedores.vista.con_receptor_ajeno')} valor={numero(receptorAjeno)}
+          nota={tx('proveedores.vista.el_cfdi_no_es_a')} tono={receptorAjeno > 0 ? 'bad' : undefined} />
       </TiraCifras>
 
       {topeTocado && (
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-          Las aprobadas, rechazadas y el receptor ajeno se cuentan sobre las {numero(TOPE_FACTURAS)} facturas
-          más recientes del buzón — hay más atrás. Las pendientes se leen todas
-          {pendientes.length >= TOPE_PENDIENTES ? `, hasta ${numero(TOPE_PENDIENTES)}: hay más por decidir de las que caben aquí` : ''}.
-        </p>
+        <AvisoCompacto tono="info" resumen={<>
+          {tx('proveedores.vista.las_aprobadas_rechazadas_y_el', { TOPE_FACTURAS: numero(TOPE_FACTURAS), hasta: pendientes.length >= TOPE_PENDIENTES ? tx('proveedores.vista.hasta_hay_mas_por_decidir', { TOPE_PENDIENTES: numero(TOPE_PENDIENTES) }) : '' })}
+        </>} />
       )}
 
-      <section className="card p-4">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <TituloRecuadro info="proveedores.subir" className="mb-1">Subir factura de proveedor</TituloRecuadro>
-            <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-              El XML es el dato duro del CFDI — súbelo siempre que lo tengas. Si solo hay
-              papel, la foto también entra: la IA lee las cifras y la bandeja la marca para
-              revisarse contra el papel antes de aprobar. {rfcFlota
-                ? <>Se valida contra el RFC de tu flota ({rfcFlota}).</>
-                : <>Tu flota aún no tiene RFC capturado: la validación de receptor queda pendiente y se dice.</>}
-            </p>
-            <div className="space-y-2">
-              <SubirFactura subirFactura={acciones.subirFactura} />
-              <SubirFotoFactura subirFoto={acciones.subirFoto} />
-            </div>
-          </div>
-          {aprobadas.length > 0 && (
-            <div className="shrink-0 space-y-1.5">
-              <BotonExport
-                href={linkExport(sufijo, 'sap_b1')}
-                rotulo="Exportar aprobadas (CSV SAP B1)" />
-              <BotonExport
-                href={linkExport(sufijo, 'contpaqi')}
-                rotulo="Exportar aprobadas (CSV CONTPAQi)" />
-              <p className="text-[11px] max-w-[260px]" style={{ color: 'var(--faint)' }}>
-                Layout estándar de importación — valídalo con tu contador o consultor SAP
-                antes del primer import. Lo exportado queda marcado en la bandeja.
-              </p>
-            </div>
-          )}
+      <Tarjeta titulo={tx('proveedores.vista.subir_factura_de_proveedor')} info="proveedores.subir">
+        <p className="rv-prov__nota">
+          {rico(tx('proveedores.vista.el_xml_es_el_dato'), { rfc: rfcFlota
+            ? <>{tx('proveedores.vista.rfc_valida', { rfc: rfcFlota })}</>
+            : <>{tx('proveedores.vista.tu_flota_aun_no_tiene')}</> })}
+        </p>
+        <div className="rv-prov__subir">
+          <SubirFactura subirFactura={acciones.subirFactura} />
+          <SubirFotoFactura subirFoto={acciones.subirFoto} />
         </div>
-      </section>
+        {aprobadas.length > 0 && (
+          <div className="rv-prov__export">
+            <BotonExport href={linkExport(sufijo, 'sap_b1')} rotulo="Exportar aprobadas (CSV SAP B1)" />
+            <BotonExport href={linkExport(sufijo, 'contpaqi')} rotulo="Exportar aprobadas (CSV CONTPAQi)" />
+            <p className="rv-prov__nota">
+              {tx('proveedores.vista.layout_estandar_de_importacion_valid')}
+            </p>
+          </div>
+        )}
+      </Tarjeta>
 
-      <SeccionBuzon
+      <SeccionBuzon tr={tr}
         buzon={buzon}
         dominioConfigurado={dominioConfigurado}
         puedeAdministrarBuzon={puedeAdministrarBuzon}
@@ -141,21 +128,17 @@ export function VistaAgenteProveedores({
 
       {recepcion}
 
-      <section className="card p-4">
-        <TituloRecuadro info="proveedores.bandeja" className="mb-1">La bandeja</TituloRecuadro>
-        <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-          Pendientes arriba; lo decidido queda con su quién y su cuándo
-        </p>
+      <Tarjeta titulo={tx('proveedores.vista.la_bandeja')} info="proveedores.bandeja">
+        <p className="rv-prov__nota">{tx('proveedores.vista.pendientes_arriba_lo_decidido_queda')}</p>
         {facturas.length === 0 ? (
-          <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-            Aún no hay facturas de proveedor — sube el primer XML y aparece aquí
-            esperando tu decisión.
+          <EstadoVacio titulo={tx('proveedores.vista.sin_facturas_de_proveedor')} icono={Inbox} contenido>
+            {tx('proveedores.vista.aun_no_hay_facturas_de')}
           </EstadoVacio>
         ) : (
           <>
             <TablaLista<FacturaProveedor>
-              etiqueta="Bandeja de facturas de proveedor"
-              columnas={columnasBandeja(acciones)}
+              etiqueta={tx('proveedores.vista.bandeja_de_facturas_de_proveedor')}
+              columnas={columnasBandeja(acciones, tr)}
               filas={[...pendientes, ...aprobadas, ...rechazadas]}
               idFila={(f) => f.id}
               base="/dashboard/agentes/proveedores"
@@ -165,21 +148,19 @@ export function VistaAgenteProveedores({
               atributosFila={(f) => ({ 'data-estado': f.estado })}
             />
             <div className="rv-tl__sellos">
-              <SelloDato tipo="observado" fuente="Buzón de facturas" leidoEn={ahoraMs()} edad={false} />
+              <SelloDato tipo="observado" fuente={tx('proveedores.vista.buzon_de_facturas')} leidoEn={ahoraMs()} edad={false} />
             </div>
           </>
         )}
-      </section>
+      </Tarjeta>
 
       {entrega}
 
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-        Los CSV usan el layout estándar de importación de facturas de compra (SAP Business
-        One por Excel/DTW; variante simple para CONTPAQi) — no una compatibilidad
-        certificada: valídalos con tu contador o consultor SAP antes del primer import. La
-        escritura directa al Service Layer de SAP B1 se activa con credenciales del cliente —
-        este agente no la promete antes de tenerlas.
+      <Disclosure titulo={tx('proveedores.vista.que_son_los_csv_de')}>
+      <p className="rv-prov__nota">
+        {tx('proveedores.vista.los_csv_usan_el_layout')}
       </p>
+      </Disclosure>
 
       {ficha}
 
@@ -197,56 +178,43 @@ export function VistaAgenteProveedores({
  * pero NADIE la escribía: 0 flotas con buzón en producción. Esta sección es
  * quien la llena. Exportada para poder probar su gateo por render.
  */
-export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon, acciones }: {
+export function SeccionBuzon({ buzon, dominioConfigurado, puedeAdministrarBuzon, acciones, tr = TR_ES }: {
   buzon: BuzonDeFlota | null;
   dominioConfigurado: boolean;
   puedeAdministrarBuzon: boolean;
-  acciones: { generarBuzon: AccionProveedores; rotarBuzon: AccionProveedores };
+  acciones: { generarBuzon: AccionProveedores; rotarBuzon: AccionProveedores }; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   return (
-    <section className="card p-4">
-      <TituloRecuadro info="proveedores.buzon" className="mb-1">Buzón de facturas por correo</TituloRecuadro>
-      <p className="text-[11px] mb-3 max-w-xl" style={{ color: 'var(--faint)' }}>
-        Dale esta dirección a tus proveedores o reenvía ahí sus facturas: los XML adjuntos
-        entran solos a esta bandeja, sin subir nada a mano.
+    <Tarjeta titulo={tx('proveedores.vista.buzon_de_facturas_por_correo')} info="proveedores.buzon">
+      <p className="rv-prov__nota">
+        {tx('proveedores.vista.dale_esta_direccion_a_tus')}
       </p>
 
       {buzon === null ? (
-        // La lectura falló. NO se dice "sin buzón": ese estado ofrecería
-        // generar uno encima del que quizá ya existe, y rotarlo sin querer.
-        // Un <p> y no `EstadoError`: aquel trae `useRouter` para reintentar,
-        // y esta sección se degrada dentro de una página que sí cargó.
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-          No se pudo leer el buzón de la flota ahora mismo. Recarga la página; si se repite,
-          avísale a Likida.
-        </p>
+        // La lectura falló. NO se dice "sin buzón": ese estado ofrecería generar uno encima del que quizá ya existe, y rotarlo sin querer.
+        <AvisoCompacto tono="error" resumen={tx('proveedores.vista.no_se_pudo_leer_el')} />
       ) : !dominioConfigurado ? (
-        // Sin RESEND_EMAIL_DOMAIN no hay dirección que enseñar ni que generar:
-        // se dice qué falta en vez de armar una dirección que no existe.
-        <EstadoVacio icono={<Mail width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          El dominio de correo no está configurado en este entorno
-          (lo configura el equipo de Likida), así que el buzón por
-          correo no puede operar. Es configuración del sistema, no de tu flota.
+        // Sin RESEND_EMAIL_DOMAIN no hay dirección que enseñar ni que generar: se dice qué falta en vez de armar una que no existe.
+        <EstadoVacio titulo={tx('proveedores.vista.buzon_no_disponible')} icono={Mail} contenido>
+          {tx('proveedores.vista.el_dominio_de_correo_no')}
         </EstadoVacio>
       ) : buzon.direccion ? (
-        <div>
+        <div className="rv-prov__subir">
           <DireccionBuzon direccion={buzon.direccion} />
           {puedeAdministrarBuzon && <RotarBuzon rotar={acciones.rotarBuzon} />}
         </div>
       ) : (
-        <div>
-          <p className="text-[12px] mb-2 max-w-xl" style={{ color: 'var(--muted)' }}>
-            Tu flota aún no tiene dirección. Se genera una vez y es única de tu flota — el token
-            en la dirección es lo que decide que esas facturas entren aquí y no a otra parte.
+        <div className="rv-prov__subir">
+          <p className="rv-prov__nota">
+            {tx('proveedores.vista.tu_flota_aun_no_tiene_2')}
           </p>
           {puedeAdministrarBuzon
             ? <GenerarBuzon generar={acciones.generarBuzon} />
-            : <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
-                Generarla es una acción del dueño de la flota — pídesela a tu administrador.
-              </p>}
+            : <p className="rv-prov__nota">{tx('proveedores.vista.generarla_es_una_accion_del')}</p>}
         </div>
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -254,72 +222,66 @@ const ORDEN_ESTADO = { pendiente: 0, aprobada: 1, rechazada: 2 } as const;
 
 /** Las columnas de la bandeja. Por omisión el orden es el de siempre (pendientes arriba, luego aprobadas y rechazadas); cada cabecera
  *  con dato se puede ordenar (`?orden=total&dir=desc`), y la página (`?pag=2`) vive en la URL junto con tenant/vista/rol. */
-function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: AccionProveedores }): ColumnaTabla<FacturaProveedor>[] {
+function columnasBandeja(acciones: { decidir: AccionProveedores; verPdf?: AccionProveedores }, tr: TrAgentes): ColumnaTabla<FacturaProveedor>[] {
+  const { t: tx } = tr;
+  const idioma = tr.idioma;
   return [
     {
-      id: 'fecha', titulo: 'Fecha', corta: true, valor: (f) => f.fecha,
+      id: 'fecha', titulo: tx('proveedores.vista.fecha'), corta: true, valor: (f) => f.fecha,
       celda: (f) => (
         <span className="rv-tl__apagado">
-          {f.fecha ? fechaCorta(f.fecha) : '—'}
+          {f.fecha ? fechaCorta(f.fecha, idioma) : '—'}
           {/* NULL = fila anterior al rastreo de origen (0108): no se adivina. */}
           {f.origen && <span className="rv-tl__sub">{f.origen === 'correo' ? 'por correo' : 'subida a mano'}</span>}
         </span>
       ),
     },
     {
-      id: 'proveedor', titulo: 'Proveedor (RFC)', principal: true, valor: (f) => f.emisorRfc,
+      id: 'proveedor', titulo: tx('proveedores.vista.proveedor_rfc'), principal: true, valor: (f) => f.emisorRfc,
       celda: (f) => (
         <>
-          <span className="cifra-mono block">{f.emisorRfc ?? 'sin RFC'}</span>
+          <span className="cifra-mono block">{f.emisorRfc ?? tx('proveedores.vista.sin_rfc')}</span>
           {f.receptorEsFlota === false && (
-            <span className="inline-flex items-center gap-1 text-[11px] rv-tl__bad">
-              <TriangleAlert width={11} height={11} strokeWidth={2} aria-hidden /> receptor ajeno
-            </span>
+            <StatusChip tono="bad">{tx('proveedores.vista.receptor_ajeno')}</StatusChip>
           )}
-          {f.receptorEsFlota === null && <span className="rv-tl__sub">receptor sin validar</span>}
+          {f.receptorEsFlota === null && <span className="rv-tl__sub">{tx('proveedores.vista.receptor_sin_validar')}</span>}
         </>
       ),
     },
     {
-      id: 'concepto', titulo: 'Concepto', valor: (f) => f.descripcion,
+      id: 'concepto', titulo: tx('proveedores.vista.concepto'), valor: (f) => f.descripcion,
       celda: (f) => (
         <>
           <span className="block truncate max-w-[26ch]" title={f.descripcion ?? undefined}>
-            {f.descripcion ?? 'sin descripción en el XML'}
+            {f.descripcion ?? tx('proveedores.vista.sin_descripcion_en_el_xml')}
           </span>
           {f.conceptos > 1 && (
-            <span className="rv-tl__sub">y {numero(f.conceptos - 1)} concepto{f.conceptos - 1 === 1 ? '' : 's'} más</span>
+            <span className="rv-tl__sub">{tr.tp('proveedores.vista.y_concepto_mas', f.conceptos - 1, { n: numero(f.conceptos - 1) })}</span>
           )}
           {/* Cifra leída por VISIÓN, no del XML: se dice siempre, con su
               confianza, para que nadie apruebe un OCR como dato duro. */}
           {f.requiereRevision && (
-            <span className="inline-flex items-center gap-1 text-[11px] rv-tl__warn">
-              <TriangleAlert width={10} height={10} strokeWidth={2} aria-hidden />
-              {f.revisionMotivo ?? 'lectura de PDF: cotéjala antes de aprobar'}
-            </span>
+            <StatusChip tono="warn">{f.revisionMotivo ?? tx('proveedores.vista.lectura_de_pdf_cotejala_antes')}</StatusChip>
           )}
           {f.tienePdf && acciones.verPdf && (
             <span className="block mt-1"><BotonVerPdf campo="facturaId" id={f.id} ver={acciones.verPdf} /></span>
           )}
           {f.ocrConfianza !== null && (
-            <span className="inline-flex items-center gap-1 text-[11px] rv-tl__warn">
-              <TriangleAlert width={10} height={10} strokeWidth={2} aria-hidden />
-              leída de {f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? 'PDF' : 'foto'} (OCR {numero(f.ocrConfianza)}) — revisa contra el papel
-            </span>
+            <StatusChip tono="warn">{tx('proveedores.vista.leida_de_ocr_revisa_contra', { fuente: f.fuenteDatos === 'pdf_texto' || f.fuenteDatos === 'pdf_vision' ? tx('proveedores.vista.fuente_pdf') : tx('proveedores.vista.fuente_foto'), ocrConfianza: numero(f.ocrConfianza) })}</StatusChip>
           )}
         </>
       ),
     },
-    { id: 'total', titulo: 'Total', alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="cifra-mono">{mxn(f.total)}</span> },
+    { id: 'total', titulo: tx('proveedores.vista.total'), alinear: 'der', valor: (f) => f.total, celda: (f) => <span className="cifra-mono">{mxn(f.total, idioma)}</span> },
     {
-      id: 'estado', titulo: 'Estado', corta: true, valor: (f) => ORDEN_ESTADO[f.estado],
-      celda: (f) => (<><PillEstado f={f} /><NotaSat estadoSat={f.estadoSat} /></>),
+      id: 'estado', titulo: tx('proveedores.vista.estado'), corta: true, valor: (f) => ORDEN_ESTADO[f.estado],
+      celda: (f) => (<><PillEstado f={f} tr={tr} /><NotaSat estadoSat={f.estadoSat} tr={tr} /></>),
     },
     {
-      id: 'decidir', titulo: 'Decidir', alinear: 'der',
+      id: 'decidir', titulo: tx('proveedores.vista.decidir'), alinear: 'der',
       celda: (f) => f.estado === 'pendiente'
         ? <BotonesDecision facturaId={f.id} decidir={acciones.decidir} />
-        : <span className="rv-tl__sub rv-tl__der">{f.decididoPor ?? '—'}{f.decididoEn ? ` · ${fechaCorta(f.decididoEn)}` : ''}</span>,
+        : <span className="rv-tl__sub rv-tl__der">{f.decididoPor ?? '—'}{f.decididoEn ? ` · ${fechaCorta(f.decididoEn, idioma)}` : ''}</span>,
     },
   ];
 }
@@ -334,12 +296,7 @@ function linkExport(sufijo: string, formato: 'sap_b1' | 'contpaqi'): string {
 function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
   return (
     <form method="post" action={href}>
-      <button type="submit"
-        className="rv-btn rv-btn--secondary rv-btn--sm w-full"
-        style={{ background: 'var(--surface)' }}>
-        <Download width={13} height={13} strokeWidth={1.75} />
-        {rotulo}
-      </button>
+      <Boton type="submit" variante="secondary" tamano="sm" icono={<Icono icono={Download} tam={14} />}>{rotulo}</Boton>
     </form>
   );
 }
@@ -348,50 +305,26 @@ function BotonExport({ href, rotulo }: { href: string; rotulo: string }) {
  *  0108 (no se consultó y se dice); 'pendiente' = se intentó y el SAT no
  *  contestó. Un CFDI cancelado grita: aprobarlo mandaría al ERP una factura
  *  que el SAT ya no reconoce. */
-function NotaSat({ estadoSat }: { estadoSat: FacturaProveedor['estadoSat'] }) {
-  if (estadoSat === 'vigente') {
-    return <span className="block text-[11px] mt-0.5" style={{ color: 'var(--ok)' }}>vigente ante el SAT</span>;
-  }
-  if (estadoSat === 'cancelado') {
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
-        <TriangleAlert width={10} height={10} strokeWidth={2} /> CANCELADO ante el SAT
-      </span>
-    );
-  }
-  if (estadoSat === 'no_encontrado') {
-    // El SAT no reconoce ese folio fiscal — la señal más fuerte de un CFDI
-    // inventado (el buzón acepta cualquier XML sin validar el sello digital).
-    // MISMO tratamiento que 'cancelado': no se ve igual de discreto que
-    // "pendiente"/"sin consultar".
-    return (
-      <span className="inline-flex items-center gap-1 text-[11px] mt-0.5 font-medium" style={{ color: 'var(--bad)' }}>
-        <TriangleAlert width={10} height={10} strokeWidth={2} /> el SAT NO LO ENCUENTRA — folio no reconocido
-      </span>
-    );
-  }
-  return (
-    <span className="block text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>
-      {estadoSat === 'pendiente' ? 'SAT sin contestar al ingerir' : 'SAT sin consultar'}
-    </span>
-  );
+function NotaSat({ estadoSat, tr = TR_ES }: { estadoSat: FacturaProveedor['estadoSat']; tr?: TrAgentes; }) {
+  const { t: tx } = tr;
+  if (estadoSat === 'vigente') return <StatusChip tono="ok">{tx('proveedores.vista.vigente_ante_el_sat')}</StatusChip>;
+  if (estadoSat === 'cancelado') return <StatusChip tono="bad">{tx('proveedores.vista.cancelado_ante_el_sat')}</StatusChip>;
+  // El SAT no reconoce ese folio fiscal — la señal más fuerte de un CFDI inventado: MISMO tratamiento que 'cancelado'.
+  if (estadoSat === 'no_encontrado') return <StatusChip tono="bad">{tx('proveedores.vista.el_sat_no_lo_encuentra')}</StatusChip>;
+  return <StatusChip tono="muted">{estadoSat === 'pendiente' ? tx('proveedores.vista.sat_sin_contestar_al_ingerir') : tx('proveedores.vista.sat_sin_consultar')}</StatusChip>;
 }
 
-function PillEstado({ f }: { f: FacturaProveedor }) {
-  // «Exportada» no borra la decisión: es una aprobada que YA salió en un CSV
-  // (`exportada_en`, 0108) — el anti-doble-import visible.
-  const cfg = f.estado === 'aprobada'
+function PillEstado({ f, tr = TR_ES }: { f: FacturaProveedor; tr?: TrAgentes }) {
+  const { t: tx } = tr;
+  // «Exportada» no borra la decisión: es una aprobada que YA salió en un CSV (`exportada_en`, 0108): el anti-doble-import visible.
+  const cfg: { rotulo: string; tono: TonoEstado } = f.estado === 'aprobada'
     ? f.entregadaEn
-      ? { rotulo: 'Entregada al contador', fg: 'var(--ok)', bg: 'var(--okbg)' }
-    : f.exportadaEn
-      ? { rotulo: 'Exportada', fg: 'var(--ok)', bg: 'var(--okbg)' }
-      : { rotulo: 'Aprobada', fg: 'var(--ok)', bg: 'var(--okbg)' }
+      ? { rotulo: tx('proveedores.vista.est_entregada'), tono: 'ok' }
+      : f.exportadaEn
+        ? { rotulo: tx('proveedores.vista.est_exportada'), tono: 'ok' }
+        : { rotulo: tx('proveedores.vista.est_aprobada'), tono: 'ok' }
     : f.estado === 'rechazada'
-      ? { rotulo: 'Rechazada', fg: 'var(--muted)', bg: 'var(--canvas)' }
-      : { rotulo: 'Pendiente', fg: 'var(--warn)', bg: 'var(--warnbg)' };
-  return (
-    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-      style={{ color: cfg.fg, background: cfg.bg }}>{cfg.rotulo}</span>
-  );
+      ? { rotulo: tx('proveedores.vista.est_rechazada'), tono: 'muted' }
+      : { rotulo: tx('proveedores.vista.est_pendiente'), tono: 'warn' };
+  return <StatusChip tono={cfg.tono}>{cfg.rotulo}</StatusChip>;
 }
-

@@ -11,18 +11,33 @@ import {
 import { NIVEL_MAXIMO } from '@/lib/likida/asistencia_escalamiento';
 import { fechaHoraMx } from '../formato';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, Campo, type ResultadoAccion } from '../../admin/ui/forma';
 import { BotonAccionMesa } from './boton-accion';
 import type { Metadata } from 'next';
-import { Disclosure, EstadoVacio, MarcoPagina } from '@/app/ui-v2/componentes';
+import {
+  CampoTexto, Chip, Disclosure, EstadoVacio, FormaConAviso, Icono, MarcoPagina, StatusChip, Tarjeta, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import './asistencia.css';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { numero } from '@/lib/formato';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-export const metadata: Metadata = { title: 'Mesa de control' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.asistencia') };
+}
 
 export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/asistencia';
+
+/** Cómo se llama cada clase de incidencia en palabras de la oficina (los valores crudos son del sistema). */
+const ROTULO_TIPO: Record<string, 'asist.tipo.siniestro' | 'asist.tipo.robo' | 'asist.tipo.emergencia_medica' | 'asist.tipo.varado' | 'asist.tipo.bloqueo'> = {
+  siniestro: 'asist.tipo.siniestro', robo: 'asist.tipo.robo', emergencia_medica: 'asist.tipo.emergencia_medica', varado: 'asist.tipo.varado',
+  bloqueo: 'asist.tipo.bloqueo',
+};
+const ROTULO_PRIORIDAD: Record<string, 'asist.prio.critica' | 'asist.prio.alta'> = { critica: 'asist.prio.critica', alta: 'asist.prio.alta' };
+/** Una clave que no está en el mapa sale legible (sin guiones bajos), no en crudo. */
+const legible = (clave: string) => { const t = clave.replace(/_/g, ' '); return t.charAt(0).toUpperCase() + t.slice(1); };
 
 /**
  * La puerta compartida de las tres acciones: re-gatea ADENTRO (el rol del render no es el de la llamada). A nivel de módulo y SIN
@@ -30,8 +45,9 @@ const RUTA = '/dashboard/asistencia';
  * directo que devolvía el tenantId y el userId de la sesión; así es solo una función interna de las acciones.
  */
 async function gate(sp: { tenant?: string; rol?: string; vista?: string }, tenantId: string): Promise<{ tenantId: string; userId: string } | { error: string }> {
+  const { t } = await getT('operacion');
   const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-  if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede intervenir desde la mesa de control.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: t('asist.a.rol') };
   return { tenantId: s.tenantId, userId: s.userId };
 }
 
@@ -54,6 +70,7 @@ export default async function PaginaMesaControl({
 }: {
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
 }) {
+  const { t, tp, idioma } = await getT('operacion');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -74,16 +91,18 @@ export default async function PaginaMesaControl({
 
   async function tomarControl(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('operacion');
     const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await tomarControlMesa(g.tenantId, String(fd.get('id') ?? ''), g.userId);
     if ('error' in r) { logger.warn('mesa.tomar_control', { detalle: r.error }); return { error: r.error }; }
     revalidatePath(RUTA);
-    return { ok: 'Tomaste el control: el escalamiento automático quedó detenido.' };
+    return { ok: t('asist.a.tomado') };
   }
 
   async function reescalar(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+  const { t } = await getT('operacion');
     const g = await gate(sp, tenantId);
     if ('error' in g) return { error: g.error };
     const r = await reescalarDesdeMesa(
@@ -91,7 +110,7 @@ export default async function PaginaMesaControl({
     );
     if ('error' in r) { logger.warn('mesa.reescalar', { detalle: r.error }); return { error: r.error }; }
     revalidatePath(RUTA);
-    return { ok: 'Nivel de escalamiento subido.' };
+    return { ok: t('asist.a.subido') };
   }
 
   async function resolver(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -110,127 +129,118 @@ export default async function PaginaMesaControl({
 
   // Una línea (≈90 caracteres): cuántas incidencias vivas hay y cuántas son críticas.
   const apoyo = leyoOk
-          ? `${incidencias.length} incidencia${incidencias.length === 1 ? '' : 's'} de asistencia viva${incidencias.length === 1 ? '' : 's'}${criticas ? ` · ${criticas} crítica${criticas === 1 ? '' : 's'}` : ''} — el agente propone, aquí se decide`
-          : 'Sin datos — no se pudo leer la mesa';
+          ? `${tp('asist.apoyo.vivas', incidencias.length)}${criticas ? tp('asist.apoyo.criticas', criticas) : ''}${t('asist.apoyo.cola')}`
+          : t('asist.sindatos');
 
   return (
-    <MarcoPagina titulo="Mesa de control" apoyo={apoyo}>
+    <MarcoPagina titulo={t('asist.titulo')} apoyo={apoyo}>
       {!leyoOk && (
-        <EstadoVacio pantalla contenido icono={TriangleAlert} titulo="No se pudo leer la mesa">
-          Recarga la página. No se ofrecen botones de intervención para no decidir sobre lo que no se ve.
+        <EstadoVacio pantalla contenido icono={TriangleAlert} titulo={t('asist.error.titulo')}>
+          {t('asist.error')}
         </EstadoVacio>
       )}
 
       {leyoOk && (
         <TiraCifras sello={selloHoy('Mesa de control')}>
-          <Cifra etiqueta="Abiertas" valor={numero(incidencias.length)} info="asistencia.abiertas" />
-          <Cifra etiqueta="Críticas" valor={numero(criticas ?? 0)} tono={criticas ? 'bad' : undefined} info="asistencia.criticas" />
-          <Cifra etiqueta="Sin tomar" valor={numero(incidencias.filter((i) => !i.reconocidaEn).length)}
+          <Cifra etiqueta={t('asist.cifra.abiertas')} valor={numero(incidencias.length, idioma)} info="asistencia.abiertas" />
+          <Cifra etiqueta={t('asist.cifra.criticas')} valor={numero(criticas ?? 0, idioma)} tono={criticas ? 'bad' : undefined} info="asistencia.criticas" />
+          <Cifra etiqueta={t('asist.cifra.sintomar')} valor={numero(incidencias.filter((i) => !i.reconocidaEn).length, idioma)}
             tono={incidencias.some((i) => !i.reconocidaEn) ? 'warn' : undefined} info="asistencia.sin_tomar" />
         </TiraCifras>
       )}
 
       {leyoOk && incidencias.length === 0 && (
-        <EstadoVacio pantalla contenido icono={ShieldCheck} titulo="Sin incidencias abiertas">
-          Cuando un chofer reporte una emergencia por WhatsApp, o la cámara de una unidad detecte un evento grave, el expediente aparece aquí con su timeline y sus botones.
+        <EstadoVacio pantalla contenido icono={ShieldCheck} titulo={t('asist.vacio.titulo')}>
+          {t('asist.vacio')}
         </EstadoVacio>
       )}
 
       {leyoOk && incidencias.map((inc) => (
-        <section
+        <Tarjeta
           key={inc.id}
-          className="rounded-2xl px-5 py-4 flex flex-col gap-3 hairline"
-          style={{
-            background: 'var(--surface)',
-            borderLeft: inc.prioridad === 'critica' ? '3px solid var(--bad)' : undefined,
-          }}
+          titulo={`${ROTULO_TIPO[inc.tipo] ? t(ROTULO_TIPO[inc.tipo]) : legible(inc.tipo)} · ${inc.operadorNombre ?? (inc.unidadRotulo ? t('asist.sinchofer') : t('asist.sinchofer.sinunidad'))}`}
         >
-          <div className="flex items-start gap-2.5 flex-wrap">
-            <TriangleAlert
-              width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0"
-              style={{ color: inc.prioridad === 'critica' ? 'var(--bad)' : 'var(--muted)' }}
-            />
-            <div className="min-w-0">
-              <p className="text-sm font-medium">
-                {inc.tipo.replace(/_/g, ' ')} · prioridad {inc.prioridad} · nivel {inc.nivelEscalado}/{NIVEL_MAXIMO}
-              </p>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                {inc.operadorNombre ?? (inc.unidadRotulo ? 'sin chofer identificado' : 'sin chofer ni unidad')}
-                {inc.unidadRotulo ? ` · unidad ${inc.unidadRotulo}` : ''}
-                {inc.viajeFolio ? ` · viaje ${inc.viajeFolio}` : ''}
-                {' · abierta '}{fechaHoraMx(inc.abiertaEn)}
-                {inc.hayLesionados === true ? ' · ⛑️ CON LESIONADOS' : ''}
-              </p>
-              {inc.soloCamara && (
-                <p className="text-xs mt-1 flex items-center gap-1.5" style={{ color: 'var(--warn)' }}>
-                  <Camera width={12} height={12} strokeWidth={1.75} className="shrink-0" />
-                  Detectada por la cámara de la unidad — el chofer NO ha reportado nada todavía.
-                </p>
-              )}
-              {inc.descripcion && (
-                <p className="text-xs mt-1 italic" style={{ color: 'var(--muted)' }}>
-                  «{inc.descripcion.slice(0, 240)}»
-                </p>
-              )}
-              <p className="text-xs mt-1" style={{ color: inc.reconocidaEn ? 'var(--ok)' : 'var(--warn)' }}>
-                {inc.reconocidaEn
-                  ? `Atendida por ${inc.reconocidaPorNombre ?? 'alguien del equipo'} desde ${fechaHoraMx(inc.reconocidaEn)} — el escalamiento automático está detenido`
-                  : 'NADIE la ha tomado — el escalamiento automático sigue corriendo'}
-              </p>
+          <div className="rv-as__cuerpo">
+            <div className="rv-as__etiquetas">
+              <StatusChip tono={inc.prioridad === 'critica' ? 'bad' : 'warn'}>{t('asist.prioridad', { p: (ROTULO_PRIORIDAD[inc.prioridad] ? t(ROTULO_PRIORIDAD[inc.prioridad]) : legible(inc.prioridad)).toLowerCase() })}</StatusChip>
+              <Chip>{t('asist.nivel', { n: inc.nivelEscalado, max: NIVEL_MAXIMO })}</Chip>
+              {inc.hayLesionados === true && <StatusChip tono="bad">{t('asist.lesionados')}</StatusChip>}
             </div>
-            <span className="ml-auto flex gap-1.5 items-start shrink-0">
+            <p className="rv-as__nota">
+              {inc.unidadRotulo ? t('asist.unidad', { r: inc.unidadRotulo }) : ''}
+              {inc.unidadRotulo && inc.viajeFolio ? ' · ' : ''}
+              {inc.viajeFolio ? t('asist.viaje', { folio: inc.viajeFolio }) : ''}
+              {inc.unidadRotulo || inc.viajeFolio ? ' · ' : ''}
+              {t('asist.abierta', { fecha: fechaHoraMx(inc.abiertaEn, idioma) })}
+            </p>
+            {inc.soloCamara && (
+              <p className="rv-as__camara">
+                <Icono icono={Camera} />
+                {t('asist.camara')}
+              </p>
+            )}
+            {inc.descripcion && (
+              <p className="rv-as__descripcion">«{inc.descripcion.slice(0, 240)}»</p>
+            )}
+            <p className="rv-as__atencion" data-atendida={inc.reconocidaEn ? '' : undefined}>
+              {inc.reconocidaEn
+                ? t('asist.atendida', { quien: inc.reconocidaPorNombre ?? t('asist.alguien'), desde: fechaHoraMx(inc.reconocidaEn, idioma) })
+                : t('asist.nadie')}
+            </p>
+
+            <span className="rv-as__acciones">
               {!inc.reconocidaEn && (
                 <BotonAccionMesa
-                  accion={tomarControl} campos={{ id: inc.id }} etiqueta="Tomar el control"
-                  titulo="Reconocerla desde la mesa: detiene el escalamiento automático y queda a tu nombre"
+                  accion={tomarControl} campos={{ id: inc.id }} etiqueta={t('asist.tomar')}
+                  titulo={t('asist.tomar.titulo')}
                 />
               )}
               {inc.nivelEscalado < NIVEL_MAXIMO && (
-                <div className="flex flex-col items-end">
+                <div className="rv-as__nivel">
                   {/* A37-S16-05: el aviso NO puede ir solo en el `title` (en celular no existe). Se rotula con texto visible. */}
                   <BotonAccionMesa
-                    accion={reescalar} campos={{ id: inc.id, nivel: inc.nivelEscalado + 1 }} etiqueta={`Registrar nivel ${inc.nivelEscalado + 1} (no avisa)`}
-                    titulo="Registra el nivel en el expediente (solo sube — bajar re-armaría avisos ya mandados). No manda WhatsApp: tú ya estás viendo esto."
+                    accion={reescalar} campos={{ id: inc.id, nivel: inc.nivelEscalado + 1 }} etiqueta={t('asist.reescalar', { n: inc.nivelEscalado + 1 })}
+                    titulo={t('asist.reescalar.titulo')}
                   />
-                  <span className="block text-[11px] mt-1 max-w-[16rem] text-right" style={{ color: 'var(--muted)' }}>
-                    Solo lo anota: no manda ningún aviso a la dirección y el aviso automático ya no repite los niveles anteriores.
+                  <span className="rv-as__nota">
+                    {t('asist.reescalar.nota')}
                   </span>
                 </div>
               )}
             </span>
+
+            {/* ── Timeline: la bitácora citable — quién supo qué y cuándo ── */}
+            <Disclosure variante="linea" titulo={tp('asist.timeline', inc.eventos.length)}>
+              {inc.eventos.length === 0 ? (
+                <p className="rv-as__nota">
+                  {t('asist.sineventos')}
+                </p>
+              ) : (
+                <ol className="rv-as__linea">
+                  {inc.eventos.map((e, idx) => (
+                    <li key={idx}>
+                      <span className="rv-as__hora">{fechaHoraMx(e.creadoEn, idioma)}</span>
+                      {' — '}{ROTULO_EVENTO[e.tipo] ?? legible(e.tipo)}
+                      {typeof e.detalle?.nota === 'string' ? `: «${String(e.detalle.nota).slice(0, 200)}»` : ''}
+                      {typeof e.detalle?.texto === 'string' ? `: «${String(e.detalle.texto).slice(0, 200)}»` : ''}
+                      {typeof e.detalle?.nivel === 'number' ? t('asist.evento.nivel', { n: e.detalle.nivel }) : ''}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Disclosure>
+
+            {/* ── Cierre con nota obligatoria ─────────────────────────────── */}
+            <FormaConAviso accion={resolver} boton={t('asist.cerrar')} columnas="md:grid-cols-1">
+              <input type="hidden" name="id" value={inc.id} />
+              <CampoTexto
+                name="nota" etiqueta={t('asist.nota')} obligatorio
+                placeholder={t('asist.nota.ph')}
+                ayuda={t('asist.nota.ayuda')}
+              />
+            </FormaConAviso>
           </div>
-
-          {/* ── Timeline: la bitácora citable — quién supo qué y cuándo ── */}
-          <Disclosure variante="linea" titulo={`Timeline del expediente (${inc.eventos.length} evento${inc.eventos.length === 1 ? '' : 's'})`}>
-            {inc.eventos.length === 0 ? (
-              <p className="mt-2" style={{ color: 'var(--muted)' }}>
-                Sin eventos legibles — la bitácora de esta incidencia no se pudo leer o aún no tiene filas.
-              </p>
-            ) : (
-              <ol className="mt-2 flex flex-col gap-1 border-l pl-3" style={{ borderColor: 'var(--muted)' }}>
-                {inc.eventos.map((e, idx) => (
-                  <li key={idx}>
-                    <span style={{ color: 'var(--muted)' }}>{fechaHoraMx(e.creadoEn)}</span>
-                    {' — '}{ROTULO_EVENTO[e.tipo] ?? e.tipo}
-                    {typeof e.detalle?.nota === 'string' ? `: «${String(e.detalle.nota).slice(0, 200)}»` : ''}
-                    {typeof e.detalle?.texto === 'string' ? `: «${String(e.detalle.texto).slice(0, 200)}»` : ''}
-                    {typeof e.detalle?.nivel === 'number' ? ` (nivel ${e.detalle.nivel})` : ''}
-                  </li>
-                ))}
-              </ol>
-            )}
-          </Disclosure>
-
-          {/* ── Cierre con nota obligatoria ─────────────────────────────── */}
-          <FormaConAviso accion={resolver} boton="Cerrar con nota" columnas="md:grid-cols-1">
-            <input type="hidden" name="id" value={inc.id} />
-            <Campo
-              nombre="nota" etiqueta="Nota de cierre" requerido
-              placeholder="Cómo terminó: quién atendió, con qué resultado"
-              ayuda="Obligatoria — es lo que el expediente va a decir para siempre. Sin nota no hay cierre."
-            />
-          </FormaConAviso>
-        </section>
+        </Tarjeta>
       ))}
     </MarcoPagina>
   );

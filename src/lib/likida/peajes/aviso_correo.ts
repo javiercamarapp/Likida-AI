@@ -173,7 +173,7 @@ export function canalCorreoPeajes(deps: DepsCanalCorreoPeajes): CanalAvisoPeajes
         for (let intento = 1; intento <= MAX_INTENTOS_CORREO_AVISO && !aceptado; intento++) {
           // Sin tiempo: el destinatario queda pendiente (se suelta el sello y el siguiente barrido repite las mismas llaves).
           if (reloj() - inicio >= presupuesto) break;
-          const r = await enviar(dest, correo, { sobrio: true, ...(llave ? { idempotencyKey: llave } : {}) });
+          const r = await enviar(dest, correo, { sobrio: true, tenantId: aviso.tenantId, ...(llave ? { idempotencyKey: llave } : {}) });
           if (r.ok) { aceptado = true; break; }
           const ambiguo = r.motivo === 'red' && !r.previoAConexion;
           // Reintento acotado: solo lo transitorio; un corte ambiguo solo se repite con llave (si no, podría duplicar).

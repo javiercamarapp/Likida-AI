@@ -24,12 +24,15 @@ import { DatoInvalido } from '@/lib/likida/errores';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
+import { atribucionDe, canalDe } from '@/lib/marketing/atribucion';
 
 export const dynamic = 'force-dynamic';
 
 interface Cuerpo {
   nombre?: unknown; empresa?: unknown; correo?: unknown; telefono?: unknown;
   sitioWeb?: unknown;
+  /** utm_*, click id, referrer y ruta que el cliente leyó de la URL (F16). Se filtra a las claves conocidas. */
+  atribucion?: unknown;
   cifras?: {
     litrosDieselMes?: unknown; gastoDieselMesMxn?: unknown;
     gastoCasetasMesMxn?: unknown; unidades?: unknown;
@@ -98,7 +101,9 @@ export async function POST(req: Request) {
       notas: nota,
       vendedorId: '',
     });
-    const id = await crearProspecto(valido, 'landing');
+    // F16: el canal sale de la atribución (antes iba fijo 'landing' y un lead de anuncio contaba como orgánico).
+    const atr = atribucionDe(c.atribucion);
+    const id = await crearProspecto(valido, canalDe(atr), atr);
 
     // La conversión del embudo — mejor esfuerzo: la analítica jamás tumba
     // la captura que sí importa.

@@ -1,18 +1,23 @@
 import Link from 'next/link';
 import {
-  Hand, Play, Power, PowerOff, GitPullRequest, Inbox, ListChecks,
-  Image as ImageIcon, Bot, StickyNote,
+  Play, Power, PowerOff, GitPullRequest, Inbox, ListChecks, Image as ImageIcon, Bot,
 } from 'lucide-react';
 // SOLO tipos: lib/admin/bus importa supabaseAdmin y no debe entrar al bundle.
-import type { EstadoBus, ResultadoPrs } from '@/lib/admin/bus';
-import { totalEscalaciones as calcularTotalEscalaciones, type BandejaEscalaciones } from '@/lib/admin/escalaciones';
+import type { EstadoBus, ResultadoPrs, RutinaBus } from '@/lib/admin/bus';
+import { totalEscalacionesLegible, type BandejaEscalaciones } from '@/lib/admin/escalaciones';
+import type { AgentesParados } from '@/lib/admin/agentes-parados';
+import type { ResumenBandejaCola } from '@/lib/admin/cola-aprobacion';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
-import { fechaHoraMx } from '@/lib/formato';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { EstadoVacio, StatCard, StatusPill } from '../ui/kit';
-import { Boton } from '../../ui-v2/componentes/boton';
-import { BotonConfirmar } from '../ui/confirmar';
+import { fechaHoraMx, numero } from '@/lib/formato';
+import {
+  Aviso, Boton, BotonEnlace, CampoTextarea, Disclosure, EstadoVacio, FilaTarjetas, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  clasesBoton, type ColumnaBase,
+} from '../../ui-v2/componentes';
+import { BotonConfirmar } from '../../ui-v2/componentes/confirmar';
+import { TiraCifras } from '../../ui-v2/graficas';
+import { contarPorCausa, etiquetaCausa } from '../escalaciones/agentes-parados';
 import { BotonEnvio } from './boton_envio';
+import '../bandeja.css';
 
 const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
@@ -40,6 +45,47 @@ const NOMBRE_ORDEN: Record<string, string> = {
 
 export type AccionForm = (fd: FormData) => Promise<void>;
 
+/** El resumen de «Agentes que no corrieron» para Tu turno; el detalle y el porqué de cada uno viven en Escalaciones. */
+function TarjetaAgentesParados({ parados, cola }: { parados: AgentesParados | null | undefined; cola: ResumenBandejaCola | null | undefined }) {
+  if (parados === null || parados === undefined) {
+    return (
+      <Tarjeta titulo="Agentes que no corrieron" estado="error"
+        mensaje="No se pudo leer el catálogo de agentes o sus corridas. No es que no haya agentes parados." />
+    );
+  }
+  if (parados.parados.length === 0) {
+    return (
+      <Tarjeta titulo="Agentes que no corrieron" estado="vacio" mensaje="Ningún agente parado"
+        detalle={`Los ${numero(parados.habilitados)} agentes habilitados corrieron en las últimas ${numero(parados.umbralHoras)} h.`} />
+    );
+  }
+  const causas = contarPorCausa(parados.parados).slice(0, 3);
+  return (
+    <Tarjeta titulo="Agentes que no corrieron"
+      acciones={<BotonEnlace href="/admin/escalaciones#agentes-parados" variante="secondary" tamano="sm">Ver cuáles y por qué</BotonEnlace>}>
+      <ul className="bj-lista">
+        <li>
+          <span className="bj-lista__texto">
+            {numero(parados.parados.length)} de {numero(parados.habilitados)} agentes habilitados llevan más de {numero(parados.umbralHoras)} h sin correr
+          </span>
+        </li>
+        {causas.map((c) => (
+          <li key={c.causa ?? 'sin-dato'}>
+            <span className="bj-lista__texto">{etiquetaCausa(c.causa) ?? 'Sin dato del motivo'}</span>
+            <span className="bj-lista__apoyo">{numero(c.n)}</span>
+          </li>
+        ))}
+      </ul>
+      {cola?.frenaAlRunner && (
+        <Aviso tono="error" titulo="La bandeja de aprobación los frena."
+          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">Ir a Aprobaciones</BotonEnlace>}>
+          {numero(cola.pendientes)} piezas pendientes esperan tu decisión; el límite de ejecución automática no se toca.
+        </Aviso>
+      )}
+    </Tarjeta>
+  );
+}
+
 /**
  * La VISTA de "Tu turno" — todo el cuerpo de la bandeja, sin auth ni fetch
  * (eso vive en page.tsx). Server component a propósito: los formularios usan
@@ -47,7 +93,7 @@ export type AccionForm = (fd: FormData) => Promise<void>;
  */
 export function VistaTuTurno({
   bus, escalaciones, envios, prs, ahora, aviso, error, sesionNombre,
-  accionPieza, accionOrden,
+  accionPieza, accionOrden, parados, cola,
 }: {
   bus: EstadoBus;
   escalaciones: BandejaEscalaciones;
@@ -59,92 +105,111 @@ export function VistaTuTurno({
   sesionNombre: string;
   accionPieza: AccionForm;
   accionOrden: AccionForm;
+  /** «Agentes que no corrieron» (`getAgentesParados`); `null` = no se pudo leer, `undefined` = la página no lo pidió. */
+  parados?: AgentesParados | null;
+  cola?: ResumenBandejaCola | null;
 }) {
-  // ADM-4 (auditoría 24): `escalaciones.cola.length` subestimaba el total —
-  // tres de las seis fuentes vienen topadas (ver `totalEscalaciones` en
-  // lib/admin/escalaciones.ts) y la cola solo trae hasta el tope de cada
-  // una. La lista de abajo (top 5) sigue siendo `escalaciones.cola`.
-  const totalEscalaciones = calcularTotalEscalaciones(escalaciones);
+  // ADM-4: tres de las seis fuentes vienen topadas; el total sale de los conteos REALES. Lectura caída = null («—»), nunca 0.
+  const totalEscalaciones = totalEscalacionesLegible(escalaciones);
+  const piezasSinDato = bus.errores.some((e) => /pieza/i.test(e));
+
+  const columnasRutinas: ColumnaBase<RutinaBus>[] = [
+    { id: 'rutina', titulo: 'Rutina', principal: true, celda: (r) => r.nombre },
+    { id: 'horario', titulo: 'Horario', celda: (r) => r.horario || '—' },
+    { id: 'ultima', titulo: 'Última corrida', celda: (r) => (r.ultimaCorrida ? fechaHoraMx(r.ultimaCorrida.inicio) : 'sin corridas en el bus') },
+    {
+      id: 'veredicto', titulo: 'Veredicto',
+      celda: (r) => (r.ultimaCorrida ? (
+        <>
+          {r.ultimaCorrida.exitCode !== null && (
+            <StatusChip tono={r.ultimaCorrida.exitCode === 0 ? 'ok' : 'bad'}>{r.ultimaCorrida.exitCode === 0 ? 'ok' : `exit ${r.ultimaCorrida.exitCode}`}</StatusChip>
+          )}{' '}
+          {r.ultimaCorrida.veredicto ?? '—'}
+          {r.ultimaCorrida.prUrl && <>{' '}<a href={r.ultimaCorrida.prUrl} target="_blank" rel="noreferrer">PR</a></>}
+        </>
+      ) : '—'),
+    },
+    {
+      id: 'accion', titulo: 'Acción', alinear: 'der',
+      celda: (r) => (
+        <form action={accionOrden}>
+          <input type="hidden" name="tipo" value="correr_ahora" />
+          <input type="hidden" name="rutina" value={r.nombre} />
+          <BotonEnvio><Play {...ICONO} /> Correr ahora</BotonEnvio>
+        </form>
+      ),
+    },
+  ];
 
   return (
-    <div className="space-y-8">
-      <BarraPagina icono={<Hand {...ICONO} />} titulo="Tu turno" />
-
-      {aviso && (
-        <p className="text-sm rounded-xl px-4 py-2.5" style={{ background: 'color-mix(in srgb, var(--accent) 10%, transparent)', color: 'var(--accent)' }}>
-          {aviso}
-        </p>
-      )}
-      {error && (
-        <p className="text-sm rounded-xl px-4 py-2.5" style={{ background: 'color-mix(in srgb, #b91c1c 10%, transparent)', color: '#b91c1c' }}>
-          {error}
-        </p>
-      )}
+    <MarcoPagina titulo="Tu turno" apoyo="Todo lo que espera tu decisión, de todas las fuentes.">
+      {aviso && <Aviso tono="ok">{aviso}</Aviso>}
+      {error && <Aviso tono="error">{error}</Aviso>}
       {bus.errores.length > 0 && (
-        <p className="text-sm" style={{ color: 'var(--muted)' }}>
-          Fuentes que no se pudieron leer (no son ceros): {bus.errores.join(' · ')}
-        </p>
+        <Aviso tono="warn" titulo="Fuentes que no se pudieron leer (no son ceros).">{bus.errores.join(' · ')}</Aviso>
       )}
 
-      {/* Cabecera con cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
-      <div className="kit-kpis" aria-label="Lo que espera tu turno">
-        <StatCard icono={<ImageIcon {...ICONO} strokeWidth={1.75} />} etiqueta="Piezas para tu tap"
-          valor={bus.errores.some((e) => /pieza/i.test(e)) ? null : bus.piezasPendientes.length} formato="entero"
-          sinDato="No se pudo leer la cola de piezas"
-          nota={bus.piezasPendientes.length >= TOPE_PIEZAS ? `Se cuentan las ${TOPE_PIEZAS} más recientes; hay más detrás` : undefined} />
-        <StatCard icono={<ListChecks {...ICONO} strokeWidth={1.75} />} etiqueta="Envíos por aprobar" valor={envios.length} formato="entero" />
-        <StatCard icono={<GitPullRequest {...ICONO} strokeWidth={1.75} />} etiqueta="PRs esperando tu merge"
-          valor={prs.estado === 'ok' ? prs.prs.length : null} formato="entero"
-          sinDato={prs.estado === 'sin_token' ? 'Falta el acceso a GitHub' : 'GitHub no contestó'} />
-        <StatCard icono={<Inbox {...ICONO} strokeWidth={1.75} />} etiqueta="Escalaciones" valor={totalEscalaciones} formato="entero" />
-      </div>
+      {/* Cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
+      <TiraCifras
+        etiqueta="Lo que espera tu turno"
+        items={[
+          {
+            etiqueta: 'Piezas para tu tap', icono: <ImageIcon {...ICONO} />, formato: 'entero',
+            valor: piezasSinDato ? null : bus.piezasPendientes.length,
+            nota: piezasSinDato ? 'No se pudo leer la cola de piezas' : bus.piezasPendientes.length >= TOPE_PIEZAS ? `Se cuentan las ${TOPE_PIEZAS} más recientes; hay más detrás` : undefined,
+          },
+          { etiqueta: 'Envíos por aprobar', icono: <ListChecks {...ICONO} />, valor: envios.length, formato: 'entero' },
+          {
+            etiqueta: 'Cambios por aprobar', icono: <GitPullRequest {...ICONO} />, formato: 'entero',
+            valor: prs.estado === 'ok' ? prs.prs.length : null,
+            nota: prs.estado === 'ok' ? undefined : prs.estado === 'sin_token' ? 'Falta conectar GitHub' : 'GitHub no contestó',
+          },
+          {
+            etiqueta: 'Escalaciones', icono: <Inbox {...ICONO} />, valor: totalEscalaciones, formato: 'entero',
+            nota: totalEscalaciones === null ? 'No se pudo leer ninguna fuente' : undefined,
+          },
+        ]}
+      />
 
       {/* ── 1 · Piezas de las rutinas — el tap de publicar ────────────────── */}
-      <section>
-        {/* FE-13: `leerEstadoBus` trae 50 piezas pendientes como tope. Con la
-            cola llena, "(50)" se lee como el total y son las 50 más recientes. */}
-        <TituloSeccion>
+      <section className="bj-bloque" aria-labelledby="tt-piezas">
+        {/* FE-13: `leerEstadoBus` trae 50 piezas pendientes como tope. Con la cola llena, "(50)" se lee como el total. */}
+        <h2 className="bj-titulo" id="tt-piezas">
           Piezas para tu tap ({bus.piezasPendientes.length}{bus.piezasPendientes.length >= TOPE_PIEZAS ? '+' : ''})
-        </TituloSeccion>
+        </h2>
         {bus.piezasPendientes.length >= TOPE_PIEZAS && (
-          <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-            Se listan las {TOPE_PIEZAS} más recientes — hay más esperando detrás.
-          </p>
+          <p className="bj-nota">Se listan las {TOPE_PIEZAS} más recientes — hay más esperando detrás.</p>
         )}
         {bus.piezasPendientes.length === 0 ? (
-          <EstadoVacio icono={<ImageIcon {...ICONO} />}>
-            No hay piezas esperando. Las rutinas de la Mac las suben aquí al terminar
-            (si la Mac aún no corre el bus, instala <code>bus.sh</code> — ver el esqueleto de autonomía).
+          <EstadoVacio titulo="No hay piezas esperando" contenido>
+            Las piezas que preparan las rutinas automáticas aparecen aquí para que las apruebes. Si esperabas alguna, revisa que las rutinas estén encendidas.
           </EstadoVacio>
         ) : (
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3 items-stretch">
+          <div className="bj-piezas">
             {bus.piezasPendientes.map((p) => (
-              <article key={p.id} className="rounded-xl hairline overflow-hidden flex flex-col h-full" style={{ background: 'var(--ui-surface, var(--surface))' }}>
-                {/* Marco de aspecto fijo (16:9, tope 176 px): una imagen enorme o ausente no cambia la altura de la tarjeta. */}
-                <div className="w-full overflow-hidden flex items-center justify-center" style={{ aspectRatio: '16 / 9', maxHeight: 176, background: 'var(--canvas)' }}>
+              <article key={p.id} className="bj-pieza">
+                <div className="bj-pieza__marco">
                   {p.mediaUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element -- URL firmada de storage, dominio propio
-                    <img src={p.mediaUrl} alt={p.titulo} className="w-full h-full object-cover" loading="lazy" />
+                    <img src={p.mediaUrl} alt={p.titulo} loading="lazy" />
                   ) : (
-                    <span className="inline-flex flex-col items-center gap-1 text-xs" style={{ color: 'var(--faint)' }}>
-                      <ImageIcon {...ICONO} strokeWidth={1.75} /> Sin imagen
-                    </span>
+                    <span><ImageIcon {...ICONO} /> Sin imagen</span>
                   )}
                 </div>
-                <div className="p-3.5 flex-1 flex flex-col gap-2">
-                  <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
-                    <StatusPill estado="neutral">{p.tipo}</StatusPill>
+                <div className="bj-pieza__cuerpo">
+                  <div className="bj-pieza__meta">
+                    <StatusChip tono="neutral">{p.tipo}</StatusChip>
                     <span>{p.rutina}</span>
-                    <span className="ml-auto">{edadDe(p.creadoEn, ahora)}</span>
+                    <span className="bj-pieza__edad">{edadDe(p.creadoEn, ahora)}</span>
                   </div>
-                  <h3 className="font-medium text-sm leading-snug line-clamp-2 min-h-[2.5rem]" title={p.titulo}>{p.titulo}</h3>
+                  <h3 className="bj-pieza__titulo" title={p.titulo}>{p.titulo}</h3>
                   {p.copyMd && (
-                    <details className="text-xs" style={{ color: 'var(--muted)' }}>
-                      <summary className="cursor-pointer">Ver el copy</summary>
-                      <pre className="mt-2 whitespace-pre-wrap font-sans">{p.copyMd}</pre>
+                    <details className="bj-pieza__copy">
+                      <summary>Ver el copy</summary>
+                      <pre>{p.copyMd}</pre>
                     </details>
                   )}
-                  <div className="mt-auto flex gap-2 pt-2">
+                  <div className="bj-pieza__acciones">
                     {/* Acción principal sólida y secundaria discreta: aprobar publica, descartar no. */}
                     <form action={accionPieza}>
                       <input type="hidden" name="pieza" value={p.id} />
@@ -164,102 +229,82 @@ export function VistaTuTurno({
         )}
       </section>
 
-      {/* ── 2 · Envíos redactados (0117) — dinero directo, se resuelven allá ─ */}
-      <section>
-        <TituloSeccion>Envíos por aprobar ({envios.length})</TituloSeccion>
-        {envios.length === 0 ? (
-          <EstadoVacio icono={<ListChecks {...ICONO} />}>Nada redactado esperando tu firma.</EstadoVacio>
-        ) : (
-          <ul className="space-y-1.5">
+      <FilaTarjetas variante="6-6">
+        {/* ── 2 · Envíos redactados (0117) — dinero directo, se resuelven en Aprobaciones ─ */}
+        <Tarjeta
+          titulo={`Envíos por aprobar (${envios.length})`}
+          estado={envios.length === 0 ? 'vacio' : 'ok'} contenida mensaje="Nada redactado esperando tu firma"
+          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">Revisar y aprobar en la cola</BotonEnlace>}
+        >
+          <ul className="bj-lista">
             {envios.slice(0, 5).map((p) => (
-              <li key={p.id} className="text-sm flex items-center gap-2">
-                <StatusPill estado={p.prioridad === 'urgente' ? 'warn' : 'neutral'}>{p.prioridad}</StatusPill>
-                <span className="truncate">{p.titulo}</span>
-                <span className="text-xs shrink-0" style={{ color: 'var(--muted)' }}>
-                  {p.prospectoEmpresa ?? p.agente}
-                </span>
-              </li>
-            ))}
-            <li className="pt-1">
-              <Link href="/admin/aprobaciones" className="text-sm font-medium hover:opacity-70" style={{ color: 'var(--accent)' }}>
-                Revisar y aprobar en la cola →
-              </Link>
-            </li>
-          </ul>
-        )}
-      </section>
-
-      {/* ── 3 · PRs — la aprobación de CÓDIGO es el merge, no un botón aquí ── */}
-      <section>
-        <TituloSeccion>PRs esperando tu merge</TituloSeccion>
-        {prs.estado === 'sin_token' && (
-          <EstadoVacio icono={<GitPullRequest {...ICONO} />}>
-            Sin la llave <code>GITHUB_TOKEN</code> en Vercel esta sección no puede ver los PRs
-            — es una de tus llaves pendientes, no un cero.
-          </EstadoVacio>
-        )}
-        {prs.estado === 'error' && (
-          <EstadoVacio icono={<GitPullRequest {...ICONO} />}>
-            GitHub no contestó — no se sabe cuántos PRs esperan (que no es lo mismo que ninguno).
-          </EstadoVacio>
-        )}
-        {prs.estado === 'ok' && (prs.prs.length === 0 ? (
-          <EstadoVacio icono={<GitPullRequest {...ICONO} />}>No hay PRs abiertos.</EstadoVacio>
-        ) : (
-          <ul className="space-y-1.5">
-            {prs.prs.map((pr) => (
-              <li key={pr.numero} className="text-sm flex items-center gap-2">
-                <GitPullRequest {...ICONO} style={{ color: 'var(--muted)' }} />
-                <a href={pr.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">
-                  #{pr.numero} · {pr.titulo}
-                </a>
-                <span className="text-xs shrink-0" style={{ color: 'var(--muted)' }}>{edadDe(pr.creadoEn, ahora)}</span>
+              <li key={p.id}>
+                <StatusChip tono={p.prioridad === 'urgente' ? 'warn' : 'neutral'}>{p.prioridad}</StatusChip>
+                <span className="bj-lista__texto">{p.titulo}</span>
+                <span className="bj-lista__apoyo">{p.prospectoEmpresa ?? p.agente}</span>
               </li>
             ))}
           </ul>
-        ))}
-      </section>
+        </Tarjeta>
 
-      {/* ── 4 · Escalaciones — el top; la cola completa vive en su pantalla ── */}
-      <section>
-        <TituloSeccion>Escalaciones ({totalEscalaciones})</TituloSeccion>
-        {totalEscalaciones === 0 ? (
-          <EstadoVacio icono={<Inbox {...ICONO} />}>Nada escalado a un humano ahora mismo.</EstadoVacio>
-        ) : (
-          <ul className="space-y-1.5">
+        {/* ── 4 · Escalaciones — el top; la cola completa vive en su pantalla ── */}
+        <Tarjeta
+          titulo={`Escalaciones (${totalEscalaciones === null ? '—' : totalEscalaciones})`}
+          estado={totalEscalaciones === null ? 'error' : totalEscalaciones === 0 ? 'vacio' : 'ok'} contenida
+          mensaje={totalEscalaciones === null ? 'No se pudo leer ninguna fuente de escalaciones. No es cero.' : 'Nada escalado a un humano ahora mismo'}
+          acciones={<BotonEnlace href="/admin/escalaciones" variante="secondary" tamano="sm">La cola completa</BotonEnlace>}
+        >
+          <ul className="bj-lista">
             {escalaciones.cola.slice(0, 5).map((it, i) => (
-              <li key={`${it.fuente}-${i}`} className="text-sm flex items-center gap-2">
-                <StatusPill estado={it.vence && new Date(it.vence).getTime() < ahora ? 'bad' : 'neutral'}>{it.fuente}</StatusPill>
-                {it.href ? (
-                  <Link href={it.href} className="truncate hover:opacity-70">{it.titulo}</Link>
-                ) : (
-                  <span className="truncate">{it.titulo}</span>
-                )}
-                <span className="text-xs shrink-0" style={{ color: 'var(--muted)' }}>{edadDe(it.desde, ahora)}</span>
+              <li key={`${it.fuente}-${i}`}>
+                <StatusChip tono={it.vence && new Date(it.vence).getTime() < ahora ? 'bad' : 'neutral'}>{it.fuente}</StatusChip>
+                {it.href ? <Link className="bj-lista__texto" href={it.href}>{it.titulo}</Link> : <span className="bj-lista__texto">{it.titulo}</span>}
+                <span className="bj-lista__apoyo">{edadDe(it.desde, ahora)}</span>
               </li>
             ))}
-            <li className="pt-1">
-              <Link href="/admin/escalaciones" className="text-sm font-medium hover:opacity-70" style={{ color: 'var(--accent)' }}>
-                La cola completa →
-              </Link>
-            </li>
           </ul>
+        </Tarjeta>
+      </FilaTarjetas>
+
+      <FilaTarjetas variante="6-6">
+        {/* ── 3 · Cambios de código (PRs) — la aprobación de CÓDIGO es fusionarlos en GitHub, no un botón aquí ── */}
+        {prs.estado === 'sin_token' ? (
+          <Tarjeta titulo="Cambios por aprobar" estado="vacio" contenida mensaje="Falta conectar GitHub"
+            detalle="Sin ese acceso no se pueden ver los cambios de código pendientes. Es un dato que falta, no un cero." />
+        ) : prs.estado === 'error' ? (
+          <Tarjeta titulo="Cambios por aprobar" estado="error"
+            mensaje="GitHub no contestó: no se sabe cuántos cambios esperan, y eso no es lo mismo que ninguno." />
+        ) : (
+          <Tarjeta titulo="Cambios por aprobar" estado={prs.prs.length === 0 ? 'vacio' : 'ok'} contenida mensaje="No hay cambios por aprobar" detalle="Cuando alguien proponga un cambio de código, lo verás aquí.">
+            <ul className="bj-lista">
+              {prs.prs.map((pr) => (
+                <li key={pr.numero}>
+                  <GitPullRequest {...ICONO} aria-hidden="true" />
+                  <a className="bj-lista__texto" href={pr.url} target="_blank" rel="noreferrer">#{pr.numero} · {pr.titulo}</a>
+                  <span className="bj-lista__apoyo">{edadDe(pr.creadoEn, ahora)}</span>
+                </li>
+              ))}
+            </ul>
+          </Tarjeta>
         )}
-      </section>
+
+        {/* ── Agentes que no corrieron y por qué (P0 de visibilidad) ──────── */}
+        <TarjetaAgentesParados parados={parados} cola={cola} />
+      </FilaTarjetas>
 
       {/* ── 5 · Las rutinas de la Mac — estado y mando ───────────────────── */}
-      <section>
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <TituloSeccion>Rutinas de la Mac ({bus.rutinas.length})</TituloSeccion>
-          <div className="flex gap-2">
+      <section className="bj-bloque" aria-labelledby="tt-rutinas">
+        <div className="bj-titulo-fila">
+          <h2 className="bj-titulo" id="tt-rutinas">Rutinas automáticas ({bus.rutinas.length})</h2>
+          <div className="bj-acciones">
             <form action={accionOrden}>
               <input type="hidden" name="tipo" value="kill_switch_on" />
               {/* A37-S08-03: un toque accidental apagaba TODAS las rutinas. */}
               <BotonConfirmar
                 etiqueta="Apagar todas" icono={<PowerOff {...ICONO} />} tono="peligro"
                 etiquetaConfirmar="Sí, apagar todas" titulo="Apagar todas las rutinas"
-                descripcion={`Se encola la orden de apagado: la Mac detiene las ${bus.rutinas.length} rutinas en su siguiente latido (≤5 min) hasta que las enciendas.`}
-                className="px-3 py-1.5 rounded-lg text-xs hairline flex items-center gap-1.5" style={{ color: '#b91c1c' }}
+                descripcion={`Se encola la orden de apagado: se detienen las ${bus.rutinas.length} rutinas en la siguiente revisión (≤5 min) hasta que las enciendas.`}
+                className={clasesBoton('danger', 'sm')}
               />
             </form>
             <form action={accionOrden}>
@@ -267,129 +312,60 @@ export function VistaTuTurno({
               <BotonConfirmar
                 etiqueta="Encender todas" icono={<Power {...ICONO} />} tono="normal"
                 etiquetaConfirmar="Sí, encender todas" titulo="Encender todas las rutinas"
-                descripcion={`Se encola la orden de encendido: la Mac reactiva las ${bus.rutinas.length} rutinas en su siguiente latido (≤5 min). Pueden gastar modelo y publicar.`}
-                className="px-3 py-1.5 rounded-lg text-xs hairline flex items-center gap-1.5"
+                descripcion={`Se encola la orden de encendido: se reactivan las ${bus.rutinas.length} rutinas en la siguiente revisión (≤5 min). Pueden gastar modelo y publicar.`}
+                className={clasesBoton('secondary', 'sm')}
               />
             </form>
           </div>
         </div>
         {bus.killSwitchPendiente && (
-          <p className="mt-2 text-xs" style={{ color: 'var(--muted)' }}>
-            Hay una orden de apagado/encendido esperando el latido de la Mac.
-          </p>
+          <p className="bj-nota">Hay una orden de apagado o encendido esperando la siguiente revisión.</p>
         )}
         {bus.rutinas.length === 0 ? (
-          <EstadoVacio icono={<Bot {...ICONO} />}>
-            La Mac aún no siembra el catálogo — corre <code>bus.sh sembrar-catalogo</code> una vez.
+          <EstadoVacio titulo="Aún no hay rutinas registradas" icono={Bot} contenido>
+            Cuando el equipo técnico dé de alta las rutinas automáticas, aparecerán aquí con su estado.
           </EstadoVacio>
         ) : (
-          <div className="mt-3 overflow-x-auto">
-            <table aria-label="Rutinas programadas" className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs" style={{ color: 'var(--muted)' }}>
-                  <th scope="col" className="py-1.5 pr-3 font-medium">Rutina</th>
-                  <th scope="col" className="py-1.5 pr-3 font-medium">Horario</th>
-                  <th scope="col" className="py-1.5 pr-3 font-medium">Última corrida</th>
-                  <th scope="col" className="py-1.5 pr-3 font-medium">Veredicto</th>
-                  <th scope="col" className="py-1.5" />
-                </tr>
-              </thead>
-              <tbody>
-                {bus.rutinas.map((r) => (
-                  <tr key={r.nombre} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                    <td className="py-2 pr-3 font-medium whitespace-nowrap">{r.nombre}</td>
-                    <td className="py-2 pr-3 text-xs whitespace-nowrap" style={{ color: 'var(--muted)' }}>{r.horario || '—'}</td>
-                    <td className="py-2 pr-3 text-xs whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                      {r.ultimaCorrida ? fechaHoraMx(r.ultimaCorrida.inicio) : 'sin corridas en el bus'}
-                    </td>
-                    <td className="py-2 pr-3 text-xs max-w-[26rem]">
-                      {r.ultimaCorrida ? (
-                        <span className="flex items-center gap-1.5">
-                          {r.ultimaCorrida.exitCode !== null && (
-                            <StatusPill estado={r.ultimaCorrida.exitCode === 0 ? 'ok' : 'bad'}>
-                              {r.ultimaCorrida.exitCode === 0 ? 'ok' : `exit ${r.ultimaCorrida.exitCode}`}
-                            </StatusPill>
-                          )}
-                          <span className="truncate">{r.ultimaCorrida.veredicto ?? '—'}</span>
-                          {r.ultimaCorrida.prUrl && (
-                            <a href={r.ultimaCorrida.prUrl} target="_blank" rel="noreferrer" className="shrink-0 hover:opacity-70" style={{ color: 'var(--accent)' }}>PR</a>
-                          )}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className="py-2 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <form action={accionOrden}>
-                          <input type="hidden" name="tipo" value="correr_ahora" />
-                          <input type="hidden" name="rutina" value={r.nombre} />
-                          <BotonEnvio className="px-2.5 py-1 rounded-lg text-xs hairline inline-flex items-center gap-1.5 hover:opacity-70">
-                            <Play {...ICONO} /> Correr ahora
-                          </BotonEnvio>
-                        </form>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <>
+            <TablaBase etiqueta="Rutinas programadas" columnas={columnasRutinas} filas={bus.rutinas} idFila={(r) => r.nombre} densa />
             {/* ── EL EDITOR DE RUTINAS (Fase D, cerrado 17-ago-2026) ────────
-                  El encargo se edita AQUÍ y viaja como orden editar_encargo:
-                  la Mac abre un PR chico con el cambio — jamás escritura
-                  directa. Solo rutinas con encargo sembrado se pueden editar
-                  (sin el texto original no hay qué pre-llenar ni qué PR). */}
-            <div className="mt-3 space-y-1.5">
-              {bus.rutinas.filter((r) => r.encargoMd).map((r) => (
-                <details key={`ed-${r.nombre}`} className="rounded-xl hairline px-3 py-2" style={{ background: 'var(--surface)' }}>
-                  <summary className="text-xs cursor-pointer" style={{ color: 'var(--muted)' }}>
-                    Editar encargo · <span className="font-medium" style={{ color: 'var(--ink)' }}>{r.nombre}</span>
-                  </summary>
-                  <form action={accionOrden} className="mt-2 space-y-2">
-                    <input type="hidden" name="tipo" value="editar_encargo" />
-                    <input type="hidden" name="rutina" value={r.nombre} />
-                    <textarea name="contenido" defaultValue={r.encargoMd} required maxLength={20000} rows={12}
-                      className="w-full text-[12px] leading-relaxed px-3 py-2 rounded-lg hairline cifra-mono"
-                      style={{ background: 'var(--canvas)', resize: 'vertical' }} />
-                    <div className="flex items-center gap-3">
-                      <button className="px-3 py-1.5 rounded-lg text-xs font-medium" style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                        Encolar el cambio (la Mac abre el PR)
-                      </button>
-                      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                        Nada se escribe directo: apruebas el PR en GitHub y el sembrado nocturno actualiza el catálogo.
-                      </p>
-                    </div>
-                  </form>
-                </details>
-              ))}
-            </div>
-          </div>
+                El encargo se edita AQUÍ y viaja como orden editar_encargo: la Mac abre un PR chico con el cambio — jamás escritura
+                directa. Solo rutinas con encargo sembrado se pueden editar (sin el texto original no hay qué pre-llenar ni qué PR). */}
+            {bus.rutinas.filter((r) => r.encargoMd).map((r) => (
+              <Disclosure key={`ed-${r.nombre}`} titulo={`Editar encargo · ${r.nombre}`}>
+                <form action={accionOrden} className="bj-item__forma">
+                  <input type="hidden" name="tipo" value="editar_encargo" />
+                  <input type="hidden" name="rutina" value={r.nombre} />
+                  <CampoTextarea etiqueta={`Encargo de ${r.nombre}`} etiquetaOculta name="contenido" defaultValue={r.encargoMd} required maxLength={20000} rows={12} />
+                  <div className="bj-item__fila">
+                    <BotonEnvio variante="primary">Encolar el cambio (la Mac abre el PR)</BotonEnvio>
+                    <p className="bj-nota">Nada se escribe directo: apruebas el PR en GitHub y el sembrado nocturno actualiza el catálogo.</p>
+                  </div>
+                </form>
+              </Disclosure>
+            ))}
+          </>
         )}
       </section>
 
       {/* ── 6 · Órdenes recientes — el acuse de la Mac ───────────────────── */}
-      <section>
-        <TituloSeccion>Órdenes recientes</TituloSeccion>
-        {bus.ordenesRecientes.length === 0 ? (
-          <EstadoVacio icono={<StickyNote {...ICONO} />}>Aún no has ordenado nada por el bus.</EstadoVacio>
-        ) : (
-          <ul className="space-y-1.5">
-            {bus.ordenesRecientes.map((o) => (
-              <li key={o.id} className="text-sm flex items-center gap-2">
-                <StatusPill estado={o.estado === 'hecha' ? 'ok' : o.estado === 'fallida' ? 'bad' : 'neutral'}>
-                  {o.estado}
-                </StatusPill>
-                <span>{NOMBRE_ORDEN[o.tipo] ?? o.tipo}{o.rutina ? ` · ${o.rutina}` : ''}</span>
-                <span className="text-xs" style={{ color: 'var(--muted)' }}>{edadDe(o.creadoEn, ahora)}</span>
-                {o.resultado && <span className="text-xs truncate" style={{ color: 'var(--muted)' }}>— {o.resultado}</span>}
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      <Tarjeta titulo="Órdenes recientes" estado={bus.ordenesRecientes.length === 0 ? 'vacio' : 'ok'} mensaje="Aún no has ordenado nada por el bus">
+        <ul className="bj-lista">
+          {bus.ordenesRecientes.map((o) => (
+            <li key={o.id}>
+              <StatusChip tono={o.estado === 'hecha' ? 'ok' : o.estado === 'fallida' ? 'bad' : 'neutral'}>{o.estado}</StatusChip>
+              <span>{NOMBRE_ORDEN[o.tipo] ?? o.tipo}{o.rutina ? ` · ${o.rutina}` : ''}</span>
+              <span className="bj-lista__apoyo">{edadDe(o.creadoEn, ahora)}</span>
+              {o.resultado && <span className="bj-lista__texto bj-lista__apoyo">— {o.resultado}</span>}
+            </li>
+          ))}
+        </ul>
+      </Tarjeta>
 
-      <p className="text-xs" style={{ color: 'var(--muted)' }}>
-        Sesión: {sesionNombre} · Las órdenes las ejecuta la Mac en su latido (≤5 min) y firma el
+      <p className="bj-nota">
+        Sesión: {sesionNombre} · Las órdenes se ejecutan en la siguiente revisión (≤5 min) y firma el
         resultado aquí. Esta pantalla nunca toca la Mac directo.
       </p>
-    </div>
+    </MarcoPagina>
   );
 }

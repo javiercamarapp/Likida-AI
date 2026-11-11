@@ -3,8 +3,8 @@
 import { useState, useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ban } from 'lucide-react';
-import { DialogoConfirmar } from '@/app/admin/ui/confirmar';
-import { AvisoResultado, type ResultadoUI } from '@/app/admin/ui/aviso-resultado';
+import { AvisoResultado, Boton, CampoTextarea, DialogoConfirmar, Icono, type ResultadoUI } from '@/app/ui-v2/componentes';
+import './peajes.css';
 
 export type EstadoAnular = { ok?: string; error?: string } | null;
 export type AccionAnular = (prev: EstadoAnular, fd: FormData) => Promise<EstadoAnular>;
@@ -25,30 +25,23 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
   }, [estado, router]);
 
   return (
-    <form action={accion} className="shrink-0" onSubmit={() => setAbierto(false)}>
+    <form action={accion} className="rv-pj-control" onSubmit={() => setAbierto(false)}>
       <input type="hidden" name="desglose" value={desgloseId} />
-      <button type="button" onClick={() => setAbierto(true)}
-        title="Para un archivo subido por error: deja de contar, no se borra"
-        className="rv-btn rv-btn--danger"
-        style={{ background: 'var(--surface)', color: 'var(--bad)' }}>
-        <Ban width={13} height={13} strokeWidth={2} /> Anular
-      </button>
+      <Boton variante="danger" onClick={() => setAbierto(true)} icono={<Icono icono={Ban} />}
+        title="Para un archivo subido por error: deja de contar, no se borra">
+        Anular
+      </Boton>
       <DialogoConfirmar
         abierto={abierto} titulo="¿Anular este desglose?" tono="peligro" cierraConFondo={false}
         etiquetaConfirmar="Anular desglose" tipoConfirmar="submit" pendiente={pendiente}
         onConfirmar={() => setAbierto(false)} onCancelar={() => setAbierto(false)}
         descripcion={(
-          <div className="space-y-2">
+          <div className="rv-pj-dialogo">
             <p>
               Deja de aparecer aquí, de contar en la bitácora RMF 9.1.8, de exportarse y de avisar a la oficina. No se borra:
               queda de constancia con quién lo anuló y por qué. El archivo correcto (o este mismo, ya arreglado) puede volver a mandarse; si había llegado por consulta automática (pull o SFTP), el sistema no lo vuelve a tomar solo: súbelo a mano para cargarlo otra vez.
             </p>
-            <label className="block">
-              <span className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>Motivo (obligatorio, hasta 500 caracteres)</span>
-              <textarea name="motivo" required maxLength={500} rows={3}
-                className="hairline text-[12px] px-2.5 py-1.5 rounded-lg w-full mt-0.5"
-                style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
-            </label>
+            <CampoTextarea etiqueta="Motivo (obligatorio, hasta 500 caracteres)" name="motivo" required maxLength={500} rows={3} />
           </div>
         )}
       />

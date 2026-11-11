@@ -17,7 +17,10 @@ import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import { Bloque, EsqTabla } from '../../bloque';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Carta Porte en automático' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('cartaporte.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -81,6 +84,7 @@ export default async function PaginaAgenteCartaPorte({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
 
@@ -117,6 +121,7 @@ export default async function PaginaAgenteCartaPorte({
 
   return (
     <VistaAgenteCartaPorte
+      tr={tr}
       datos={datos}
       sufijo={sufijoTenant(sp)}
       buzon={buzon}

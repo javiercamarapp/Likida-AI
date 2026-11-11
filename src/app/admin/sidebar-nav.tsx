@@ -1,34 +1,45 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Gauge } from 'lucide-react';
-import { type Item, AGENTES, NEGOCIO, PLATAFORMA, CONTROL, SISTEMA } from './rutas';
-import { SelectorTema } from '../selector-tema';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { type Item, SECCIONES, entradaDeRuta } from './rutas';
+import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
+import { useRequiereAccion } from './cabecera-admin';
 import LogoV2 from '../dashboard/shell/logo-v2';
 import { ALTO_LOGO_PX } from '../marco-v2';
 import { useRiel } from '../dashboard/shell/colapso';
+import { Tooltip } from '../ui-v2/componentes/overlay';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
+import { etiquetaNav, etiquetaRol } from '@/lib/i18n/nav';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
-import { WidgetUso } from './ui/kit';
-import { usd } from '@/lib/utils';
-import { numero } from '@/lib/formato';
+import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
 // El sidebar de /admin usa las clases del sistema (`.rv-sb`, `.rv-item`, `.rv-grupo` de ui-v2/shell.css), las MISMAS que el del
 // dashboard (7-nov-2026, R8): ancho, hover, activo, colapso a riel y animación de entrada vienen de ahí. Lo único distinto es el
 // contenido: las secciones salen de `admin/rutas.ts` y aquí no hay sufijo de superadmin.
+
+// Icono de CADA sección: en el riel (72 px) solo se ve una sección abierta a la vez y las demás se reducen a su icono (antes el riel
+// pintaba las 43 páginas seguidas, la lista se cortaba a medias y se encimaba con el pie).
+const ICONO_SECCION: Record<string, typeof Workflow> = {
+  Agentes: Workflow, Negocio: Briefcase, Control: SlidersHorizontal, Sistema: Activity,
+};
 
 function idSeccion(titulo: string): string {
   return `nav-seccion-${titulo.toLowerCase().split(' ').join('-')}`;
 }
 
 function Fila({ item, pathname }: { item: Item; pathname: string }) {
-  const activo = pathname === item.href;
+  const nombre = etiquetaNav(useT('shell', shellEs), item.nombre);
+  // La entrada está activa en su ruta Y en la de cualquiera de sus pestañas (p. ej. «Agentes» también en /admin/agente-ocr).
+  const activo = entradaDeRuta(pathname)?.href === item.href;
   return (
     <li>
-      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={item.nombre} aria-label={item.nombre}>
+      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={nombre} aria-label={nombre}>
         <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        <span className="rv-item__txt">{item.nombre}</span>
+        <span className="rv-item__txt">{nombre}</span>
       </Link>
     </li>
   );
@@ -39,6 +50,7 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
   onAbrir: (titulo: string) => void;
 }) {
   // ACORDEÓN (orden de Javier, 17-ago): UNA sola sección abierta a la vez; el estado vive en el padre.
+  const tr = useT('shell', shellEs);
   const esta = abierta === titulo;
   if (items.length === 0) return null;
   const id = idSeccion(titulo);
@@ -47,7 +59,8 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
       <h2 className="rv-grupo__h">
         <button type="button" id={id} className="rv-grupo__t rv-grupo__tog" onClick={() => onAbrir(titulo)}
           aria-expanded={esta} aria-controls={`${id}-items`}>
-          {titulo}
+          {(() => { const Ico = ICONO_SECCION[titulo]; return Ico ? <Ico className="rv-grupo__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden /> : null; })()}
+          <span className="rv-grupo__tt">{etiquetaNav(tr, titulo)}</span>
           <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
         </button>
       </h2>
@@ -69,23 +82,24 @@ export function AsideAdmin({ children }: { children: React.ReactNode }) {
 /** La marca del sidebar: logo (horizontal / símbolo en el riel) y el botón de plegar — las mismas piezas que `SidebarV2`. */
 export function MarcaAdmin() {
   const { riel, alternar } = useRiel();
+  const { t } = useT('shell', shellEs);
   return (
     <div className="rv-sb__marca">
-      <Link href="/admin" className="rv-sb__logo" aria-label="Likida, ir al inicio">
+      <Link href="/admin" className="rv-sb__logo" aria-label={t('marca.irInicio')}>
         <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
         <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
       </Link>
-      <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
-        <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-      </button>
+      <Tooltip texto={t('cab.plegar')}>
+        <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={t('cab.plegar')} aria-expanded={!riel}>
+          <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+        </button>
+      </Tooltip>
     </div>
   );
 }
 
-const TITULOS_ADMIN: Array<[string, Item[]]> = [
-  ['Agentes', AGENTES], ['Negocio', NEGOCIO], ['Plataforma', PLATAFORMA],
-  ['Control', CONTROL], ['Sistema', SISTEMA],
-];
+// Las secciones salen de `rutas.ts` (SECCIONES: Agentes, Negocio, Control, Sistema), la misma fuente del rótulo de área de cada pantalla.
+const TITULOS_ADMIN: Array<[string, Item[]]> = SECCIONES.map((s) => [s.titulo, s.items]);
 
 export default function SidebarNav() {
   const pathname = usePathname();
@@ -94,21 +108,40 @@ export default function SidebarNav() {
   // sobre la abierta la cierra (null = todas plegadas, también válido).
   const [abierta, setAbierta] = useState<string | null>(() => {
     for (const [titulo, items] of TITULOS_ADMIN) {
-      if (items.some((it) => it.href === pathname)) return titulo;
+      if (items.some((it) => it.href === entradaDeRuta(pathname)?.href)) return titulo;
     }
     return 'Agentes';
   });
   const alternar = (titulo: string) => setAbierta((a) => (a === titulo ? null : titulo));
+  const { t } = useT('shell', shellEs);
+  // «Página actual»: la pantalla abierta cuando su sección está cerrada (o hay otra abierta) no se vería en el árbol; el bloque la repite
+  // arriba y desaparece en cuanto se abre su sección. En el riel no se pinta (CSS): ahí todo está a la vista.
+  const activa = entradaDeRuta(pathname);
+  const seccionActiva = activa ? TITULOS_ADMIN.find(([, items]) => items.some((it) => it.href === activa.href))?.[0] ?? null : null;
+  const itemActual = activa && seccionActiva && abierta !== seccionActiva ? activa : null;
+  // El ítem activo se deja a la vista cuando el árbol scrollea; espera a que termine de abrirse la sección (180 ms) para medir.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      dejarItemActivoALaVista();
+    }, 200);
+    return () => window.clearTimeout(id);
+  }, [pathname, abierta]);
   return (
     <>
       <ul className="rv-lista">
         <li>
-          <Link href="/admin" className="rv-item" aria-current={resumenActivo ? 'page' : undefined} title="Resumen" aria-label="Resumen">
+          <Link href="/admin" className="rv-item" aria-current={resumenActivo ? 'page' : undefined} title={etiquetaNav({ t }, 'Resumen')} aria-label={etiquetaNav({ t }, 'Resumen')}>
             <LayoutGrid className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-            <span className="rv-item__txt">Resumen</span>
+            <span className="rv-item__txt">{etiquetaNav({ t }, 'Resumen')}</span>
           </Link>
         </li>
       </ul>
+      {itemActual && (
+        <section aria-labelledby="rv-g-pagina-actual" className="rv-grupo rv-pagina-actual" data-estatico>
+          <p id="rv-g-pagina-actual" className="rv-grupo__t">{t('nav.paginaActual')}</p>
+          <ul className="rv-lista"><Fila item={itemActual} pathname={pathname} /></ul>
+        </section>
+      )}
       {TITULOS_ADMIN.map(([titulo, items]) => (
         <Seccion key={titulo} titulo={titulo} items={items} pathname={pathname}
           abierta={abierta} onAbrir={alternar} />
@@ -117,43 +150,55 @@ export default function SidebarNav() {
   );
 }
 
-/** El bloque inferior fijo — gemelo de `SidebarAbajo` del dashboard (pill de
- *  ayuda + selector de tema). Aquí la pill es la puerta a los paneles de los
- *  otros roles: la acción que el superadmin hace todo el día.
- *
- *  `usoIa` (16-ago-2026, ref. shadcn-dashboard): el costo de IA del mes,
- *  medido — lo trae layout.tsx. `undefined` = no se pidió (render de
- *  prueba): el widget no se pinta; `null` = se pidió y no se pudo leer: el
- *  widget lo DICE. */
-export function SidebarAbajoAdmin({ usoIa }: {
-  usoIa?: { mesUsd: number; llamadas: number; etiquetaMes: string } | null;
+/**
+ * El pie de /admin: el MISMO `PieSidebar` del dashboard. Organización = selector de flota con «Ver como» (la flota se abre en el
+ * dashboard con `?tenant=`, el mecanismo de siempre, sin escribir nada; «Elegir flota» lleva al flujo de `elegir-flota`). «Avisos» lee
+ * el conteo real de `requiere-accion.ts` (lectura caída = «sin dato»). Acceso cruzado al panel del cliente. `salir` llega ya armado
+ * por el servidor (el `<form>` de cerrar sesión): aquí no viaja ninguna función.
+ */
+export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir, alNavegar }: {
+  nombre: string | null; avatarUrl: string | null;
+  /** `null` = la lista de flotas no se pudo leer (se dice «Sin dato»); `undefined` = no se pidió (render de prueba). */
+  flotas?: Array<{ id: string; nombre: string }> | null;
+  flotaActual?: string | null;
+  salir?: React.ReactNode;
+  /** La hoja «Más» del móvil la cierra al navegar. */
+  alNavegar?: () => void;
 }) {
+  const tr = useT('shell', shellEs);
+  const r = useRequiereAccion();
+  const n = (nombre ?? '').trim();
   return (
-    <>
-      {usoIa !== undefined && (
-        <div className="adm-solo-ancho">
-          <WidgetUso
-            etiqueta={usoIa ? `Costo de IA · ${usoIa.etiquetaMes}` : 'Costo de IA · este mes'}
-            valor={usoIa ? usd(usoIa.mesUsd) : null}
-            detalle={usoIa ? `${numero(usoIa.llamadas)} ${usoIa.llamadas === 1 ? 'llamada' : 'llamadas'} al modelo` : undefined}
-            href="/admin/costos-facturacion" hrefTexto="Ver costos"
-          />
-        </div>
+    <PieSidebar
+      alNavegar={alNavegar}
+      organizacion={{
+        opciones: flotas === undefined ? [] : flotas === null ? null : flotas.map((f) => ({ valor: f.id, nombre: f.nombre })),
+        actual: flotaActual ?? null,
+        hrefIr: (id) => `/dashboard?tenant=${encodeURIComponent(id)}`,
+        textoIr: tr.t('admin.verComo'),
+        hrefSinOpcion: '/admin/elegir-flota',
+      }}
+      avisos={{ href: '/admin/notificaciones', pendientes: r ? r.pendientes : undefined, urgente: r?.hayUrgente }}
+      acceso={{ href: '/dashboard', texto: tr.t('admin.panelCliente'), Icono: ArrowLeftRight }}
+      tarjeta={(
+        <TarjetaUsuario nombre={nombre} rolEtiqueta={etiquetaRol(tr, 'superadmin', 'Superadmin')} iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} salir={salir} alElegir={alNavegar}
+          menu={(
+            <Link role="menuitem" tabIndex={-1} href="/admin/mi-perfil" className="rv-menu__item" onClick={() => alNavegar?.()}>
+              <span className="rv-menu__icono" aria-hidden><UserRound width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
+              <span>{etiquetaNav(tr, 'Mi perfil')}</span>
+            </Link>
+          )} />
       )}
-      {usoIa === undefined && (
-        <Link href="/admin/costos-facturacion" aria-label="Costos de IA" title="Costos de IA" className="rv-item">
-          <Gauge className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-          <span className="rv-item__txt">Costos de IA</span>
-        </Link>
-      )}
-      <Link href="/admin/dev" title="Entrar a los paneles de los otros roles (vive en Dev desde el 17-ago)" aria-label="Ver los otros paneles" className="rv-item">
-        <ArrowLeftRight className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        <span className="rv-item__txt">Ver los otros paneles</span>
-      </Link>
-      {/* El selector se esconde entero en el riel (adm-solo-ancho): a 72 px no caben tres botones. */}
-      <div className="adm-solo-ancho flex justify-center py-1">
-        <SelectorTema />
-      </div>
-    </>
+    />
+  );
+}
+
+/** El `<nav>` del sidebar de /admin (con su etiqueta en el idioma activo). */
+export function NavAdmin() {
+  const { t } = useT('shell', shellEs);
+  return (
+    <nav aria-label={t('nav.consola')} className="rv-sb__nav">
+      <SidebarNav />
+    </nav>
   );
 }

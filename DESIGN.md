@@ -1,4 +1,37 @@
-# Likida — Sistema de diseño v3.1
+# Likida — Sistema de diseño v4
+
+## Estado vigente (v4, 10-nov-2026)
+
+Esta sección manda sobre lo que contradiga a las de abajo, que son el historial v3.1 y se conservan por sus reglas de
+producto. La v4 está **derivada del código**, no al revés: si un valor de aquí discrepa de los archivos, gana el archivo
+y se corrige este texto.
+
+**Fuentes de verdad (los valores NO se copian aquí):**
+
+| Qué | Dónde |
+|---|---|
+| Colores, radios, alturas, estados de foco y de botón | `src/app/ui-v2/tokens.css` (alcance `[data-ui="v2"]`) |
+| Tipografía | `src/app/ui-v2/fonts.css` y `src/app/layout.tsx` |
+| Piezas (botón, chip, aviso, tabla, cajón, filtros) | `src/app/ui-v2/componentes/` y `CATALOGO-L7.md` |
+| Gráficas | `src/app/ui-v2/graficas/` (el kit viejo `admin/ui/graficas` queda prohibido en pantallas nuevas) |
+
+**Tipografía (corrige la sección «Tipografía» de abajo):** **Hanken Grotesk** (local, cuatro pesos, decisión D-5) para la UI
+y los titulares (`--font-sans-ui`, `--font-display`); **IBM Plex Mono** (`next/font`) para micro-rótulos y cifras de tabla
+(`.etiqueta-mono` / `.cifra-mono`). **Inter e Inter Tight ya no se cargan**: cualquier mención a ellas abajo es historia.
+
+**Identidad (decisiones del dueño, 10-nov-2026, `DECISIONES-DUENO`):**
+1. **Botón primario NEGRO**; el resto del botón como Rovaq (peso 500, radios, estados). El hover es **neutro**, coherente con el negro.
+2. **Telón de carga con el logo, igual a Rovaq**, también en navegaciones internas lentas (> 250 ms), no solo en la primera carga de la sesión; respeta `prefers-reduced-motion`.
+3. La cabecera de escritorio **no lleva campana ni fecha**: la campana vive como «Avisos» en el pie del sidebar; el botón Guía va junto al plegar, estilo píldora.
+4. Para lo no listado (tooltip, título con icono, barra móvil, cajón 420/640): **seguir a Rovaq** y documentarlo en el commit.
+5. Se conservan el Cerebro de ventas y sus datos, el Copiloto y todos los agentes con su panel.
+
+**Rótulo «Ejemplo».** Todo dato de demostración (la página pública `/demo`, escenarios de ejemplo) lleva la etiqueta visible
+«Ejemplo» (`Chip` tono `warn`). Un dato ficticio sin rótulo es una cifra inventada (regla de `CLAUDE.md`).
+
+---
+
+# Sistema v3.1 (historial)
 
 Dirección fijada el **12-ago-2026**, reemplazando la dirección "degradado de
 marca" del 7-ago-2026. Se pidió explícito: **logo negro, ya no paleta

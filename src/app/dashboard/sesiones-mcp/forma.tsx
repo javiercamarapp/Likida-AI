@@ -1,8 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
+import { AvisoResultado, BotonConfirmar, clasesBoton } from '@/app/ui-v2/componentes';
 
 /**
  * El botón de cortar accesos MCP. Mismo molde que `FormaRevocar` de
@@ -40,7 +39,7 @@ export function FormaCortar({ accion, usuarioId, quien, cuantos }: {
   const [estado, despachar] = useActionState(accion, null);
 
   return (
-    <form action={despachar} className="min-w-[15rem] space-y-2">
+    <form action={despachar} className="rv-mcp__forma">
       <input type="hidden" name="usuarioId" value={usuarioId} />
       <BotonConfirmar
         etiqueta={cuantos === 1 ? 'Cortar el acceso' : `Cortar los ${cuantos} accesos`} tono="peligro"
@@ -49,12 +48,11 @@ export function FormaCortar({ accion, usuarioId, quien, cuantos }: {
         descripcion={`${cuantos === 1
           ? `El cliente MCP de ${quien} deja de leer en ese instante.`
           : `Los ${cuantos} clientes MCP de ${quien} dejan de leer en ese instante.`} No hay deshacer: para volver a conectar, ${quien} tiene que autorizar de nuevo desde su cliente.`}
-        className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--bad)' }}
+        className={clasesBoton('danger', 'sm')}
       />
       {estado && !estado.ok && <AvisoError error={estado.error} />}
       {estado?.ok && (
-        <p role="status" className="text-[11px]" style={{ color: 'var(--ok)' }}>{estado.mensaje}</p>
+        <p role="status" className="rv-mcp__ok">{estado.mensaje}</p>
       )}
     </form>
   );

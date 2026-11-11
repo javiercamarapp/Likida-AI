@@ -16,7 +16,7 @@
 // declara con esas palabras en vez de fingir que puede.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { INTERRUPTORES, apagar, type NombreInterruptor } from '@/lib/likida/interruptores';
+import { INTERRUPTORES, apagar, encender, type NombreInterruptor } from '@/lib/likida/interruptores';
 import { correrRunner } from '@/lib/likida/agentes/runner';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
@@ -49,9 +49,11 @@ export const CATALOGO_ACCIONES: readonly AccionCatalogo[] = [
     revertir: 'Encender desde /admin/observabilidad o el ⌘K (un clic — el motivo es la única puerta que hoy tiene apagar/encender).',
   },
   {
-    id: 'encender_agente', gateo: 'doble', implementada: false,
-    efecto: 'Vuelve a soltar al agente sobre clientes reales.',
-    revertir: 'Apagar de nuevo.',
+    // F5 (PLAN-MAESTRO §F5): simétrica a `apagar_agente`. Gateo base `confirma` con MOTIVO obligatorio y bitácora; el interruptor GLOBAL
+    // sube a `doble` (ver `gateoEfectivo`), porque encenderlo suelta a TODOS los agentes de una vez.
+    id: 'encender_agente', gateo: 'confirma', implementada: true,
+    efecto: 'Vuelve a soltar al agente sobre clientes reales: su próxima corrida ya no sale como "saltado". Si su interruptor es el GLOBAL, se sueltan todos los agentes a la vez.',
+    revertir: 'Apagar de nuevo desde el Copiloto, Observabilidad o el ⌘K (con motivo).',
   },
   {
     id: 'correr_agente_ahora', gateo: 'confirma', implementada: false,
@@ -142,6 +144,18 @@ export function accionDelCatalogo(id: string): AccionCatalogo | null {
   return CATALOGO_ACCIONES.find((a) => a.id === id) ?? null;
 }
 
+/**
+ * El gateo que de verdad aplica a una acción SOBRE un objetivo. Casi siempre es el del catálogo; la excepción es encender el
+ * interruptor GLOBAL (un solo clic suelta a todos los agentes sobre clientes reales), que exige `doble` aunque encender uno solo
+ * exija `confirma`. Una acción desconocida se trata como `doble` (lo más estricto).
+ */
+export function gateoEfectivo(accionId: string, objetivo: string): Gateo {
+  const a = accionDelCatalogo(accionId);
+  if (!a) return 'doble';
+  if (accionId === 'encender_agente' && objetivo.trim().toLowerCase() === 'global') return 'doble';
+  return a.gateo;
+}
+
 export interface ResultadoAccionCopiloto {
   ok: boolean;
   mensaje: string;
@@ -180,6 +194,19 @@ export async function ejecutarAccionCopiloto(
     // `revertir` se arregló entonces; esta cadena, que dice lo mismo por
     // fuera del catálogo, se quedó mintiendo.
     return { ok: true, mensaje: `Listo: ${id} quedó apagado y el motivo en la bitácora. Se enciende desde Observabilidad o el ⌘K (un clic — el motivo es la única puerta que hoy tiene apagar/encender).` };
+  }
+
+  if (accionId === 'encender_agente') {
+    const id = (params.id ?? '').trim();
+    if (!(INTERRUPTORES as readonly string[]).includes(id)) {
+      throw new DatoInvalido(`"${id}" no es un interruptor del catálogo.`);
+    }
+    // Simétrica a apagar: el motivo es obligatorio (en tres semanas nadie recuerda por qué se soltó) y viaja a la bitácora desde
+    // `encender` — la MISMA función de Observabilidad y el ⌘K, no una vía paralela.
+    const motivo = (params.motivo ?? '').trim();
+    if (!motivo) throw new DatoInvalido('Encender exige un motivo: sin nota, en tres semanas nadie sabe por qué se soltó.');
+    await encender(id as NombreInterruptor, userId, motivo);
+    return { ok: true, mensaje: `Listo: ${id} quedó encendido y el motivo en la bitácora. Se apaga de nuevo desde el Copiloto, Observabilidad o el ⌘K.` };
   }
 
   if (accionId === 'correr_runner') {

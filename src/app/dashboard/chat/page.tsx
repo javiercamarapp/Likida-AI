@@ -12,7 +12,7 @@ import ChatFlota from '../chat';
 export const dynamic = 'force-dynamic';
 
 /**
- * Preguntar a la IA — LA PRIMERA página reconstruida tras el borrado del
+ * Pregunta a tus datos (título igual al del menú, al de la pestaña y al h1 accesible) — LA PRIMERA página reconstruida tras el borrado del
  * 10-ago-2026, pedida explícita el 12-ago: una página hero propia con el
  * logo de Likida. La composición hero ya vivía en `ChatFlota` (variante
  * 'hero', sobrevivió al borrado porque el componente lo usa también el rail).
@@ -68,4 +68,4 @@ export default async function PaginaChat({
   );
 }
 
-export const metadata: Metadata = { title: 'Preguntar a la IA' };
+export const metadata: Metadata = { title: 'Pregunta a tus datos' };

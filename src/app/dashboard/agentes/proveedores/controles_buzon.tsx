@@ -4,31 +4,29 @@ import { useState, useEffect, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Send, X, RotateCcw, FileText, Trash2, Check } from 'lucide-react';
+import './proveedores.css';
+import { Boton as BotonV2, Casilla, CampoSelect, CampoTexto, CampoTextarea, Icono } from '@/app/ui-v2/componentes';
 import type { AccionProveedores } from './controles';
 import type { ConfigEntrega } from '@/lib/likida/buzon/entrega_pura';
 
 // Los controles de la ENTREGA AL CONTADOR y de la bandeja de recepción (Agente 9). Cada botón es un <form> con su
 // server action: el gateo (sesión, rol, tenant) vive en la action, no aquí. Cada uno enseña su error y su aviso.
 
-function Boton({ texto, pendiente, icono, destructivo, suave }: {
-  texto: string; pendiente: string; icono?: React.ReactNode; destructivo?: boolean; suave?: boolean;
+function Boton({ texto, pendiente, icono, suave }: {
+  texto: string; pendiente: string; icono?: React.ReactNode; suave?: boolean;
 }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className={`rv-btn ${destructivo ? 'rv-btn--danger' : suave ? 'rv-btn--secondary' : 'rv-btn--primary'} rv-btn--sm`}
-      style={destructivo ? { background: 'var(--badbg)', color: 'var(--bad)' }
-        : suave ? { background: 'var(--surface)', color: 'var(--muted)' }
-        : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      {icono}{pending ? pendiente : texto}
-    </button>
+    <BotonV2 type="submit" tamano="sm" variante={suave ? 'secondary' : 'primary'} loading={pending} icono={icono}>
+      {pending ? pendiente : texto}
+    </BotonV2>
   );
 }
 
 function Mensaje({ estado }: { estado: { error?: string; aviso?: string } | null }) {
   if (!estado) return null;
-  if (estado.error) return <p role="alert" className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>;
-  if (estado.aviso) return <p role="status" className="text-[11px] mt-1" style={{ color: 'var(--muted)' }}>{estado.aviso}</p>;
+  if (estado.error) return <p role="alert" className="rv-prov__msg" data-tono="bad">{estado.error}</p>;
+  if (estado.aviso) return <p role="status" className="rv-prov__msg">{estado.aviso}</p>;
   return null;
 }
 
@@ -44,56 +42,28 @@ export function FormaEntrega({ config, guardar }: { config: ConfigEntrega; guard
   const [automatica, setAutomatica] = useState(config.automatica);
   useRefrescarAlAvisar(estado);
   return (
-    <form action={accion} className="space-y-3 max-w-xl">
-      <label className="flex items-start gap-2.5 cursor-pointer">
-        <input type="checkbox" name="activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} className="mt-0.5" />
-        <span className="text-[13px]">
-          <span className="font-medium">Entregar al contador las facturas aprobadas</span>
-          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
-            Apagado (como nace), nada sale por correo: las aprobadas se descargan a mano en CSV. Solo viaja lo que una persona aprobó.
-          </span>
-        </span>
-      </label>
-      <label className="block text-[12px]">
-        <span className="font-medium">Correo(s) del contador</span>
-        <span className="block text-[11px] mb-1" style={{ color: 'var(--faint)' }}>Hasta 5, separados por coma o renglón.</span>
-        <textarea name="destinatarios" defaultValue={config.destinatarios.join('\n')} rows={2} maxLength={600}
-          aria-label="Correos del contador" placeholder="contador@tuempresa.mx"
-          className="hairline w-full rounded-lg px-2.5 py-1.5 text-[12px]" style={{ background: 'var(--surface)' }} />
-      </label>
-      <div className="flex gap-4 flex-wrap items-end">
-        <label className="text-[12px]">
-          <span className="block font-medium mb-1">Formato del CSV</span>
-          <select name="formato" defaultValue={config.formato} className="hairline rounded-lg px-2 py-1.5 text-[12px]" style={{ background: 'var(--surface)' }}>
-            <option value="generico">Genérico (Excel)</option>
-            <option value="sap_b1">SAP Business One</option>
-            <option value="contpaqi">CONTPAQi</option>
-          </select>
-        </label>
-        <label className="flex items-center gap-2 text-[12px]">
-          <input type="checkbox" name="incluirZip" defaultChecked={config.incluirZip} /> Incluir ZIP con XML y PDF
-        </label>
+    <form action={accion} className="rv-prov__forma">
+      <Casilla name="activo" checked={activo} onChange={(e) => setActivo(e.target.checked)} etiqueta="Entregar al contador las facturas aprobadas"
+        ayuda="Apagado (como nace), nada sale por correo: las aprobadas se descargan a mano en CSV. Solo viaja lo que una persona aprobó." />
+      <CampoTextarea etiqueta="Correo(s) del contador" ayuda="Hasta 5, separados por coma o renglón." name="destinatarios" defaultValue={config.destinatarios.join('\n')} rows={2} maxLength={600}
+        placeholder="contador@tuempresa.mx" />
+      <div className="rv-prov__par">
+        <CampoSelect etiqueta="Formato del CSV" name="formato" defaultValue={config.formato}>
+          <option value="generico">Genérico (Excel)</option>
+          <option value="sap_b1">SAP Business One</option>
+          <option value="contpaqi">CONTPAQi</option>
+        </CampoSelect>
+        <Casilla name="incluirZip" defaultChecked={config.incluirZip} etiqueta="Incluir ZIP con XML y PDF" />
       </div>
-      <label className="flex items-start gap-2.5 cursor-pointer">
-        <input type="checkbox" name="automatica" checked={automatica} onChange={(e) => setAutomatica(e.target.checked)} className="mt-0.5" />
-        <span className="text-[13px]">
-          <span className="font-medium">Enviar solo, una vez al día</span>
-          <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>Si no, el lote sale cuando pulsas «Enviar ahora».</span>
-        </span>
-      </label>
+      <Casilla name="automatica" checked={automatica} onChange={(e) => setAutomatica(e.target.checked)} etiqueta="Enviar solo, una vez al día"
+        ayuda="Si no, el lote sale cuando pulsas «Enviar ahora»." />
       {automatica && (
-        <div className="flex gap-4 flex-wrap">
-          <label className="text-[12px]">
-            <span className="block font-medium mb-1">A partir de las (hora de México)</span>
-            <input type="number" name="horaEnvio" min={0} max={23} defaultValue={config.horaEnvio} className="hairline rounded-lg px-2 py-1.5 w-20 text-[12px]" style={{ background: 'var(--surface)' }} />
-          </label>
-          <label className="text-[12px]">
-            <span className="block font-medium mb-1">Mínimo de facturas</span>
-            <input type="number" name="minFacturas" min={1} max={100} defaultValue={config.minFacturas} className="hairline rounded-lg px-2 py-1.5 w-20 text-[12px]" style={{ background: 'var(--surface)' }} />
-          </label>
+        <div className="rv-prov__par">
+          <CampoTexto tipo="number" etiqueta="A partir de las (hora de México)" name="horaEnvio" min={0} max={23} defaultValue={config.horaEnvio} />
+          <CampoTexto tipo="number" etiqueta="Mínimo de facturas" name="minFacturas" min={1} max={100} defaultValue={config.minFacturas} />
         </div>
       )}
-      <div><Boton texto="Guardar" pendiente="Guardando…" icono={<Check width={13} height={13} strokeWidth={2} />} /></div>
+      <div><Boton texto="Guardar" pendiente="Guardando…" icono={<Icono icono={Check} tam={14} />} /></div>
       <Mensaje estado={estado} />
     </form>
   );
@@ -104,7 +74,7 @@ export function BotonEnviarAhora({ enviar, disponibles }: { enviar: AccionProvee
   useRefrescarAlAvisar(estado);
   return (
     <form action={accion}>
-      <Boton texto={`Enviar ahora (${disponibles})`} pendiente="Enviando…" icono={<Send width={13} height={13} strokeWidth={2} />} />
+      <Boton texto={`Enviar ahora (${disponibles})`} pendiente="Enviando…" icono={<Icono icono={Send} tam={14} />} />
       <Mensaje estado={estado} />
     </form>
   );
@@ -118,16 +88,16 @@ export function BotonesLote({ id, puedeReintentar, puedeCancelar, reintentar, ca
   const [eC, aC] = useActionState(cancelar, null);
   useRefrescarAlAvisar(eR); useRefrescarAlAvisar(eC);
   return (
-    <div className="inline-flex flex-col items-end gap-1">
-      <div className="inline-flex gap-1.5">
+    <div className="rv-prov__pila">
+      <div className="rv-prov__acciones">
         {puedeReintentar && (
           <form action={aR}><input type="hidden" name="id" value={id} />
-            <Boton texto="Reintentar" pendiente="…" suave icono={<RotateCcw width={11} height={11} strokeWidth={2} />} />
+            <Boton texto="Reintentar" pendiente="…" suave icono={<Icono icono={RotateCcw} tam={14} />} />
           </form>
         )}
         {puedeCancelar && (
           <form action={aC}><input type="hidden" name="id" value={id} />
-            <Boton texto="Cancelar" pendiente="…" suave icono={<X width={11} height={11} strokeWidth={2} />} />
+            <Boton texto="Cancelar" pendiente="…" suave icono={<Icono icono={X} tam={14} />} />
           </form>
         )}
       </div>
@@ -140,9 +110,9 @@ export function BotonDescartar({ id, descartar }: { id: string; descartar: Accio
   const [estado, accion] = useActionState(descartar, null);
   useRefrescarAlAvisar(estado);
   return (
-    <form action={accion} className="inline-block">
+    <form action={accion} className="rv-prov__acciones">
       <input type="hidden" name="id" value={id} />
-      <Boton texto="Descartar" pendiente="…" suave icono={<Trash2 width={11} height={11} strokeWidth={2} />} />
+      <Boton texto="Descartar" pendiente="…" suave icono={<Icono icono={Trash2} tam={14} />} />
       <Mensaje estado={estado} />
     </form>
   );
@@ -152,9 +122,9 @@ export function BotonDescartar({ id, descartar }: { id: string; descartar: Accio
 export function BotonVerPdf({ campo, id, ver }: { campo: 'facturaId' | 'recepcionId'; id: string; ver: AccionProveedores }) {
   const [estado, accion] = useActionState(ver, null);
   return (
-    <form action={accion} className="inline-block">
+    <form action={accion} className="rv-prov__acciones">
       <input type="hidden" name={campo} value={id} />
-      <Boton texto="Ver PDF" pendiente="…" suave icono={<FileText width={11} height={11} strokeWidth={2} />} />
+      <Boton texto="Ver PDF" pendiente="…" suave icono={<Icono icono={FileText} tam={14} />} />
       <Mensaje estado={estado} />
     </form>
   );

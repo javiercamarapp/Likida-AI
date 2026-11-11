@@ -1,3 +1,8 @@
+import { getT } from '@/lib/i18n/servidor';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
 import Link from 'next/link';
 import { CloudDownload, FileQuestion } from 'lucide-react';
@@ -17,11 +22,10 @@ import {
 } from '@/lib/likida/sat_descarga/resolucion';
 import { numero } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
-import { TituloSeccion } from '../../resumen-visual';
-import { EstadoVacio } from '../../estados';
 import { FilaComprobante, type ResultadoFila } from './fila';
 import { EnlacePagina, NavPaginas } from '../../paginador';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BotonEnlace, Chip, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import '../descarga-sat.css';
 
 /**
  * LA BANDEJA DE CONCILIACIÓN DEL SAT (0243) — donde el contralor decide.
@@ -45,28 +49,28 @@ const t = (v: FormDataEntryValue | null): string => String(v ?? '').trim();
 
 /** Los rótulos de cada cola, y lo que se hace en ella. El rótulo es una
  *  promesa: si dice «esperan que tú decidas», tiene que haber dónde decidir. */
-const COLAS: Record<EstatusCfdi, { titulo: string; explica: string; vacio: string }> = {
+const colas = (tr: Tr): Record<EstatusCfdi, { titulo: string; explica: string; vacio: string }> => ({
   ambiguo: {
-    titulo: 'Esperan que tú decidas',
-    explica: 'Varios gastos empataron con el importe de estos comprobantes y Likida se niega a adivinar. Elige cuál era, y el cruce queda firmado con tu correo.',
-    vacio: 'Ningún comprobante tiene varios candidatos ahora mismo. Ésta es la cola que debe verse vacía casi siempre.',
+    titulo: tr('descargaSat.bandeja.vista.esperanQueTuDecidas'),
+    explica: tr('descargaSat.bandeja.vista.variosGastosEmpataronCon'),
+    vacio: tr('descargaSat.bandeja.vista.ningunComprobanteTieneVarios'),
   },
   disponible: {
-    titulo: 'Sin gasto que les corresponda',
-    explica: 'Bajaron del SAT y ningún gasto los reclama. Eso TAMBIÉN es un hallazgo: alguien gastó y nadie lo reportó. Ligalos al gasto que les toque, o archívalos con motivo.',
-    vacio: 'Todo lo que bajó encontró su gasto o ya se archivó. Nada que reclamar.',
+    titulo: tr('descargaSat.bandeja.vista.sinGastoQueLes'),
+    explica: tr('descargaSat.bandeja.vista.bajaronDelSatY'),
+    vacio: tr('descargaSat.bandeja.vista.todoLoQueBajo'),
   },
   casado: {
-    titulo: 'Cuadraron con un gasto',
-    explica: 'Quedaron facturados sin que nadie entrara a un portal. Si alguno está mal, se deshace desde aquí — y la reversión se anota, no se borra.',
-    vacio: 'Todavía no ha cuadrado ningún comprobante con un gasto.',
+    titulo: tr('descargaSat.bandeja.vista.cuadraronConUnGasto'),
+    explica: tr('descargaSat.bandeja.vista.quedaronFacturadosSinQue'),
+    vacio: tr('descargaSat.bandeja.vista.todaviaNoHaCuadrado'),
   },
   ignorado: {
-    titulo: 'Archivados',
-    explica: 'Los que alguien descartó con motivo, y los consolidados de monedero que ya entraron línea por línea por su propio camino. No se borraron: se pueden devolver a la bandeja.',
-    vacio: 'No hay nada archivado.',
+    titulo: tr('descargaSat.bandeja.vista.archivados'),
+    explica: tr('descargaSat.bandeja.vista.losQueAlguienDescarto'),
+    vacio: tr('descargaSat.bandeja.vista.noHayNadaArchivado'),
   },
-};
+});
 
 interface Params {
   vista?: string; tenant?: string; rol?: string;
@@ -126,6 +130,7 @@ export async function PanelBandeja({
   busqueda: ResultadoBusquedaGastos | null;
   prefill: { importe: string; desde: string; hasta: string; texto: string };
 }) {
+  const { t: tr } = await getT('dinero');
   const proveedor = estadoDescargaSat();
   const estatus = bandeja.estatus;
   const cfdiBuscando = (searchParams.buscar ?? '').trim();
@@ -147,13 +152,14 @@ export async function PanelBandeja({
    */
   async function resolver(_p: ResultadoFila, fd: FormData): Promise<ResultadoFila> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat/bandeja', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat/bandeja') || !puedeVerArea(s.rol, 'dinero')) {
-      return { error: 'Tu rol no puede resolver comprobantes del SAT: esto mueve dinero deducible de la flota.' };
+      return { error: tr('descargaSat.bandeja.vista.tuRolNoPuede') };
     }
     const cfdiId = t(fd.get('cfdi'));
     const operacion = t(fd.get('operacion'));
-    if (cfdiId === '') return { error: 'Falta decir sobre qué comprobante se está decidiendo.' };
+    if (cfdiId === '') return { error: tr('descargaSat.bandeja.vista.faltaDecirSobreQue') };
     try {
       if (operacion.startsWith('ligar:')) {
         const r = await ligarComprobante(s.tenantId, cfdiId, operacion.slice('ligar:'.length), { id: s.userId });
@@ -170,7 +176,7 @@ export async function PanelBandeja({
         revalidatePath('/dashboard/descarga-sat/bandeja');
         return r.ok ? { ok: r.mensaje } : { error: r.mensaje };
       }
-      return { error: 'Esa operación no existe: ligar, archivar o deshacer, ni una más.' };
+      return { error: tr('descargaSat.bandeja.vista.esaOperacionNoExiste') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'resolver el comprobante') };
     }
@@ -182,112 +188,71 @@ export async function PanelBandeja({
   const paginas = bandeja.total === null
     ? null
     : Math.min(Math.max(1, Math.ceil(bandeja.total / bandeja.porPagina)), PAGINA_MAX);
-  const cola = COLAS[estatus];
+  const cola = colas(tr)[estatus];
 
+  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
   return (
-    <MarcoPagina titulo="Conciliación del SAT" apoyo="Lo que bajó del SAT y no cuadró solo: aquí el contralor decide cada caso.">
+    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
+    <MarcoPagina titulo="SAT" apoyo={tr('descargaSat.bandeja.vista.loQueBajoDel')}>
       {/* ── LAS CUATRO COLAS, con su conteo EXACTO de la base ──────── */}
-      <section className="card p-3">
-        <TituloSeccion>Qué bajó del buzón, y en qué está</TituloSeccion>
-        <div className="mt-2 flex items-center gap-2 flex-wrap">
+      <Tarjeta titulo={tr('descargaSat.bandeja.vista.queBajoDelBuzon')}>
+        <div className="rv-sat__cola">
           {ESTATUS_CFDI.map((e) => {
             const activo = e === estatus;
-            // `null` = la consulta de conteos se cayó. La pestaña no pinta
-            // un 0 que nadie midió: pinta un guion.
+            // `null` = la consulta de conteos se cayó. La cola no pinta un 0 que nadie midió: pinta un guion.
             const n = c === null ? null
               : e === 'ambiguo' ? c.ambiguos
                 : e === 'disponible' ? c.disponibles
                   : e === 'casado' ? c.casados : c.ignorados;
             return (
-              <Link key={e} href={enlace(searchParams, { estatus: e, pag: null, buscar: null })}
+              <BotonEnlace key={e} href={enlace(searchParams, { estatus: e, pag: null, buscar: null })}
                 aria-current={activo ? 'page' : undefined}
-                className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full hairline transition-opacity hover:opacity-80"
-                style={activo
-                  ? { background: 'var(--ink)', color: 'var(--surface)' }
-                  : { background: 'var(--surface)' }}>
-                {COLAS[e].titulo}
-                <span className="cifra-mono text-[11px]" style={{ opacity: 0.75 }}>
-                  {n === null ? '—' : numero(n)}
-                </span>
-              </Link>
+                variante={activo ? 'primary' : 'secondary'} tamano="sm">
+                {colas(tr)[e].titulo} {n === null ? '—' : numero(n)}
+              </BotonEnlace>
             );
           })}
         </div>
         {c === null && (
-          <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--warn)' }}>
-            Los conteos de arriba no se pudieron leer — el guion NO quiere decir cero.
-            La lista de abajo sí se pidió por su cuenta.
-          </p>
+          <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losConteosDeArriba')} />
         )}
-        <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--muted)' }}>{cola.explica}</p>
-      </section>
+        <p className="rv-sat__texto">{cola.explica}</p>
+      </Tarjeta>
 
       {/* ── QUÉ FALTA PARA QUE HAYA ALGO QUE CONCILIAR ─────────────── */}
       {(!proveedor.configurado || datos.config === null) && (
-        <section className="card p-4" style={{ borderColor: 'var(--warn)' }}>
-          <TituloSeccion>Todavía no hay de dónde bajar comprobantes</TituloSeccion>
-          <ul className="mt-2 space-y-1.5 text-[12px] m-0 pl-4">
-            {!proveedor.configurado && (
-              <li style={{ color: 'var(--muted)' }}>
-                {proveedor.motivo} <span style={{ color: 'var(--faint)' }}>— lo destraba Likida, no tu flota.</span>
-              </li>
-            )}
-            {datos.config === null && (
-              <li style={{ color: 'var(--muted)' }}>
-                No has declarado de qué RFC se descarga el buzón.{' '}
-                <Link href={`/dashboard/descarga-sat${sufijoTenant(searchParams)}`} className="underline">Decláralo aquí</Link> — sin eso
-                no se pide nada, y Likida jamás adivina un RFC.
-              </li>
-            )}
-            {datos.config !== null && datos.config.certificadoNumero === null && (
-              <li style={{ color: 'var(--muted)' }}>
-                {datos.config.verificadaEn === null
-                  ? 'No se ha verificado que tu e.firma esté cargada en la bóveda del PAC.'
-                  : 'Tu e.firma NO se encontró en la bóveda del PAC — la sube tu contador en el portal del PAC.'}
-              </li>
-            )}
-          </ul>
-        </section>
+        <Aviso tono="warn" titulo={tr('descargaSat.bandeja.vista.todaviaNoHayDe')}>
+          {!proveedor.configurado && <>{tr('descargaSat.bandeja.vista.loDestrabaLikidaNo', { motivo: proveedor.motivo ?? '' })} </>}
+          {datos.config === null && (
+            <>{rico(tr('descargaSat.bandeja.vista.noHasDeclaradoDe'), { link: (c) => <Link href={`/dashboard/descarga-sat${sufijoTenant(searchParams)}`} className="rv-sat__enlace">{c}</Link> })} </>
+          )}
+          {datos.config !== null && datos.config.certificadoNumero === null && (
+            datos.config.verificadaEn === null
+              ? tr('descargaSat.bandeja.vista.noSeHaVerificado')
+              : tr('descargaSat.bandeja.vista.tuEFirmaNo')
+          )}
+        </Aviso>
       )}
 
       {/* ── LA LISTA ───────────────────────────────────────────────── */}
-      <section className="card p-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <TituloSeccion>{cola.titulo}</TituloSeccion>
-          {bandeja.total !== null && (
-            <span className="cifra-mono text-[11px] px-1.5 py-0.5 rounded-full"
-              style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>
-              {numero(bandeja.total)}
-            </span>
-          )}
-        </div>
-
+      <Tarjeta titulo={cola.titulo} acciones={bandeja.total !== null ? <Chip>{numero(bandeja.total)}</Chip> : undefined}>
         {bandeja.incompleta && (
-          <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--warn)' }}>
-            Los comprobantes están, pero algo de lo que cuelga de ellos —los candidatos o el
-            expediente— no se pudo leer. Reintenta antes de decidir sobre esta pantalla.
-          </p>
+          <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.losComprobantesEstanPero')} />
         )}
 
         {bandeja.error !== null ? (
           // NUNCA se pinta como bandeja limpia: no se pudo preguntar.
-          <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--bad)' }}>
-            No se pudo leer esta lista, así que NO significa que esté vacía: {bandeja.error}
-          </p>
+          <AvisoCompacto tono="error" resumen={tr('descargaSat.bandeja.vista.noSePudoLeer', { error: bandeja.error })} />
         ) : bandeja.filas.length === 0 ? (
-          <div className="mt-2">
-            <EstadoVacio icono={<FileQuestion width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              {/* CERO COMPROBANTES EN TOTAL no es lo mismo que cero en esta
-                  cola, y decirlo igual haría creer que el buzón está limpio
-                  cuando lo que pasa es que todavía no se ha descargado nada. */}
-              {c !== null && c.descargados === 0
-                ? 'Todavía no ha bajado ni un comprobante del buzón del SAT. No es que esté todo cuadrado: es que la descarga no ha traído nada. Arriba está lo que falta para que empiece.'
-                : cola.vacio}
-            </EstadoVacio>
-          </div>
+          <EstadoVacio titulo={c !== null && c.descargados === 0 ? tr('descargaSat.bandeja.vista.aunNoBajaNada') : tr('descargaSat.bandeja.vista.colaVacia')} icono={FileQuestion} contenido>
+            {/* CERO COMPROBANTES EN TOTAL no es lo mismo que cero en esta cola, y decirlo igual haría creer que el buzón está limpio cuando lo que pasa es que todavía no se ha descargado nada. */}
+            {c !== null && c.descargados === 0
+              ? tr('descargaSat.bandeja.vista.todaviaNoHaBajado')
+              : cola.vacio}
+          </EstadoVacio>
         ) : (
           <>
-            <ul className="mt-2.5 space-y-2 m-0 p-0">
+            <ul className="rv-sat__lista">
               {bandeja.filas.map((f) => (
                 <FilaComprobante
                   key={f.id}
@@ -303,54 +268,37 @@ export async function PanelBandeja({
             </ul>
 
             {/* ── EL PIE: cuántos se están viendo, de cuántos ───────── */}
-            <div className="mt-3 flex items-center gap-3 flex-wrap text-[12px]" style={{ color: 'var(--muted)' }}>
+            <div className="rv-sat__pie">
               <span>
-                {/* Las cifras del pie salen de `count: 'exact'` en la misma
-                    consulta que trajo las filas — no de contar en JS. */}
-                {numero(desde + 1)}–{numero(hasta)} de{' '}
-                {bandeja.total === null
-                  ? <span style={{ color: 'var(--warn)' }}>no se pudo contar</span>
-                  : numero(bandeja.total)}
-                {paginas !== null && ` · página ${numero(bandeja.pagina)} de ${numero(paginas)}`}
+                {/* Las cifras del pie salen de `count: 'exact'` en la misma consulta que trajo las filas — no de contar en JS. */}
+                {tr('descargaSat.bandeja.vista.rangoDe', { desde: numero(desde + 1), hasta: numero(hasta), total: bandeja.total === null ? tr('descargaSat.bandeja.vista.noSePudoContar') : numero(bandeja.total) })}
+                {paginas !== null && ' ' + tr('descargaSat.bandeja.vista.paginaDe', { v: numero(bandeja.pagina), v2: numero(paginas) })}
               </span>
-              <span className="ml-auto">
-                <NavPaginas>
-                  {bandeja.pagina > 1 && <EnlacePagina href={enlace(searchParams, { pag: String(bandeja.pagina - 1), buscar: null })} direccion="anterior" />}
-                  {paginas !== null && bandeja.pagina < paginas && <EnlacePagina href={enlace(searchParams, { pag: String(bandeja.pagina + 1), buscar: null })} direccion="siguiente" />}
-                </NavPaginas>
-              </span>
+              <NavPaginas>
+                {bandeja.pagina > 1 && <EnlacePagina href={enlace(searchParams, { pag: String(bandeja.pagina - 1), buscar: null })} direccion="anterior" />}
+                {paginas !== null && bandeja.pagina < paginas && <EnlacePagina href={enlace(searchParams, { pag: String(bandeja.pagina + 1), buscar: null })} direccion="siguiente" />}
+              </NavPaginas>
             </div>
 
             {bandeja.truncada && (
-              <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--warn)' }}>
-                Esta lista llega hasta la página {numero(PAGINA_MAX)} ({numero(PAGINA_MAX * POR_PAGINA)}{' '}
-                comprobantes) y hay {numero(bandeja.total ?? 0)} en esta cola: lo que sigue NO se
-                está enseñando. La cola se vacía por el frente — resuelve lo de arriba y el
-                resto sube.
-              </p>
+              <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.estaListaLlegaHasta', { v: numero(PAGINA_MAX), v2: numero(PAGINA_MAX * POR_PAGINA), v3: numero(bandeja.total ?? 0) })}
+                mas={tr('descargaSat.bandeja.vista.laColaSeVacia')} />
             )}
 
-            {/* D-1 (auditoría E.28): el expediente de esta página se cortó
-                en su propio tope, no en el silencioso de PostgREST — y se
-                dice, en vez de pintar cada renglón como si trajera todo. */}
+            {/* D-1 (auditoría E.28): el expediente de esta página se cortó en su propio tope, no en el silencioso de PostgREST — y se dice, en vez de pintar cada renglón como si trajera todo. */}
             {bandeja.historialTruncado && (
-              <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--warn)' }}>
-                El expediente de estos comprobantes trae {numero(bandeja.historialTotal ?? 0)} actos en
-                total y aquí se muestran los más recientes: algunos renglones más viejos no caben en
-                esta vista. Abre el expediente de cada comprobante para lo que sí se enseña.
-              </p>
+              <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.vista.elExpedienteDeEstos', { v: numero(bandeja.historialTotal ?? 0) })}
+                mas={tr('descargaSat.bandeja.vista.algunosRenglonesMasViejos')} />
             )}
           </>
         )}
-      </section>
+      </Tarjeta>
 
-      <EstadoVacio icono={<CloudDownload width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-        Nada de esto borra un comprobante. Archivar y deshacer dejan rastro firmado con el
-        correo de quien lo hizo —congelado, para que sobreviva a que la cuenta se borre— y el
-        expediente de cada fila se abre debajo de ella. El candado es de la base de datos, no de
-        esta pantalla: un comprobante no puede afirmar un cruce sin decir con qué gasto.
+      <EstadoVacio titulo={tr('descargaSat.bandeja.vista.nadaDeEstoBorra')} icono={CloudDownload} contenido>
+        {tr('descargaSat.bandeja.vista.archivarYDeshacerDejan')}
       </EstadoVacio>
     </MarcoPagina>
+    </IdiomaProvider>
   );
 }
 

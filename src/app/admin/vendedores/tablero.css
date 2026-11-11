@@ -1,0 +1,65 @@
+/* El tablero del pipeline (compartido entre /admin/vendedores y /vendedor). Solo tokens globales (--ink, --line, --ok…). Cero hex, cero emojis, cero `style=` en el JSX. */
+.ven-tablero { overflow-x: auto; padding-bottom: 4px; }
+.ven-tablero__fila { display: flex; gap: 8px; align-items: flex-start; min-width: max-content; }
+.ven-vacio { margin: 0; padding: 12px 0; font-size: 13px; color: var(--muted); }
+.ven-col { width: 248px; flex: none; padding: 8px; border-radius: 12px; border: 1px solid var(--line2); background: var(--canvas2); }
+.ven-col__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px 8px; }
+.ven-col__total { font-size: 11px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--muted); }
+.ven-col__cuerpo { display: flex; flex-direction: column; gap: 6px; }
+.ven-col__vacia { display: inline-flex; align-items: center; gap: 6px; margin: 0; padding: 8px 4px; font-size: 12px; color: var(--faint); }
+.ven-col__mas { display: block; padding: 0 4px; font-size: 11px; color: var(--muted); text-decoration: underline; }
+.ven-col__mas:hover { opacity: .7; }
+.ven-col__recorte { margin: 0; padding: 0 4px; font-size: 11px; color: var(--muted); }
+
+.ven-pill { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 500; background: var(--canvas); color: var(--muted); border: 1px solid var(--line); }
+.ven-pill::before { content: ""; width: 6px; height: 6px; border-radius: 999px; background: currentColor; }
+.ven-pill[data-tono="ok"] { background: var(--okbg); color: var(--ok); border-color: transparent; }
+.ven-pill[data-tono="warn"] { background: var(--warnbg); color: var(--warn); border-color: transparent; }
+.ven-pill[data-tono="bad"] { background: var(--badbg); color: var(--bad); border-color: transparent; }
+
+.ven-tarjeta { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.ven-tarjeta[data-pendiente="true"] { opacity: .6; }
+.ven-tarjeta__empresa { font-size: 13px; font-weight: 600; line-height: 1.3; color: var(--ink); }
+.ven-tarjeta__tenue { margin: 0; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ven-tarjeta__tenue--fino { color: var(--faint); }
+.ven-tarjeta__linea { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11px; color: var(--faint); }
+.ven-tarjeta__linea span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ven-tarjeta__acciones { display: flex; flex-wrap: wrap; gap: 4px; }
+.ven-tarjeta__ok { margin: 0; font-size: 11px; color: var(--ok); }
+.ven-tarjeta__error { margin: 0; font-size: 11px; color: var(--bad); }
+
+.ven-btn { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; font-weight: 500; cursor: pointer; transition: background-color .12s; }
+.ven-btn:hover:not(:disabled) { background: var(--canvas); }
+.ven-btn:disabled { opacity: .5; cursor: not-allowed; }
+.ven-btn:focus-visible, .ven-select:focus-visible, .ven-nota textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.ven-btn--ancho { width: 100%; height: auto; min-height: 28px; padding: 5px 8px; line-height: 1.25; white-space: normal; text-wrap: balance; }
+.ven-btn[data-sentido="perdido"] { color: var(--bad); }
+.ven-btn[data-sentido="ganado"] { color: var(--ok); }
+.ven-select { width: 100%; height: 28px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; }
+.ven-nota { font-size: 12px; }
+.ven-nota { display: flex; flex-direction: column; gap: 8px; }
+.ven-nota textarea { width: 100%; margin-top: 4px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; resize: vertical; }
+.ven-nota .ven-btn { margin-top: 4px; }
+
+/* Formas de /admin/vendedores */
+.ven-forma { display: flex; flex-direction: column; gap: 12px; }
+.ven-forma__rejilla { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 767px) { .ven-forma__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.ven-forma__pie { display: flex; justify-content: flex-start; }
+.ven-corridas { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ven-corridas li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; }
+.ven-corridas__fecha { color: var(--muted); }
+.ven-corridas__dur { color: var(--faint); }
+.ven-corridas__error { color: var(--bad); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ven-regla { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; font-size: 13px; font-weight: 500; }
+.ven-regla p { margin: 0; }
+
+/* Desempeño por vendedor: 13 columnas. Relleno corto, cabeceras que envuelven y el nombre en una línea para que quepan en la tarjeta sin recortar «Conversión». */
+[data-ui="v2"] .card.ven-desempeno table thead th { padding: 6px 6px; height: auto; white-space: normal; line-height: 1.2; vertical-align: bottom; }
+[data-ui="v2"] .card.ven-desempeno table tbody td { padding: 0 6px; }
+[data-ui="v2"] .card.ven-desempeno table tbody th { padding: 0 8px; white-space: nowrap; }
+[data-ui="v2"] .card.ven-desempeno table thead th:first-child { padding-left: 8px; }
+/* La tarjeta abre el cajón de detalle; sus acciones viven allí. */
+.ven-tarjeta__abrir { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.ven-tarjeta__abrir:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 4px; }
+.ven-detalle { display: flex; flex-direction: column; gap: 12px; }

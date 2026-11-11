@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { FilaAccionesCotizacion } from './acciones';
-import type { ResultadoAccion } from '../../admin/ui/forma';
+import type { ResultadoAccion } from '@/app/ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-13b (auditoría 24): "Marcar enviada"/"Crear viaje"/"Perdida"/"Vencida"

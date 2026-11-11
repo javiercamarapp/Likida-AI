@@ -1,26 +1,26 @@
-import { renderToStaticMarkup } from 'react-dom/server';
-import { expect, it, vi } from 'vitest';
-// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
-vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
+import { beforeEach, expect, it, vi } from 'vitest';
 
-// ═══════════════════════════════════════════════════════════════════════════
-// /admin/comunicacion — CERO cobertura. Página síncrona, sin datos ni server
-// actions, gateada sólo por admin/layout.tsx. Su único contrato real es el
-// rótulo honesto: NO existe broadcast interno hoy, y no debe confundirse con
-// el estudio de marketing (crecimiento hacia afuera), que es un dominio
-// distinto.
-// ═══════════════════════════════════════════════════════════════════════════
+// Stub 308 de /admin/comunicacion (Fase 1): la pantalla se retiró y su dirección vieja sigue sirviendo, hacia /admin/marketing. Contrato que se fija:
+// (1) la puerta de superadmin se llama ANTES de redirigir, (2) la redirección es permanente (308, no 307) y (3) conserva la consulta.
+const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn(), permanente: vi.fn((destino: string): never => { throw new Error(`NEXT_REDIRECT:${destino}`); }) }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
+vi.mock('next/navigation', () => ({ permanentRedirect: dobles.permanente, redirect: vi.fn() }));
 
-import ComunicacionPage from './page';
+import Pagina from './page';
 
-it('declara honestamente que no hay sistema de comunicación masiva interna', async () => {
-  const html = renderToStaticMarkup(await ComunicacionPage());
-  expect(html).toContain('Likida no tiene un sistema de comunicación masiva INTERNA hoy');
-  expect(html).toContain('bot de WhatsApp conversando 1 a 1');
+beforeEach(() => { vi.clearAllMocks(); dobles.requireSuperadmin.mockResolvedValue({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' }); });
+
+it('redirige de forma permanente a /admin/marketing', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/admin/marketing');
+  expect(dobles.permanente).toHaveBeenCalledTimes(1);
 });
 
-it('distingue este dominio del estudio de marketing (crecimiento hacia afuera), con su liga', async () => {
-  const html = renderToStaticMarkup(await ComunicacionPage());
-  expect(html).toContain('href="/admin/marketing"');
-  expect(html).toContain('un dominio distinto');
+it('conserva la consulta de la dirección vieja', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({ tenant: 't-1' }) })).rejects.toThrow('NEXT_REDIRECT:/admin/marketing?tenant=t-1');
+});
+
+it('llama la puerta de superadmin antes de redirigir; sin sesión no redirige', async () => {
+  dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT:/login'));
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/login');
+  expect(dobles.permanente).not.toHaveBeenCalled();
 });

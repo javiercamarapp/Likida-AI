@@ -1,5 +1,7 @@
+import { getT } from '@/lib/i18n/servidor';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { revalidatePath } from 'next/cache';
-import { FileSpreadsheet, Download } from 'lucide-react';
+import { Download } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -15,8 +17,8 @@ import {
 import { ENCABEZADO_CONTPAQI, SAP_B1_BASE } from '@/lib/likida/contabilidad/formatos';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
-import { FormaConAviso, type ResultadoAccion } from '../../admin/ui/forma';
-import { CampoSelect, CampoTexto, Disclosure } from '@/app/ui-v2/componentes';
+import { BotonEnlace, CampoSelect, CampoTexto, Disclosure, FormaConAviso, Icono, Tarjeta, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import './contador.css';
 
 /**
  * PLAN MAESTRO 26-ago, sección B — el formulario que desbloquea el export a
@@ -41,15 +43,15 @@ import { CampoSelect, CampoTexto, Disclosure } from '@/app/ui-v2/componentes';
 const listaDeColumnas = (v: FormDataEntryValue | null): string[] =>
   String(v ?? '').split(',').map((s) => s.trim()).filter(Boolean);
 
-function EstadoPerfil({ etiqueta, perfil, leyoOk }: { etiqueta: string; perfil: PerfilExportacionErp | null; leyoOk: boolean }) {
+function EstadoPerfil({ etiqueta, perfil, leyoOk, tr = trEs }: { etiqueta: string; perfil: PerfilExportacionErp | null; leyoOk: boolean; tr?: Tr }) {
   return (
-    <p className="text-xs" style={{ color: 'var(--muted)' }}>
-      <span className="font-medium">{etiqueta}:</span>{' '}
+    <p className="rv-cont__linea">
+      <strong>{etiqueta}:</strong>{' '}
       {!leyoOk
-        ? 'no pude leer si ya hay plantilla confirmada — recarga antes de confirmar de nuevo.'
+        ? tr('contador.perfilErp.noPudeLeerSi')
         : perfil
-          ? `plantilla confirmada el ${fechaMx(perfil.confirmadoEn)}. El export ya usa este layout; volver a enviar la reemplaza.`
-          : 'sin plantilla confirmada — el export de póliza en este formato responde 409 hasta confirmarla.'}
+          ? tr('contador.perfilErp.plantillaConfirmadaElEl', { v: fechaMx(perfil.confirmadoEn) })
+          : tr('contador.perfilErp.sinPlantillaConfirmadaEl')}
     </p>
   );
 }
@@ -75,18 +77,15 @@ function EstadoPerfil({ etiqueta, perfil, leyoOk }: { etiqueta: string; perfil: 
  * del encabezado (`desde=AAAA-MM-01`), y cabe de sobra en el tope de 92 días
  * que impone la ruta.
  */
-function BotonPoliza({ sufijo, hoy }: { sufijo: string; hoy: string }) {
+function BotonPoliza({ sufijo, hoy, tr = trEs }: { sufijo: string; hoy: string; tr?: Tr }) {
   // El sufijo del superadmin (`?tenant=`, `?vista=`, `?rol=`) tiene que
   // viajar o el CSV saldría de la flota equivocada. Tercer dialecto del
   // repo: `${sufijo}${sufijo ? '&' : '?'}`, igual que el botón de arriba.
   const href = `/api/export/poliza${sufijo}${sufijo ? '&' : '?'}formato=contpaqi&desde=${hoy.slice(0, 8)}01&hasta=${hoy}`;
   return (
-    <a href={href} download
-      className="hairline inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-colors hover:bg-[var(--canvas)]"
-      style={{ background: 'var(--surface)' }}>
-      <Download width={13} height={13} strokeWidth={1.75} />
-      Descargar póliza del mes (CSV CONTPAQi)
-    </a>
+    <BotonEnlace href={href} download variante="secondary" tamano="sm" icono={<Icono icono={Download} />}>
+      {tr('contador.perfilErp.descargarPolizaDelMes')}
+    </BotonEnlace>
   );
 }
 
@@ -97,6 +96,7 @@ export async function PerfilErp({
   searchParams: { vista?: string; tenant?: string; rol?: string };
   tenantExiste: boolean;
 }) {
+  const { t: tr } = await getT('dinero');
   if (!tenantExiste) return null;
 
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/contador', searchParams);
@@ -119,10 +119,11 @@ export async function PerfilErp({
 
   async function confirmarContpaqi(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
-      return { error: 'Tu rol no puede confirmar la plantilla de exportación contable.' };
+      return { error: tr('contador.perfilErp.tuRolNoPuede') };
     }
     const numero = Number(String(fd.get('numeroInicial') ?? ''));
     try {
@@ -136,15 +137,16 @@ export async function PerfilErp({
       return { error: mensajeParaPantalla(e, 'confirmar la plantilla CONTPAQi') };
     }
     revalidatePath('/dashboard/contador');
-    return { ok: 'Plantilla CONTPAQi confirmada. El export de póliza ya entrega este layout.' };
+    return { ok: tr('contador.perfilErp.plantillaContpaqiConfirmadaE') };
   }
 
   async function confirmarSapB1(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
-      return { error: 'Tu rol no puede confirmar la plantilla de exportación contable.' };
+      return { error: tr('contador.perfilErp.tuRolNoPuede') };
     }
     try {
       await guardarPerfilExportacionErp(s.tenantId, 'sap_b1', {
@@ -157,7 +159,7 @@ export async function PerfilErp({
       return { error: mensajeParaPantalla(e, 'confirmar la plantilla SAP B1') };
     }
     revalidatePath('/dashboard/contador');
-    return { ok: 'Plantilla SAP Business One (DTW) confirmada. El export de póliza ya entrega este layout.' };
+    return { ok: tr('contador.perfilErp.plantillaSapBusinessOne') };
   }
 
   const sapInicial = sapB1?.sistema === 'sap_b1' ? sapB1.plantilla : SAP_B1_BASE;
@@ -166,90 +168,71 @@ export async function PerfilErp({
     : { tipo: 'Dr', numero: 1, separador: ',' as const, encabezado: [...ENCABEZADO_CONTPAQI] };
 
   return (
-    <section
-      className="mt-3 rounded-2xl px-5 py-4 flex flex-col gap-4 hairline"
-      style={{ background: 'var(--surface)' }}
-    >
-      <div className="flex items-start gap-2.5">
-        <FileSpreadsheet width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
-        <div className="min-w-0">
-          <p className="text-sm font-medium">Plantilla de exportación contable (CONTPAQi / SAP Business One)</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            El export de la póliza usa el layout EXACTO que tu instancia importa — no hay una
-            plantilla universal segura entre versiones. Confirmarla aquí significa que la
-            contrastaste contra el esquema de importación de tu CONTPAQi o tu Data Transfer
-            Workbench de SAP B1. Los campos vienen prellenados con la base común solo para no
-            teclear desde cero.
-          </p>
-          <div className="mt-1.5 flex flex-col gap-0.5">
-            <EstadoPerfil etiqueta="CONTPAQi" perfil={contpaqi} leyoOk={leyoOk} />
-            <EstadoPerfil etiqueta="SAP Business One" perfil={sapB1} leyoOk={leyoOk} />
+    <Tarjeta titulo={tr('contador.perfilErp.plantillaDeExportacionContab')}>
+      <div className="rv-cont__lista">
+        <p className="rv-cont__linea">
+          {tr('contador.perfilErp.elExportDeLa')}
+        </p>
+        <EstadoPerfil tr={tr} etiqueta="CONTPAQi" perfil={contpaqi} leyoOk={leyoOk} />
+        <EstadoPerfil tr={tr} etiqueta={tr('contador.perfilErp.sapBusinessOne')} perfil={sapB1} leyoOk={leyoOk} />
+
+        {/* El botón solo con plantilla CONTPAQi confirmada Y con permiso de exportar: sin lo primero la ruta contesta 409, y sin lo segundo 403. Ofrecerlo igual mandaría al contador a un error en vez de a un archivo. La puerta REAL sigue estando en la ruta. */}
+        {leyoOk && contpaqi !== null && puedeExportar(rol) && (
+          <div className="rv-cont__lista">
+            <div><BotonPoliza tr={tr} sufijo={sufijoTenant(searchParams)} hoy={hoyMx(new Date(ahoraMs()))} /></div>
+            <p className="rv-cont__linea">
+              {tr('contador.perfilErp.elAsientoDelMes')}
+            </p>
           </div>
-
-          {/* El botón solo con plantilla CONTPAQi confirmada Y con permiso de
-              exportar: sin lo primero la ruta contesta 409, y sin lo segundo
-              403. Ofrecerlo igual mandaría al contador a un error en vez de a
-              un archivo. La puerta REAL sigue estando en la ruta. */}
-          {leyoOk && contpaqi !== null && puedeExportar(rol) && (
-            <div className="mt-2.5">
-              <BotonPoliza sufijo={sufijoTenant(searchParams)} hoy={hoyMx(new Date(ahoraMs()))} />
-              <p className="text-xs mt-1" style={{ color: 'var(--faint)' }}>
-                El asiento del mes en curso, con el layout que confirmaste. SAP Business One no
-                baja como archivo —su plantilla DTW son dos .txt que la ruta entrega en JSON—;
-                se pide desde la integración, no desde aquí.
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
+        )}
       {/* Mismo criterio que estimulo-peaje: sin lectura confiable no se ofrece
           el formulario — confirmaría a ciegas encima de una plantilla real. */}
       {leyoOk && (
         <>
-          <Disclosure titulo="CONTPAQi — confirmar plantilla">
+          <Disclosure titulo={tr('contador.perfilErp.contpaqiConfirmarPlantilla')}>
             {/* Una sola columna para el encabezado de 9 columnas: necesita todo el ancho; los tres campos cortos van en rejilla. */}
             <FormaConAviso accion={confirmarContpaqi} boton="Confirmar contra mi instancia" columnas="md:grid-cols-1">
               <div className="rv-forma__rejilla">
-                <CampoSelect id="tipo" name="tipo" etiqueta="Tipo de póliza" obligatorio defaultValue={cpInicial.tipo}>
-                  <option value="Dr">Dr — diario</option>
-                  <option value="Ig">Ig — ingreso</option>
-                  <option value="Eg">Eg — egreso</option>
+                <CampoSelect id="tipo" name="tipo" etiqueta={tr('contador.perfilErp.tipoDePoliza')} obligatorio defaultValue={cpInicial.tipo}>
+                  <option value="Dr">{tr('contador.perfilErp.drDiario')}</option>
+                  <option value="Ig">{tr('contador.perfilErp.igIngreso')}</option>
+                  <option value="Eg">{tr('contador.perfilErp.egEgreso')}</option>
                 </CampoSelect>
-                <CampoSelect id="separador" name="separador" etiqueta="Separador del archivo" obligatorio defaultValue={cpInicial.separador ?? ','}>
-                  <option value=",">Coma (,)</option>
-                  <option value={'\t'}>Tabulador</option>
-                  <option value="|">Barra vertical (|)</option>
+                <CampoSelect id="separador" name="separador" etiqueta={tr('contador.perfilErp.separadorDelArchivo')} obligatorio defaultValue={cpInicial.separador ?? ','}>
+                  <option value=",">{tr('contador.perfilErp.coma')}</option>
+                  <option value={'\t'}>{tr('contador.perfilErp.tabulador')}</option>
+                  <option value="|">{tr('contador.perfilErp.barraVertical')}</option>
                 </CampoSelect>
               </div>
-              <CampoTexto id="numeroInicial" name="numeroInicial" tipo="number" step="0.01" min="0" etiqueta="Número inicial de póliza" obligatorio
+              <CampoTexto id="numeroInicial" name="numeroInicial" tipo="number" step="0.01" min="0" etiqueta={tr('contador.perfilErp.numeroInicialDePoliza')} obligatorio
                 defaultValue={String(cpInicial.numero)}
-                ayuda="Lo asigna tu contabilidad; cada póliza del archivo incrementa desde aquí." />
-              <CampoTexto id="encabezado" name="encabezado" etiqueta="Encabezado del esquema (9 columnas separadas por coma)" obligatorio
+                ayuda={tr('contador.perfilErp.loAsignaTuContabilidad')} />
+              <CampoTexto id="encabezado" name="encabezado" etiqueta={tr('contador.perfilErp.encabezadoDelEsquema9')} obligatorio
                 defaultValue={(cpInicial.encabezado ?? [...ENCABEZADO_CONTPAQI]).join(', ')}
-                ayuda="Debe coincidir con el esquema de importación de TU CONTPAQi, no con este ejemplo." />
+                ayuda={tr('contador.perfilErp.debeCoincidirConEl')} />
             </FormaConAviso>
           </Disclosure>
 
-          <Disclosure titulo="SAP Business One (DTW) — confirmar plantilla">
+          <Disclosure titulo={tr('contador.perfilErp.sapBusinessOneDtw')}>
             <FormaConAviso accion={confirmarSapB1} boton="Confirmar contra mi instancia" columnas="md:grid-cols-1">
               <div className="rv-forma__rejilla">
-                <CampoTexto id="cabeceraTecnica" name="cabeceraTecnica" etiqueta="Cabecera — fila técnica (columnas separadas por coma)" obligatorio
+                <CampoTexto id="cabeceraTecnica" name="cabeceraTecnica" etiqueta={tr('contador.perfilErp.cabeceraFilaTecnicaColumnas')} obligatorio
                   defaultValue={sapInicial.cabeceraTecnica.join(', ')}
-                  ayuda="La primera fila de la plantilla DTW de asientos (JournalEntries) de TU instancia." />
-                <CampoTexto id="cabeceraVisible" name="cabeceraVisible" etiqueta="Cabecera — fila descriptiva" obligatorio
+                  ayuda={tr('contador.perfilErp.laPrimeraFilaDe')} />
+                <CampoTexto id="cabeceraVisible" name="cabeceraVisible" etiqueta={tr('contador.perfilErp.cabeceraFilaDescriptiva')} obligatorio
                   defaultValue={sapInicial.cabeceraVisible.join(', ')}
-                  ayuda="La segunda fila de esa misma plantilla. Debe tener las mismas columnas que la técnica." />
-                <CampoTexto id="lineasTecnica" name="lineasTecnica" etiqueta="Líneas — fila técnica" obligatorio
+                  ayuda={tr('contador.perfilErp.laSegundaFilaDe')} />
+                <CampoTexto id="lineasTecnica" name="lineasTecnica" etiqueta={tr('contador.perfilErp.lineasFilaTecnica')} obligatorio
                   defaultValue={sapInicial.lineasTecnica.join(', ')}
-                  ayuda="La primera fila de la plantilla DTW de líneas (JournalEntries_Lines)." />
-                <CampoTexto id="lineasVisible" name="lineasVisible" etiqueta="Líneas — fila descriptiva" obligatorio
+                  ayuda={tr('contador.perfilErp.laPrimeraFilaDe2')} />
+                <CampoTexto id="lineasVisible" name="lineasVisible" etiqueta={tr('contador.perfilErp.lineasFilaDescriptiva')} obligatorio
                   defaultValue={sapInicial.lineasVisible.join(', ')} />
               </div>
             </FormaConAviso>
           </Disclosure>
         </>
       )}
-    </section>
+      </div>
+    </Tarjeta>
   );
 }

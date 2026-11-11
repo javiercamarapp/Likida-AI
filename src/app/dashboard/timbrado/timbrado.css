@@ -1,0 +1,12 @@
+/* Timbrado · solo lo que las piezas del sistema no traen. */
+.rv-timb__bloque { display: grid; gap: 10px; }
+.rv-timb__texto { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-timb__texto strong { color: var(--ink); font-weight: 600; }
+.rv-timb__tenue { margin: 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-timb__aviso { margin: 0; font-size: var(--t-small); font-weight: 600; color: var(--warn); }
+.rv-timb__faltan { margin: 0; padding-left: 20px; display: grid; gap: 2px; font-size: var(--t-small); color: var(--muted); }
+.rv-timb__mono { font-variant-numeric: tabular-nums; word-break: break-all; }
+.rv-timb__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-timb__fila { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-timb__fila a { font-size: var(--t-body); font-weight: 500; color: var(--ink); text-decoration: underline; }
+.rv-timb__cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }

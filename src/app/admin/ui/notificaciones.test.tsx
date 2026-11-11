@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ProveedorNotificaciones, agregarNotificacion, duracionDe, MAX_NOTIFICACIONES, useNotificar } from './notificaciones';
 
@@ -60,9 +62,13 @@ describe('ProveedorNotificaciones — lo servido', () => {
     expect(html).toContain('aria-live="polite"');
   });
 
-  it('el visor no intercepta clics de la página (pointer-events-none en el contenedor)', () => {
+  it('el visor no intercepta clics de la página: contenedor `.rv-toasts` (popover manual) con pointer-events none y solo cada toast lo recibe', () => {
     const html = renderToStaticMarkup(<ProveedorNotificaciones>x</ProveedorNotificaciones>);
-    expect(html).toContain('pointer-events-none');
+    expect(html).toContain('class="rv-toasts"');
+    expect(html).toContain('popover="manual"');
+    const css = readFileSync(join(__dirname, '../../ui-v2/overlay.css'), 'utf8');
+    expect(css).toMatch(/\.rv-toasts \{[^}]*pointer-events: none/);
+    expect(css).toMatch(/\.rv-toast \{ pointer-events: auto/);
   });
 });
 

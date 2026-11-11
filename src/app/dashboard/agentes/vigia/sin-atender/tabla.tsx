@@ -1,5 +1,6 @@
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { Chip } from '@/app/ui-v2/componentes';
+import '../vigia.css';
+import { Chip, EstadoVacio, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import type { AlertaSinAtender, MotivoSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/motor';
 
 const MOTIVO: Record<MotivoSinAtender, string> = {
@@ -12,36 +13,27 @@ export function duracion(min: number): string {
   return `${numero(Math.floor(min / 60))} h ${numero(min % 60)} min`;
 }
 
+const COLUMNAS: readonly ColumnaBase<AlertaSinAtender>[] = [
+  { id: 'grupo', titulo: 'Grupo', principal: true, celda: (a) => <>{a.chatNombre}{a.critico ? <> <Chip tono="warn">Crítico</Chip></> : null}</> },
+  { id: 'prioridad', titulo: 'Prioridad', celda: (a) => <Chip tono={a.nivel === 'alta' ? 'bad' : 'neutral'}>{a.nivel === 'alta' ? 'Alta' : 'Normal'}</Chip> },
+  { id: 'espera', titulo: 'Sin respuesta', celda: (a) => <>{duracion(a.antiguedadMin)} <span className="rv-vg__faint">(plazo {duracion(a.umbralAplicadoMin)})</span></> },
+  { id: 'motivo', titulo: 'Motivo', celda: (a) => a.motivos.map((m) => MOTIVO[m]).join(', ') },
+  { id: 'turno', titulo: 'Turno', celda: (a) => TURNO[a.turno] },
+  {
+    id: 'ultimo', titulo: 'Último mensaje',
+    celda: (a) => (
+      <>
+        {fechaHoraMx(a.ultimoEn)}
+        {a.vistaPrevia ? <span className="rv-vg__bloquear rv-vg__muted">{a.vistaPrevia}</span> : null}
+      </>
+    ),
+  },
+];
+
 /** La lista de conversaciones sin atender. Pura (sin acciones): sirve igual en servidor y dentro del formulario. */
 export function TablaSinAtender({ alertas }: { alertas: readonly AlertaSinAtender[] }) {
   if (alertas.length === 0) {
-    return <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Ninguna conversación pasa de su plazo en los chats subidos.</p>;
+    return <EstadoVacio titulo="Nada sin atender" contenido>Ninguna conversación pasa de su plazo en los chats subidos.</EstadoVacio>;
   }
-  return (
-    <div className="overflow-x-auto">
-      <table aria-label="Conversaciones sin atender" className="w-full text-[12px]">
-        <thead>
-          <tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}>
-            <th scope="col" className="py-1 pr-3">Grupo</th><th scope="col" className="pr-3">Prioridad</th><th scope="col" className="pr-3">Sin respuesta</th>
-            <th scope="col" className="pr-3">Motivo</th><th scope="col" className="pr-3">Turno</th><th scope="col">Último mensaje</th>
-          </tr>
-        </thead>
-        <tbody>
-          {alertas.map((a) => (
-            <tr key={a.clave} className="border-t align-top" style={{ borderColor: 'var(--line)' }}>
-              <td className="py-2 pr-3">{a.chatNombre}{a.critico ? <> <Chip tono="warn">Crítico</Chip></> : null}</td>
-              <td className="pr-3"><Chip tono={a.nivel === 'alta' ? 'bad' : 'neutral'}>{a.nivel === 'alta' ? 'Alta' : 'Normal'}</Chip></td>
-              <td className="pr-3">{duracion(a.antiguedadMin)} <span style={{ color: 'var(--faint)' }}>(plazo {duracion(a.umbralAplicadoMin)})</span></td>
-              <td className="pr-3">{a.motivos.map((m) => MOTIVO[m]).join(', ')}</td>
-              <td className="pr-3">{TURNO[a.turno]}</td>
-              <td>
-                {fechaHoraMx(a.ultimoEn)}
-                {a.vistaPrevia ? <span className="block" style={{ color: 'var(--muted)' }}>{a.vistaPrevia}</span> : null}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <TablaBase etiqueta="Conversaciones sin atender" columnas={COLUMNAS} filas={alertas} idFila={(a) => a.clave} densa tarjetaMovil />;
 }

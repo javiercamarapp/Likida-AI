@@ -1,3 +1,5 @@
+import { getT } from '@/lib/i18n/servidor';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { revalidatePath } from 'next/cache';
 import { exigirStepUpAccion } from '@/lib/auth/stepup';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -18,7 +20,10 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 // que emite un CFDI irreversible, así que con más razón.
 import { mxn } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../../admin/ui/forma';
+import {
+  AvisoCompacto, BotonEnlace, Campo, CampoSelect, CampoTexto, Casilla, Disclosure, FormaConAviso, Tarjeta, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import '../timbrado.css';
 
 /**
  * LA SECCIÓN DE TIMBRE (0226; mudada al área `dinero` por la 0227 — auditoría
@@ -52,6 +57,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
   v: ViajeCcp;
   searchParams: { tenant?: string; rol?: string; vista?: string };
 }) {
+  const { t: tr } = await getT('dinero');
   const RUTA = '/dashboard/timbrado';
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, searchParams);
 
@@ -65,13 +71,14 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
   async function timbrar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     // El ÁREA y el VERBO, en ese orden y los dos: el rol del render no es el
     // de la acción, y ver la pantalla nunca fue permiso para emitir un CFDI.
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('timbrado.viajeId.timbrar.tuRolNoVe') };
     if (!puedeTimbrar(s.rol)) {
-      return { error: 'Tu rol no puede timbrar: emitir un CFDI es del dueño de la flota o del contador.' };
+      return { error: tr('timbrado.viajeId.timbrar.tuRolNoPuede') };
     }
     // F9 (CT-SEG-05): segundo factor escalonado, tras bandera apagada por omisión (D8).
     const pasoMfa = await exigirStepUpAccion(s.rol, 'emitir_cfdi', { tenantId: s.tenantId, userId: s.userId });
@@ -100,13 +107,14 @@ export async function SeccionTimbrado({ v, searchParams }: {
       }
       return {
         ok: r.yaExistia
-          ? `Este viaje ya tenía su timbre: ${r.uuid} (${r.modo}).`
-          : `Timbrado ${r.modo === 'sandbox' ? 'DE PRUEBA (no ampara nada)' : ''} — folio fiscal ${r.uuid}.`,
+          ? tr('timbrado.viajeId.timbrar.esteViajeYaTenia', { uuid: r.uuid, modo: r.modo })
+          : r.modo === 'sandbox'
+            ? tr('timbrado.viajeId.timbrar.timbradoPrueba', { prueba: tr('timbrado.viajeId.timbrar.dePruebaNoAmpara'), uuid: r.uuid })
+            : tr('timbrado.viajeId.timbrar.timbradoOk', { uuid: r.uuid }),
       };
     } catch (e) {
       return {
-        error: `${mensajeParaPantalla(e, 'timbrar')} No des el timbre por fallido: si el PAC alcanzó a sellar, ` +
-          'el CFDI existe. Recarga esta pantalla y, si sigue sin folio fiscal, verifica en el panel de tu PAC antes de reintentar.',
+        error: tr('timbrado.viajeId.timbrar.errorPac', { mensaje: mensajeParaPantalla(e, 'timbrar') }),
       };
     } finally {
       revalidatePath(rutaActual);
@@ -117,16 +125,17 @@ export async function SeccionTimbrado({ v, searchParams }: {
   // Quien la libera DECLARA que verificó en el panel del PAC que no hay CFDI.
   async function liberarReserva(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('timbrado.viajeId.timbrar.tuRolNoVe') };
     if (!puedeTimbrar(s.rol)) {
-      return { error: 'Tu rol no puede liberar el bloqueo: es del dueño de la flota o del contador.' };
+      return { error: tr('timbrado.viajeId.timbrar.tuRolNoPuede2') };
     }
     try {
       const r = await liberarReservaTimbre(s.tenantId, v.viajeId, { id: s.userId }, fd.get('verificadoEnPac') === 'on');
       if (!r.ok) return { error: r.motivo };
-      return { ok: 'Bloqueo liberado. Ya puedes volver a timbrar este viaje.' };
+      return { ok: tr('timbrado.viajeId.timbrar.bloqueoLiberadoYaPuedes') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'liberar el bloqueo de timbrado') };
     } finally {
@@ -137,10 +146,11 @@ export async function SeccionTimbrado({ v, searchParams }: {
   // 0541: CANCELAR el CFDI vía PAC. Mismas dos puertas (área + verbo) y bitácora.
   async function cancelarTimbre(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
-    if (!puedeTimbrar(s.rol)) return { error: 'Tu rol no puede cancelar un CFDI: es del dueño de la flota o del contador.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('timbrado.viajeId.timbrar.tuRolNoVe') };
+    if (!puedeTimbrar(s.rol)) return { error: tr('timbrado.viajeId.timbrar.tuRolNoPuede3') };
     const pasoMfa = await exigirStepUpAccion(s.rol, 'emitir_cfdi', { tenantId: s.tenantId, userId: s.userId });
     if (pasoMfa) return { error: pasoMfa };
     const motivo = String(fd.get('motivo') ?? '') as MotivoCancelacion;
@@ -148,7 +158,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
       const r = await solicitarCancelacionTimbre(s.tenantId, v.viajeId, { id: s.userId }, { motivo, folioSustitucion: t(fd.get('folioSustitucion')) });
       return r.ok ? { ok: r.mensaje } : { error: r.motivo };
     } catch (e) {
-      return { error: `${mensajeParaPantalla(e, 'cancelar el CFDI')} No des la cancelación por fallida: si el PAC alcanzó a enviarla, el SAT la recibió. Recarga y verifica el estatus.` };
+      return { error: tr('timbrado.viajeId.timbrar.noDesLaCancelacion', { v: mensajeParaPantalla(e, 'cancelar el CFDI') }) };
     } finally {
       revalidatePath(rutaActual);
     }
@@ -156,10 +166,11 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
   async function confirmarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
-    if (!puedeTimbrar(s.rol)) return { error: 'Tu rol no puede confirmar la cancelación: es del dueño de la flota o del contador.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('timbrado.viajeId.timbrar.tuRolNoVe') };
+    if (!puedeTimbrar(s.rol)) return { error: tr('timbrado.viajeId.timbrar.tuRolNoPuede4') };
     try {
       const r = await confirmarCancelacionTimbre(s.tenantId, v.viajeId, { id: s.userId }, fd.get('verificadoEnSat') === 'on');
       return r.ok ? { ok: r.mensaje } : { error: r.motivo };
@@ -172,14 +183,15 @@ export async function SeccionTimbrado({ v, searchParams }: {
 
   async function guardarReceptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no ve el timbrado de la flota.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('timbrado.viajeId.timbrar.tuRolNoVe') };
     // Mismo verbo que timbrar: la razón social, el régimen y el uso CFDI del
     // receptor VAN DENTRO del comprobante. Capturarlos es declarar, y quien
     // declara es quien firma.
     if (!puedeTimbrar(s.rol)) {
-      return { error: 'Tu rol no puede capturar los datos fiscales del cliente: van dentro del CFDI.' };
+      return { error: tr('timbrado.viajeId.timbrar.tuRolNoPuede5') };
     }
     // A37-A3-21 / A37-S20-07: el cliente sale del VIAJE (leído aquí, anclado al tenant), nunca del formulario:
     // un POST con el clienteId de otro cliente de la flota reescribiría sus datos fiscales.
@@ -189,7 +201,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'leer el cliente del viaje') };
     }
-    if (clienteId === null) return { error: 'El viaje no tiene cliente asignado — asígnalo antes de capturar sus datos fiscales.' };
+    if (clienteId === null) return { error: tr('timbrado.viajeId.timbrar.elViajeNoTiene') };
     try {
       await guardarReceptorFiscal(s.tenantId, clienteId, {
         razonSocial: t(fd.get('razonSocial')),
@@ -201,28 +213,28 @@ export async function SeccionTimbrado({ v, searchParams }: {
       return { error: mensajeParaPantalla(e, 'guardar los datos fiscales del cliente') };
     }
     revalidatePath(rutaActual);
-    return { ok: 'Datos fiscales del cliente guardados.' };
+    return { ok: tr('timbrado.viajeId.timbrar.datosFiscalesDelCliente2') };
   }
 
   // ── Timbre ya emitido: el hecho, citable, con su descarga ────────────────
   if (ctx.timbreVigente !== null) {
     const tv = ctx.timbreVigente;
     return (
-      <section className="space-y-2 print:hidden">
-        <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-        <p className="text-[12px]">
-          {tv.modo === 'sandbox' ? 'Timbre DE PRUEBA (sandbox — no ampara ningún traslado). ' : 'Timbrado. '}
-          Folio fiscal <span className="font-mono">{tv.uuidFiscal}</span> · {tv.fechaTimbrado} · PAC {tv.proveedor.toUpperCase()}.
-        </p>
-        <a
-          className="inline-block text-[12px] font-medium hover:opacity-75"
-          style={{ color: 'var(--marca)' }}
-          href={`/api/export/carta-porte-xml${sufijoTenant(searchParams) ? `${sufijoTenant(searchParams)}&` : '?'}viaje=${v.viajeId}&timbrado=1`}
-        >
-          Descargar XML timbrado ↓
-        </a>
-        {puedeEmitir && <CancelacionDelTimbre cancelacion={tv.cancelacion} cancelar={cancelarTimbre} confirmar={confirmarCancelacion} />}
-      </section>
+      <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+        <div className="rv-timb__bloque">
+          <p className="rv-timb__texto">
+            {tv.modo === 'sandbox' ? tr('timbrado.viajeId.timbrar.timbreDePruebaSandbox') + ' ' : tr('timbrado.viajeId.timbrar.timbrado') + ' '}
+            {tr('timbrado.viajeId.timbrar.folioFiscal')} <span className="rv-timb__mono">{tv.uuidFiscal}</span> · {tv.fechaTimbrado} · {tr('timbrado.viajeId.timbrar.pac', { proveedor: tv.proveedor.toUpperCase() })}.
+          </p>
+          <div>
+            <BotonEnlace variante="secondary" tamano="sm"
+              href={`/api/export/carta-porte-xml${sufijoTenant(searchParams) ? `${sufijoTenant(searchParams)}&` : '?'}viaje=${v.viajeId}&timbrado=1`}>
+              {tr('timbrado.viajeId.timbrar.descargarXmlTimbrado')}
+            </BotonEnlace>
+          </div>
+          {puedeEmitir && <CancelacionDelTimbre tr={tr} cancelacion={tv.cancelacion} cancelar={cancelarTimbre} confirmar={confirmarCancelacion} />}
+        </div>
+      </Tarjeta>
     );
   }
 
@@ -231,46 +243,36 @@ export async function SeccionTimbrado({ v, searchParams }: {
   // CFDI real. El bloqueo real es el unique de la base; esto solo lo explica.
   if (ctx.reservaPendiente !== null) {
     return (
-      <section className="space-y-2 print:hidden">
-        <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-          {motivoDeReservaViva(ctx.reservaPendiente)}
-        </p>
-        {ctx.reservaPendiente.reservadoEn !== null && (
-          <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-            Apartado desde {ctx.reservaPendiente.reservadoEn}.
-          </p>
-        )}
-        {/* Sin folio fiscal (el PAC no contestó): la salida existe, con candado. */}
-        {ctx.reservaPendiente.uuidFiscal === null && puedeEmitir && (
-          <div className="space-y-2 pt-2">
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Si ya verificaste en el panel de tu PAC que NO existe un CFDI de este viaje, puedes liberar el
-              bloqueo (solo después de {MINUTOS_MIN_LIBERAR_RESERVA} minutos de apartado). Queda en la bitácora.
-            </p>
-            <FormaConAviso accion={liberarReserva} boton="Liberar el bloqueo" columnas="md:grid-cols-1">
-              <label className="flex items-start gap-2 text-[12px]">
-                <input type="checkbox" name="verificadoEnPac" />
-                <span>Verifiqué en el panel de mi PAC que NO existe un CFDI de este viaje.</span>
-              </label>
-            </FormaConAviso>
-          </div>
-        )}
-      </section>
+      <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+        <div className="rv-timb__bloque">
+          <AvisoCompacto tono="warn" resumen={motivoDeReservaViva(ctx.reservaPendiente)} />
+          {ctx.reservaPendiente.reservadoEn !== null && (
+            <p className="rv-timb__tenue">{tr('timbrado.viajeId.timbrar.apartadoDesde', { reservadoEn: ctx.reservaPendiente.reservadoEn })}</p>
+          )}
+          {/* Sin folio fiscal (el PAC no contestó): la salida existe, con candado. */}
+          {ctx.reservaPendiente.uuidFiscal === null && puedeEmitir && (
+            <>
+              <p className="rv-timb__texto">
+                {tr('timbrado.viajeId.timbrar.siYaVerificasteEn', { MINUTOS_MIN_LIBERAR_RESERVA })}
+              </p>
+              <FormaConAviso accion={liberarReserva} boton="Liberar el bloqueo" columnas="md:grid-cols-1">
+                <Casilla name="verificadoEnPac" etiqueta={tr('timbrado.viajeId.timbrar.verifiqueEnElPanel')} />
+              </FormaConAviso>
+            </>
+          )}
+        </div>
+      </Tarjeta>
     );
   }
 
   // ── Sin PAC: la verdad y cero botones ────────────────────────────────────
   if (!ctx.pac.configurado) {
     return (
-      <section className="space-y-2 print:hidden">
-        <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          Sin PAC configurado: el timbrado directo está apagado (lo enciende el equipo de
-          Likida al configurar el servicio). Mientras tanto, el XML del borrador se descarga y se timbra en
-          tu facturador — Likida jamás simula un timbre.
+      <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+        <p className="rv-timb__texto">
+          {tr('timbrado.viajeId.timbrar.sinPacConfiguradoEl')}
         </p>
-      </section>
+      </Tarjeta>
     );
   }
 
@@ -280,78 +282,64 @@ export async function SeccionTimbrado({ v, searchParams }: {
   });
 
   return (
-    <section className="space-y-3 print:hidden">
-      <h2 className="font-display text-[15px] font-semibold">Timbre</h2>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-        PAC {ctx.pac.proveedor?.toUpperCase()} · ambiente {ctx.emisor.modo === 'sandbox' ? 'SANDBOX (timbres de prueba)' : 'PRODUCCIÓN'}.
-        El CFDI sale del borrador validado + tu perfil fiscal (panel del contador) + los datos fiscales del cliente.
-      </p>
-
-      {!ensayo.ok && (
-        <div className="space-y-1">
-          <p className="text-[12px] font-medium" style={{ color: 'var(--warn)' }}>Para timbrar falta:</p>
-          <ul className="text-[12px] list-disc pl-5 space-y-0.5" style={{ color: 'var(--muted)' }}>
-            {ensayo.faltantes.map((f) => <li key={f}>{f}</li>)}
-          </ul>
-        </div>
-      )}
-
-      {ctx.clienteId !== null && puedeEmitir && (
-        <details className="rounded-lg hairline px-3 py-2">
-          <summary className="text-[12px] font-medium cursor-pointer">Datos fiscales del cliente (receptor)</summary>
-          <div className="pt-2">
-            <FormaConAviso accion={guardarReceptor} boton="Guardar datos del cliente" columnas="md:grid-cols-2">
-              <Campo nombre="razonSocial" etiqueta="Razón social (exacta a SU constancia)" valorInicial={ctx.receptor.razonSocial ?? ''} />
-              <Campo nombre="regimenFiscal" etiqueta="Régimen fiscal (clave)" valorInicial={ctx.receptor.regimenFiscal ?? ''} placeholder="601" />
-              <Campo nombre="usoCfdi" etiqueta="Uso CFDI" valorInicial={ctx.receptor.usoCfdi ?? ''} placeholder="S01 o G03" />
-              <Campo nombre="cpFiscal" etiqueta="CP fiscal" valorInicial={ctx.receptor.cpFiscal ?? ''} placeholder="64000" />
-            </FormaConAviso>
-          </div>
-        </details>
-      )}
-
-      {ensayo.ok && !puedeEmitir && (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          El comprobante está listo para emitirse, pero timbrar es del dueño de la flota o del
-          contador: emitir un CFDI es un acto fiscal irreversible y lo firma quien responde por él.
+    <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+      <div className="rv-timb__bloque">
+        <p className="rv-timb__texto">
+          {tr('timbrado.viajeId.timbrar.pacAmbienteElCfdi', { v: ctx.pac.proveedor?.toUpperCase() ?? '', v2: ctx.emisor.modo === 'sandbox' ? tr('timbrado.viajeId.timbrar.sandboxTimbresDePrueba') : tr('timbrado.viajeId.timbrar.produccion') })}
         </p>
-      )}
 
-      {puedeEmitir && (
-        <div className="space-y-1">
-          {ensayo.ok && (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Flete {mxn(ensayo.subTotal)} + IVA 16% {mxn(ensayo.iva)}
-              {ensayo.retencionIva !== null ? ` − retención IVA 4% ${mxn(ensayo.retencionIva)} (receptor persona moral, LIVA 1-A II c)` : ''}
-              {' '}= <span className="font-medium">Total {mxn(ensayo.total)}</span>.
-            </p>
-          )}
-          <FormaConAviso accion={timbrar} boton={ctx.emisor.modo === 'sandbox' ? 'Timbrar (PRUEBA)' : 'Timbrar'} columnas="md:grid-cols-2">
-            {/* AUDITORÍA 24, FIS-8 (MEDIO): el valor por defecto era PPD, y un
-                CFDI PPD OBLIGA a emitir después un complemento de pago (CFDI
-                de Pagos 2.0) al cobrar. Likida no lo emite todavía —
-                `pac/sw.ts` lo declara, la pantalla no— y sin el REP el cliente
-                de la flota no puede acreditar su IVA y la flota queda con una
-                obligación pendiente que su sistema no le dijo. El defecto pasa
-                a PUE (pago en una exhibición: se agota con el timbre y no
-                arrastra nada) y PPD queda como elección explícita, con lo que
-                arrastra escrito al lado. */}
-            <Selector nombre="metodoPago" etiqueta="Método de pago" valorInicial="PUE" opciones={[
-              { valor: 'PUE', texto: 'PUE — pago en una exhibición (ya cobrado o se cobra al entregar)' },
-              { valor: 'PPD', texto: 'PPD — pago en parcialidades/diferido (forma 99)' },
-            ]} />
-            <Campo nombre="formaPago" etiqueta="Forma de pago (obligatoria con PUE)" placeholder="03 transferencia · 01 efectivo" ayuda="Con PPD se envía 99 «Por definir» (Anexo 20) y este campo se ignora. PUE con 99 se rechaza aquí mismo: se contradicen." />
-            <Campo nombre="fechaLlegadaEstimada" etiqueta="Llegada estimada (hora local de México)" tipo="datetime-local" requerido ayuda="Debe ser posterior a la salida; se escribe como FechaHoraSalidaLlegada del destino." />
-          </FormaConAviso>
-          <p className="text-[11px]" style={{ color: 'var(--warn)' }}>
-            Si eliges PPD: ese CFDI te obliga a emitir un complemento de pago cuando cobres, y Likida
-            todavía no lo emite. Mientras no exista, tu cliente no puede acreditar su IVA y la
-            obligación queda abierta a tu nombre. Elige PPD solo si tu contador va a emitir el
-            complemento por su cuenta.
+        {!ensayo.ok && (
+          <div className="rv-timb__bloque">
+            <p className="rv-timb__aviso">{tr('timbrado.viajeId.timbrar.paraTimbrarFalta')}</p>
+            <ul className="rv-timb__faltan">
+              {ensayo.faltantes.map((f) => <li key={f}>{f}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {ctx.clienteId !== null && puedeEmitir && (
+          <Disclosure variante="linea" titulo={tr('timbrado.viajeId.timbrar.datosFiscalesDelCliente')}>
+            <FormaConAviso accion={guardarReceptor} boton="Guardar datos del cliente" columnas="md:grid-cols-2">
+              <CampoTexto id="razonSocial" name="razonSocial" etiqueta={tr('timbrado.viajeId.timbrar.razonSocialExactaA')} defaultValue={ctx.receptor.razonSocial ?? ''} />
+              <CampoTexto id="regimenFiscal" name="regimenFiscal" etiqueta={tr('timbrado.viajeId.timbrar.regimenFiscalClave')} defaultValue={ctx.receptor.regimenFiscal ?? ''} placeholder="601" />
+              <CampoTexto id="usoCfdi" name="usoCfdi" etiqueta={tr('timbrado.viajeId.timbrar.usoCfdi')} defaultValue={ctx.receptor.usoCfdi ?? ''} placeholder="S01 o G03" />
+              <CampoTexto id="cpFiscal" name="cpFiscal" etiqueta={tr('timbrado.viajeId.timbrar.cpFiscal')} defaultValue={ctx.receptor.cpFiscal ?? ''} placeholder="64000" />
+            </FormaConAviso>
+          </Disclosure>
+        )}
+
+        {ensayo.ok && !puedeEmitir && (
+          <p className="rv-timb__texto">
+            {tr('timbrado.viajeId.timbrar.elComprobanteEstaListo')}
           </p>
-        </div>
-      )}
-    </section>
+        )}
+
+        {puedeEmitir && (
+          <div className="rv-timb__bloque">
+            {ensayo.ok && (
+              <p className="rv-timb__texto">
+                {tr('timbrado.viajeId.timbrar.flete')} {mxn(ensayo.subTotal)} {tr('timbrado.viajeId.timbrar.masIva', { iva: mxn(ensayo.iva) })}
+                {ensayo.retencionIva !== null ? ' ' + tr('timbrado.viajeId.timbrar.retencionIva4Receptor', { v: mxn(ensayo.retencionIva) }) : ''}
+                {' '}= <strong>{tr('timbrado.viajeId.timbrar.total', { v: mxn(ensayo.total) })}</strong>.
+              </p>
+            )}
+            <FormaConAviso accion={timbrar} boton={ctx.emisor.modo === 'sandbox' ? 'Timbrar (PRUEBA)' : 'Timbrar'} columnas="md:grid-cols-2">
+              {/* AUDITORÍA 24, FIS-8 (MEDIO): el valor por defecto era PPD, y un CFDI PPD OBLIGA a emitir después un complemento de pago (CFDI de Pagos 2.0) al cobrar. Likida no lo emite todavía — `pac/sw.ts` lo declara, la pantalla no — y sin el REP el cliente de la flota no puede acreditar su IVA y la flota queda con una obligación pendiente que su sistema no le dijo. El defecto pasa a PUE (pago en una exhibición: se agota con el timbre y no arrastra nada) y PPD queda como elección explícita, con lo que arrastra escrito al lado. */}
+              <CampoSelect id="metodoPago" name="metodoPago" etiqueta={tr('timbrado.viajeId.timbrar.metodoDePago')} defaultValue="PUE">
+                <option value="PUE">{tr('timbrado.viajeId.timbrar.puePagoEnUna')}</option>
+                <option value="PPD">{tr('timbrado.viajeId.timbrar.ppdPagoEnParcialidades')}</option>
+              </CampoSelect>
+              <CampoTexto id="formaPago" name="formaPago" etiqueta={tr('timbrado.viajeId.timbrar.formaDePagoObligatoria')} placeholder={tr('timbrado.viajeId.timbrar.03Transferencia01Efectivo')} ayuda={tr('timbrado.viajeId.timbrar.conPpdSeEnvia')} />
+              <Campo etiqueta={tr('timbrado.viajeId.timbrar.llegadaEstimadaHoraLocal')} obligatorio ayuda={tr('timbrado.viajeId.timbrar.debeSerPosteriorA')}>
+                <input id="fechaLlegadaEstimada" name="fechaLlegadaEstimada" type="datetime-local" className="rv-ctl" required />
+              </Campo>
+            </FormaConAviso>
+            <AvisoCompacto tono="warn" resumen={tr('timbrado.viajeId.timbrar.siEligesPpdEse')}
+              mas={tr('timbrado.viajeId.timbrar.siEligesPpdEse2')} />
+          </div>
+        )}
+      </div>
+    </Tarjeta>
   );
 }
 
@@ -363,49 +351,43 @@ export async function SeccionTimbrado({ v, searchParams }: {
  *     quien lo vio lo confirma aquí y recién entonces el viaje queda libre para re-timbrar;
  *   · rechazada / sin respuesta: se muestra el mensaje del PAC tal cual y se puede volver a pedir.
  */
-function CancelacionDelTimbre({ cancelacion, cancelar, confirmar }: {
+function CancelacionDelTimbre({ cancelacion, cancelar, confirmar, tr = trEs }: {
   cancelacion: import('@/lib/likida/carta_porte_timbre').CancelacionTimbre | null;
   cancelar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
-  confirmar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+  confirmar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>; tr?: Tr;
 }) {
   if (cancelacion?.estado === 'en_proceso') {
     return (
-      <div className="space-y-2 pt-3 border-t" style={{ borderColor: 'var(--line2)' }}>
-        <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-          Cancelación EN PROCESO (código {cancelacion.codigoSat ?? 's/d'}, motivo {cancelacion.motivo}). El SAT recibió la solicitud, pero este CFDI sigue
-          vigente hasta ver el acuse o el estatus «Cancelado» en el portal del SAT o en el panel de tu PAC.
-        </p>
-        <FormaConAviso accion={confirmar} boton="Confirmar que ya está cancelado" columnas="md:grid-cols-1">
-          <label className="flex items-start gap-2 text-[12px]">
-            <input type="checkbox" name="verificadoEnSat" />
-            <span>Vi el acuse o el estatus «Cancelado» de este CFDI.</span>
-          </label>
+      <div className="rv-timb__bloque">
+        <AvisoCompacto tono="warn" resumen={tr('timbrado.viajeId.timbrar.cancelacionEnProcesoCodigo', { v: cancelacion.codigoSat ?? 's/d', motivo: cancelacion.motivo ?? '' })}
+          mas={tr('timbrado.viajeId.timbrar.elSatRecibioLa')} />
+        <FormaConAviso accion={confirmar} boton={tr('timbrado.viajeId.timbrar.confirmarQueYaEsta')} columnas="md:grid-cols-1">
+          <Casilla name="verificadoEnSat" etiqueta={tr('timbrado.viajeId.timbrar.viElAcuseO')} />
         </FormaConAviso>
       </div>
     );
   }
   return (
-    <details className="rounded-lg hairline px-3 py-2 mt-3">
-      <summary className="text-[12px] font-medium cursor-pointer">Cancelar este CFDI</summary>
-      <div className="pt-2 space-y-2">
+    <Disclosure variante="linea" titulo={tr('timbrado.viajeId.timbrar.cancelarEsteCfdi')}>
+      <div className="rv-timb__bloque">
         {cancelacion?.estado === 'rechazada' && (
-          <p className="text-[12px]" style={{ color: 'var(--bad)' }}>El PAC no canceló: {cancelacion.error ?? 'sin detalle'}</p>
+          <AvisoCompacto tono="error" resumen={tr('timbrado.viajeId.timbrar.elPacNoCancelo', { v: cancelacion.error ?? tr('timbrado.viajeId.timbrar.sinDetalle') })} />
         )}
         {cancelacion?.estado === 'solicitada' && (
-          <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-            La última solicitud no tuvo respuesta del PAC y pudo llegar al SAT. Repetirla es seguro: si ya estaba cancelado, el PAC lo dice.
-            {cancelacion.error ? ` (${cancelacion.error})` : ''}
-          </p>
+          <AvisoCompacto tono="warn" resumen={tr('timbrado.viajeId.timbrar.laUltimaSolicitudNo', { v: cancelacion.error ? ` (${cancelacion.error})` : '' })} />
         )}
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-          La cancelación tiene ventana y, a veces, exige la aceptación del receptor. Con el motivo 01 el SAT pide el folio fiscal del CFDI que lo sustituye.
+        <p className="rv-timb__tenue">
+          {tr('timbrado.viajeId.timbrar.laCancelacionTieneVentana')}
         </p>
-        <FormaConAviso accion={cancelar} boton="Pedir la cancelación" columnas="md:grid-cols-2">
-          <Selector nombre="motivo" etiqueta="Motivo (SAT)" valorInicial="02"
-            opciones={(Object.keys(MOTIVOS_CANCELACION) as MotivoCancelacion[]).map((k) => ({ valor: k, texto: `${k} — ${MOTIVOS_CANCELACION[k]}` }))} />
-          <Campo nombre="folioSustitucion" etiqueta="Folio fiscal del CFDI que lo sustituye (solo motivo 01)" placeholder="UUID" />
+        <FormaConAviso accion={cancelar} boton={tr('timbrado.viajeId.timbrar.pedirLaCancelacion')} columnas="md:grid-cols-2">
+          <CampoSelect id="motivo" name="motivo" etiqueta={tr('timbrado.viajeId.timbrar.motivoSat')} defaultValue="02">
+            {(Object.keys(MOTIVOS_CANCELACION) as MotivoCancelacion[]).map((k) => (
+              <option key={k} value={k}>{`${k} — ${MOTIVOS_CANCELACION[k]}`}</option>
+            ))}
+          </CampoSelect>
+          <CampoTexto id="folioSustitucion" name="folioSustitucion" etiqueta={tr('timbrado.viajeId.timbrar.folioFiscalDelCfdi')} placeholder="UUID" />
         </FormaConAviso>
       </div>
-    </details>
+    </Disclosure>
   );
 }

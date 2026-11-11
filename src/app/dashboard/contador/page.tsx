@@ -1,3 +1,4 @@
+import { getT } from '@/lib/i18n/servidor';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../sufijo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -5,8 +6,12 @@ import '@/lib/likida/orquestador/fuentes_reales';
 import { leerTareasDeDinero, TOPE_TAREAS_DINERO } from '@/lib/likida/orquestador/tareas_de_dinero';
 import { TareasAbiertas } from '../viajes-en-vivo/vista';
 import { InicioContador } from './inicio-contador';
+import './contador.css';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Contador' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.contador') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +38,7 @@ export default async function PanelContadorPage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, tenantNombre, nombre, tenantExiste, rol } = await resolverTenantEfectivo('/dashboard/contador', sp);
   // El MISMO contrato de sufijo que el sidebar y que `/dashboard/page.tsx`:
@@ -63,10 +69,10 @@ export default async function PanelContadorPage({
       searchParams={sp}
     />
     {hayTareas && (
-      <main className="px-4 md:px-6 pb-6 space-y-2">
+      <div className="rv-cont__tareas">
         <TareasAbiertas tareas={tareas} errorLectura={tareasConError} accion={null} ocultos={{}} />
-        {hayMas && <p className="text-[12px]" role="status" style={{ color: 'var(--muted)' }}>Hay más de {TOPE_TAREAS_DINERO} tareas de dinero abiertas: se muestran las {TOPE_TAREAS_DINERO} más recientes.</p>}
-      </main>
+        {hayMas && <p className="rv-cont__linea" role="status">{tr('contador.page.hayMasDeTareas', { TOPE_TAREAS_DINERO, TOPE_TAREAS_DINERO2: TOPE_TAREAS_DINERO })}</p>}
+      </div>
     )}
     </>
   );

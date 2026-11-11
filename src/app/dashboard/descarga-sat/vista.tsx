@@ -1,6 +1,8 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
-import Link from 'next/link';
-import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d, ShieldCheck } from 'lucide-react';
+import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -15,12 +17,13 @@ import { VENTANA_MAX_DIAS } from '@/lib/likida/sat_descarga/ciclo';
 import { DIAS_AVISO_DEFECTO } from '@/lib/likida/sat_descarga/peaje_cierre';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import { sufijoTenant } from '../sufijo';
-import { TituloSeccion } from '../resumen-visual';
-import { EstadoVacio } from '../estados';
-import { FormaConAviso, Campo, Selector, type ResultadoAccion } from '../../admin/ui/forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { AvisoCompacto, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import {
+  AvisoCompacto, BotonEnlace, CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FormaConAviso, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  type ColumnaBase, type ResultadoAccion,
+} from '@/app/ui-v2/componentes';
+import './descarga-sat.css';
 
 /**
  * DESCARGA DEL SAT (0231) — la pantalla del contralor.
@@ -48,33 +51,33 @@ const t = (v: FormDataEntryValue | null): string => String(v ?? '').trim();
 
 /** Lo que la flota tiene que hacer POR SU CUENTA para que estos comprobantes
  *  lleguen solos. Verificado en las fuentes de cada proveedor. */
-const CHECKLIST: Array<{ que: string; porque: string; cae: boolean }> = [
+const checklist = (tr: Tr): Array<{ que: string; porque: string; cae: boolean }> => [
   {
-    que: 'Dar de alta tus datos fiscales con el emisor de tu monedero de combustible (Edenred/Ticket Car, Efectivale, Pluxee, Shell, Petro-7…).',
-    porque: 'Cuando pagas con monedero, la gasolinera NO te factura a ti (RMF 3.3.1.7): le factura al emisor. Tu comprobante deducible es el CFDI del EMISOR con complemento ECC, y ése sí llega solo al buzón — Likida lo concilia carga por carga.',
+    que: tr('descargaSat.vista.darDeAltaTus'),
+    porque: tr('descargaSat.vista.cuandoPagasConMonedero'),
     cae: true,
   },
   {
-    que: 'Dar de alta tus datos fiscales en TeleVía (alta única).',
-    porque: 'Con el alta hecha, TeleVía timbra un CFDI mensual por tus cruces y llega al buzón a partir del 5º día hábil. SIN el alta no recibes nada, aunque el TAG esté activo y cruzando.',
+    que: tr('descargaSat.vista.darDeAltaTus2'),
+    porque: tr('descargaSat.vista.conElAltaHecha'),
     cae: true,
   },
   {
-    que: 'Pedir a PASE el cambio a modalidad POSPAGO MENSUAL.',
-    porque: 'Solo en esa modalidad PASE timbra por periodo y el CFDI cae al buzón. En prepago se factura la RECARGA desde su portal, y en pospago por cruce hay que seleccionar los cruces a mano.',
+    que: tr('descargaSat.vista.pedirAPase'),
+    porque: tr('descargaSat.vista.soloEnEsaModalidad'),
     cae: true,
   },
   {
-    que: 'Facturar en el portal lo que no cae solo: PASE prepago, PASE pospago por cruce y, muy probablemente, IAVE/CAPUFE.',
-    porque: 'Y hay prisa: PASE extingue el derecho a facturar el ÚLTIMO DÍA DEL MES EN CURSO. Por eso Likida te avisa antes del cierre con la lista de cruces sin CFDI, en vez de enseñártelos a mes vencido cuando ya no se puede.',
+    que: tr('descargaSat.vista.facturarEnElPortal'),
+    porque: tr('descargaSat.vista.yHayPrisaPase'),
     cae: false,
   },
 ];
-
 export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
   searchParams: { vista?: string; tenant?: string; rol?: string };
   tenantExiste?: boolean;
 }) {
+  const { t: tr } = await getT('dinero');
   const { tenantId } = await resolverTenantEfectivo('/dashboard/descarga-sat', searchParams);
   const proveedor = estadoDescargaSat();
   const datos: VistaDescargaSat = tenantExiste
@@ -84,11 +87,12 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function guardar(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     // El rol del render NO es el de la acción: se re-gatea adentro, mismo
     // criterio que Políticas y el estímulo de peaje.
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
-      return { error: 'Tu rol no puede configurar la descarga del SAT.' };
+      return { error: tr('descargaSat.vista.tuRolNoPuede') };
     }
     // R7-A3: declarar OTRO RFC para el buzón del SAT (o el primero) exige segundo factor reciente. Se compara contra lo guardado ahora;
     // si no se pudo leer, se cierra. Pausar/reanudar o ajustar el aviso con el mismo RFC no lo pide.
@@ -109,14 +113,15 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
       return { error: mensajeParaPantalla(e, 'guardar la configuración de descarga') };
     }
     revalidatePath('/dashboard/descarga-sat');
-    return { ok: 'Configuración guardada. El siguiente barrido (cada 6 horas) la usa tal cual.' };
+    return { ok: tr('descargaSat.vista.configuracionGuardadaElSigui') };
   }
 
   async function verificar(): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
-      return { error: 'Tu rol no puede verificar la e.firma de la flota.' };
+      return { error: tr('descargaSat.vista.tuRolNoPuede2') };
     }
     try {
       const r = await verificarCredencial(s.tenantId, { id: s.userId });
@@ -131,9 +136,10 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   async function pedir(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza('/dashboard/descarga-sat', searchParams, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/descarga-sat')) {
-      return { error: 'Tu rol no puede pedir descargas al SAT.' };
+      return { error: tr('descargaSat.vista.tuRolNoPuede3') };
     }
     try {
       const r = await pedirRangoManual(s.tenantId, {
@@ -150,238 +156,172 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
 
   const cfg = datos.config;
   const c = datos.conteos;
+  type Solicitud = (typeof datos.solicitudes)[number];
+  const columnas: ColumnaBase<Solicitud>[] = [
+    { id: 'periodo', titulo: tr('descargaSat.vista.periodo'), principal: true, celda: (s) => `${fechaMx(s.desde)} → ${fechaMx(s.hasta)}` },
+    { id: 'buzon', titulo: tr('descargaSat.vista.buzon'), celda: (s) => s.tipo },
+    { id: 'estado', titulo: tr('descargaSat.vista.estado'), celda: (s) => <StatusChip tono="neutral">{s.estado}</StatusChip> },
+    // NULL = no se ha ingerido; 0 = se ingirió y no había nada.
+    { id: 'nuevos', titulo: tr('descargaSat.vista.cfdiNuevos'), alinear: 'der', celda: (s) => (s.cfdisNuevos === null ? <span className="rv-sat__tenue" title={tr('descargaSat.vista.todaviaNoSeHa')}>—</span> : s.cfdisNuevos) },
+    // El mensaje del proveedor TAL CUAL.
+    { id: 'sat', titulo: tr('descargaSat.vista.loQueDijoEl'), celda: (s) => <span className="rv-sat__tenue">{s.mensaje ?? ''}</span> },
+  ];
+  const sufijoBandeja = sufijoTenant(searchParams) ? `&${sufijoTenant(searchParams).slice(1)}` : '';
 
   return (
-    <MarcoPagina titulo="Descarga del SAT" apoyo="Los CFDI que tus proveedores ya timbraron a tu RFC, bajados del buzón del SAT y cruzados contra el ticket.">
+    <MarcoPagina titulo="SAT" apoyo={tr('descargaSat.vista.losCfdiQueTus')}>
       {/* ── 1. QUÉ FALTA Y QUIÉN LO DESTRABA. Antes que ninguna cifra. */}
-      <section className="card p-4">
-        <div className="flex items-start gap-2">
-          <ShieldCheck size={16} style={{ color: 'var(--marca)' }} aria-hidden className="mt-0.5 shrink-0" />
-          <div className="space-y-1.5">
-            <TituloRecuadro info="descarga_sat.intro">
-              Los comprobantes que el comercio ya te timbró, sin entrar a ningún portal
-            </TituloRecuadro>
-            <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>
-              Todo CFDI que un proveedor timbró a tu RFC ya está en tu buzón del SAT. Esto lo baja
-              en bloque y lo cruza contra los tickets que tus operadores mandaron por WhatsApp.
+      <Tarjeta titulo={tr('descargaSat.vista.losComprobantesQueEl')} info="descarga_sat.intro">
+        <div className="rv-sat__bloque">
+          <p className="rv-sat__texto">
+            {tr('descargaSat.vista.todoCfdiQueUn')}
+          </p>
+          {/* La pregunta que un contador hace antes de subir nada. */}
+          <p className="rv-sat__texto">
+            {rico(tr('descargaSat.vista.strongTuEFirma'), { strong: (c) => <strong>{c}</strong> })}
+          </p>
+          {!proveedor.configurado && <AvisoCompacto tono="warn" resumen={proveedor.motivo} />}
+          {proveedor.configurado && (
+            <p className="rv-sat__texto">
+              {tr('descargaSat.vista.proveedorConectadoNoHay', { v: proveedor.proveedor?.toUpperCase() ?? '' })}
             </p>
-            {/* La pregunta que un contador hace antes de subir nada. */}
-            <p className="text-[12px] m-0">
-              <strong>Tu e.firma no se guarda en Likida.</strong>{' '}
-              <span style={{ color: 'var(--muted)' }}>
-                Se carga en la bóveda del PAC —en el portal del PAC, igual que tu CSD del
-                timbrado— y desde aquí solo se mandan solicitudes con tu RFC. Likida no la
-                recibe, no la transporta y no la guarda: lo único que queda de ella aquí es su
-                número de referencia y su vigencia. El CSD del timbrado NO sirve para descargar:
-                el SAT exige la e.firma.
-              </span>
-            </p>
-            {!proveedor.configurado && <AvisoCompacto tono="warn" resumen={proveedor.motivo} />}
-            {proveedor.configurado && (
-              <p className="text-[12px] m-0 pt-1" style={{ color: 'var(--muted)' }}>
-                Proveedor conectado: {proveedor.proveedor?.toUpperCase()}. No hay ambiente de
-                pruebas para descarga masiva (ni el SAT ni el proveedor lo ofrecen): la primera
-                solicitud va contra tu buzón real.
-              </p>
-            )}
-          </div>
+          )}
         </div>
-      </section>
+      </Tarjeta>
 
       {datos.incompleta && (
-        <AvisoCompacto tono="warn" resumen="Faltan datos por cargar: esta pantalla está incompleta."
-          mas="Una o más lecturas no respondieron. Lo que ves puede no ser todo: reintenta antes de capturar encima." />
+        <AvisoCompacto tono="warn" resumen={tr('descargaSat.vista.faltanDatosPorCargar')}
+          mas={tr('descargaSat.vista.unaOMasLecturas')} />
       )}
 
-      {/* ── 2. EL ESTADO Y LAS CIFRAS ─────────────────────────────── */}
-      <section className="card p-3">
-        <TituloSeccion>Tu conexión</TituloSeccion>
+      {/* CINCO cubos, no cuatro: `descargados` se reparte ENTERO entre los otros cuatro (casado + ambiguo + disponible + ignorado son el dominio completo del CHECK de la 0231). Con cuatro tarjetas las cifras no sumaban el total de la primera. null ≠ 0: si la consulta se cayó, la tarjeta lo dice. */}
+      <TiraCifras sello={selloHoy(tr('descargaSat.vista.buzonDelSat'))}>
+        <Cifra icono={<Icono icono={CloudDownload} />}
+          etiqueta={tr('descargaSat.vista.cfdiBajadosDelBuzon')} info="descarga_sat.bajados" valor={c?.descargados ?? null}
+          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.foliosFiscalesUnicosEl')} />
+        <Cifra icono={<Icono icono={Link2} />}
+          etiqueta={tr('descargaSat.vista.casaronSolosConUn')} info="descarga_sat.casados" valor={c?.casados ?? null}
+          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.quedaronFacturadosSinQue')} />
+        <Cifra icono={<Icono icono={FileQuestion} />}
+          etiqueta={tr('descargaSat.vista.esperanQueTuDecidas')} info="descarga_sat.ambiguos" valor={c?.ambiguos ?? null}
+          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.variosGastosEmpatanLikida')} />
+        <Cifra icono={<Icono icono={FileCheck2} />}
+          etiqueta={tr('descargaSat.vista.sinGastoQueLes')} info="descarga_sat.disponibles" valor={c?.disponibles ?? null}
+          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.puedeSerUnGasto')} />
+        <Cifra icono={<Icono icono={Archive} />}
+          etiqueta={tr('descargaSat.vista.archivadosAProposito')} info="descarga_sat.ignorados" valor={c?.ignorados ?? null}
+          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.consolidadosQueYaEntraron')} />
+      </TiraCifras>
+
+      {/* ── LA PUERTA A LAS FILAS (0243): los cuatro cubos que SÍ son colas de trabajo llevan a su lista, filtrada — el conteo deja de ser una cifra huérfana. */}
+      <div className="rv-sat__filas">
+        <span className="rv-sat__tenue">{tr('descargaSat.vista.verLasFilas')}</span>
+        {([
+          ['ambiguo', tr('descargaSat.vista.losQueEsperanTu')],
+          ['disponible', tr('descargaSat.vista.losQueNingunGasto')],
+          ['casado', tr('descargaSat.vista.losQueYaCuadraron')],
+          ['ignorado', tr('descargaSat.vista.losArchivados')],
+        ] as const).map(([e, texto]) => (
+          <BotonEnlace key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}${sufijoBandeja}`} variante="secondary" tamano="sm"
+            icono={<Icono icono={Scale3d} />}>
+            {texto}
+          </BotonEnlace>
+        ))}
+      </div>
+
+      {/* ── 2. EL ESTADO ─────────────────────────────────────────── */}
+      <Tarjeta titulo={tr('descargaSat.vista.tuConexion')}>
         {cfg === null ? (
-          <div className="mt-2">
-            <EstadoVacio icono={<FileQuestion width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-              Todavía no has declarado de qué RFC se descarga el buzón. Decláralo abajo — sin eso
-              no se pide nada, y Likida jamás adivina un RFC.
-            </EstadoVacio>
-          </div>
+          <EstadoVacio titulo={tr('descargaSat.vista.buzonSinDeclarar')} icono={FileQuestion} contenido>
+            {tr('descargaSat.vista.todaviaNoHasDeclarado')}
+          </EstadoVacio>
         ) : (
-          <>
-            <p className="text-[12px] mt-2 mb-2" style={{ color: 'var(--muted)' }}>
-              RFC {cfg.rfc} · modo {cfg.modo === 'webservice'
-                ? 'web service (200,000 CFDI por petición, el SAT tarda hasta 6 días)'
-                : 'portal (2,000 documentos al día, ~48 h)'}
-              {' · '}{cfg.activa ? 'activa' : 'PAUSADA'}.
-              {' '}e.firma: {cfg.certificadoNumero
-                ? `cargada en la bóveda del proveedor (ref. ${cfg.certificadoNumero}${cfg.certificadoVenceEn ? `, vence el ${fechaMx(cfg.certificadoVenceEn)}` : ''})`
+          <div className="rv-sat__bloque">
+            <p className="rv-sat__texto">
+              RFC {cfg.rfc} {tr('descargaSat.vista.modo')} {cfg.modo === 'webservice'
+                ? tr('descargaSat.vista.webService2000002')
+                : tr('descargaSat.vista.portal2000Documentos')}
+              {' · '}{cfg.activa ? tr('descargaSat.vista.activa') : tr('descargaSat.vista.pausada')}.
+              {' '}{tr('descargaSat.vista.efirmaDosPuntos')} {cfg.certificadoNumero
+                ? tr('descargaSat.vista.cargadaEnLaBoveda', { certificadoNumero: cfg.certificadoNumero, v: cfg.certificadoVenceEn ? tr('descargaSat.vista.venceEl', { v: fechaMx(cfg.certificadoVenceEn) }) : '' })
                 : cfg.verificadaEn
-                  ? 'NO se encontró en la bóveda del proveedor — la sube tu contador en el portal del PAC'
-                  : 'sin verificar todavía'}.
-              {' '}Última descarga: {cfg.ultimaDescargaHasta
-                ? `hasta el ${fechaMx(cfg.ultimaDescargaHasta)}`
-                : 'ninguna todavía — la primera solicitud abre una ventana de 90 días hacia atrás'}.
+                  ? tr('descargaSat.vista.noSeEncontroEn')
+                  : tr('descargaSat.vista.sinVerificarTodavia')}.
+              {' '}{tr('descargaSat.vista.ultimaDescarga')} {cfg.ultimaDescargaHasta
+                ? tr('descargaSat.vista.hastaEl', { v: fechaMx(cfg.ultimaDescargaHasta) })
+                : tr('descargaSat.vista.ningunaTodaviaLaPrimera')}.
             </p>
-            <FormaConAviso accion={verificar} boton="Verificar mi e.firma con el proveedor" columnas="md:grid-cols-1">
-              <p className="text-[12px] m-0" style={{ color: 'var(--faint)' }}>
-                Pregunta al PAC si tu e.firma sigue en su bóveda y guarda solo su referencia y su
-                vigencia. No sube nada ni descarga nada.
+            <FormaConAviso accion={verificar} boton={tr('descargaSat.vista.verificarMiEFirma')} columnas="md:grid-cols-1">
+              <p className="rv-sat__tenue">
+                {tr('descargaSat.vista.preguntaAlPacSi')}
               </p>
             </FormaConAviso>
-          </>
+          </div>
         )}
-
-        {/* CINCO cubos, no cuatro: `descargados` se reparte ENTERO entre
-            los otros cuatro (casado + ambiguo + disponible + ignorado son
-            el dominio completo del CHECK de la 0231). Con cuatro tarjetas
-            las cifras no sumaban el total de la primera y el contralor no
-            tenía dónde averiguar a dónde se fue la diferencia. */}
-        {/* null ≠ 0: si la consulta se cayó, la tarjeta lo dice. */}
-        <TiraCifras className="mt-3" sello={selloHoy('Buzón del SAT')}>
-          <Cifra icono={<CloudDownload width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="CFDI bajados del buzón" info="descarga_sat.bajados" valor={c?.descargados ?? null}
-            mensaje="no se pudo leer" nota="Folios fiscales únicos: el mismo no entra dos veces" />
-          <Cifra icono={<Link2 width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Casaron solos con un gasto" info="descarga_sat.casados" valor={c?.casados ?? null}
-            mensaje="no se pudo leer" nota="Quedaron facturados sin que nadie entrara a un portal" />
-          <Cifra icono={<FileQuestion width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Esperan que tú decidas" info="descarga_sat.ambiguos" valor={c?.ambiguos ?? null}
-            mensaje="no se pudo leer" nota="Varios gastos empatan: Likida no adivina cuál es" />
-          <Cifra icono={<FileCheck2 width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Sin gasto que les corresponda" info="descarga_sat.disponibles" valor={c?.disponibles ?? null}
-            mensaje="no se pudo leer" nota="Puede ser un gasto que nadie reportó — eso también es hallazgo" />
-          <Cifra icono={<Archive width={15} height={15} strokeWidth={1.75} />}
-            etiqueta="Archivados a propósito" info="descarga_sat.ignorados" valor={c?.ignorados ?? null}
-            mensaje="no se pudo leer" nota="Consolidados que ya entraron por su propio camino — no se pierden, se archivan" />
-        </TiraCifras>
-
-        {/* ── LA PUERTA A LAS FILAS (0243) ─────────────────────────────
-            Hasta hoy estas cinco tarjetas eran el final del camino: la
-            tercera decía «Esperan que tú decidas» y no había dónde decidir.
-            Los cuatro cubos que SÍ son colas de trabajo llevan ahora a su
-            lista, filtrada — el conteo deja de ser una cifra huérfana. */}
-        <div className="mt-2.5 flex items-center gap-2 flex-wrap text-[12px]">
-          <span style={{ color: 'var(--muted)' }}>Ver las filas:</span>
-          {([
-            ['ambiguo', 'los que esperan tu decisión'],
-            ['disponible', 'los que ningún gasto reclama'],
-            ['casado', 'los que ya cuadraron'],
-            ['ignorado', 'los archivados'],
-          ] as const).map(([e, texto]) => (
-            <Link key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}${sufijoTenant(searchParams) ? `&${sufijoTenant(searchParams).slice(1)}` : ''}`}
-              className="inline-flex items-center gap-1.5 font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-              <Scale3d width={13} height={13} strokeWidth={1.75} /> {texto}
-            </Link>
-          ))}
-        </div>
-      </section>
+      </Tarjeta>
 
       {/* ── 3. DECLARAR LA CONEXIÓN ───────────────────────────────── */}
-      <section className="card p-3">
-        <TituloSeccion>Declara tu buzón</TituloSeccion>
-        <p className="text-[12px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
-          El RFC del que se descarga puede NO ser el mismo con el que emites: aquí va el de la
-          razón social que RECIBE las facturas. Cópialo de tu constancia.
+      <Tarjeta titulo={tr('descargaSat.vista.declaraTuBuzon')}>
+        <p className="rv-sat__texto">
+          {tr('descargaSat.vista.elRfcDelQue')}
         </p>
         <FormaConAviso accion={guardar} boton="Guardar" columnas="md:grid-cols-4">
-          <Campo nombre="rfc" etiqueta="RFC del buzón" valorInicial={cfg?.rfc ?? ''} placeholder="EKU9003173C9" requerido />
-          <Selector nombre="modo" etiqueta="Servicio del SAT" valorInicial={cfg?.modo ?? 'webservice'} opciones={[
-            { valor: 'webservice', texto: 'Web service — 200,000 CFDI, hasta 6 días' },
-            { valor: 'portal', texto: 'Portal — 2,000 al día, ~48 h' },
-          ]} />
-          <Campo nombre="peajeDiasAviso" etiqueta="Aviso de cierre de peaje (días antes)" tipo="number"
-            valorInicial={String(cfg?.peajeDiasAviso ?? DIAS_AVISO_DEFECTO)}
-            ayuda="De 1 a 25. El aviso del último día del mes sale siempre, además de éste." />
-          <Selector nombre="activa" etiqueta="Estado" valorInicial={cfg?.activa === false ? 'pausada' : 'activa'} opciones={[
-            { valor: 'activa', texto: 'Activa — se descarga sola cada 6 h' },
-            { valor: 'pausada', texto: 'Pausada — no se pide nada' },
-          ]} />
+          <CampoTexto id="rfc" name="rfc" etiqueta={tr('descargaSat.vista.rfcDelBuzon')} defaultValue={cfg?.rfc ?? ''} placeholder="EKU9003173C9" obligatorio />
+          <CampoSelect id="modo" name="modo" etiqueta={tr('descargaSat.vista.servicioDelSat')} defaultValue={cfg?.modo ?? 'webservice'}>
+            <option value="webservice">{tr('descargaSat.vista.webService200000')}</option>
+            <option value="portal">{tr('descargaSat.vista.portal2000Al')}</option>
+          </CampoSelect>
+          <CampoTexto id="peajeDiasAviso" name="peajeDiasAviso" tipo="number" etiqueta={tr('descargaSat.vista.avisoDeCierreDe')}
+            defaultValue={String(cfg?.peajeDiasAviso ?? DIAS_AVISO_DEFECTO)}
+            ayuda={tr('descargaSat.vista.de1A25')} />
+          <CampoSelect id="activa" name="activa" etiqueta={tr('descargaSat.vista.estado')} defaultValue={cfg?.activa === false ? 'pausada' : 'activa'}>
+            <option value="activa">{tr('descargaSat.vista.activaSeDescargaSola')}</option>
+            <option value="pausada">{tr('descargaSat.vista.pausadaNoSePide')}</option>
+          </CampoSelect>
         </FormaConAviso>
-      </section>
+      </Tarjeta>
 
       {/* ── 4. PEDIR UN RANGO A MANO ──────────────────────────────── */}
-      <section className="card p-3">
-        <TituloSeccion>Pedir un periodo a mano</TituloSeccion>
-        <p className="text-[12px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
-          Para un periodo viejo que el barrido automático no va a alcanzar pronto. Máximo{' '}
-          {VENTANA_MAX_DIAS} días por solicitud. El SAT tarda: la solicitud queda abierta y
-          Likida la revisa sola cada 6 horas. Cada solicitud consume el tope diario de tu RFC,
-          así que un rango que ya está en curso se rechaza en vez de pedirse dos veces.
+      <Tarjeta titulo={tr('descargaSat.vista.pedirUnPeriodoA')}>
+        <p className="rv-sat__texto">
+          {tr('descargaSat.vista.paraUnPeriodoViejo', { VENTANA_MAX_DIAS })}
         </p>
         <FormaConAviso accion={pedir} boton="Pedir al SAT" columnas="md:grid-cols-3">
-          <Campo nombre="desde" etiqueta="Desde" tipo="date" valorInicial={`${hoy.slice(0, 8)}01`} requerido />
-          <Campo nombre="hasta" etiqueta="Hasta" tipo="date" valorInicial={hoy} requerido />
-          <Selector nombre="tipo" etiqueta="Qué buzón" valorInicial="recibidos" opciones={[
-            { valor: 'recibidos', texto: 'Recibidos — lo que te timbraron (el que te sirve)' },
-            { valor: 'emitidos', texto: 'Emitidos — lo que tú facturaste' },
-          ]} />
+          <CampoFecha id="desde" name="desde" etiqueta={tr('descargaSat.vista.desde')} defaultValue={`${hoy.slice(0, 8)}01`} obligatorio />
+          <CampoFecha id="hasta" name="hasta" etiqueta={tr('descargaSat.vista.hasta')} defaultValue={hoy} obligatorio />
+          <CampoSelect id="tipo" name="tipo" etiqueta={tr('descargaSat.vista.queBuzon')} defaultValue="recibidos">
+            <option value="recibidos">{tr('descargaSat.vista.recibidosLoQueTe')}</option>
+            <option value="emitidos">{tr('descargaSat.vista.emitidosLoQueTu')}</option>
+          </CampoSelect>
         </FormaConAviso>
-      </section>
+      </Tarjeta>
 
       {/* ── 5. LAS SOLICITUDES ────────────────────────────────────── */}
       {datos.solicitudes.length > 0 && (
-        <section className="card p-3">
-          {/* FE-34: antes callaba la ventana — "Tus solicitudes" es
-              siempre "las 12 más recientes" (`TOPE_SOLICITUDES`), nunca
-              el historial completo. */}
-          <TituloSeccion>
-            Tus solicitudes
-            {datos.solicitudes.length >= TOPE_SOLICITUDES && (
-              <span className="font-normal" style={{ color: 'var(--faint)' }}> — las {TOPE_SOLICITUDES} más recientes</span>
-            )}
-          </TituloSeccion>
-          <div className="mt-2 overflow-x-auto">
-            <table aria-label="Descargas del SAT por periodo" className="w-full text-[12px]">
-              <thead>
-                <tr style={{ color: 'var(--muted)' }}>
-                  <th scope="col" className="text-left font-medium py-1">Periodo</th>
-                  <th scope="col" className="text-left font-medium py-1">Buzón</th>
-                  <th scope="col" className="text-left font-medium py-1">Estado</th>
-                  <th scope="col" className="text-right font-medium py-1">CFDI nuevos</th>
-                  <th scope="col" className="text-left font-medium py-1 pl-3">Lo que dijo el SAT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {datos.solicitudes.map((s) => (
-                  <tr key={s.id} className="align-top">
-                    <td className="py-1 whitespace-nowrap">{fechaMx(s.desde)} → {fechaMx(s.hasta)}</td>
-                    <td className="py-1">{s.tipo}</td>
-                    <td className="py-1">{s.estado}</td>
-                    {/* NULL = no se ha ingerido; 0 = se ingirió y no había nada. */}
-                    <td className="py-1 text-right tabular-nums">
-                      {s.cfdisNuevos === null
-                        ? <span style={{ color: 'var(--faint)' }} title="Todavía no se ha ingerido">—</span>
-                        : s.cfdisNuevos}
-                    </td>
-                    {/* El mensaje del proveedor TAL CUAL. */}
-                    <td className="py-1 pl-3" style={{ color: 'var(--muted)' }}>{s.mensaje ?? ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+        // FE-34: "Tus solicitudes" es siempre "las 12 más recientes" (`TOPE_SOLICITUDES`), nunca el historial completo.
+        <Tarjeta titulo={datos.solicitudes.length >= TOPE_SOLICITUDES ? tr('descargaSat.vista.tusSolicitudesLasMas', { TOPE_SOLICITUDES }) : tr('descargaSat.vista.tusSolicitudes')}>
+          <TablaBase<Solicitud> etiqueta={tr('descargaSat.vista.descargasDelSatPor')} columnas={columnas} filas={datos.solicitudes}
+            idFila={(s) => s.id} altoMaximo={false} tarjetaMovil />
+        </Tarjeta>
       )}
 
       {/* ── 6. EL CHECKLIST QUE NADIE MÁS TE VA A DECIR ───────────── */}
-      <section className="card p-3">
-        <TituloSeccion>Para que estos comprobantes lleguen solos, tu flota tiene que…</TituloSeccion>
-        <p className="text-[12px] mt-1 mb-2" style={{ color: 'var(--muted)' }}>
-          La descarga recoge lo que el comercio YA timbró a tu RFC. Si el comercio no sabe tu
-          RFC, o tu contrato no es del tipo que timbra por periodo, no hay nada que recoger —
-          aunque el TAG esté activo y cruzando todos los días.
+      <Tarjeta titulo={tr('descargaSat.vista.paraQueEstosComprobantes')}>
+        <p className="rv-sat__texto">
+          {tr('descargaSat.vista.laDescargaRecogeLo')}
         </p>
-        <ol className="mt-2 space-y-2 list-none p-0 m-0">
-          {CHECKLIST.map((p, i) => (
-            <li key={i} className="hairline rounded-lg p-2.5" style={{ background: 'var(--surface)' }}>
-              <p className="text-[13px] font-medium m-0">
-                <span style={{ color: p.cae ? 'var(--marca)' : 'var(--warn)' }}>
-                  {p.cae ? 'Cae solo · ' : 'NO cae solo · '}
-                </span>
+        <ol className="rv-sat__pasos">
+          {checklist(tr).map((p, i) => (
+            <li key={i} className="rv-sat__paso">
+              <p className="rv-sat__que">
+                <StatusChip tono={p.cae ? 'ok' : 'warn'}>{p.cae ? tr('descargaSat.vista.caeSolo') : tr('descargaSat.vista.noCaeSolo')}</StatusChip>{' '}
                 {p.que}
               </p>
-              <p className="text-[12px] mt-1 m-0" style={{ color: 'var(--muted)' }}>{p.porque}</p>
+              <p className="rv-sat__texto">{p.porque}</p>
             </li>
           ))}
         </ol>
-      </section>
+      </Tarjeta>
     </MarcoPagina>
   );
 }

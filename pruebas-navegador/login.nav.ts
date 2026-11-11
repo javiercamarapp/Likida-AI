@@ -20,7 +20,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { test, expect } from './apoyo/fixture';
-import { CORREOS, entrar, pedirEnlace, mensajesDe, enlaceDelCorreo } from './apoyo/sesion';
+import { CORREOS, MARCA_CONSOLA, entrar, pedirEnlace, mensajesDe, enlaceDelCorreo } from './apoyo/sesion';
 import { completarMfaSuperadmin, rechazarCodigoMfaInvalido } from './apoyo/mfa';
 
 test('sin sesión, /dashboard rebota a /login y conserva el destino', async ({ page }) => {
@@ -46,7 +46,7 @@ test('el superadmin debe verificar el segundo factor antes de abrir su consola',
   await completarMfaSuperadmin(page);
   await page.goto('/admin');
   await expect(page).toHaveURL(/\/admin$/);
-  await expect(page.locator('body')).toContainText('Consola de Likida');
+  await expect(page.locator('body')).toContainText(MARCA_CONSOLA);
 });
 
 test('un correo sin cuenta: misma pantalla, ningún correo (anti-oráculo)', async ({ page }) => {

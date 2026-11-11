@@ -12,7 +12,7 @@ export type EstadoTarjeta = 'ok' | 'vacio' | 'cargando' | 'error';
  *  los MISMOS estados en todo el producto: vacío (título + una línea + UNA acción), cargando (esqueleto con la forma real, o los datos
  *  previos atenuados con `aria-busy` si no se da uno) y error blando («No disponible ahora. No es cero» + Reintentar).
  *  Una tarjeta nunca se pinta con una sola cifra suelta ni con vacío interior. */
-export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detalle, accionVacio, iconoVacio, contenida, formulario, esqueleto, onReintentar, reintentar, children, className }: {
+export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detalle, accionVacio, iconoVacio, contenida, formulario, esqueleto, onReintentar, reintentar, elevar, entra, children, className }: {
   titulo: string;
   /** Clave del catálogo de explicaciones: pone la ⓘ junto al título. */
   info?: InfoClave;
@@ -37,11 +37,15 @@ export function Tarjeta({ titulo, info, acciones, estado = 'ok', mensaje, detall
   onReintentar?: () => void;
   /** Desde un componente de servidor: Reintentar vuelve a pedir los datos de la página. */
   reintentar?: boolean;
+  /** Rovaq `[data-lift]`: la tarjeta sube 1 px al pasar el puntero (solo con movimiento permitido). Para tarjetas del Resumen, no de formularios. */
+  elevar?: boolean;
+  /** Rovaq `[data-entra]`: entrada al montar (translateY, 180 ms). Solo con movimiento permitido. */
+  entra?: 'tarjeta' | 'seccion';
   children?: ReactNode;
   className?: string;
 }) {
   return (
-    <section className={cx('rv-tarjeta', className)} data-contenida={contenida || undefined} aria-busy={estado === 'cargando' || undefined} data-estado={estado}>
+    <section className={cx('rv-tarjeta', className)} data-contenida={contenida || undefined} data-lift={elevar || undefined} data-entra={entra} aria-busy={estado === 'cargando' || undefined} data-estado={estado}>
       <header className="rv-tarjeta__cab">
         <h2 className="rv-tarjeta__titulo">{titulo}</h2>
         {acciones ? <div className="rv-tarjeta__acciones">{acciones}</div> : null}

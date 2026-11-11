@@ -9,11 +9,16 @@ import { fileURLToPath } from 'node:url';
 // component con sesión y no se monta suelta.
 const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
 
+// Desde i18n P3 el texto visible vive en el diccionario es (`src/lib/i18n/es/dinero.ts`), no en la página.
+// La ruta la arma `import.meta.url`, no entrada de nadie.
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const DICCIONARIO = readFileSync(fileURLToPath(new URL('../../../lib/i18n/es/dinero.ts', import.meta.url)), 'utf8');
+
 describe('/dashboard/arco cita la ley vigente (M6)', () => {
   it('no queda ninguna referencia al art. 32 (ley abrogada)', () => {
-    expect(PAGINA).not.toMatch(/art\.?\s*32/i);
+    expect(PAGINA + DICCIONARIO.split('\n').filter((l) => l.includes("'arco.")).join('\n')).not.toMatch(/art\.?\s*32/i);
   });
   it('el texto visible funda los 20 días hábiles en el art. 31', () => {
-    expect(PAGINA).toContain('LFPDPPP art. 31: 20 días hábiles');
+    expect(DICCIONARIO).toContain('LFPDPPP art. 31: 20 días hábiles');
   });
 });

@@ -16,8 +16,12 @@ import { Bloque, EsqTabla } from '../bloque';
 import { SeccionNotificaciones } from '../agentes/seccion-notificaciones';
 import { PreguntaAlAsistente } from './pregunta';
 import { TareasAbiertas, VistaViajesEnVivo } from './vista';
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Viajes en vivo' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.viajes-en-vivo') };
+}
 
 export const dynamic = 'force-dynamic';
 

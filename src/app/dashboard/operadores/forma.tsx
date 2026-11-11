@@ -3,8 +3,10 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save, UserPlus } from 'lucide-react';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
+import { AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, CampoFecha, Disclosure, Icono, clasesBoton } from '@/app/ui-v2/componentes';
+import './operadores.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
@@ -30,201 +32,111 @@ export interface OperadorCrudo {
   terminalId?: string;
 }
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
-
-function Boton() {
+function BotonGuardar() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Save width={14} height={14} strokeWidth={1.75} />
-      {pending ? 'Guardando…' : 'Guardar'}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />}>
+      {pending ? t('op.f.guardando') : t('op.f.guardar')}
+    </Boton>
   );
 }
 
-/** El aviso del resultado — el UNICO del panel (`admin/ui/aviso-resultado`). El
- *  error sale VERBATIM: los `DatoInvalido` de `actualizarOperador` están escritos
+/** El aviso del resultado — el UNICO del panel. El error sale VERBATIM: los `DatoInvalido` de `actualizarOperador` están escritos
  *  para leerse aquí y son lo único que dice QUÉ corregir. */
 const Aviso = AvisoResultado;
 
 /** Un patio, como llega del servidor: solo id y nombre. */
 export interface PatioOpcion { id: string; nombre: string }
 
-/** Un bloque que se abre. `<details>` nativo y no `useState`: sin JavaScript
- *  sigue abriendo, y una pantalla con muchos operadores no arrastra un estado
- *  de React vivo por renglón para no enseñar nada (mismo patrón que
- *  `dashboard/clientes/forma.tsx`). */
+/** Un bloque que se abre. `<details>` nativo y no `useState`: sin JavaScript sigue abriendo (mismo patrón que `dashboard/clientes/forma.tsx`). */
 export function Plegable({ resumen, children }: { resumen: string; children: React.ReactNode }) {
   return (
-    <details className="group">
-      <summary className="cursor-pointer text-[12px] font-medium select-none list-none inline-flex items-center gap-1"
-        style={{ color: 'var(--marca)' }}>
-        {resumen}
-      </summary>
-      <div className="pt-3">{children}</div>
-    </details>
+    <Disclosure variante="linea" titulo={resumen}>{children}</Disclosure>
   );
 }
 
 /**
- * Corregir la licencia, su vigencia y el RFC de un operador ya dado de alta —
- * la pantalla que faltaba (auditoría 2): `operadores/vista.tsx` solo leía, y
- * un chofer con la licencia mal tecleada o sin RFC se quedaba así para
- * siempre. SOLO EDITA: el alta rápida sigue viviendo en Despacho.
+ * Corregir la licencia, su vigencia y el RFC de un operador ya dado de alta. SOLO EDITA: el alta rápida sigue viviendo en Despacho.
  *
- * El `operadorId` viaja en un campo oculto sin que eso sea un agujero: el
- * server action re-resuelve el tenant de la SESIÓN, no del formulario, y
- * `actualizarOperador` ancla el UPDATE con `.eq('tenant_id', ...)` y comprueba
- * cuántas filas tocó — el id de un operador de otra flota sale como error, no
- * como "guardado".
+ * El `operadorId` viaja en un campo oculto sin que eso sea un agujero: el server action re-resuelve el tenant de la SESIÓN, no del
+ * formulario, y `actualizarOperador` ancla el UPDATE con `.eq('tenant_id', ...)` y comprueba cuántas filas tocó.
  */
 export function FormaOperador({ accion, operadorId, inicial, idPrefijo, patios = [], patioFijo = false }: {
   accion: AccionForma;
   operadorId: string;
   inicial: OperadorCrudo;
-  /** Prefijo para los `id` del DOM: esta forma se repite por renglón y dos
-   *  `<label for="licencia">` en la misma página apuntan al primero. */
+  /** Prefijo para los `id` del DOM: dos `<label for="licencia">` en la misma página apuntan al primero. */
   idPrefijo: string;
-  /** Los patios de la flota (W2). Vacío = la flota no ha creado ninguno y el
-   *  selector no se pinta. */
+  /** Los patios de la flota (W2). Vacío = la flota no ha creado ninguno y el selector no se pinta. */
   patios?: PatioOpcion[];
-  /** Un jefe con patio no puede mover al operador a otro patio: el selector se
-   *  enseña bloqueado (el servidor lo vuelve a exigir). */
+  /** Un jefe con patio no puede mover al operador a otro patio: el selector se enseña bloqueado (el servidor lo vuelve a exigir). */
   patioFijo?: boolean;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
   return (
-    <form action={despachar} className="space-y-3">
+    <form action={despachar} className="rv-forma">
       <input type="hidden" name="operadorId" value={operadorId} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label htmlFor={campo('nombre')} className={ETIQUETA}>Nombre</label>
-          <input id={campo('nombre')} name="nombre" type="text" required minLength={3} maxLength={120}
-            defaultValue={inicial.nombre}
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
+      <div className="rv-forma__rejilla">
+        <CampoTexto id={campo('nombre')} name="nombre" etiqueta={t('op.f.nombre')} obligatorio minLength={3} maxLength={120} defaultValue={inicial.nombre} />
 
-        {/* ── EL TELÉFONO DE WHATSAPP (auditoría 24, FE-4) ─────────────────
-            Faltaba, y era el hueco más caro de esta pantalla: el teléfono es
-            la IDENTIDAD del chofer frente al bot, y un dígito mal tecleado en
-            el alta lo dejaba sin poder reportar un solo gasto — sin forma de
-            corregirlo salvo dando de baja al chofer y creándolo de nuevo, que
-            parte su historial en dos.
+        {/* El teléfono es la IDENTIDAD del chofer frente al bot: un dígito mal tecleado lo deja sin poder reportar un gasto. Se avisa de
+            las dos consecuencias porque ninguna se ve desde aquí: el número viejo deja de funcionar en el acto, y el nuevo tiene que
+            estar libre en la flota (`comprobarTelefonoLibre`). Un operador sin WhatsApp (desglose por correo, 0932) llega con el
+            teléfono vacío: no se le exige uno al corregir otro dato. */}
+        <CampoTexto id={campo('telefono')} name="telefono" tipo="tel" etiqueta={t('op.f.whatsapp')} obligatorio={inicial.telefono !== ''}
+          maxLength={25} defaultValue={inicial.telefono} placeholder="55 1234 5678"
+          ayuda={t('op.f.whatsapp.ayuda')} />
 
-            Se avisa de las dos consecuencias porque ninguna se ve desde aquí:
-            el número viejo deja de funcionar en el acto, y el nuevo tiene que
-            estar libre en la flota (`comprobarTelefonoLibre`). */}
-        <div>
-          <label htmlFor={campo('telefono')} className={ETIQUETA}>WhatsApp del operador</label>
-          {/* Un operador sin WhatsApp (desglose por correo, 0932) llega con el teléfono vacío: no se le exige uno al corregir otro dato. */}
-          <input id={campo('telefono')} name="telefono" type="tel" required={inicial.telefono !== ''} maxLength={25}
-            defaultValue={inicial.telefono} placeholder="55 1234 5678"
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-            Es con lo que el bot lo reconoce. Si lo cambias, el número anterior deja de funcionar de
-            inmediato y el chofer tiene que escribir desde el nuevo.
-          </p>
-        </div>
+        <CampoTexto id={campo('numeroEmpleado')} name="numeroEmpleado" etiqueta={t('op.f.empleado.opc')} maxLength={40} defaultValue={inicial.numeroEmpleado} />
 
-        <div>
-          <label htmlFor={campo('numeroEmpleado')} className={ETIQUETA}>Nº de empleado (opcional)</label>
-          <input id={campo('numeroEmpleado')} name="numeroEmpleado" type="text" maxLength={40}
-            defaultValue={inicial.numeroEmpleado}
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-        </div>
-
-        <div>
-          <label htmlFor={campo('rfc')} className={ETIQUETA}>RFC del operador (opcional)</label>
-          <input id={campo('rfc')} name="rfc" type="text" maxLength={13}
-            defaultValue={inicial.rfc} placeholder="GODE561231GR8"
-            className="w-full cifra-mono uppercase" style={{ background: 'var(--surface)' }} />
-          <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-            Sin él, un viático timbrado a su nombre se queda en revisar (RLISR 57) aunque el reglamento lo conceda.
-          </p>
-        </div>
+        <CampoTexto id={campo('rfc')} name="rfc" etiqueta={t('op.f.rfc')} maxLength={13} defaultValue={inicial.rfc}
+          placeholder="GODE561231GR8" claseControl="rv-eq__mayus"
+          ayuda={t('op.f.rfc.ayuda')} />
 
         {patios.length > 0 && (
-          <div>
-            <label htmlFor={campo('terminalId')} className={ETIQUETA}>Patio</label>
-            <select id={campo('terminalId')} name="terminalId" defaultValue={inicial.terminalId ?? ''} disabled={patioFijo}
-              className="w-full" style={{ background: 'var(--surface)' }}>
-              <option value="">Sin patio</option>
+          <>
+            <CampoSelect id={campo('terminalId')} name="terminalId" etiqueta={t('op.f.patio')} defaultValue={inicial.terminalId ?? ''} disabled={patioFijo}
+              ayuda={patioFijo ? t('op.f.patio.soloadmin') : t('op.f.patio.ayuda')}>
+              <option value="">{t('op.f.sinpatio')}</option>
               {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-            </select>
+            </CampoSelect>
             {patioFijo && <input type="hidden" name="terminalId" value={inicial.terminalId ?? ''} />}
-            <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-              {patioFijo ? 'Solo quien administra la flota mueve a un operador de patio.' : 'Con el patio, su jefe de tráfico lo ve y lo corrige.'}
-            </p>
-          </div>
+          </>
         )}
 
-        <div>
-          <label htmlFor={campo('licencia')} className={ETIQUETA}>Licencia (opcional)</label>
-          <input id={campo('licencia')} name="licencia" type="text" maxLength={40}
-            defaultValue={inicial.licencia}
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-        </div>
-
-        <div>
-          <label htmlFor={campo('licenciaTipo')} className={ETIQUETA}>Tipo (opcional)</label>
-          <input id={campo('licenciaTipo')} name="licenciaTipo" type="text" maxLength={10}
-            defaultValue={inicial.licenciaTipo} placeholder="B, C, E…"
-            className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-
-        <div>
-          <label htmlFor={campo('licenciaVence')} className={ETIQUETA}>Vence (opcional)</label>
-          <input id={campo('licenciaVence')} name="licenciaVence" type="date"
-            defaultValue={inicial.licenciaVence}
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-            Vacío = sin registrar, no vencida.
-          </p>
-        </div>
+        <CampoTexto id={campo('licencia')} name="licencia" etiqueta={t('op.f.licencia')} maxLength={40} defaultValue={inicial.licencia} />
+        <CampoTexto id={campo('licenciaTipo')} name="licenciaTipo" etiqueta={t('op.f.tipo')} maxLength={10} defaultValue={inicial.licenciaTipo} placeholder="B, C, E…" />
+        <CampoFecha id={campo('licenciaVence')} name="licenciaVence" etiqueta={t('op.f.vence')} defaultValue={inicial.licenciaVence} ayuda={t('op.f.vence.ayuda')} />
       </div>
 
-      {/* ── LA BAJA DEL CHOFER (auditoría 20, H2; W2) ─────────────────────────
-          Antes era un checkbox «Operador activo» que se desmarcaba y se guardaba:
-          un gesto que corta el acceso de una PERSONA al canal de la flota sin
-          decir cuántos efectos tiene. Ahora es un botón con su diálogo, que los
-          dice: el bot deja de atenderlo como operador de la flota, sale de los
-          buscadores de Despacho y su teléfono queda libre para otra flota. Su
-          historial de viajes y liquidaciones se conserva completo — no se borra
-          nada. Reactivar no necesita diálogo: devuelve, no corta. */}
+      {/* LA BAJA DEL CHOFER: un botón con su diálogo, que dice los efectos. Reactivar no necesita diálogo: devuelve, no corta. */}
       <Aviso estado={estado} />
-      <div className="flex flex-wrap items-center gap-2">
-        <Boton />
+      <div className="rv-forma__fila">
+        <BotonGuardar />
         {inicial.activo ? (
           <BotonConfirmar
-            etiqueta="Dar de baja" tono="peligro" nombreConfirmar="accion" valorConfirmar="baja"
-            titulo={`Dar de baja a ${inicial.nombre}`}
-            descripcion="Deja de recibir mensajes del bot como operador de tu flota, sale de los buscadores de Despacho y su teléfono queda libre para darlo de alta en otra flota. Su historial de viajes y liquidaciones se conserva completo: no se borra nada."
-            etiquetaConfirmar="Sí, dar de baja"
-            className="h-9 px-4 rounded-lg text-[13px] font-medium transition-colors hover:bg-[var(--badbg)]"
-            style={{ color: 'var(--bad)', border: '1px solid var(--line)' }}
+            etiqueta={t('op.f.baja')} tono="peligro" nombreConfirmar="accion" valorConfirmar="baja"
+            titulo={t('op.f.baja.titulo', { nombre: inicial.nombre })}
+            descripcion={t('op.f.baja.cuerpo')}
+            etiquetaConfirmar={t('op.f.baja.si')}
+            className={clasesBoton('danger')}
           />
         ) : (
-          <button type="submit" name="accion" value="reactivar"
-            className="rv-btn rv-btn--secondary">
-            Reactivar operador
-          </button>
+          <Boton type="submit" name="accion" value="reactivar" variante="secondary">{t('op.f.reactivar')}</Boton>
         )}
       </div>
     </form>
   );
 }
 
-
 /**
- * El alta de UN operador, en su propia pantalla (W2). La guía de arranque mandaba
- * a dar de alta al primer operador a esta pantalla y aquí solo se editaba: el
- * alta rápida vivía escondida en Despacho. Mismo `crearOperador` que Despacho y
- * que el importador: un teléfono que uno acepta, los otros también.
+ * El alta de UN operador, en su propia pantalla (W2). Mismo `crearOperador` que Despacho y que el importador: un teléfono que uno
+ * acepta, los otros también.
  */
 export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, sinWhatsApp = false }: {
   accion: AccionForma;
@@ -234,50 +146,32 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, si
   /** Un jefe con patio da de alta SOLO en el suyo (nombre del patio). */
   terminalFijo?: string | null;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
-    <form action={despachar} className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="alta-op-nombre" className={ETIQUETA}>Nombre</label>
-          <input id="alta-op-nombre" name="nombre" type="text" required minLength={3} maxLength={120}
-            autoComplete="off" className="w-full" style={{ background: 'var(--surface)' }} />
-        </div>
-        <div>
-          <label htmlFor="alta-op-telefono" className={ETIQUETA}>WhatsApp del operador{sinWhatsApp ? ' (opcional)' : ''}</label>
-          <input id="alta-op-telefono" name="telefono" type="tel" required={!sinWhatsApp} maxLength={25} autoComplete="off"
-            placeholder="55 1234 5678" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-          <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
-            {sinWhatsApp
-              ? 'Tu flota recibe el desglose por correo: sin WhatsApp, el operador necesita su nº de empleado y su correo.'
-              : 'Es con lo que el bot lo reconoce: desde este número tiene que escribirle a Likida.'}
-          </p>
-        </div>
-        <div>
-          <label htmlFor="alta-op-empleado" className={ETIQUETA}>Nº de empleado{sinWhatsApp ? '' : ' (opcional)'}</label>
-          <input id="alta-op-empleado" name="numeroEmpleado" type="text" maxLength={40}
-            className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
-        </div>
+    <form action={despachar} className="rv-forma">
+      <div className="rv-forma__rejilla">
+        <CampoTexto id="alta-op-nombre" name="nombre" etiqueta={t('op.f.nombre')} obligatorio minLength={3} maxLength={120} autoComplete="off" />
+        <CampoTexto id="alta-op-telefono" name="telefono" tipo="tel" etiqueta={sinWhatsApp ? t('op.f.wa.opc') : t('op.f.wa')}
+          obligatorio={!sinWhatsApp} maxLength={25} autoComplete="off" placeholder="55 1234 5678"
+          ayuda={sinWhatsApp
+            ? t('op.f.sinwa.ayuda')
+            : t('op.f.wa.ayuda')} />
+        <CampoTexto id="alta-op-empleado" name="numeroEmpleado" etiqueta={sinWhatsApp ? t('op.f.empleado') : t('op.f.empleado.opc')} maxLength={40} />
         {sinWhatsApp && (
-          <div>
-            <label htmlFor="alta-op-correo" className={ETIQUETA}>Correo del operador</label>
-            <input id="alta-op-correo" name="correo" type="email" maxLength={254} autoComplete="off"
-              className="w-full" style={{ background: 'var(--surface)' }} />
-          </div>
+          <CampoTexto id="alta-op-correo" name="correo" tipo="email" etiqueta={t('op.f.correo')} maxLength={254} autoComplete="off" />
         )}
-        {(patios.length > 0 || terminalFijo) && (
-          <div>
-            <label htmlFor="alta-op-patio" className={ETIQUETA}>Patio</label>
-            {terminalFijo ? (
-              <p id="alta-op-patio" className="flex h-9 items-center text-[13px]" style={{ color: 'var(--muted)' }}>{terminalFijo}</p>
-            ) : (
-              <select id="alta-op-patio" name="terminalId" defaultValue="" className="w-full" style={{ background: 'var(--surface)' }}>
-                <option value="">Sin patio</option>
-                {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </select>
-            )}
+        {terminalFijo ? (
+          <div className="rv-campo">
+            <span className="rv-campo__etq">{t('op.f.patio')}</span>
+            <p id="alta-op-patio" className="rv-eq__fijo">{terminalFijo}</p>
           </div>
-        )}
+        ) : patios.length > 0 ? (
+          <CampoSelect id="alta-op-patio" name="terminalId" etiqueta={t('op.f.patio')} defaultValue="">
+            <option value="">{t('op.f.sinpatio')}</option>
+            {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </CampoSelect>
+        ) : null}
       </div>
       <Aviso estado={estado} />
       <BotonAlta />
@@ -286,13 +180,11 @@ export function FormaAltaOperador({ accion, patios = [], terminalFijo = null, si
 }
 
 function BotonAlta() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <UserPlus width={14} height={14} strokeWidth={1.75} />
-      {pending ? 'Dando de alta…' : 'Dar de alta'}
-    </button>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={UserPlus} />} className="rv-eq__alta">
+      {pending ? t('op.f.dando') : t('op.f.alta')}
+    </Boton>
   );
 }

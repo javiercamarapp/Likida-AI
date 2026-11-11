@@ -39,7 +39,7 @@ export const ROTULOS_ROL: Record<string, RotuloRol> = {
     detalle: 'Ve el dinero y lo fiscal — facturación, cobranza, clientes y tarifas — y puede exportar. No despacha viajes.',
   },
   encargado: {
-    nombre: 'Encargado (jefe de tráfico)',
+    nombre: 'Jefe de tráfico',
     detalle: 'Despacha y da seguimiento: viajes, mapa y patios; da de alta, corrige y da de baja operadores, unidades y jornadas (solo los de su patio si tiene uno asignado). No ve un peso — ni tarifas, ni facturación, ni rentabilidad.',
   },
   nomina: {
@@ -51,11 +51,11 @@ export const ROTULOS_ROL: Record<string, RotuloRol> = {
     detalle: 'No entra a este panel: habla con el bot por WhatsApp.',
   },
   superadmin: {
-    nombre: 'Superadmin (Likida)',
+    nombre: 'Superadmin',
     detalle: 'Personal de Likida — no pertenece a la flota.',
   },
   vendedor: {
-    nombre: 'Vendedor (Likida)',
+    nombre: 'Vendedor',
     detalle: 'Personal de ventas de Likida — su panel es /vendedor, no este.',
   },
 };

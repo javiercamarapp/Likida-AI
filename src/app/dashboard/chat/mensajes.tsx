@@ -7,7 +7,7 @@ import MarcaLikida from './marca';
 import BloqueRespuesta from './bloques';
 import TarjetaAccion from './tarjeta-accion';
 import { TrazaFinal, TrazaViva, textoMs } from './traza';
-import { descargar, tablaACsv, textoParaCopiar, visualesDe } from './exportar';
+import { descargar, repartoACsv, serieACsv, tablaACsv, textoParaCopiar, visualesDe } from './exportar';
 import { useMovimientoReducido } from './movimiento';
 import type { PasoTraza, Respuesta } from './respuestas';
 import type { Turno } from './use-analista';
@@ -92,6 +92,7 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
 
   const visuales = visualesDe(r);
   const tablas = visuales.filter((v): v is Extract<typeof v, { tipo: 'tabla' }> => v.tipo === 'tabla');
+  const graficas = visuales.filter((v): v is Extract<typeof v, { tipo: 'serie' | 'dona' }> => v.tipo === 'serie' || v.tipo === 'dona');
   async function copiar() {
     try { await navigator.clipboard.writeText(textoParaCopiar(r)); setCopiado(true); } catch { setCopiado(false); }
   }
@@ -110,7 +111,7 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
       {terminado && acciones && r.accion && (r.archivada ? (
         // Una acción reabierta del historial NO trae botón: la previsualización vieja describe el estado de AQUEL día; ejecutarla hoy
         // firmaría sobre un efecto que ya no es verdad. Se pide de nuevo y el servidor la re-propone.
-        <section className="card rv-chat__bloque rv-accion" data-estado="archivada">
+        <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="archivada">
           <p className="rv-accion__linea">Propuesta archivada del historial (<span className="rv-accion__objetivo">{r.accion.objetivo}</span>). Para ejecutarla, pídela de nuevo — se re-propone con el estado de hoy.</p>
         </section>
       ) : (
@@ -137,6 +138,13 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
               aria-label={tablas.length > 1 ? `Descargar la tabla ${i + 1} como CSV` : 'Descargar la tabla como CSV'}
               onClick={() => setErrorArchivo(!descargar(`likida-respuesta-${i + 1}.csv`, tablaACsv(t.filas), 'text/csv;charset=utf-8'))}>
               <FileSpreadsheet aria-hidden="true" /><span>CSV</span>
+            </button>
+          ))}
+          {graficas.map((g, i) => (
+            <button key={`g${i}`} type="button" className="rv-btn rv-btn--secondary"
+              aria-label={graficas.length > 1 ? `Descargar los datos de la gráfica ${i + 1} como CSV` : 'Descargar los datos de la gráfica como CSV'}
+              onClick={() => setErrorArchivo(!descargar(`likida-grafica-${i + 1}.csv`, g.tipo === 'serie' ? serieACsv(g.puntos) : repartoACsv(g.segmentos), 'text/csv;charset=utf-8'))}>
+              <FileSpreadsheet aria-hidden="true" strokeWidth={1.75} /><span>Datos CSV</span>
             </button>
           ))}
           {ultimo && (r.origen === 'analista' || r.origen === 'copiloto') && (

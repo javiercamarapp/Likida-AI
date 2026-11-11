@@ -24,6 +24,7 @@ import { createLlmBudget } from '@/lib/llm/budget';
 import { clasificarFalloModelo } from '@/lib/llm/fallo_modelo';
 import { hashImagen } from '@/lib/likida/intake/hash';
 import { metadatosDeFoto } from '@/lib/likida/intake/calidad_foto';
+import { prevalidarFotoDeOperador } from '@/lib/likida/intake/prevalidacion_foto';
 import { subirComprobante } from '@/lib/likida/intake/almacen';
 import {
   mensajeGuardadoSinViaje, mensajeGuardadoTrasLiquidar, mensajeOfrecer,
@@ -2892,6 +2893,17 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
           return; // ya la teníamos: no re-OCR, no duplicar gasto
         }
 
+        // ── F19 · PREVALIDACIÓN DE LA FOTO, ANTES DE PAGAR EL OCR ─────────────
+        //
+        // Tipo, tamaño, luz, reflejo, nitidez y encuadre se miden sobre la foto YA descargada. Si no sirve, el operador la repite en el
+        // momento con el motivo y cómo tomarla (en vez de enterarse días después). Falla ABIERTO: ante un error interno, o pasado el
+        // tope diario de repeticiones, la foto sigue al OCR (con marca `fotoDudosa` en el segundo caso). Nunca se pierde.
+        const prevalidacion = await prevalidarFotoDeOperador(op.operadorId, dataUrl);
+        if (prevalidacion.accion === 'repetir') {
+          await say(prevalidacion.mensaje);
+          return;
+        }
+
         // LA FOTO SE GUARDA, y se arranca AQUÍ para que corra en paralelo con
         // la visión: esperarla después costaría segundos de pared que no hacen
         // falta, porque nadie la necesita hasta el `addGasto` de más abajo.
@@ -2925,6 +2937,9 @@ async function procesarTurno(msg: InboundMessage, reloj: Presupuesto, soltarClai
         // demo — decisión explícita de Javier, 1-ago-2026. Cada foto vuelve a
         // pagar su propia visión, como antes de la auditoría 8.
         const extraccion = await extraerComprobante(dataUrl, reloj.senal(25_000), createLlmBudget(op.tenantId, randomUUID(), 'interactivo'));
+        if (prevalidacion.marca) {
+          extraccion.gasto.ocrExtra = { ...(extraccion.gasto.ocrExtra ?? {}), fotoDudosa: prevalidacion.marca };
+        }
         const { gasto, costo } = extraccion;
         await registrarCosto({ tenantId: op.tenantId, viajeId, fase: 'ocr', modelo: costo.modelo, tokensIn: costo.tokensIn, tokensOut: costo.tokensOut, costoUsd: costo.costoUsd, duracionMs: costo.duracionMs });
 

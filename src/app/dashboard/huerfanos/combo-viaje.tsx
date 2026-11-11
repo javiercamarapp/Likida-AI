@@ -2,6 +2,9 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { OpcionViaje } from '@/lib/likida/repo_paginado';
+import './huerfanos.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-3 (auditoría 24) — el mismo remedio de `ComboCatalogo` (FE-2, 22-ago),
@@ -19,15 +22,15 @@ export type BuscarViaje = (q: string) => Promise<OpcionViaje[]>;
 const FRENO_MS = 200;
 
 export function ComboViaje({
-  name, buscar, requerido = false, className, estilo, 'aria-label': ariaLabel,
+  name, buscar, requerido = false, className, 'aria-label': ariaLabel,
 }: {
   name: string;
   buscar: BuscarViaje;
   requerido?: boolean;
   className?: string;
-  estilo?: React.CSSProperties;
   'aria-label'?: string;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const listaId = useId();
   const [texto, setTexto] = useState('');
   const [id, setId] = useState<string | null>(null);
@@ -56,7 +59,7 @@ export function ComboViaje({
   const sinResolver = texto.trim() !== '' && id === null;
 
   return (
-    <div className="flex-1 min-w-0">
+    <div className="rv-hf__combo">
       <input type="hidden" name={name} value={id ?? ''} />
       <input
         type="text"
@@ -68,19 +71,18 @@ export function ComboViaje({
         value={texto}
         required={requerido}
         autoComplete="off"
-        placeholder="Folio u operador…"
+        placeholder={t('hf.combo.ph')}
         onFocus={() => { if (opciones.length === 0) pedir(texto); }}
         onChange={(e) => alEscribir(e.target.value)}
         className={className}
-        style={estilo}
       />
       <datalist id={listaId}>
         {opciones.map((o) => <option key={o.id} value={o.etiqueta} />)}
       </datalist>
       {fallo ? (
-        <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>No se pudo buscar — vuelve a escribir en un momento.</p>
+        <p className="rv-hf__aviso" data-tono="bad" role="status">{t('hf.combo.error')}</p>
       ) : sinResolver ? (
-        <p className="text-[11px] mt-1" style={{ color: 'var(--warn)' }}>Elige uno de la lista: se guarda el viaje, no el texto.</p>
+        <p className="rv-hf__aviso" data-tono="warn" role="status">{t('hf.combo.elige')}</p>
       ) : null}
     </div>
   );

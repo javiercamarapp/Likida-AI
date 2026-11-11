@@ -1,0 +1,42 @@
+/* Facturas en automático · archivo propio de la pantalla. Solo tokens del sistema. */
+.rv-fact__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; }
+.rv-fact__grande { display: block; font-size: var(--t-kpi, 26px); font-weight: 600; color: var(--ink); }
+.rv-fact__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-fact__lista li { display: flex; justify-content: space-between; gap: 8px; font-size: var(--t-small, 12px); color: var(--muted); }
+.rv-fact__nota[data-tono="warn"] { color: var(--warn); }
+.rv-fact__nota[data-tono="bad"] { color: var(--bad); }
+.rv-fact__nota[data-tono="faint"] { color: var(--faint); }
+.rv-fact__tenue { color: var(--muted); }
+.rv-fact__sub { display: block; font-size: var(--t-micro, 11px); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-fact__rotulo { margin: 0 0 4px; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-fact__corta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.rv-fact__der { text-align: right; }
+.rv-fact__dos { display: grid; min-width: 0; }
+.rv-fact__dos strong { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-fact__cola { display: grid; gap: 4px; overflow-x: auto; }
+.rv-fact__item { border: 1px solid transparent; border-radius: 12px; }
+.rv-fact__item[data-abierta] { border-color: var(--line); background: var(--canvas); }
+.rv-fact__cab { display: grid; grid-template-columns: 64px minmax(0, 1.2fr) minmax(0, 1fr) auto auto auto 20px; align-items: center; gap: 12px; width: 100%; padding: 8px 10px; border-radius: 12px; text-align: left; font-size: var(--t-body, 13px); background: transparent; color: var(--ink); }
+.rv-fact__cab:hover { background: var(--canvas); }
+@media (max-width: 767px) { .rv-fact__cab { grid-template-columns: minmax(0, 1fr) auto; } .rv-fact__cab > .rv-fact__corta, .rv-fact__cab > .rv-fact__tenue { display: none; } }
+.rv-fact__mesa { display: grid; gap: 12px; padding: 4px 12px 12px; }
+.rv-fact__campos { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-fact__campo { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--t-small, 12px); }
+.rv-fact__valor { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.rv-fact__linea { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.rv-fact__linea .rv-campo { flex: 1; min-width: 220px; }
+.rv-fact__pila { display: grid; gap: 12px; }
+.rv-fact__tres { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); align-items: end; }
+.rv-btn[data-copiado] { color: var(--ok); }
+.rv-fact__enlace { font-size: var(--t-small, 12px); font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; display: inline-flex; align-items: center; gap: 4px; }
+.rv-fact__reglones { list-style: none; margin: 0; padding: 0; display: grid; }
+.rv-fact__reglon { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 0; }
+.rv-fact__reglones > li + li { border-top: 1px solid var(--line); }
+.rv-fact__portal { display: grid; gap: 6px; padding: 6px 0; }
+.rv-fact__portal .rv-fact__reglon { padding: 0; align-items: flex-start; }
+.rv-fact__nota[data-tono="ok"] { color: var(--ok); }
+.rv-fact__relogin { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.rv-fact__relogin > .rv-fact__pila { flex: 1; min-width: 0; gap: 6px; }
+.rv-fact__titulo { margin: 0; font-size: var(--t-small, 12px); font-weight: 600; color: var(--ink); }
+.rv-fact__pasos { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--t-small, 12px); color: var(--muted); }
+.rv-fact__codigo { padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-small, 12px); overflow-wrap: anywhere; }

@@ -31,6 +31,7 @@ const dobles = vi.hoisted(() => ({
   modoFacturapi: vi.fn(),
   revalidatePath: vi.fn(),
   hoyMx: vi.fn(),
+  listarSuscripciones: vi.fn(),
 }));
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
@@ -40,7 +41,9 @@ vi.mock('@/lib/saas/suscripcion', async (importar) => ({
   ...(await importar<typeof import('@/lib/saas/suscripcion')>()),
   getPlanes: dobles.getPlanes,
   guardarPriceDePlan: dobles.guardarPriceDePlan,
+  listarSuscripcionesVivas: dobles.listarSuscripciones,
 }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock('@/lib/saas/stripe', () => ({
   stripeConfigurado: dobles.stripeConfigurado, modoStripe: dobles.modoStripe, webhookConfigurado: dobles.webhookConfigurado,
 }));
@@ -60,6 +63,7 @@ vi.mock('@/lib/formato', async (importar) => ({
 
 import { FormaConAviso, type AccionDeForma } from '../ui/forma';
 import { FormaEmitirMensualidad } from './forma-emitir';
+import { accionGestionarPlan } from '../flotas/acciones-plan';
 import CostosFacturacionPage from './page';
 
 type AccionEmitir = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string }>;
@@ -105,11 +109,12 @@ beforeEach(() => {
   dobles.datosBancarios.mockReturnValue(null);
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [], total: 0 });
   dobles.hoyMx.mockReturnValue('2026-03-15');
+  dobles.listarSuscripciones.mockResolvedValue([]);
 });
 
 it('accionPrecio: no-superadmin — requireSuperadmin ya redirige (guard.test.ts la prueba); confirmamos que se invoca antes de tocar Stripe', async () => {
   dobles.getPlanes.mockResolvedValue([{ clave: 'pro', nombre: 'Pro', precioMensual: null, precioIvaIncluido: null, stripePriceId: null }]);
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionDelBoton(pagina, /Guardar price/);
   // La página ya pasó su propia puerta (A39-S05-01); ahora es la ACCIÓN la que rebota al no-superadmin.
   dobles.requireSuperadmin.mockRejectedValueOnce(new Error('REDIRECT:/dashboard'));
@@ -120,7 +125,7 @@ it('accionPrecio: no-superadmin — requireSuperadmin ya redirige (guard.test.ts
 it('accionPrecio: lee el monto/IVA de Stripe (no se teclea) y avisa si tax_behavior es unspecified', async () => {
   dobles.getPlanes.mockResolvedValue([{ clave: 'pro', nombre: 'Pro', precioMensual: null, precioIvaIncluido: null, stripePriceId: null }]);
   dobles.guardarPriceDePlan.mockResolvedValue({ montoMensual: 2400, moneda: 'MXN', ivaIncluido: null });
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionDelBoton(pagina, /Guardar price/);
   const r = await accion(null, fd({ plan: 'pro', price: 'price_1abc' }));
   expect(dobles.guardarPriceDePlan).toHaveBeenCalledWith('pro', 'price_1abc');
@@ -130,14 +135,14 @@ it('accionPrecio: lee el monto/IVA de Stripe (no se teclea) y avisa si tax_behav
 it('accionPrecio: con IVA declarado, dice que ya se puede contratar', async () => {
   dobles.getPlanes.mockResolvedValue([{ clave: 'pro', nombre: 'Pro', precioMensual: null, precioIvaIncluido: null, stripePriceId: null }]);
   dobles.guardarPriceDePlan.mockResolvedValue({ montoMensual: 2400, moneda: 'MXN', ivaIncluido: true });
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionDelBoton(pagina, /Guardar price/);
   const r = await accion(null, fd({ plan: 'pro', price: 'price_1abc' }));
   expect(r).toEqual(expect.objectContaining({ ok: expect.stringContaining('Ya se puede contratar') }));
 });
 
 it('accionEmitir: sin flota elegida, error explícito y NO llama emitirMensualidad', async () => {
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionEmitirDeLaPagina(pagina).props.accion as AccionEmitir;
   const r = await accion(null, fd({ tenantId: '' }));
   expect(r).toEqual({ error: 'Elige una flota.' });
@@ -147,7 +152,7 @@ it('accionEmitir: sin flota elegida, error explícito y NO llama emitirMensualid
 it('accionEmitir: el periodo es el MES EN CURSO en hora de México, no UTC (regresión DAT-23: 31-dic 18:01 MX ya era 1-ene en UTC)', async () => {
   dobles.hoyMx.mockReturnValue('2026-12-31'); // 31 de diciembre en México
   dobles.emitirMensualidad.mockResolvedValue({ monto: 2784, subtotal: 2400, iva: 384, referencia: 'REF-1' });
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionEmitirDeLaPagina(pagina).props.accion as AccionEmitir;
   await accion(null, fd({ tenantId: 'tn-1' }));
   // Debe emitir DICIEMBRE (2026-12-01 al 2026-12-31), nunca enero.
@@ -156,7 +161,7 @@ it('accionEmitir: el periodo es el MES EN CURSO en hora de México, no UTC (regr
 
 it('accionEmitir: dice las TRES cifras (total, base, IVA) y la referencia — verlas juntas es lo que deja cachar un IVA mal puesto', async () => {
   dobles.emitirMensualidad.mockResolvedValue({ monto: 2784, subtotal: 2400, iva: 384, referencia: 'REF-1' });
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionEmitirDeLaPagina(pagina).props.accion as AccionEmitir;
   const r = await accion(null, fd({ tenantId: 'tn-1' }));
   expect(r.ok).toContain('REF-1');
@@ -177,7 +182,7 @@ it('accionEmitir: dice las TRES cifras (total, base, IVA) y la referencia — ve
 // ═══════════════════════════════════════════════════════════════════════════
 
 it('INTEGRACIÓN — "Emitir" de la página real es FormaEmitirMensualidad (confirmación), NUNCA FormaConAviso (un solo clic)', async () => {
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   expect(buscarElementos(pagina, FormaEmitirMensualidad)).toHaveLength(1);
   // Si alguien revirtiera el arreglo reintroduciendo el de un clic, ningún
   // FormaConAviso con botón "Emitir" debe volver a existir.
@@ -186,7 +191,7 @@ it('INTEGRACIÓN — "Emitir" de la página real es FormaEmitirMensualidad (conf
 
 it('INTEGRACIÓN — el botón "Emitir" abre el diálogo de confirmación en vez de ejecutar directo, con el periodo REAL y las flotas reales', async () => {
   dobles.hoyMx.mockReturnValue('2026-10-15');
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const forma = accionEmitirDeLaPagina(pagina);
   expect(forma.props.periodoIni).toBe('2026-10-01');
   expect(forma.props.periodoFin).toBe('2026-10-31');
@@ -211,7 +216,7 @@ it('INTEGRACIÓN — el botón "Emitir" abre el diálogo de confirmación en vez
 
 it('INTEGRACIÓN — confirmar en el diálogo (el type="submit" real) SÍ emite la mensualidad', async () => {
   dobles.emitirMensualidad.mockResolvedValue({ monto: 2784, subtotal: 2400, iva: 384, referencia: 'REF-1' });
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const forma = accionEmitirDeLaPagina(pagina);
   const accion = forma.props.accion as AccionEmitir;
 
@@ -237,7 +242,7 @@ it('accionConciliar: manda el userId de la SESIÓN al conciliar, y timbra DESPU�
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }], total: 1 });
   dobles.conciliar.mockResolvedValue(undefined);
   dobles.timbrarFactura.mockResolvedValue({ uuid: 'uuid-real-12345678' });
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionDelBoton(pagina, /Marcar pagada/);
   const r = await accion(null, fd({ facturaId: 'f-1', referenciaBanco: 'MOV-999' }));
   expect(dobles.conciliar).toHaveBeenCalledWith('f-1', 'MOV-999', 'u-1');
@@ -248,7 +253,7 @@ it('accionConciliar: un PAC caído NO deshace el pago ya registrado — se dice 
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }], total: 1 });
   dobles.conciliar.mockResolvedValue(undefined);
   dobles.timbrarFactura.mockRejectedValue(new Error('PAC caído'));
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionDelBoton(pagina, /Marcar pagada/);
   const r = await accion(null, fd({ facturaId: 'f-1', referenciaBanco: 'MOV-999' }));
   expect(r.ok).toContain('Factura marcada como pagada');
@@ -259,7 +264,7 @@ it('A37-L-03: un timbrado AMBIGUO (el PAC no contestó) NO dice «NO se timbró�
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [{ id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 }], total: 1 });
   dobles.conciliar.mockResolvedValue(undefined);
   dobles.timbrarFactura.mockRejectedValue(Object.assign(new DatoInvalido('El PAC no contestó y NO se sabe si el CFDI se creó. Busca en el panel de Facturapi la referencia R'), { ambiguo: true }));
-  const pagina = await CostosFacturacionPage();
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
   const accion = accionDelBoton(pagina, /Marcar pagada/);
   const r = await accion(null, fd({ facturaId: 'f-1', referenciaBanco: 'MOV-999' }));
   expect(r.ok).toContain('Factura marcada como pagada');
@@ -269,7 +274,7 @@ it('A37-L-03: un timbrado AMBIGUO (el PAC no contestó) NO dice «NO se timbró�
 
 it('un "por cobrar" caído se DICE — nunca se confunde con "nada pendiente"', async () => {
   dobles.getPorCobrarTodas.mockRejectedValueOnce(new Error('caída'));
-  const html = renderToStaticMarkup(await CostosFacturacionPage());
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }));
   expect(html).toContain('No se pudo leer lo que está por cobrarse');
   expect(html).not.toContain('Nada pendiente de cobro');
 });
@@ -278,8 +283,94 @@ it('un "por cobrar" caído se DICE — nunca se confunde con "nada pendiente"', 
 it('A37-S06-07 — si hay más facturas por cobrar que las mostradas, la tabla DICE que está recortada', async () => {
   const f = { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R', monto: 2784, subtotal: 2400, iva: 384 };
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [f], total: 1200 });
-  const html = renderToStaticMarkup(await CostosFacturacionPage());
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }));
   expect(html).toContain('Se muestran 1 de 1200 facturas por cobrar');
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [f], total: 1 });
-  expect(renderToStaticMarkup(await CostosFacturacionPage())).not.toContain('recortada');
+  expect(renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }))).not.toContain('recortada');
+});
+
+// ── Planes y cobro: el plan de cada flota, las cifras y los estados (Fase 3) ───────────────────────────────────────────────
+
+const DOS_FLOTAS = { ...RESUMEN, flotas: [{ id: 'tn-1', nombre: 'ACME' }, { id: 'tn-2', nombre: 'Beta' }] };
+
+const SUSCRIPCION = (extra: Record<string, unknown> = {}) => ({
+  id: 's-1', tenantId: 'tn-1', planClave: 'flota', planNombre: 'Flota', estado: 'activa', inicio: '2026-01-01', periodoFin: null,
+  stripeCustomerId: null, stripeSubscriptionId: null, vencida: false, ...extra,
+});
+
+it('cada flota dice su plan y estado, y la que no tiene suscripción dice «Sin plan asignado» (no un guion mudo)', async () => {
+  dobles.getResumenNegocio.mockResolvedValue(DOS_FLOTAS);
+  dobles.listarSuscripciones.mockResolvedValue([SUSCRIPCION({ estado: 'morosa' })]);
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('Morosa');
+  expect(html).toContain('Sin plan asignado');
+  expect(html).toContain('Flotas con plan asignado');
+  expect(html).toContain('1 de 2');
+});
+
+it('si las suscripciones no se pudieron leer, NO se afirma que ninguna flota tenga plan', async () => {
+  dobles.listarSuscripciones.mockRejectedValue(new Error('caída'));
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('No se pudo leer el plan de las flotas');
+  expect(html).not.toContain('Sin plan asignado</span>');
+});
+
+it('el filtro por estado deja solo las flotas de ese estado', async () => {
+  dobles.getResumenNegocio.mockResolvedValue(DOS_FLOTAS);
+  dobles.listarSuscripciones.mockResolvedValue([SUSCRIPCION({ estado: 'morosa' })]);
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({ estado: 'morosa' }) }));
+  expect(html).toContain('data-label="Flota">ACME');
+  expect(html).not.toContain('data-label="Flota">Beta');
+});
+
+it('asignar, activar/pausar y cancelar el plan usan la acción de servidor de las flotas (con su puerta, su bitácora y su paso extra)', async () => {
+  dobles.getPlanes.mockResolvedValue([{ clave: 'flota', nombre: 'Flota', precioMensual: 17500, precioIvaIncluido: false, stripePriceId: 'price_1' }]);
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
+  for (const boton of [/Asignar o cambiar plan/, /^Aplicar$/, /Cancelar suscripción/]) {
+    const forma = buscarElementos(pagina, FormaConAviso).find((f) => boton.test(String(f.props.boton)));
+    expect(forma, String(boton)).toBeDefined();
+    expect(forma!.props.accion).toBe(accionGestionarPlan);
+  }
+});
+
+it('cancelar una suscripción pide confirmación que dice el alcance', async () => {
+  const pagina = await CostosFacturacionPage({ searchParams: Promise.resolve({}) });
+  const forma = buscarElementos(pagina, FormaConAviso).find((f) => /Cancelar suscripción/.test(String(f.props.boton)));
+  const confirmar = forma!.props.confirmar as { descripcion: string };
+  expect(confirmar.descripcion).toMatch(/plan de demostración/);
+  expect(confirmar.descripcion).toMatch(/No se borra su historial de cobro/);
+});
+
+it('la cifra «Por cobrar» suma lo pendiente; con la lista recortada NO suma un total parcial', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [
+    { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R1', monto: 1000, subtotal: 862.07, iva: 137.93, estado: 'pendiente' },
+    { id: 'f-2', tenantNombre: 'Beta', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R2', monto: 500, subtotal: 431.03, iva: 68.97, estado: 'fallida' },
+  ], total: 2 });
+  expect(renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }))).toContain('$1,500.00');
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [
+    { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R1', monto: 1000, subtotal: null, iva: null, estado: 'pendiente' },
+  ], total: 40 });
+  const recortada = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }));
+  expect(recortada).toContain('no se suma un total parcial');
+  expect(recortada).not.toContain('$1,000.00</div>');
+});
+
+it('una factura sin desglose lo dice en su fila: no se puede timbrar', async () => {
+  dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [
+    { id: 'f-1', tenantNombre: 'ACME', periodoInicio: '2026-01-01', periodoFin: '2026-01-31', referencia: 'R1', monto: 1000, subtotal: null, iva: null, estado: 'pendiente' },
+  ], total: 1 });
+  expect(renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }))).toContain('sin desglose: no se puede timbrar');
+});
+
+it('sin cuenta bancaria configurada se avisa arriba, sin nombrar variables de entorno', async () => {
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('Sin cuenta de cobro configurada');
+  expect(html).not.toMatch(/LIKIDA_CLABE|STRIPE_SECRET_KEY/);
+});
+
+it('si la lista de flotas no se pudo leer, no se ofrece emitir a ciegas y se dice', async () => {
+  dobles.getResumenNegocio.mockRejectedValue(new Error('caída'));
+  const html = renderToStaticMarkup(await CostosFacturacionPage({ searchParams: Promise.resolve({}) }));
+  expect(html).toContain('No se pudo leer la lista de flotas');
+  expect(html).not.toContain('Sin flotas dadas de alta');
 });

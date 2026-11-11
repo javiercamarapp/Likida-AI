@@ -1,4 +1,7 @@
-import { StatusPill } from '../../admin/ui/kit';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { CamposSistema, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Bullet } from '@/app/ui-v2/graficas';
+import './suscripcion.css';
 import { mxn } from '@/lib/utils';
 import type { Plan } from '@/lib/saas/suscripcion';
 import { etiquetaIva } from '@/lib/saas/iva';
@@ -20,22 +23,18 @@ import { etiquetaIva } from '@/lib/saas/iva';
  * `null` es SIN LÍMITE y se dice con palabras. Pintarlo como una barra al 0%
  * haría ver un plan ilimitado como uno vacío.
  */
-export function Uso({ etiqueta, usado, limite }: { etiqueta: string; usado: number; limite: number | null }) {
-  const pct = limite === null ? null : Math.min(100, Math.round((usado / limite) * 100));
+export function Uso({ etiqueta, usado, limite, tr = trEs }: { etiqueta: string; usado: number; limite: number | null; tr?: Tr }) {
   return (
-    <div className="card p-4">
-      <div className="text-lg font-semibold tabular">
+    <div className="rv-sus__uso">
+      <div className="rv-sus__uso-cifra">
         {usado}
-        {limite !== null && <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}> / {limite}</span>}
+        {limite !== null && <span className="rv-sus__tenue"> / {limite}</span>}
       </div>
-      <div className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
-      {pct === null ? (
-        <div className="text-xs mt-2" style={{ color: 'var(--muted)' }}>Sin límite en este plan</div>
+      <div className="rv-sus__tenue">{etiqueta}</div>
+      {limite === null ? (
+        <div className="rv-sus__tenue">{tr('suscripcion.vista.sinLimiteEnEste')}</div>
       ) : (
-        <div className="h-1.5 rounded-full overflow-hidden mt-2" style={{ background: 'var(--canvas)' }}>
-          <div className="h-full rounded-full"
-            style={{ width: `${pct}%`, background: pct >= 100 ? 'var(--bad)' : 'var(--marca)' }} />
-        </div>
+        <Bullet etiqueta={etiqueta} valor={usado} maximo={Math.max(limite, usado)} meta={limite} />
       )}
     </div>
   );
@@ -61,35 +60,31 @@ export function Uso({ etiqueta, usado, limite }: { etiqueta: string; usado: numb
  * `children` para que el preview pueda pintar la tarjeta sin uno.
  */
 export function TarjetaPlan({
-  plan, esActual, children,
+  plan, esActual, children, tr = trEs,
 }: {
   plan: Plan;
   esActual: boolean;
-  children?: React.ReactNode;
+  children?: React.ReactNode; tr?: Tr;
 }) {
   return (
-    <div className="card p-4 flex flex-col gap-2">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-medium">{plan.nombre}</span>
-        {esActual && <StatusPill estado="ok">Tu plan</StatusPill>}
+    <Tarjeta titulo={plan.nombre} acciones={esActual ? <StatusChip tono="ok">{tr('suscripcion.vista.tuPlan')}</StatusChip> : undefined}>
+      <div className="rv-sus__plan">
+        <div className="rv-sus__precio">
+          {plan.precioMensual === null
+            ? <span className="rv-sus__tenue">{tr('suscripcion.vista.sinPrecioConfigurado')}</span>
+            : <>{mxn(plan.precioMensual)}<span className="rv-sus__tenue"> {tr('suscripcion.vista.alMes')} {etiquetaIva(plan.precioIvaIncluido)}</span></>}
+        </div>
+        <ul className="rv-sus__limites">
+          <li>{plan.limiteViajesMes === null ? tr('suscripcion.vista.viajesSinLimite') : tr('suscripcion.vista.hastaViajesAlMes', { limiteViajesMes: plan.limiteViajesMes })}</li>
+          <li>{plan.limiteOperadores === null ? tr('suscripcion.vista.operadoresSinLimite') : tr('suscripcion.vista.hastaOperadores', { limiteOperadores: plan.limiteOperadores })}</li>
+        </ul>
+        {!plan.stripePriceId ? (
+          <p className="rv-sus__tenue">{tr('suscripcion.vista.todaviaNoSePuede')}</p>
+        ) : (
+          <div>{children}</div>
+        )}
       </div>
-      <div className="text-2xl font-semibold tabular">
-        {plan.precioMensual === null
-          ? <span className="text-sm font-normal" style={{ color: 'var(--muted)' }}>Sin precio configurado</span>
-          : <>{mxn(plan.precioMensual)}<span className="text-xs font-normal" style={{ color: 'var(--muted)' }}> /mes {etiquetaIva(plan.precioIvaIncluido)}</span></>}
-      </div>
-      <ul className="text-xs list-none p-0 m-0 flex flex-col gap-1" style={{ color: 'var(--muted)' }}>
-        <li>{plan.limiteViajesMes === null ? 'Viajes sin límite' : `Hasta ${plan.limiteViajesMes} viajes al mes`}</li>
-        <li>{plan.limiteOperadores === null ? 'Operadores sin límite' : `Hasta ${plan.limiteOperadores} operadores`}</li>
-      </ul>
-      {!plan.stripePriceId ? (
-        <p className="text-xs mt-auto pt-2" style={{ color: 'var(--muted)' }}>
-          Todavía no se puede contratar en línea.
-        </p>
-      ) : (
-        <div className="mt-auto pt-2">{children}</div>
-      )}
-    </div>
+    </Tarjeta>
   );
 }
 
@@ -106,7 +101,7 @@ export function TarjetaPlan({
  * que no puede pasar es que viva en el código de un repo público.
  */
 export function InstruccionesTransferencia({
-  beneficiario, banco, clabe, monto, subtotal, iva, moneda, referencia,
+  beneficiario, banco, clabe, monto, subtotal, iva, moneda, referencia, tr = trEs,
 }: {
   beneficiario: string;
   banco: string;
@@ -117,7 +112,7 @@ export function InstruccionesTransferencia({
   subtotal?: number | null;
   iva?: number | null;
   moneda: string;
-  referencia: string;
+  referencia: string; tr?: Tr;
 }) {
   const filas: Array<[string, string, boolean?]> = [
     ['Beneficiario', beneficiario],
@@ -126,28 +121,20 @@ export function InstruccionesTransferencia({
     // "Monto" a secas no dice si el IVA está dentro, y ese es justo el número
     // que el contralor cruza contra el total del CFDI. Se rotula como TOTAL y,
     // cuando hay desglose, se enseña de qué se compone.
-    ['Total a transferir', `${mxn(monto)} ${moneda}`],
+    [tr('suscripcion.vista.totalATransferir'), `${mxn(monto)} ${moneda}`],
     ...(subtotal !== null && subtotal !== undefined && iva !== null && iva !== undefined
-      ? [['Se desglosa como', `${mxn(subtotal)} + ${mxn(iva)} de IVA`] as [string, string]]
+      ? [[tr('suscripcion.vista.seDesglosaComo'), `${mxn(subtotal)} + ${mxn(iva)} de IVA`] as [string, string]]
       : []),
-    ['Referencia (ponla en el concepto)', referencia, true],
+    [tr('suscripcion.vista.referenciaPonlaEnEl'), referencia, true],
   ];
   return (
-    // FE-19: scrollea dentro de la tarjeta, no estira la página.
-    <div className="card p-4 overflow-x-auto">
-      <table aria-label="Datos para la transferencia" className="w-full text-sm">
-        <tbody>
-          {filas.map(([k, v, mono]) => (
-            <tr key={k} className="border-b last:border-0" style={{ borderColor: 'var(--line)' }}>
-              <td className="py-2 pr-4 align-top" style={{ color: 'var(--muted)', width: '45%' }}>{k}</td>
-              <td className={`py-2 font-medium ${mono ? 'font-mono tracking-wide' : ''}`}>{v}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-        Sin la referencia en el concepto no podemos saber de qué mes es tu pago, y la factura se queda como
-        pendiente aunque el dinero ya haya salido de tu cuenta.
+    <div className="rv-sus__transf">
+      <CamposSistema etiqueta={tr('suscripcion.vista.datosParaLaTransferencia')} campos={filas.map(([k, v, mono]) => ({
+        etiqueta: k,
+        valor: mono ? <span className="rv-sus__mono">{v}</span> : v,
+      }))} />
+      <p className="rv-sus__tenue">
+        {tr('suscripcion.vista.sinLaReferenciaEn')}
       </p>
     </div>
   );

@@ -2,9 +2,9 @@
 
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Vault, PlugZap, CircleCheck } from 'lucide-react';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
+import { Vault, PlugZap } from 'lucide-react';
+import { Aviso, AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, Icono, clasesBoton } from '@/app/ui-v2/componentes';
+import './conexiones.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CAPTURA DE CREDENCIALES (C2, auditoría 4) — la mitad CLIENTE.
@@ -52,12 +52,9 @@ export type ResultadoCredencial =
   | null;
 export type AccionCredencial = (previo: ResultadoCredencial, fd: FormData) => Promise<ResultadoCredencial>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
-const AYUDA = 'text-[11px] mt-1';
-
 /** input type por forma: el `password` es lo que evita que el secreto quede a
  *  la vista (y en el autocompletado) mientras se teclea. */
-const TIPO_INPUT: Record<CampoCaptura['forma'], string> = {
+const TIPO_INPUT: Record<CampoCaptura['forma'], 'text' | 'url' | 'password' | 'email'> = {
   texto: 'text', url: 'url', secreto: 'password', correo: 'email',
 };
 
@@ -69,12 +66,9 @@ function AvisoError({ error }: { error: string }) {
 function BotonGuardar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Vault width={14} height={14} strokeWidth={1.75} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Vault} />}>
       {pending ? 'Guardando…' : 'Guardar en el cofre'}
-    </button>
+    </Boton>
   );
 }
 
@@ -102,49 +96,37 @@ export function FormaCredenciales({ grupos, guardar }: {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="rv-cx__form">
       {/* `key={elegido}`: cambiar de sistema TIRA los valores tecleados. Sin
           esto, el password de SAP sobreviviría en el input al cambiar a Odoo
           y viajaría al conector equivocado. */}
-      <form action={despachar} className="space-y-3" key={elegido}>
-        <div className="max-w-md">
-          <label htmlFor="cred-conector" className={ETIQUETA}>Sistema</label>
-          <select id="cred-conector" name="conector" value={elegido} required
-            onChange={(e) => setElegido(e.target.value)}
-            className="w-full" style={{ background: 'var(--surface)' }}>
-            <option value="">Elige el sistema…</option>
-            {grupos.map((g) => (
-              <optgroup key={g.categoria} label={g.categoria}>
-                {g.conectores.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
+      <form action={despachar} className="rv-cx__form" key={elegido}>
+        <CampoSelect etiqueta="Sistema" id="cred-conector" name="conector" value={elegido} required
+          onChange={(e) => setElegido(e.target.value)} className="rv-cx__selector">
+          <option value="">Elige el sistema…</option>
+          {grupos.map((g) => (
+            <optgroup key={g.categoria} label={g.categoria}>
+              {g.conectores.map((c) => (
+                <option key={c.id} value={c.id}>{c.nombre}</option>
+              ))}
+            </optgroup>
+          ))}
+        </CampoSelect>
 
         {conector && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rv-cx__rejilla">
             {conector.campos.map((campo) => (
-              <div key={campo.clave}>
-                <label htmlFor={`cred-${campo.clave}`} className={ETIQUETA}>
-                  {campo.rotulo}{campo.requerida ? '' : ' (opcional)'}
-                </label>
-                <input id={`cred-${campo.clave}`} name={`campo_${campo.clave}`}
-                  type={TIPO_INPUT[campo.forma]} required={campo.requerida}
-                  placeholder={campo.ejemplo} autoComplete="off"
-                  className="w-full" style={{ background: 'var(--surface)' }} />
-                <p className={AYUDA} style={{ color: 'var(--faint)' }}>{campo.ayuda}</p>
-              </div>
+              <CampoTexto key={campo.clave} etiqueta={`${campo.rotulo}${campo.requerida ? '' : ' (opcional)'}`}
+                id={`cred-${campo.clave}`} name={`campo_${campo.clave}`}
+                tipo={TIPO_INPUT[campo.forma]} required={campo.requerida}
+                placeholder={campo.ejemplo} autoComplete="off" ayuda={campo.ayuda} />
             ))}
           </div>
         )}
 
         {estado && !estado.ok && <AvisoError error={estado.error} />}
-        {estado?.ok && (
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{estado.mensaje}</p>
-        )}
-        {conector && <BotonGuardar />}
+        {estado?.ok && <p className="rv-cx__ok">{estado.mensaje}</p>}
+        {conector && <div><BotonGuardar /></div>}
       </form>
     </div>
   );
@@ -172,19 +154,13 @@ export function FormaProbar({ conectorId, probar }: {
 }) {
   const [estado, despachar] = useActionState(probar, null);
   return (
-    <div className="space-y-2">
+    <div className="rv-cx__form-linea">
       <form action={despachar}>
         <input type="hidden" name="conector" value={conectorId} />
         <BotonProbar />
       </form>
       {estado && !estado.ok && <AvisoError error={estado.error} />}
-      {estado?.ok && (
-        <p className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg"
-          style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-          <CircleCheck width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-          {estado.mensaje}
-        </p>
-      )}
+      {estado?.ok && <Aviso tono="ok">{estado.mensaje}</Aviso>}
     </div>
   );
 }
@@ -192,13 +168,11 @@ export function FormaProbar({ conectorId, probar }: {
 function BotonProbar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--secondary">
-      <PlugZap width={13} height={13} strokeWidth={1.75} />
+    <Boton type="submit" loading={pending} icono={<Icono icono={PlugZap} />}>
       {/* «Probando…» y no «Conectando…»: probar no deja nada conectado, y la
           espera puede ser de hasta 15 s (TIMEOUT_PRUEBA_MS). */}
       {pending ? 'Probando contra el proveedor…' : 'Probar conexión'}
-    </button>
+    </Boton>
   );
 }
 
@@ -218,14 +192,13 @@ export function FormaDesactivar({ conectorId, nombre, desactivar }: {
 }) {
   const [estado, despachar] = useActionState(desactivar, null);
   return (
-    <form action={despachar} className="space-y-2">
+    <form action={despachar} className="rv-cx__form-linea">
       <input type="hidden" name="conector" value={conectorId} />
       <BotonConfirmar
         etiqueta="Desactivar" tono="peligro" etiquetaConfirmar="Sí, desactivar este acceso"
         titulo={`Desactivar el acceso a ${nombre}`}
         descripcion={descripcionDesactivar(nombre)}
-        className="text-[12px] font-medium select-none inline-flex items-center gap-1 hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--bad)' }}
+        className={clasesBoton('danger', 'sm')}
       />
       {estado && !estado.ok && <AvisoError error={estado.error} />}
     </form>

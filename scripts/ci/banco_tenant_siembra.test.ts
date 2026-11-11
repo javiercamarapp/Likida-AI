@@ -133,9 +133,14 @@ describe('carga de candidatos y consulta de catalogo', () => {
     expect(() => sqlCandidatos([{ tabla: 't', columna: 'c', ord: 0, va: '$cand$', vb: 'x' }])).toThrow(/delimitador/);
   });
 
+  const A_BASES = BASES_EXPLICITAS as Record<string, { a: Record<string, string> }>;
+
   it('la consulta de catalogo valida los esquemas y la salida se extrae de su linea marcada', () => {
     expect(consultaChecks(['public'])).toMatch(/pg_get_constraintdef/);
     expect(() => consultaChecks(["public'; drop"])).toThrow(/esquema/);
+    // El orden de los CHECK decide el de los candidatos: tiene que ser determinista, no el del heap/indice del catalogo.
+    expect(consultaChecks(['public'])).toMatch(/order by n\.nspname, c\.relname, k\.oid/);
+    expect(A_BASES['public.vigia_mensaje'].a).toEqual({ direccion: 'entrante', autor: 'cliente', estado: 'recibido' });
     expect(extraerChecks('ruido\nBANCO_CHECKS [{"tabla":"public.t"}]\n')).toEqual([{ tabla: 'public.t' }]);
     expect(() => extraerChecks('nada')).toThrow(/BANCO_CHECKS/);
   });

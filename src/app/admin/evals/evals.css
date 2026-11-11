@@ -1,0 +1,5 @@
+/* Calidad › Exámenes (F5): lo que el kit ui-v2 no trae. */
+.rv-evals__sub { display: block; margin-top: 2px; font-size: var(--t-small); color: var(--muted); }
+.rv-evals__nota { margin: 8px 0; font-size: var(--t-body); }
+.rv-evals__huella { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-evals__juez { display: inline-flex; gap: 4px; }

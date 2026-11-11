@@ -1,0 +1,13 @@
+/* Llaves de API · solo lo que las piezas del sistema no traen. */
+.rv-lla__muerta { text-decoration: line-through; color: var(--faint); }
+.rv-lla__tenue { color: var(--muted); white-space: nowrap; }
+.rv-lla__fila { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.rv-lla__forma { display: grid; gap: 12px; }
+.rv-lla__rejilla { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 640px) { .rv-lla__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.rv-lla__secreto { display: grid; gap: 8px; padding: 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--warnbg); }
+.rv-lla__alerta { display: flex; align-items: flex-start; gap: 8px; font-size: var(--t-small); font-weight: 600; color: var(--warn); }
+.rv-lla__clave { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); }
+.rv-lla__clave code { flex: 1; min-width: 0; font-size: var(--t-small); word-break: break-all; }
+.rv-lla__nota { margin: 0; font-size: var(--t-micro); color: var(--muted); }
+.rv-lla__revocar { display: grid; gap: 8px; }

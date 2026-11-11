@@ -32,6 +32,7 @@ import { logger } from '@/lib/logger';
 import { enviarCorreo, type OpcionesEnvio, type ResultadoEnvio } from '@/lib/correo/enviar';
 import type { Correo } from '@/lib/correo/plantilla';
 import { aInstanteMx } from '../peajes/formatos';
+import { esPolizaProvisional, MARCA_POLIZA_PROVISIONAL } from './poliza_provisional';
 import { leerPorId, registrarEvento, transicionar, type TipoEvento } from './repo';
 import {
   abrirExcepcion, firmarXlsx, leerConfigCorreo, leerDesglose, marcarEnviada, marcarFallida, reclamarEntregas, reprogramarEntrega,
@@ -75,6 +76,8 @@ export interface ContextoLiquidacion {
   claveExterna: string; periodoDesde: string; periodoHasta: string;
   /** 0933: por qué el desglose quedó RETENIDO (sin cifras), o null/ausente = no retenido. Solo lo usa la copia del revisor. */
   retenidaMotivo?: string | null;
+  /** El desglose se guardó con póliza provisional: el asunto y el cuerpo lo dicen (decisión del dueño). */
+  polizaProvisional?: boolean;
   /** A37-A1-liquidaciones-10: la bitácora REAL del desglose (`liquidacion_desglose.bitacora`). Sin ella se infiere de la clave. */
   bitacora?: string;
 }
@@ -186,7 +189,8 @@ export function armarCorreoDesglose(ctx: ContextoLiquidacion, revision?: Revisio
   const rango = rangoCorto(ctx.periodoDesde, ctx.periodoHasta);
   // A37-A1-02: una clave terminada en `-R<n>` es la CORRECCIÓN de un desglose ya enviado: el operador debe saberlo de inmediato.
   const esCorreccion = /-R\d+$/.test(ctx.claveExterna);
-  const asunto = `${revision ? '[Revisión] ' : ''}${revision?.retenidoMotivo ? 'RETENIDO — ' : ''}${esCorreccion ? 'CORRECCIÓN — ' : ''}Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
+  const provisional = ctx.polizaProvisional === true;
+  const asunto = `${revision ? '[Revisión] ' : ''}${revision?.retenidoMotivo ? 'RETENIDO — ' : ''}${provisional ? `${MARCA_POLIZA_PROVISIONAL.toUpperCase()} — ` : ''}${esCorreccion ? 'CORRECCIÓN — ' : ''}Desglose de pago — bitácora ${bitacora}${rango ? ` — ${rango}` : ''}`;
   const seguro = bitacora.replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 60) || 'bitacora';
   if (revision) {
     const depto = revision.departamento ? ` (${revision.departamento})` : '';
@@ -197,6 +201,7 @@ export function armarCorreoDesglose(ctx: ContextoLiquidacion, revision?: Revisio
         avance: revision.retenidoMotivo ? 'Desglose RETENIDO: revisión pendiente.' : 'Copia de revisión del desglose de pago.',
         titulo: revision.retenidoMotivo ? 'Desglose retenido (revisión)' : 'Desglose de pago (revisión)',
         parrafos: [
+          ...(provisional ? ['PÓLIZA PROVISIONAL: la póliza real aún no llega; el desglose lleva esa marca y requiere tu revisión.'] : []),
           ...(esCorreccion ? ['CORRECCIÓN: este desglose reemplaza al que se envió antes de esta bitácora.'] : []),
           revision.retenidoMotivo
             ? `El desglose de la bitácora ${bitacora} NO se envió al operador: quedó retenido. Motivo: ${sinSaltos(revision.retenidoMotivo)}`
@@ -215,6 +220,7 @@ export function armarCorreoDesglose(ctx: ContextoLiquidacion, revision?: Revisio
       avance: esCorreccion ? 'CORRECCIÓN: desglose de pago adjunto.' : 'Desglose de pago adjunto.',
       titulo: esCorreccion ? 'Desglose de pago (corrección)' : 'Desglose de pago',
       parrafos: [
+        ...(provisional ? ['PÓLIZA PROVISIONAL: este desglose se envía sin la póliza definitiva y fue revisado por una persona.'] : []),
         ...(esCorreccion ? ['CORRECCIÓN: este desglose reemplaza al que se envió antes de esta bitácora; el anterior ya no es válido.'] : []),
         `Va adjunto el desglose de pago de la bitácora ${bitacora}.`,
         'El detalle está en el archivo de Excel.',
@@ -256,12 +262,14 @@ export function dependenciasEntregaCorreo(): DependenciasEntregaCorreo {
       // A37-A1-liquidaciones-10: la bitácora sale del encabezado del desglose; si no se puede leer, se infiere de la clave.
       let bitacora: string | undefined;
       let retenidaMotivo: string | null = null;
+      let polizaProvisional = false;
       try {
         const d = await leerDesglose(tenantId, id);
         if (d.ok && d.valor?.bitacora) bitacora = d.valor.bitacora;
         if (d.ok && d.valor?.retenidaMotivo) retenidaMotivo = d.valor.retenidaMotivo;
+        if (d.ok && esPolizaProvisional(d.valor?.poliza)) polizaProvisional = true;
       } catch { /* sin encabezado: se usa la clave */ }
-      return { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, retenidaMotivo, ...(bitacora ? { bitacora } : {}) };
+      return { claveExterna: l.claveExterna, periodoDesde: l.periodoDesde, periodoHasta: l.periodoHasta, retenidaMotivo, ...(polizaProvisional ? { polizaProvisional } : {}), ...(bitacora ? { bitacora } : {}) };
     },
     descargarXlsx: async (tenantId, ruta) => {
       // La URL firmada se pide con el módulo que valida que la ruta sea de la flota; se descarga con tope de tiempo.
@@ -420,6 +428,7 @@ async function procesarUna(
   const { correo, nombreAdjunto } = armarCorreoDesglose(ctx, revision);
   const res = await deps.enviar(e.correo, correo, {
     idempotencyKey: llaveIdempotencia(e),
+    tenantId: e.tenantId,
     adjuntos: [{ filename: nombreAdjunto, content: Buffer.from(bytes).toString('base64'), contentType: TIPO_XLSX_CORREO }],
     sobrio: true,
     ...(config.remitenteNombre ? { remitenteNombre: config.remitenteNombre } : {}),

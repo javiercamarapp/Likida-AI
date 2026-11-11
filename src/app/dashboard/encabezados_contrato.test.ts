@@ -1,10 +1,10 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- lee el árbol de FUENTE del propio repo; ninguna ruta viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fuentesDeProduccion, sinComentarios } from '@/lib/pruebas/codigo';
 import { APOYO_MAX } from '../ui-v2/componentes';
-import { TODAS_LAS_RUTAS } from './rutas';
+import { TODAS_LAS_RUTAS, ENTRADAS_DASHBOARD } from './rutas';
 
 // L2b · CONTRATO DE LOS ENCABEZADOS (super prompt A.R05 puntos 2 y 3; decisiones de Javier del 31-oct):
 //   · UN solo encabezado por pantalla (`MarcoPagina` → `EncabezadoPagina`): etiqueta del área sobre el título, h1 = nombre del menú
@@ -13,6 +13,21 @@ import { TODAS_LAS_RUTAS } from './rutas';
 const RAIZ = join(process.cwd(), 'src/app/dashboard');
 const fuente = (rel: string) => readFileSync(join(RAIZ, rel), 'utf8');
 const todas = fuentesDeProduccion(RAIZ);
+
+/** Diccionarios en español (todos los namespaces): `'clave': 'texto'`. Las pantallas migradas a i18n titulan con `titulo={t('clave')}`. */
+const DICCIONARIO_ES = readdirSync(join(process.cwd(), 'src/lib/i18n/es'))
+  .map((f) => readFileSync(join(process.cwd(), 'src/lib/i18n/es', f), 'utf8')).join('\n');
+function textoDeClave(clave: string): string | null {
+  const m = new RegExp(`'${clave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}':\\s*'((?:[^'\\\\]|\\\\.)*)'`).exec(DICCIONARIO_ES);
+  return m ? m[1].replace(/\\'/g, "'") : null;
+}
+/** El `titulo` de `<MarcoPagina>`: literal, o `{t('clave')}` resuelto contra el diccionario en español; `null` si es calculado. */
+function tituloDeMarco(src: string): string | null {
+  const lit = /<MarcoPagina\b[^>]*?\btitulo="([^"]*)"/s.exec(src);
+  if (lit) return lit[1];
+  const dic = /<MarcoPagina\b[^>]*?\btitulo=\{\s*\w+\('([^']+)'\)\s*\}/s.exec(src);
+  return dic ? textoDeClave(dic[1]) : null;
+}
 
 /** Las pantallas del panel que ya usan el marco único (se agregan aquí al migrarlas; una que vuelva atrás rompe la prueba). */
 const MIGRADAS = [
@@ -30,6 +45,7 @@ const MIGRADAS = [
   'agentes/peajes/reclamacion/vista.tsx', 'agentes/vigia/historial/vista.tsx', 'agentes/vigia/avisos/vista.tsx', 'agentes/vigia/sin-atender/vista.tsx', 'agentes/vigia/importacion/vista.tsx', 'agentes/vigia/programa/vista.tsx', 'agentes/liquidacion/desgloses.tsx', 'agentes/carta-porte/catalogo/vista.tsx',
   'agentes/carta-porte/referencia/vista.tsx', 'agentes/carta-porte/configuracion/vista.tsx', 'inicio-contenido.tsx', 'inicio-operacion.tsx',
   'contador/inicio-contador.tsx', '[id]/detalle.tsx', 'proximamente/proximamente.tsx', 'resumen-v2.tsx', 'puesta-en-marcha/vista.tsx',
+  'carta-porte/documentos/[id]/vista.tsx',
 ];
 
 describe('las pantallas migradas usan el encabezado único', () => {
@@ -67,7 +83,7 @@ describe('título de pestaña por pantalla «<Pantalla> · Likida»', () => {
       const page = join(dir, 'page.tsx');
       let src = '';
       try { src = fuente(page); } catch { continue; } // la vista no cuelga de un page.tsx de su carpeta (p. ej. subcomponentes)
-      if (!/export const metadata\b/.test(src)) sinTitulo.push(page);
+      if (!/export (const metadata\b|async function generateMetadata\b)/.test(src)) sinTitulo.push(page); // generateMetadata: el título sale del diccionario (i18n)
     }
     expect(sinTitulo).toEqual([]);
   });
@@ -80,21 +96,29 @@ describe('sin miga de pan en el marco', () => {
   });
 });
 
-// H5 · el h1 ES el nombre del menú (rutas.ts) y TODO apoyo —literal o con plantilla/ternario— cabe en 140 caracteres.
-describe('el título es el nombre exacto del menú', () => {
-  const NOMBRE_POR_RUTA = new Map(TODAS_LAS_RUTAS.map((i) => [i.href, i.nombre]));
-  it('cada vista que ES la pantalla de una entrada del menú titula con ese nombre', () => {
+// H5 · el h1 ES el nombre de la ENTRADA del menú (rutas.ts, PLAN-MAESTRO §3.3 regla 3) y TODO apoyo —literal o con plantilla/ternario— cabe en 140 caracteres.
+// Fase 8: las pantallas hermanas son pestañas de una entrada y su título es el de la entrada («Viajes» sobre Despacho, Registro, Mapa…).
+// TRANSICIÓN: mientras los paquetes de cada área (P-DAS-OP-*, F9-F11) migran sus pantallas, una pantalla que todavía titula con el
+// nombre que tenía en el menú de 49 entradas (`TODAS_LAS_RUTAS`) se acepta; no se acepta ningún otro título. El día que todas titulen
+// con el de su entrada, `NOMBRE_ANTERIOR` se vacía y la prueba queda estricta.
+describe('el título es el nombre exacto de la entrada del menú', () => {
+  const NOMBRE_ENTRADA = new Map(ENTRADAS_DASHBOARD.flatMap((e) => e.pestanas.map((p) => [p.href, e.nombre] as const)));
+  const NOMBRE_ANTERIOR = new Map(TODAS_LAS_RUTAS.map((i) => [i.href, i.nombre]));
+  it('cada vista que ES la pantalla de una entrada (o pestaña) titula con el nombre de su entrada', () => {
     const mal: string[] = [];
     let comparadas = 0;
     for (const rel of MIGRADAS) {
       const dir = rel.includes('/') ? rel.slice(0, rel.lastIndexOf('/')) : '';
       const href = dir === '' ? '/dashboard' : `/dashboard/${dir}`;
-      const nombre = NOMBRE_POR_RUTA.get(href);
-      if (!nombre) continue;
-      const m = /<MarcoPagina\b[^>]*?\btitulo="([^"]*)"/s.exec(fuente(rel));
-      if (!m) continue; // título calculado (detalle)
+      const entrada = NOMBRE_ENTRADA.get(href);
+      const anterior = NOMBRE_ANTERIOR.get(href);
+      // Las subpantallas que el menú anterior no nombraba (p. ej. `agentes/vigia/avisos`) conservan su título descriptivo hasta que la
+      // fase que las migra (F10 para Automatización) las lleve al nombre de su entrada.
+      if (!entrada || !anterior) continue;
+      const titulo = tituloDeMarco(fuente(rel));
+      if (titulo === null) continue; // título calculado (detalle)
       comparadas++;
-      if (m[1] !== nombre) mal.push(`${rel}: «${m[1]}» ≠ menú «${nombre}»`);
+      if (titulo !== entrada && titulo !== anterior) mal.push(`${rel}: «${titulo}» ≠ entrada «${entrada}» (ni su nombre anterior «${anterior}»)`);
     }
     expect(comparadas).toBeGreaterThan(30);
     expect(mal).toEqual([]);

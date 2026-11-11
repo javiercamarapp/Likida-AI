@@ -5,8 +5,9 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Upload, Check, X, Copy, Mail } from 'lucide-react';
+import './proveedores.css';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
-import { CampoArchivo } from '@/app/ui-v2/componentes';
+import { Boton, CampoArchivo, Disclosure, Icono } from '@/app/ui-v2/componentes';
 
 export type AccionProveedores = (
   prev: { error?: string; aviso?: string; confirmar?: boolean } | null,
@@ -25,17 +26,21 @@ export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores
 
   return (
     <div>
-      <form action={accion} className="flex items-center gap-2 flex-wrap">
+      <form action={accion} className="rv-prov__linea">
         <CampoArchivo etiqueta="XML de la factura de proveedor" name="archivo" accept=".xml,text/xml,application/xml" required />
         <BotonSubir />
       </form>
-      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
-      {estado?.aviso && (
-        <p className="text-[12px] mt-2" style={{ color: estado.aviso.includes('OJO') ? 'var(--warn)' : 'var(--muted)' }}>
-          {estado.aviso}
-        </p>
-      )}
+      <ResultadoSubida estado={estado} />
     </div>
+  );
+}
+
+function ResultadoSubida({ estado }: { estado: { error?: string; aviso?: string } | null }) {
+  return (
+    <>
+      {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}
+      {estado?.aviso && <p role="status" className="rv-prov__nota" data-tono={estado.aviso.includes('OJO') ? 'warn' : undefined}>{estado.aviso}</p>}
+    </>
   );
 }
 
@@ -44,12 +49,9 @@ function BotonSubir({ rotulo = 'Subir a la bandeja', pendienteRotulo = 'Leyendo�
 }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Upload width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Upload} tam={14} />}>
       {pending ? pendienteRotulo : rotulo}
-    </button>
+    </Boton>
   );
 }
 
@@ -68,18 +70,13 @@ export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }
 
   return (
     <div>
-      <form action={accion} className="flex items-center gap-2 flex-wrap">
+      <form action={accion} className="rv-prov__linea">
         <CampoArchivo etiqueta="Foto de la factura de proveedor" name="archivo" accept="image/jpeg,image/png,image/webp" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)} />
         <BotonSubir rotulo="Leer foto con IA" pendienteRotulo="Leyendo la foto…" />
       </form>
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>Máximo 4 MB por foto.</p>
-      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
-      {estado?.aviso && (
-        <p className="text-[12px] mt-2" style={{ color: estado.aviso.includes('OJO') ? 'var(--warn)' : 'var(--muted)' }}>
-          {estado.aviso}
-        </p>
-      )}
+      <p className="rv-prov__nota" data-tono="faint">Máximo 4 MB por foto.</p>
+      <ResultadoSubida estado={estado} />
     </div>
   );
 }
@@ -91,36 +88,28 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
   const [confirmando, setConfirmando] = useState(false);
 
   return (
-    <div className="min-w-[190px]">
+    <div className="rv-prov__decision">
       {confirmando ? (
-        <form action={accion} onSubmit={() => setConfirmando(false)} className="inline-flex items-center gap-2">
+        <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-prov__linea">
           <input type="hidden" name="facturaId" value={facturaId} />
           <input type="hidden" name="decision" value="rechazada" />
-          <span className="text-[11px]" style={{ color: 'var(--muted)' }}>¿Rechazarla?</span>
+          <span className="rv-prov__nota">¿Rechazarla?</span>
           <BotonMini texto="Sí" pendienteTexto="…" destructivo />
-          <button type="button" onClick={() => setConfirmando(false)}
-            className="rv-btn rv-btn--secondary"
-            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            No
-          </button>
+          <Boton tamano="sm" onClick={() => setConfirmando(false)}>No</Boton>
         </form>
       ) : (
-        <div className="inline-flex items-center gap-1.5">
-          <form action={accion} className="inline">
+        <div className="rv-prov__linea">
+          <form action={accion}>
             <input type="hidden" name="facturaId" value={facturaId} />
             <input type="hidden" name="decision" value="aprobada" />
             {/* A37-S55-03: tras la advertencia del servidor, el siguiente clic ya es una confirmación. */}
             {estado?.confirmar && <input type="hidden" name="confirmar" value="1" />}
             <BotonMini texto={estado?.confirmar ? 'Aprobar de todos modos' : 'Aprobar'} pendienteTexto="Guardando…" IconoOk />
           </form>
-          <button type="button" onClick={() => setConfirmando(true)} title="Rechazar la factura"
-            className="rv-btn rv-btn--secondary"
-            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            <X width={11} height={11} strokeWidth={2} /> Rechazar
-          </button>
+          <Boton tamano="sm" onClick={() => setConfirmando(true)} title="Rechazar la factura" icono={<Icono icono={X} tam={14} />}>Rechazar</Boton>
         </div>
       )}
-      {estado?.error && <p className="text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}
     </div>
   );
 }
@@ -138,14 +127,11 @@ export function DireccionBuzon({ direccion }: { direccion: string }) {
   }
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
-      <code className="cifra-mono text-[12px] px-2 py-1 rounded-lg hairline break-all"
-        style={{ background: 'var(--surface)' }}>{direccion}</code>
-      <button type="button" aria-label="Copiar la dirección del buzón" onClick={copiar}
-        className="rv-icono-boton"
-        style={{ color: copiado ? 'var(--ok)' : 'var(--muted)' }}>
-        {copiado ? <Check width={13} height={13} strokeWidth={2} /> : <Copy width={13} height={13} strokeWidth={2} />}
-      </button>
+    <div className="rv-prov__linea">
+      <code className="cifra-mono rv-prov__direccion">{direccion}</code>
+      <Boton variante="ghost" tamano="sm" aria-label="Copiar la dirección del buzón" onClick={copiar} data-copiado={copiado || undefined}>
+        <Icono icono={copiado ? Check : Copy} tam={14} />
+      </Boton>
     </div>
   );
 }
@@ -159,7 +145,7 @@ export function GenerarBuzon({ generar }: { generar: AccionProveedores }) {
       <form action={accion}>
         <BotonBuzon texto="Generar dirección" pendienteTexto="Generando…" />
       </form>
-      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}
     </div>
   );
 }
@@ -173,12 +159,9 @@ export function GenerarBuzon({ generar }: { generar: AccionProveedores }) {
 export function RotarBuzon({ rotar }: { rotar: AccionProveedores }) {
   const [estado, accion] = useActionState(rotar, null);
   return (
-    <details className="mt-3">
-      <summary className="text-[12px] cursor-pointer select-none" style={{ color: 'var(--muted)' }}>
-        ¿Necesitas rotar la dirección?
-      </summary>
-      <div className="mt-2 space-y-2">
-        <p className="text-[12px] max-w-xl" style={{ color: 'var(--warn)' }}>
+    <Disclosure titulo="¿Necesitas rotar la dirección?" variante="linea">
+      <div className="rv-prov__pila">
+        <p className="rv-prov__nota" data-tono="warn">
           Rotar genera una dirección nueva e <strong>invalida la actual en el acto</strong>: los
           correos que lleguen al buzón viejo se ignoran sin avisarle a quien los mandó. Hazlo solo
           si la dirección se filtró a donde no debía, y pásales la nueva a tus proveedores.
@@ -186,9 +169,9 @@ export function RotarBuzon({ rotar }: { rotar: AccionProveedores }) {
         <form action={accion}>
           <BotonBuzon texto="Rotar e invalidar la anterior" pendienteTexto="Rotando…" destructivo />
         </form>
-        {estado?.error && <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+        {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}
       </div>
-    </details>
+    </Disclosure>
   );
 }
 
@@ -197,14 +180,9 @@ function BotonBuzon({ texto, pendienteTexto, destructivo }: {
 }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className={`rv-btn ${destructivo ? 'rv-btn--danger' : 'rv-btn--primary'} inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-50`}
-      style={destructivo
-        ? { background: 'var(--badbg)', color: 'var(--bad)' }
-        : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Mail width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
+    <Boton type="submit" variante={destructivo ? 'danger' : 'primary'} loading={pending} icono={<Icono icono={Mail} tam={14} />}>
       {pending ? pendienteTexto : texto}
-    </button>
+    </Boton>
   );
 }
 
@@ -213,13 +191,8 @@ function BotonMini({ texto, pendienteTexto, IconoOk, destructivo }: {
 }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className={`rv-btn ${destructivo ? 'rv-btn--danger' : 'rv-btn--primary'} rv-btn--sm`}
-      style={destructivo
-        ? { background: 'var(--badbg)', color: 'var(--bad)' }
-        : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      {IconoOk && <Check width={11} height={11} strokeWidth={2} />}
+    <Boton type="submit" tamano="sm" variante={destructivo ? 'danger' : 'primary'} loading={pending} icono={IconoOk ? <Icono icono={Check} tam={14} /> : undefined}>
       {pending ? pendienteTexto : texto}
-    </button>
+    </Boton>
   );
 }

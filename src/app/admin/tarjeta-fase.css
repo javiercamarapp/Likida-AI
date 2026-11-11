@@ -1,0 +1,3 @@
+/* TarjetaFase (F5): solo texto de apoyo; la tarjeta, la lista de barras y la cifra son del kit ui-v2. */
+.rv-fase__texto { margin: 0 0 6px; font-size: var(--t-body); color: var(--muted); }
+.rv-fase__linea { margin: 0 0 8px; font-size: var(--t-body); }

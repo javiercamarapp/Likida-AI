@@ -39,3 +39,31 @@ export async function rpcUsoLlmDiaPorFlota(dia: string): Promise<RespuestaRpc | 
   if (typeof admin.rpc !== 'function') return null;
   return acotada(admin.rpc('uso_llm_dia_por_flota', { p_dia: dia }), 'usoLlmDiaPorFlota');
 }
+
+export interface FilaAlertaTope {
+  tenantId: string; tenantNombre: string; dia: string; nivel: 80 | 100; usoUsd: number; topeUsd: number; origenTope: string; creadoEn: string;
+}
+
+/**
+ * Los avisos de tope diario ya emitidos (0990), de los últimos `dias` días del calendario de México, de TODAS las flotas: es la
+ * lectura del superadmin (/admin/consumo). LANZA si la base no responde — «ningún aviso» y «no se pudo leer» no son lo mismo.
+ */
+export async function listarAlertasTopeRecientes(desdeDia: string, limite = 60): Promise<FilaAlertaTope[]> {
+  const r = await acotada(
+    supabaseAdmin().from('llm_alerta_tope')
+      .select('tenant_id, dia, nivel, uso_usd, tope_usd, origen_tope, creado_en, tenant(nombre)')
+      .gte('dia', desdeDia)
+      .order('dia', { ascending: false }).order('creado_en', { ascending: false }).order('tenant_id', { ascending: false })
+      .limit(Math.min(Math.max(1, limite), 200)),
+    'listarAlertasTopeRecientes',
+  );
+  if (r.error) throw new Error(`listarAlertasTopeRecientes: ${r.error.message}`);
+  return (r.data ?? []).map((f) => {
+    const t = f.tenant as { nombre?: string } | Array<{ nombre?: string }> | null;
+    const nombre = Array.isArray(t) ? t[0]?.nombre : t?.nombre;
+    return {
+      tenantId: String(f.tenant_id), tenantNombre: nombre ?? '—', dia: String(f.dia), nivel: Number(f.nivel) === 100 ? 100 : 80,
+      usoUsd: Number(f.uso_usd), topeUsd: Number(f.tope_usd), origenTope: String(f.origen_tope), creadoEn: String(f.creado_en),
+    };
+  });
+}

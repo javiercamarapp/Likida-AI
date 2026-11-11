@@ -22,7 +22,11 @@ import { validarIngreso } from '@/lib/likida/ingreso_viaje';
 import { getConfig } from '@/lib/likida/config';
 import { topeAnticipoParaPanel, evaluarAnticipo, MENSAJE_POLITICA_ILEGIBLE, type TopeAnticipo } from '@/lib/likida/crear_viaje_wa';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Despacho' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.despacho') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -67,10 +71,11 @@ async function topeAnticipoDeLaFlota(tenantId: string, puedeVerDinero: boolean):
 }
 
 async function guardiaDespacho(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string, requiereDinero = false): Promise<string | null> {
+  const { t } = await getT('operacion');
   const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
-  if (!puedeAsignar(sesion.rol)) return 'Tu rol no puede despachar viajes.';
-  if (requiereDinero && !puedeVerArea(sesion.rol, 'dinero')) return 'Tu rol no puede consultar ni capturar datos de dinero o clientes.';
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Este despacho no es de tu flota.';
+  if (!puedeAsignar(sesion.rol)) return t('dsp.a.rol');
+  if (requiereDinero && !puedeVerArea(sesion.rol, 'dinero')) return t('dsp.a.dinero');
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return t('dsp.a.ajeno');
   return null;
 }
 
@@ -165,21 +170,23 @@ export default async function PaginaDespacho({
    */
   async function buscarCatalogoAccion(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
+  const { t } = await getT('operacion');
     const rechazo = await guardiaDespacho(sp, tenantId, tipo === 'cliente');
     if (rechazo) throw new Error(rechazo);
     if (tipo !== 'operador' && tipo !== 'cliente' && tipo !== 'unidad') {
-      throw new Error('Catálogo desconocido.');
+      throw new Error(t('dsp.a.catalogo'));
     }
     try {
       return await buscarCatalogo(tenantId, tipo, typeof q === 'string' ? q : '');
     } catch (err) {
       logger.error('despacho.catalogo.fallo', { tipo, err: err instanceof Error ? err.message : String(err) });
-      throw new Error('No se pudo buscar en el catálogo.');
+      throw new Error(t('dsp.a.busqueda'));
     }
   }
 
   async function crear(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+  const { t } = await getT('operacion');
     // La presencia se valida antes de leer valores: un POST manual, incluso
     // vacío o con claves repetidas, no concede al encargado captura financiera.
     // E1-B (P0-7, decisión de Javier): el ANTICIPO ya no exige el área `dinero` —
@@ -210,11 +217,11 @@ export default async function PaginaDespacho({
     // operador" llegaba a la base y volvía como un 23502 traducido a "No se
     // pudo crear el viaje": un mensaje que no dice qué arreglar.
     if (!texto('operadorId', 64)) {
-      return { error: 'Elige un operador: un viaje no puede existir sin quién lo maneje.' };
+      return { error: t('dsp.a.sinoperador') };
     }
     const fecha = texto('fechaInicio', 10);
     if (fecha && !/^\d{4}-\d{2}-\d{2}$/.test(fecha)) {
-      return { error: 'La fecha de inicio no tiene un formato válido.' };
+      return { error: t('dsp.a.fecha') };
     }
     try {
       // `crearViaje` re-valida que el operador sea de ESTA flota y manda el
@@ -269,24 +276,25 @@ export default async function PaginaDespacho({
         const folio = (abierto?.folio as string | undefined) || null;
         return {
           error: folio
-            ? `Ese operador ya trae el viaje ${folio} abierto — ciérralo o asígnale otro chofer.`
-            : 'Ese operador ya trae un viaje abierto — ciérralo o asígnale otro chofer.',
+            ? t('dsp.a.ocupado.folio', { folio })
+            : t('dsp.a.ocupado'),
         };
       }
       logger.error('despacho.crear.fallo', { err: detalle });
-      return { error: 'No se pudo crear el viaje. Revisa los datos e inténtalo de nuevo.' };
+      return { error: t('dsp.a.nocreo') };
     }
     redirect(destino);
   }
 
   async function asignarYAvisar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+  const { t } = await getT('operacion');
     const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
     const operadorId = typeof fd.get('operadorId') === 'string' ? (fd.get('operadorId') as string).trim().slice(0, 64) : '';
-    if (!viajeId || !operadorId) return { error: 'Falta el viaje o el operador.' };
+    if (!viajeId || !operadorId) return { error: t('dsp.a.falta') };
 
     // A37-S18-04: el viaje tiene que existir en ESTA flota y seguir abierto; y si «asignar» es al MISMO chofer que ya lo tiene,
     // es un reaviso disfrazado (clic repetido / pestaña vieja) y pasa por las mismas guardas que Reavisar (aceptó, baja, cooldown).
@@ -301,7 +309,7 @@ export default async function PaginaDespacho({
     } catch (err) {
       logger.error('despacho.asignar.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
       // A37-S18-05: el motivo determinista (operador/unidad con viaje abierto, baja) se DICE; lo demás es el genérico.
-      return { error: mensajeDeAsignacion(err, 'No se pudo asignar. Inténtalo de nuevo.') };
+      return { error: mensajeDeAsignacion(err, t('dsp.a.noasigno')) };
     }
     let avisoFallo = false;
     let salio = false;
@@ -320,18 +328,19 @@ export default async function PaginaDespacho({
     // Después del aviso del viaje, las instrucciones del convenio (primera asignación o cambio de chofer). Nunca lanza, y un
     // aviso que no salió no las frena: el chofer ya es el del viaje.
     await instruccionesAlCambiarOperador(tenantId, viajeId, cambio);
-    if (avisoFallo) return { error: 'Quedó asignado, pero el aviso de WhatsApp no salió — usa Reavisar en "En curso".' };
+    if (avisoFallo) return { error: t('dsp.a.sinaviso') };
     redirect(destino);
   }
 
   async function asignarUnidadViaje(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+  const { t } = await getT('operacion');
     const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
     const unidadId = typeof fd.get('unidadId') === 'string' ? (fd.get('unidadId') as string).trim().slice(0, 64) : '';
-    if (!viajeId) return { error: 'Falta el viaje.' };
+    if (!viajeId) return { error: t('dsp.a.faltaviaje') };
 
     try {
       // `asignarUnidad` verifica que la unidad sea de ESTA flota, ancla el
@@ -342,18 +351,19 @@ export default async function PaginaDespacho({
     } catch (err) {
       logger.error('despacho.asignar_unidad.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
       // A37-S18-05: «unidad dada de baja», «unidad ya en otro viaje abierto» y «viaje inexistente» tienen mensaje de pantalla.
-      return { error: mensajeDeAsignacion(err, 'No se pudo asignar la unidad. Inténtalo de nuevo.') };
+      return { error: mensajeDeAsignacion(err, t('dsp.a.nounidad')) };
     }
     redirect(destino);
   }
 
   async function reenviarAviso(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+  const { t } = await getT('operacion');
     const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const viajeId = typeof fd.get('viajeId') === 'string' ? (fd.get('viajeId') as string).trim().slice(0, 64) : '';
-    if (!viajeId) return { error: 'Falta el viaje.' };
+    if (!viajeId) return { error: t('dsp.a.faltaviaje') };
 
     // El destinatario se resuelve AQUÍ, anclado al tenant — el cliente no elige a quién se le manda el WhatsApp. A37-S18-04: y
     // la acción VUELVE a comprobar lo que la UI solo oculta (viaje abierto, chofer sin aceptar, operador activo, cooldown).
@@ -364,9 +374,9 @@ export default async function PaginaDespacho({
       salio = (await avisarAlChofer(tenantId, guarda.operadorId, viajeId)) !== false;
     } catch (err) {
       logger.error('despacho.reaviso.fallo', { viajeId, err: err instanceof Error ? err.message : String(err) });
-      return { error: 'El aviso no salió — inténtalo de nuevo en un momento.' };
+      return { error: t('dsp.a.avisono') };
     }
-    if (!salio) return { error: 'El aviso no salió: el operador no tiene WhatsApp capturado o el envío fue rechazado. Revisa su teléfono.' };
+    if (!salio) return { error: t('dsp.a.avisono.tel') };
     const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
     await anotarAvisoAlChofer(tenantId, viajeId, guarda.operadorId, { contarReaviso: guarda.contarReaviso, avisosEnviados: guarda.avisosEnviados, actor: { id: sesion.userId } });
     redirect(destino);
@@ -374,19 +384,20 @@ export default async function PaginaDespacho({
 
   async function altaOperador(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+  const { t } = await getT('operacion');
     const rechazo = await guardiaDespacho(sp, tenantId);
     if (rechazo) return { error: rechazo };
 
     const nombre = typeof fd.get('nombre') === 'string' ? (fd.get('nombre') as string).trim().slice(0, 120) : '';
     const telefono = typeof fd.get('telefono') === 'string' ? (fd.get('telefono') as string).trim().slice(0, 20) : '';
-    if (!nombre || !telefono) return { error: 'Faltan el nombre o el WhatsApp.' };
+    if (!nombre || !telefono) return { error: t('dsp.a.faltadatos') };
 
     const sesion = await resolverTenantAtadoOLanza('/dashboard/despacho', sp, tenantId);
     // W2: un jefe de tráfico CON patio da de alta SIEMPRE en el suyo. Si su patio
     // no se pudo leer, no se da de alta a nadie: un operador sin patio quedaría
     // fuera de su alcance y nadie de su patio podría corregirlo.
     const alcance = await alcanceDePatio(tenantId, sesion.userId, sesion.rol);
-    if (!alcance) return { error: 'No pude comprobar tu patio — no se dio de alta a nadie. Inténtalo de nuevo.' };
+    if (!alcance) return { error: t('dsp.a.patio') };
     try {
       // `crearOperador` normaliza la lada 52 y falla CERRADO ante duplicados
       // (incluso entre flotas) — sus mensajes están escritos para pantalla.
@@ -394,13 +405,14 @@ export default async function PaginaDespacho({
     } catch (err) {
       if (err instanceof DatoInvalido) return { error: err.message };
       logger.error('despacho.alta_operador.fallo', { err: err instanceof Error ? err.message : String(err) });
-      return { error: 'No se pudo dar de alta. Inténtalo de nuevo.' };
+      return { error: t('dsp.a.noalta') };
     }
     redirect(destino);
   }
 
   return (
     <VistaDespacho
+      tr={await getT('operacion')}
       puedeCapturarDinero={puedeCapturarDinero}
       puedeCapturarAnticipo={puedeCapturarAnticipo}
       topeAnticipo={topeAnticipo}

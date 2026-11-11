@@ -1,0 +1,18 @@
+/* Carta Porte · solo lo que las piezas del sistema no traen. */
+.rv-ccp__viaje { display: grid; gap: 10px; }
+.rv-ccp__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-ccp__tenue { color: var(--faint); font-size: var(--t-small); }
+.rv-ccp__falta { color: var(--warn); font-style: italic; }
+.rv-ccp__mono { font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-ccp__pendientes { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: var(--t-small); color: var(--warn); }
+.rv-ccp__pendientes li { display: flex; align-items: flex-start; gap: 6px; }
+.rv-ccp__datos { display: flex; flex-wrap: wrap; gap: 4px 20px; font-size: var(--t-small); color: var(--muted); }
+.rv-ccp__dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
+.rv-ccp__sub { margin: 0 0 6px; font-size: var(--t-body); font-weight: 600; }
+.rv-ccp__campos { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-small); }
+.rv-ccp__campos li { display: flex; align-items: flex-start; gap: 6px; }
+.rv-ccp__merc { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: var(--t-small); }
+.rv-ccp__merc li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.rv-ccp__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+.rv-ccp__rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.rv-ccp__acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

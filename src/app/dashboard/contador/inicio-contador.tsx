@@ -1,3 +1,4 @@
+import { getT } from '@/lib/i18n/servidor';
 import Link from 'next/link';
 import { Plus, MessageCircle, Landmark, Route as RouteIcon, ReceiptText, Fuel, Wallet, FileX2, FileSearch, Download } from 'lucide-react';
 import {
@@ -18,12 +19,14 @@ import { mxn, hoyMx } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { areaDeRuta } from '@/lib/auth/visibilidad';
 import { AUTOMATIZACIONES, DINERO_FISCAL, SISTEMA, type Item } from '../rutas';
-import { MotorFiscal, TituloSeccion } from '../resumen-visual';
-import { BotonEnlace, MarcoPagina, clasesBoton } from '@/app/ui-v2/componentes';
-import { EstadoVacio } from '../estados';
+import { MotorFiscal } from '../resumen-visual';
+import {
+  Aviso, BotonEnlace, EsqCifrasV2, EsqTarjetaV2, EstadoVacio, Icono, MarcoPagina, Tarjeta, clasesBoton,
+} from '@/app/ui-v2/componentes';
 import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
-import { Bloque, Barra, EsqCifras } from '../bloque';
+import { Bloque } from '../bloque';
+import './contador.css';
 import { EstimuloPeaje } from './estimulo-peaje';
 import { PerfilErp } from './perfil-erp';
 import { Timbrado } from './timbrado';
@@ -68,6 +71,7 @@ export async function InicioContador({
    *  de la acción. */
   searchParams?: { vista?: string; tenant?: string; rol?: string };
 }) {
+  const { t: tr } = await getT('dinero');
   // El MISMO "cuándo" que el Resumen del dueño (auditoría de diseño,
   // 8-ago-2026): todo lo fiscal de esta pantalla se corta al ejercicio en
   // curso, y `getKpis`/`detectarAnomalias` van sin ventana — un pendiente no
@@ -151,17 +155,17 @@ export async function InicioContador({
     // (`--g1`) con tarjetas blancas encima — la misma anatomía que el
     // Resumen del dueño, porque es la misma casa con otro contenido.
     <MarcoPagina
-      titulo="Contador"
+      titulo={tr('contador.inicioContador.contador')}
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
-      apoyo={`${saludo()}, ${nombre ?? 'contador'}. El dinero comprobado y el papel que lo sostiene, con su fundamento citado.`}
+      apoyo={tr('contador.inicioContador.elDineroComprobadoY', { v: saludo(), v2: nombre ?? 'contador' })}
       acciones={(
         <>
           {/* Un link directo, no `BarraAcciones`: su buscador indexa los
               VIAJES (registro operativo, área `operacion`) y esta
               pantalla no debe cargar datos de un área que su lector
               principal no ve. El asistente sí es suyo (chat es dinero). */}
-          <BotonEnlace variante="secondary" tamano="sm" href={`/dashboard/chat${sufijo}`} icono={<MessageCircle width={14} height={14} strokeWidth={1.75} />}>
-            Chatea con tus datos
+          <BotonEnlace variante="secondary" tamano="sm" href={`/dashboard/chat${sufijo}`} icono={<Icono icono={MessageCircle} />}>
+            {tr('contador.inicioContador.chateaConTusDatos')}
           </BotonEnlace>
           {/* AUDITORÍA 2, ALTO (proceso faltante): el CSV de liquidaciones para el ERP/Excel ya existía en
               /api/export/liquidaciones —bien protegido por sesión, rol (`puedeExportar`) y tenant— pero NO tenía puerta en
@@ -174,12 +178,12 @@ export async function InicioContador({
               silencioso de siempre. Es un <a> y no un Link: un Link precargaría el CSV. */}
           <a href={`/api/export/liquidaciones${sufijo}${sufijo ? '&' : '?'}desde=${hoy.slice(0, 8)}01&hasta=${hoy}`} download
             className={clasesBoton('secondary', 'sm')}>
-            <Download width={15} height={15} strokeWidth={2} /> Exportar CSV del mes
+            <Icono icono={Download} /> {tr('contador.inicioContador.exportarCsvDelMes')}
           </a>
           {/* La acción primaria del contador no es despachar: es meter el papel. Facturación es lectura Y captura desde la
               auditoría 4 (A1), y este botón es su puerta. */}
-          <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/facturacion${sufijo}`} icono={<Plus width={15} height={15} strokeWidth={2} />}>
-            Registrar factura
+          <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/facturacion${sufijo}`} icono={<Icono icono={Plus} />}>
+            {tr('contador.inicioContador.registrarFactura')}
           </BotonEnlace>
         </>
       )}
@@ -207,7 +211,7 @@ export async function InicioContador({
 
           {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
               reservar un hueco que casi siempre queda vacío. */}
-          <Bloque mensaje="No se pudieron leer las alertas." esqueleto={null}>
+          <Bloque mensaje={tr('contador.inicioContador.noSePudieronLeer')} esqueleto={null}>
             <BloqueAlertas pKpis={pKpis} pAnomalias={pAnomalias} pHuerfanos={pHuerfanos}
               pFacturacion={pFacturacion} sufijo={sufijo} />
           </Bloque>
@@ -217,7 +221,7 @@ export async function InicioContador({
               el streaming ya no gobierna el render —cada tarjeta de abajo
               degrada sola y dice lo suyo—: queda como lo que en el fondo
               siempre fue, un aviso, y llega cuando puede. */}
-          <Bloque mensaje="No se pudo evaluar el estado de la pantalla." esqueleto={null}>
+          <Bloque mensaje={tr('contador.inicioContador.noSePudoEvaluar')} esqueleto={null}>
             <AvisoEstado pAcred={pAcred} pKpis={pKpis} pAnomalias={pAnomalias} pCfgFiscal={pCfgFiscal}
               pGastosFiscales={pGastosFiscales} pGastosFiscalesSeries={pGastosFiscalesSeries}
               pFacturacion={pFacturacion} />
@@ -231,8 +235,8 @@ export async function InicioContador({
               dónde sale: dos números parecidos sin su fuente se leen
               como dos cálculos. */}
           <div>
-            <Bloque mensaje="No se pudo cargar lo acreditable de tus liquidaciones."
-              esqueleto={<EsqCifras n={4} rejilla="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-2" />}>
+            <Bloque mensaje={tr('contador.inicioContador.noSePudoCargar')}
+              esqueleto={<EsqCifrasV2 n={4} />}>
               <BloqueAcreditables pAcred={pAcred} pResumenPerdidas={pResumenPerdidas} periodoFiscal={periodoFiscal} />
             </Bloque>
           </div>
@@ -240,7 +244,7 @@ export async function InicioContador({
           {/* ── Motor fiscal — las mismas piezas que el Resumen del
               dueño, porque el motor ES la pantalla del contador. */}
           <div>
-            <Bloque mensaje="No se pudo cargar el motor fiscal." esqueleto={<EsqMotorFiscal />}>
+            <Bloque mensaje={tr('contador.inicioContador.noSePudoCargar2')} esqueleto={<EsqTarjetaV2 alto={240} />}>
               <BloqueFiscal pResumenPerdidas={pResumenPerdidas} pResumenPerdidasSeries={pResumenPerdidasSeries}
                 periodoFiscal={periodoFiscal} />
             </Bloque>
@@ -255,7 +259,7 @@ export async function InicioContador({
               documentado, en sus dos cubetas que SUMAN todo el IVA
               desglosado, y el estado de cada CFDI ante el SAT. */}
           <div>
-            <Bloque mensaje="No se pudo leer el desglose fiscal." esqueleto={<EsqDesgloseFiscal />}>
+            <Bloque mensaje={tr('contador.inicioContador.noSePudoLeer')} esqueleto={<EsqTarjetaV2 alto={160} />}>
               <BloqueDesglose pResumenFiscal={pResumenFiscal} periodoFiscal={periodoFiscal} />
             </Bloque>
           </div>
@@ -263,21 +267,18 @@ export async function InicioContador({
           {/* ── Sus pantallas: solo rutas de área `dinero`, del mismo
               mapa que las gatea. Todos los links cargan el sufijo. Cero
               consultas: entra con el primer flush. */}
-          <div className="card p-3">
-            <TituloSeccion>Tus pantallas</TituloSeccion>
-            <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-1.5">
+          <Tarjeta titulo={tr('contador.inicioContador.tusPantallas')}>
+            <div className="rv-cont__pantallas">
               {pantallas.map((it) => (
-                <Link key={it.href} href={`${it.href}${sufijo}`}
-                  className="hairline rounded-lg px-3 py-2 flex items-center gap-2 text-[13px] transition-colors hover:bg-[var(--canvas)]"
-                  style={{ background: 'var(--surface)' }}>
-                  <it.Icono width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-                  <span className="truncate">{it.nombre}</span>
+                <Link key={it.href} href={`${it.href}${sufijo}`} className="rv-cont__pantalla">
+                  <Icono icono={it.Icono} />
+                  <span>{it.nombre}</span>
                 </Link>
               ))}
             </div>
-          </div>
+          </Tarjeta>
 
-          <p className="text-[11px] pt-3" style={{ color: 'var(--faint)' }}>{LEYENDA_CORTA}</p>
+          <p className="rv-cont__pie">{LEYENDA_CORTA}</p>
     </MarcoPagina>
   );
 }
@@ -294,6 +295,7 @@ async function BloqueAlertas({ pKpis, pAnomalias, pHuerfanos, pFacturacion, sufi
   pFacturacion: Promise<FacturacionClientes | null>;
   sufijo: string;
 }) {
+  const { t: tr } = await getT('dinero');
   const [kpis, anomalias, huerfanosPendientes, facturacion] =
     await Promise.all([pKpis, pAnomalias, pHuerfanos, pFacturacion]);
 
@@ -303,7 +305,7 @@ async function BloqueAlertas({ pKpis, pAnomalias, pHuerfanos, pFacturacion, sufi
   const alertas: Array<{ texto: string; href: string }> = [];
   if (kpis && kpis.porRevisar > 0) {
     alertas.push({
-      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? ' espera' : 'es esperan'} tu revisión`,
+      texto: tr(kpis.porRevisar === 1 ? 'contador.inicioContador.revisionUna' : 'contador.inicioContador.revisionVarias', { n: kpis.porRevisar }),
       href: `/dashboard/agentes/liquidacion${sufijo}`,
     });
   }
@@ -315,7 +317,7 @@ async function BloqueAlertas({ pKpis, pAnomalias, pHuerfanos, pFacturacion, sufi
   }
   if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
     alertas.push({
-      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? ' sin viaje espera que alguien lo acomode' : 's sin viaje esperan que alguien los acomode'}`,
+      texto: tr(huerfanosPendientes === 1 ? 'contador.inicioContador.huerfanoUno' : 'contador.inicioContador.huerfanosVarios', { n: huerfanosPendientes }),
       href: `/dashboard/huerfanos${sufijo}`,
     });
   }
@@ -326,7 +328,7 @@ async function BloqueAlertas({ pKpis, pAnomalias, pHuerfanos, pFacturacion, sufi
     const sinPago = facturacion.cartera.facturas.filter((f) => f.viva && f.conSaldo).length;
     if (sinPago > 0) {
       alertas.push({
-        texto: `${sinPago} factura${sinPago === 1 ? '' : 's'} emitida${sinPago === 1 ? '' : 's'} sin cobrar por completo — ${mxn(facturacion.cartera.porCobrar)} por cobrar${facturacion.cartera.vencido > 0 ? ` (${mxn(facturacion.cartera.vencido)} ya vencido)` : ''}`,
+        texto: tr(sinPago === 1 ? 'contador.inicioContador.sinCobrarUna' : 'contador.inicioContador.sinCobrarVarias', { n: sinPago, monto: mxn(facturacion.cartera.porCobrar), vencido: facturacion.cartera.vencido > 0 ? ' ' + tr('contador.inicioContador.yaVencido', { monto: mxn(facturacion.cartera.vencido) }) : '' }),
         href: `/dashboard/facturacion${sufijo}`,
       });
     }
@@ -334,14 +336,11 @@ async function BloqueAlertas({ pKpis, pAnomalias, pHuerfanos, pFacturacion, sufi
   if (alertas.length === 0) return null;
 
   return (
-    <div className="mt-3 space-y-1.5">
+    <div className="rv-cont__alertas">
       {alertas.map((a) => (
-        <Link key={a.texto} href={a.href}
-          className="card p-3 flex items-center gap-2.5 hover:opacity-85 transition-opacity"
-          style={{ borderColor: 'var(--warn)' }}>
-          <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
-          <span className="text-[13px]">{a.texto}</span>
-          <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+        <Link key={a.texto} href={a.href} className="rv-cont__alerta">
+          <span>{a.texto}</span>
+          <span className="rv-cont__ver">{tr('contador.inicioContador.ver')}</span>
         </Link>
       ))}
     </div>
@@ -359,6 +358,7 @@ async function AvisoEstado({
   pGastosFiscalesSeries: Promise<GastosFiscalesSeries | null>;
   pFacturacion: Promise<FacturacionClientes | null>;
 }) {
+  const { t: tr } = await getT('dinero');
   // La MISMA regla que `estadoPanel` (estado.ts), sobre las secciones de ESTA
   // pantalla: "no hay nada" es una afirmación sobre el negocio y solo se hace
   // cuando TODO cargó. No se reusa la función porque su forma pide viajes y
@@ -372,25 +372,15 @@ async function AvisoEstado({
 
   if (caidas === secciones.length) {
     return (
-      <div className="card p-6 mt-3" style={{ borderColor: 'var(--bad)' }}>
-        <p className="text-sm font-semibold tracking-tight m-0">No se pudieron cargar los datos</p>
-        <p className="mt-1.5 text-sm m-0" style={{ color: 'var(--muted)' }}>
-          Hubo un problema al leer del sistema. Recarga la página en un momento — esto NO significa
-          que no haya nada acreditable, significa que no se pudo leer.
-        </p>
-      </div>
+      <Aviso tono="error" titulo={tr('contador.inicioContador.noSePudieronCargar')}>
+        {tr('contador.inicioContador.huboUnProblemaAl')}
+      </Aviso>
     );
   }
   return (
-    <div className="card p-4 flex items-start gap-3 mt-3" style={{ borderColor: 'var(--warn)' }}>
-      <span className="inline-block w-2 h-2 rounded-full mt-1.5 shrink-0" style={{ background: 'var(--warn)' }} />
-      <div>
-        <p className="text-sm font-semibold m-0">Faltan datos por cargar — esta pantalla está incompleta</p>
-        <p className="text-xs mt-1 m-0" style={{ color: 'var(--muted)' }}>
-          Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo.
-        </p>
-      </div>
-    </div>
+    <Aviso tono="warn" titulo={tr('contador.inicioContador.faltanDatosPorCargar')}>
+      {tr('contador.inicioContador.unaOMasSecciones')}
+    </Aviso>
   );
 }
 
@@ -399,65 +389,49 @@ async function BloqueAcreditables({ pAcred, pResumenPerdidas, periodoFiscal }: {
   pResumenPerdidas: Promise<ResumenPerdidas | null>;
   periodoFiscal: Periodo;
 }) {
+  const { t: tr } = await getT('dinero');
   const [acred, resumenPerdidas] = await Promise.all([pAcred, pResumenPerdidas]);
   if (acred === null) {
     return (
-      <p className="text-sm" style={{ color: 'var(--muted)' }}>
-        No se pudo cargar lo acreditable de tus liquidaciones.
-      </p>
+      <Aviso tono="error">{tr('contador.inicioContador.noSePudoCargar3')}</Aviso>
     );
   }
   return (
-    <TiraCifras sello={selloHoy('Liquidaciones certificadas')}>
-      <Cifra icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
-        etiqueta={`IVA acreditable de tus liquidaciones — ${periodoFiscal.etiqueta}`}
+    <TiraCifras sello={selloHoy(tr('contador.inicioContador.selloCertificadas'))}>
+      <Cifra icono={<Icono icono={Landmark} />}
+        etiqueta={tr('contador.inicioContador.ivaAcreditableDeTus', { etiqueta: periodoFiscal.etiqueta })}
         info="contador.iva_liquidaciones"
         valor={acred.iva} formato="mxn"
-        nota="LIVA art. 5 — lo que el motor certificó al cerrar cada liquidación" />
+        nota={tr('contador.inicioContador.livaArt5Lo')} />
       {/* La condición va en el rótulo, no solo en la nota — el
           criterio de `liquidacion/acreditable.ts`: "Estímulo de
           peaje 50%" a secas se lee como un derecho ya ganado. */}
-      <Cifra icono={<RouteIcon width={15} height={15} strokeWidth={1.75} />}
-        etiqueta={`Estímulo de peaje 50% — ${periodoFiscal.etiqueta} · sujeto a elegibilidad`}
+      <Cifra icono={<Icono icono={RouteIcon} />}
+        etiqueta={tr('contador.inicioContador.estimuloDePeaje50', { etiqueta: periodoFiscal.etiqueta })}
         info="contador.estimulo_peaje"
         valor={acred.peaje} formato="mxn"
-        nota="LIF 2026 art. 20, ap. A — base: subtotal SIN IVA de casetas con CFDI" />
+        nota={tr('contador.inicioContador.lif2026Art20')} />
       {resumenPerdidas ? (
-        <Cifra icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
+        <Cifra icono={<Icono icono={ReceiptText} />}
           etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
           info="contador.recuperable"
           valor={resumenPerdidas.montoRecuperable} formato="mxn"
-          nota="Gasto cuya factura aún se puede pedir — el motor dice a quién, abajo" />
+          nota={tr('contador.inicioContador.gastoCuyaFacturaAun')} />
       ) : (
-        <Cifra icono={<ReceiptText width={15} height={15} strokeWidth={1.75} />}
+        <Cifra icono={<Icono icono={ReceiptText} />}
           etiqueta={`Recuperable pidiendo factura — ${periodoFiscal.etiqueta}`}
           info="contador.recuperable"
-          valor={null} estado="error" mensaje="No se pudo calcular lo recuperable en este momento." reintentar />
+          valor={null} estado="error" mensaje={tr('contador.inicioContador.noSePudoCalcular')} reintentar />
       )}
       {/* En LITROS, nunca en pesos — regla de producto: el
           estímulo es cuota DOF (semanal) × litros, y la cuota no
           vive aquí (decisión D2; `guion_demo.test.ts` la ata). */}
-      <Cifra icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
-        etiqueta="Diésel elegible para el estímulo"
+      <Cifra icono={<Icono icono={Fuel} />}
+        etiqueta={tr('contador.inicioContador.dieselElegibleParaEl')}
         info="contador.diesel_elegible"
         valor={acred.litrosDiesel} formato="litros"
-        nota="LIF 2026, art. 20-A: cuota semanal del DOF × litros — tu contador aplica la cuota fechada" />
+        nota={tr('contador.inicioContador.lif2026Art202')} />
     </TiraCifras>
-  );
-}
-
-/** El mismo bulto que el motor fiscal: rótulo, la fila de tarjetas del
- *  periodo y el cuerpo del desglose de causas. */
-function EsqMotorFiscal() {
-  return (
-    <div className="card p-3" role="status" aria-label="Cargando">
-      <Barra alto={13} ancho="38%" />
-      <div className="mt-2 flex flex-wrap gap-2 items-stretch">
-        <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
-        <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
-      </div>
-      <div className="mt-2"><Barra alto={150} className="rounded-xl" /></div>
-    </div>
   );
 }
 
@@ -468,30 +442,12 @@ async function BloqueFiscal({ pResumenPerdidas, pResumenPerdidasSeries, periodoF
 }) {
   const [resumenPerdidas, resumenPerdidasSeries] = await Promise.all([pResumenPerdidas, pResumenPerdidasSeries]);
   return (
-    <div className="card p-3">
-      <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
-      <div className="mt-2 flex flex-wrap gap-2 items-stretch">
+    <Tarjeta titulo={`Tu motor fiscal — ${periodoFiscal.etiqueta}`}>
+      <div className="rv-cont__motor">
         <MotorFiscalPeriodo series={resumenPerdidasSeries} />
       </div>
-      <div className="mt-2">
-        <MotorFiscal resumen={resumenPerdidas} />
-      </div>
-    </div>
-  );
-}
-
-/** Rótulo + las tres cifras del desglose + la línea del estado ante el SAT. */
-function EsqDesgloseFiscal() {
-  return (
-    <div className="card p-3" role="status" aria-label="Cargando">
-      <Barra alto={13} ancho="55%" />
-      <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <Barra key={i} alto={100} className="rounded-xl" />
-        ))}
-      </div>
-      <div className="mt-2"><Barra alto={12} ancho="80%" /></div>
-    </div>
+      <MotorFiscal resumen={resumenPerdidas} />
+    </Tarjeta>
   );
 }
 
@@ -499,29 +455,24 @@ async function BloqueDesglose({ pResumenFiscal, periodoFiscal }: {
   pResumenFiscal: Promise<ResumenFiscal | null>;
   periodoFiscal: Periodo;
 }) {
+  const { t: tr } = await getT('dinero');
   const resumenFiscal = await pResumenFiscal;
   return (
-    <div className="card p-3">
-      <TituloSeccion>El gasto del periodo, por su suerte fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
+    <Tarjeta titulo={tr('contador.inicioContador.elGastoDelPeriodo', { etiqueta: periodoFiscal.etiqueta })}>
       {resumenFiscal === null ? (
-        <p className="text-sm mt-2" style={{ color: 'var(--muted)' }}>
-          No se pudo leer el desglose fiscal en este momento.
-        </p>
+        <Aviso tono="error">{tr('contador.inicioContador.noSePudoLeer2')}</Aviso>
       ) : resumenFiscal.n === 0 ? (
-        <div className="mt-2">
-          <EstadoVacio icono={<FileSearch width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-            Todavía no hay comprobantes leídos en este ejercicio. En cuanto los operadores manden
-            los primeros por WhatsApp, aquí se ve cuánto del gasto sostiene su IVA y cuánto no.
-          </EstadoVacio>
-        </div>
+        <EstadoVacio titulo={tr('contador.inicioContador.sinComprobantesLeidos')} icono={FileSearch} contenido>
+          {tr('contador.inicioContador.todaviaNoHayComprobantes')}
+        </EstadoVacio>
       ) : (
         <>
-          <TiraCifras className="mt-2" sello={selloHoy('Liquidaciones y comprobantes')}>
-            <Cifra icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
-              etiqueta="Gasto comprobado leído" info="contador.gasto_leido" valor={resumenFiscal.gastoTotal} formato="mxn"
-              nota={`${resumenFiscal.n} comprobante${resumenFiscal.n === 1 ? '' : 's'} · ${resumenFiscal.conCfdi} con CFDI, ${resumenFiscal.sinCfdi} sin CFDI`} />
-            <Cifra icono={<Landmark width={15} height={15} strokeWidth={1.75} />}
-              etiqueta="IVA acreditable documentado" info="contador.iva_documentado" valor={resumenFiscal.ivaAcreditable} formato="mxn"
+          <TiraCifras sello={selloHoy(tr('contador.inicioContador.selloLiquidaciones'))}>
+            <Cifra icono={<Icono icono={Wallet} />}
+              etiqueta={tr('contador.inicioContador.gastoComprobadoLeido')} info="contador.gasto_leido" valor={resumenFiscal.gastoTotal} formato="mxn"
+              nota={tr('contador.inicioContador.comprobanteConCfdiSin', { n: resumenFiscal.n, v: resumenFiscal.n === 1 ? '' : 's', conCfdi: resumenFiscal.conCfdi, sinCfdi: resumenFiscal.sinCfdi })} />
+            <Cifra icono={<Icono icono={Landmark} />}
+              etiqueta={tr('contador.inicioContador.ivaAcreditableDocumentado')} info="contador.iva_documentado" valor={resumenFiscal.ivaAcreditable} formato="mxn"
               nota={resumenFiscal.combustible15SujetoADeriva
                 // RE-AUDITORÍA 25, FIS-REAUD-3 (ALTO): incluye combustible en
                 // efectivo prorrateado al 15% con el acumulado del ejercicio
@@ -539,22 +490,22 @@ async function BloqueDesglose({ pResumenFiscal, periodoFiscal }: {
                 // proporción agregada a todos por igual (ver el doc-comment
                 // de `proporcionCombustible15` en fiscal.ts). Es una
                 // ESTIMACIÓN, no una reproducción exacta del PDF.
-                ? 'LIVA art. 5 — incluye combustible en efectivo al 15% del acumulado de HOY, prorrateado en AGREGADO (estimación, no viaje por viaje): puede diferir de lo firmado en PDFs viejos y de tasas de IVA no uniformes (ver "de tus liquidaciones", arriba)'
-                : 'LIVA art. 5 — solo el IVA desglosado en CFDI que lo sostiene'} />
-            <Cifra icono={<FileX2 width={15} height={15} strokeWidth={1.75} />}
-              etiqueta="IVA desglosado que NO se acredita" info="contador.iva_no_acreditable" valor={resumenFiscal.ivaNoAcreditable} formato="mxn"
-              nota="Las dos cubetas suman todo el IVA desglosado del periodo — crúzalo con calculadora" />
+                ? tr('contador.inicioContador.livaArt5Incluye')
+                : tr('contador.inicioContador.livaArt5Solo')} />
+            <Cifra icono={<Icono icono={FileX2} />}
+              etiqueta={tr('contador.inicioContador.ivaDesglosadoQueNo')} info="contador.iva_no_acreditable" valor={resumenFiscal.ivaNoAcreditable} formato="mxn"
+              nota={tr('contador.inicioContador.lasDosCubetasSuman')} />
           </TiraCifras>
-          <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
-            Estado ante el SAT de los {resumenFiscal.conCfdi} CFDI: {resumenFiscal.vigentes} vigente{resumenFiscal.vigentes === 1 ? '' : 's'} · {resumenFiscal.porValidar} por validar · {resumenFiscal.cancelados} cancelado{resumenFiscal.cancelados === 1 ? '' : 's'}.
+          <p className="rv-cont__nota">
+            {tr(resumenFiscal.vigentes === 1 ? 'contador.inicioContador.estadoSatUnVigente' : 'contador.inicioContador.estadoSatVigentes', { conCfdi: resumenFiscal.conCfdi, vigentes: resumenFiscal.vigentes, porValidar: resumenFiscal.porValidar, cancelados: resumenFiscal.cancelados, canceladosEtiqueta: resumenFiscal.cancelados === 1 ? tr('contador.inicioContador.cancelado') : tr('contador.inicioContador.cancelados') })}
             {/* "Por validar" no es "inválido": es "no comprobado" —
                 la distinción viene del propio tipo ResumenFiscal. */}
             {resumenFiscal.conCfdiSinDesglose > 0 && (
-              ` ${resumenFiscal.conCfdiSinDesglose} traen CFDI pero sin desglose de IVA leído — su IVA existe en el papel y aquí no se afirma.`
+              ' ' + tr('contador.inicioContador.traenCfdiPeroSin', { conCfdiSinDesglose: resumenFiscal.conCfdiSinDesglose })
             )}
           </p>
         </>
       )}
-    </div>
+    </Tarjeta>
   );
 }

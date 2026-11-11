@@ -1,11 +1,12 @@
 'use client';
 
-import { useActionState } from 'react';
-import { MessageCircle, Send } from 'lucide-react';
+import { useActionState, useCallback } from 'react';
+import { Send } from 'lucide-react';
 import { numero } from '@/lib/formato';
-import { AvisoResultado } from '../../admin/ui/aviso-resultado';
-import { BotonConfirmar } from '../../admin/ui/confirmar';
-import { useNotificarResultado } from '../../admin/ui/notificaciones';
+import { AvisoResultado, BotonConfirmar, Icono, Tarjeta, clasesBoton, leerResultado, useNotificar } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
+import './operadores.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA INVITACIÓN DEL OPERADOR POR WHATSAPP (W2): masiva y por renglón.
@@ -18,18 +19,17 @@ import { useNotificarResultado } from '../../admin/ui/notificaciones';
 export type ResultadoInvitar =
   | null
   | { ok: true; mensaje: string; fallidas: Array<{ nombre: string; motivo: string }> }
-  | { ok: false; error: string };
+  | { ok: false; error: string; fallidas?: Array<{ nombre: string; motivo: string }> };
 export type AccionInvitar = (previo: ResultadoInvitar, datos: FormData) => Promise<ResultadoInvitar>;
 
-const CONFIRMACION =
-  'Cada invitación es un mensaje de WhatsApp (plantilla aprobada, con el costo de Meta). Confírmalo solo si son tus choferes y aceptaron recibir mensajes de la empresa.';
-
 function Fallidas({ estado }: { estado: ResultadoInvitar }) {
-  if (!estado || !estado.ok || estado.fallidas.length === 0) return null;
+  const { t, idioma } = useT('operacion', operacionEs);
+  const fallidas = estado?.fallidas ?? [];
+  if (fallidas.length === 0) return null;
   return (
-    <ul className="space-y-0.5 text-[12px]" style={{ color: 'var(--warn)' }}>
-      {estado.fallidas.slice(0, 10).map((f) => <li key={f.nombre + f.motivo}>{f.nombre}: {f.motivo}</li>)}
-      {estado.fallidas.length > 10 && <li>y {numero(estado.fallidas.length - 10)} más.</li>}
+    <ul className="rv-eq__lista">
+      {fallidas.slice(0, 10).map((f) => <li key={f.nombre + f.motivo}>{f.nombre}: {f.motivo}</li>)}
+      {fallidas.length > 10 && <li>{t('comun.mas', { n: numero(fallidas.length - 10, idioma) })}</li>}
     </ul>
   );
 }
@@ -42,57 +42,51 @@ export function InvitarPendientes({ pendientes, conFallo, accion, hrefGuia }: {
   /** A la guía del arranque del chofer (número de Likida, QR). */
   hrefGuia: string;
 }) {
+  const { t, tp, idioma } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   if (pendientes === 0 && conFallo === 0 && !estado) return null;
   return (
-    <section aria-labelledby="titulo-invitar" className="card p-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-          <MessageCircle aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        </div>
-        <div className="min-w-0 flex-1 space-y-2">
-          <h2 id="titulo-invitar" className="font-display text-[15px] font-semibold">Invitar a los operadores por WhatsApp</h2>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-            {pendientes > 0
-              ? <><strong style={{ color: 'var(--ink)' }}>{numero(pendientes)}</strong> {pendientes === 1 ? 'operador activo espera' : 'operadores activos esperan'} su invitación. </>
-              : 'Todos los operadores activos ya fueron invitados. '}
-            Les llega un mensaje para que le escriban a Likida con su número; hasta que lo hagan, el bot no los conoce en conversación.{' '}
-            <a href={hrefGuia} className="underline">Ver el número y el flujo de arranque del chofer</a>.
+    <Tarjeta titulo={t('op.inv.titulo')} info="whatsapp.avance">
+      <div className="rv-eq__bloque">
+        <p className="rv-eq__texto">
+          {pendientes > 0
+            ? <strong>{tp('op.inv.esperan', pendientes, { n: numero(pendientes, idioma) })}</strong>
+            : t('op.inv.todos')}
+          {t('op.inv.llega')}{' '}
+          <a href={hrefGuia} className="rv-eq__enlace">{t('op.inv.guia')}</a>.
+        </p>
+        {conFallo > 0 && (
+          <p className="rv-eq__texto" data-tono="warn">
+            {tp('op.inv.fallo', conFallo, { n: numero(conFallo, idioma) })}
           </p>
-          {conFallo > 0 && (
-            <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-              {numero(conFallo)} {conFallo === 1 ? 'invitación falló' : 'invitaciones fallaron'} (número sin WhatsApp o inválido): corrige el teléfono en su ficha y reintenta.
-            </p>
+        )}
+        <form action={despachar} className="rv-eq__fila">
+          {pendientes > 0 && (
+            <BotonConfirmar
+              etiqueta={t('op.inv.enviar', { n: numero(pendientes, idioma) })} tono="normal"
+              nombreConfirmar="modo" valorConfirmar="pendientes"
+              titulo={t('op.inv.enviar.titulo', { n: numero(Math.min(pendientes, 40), idioma) })}
+              descripcion={pendientes > 40 ? t('op.inv.enviar.resto', { conf: t('op.inv.confirmacion'), n: numero(pendientes - 40, idioma) }) : t('op.inv.enviar.tope', { conf: t('op.inv.confirmacion') })}
+              etiquetaConfirmar={t('op.inv.enviar.si')}
+              className={clasesBoton('primary')}
+              icono={<Icono icono={Send} />}
+            />
           )}
-          <form action={despachar} className="flex flex-wrap items-center gap-2">
-            {pendientes > 0 && (
-              <BotonConfirmar
-                etiqueta={`Enviar invitaciones pendientes (${numero(pendientes)})`} tono="normal"
-                nombreConfirmar="modo" valorConfirmar="pendientes"
-                titulo={`Invitar a ${numero(Math.min(pendientes, 40))} operadores`}
-                descripcion={<>{CONFIRMACION} Salen hasta 40 por vez{pendientes > 40 ? `; quedarán ${numero(pendientes - 40)} pendientes y repites el envío` : ''}.</>}
-                etiquetaConfirmar="Sí, enviar invitaciones"
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-opacity hover:opacity-85"
-                style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}
-                icono={<Send aria-hidden width={13} height={13} strokeWidth={2} />}
-              />
-            )}
-            {conFallo > 0 && (
-              <BotonConfirmar
-                etiqueta={`Reintentar las que fallaron (${numero(conFallo)})`} tono="normal"
-                nombreConfirmar="modo" valorConfirmar="fallidas"
-                titulo={`Reintentar ${numero(Math.min(conFallo, 40))} invitaciones`}
-                descripcion={CONFIRMACION}
-                etiquetaConfirmar="Sí, reintentar"
-                className="hairline inline-flex h-9 items-center gap-1.5 rounded-lg px-4 text-[13px] font-medium transition-colors hover:bg-[var(--canvas)]"
-              />
-            )}
-          </form>
-          <AvisoResultado estado={estado} />
-          <Fallidas estado={estado} />
-        </div>
+          {conFallo > 0 && (
+            <BotonConfirmar
+              etiqueta={t('op.inv.reintentar', { n: numero(conFallo, idioma) })} tono="normal"
+              nombreConfirmar="modo" valorConfirmar="fallidas"
+              titulo={t('op.inv.reintentar.titulo', { n: numero(Math.min(conFallo, 40), idioma) })}
+              descripcion={t('op.inv.confirmacion')}
+              etiquetaConfirmar={t('op.inv.reintentar.si')}
+              className={clasesBoton('secondary')}
+            />
+          )}
+        </form>
+        <AvisoResultado estado={estado} />
+        <Fallidas estado={estado} />
       </div>
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -104,19 +98,27 @@ export function InvitarUno({ operadorId, nombre, reintento, accion }: {
   reintento: boolean;
   accion: AccionInvitar;
 }) {
-  const [estado, despachar] = useActionState(accion, null);
-  useNotificarResultado(estado);
+  // El aviso sale DENTRO de la acción, no de un efecto de este componente: tras `revalidatePath` la fila pasa a «Invitación
+  // enviada»/«falló», este botón se desmonta y un `useNotificarResultado` se perdía (el éxito y, peor, el error nunca se veían).
+  const { t } = useT('operacion', operacionEs);
+  const { notificar } = useNotificar();
+  const conAviso = useCallback<AccionInvitar>(async (previo, datos) => {
+    const resultado = await accion(previo, datos);
+    const leido = leerResultado(resultado);
+    if (leido) notificar({ tono: leido.tono === 'error' ? 'error' : 'ok', mensaje: leido.texto });
+    return resultado;
+  }, [accion, notificar]);
+  const [, despachar] = useActionState(conAviso, null);
   return (
-    <form action={despachar} className="inline">
+    <form action={despachar} className="rv-eq__en-linea">
       <input type="hidden" name="modo" value="uno" />
       <input type="hidden" name="operadorId" value={operadorId} />
       <BotonConfirmar
-        etiqueta={reintento ? 'Reintentar invitación' : 'Invitar por WhatsApp'} tono="normal"
-        titulo={`Invitar a ${nombre}`}
-        descripcion={<>Se le manda un mensaje de WhatsApp para que le escriba a Likida. {CONFIRMACION}</>}
-        etiquetaConfirmar="Sí, invitar"
-        className="text-[12px] underline hover:opacity-70 transition-opacity"
-        style={{ color: 'var(--muted)' }}
+        etiqueta={reintento ? t('op.inv.uno.reintentar') : t('op.inv.uno.invitar')} tono="normal"
+        titulo={t('op.inv.uno.titulo', { nombre })}
+        descripcion={t('op.inv.uno.cuerpo', { conf: t('op.inv.confirmacion') })}
+        etiquetaConfirmar={t('op.inv.uno.si')}
+        className={clasesBoton('ghost', 'sm')}
       />
     </form>
   );

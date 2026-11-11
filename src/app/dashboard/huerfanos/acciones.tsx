@@ -3,7 +3,11 @@
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Link2, Trash2 } from 'lucide-react';
+import { AvisoCompacto, Boton, Icono } from '@/app/ui-v2/componentes';
 import { ComboViaje, type BuscarViaje } from './combo-viaje';
+import './huerfanos.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type AccionHuerfano = (
   prev: { error?: string } | null,
@@ -34,88 +38,67 @@ export function FilaAcciones({ huerfanoId, hayViajesVivos, sinMonto, buscarViaje
   adjuntar: AccionHuerfano;
   descartar: AccionHuerfano;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estadoAdj, accionAdj] = useActionState(adjuntar, null);
   const [estadoDesc, accionDesc] = useActionState(descartar, null);
   const [confirmando, setConfirmando] = useState(false);
 
   return (
-    <div className="min-w-[260px]">
+    <div className="rv-hf__acciones">
       {confirmando ? (
-        <form action={accionDesc} onSubmit={() => setConfirmando(false)}
-          className="flex items-center gap-2 justify-end">
+        <form action={accionDesc} onSubmit={() => setConfirmando(false)} className="rv-hf__fila">
           <input type="hidden" name="huerfanoId" value={huerfanoId} />
-          <span className="text-[12px]" style={{ color: 'var(--muted)' }}>¿Descartarlo?</span>
+          <span className="rv-hf__pregunta">{t('hf.descartar.pregunta')}</span>
           <BotonConfirmarDescarte />
-          <button type="button" onClick={() => setConfirmando(false)}
-            className="rv-btn rv-btn--secondary"
-            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            No
-          </button>
+          <Boton tamano="sm" variante="ghost" onClick={() => setConfirmando(false)}>{t('hf.no')}</Boton>
         </form>
       ) : (
-        <form action={accionAdj} className="flex items-center gap-2 justify-end">
+        <form action={accionAdj} className="rv-hf__fila">
           <input type="hidden" name="huerfanoId" value={huerfanoId} />
           {sinMonto ? (
-            <span className="text-[12px] text-right" style={{ color: 'var(--faint)' }}>
-              Sin monto legible no se puede adjuntar (metería $0.00) — pídele al chofer que reenvíe la foto
+            <span className="rv-hf__sin">
+              {t('hf.sinmonto')}
             </span>
           ) : hayViajesVivos ? (
             <>
-              <ComboViaje name="viajeId" buscar={buscarViaje} requerido aria-label="Viaje al que va"
-                className="flex-1 min-w-0 max-w-[180px] text-[12px] px-2 py-1.5 rounded-lg hairline"
-                estilo={{ background: 'var(--surface)' }} />
+              <ComboViaje name="viajeId" buscar={buscarViaje} requerido aria-label={t('hf.viaje.aria')} className="rv-ctl" />
               <BotonAdjuntar />
             </>
           ) : (
-            <span className="text-[12px]" style={{ color: 'var(--faint)' }}>Sin viajes abiertos a los cuales adjuntar</span>
+            <span className="rv-hf__sin">{t('hf.sinviajes')}</span>
           )}
-          {/* FE-21: es un botón SOLO de ícono. Sin `aria-label`, un lector de
-              pantalla lo anuncia como "botón" a secas — y el que borra un
-              comprobante es el peor botón para no tener nombre. `title` no
-              basta: no todos los lectores lo leen si no hay nombre accesible. */}
-          <button type="button" onClick={() => setConfirmando(true)} title="Descartar el comprobante"
-            aria-label="Descartar el comprobante"
-            className="rv-icono-boton"
-            style={{ background: 'var(--surface)', color: 'var(--muted)' }}>
-            <Trash2 width={13} height={13} strokeWidth={1.75} aria-hidden />
-          </button>
+          {/* FE-21: es un botón SOLO de ícono. Sin `aria-label`, un lector de pantalla lo anuncia como "botón" a secas — y el que
+              borra un comprobante es el peor botón para no tener nombre. */}
+          <Boton tamano="sm" variante="ghost" onClick={() => setConfirmando(true)} title={t('hf.descartar.titulo')}
+            aria-label={t('hf.descartar.titulo')} icono={<Icono icono={Trash2} tam={16} />}>{''}</Boton>
         </form>
       )}
-      {/* FE-3: ya no hay ventana que confesar — el buscador pregunta a la
-          flota entera de viajes vivos, no a un recorte cargado de una vez. */}
+      {/* FE-3: ya no hay ventana que confesar — el buscador pregunta a la flota entera de viajes vivos, no a un recorte cargado de una vez. */}
       {!confirmando && !sinMonto && hayViajesVivos && (
-        <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--faint)' }}>
-          Escribe el folio o el nombre del operador — se busca en todos los viajes vivos.
-        </p>
+        <p className="rv-hf__ayuda">{t('hf.ayuda')}</p>
       )}
-      {estadoAdj?.error && <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--bad)' }}>{estadoAdj.error}</p>}
-      {estadoDesc?.error && <p className="text-[11px] mt-1 text-right" style={{ color: 'var(--bad)' }}>{estadoDesc.error}</p>}
+      {estadoAdj?.error && <AvisoCompacto tono="error" resumen={estadoAdj.error} />}
+      {estadoDesc?.error && <AvisoCompacto tono="error" resumen={estadoDesc.error} />}
     </div>
   );
 }
 
 function BotonAdjuntar() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary shrink-0"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Link2 width={12} height={12} strokeWidth={2} />
-      {pending ? 'Adjuntando…' : 'Adjuntar'}
-    </button>
+    <Boton type="submit" variante="primary" tamano="sm" disabled={pending} icono={<Icono icono={Link2} tam={16} />}>
+      {pending ? t('hf.adjuntando') : t('hf.adjuntar')}
+    </Boton>
   );
 }
 
 function BotonConfirmarDescarte() {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    /* Texto rojo sobre su fondo tenue (tokens existentes) — no se inventa un
-       token de contraste para un botón sólido rojo. */
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--danger"
-      style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <Trash2 width={12} height={12} strokeWidth={2} />
-      {pending ? 'Descartando…' : 'Sí, descartar'}
-    </button>
+    <Boton type="submit" variante="danger" tamano="sm" disabled={pending} icono={<Icono icono={Trash2} tam={16} />}>
+      {pending ? t('hf.descartando') : t('hf.descartar.si')}
+    </Boton>
   );
 }

@@ -1,10 +1,12 @@
 'use client';
 
+import { useT } from '@/lib/i18n/proveedor';
+import { dinero } from '@/lib/i18n/es/dinero';
 import { useActionState, useState } from 'react';
-import Link from 'next/link';
-import { Archive, Link2, RotateCcw, Search, TriangleAlert } from 'lucide-react';
+import { Archive, Link2, RotateCcw, Search } from 'lucide-react';
 import { fechaMx, fechaHoraMx, mxn } from '@/lib/formato';
-import { StatusPill } from '../../../admin/ui/kit';
+import { AvisoCompacto, Boton, BotonEnlace, CampoFecha, CampoTexto, Disclosure, Icono, StatusChip } from '@/app/ui-v2/componentes';
+import '../descarga-sat.css';
 import type { FilaBandeja, CandidatoVista, GastoCandidatoBusqueda } from '@/lib/likida/sat_descarga/bandeja';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -35,46 +37,26 @@ export type AccionFila = (previo: ResultadoFila, fd: FormData) => Promise<Result
 
 /** Qué dice un candidato HOY, sin adivinar cuando no se pudo comprobar. */
 function EstadoCandidato({ c }: { c: CandidatoVista }) {
+  const { t: tr } = useT('dinero', dinero);
   if (c.vive === null) {
-    return (
-      <span className="text-[11px]" style={{ color: 'var(--warn)' }}>
-        no se pudo comprobar si este gasto sigue ahí
-      </span>
-    );
+    return <span className="rv-sat__nota" data-tono="warn">{tr('descargaSat.bandeja.fila.noSePudoComprobar')}</span>;
   }
   if (c.vive === false) {
-    return (
-      <span className="text-[11px]" style={{ color: 'var(--bad)' }}>
-        ese gasto ya no existe (se borró el viaje del que colgaba)
-      </span>
-    );
+    return <span className="rv-sat__nota" data-tono="bad">{tr('descargaSat.bandeja.fila.eseGastoYaNo')}</span>;
   }
   if (c.yaTieneCfdi === true) {
-    return (
-      <span className="text-[11px]" style={{ color: 'var(--warn)' }}>
-        ya tiene comprobante — le llegó por otro camino
-      </span>
-    );
+    return <span className="rv-sat__nota" data-tono="warn">{tr('descargaSat.bandeja.fila.yaTieneComprobanteLe')}</span>;
   }
-  // EL GASTO CAMBIÓ DESDE EL CRUCE — y solo entonces se dice. Repetir «hoy:
-  // $1,160 · 24 ago · caseta» debajo de un candidato idéntico llena la fila de
-  // ruido y entierra justo el caso que importa: el gasto al que alguien le
-  // movió el monto o la fecha entre que el motor lo propuso y hoy.
+  // EL GASTO CAMBIÓ DESDE EL CRUCE — y solo entonces se dice. Repetir «hoy: …» debajo de un candidato idéntico llena la fila de ruido y entierra justo el caso que importa: el gasto al que alguien le movió el monto o la fecha entre que el motor lo propuso y hoy.
   const cambio = c.montoHoy !== c.montoOfrecido
     || c.fechaHoy !== c.fechaOfrecida
     || c.conceptoHoy !== c.conceptoOfrecido;
   if (!cambio) {
-    return (
-      <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
-        sin cambios desde el cruce
-      </span>
-    );
+    return <span className="rv-sat__nota">{tr('descargaSat.bandeja.fila.sinCambiosDesdeEl')}</span>;
   }
   return (
-    <span className="text-[11px]" style={{ color: 'var(--warn)' }}>
-      cambió — hoy: {c.montoHoy === null ? 'sin monto legible' : mxn(c.montoHoy)}
-      {c.fechaHoy ? ` · ${fechaMx(c.fechaHoy)}` : ''}
-      {c.conceptoHoy ? ` · ${c.conceptoHoy}` : ''}
+    <span className="rv-sat__nota" data-tono="warn">
+      {tr('descargaSat.bandeja.fila.cambioHoy', { v: c.montoHoy === null ? tr('descargaSat.bandeja.fila.sinMontoLegible') : mxn(c.montoHoy), v2: c.fechaHoy ? ` · ${fechaMx(c.fechaHoy)}` : '', v3: c.conceptoHoy ? ` · ${c.conceptoHoy}` : '' })}
     </span>
   );
 }
@@ -99,98 +81,76 @@ export function FilaComprobante({
     campoPagina: Array<{ nombre: string; valor: string }>;
   } | null;
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, enviar, pendiente] = useActionState<ResultadoFila, FormData>(accion, null);
   const [motivando, setMotivando] = useState<null | 'ignorar' | 'revertir'>(null);
 
   return (
-    <li className="hairline rounded-lg p-3 list-none" style={{ background: 'var(--surface)' }}>
+    <li className="rv-sat__fila">
       {/* ── La identidad del comprobante ─────────────────────────────── */}
-      <div className="flex items-start gap-2 flex-wrap">
-        <span className="text-[13px] font-medium">
+      <div className="rv-sat__cab">
+        <strong>
           {/* `null` ≠ 0: un CFDI sin total legible lo dice. */}
-          {fila.total === null
-            ? <span style={{ color: 'var(--warn)' }}>sin total legible</span>
-            : mxn(fila.total)}
-        </span>
-        <StatusPill estado={
+          {fila.total === null ? <span className="rv-sat__nota" data-tono="warn">{tr('descargaSat.bandeja.fila.sinTotalLegible')}</span> : mxn(fila.total)}
+        </strong>
+        <StatusChip tono={
           fila.estatus === 'casado' ? 'ok'
             : fila.estatus === 'ambiguo' ? 'warn'
               : fila.estatus === 'ignorado' ? 'neutral' : 'bad'
         }>
           {fila.estatus}
-        </StatusPill>
-        <span className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          {fila.rfcEmisor ?? 'sin RFC de emisor'}
+        </StatusChip>
+        <span className="rv-sat__tenue">
+          {fila.rfcEmisor ?? tr('descargaSat.bandeja.fila.sinRfcDeEmisor')}
           {' · '}
-          {fila.fecha ? fechaMx(fila.fecha) : 'sin fecha'}
-          {fila.tipoComprobante ? ` · tipo ${fila.tipoComprobante}` : ''}
+          {fila.fecha ? fechaMx(fila.fecha) : tr('descargaSat.bandeja.fila.sinFecha')}
+          {fila.tipoComprobante ? ' ' + tr('descargaSat.bandeja.fila.tipo', { tipoComprobante: fila.tipoComprobante }) : ''}
         </span>
-        <span className="ml-auto cifra-mono text-[11px] shrink-0" style={{ color: 'var(--faint)' }}
-          title="Folio fiscal — la llave del comprobante ante el SAT">
-          {fila.cfdiUuid}
-        </span>
+        <span className="rv-sat__uuid" title={tr('descargaSat.bandeja.fila.folioFiscalLaLlave')}>{fila.cfdiUuid}</span>
       </div>
 
       {/* Lo que el motor dijo, TAL CUAL. */}
-      {fila.motivo && (
-        <p className="text-[12px] mt-1.5 m-0" style={{ color: 'var(--muted)' }}>{fila.motivo}</p>
-      )}
+      {fila.motivo && <p className="rv-sat__texto">{fila.motivo}</p>}
 
       {/* La firma viva: quién dejó esta fila como está. */}
       {fila.resueltoPorEmail && (
-        <p className="text-[11px] mt-1 m-0" style={{ color: 'var(--faint)' }}>
-          Lo dejó así {fila.resueltoPorEmail}
-          {fila.resueltoEn ? ` el ${fechaHoraMx(fila.resueltoEn)}` : ''}.
+        <p className="rv-sat__nota">
+          {tr('descargaSat.bandeja.fila.loDejoAsi', { resueltoPorEmail: fila.resueltoPorEmail, v: fila.resueltoEn ? ` el ${fechaHoraMx(fila.resueltoEn)}` : '' })}
         </p>
       )}
       {!fila.resueltoPorEmail && fila.estatus === 'casado' && (
-        <p className="text-[11px] mt-1 m-0" style={{ color: 'var(--faint)' }}>
-          Casó solo: lo decidió el cruce automático, no una persona.
-        </p>
+        <p className="rv-sat__nota">{tr('descargaSat.bandeja.fila.casoSoloLoDecidio')}</p>
       )}
 
-      {estado?.error && (
-        <p className="text-[12px] mt-2 mb-0 flex items-start gap-1.5" style={{ color: 'var(--bad)' }}>
-          <TriangleAlert width={13} height={13} strokeWidth={2} className="shrink-0 mt-0.5" aria-hidden />
-          {estado.error}
-        </p>
-      )}
-      {estado?.ok && (
-        <p className="text-[12px] mt-2 mb-0" style={{ color: 'var(--ok)' }}>{estado.ok}</p>
-      )}
+      {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
+      {estado?.ok && <AvisoCompacto tono="ok" resumen={estado.ok} />}
 
-      <form action={enviar} className="mt-2.5 space-y-2">
+      <form action={enviar} className="rv-sat__bloque">
         <input type="hidden" name="cfdi" value={fila.id} />
 
         {/* ── AMBIGUO: los candidatos, y se ELIGE uno ─────────────────── */}
         {fila.estatus === 'ambiguo' && (
           fila.candidatos.length === 0 ? (
-            <p className="text-[12px] m-0" style={{ color: 'var(--warn)' }}>
-              Está marcado como ambiguo pero no quedó ninguna lista de candidatos legible.
-              No se puede elegir a ciegas: archívalo con motivo, o pídele a soporte que
-              revise por qué se quedó así.
-            </p>
+            <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.fila.estaMarcadoComoAmbiguo')}
+              mas={tr('descargaSat.bandeja.fila.noSePuedeElegir')} />
           ) : (
-            <div className="space-y-1.5">
-              <p className="text-[11px] m-0" style={{ color: 'var(--muted)' }}>
-                Varios gastos empataron con este importe y Likida no adivina cuál es.
-                Elige tú — y quedará firmado con tu correo.
+            <div className="rv-sat__bloque">
+              <p className="rv-sat__nota">
+                {tr('descargaSat.bandeja.fila.variosGastosEmpataronCon')}
               </p>
               {fila.candidatos.map((c) => (
-                <div key={c.gastoId} className="hairline rounded-lg px-2.5 py-2 flex items-center gap-2.5 flex-wrap"
-                  style={{ background: 'var(--canvas)' }}>
-                  <span className="text-[12px]">
-                    {c.montoOfrecido === null ? 'sin monto anotado' : mxn(c.montoOfrecido)}
+                <div key={c.gastoId} className="rv-sat__candidato">
+                  <span>
+                    {c.montoOfrecido === null ? tr('descargaSat.bandeja.fila.sinMontoAnotado') : mxn(c.montoOfrecido)}
                     {c.fechaOfrecida ? ` · ${fechaMx(c.fechaOfrecida)}` : ''}
                     {c.conceptoOfrecido ? ` · ${c.conceptoOfrecido}` : ''}
                   </span>
                   <EstadoCandidato c={c} />
-                  <button type="submit" name="operacion" value={`ligar:${c.gastoId}`}
+                  <Boton type="submit" name="operacion" value={`ligar:${c.gastoId}`} variante="primary" tamano="sm"
                     disabled={pendiente || c.vive !== true || c.yaTieneCfdi === true}
-                    className="rv-btn rv-btn--primary ml-auto"
-                    style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
-                    <Link2 width={12} height={12} strokeWidth={2} /> Es éste
-                  </button>
+                    icono={<Icono icono={Link2} />}>
+                    {tr('descargaSat.bandeja.fila.esEste')}
+                  </Boton>
                 </div>
               ))}
             </div>
@@ -199,49 +159,39 @@ export function FilaComprobante({
 
         {/* ── DISPONIBLE: el buscador de gastos ───────────────────────── */}
         {fila.estatus === 'disponible' && busqueda !== null && (
-          <div className="hairline rounded-lg p-2.5 space-y-2" style={{ background: 'var(--canvas)' }}>
-            <p className="text-[11px] m-0" style={{ color: 'var(--muted)' }}>
-              Solo se ofrecen gastos de tu flota que TODAVÍA no tienen comprobante. El
-              importe viene prellenado con el total del CFDI (± $1). Desde aquí no se crea
-              un gasto: si nadie lo reportó, ése es el hallazgo.
+          <div className="rv-sat__candidato rv-sat__candidato--col">
+            <p className="rv-sat__nota">
+              {tr('descargaSat.bandeja.fila.soloSeOfrecenGastos')}
             </p>
             {busqueda.error !== null ? (
-              <p className="text-[12px] m-0" style={{ color: 'var(--bad)' }}>
-                No se pudo buscar — eso NO significa que no haya gastos que correspondan:
-                {' '}{busqueda.error}
-              </p>
+              <AvisoCompacto tono="error" resumen={tr('descargaSat.bandeja.fila.noSePudoBuscar', { error: busqueda.error })} />
             ) : (
               <>
                 {busqueda.gastos.length === 0 ? (
-                  <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>
-                    Ningún gasto sin comprobante coincide con esos filtros. Amplía el rango de
-                    fechas o quita el importe — o archívalo, si de verdad nadie lo reportó.
+                  <p className="rv-sat__texto">
+                    {tr('descargaSat.bandeja.fila.ningunGastoSinComprobante')}
                   </p>
                 ) : (
-                  <ul className="space-y-1.5 m-0 p-0 list-none">
+                  <ul className="rv-sat__lista">
                     {busqueda.gastos.map((g) => (
-                      <li key={g.id} className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-[12px]">
+                      <li key={g.id} className="rv-sat__candidato">
+                        <span>
                           {mxn(g.monto)}
-                          {g.fecha ? ` · ${fechaMx(g.fecha)}` : ' · sin fecha'}
+                          {g.fecha ? ` · ${fechaMx(g.fecha)}` : ' ' + tr('descargaSat.bandeja.fila.sinFecha2')}
                           {` · ${g.concepto}`}
-                          {g.folio ? ` · folio ${g.folio}` : ''}
+                          {g.folio ? ' ' + tr('descargaSat.bandeja.fila.folio', { folio: g.folio }) : ''}
                           {g.rfcEmisor ? ` · ${g.rfcEmisor}` : ''}
                         </span>
-                        <button type="submit" name="operacion" value={`ligar:${g.id}`} disabled={pendiente}
-                          className="rv-btn rv-btn--primary ml-auto"
-                          style={{ background: 'var(--ink)', color: 'var(--surface)' }}>
-                          <Link2 width={12} height={12} strokeWidth={2} /> Ligar a este gasto
-                        </button>
+                        <Boton type="submit" name="operacion" value={`ligar:${g.id}`} variante="primary" tamano="sm" disabled={pendiente}
+                          icono={<Icono icono={Link2} />}>
+                          {tr('descargaSat.bandeja.fila.ligarAEsteGasto')}
+                        </Boton>
                       </li>
                     ))}
                   </ul>
                 )}
                 {busqueda.truncada && (
-                  <p className="text-[11px] m-0" style={{ color: 'var(--warn)' }}>
-                    Hay más gastos que cumplen esos filtros de los que caben aquí — esta lista
-                    está recortada. Acota la fecha o el importe para verlos todos.
-                  </p>
+                  <AvisoCompacto tono="warn" resumen={tr('descargaSat.bandeja.fila.hayMasGastosQue')} />
                 )}
               </>
             )}
@@ -250,131 +200,85 @@ export function FilaComprobante({
 
         {/* El motivo, cuando la operación quita una afirmación. */}
         {motivando !== null && (
-          <input name="motivo" autoFocus required
-            aria-label={motivando === 'ignorar' ? 'Por qué se archiva' : 'Por qué se deshace'}
+          <CampoTexto name="motivo" autoFocus required etiqueta={motivando === 'ignorar' ? tr('descargaSat.bandeja.fila.porQueSeArchiva') : tr('descargaSat.bandeja.fila.porQueSeDeshace')} etiquetaOculta
             placeholder={motivando === 'ignorar'
-              ? 'Por qué se archiva (obligatorio) — «no es de esta flota», «duplicado del folio X»…'
-              : 'Por qué se deshace (obligatorio) — «era del ticket de la otra unidad»…'}
-            className="w-full text-[12px] px-3 py-2 rounded-lg hairline"
-            style={{ background: 'var(--canvas)' }} />
+              ? tr('descargaSat.bandeja.fila.porQueSeArchiva2')
+              : tr('descargaSat.bandeja.fila.porQueSeDeshace2')} />
         )}
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="rv-sat__acciones">
           {fila.estatus === 'disponible' && hrefBuscar !== null && busqueda === null && (
-            <Link href={hrefBuscar}
-              className="inline-flex items-center gap-1.5 text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-              <Search width={12} height={12} strokeWidth={1.75} /> Buscar el gasto que le toca
-            </Link>
+            <BotonEnlace href={hrefBuscar} variante="secondary" tamano="sm" icono={<Icono icono={Search} />}>
+              {tr('descargaSat.bandeja.fila.buscarElGastoQue')}
+            </BotonEnlace>
           )}
           {busqueda !== null && hrefCerrarBusqueda !== null && (
-            <Link href={hrefCerrarBusqueda}
-              className="text-[12px] font-medium px-3 py-1.5 rounded-full hairline hover:opacity-70 transition-opacity">
-              Cerrar el buscador
-            </Link>
+            <BotonEnlace href={hrefCerrarBusqueda} variante="ghost" tamano="sm">{tr('descargaSat.bandeja.fila.cerrarElBuscador')}</BotonEnlace>
           )}
 
           {(fila.estatus === 'disponible' || fila.estatus === 'ambiguo') && (
             motivando === 'ignorar' ? (
               <>
-                <button type="submit" name="operacion" value="ignorar" disabled={pendiente}
-                  className="rv-btn rv-btn--danger"
-                  style={{ background: 'var(--bad)', color: 'var(--surface)' }}>
-                  <Archive width={12} height={12} strokeWidth={2} /> Archivar
-                </button>
-                <button type="button" onClick={() => setMotivando(null)}
-                  className="rv-btn rv-btn--secondary rv-btn--sm">
-                  Cancelar
-                </button>
+                <Boton type="submit" name="operacion" value="ignorar" disabled={pendiente} variante="danger" tamano="sm" icono={<Icono icono={Archive} />}>
+                  {tr('descargaSat.bandeja.fila.archivar')}
+                </Boton>
+                <Boton type="button" onClick={() => setMotivando(null)} variante="secondary" tamano="sm">{tr('descargaSat.bandeja.fila.cancelar')}</Boton>
               </>
             ) : (
-              <button type="button" onClick={() => setMotivando('ignorar')}
-                className="rv-btn rv-btn--secondary rv-btn--sm"
-                style={{ color: 'var(--bad)' }}>
-                <Archive width={12} height={12} strokeWidth={1.75} /> Archivar con motivo…
-              </button>
+              <Boton type="button" onClick={() => setMotivando('ignorar')} variante="secondary" tamano="sm" icono={<Icono icono={Archive} />}>
+                {tr('descargaSat.bandeja.fila.archivarConMotivo')}
+              </Boton>
             )
           )}
 
           {(fila.estatus === 'casado' || fila.estatus === 'ignorado') && (
             motivando === 'revertir' ? (
               <>
-                <button type="submit" name="operacion" value="revertir" disabled={pendiente}
-                  className="rv-btn rv-btn--primary"
-                  style={{ background: 'var(--warn)', color: 'var(--surface)' }}>
-                  <RotateCcw width={12} height={12} strokeWidth={2} />
-                  {fila.estatus === 'casado' ? 'Deshacer el cruce' : 'Devolver a la bandeja'}
-                </button>
-                <button type="button" onClick={() => setMotivando(null)}
-                  className="rv-btn rv-btn--secondary rv-btn--sm">
-                  Cancelar
-                </button>
+                <Boton type="submit" name="operacion" value="revertir" disabled={pendiente} variante="primary" tamano="sm" icono={<Icono icono={RotateCcw} />}>
+                  {fila.estatus === 'casado' ? tr('descargaSat.bandeja.fila.deshacerElCruce') : tr('descargaSat.bandeja.fila.devolverALaBandeja')}
+                </Boton>
+                <Boton type="button" onClick={() => setMotivando(null)} variante="secondary" tamano="sm">{tr('descargaSat.bandeja.fila.cancelar')}</Boton>
               </>
             ) : (
-              <button type="button" onClick={() => setMotivando('revertir')}
-                className="rv-btn rv-btn--secondary rv-btn--sm">
-                <RotateCcw width={12} height={12} strokeWidth={1.75} />
-                {fila.estatus === 'casado' ? 'Deshacer el cruce…' : 'Devolver a la bandeja…'}
-              </button>
+              <Boton type="button" onClick={() => setMotivando('revertir')} variante="secondary" tamano="sm" icono={<Icono icono={RotateCcw} />}>
+                {fila.estatus === 'casado' ? tr('descargaSat.bandeja.fila.deshacerElCruce2') : tr('descargaSat.bandeja.fila.devolverALaBandeja2')}
+              </Boton>
             )
           )}
         </div>
       </form>
 
-      {/* El buscador va en SU PROPIO form (GET, sin JS): navegar no puede
-          compartir formulario con las acciones de arriba. */}
+      {/* El buscador va en SU PROPIO form (GET, sin JS): navegar no puede compartir formulario con las acciones de arriba. */}
       {busqueda !== null && (
-        <form method="get" className="mt-2 flex items-end gap-2 flex-wrap">
+        <form method="get" className="rv-sat__buscador">
           {busqueda.campoPagina.map((c) => (
             <input key={c.nombre} type="hidden" name={c.nombre} value={c.valor} />
           ))}
           <input type="hidden" name="buscar" value={fila.id} />
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>
-            Importe
-            <input name="bimporte" defaultValue={busqueda.importe} inputMode="decimal"
-              className="text-[12px] rounded-lg px-2 py-1.5 hairline w-28" style={{ background: 'var(--canvas)' }} />
-          </label>
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>
-            Desde
-            <input name="bdesde" type="date" defaultValue={busqueda.desde}
-              className="text-[12px] rounded-lg px-2 py-1.5 hairline" style={{ background: 'var(--canvas)' }} />
-          </label>
-          <label className="flex flex-col gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>
-            Hasta
-            <input name="bhasta" type="date" defaultValue={busqueda.hasta}
-              className="text-[12px] rounded-lg px-2 py-1.5 hairline" style={{ background: 'var(--canvas)' }} />
-          </label>
-          <label className="flex flex-col gap-1 text-[11px] flex-1 min-w-40" style={{ color: 'var(--muted)' }}>
-            Folio o RFC del ticket
-            <input name="btexto" defaultValue={busqueda.texto} placeholder="A-1234 · XAXX010101000"
-              className="text-[12px] rounded-lg px-2 py-1.5 hairline w-full" style={{ background: 'var(--canvas)' }} />
-          </label>
-          <button type="submit"
-            className="rv-btn rv-btn--secondary rv-btn--sm">
-            Buscar
-          </button>
+          <CampoTexto name="bimporte" etiqueta={tr('descargaSat.bandeja.fila.importe')} defaultValue={busqueda.importe} inputMode="decimal" />
+          <CampoFecha name="bdesde" etiqueta={tr('descargaSat.bandeja.fila.desde')} defaultValue={busqueda.desde} />
+          <CampoFecha name="bhasta" etiqueta={tr('descargaSat.bandeja.fila.hasta')} defaultValue={busqueda.hasta} />
+          <CampoTexto name="btexto" etiqueta={tr('descargaSat.bandeja.fila.folioORfcDel')} defaultValue={busqueda.texto} placeholder={tr('descargaSat.bandeja.fila.a1234Xaxx010101000')} />
+          <Boton type="submit" variante="secondary" tamano="sm">{tr('descargaSat.bandeja.fila.buscar')}</Boton>
         </form>
       )}
 
       {/* ── EL EXPEDIENTE: lo que hace que deshacer no sea borrar ────── */}
       {fila.historial.length > 0 && (
-        <details className="mt-2.5">
-          <summary className="text-[11px] cursor-pointer" style={{ color: 'var(--muted)' }}>
-            Qué se ha decidido sobre este comprobante ({fila.historial.length})
-          </summary>
-          <ul className="mt-1.5 space-y-1 m-0 p-0 list-none">
+        <Disclosure variante="linea" titulo={tr('descargaSat.bandeja.fila.queSeHaDecidido', { length: fila.historial.length })}>
+          <ul className="rv-sat__lista">
             {fila.historial.map((h, i) => (
-              <li key={i} className="text-[11px]" style={{ color: 'var(--muted)' }}>
+              <li key={i} className="rv-sat__nota">
                 <strong>{h.acto}</strong>{' '}
                 {h.estatusAntes} → {h.estatusDespues} ·{' '}
-                {/* `null` en actorEmail SOLO ocurre en 'degradado': lo hizo la
-                    base, no una persona, y se dice con esas palabras. */}
-                {h.actorEmail ?? 'lo hizo la base, no una persona'} ·{' '}
+                {/* `null` en actorEmail SOLO ocurre en 'degradado': lo hizo la base, no una persona, y se dice con esas palabras. */}
+                {h.actorEmail ?? tr('descargaSat.bandeja.fila.loHizoLaBase')} ·{' '}
                 {fechaHoraMx(h.creadoEn)}
                 {h.motivo ? ` — ${h.motivo}` : ''}
               </li>
             ))}
           </ul>
-        </details>
+        </Disclosure>
       )}
     </li>
   );

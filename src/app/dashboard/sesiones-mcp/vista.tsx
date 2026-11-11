@@ -1,9 +1,10 @@
 import { PlugZap } from 'lucide-react';
-import { EstadoVacio } from '../estados';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { ClienteMcpConectado, SesionMcpUsuario } from '@/lib/mcp/sesiones';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
+import { EstadoVacio, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { FormaCortar, type AccionForma } from './forma';
+import './sesiones-mcp.css';
 
 /**
  * La lista de sesiones MCP, PURA PROPS — mismo corte que `ListaLlaves` en
@@ -24,39 +25,19 @@ function rotuloCliente(c: ClienteMcpConectado): string {
   return c.cliente ?? 'Cliente MCP sin nombre';
 }
 
+const COLUMNAS: ColumnaBase<ClienteMcpConectado>[] = [
+  { id: 'cliente', titulo: 'Cliente', principal: true, celda: (c) => rotuloCliente(c) },
+  { id: 'conectado', titulo: 'Conectado', celda: (c) => <span className="rv-mcp__tenue">{fechaMx(c.otorgadoEn)}</span> },
+  {
+    id: 'uso', titulo: 'Último uso',
+    // La verdad, no un guion: "nunca" es la respuesta a "¿lo puedo cortar sin romperle nada a nadie?".
+    celda: (c) => <span className="rv-mcp__tenue">{c.ultimoUsoEn === null ? 'nunca' : fechaHoraMx(c.ultimoUsoEn)}</span>,
+  },
+  { id: 'vence', titulo: 'Vence', celda: (c) => <span className="rv-mcp__tenue">{fechaHoraMx(c.expiraEn)}</span> },
+];
+
 export function TablaClientesMcp({ clientes }: { clientes: ClienteMcpConectado[] }) {
-  return (
-    <div className="overflow-x-auto">
-      <table aria-label="Sesiones MCP conectadas" className="w-full text-[12px]">
-        <thead>
-          <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
-            <th scope="col" className="px-3 py-2 font-medium">Conectado</th>
-            <th scope="col" className="px-3 py-2 font-medium">Último uso</th>
-            <th scope="col" className="px-3 py-2 font-medium">Vence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {clientes.map((c) => (
-            <tr key={c.familia} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-              <td className="px-3 py-2 font-medium">{rotuloCliente(c)}</td>
-              <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                {fechaMx(c.otorgadoEn)}
-              </td>
-              <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                {/* La verdad, no un guion: "nunca" es la respuesta a "¿lo puedo
-                    cortar sin romperle nada a nadie?". */}
-                {c.ultimoUsoEn === null ? 'nunca' : fechaHoraMx(c.ultimoUsoEn)}
-              </td>
-              <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                {fechaHoraMx(c.expiraEn)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <TablaBase etiqueta="Sesiones MCP conectadas" columnas={COLUMNAS} filas={clientes} idFila={(c) => c.familia} densa altoMaximo={false} tarjetaMovil />;
 }
 
 export function ListaSesionesMcp({ sesiones, cortarSesiones }: {
@@ -65,16 +46,15 @@ export function ListaSesionesMcp({ sesiones, cortarSesiones }: {
 }) {
   if (sesiones.length === 0) {
     return (
-      <EstadoVacio icono={<PlugZap width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-        Nadie de tu flota tiene hoy un cliente MCP conectado — ni Claude ni ChatGPT
-        están leyendo estos datos desde fuera del panel. Cuando alguien autorice uno,
+      <EstadoVacio icono={PlugZap} titulo="Nadie tiene un cliente conectado">
+        Ni Claude ni ChatGPT están leyendo estos datos desde fuera del panel. Cuando alguien autorice uno,
         aparece aquí con su último uso y con el botón para cortarlo.
       </EstadoVacio>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className="rv-mcp__lista">
       {sesiones.map((s) => (
         <TarjetaUsuarioMcp key={s.userId} s={s} cortarSesiones={cortarSesiones} />
       ))}
@@ -87,25 +67,22 @@ function TarjetaUsuarioMcp({ s, cortarSesiones }: {
   cortarSesiones: AccionForma;
 }) {
   const quien = s.nombre ?? s.email ?? 'Usuario de la flota';
+  const rol = ROL_LABEL[s.rol as RolAppUser] ?? s.rol;
 
   return (
-    <div className="card p-4 space-y-3">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
+    <Tarjeta titulo={quien} info="mi_perfil.clientes_mcp">
+      <div className="rv-mcp__cab">
         <div>
-          <p className="text-[13px] font-medium">{quien}</p>
-          <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
-            {s.email ?? 'sin correo en el padrón'} · {ROL_LABEL[s.rol as RolAppUser] ?? s.rol}
-          </p>
-          <p className="text-[11px] mt-1" style={{ color: 'var(--faint)' }}>
+          <p className="rv-mcp__detalle">{s.email ?? 'sin correo en el padrón'} · {rol}</p>
+          <p className="rv-mcp__nota">
             {/* El rol del TOKEN, no el de hoy: es el que decide qué lee el
                 cliente MCP mientras el acceso siga vivo. */}
-            El acceso lee lo que ve el rol con el que se autorizó
-            ({ROL_LABEL[s.rol as RolAppUser] ?? s.rol}), nunca escribe.
+            El acceso lee lo que ve el rol con el que se autorizó ({rol}), nunca escribe.
           </p>
         </div>
         <FormaCortar accion={cortarSesiones} usuarioId={s.userId} quien={quien} cuantos={s.clientes.length} />
       </div>
       <TablaClientesMcp clientes={s.clientes} />
-    </div>
+    </Tarjeta>
   );
 }

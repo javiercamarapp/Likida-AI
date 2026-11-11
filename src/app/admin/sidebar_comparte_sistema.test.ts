@@ -23,8 +23,11 @@ describe('sidebar de /admin = sidebar del dashboard (mismas clases del sistema)'
   it('admin no trae un ancho propio: 232/72 salen de shell.css', () => {
     expect(admin).not.toMatch(/w-\[232px\]|w-\[72px\]|glass-panel/);
   });
-  it('conserva la lista de rutas de rutas.ts', () => {
+  it('conserva la lista de rutas de rutas.ts: las secciones salen de SECCIONES (Agentes, Negocio, Control, Sistema; sin «Plataforma»)', () => {
     const s = leer('sidebar-nav.tsx');
-    for (const n of ['AGENTES', 'NEGOCIO', 'PLATAFORMA', 'CONTROL', 'SISTEMA']) expect(s).toContain(n);
+    expect(s).toContain('SECCIONES');
+    expect(s).not.toMatch(/PLATAFORMA|Plataforma/);
+    // Cada sección trae su icono en el riel (72 px): sin él, la sección desaparece al plegar el menú.
+    for (const n of ['Agentes', 'Negocio', 'Control', 'Sistema']) expect(s).toMatch(new RegExp(`${n}: \\w+`));
   });
 });

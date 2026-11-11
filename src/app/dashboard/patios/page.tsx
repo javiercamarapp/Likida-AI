@@ -14,7 +14,11 @@ import { sufijoTenant } from '../sufijo';
 import { VistaPatios, type FilaPatio, type FilaJefe } from './vista';
 import type { ResultadoForma } from './formas';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Patios' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.patios') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -66,14 +70,15 @@ export default async function PaginaPatios({
 
   async function crear(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
-    if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota crea patios.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
+    if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.crea') };
     try {
       const nombre = String(fd.get('nombre') ?? '');
       await crearTerminal(s.tenantId, { nombre, ciudad: String(fd.get('ciudad') ?? '') }, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `El patio «${nombre.replace(/\s+/g, ' ').trim()}» ya existe. Asígnale gente y camiones desde sus fichas o con la carga masiva.` };
+      return { ok: true, mensaje: t('patios.a.creado', { nombre: nombre.replace(/\s+/g, ' ').trim() }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'crear el patio') };
     }
@@ -81,15 +86,16 @@ export default async function PaginaPatios({
 
   async function editar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
-    if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota edita patios.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
+    if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.edita') };
     try {
       await editarTerminal(s.tenantId, String(fd.get('terminalId') ?? ''), {
         nombre: String(fd.get('nombre') ?? ''), ciudad: String(fd.get('ciudad') ?? ''),
       }, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Patio actualizado.' };
+      return { ok: true, mensaje: t('patios.a.actualizado') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar el patio') };
     }
@@ -97,13 +103,14 @@ export default async function PaginaPatios({
 
   async function eliminar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
-    if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota borra patios.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
+    if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.borra') };
     try {
       const q = await eliminarTerminal(s.tenantId, String(fd.get('terminalId') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `Patio borrado. ${q.operadores} operadores y ${q.unidades} unidades quedaron sin patio; no se borró a nadie.` };
+      return { ok: true, mensaje: t('patios.a.borrado', { operadores: q.operadores, unidades: q.unidades }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'borrar el patio') };
     }
@@ -111,9 +118,10 @@ export default async function PaginaPatios({
 
   async function asignarJefe(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
-    if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota asigna patios a los jefes de tráfico.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
+    if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.jefes') };
     try {
       const terminalId = String(fd.get('terminalId') ?? '').trim() || null;
       await asignarTerminalJefe(s.tenantId, String(fd.get('userId') ?? ''), terminalId, { id: s.userId });
@@ -121,8 +129,8 @@ export default async function PaginaPatios({
       return {
         ok: true,
         mensaje: terminalId
-          ? 'Listo: el jefe solo corrige lo de ese patio.'
-          : 'Listo: el jefe vuelve a ver y corregir toda la flota.',
+          ? t('patios.a.jefe.patio')
+          : t('patios.a.jefe.toda'),
       };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'asignar el patio al jefe') };
@@ -131,15 +139,16 @@ export default async function PaginaPatios({
 
   async function asignarSinPatioAccion(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver los patios.' };
-    if (!puedeAdministrar(s.rol)) return { ok: false, error: 'Solo quien administra la flota reparte lo que quedó sin patio.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('patios.a.rol') };
+    if (!puedeAdministrar(s.rol)) return { ok: false, error: t('patios.a.sinpatio') };
     const tabla = String(fd.get('tabla') ?? '');
-    if (tabla !== 'operador' && tabla !== 'unidad') return { ok: false, error: 'No se reconoce qué asignar. Recarga la pantalla.' };
+    if (tabla !== 'operador' && tabla !== 'unidad') return { ok: false, error: t('patios.a.noreconoce') };
     try {
       const n = await asignarSinPatio(tabla, s.tenantId, String(fd.get('terminalId') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: n === 0 ? 'No había nada sin patio que asignar.' : `Listo: ${n} ${tabla === 'operador' ? 'operadores' : 'unidades'} pasaron a ese patio.` };
+      return { ok: true, mensaje: n === 0 ? t('patios.a.nadie') : t(`patios.a.listo.${tabla}`, { n }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'asignar el patio') };
     }
@@ -147,6 +156,7 @@ export default async function PaginaPatios({
 
   return (
     <VistaPatios
+      tr={await getT('operacion')}
       patios={patios}
       jefes={jefes}
       sinPatio={sinPatio}

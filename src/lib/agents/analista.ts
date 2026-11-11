@@ -157,6 +157,60 @@ export function extraerNumeros(v: unknown, destino: Set<number>): void {
   if (v && typeof v === 'object') { for (const x of Object.values(v)) extraerNumeros(x, destino); }
 }
 
+/** Cifras con MULTIPLICADOR escrito pegado al número: «99k», «7 mil», «1.5 millones». Sin «m»/«mm» sueltos: son metros y milímetros.
+ *  Sin esto el regex de dígitos veía 99, 7 y 1.5 (todos «blancos» o fáciles de empatar con un 99 de una
+ *  herramienta) y la cantidad real —99,000, 7,000, 1,500,000— salía sin verificar (F16). */
+const RE_MULTIPLICADOR = /(\d[\d,]*\.?\d*)\s*(k|mil|millones|millón|millon)(?![a-záéíóúñ0-9])/gi;
+const ESCALA: Record<string, number> = { k: 1e3, mil: 1e3, millon: 1e6, 'millón': 1e6, millones: 1e6 };
+
+/** Quita del texto las cifras con multiplicador y devuelve su valor ya multiplicado. */
+export function separarMultiplicadores(texto: string): { resto: string; valores: number[] } {
+  const valores: number[] = [];
+  const resto = texto.replace(RE_MULTIPLICADOR, (_m, num: string, mult: string) => {
+    const n = Number(num.replace(/,/g, ''));
+    if (Number.isFinite(n)) valores.push(Math.round(n * ESCALA[mult.toLowerCase()] * 100) / 100);
+    return ' ';
+  });
+  return { resto, valores };
+}
+
+/** Como `extraerNumeros`, pero para lo que el MODELO escribió: las cifras con multiplicador cuentan por su
+ *  valor real y sus cardinales en palabras también. */
+export function extraerCifrasUsadas(v: unknown, destino: Set<number>): void {
+  if (typeof v === 'string') {
+    const { resto, valores } = separarMultiplicadores(v);
+    for (const n of valores) destino.add(n);
+    extraerNumeros(resto, destino);
+    for (const n of cardinalesEnPalabras(resto)) destino.add(n);
+    return;
+  }
+  if (Array.isArray(v)) { for (const x of v) extraerCifrasUsadas(x, destino); return; }
+  if (v && typeof v === 'object') { for (const x of Object.values(v)) extraerCifrasUsadas(x, destino); return; }
+  extraerNumeros(v, destino);
+}
+
+/** Decisión pendiente del dueño (F16-D1): el documento que el usuario adjunta llega del navegador. Hoy sus cifras
+ *  respaldan porque analizarlo ES el trabajo pedido y el modelo debe citarlas «según tu archivo». Apagarlo cierra
+ *  el último canal del navegador hacia el respaldo, pero el análisis de archivos dejaría de poder citar cifras. */
+export const DOCUMENTO_ADJUNTO_RESPALDA_CIFRAS = true;
+
+/** El respaldo de la guardia de cifras de UN turno. Solo entra lo que el SISTEMA produjo: los resultados de las
+ *  herramientas de este turno y el calendario/reloj de hoy. NO entra el texto del usuario (si pregunta «¿gasté
+ *  99,000?» y el modelo contesta 99,000 sin herramienta, eso es eco, no medición; una cifra del usuario respalda
+ *  solo si una herramienta también la devolvió, y entonces ya está en el conjunto) ni el historial `asistente`
+ *  (viene del navegador, fabricable). */
+export function construirRespaldo(o: {
+  resultadosTools: unknown[];
+  calendario: string[];
+  documento?: { extracto: string } | null;
+}): Set<number> {
+  const respaldo = new Set<number>();
+  for (const r of o.resultadosTools) extraerNumeros(r, respaldo);
+  for (const c of o.calendario) extraerNumeros(c, respaldo);
+  if (o.documento && DOCUMENTO_ADJUNTO_RESPALDA_CIFRAS) extraerNumeros(o.documento.extracto, respaldo);
+  return respaldo;
+}
+
 /** Enteros chicos (conteos que el modelo hace sobre listas), 50 (el peaje se
  *  describe "al 50%") y 100 (porcentajes) no delatan invención — bloquearlos
  *  convertía "te muestro 3 rutas" en una respuesta muerta. El trade-off está
@@ -204,11 +258,10 @@ export function cifrasRespaldadas(bloques: Bloque[], respaldo: Set<number>): boo
   // uno. Su aproximación falla hacia «no respaldado» a propósito (lo dice su
   // propia cabecera), que aquí es la dirección segura: dispara el reintento
   // correctivo y la red determinística en vez de dejar salir la cifra.
-  const cardinales = (t: string) => { for (const n of cardinalesEnPalabras(t)) usadas.add(n); };
   for (const b of bloques) {
-    if (b.tipo === 'texto') { extraerNumeros(b.texto, usadas); cardinales(b.texto); }
-    else if (b.tipo === 'cifra') { usadas.add(Math.round(b.valor * 100) / 100); if (b.nota) { extraerNumeros(b.nota, usadas); cardinales(b.nota); } }
-    else if (b.tipo === 'tabla') extraerNumeros(b.filas, usadas);
+    if (b.tipo === 'texto') extraerCifrasUsadas(b.texto, usadas);
+    else if (b.tipo === 'cifra') { usadas.add(Math.round(b.valor * 100) / 100); if (b.nota) extraerCifrasUsadas(b.nota, usadas); }
+    else if (b.tipo === 'tabla') extraerCifrasUsadas(b.filas, usadas);
     else if (b.tipo === 'dona') for (const s of b.segmentos) usadas.add(Math.round(s.valor * 100) / 100);
     else for (const p of b.puntos) usadas.add(Math.round(p.valor * 100) / 100);
   }
@@ -432,18 +485,17 @@ export async function ejecutarAnalista(opts: {
       readOnlyTools: toolsLectura,
     });
 
-    // El respaldo de la guardia: todo lo que las tools devolvieron en este
-    // turno + los números que el usuario mismo escribió.
-    const respaldo = new Set<number>();
-    for (const t of res.toolCalls) extraerNumeros(t.result, respaldo);
-    extraerNumeros(opts.mensajes.map((m) => m.texto).join(' '), respaldo);
-    // La fecha y hora de HOY también respaldan: "el ejercicio 2026" o "son
-    // las 6:15" no son invención, son calendario y reloj del sistema.
-    extraerNumeros(hoyMx(new Date(ahoraMs())), respaldo);
-    extraerNumeros(fechaLarga, respaldo);
-    // Las cifras del documento adjunto también respaldan: analizarlo ES el
-    // trabajo pedido.
-    if (opts.documento) extraerNumeros(opts.documento.extracto, respaldo);
+    // El respaldo de la guardia: lo que las tools devolvieron en ESTE turno + el calendario. Los números que
+    // el usuario escribió ya NO respaldan (F16).
+    const respaldo = construirRespaldo({
+      resultadosTools: res.toolCalls.map((t) => t.result),
+      // La fecha y hora de HOY también respaldan: "el ejercicio 2026" o "son las 6:15" no son invención,
+      // son calendario y reloj del sistema.
+      calendario: [hoyMx(new Date(ahoraMs())), fechaLarga],
+      // Las cifras del documento adjunto respaldan (analizarlo ES el trabajo pedido) mientras la decisión
+      // F16-D1 no diga lo contrario.
+      documento: opts.documento,
+    });
 
     let bloques = CAPTURAS.get(runId)
       ?? (res.finalText.trim() ? [{ tipo: 'texto', texto: res.finalText.trim().slice(0, 900) } as Bloque] : null);

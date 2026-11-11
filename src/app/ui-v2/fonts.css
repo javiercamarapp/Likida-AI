@@ -40,6 +40,9 @@
   src: url("/fonts/hankengrotesk-700.woff2") format("woff2");
 }
 
+/* `:root` además de v2: el layout raíz ya no carga Inter/Inter Tight, así que la familia de las páginas públicas, /estado y el
+   vendedor también es Hanken (el @font-face es perezoso: no se descarga si nada lo usa). */
+:root,
 [data-ui="v2"] {
   --font-sans-ui: "Hanken Grotesk UI", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-display: "Hanken Grotesk UI", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;

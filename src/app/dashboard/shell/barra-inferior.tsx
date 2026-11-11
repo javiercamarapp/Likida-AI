@@ -5,7 +5,10 @@ import { Ellipsis } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { hrefActivo } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
-import { destinosMovil } from './barra-inferior-destinos';
+import { destinosMovil, type DestinoMovil } from './barra-inferior-destinos';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
+import { etiquetaNav } from '@/lib/i18n/nav';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
@@ -20,28 +23,36 @@ export default function BarraInferior({ rol, perfil, masAbierta, alAbrirMas }: {
 }) {
   const { pathname, sufijo, menu } = useMenuV2(rol, perfil);
   const destinos = destinosMovil(rol, menu);
+  return <BarraInferiorVista destinos={destinos} sufijo={sufijo} activo={hrefActivo(pathname, menu)} masAbierta={masAbierta} alAbrirMas={alAbrirMas} />;
+}
+
+/** El dibujo de la barra, sin saber de qué panel es (lo comparten /dashboard y /admin): recibe los destinos ya resueltos y el activo. */
+export function BarraInferiorVista({ destinos, sufijo, activo, masAbierta, alAbrirMas }: {
+  destinos: DestinoMovil[]; sufijo: string; activo: string | null; masAbierta: boolean; alAbrirMas: () => void;
+}) {
+  const tr = useT('shell', shellEs);
+  const { t } = tr;
   if (destinos.length === 0) return null;
-  const activo = hrefActivo(pathname, menu);
   const activoEnBarra = destinos.some((d) => d.href === activo);
   return (
-    <nav className="rv-nav-inf" aria-label="Navegación móvil">
+    <nav className="rv-nav-inf" aria-label={t('nav.movil')}>
       <ul className="rv-nav-inf__lista">
         {destinos.map((d) => {
           const esActivo = d.href === activo;
           return (
             <li key={d.href}>
-              <Link href={`${d.href}${sufijo}`} className="rv-nav-inf__item" aria-current={esActivo ? 'page' : undefined} title={d.nombre}>
+              <Link href={`${d.href}${sufijo}`} className="rv-nav-inf__item" aria-current={esActivo ? 'page' : undefined}>
                 <d.Icono className="rv-nav-inf__ico" width={22} height={22} strokeWidth={TRAZO_ICONO} aria-hidden />
-                <span className="rv-nav-inf__txt">{d.etiqueta}</span>
+                <span className="rv-nav-inf__txt">{etiquetaNav(tr, d.etiqueta)}</span>
               </Link>
             </li>
           );
         })}
         <li>
-          <button type="button" className="rv-nav-inf__item" aria-label="Más: abrir el menú completo" aria-haspopup="dialog" aria-expanded={masAbierta}
+          <button type="button" className="rv-nav-inf__item" aria-label={t('nav.mas.abrir')} aria-haspopup="dialog" aria-expanded={masAbierta}
             data-activo={!activoEnBarra && activo ? '' : undefined} data-tour="nav-mas" onClick={alAbrirMas}>
             <Ellipsis className="rv-nav-inf__ico" width={22} height={22} strokeWidth={TRAZO_ICONO} aria-hidden />
-            <span className="rv-nav-inf__txt">Más</span>
+            <span className="rv-nav-inf__txt">{t('nav.mas')}</span>
           </button>
         </li>
       </ul>

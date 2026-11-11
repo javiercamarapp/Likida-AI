@@ -6,10 +6,10 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { listarSesionesMcp, revocarSesionesMcp, type SesionMcpUsuario } from '@/lib/mcp/sesiones';
-import { EstadoError } from '../estados';
 import type { ResultadoForma } from './forma';
 import { ListaSesionesMcp } from './vista';
-import { MarcoPagina, Aviso } from '@/app/ui-v2/componentes';
+import './sesiones-mcp.css';
+import { MarcoPagina, AvisoCompacto, EstadoError } from '@/app/ui-v2/componentes';
 import type { Metadata } from 'next';
 export const metadata: Metadata = { title: 'Sesiones MCP' };
 
@@ -92,21 +92,17 @@ export default async function PaginaSesionesMcp({
 
   return (
     <MarcoPagina titulo="Sesiones MCP" apoyo="Quién de tu equipo tiene Claude o ChatGPT conectado a Likida, con qué rol y desde cuándo. Solo lectura.">
-      <Aviso tono="info">
-        Cuando alguien de tu equipo conecta Claude o ChatGPT a Likida, ese cliente
-        queda <strong>leyendo</strong> —nunca cambiando— lo que ve el rol con el que
-        autorizó, sin navegador y sin volver a iniciar sesión. Aquí está quién tiene
-        qué conectado y desde cuándo. Tus propias conexiones las cortas en{' '}
-        <strong>Mi perfil</strong>.
-      </Aviso>
+      <AvisoCompacto tono="info"
+        resumen="Quien conecta Claude o ChatGPT a Likida deja ese cliente leyendo, nunca cambiando, lo que ve su rol. Tus propias conexiones las cortas en Mi perfil."
+        mas={<p>Cuando alguien de tu equipo conecta Claude o ChatGPT a Likida, ese cliente queda leyendo lo que ve el rol con el que autorizó, sin navegador y sin volver a iniciar sesión. Aquí está quién tiene qué conectado y desde cuándo.</p>} />
 
       {sesiones === null ? (
-        <EstadoError mensaje="No pude leer las sesiones MCP de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre accesos eso hace creer que ya no queda nada conectado." />
+        <EstadoError reintentar>No pude leer las sesiones MCP de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre accesos eso hace creer que ya no queda nada conectado.</EstadoError>
       ) : (
         <ListaSesionesMcp sesiones={sesiones} cortarSesiones={cortarSesiones} />
       )}
 
-      <p className="text-[11px] max-w-2xl" style={{ color: 'var(--faint)' }}>
+      <p className="rv-mcp__pie">
         El nombre del cliente lo declaró quien lo registró, no Likida. Cortar el
         acceso tumba todos los tokens vivos de esa persona de un tiro y no tiene
         deshacer: para volver a conectar hay que autorizar otra vez desde el cliente.

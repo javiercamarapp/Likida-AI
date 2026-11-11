@@ -23,7 +23,11 @@ const validarProspecto = vi.fn((entrada: Record<string, string>) => ({
   vendedorId: entrada.vendedorId || null,
 }));
 const crearProspecto = vi.fn(async () => undefined);
-const invitarVendedor = vi.fn(async () => ({ email: 'vendedor@example.com' }));
+const invitarVendedor = vi.fn(async () => ({ userId: 'u-nuevo', email: 'vendedor@example.com' }));
+const anotarAccionVendedor = vi.fn(async () => undefined);
+let correoListo = true;
+let envioOk = true;
+const enviarAccesoVendedor = vi.fn(async () => (envioOk ? { enviado: true as const } : { enviado: false as const, motivo: 'fallo' as const }));
 const asignarPendientes = vi.fn(async () => ({
   apagado: false,
   sinVendedores: false,
@@ -47,6 +51,12 @@ vi.mock('@/lib/likida/vendedores', () => ({
   crearProspecto,
   invitarVendedor,
   asignarPendientes,
+}));
+vi.mock('@/lib/likida/vendedores_registro', () => ({
+  anotarAccionVendedor,
+  correoDeAccesoDisponible: () => correoListo,
+  enviarAccesoVendedor,
+  MENSAJE_SIN_CORREO: 'sin correo',
 }));
 vi.mock('@/lib/likida/agentes/redactor', () => ({ redactarCorreoFrio }));
 vi.mock('@/lib/auth/invitar', () => ({ descifrarErrorProvision: () => null }));
@@ -104,6 +114,8 @@ describe('las siete acciones de /admin/vendedores', () => {
       avatarUrl: null,
     };
     veredicto = 'ok';
+    correoListo = true;
+    envioOk = true;
   });
 
   it.each(['inscribir', 'retar', 'no_verificable'] as const)(
@@ -142,4 +154,30 @@ describe('las siete acciones de /admin/vendedores', () => {
       expect(consultarMfa).not.toHaveBeenCalled();
     },
   );
+
+  it('invitar: sin correo saliente falla cerrada, declara la causa y no crea la cuenta', async () => {
+    correoListo = false;
+    const fd = new FormData();
+    fd.set('email', 'vendedor@example.com');
+    const r = await accionInvitar(null, fd);
+    expect(r).toEqual({ ok: false, error: 'sin correo' });
+    expect(invitarVendedor).not.toHaveBeenCalled();
+    expect(enviarAccesoVendedor).not.toHaveBeenCalled();
+  });
+
+  it('invitar: si el correo no sale, la cuenta existe pero NO se pinta verde', async () => {
+    envioOk = false;
+    const fd = new FormData();
+    fd.set('email', 'vendedor@example.com');
+    const r = await accionInvitar(null, fd);
+    expect(r?.ok).toBe(false);
+    expect(invitarVendedor).toHaveBeenCalledTimes(1);
+  });
+
+  it('mover y nota dejan huella en la bitácora; la nota solo con su largo', async () => {
+    await accionMover('p-1', 'contactado');
+    await accionNota('p-1', 'hola');
+    expect(anotarAccionVendedor).toHaveBeenCalledWith(expect.anything(), 'prospecto.movido', 'p-1', { a: 'contactado' });
+    expect(anotarAccionVendedor).toHaveBeenCalledWith(expect.anything(), 'prospecto.nota', 'p-1', { largo: 4 });
+  });
 });

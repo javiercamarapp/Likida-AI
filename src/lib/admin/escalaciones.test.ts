@@ -214,7 +214,7 @@ describe('getBandejaEscalaciones', () => {
       href: '/dashboard/agentes/liquidacion?tenant=t1',
     });
     expect(porFuente.get('arco')?.href).toBe('/admin/compliance');
-    expect(porFuente.get('tickets')).toMatchObject({ href: '/admin/soporte', vence: '2026-08-11T00:00:00Z' });
+    expect(porFuente.get('tickets')).toMatchObject({ href: '/admin/soporte?ticket=tk1', vence: '2026-08-11T00:00:00Z' });
     // NULL ≠ $0: la talacha sin monto lo dice con palabras, nunca "$0.00".
     expect(porFuente.get('talachas')?.titulo).toContain('sin monto reportado');
   });
@@ -456,5 +456,20 @@ describe('getBandejaEscalaciones — las corridas en fallo se juntan en rachas',
       error: null,
     });
     expect(await corridas()).toHaveLength(4);
+  });
+});
+
+describe('totalEscalacionesLegible', () => {
+  const base = { arco: 0, corridasFallo: 0, talachas: 0, facturasProveedor: 0, ticketsAbiertos: 0, ticketsVencidos: 0, liquidacionesRevisar: 0 };
+  it('suma lo legible; un 0 leído es 0', async () => {
+    const { totalEscalacionesLegible } = await import('./escalaciones');
+    expect(totalEscalacionesLegible({ conteos: base })).toBe(0);
+    expect(totalEscalacionesLegible({ conteos: { ...base, talachas: 2, arco: null } })).toBe(2);
+  });
+  it('si ninguna fuente se pudo leer: null, nunca 0', async () => {
+    const { totalEscalacionesLegible } = await import('./escalaciones');
+    const caido = Object.fromEntries(Object.keys(base).map((k) => [k, null])) as unknown as typeof base;
+    expect(totalEscalacionesLegible({ conteos: caido })).toBeNull();
+    expect(totalEscalacionesLegible({ conteos: {} as never })).toBeNull();
   });
 });

@@ -285,6 +285,16 @@ export async function conciliar(
 }
 
 /**
+ * La flota dueña de una factura SaaS, o `null` si la factura no existe. LANZA si la base no contesta: `null` es «no hay», no «no pude
+ * leer». Lo usa la bitácora de la conciliación para atribuir el asiento a su flota.
+ */
+export async function tenantDeFacturaSaas(facturaId: string): Promise<string | null> {
+  const { data, error } = await supabaseAdmin().from('factura_saas').select('tenant_id').eq('id', facturaId).maybeSingle();
+  if (error) throw new Error(`tenantDeFacturaSaas: ${error.message}`);
+  return data?.tenant_id ? String(data.tenant_id) : null;
+}
+
+/**
  * Timbra el CFDI de una factura YA PAGADA.
  *
  * SEPARADO DE `conciliar()` A PROPÓSITO, aunque se llamen juntos. Marcar el pago
@@ -558,4 +568,96 @@ export async function getPorCobrarCompleto(): Promise<FacturaPorCobrar[]> {
  *  para que los totales de /admin/cobranza no se calculen sobre una página. */
 export async function getPorCobrarTodas(): Promise<{ facturas: FacturaPorCobrar[]; total: number }> {
   return leerPorCobrar(TECHO_POR_COBRAR_TOTAL);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LAS FACTURAS DE LA MENSUALIDAD, TODAS (emitidas, pagadas, fallidas, canceladas) — para la pestaña «Facturas» de /admin y para
+// la exportación del contador. Solo LEE: nada de aquí emite, concilia ni timbra (eso sigue en `emitirMensualidad`, `conciliar` y
+// `timbrarFactura`). Cada campo fiscal es el que ya guarda la fila; lo que no existe llega como `null`, nunca como cero.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type EstadoFacturaSaas = 'pendiente' | 'pagada' | 'fallida' | 'cancelada';
+export const ESTADOS_FACTURA_SAAS: readonly EstadoFacturaSaas[] = ['pendiente', 'pagada', 'fallida', 'cancelada'];
+
+export interface FacturaSaasFila {
+  id: string;
+  tenantId: string;
+  tenantNombre: string;
+  periodoInicio: string;
+  periodoFin: string;
+  /** El total con IVA, lo que la flota transfiere. */
+  monto: number;
+  /** `null` = la fila no tiene desglose: esa factura no se puede timbrar. */
+  subtotal: number | null;
+  iva: number | null;
+  moneda: string;
+  estado: EstadoFacturaSaas | string;
+  referencia: string | null;
+  metodoCobro: string | null;
+  referenciaBanco: string | null;
+  pagadaEn: string | null;
+  conciliadaEn: string | null;
+  cfdiUuid: string | null;
+  timbradaEn: string | null;
+  cfdiCanceladoEn: string | null;
+  /** Solo si el PAC devolvió el enlace al guardar el CFDI. */
+  cfdiXmlUrl: string | null;
+  cfdiVerificacionUrl: string | null;
+  creadaEn: string;
+}
+
+/** Techo de la lectura. Si la base tiene más, `truncado` lo dice y el CSV se niega: un archivo parcial presentado como completo es peor que ninguno. */
+export const TECHO_FACTURAS_SAAS = 2000;
+
+const texto = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v : null);
+const numeroONulo = (v: unknown): number | null => (v === null || v === undefined || v === '' ? null : Number(v));
+
+/** Lanza si la base no responde: una lista de facturas caída NO se pinta como «ninguna». */
+export async function listarFacturasSaas(
+  opts: { estado?: EstadoFacturaSaas; desde?: string; hasta?: string; limite?: number } = {},
+): Promise<{ filas: FacturaSaasFila[]; total: number; truncado: boolean }> {
+  const limite = Math.min(Math.max(1, Math.trunc(opts.limite ?? 200)), TECHO_FACTURAS_SAAS);
+  let q = supabaseAdmin()
+    .from('factura_saas')
+    .select(
+      'id, tenant_id, periodo_inicio, periodo_fin, monto, subtotal, iva, moneda, estado, referencia, metodo_cobro, referencia_banco, pagada_en, conciliada_en, cfdi_uuid, timbrada_en, cfdi_cancelado_en, cfdi_xml_url, cfdi_verificacion_url, creada_en, tenant(nombre)',
+      { count: 'exact' },
+    );
+  if (opts.estado) q = q.eq('estado', opts.estado);
+  if (opts.desde) q = q.gte('periodo_inicio', opts.desde);
+  if (opts.hasta) q = q.lte('periodo_inicio', opts.hasta);
+  const { data, error, count } = await q
+    .order('periodo_inicio', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(limite);
+  if (error) throw new Error(`listarFacturasSaas: ${error.message}`);
+  const filas: FacturaSaasFila[] = (data ?? []).map((f) => {
+    const t = f.tenant as { nombre?: string } | Array<{ nombre?: string }> | null;
+    const nombre = Array.isArray(t) ? t[0]?.nombre : t?.nombre;
+    return {
+      id: String(f.id),
+      tenantId: String(f.tenant_id),
+      tenantNombre: nombre ?? '—',
+      periodoInicio: String(f.periodo_inicio),
+      periodoFin: String(f.periodo_fin),
+      monto: Number(f.monto),
+      subtotal: numeroONulo(f.subtotal),
+      iva: numeroONulo(f.iva),
+      moneda: texto(f.moneda) ?? 'MXN',
+      estado: String(f.estado),
+      referencia: texto(f.referencia),
+      metodoCobro: texto(f.metodo_cobro),
+      referenciaBanco: texto(f.referencia_banco),
+      pagadaEn: texto(f.pagada_en),
+      conciliadaEn: texto(f.conciliada_en),
+      cfdiUuid: texto(f.cfdi_uuid),
+      timbradaEn: texto(f.timbrada_en),
+      cfdiCanceladoEn: texto(f.cfdi_cancelado_en),
+      cfdiXmlUrl: texto(f.cfdi_xml_url),
+      cfdiVerificacionUrl: texto(f.cfdi_verificacion_url),
+      creadaEn: String(f.creada_en),
+    };
+  });
+  const total = count ?? filas.length;
+  return { filas, total, truncado: total > filas.length };
 }

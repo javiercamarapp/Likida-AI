@@ -14,6 +14,9 @@ export const ETIQUETA_TOOL_ADMIN: Record<string, string> = {
   ficha_cliente: 'Armando la ficha 360 del cliente',
   estado_runner: 'Leyendo el pulso del runner',
   adquisicion: 'Midiendo la adquisición',
+  decide_hoy: 'Armando el briefing de lo que hay que decidir',
+  agentes_parados: 'Buscando agentes parados',
+  costo_ia_por_dia: 'Midiendo el costo de IA por día',
   proponer_accion: 'Armando la previsualización',
   entregar_respuesta_admin: 'Armando la respuesta',
 };
@@ -34,4 +37,7 @@ export const PANTALLA_UI: Record<string, { ruta: string; etiqueta: string }> = {
   ficha_cliente: { ruta: '/admin/flotas', etiqueta: 'Flotas / Clientes' },
   estado_runner: { ruta: '/admin/observabilidad', etiqueta: 'Observabilidad' },
   adquisicion: { ruta: '/admin/crecimiento', etiqueta: 'Crecimiento' },
+  decide_hoy: { ruta: '/admin/escalaciones', etiqueta: 'Escalaciones' },
+  agentes_parados: { ruta: '/admin/agentes', etiqueta: 'Agentes' },
+  costo_ia_por_dia: { ruta: '/admin/costos-facturacion', etiqueta: 'Costos' },
 };

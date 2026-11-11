@@ -6,6 +6,8 @@ import ts from 'typescript';
 
 // F8 / CT-PAR-11: el respaldo de accesibilidad de globals.css no se pierde en una limpieza.
 const css = readFileSync(join(__dirname, 'globals.css'), 'utf8');
+// Interpolación del FUENTE analizado (no de este archivo): se arma por partes para no parecer una plantilla sin evaluar.
+const PLACEHOLDER_CSS = '$' + '{css}';
 const sinComentarios = css.replace(/\/\*[\s\S]*?\*\//g, '');
 
 describe('respaldo de accesibilidad en globals.css', () => {
@@ -118,15 +120,20 @@ describe('regla de foco visible por intención (R4)', () => {
         if (c.ocultoVisual) { ocultos++; if (!c.foco) sinMarca.push(`${relative(process.cwd(), f)}:${c.linea} falta data-foco="etiqueta"`); }
       }
     }
-    expect(transparentes).toBeGreaterThanOrEqual(10);
-    expect(ocultos).toBeGreaterThanOrEqual(3);
+    // Eran 10 hasta que /admin/conversaciones (identidad J) pasó al hilo compartido del sistema (`conversaciones/hilo.tsx`), que ya no usa un
+    // campo transparente propio. El piso solo garantiza que el detector siga viendo casos; la regla de fondo es `sinMarca` vacío.
+    expect(transparentes).toBeGreaterThanOrEqual(9);
+    // Eran 3 hasta que cobranza (estrategia.tsx, forma-por-gasto.tsx) pasó a <Casilla> de ui-v2 (`rv-marca__input`): una caja propia VISIBLE
+    // que recibe el anillo de foco global, ya no un `<input class="sr-only">` con `data-foco`. Queda el radio de revision-panel.tsx; el piso
+    // sigue exigiendo que el detector vea al menos uno (si no, estaría ciego).
+    expect(ocultos).toBeGreaterThanOrEqual(1);
     expect(sinMarca).toEqual([]);
   }, 60_000); // recorre todo src/: bajo carga del CI superaba el límite de 5 s
 
   it('resuelve className por constante del mismo archivo y no exige atributo a un campo transparente con borde visible', () => {
-    const sinBorde = camposMarcables("const css = 'px-2 bg-transparent border-0'; export const A = () => <input className={`${css} w-full`} />;", 'x.tsx');
+    const sinBorde = camposMarcables("const css = 'px-2 bg-transparent border-0'; export const A = () => <input className={`" + PLACEHOLDER_CSS + " w-full`} />;", 'x.tsx');
     expect(sinBorde[0].transparente && !sinBorde[0].anillo).toBe(true);
-    const conBorde = camposMarcables("const css = 'hairline rounded-lg bg-transparent'; export const A = () => <input className={`${css} w-full`} />;", 'x.tsx');
+    const conBorde = camposMarcables("const css = 'hairline rounded-lg bg-transparent'; export const A = () => <input className={`" + PLACEHOLDER_CSS + " w-full`} />;", 'x.tsx');
     expect(conBorde[0].transparente).toBe(false);
   });
 

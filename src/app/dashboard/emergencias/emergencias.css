@@ -1,0 +1,7 @@
+/* Emergencias · solo lo que las piezas del sistema no traen. Escala tipográfica 11/12/13 y colores de tokens. */
+.rv-em__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-em__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.rv-em__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: var(--t-small); }
+.rv-em__nombre { font-weight: 500; }
+.rv-em__dato { color: var(--muted); }
+.rv-em__acciones { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }

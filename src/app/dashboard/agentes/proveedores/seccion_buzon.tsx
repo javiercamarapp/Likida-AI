@@ -1,9 +1,10 @@
-import { Send, Inbox, TriangleAlert } from 'lucide-react';
+import { Send, Inbox } from 'lucide-react';
 import type { Entrega } from '@/lib/likida/buzon/entrega_repo';
 import type { Recepcion, ConteoBuzon } from '@/lib/likida/buzon/repo';
 import type { ConfigEntrega } from '@/lib/likida/buzon/entrega_pura';
 import { mxn, numero, fechaHoraMx, pesoArchivo } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
+import './proveedores.css';
+import { StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import type { AccionProveedores } from './controles';
 import { FormaEntrega, BotonEnviarAhora, BotonesLote, BotonDescartar, BotonVerPdf } from './controles_buzon';
 
@@ -12,14 +13,14 @@ import { FormaEntrega, BotonEnviarAhora, BotonesLote, BotonDescartar, BotonVerPd
 // Sin datos, dicen QUÉ falta; una lectura caída (`null`) lo dice en vez de pintar «nada».
 // ═══════════════════════════════════════════════════════════════════════════
 
-const ROTULO_LOTE: Record<Entrega['estado'], { texto: string; color: string; fondo: string }> = {
-  pendiente: { texto: 'En cola', color: 'var(--muted)', fondo: 'var(--canvas)' },
-  enviando: { texto: 'Enviando', color: 'var(--muted)', fondo: 'var(--canvas)' },
-  enviada: { texto: 'Enviada · sin confirmar', color: 'var(--warn)', fondo: 'var(--warnbg)' },
-  entregada: { texto: 'Entregada', color: 'var(--ok)', fondo: 'var(--okbg)' },
-  rebotada: { texto: 'Rebotó', color: 'var(--bad)', fondo: 'var(--badbg)' },
-  fallida: { texto: 'Falló', color: 'var(--bad)', fondo: 'var(--badbg)' },
-  cancelada: { texto: 'Cancelada', color: 'var(--faint)', fondo: 'var(--canvas)' },
+const ROTULO_LOTE: Record<Entrega['estado'], { texto: string; tono: TonoEstado }> = {
+  pendiente: { texto: 'En cola', tono: 'neutral' },
+  enviando: { texto: 'Enviando', tono: 'neutral' },
+  enviada: { texto: 'Enviada · sin confirmar', tono: 'warn' },
+  entregada: { texto: 'Entregada', tono: 'ok' },
+  rebotada: { texto: 'Rebotó', tono: 'bad' },
+  fallida: { texto: 'Falló', tono: 'bad' },
+  cancelada: { texto: 'Cancelada', tono: 'muted' },
 };
 
 const ROTULO_FORMATO = { generico: 'Genérico', sap_b1: 'SAP B1', contpaqi: 'CONTPAQi' } as const;
@@ -34,29 +35,53 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
   puedeAdministrar: boolean;
   acciones: { guardar: AccionProveedores; enviar: AccionProveedores; reintentar: AccionProveedores; cancelar: AccionProveedores };
 }) {
+  const columnas: readonly ColumnaBase<Entrega>[] = [
+    {
+      id: 'creado', titulo: 'Creado', principal: true,
+      celda: (l) => (
+        <>
+          {fechaHoraMx(l.creadoEn)}
+          <span className="rv-prov__sub">{l.disparo === 'automatica' ? 'automático' : 'a petición'} · {ROTULO_FORMATO[l.formato]}</span>
+        </>
+      ),
+    },
+    { id: 'facturas', titulo: 'Facturas', celda: (l) => <span className="cifra-mono">{numero(l.nFacturas)}</span> },
+    { id: 'total', titulo: 'Total', alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.total)}</span> },
+    {
+      id: 'estado', titulo: 'Estado',
+      celda: (l) => {
+        const r = ROTULO_LOTE[l.estado];
+        return (
+          <>
+            <StatusChip tono={r.tono}>{r.texto}</StatusChip>
+            {l.estado === 'pendiente' && l.intentos > 0 && <span className="rv-prov__sub">intento {l.intentos}, reintenta solo</span>}
+            {l.estado === 'rebotada' && <span className="rv-prov__sub" data-tono="bad">El correo rebotó: revisa la dirección del contador; sus facturas volvieron a la cola.</span>}
+            {(l.estado === 'fallida' || (l.estado === 'pendiente' && l.error)) && l.error && <span className="rv-prov__sub" data-tono="bad">{l.error}</span>}
+          </>
+        );
+      },
+    },
+    {
+      id: 'acciones', titulo: 'Acciones', alinear: 'der',
+      celda: (l) => (puedeAdministrar && (l.estado === 'fallida' || l.estado === 'pendiente') ? (
+        <BotonesLote id={l.id} puedeReintentar={l.estado === 'fallida'} puedeCancelar reintentar={acciones.reintentar} cancelar={acciones.cancelar} />
+      ) : <span className="rv-prov__sub">—</span>),
+    },
+  ];
   return (
-    <section className="card p-4">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Entrega al contador</h2>
-      <p className="text-[11px] mb-3 max-w-xl" style={{ color: 'var(--faint)' }}>
-        Las facturas que tú apruebas salen por correo al contador, con su CSV y un ZIP con el XML y el PDF de cada una.
-        La decisión de aprobar sigue siendo de una persona; esto solo ahorra el envío.
-      </p>
-
-      {config === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-          No se pudo leer la configuración de la entrega. Recarga la página; si se repite, avísale a Likida.
-        </p>
-      ) : !disponible ? (
-        <EstadoVacio icono={<Send width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          La entrega al contador aún no está disponible en tu cuenta. Avísale a Likida y la habilita.
-          Mientras tanto las aprobadas se descargan en CSV arriba.
-        </EstadoVacio>
-      ) : (
-        <div className="space-y-5">
+    <Tarjeta titulo="Entrega al contador" info="proveedores.buzon" estado={config !== null && !disponible ? 'vacio' : config === null ? 'error' : 'ok'} iconoVacio={Send}
+      mensaje={config === null ? 'No se pudo leer la configuración de la entrega. Recarga la página; si se repite, avísale a Likida.' : 'Entrega al contador no disponible'}
+      detalle="La entrega al contador aún no está disponible en tu cuenta. Avísale a Likida y la habilita. Mientras tanto las aprobadas se descargan en CSV arriba.">
+      {config !== null && disponible && (
+        <div className="rv-prov__pila">
+          <p className="rv-prov__nota">
+            Las facturas que tú apruebas salen por correo al contador, con su CSV y un ZIP con el XML y el PDF de cada una.
+            La decisión de aprobar sigue siendo de una persona; esto solo ahorra el envío.
+          </p>
           {puedeAdministrar ? (
             <FormaEntrega config={config} guardar={acciones.guardar} />
           ) : (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+            <p className="rv-prov__nota">
               {config.activo
                 ? <>Activa: se entrega a {config.destinatarios.join(', ')} ({ROTULO_FORMATO[config.formato]}{config.automatica ? `, solo, desde las ${config.horaEnvio}:00` : ', a petición'}).</>
                 : 'Apagada. Configurarla es una acción del dueño de la flota.'}
@@ -64,88 +89,37 @@ export function SeccionEntrega({ config, disponible, lotes, sinEntregar, puedeAd
           )}
 
           {config.activo && (
-            <div className="flex items-center gap-3 flex-wrap">
+            <div className="rv-prov__linea">
               {sinEntregar === null
-                ? <span className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudo contar lo pendiente de entregar.</span>
+                ? <span className="rv-prov__nota" data-tono="bad">No se pudo contar lo pendiente de entregar.</span>
                 : sinEntregar > 0
                   ? <BotonEnviarAhora enviar={acciones.enviar} disponibles={sinEntregar} />
-                  : <span className="text-[12px]" style={{ color: 'var(--faint)' }}>No hay aprobadas pendientes de entregar.</span>}
+                  : <span className="rv-prov__nota" data-tono="faint">No hay aprobadas pendientes de entregar.</span>}
             </div>
           )}
 
-          <div>
-            <h3 className="etiqueta-mono text-[11px] uppercase mb-2" style={{ color: 'var(--faint)' }}>Últimos envíos</h3>
-            {lotes === null ? (
-              <p className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudo leer el historial de envíos.</p>
-            ) : lotes.length === 0 ? (
-              <p className="text-[12px]" style={{ color: 'var(--faint)' }}>Aún no se ha enviado ningún lote.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table aria-label="Buzones de proveedores" className="w-full text-[12px]">
-                  <thead>
-                    <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Creado</th>
-                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Facturas</th>
-                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 pr-4 text-right">Total</th>
-                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Estado</th>
-                      <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {lotes.map((l) => {
-                      const r = ROTULO_LOTE[l.estado];
-                      return (
-                        <tr key={l.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                          <td className="py-2" style={{ color: 'var(--muted)' }}>
-                            {fechaHoraMx(l.creadoEn)}
-                            <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
-                              {l.disparo === 'automatica' ? 'automático' : 'a petición'} · {ROTULO_FORMATO[l.formato]}
-                            </span>
-                          </td>
-                          <td className="py-2 cifra-mono">{numero(l.nFacturas)}</td>
-                          <td className="py-2 pr-4 text-right cifra-mono">{mxn(l.total)}</td>
-                          <td className="py-2">
-                            <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: r.color, background: r.fondo }}>{r.texto}</span>
-                            {l.estado === 'pendiente' && l.intentos > 0 && (
-                              <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>intento {l.intentos}, reintenta solo</span>
-                            )}
-                            {l.estado === 'rebotada' && (
-                              <span className="block text-[11px]" style={{ color: 'var(--bad)' }}>
-                                El correo rebotó: revisa la dirección del contador; sus facturas volvieron a la cola.
-                              </span>
-                            )}
-                            {(l.estado === 'fallida' || (l.estado === 'pendiente' && l.error)) && l.error && (
-                              <span className="block text-[11px] max-w-[34ch]" style={{ color: 'var(--bad)' }}>{l.error}</span>
-                            )}
-                          </td>
-                          <td className="py-2 text-right">
-                            {puedeAdministrar && (l.estado === 'fallida' || l.estado === 'pendiente') ? (
-                              <BotonesLote id={l.id} puedeReintentar={l.estado === 'fallida'} puedeCancelar
-                                reintentar={acciones.reintentar} cancelar={acciones.cancelar} />
-                            ) : <span className="text-[11px]" style={{ color: 'var(--faint)' }}>—</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <p className="rv-prov__rotulo">Últimos envíos</p>
+          {lotes === null ? (
+            <p className="rv-prov__nota" data-tono="bad">No se pudo leer el historial de envíos.</p>
+          ) : lotes.length === 0 ? (
+            <p className="rv-prov__nota" data-tono="faint">Aún no se ha enviado ningún lote.</p>
+          ) : (
+            <TablaBase etiqueta="Buzones de proveedores" columnas={columnas} filas={lotes} idFila={(l) => l.id} densa tarjetaMovil />
+          )}
         </div>
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
-const ROTULO_RECEPCION: Record<Recepcion['estado'], { texto: string; color: string }> = {
-  procesada: { texto: 'Entró a la bandeja', color: 'var(--ok)' },
-  duplicada: { texto: 'Ya la teníamos', color: 'var(--muted)' },
-  revision: { texto: 'Revísala', color: 'var(--warn)' },
-  descartada: { texto: 'Descartada', color: 'var(--faint)' },
-  ignorada: { texto: 'Ignorada', color: 'var(--faint)' },
-  rechazada: { texto: 'Rechazada por seguridad', color: 'var(--bad)' },
-  error: { texto: 'Error', color: 'var(--bad)' },
+const ROTULO_RECEPCION: Record<Recepcion['estado'], { texto: string; tono: TonoEstado }> = {
+  procesada: { texto: 'Entró a la bandeja', tono: 'ok' },
+  duplicada: { texto: 'Ya la teníamos', tono: 'neutral' },
+  revision: { texto: 'Revísala', tono: 'warn' },
+  descartada: { texto: 'Descartada', tono: 'muted' },
+  ignorada: { texto: 'Ignorada', tono: 'muted' },
+  rechazada: { texto: 'Rechazada por seguridad', tono: 'bad' },
+  error: { texto: 'Error', tono: 'bad' },
 };
 
 export function SeccionRecepcion({ recepciones, conteo, acciones }: {
@@ -153,72 +127,57 @@ export function SeccionRecepcion({ recepciones, conteo, acciones }: {
   conteo: ConteoBuzon | null;
   acciones: { descartar: AccionProveedores; verPdf: AccionProveedores };
 }) {
-  return (
-    <section className="card p-4">
-      <h2 className="font-display text-[15px] font-semibold mb-1">Lo que ha llegado por correo</h2>
-      <p className="text-[11px] mb-3 max-w-xl" style={{ color: 'var(--faint)' }}>
-        El buzón lee XML, PDF y ZIP. Un PDF sin XML se lee con IA y queda marcado para que lo cotejes antes de aprobar;
-        un ZIP se abre con límites de tamaño y un archivo sospechoso se rechaza y se anota aquí con el motivo.
-      </p>
-      {recepciones === null || conteo === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>No se pudo leer lo recibido. Recarga la página; si se repite, avísale a Likida.</p>
-      ) : recepciones.length === 0 ? (
-        <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          Todavía no llega ningún archivo por correo. Cuando un proveedor mande una factura a tu dirección, aparece aquí.
-        </EstadoVacio>
-      ) : (
+  const columnas: readonly ColumnaBase<Recepcion>[] = [
+    { id: 'recibido', titulo: 'Recibido', principal: true, celda: (r) => fechaHoraMx(r.recibidoEn) },
+    {
+      id: 'archivo', titulo: 'Archivo',
+      celda: (r) => (
         <>
-          <div className="flex gap-4 flex-wrap text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
+          <span className="rv-prov__mono-corto" title={r.nombre}>{r.nombre}</span>
+          <span className="rv-prov__sub">{r.tipo.toUpperCase()} · {pesoArchivo(r.bytes)}{r.zipOrigen ? ` · dentro de ${r.zipOrigen}` : ''}</span>
+        </>
+      ),
+    },
+    {
+      id: 'paso', titulo: 'Qué pasó',
+      celda: (r) => (
+        <>
+          <StatusChip tono={ROTULO_RECEPCION[r.estado].tono}>{ROTULO_RECEPCION[r.estado].texto}</StatusChip>
+          {r.motivo && <span className="rv-prov__sub">{r.motivo}</span>}
+        </>
+      ),
+    },
+    {
+      id: 'acciones', titulo: 'Acciones', alinear: 'der',
+      celda: (r) => (
+        <div className="rv-prov__acciones">
+          {r.storageRuta && <BotonVerPdf campo="recepcionId" id={r.id} ver={acciones.verPdf} />}
+          {r.estado === 'revision' && r.facturaId === null && <BotonDescartar id={r.id} descartar={acciones.descartar} />}
+        </div>
+      ),
+    },
+  ];
+  return (
+    <Tarjeta titulo="Lo que ha llegado por correo" info="proveedores.buzon"
+      estado={recepciones === null || conteo === null ? 'error' : recepciones.length === 0 ? 'vacio' : 'ok'} iconoVacio={Inbox}
+      mensaje={recepciones === null || conteo === null ? 'No se pudo leer lo recibido. Recarga la página; si se repite, avísale a Likida.' : 'Aún no llega nada por correo'}
+      detalle="Todavía no llega ningún archivo por correo. Cuando un proveedor mande una factura a tu dirección, aparece aquí.">
+      {recepciones !== null && conteo !== null && (
+        <div className="rv-prov__pila">
+          <p className="rv-prov__nota">
+            El buzón lee XML, PDF y ZIP. Un PDF sin XML se lee con IA y queda marcado para que lo cotejes antes de aprobar;
+            un ZIP se abre con límites de tamaño y un archivo sospechoso se rechaza y se anota aquí con el motivo.
+          </p>
+          <div className="rv-prov__resumen">
             <span>{numero(conteo.total)} archivos en 30 días</span>
             <span>{numero(conteo.porEstado.procesada)} entraron</span>
             <span>{numero(conteo.porEstado.duplicada)} repetidos</span>
-            {conteo.facturasPorRevisar > 0 && (
-              <span className="inline-flex items-center gap-1" style={{ color: 'var(--warn)' }}>
-                <TriangleAlert width={11} height={11} strokeWidth={2} /> {numero(conteo.facturasPorRevisar)} factura(s) leída(s) de PDF esperan tu cotejo
-              </span>
-            )}
-            {conteo.porEstado.rechazada > 0 && <span style={{ color: 'var(--bad)' }}>{numero(conteo.porEstado.rechazada)} rechazados por seguridad</span>}
+            {conteo.facturasPorRevisar > 0 && <span data-tono="warn">{numero(conteo.facturasPorRevisar)} factura(s) leída(s) de PDF esperan tu cotejo</span>}
+            {conteo.porEstado.rechazada > 0 && <span data-tono="bad">{numero(conteo.porEstado.rechazada)} rechazados por seguridad</span>}
           </div>
-          <div className="overflow-x-auto">
-            <table aria-label="Archivos recibidos en el buzón" className="w-full text-[12px]">
-              <thead>
-                <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Recibido</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Archivo</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Qué pasó</th>
-                  <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recepciones.map((r) => {
-                  const e = ROTULO_RECEPCION[r.estado];
-                  return (
-                    <tr key={r.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                      <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaHoraMx(r.recibidoEn)}</td>
-                      <td className="py-2">
-                        <span className="block truncate max-w-[30ch]" title={r.nombre}>{r.nombre}</span>
-                        <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>
-                          {r.tipo.toUpperCase()} · {pesoArchivo(r.bytes)}{r.zipOrigen ? ` · dentro de ${r.zipOrigen}` : ''}
-                        </span>
-                      </td>
-                      <td className="py-2">
-                        <span className="font-medium" style={{ color: e.color }}>{e.texto}</span>
-                        {r.motivo && <span className="block text-[11px] max-w-[46ch]" style={{ color: 'var(--faint)' }}>{r.motivo}</span>}
-                      </td>
-                      <td className="py-2 text-right">
-                        <div className="inline-flex gap-1.5 flex-wrap justify-end">
-                          {r.storageRuta && <BotonVerPdf campo="recepcionId" id={r.id} ver={acciones.verPdf} />}
-                          {r.estado === 'revision' && r.facturaId === null && <BotonDescartar id={r.id} descartar={acciones.descartar} />}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </>
+          <TablaBase etiqueta="Archivos recibidos en el buzón" columnas={columnas} filas={recepciones} idFila={(r) => r.id} densa tarjetaMovil />
+        </div>
       )}
-    </section>
+    </Tarjeta>
   );
 }

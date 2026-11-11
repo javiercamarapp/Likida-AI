@@ -4,7 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Power, Eye, Siren, AlertTriangle, Check, Sparkles } from 'lucide-react';
 import { Modal } from '../ui-v2/componentes/overlay';
-import { TODAS_LAS_RUTAS } from './rutas';
+import { todasLasRutas, coincideBusqueda, planoBusqueda } from './rutas';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
+import { etiquetaNav } from '@/lib/i18n/nav';
 import { etiquetaInterruptor } from './observabilidad/etiquetas';
 
 /**
@@ -42,10 +45,15 @@ interface Item {
   detalle?: string;
   apagado?: boolean;
   Icono?: typeof Search;
+  /** Otras palabras que encuentran esta fila («kill switch» → Agentes, «ARCO» → Seguridad y datos). */
+  alias?: readonly string[];
   correr: () => void;
 }
 
+
 export default function CommandPalette() {
+  const tr = useT('shell', shellEs);
+  const { t } = tr;
   const [abierto, setAbierto] = useState(false);
   const [abiertoPrevio, setAbiertoPrevio] = useState(abierto);
   const [consulta, setConsulta] = useState('');
@@ -92,9 +100,9 @@ export default function CommandPalette() {
       // El error se DICE en el palette: una lista vacía afirmaría que no hay
       // flotas ni interruptores, que es distinto de no haber podido mirar.
       setDatos(null);
-      setErrorDatos('No se pudieron leer interruptores y flotas. Reabre el buscador para reintentar.');
+      setErrorDatos(t('cmd.err.datos'));
     }
-  }, []);
+  }, [t]);
 
   // Los datos se piden al ABRIR (aquí, no en un efecto): el palette vive en
   // todo /admin y pedir interruptores+flotas en cada carga de página cobraría
@@ -117,14 +125,14 @@ export default function CommandPalette() {
       });
       const j = await res.json().catch(() => ({})) as { ok?: boolean; error?: string };
       if (!res.ok) {
-        setAviso({ tipo: 'error', texto: j.error ?? `No se pudo (${res.status}).` });
+        setAviso({ tipo: 'error', texto: j.error ?? t('cmd.err.estado', { status: res.status }) });
         return;
       }
       setAviso({
         tipo: 'ok',
         texto: operacion === 'apagar'
-          ? `${etiquetaInterruptor(id)} APAGADO. Los crons lo saltan desde su siguiente corrida; quedó firmado en la bitácora.`
-          : `${etiquetaInterruptor(id)} encendido.`,
+          ? t('cmd.ok.apagado', { nombre: etiquetaInterruptor(id) })
+          : t('cmd.ok.encendido', { nombre: etiquetaInterruptor(id) }),
       });
       setModo('interruptores');
       setMotivoPara(null);
@@ -133,7 +141,7 @@ export default function CommandPalette() {
       // Para que /admin/observabilidad (si está detrás) repinte las palancas.
       router.refresh();
     } catch {
-      setAviso({ tipo: 'error', texto: 'No se pudo hablar con el servidor.' });
+      setAviso({ tipo: 'error', texto: t('cmd.err.servidor') });
     } finally {
       setEnviando(false);
     }
@@ -171,11 +179,16 @@ export default function CommandPalette() {
     };
   }, [router, abierto, abrirEn]);
 
+  // La fila activa se mantiene a la vista cuando la lista scrollea con las flechas.
+  useEffect(() => {
+    if (abierto) document.getElementById(`command-palette-op-${activo}`)?.scrollIntoView({ block: 'nearest' });
+  }, [abierto, activo]);
+
   useEffect(() => {
     if (!abierto) return;
     // Un tick para que el input ya esté montado antes de enfocarlo.
-    const t = setTimeout(() => inputRef.current?.focus(), 0);
-    return () => clearTimeout(t);
+    const tmr = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(tmr);
   }, [abierto]);
 
   function ir(href: string) {
@@ -191,14 +204,14 @@ export default function CommandPalette() {
   }
 
   const resultados = useMemo((): Item[] => {
-    const q = consulta.trim().toLowerCase();
-    const filtra = (items: Item[]) => (q ? items.filter((i) => i.etiqueta.toLowerCase().includes(q)) : items);
+    const q = planoBusqueda(consulta.trim());
+    const filtra = (items: Item[]) => (q ? items.filter((i) => coincideBusqueda(i.etiqueta, i.alias, q)) : items);
 
     if (modo === 'interruptores') {
       return filtra((datos?.interruptores ?? []).map((i): Item => ({
         key: `int-${i.id}`,
         etiqueta: etiquetaInterruptor(i.id),
-        detalle: i.apagado ? 'APAGADO · Enter: encender' : 'Encendido · Enter: apagar…',
+        detalle: i.apagado ? t('cmd.det.apagado') : t('cmd.det.encendido'),
         apagado: i.apagado,
         Icono: Power,
         correr: () => { if (i.apagado) void ejecutarInterruptor('encender', i.id); else pedirMotivo(i.id); },
@@ -208,7 +221,7 @@ export default function CommandPalette() {
       return filtra((datos?.flotas ?? []).map((f): Item => ({
         key: `flota-${f.id}`,
         etiqueta: f.nombre,
-        detalle: 'ver como — firmado',
+        detalle: t('cmd.det.verComo'),
         Icono: Eye,
         correr: () => ir(`/dashboard?tenant=${f.id}&rol=flota_admin`),
       })));
@@ -217,34 +230,43 @@ export default function CommandPalette() {
 
     const acciones: Item[] = [
       {
-        key: 'acc-interruptores', etiqueta: 'Apagar / encender un agente…', detalle: '⌃⇧A', Icono: Power,
+        key: 'acc-interruptores', etiqueta: t('cmd.acc.interruptores'), detalle: '⌃⇧A', Icono: Power,
         correr: () => { setModo('interruptores'); setConsulta(''); setActivo(0); },
       },
       {
-        key: 'acc-flotas', etiqueta: 'Ver como flota…', detalle: '⌃⇧F', Icono: Eye,
+        key: 'acc-flotas', etiqueta: t('cmd.acc.flotas'), detalle: '⌃⇧F', Icono: Eye,
         correr: () => { setModo('flotas'); setConsulta(''); setActivo(0); },
       },
-      { key: 'acc-escalaciones', etiqueta: 'Ir a escalaciones', detalle: '⌃⇧E', Icono: Siren, correr: () => ir('/admin/escalaciones') },
+      { key: 'acc-escalaciones', etiqueta: t('cmd.acc.escalaciones'), detalle: '⌃⇧E', Icono: Siren, correr: () => ir('/admin/escalaciones') },
       {
         // El panel lateral del copiloto (diseño §6). Mismo puente de evento
         // que el botón "Buscar" del sidebar: el estado vive en su componente.
-        key: 'acc-copiloto', etiqueta: 'Abrir el copiloto (panel lateral)', detalle: '⌘J', Icono: Sparkles,
+        key: 'acc-copiloto', etiqueta: t('cmd.acc.copiloto'), detalle: '⌘J', Icono: Sparkles,
         correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); },
       },
+      // Verbos del Copiloto (F5, mejora 6): abren el panel lateral y le hacen la pregunta; no ejecutan nada por sí solos.
+      {
+        key: 'acc-copiloto-decide', etiqueta: t('cmd.acc.decide'), Icono: Sparkles,
+        correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); window.dispatchEvent(new CustomEvent('likida:copiloto-preguntar', { detail: { pregunta: t('cmd.pregunta.decide') } })); },
+      },
+      {
+        key: 'acc-copiloto-resumen', etiqueta: t('cmd.acc.resumen'), Icono: Sparkles,
+        correr: () => { setAbierto(false); window.dispatchEvent(new CustomEvent('likida:abrir-copiloto')); window.dispatchEvent(new CustomEvent('likida:copiloto-preguntar', { detail: { pregunta: t('cmd.pregunta.resumen') } })); },
+      },
     ];
-    const rutas = TODAS_LAS_RUTAS.map((r): Item => ({
-      key: r.href, etiqueta: r.nombre, Icono: r.Icono, correr: () => ir(r.href),
+    const rutas = todasLasRutas((n) => etiquetaNav(tr, n)).map((r): Item => ({
+      key: r.href, etiqueta: r.nombre, Icono: r.Icono, alias: r.alias, correr: () => ir(r.href),
     }));
     return filtra([...acciones, ...rutas]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [consulta, modo, datos]);
+  }, [consulta, modo, datos, tr]);
 
   function onInputKeyDown(e: React.KeyboardEvent) {
     if (modo === 'motivo') {
       if (e.key === 'Enter') {
         e.preventDefault();
         const m = consulta.trim();
-        if (!m) { setAviso({ tipo: 'error', texto: 'El motivo es obligatorio para apagar — sin nota nadie sabrá después por qué.' }); return; }
+        if (!m) { setAviso({ tipo: 'error', texto: t('cmd.err.motivo') }); return; }
         if (motivoPara) void ejecutarInterruptor('apagar', motivoPara, m);
       } else if (e.key === 'Backspace' && consulta === '') {
         setModo('interruptores');
@@ -261,21 +283,26 @@ export default function CommandPalette() {
   if (!abierto) return null;
 
   const placeholder = modo === 'motivo'
-    ? `Motivo para apagar ${motivoPara ? etiquetaInterruptor(motivoPara) : ''} (obligatorio) — Enter confirma`
-    : modo === 'interruptores' ? 'Filtrar interruptores… (Backspace vacío: regresar)'
-    : modo === 'flotas' ? 'Filtrar flotas… (Backspace vacío: regresar)'
-    : 'Buscar página o acción… (Inicio, Apagar, Ver como…)';
+    ? t('cmd.ph.motivo', { nombre: motivoPara ? etiquetaInterruptor(motivoPara) : '' })
+    : modo === 'interruptores' ? t('cmd.ph.interruptores')
+    : modo === 'flotas' ? t('cmd.ph.flotas')
+    : t('cmd.ph.raiz');
 
   return (
-    <Modal abierto onCerrar={() => setAbierto(false)} titulo="Buscar en administración" sinCabecera tamano="l" posicion="arriba">
+    <Modal abierto onCerrar={() => setAbierto(false)} titulo={t('cmd.titulo')} sinCabecera tamano="l" posicion="arriba">
       <div className="rv-paleta__campo" data-motivo={modo === 'motivo' || undefined}>
         {modo === 'motivo'
           ? <Power width={16} height={16} strokeWidth={1.75} aria-hidden="true" />
           : <Search width={16} height={16} strokeWidth={1.75} aria-hidden="true" />}
         <input
           ref={inputRef}
-          aria-label={modo === 'motivo' ? 'Motivo de la acción' : 'Buscar una acción, interruptor o flota'}
+          role="combobox"
+          aria-expanded="true"
+          aria-autocomplete="list"
+          aria-haspopup="listbox"
+          aria-label={modo === 'motivo' ? t('cmd.aria.motivo') : t('cmd.aria.buscar')}
           aria-controls="command-palette-results"
+          aria-activedescendant={modo !== 'motivo' && resultados[activo] ? `command-palette-op-${activo}` : undefined}
           value={consulta}
           onChange={(e) => setConsulta(e.target.value)}
           onKeyDown={onInputKeyDown}
@@ -294,23 +321,23 @@ export default function CommandPalette() {
         </div>
       )}
 
-      <div id="command-palette-results" role="listbox" aria-label="Resultados" className="rv-paleta__lista">
+      <div id="command-palette-results" role="listbox" aria-label={t('cmd.resultados')} className="rv-paleta__lista">
         {modo === 'motivo' ? (
           <div className="rv-paleta__nota">
-            Vas a apagar <strong>{motivoPara ? etiquetaInterruptor(motivoPara) : ''}</strong>.
-            Escribe el motivo arriba y confirma con Enter. {enviando ? 'Guardando…' : ''}
+            {t('cmd.apagar.antes')} <strong>{motivoPara ? etiquetaInterruptor(motivoPara) : ''}</strong>.
+            {' '}{t('cmd.apagar.despues')} {enviando ? t('cmd.guardando') : ''}
           </div>
         ) : errorDatos && (modo === 'interruptores' || modo === 'flotas') ? (
           <div className="rv-paleta__nota" data-error>{errorDatos}</div>
         ) : (modo === 'interruptores' || modo === 'flotas') && datos === null ? (
-          <div className="rv-paleta__nota">Leyendo…</div>
+          <div className="rv-paleta__nota">{t('cmd.leyendo')}</div>
         ) : resultados.length === 0 ? (
-          <div className="rv-paleta__nota" data-centrada>Sin resultados.</div>
+          <div className="rv-paleta__nota" data-centrada>{t('cmd.sinResultados')}</div>
         ) : (
           resultados.map((item, i) => {
             const { key, etiqueta, detalle, Icono, apagado, correr } = item;
             return (
-              <button key={key} type="button" role="option" aria-selected={i === activo} onClick={correr} disabled={enviando}
+              <button key={key} id={`command-palette-op-${i}`} type="button" role="option" aria-selected={i === activo} tabIndex={-1} onClick={correr} disabled={enviando}
                 className="rv-paleta__fila" data-apagado={apagado || undefined}
                 onMouseEnter={() => setActivo(i)}
               >

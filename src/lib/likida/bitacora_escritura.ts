@@ -58,6 +58,10 @@ export type EntidadBitacora =
   // consume el tope diario que ese RFC tiene ante el SAT.
   | 'sat_descarga_config'
   | 'sat_descarga_solicitud'
+  // Lo que Likida le cobra a una flota (0052/0057): el plan (su price), la suscripción y la mensualidad por transferencia.
+  | 'plan'
+  | 'suscripcion'
+  | 'factura_saas'
   // 0243: la bandeja de conciliación. Ligar un CFDI a un gasto, archivarlo o
   // DESHACER cualquiera de las dos cosas son afirmaciones sobre dinero
   // deducible: «este comprobante ampara este gasto» es lo que el contador va a
@@ -190,6 +194,44 @@ export interface FilaBitacora {
   detalle: Record<string, unknown> | null;
 }
 
+// ── F20 (d): `detalle` NO guarda valores personales ──────────────────────────
+// La tabla sobrevive a un borrado ARCO, así que un correo, un RFC, un teléfono o una CLABE dentro de `detalle` no se puede borrar
+// después. El contrato siempre fue «contexto sin datos personales»; esto lo hace cumplir en el ÚNICO escritor: el valor sospechoso
+// se sustituye por una marca y se avisa por log (con la ruta del campo, nunca con el valor). `actor_email` es otra columna y es
+// la firma del actor, no parte del detalle.
+const PERSONAL_EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const PERSONAL_RFC = /(?<![A-Za-z0-9])[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}(?![A-Za-z0-9])/;
+const PERSONAL_TEL = /(?<![\w-])(?:\+52[\d\s-]{10,14}|\d{10})(?![\w-])/;
+const PERSONAL_CLABE = /(?<![\w-])\d{18}(?![\w-])/;
+const UUID_COMPLETO = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const MARCA_DATO_PERSONAL = '[omitido: dato personal]';
+
+/** ¿Este texto contiene un valor personal (correo, RFC, teléfono, CLABE)? Un UUID completo nunca lo es. */
+export function textoConDatoPersonal(t: string): boolean {
+  if (UUID_COMPLETO.test(t)) return false;
+  return PERSONAL_EMAIL.test(t) || PERSONAL_RFC.test(t) || PERSONAL_TEL.test(t) || PERSONAL_CLABE.test(t);
+}
+
+/** Rutas (`a.b[0].c`) de los valores de texto de `detalle` que traen un dato personal. Puro. */
+export function rutasConDatoPersonal(detalle: unknown, ruta = ''): string[] {
+  if (typeof detalle === 'string') return textoConDatoPersonal(detalle) ? [ruta || '(raíz)'] : [];
+  if (Array.isArray(detalle)) return detalle.flatMap((v, i) => rutasConDatoPersonal(v, `${ruta}[${i}]`));
+  if (detalle && typeof detalle === 'object') {
+    return Object.entries(detalle as Record<string, unknown>).flatMap(([k, v]) => rutasConDatoPersonal(v, ruta ? `${ruta}.${k}` : k));
+  }
+  return [];
+}
+
+/** Copia de `detalle` con cada valor personal sustituido por la marca. Puro; no muta el original. */
+export function detalleSinDatoPersonal<T>(detalle: T): T {
+  if (typeof detalle === 'string') return (textoConDatoPersonal(detalle) ? MARCA_DATO_PERSONAL : detalle) as T;
+  if (Array.isArray(detalle)) return detalle.map((v) => detalleSinDatoPersonal(v)) as T;
+  if (detalle && typeof detalle === 'object') {
+    return Object.fromEntries(Object.entries(detalle as Record<string, unknown>).map(([k, v]) => [k, detalleSinDatoPersonal(v)])) as T;
+  }
+  return detalle;
+}
+
 export function filaBitacora(e: EntradaBitacora): FilaBitacora {
   const actor = e.actor === 'sistema' ? null : e.actor;
   return {
@@ -199,7 +241,7 @@ export function filaBitacora(e: EntradaBitacora): FilaBitacora {
     accion: e.accion,
     entidad: e.entidad,
     entidad_id: e.entidadId,
-    detalle: e.detalle ?? null,
+    detalle: e.detalle ? detalleSinDatoPersonal(e.detalle) : null,
   };
 }
 
@@ -213,6 +255,8 @@ export async function anotarBitacora(
 ): Promise<boolean> {
   const evento = opciones.evento ?? 'bitacora.no_escribio';
   const contexto = { ...(opciones.contexto ?? {}), accion: entrada.accion };
+  const personales = entrada.detalle ? rutasConDatoPersonal(entrada.detalle) : [];
+  if (personales.length > 0) logger.warn('bitacora.detalle_con_dato_personal', { ...contexto, campos: personales });
   try {
     if (opciones.unica) {
       // El filtro de tenant va dentro de cada cadena (lo exige el guardián de consultas de supabaseAdmin).

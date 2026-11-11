@@ -27,6 +27,7 @@
 // `MARGEN_RELOJ_MS` más abajo): no decide si un agente puede correr, decide si
 // TODAVÍA CABE en la invocación. Lo que no cabe se dice; no se muere.
 // ═══════════════════════════════════════════════════════════════════════════
+import { veredictoSalidasDeFlota } from '@/lib/saas/salidas_flota';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -257,6 +258,111 @@ export interface ResultadoRunner {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// «POR QUÉ NO CORRIÓ» (auditoría admin, 10-nov-2026, hallazgo P0).
+//
+// Medido en producción: 48 de 49 agentes con runner habilitado NO corrían
+// porque la contrapresión global (`topeBandejaGlobal`) llevaba semanas
+// activa con ~100 piezas sin resolver, y el latido seguía `'ok'` — el motivo
+// solo viajaba en la respuesta HTTP del cron, que nadie lee. Aquí vive la
+// parte PURA que decide el estado del latido y deja cada salto con su causa.
+//
+// Lo que esto NO hace: no suelta ni cambia el tope. La contrapresión es un
+// freno correcto (aprobar es humano); lo que estaba mal era que el freno no
+// se viera. Vaciar la bandeja es trabajo de `lib/admin/cola-aprobacion.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export type CausaSalto =
+  | 'contrapresion_bandeja'
+  | 'reloj'
+  | 'apagado'
+  | 'sin_presupuesto'
+  | 'techo_diario'
+  | 'costo_no_medido'
+  | 'pausa_por_fallos'
+  | 'lectura_fallida'
+  | 'experimental'
+  | 'sin_motor'
+  | 'otra';
+
+/** Clasifica el motivo en prosa de un salto en una causa estable (para contar
+ *  y filtrar). Pura. Un motivo ausente o desconocido es `'otra'`, nunca se
+ *  adivina una causa más amable. */
+export function causaDeSalto(motivo: string | undefined): CausaSalto {
+  const m = (motivo ?? '').toLowerCase();
+  if (!m) return 'otra';
+  if (m.includes('bandeja sin atender') || m.includes('piezas sin resolver')) return 'contrapresion_bandeja';
+  if (m.includes('reloj')) return 'reloj';
+  if (m.includes('fail closed') || m.includes('no se pudo leer')) return 'lectura_fallida';
+  if (m.includes('apagado')) return 'apagado';
+  if (m.includes('sin kill switch')) return 'apagado';
+  if (m.includes('sin presupuesto_dia_usd')) return 'sin_presupuesto';
+  if (m.includes('no medido')) return 'costo_no_medido';
+  if (m.includes('techo diario')) return 'techo_diario';
+  if (m.includes('experimental')) return 'experimental';
+  if (m.includes('sin motor despachable') || m.includes('divergen')) return 'sin_motor';
+  if (m.includes('pausa') || m.includes('fallos seguidos') || m.includes('racha')) return 'pausa_por_fallos';
+  return 'otra';
+}
+
+export interface SaltadoConCausa {
+  agente: string;
+  causa: CausaSalto;
+  motivo: string;
+}
+
+/** Los agentes que se SALTARON en la vuelta, cada uno con su causa y su motivo
+ *  (recortado a 200 caracteres: el latido es una fila, no un log). */
+export function saltadosConCausa(agentes: ReadonlyArray<AgenteDelRunner>): SaltadoConCausa[] {
+  return agentes
+    .filter((a) => a.resultado === 'saltado')
+    .map((a) => ({ agente: a.agente, causa: causaDeSalto(a.motivo), motivo: (a.motivo ?? 'sin motivo declarado').slice(0, 200) }));
+}
+
+export interface LatidoRunner {
+  estado: 'ok' | 'parcial';
+  detalle: Record<string, unknown>;
+}
+
+/**
+ * El latido de una vuelta, ya decidido. `'parcial'` si el reloj cortó (como
+ * antes) O si la contrapresión de la bandeja frenó a al menos un agente. El
+ * detalle expone el motivo de la contrapresión y la lista de saltados con su
+ * causa. Pura: la ruta solo la llama y escribe lo que devuelve.
+ */
+export function evaluarLatidoRunner(
+  r: ResultadoRunner,
+  extra: { cortesSeguidos: number },
+): LatidoRunner {
+  const despachados = r.agentes.filter((a) => a.resultado === 'corrio').length;
+  const saltados = saltadosConCausa(r.agentes);
+  const porCausa: Record<string, number> = {};
+  for (const s of saltados) porCausa[s.causa] = (porCausa[s.causa] ?? 0) + 1;
+  const frenados = saltados.filter((s) => s.causa === 'contrapresion_bandeja');
+  const cortoElReloj = r.saltadosPorReloj.length > 0 || r.cortadaPorRelojDuro === true;
+  const hayContrapresion = frenados.length > 0;
+  const detalle: Record<string, unknown> = {
+    agentes: r.agentes.length,
+    despachados,
+    saltadosPorReloj: r.saltadosPorReloj,
+    cortesSeguidos: extra.cortesSeguidos,
+    // Solo si hubo saltos: una vuelta limpia deja el mismo detalle de siempre.
+    ...(saltados.length > 0 ? { saltados, saltadosPorCausa: porCausa } : {}),
+  };
+  if (hayContrapresion) {
+    detalle.contrapresion = {
+      agentesFrenados: frenados.length,
+      motivo: frenados[0].motivo,
+      topeBandejaGlobal: topeBandejaGlobal(),
+      diasVencimientoPieza: diasVencimientoPieza(),
+    };
+    // `motivo` al primer nivel: es la llave que `motivoDeSalto` (salud.ts) ya
+    // sabe leer para pintar el «por qué» en /admin/crons.
+    detalle.motivo = `contrapresión de la bandeja: ${frenados.length} de ${r.agentes.length} agentes no corrieron — ${frenados[0].motivo}`;
+  }
+  return { estado: cortoElReloj || hayContrapresion ? 'parcial' : 'ok', detalle };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // EL PARTE EN VIVO DE LA VUELTA (c7-1, 28-ago-2026).
 //
 // `correrRunner` devuelve su resultado AL FINAL. Eso basta cuando la vuelta
@@ -397,15 +503,40 @@ export function ordenarPorCosto<T extends { id: string }>(agentes: readonly T[])
 export async function gastoDelDiaUsd(agente: string): Promise<number> {
   const diaMx = hoyMx();
   const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('agente_corrida')
-    .select('costo_usd')
-    .eq('agente', agente)
-    .not('costo_usd', 'is', null)
-    .gte('inicio', inicioDia)
-    .limit(1000), 'runner.gasto_dia');
-  if (error) throw new Error(`gastoDelDiaUsd: ${error.message}`);
-  return ((data ?? []) as Array<{ costo_usd: unknown }>).reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
+  const r = await gastoDesdeUsd(agente, inicioDia);
+  if (r === null) throw new Error('gastoDelDiaUsd: no se pudo leer');
+  return r;
+}
+
+/**
+ * El gasto MEDIDO de un agente desde `inicioIso`. Con `origen` solo cuenta las corridas marcadas `resumen.origen = origen` y,
+ * en ese modo ESTRICTO, una fila sin costo hace el resultado `null` (no medible: quien decide gastar falla cerrado, jamás lo
+ * lee como cero) — es el contador del tope mensual del diagnóstico de la guardia (F14-C). Sin `origen` es el comportamiento
+ * histórico: suma lo medido e ignora las filas sin costo (esas las cuenta `corridasSinCostoHoy`). Un error de lectura LANZA
+ * sin `origen` y devuelve `null` con `origen`.
+ */
+export async function gastoDesdeUsd(agente: string, inicioIso: string, origen?: string): Promise<number | null> {
+  let q = supabaseAdmin().from('agente_corrida').select('costo_usd').eq('agente', agente).gte('inicio', inicioIso);
+  q = origen ? q.eq('resumen->>origen', origen) : q.not('costo_usd', 'is', null);
+  const { data, error } = await acotada(q.limit(1000), 'runner.gasto_dia');
+  if (error) {
+    if (origen) return null;
+    throw new Error(`gastoDelDiaUsd: ${error.message}`);
+  }
+  const filas = (data ?? []) as Array<{ costo_usd: unknown }>;
+  if (origen && (filas.length >= 1000 || filas.some((f) => f.costo_usd === null || f.costo_usd === undefined || !Number.isFinite(Number(f.costo_usd))))) return null;
+  return filas.reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
+}
+
+/** El gasto del MES (día de México) del diagnóstico de solo lectura. `null` = no medible. */
+export async function gastoMesDiagnosticoUsd(ahora: Date = new Date()): Promise<number | null> {
+  try {
+    const mx = new Date(ahora.getTime() - 6 * 3_600_000);
+    const inicioMes = new Date(`${mx.getUTCFullYear()}-${String(mx.getUTCMonth() + 1).padStart(2, '0')}-01T00:00:00-06:00`).toISOString();
+    return await gastoDesdeUsd('especialistas_incidente', inicioMes, 'diagnostico_f14');
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -643,6 +774,23 @@ export async function correrRunner(
   if (await estaApagado('global')) {
     avance.apagadoGlobal = true;
     return { apagadoGlobal: true, agentes, saltadosPorReloj };
+  }
+
+  // F20: una vuelta que paga/actúa por una flota con plan pausado o cancelado NO despacha a nadie. Falla cerrado si no se
+  // puede leer el plan. (Las vueltas de PLATAFORMA, sin tenant, son de Likida y no dependen del plan de ninguna flota.)
+  if (budgetTenantId) {
+    const plan = await veredictoSalidasDeFlota(budgetTenantId);
+    if (!plan.salen) {
+      logger.warn('runner.frenado_por_plan', { estado: plan.estado });
+      const todos = await acotada(supabaseAdmin()
+        .from('agente_definicion').select('id').eq('estado', 'vivo').eq('runner_habilitado', true).eq('disparador', 'cron').order('id'), 'runner.agentes_frenados');
+      const ids = (todos.data ?? []) as Array<{ id: string }>;
+      for (const a of ids.filter((x) => !soloAgente || x.id === soloAgente)) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: `${plan.mensaje} — la flota no genera salidas automáticas` });
+      }
+      if (ids.length === 0) agentes.push({ agente: soloAgente ?? '*', resultado: 'saltado', motivo: plan.mensaje });
+      return { apagadoGlobal: false, agentes, saltadosPorReloj };
+    }
   }
 
   const { data, error } = await acotada(supabaseAdmin()

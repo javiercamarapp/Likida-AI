@@ -17,7 +17,10 @@ const dobles = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
-vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/corridas', useSearchParams: () => new URLSearchParams() }));
+vi.mock('@/lib/admin/agentes-parados', async (importar) => ({ ...(await importar<typeof import('@/lib/admin/agentes-parados')>()), getAgentesParados: vi.fn(async () => ({ parados: [], habilitados: 3, umbralHoras: 72, latidoDelRunner: null })) }));
+vi.mock('@/lib/admin/cola-aprobacion', async (importar) => ({ ...(await importar<typeof import('@/lib/admin/cola-aprobacion')>()), leerResumenBandeja: vi.fn(async () => null) }));
+vi.mock('@/lib/admin/bitacora', async (importar) => ({ ...(await importar<typeof import('@/lib/admin/bitacora')>()), opcionesBitacora: vi.fn(async () => ({ flotas: [{ id: 't-1', nombre: 'Transportes Uno' }], personas: [] })) }));
 vi.mock('@/lib/admin/corridas-cruzadas', async (importar) => ({
   ...(await importar<typeof import('@/lib/admin/corridas-cruzadas')>()),
   corridasFiltradas: dobles.corridasFiltradas,
@@ -88,4 +91,38 @@ it('la página pedida (?p=) viaja al filtro; una página inválida cae a 1', asy
 
   await renderizar({ p: 'nan' });
   expect(dobles.corridasFiltradas).toHaveBeenLastCalledWith(expect.objectContaining({ pagina: 1 }));
+});
+
+it('F7: el bloque «Agentes que no corrieron y por qué» también vive aquí', async () => {
+  const html = await renderizar();
+  expect(html).toContain('Agentes que no corrieron y por qué');
+});
+
+it('F7: el total real y la siguiente página conservan los filtros', async () => {
+  dobles.corridasFiltradas.mockResolvedValue({ corridas: [CORRIDA_OK], pagina: 1, paginas: 3, total: 120 });
+  const html = await renderizar({ estado: 'fallo' });
+  expect(html).toContain('de 120 corridas');
+  expect(html).toContain('estado=fallo&amp;p=2');
+});
+
+it('F7: no imprime ids de corrida ni nombres internos de columnas', async () => {
+  dobles.corridasFiltradas.mockResolvedValue({ corridas: [CORRIDA_OK], pagina: 1, paginas: 1, total: 1 });
+  const html = await renderizar();
+  expect(html).not.toMatch(/costo_usd|agente_corrida|\bNULL\b/);
+});
+
+it('con corridas pinta el mapa de calor por día y bloque de 3 horas, y dice que cuenta solo la página', async () => {
+  dobles.corridasFiltradas.mockResolvedValue({ corridas: [CORRIDA_OK, { ...CORRIDA_OK, id: 'c-2', inicio: '2026-01-01T01:00:00Z' }], pagina: 1, paginas: 1, total: 2 });
+  const html = await renderizar();
+  expect(html).toContain('Cuándo corren los agentes');
+  expect(html).toContain('rv-calor');
+  expect(html).toContain('Cuenta las 2 corridas de la página');
+  // 00:00 y 01:00 UTC del 1-ene-2026 (jueves) son 18:00 y 19:00 del miércoles 31-dic en México: bloque 18.
+  expect(html).toContain('Mié · 18: 2');
+});
+
+it('sin corridas (o lectura caída) no hay mapa de calor', async () => {
+  expect(await renderizar()).not.toContain('rv-calor');
+  dobles.corridasFiltradas.mockRejectedValue(new Error('x'));
+  expect(await renderizar()).not.toContain('rv-calor');
 });

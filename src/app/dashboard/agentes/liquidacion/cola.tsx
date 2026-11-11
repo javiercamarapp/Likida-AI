@@ -1,8 +1,8 @@
 import Link from 'next/link';
 import { Inbox, ArrowRight } from 'lucide-react';
+import './liquidacion.css';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { EstadoVacio } from '../../estados';
-import { BarraFiltros, FiltroCampo, FiltroFecha, FiltroOpciones } from '@/app/ui-v2/componentes';
+import { BarraFiltros, EstadoVacio, FiltroCampo, FiltroFecha, FiltroOpciones, Icono, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { ComboCatalogo, type BuscarCatalogo } from '../../combo-catalogo';
 import {
   ESTADOS_CUADRE, REVISIONES, hayFiltrosCola,
@@ -90,18 +90,14 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
   const conFiltros = hayFiltrosCola(filtros);
 
   return (
-    <section className="card p-4">
-      <div className="flex items-baseline justify-between gap-3 flex-wrap mb-1">
-        <h2 className="font-display text-[15px] font-semibold">Esperan tu revisión</h2>
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{rotuloCola(pagina, filtros)}</p>
-      </div>
+    <Tarjeta titulo="Esperan tu revisión" acciones={<span className="rv-liq-sub">{rotuloCola(pagina, filtros)}</span>}>
 
       <FormaFiltros filtros={filtros} terminales={terms} buscar={buscar} contexto={contexto} conFiltros={conFiltros}
         nombres={Object.fromEntries(chipsDeCola(pagina, filtros, terms, contexto).map((c) => [c.id, c.valor]))} />
 
 
       {pagina.filas.length === 0 ? (
-        <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
+        <EstadoVacio icono={Inbox} titulo={conFiltros ? 'Ningún resultado con ese filtro' : 'Nada espera tu firma'}>
           {conFiltros
             ? 'Ninguna liquidación cae en ese filtro. Quita alguno para ver el resto de la cola.'
             : 'No hay liquidaciones esperando a un humano — cuando el agente no pueda cuadrar una solo, la vas a ver aquí.'}
@@ -136,7 +132,7 @@ export async function SeccionCola({ cola, filtros, terminales, buscar, contexto,
       <div className="rv-tl__sellos">
         <SelloDato tipo="observado" fuente="Cola de revisión" leidoEn={ahoraMs()} edad={false} />
       </div>
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -213,15 +209,15 @@ function columnasCola(sufijo: string): ColumnaTabla<FilaCola>[] {
     {
       id: 'cuadre', titulo: 'Cuadre', corta: true,
       celda: (l) => {
-        const e = ROTULO_ESTADO[l.estatus] ?? { rotulo: l.estatus, tono: undefined };
-        return <span className="rv-tl__pill" data-tono={e.tono}>{e.rotulo}</span>;
+        const e = ROTULO_ESTADO[l.estatus] ?? { rotulo: l.estatus, tono: 'muted' as const };
+        return <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>;
       },
     },
     {
       id: 'accion', titulo: 'Revisar', tituloOculto: true, alinear: 'der',
       celda: (l) => (
-        <Link href={`/dashboard/${l.id}${sufijo}`} className="inline-flex items-center gap-1 text-[12px] font-medium hover:opacity-70 transition-opacity rv-tl__enlace">
-          Revisar <ArrowRight width={12} height={12} strokeWidth={2} aria-hidden />
+        <Link href={`/dashboard/${l.id}${sufijo}`} className="rv-liq-enlace rv-tl__enlace">
+          Revisar <Icono icono={ArrowRight} tam={14} />
         </Link>
       ),
     },

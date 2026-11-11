@@ -13,6 +13,16 @@ export function tablaACsv(filas: Array<[string, string]>): string {
   return [filaCsvSegura(['Concepto', 'Valor']), ...filas.map(([k, v]) => filaCsvSegura([k, v], { numerosEnTexto: true }))].join('\n');
 }
 
+/** CSV de una serie temporal de respuesta (día, valor): lo que graficó el servidor, sin re-calcular. Misma guarda anti-fórmulas. */
+export function serieACsv(puntos: Array<{ dia: string; valor: number }>): string {
+  return [filaCsvSegura(['Día', 'Valor']), ...puntos.map((p) => filaCsvSegura([p.dia, String(p.valor)], { numerosEnTexto: true }))].join('\n');
+}
+
+/** CSV de un reparto (dona): etiqueta y valor, tal como se graficó. */
+export function repartoACsv(segmentos: Array<{ etiqueta: string; valor: number }>): string {
+  return [filaCsvSegura(['Concepto', 'Valor']), ...segmentos.map((g) => filaCsvSegura([g.etiqueta, String(g.valor)], { numerosEnTexto: true }))].join('\n');
+}
+
 /** Texto plano de una respuesta para copiarla: el texto y, debajo, cada tabla / cifra en líneas «Concepto: valor». */
 export function textoParaCopiar(r: Respuesta): string {
   const partes = [r.texto];

@@ -1,67 +1,56 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { getResumenNegocio } from '@/lib/admin/negocio';
-import { Calculator, DollarSign, CheckCircle2 } from 'lucide-react';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
-import { StatCard, EstadoVacio } from '../ui/kit';
+import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
+import { MarcoPagina, FilaTarjetas, Tarjeta } from '@/app/ui-v2/componentes';
+import { TiraCifras, Columnas } from '@/app/ui-v2/graficas';
+import { TarjetaFase } from '../tarjeta-fase';
 
 export const dynamic = 'force-dynamic';
 
-const ICONO_KPI = { width: 15, height: 15, strokeWidth: 1.75 } as const;
-
 /**
- * Agente de Cuadre — la fase que compara los gastos ya capturados contra el
- * anticipo y la política de la flota. Real: `llm_costo` filtrado por
- * `fase === 'cuadre'` (`getResumenNegocio`) y `viaje` para el total de
- * viajes procesados.
- *
- * Re-envuelta en la anatomía de página (14-ago): lienzo `--g1` + `BarraPagina`
- * con el ícono de `rutas.ts` + `StatCard` del kit. Las cifras y su fuente
- * no cambian. Un cero aquí es MEDIDO: cero filas en `llm_costo` para la
- * fase es cero gasto real, no un relleno.
+ * Agente de Cuadre: la fase que compara los gastos ya capturados contra el anticipo y la política de la flota. Real: `llm_costo`
+ * filtrado por la fase `cuadre` y `viaje` para el total de viajes procesados. Un cero aquí es MEDIDO: cero filas para la fase es
+ * cero gasto real, no un relleno.
  */
 export default async function AgenteCuadrePage() {
-  // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
-  const r = await getResumenNegocio();
+  const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo().catch(() => [])]);
   const cuadre = r.porFase.find((f) => f.fase === 'cuadre');
+  const modelos = porFaseModelo.filter((m) => m.fase === 'cuadre');
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Calculator width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Agente de Cuadre"
+    <MarcoPagina
+      area="Agentes"
+      titulo="Agentes"
+      apoyo="Cuadre: concilia gastos comprobados contra anticipo y política. Costo real, histórico."
+    >
+      <TiraCifras
+        etiqueta="Cuadre"
+        items={[
+          { etiqueta: 'Gastado en Cuadre', valor: cuadre ? cuadre.costoUsd : 0, formato: 'usd', nota: 'Costo medido en llm_costo' },
+          { etiqueta: 'Llamadas de Cuadre', valor: cuadre ? cuadre.n : 0, formato: 'entero' },
+          { etiqueta: 'Viajes procesados', valor: r.viajesProcesados, formato: 'entero' },
+        ]}
+      />
+      <FilaTarjetas variante="6-6">
+        <TarjetaFase
+          titulo="Costo por modelo, Cuadre"
+          queHace="Compara los gastos ya capturados contra el anticipo y la política de la flota."
+          datos={cuadre}
+          modelos={modelos}
         />
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <p className="text-xs" style={{ color: 'var(--muted)' }}>Concilia gastos comprobados contra anticipo y política — costo real, histórico</p>
-
-          <div className="kit-kpis">
-            <StatCard icono={<DollarSign {...ICONO_KPI} />}
-              etiqueta="Gastado en Cuadre" valor={cuadre ? cuadre.costoUsd : 0} formato="usd"
-            />
-            <StatCard icono={<Calculator {...ICONO_KPI} />}
-              etiqueta="Llamadas de Cuadre" valor={cuadre ? cuadre.n : 0} formato="entero"
-            />
-            <StatCard icono={<CheckCircle2 {...ICONO_KPI} />}
-              etiqueta="Viajes procesados" valor={r.viajesProcesados} formato="entero"
-            />
-          </div>
-
-          <div className="card p-3">
-            <TituloSeccion>Conciliación automática vs. manual</TituloSeccion>
-            <div className="mt-2">
-              <EstadoVacio>
-                % de conciliación automática vs. manual — necesita instrumentar qué viajes requirieron intervención
-                humana, no existe hoy. Likida sabe cuántos viajes se procesaron ({r.viajesProcesados}) y cuánto costó el
-                Agente de Cuadre, pero no guarda todavía si un viaje se cerró solo o si alguien tuvo que intervenir.
-              </EstadoVacio>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
+        <Tarjeta
+          titulo="Conciliación automática contra manual"
+          estado="vacio"
+          mensaje="Aún no se mide"
+          detalle={`Likida sabe cuántos viajes se procesaron (${r.viajesProcesados}) y cuánto costó Cuadre, pero no guarda todavía si un viaje se cerró solo o si alguien tuvo que intervenir. Medirlo exige registrar esa intervención humana.`}
+        />
+      </FilaTarjetas>
+      <Tarjeta titulo="Costo de IA por día, todas las fases" estado={r.porDia.length > 0 ? 'ok' : 'vacio'} mensaje="Sin actividad de IA" detalle="El costo por día no se separa por fase con los datos de hoy; esta gráfica suma todas.">
+        <Columnas etiqueta="Costo de IA por día" datos={r.porDia.map((d) => ({ etiqueta: d.dia, valor: d.costoUsd }))} formato="usd" />
+      </Tarjeta>
+    </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Agente de Cuadre' };
+export const metadata: Metadata = { title: 'Cuadre' };

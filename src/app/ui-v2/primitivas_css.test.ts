@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 // Solo la capa v2 (después del marcador): arriba vive lo de siempre sin tocar (ver invariancia_v1.test.tsx).
 const MARCA = 'Capa v2 Likida-Rovaq';
 const css = (f: string) => { const t = readFileSync(join(__dirname, f), 'utf8'); return t.slice(t.indexOf(MARCA)).replace(/\/\*[\s\S]*?\*\//g, ''); };
+const tok = readFileSync(join(__dirname, 'tokens.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const comp = css('componentes.css');
 const graf = css('graficas.css');
 
@@ -17,22 +18,26 @@ const lum = (hex: string) => {
 const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
 
 describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
-  it('botón: 32 px (36 en <820), radio 8, 13/600, toque 44 por ::after, primario negro por tokens (sin azul)', () => {
-    expect(comp).toMatch(/\.rv-btn \{[^}]*min-height: 32px[^}]*font: 600 13px/);
+  it('botón: 32 px (36 en <820), radio 8, 13/500, toque 44 por ::after, primario negro por tokens (sin azul)', () => {
+    expect(comp).toMatch(/\.rv-btn \{[^}]*min-height: 32px[^}]*font: var\(--t-ctl\)/);
+    expect(tok).toMatch(/--t-ctl: 500 13px\/1\.3/);
     expect(comp).toMatch(/\.rv-btn \{[^}]*border-radius: 8px/);
     expect(comp).toMatch(/@media \(max-width: 819px\) \{\s*\[data-ui="v2"\] \.rv-btn \{ min-height: 36px; \}/);
     expect(comp).toMatch(/\.rv-btn::after \{[^}]*width: max\(100%, 44px\); height: max\(100%, 44px\)/);
     expect(comp).toMatch(/\.rv-btn--primary \{ background: var\(--btn-bg\)/); // lee --btn-bg/--btn-fg/--btn-borde/--btn-hover (tenue neutro, en tokens.css)
     expect(comp).not.toMatch(/\.rv-btn--primary \{[^}]*var\(--marca\)/);
   });
-  it('botón compacto (.rv-btn--sm): 32 px en escritorio y también bajo 820 (donde el botón normal sube a 36)', () => {
-    expect(comp).toMatch(/\.rv-btn--sm \{ min-height: 32px; padding: 4px 10px; \}/);
-    expect(comp).toMatch(/@media \(max-width: 819px\) \{[^@]*\.rv-btn \{ min-height: 36px; \}\s*\[data-ui="v2"\] \.rv-btn--sm \{ min-height: 32px; \}/);
+  it('botón compacto (.rv-btn--sm): 28 px / 12 px en escritorio y 36 bajo 820, como Rovaq', () => {
+    expect(comp).toMatch(/\.rv-btn--sm \{ min-height: var\(--ctl-h-sm, 28px\); padding: 4px 10px; font: var\(--t-ctl-sm\); \}/);
+    expect(tok).toMatch(/--ctl-h-sm: 28px/);
+    expect(tok).toMatch(/--t-ctl-sm: 500 12px\/1\.3/);
+    expect(comp).toMatch(/@media \(max-width: 819px\) \{[^@]*\.rv-btn \{ min-height: 36px; \}\s*\[data-ui="v2"\] \.rv-btn--sm \{ min-height: var\(--ctl-h-movil, 36px\); \}/);
   });
-  it('botón deshabilitado: borde discontinuo y SIN opacidad', () => {
+  it('botón deshabilitado: borde sólido tenue (sin punteado) y SIN opacidad', () => {
     const m = /\.rv-btn:disabled,[^{]*\{([^}]*)\}/.exec(comp);
     expect(m?.[1]).toMatch(/opacity: 1/);
-    expect(m?.[1]).toMatch(/dashed/);
+    expect(m?.[1]).toMatch(/border: 1px solid var\(--line\)/);
+    expect(m?.[1]).not.toMatch(/dashed|dotted/);
   });
   it('tenue: tinta sobre el fondo del primario ≥ 4.5:1 en claro y oscuro', () => {
     expect(ratio('#0e0e10', '#e4e4e6')).toBeGreaterThanOrEqual(4.5);
@@ -85,10 +90,10 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
     expect(regla).toMatch(/gap: var\(--ui-rhythm\)/);
     expect(regla).toMatch(/padding: 0/);
   });
-  it('esqueleto: UNA variante que respira (1 ↔ .5, 1.6 s) solo con no-preference; sin shimmer', () => {
+  it('esqueleto: shimmer de Rovaq (soft-borde-soft, 200 %, 1.4 s ease-in-out) solo con no-preference', () => {
     const mov = readFileSync(join(__dirname, 'movimiento.css'), 'utf8');
-    expect(mov).toMatch(/@keyframes rv-esq-respira \{ 0%, 100% \{ opacity: 1; \} 50% \{ opacity: \.5; \} \}/);
-    expect(comp).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{\s*\[data-ui="v2"\] \.skeleton \{ animation: rv-esq-respira 1600ms/);
+    expect(mov).toMatch(/@keyframes rv-shimmer \{ to \{ background-position: -200% 0; \} \}/);
+    expect(comp).toMatch(/@media \(prefers-reduced-motion: no-preference\) \{\s*\[data-ui="v2"\] \.skeleton \{ background-image: linear-gradient\(90deg, var\(--ui-soft\), var\(--ui-border\), var\(--ui-soft\)\); background-size: 200% 100%; animation: rv-shimmer 1400ms ease-in-out/);
     expect(comp).toMatch(/\[data-ui="v2"\] \.skeleton \{[^}]*background-image: none[^}]*animation: none/);
   });
   it('KPI: tarjeta de 112 px, cifra 26/700, vacío 18/600, sello fuera de pantalla bajo 1100 px, sin elipsis', () => {
@@ -126,5 +131,26 @@ describe('cascada (Waterfall) en la capa v2', () => {
   });
   it('la cifra de la barra más alta tiene aire arriba: .rv-cascada con padding-top y el rótulo no se pisa con el título', () => {
     expect(graf).toMatch(/\.rv-cascada \{ padding-top: 22px; \}/);
+  });
+});
+
+describe('identidad Rovaq · tokens del paquete B1 (10-nov-2026)', () => {
+  it('fondo hundido del contenido, sombra del marco, --line2 oscuro y cabecera de tabla', () => {
+    expect(tok).toMatch(/--ui-sunken: #f1f1f2;/);
+    expect(tok).toMatch(/--ui-sunken: #0e0e10;/);
+    expect(tok).toMatch(/--sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;/);
+    expect(tok).toMatch(/--sh-marco: none;/);
+    expect(tok).toMatch(/--line2: #34343a;/);
+    expect(tok).toMatch(/--tabla-cab-bg: var\(--ui-soft\);\s*--tabla-cab-ink: var\(--muted\);/);
+    const shell = readFileSync(join(__dirname, 'shell.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+    expect(shell).toMatch(/\.rv-col \{[^}]*background: var\(--ui-sunken\)/);
+  });
+  it('botón primario NEGRO por decisión del dueño (sin azul) y segmentado 500', () => {
+    expect(tok).toMatch(/--btn-bg: #0e0e10;/);
+    expect(tok).toMatch(/--btn-hover: #3a3a40;/);
+    expect(readFileSync(join(__dirname, 'piezas.css'), 'utf8')).toMatch(/\.rv-seg__btn \{[^}]*font-weight: 500/);
+  });
+  it('cifra de KPI con tracking -.03em en la capa v2', () => {
+    expect(graf).toMatch(/\.rv-kpi__valor \{ font: 700 var\(--t-kpi\)\/1\.1 var\(--font-display, inherit\); letter-spacing: -\.03em/);
   });
 });

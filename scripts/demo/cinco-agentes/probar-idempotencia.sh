@@ -41,6 +41,9 @@ TABLAS=(
   "peaje_curso|peaje_curso|t.tenant_id = '$T'"
   "peaje_curso_caseta|peaje_curso_caseta|t.tenant_id = '$T'"
   "liquidacion_externa|liquidacion_externa|t.tenant_id = '$T'"
+  "liquidacion_desglose|liquidacion_desglose|t.tenant_id = '$T'"
+  "liquidacion_entrega_correo|liquidacion_entrega_correo|t.tenant_id = '$T'"
+  "liquidacion_excepcion|liquidacion_excepcion|t.tenant_id = '$T'|id"
   "cp_documento|cp_documento|t.tenant_id = '$T'"
   "cp_documento_embarque|cp_documento_embarque|t.tenant_id = '$T'"
   "cp_perfil|cp_perfil|t.tenant_id = '$T'"
@@ -99,8 +102,13 @@ n=$(psql "$URL" -Atq -c "select count(*) from (select telefono from cliente wher
 # Copia al jefe y aviso de discrepancia SEMBRADOS (sin ellos el guion no tiene qué enseñar), y ningún aviso con salida pendiente.
 n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_formato_flota where tenant_id = '$T' and cardinality(copia_telefonos) > 0 and cardinality(discrepancia_telefonos) > 0)")
 [ "$n" = "1" ] || { echo "FALLA: el formato de la flota no trae teléfonos de copia y de discrepancia sembrados" >&2; ok=0; }
-n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_aviso_discrepancia where tenant_id = '$T' and estado in ('pendiente', 'enviando')) + (select count(*) from orquestador_escalacion where tenant_id = '$T' and aviso_estado = 'pendiente') + (select count(*) from liquidacion_externa where tenant_id = '$T' and estado in ('pendiente', 'en_cola'))")
+n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_aviso_discrepancia where tenant_id = '$T' and estado in ('pendiente', 'enviando')) + (select count(*) from orquestador_escalacion where tenant_id = '$T' and aviso_estado = 'pendiente') + (select count(*) from liquidacion_externa l where l.tenant_id = '$T' and l.estado in ('pendiente', 'en_cola') and not exists (select 1 from liquidacion_desglose d where d.liquidacion_externa_id = l.id))")
 [ "$n" = "0" ] || { echo "FALLA: hay $n avisos o liquidaciones del tenant demo con salida pendiente (algún cron intentaría mandarlos)" >&2; ok=0; }
+# Ruta de CORREO con Excel (05b): nada puede salir. Ninguna entrega pendiente/enviando, el envío de la flota APAGADO, y todo correo es .invalid.
+n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_entrega_correo where tenant_id = '$T' and estado in ('pendiente', 'enviando')) + (select count(*) from liquidacion_correo_config where tenant_id = '$T' and activa) + (select count(*) from liquidacion_entrega_correo where tenant_id = '$T' and correo not like '%@demo.invalid') + (select count(*) from operador where tenant_id = '$T' and correo is not null and correo not like '%@demo.invalid')")
+[ "$n" = "0" ] || { echo "FALLA: la ruta de correo del demo podría enviar algo real ($n: entregas pendientes, envío activo o correos que no son @demo.invalid)" >&2; ok=0; }
+n=$(psql "$URL" -Atq -c "select (select count(*) from liquidacion_desglose where tenant_id = '$T') || '-' || (select count(*) from liquidacion_excepcion where tenant_id = '$T' and resuelta_en is null)")
+[ "$n" = "7-5" ] || { echo "FALLA: la ruta de correo del demo debe traer 7 desgloses y 5 excepciones abiertas (trae $n)" >&2; ok=0; }
 n=$(psql "$URL" -Atq -c "select (select count(*) from vigia_config where tenant_id = '$T' and (habilitado or respaldo_correo)) + (select count(*) from agente_conductor_config where tenant_id = '$T' and (activo or avisar_senal_vida))")
 [ "$n" = "0" ] || { echo "FALLA: el Vigía o el Conductor del tenant demo están ENCENDIDOS tras sembrar (deben venir apagados)" >&2; ok=0; }
 # La lista de directores del Vigía (P14) se siembra con CORREO nada más: `vigia_director.telefono` exige 52 + 10 dígitos y la marca 28999… no

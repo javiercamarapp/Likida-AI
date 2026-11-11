@@ -35,7 +35,7 @@ vi.mock('@/lib/likida/analytics', async (importar) => ({
 
 import ChatFlota from '../chat';
 import { AvisoSinFlota } from '../sin-flota';
-import PaginaChat from './page';
+import PaginaChat, { metadata } from './page';
 
 function buscar(nodo: ReactNode, componente: unknown, salida: Elemento[] = []): Elemento[] {
   if (Array.isArray(nodo)) { for (const hijo of nodo) buscar(hijo, componente, salida); return salida; }
@@ -95,4 +95,8 @@ it('flota que ya no existe (H13): avisa ANTES de la conversación, no la deja pa
 it('flota que sí existe: no se muestra el aviso de flota inexistente', async () => {
   const pagina = await PaginaChat({ searchParams: SP });
   expect(buscar(pagina, AvisoSinFlota)).toHaveLength(0);
+});
+
+it('el título de la pestaña es el nombre de la entrada del menú (Pregunta a tus datos)', () => {
+  expect(metadata.title).toBe('Pregunta a tus datos');
 });

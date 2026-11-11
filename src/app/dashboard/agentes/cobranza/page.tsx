@@ -1,3 +1,4 @@
+import { Tarjeta } from '@/app/ui-v2/componentes';
 import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from '../../sufijo';
@@ -18,7 +19,10 @@ import { SeccionPorGasto } from './seccion-por-gasto';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Seguimiento de comprobantes' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('cobranza.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -61,6 +65,7 @@ export default async function PaginaAgenteCobranza({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/cobranza', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/cobranza')) redirect('/dashboard');
 
@@ -185,6 +190,7 @@ export default async function PaginaAgenteCobranza({
 
   return (
     <VistaAgenteCobranza
+      tr={tr}
       cola={cola}
       config={config}
       bitacora={bitacora}
@@ -197,16 +203,11 @@ export default async function PaginaAgenteCobranza({
       acciones={{ guardarEstrategia, alternarPausa, ejecutarAhora }}
       gastosParaContactar={porGasto ? porGasto.plan.paraContactar.length : 0}
       porGasto={porGasto
-        ? <SeccionPorGasto config={porGasto.config} plan={porGasto.plan} tablero={tableroPorGasto}
+        ? <SeccionPorGasto tr={tr} config={porGasto.config} plan={porGasto.plan} tablero={tableroPorGasto}
             firma={config.firma} instrucciones={config.instrucciones} guardar={guardarPorGasto} />
         : (
-          <section className="card p-4">
-            <h2 className="font-display text-[15px] font-semibold">Cobranza por gasto</h2>
-            <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>
-              No se pudo leer la cobranza por gasto ahora mismo. No se muestra una lista a medias: media lista se
-              ve igual que la lista entera.
-            </p>
-          </section>
+          <Tarjeta titulo={tr.t('cobranza.page.por_gasto_titulo')} info="cobranza.gasto" estado="error"
+            mensaje={tr.t('cobranza.page.por_gasto_error')} reintentar />
         )}
       notificaciones={
         <>

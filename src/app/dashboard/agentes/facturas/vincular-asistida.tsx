@@ -3,7 +3,8 @@
 import { useActionState, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Copy, MonitorSmartphone, X } from 'lucide-react';
-import { useNotificar } from '../../../admin/ui/notificaciones';
+import './facturas.css';
+import { Boton, Icono, useNotificar } from '@/app/ui-v2/componentes';
 import {
   accionIniciarVinculacion, accionCancelarVinculacion, accionEstadoVinculacion,
   type ResultadoVincular, type EstadoVinculacionPantalla,
@@ -59,52 +60,53 @@ export function VincularAsistida({ clave, nombre, flota = null }: { clave: strin
 
   if (!hayCodigo) {
     return (
-      <form action={(fd) => { setCerrado(false); setEstado(null); iniciar(fd); }} className="inline">
+      <form action={(fd) => { setCerrado(false); setEstado(null); iniciar(fd); }} className="rv-fact__pila">
         <input type="hidden" name="comercio" value={clave} />
         {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
-        <button type="submit" disabled={iniciando}
-          className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>
-          <MonitorSmartphone width={11} height={11} strokeWidth={2} />
-          {iniciando ? 'Generando…' : 'Vincular con código'}
-        </button>
-        {res && !res.ok && <span role="alert" className="block text-[11px] mt-1" style={{ color: 'var(--bad)' }}>{res.error}</span>}
+        <div>
+          <Boton type="submit" variante="ghost" tamano="sm" loading={iniciando} icono={<Icono icono={MonitorSmartphone} tam={14} />}>
+            {iniciando ? 'Generando…' : 'Vincular con código'}
+          </Boton>
+        </div>
+        {res && !res.ok && <span role="alert" className="rv-fact__nota" data-tono="bad">{res.error}</span>}
       </form>
     );
   }
 
   const vivo = estado?.ok ? estado.estado : 'pendiente';
   return (
-    <div className="mt-2 rounded-lg p-3 w-full" style={{ background: 'var(--canvas)' }} role="region" aria-label={`Vincular ${nombre}`}>
-      <p className="text-[12px] font-medium">Vincular {nombre}</p>
-      <ol className="text-[11px] mt-1 space-y-1 list-decimal pl-4" style={{ color: 'var(--muted)' }}>
-        <li>En una computadora <strong>con pantalla</strong> (la tuya), en la carpeta de Likida, corre:</li>
-      </ol>
-      <div className="flex items-center gap-2 mt-1.5">
-        <code className="text-[11px] font-mono rounded px-2 py-1 break-all" style={{ background: 'var(--line2)' }} data-testid="comando-vinculacion">{res.comando}</code>
-        <button type="button" aria-label="Copiar comando" className="rv-icono-boton"
-          onClick={() => { void navigator.clipboard?.writeText(res.comando); notificar({ tono: 'info', mensaje: 'Comando copiado.' }); }}>
-          <Copy width={12} height={12} strokeWidth={2} />
-        </button>
-      </div>
-      <ol start={2} className="text-[11px] mt-1.5 space-y-1 list-decimal pl-4" style={{ color: 'var(--muted)' }}>
-        <li>Se abre el portal. <strong>Entra tú</strong> con tu cuenta y resuelve el CAPTCHA o el código de dos pasos. Likida no teclea nada ni resuelve retos.</li>
-        <li>Cuando estés dentro, la ventana se cierra sola y aquí aparece «vinculado».</li>
-      </ol>
-      <p className="text-[11px] mt-2" style={{ color: 'var(--warn)' }}>
-        El código se muestra solo ahora, sirve una vez y caduca a las {horaMx(res.expiraEn)}. No lo compartas.
-      </p>
-      <p className="text-[11px] mt-1" role="status" style={{ color: 'var(--muted)' }}>{ROTULO[vivo] ?? ''}</p>
-      <div className="mt-2">
-        <button type="button" disabled={cancelando}
-          className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}
-          onClick={() => empezarCancelar(async () => {
-            const fd = new FormData(); fd.set('comercio', clave); if (flota) fd.set(CAMPO_FLOTA_PINTADA, flota);
-            const r = await accionCancelarVinculacion(null, fd);
-            notificar(r.error ? { tono: 'error', mensaje: r.error } : { tono: 'info', mensaje: r.ok ?? 'Cancelada.' });
-            setCerrado(true); router.refresh();
-          })}>
-          <X width={11} height={11} strokeWidth={2} /> Cancelar y anular el código
-        </button>
+    <div className="rv-fact__relogin" role="region" aria-label={`Vincular ${nombre}`}>
+      <div className="rv-fact__pila">
+        <p className="rv-fact__titulo">Vincular {nombre}</p>
+        <ol className="rv-fact__pasos">
+          <li>En una computadora <strong>con pantalla</strong> (la tuya), en la carpeta de Likida, corre:</li>
+        </ol>
+        <div className="rv-fact__linea">
+          <code className="rv-fact__codigo" data-testid="comando-vinculacion">{res.comando}</code>
+          <Boton variante="ghost" tamano="sm" aria-label="Copiar comando"
+            onClick={() => { void navigator.clipboard?.writeText(res.comando); notificar({ tono: 'info', mensaje: 'Comando copiado.' }); }}>
+            <Icono icono={Copy} tam={14} />
+          </Boton>
+        </div>
+        <ol start={2} className="rv-fact__pasos">
+          <li>Se abre el portal. <strong>Entra tú</strong> con tu cuenta y resuelve el CAPTCHA o el código de dos pasos. Likida no teclea nada ni resuelve retos.</li>
+          <li>Cuando estés dentro, la ventana se cierra sola y aquí aparece «vinculado».</li>
+        </ol>
+        <p className="rv-fact__nota" data-tono="warn">
+          El código se muestra solo ahora, sirve una vez y caduca a las {horaMx(res.expiraEn)}. No lo compartas.
+        </p>
+        <p className="rv-fact__nota" role="status">{ROTULO[vivo] ?? ''}</p>
+        <div>
+          <Boton variante="ghost" tamano="sm" loading={cancelando} icono={<Icono icono={X} tam={14} />}
+            onClick={() => empezarCancelar(async () => {
+              const fd = new FormData(); fd.set('comercio', clave); if (flota) fd.set(CAMPO_FLOTA_PINTADA, flota);
+              const r = await accionCancelarVinculacion(null, fd);
+              notificar(r.error ? { tono: 'error', mensaje: r.error } : { tono: 'info', mensaje: r.ok ?? 'Cancelada.' });
+              setCerrado(true); router.refresh();
+            })}>
+            Cancelar y anular el código
+          </Boton>
+        </div>
       </div>
     </div>
   );

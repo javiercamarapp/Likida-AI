@@ -127,8 +127,8 @@ function parsearRegex(pat) {
 
   function cuantificar(a) {
     const c = pat[i];
-    let min = 1;
-    let max = 1;
+    let min;
+    let max;
     if (c === '?') {
       min = 0;
       max = 1;
@@ -388,7 +388,10 @@ export function construirCandidatos(checks) {
   return filas;
 }
 
-/** Consulta de catalogo: un CHECK por fila con sus columnas. Una sola linea `BANCO_CHECKS <json>`. */
+/** Consulta de catalogo: un CHECK por fila con sus columnas. Una sola linea `BANCO_CHECKS <json>`.
+ *  El orden es DETERMINISTA (tabla y luego oid = orden de creacion del CHECK): sin ORDER BY, pg_constraint sale en el orden fisico
+ *  del heap o del indice segun el plan y las estadisticas, y el orden de los CHECK decide el orden de los valores candidatos (el
+ *  primer literal de `estado` pasa de 'recibido' a 'aprobado'), que mueve la combinacion valida mas alla de los 600 intentos. */
 export function consultaChecks(esquemas) {
   for (const s of esquemas) if (!/^[a-z_][a-z0-9_]*$/.test(s)) throw new Error(`esquema invalido: ${s}`);
   const lista = esquemas.map((s) => `'${s}'`).join(',');
@@ -402,7 +405,8 @@ export function consultaChecks(esquemas) {
              from pg_attribute a
              join pg_type t on t.oid = a.atttypid
              left join pg_type et on et.oid = t.typelem and t.typcategory = 'A'
-            where a.attrelid = c.oid and a.attnum = any (k.conkey)))), '[]'::jsonb)::text
+            where a.attrelid = c.oid and a.attnum = any (k.conkey)))
+          order by n.nspname, c.relname, k.oid), '[]'::jsonb)::text
   from pg_constraint k
   join pg_class c on c.oid = k.conrelid
   join pg_namespace n on n.oid = c.relnamespace
@@ -452,6 +456,12 @@ export const BASES_EXPLICITAS = {
   'public.cp_documento': {
     a: { canal: 'manual', formato: 'pdf_texto', bytes: '1000', sha256: HEX64_A },
     b: { canal: 'manual', formato: 'pdf_texto', bytes: '1000', sha256: HEX64_B },
+  },
+  // 0400 vigia_mensaje_autor_coherente / estado_coherente / aprobado_tiene_quien: un mensaje ENTRANTE es del cliente y esta
+  // 'recibido'. Es la combinacion valida mas corta; la busqueda generica la encontraba en el intento ~500 y se salia de los 600.
+  'public.vigia_mensaje': {
+    a: { direccion: 'entrante', autor: 'cliente', estado: 'recibido' },
+    b: { direccion: 'entrante', autor: 'cliente', estado: 'recibido' },
   },
   // 0787/0788/0933: rol del dominio y correo con forma (unico por liquidacion, generacion, rol y correo).
   'public.liquidacion_entrega_correo': {

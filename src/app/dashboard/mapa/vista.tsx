@@ -1,11 +1,13 @@
 import Link from 'next/link';
-import { MapPinOff, Satellite } from 'lucide-react';
+import { MapPinOff } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import { nivelDePosicion, contarPorFrescura, ROTULO_FRESCURA, TONO_FRESCURA, MINUTOS_ATRASADA } from '@/lib/likida/gps_salud';
 import { MapaVivo, type ViajeEnMapa, type PinUnidad } from './mapa-vivo';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Aviso, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import './mapa.css';
+import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 export interface SinUbicar {
   id: string;
@@ -48,21 +50,54 @@ export const MINUTOS_POSICION_FRESCA = MINUTOS_ATRASADA;
 
 /** «Hace 4 h», «hace 2 días» — con la hora exacta siempre al lado, para que
  *  nadie tenga que confiar en el redondeo. */
-function antiguedad(minutos: number): string {
-  if (minutos < 1) return 'ahora mismo';
-  if (minutos < 60) return `hace ${minutos} min`;
+function antiguedad(minutos: number, tr: TrOperacion): string {
+  const { t, tp } = tr;
+  if (minutos < 1) return t('mapa.ahora');
+  if (minutos < 60) return t('mapa.hacemin', { n: minutos });
   const horas = Math.round(minutos / 60);
-  if (horas < 24) return `hace ${horas} h`;
+  if (horas < 24) return t('mapa.hacehoras', { n: horas });
   const dias = Math.round(horas / 24);
-  return `hace ${dias} ${dias === 1 ? 'día' : 'días'}`;
+  return tp('mapa.hacedias', dias);
 }
+
+const columnasPines = (tr: TrOperacion): ColumnaBase<PinUnidad>[] => {
+  const { t, idioma } = tr;
+  return [
+  {
+    id: 'unidad', titulo: t('mapa.unidad'), principal: true,
+    celda: (p) => (<><span className="rv-mp__unidad">{p.etiqueta}</span>{p.placas && <span className="rv-mp__placas">{p.placas}</span>}</>),
+  },
+  {
+    id: 'reporto', titulo: t('mapa.reporto'),
+    celda: (p) => {
+      const nivel = nivelDePosicion(p.minutos);
+      return (
+        <>
+          <StatusChip tono={TONO_FRESCURA[nivel]}>{ROTULO_FRESCURA[nivel]}</StatusChip> {antiguedad(p.minutos, tr)}
+          <span className="rv-mp__sub">{fechaHoraMx(p.medidaEn, idioma)}</span>
+        </>
+      );
+    },
+  },
+  {
+    id: 'origen', titulo: t('mapa.origen'),
+    celda: (p) => (p.proveedor === 'whatsapp' ? (p.respaldoWa ? t('mapa.origen.pin') : t('mapa.origen.wa')) : p.proveedor),
+  },
+  {
+    // `null` NO es cero: cero es «parado», null es «el proveedor no manda velocidad».
+    id: 'velocidad', titulo: t('mapa.velocidad'), alinear: 'der',
+    celda: (p) => (p.velocidadKmh === null ? '—' : t('mapa.kmh', { n: numero(Math.round(p.velocidadKmh), idioma) })),
+  },
+  { id: 'coordenadas', titulo: t('mapa.coordenadas'), alinear: 'der', celda: (p) => <span className="rv-mp__mono">{p.lat.toFixed(4)}, {p.lng.toFixed(4)}</span> },
+  ];
+};
 
 /**
  * El marco del mapa (F3): KPIs medidos arriba, el mapa vivo al centro, y la
  * lista honesta de lo que NO se pudo ubicar abajo. La leyenda del trayecto
  * ilustrativo vive junto al mapa, no en un tooltip escondido.
  */
-export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
+export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivos, tope, rastreo }: { tr?: TrOperacion;
   ubicados: ViajeEnMapa[];
   sinUbicar: SinUbicar[];
   /** Cuántos viajes EN CURSO tiene la flota (`count exact` en la base, FE-5).
@@ -73,209 +108,133 @@ export function VistaMapa({ ubicados, sinUbicar, totalVivos, tope, rastreo }: {
   /** El GPS: los pines medidos y la salud del conector (auditoría 20, H5). */
   rastreo: Rastreo;
 }) {
+  const { t, idioma } = tr;
   const escalados = ubicados.filter((v) => v.escalado).length;
   const dibujados = ubicados.length + sinUbicar.length;
   const recortado = totalVivos !== null && totalVivos > dibujados;
 
   return (
-    <MarcoPagina titulo="Mapa" apoyo="Tus viajes en curso sobre México, con el trayecto ilustrativo y la lista de los que no se pudieron ubicar.">
+    <MarcoPagina titulo={t('mapa.titulo')} apoyo={t('mapa.apoyo')}>
 
-      <div>
-        <TiraCifras sello={selloHoy('Viajes en curso')}>
-          {/* FE-5: este KPI contaba los vivos ENTRE las 100 filas más
-              recientes — ~90 minutos de operación a 50k viajes/mes. Ahora
-              es el conteo real de la flota; lo acotado es el DIBUJO. */}
-          <Cifra etiqueta="Viajes en curso" valor={totalVivos === null ? '—' : numero(totalVivos)}
-            nota={totalVivos === null ? 'no se pudo contar' : 'abiertos o en cuadre'} info="mapa.viajes_en_curso" />
-          <Cifra etiqueta="En el mapa" valor={numero(ubicados.length)} info="mapa.en_el_mapa" />
-          <Cifra etiqueta="Sin ubicar" valor={numero(sinUbicar.length)}
-            nota={sinUbicar.length > 0 ? 'listados abajo, no omitidos' : undefined}
-            tono={sinUbicar.length > 0 ? 'warn' : undefined} info="mapa.sin_ubicar" />
-          <Cifra etiqueta="Escalados" valor={numero(escalados)} tono={escalados > 0 ? 'bad' : undefined} info="mapa.escalados" />
-          {/* AUDITORÍA 20 (H5): el GPS existía y no se veía. `null` cuando
-              la lectura no se pudo hacer — nunca un 0 inventado, que aquí
-              significaría "ninguna unidad reporta". */}
-          <Cifra etiqueta="Unidades con posición"
-            valor={rastreo.unidadesConPosicion === null ? '—' : numero(rastreo.unidadesConPosicion)}
-            nota={rastreo.error !== null
-              ? 'no se pudo leer el rastreo'
-              : rastreo.ultimaPosicion !== null
-                ? `última: ${fechaHoraMx(rastreo.ultimaPosicion)}`
-                : 'sin una sola posición todavía'}
-            tono={rastreo.error !== null ? 'warn' : undefined} info="mapa.unidades_con_posicion" />
-        </TiraCifras>
-        {/* El tope se declara. Antes decía "los N viajes más recientes"
-            mezclando liquidados y vivos; ahora la base ya filtró por
-            estatus y lo único que se recorta es cuántos caben dibujados. */}
-        <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-          {recortado
-            ? `Se dibujan los ${numero(tope)} viajes en curso más recientes de ${numero(totalVivos!)} — el resto está en el registro.`
-            : 'Se dibujan todos los viajes en curso de la flota. El trayecto es ilustrativo: es la línea origen→destino, no la posición del camión.'}
-        </p>
-      </div>
+      <TiraCifras sello={selloHoy('Viajes en curso')}>
+        {/* FE-5: este KPI contaba los vivos ENTRE las 100 filas más recientes — ~90 minutos de operación a 50k viajes/mes. Ahora es
+            el conteo real de la flota; lo acotado es el DIBUJO. */}
+        <Cifra etiqueta={t('mapa.cifra.encurso')} valor={totalVivos === null ? '—' : numero(totalVivos, idioma)}
+          nota={totalVivos === null ? t('mapa.nocontar') : t('mapa.abiertos')} info="mapa.viajes_en_curso" />
+        <Cifra etiqueta={t('mapa.cifra.enmapa')} valor={numero(ubicados.length, idioma)} info="mapa.en_el_mapa" />
+        <Cifra etiqueta={t('mapa.cifra.sinubicar')} valor={numero(sinUbicar.length, idioma)}
+          nota={sinUbicar.length > 0 ? t('mapa.sinubicar.nota') : undefined}
+          tono={sinUbicar.length > 0 ? 'warn' : undefined} info="mapa.sin_ubicar" />
+        <Cifra etiqueta={t('mapa.cifra.escalados')} valor={numero(escalados, idioma)} tono={escalados > 0 ? 'bad' : undefined} info="mapa.escalados" />
+        {/* AUDITORÍA 20 (H5): el GPS existía y no se veía. `null` cuando la lectura no se pudo hacer — nunca un 0 inventado, que aquí
+            significaría "ninguna unidad reporta". */}
+        <Cifra etiqueta={t('mapa.cifra.unidades')}
+          valor={rastreo.unidadesConPosicion === null ? '—' : numero(rastreo.unidadesConPosicion, idioma)}
+          nota={rastreo.error !== null
+            ? t('mapa.norastreo')
+            : rastreo.ultimaPosicion !== null
+              ? `última: ${fechaHoraMx(rastreo.ultimaPosicion, idioma)}`
+              : t('mapa.sinposicion')}
+          tono={rastreo.error !== null ? 'warn' : undefined} info="mapa.unidades_con_posicion" />
+      </TiraCifras>
+      {/* El tope se declara. Antes decía "los N viajes más recientes" mezclando liquidados y vivos; ahora la base ya filtró por estatus
+          y lo único que se recorta es cuántos caben dibujados. */}
+      <p className="rv-mp__nota">
+        {recortado
+          ? t('mapa.dibujan.n', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) })
+          : t('mapa.dibujan.todos')}
+      </p>
 
       <MapaVivo viajes={ubicados} pines={rastreo.pines} />
 
       {/* ── EL GPS, CON SUS PALABRAS ──────────────────────────────────
-          Tres estados y ninguno se confunde con otro: no se pudo leer /
-          no hay conector ni un solo pin / esto es lo que reportaron las
-          unidades. El tercero se lista con hora y proveedor porque una
-          coordenada sin cuándo ni quién la mandó no es verificable. */}
-      <section className="card p-4">
-        <div className="flex items-center gap-2 mb-1">
-          <Satellite width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          <TituloRecuadro info="mapa.posiciones">Últimas posiciones</TituloRecuadro>
-        </div>
-
-        {rastreo.error !== null ? (
-          // AUDITORÍA 28, FE-M4: antes se pintaba `rastreo.error.slice(0, 140)`
-          // — el mensaje crudo de PostgREST («permission denied for table
-          // unidad») llegaba a la pantalla del cliente. `page.tsx` ya entrega
-          // aquí una frase fija (nunca el mensaje original), pero esta vista
-          // tampoco debe volver a confiar en el contenido de `rastreo.error`
-          // para pintarlo: solo mira si hay error o no.
-          <p className="text-[12px] mt-1" style={{ color: 'var(--warn)' }}>
-            No se pudo leer el rastreo de esta flota. Recarga en un momento — mientras tanto esta
-            sección no afirma nada sobre tus unidades.
-          </p>
-        ) : (
-          <>
-            {/* AUDITORÍA 28, FE-M4: `p.error` (`conector_poll_estado.
-                ultimo_error`, vía `sincronizar_gps.ts`) ya es una frase
-                NUESTRA desde este cambio — la decisión es pintarla igual
-                que hoy, sin acotar. Fila escrita ANTES de este cambio
-                puede traer el mensaje crudo de Postgres todavía: es un
-                rezago que se limpia solo en el siguiente poll (cada
-                corrida vuelve a escribir la columna), no algo que esta
-                vista deba filtrar por patrón. */}
-            {rastreo.polls.map((p) => (
-              <p key={`${p.proveedor}:${p.recurso}`} className="text-[11px] mt-1" style={{ color: p.backlogPendiente || p.eventosCuarentenaMuertos > 0 || p.eventosOutboxMuertos > 0 || p.avisosMuertos > 0 ? 'var(--warn)' : 'var(--faint)' }}>
-                {p.proveedor} · {p.recurso}: poll {p.ultimoPoll ? fechaHoraMx(p.ultimoPoll) : 'nunca'};
-                {' '}medida {p.ultimaMedida ? fechaHoraMx(p.ultimaMedida) : 'ninguna'};
-                {' '}{p.backlogPendiente ? `backlog pendiente${p.error ? ` (${p.error.slice(0, 100)})` : ''}` : `${numero(p.elementos)} elementos / ${numero(p.paginas)} páginas`}.
-                {p.recurso === 'eventos' && (p.eventosEnCuarentena + p.eventosOutboxPendientes + p.avisosPendientes + p.eventosCuarentenaMuertos + p.eventosOutboxMuertos + p.avisosMuertos > 0)
-                  ? ` Atención: ${numero(p.eventosEnCuarentena)} en cuarentena, ${numero(p.eventosOutboxPendientes)} eventos pendientes, ${numero(p.avisosPendientes)} avisos pendientes; ${numero(p.eventosCuarentenaMuertos + p.eventosOutboxMuertos + p.avisosMuertos)} agotaron reintentos.`
-                  : ''}
-              </p>
-            ))}
-            {rastreo.pines.length > 0 && (() => {
-              const c = contarPorFrescura(rastreo.pines.map((p) => p.minutos));
-              return (
-                <p className="text-[12px] mb-2" style={{ color: 'var(--muted)' }}>
-                  Frescura del dato:{' '}
-                  <span style={{ color: 'var(--ok)' }}>{numero(c.en_vivo)} en vivo</span> ·{' '}
-                  <span style={{ color: 'var(--warn)' }}>{numero(c.atrasada)} atrasadas</span> ·{' '}
-                  <span style={{ color: 'var(--bad)' }}>{numero(c.obsoleta)} obsoletas</span>
-                  {' '}(en vivo ≤ 30 min, atrasada ≤ {Math.round(MINUTOS_POSICION_FRESCA / 60)} h). Un camión parado puede tener la posición vieja sin que nada falle.
-                </p>
-              );
-            })()}
-            {typeof rastreo.huerfanos === 'number' && rastreo.huerfanos > 0 && (
-              <p className="text-[12px] mb-2" style={{ color: 'var(--warn)' }}>
-                {numero(rastreo.huerfanos)} {rastreo.huerfanos === 1 ? 'dispositivo que reporta tu proveedor no está ligado' : 'dispositivos que reporta tu proveedor no están ligados'} a ninguna unidad:
-                no se dibujan (Likida no inventa camiones). Lígalos en <Link href="/dashboard/conexiones#gps" className="underline">Conexiones</Link>.
-              </p>
-            )}
-            <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-              Posición MEDIDA de cada unidad: la que manda tu proveedor de GPS o el pin que el chofer
-              comparte por WhatsApp. Es un dato con hora, no el trayecto ilustrativo del mapa.
+          Tres estados y ninguno se confunde con otro: no se pudo leer / no hay conector ni un solo pin / esto es lo que reportaron las
+          unidades. El tercero se lista con hora y proveedor porque una coordenada sin cuándo ni quién la mandó no es verificable. */}
+      {rastreo.error !== null ? (
+        // AUDITORÍA 28, FE-M4: antes se pintaba `rastreo.error.slice(0, 140)` — el mensaje crudo de PostgREST llegaba a la pantalla del
+        // cliente. Esta vista solo mira si hay error o no; la frase es fija.
+        <Tarjeta titulo={t('mapa.ultimas')} info="mapa.posiciones" estado="error" reintentar
+          mensaje={t('mapa.ultimas.error')} />
+      ) : (
+        <Tarjeta titulo={t('mapa.ultimas')} info="mapa.posiciones">
+          {/* AUDITORÍA 28, FE-M4: `p.error` (`conector_poll_estado.ultimo_error`) ya es una frase NUESTRA — se pinta tal cual, sin acotar. */}
+          {rastreo.polls.map((p) => (
+            <p key={`${p.proveedor}:${p.recurso}`} className="rv-mp__poll" data-tono={p.backlogPendiente || p.eventosCuarentenaMuertos > 0 || p.eventosOutboxMuertos > 0 || p.avisosMuertos > 0 ? 'warn' : undefined}>
+              {p.proveedor} · {p.recurso}: poll {p.ultimoPoll ? fechaHoraMx(p.ultimoPoll, idioma) : 'nunca'};
+              {' '}medida {p.ultimaMedida ? fechaHoraMx(p.ultimaMedida, idioma) : 'ninguna'};
+              {' '}{p.backlogPendiente ? `backlog pendiente${p.error ? ` (${p.error.slice(0, 100)})` : ''}` : `${numero(p.elementos, idioma)} elementos / ${numero(p.paginas, idioma)} páginas`}.
+              {p.recurso === 'eventos' && (p.eventosEnCuarentena + p.eventosOutboxPendientes + p.avisosPendientes + p.eventosCuarentenaMuertos + p.eventosOutboxMuertos + p.avisosMuertos > 0)
+                ? ` Atención: ${numero(p.eventosEnCuarentena, idioma)} en cuarentena, ${numero(p.eventosOutboxPendientes, idioma)} eventos pendientes, ${numero(p.avisosPendientes, idioma)} avisos pendientes; ${numero(p.eventosCuarentenaMuertos + p.eventosOutboxMuertos + p.avisosMuertos, idioma)} agotaron reintentos.`
+                : ''}
             </p>
-
-            {rastreo.proveedores.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-3">
-                {rastreo.proveedores.map((p) => (
-                  <span key={p.proveedor} className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] hairline"
-                    style={{ background: 'var(--surface)' }}>
-                    <span className="font-medium">{p.proveedor}</span>
-                    <span style={{ color: p.ultimoError ? 'var(--bad)' : p.activo ? 'var(--ok)' : 'var(--faint)' }}>
-                      {p.ultimoError ? `con error: ${p.ultimoError.slice(0, 60)}` : p.activo ? 'conectado' : 'apagado'}
-                    </span>
-                    {p.ultimos4 && <span className="cifra-mono" style={{ color: 'var(--faint)' }}>····{p.ultimos4}</span>}
-                  </span>
-                ))}
+          ))}
+          {rastreo.pines.length > 0 && (() => {
+            const c = contarPorFrescura(rastreo.pines.map((p) => p.minutos));
+            return (
+              <div className="rv-mp__frescura">
+                <span>Frescura del dato:</span>
+                <StatusChip tono="ok">{numero(c.en_vivo, idioma)} en vivo</StatusChip>
+                <StatusChip tono="warn">{numero(c.atrasada, idioma)} atrasadas</StatusChip>
+                <StatusChip tono="bad">{numero(c.obsoleta, idioma)} obsoletas</StatusChip>
+                <span>(en vivo ≤ 30 min, atrasada ≤ {Math.round(MINUTOS_POSICION_FRESCA / 60)} h). Un camión parado puede tener la posición vieja sin que nada falle.</span>
               </div>
-            )}
+            );
+          })()}
+          {typeof rastreo.huerfanos === 'number' && rastreo.huerfanos > 0 && (
+            <Aviso tono="warn">
+              {numero(rastreo.huerfanos, idioma)} {rastreo.huerfanos === 1 ? 'dispositivo que reporta tu proveedor no está ligado' : 'dispositivos que reporta tu proveedor no están ligados'} a ninguna unidad:
+              no se dibujan (Likida no inventa camiones). Lígalos en <Link href="/dashboard/conexiones#gps" className="rv-mp__enlace">Conexiones</Link>.
+            </Aviso>
+          )}
+          <p className="rv-mp__nota">
+            {t('mapa.medida')}
+          </p>
 
-            {rastreo.pines.length === 0 ? (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                {rastreo.proveedores.length === 0
-                  ? 'Todavía no hay un proveedor de GPS conectado. Se captura en Conexiones, y el número de dispositivo de cada camión en su ficha de Unidades. Mientras tanto, un chofer puede mandar su ubicación por WhatsApp y aparece aquí.'
-                  : 'El conector está dado de alta pero ninguna unidad activa ha reportado una posición todavía. Revisa que las unidades tengan capturado su número de dispositivo GPS.'}
+          {rastreo.proveedores.length > 0 && (
+            <div className="rv-mp__chips">
+              {rastreo.proveedores.map((p) => (
+                <StatusChip key={p.proveedor} tono={p.ultimoError ? 'bad' : p.activo ? 'ok' : 'muted'}>
+                  {p.proveedor} · {p.ultimoError ? `con error: ${p.ultimoError.slice(0, 60)}` : p.activo ? 'conectado' : 'apagado'}
+                  {p.ultimos4 && <> ····{p.ultimos4}</>}
+                </StatusChip>
+              ))}
+            </div>
+          )}
+
+          {rastreo.pines.length === 0 ? (
+            <EstadoVacio contenido titulo={t('mapa.sinposiciones')}>
+              {rastreo.proveedores.length === 0
+                ? t('mapa.sinproveedor')
+                : t('mapa.sinreporte')}
+            </EstadoVacio>
+          ) : (
+            <>
+              <TablaBase<PinUnidad> etiqueta={t('mapa.unidades.ultimo')} columnas={columnasPines(tr)} filas={rastreo.pines} idFila={(p) => p.unidadId} tarjetaMovil />
+              <p className="rv-mp__nota">
+                Lo atrasado se marca en ámbar y lo obsoleto (más de {Math.round(MINUTOS_POSICION_FRESCA / 60)} horas) en rojo
+                aquí, y se dibuja apagado en el mapa: sigue siendo la última posición conocida, no dónde
+                está el camión ahora.
               </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table aria-label="Unidades y su último reporte" className="w-full text-[12px]">
-                  <thead>
-                    <tr style={{ color: 'var(--faint)' }} className="text-left">
-                      <th scope="col" className="py-2 font-medium">Unidad</th>
-                      <th scope="col" className="py-2 font-medium">Reportó</th>
-                      <th scope="col" className="py-2 font-medium">Origen del dato</th>
-                      <th scope="col" className="py-2 font-medium text-right">Velocidad</th>
-                      <th scope="col" className="py-2 font-medium text-right">Coordenadas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rastreo.pines.map((p) => {
-                      const nivel = nivelDePosicion(p.minutos);
-                      const vieja = nivel !== 'en_vivo';
-                      return (
-                        <tr key={p.unidadId} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                          <td className="py-2.5">
-                            <span className="font-medium">{p.etiqueta}</span>
-                            {p.placas && <span className="ml-2 cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>{p.placas}</span>}
-                          </td>
-                          <td className="py-2.5" style={vieja ? { color: `var(--${TONO_FRESCURA[nivel]})` } : undefined}>
-                            <span className="mr-1.5 inline-flex rounded-full px-1.5 py-0.5 text-[11px] font-medium"
-                              style={{ color: `var(--${TONO_FRESCURA[nivel]})`, background: `var(--${TONO_FRESCURA[nivel]}bg)` }}>{ROTULO_FRESCURA[nivel]}</span>
-                            {antiguedad(p.minutos)}
-                            <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaHoraMx(p.medidaEn)}</span>
-                          </td>
-                          <td className="py-2.5" style={{ color: 'var(--muted)' }}>
-                            {p.proveedor === 'whatsapp' ? (p.respaldoWa ? 'pin del chofer (WhatsApp) — respaldo: el GPS de esta unidad no reportó después' : 'pin del chofer (WhatsApp)') : p.proveedor}
-                          </td>
-                          <td className="py-2.5 text-right tabular">
-                            {/* `null` NO es cero: cero es «parado», null es
-                                «el proveedor no manda velocidad». */}
-                            {p.velocidadKmh === null ? '—' : `${numero(Math.round(p.velocidadKmh))} km/h`}
-                          </td>
-                          <td className="py-2.5 text-right cifra-mono text-[11px]" style={{ color: 'var(--faint)' }}>
-                            {p.lat.toFixed(4)}, {p.lng.toFixed(4)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-                  Lo atrasado se marca en ámbar y lo obsoleto (más de {Math.round(MINUTOS_POSICION_FRESCA / 60)} horas) en rojo
-                  aquí, y se dibuja apagado en el mapa: sigue siendo la última posición conocida, no dónde
-                  está el camión ahora.
-                </p>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+            </>
+          )}
+        </Tarjeta>
+      )}
 
       {sinUbicar.length > 0 && (
-        <section className="card p-4">
-          <TituloRecuadro info="mapa.sin_ubicar_lista" className="mb-1">Sin ubicar en el mapa</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-            Viajes vivos cuya ciudad no está en la tabla del mapa — existen igual, solo no se dibujan
-          </p>
-          <div className="space-y-2">
+        <Tarjeta titulo={t('mapa.sinubicar.titulo')} info="mapa.sin_ubicar_lista">
+          <p className="rv-mp__nota">{t('mapa.sinubicar.nota2')}</p>
+          <ul className="rv-mp__lista">
             {sinUbicar.map((v) => (
-              <div key={v.id} className="flex items-center gap-2.5 text-[12px]">
-                <MapPinOff width={13} height={13} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--warn)' }} />
-                <span className="font-medium">{v.folio}</span>
-                {v.operadorNombre && <span style={{ color: 'var(--muted)' }}>{v.operadorNombre}</span>}
-                <span className="ml-auto text-right" style={{ color: 'var(--faint)' }}>{v.motivo}</span>
-              </div>
+              <li key={v.id} className="rv-mp__sin">
+                <Icono icono={MapPinOff} tam={16} />
+                <strong>{v.folio}</strong>
+                {v.operadorNombre && <span>{v.operadorNombre}</span>}
+                <span className="rv-mp__sin-motivo">{v.motivo}</span>
+              </li>
             ))}
-          </div>
-        </section>
+          </ul>
+        </Tarjeta>
       )}
     </MarcoPagina>
   );
 }
-

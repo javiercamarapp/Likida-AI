@@ -1,16 +1,16 @@
-import { CheckCircle2, Cog, CircleAlert, ShieldAlert } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
+import './facturas.css';
 import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { enrutar, type Ruta } from '@/lib/likida/facturacion/enrutar';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
-import { Dona } from '@/app/admin/charts';
 import { ColaJefe, type FilaJefe, type AccionMarcarFacturada } from './cola-jefe';
 import { SeccionPortales, type FilaPortal } from './portales-vinculo';
 import type { AccionRelogin } from './relogin-controles';
 import { SeccionControlEmision, type DatosControl } from './control-emision';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { AvisoCompacto, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { TR_ES, rico, type TrAgentes, selloHoyTr } from '../i18n-agentes';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
  *  silencio (los encabezados suman la lista COMPLETA). */
@@ -36,7 +36,7 @@ export interface ExtraAgenteFacturas {
  * Nada se pinta que no salga de un ticket real; el modo de emisión se
  * declara (en ensayo no se promete emisión).
  */
-export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos, autorizarRelogin, revocarRelogin, control }: {
+export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos, autorizarRelogin, revocarRelogin, control, tr = TR_ES }: {
   tickets: TicketPorFacturar[];
   extra: ExtraAgenteFacturas;
   /**
@@ -70,8 +70,9 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
    * ese registro arrastra los adaptadores de Playwright, y esta vista corre en
    * el cliente. Lo resuelve la página, que sí es servidor.
    */
-  portalesConAdaptador: readonly string[];
+  portalesConAdaptador: readonly string[]; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   // Orden por VENCIMIENTO real (no por fecha del ticket): vencidos arriba,
   // desconocidos al final. Cotas finitas — Infinity-Infinity da NaN.
   const orden = (t: TicketPorFacturar) =>
@@ -94,18 +95,18 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   // Dónde se concentra el dinero sin factura (top 4 comercios + el resto).
   const porComercio = new Map<string, number>();
   for (const t of ordenados) {
-    const k = t.comercio?.nombre ?? 'Sin identificar';
+    const k = t.comercio?.nombre ?? tx('facturas.vista.sin_identificar');
     porComercio.set(k, (porComercio.get(k) ?? 0) + t.monto);
   }
   const comerciosTop = [...porComercio.entries()].sort((a, b) => b[1] - a[1]);
   const donaComercios = comerciosTop.slice(0, 4).map(([etiqueta, valor]) => ({ etiqueta, valor }));
   const restoComercios = comerciosTop.slice(4).reduce((s, [, v]) => s + v, 0);
-  if (restoComercios > 0) donaComercios.push({ etiqueta: 'Otros', valor: restoComercios });
+  if (restoComercios > 0) donaComercios.push({ etiqueta: tx('facturas.vista.otros_c'), valor: restoComercios });
 
   // Qué les falta a los incompletos, agregado (la primera falta de cada uno).
   const faltas = new Map<string, number>();
   for (const x of incompletos) {
-    const f = (x.r as Extract<Ruta, { via: 'incompleto' }>).falta[0] ?? 'dato ilegible';
+    const f = (x.r as Extract<Ruta, { via: 'incompleto' }>).falta[0] ?? tx('facturas.vista.dato_ilegible');
     faltas.set(f, (faltas.get(f) ?? 0) + 1);
   }
   const faltasTop = [...faltas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
@@ -115,87 +116,72 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   const bloqueados = teToca.filter((x) => (x.r as Extract<Ruta, { via: 'mensaje' }>).motivo === 'bloqueado');
 
   return (
-    <MarcoPagina titulo="Facturas en automático" apoyo="Tickets sin CFDI: lo que te toca a ti, lo que la máquina resuelve sola y lo que está incompleto o vencido.">
+    <MarcoPagina titulo={tx('facturas.vista.facturas_en_automatico')} apoyo={tx('facturas.vista.tickets_sin_cfdi_lo_que')}>
 
-      <TiraCifras sello={selloHoy('Tickets sin CFDI')}>
-        <Cifra info="facturas.por_facturar" etiqueta="Por facturar" valor={numero(ordenados.length)} nota="tickets sin CFDI, hoy" />
-        <Cifra info="facturas.monto_sin_factura" etiqueta="Monto sin factura" valor={mxn(montoSinFactura)} />
-        <Cifra info="facturas.urgentes" etiqueta="Urgentes (≤2 días)" valor={numero(urgentes.length)} tono={urgentes.length > 0 ? 'warn' : undefined} />
-        <Cifra info="facturas.vencidos" etiqueta="Vencidos" valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
+      <TiraCifras sello={selloHoyTr(tr, tx('facturas.vista.sello_tickets_sin_cfdi'))}>
+        <Cifra info="facturas.por_facturar" etiqueta={tx('facturas.vista.por_facturar')} valor={numero(ordenados.length)} nota={tx('facturas.vista.tickets_sin_cfdi_hoy')} />
+        <Cifra info="facturas.monto_sin_factura" etiqueta={tx('facturas.vista.monto_sin_factura')} valor={mxn(montoSinFactura, tr.idioma)} />
+        <Cifra info="facturas.urgentes" etiqueta={tx('facturas.vista.urgentes_2_dias')} valor={numero(urgentes.length)} tono={urgentes.length > 0 ? 'warn' : undefined} />
+        <Cifra info="facturas.vencidos" etiqueta={tx('facturas.vista.vencidos')} valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
       </TiraCifras>
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      {/* En ensayo no se promete emisión: el aviso va arriba, a la vista, no escondido en un párrafo. */}
+      {!extra.emite && (
+        <AvisoCompacto tono="warn" resumen={tx('facturas.vista.la_emision_automatica_hoy_esta')}
+          mas={tx('facturas.vista.si_tu_empresa_aun_no')} />
+      )}
+
+      <FilaTarjetas variante="8-4">
         {/* ── TU COLA: lo único de esta página que espera una acción tuya ── */}
-        <section className="card p-4 lg:col-span-2 flex flex-col">
-          <TituloRecuadro info="facturas.te_toca">Te toca a ti</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-            Portales que piden TU cuenta, o donde la máquina se topó con un muro — con los datos ya leídos
-            {monto(teToca) > 0 && <> · <span className="cifra-mono">{mxn(monto(teToca))}</span></>}
+        <Tarjeta titulo={tx('facturas.vista.te_toca_a_ti')} info="facturas.te_toca"
+          estado={teToca.length === 0 ? 'vacio' : 'ok'} iconoVacio={CheckCircle2}
+          mensaje={tx('facturas.vista.hoy_no_te_toca_capturar')}
+          detalle={tx('facturas.vista.lo_demas_lo_trae_la')}>
+          <p className="rv-fact__nota">
+            {rico(tx('facturas.vista.portales_que_piden_tu_cuenta'), { monto: monto(teToca) > 0 && <> · <span className="cifra-mono">{mxn(monto(teToca), tr.idioma)}</span></> })}
           </p>
-          {teToca.length === 0 ? (
-            <Leyenda icono={<CheckCircle2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--ok)' }} />}>
-              Hoy no te toca capturar nada — lo demás lo trae la máquina o le falta un dato.
-            </Leyenda>
-          ) : (
-            <ColaJefe
-              filas={teToca.slice(0, MAX_TE_TOCA).map(({ t, r }): FilaJefe => {
-                const m = r as Extract<Ruta, { via: 'mensaje' }>;
-                return {
-                  gastoId: t.gastoId,
-                  fecha: t.fecha,
-                  comercio: t.comercio?.nombre ?? 'Sin identificar',
-                  portal: m.portal,
-                  urlTicket: t.urlTicket,
-                  concepto: etiquetaConcepto(t.concepto),
-                  monto: t.monto,
-                  caducidad: t.caducidad,
-                  motivo: m.motivo,
-                  detalle: m.detalle ?? t.bloqueo?.motivo,
-                  campos: m.campos.map((c) => ({ etiqueta: c.etiqueta, valor: c.valor, requerido: c.requerido })),
-                };
-              })}
-              marcarFacturada={marcarFacturada}
-              maxFilas={MAX_TE_TOCA}
-              totalFilas={teToca.length}
-            />
-          )}
-        </section>
+          <ColaJefe
+            filas={teToca.slice(0, MAX_TE_TOCA).map(({ t, r }): FilaJefe => {
+              const m = r as Extract<Ruta, { via: 'mensaje' }>;
+              return {
+                gastoId: t.gastoId,
+                fecha: t.fecha,
+                comercio: t.comercio?.nombre ?? tx('facturas.vista.sin_identificar'),
+                portal: m.portal,
+                urlTicket: t.urlTicket,
+                concepto: etiquetaConcepto(t.concepto),
+                monto: t.monto,
+                caducidad: t.caducidad,
+                motivo: m.motivo,
+                detalle: m.detalle ?? t.bloqueo?.motivo,
+                campos: m.campos.map((c) => ({ etiqueta: c.etiqueta, valor: c.valor, requerido: c.requerido })),
+              };
+            })}
+            marcarFacturada={marcarFacturada}
+            maxFilas={MAX_TE_TOCA}
+            totalFilas={teToca.length}
+          />
+        </Tarjeta>
 
         {/* ── Lo que hizo solo ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.hizo_solo" className="mb-3">Lo que hizo solo</TituloRecuadro>
+        <Tarjeta titulo={tx('facturas.vista.lo_que_hizo_solo')} info="facturas.hizo_solo"
+          estado={extra.conCfdi === null && bloqueados.length === 0 ? 'error' : 'ok'}
+          mensaje={tx('facturas.vista.no_se_pudo_leer_el')}>
           {extra.conCfdi !== null && (
-            <p className="text-[12px] mb-2">
-              <span className="cifra-mono text-[20px] font-medium block">{numero(extra.conCfdi)}</span>
-              <span style={{ color: 'var(--faint)' }}>tickets con factura ya amarrada — emitida sola, pescada
-                del XML que mandaron o capturada a mano (el folio tecleado solo se valida de forma, no contra el SAT), histórico.</span>
+            <p className="rv-fact__nota">
+              {rico(tx('facturas.vista.tickets_con_factura_ya_amarrada'), { span: <span className="cifra-mono rv-fact__grande">{numero(extra.conCfdi)}</span> })}
             </p>
           )}
-          {bloqueados.length > 0 && (
-            <div className="space-y-2 text-[12px] pt-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-              {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
-                <div key={t.gastoId} className="flex items-start gap-2">
-                  <ShieldAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
-                  <span>
-                    Se rindió a propósito con <span className="font-medium">{t.comercio?.nombre}</span>{' '}
-                    ({(r as Extract<Ruta, { via: 'mensaje' }>).detalle ?? 'muro del portal'}) y te lo dejó listo
-                    {t.bloqueo && <span className="block text-[11px]" style={{ color: 'var(--faint)' }}>{fechaCorta(t.bloqueo.desde)}</span>}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-          {extra.conCfdi === null && bloqueados.length === 0 && (
-            <Leyenda>No se pudo leer el acumulado ahora mismo.</Leyenda>
-          )}
+          {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
+            <p key={t.gastoId} className="rv-fact__nota">
+              {rico(tx('facturas.vista.con_y_te_lo_dejo'), { chip: <StatusChip tono="warn">{tx('facturas.vista.se_rindio_a_proposito')}</StatusChip>, comercio: <strong>{t.comercio?.nombre}</strong>, detalle: (r as Extract<Ruta, { via: 'mensaje' }>).detalle ?? tx('facturas.vista.muro_del_portal'), fecha: t.bloqueo && <> · {fechaCorta(t.bloqueo.desde, tr.idioma)}</> })}
+            </p>
+          ))}
           {extra.conCfdi === 0 && bloqueados.length === 0 && (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Aún no amarra su primera factura en esta flota — en cuanto emita una o pesque un
-              XML, aquí se cuenta.
-            </p>
+            <p className="rv-fact__nota">{tx('facturas.vista.aun_no_amarra_su_primera')}</p>
           )}
-        </section>
-      </div>
+        </Tarjeta>
+      </FilaTarjetas>
 
       {/* ── El VÍNCULO por portal: lo que decide si esta cola crece sola ── */}
       <SeccionPortales filas={portales} vinculos={vinculosLeidos}
@@ -204,99 +190,51 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
       {/* ── La emisión real: encender, límites, lotes por confirmar, fase por portal (0542) ── */}
       <SeccionControlEmision datos={control} />
 
-      <div className="grid lg:grid-cols-3 gap-4">
+      <FilaTarjetas variante="4-4-4">
         {/* ── Monitoreo: lo que NO tienes que hacer ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.maquina">La máquina se encarga</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
+        <Tarjeta titulo={tx('facturas.vista.la_maquina_se_encarga')} info="facturas.maquina"
+          estado={maquina.length === 0 ? 'vacio' : 'ok'} mensaje={tx('facturas.vista.nada_en_la_cola_automatica')} detalle={tx('facturas.vista.no_hay_tickets_que_la')}>
+          <p className="rv-fact__nota">
             {extra.emite
-              ? 'Sin cuenta y con todo leído: los factura sola en la próxima corrida'
-              : 'La emisión hoy está en ensayo (llena el portal sin emitir): si tu empresa aún no otorgó el mandato, el dueño lo hace en Términos y mandato. Mientras tanto puedes capturarlos tú con los datos ya listos'}
+              ? tx('facturas.vista.sin_cuenta_y_con_todo')
+              : tx('facturas.vista.hoy_en_ensayo_puedes_capturarlos')}
           </p>
-          {maquina.length === 0 ? (
-            <Leyenda>Nada en la cola automática ahora mismo.</Leyenda>
-          ) : (
-            <>
-              <div className="cifra-mono text-[20px] font-medium mb-2">{numero(maquina.length)} · {mxn(monto(maquina))}</div>
-              <div className="space-y-1.5">
-                {maquina.slice(0, MAX_MINI).map(({ t }) => (
-                  <div key={t.gastoId} className="flex items-center justify-between gap-2 text-[12px]">
-                    <span className="truncate" style={{ color: 'var(--muted)' }}>
-                      <Cog width={11} height={11} strokeWidth={2} className="inline mr-1 -mt-0.5" />
-                      {t.comercio?.nombre} · {etiquetaConcepto(t.concepto)}
-                    </span>
-                    <span className="cifra-mono shrink-0">{mxn(t.monto)}</span>
-                  </div>
-                ))}
-                {maquina.length > MAX_MINI && (
-                  <p className="text-[11px]" style={{ color: 'var(--faint)' }}>y {numero(maquina.length - MAX_MINI)} más — el total de arriba los suma todos.</p>
-                )}
-              </div>
-            </>
+          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(maquina.length)} · {mxn(monto(maquina), tr.idioma)}</span></p>
+          <ul className="rv-fact__lista">
+            {maquina.slice(0, MAX_MINI).map(({ t }) => (
+              <li key={t.gastoId}>
+                <span>{t.comercio?.nombre} · {etiquetaConcepto(t.concepto)}</span>
+                <span className="cifra-mono">{mxn(t.monto, tr.idioma)}</span>
+              </li>
+            ))}
+          </ul>
+          {maquina.length > MAX_MINI && (
+            <p className="rv-fact__nota">{tx('facturas.vista.y_mas_el_total_de', { n: numero(maquina.length - MAX_MINI) })}</p>
           )}
-        </section>
+        </Tarjeta>
 
         {/* ── Incompletos: se dice QUÉ falta ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.incompletos">Incompletos</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>Ni tú ni la máquina pueden con lo que hay — esto es lo que falta</p>
-          {incompletos.length === 0 ? (
-            <Leyenda>Ninguno — todo ticket sin factura tiene con qué facturarse.</Leyenda>
-          ) : (
-            <>
-              <div className="cifra-mono text-[20px] font-medium mb-2">{numero(incompletos.length)} · {mxn(monto(incompletos))}</div>
-              <div className="space-y-1.5">
-                {faltasTop.map(([f, n]) => (
-                  <div key={f} className="flex items-start justify-between gap-2 text-[12px]">
-                    <span style={{ color: 'var(--muted)' }}>
-                      <CircleAlert width={11} height={11} strokeWidth={2} className="inline mr-1 -mt-0.5" />
-                      {f}
-                    </span>
-                    <span className="cifra-mono shrink-0">{numero(n)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
+        <Tarjeta titulo={tx('facturas.vista.incompletos')} info="facturas.incompletos"
+          estado={incompletos.length === 0 ? 'vacio' : 'ok'} mensaje={tx('facturas.vista.ninguno_incompleto')} detalle={tx('facturas.vista.todo_ticket_sin_factura_tiene')}>
+          <p className="rv-fact__nota">{tx('facturas.vista.ni_tu_ni_la_maquina')}</p>
+          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(incompletos.length)} · {mxn(monto(incompletos), tr.idioma)}</span></p>
+          <ul className="rv-fact__lista">
+            {faltasTop.map(([f, n]) => (
+              <li key={f}><span>{f}</span><span className="cifra-mono">{numero(n)}</span></li>
+            ))}
+          </ul>
+        </Tarjeta>
 
         {/* ── Dónde está el dinero sin factura ── */}
-        <section className="card p-4 flex flex-col">
-          <TituloRecuadro info="facturas.por_comercio">Sin factura, por comercio</TituloRecuadro>
-          <p className="text-[11px] mb-2" style={{ color: 'var(--faint)' }}>Dónde se concentra el monto pendiente</p>
-          {donaComercios.length === 0 ? (
-            <Leyenda>Ningún gasto sin factura — cuando entre un comprobante sin CFDI, aquí se reparte.</Leyenda>
-          ) : (
-            <>
-              <Dona segmentos={donaComercios} />
-              <div className="mt-2 space-y-1">
-                {donaComercios.map((c) => (
-                  <div key={c.etiqueta} className="flex items-center justify-between text-[12px]">
-                    <span style={{ color: 'var(--muted)' }}>{c.etiqueta}</span>
-                    <span className="cifra-mono">{mxn(c.valor)}</span>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </section>
-      </div>
+        <Tarjeta titulo={tx('facturas.vista.sin_factura_por_comercio')} info="facturas.por_comercio"
+          estado={donaComercios.length === 0 ? 'vacio' : 'ok'} mensaje={tx('facturas.vista.ningun_gasto_sin_factura')} detalle={tx('facturas.vista.cuando_entre_un_comprobante_sin')}>
+          <p className="rv-fact__nota">{tx('facturas.vista.donde_se_concentra_el_monto')}</p>
+          <BarList etiqueta={tx('facturas.vista.monto_sin_factura_por_comercio')} formato={mxn}
+            items={donaComercios.map((c) => ({ clave: c.etiqueta, etiqueta: c.etiqueta, valor: c.valor, texto: mxn(c.valor, tr.idioma) }))} />
+        </Tarjeta>
+      </FilaTarjetas>
 
       {notificaciones}
     </MarcoPagina>
   );
 }
-
-/** Leyenda de vacío/pendiente — centrada por alto y ancho, como TODAS las
- *  leyendas del panel. */
-function Leyenda({ children, icono }: { children: React.ReactNode; icono?: React.ReactNode }) {
-  return (
-    <div className="flex-1 min-h-[110px] flex items-center justify-center">
-      <div className="text-center max-w-[32ch]">
-        {icono && <div className="flex justify-center mb-2">{icono}</div>}
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{children}</p>
-      </div>
-    </div>
-  );
-}
-

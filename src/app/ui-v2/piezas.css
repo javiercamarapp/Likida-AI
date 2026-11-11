@@ -23,7 +23,7 @@
 [data-ui="v2"] .rv-marca--radio .rv-marca__input:checked::after { display: block; left: 3px; top: 3px; width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--marca); transform: none; }
 [data-ui="v2"] .rv-marca__input:hover:not(:disabled) { border-color: var(--ink); }
 [data-ui="v2"] .rv-marca__input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-marca__input:disabled { border-style: dashed; cursor: not-allowed; }
+[data-ui="v2"] .rv-marca__input:disabled { border-style: solid; cursor: not-allowed; }
 [data-ui="v2"] .rv-marca__input:disabled ~ .rv-marca__etq { color: var(--muted); }
 [data-ui="v2"] .rv-marca__fila:has(.rv-marca__input:disabled) { cursor: not-allowed; }
 [data-ui="v2"] .rv-marca__ayuda { padding-inline-start: 25px; font-size: var(--t-small); color: var(--muted); }
@@ -35,7 +35,7 @@
 }
 
 /* ── Campo: etiqueta, ayuda, error ─────────────────────────────────────────────────────────────────────────────────── */
-[data-ui="v2"] .rv-campo { display: grid; gap: 6px; min-width: 0; }
+[data-ui="v2"] .rv-campo { display: grid; gap: 6px; min-width: 0; /* start: en una rejilla con campos de distinta altura (uno con ayuda, otro sin ella) las filas del campo se repartían el sobrante y el control engordaba: un solo alto de campo por formulario. */ align-content: start; }
 [data-ui="v2"] .rv-campo__etq { font-size: var(--t-small); font-weight: 500; color: var(--ink2); }
 [data-ui="v2"] .rv-campo__obl { font-weight: 400; color: var(--muted); }
 [data-ui="v2"] .rv-campo__ayuda { font-size: var(--t-small); color: var(--muted); }
@@ -67,7 +67,7 @@
 [data-ui="v2"] .rv-archivo__boton { display: inline-flex; flex: none; align-items: center; gap: 6px; box-sizing: border-box; min-height: 32px; padding: 0 12px; border: 1px solid var(--input); border-radius: 8px; background: var(--surface); color: var(--ink); font: var(--t-ctl-sm); white-space: nowrap; cursor: pointer; }
 [data-ui="v2"] .rv-archivo__boton:hover { background: var(--ui-soft); }
 [data-ui="v2"] .rv-archivo__input:focus-visible + .rv-archivo__boton { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-archivo__input:disabled + .rv-archivo__boton { border-style: dashed; color: var(--muted); cursor: not-allowed; }
+[data-ui="v2"] .rv-archivo__input:disabled + .rv-archivo__boton { border-style: solid; color: var(--muted); cursor: not-allowed; }
 [data-ui="v2"] .rv-archivo__nombre { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-body); font-weight: 400; color: var(--ink); }
 [data-ui="v2"] .rv-archivo__nombre[data-vacio] { color: var(--muted); }
 [data-ui="v2"] .rv-campo > [aria-invalid="true"] .rv-archivo__boton, [data-ui="v2"] .rv-archivo:has([aria-invalid="true"]) .rv-archivo__boton { border-color: var(--bad); }
@@ -81,23 +81,31 @@
 [data-ui="v2"] .rv-disc__cab::-webkit-details-marker { display: none; }
 [data-ui="v2"] .rv-disc__cab:hover { background: var(--ui-soft); }
 [data-ui="v2"] .rv-disc__cab:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
-[data-ui="v2"] .rv-disc__titulo { flex: 1 1 auto; min-width: 0; }
-[data-ui="v2"] .rv-disc__resumen { flex: none; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
+/* El título manda: nunca se aplasta por debajo de su palabra más larga; el resumen cede primero y se recorta con elipsis. */
+[data-ui="v2"] .rv-disc__titulo { flex: 1 1 auto; min-width: min-content; }
+[data-ui="v2"] .rv-disc__resumen { flex: 0 10 auto; min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); font-weight: 400; color: var(--muted); }
 [data-ui="v2"] .rv-disc__chev { flex: none; color: var(--ink2); }
 [data-ui="v2"] .rv-disc[open] > .rv-disc__cab { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom: 1px solid var(--line); }
 [data-ui="v2"] .rv-disc[open] > .rv-disc__cab .rv-disc__chev { transform: rotate(180deg); }
 [data-ui="v2"] .rv-disc__cuerpo { padding: 14px; min-width: 0; }
 @media (prefers-reduced-motion: no-preference) { [data-ui="v2"] .rv-disc__chev { transition: transform var(--ui-fast) ease; } }
 @media (max-width: 819px) { [data-ui="v2"] .rv-disc__cab { min-height: 44px; } }
+/* Móvil: el resumen pasa DEBAJO del título (ancho completo, una línea con elipsis); el chevron queda junto al título. */
+@media (max-width: 767.98px) {
+  [data-ui="v2"] .rv-disc__cab { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding-block: 6px; }
+  [data-ui="v2"] .rv-disc__titulo { grid-column: 1; min-width: 0; overflow-wrap: anywhere; }
+  [data-ui="v2"] .rv-disc__chev { grid-column: 2; grid-row: 1; }
+  [data-ui="v2"] .rv-disc__resumen { grid-column: 1 / -1; grid-row: 2; max-width: 100%; }
+}
 
 /* ── SegmentedControl (Vexa .segmented): pista suave + borde, activo blanco con anillo ──────────────────────────────── */
 [data-ui="v2"] .rv-seg { display: inline-flex; width: fit-content; max-width: 100%; padding: 2px; gap: 2px; overflow-x: auto; background: var(--surface); border: var(--borde-w, 1px) solid var(--btn-borde-sec); border-radius: 999px; }
-[data-ui="v2"] .rv-seg__btn { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 1px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--ink2); font-size: var(--t-small); font-weight: 600; line-height: 1.3; font-family: var(--font-sans-ui, inherit); white-space: nowrap; cursor: pointer; }
+[data-ui="v2"] .rv-seg__btn { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 1px 12px; border: 0; border-radius: 999px; background: transparent; color: var(--ink2); font-size: var(--t-small); font-weight: 500; line-height: 1.3; font-family: var(--font-sans-ui, inherit); white-space: nowrap; cursor: pointer; }
 [data-ui="v2"] .rv-seg[data-tam="sm"] .rv-seg__btn { padding: 1px 10px; }
 [data-ui="v2"] .rv-seg__btn[aria-checked="true"] { background: var(--seg-activo-bg); color: var(--seg-activo-fg); box-shadow: 0 0 0 1px var(--seg-activo-borde); }
 [data-ui="v2"] .rv-seg__btn[aria-checked="false"]:hover:not(:disabled) { background: var(--ui-soft); color: var(--ink); }
 [data-ui="v2"] .rv-seg__btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
-[data-ui="v2"] .rv-seg__btn:disabled { color: var(--muted); border: 1px dashed var(--line2); cursor: not-allowed; }
+[data-ui="v2"] .rv-seg__btn:disabled { color: var(--muted); border: 1px solid var(--line2); cursor: not-allowed; }
 [data-ui="v2"] .rv-seg__conteo { font-size: var(--t-small); font-weight: 500; font-family: var(--font-sans-ui, inherit); color: var(--muted); }
 /* Móvil: botones de 44 px de alto (zona táctil). */
 @media (max-width: 819px) {
@@ -236,10 +244,13 @@
 [data-ui="v2"] .rv-disc--linea + .rv-disc--linea { margin-top: 4px; }
 [data-ui="v2"] .rv-disc--linea > .rv-disc__cab { width: fit-content; max-width: 100%; min-height: 32px; padding: 0 8px 0 0; border-radius: 8px; font-size: var(--t-small); }
 [data-ui="v2"] .rv-disc--linea > .rv-disc__cab:hover { background: transparent; text-decoration: underline; text-underline-offset: 2px; }
-[data-ui="v2"] .rv-disc--linea .rv-disc__titulo { flex: none; }
+[data-ui="v2"] .rv-disc--linea .rv-disc__titulo { flex: none; display: inline-flex; align-items: center; gap: 6px; }
 [data-ui="v2"] .rv-disc--linea[open] > .rv-disc__cab { border-bottom: 0; border-radius: 8px; }
 [data-ui="v2"] .rv-disc--linea > .rv-disc__cuerpo { padding: 10px 0 0; }
 
 /* Controles de barra de herramientas: un <summary> con aspecto de botón mide lo mismo que un filtro (32), no más */
 [data-ui="v2"] summary.rv-btn { box-sizing: border-box; min-height: var(--ctl-h, 32px); }
 @media (max-width: 819px) { [data-ui="v2"] summary.rv-btn { min-height: 44px; } }
+
+/* Pila vertical con el ritmo del sistema: para los grupos de tarjetas que no cuelgan directamente de `.rv-marco` (pestañas de una ficha). */
+[data-ui="v2"] .rv-pila { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }

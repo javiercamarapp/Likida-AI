@@ -1,13 +1,15 @@
-import Link from 'next/link';
-import { TriangleAlert, CircleCheck, CircleHelp, Package, Printer } from 'lucide-react';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
+import { TriangleAlert, CircleCheck, CircleHelp, Printer } from 'lucide-react';
 import type { EstadoCartaPorte, ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import type { EstadoCampoCcp } from '@/lib/likida/carta_porte';
 import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
-import { EstadoVacio, EstadoError } from '../estados';
 import { numero } from '@/lib/formato';
 import { FormaDeclaracion, FormaMercancia, FormaDatosCliente, BotonBorrarMercancia, type AccionForma } from './forma';
-import { MarcoPagina, AvisoCompacto, Disclosure, TituloRecuadro } from '@/app/ui-v2/componentes';
-import type { InfoClave } from '@/app/ui-v2/info-catalogo';
+import {
+  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta,
+} from '@/app/ui-v2/componentes';
+import './carta-porte.css';
 
 /**
  * CARTA PORTE — la pregunta del minuto tres de cualquier demo (hallazgo A3,
@@ -33,65 +35,54 @@ export interface AccionesCcp {
   guardarDatosCliente: AccionForma | null;
 }
 
-export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = null, quitarMercancia = null, guardarDatosCliente = null, sufijo = '' }: {
+export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = null, quitarMercancia = null, guardarDatosCliente = null, sufijo = '', tr = trEs }: {
   datos: EstadoCartaPorte | null;
   declarar?: AccionForma | null;
   agregarMercancia?: AccionForma | null;
   quitarMercancia?: AccionForma | null;
   guardarDatosCliente?: AccionForma | null;
   /** El `?tenant=&rol=` que se arrastra en cada link interno (ver sufijo.ts). */
-  sufijo?: string;
+  sufijo?: string; tr?: Tr;
 }) {
   const acciones: AccionesCcp = { declarar, agregarMercancia, quitarMercancia, guardarDatosCliente };
   return (
-    <MarcoPagina titulo="Carta Porte" apoyo="Por cada viaje en curso: si necesita el complemento Carta Porte 3.1 y qué dato falta, separado por responsable.">
+    <MarcoPagina titulo={tr('cartaPorte.vista.cartaPorte')} apoyo={tr('cartaPorte.vista.porCadaViajeEn')}>
       <AvisoCompacto tono="info"
-        resumen="La ley limita la responsabilidad de cada parte a los datos que esa parte aportó. Likida no timbra ni garantiza cumplimiento: prepara, valida y deja rastro de quién declaró qué."
-        mas={<p>Se evalúa como <strong>carga general</strong>: si mueves hidrocarburos, medicamentos o mercancía de despacho aduanero, el complemento es obligatorio siempre y ninguna facilidad aplica.</p>} />
+        resumen={tr('cartaPorte.vista.laLeyLimitaLa')}
+        mas={<p>{rico(tr('cartaPorte.vista.seEvaluaComoStrong'), { strong: (c) => <strong>{c}</strong> })}</p>} />
 
       {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del
           siniestro. Es incondicional a propósito — Likida hoy no captura
           ValorMercancia, así que no hay un "por viaje" que evaluar: el
           dato correcto es que se declara AL EMITIR con el PAC, y la
           consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
-      <section className="card p-4 space-y-1.5" style={{ borderLeft: '3px solid var(--warn)' }}>
-        <p className="text-[12px] font-medium flex items-start gap-1.5">
-          <TriangleAlert width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
-          {AVISO_VALOR_MERCANCIA.titulo}
-        </p>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{AVISO_VALOR_MERCANCIA.cuerpo}</p>
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{AVISO_VALOR_MERCANCIA.fundamento}</p>
-      </section>
+      <Aviso tono="warn" titulo={AVISO_VALOR_MERCANCIA.titulo}>
+        {AVISO_VALOR_MERCANCIA.cuerpo}{' '}
+        <span className="rv-ccp__tenue">{AVISO_VALOR_MERCANCIA.fundamento}</span>
+      </Aviso>
 
       {datos !== null && datos.hazmatDeclarado === true && (
-        <p className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
-          Tu flota declaró que mueve <strong>material peligroso</strong>: la carga es materia excluida
-          y el complemento es obligatorio SIEMPRE — ninguna facilidad aplica (regla 2.7.7.2.1, cuarto párrafo).
-          El semáforo de abajo ya lo refleja.
-        </p>
+        <Aviso tono="warn">
+          {rico(tr('cartaPorte.vista.tuFlotaDeclaroQue'), { strong: (c) => <strong>{c}</strong> })}
+        </Aviso>
       )}
       {datos !== null && datos.dedicadoDeclarado === true && (
-        <p className="text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
-          Tu flota declaró <strong>transporte dedicado</strong>: la regla 2.7.7.1.3 invierte los roles
-          y el complemento puede tocarle emitirlo a tu cliente con CFDI de traslado. Confírmalo con tu
-          contador — Likida lo advierte, no lo decide.
-        </p>
+        <Aviso tono="warn">
+          {rico(tr('cartaPorte.vista.tuFlotaDeclaroStrong'), { strong: (c) => <strong>{c}</strong> })}
+        </Aviso>
       )}
       {datos === null ? (
-        <EstadoError mensaje="No pude leer los viajes en curso ni sus datos de unidad y operador. No se pinta un semáforo a medias: un «no necesita» sobre datos incompletos vale una presunción de contrabando." />
+        <EstadoError>{tr('cartaPorte.vista.noPudeLeerLos')}</EstadoError>
       ) : datos.viajes.length === 0 ? (
-        <EstadoVacio pantalla contenido titulo="No hay viajes en curso">
-          No hay viajes en curso. Al despachar el primero, aquí aparece si necesita Carta Porte —
-          con las dos declaraciones que lo deciden (¿pisa carretera federal? ¿el tramo federal
-          cabe en un radio de 30 km?) — y el semáforo de los 18 datos del transportista contra lo
-          capturado en Unidades y Operadores.
+        <EstadoVacio contenido titulo={tr('cartaPorte.vista.noHayViajesEn')}>
+          {tr('cartaPorte.vista.alDespacharElPrimero')}
         </EstadoVacio>
       ) : (
         <>
-          {datos.viajes.map((v) => <TarjetaViaje key={v.viajeId} v={v} acciones={acciones} sufijo={sufijo} />)}
+          {datos.viajes.map((v) => <TarjetaViaje tr={tr} key={v.viajeId} v={v} acciones={acciones} sufijo={sufijo} />)}
           {datos.viajes.length < datos.total && (
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Se evalúan los {numero(datos.viajes.length)} viajes más próximos de {numero(datos.total)} en curso.
+            <p className="rv-ccp__nota">
+              {tr('cartaPorte.vista.seEvaluanLosViajes', { v: numero(datos.viajes.length), v2: numero(datos.total) })}
             </p>
           )}
         </>
@@ -100,163 +91,134 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
   );
 }
 
-const PILL: Record<string, { rotulo: string; fg: string; bg: string }> = {
-  si: { rotulo: 'Necesita complemento', fg: 'var(--warn)', bg: 'var(--warnbg, var(--canvas))' },
-  no: { rotulo: 'Sin complemento', fg: 'var(--ok)', bg: 'var(--okbg)' },
-  falta_declarar: { rotulo: 'Falta declarar', fg: 'var(--bad)', bg: 'var(--badbg)' },
-};
-
-function TarjetaViaje({ v, acciones, sufijo }: { v: ViajeCcp; acciones: AccionesCcp; sufijo: string }) {
-  const pill = PILL[v.decision.necesita];
+const pillDe = (tr: Tr): Record<string, { rotulo: string; tono: 'warn' | 'ok' | 'bad' }> => ({
+  si: { rotulo: tr('cartaPorte.vista.necesitaComplemento'), tono: 'warn' },
+  no: { rotulo: tr('cartaPorte.vista.sinComplemento'), tono: 'ok' },
+  falta_declarar: { rotulo: tr('cartaPorte.vista.faltaDeclarar'), tono: 'bad' },
+});
+function TarjetaViaje({ v, acciones, sufijo, tr = trEs }: { v: ViajeCcp; acciones: AccionesCcp; sufijo: string; tr?: Tr }) {
+  const pill = pillDe(tr)[v.decision.necesita];
   const c = v.checklist;
   const listos = 18 - c.faltanTransportista;
   const b = v.borrador;
 
   return (
-    <section className="card p-4 space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="cifra-mono font-medium">{v.folio ?? v.viajeId.slice(0, 8)}</span>
-        <span style={{ color: 'var(--muted)' }}>
-          {v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? 'sin ruta capturada'}
-        </span>
-        <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-          style={{ color: pill.fg, background: pill.bg }}>
-          {pill.rotulo}
-        </span>
-      </div>
-
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-        {v.decision.motivo}{' '}
-        <span style={{ color: 'var(--faint)' }}>({v.decision.fundamento})</span>
-      </p>
-      {v.decision.pendientes.length > 0 && (
-        <ul className="text-[12px] space-y-0.5" style={{ color: 'var(--warn)' }}>
-          {v.decision.pendientes.map((p) => (
-            <li key={p} className="flex items-start gap-1.5">
-              <TriangleAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-              {p}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <div className="flex flex-wrap gap-x-5 gap-y-1 text-[12px]" style={{ color: 'var(--muted)' }}>
-        <span>Unidad: {v.unidadEconomico ?? <em style={{ color: 'var(--warn)' }}>sin asignar</em>}</span>
-        <span>Operador: {v.operadorNombre ?? <em style={{ color: 'var(--warn)' }}>sin datos</em>}</span>
-        <span>Cliente: {v.clienteNombre ?? <em style={{ color: 'var(--warn)' }}>sin asignar</em>}</span>
-        <span>
-          Datos del transportista:{' '}
-          <strong style={{ color: c.transportistaListo ? 'var(--ok)' : undefined }}>
-            {numero(listos)} de 18
-          </strong>
-        </span>
-        <span>
-          Del cliente: <strong>{numero(19 - c.faltanCliente)} de 19</strong>{' '}
-          <span style={{ color: 'var(--faint)' }}>(los aporta tu cliente; su hueco es responsabilidad suya)</span>
-        </span>
-      </div>
-
-      <Disclosure variante="linea" titulo={"Los 37 datos, uno por uno"}>
-<div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <ListaCampos info="carta_porte.datos_transportista" titulo="Del transportista (18) — responde tu flota" campos={c.campos.filter((x) => x.responsable === 'transportista')} />
-          <ListaCampos info="carta_porte.datos_cliente" titulo="Del cliente (19) — pídeselos ANTES del viaje" campos={c.campos.filter((x) => x.responsable === 'cliente')} />
-        </div>
-</Disclosure>
-
-      {acciones.declarar && (
-        <Disclosure variante="linea" titulo={"Declarar la ruta de este viaje"}>
-<div>
-            <FormaDeclaracion accion={acciones.declarar} viajeId={v.viajeId} inicial={v.declarado} />
-          </div>
-</Disclosure>
-      )}
-
-      <Disclosure variante="linea" titulo={<><Package width={13} height={13} strokeWidth={1.75} />
-          Mercancía del viaje ({numero(v.mercancias.length)} {v.mercancias.length === 1 ? 'renglón' : 'renglones'})</>}>
-<div className="space-y-3">
-          {v.mercancias.length > 0 && (
-            <ul className="space-y-1 text-[12px]">
-              {v.mercancias.map((m) => (
-                <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                  <span>{m.descripcion}</span>
-                  <span className="cifra-mono" style={{ color: 'var(--muted)' }}>
-                    {m.bienesTransp ?? <em style={{ color: 'var(--warn)' }}>sin clave SAT</em>}
-                    {' · '}{numero(m.cantidad)} {m.claveUnidad ?? <em style={{ color: 'var(--warn)' }}>sin unidad</em>}
-                    {' · '}{m.pesoKg !== null ? `${numero(m.pesoKg)} kg` : <em style={{ color: 'var(--warn)' }}>sin peso</em>}
-                  </span>
-                  {m.materialPeligroso === true && <span className="text-[11px]" style={{ color: 'var(--warn)' }}>material peligroso</span>}
-                  {m.materialPeligroso === null && <span className="text-[11px]" style={{ color: 'var(--faint)' }}>peligroso sin declarar</span>}
-                  {acciones.quitarMercancia && <BotonBorrarMercancia accion={acciones.quitarMercancia} mercanciaId={m.id} />}
-                </li>
-              ))}
-            </ul>
-          )}
-          {acciones.agregarMercancia && <FormaMercancia accion={acciones.agregarMercancia} viajeId={v.viajeId} />}
-        </div>
-</Disclosure>
-
-      {acciones.guardarDatosCliente && (
-        <Disclosure variante="linea" titulo={"Datos del cliente (CPs, RFC del destinatario)"}>
-<div>
-            <FormaDatosCliente accion={acciones.guardarDatosCliente} viajeId={v.viajeId} inicial={v.datosCliente} />
-          </div>
-</Disclosure>
-      )}
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px]">
-        {b.borrador !== null ? (
-          b.fallas.length === 0 ? (
-            <span style={{ color: 'var(--ok)' }}>
-              Borrador armado y SIN fallas del validador — listo para que tu PAC lo timbre.
-            </span>
-          ) : (
-            <span style={{ color: 'var(--warn)' }}>
-              Borrador armado con {numero(b.fallas.length)} {b.fallas.length === 1 ? 'falla' : 'fallas'} que el PAC rechazaría: {b.fallas.map((f) => f.campo).join(', ')}.
-            </span>
-          )
-        ) : (
-          <span style={{ color: 'var(--muted)' }}>
-            Borrador aún no armable — faltan {numero(b.faltantes.length)} {b.faltantes.length === 1 ? 'dato' : 'datos'}.
-          </span>
+    <Tarjeta titulo={v.folio ?? v.viajeId.slice(0, 8)} acciones={<StatusChip tono={pill.tono}>{pill.rotulo}</StatusChip>}>
+      <div className="rv-ccp__viaje">
+        <p className="rv-ccp__nota">
+          {v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? tr('cartaPorte.vista.sinRutaCapturada')}
+        </p>
+        <p className="rv-ccp__nota">
+          {v.decision.motivo}{' '}
+          <span className="rv-ccp__tenue">({v.decision.fundamento})</span>
+        </p>
+        {v.decision.pendientes.length > 0 && (
+          <ul className="rv-ccp__pendientes">
+            {v.decision.pendientes.map((p) => (
+              <li key={p}><Icono icono={TriangleAlert} />{p}</li>
+            ))}
+          </ul>
         )}
-        <Link href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijo}`}
-          className="inline-flex items-center gap-1 font-medium hover:opacity-75"
-          style={{ color: 'var(--marca)' }}>
-          <Printer width={13} height={13} strokeWidth={1.75} />
-          Ver borrador imprimible
-        </Link>
+
+        <div className="rv-ccp__datos">
+          <span>{tr('cartaPorte.vista.unidadDosPuntos')} {v.unidadEconomico ?? <em className="rv-ccp__falta">{tr('cartaPorte.vista.sinAsignar')}</em>}</span>
+          <span>{tr('cartaPorte.vista.operadorDosPuntos')} {v.operadorNombre ?? <em className="rv-ccp__falta">{tr('cartaPorte.vista.sinDatos')}</em>}</span>
+          <span>{tr('cartaPorte.vista.clienteDosPuntos')} {v.clienteNombre ?? <em className="rv-ccp__falta">{tr('cartaPorte.vista.sinAsignar')}</em>}</span>
+          <span>
+            {tr('cartaPorte.vista.datosDelTransportista')} <strong>{tr('cartaPorte.vista.listosDe18', { n: numero(listos) })}</strong>
+            {c.transportistaListo && <StatusChip tono="ok">{tr('cartaPorte.vista.completos')}</StatusChip>}
+          </span>
+          <span>
+            {rico(tr('cartaPorte.vista.delClienteStrongDe', { v: numero(19 - c.faltanCliente) }), { strong: (c) => <strong>{c}</strong>, span: (c) => <span className="rv-ccp__tenue">{c}</span> })}
+          </span>
+        </div>
+
+        <Disclosure variante="linea" titulo={tr('cartaPorte.vista.los37DatosUno')}>
+          <div className="rv-ccp__dos">
+            <ListaCampos tr={tr} titulo={tr('cartaPorte.vista.delTransportista18Responde')} campos={c.campos.filter((x) => x.responsable === 'transportista')} />
+            <ListaCampos tr={tr} titulo={tr('cartaPorte.vista.delCliente19Pideselos')} campos={c.campos.filter((x) => x.responsable === 'cliente')} />
+          </div>
+        </Disclosure>
+
+        {acciones.declarar && (
+          <Disclosure variante="linea" titulo={tr('cartaPorte.vista.declararLaRutaDe')}>
+            <FormaDeclaracion accion={acciones.declarar} viajeId={v.viajeId} inicial={v.declarado} />
+          </Disclosure>
+        )}
+
+        <Disclosure variante="linea" titulo={tr('cartaPorte.vista.mercanciaDelViaje', { v: numero(v.mercancias.length), v2: v.mercancias.length === 1 ? tr('cartaPorte.vista.renglon') : tr('cartaPorte.vista.renglones') })}>
+          <div className="rv-ccp__viaje">
+            {v.mercancias.length > 0 && (
+              <ul className="rv-ccp__merc">
+                {v.mercancias.map((m) => (
+                  <li key={m.id}>
+                    <span>{m.descripcion}</span>
+                    <span className="rv-ccp__mono">
+                      {m.bienesTransp ?? <em className="rv-ccp__falta">{tr('cartaPorte.vista.sinClaveSat')}</em>}
+                      {' · '}{numero(m.cantidad)} {m.claveUnidad ?? <em className="rv-ccp__falta">{tr('cartaPorte.vista.sinUnidad')}</em>}
+                      {' · '}{m.pesoKg !== null ? `${numero(m.pesoKg)} kg` : <em className="rv-ccp__falta">{tr('cartaPorte.vista.sinPeso')}</em>}
+                    </span>
+                    {m.materialPeligroso === true && <StatusChip tono="warn">{tr('cartaPorte.vista.materialPeligroso')}</StatusChip>}
+                    {m.materialPeligroso === null && <span className="rv-ccp__tenue">{tr('cartaPorte.vista.peligrosoSinDeclarar')}</span>}
+                    {acciones.quitarMercancia && <BotonBorrarMercancia accion={acciones.quitarMercancia} mercanciaId={m.id} />}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {acciones.agregarMercancia && <FormaMercancia accion={acciones.agregarMercancia} viajeId={v.viajeId} />}
+          </div>
+        </Disclosure>
+
+        {acciones.guardarDatosCliente && (
+          <Disclosure variante="linea" titulo={tr('cartaPorte.vista.datosDelClienteCps')}>
+            <FormaDatosCliente accion={acciones.guardarDatosCliente} viajeId={v.viajeId} inicial={v.datosCliente} />
+          </Disclosure>
+        )}
+
+        <div className="rv-ccp__pie">
+          {b.borrador !== null ? (
+            b.fallas.length === 0 ? (
+              <StatusChip tono="ok">{tr('cartaPorte.vista.borradorArmadoYSin')}</StatusChip>
+            ) : (
+              <StatusChip tono="warn">
+                {tr(b.fallas.length === 1 ? 'cartaPorte.vista.borradorFallaUna' : 'cartaPorte.vista.borradorFallasVarias', { n: numero(b.fallas.length), campos: b.fallas.map((f) => f.campo).join(', ') })}
+              </StatusChip>
+            )
+          ) : (
+            <span className="rv-ccp__nota">
+              {tr('cartaPorte.vista.borradorAunNoArmable', { v: numero(b.faltantes.length), v2: b.faltantes.length === 1 ? tr('cartaPorte.vista.dato') : tr('cartaPorte.vista.datos') })}
+            </span>
+          )}
+          <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijo}`} variante="secondary" tamano="sm" icono={<Icono icono={Printer} />}>
+            {tr('cartaPorte.vista.verBorradorImprimible')}
+          </BotonEnlace>
+        </div>
       </div>
-    </section>
+    </Tarjeta>
   );
 }
 
-function ListaCampos({ titulo, campos, info }: { titulo: string; campos: EstadoCampoCcp[]; info: InfoClave }) {
+function ListaCampos({ titulo, campos, tr = trEs }: { titulo: string; campos: EstadoCampoCcp[]; tr?: Tr }) {
   return (
     <div>
-      <TituloRecuadro nivel="h3" info={info} className="mb-1.5">{titulo}</TituloRecuadro>
-      <ul className="space-y-0.5 text-[12px]">
+      <p className="rv-ccp__sub">{titulo}</p>
+      <ul className="rv-ccp__campos">
         {campos.map((c) => (
-          <li key={c.clave} className="flex items-start gap-1.5">
-            {c.presente === true ? (
-              <CircleCheck width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--ok)' }} />
-            ) : c.presente === false ? (
-              <TriangleAlert width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} />
-            ) : (
-              <CircleHelp width={13} height={13} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--faint)' }} />
-            )}
+          <li key={c.clave}>
+            <Icono icono={c.presente === true ? CircleCheck : c.presente === false ? TriangleAlert : CircleHelp} />
             <span>
               {c.rotulo}
               {c.presente === true && c.valor !== null && (
-                <span className="cifra-mono ml-1" style={{ color: 'var(--muted)' }}>{c.valor}</span>
+                <span className="rv-ccp__mono"> {c.valor}</span>
               )}
               {c.presente === false && c.fuente !== null && (
-                <span className="ml-1" style={{ color: 'var(--faint)' }}>— se captura en {c.fuente.split('.')[0] === 'unidad' ? 'Unidades' : c.fuente.split('.')[0] === 'operador' ? 'Operadores' : c.fuente.split('.')[0] === 'viaje' ? 'el viaje' : c.fuente.split('.')[0] === 'cliente' ? 'Clientes' : c.fuente}</span>
+                <span className="rv-ccp__tenue"> {tr('cartaPorte.vista.seCapturaEn', { v: c.fuente.split('.')[0] === 'unidad' ? tr('cartaPorte.vista.unidades') : c.fuente.split('.')[0] === 'operador' ? tr('cartaPorte.vista.operadores') : c.fuente.split('.')[0] === 'viaje' ? tr('cartaPorte.vista.elViaje') : c.fuente.split('.')[0] === 'cliente' ? tr('cartaPorte.vista.clientes') : c.fuente })}</span>
               )}
               {c.presente === null && (
-                <span className="ml-1" style={{ color: 'var(--faint)' }}>
+                <span className="rv-ccp__tenue">
                   {c.responsable === 'cliente'
-                    ? '— sin casilla en Likida todavía; pídeselo a tu cliente antes del viaje'
-                    : '— sin casilla en Likida todavía; se declara al emitir el CFDI'}
+                    ? ' ' + tr('cartaPorte.vista.sinCasillaEnLikida')
+                    : ' ' + tr('cartaPorte.vista.sinCasillaEnLikida2')}
                 </span>
               )}
             </span>

@@ -1,9 +1,12 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
-import { EstadoError } from '../estados';
 import { logger } from '@/lib/logger';
 import { interpretar, interpretarAMano } from '@/lib/likida/reglas/traductor';
 import {
@@ -15,9 +18,13 @@ import {
   FormaEscribirRegla, FormaElegirAMano, type ResultadoForma, type PlantillaEnPantalla,
 } from './forma';
 import { ListaReglas } from './vista';
-import { MarcoPagina, Aviso, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Aviso, Disclosure, EstadoError, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import './reglas.css';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Mis reglas' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.reglas') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -63,10 +70,10 @@ async function sesionConPermiso(sp: { vista?: string; tenant?: string; rol?: str
   return s;
 }
 
-const NEGADO: ResultadoForma = {
+const negado = (tr: Tr): ResultadoForma => ({
   ok: false,
-  error: 'Tu rol no puede declarar reglas de vigilancia — las declara quien recibe los avisos de dinero.',
-};
+  error: tr('reglas.page.tuRolNoPuede'),
+});
 
 /** Los parámetros del formulario "a mano": `p_<campo>` → valor tipado. */
 function paramsDelFormulario(fd: FormData): Record<string, unknown> {
@@ -88,6 +95,7 @@ export default async function PaginaReglas({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -109,8 +117,9 @@ export default async function PaginaReglas({
 
   async function accionInterpretar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionConPermiso(sp, tenantId);
-    if (!s) return NEGADO;
+    if (!s) return negado(tr);
 
     const texto = String(fd.get('texto') ?? '');
     const lectura = await interpretar(texto, { tenantId: s.tenantId, rol: s.rol });
@@ -128,13 +137,14 @@ export default async function PaginaReglas({
       modelo: lectura.modelo, costoUsd: lectura.costoUsd,
     });
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Así lo entendí. Léelo abajo y confírmalo para que empiece a vigilar.' };
+    return { ok: true, mensaje: tr('reglas.page.asiLoEntendiLeelo') };
   }
 
   async function accionAMano(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionConPermiso(sp, tenantId);
-    if (!s) return NEGADO;
+    if (!s) return negado(tr);
 
     const plantilla = String(fd.get('plantilla') ?? '');
     const lectura = interpretarAMano(plantilla, paramsDelFormulario(fd), s.rol);
@@ -151,13 +161,14 @@ export default async function PaginaReglas({
     if (!guardada.ok) return { ok: false, error: guardada.error };
 
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Lista para confirmar. Revísala abajo y enciéndela.' };
+    return { ok: true, mensaje: tr('reglas.page.listaParaConfirmarRevisala') };
   }
 
   async function accionConfirmar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionConPermiso(sp, tenantId);
-    if (!s) return NEGADO;
+    if (!s) return negado(tr);
     const r = await confirmarRegla(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
     revalidatePath(RUTA);
@@ -166,28 +177,31 @@ export default async function PaginaReglas({
 
   async function accionPausar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionConPermiso(sp, tenantId);
-    if (!s) return NEGADO;
+    if (!s) return negado(tr);
     const r = await alternarPausa(s.tenantId, String(fd.get('id') ?? ''), true, { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Pausada.' };
+    return { ok: true, mensaje: tr('reglas.page.pausada') };
   }
 
   async function accionReanudar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionConPermiso(sp, tenantId);
-    if (!s) return NEGADO;
+    if (!s) return negado(tr);
     const r = await alternarPausa(s.tenantId, String(fd.get('id') ?? ''), false, { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Vigilando otra vez.' };
+    return { ok: true, mensaje: tr('reglas.page.vigilandoOtraVez') };
   }
 
   async function accionBorrar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionConPermiso(sp, tenantId);
-    if (!s) return NEGADO;
+    if (!s) return negado(tr);
     const r = await borrarRegla(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
     revalidatePath(RUTA);
@@ -196,43 +210,36 @@ export default async function PaginaReglas({
 
   async function accionFrecuencia(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await sesionConPermiso(sp, tenantId);
-    if (!s) return NEGADO;
+    if (!s) return negado(tr);
     const r = await actualizarFrecuencia(s.tenantId, String(fd.get('id') ?? ''), {
       maxAvisosDia: fd.get('maxAvisosDia'), minHorasEntreAvisos: fd.get('minHorasEntreAvisos'),
     }, { id: s.userId });
     if (!r.ok) return { ok: false, error: r.error };
     revalidatePath(RUTA);
-    return { ok: true, mensaje: 'Límite guardado.' };
+    return { ok: true, mensaje: tr('reglas.page.limiteGuardado') };
   }
 
+  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
   return (
-    <MarcoPagina titulo="Mis reglas" apoyo="Escribe de qué quieres que te avise y se traduce a una vigilancia concreta. Se revisa cada hora y cada caso avisa una vez.">
+    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
+    <MarcoPagina titulo={tr('reglas.page.notificaciones')} apoyo={tr('reglas.page.escribeDeQueQuieres2')}>
       <Aviso tono="info">
-        Escribe de qué quieres que te avise y lo traduzco a una vigilancia concreta.
-        Te la enseño antes de encenderla: lo que queda guardado es la vigilancia, no
-        la frase. Reviso cada hora, y cada caso te suena UNA vez.
+        {tr('reglas.page.escribeDeQueQuieres')}
       </Aviso>
 
-      <section className="space-y-3">
-        <div className="card p-4">
-          <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
-        </div>
-        <details className="card p-4">
-          <summary className="cursor-pointer text-[12px] font-medium select-none list-none"
-            style={{ color: 'var(--ink2)' }}>
-            …o elígela de la lista, sin pasar por el intérprete
-          </summary>
-          <div className="pt-3">
-            <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
-          </div>
-        </details>
-      </section>
+      <Tarjeta titulo={tr('reglas.page.escribeUnaRegla')}>
+        <FormaEscribirRegla accion={accionInterpretar} ejemplos={ejemplos} />
+      </Tarjeta>
+      <Disclosure titulo={tr('reglas.page.oEligelaDeLa')}>
+        <FormaElegirAMano accion={accionAMano} plantillas={plantillas} />
+      </Disclosure>
 
       {reglas === null ? (
-        <EstadoError mensaje="No pude leer tus reglas. No se enseña una lista a medias: media lista se ve igual que la lista entera, y sobre vigilancias eso invita a declarar duplicados." />
+        <EstadoError reintentar>{tr('reglas.page.noPudeLeerTus')}</EstadoError>
       ) : (
-        <ListaReglas
+        <ListaReglas tr={tr}
           reglas={reglas}
           acciones={{
             confirmar: accionConfirmar, pausar: accionPausar,
@@ -241,22 +248,15 @@ export default async function PaginaReglas({
         />
       )}
 
-      <section className="space-y-2">
-        <TituloRecuadro info="reglas.vigilancia">Lo que sé vigilar hoy</TituloRecuadro>
-        {/* La lista completa, siempre a la vista y no solo cuando algo
-            falla: es la frontera honesta del producto. Lo que no está
-            aquí, Likida no lo puede prometer. */}
-        <div className="card p-4">
-          <ul className="space-y-1.5">
-            {loQueSiSeVigila(rol).map((linea) => (
-              <li key={linea} className="text-[12px] flex gap-2" style={{ color: 'var(--ink2)' }}>
-                <span style={{ color: 'var(--faint)' }}>·</span>
-                <span>{linea}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </section>
+      {/* La lista completa, siempre a la vista y no solo cuando algo falla: es la frontera honesta del producto. Lo que no está aquí, Likida no lo puede prometer. */}
+      <Tarjeta titulo={tr('reglas.page.loQueSeVigilar')} info="reglas.vigilancia">
+        <ul className="rv-reglas__lista">
+          {loQueSiSeVigila(rol).map((linea) => (
+            <li key={linea}>{linea}</li>
+          ))}
+        </ul>
+      </Tarjeta>
     </MarcoPagina>
+    </IdiomaProvider>
   );
 }

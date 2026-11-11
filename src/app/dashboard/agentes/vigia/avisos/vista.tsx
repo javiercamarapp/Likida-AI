@@ -1,11 +1,11 @@
 'use client';
 
-import { AvisoCompacto, FiltroChip, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import '../vigia.css';
+import { AvisoCompacto, Boton as BotonV2, CampoSelect, CampoFecha, CampoTexto, CampoTextarea, Casilla, Disclosure, Fieldset, FiltroChip, Icono, MarcoPagina, EstadoVacio, StatusChip, Tarjeta, AvisoResultado, type TonoEstado } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { Check, ClipboardCopy, Pencil, Send, Trash2, Truck } from 'lucide-react';
-import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
+import { Check, ClipboardCopy, Send, Trash2, Truck } from 'lucide-react';
 import type { GrupoDia, TarjetaAviso } from '@/lib/likida/vigia/aviso/bandeja';
 import { AVISO_AUTOMATICO_CONECTADO, TEXTO_AVISO_AUTOMATICO_POR_CONECTAR, VACIO_BANDEJA_POR_CONECTAR } from '@/lib/likida/vigia/aviso/conexion';
 
@@ -37,23 +37,21 @@ const VACIO_TODOS = AVISO_AUTOMATICO_CONECTADO
   : VACIO_BANDEJA_POR_CONECTAR;
 const VACIO_PENDIENTES = 'No hay avisos esperando a nadie. Todo lo que se armó ya se envió o se descartó.';
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
-
 /** AAAA-MM-DD → DD/MM/AAAA, sin pasar por Date. */
 function dia(fecha: string): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(fecha);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : fecha || 'Sin fecha';
 }
 
-const COLOR_ESTADO: Record<string, string> = {
-  pendiente_confirmacion: 'var(--warn, #b45309)',
-  sin_destinatario: 'var(--warn, #b45309)',
-  fallido: 'var(--bad)',
-  enviado: 'var(--ok, #15803d)',
-  aprobado: 'var(--muted)',
-  descartado: 'var(--muted)',
-  borrador: 'var(--muted)',
-  reemplazado: 'var(--muted)',
+const TONO_ESTADO: Record<string, TonoEstado> = {
+  pendiente_confirmacion: 'warn',
+  sin_destinatario: 'warn',
+  fallido: 'bad',
+  enviado: 'ok',
+  aprobado: 'muted',
+  descartado: 'muted',
+  borrador: 'muted',
+  reemplazado: 'muted',
 };
 
 function Aviso({ children }: { children: React.ReactNode }) {
@@ -63,9 +61,9 @@ function Aviso({ children }: { children: React.ReactNode }) {
 function Boton({ accion, children, tono }: { accion: string; children: React.ReactNode; tono?: 'peligro' }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" name="accion" value={accion} disabled={pending} className={`rv-btn ${tono === 'peligro' ? 'rv-btn--danger' : 'rv-btn--secondary'}`} style={tono === 'peligro' ? { color: 'var(--bad)' } : undefined}>
+    <BotonV2 type="submit" name="accion" value={accion} loading={pending} tamano="sm" variante={tono === 'peligro' ? 'danger' : 'secondary'}>
       {children}
-    </button>
+    </BotonV2>
   );
 }
 
@@ -73,32 +71,32 @@ function Boton({ accion, children, tono }: { accion: string; children: React.Rea
 function BotonCopiar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit" name="accion" value="copiar" disabled={pending} className="rv-btn rv-btn--secondary"
+    <BotonV2
+      type="submit" name="accion" value="copiar" loading={pending} tamano="sm" icono={<Icono icono={ClipboardCopy} tam={14} />}
       onClick={() => {
         try { void navigator.clipboard?.writeText(texto); } catch { /* sin portapapeles: el texto sigue a la vista para copiarlo a mano */ }
       }}
     >
-      <ClipboardCopy width={14} height={14} strokeWidth={1.75} aria-hidden />Copiar y marcar enviado
-    </button>
+      Copiar y marcar enviado
+    </BotonV2>
   );
 }
 
-function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionAviso; puedeDecidir: boolean }) {
+function TarjetaAvisoViaje({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionAviso; puedeDecidir: boolean }) {
   const [estado, despachar] = useActionState(accion, null);
   const p = t.puede;
   return (
-    <article className="card p-4 space-y-3" aria-labelledby={`aviso-${t.id}`} data-estado={t.estado}>
-      <header className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0">
-          <h4 id={`aviso-${t.id}`} className="font-display text-[14px] font-semibold">{t.servicio}</h4>
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <article className="rv-vg__bloque" aria-labelledby={`aviso-${t.id}`} data-estado={t.estado}>
+      <header className="rv-vg__linea">
+        <div>
+          <h4 id={`aviso-${t.id}`} className="rv-vg__titulo">{t.servicio}</h4>
+          <p className="rv-vg__nota">
             {t.cita ? `Cita: ${t.cita} · ` : ''}{t.canalRotulo}
           </p>
         </div>
-        <div className="text-right text-[12px]">
-          <span className="font-medium" style={{ color: COLOR_ESTADO[t.estado] }} data-testid="estado">{t.estadoRotulo}</span>
-          <p style={{ color: 'var(--muted)' }}>
+        <div className="rv-vg__fin rv-vg__der">
+          <span data-testid="estado"><StatusChip tono={TONO_ESTADO[t.estado] ?? 'neutral'}>{t.estadoRotulo}</StatusChip></span>
+          <p className="rv-vg__nota">
             Versión {t.version}{t.tipo === 'actualizacion' ? ' (actualización)' : t.tipo === 'cancelacion' ? ' (cancelación)' : ''}
             {t.editadoPorPersona ? ' · editado a mano' : ''}
           </p>
@@ -106,114 +104,106 @@ function Tarjeta({ t, accion, puedeDecidir }: { t: TarjetaAviso; accion: AccionA
       </header>
 
       {t.interno ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Alerta interna para la oficina: no se manda al cliente.</p>
+        <p className="rv-vg__nota">Alerta interna para la oficina: no se manda al cliente.</p>
       ) : null}
-      {t.cambio ? <p className="text-[12px]" data-testid="cambio"><span className="font-medium">Qué cambió:</span> {t.cambio}</p> : null}
+      {t.cambio ? <p className="rv-vg__nota" data-testid="cambio"><strong>Qué cambió:</strong> {t.cambio}</p> : null}
 
       {t.errorLlano ? <Aviso>{t.errorLlano}</Aviso> : null}
       {t.causas.length > 0 ? (
-        <ul className="text-[12px] list-disc pl-5 space-y-0.5" aria-label="Por qué no hay destinatario" style={{ color: 'var(--bad)' }}>
+        <ul className="rv-vg__bullets" aria-label="Por qué no hay destinatario" data-tono="bad">
           {t.causas.map((c) => <li key={c}>{c}</li>)}
         </ul>
       ) : null}
 
-      <div className="grid sm:grid-cols-2 gap-3">
-        <div>
-          <h5 className="text-[11px] font-medium mb-1">Qué datos tiene</h5>
+      <div className="rv-vg__cuad">
+        <div className="rv-vg__pila--s">
+          <p className="rv-vg__rotulo">Qué datos tiene</p>
           {t.tiene.length > 0 ? (
-            <ul className="text-[12px] space-y-0.5" aria-label="Datos que tiene">
+            <ul className="rv-vg__ul" aria-label="Datos que tiene">
               {t.tiene.map((d) => (
                 <li key={d.campo}>
-                  <span className="font-medium">{d.rotulo}:</span> {d.valor} <span style={{ color: 'var(--muted)' }}>({d.fuente})</span>
+                  <span className="rv-vg__medio">{d.rotulo}:</span> {d.valor} <span className="rv-vg__muted">({d.fuente})</span>
                 </li>
               ))}
             </ul>
-          ) : <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Todavía no tiene ningún dato.</p>}
+          ) : <p className="rv-vg__nota">Todavía no tiene ningún dato.</p>}
         </div>
-        <div>
-          <h5 className="text-[11px] font-medium mb-1">Qué falta</h5>
+        <div className="rv-vg__pila--s">
+          <p className="rv-vg__rotulo">Qué falta</p>
           {t.faltan.length > 0 ? (
-            <ul className="text-[12px] space-y-0.5 list-disc pl-5" aria-label="Datos que faltan" style={{ color: 'var(--bad)' }}>
+            <ul className="rv-vg__bullets" aria-label="Datos que faltan" data-tono="bad">
               {t.faltan.map((f) => <li key={f.campo}>{f.texto}</li>)}
             </ul>
-          ) : <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No falta nada.</p>}
+          ) : <p className="rv-vg__nota">No falta nada.</p>}
         </div>
       </div>
 
-      <div>
-        <h5 className="text-[11px] font-medium mb-1">Lo que se le va a decir al cliente</h5>
-        <pre className="hairline rounded-lg px-3 py-2 text-[12px] whitespace-pre-wrap font-sans" data-testid="texto">{t.texto}</pre>
+      <div className="rv-vg__pila--s">
+        <p className="rv-vg__rotulo">Lo que se le va a decir al cliente</p>
+        <pre className="rv-vg__texto" data-testid="texto">{t.texto}</pre>
       </div>
 
       {puedeDecidir ? (
         <>
-          <form action={despachar} className="flex flex-wrap gap-2">
+          <form action={despachar} className="rv-vg__linea">
             <input type="hidden" name="id" value={t.id} />
-            {p.confirmar ? <Boton accion="confirmar"><Send width={14} height={14} strokeWidth={1.75} aria-hidden />Confirmar y enviar</Boton> : null}
+            {p.confirmar ? <Boton accion="confirmar"><Icono icono={Send} tam={14} />Confirmar y enviar</Boton> : null}
             {p.copiar ? <BotonCopiar texto={t.texto} /> : null}
           </form>
 
           {p.editar ? (
-            <details className="text-[12px]">
-              <summary className="cursor-pointer inline-flex items-center gap-1.5"><Pencil width={14} height={14} strokeWidth={1.75} aria-hidden />Editar</summary>
-              <form action={despachar} className="space-y-2 mt-2">
+            <Disclosure titulo="Editar" variante="linea">
+              <form action={despachar} className="rv-vg__pila">
                 <input type="hidden" name="id" value={t.id} />
-                <label>
-                  <span className={ETIQUETA}>Texto del aviso (hasta 1 000 letras)</span>
-                  <textarea name="texto" required maxLength={1000} rows={6} defaultValue={t.texto} className="hairline rounded-lg px-2.5 py-2 text-[13px] w-full" />
-                </label>
-                <Boton accion="editar"><Check width={14} height={14} strokeWidth={1.75} aria-hidden />Guardar el texto</Boton>
+                <CampoTextarea etiqueta="Texto del aviso (hasta 1 000 letras)" name="texto" required maxLength={1000} rows={6} defaultValue={t.texto} />
+                <div><Boton accion="editar"><Icono icono={Check} tam={14} />Guardar el texto</Boton></div>
               </form>
-            </details>
+            </Disclosure>
           ) : null}
 
           {p.capturar ? (
-            <details className="text-[12px]">
-              <summary className="cursor-pointer">Capturar lo que falta</summary>
-              <form action={despachar} className="space-y-3 mt-2">
+            <Disclosure titulo="Capturar lo que falta" variante="linea">
+              <form action={despachar} className="rv-vg__pila">
                 <input type="hidden" name="id" value={t.id} />
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <label><span className={ETIQUETA}>Operador</span><input name="operadorNombre" maxLength={120} className="w-full" autoComplete="off" /></label>
-                  <label><span className={ETIQUETA}>Placas de la unidad</span><input name="placasUnidad" maxLength={14} className="w-full" autoComplete="off" /></label>
-                  <label><span className={ETIQUETA}>Placas de la caja</span><input name="placasCaja" maxLength={14} className="w-full" autoComplete="off" /></label>
-                  <label>
-                    <span className={ETIQUETA}>Estado de la caja</span>
-                    <select name="estadoCaja" className="w-full" defaultValue="">
-                      <option value="">No cambiar</option>
-                      <option value="vacia">Vacía</option>
-                      <option value="cargada">Cargada</option>
-                      <option value="en_patio">En patio</option>
-                      <option value="en_transito">En tránsito</option>
-                      <option value="desconocido">Desconocido</option>
-                    </select>
-                  </label>
-                  <label><span className={ETIQUETA}>Licencia (no se envía al cliente)</span><input name="licencia" maxLength={40} className="w-full" autoComplete="off" /></label>
-                  <label><span className={ETIQUETA}>Vigencia de la licencia (no se envía)</span><input name="licenciaVence" type="date" className="w-full" /></label>
-                  <label><span className={ETIQUETA}>Teléfono del operador (no se envía)</span><input name="telefono" inputMode="tel" maxLength={16} className="w-full" autoComplete="off" /></label>
+                <div className="rv-vg__cuad">
+                  <CampoTexto etiqueta="Operador" name="operadorNombre" maxLength={120} autoComplete="off" />
+                  <CampoTexto etiqueta="Placas de la unidad" name="placasUnidad" maxLength={14} autoComplete="off" />
+                  <CampoTexto etiqueta="Placas de la caja" name="placasCaja" maxLength={14} autoComplete="off" />
+                  <CampoSelect etiqueta="Estado de la caja" name="estadoCaja" defaultValue="">
+                    <option value="">No cambiar</option>
+                    <option value="vacia">Vacía</option>
+                    <option value="cargada">Cargada</option>
+                    <option value="en_patio">En patio</option>
+                    <option value="en_transito">En tránsito</option>
+                    <option value="desconocido">Desconocido</option>
+                  </CampoSelect>
+                  <CampoTexto etiqueta="Licencia (no se envía al cliente)" name="licencia" maxLength={40} autoComplete="off" />
+                  <CampoFecha etiqueta="Vigencia de la licencia (no se envía)" name="licenciaVence" />
+                  <CampoTexto etiqueta="Teléfono del operador (no se envía)" name="telefono" tipo="tel" inputMode="tel" maxLength={16} autoComplete="off" />
                 </div>
-                <fieldset className="text-[11px]" data-testid="borrar-datos">
-                  <legend className={ETIQUETA}>Quitar un dato mal escrito (déjalo vacío arriba y márcalo aquí)</legend>
-                  <div className="flex flex-wrap gap-x-3 gap-y-1">
-                    {([['operadorNombre', 'Operador'], ['placasUnidad', 'Placas unidad'], ['placasCaja', 'Placas caja'], ['estadoCaja', 'Estado caja'], ['licencia', 'Licencia'], ['licenciaVence', 'Vigencia'], ['telefono', 'Teléfono']] as const).map(([v, r]) => (
-                      <label key={v} className="inline-flex items-center gap-1"><input type="checkbox" name="borrar" value={v} />{r}</label>
-                    ))}
-                  </div>
-                </fieldset>
-                <p className="text-[11px]" style={{ color: 'var(--muted)' }} data-testid="privacidad">{POLITICA_PRIVACIDAD}</p>
-                <Boton accion="capturar"><Truck width={14} height={14} strokeWidth={1.75} aria-hidden />Guardar los datos</Boton>
+                <div data-testid="borrar-datos">
+                  <Fieldset leyenda="Quitar un dato mal escrito (déjalo vacío arriba y márcalo aquí)">
+                    <div className="rv-vg__linea">
+                      {([['operadorNombre', 'Operador'], ['placasUnidad', 'Placas unidad'], ['placasCaja', 'Placas caja'], ['estadoCaja', 'Estado caja'], ['licencia', 'Licencia'], ['licenciaVence', 'Vigencia'], ['telefono', 'Teléfono']] as const).map(([v, r]) => (
+                        <Casilla key={v} name="borrar" value={v} etiqueta={r} />
+                      ))}
+                    </div>
+                  </Fieldset>
+                </div>
+                <p className="rv-vg__nota" data-testid="privacidad">{POLITICA_PRIVACIDAD}</p>
+                <div><Boton accion="capturar"><Icono icono={Truck} tam={14} />Guardar los datos</Boton></div>
               </form>
-            </details>
+            </Disclosure>
           ) : null}
 
           {p.descartar ? (
-            <details className="text-[12px]">
-              <summary className="cursor-pointer inline-flex items-center gap-1.5" style={{ color: 'var(--bad)' }}><Trash2 width={14} height={14} strokeWidth={1.75} aria-hidden />Descartar</summary>
-              <form action={despachar} className="mt-2 space-y-2">
+            <Disclosure titulo="Descartar" variante="linea">
+              <form action={despachar} className="rv-vg__pila">
                 <input type="hidden" name="id" value={t.id} />
-                <p>Este aviso no se enviará. Si el servicio cambia, el sistema arma uno nuevo.</p>
-                <Boton accion="descartar" tono="peligro"><Trash2 width={14} height={14} strokeWidth={1.75} aria-hidden />Sí, descartar</Boton>
+                <p className="rv-vg__nota">Este aviso no se enviará. Si el servicio cambia, el sistema arma uno nuevo.</p>
+                <div><Boton accion="descartar" tono="peligro"><Icono icono={Trash2} tam={14} />Sí, descartar</Boton></div>
               </form>
-            </details>
+            </Disclosure>
           ) : null}
         </>
       ) : null}
@@ -245,12 +235,12 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
   const conPendientes = `${base}${sufijo ? '&' : '?'}pendientes=1`;
   return (
     <MarcoPagina titulo="Avisos de viaje" apoyo="Los avisos que el Vigía arma para tus clientes, por día, para confirmarlos, editarlos o descartarlos.">
-      <nav aria-label="Navegación" className="flex flex-wrap gap-2 text-[12px]">
-        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="hairline rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">Volver a servicio al cliente</Link>
+      <nav aria-label="Navegación" className="rv-vg__herr">
+        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">Volver a servicio al cliente</Link>
         <FiltroChip href={soloPendientes ? base : conPendientes} activo={soloPendientes}>Solo pendientes</FiltroChip>
       </nav>
 
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>
+      <p className="rv-vg__nota" data-testid="ayuda">{AYUDA_REGLA_PROVISIONAL}</p>
 
       {!AVISO_AUTOMATICO_CONECTADO ? (
         <div data-testid="por-conectar"><AvisoCompacto tono="warn" resumen={TEXTO_AVISO_AUTOMATICO_POR_CONECTAR} /></div>
@@ -259,36 +249,36 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, soloPe
         <AvisoCompacto tono="warn" resumen="El aviso de viaje está apagado: no se arman ni se envían avisos nuevos hasta que el dueño lo encienda." />
       ) : null}
       {avisoEncendido === null && !sinMigrar && !errorLectura ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No pude confirmar si el aviso de viaje está encendido.</p>
+        <p className="rv-vg__nota">No pude confirmar si el aviso de viaje está encendido.</p>
       ) : null}
       {!puedeDecidir ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Solo el dueño o el encargado de la flota confirma, edita o descarta avisos. Tú puedes verlos, sin teléfonos completos.</p>
+        <p className="rv-vg__nota">Solo el dueño o el encargado de la flota confirma, edita o descarta avisos. Tú puedes verlos, sin teléfonos completos.</p>
       ) : null}
 
       {sinMigrar ? <Aviso>La base de datos todavía no está lista para los avisos de viaje. Avísale a soporte.</Aviso> : null}
       {errorLectura ? <Aviso>{errorLectura}</Aviso> : null}
 
       {!sinMigrar && !errorLectura && total === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="vacio">{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</p>
+        <div data-testid="vacio"><EstadoVacio titulo="Sin avisos que revisar" contenido>{soloPendientes ? VACIO_PENDIENTES : VACIO_TODOS}</EstadoVacio></div>
       ) : null}
 
       {hayMas ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }} data-testid="hay-mas">
+        <p className="rv-vg__nota" data-testid="hay-mas">
           Se muestran los {total} avisos más recientes; puede haber más antiguos. {soloPendientes ? 'Resuelve los pendientes para ver el resto.' : 'Usa «Solo pendientes» para ver lo que falta por resolver.'}
         </p>
       ) : null}
 
       {grupos.map((g) => (
-        <section key={g.fecha || 'sin-fecha'} className="space-y-3" aria-labelledby={`dia-${g.fecha || 'sin-fecha'}`}>
-          <TituloRecuadro id={`dia-${g.fecha || 'sin-fecha'}`} info="vigia_avisos.dia">{dia(g.fecha)}</TituloRecuadro>
-          {g.clientes.map((c) => (
-            <div key={c.cliente} className="space-y-2">
-              {/* sin-info: nombre del cliente que agrupa las tarjetas de un día, dentro del recuadro del día que lleva su ⓘ */}
-              <h3 className="text-[12px] font-medium" style={{ color: 'var(--muted)' }}>{c.cliente}</h3>
-              {c.tarjetas.map((t) => <Tarjeta key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
-            </div>
-          ))}
-        </section>
+        <Tarjeta key={g.fecha || 'sin-fecha'} titulo={dia(g.fecha)} info="vigia_avisos.dia">
+          <div className="rv-vg__pila">
+            {g.clientes.map((c) => (
+              <div key={c.cliente} className="rv-vg__pila">
+                <p className="rv-vg__rotulo">{c.cliente}</p>
+                {c.tarjetas.map((t) => <TarjetaAvisoViaje key={t.id} t={t} accion={accion} puedeDecidir={puedeDecidir} />)}
+              </div>
+            ))}
+          </div>
+        </Tarjeta>
       ))}
     </MarcoPagina>
   );

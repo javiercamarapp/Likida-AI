@@ -3,24 +3,29 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Send, UserPlus, RefreshCw } from 'lucide-react';
-import { CampoTexto } from '@/app/ui-v2/componentes';
+import type { LucideIcon } from 'lucide-react';
+import { AvisoCompacto, Boton, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
+import './despacho.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type AccionDespacho = (
   prev: { error?: string } | null,
   fd: FormData,
 ) => Promise<{ error?: string } | null>;
 
-function BotonEnviar({ texto, pendienteTexto, Icono }: { texto: string; pendienteTexto: string; Icono: typeof Send }) {
+function BotonEnviar({ texto, pendienteTexto, icono }: { texto: string; pendienteTexto: string; icono: LucideIcon }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary shrink-0"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <Icono width={13} height={13} strokeWidth={2} />
+    <Boton type="submit" variante="primary" disabled={pending} icono={<Icono icono={icono} tam={16} />}>
       {pending ? pendienteTexto : texto}
-    </button>
+    </Boton>
   );
+}
+
+function ErrorDeAccion({ estado }: { estado: { error?: string } | null }) {
+  return estado?.error ? <AvisoCompacto tono="error" resumen={estado.error} /> : null;
 }
 
 /** Una fila de "Por asignar": elegir operador y asignar+avisar en un paso.
@@ -40,22 +45,20 @@ export function AsignarFila({ viajeId, buscarCatalogo, totalOperadores, asignarY
   totalOperadores: number | null;
   asignarYAvisar: AccionDespacho;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(asignarYAvisar, null);
   return (
     <div>
-      <form action={accion} className="flex items-start gap-2">
+      <form action={accion} className="rv-dsp__fila-accion">
         <input type="hidden" name="viajeId" value={viajeId} />
-        <div className="flex-1 min-w-0">
+        <div className="rv-dsp__crece">
           <ComboCatalogo tipo="operador" name="operadorId" buscar={buscarCatalogo} requerido
-            aria-label="Operador" etiquetaVacia="Escribe el nombre del chofer…"
-            total={totalOperadores}
-            className="w-full min-w-0 text-[12px] px-2.5 py-1.5 rounded-lg hairline"
-            estilo={{ background: 'var(--surface)' }}
-          />
+            aria-label={t('dsp.operador')} etiquetaVacia="Escribe el nombre del chofer…"
+            total={totalOperadores} className="rv-ctl" />
         </div>
-        <BotonEnviar texto="Asignar y avisar" pendienteTexto="Asignando…" Icono={Send} />
+        <BotonEnviar texto={t('dsp.asignar.avisar')} pendienteTexto="Asignando…" icono={Send} />
       </form>
-      {estado?.error && <p className="text-[12px] mt-1" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      <ErrorDeAccion estado={estado} />
     </div>
   );
 }
@@ -77,35 +80,32 @@ export function AsignarUnidadFila({ viajeId, unidadId, unidadEco, buscarCatalogo
   totalUnidades: number | null;
   asignarUnidadViaje: AccionDespacho;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(asignarUnidadViaje, null);
   return (
     <div>
-      <form action={accion} className="flex items-start gap-1.5">
+      <form action={accion} className="rv-dsp__fila-accion">
         <input type="hidden" name="viajeId" value={viajeId} />
-        <div className="min-w-0">
+        <div className="rv-dsp__crece">
           <ComboCatalogo tipo="unidad" name="unidadId" buscar={buscarCatalogo}
-            aria-label="Unidad" etiquetaVacia="Sin unidad"
+            aria-label={t('dsp.unidad')} etiquetaVacia="Sin unidad"
             valorInicial={unidadId} textoInicial={unidadEco ?? ''} total={totalUnidades}
-            className="w-full min-w-0 text-[11px] px-2 py-1 rounded-lg hairline cifra-mono"
-            estilo={{ background: 'var(--surface)' }}
-          />
+            className="rv-ctl" />
         </div>
-        <BotonAsignarUnidad texto={unidadId ? 'Cambiar' : 'Asignar'} />
+        <BotonAsignarUnidad texto={unidadId ? t('dsp.cambiar') : t('dsp.asignar')} />
       </form>
-      {estado?.error && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      <ErrorDeAccion estado={estado} />
     </div>
   );
 }
 
 function BotonAsignarUnidad({ texto }: { texto: string }) {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} title="Amarrar la unidad al viaje"
-      aria-label={`${texto} la unidad del viaje`}
-      className="rv-btn rv-btn--secondary shrink-0"
-      style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
-      {pending ? 'Asignando…' : texto}
-    </button>
+    <Boton type="submit" tamano="sm" disabled={pending} title={t('dsp.unidad.titulo')} aria-label={t('dsp.unidad.aria', { texto })}>
+      {pending ? t('dsp.asignando') : texto}
+    </Boton>
   );
 }
 
@@ -118,28 +118,27 @@ export function BotonReenviar({ viajeId, yaAvisado, reenviarAviso }: {
   yaAvisado: boolean;
   reenviarAviso: AccionDespacho;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(reenviarAviso, null);
   return (
-    <div className="text-right">
-      <form action={accion} className="inline">
+    <div className="rv-dsp__der">
+      <form action={accion}>
         <input type="hidden" name="viajeId" value={viajeId} />
-        <BotonInsistir texto={yaAvisado ? 'Reavisar' : 'Avisar'} />
+        <BotonInsistir texto={yaAvisado ? t('dsp.reavisar') : t('dsp.avisar')} />
       </form>
-      {estado?.error && <p className="text-[11px] mt-0.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      <ErrorDeAccion estado={estado} />
     </div>
   );
 }
 
 function BotonInsistir({ texto }: { texto: string }) {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} title="Mandar el aviso por WhatsApp"
-      aria-label={`${texto} al chofer por WhatsApp`}
-      className="rv-btn rv-btn--secondary"
-      style={{ background: 'var(--surface)', color: 'var(--ink2)' }}>
-      <RefreshCw width={11} height={11} strokeWidth={2} className={pending ? 'animate-spin' : ''} />
-      {pending ? 'Enviando…' : texto}
-    </button>
+    <Boton type="submit" tamano="sm" disabled={pending} title={t('dsp.aviso.titulo')} aria-label={t('dsp.aviso.aria', { texto })}
+      icono={<Icono icono={RefreshCw} tam={16} />}>
+      {pending ? t('dsp.enviando') : texto}
+    </Boton>
   );
 }
 
@@ -147,15 +146,16 @@ function BotonInsistir({ texto }: { texto: string }) {
  *  media captura. La validación fuerte (lada 52, duplicados ENTRE flotas)
  *  vive en el servidor y sus mensajes se enseñan tal cual. */
 export function AltaOperador({ altaOperador }: { altaOperador: AccionDespacho }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(altaOperador, null);
   return (
     <form action={accion} className="rv-forma">
-      <CampoTexto etiqueta="Nombre del operador" name="nombre" required />
+      <CampoTexto etiqueta={t('dsp.alta.nombre')} name="nombre" required />
       <div className="rv-forma__fila">
-        <CampoTexto etiqueta="WhatsApp (10 dígitos)" name="telefono" required inputMode="tel" claseControl="cifra-mono" className="rv-forma__crece" />
-        <BotonEnviar texto="Dar de alta" pendienteTexto="Guardando…" Icono={UserPlus} />
+        <CampoTexto etiqueta={t('dsp.alta.whatsapp')} name="telefono" required inputMode="tel" className="rv-forma__crece" />
+        <BotonEnviar texto={t('dsp.alta.boton')} pendienteTexto="Guardando…" icono={UserPlus} />
       </div>
-      {estado?.error && <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
+      <ErrorDeAccion estado={estado} />
     </form>
   );
 }

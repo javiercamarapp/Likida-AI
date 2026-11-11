@@ -22,6 +22,8 @@ import { DatoInvalido } from '@/lib/likida/errores';
 // de al lado. La regla no distingue eso de un path de usuario.
 // eslint-disable-next-line security/detect-non-literal-fs-filename
 const PAGINA = readFileSync(fileURLToPath(new URL('./page.tsx', import.meta.url)), 'utf8');
+// eslint-disable-next-line security/detect-non-literal-fs-filename
+const ACCION = readFileSync(fileURLToPath(new URL('./acciones.ts', import.meta.url)), 'utf8');
 
 describe('el resultado del alta se ve en la pantalla', () => {
   it('ya no queda ningún redirect que tire la captura (el `?creado=1` que nadie leía se fue)', () => {
@@ -32,18 +34,20 @@ describe('el resultado del alta se ve en la pantalla', () => {
   });
 
   it('la forma es `FormaConAviso` (useActionState): los inputs conservan lo escrito al fallar', () => {
-    expect(PAGINA).toContain('<FormaConAviso accion={crear}');
-    expect(PAGINA).not.toContain('<form action={crear}');
+    expect(PAGINA).toContain('<FormaConAviso accion={accionNuevoAcceso}');
+    expect(PAGINA).not.toContain('<form action=');
   });
 
-  it('`provisionarUsuario` va dentro de un try que traduce el error a mensaje', () => {
-    expect(PAGINA).toMatch(/try \{\s*\n\s*await provisionarUsuario\(/);
-    expect(PAGINA).toContain('descifrarErrorProvision(e)');
+  it('el alta (cuenta + asiento + correo) va dentro de un try que traduce el error a mensaje', () => {
+    expect(ACCION).toMatch(/try \{[\s\S]*?await altaDeUsuarioDesdeAdmin\(/);
+    expect(ACCION).toContain("mensajeParaPantalla(e, 'dar de alta al usuario')");
+    // `provisionarUsuario` y su traducción de errores viven ahora en gestion_admin.ts (probado en gestion_admin.test.ts).
+    expect(ACCION).not.toMatch(/await provisionarUsuario\(/);
   });
 
   it('el rol se valida con LISTA BLANCA (ADM-12: `vendedor` con tenant ya no entra)', () => {
-    expect(PAGINA).toContain('if (!ROLES_VALIDOS.has(rol))');
-    expect(PAGINA).not.toContain("if (rol === 'superadmin') redirect");
+    expect(ACCION).toContain('if (!ROLES_VALIDOS.has(rol))');
+    expect(ACCION).not.toContain("if (rol === 'superadmin') redirect");
   });
 });
 

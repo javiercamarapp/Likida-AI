@@ -11,6 +11,7 @@ import { guardarCorreoParaReenvio } from '@/lib/auth/reenvio_enlace';
 import { registrarLoginFallido } from '@/lib/seguridad/registro_acceso';
 import { respuestaOtp, conPisoDeTiempo } from './respuesta_otp';
 import { VistaLogin } from './vista-login';
+import { getT } from '@/lib/i18n/servidor';
 import './login.css';
 
 export const dynamic = 'force-dynamic';
@@ -162,6 +163,8 @@ export default async function Login({
 }) {
   const sp = await searchParams;
   const next = sp?.next && destinoPermitido(sp.next) ? sp.next : '/dashboard';
+  // Idioma de la pantalla (i18n P1): cookie > preferencia > es. Nunca lanza: ante cualquier fallo, español.
+  const tr = await getT('login');
 
   async function entrarConGoogle(formData: FormData) {
     'use server';
@@ -260,6 +263,7 @@ export default async function Login({
       entrarConGoogle,
       entrarConEmail,
       claseFuentes: `${fraunces.variable} ${instrument.variable}`,
+      tr,
     },
   );
 }

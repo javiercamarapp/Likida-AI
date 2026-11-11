@@ -1,98 +1,75 @@
-import { History } from 'lucide-react';
+import './agentes.css';
 import type { CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { duracionLegible } from '@/lib/likida/agentes/corridas';
 import { fechaHoraMx } from '@/lib/formato';
+import { Disclosure, EstadoError, StatusChip, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 
 /**
- * LA FICHA DE CORRIDAS — el «Periodo · Estado · Tareas · Duración · Fecha»
- * (B3, auditoría 4), compartida por las seis páginas de agentes.
+ * LA FICHA DE CORRIDAS — el «Fecha · Estado · Tareas · Duración · Disparo» (B3, auditoría 4), compartida por las páginas de agentes.
  *
- * Server component puro-props: la página trae las corridas (o el error) y
- * esto solo pinta. Tres estados, como todo en este panel: historial real,
- * vacío que dice desde cuándo se anota, o el error DICHO.
+ * Server component puro-props: la página trae las corridas (o el error) y esto solo pinta. Tres estados, como todo en este panel:
+ * historial real, vacío que dice desde cuándo se anota, o el error DICHO. Va plegada («Actividad del agente») al final de la página.
  */
 
-const PILL: Record<string, { fg: string; bg: string; rotulo: string }> = {
-  ok: { fg: 'var(--ok)', bg: 'var(--okbg)', rotulo: 'OK' },
-  parcial: { fg: 'var(--warn)', bg: 'var(--warnbg, var(--canvas))', rotulo: 'Parcial' },
-  fallo: { fg: 'var(--bad)', bg: 'var(--badbg)', rotulo: 'Falló' },
+const ESTADO: Record<string, { tono: TonoEstado; rotulo: string }> = {
+  ok: { tono: 'ok', rotulo: 'OK' },
+  parcial: { tono: 'warn', rotulo: 'Parcial' },
+  fallo: { tono: 'bad', rotulo: 'Falló' },
 };
+
+/** Cada disparo con su verdad: 'correo' (0108) NO es programado (lo disparó un correo que llegó al buzón) y 'whatsapp' (0115) lo confirmó el operador por chat. */
+function rotuloDisparo(d: CorridaRegistrada['disparo']): string {
+  if (d === 'manual') return 'Ejecutar ahora';
+  if (d === 'correo') return 'Llegó un correo';
+  if (d === 'whatsapp') return 'Confirmado por WhatsApp';
+  return 'Programado';
+}
+
+const COLUMNAS: readonly ColumnaBase<CorridaRegistrada>[] = [
+  { id: 'fecha', titulo: 'Fecha', principal: true, celda: (c) => fechaHoraMx(c.inicio) },
+  {
+    id: 'estado', titulo: 'Estado',
+    celda: (c) => {
+      const e = ESTADO[c.estado] ?? { tono: 'neutral' as const, rotulo: c.estado };
+      return (
+        <>
+          <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>
+          {c.error ? <span className="rv-ag-error">{c.error}</span> : null}
+        </>
+      );
+    },
+  },
+  {
+    id: 'tareas', titulo: 'Tareas', alinear: 'der',
+    // NULL no es 0/0: una corrida que no se mide en tareas lo dice con un guion.
+    celda: (c) => (c.tareasHechas === null || c.tareasTotal === null ? '—' : `${c.tareasHechas}/${c.tareasTotal}`),
+  },
+  { id: 'duracion', titulo: 'Duración', alinear: 'der', celda: (c) => duracionLegible(c.duracionMs) ?? '—' },
+  { id: 'disparo', titulo: 'Disparo', celda: (c) => rotuloDisparo(c.disparo) },
+];
 
 export function FichaCorridas({ corridas }: { corridas: CorridaRegistrada[] | null }) {
   return (
-    <section className="card p-4 space-y-2">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide flex items-center gap-1.5" style={{ color: 'var(--muted)' }}>
-        <History width={13} height={13} strokeWidth={1.75} />
-        Corridas del agente
-      </h2>
-
+    <Disclosure titulo="Actividad del agente" resumen={corridas === null ? 'No disponible' : `${corridas.length} corridas recientes`}>
       {corridas === null ? (
-        <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-          No pude leer el historial de corridas. No se pinta «sin corridas» sobre una consulta
-          caída: es exactamente la mentira que este historial existe para evitar.
-        </p>
-      ) : corridas.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          Sin corridas registradas todavía. El historial se anota desde el 14 de agosto de 2026 —
-          si el agente corrió antes de esa fecha, esas corridas no aparecen aquí.
-        </p>
+        <EstadoError compacto>
+          No se pudo leer el historial de corridas. No se pinta «sin corridas» sobre una consulta caída: es exactamente la mentira que
+          este historial existe para evitar.
+        </EstadoError>
       ) : (
-        <div className="overflow-x-auto">
-          <table aria-label="Corridas recientes del agente" className="w-full text-[12px]">
-            <thead>
-              <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                <th scope="col" className="px-2 py-1.5 font-medium">Fecha</th>
-                <th scope="col" className="px-2 py-1.5 font-medium">Estado</th>
-                <th scope="col" className="px-2 py-1.5 font-medium text-right">Tareas</th>
-                <th scope="col" className="px-2 py-1.5 font-medium text-right">Duración</th>
-                <th scope="col" className="px-2 py-1.5 font-medium">Disparo</th>
-              </tr>
-            </thead>
-            <tbody>
-              {corridas.map((c) => {
-                const pill = PILL[c.estado];
-                const dur = duracionLegible(c.duracionMs);
-                return (
-                  <tr key={c.id} className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
-                    <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                      {fechaHoraMx(c.inicio)}
-                    </td>
-                    <td className="px-2 py-1.5">
-                      <span className="inline-flex px-1.5 py-0.5 rounded-full text-[11px] font-medium"
-                        style={{ color: pill.fg, background: pill.bg }}>
-                        {pill.rotulo}
-                      </span>
-                      {c.error && (
-                        <span className="block text-[11px] mt-0.5 max-w-[380px]" style={{ color: 'var(--bad)' }}>
-                          {c.error}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular whitespace-nowrap">
-                      {/* NULL no es 0/0: una corrida que no se mide en tareas lo dice con un guion. */}
-                      {c.tareasHechas === null || c.tareasTotal === null
-                        ? <span style={{ color: 'var(--faint)' }}>—</span>
-                        : `${c.tareasHechas}/${c.tareasTotal}`}
-                    </td>
-                    <td className="px-2 py-1.5 text-right tabular whitespace-nowrap">
-                      {dur === null ? <span style={{ color: 'var(--faint)' }}>—</span> : dur}
-                    </td>
-                    <td className="px-2 py-1.5 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
-                      {/* Cada disparo con su verdad: 'correo' (0108) NO es programado —
-                          lo disparó un correo que llegó al buzón — y 'whatsapp'
-                          (0115) lo confirmó el operador por chat. */}
-                      {c.disparo === 'manual' ? 'Ejecutar ahora'
-                        : c.disparo === 'correo' ? 'Llegó un correo'
-                          : c.disparo === 'whatsapp' ? 'Confirmado por WhatsApp'
-                            : 'Programado'}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <TablaBase
+          etiqueta="Corridas recientes del agente"
+          columnas={COLUMNAS}
+          filas={corridas}
+          idFila={(c) => c.id}
+          densa
+          tarjetaMovil
+          vacio={{
+            titulo: 'Sin corridas registradas',
+            texto: 'El historial se anota desde el 14 de agosto de 2026; si el agente corrió antes de esa fecha, esas corridas no aparecen aquí.',
+          }}
+        />
       )}
-    </section>
+    </Disclosure>
   );
 }

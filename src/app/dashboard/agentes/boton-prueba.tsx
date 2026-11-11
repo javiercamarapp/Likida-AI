@@ -3,6 +3,8 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Send } from 'lucide-react';
+import { AvisoCompacto, Boton, Icono } from '@/app/ui-v2/componentes';
+import './agentes.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL BOTÓN «MÁNDATE UNA PRUEBA» (auditoría 4, B5).
@@ -34,21 +36,17 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
   const [estado, accion] = useActionState(mandarPrueba, null);
 
   return (
-    <div className="mt-4 pt-3.5 border-t" style={{ borderColor: 'var(--line)' }}>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-        <form action={accion} className="shrink-0">
+    <div className="rv-ag-prueba">
+      <div className="rv-ag-prueba__fila">
+        <form action={accion}>
           <BotonMandar apagado={!canalListo} />
         </form>
-        <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+        <p className="rv-ag-notif__nota">
           Comprueba que estos avisos llegan de verdad: la prueba va solo a tu correo, no al reparto.
         </p>
       </div>
-      {estado?.enviado && (
-        <p className="text-[12px] mt-1.5" style={{ color: 'var(--muted)' }}>{estado.enviado}</p>
-      )}
-      {estado?.error && (
-        <p className="text-[12px] mt-1.5" style={{ color: 'var(--bad)' }}>{estado.error}</p>
-      )}
+      {estado?.enviado && <AvisoCompacto tono="ok" resumen={estado.enviado} />}
+      {estado?.error && <AvisoCompacto tono="error" resumen={estado.error} />}
     </div>
   );
 }
@@ -56,13 +54,10 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
 function BotonMandar({ apagado }: { apagado: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button
-      type="submit" disabled={pending || apagado}
+    <Boton type="submit" variante="secondary" loading={pending} disabled={pending || apagado}
       title={apagado ? 'El correo no está configurado en este entorno' : undefined}
-      className="rv-btn rv-btn--secondary"
-      style={{ background: 'var(--surface)', color: 'var(--ink)' }}>
-      <Send width={13} height={13} strokeWidth={2} />
+      icono={<Icono icono={Send} tam={14} />}>
       {pending ? 'Mandando…' : 'Mándate una prueba'}
-    </button>
+    </Boton>
   );
 }

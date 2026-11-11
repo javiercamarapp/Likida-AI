@@ -6,7 +6,8 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { FileSpreadsheet } from 'lucide-react';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
-import { CampoArchivo } from '@/app/ui-v2/componentes';
+import { Boton, CampoArchivo, CampoFecha, CampoTexto, Icono } from '@/app/ui-v2/componentes';
+import './peajes.css';
 
 export type ResumenImportado = {
   totalLineas: number;
@@ -37,38 +38,31 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
   const r = estado?.resumen;
 
   return (
-    <div>
-      <form action={accion} className="flex items-center gap-2 flex-wrap">
+    <div className="rv-pj-control">
+      <form action={accion} className="rv-pj-forma">
         <CampoArchivo etiqueta="Desglose del proveedor de peaje (Excel, CSV o PDF)" name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)} />
-        <input type="text" name="proveedor" placeholder="Proveedor (IAVE, PASE, TeleVía…)"
-          aria-label="Proveedor del desglose (opcional)"
-          className="hairline text-[12px] px-2.5 py-1.5 rounded-lg w-[210px]"
-          style={{ background: 'var(--surface)', color: 'var(--ink)' }} />
-        <label className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--muted)' }}>
-          Periodo del archivo (opcional)
-          <input type="date" name="periodo_desde" aria-label="Inicio del periodo del archivo" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
-          <span>a</span>
-          <input type="date" name="periodo_hasta" aria-label="Fin del periodo del archivo" className="rv-ctl rv-ctl--fecha" style={{ width: 'auto' }} />
-        </label>
+        <CampoTexto etiqueta="Proveedor del desglose (opcional)" name="proveedor" placeholder="Proveedor (IAVE, PASE, TeleVía…)" />
+        <CampoFecha etiqueta="Inicio del periodo del archivo (opcional)" name="periodo_desde" />
+        <CampoFecha etiqueta="Fin del periodo del archivo (opcional)" name="periodo_hasta" />
         <BotonImportar />
       </form>
-      <p className="text-[11px] mt-1.5" style={{ color: 'var(--faint)' }}>
+      <p className="rv-pj-nota">
         Máximo 4 MB por archivo (un corte decenal real pesa ~1 MB). Sube el Excel del proveedor tal cual: se lee solo su hoja principal.
         El periodo decide qué cobro es extemporáneo: si no lo declaras, se toma del nombre del archivo («01 A 10 DE SEPT»); si tampoco lo dice, esa revisión no se aplica y se avisa.
       </p>
-      {estado?.error && <p className="text-[12px] mt-2" style={{ color: 'var(--bad)' }}>{estado.error}</p>}
-      {estado?.aviso && <p className="text-[12px] mt-2" role="status" style={{ color: 'var(--muted)' }}>{estado.aviso}</p>}
+      {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
+      {estado?.aviso && <p className="rv-pj-sub" role="status">{estado.aviso}</p>}
       {r && (
-        <div className="text-[12px] mt-2 space-y-0.5" style={{ color: 'var(--muted)' }}>
-          <p>
+        <div className="rv-pj-acuse" role="status">
+          <p className="rv-pj-sub">
             Desglose importado (<span className="cifra-mono">{r.totalLineas}</span> líneas) y cruzado:{' '}
-            <span className="cifra-mono font-medium" style={{ color: 'var(--ink)' }}>{r.cuadra}</span> cuadran
+            <strong className="cifra-mono">{r.cuadra}</strong> cuadran
             {r.noCuadra > 0 && <> · <span className="cifra-mono">{r.noCuadra}</span> con discrepancia</>}
             {r.sinContraparte > 0 && <> · <span className="cifra-mono">{r.sinContraparte}</span> sin contraparte</>}.
           </p>
           {r.avisos.map((a) => (
-            <p key={a} style={{ color: 'var(--faint)' }}>{a}</p>
+            <p key={a} className="rv-pj-nota">{a}</p>
           ))}
         </div>
       )}
@@ -79,11 +73,8 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
 function BotonImportar() {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending}
-      className="rv-btn rv-btn--primary"
-      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-      <FileSpreadsheet width={13} height={13} strokeWidth={2} className={pending ? 'animate-pulse' : ''} />
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={FileSpreadsheet} />}>
       {pending ? 'Cruzando…' : 'Importar y cruzar'}
-    </button>
+    </Boton>
   );
 }

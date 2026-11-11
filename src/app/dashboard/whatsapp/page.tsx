@@ -13,7 +13,11 @@ import { ahoraMs } from '@/lib/saludo';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { VistaArranqueWhatsApp, type DatosArranque } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'WhatsApp del operador' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.whatsapp') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -30,6 +34,8 @@ export default async function PaginaArranqueWhatsApp({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const tr = await getT('operacion');
+  const { t } = tr;
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -47,7 +53,7 @@ export default async function PaginaArranqueWhatsApp({
   if (numero.estado === 'configurado') {
     enlace = enlaceWaMe(numero.digitos, textoDeArranque(nombreFlota));
     try {
-      qr = qrSvg(enlace, { etiqueta: `Código QR para escribirle a Likida por WhatsApp al ${numero.visible}`, tamanoPx: 200 });
+      qr = qrSvg(enlace, { etiqueta: t('wa.qr.etiqueta', { numero: numero.visible }), tamanoPx: 200 });
     } catch {
       qr = null; // un texto demasiado largo: queda el enlace, que es lo que importa
     }
@@ -64,6 +70,7 @@ export default async function PaginaArranqueWhatsApp({
 
   return (
     <VistaArranqueWhatsApp
+      tr={tr}
       datos={{ numero, nombreFlota, enlace, qrSvg: qr, operadores, perfil }}
       hrefOperadores={`/dashboard/operadores${sufijo}`}
       hrefAyuda={`/dashboard/soporte${sufijo}`}

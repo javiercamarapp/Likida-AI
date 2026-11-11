@@ -284,7 +284,16 @@ import { join, relative, sep } from 'node:path';
 // 114 → 115 (F9, CT-DAT-16): `api/admin/offboarding/route.ts` — exportación de una flota. Su puerta: 404 mientras la palanca
 //   `LIKIDA_OFFBOARDING_EXPORTACION` esté apagada (por omisión); luego `sesionSuperadmin()` (rol + segundo factor), mismo sitio, `tenantId` uuid
 //   validado; solo lee y deja constancia en `tenant_exportacion`. Prueba: `admin/offboarding/route.test.ts`.
-const RUTAS_APP_REVISADAS = 115;
+// 115 → 116 (F5, Copiloto «Decide hoy»): `api/admin/copiloto/briefing/route.ts` — GET de solo lectura. Su puerta: `sesionSuperadmin()` (misma que el
+//   chat del Copiloto: sin sesión 401, otro rol 403) ANTES de leer, más `rateLimit` por usuario (30/min); no recibe parámetros ni toca una flota
+//   en concreto (el briefing es de nivel compañía). Prueba: `admin/copiloto/briefing/route.test.ts`.
+// 116 → 117 (i18n P0): `api/preferencias/idioma/route.ts` — cambia el idioma de la interfaz de quien llama. Su puerta: cuerpo ≤ 200 B,
+//   mismo sitio (`vieneDeNuestroSitio`), `getSessionTenant()` obligatoria (401 sin ella), límite 20/min por usuario, lista cerrada de
+//   idiomas (400 si no); solo escribe la cookie `likida_lang` y `user_metadata.idioma` del propio usuario. Prueba:
+//   `preferencias/idioma/route.test.ts`.
+// 117 → 118 (F14-B): `api/admin/caso-examen/route.ts` — GET de solo lectura que descarga un caso de examen REDACTADO de un renglón de Escalaciones.
+// Su puerta: `sesionSuperadmin()`; no escribe nada y falla cerrado (422) si tras redactar queda un dato con forma personal.
+const RUTAS_APP_REVISADAS = 118;
 
 function rutasApp(): string[] {
   const raiz = join(process.cwd(), 'src', 'app');

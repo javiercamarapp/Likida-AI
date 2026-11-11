@@ -71,7 +71,8 @@ export function BotonEnlace({
       </a>
     );
   }
-  const interno = href.startsWith('/');
+  // Una ruta /api/ es una descarga o un endpoint, no una página: <Link> la precargaría como RSC (?_rsc) y respondería 400.
+  const interno = href.startsWith('/') && !href.startsWith('/api/');
   return interno ? (
     <Link href={href} className={clases} {...resto}>
       {icono}

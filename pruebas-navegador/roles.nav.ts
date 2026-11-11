@@ -1,5 +1,5 @@
 import { test, expect, type Page } from './apoyo/fixture';
-import { ESTADOS } from './apoyo/sesion';
+import { ESTADOS, MARCA_CONSOLA } from './apoyo/sesion';
 import { getLocalE2E } from '../scripts/ci/e2e/entorno-local.mjs';
 
 const AJENO = '22222222-eeee-4eee-8eee-222222222222';
@@ -57,7 +57,7 @@ test.describe('encargado: operación sin cifras ni administración', () => {
     test(`niega URL directa ${ruta} incluso con rol manipulado`, async ({ page }) => {
       await page.goto(`${ruta}?rol=flota_admin&tenant=${AJENO}`);
       await expect(page).toHaveURL(/\/dashboard$/);
-      await expect(page.locator('body')).not.toContainText('Consola de Likida');
+      await expect(page.locator('body')).not.toContainText(MARCA_CONSOLA);
     });
   }
   test('exports financieros niegan acceso por API', async ({ page }) => {
@@ -76,7 +76,8 @@ test.describe('contador: dinero sin despacho ni administración', () => {
     page.on('console', (m) => { if (m.type() === 'error') errores.push(m.text()); });
     await paginaSana(page, '/dashboard/contador', 'Contador E2E');
     await expect(page.locator('a[href="/dashboard/despacho"]')).toHaveCount(0);
-    await page.locator('a[href="/dashboard/facturacion"]').first().click();
+    // En v2 el grupo «Dinero y fiscal» del sidebar llega plegado: se toca el enlace a Facturación que SÍ está a la vista.
+    await page.locator('a[href="/dashboard/facturacion"]:visible').first().click();
     await expect(page).toHaveURL(/\/dashboard\/facturacion$/);
     await expect(page.locator('body')).toContainText('Facturación');
     await page.waitForLoadState('networkidle');
@@ -133,24 +134,33 @@ test.describe('vendedor: sólo su cartera, ningún dato de flota', () => {
   });
   test('guarda una nota propia y la conserva al recargar', async ({ page }) => {
     await page.goto('/vendedor');
-    const tarjeta = page.locator('.card').filter({ has: page.getByText('Cartera propia E2E', { exact: true }) }).last();
-    await tarjeta.locator('summary').click();
-    const entrada = tarjeta.locator('textarea');
+    // El panel nuevo: la tarjeta del prospecto es un botón que abre su cajón; la nota vive dentro del cajón (diálogo con el nombre de la empresa).
+    const tarjeta = page.locator('.ven-tarjeta').filter({ has: page.getByText('Cartera propia E2E', { exact: true }) }).last();
+    const cajon = page.getByRole('dialog', { name: 'Cartera propia E2E' });
+    const entrada = cajon.getByRole('textbox', { name: 'Nota de Cartera propia E2E' });
+    const abrir = async () => {
+      if (!(await entrada.isVisible())) await tarjeta.getByRole('button').first().click();
+      await expect(entrada).toBeVisible();
+    };
+    await abrir();
     const anterior = await entrada.inputValue();
     const nota = `Seguimiento sintético E2E ${Date.now()}`;
     try {
       await entrada.fill(nota);
       const respuesta = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/vendedor');
-      await tarjeta.getByRole('button', { name: 'Guardar nota', exact: true }).click();
+      await cajon.getByRole('button', { name: 'Guardar nota', exact: true }).click();
       expect((await respuesta).status()).toBe(200);
       await page.reload();
+      // La nota persistida se ve en la tarjeta y también al reabrir el cajón.
       await expect(tarjeta).toContainText(nota);
+      await abrir();
+      await expect(entrada).toHaveValue(nota);
       await expect(page.locator('body')).not.toContainText('Cartera ajena E2E');
     } finally {
-      if (!(await tarjeta.locator('textarea').isVisible())) await tarjeta.locator('summary').click();
-      await tarjeta.locator('textarea').fill(anterior);
+      await abrir();
+      await entrada.fill(anterior);
       const respuesta = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/vendedor');
-      await tarjeta.getByRole('button', { name: 'Guardar nota', exact: true }).click();
+      await cajon.getByRole('button', { name: 'Guardar nota', exact: true }).click();
       expect((await respuesta).status()).toBe(200);
     }
   });
@@ -159,7 +169,7 @@ test.describe('vendedor: sólo su cartera, ningún dato de flota', () => {
       await page.goto(`${ruta}?rol=superadmin&tenant=${AJENO}`);
       await expect(page).toHaveURL(/\/vendedor$/);
       await expect(page.locator('body')).not.toContainText('VJ-2026-0844');
-      await expect(page.locator('body')).not.toContainText('Consola de Likida');
+      await expect(page.locator('body')).not.toContainText(MARCA_CONSOLA);
     });
   }
 });

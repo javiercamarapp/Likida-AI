@@ -30,7 +30,11 @@ import { permiteAltaSinTelefono } from '@/lib/likida/operador_sin_telefono_canal
 import type { ResultadoForma } from './forma';
 import type { ResultadoInvitar } from './invitaciones';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Operadores' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.operadores') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -193,20 +197,21 @@ export default async function PaginaOperadores({
 
   async function guardarOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('op.a.rolver') };
     if (!puedeEditarCatalogoOperativo(s.rol)) {
-      return { ok: false, error: 'Tu rol no puede corregir los datos de un operador.' };
+      return { ok: false, error: t('op.a.rolcorregir') };
     }
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se guardó nada. Vuelve a intentar.' };
+    if (!alcanceAccion) return { ok: false, error: t('op.a.patio.guardar') };
 
     const operadorId = String(fd.get('operadorId') ?? '').trim();
     try {
       // El patio del registro sale de la BASE, no del formulario: un POST directo
       // con el id de un operador de otro patio rebota aquí, antes de escribir.
       const actual = await terminalDeRegistro('operador', s.tenantId, operadorId);
-      if (!actual.encontrado) return { ok: false, error: 'No se encontró ese operador en tu flota. Recarga la pantalla.' };
+      if (!actual.encontrado) return { ok: false, error: t('op.a.noencontro') };
       exigirDentroDelAlcance(alcanceAccion, actual.terminalId);
 
       // El patio nuevo, solo si la forma lo mandó. Un jefe con patio no puede
@@ -216,7 +221,7 @@ export default async function PaginaOperadores({
         const pedido = String(fd.get('terminalId') ?? '').trim() || null;
         if (pedido !== actual.terminalId) {
           if (!movimientoPermitido(alcanceAccion, pedido)) {
-            return { ok: false, error: 'Solo quien administra la flota mueve a un operador de patio.' };
+            return { ok: false, error: t('op.a.patio.mover') };
           }
           terminalId = pedido;
         }
@@ -249,8 +254,8 @@ export default async function PaginaOperadores({
       return {
         ok: true,
         mensaje: activo === false
-          ? 'Operador dado de baja. Ya no recibe mensajes del bot ni aparece en Despacho; su historial queda completo.'
-          : activo === true ? 'Operador reactivado. Vuelve a aparecer en Despacho y el bot lo atiende otra vez.'
+          ? t('op.a.baja')
+          : activo === true ? t('op.a.reactivado')
             : 'Datos del operador actualizados.',
       };
     } catch (e) {
@@ -263,11 +268,12 @@ export default async function PaginaOperadores({
   /** El alta de UN operador (la guía de arranque mandaba aquí y solo se editaba). */
   async function altaOperador(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
-    if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: 'Tu rol no puede dar de alta operadores.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('op.a.rolver') };
+    if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: t('op.a.rolalta') };
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se dio de alta a nadie. Vuelve a intentar.' };
+    if (!alcanceAccion) return { ok: false, error: t('op.a.patio.alta') };
     try {
       const nombre = String(fd.get('nombre') ?? '');
       await crearOperador(s.tenantId, {
@@ -283,8 +289,8 @@ export default async function PaginaOperadores({
       return {
         ok: true,
         mensaje: sinTel
-          ? `${nombre.trim()} quedó dado de alta sin WhatsApp: recibe su desglose en el correo que capturaste.`
-          : `${nombre.trim()} quedó dado de alta. Cuando le escriba a Likida desde ese número, el bot ya lo reconoce.`,
+          ? t('op.a.alta.sinwa', { nombre: nombre.trim() })
+          : t('op.a.alta.ok', { nombre: nombre.trim() }),
       };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'dar de alta al operador') };
@@ -294,15 +300,16 @@ export default async function PaginaOperadores({
   /** La carga masiva: revisar (no escribe) y confirmar. Mismo motor que `POST /v1/operadores`. */
   async function cargarOperadores(_previo: ResultadoImportacionUI | null, fd: FormData): Promise<ResultadoImportacionUI | null> {
     'use server';
+  const { t } = await getT('operacion');
     const vacio = (error: string): ResultadoImportacionUI => ({
       error, paso: 'previsualizar', huella: '', archivo: '', leidas: 0, nuevas: 0, yaEstaban: 0, conProblema: 0,
       muestra: [], problemas: [], patiosDesconocidos: [], avisos: [], excedeTope: false,
     });
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return vacio('Tu rol no puede ver el registro de operadores.');
-    if (!puedeEditarCatalogoOperativo(s.rol)) return vacio('Tu rol no puede dar de alta operadores.');
+    if (!puedeVerRuta(s.rol, RUTA)) return vacio(t('op.a.rolver'));
+    if (!puedeEditarCatalogoOperativo(s.rol)) return vacio(t('op.a.rolalta'));
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-    if (!alcanceAccion) return vacio('No pude comprobar tu patio — no se cargó nada. Vuelve a intentar.');
+    if (!alcanceAccion) return vacio(t('op.a.patio.carga'));
     const r = await cargarOperadoresDesdeArchivo({ tenantId: s.tenantId, alcance: alcanceAccion, actor: { id: s.userId }, datos: fd });
     if (r.confirmado) revalidatePath(RUTA);
     return r;
@@ -311,11 +318,12 @@ export default async function PaginaOperadores({
   /** Las invitaciones por WhatsApp: a uno, a los pendientes, o reintento de los fallidos. */
   async function invitar(_previo: ResultadoInvitar, fd: FormData): Promise<ResultadoInvitar> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver el registro de operadores.' };
-    if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: 'Tu rol no puede invitar operadores.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('op.a.rolver') };
+    if (!puedeEditarCatalogoOperativo(s.rol)) return { ok: false, error: t('op.a.rolinvitar') };
     const alcanceAccion = await alcanceDePatio(s.tenantId, s.userId, s.rol);
-    if (!alcanceAccion) return { ok: false, error: 'No pude comprobar tu patio — no se mandó nada. Vuelve a intentar.' };
+    if (!alcanceAccion) return { ok: false, error: t('op.a.patio.invitar') };
     try {
       const modo = String(fd.get('modo') ?? '');
       const actor = { id: s.userId };
@@ -336,6 +344,7 @@ export default async function PaginaOperadores({
 
   return (
     <VistaOperadores
+      tr={await getT('operacion')}
       filas={filas}
       pag={pag}
       conteos={conteos}

@@ -1,100 +1,26 @@
-import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
-// A37-S05-01/S06-01: la página ahora llama su propia puerta; aquí la sesión es de superadmin.
-vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: vi.fn(async () => ({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' })) }));
 
-// ═══════════════════════════════════════════════════════════════════════════
-// /admin/ejecutivo — CERO cobertura. Sin server actions y sin puerta propia
-// (requireSuperadmin() vive en admin/layout.tsx, gatea TODO /admin — no hay
-// nada que re-verificar aquí). Lo real a vigilar: `esSoloDemo` se comprueba
-// contra el ID real del tenant demo, NUNCA sólo por `tenants === 1`
-// (auditoría 10, ALTO) — mismo patrón que consola.tsx pero repetido aparte,
-// así que puede driftar; y el MRR nulo (plan sin precio) no se confunde con
-// "cero clientes".
-// ═══════════════════════════════════════════════════════════════════════════
+// Stub 308 de /admin/ejecutivo (Fase 2): la pantalla se retiró y su dirección vieja sigue sirviendo, hacia el Resumen. Contrato que se fija:
+// (1) la puerta de superadmin se llama ANTES de redirigir, (2) la redirección es permanente (308, no 307) y (3) conserva la consulta.
+const dobles = vi.hoisted(() => ({ requireSuperadmin: vi.fn(), permanente: vi.fn((destino: string): never => { throw new Error(`NEXT_REDIRECT:${destino}`); }) }));
+vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
+vi.mock('next/navigation', () => ({ permanentRedirect: dobles.permanente, redirect: vi.fn() }));
 
-const dobles = vi.hoisted(() => ({
-  getResumenNegocio: vi.fn(),
-  getMrr: vi.fn(),
-}));
+import Pagina from './page';
 
-vi.mock('@/lib/admin/negocio', () => ({ getResumenNegocio: dobles.getResumenNegocio, getMrr: dobles.getMrr }));
-vi.mock('@/lib/auth/tenant-demo', () => ({ tenantDemo: () => 'demo-real-id' }));
-// ContadorRetro es un "Solari" que anima dígito por dígito en el cliente;
-// renderToStaticMarkup no corre esa animación y el marcado no trae el valor
-// como texto plano. Se dobla por un stub que expone sus props tal cual,
-// para verificar QUÉ valor real recibió sin depender del dibujo animado.
-vi.mock('../contador-retro', () => ({
-  default: (props: { valor: number | null; sinDato?: string }) =>
-    props.valor === null
-      ? props.sinDato ?? 'sin dato'
-      : `CONTADOR:${props.valor}`,
-}));
+beforeEach(() => { vi.clearAllMocks(); dobles.requireSuperadmin.mockResolvedValue({ rol: 'superadmin', tenantId: null, nombre: 'Prueba' }); });
 
-import EjecutivoPage from './page';
-
-const BASE_RESUMEN = {
-  tenants: 0, flotas: [], viajesProcesados: 0, costoIaUsd: 0, tokensIn: 0, tokensOut: 0,
-  porFase: [], porModelo: [], porDia: [], facturasPorDia: [], facturasTotal: 0,
-  tendenciaCosto: null, tendenciaTokens: null,
-};
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  dobles.getMrr.mockResolvedValue({ totalMxn: 50000, suscripcionesActivas: 3 });
+it('redirige de forma permanente al Resumen', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/admin');
+  expect(dobles.permanente).toHaveBeenCalledTimes(1);
 });
 
-async function renderizar() { return renderToStaticMarkup(await EjecutivoPage()); }
-
-it('cero flotas: lo dice explícito, no lo confunde con "solo el demo"', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({ ...BASE_RESUMEN, tenants: 0 });
-  const html = await renderizar();
-  expect(html).toContain('Flotas (ninguna dada de alta)');
-  expect(html).not.toContain('solo el demo');
+it('conserva la consulta de la dirección vieja', async () => {
+  await expect(Pagina({ searchParams: Promise.resolve({ tenant: 't-1' }) })).rejects.toThrow('NEXT_REDIRECT:/admin?tenant=t-1');
 });
 
-it('una sola flota que ES el demo real: lo dice — comprobado contra el ID, no sólo el conteo', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({
-    ...BASE_RESUMEN, tenants: 1, flotas: [{ id: 'demo-real-id', nombre: 'Demo', plan: 'pro', viajes: 0, costoIaUsd: 0, politicaPropia: false }],
-  });
-  const html = await renderizar();
-  expect(html).toContain('Flota (solo el demo)');
-});
-
-it('una sola flota que NO es el demo (cliente real con id distinto): NO dice "solo el demo"', async () => {
-  dobles.getResumenNegocio.mockResolvedValue({
-    ...BASE_RESUMEN, tenants: 1, flotas: [{ id: 'cliente-real-id', nombre: 'ACME', plan: 'pro', viajes: 5, costoIaUsd: 2, politicaPropia: true }],
-  });
-  const html = await renderizar();
-  expect(html).not.toContain('solo el demo');
-  expect(html).toContain('Flotas');
-});
-
-it('el MRR es el MISMO valor real de getMrr() — no un número aparte "para el board"', async () => {
-  dobles.getResumenNegocio.mockResolvedValue(BASE_RESUMEN);
-  dobles.getMrr.mockResolvedValue({ totalMxn: 123456, suscripcionesActivas: 5 });
-  const html = await renderizar();
-  expect(html).toContain('123');
-  expect(html).toContain('456');
-});
-
-it('MRR null (plan activo sin precio) se declara — no se ve como $0', async () => {
-  dobles.getResumenNegocio.mockResolvedValue(BASE_RESUMEN);
-  dobles.getMrr.mockResolvedValue({ totalMxn: null, suscripcionesActivas: 2 });
-  const html = await renderizar();
-  expect(html).toContain('algún plan activo sin precio configurado');
-});
-
-it('declara honestamente qué KPIs de board NO existen todavía (ARR, burn, runway) — no inventa cifras', async () => {
-  dobles.getResumenNegocio.mockResolvedValue(BASE_RESUMEN);
-  const html = await renderizar();
-  expect(html).toContain('ARR, burn total, runway');
-  expect(html).toContain('serían números');
-});
-
-it('pide getResumenNegocio y getMrr en paralelo — ambos se llaman sin argumentos (cruza TODOS los tenants)', async () => {
-  dobles.getResumenNegocio.mockResolvedValue(BASE_RESUMEN);
-  await EjecutivoPage();
-  expect(dobles.getResumenNegocio).toHaveBeenCalledWith();
-  expect(dobles.getMrr).toHaveBeenCalledWith();
+it('llama la puerta de superadmin antes de redirigir; sin sesión no redirige', async () => {
+  dobles.requireSuperadmin.mockRejectedValue(new Error('NEXT_REDIRECT:/login'));
+  await expect(Pagina({ searchParams: Promise.resolve({}) })).rejects.toThrow('NEXT_REDIRECT:/login');
+  expect(dobles.permanente).not.toHaveBeenCalled();
 });

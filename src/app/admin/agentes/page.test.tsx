@@ -14,6 +14,7 @@ const dobles = vi.hoisted(() => ({
   darDeAltaAgente: vi.fn(),
   apagar: vi.fn(),
   encender: vi.fn(),
+  actualizarAgente: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -25,13 +26,14 @@ vi.mock('@/lib/likida/agentes/definiciones', async (importar) => ({
   validarDefinicion: dobles.validarDefinicion,
   darDeAltaAgente: dobles.darDeAltaAgente,
 }));
+vi.mock('@/lib/likida/agentes/config-agente', () => ({ actualizarAgente: dobles.actualizarAgente }));
 vi.mock('@/lib/likida/interruptores', () => ({ apagar: dobles.apagar, encender: dobles.encender }));
 
 import { DatoInvalido } from '@/lib/likida/errores';
 import PaginaAgentes from './page';
 
 type Accion1 = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string }>;
-type PropsAgentes = { accionAlta: Accion1; accionPalanca: Accion1 };
+type PropsAgentes = { accionAlta: Accion1; accionPalanca: Accion1; accionConfig: Accion1 };
 const fd = (campos: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(campos)) f.set(k, v); return f; };
 const DEF_VALIDA = { id: 'nuevo_agente', nombre: 'Nuevo agente', departamento: 'exito', descripcion: 'x', disparador: 'manual', presupuestoDiaUsd: 1, promptRef: null };
 
@@ -84,12 +86,37 @@ it('palanca: apagar manda motivo y el actorId real, revalida las DOS pantallas (
   expect(dobles.revalidatePath).toHaveBeenCalledWith('/admin/observabilidad');
 });
 
-it('palanca: encender manda el actorId real', async () => {
+it('palanca: encender manda el actorId real y el motivo (simétrico a apagar)', async () => {
   dobles.encender.mockResolvedValue(undefined);
   const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
-  const r = await pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'encender' }));
-  expect(dobles.encender).toHaveBeenCalledWith('cazador', 'u-1');
+  const r = await pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'encender', motivo: 'ya se corrigió' }));
+  expect(dobles.encender).toHaveBeenCalledWith('cazador', 'u-1', 'ya se corrigió');
   expect(r).toEqual({ ok: '"cazador" quedó encendido.' });
+});
+
+it('palanca: encender sin motivo no mueve nada', async () => {
+  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const r = await pagina.props.accionPalanca(null, fd({ id: 'cazador', operacion: 'encender' }));
+  expect(r).toEqual({ error: expect.stringContaining('motivo') });
+  expect(dobles.encender).not.toHaveBeenCalled();
+});
+
+it('configurar: delega en actualizarAgente con el motivo y el actor real, y revalida; un DatoInvalido llega verbatim', async () => {
+  dobles.actualizarAgente.mockResolvedValue({ cambios: { estado: { antes: 'vivo', despues: 'pausado' } } });
+  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  const r = await pagina.props.accionConfig(null, fd({ id: 'cobranza', estado: 'pausado', motivo: 'incidente' }));
+  expect(dobles.actualizarAgente).toHaveBeenCalledWith('cobranza', { estado: 'pausado', runnerHabilitado: '', presupuestoDiaUsd: '', modeloRol: '' }, 'incidente', 'u-1');
+  expect(r).toEqual({ ok: expect.stringContaining('configurado') });
+  expect(dobles.revalidatePath).toHaveBeenCalledWith('/admin/agentes');
+  dobles.actualizarAgente.mockRejectedValueOnce(new DatoInvalido('Configurar un agente exige un motivo.'));
+  expect(await pagina.props.accionConfig(null, fd({ id: 'cobranza', estado: 'pausado' }))).toEqual({ error: expect.stringContaining('motivo') });
+});
+
+it('configurar: re-chequea superadmin', async () => {
+  const pagina = await PaginaAgentes() as unknown as { props: PropsAgentes };
+  dobles.requireSuperadmin.mockImplementationOnce(() => { throw new Error('REDIRECT:/dashboard'); });
+  await expect(pagina.props.accionConfig(null, fd({ id: 'x', estado: 'pausado', motivo: 'x' }))).rejects.toThrow('REDIRECT:/dashboard');
+  expect(dobles.actualizarAgente).not.toHaveBeenCalled();
 });
 
 it('palanca: una operación desconocida no se adivina — error explícito, ninguna palanca se mueve', async () => {

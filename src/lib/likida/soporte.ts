@@ -287,6 +287,19 @@ export async function responderTicket(
   const mensajeId = (data as { id?: unknown } | null)?.id;
   if (!mensajeId) throw new Error('responderTicket: el insert no devolvió id');
 
+  // Aviso al superadmin cuando el CLIENTE escribe (auditoría admin 10-nov-2026):
+  // antes nadie se enteraba. Best-effort: `avisarRespuestaDelCliente` nunca
+  // lanza, y el import dinámico evita arrastrar correo/Meta a quien solo lee.
+  if (actor.tipo === 'flota' && !mensaje.interna) {
+    try {
+      const { avisarRespuestaDelCliente } = await import('./soporte-avisos');
+      await avisarRespuestaDelCliente(
+        { ticketId: ticket.id, tenantId, asunto: ticket.asunto, prioridad: ticket.prioridad },
+        String(mensajeId),
+      );
+    } catch { /* el mensaje ya quedó escrito; el aviso es un extra declarado en su propio log */ }
+  }
+
   const movioAEnProceso = actor.tipo === 'likida' && !mensaje.interna && ticket.estado === 'abierto';
   if (movioAEnProceso) {
     const { error: errEstado } = await acotada(supabaseAdmin()

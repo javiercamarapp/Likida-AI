@@ -208,6 +208,15 @@ MONEDA (crítico — el monto se contabiliza en pesos mexicanos):
 NO CONFUNDIR: "CLAVE PEMEX 32011" (o similar) es un código INTERNO de producto de la estación, NO el ClaveProdServ del SAT. No lo pongas como folio ni como clave fiscal.`;
 
 /**
+ * El prompt y el esquema EXACTOS del extractor, expuestos de solo lectura para
+ * el examen dorado (F17, `src/lib/evals/ocr-*`): el examen tiene que medir el
+ * mismo texto que corre en producción, no una copia que se desvíe. Un cambio
+ * en cualquiera de los dos cambia la huella del examen y `--check` lo acusa.
+ */
+export const PROMPT_OCR: string = SYSTEM;
+export const EsquemaExtraccionOcr = ExtraccionSchema;
+
+/**
  * Por qué no se pudo usar el comprobante. La distinción NO es cosmética: decide
  * si tiene sentido pedirle al operador que reenvíe la foto.
  * - `ilegible`      → la foto de verdad no se lee (borrosa, cortada, oscura).

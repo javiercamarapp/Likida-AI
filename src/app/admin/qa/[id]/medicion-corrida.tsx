@@ -55,13 +55,13 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
       <TituloSeccion>La precisión del OCR, medida contra la verdad-de-terreno</TituloSeccion>
 
       {error !== null && (
-        <p className="text-sm mt-2 m-0" style={{ color: 'var(--bad)' }}>
+        <p className="text-sm mt-2 m-0 rv-qa-bad">
           La medición no se pudo leer: {error} — no es que no exista, es que no se pudo mirar.
         </p>
       )}
 
       {error === null && medicion === null && (
-        <p className="text-sm mt-2 m-0" style={{ color: 'var(--muted)' }}>
+        <p className="text-sm mt-2 m-0 rv-qa-mut">
           {viva
             ? 'La medición se escribe al final de la corrida (fase de oráculos), foto por foto contra la etiqueta que una persona confirmó.'
             : 'Esta corrida terminó sin medición escrita — corre `npx tsx scripts/qa/medir-corrida.ts <id> --aplicar` si su tenant se conservó: se mide sobre lo persistido, sin gastar modelo.'}
@@ -77,7 +77,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
               valor={medicion.global.exactitud === null ? 'sin medir' : porcentaje(medicion.global.exactitud * 100)}
               nota={medicion.global.exactitud === null
                 ? 'ni un campo medido: no hay porcentaje que decir'
-                : `✅ ${numero(medicion.global.ok)} · ❌ ${numero(medicion.global.mal)} sobre ${numero(medicion.global.medidos)} campos con vara`}
+                : `${numero(medicion.global.ok)} acertados · ${numero(medicion.global.mal)} fallados sobre ${numero(medicion.global.medidos)} campos con vara`}
             />
             {/* LA PONDERACIÓN DECLARADA, con los dos números a la vista: no
                 fallan igual de caro (un folio mal es un timbrado fallido; una
@@ -93,7 +93,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
               valor={peorCampo === null ? 'sin medir' : NOMBRE_CLAVE_VERDAD[peorCampo.clave]}
               nota={peorCampo === null
                 ? 'sin campos medidos todavía'
-                : `${porcentaje(peorCampo.exactitud! * 100)} (❌ ${numero(peorCampo.mal)} de ${numero(peorCampo.medidos)}) — este número vale más que el global`}
+                : `${porcentaje(peorCampo.exactitud! * 100)} (${numero(peorCampo.mal)} fallos de ${numero(peorCampo.medidos)}) — este número vale más que el global`}
             />
             <CifraM
               etiqueta="Papeles que NO son comprobante"
@@ -115,10 +115,10 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
           <div className="overflow-x-auto">
             <table aria-label="Exactitud por campo" className="w-full text-xs">
               <thead>
-                <tr className="text-left" style={{ color: 'var(--muted)' }}>
+                <tr className="text-left rv-qa-mut">
                   <th scope="col" className="py-1 pr-3 font-medium">Campo</th>
-                  <th scope="col" className="py-1 pr-3 font-medium">✅</th>
-                  <th scope="col" className="py-1 pr-3 font-medium">❌</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Acertó</th>
+                  <th scope="col" className="py-1 pr-3 font-medium">Falló</th>
                   <th scope="col" className="py-1 pr-3 font-medium">sin medir</th>
                   <th scope="col" className="py-1 font-medium">Exactitud</th>
                 </tr>
@@ -127,18 +127,18 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
                 {medicion.porCampo.map((c) => {
                   const esPeor = peorCampo !== null && c.clave === peorCampo.clave;
                   return (
-                    <tr key={c.clave} className="border-t" style={{ borderColor: 'var(--line2)' }}>
+                    <tr key={c.clave} className="border-t rv-qa-bl2">
                       <td className="py-1 pr-3 whitespace-nowrap">
                         {NOMBRE_CLAVE_VERDAD[c.clave]}
-                        {esPeor && <span className="ml-1.5 text-[10px] font-semibold" style={{ color: 'var(--bad)' }}>← el peor</span>}
+                        {esPeor && <span className="ml-1.5 text-[10px] font-semibold rv-qa-bad">← el peor</span>}
                       </td>
                       <td className="py-1 pr-3 tabular">{numero(c.ok)}</td>
-                      <td className="py-1 pr-3 tabular" style={c.mal > 0 ? { color: 'var(--bad)' } : undefined}>{numero(c.mal)}</td>
-                      <td className="py-1 pr-3 tabular" style={{ color: 'var(--muted)' }}>{numero(c.noMedidos)}</td>
+                      <td className={c.mal > 0 ? 'py-1 pr-3 tabular rv-qa-bad' : 'py-1 pr-3 tabular'}>{numero(c.mal)}</td>
+                      <td className="py-1 pr-3 tabular rv-qa-mut">{numero(c.noMedidos)}</td>
                       <td className="py-1 tabular">
                         {/* null jamás se pinta como 0%: es un campo sin ni una medición. */}
                         {c.exactitud === null
-                          ? <span style={{ color: 'var(--faint)' }}>sin medir</span>
+                          ? <span className="rv-qa-faint">sin medir</span>
                           : porcentaje(c.exactitud * 100)}
                       </td>
                     </tr>
@@ -150,7 +150,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
 
           {/* ── Por qué salieron campos del denominador ───────────────────── */}
           {medicion.noMedidosPorMotivo.length > 0 && (
-            <details className="text-xs" style={{ color: 'var(--muted)' }}>
+            <details className="text-xs rv-qa-mut">
               <summary className="cursor-pointer">
                 Los {numero(medicion.global.noMedidos)} campos fuera del denominador, por su razón — un «no medido» sin razón no se puede defender
               </summary>
@@ -164,7 +164,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
 
           {/* ── Foto por foto: del número al caso concreto ────────────────── */}
           <div>
-            <p className="text-xs mb-1.5 m-0" style={{ color: 'var(--faint)' }}>
+            <p className="text-xs mb-1.5 m-0 rv-qa-faint">
               Las {numero(medicion.fotos.length)} fotos medidas, cada una con su veredicto campo por campo. Un
               porcentaje sin poder abrir el caso que lo bajó no se puede accionar.
             </p>
@@ -173,20 +173,20 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
                 const url = urlPorFoto.get(f.fotoId) ?? null;
                 const alucino = f.medicion.campos.some(esAlucinacion);
                 return (
-                  <details key={f.fotoId} className="rounded-lg hairline" style={{ background: 'var(--surface)' }}>
+                  <details key={f.fotoId} className="rounded-lg hairline rv-qa-fs">
                     <summary className="cursor-pointer flex items-center gap-2 px-2.5 py-1.5 text-xs">
                       <span className="truncate flex-1 min-w-0">{f.etiqueta}</span>
                       {f.clase === 'no_comprobante' && (
-                        <span className="shrink-0 font-medium" style={{ color: alucino ? 'var(--bad)' : 'var(--muted)' }}>
-                          {alucino ? 'NO es comprobante y ALUCINÓ' : 'NO es comprobante — rechazada ✅'}
+                        <span className={alucino ? 'shrink-0 font-medium rv-qa-bad' : 'shrink-0 font-medium rv-qa-mut'}>
+                          {alucino ? 'NO es comprobante y ALUCINÓ' : 'NO es comprobante: rechazada correctamente'}
                         </span>
                       )}
                       <span className="shrink-0 tabular whitespace-nowrap">
-                        ✅ {f.medicion.camposOk} · ❌ {f.medicion.camposMal} · — {f.medicion.camposNoMedidos}
+                        {f.medicion.camposOk} acertados · {f.medicion.camposMal} fallados · {f.medicion.camposNoMedidos} sin medir
                       </span>
                     </summary>
-                    <div className="px-2.5 pb-2 pt-1 border-t text-xs space-y-1.5" style={{ borderColor: 'var(--line2)' }}>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: 'var(--muted)' }}>
+                    <div className="px-2.5 pb-2 pt-1 border-t text-xs space-y-1.5 rv-qa-bl2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rv-qa-mut">
                         <span>modelo: <span className="font-mono">{f.modelo}</span></span>
                         <span>costo {usd4(f.costoUsd)}</span>
                         {url ? (
@@ -194,7 +194,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
                             abrir la foto (firma 60 s)
                           </a>
                         ) : (
-                          <span style={{ color: 'var(--faint)' }}>foto sin firma ahora mismo</span>
+                          <span className="rv-qa-faint">foto sin firma ahora mismo</span>
                         )}
                       </div>
                       <table aria-label="Campos medidos de la foto" className="w-full">
@@ -202,7 +202,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
                           {f.medicion.campos.map((c) => <FilaCampo key={c.clave} c={c} />)}
                         </tbody>
                       </table>
-                      {f.motivo && <p className="m-0" style={{ color: 'var(--warn)' }}>{f.motivo}</p>}
+                      {f.motivo && <p className="m-0 rv-qa-warn">{f.motivo}</p>}
                     </div>
                   </details>
                 );
@@ -217,22 +217,22 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
 
 function CifraM({ etiqueta, valor, nota }: { etiqueta: string; valor: string; nota: string }) {
   return (
-    <div className="rounded-xl px-3 py-2 min-w-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line2)' }}>
-      <div className="text-[11px]" style={{ color: 'var(--muted)' }}>{etiqueta}</div>
+    <div className="rounded-xl px-3 py-2 min-w-0 rv-qa-caja">
+      <div className="text-[11px] rv-qa-mut">{etiqueta}</div>
       <div className="font-display text-[17px] leading-tight font-semibold tabular mt-0.5">{valor}</div>
-      <div className="text-[10px] mt-0.5" style={{ color: 'var(--faint)' }}>{nota}</div>
+      <div className="text-[10px] mt-0.5 rv-qa-faint">{nota}</div>
     </div>
   );
 }
 
 function FilaCampo({ c }: { c: MedicionCampo }) {
   return (
-    <tr className="border-t align-top" style={{ borderColor: 'var(--line2)' }}>
+    <tr className="border-t align-top rv-qa-bl2">
       <td className="py-0.5 pr-2 whitespace-nowrap">{NOMBRE_CLAVE_VERDAD[c.clave as ClaveVerdad]}</td>
       <td className="py-0.5 pr-2"><ValorCampo clave={c.clave} v={c.esperado} vacio="—" /></td>
       <td className="py-0.5 pr-2"><ValorCampo clave={c.clave} v={c.leido} vacio="no leyó nada" /></td>
       <td className="py-0.5 whitespace-nowrap" title={c.motivo ?? ''}>
-        {c.veredicto === 'ok' ? '✅' : c.veredicto === 'mal' ? (esAlucinacion(c) ? '❌ alucinó' : '❌') : '— sin medir'}
+        {c.veredicto === 'ok' ? 'acertó' : c.veredicto === 'mal' ? (esAlucinacion(c) ? 'alucinó' : 'falló') : 'sin medir'}
       </td>
     </tr>
   );
@@ -241,7 +241,7 @@ function FilaCampo({ c }: { c: MedicionCampo }) {
 /** Moneda y fecha SOLO por lib/formato.ts. */
 function ValorCampo({ clave, v, vacio }: { clave: ClaveVerdad; v: string | number | null; vacio: string }) {
   if (v === null || v === undefined || v === '') {
-    return <span style={{ color: 'var(--faint)' }}>{vacio}</span>;
+    return <span className="rv-qa-faint">{vacio}</span>;
   }
   if (clave === 'monto') return <span className="tabular">{mxn(Number(v))}</span>;
   if (clave === 'fecha') return <span className="whitespace-nowrap">{fechaCorta(String(v))}</span>;

@@ -1,4 +1,7 @@
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { mxn, fechaMx } from '@/lib/utils';
+import { Boton, CampoSelect } from '@/app/ui-v2/componentes';
+import './combustible.css';
 import type { LineaPorConciliar } from '@/lib/likida/analytics';
 
 // La pantalla que faltaba desde la 0076 (auditoría 10, hallazgo CRÍTICO
@@ -16,78 +19,66 @@ import type { LineaPorConciliar } from '@/lib/likida/analytics';
  *  `gastoId` sin tener que importar lógica de `intake/consolidado.ts` aquí. */
 export const NINGUNO_VALOR = '__ninguno__';
 
-const CONTROL = { background: 'var(--canvas)', border: '1px solid var(--line)', color: 'var(--ink)' } as const;
-
 /** Por qué una línea NO se ligó sola, en una frase — la misma distinción que
  *  hace `conciliarLineas`: cero candidatos es "nadie cuadra", dos o más es
  *  "cuadran varios y no se adivina cuál". */
-function motivoPorConciliar(n: number): string {
-  if (n === 0) return 'Sin candidato — ningún gasto capturado cuadra por fecha y monto';
-  return `${n} candidatos — cuadran varios por fecha y monto, no se adivina cuál`;
+function motivoPorConciliar(tr: Tr, n: number): string {
+  if (n === 0) return tr('combustibleCasetas.vistaConsolidado.sinCandidatoNingunGasto');
+  return tr('combustibleCasetas.vistaConsolidado.candidatosCuadranVariosPor', { n });
 }
 
 export function LineasPorConciliar({
-  lineas, accion,
+  lineas, accion, tr = trEs,
 }: {
   lineas: LineaPorConciliar[];
-  accion: (fd: FormData) => Promise<void>;
+  accion: (fd: FormData) => Promise<void>; tr?: Tr;
 }) {
   if (lineas.length === 0) return null;
 
   return (
-    <div className="divide-y mt-3" style={{ borderColor: 'var(--line)' }}>
+    <ul className="rv-comb__lineas" aria-label={tr('combustibleCasetas.vistaConsolidado.lineasPorResolverA')}>
       {lineas.map((l) => (
-        <div key={l.id} className="py-4 flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="min-w-0">
-              <div className="text-sm font-semibold tabular">{mxn(l.monto)}</div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-                {l.fecha ? fechaMx(l.fecha) : 'sin fecha en el CFDI'}
-                {l.estacionRfc ? ` · estación ${l.estacionRfc}` : ''}
-                {l.folioOperacion ? ` · folio ${l.folioOperacion}` : ''}
-                {l.descripcion ? ` · ${l.descripcion}` : ''}
-              </div>
-              {l.cfdiUuid && (
-                <div className="text-xs mt-0.5 font-mono truncate max-w-md" style={{ color: 'var(--muted)' }}>
-                  CFDI {l.cfdiUuid} · línea {l.indice}
-                </div>
-              )}
-            </div>
-          </div>
+        <li key={l.id} className="rv-comb__linea">
+          <strong className="rv-comb__monto">{mxn(l.monto)}</strong>
+          <span className="rv-comb__tenue">
+            {l.fecha ? fechaMx(l.fecha) : tr('combustibleCasetas.vistaConsolidado.sinFechaEnEl')}
+            {l.estacionRfc ? ' ' + tr('combustibleCasetas.vistaConsolidado.estacion', { estacionRfc: l.estacionRfc }) : ''}
+            {l.folioOperacion ? ' ' + tr('combustibleCasetas.vistaConsolidado.folio', { folioOperacion: l.folioOperacion }) : ''}
+            {l.descripcion ? ` · ${l.descripcion}` : ''}
+          </span>
+          {l.cfdiUuid && (
+            <span className="rv-comb__tenue rv-comb__mono">{tr('combustibleCasetas.vistaConsolidado.cfdiLinea', { cfdiUuid: l.cfdiUuid, indice: l.indice })}</span>
+          )}
 
-          <div className="text-xs" style={{ color: 'var(--muted)' }}>
-            {motivoPorConciliar(l.candidatos.length)}
+          <span className="rv-comb__tenue">
+            {motivoPorConciliar(tr, l.candidatos.length)}
             {l.candidatos.length > 0 && ': ' + l.candidatos
-              .map((c) => `viaje ${c.viajeFolio ?? '(sin folio)'} (${mxn(c.monto)}, ${c.fecha ? fechaMx(c.fecha) : 'sin fecha'})`)
+              .map((c) => tr('combustibleCasetas.vistaConsolidado.viaje2', { v: c.viajeFolio ?? tr('combustibleCasetas.vistaConsolidado.sinFolio'), v2: mxn(c.monto), v3: c.fecha ? fechaMx(c.fecha) : tr('combustibleCasetas.vistaConsolidado.sinFecha') }))
               .join(' · ')}
-          </div>
+          </span>
 
-          <form action={accion} className="flex items-center gap-2 flex-wrap mt-1">
+          <form action={accion} className="rv-comb__forma">
             <input type="hidden" name="lineaId" value={l.id} />
             {/* A37-S17-01: con VARIOS candidatos empatados no se adivina cuál: nada viene preseleccionado y hay que elegir. */}
-            <select
+            <CampoSelect
               name="eleccion"
-              aria-label="Con qué gasto ligar esta línea"
+              etiqueta={tr('combustibleCasetas.vistaConsolidado.conQueGastoLigar')}
+              etiquetaOculta
               required
               defaultValue={l.candidatos.length === 0 ? NINGUNO_VALOR : l.candidatos.length === 1 ? l.candidatos[0].gastoId : ''}
-              className="text-sm rounded-lg px-2.5 py-1.5 max-w-xs"
-              style={CONTROL}
             >
-              {l.candidatos.length > 1 && <option value="" disabled>Elige con qué gasto ligar…</option>}
+              {l.candidatos.length > 1 && <option value="" disabled>{tr('combustibleCasetas.vistaConsolidado.eligeConQueGasto')}</option>}
               {l.candidatos.map((c) => (
                 <option key={c.gastoId} value={c.gastoId}>
-                  Viaje {c.viajeFolio ?? '(sin folio)'} — {mxn(c.monto)}, {c.fecha ? fechaMx(c.fecha) : 'sin fecha'}
+                  {tr('combustibleCasetas.vistaConsolidado.viaje', { v: c.viajeFolio ?? tr('combustibleCasetas.vistaConsolidado.sinFolio'), v2: mxn(c.monto), v3: c.fecha ? fechaMx(c.fecha) : tr('combustibleCasetas.vistaConsolidado.sinFecha') })}
                 </option>
               ))}
-              <option value={NINGUNO_VALOR}>Ninguno de estos — no ligar a nada</option>
-            </select>
-            <button type="submit" className="rv-btn rv-btn--primary"
-              style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-              Resolver
-            </button>
+              <option value={NINGUNO_VALOR}>{tr('combustibleCasetas.vistaConsolidado.ningunoDeEstosNo')}</option>
+            </CampoSelect>
+            <Boton type="submit" variante="primary">{tr('combustibleCasetas.vistaConsolidado.resolver')}</Boton>
           </form>
-        </div>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 }

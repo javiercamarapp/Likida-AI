@@ -73,7 +73,7 @@ se le avisó). Si la lista de jornadas de la tabla quedó truncada, la sección 
 - **Envío**: todo sale por `enviarConFallback` (ventana de 24 h abierta → texto; cerrada → plantilla del
   catálogo). Encargados: los contactos de escalamiento nivel 1 del patio del operador, o el jefe de la flota.
 
-### Latido en `/admin/crons` (`jornada-alertas`)
+### Latido en `/admin/crons` (menú «Salud › Relojes», `jornada-alertas`)
 
 | Latido | Cuándo |
 | --- | --- |

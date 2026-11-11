@@ -9,7 +9,7 @@ Ola enterprise E1-A (P0-8, E18, E4, parte de P1-14). Migraciones 0700 y 0701.
 | El vigía de producción (guardia A0) corría en `launchd` en la Mac de Javier, cada 2 h. Mac apagada, dormida o sin red = guardia ausente, sin que nadie lo supiera. | `/api/cron/guardia` (Vercel Cron, `*/5 * * * *`), con `CRON_SECRET`, latido en `cron_latido` (id `guardia`) e interruptor global. |
 | Estado de «ya avisé» en `.mejora-diaria/vigia-estado.json` (disco de la Mac). | Estado en el `detalle` del latido de la propia guardia (huellas sha-1, sin títulos ni nombres de flota). |
 | Aviso por WhatsApp desde la Mac (`wa-notificar.sh`). | `alertarOperador('guardia.*')`: correo a `ALERTA_EMAIL` y, si hay `ALERTA_WA`, también WhatsApp (los eventos `guardia.*` se suman a los de dinero). |
-| Latencias: «no se instrumenta hoy». | p50/p95 por ruta, por cron y por fase de IA en `/admin/observabilidad`, calculados en SQL. |
+| Latencias: «no se instrumenta hoy». | p50/p95 por ruta, por cron y por fase de IA en `/admin/observabilidad` (menú «Salud › Observabilidad»), calculados en SQL. |
 | Sin página de estado. | `/estado`, pública y de solo lectura, con cinco componentes y 30 días medidos. |
 
 La decisión de qué avisar (`decidirAvisos` en `lib/admin/guardia.ts`) es la MISMA para el cron y para el script de la Mac.

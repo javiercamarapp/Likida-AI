@@ -1,0 +1,71 @@
+/* La Bandeja de /admin (Tu turno · Aprobaciones · Escalaciones): solo lo que las piezas de ui-v2 no traen. Sin hex: solo tokens. */
+
+.bj-nota { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.bj-nota + .bj-nota { margin-top: 4px; }
+
+.bj-bloque { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bj-titulo { margin: 0; font: 600 var(--t-card, 14px)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
+.bj-titulo-fila { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; min-height: 32px; }
+.bj-titulo-fila > .bj-acciones { margin-left: auto; }
+
+.bj-acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+
+/* Filas de lista dentro de una tarjeta: título que se corta, apoyo apagado y la edad a la derecha. */
+.bj-lista { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.bj-lista > li { display: flex; align-items: center; gap: 8px; min-height: 40px; font-size: 13px; }
+.bj-lista > li + li { border-top: 1px solid var(--line); }
+.bj-lista__texto { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bj-lista__apoyo { flex: none; font-size: 12px; color: var(--muted); }
+.bj-lista__enlace { margin-top: 8px; }
+
+/* Piezas de las rutinas de la Mac: rejilla de alto uniforme; la imagen vive en un marco 16:9 con tope. */
+.bj-piezas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; align-items: stretch; }
+.bj-pieza { display: flex; flex-direction: column; height: 100%; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.bj-pieza__marco { display: flex; align-items: center; justify-content: center; width: 100%; aspect-ratio: 16 / 9; max-height: 176px; overflow: hidden; background: var(--canvas); color: var(--faint); font-size: 12px; }
+.bj-pieza__marco img { width: 100%; height: 100%; object-fit: cover; }
+.bj-pieza__cuerpo { display: flex; flex: 1 1 auto; flex-direction: column; gap: 8px; padding: 12px; min-width: 0; }
+.bj-pieza__meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+.bj-pieza__edad { margin-left: auto; }
+.bj-pieza__titulo { margin: 0; min-height: 2.6em; font-size: 13px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.bj-pieza__copy { font-size: 12px; color: var(--muted); }
+.bj-pieza__copy pre { margin: 8px 0 0; white-space: pre-wrap; font: inherit; }
+.bj-pieza__acciones { display: flex; gap: 8px; margin-top: auto; padding-top: 8px; }
+
+/* Aprobaciones: cada pieza de la cola, con su borrador completo y desplazable. */
+.bj-cola { display: flex; flex-direction: column; gap: 10px; }
+.bj-item { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.bj-item__cab { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 13px; }
+.bj-item__titulo { font-weight: 600; }
+.bj-item__meta { font-size: 12px; color: var(--muted); }
+.bj-item__fecha { margin-left: auto; flex: none; font-size: 12px; color: var(--faint); }
+.bj-item__borrador { max-height: 14rem; margin: 8px 0 0; padding: 8px 12px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font: inherit; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
+.bj-item__forma { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.bj-item__fila { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.bj-item__aviso { margin: 8px 0 0; font-size: 12px; color: var(--bad); }
+.bj-item--hecha { color: var(--muted); font-size: 13px; }
+.bj-item--envio { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.bj-item--envio > form { margin-left: auto; flex: none; }
+.bj-sub { flex-basis: 100%; font-size: 12px; }
+.bj-sub[data-tono="warn"] { color: var(--warn); }
+.bj-sub[data-tono="bad"] { color: var(--bad); }
+.bj-sub[data-tono="ok"] { color: var(--ok); }
+
+/* Limpieza por lotes. */
+.bj-lote { display: flex; flex-direction: column; gap: 12px; }
+.bj-lote__campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+.bj-lote__resumen { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.bj-lote__desglose { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Vistas de Aprobaciones: los paneles inactivos se ocultan, todos quedan en el documento. */
+.bj-vistas { display: flex; flex-direction: column; gap: 12px; }
+.bj-vistas > [hidden] { display: none; }
+.bj-panel { display: flex; flex-direction: column; gap: 12px; }
+
+@media (max-width: 767px) {
+  .bj-pieza__acciones { flex-wrap: wrap; }
+  .bj-item--envio > form { margin-left: 0; }
+}
+
+/* Fuente de una escalación: el icono va a la IZQUIERDA del nombre (antes se apilaba encima cuando el nombre envolvía). */
+.bj-fuente { display: inline-flex; align-items: flex-start; gap: 6px; }
+.bj-fuente > svg { flex: none; margin-top: 3px; }

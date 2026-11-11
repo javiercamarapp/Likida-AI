@@ -6,6 +6,8 @@ import {
   getEstadoBus, getPrsAbiertos, crearOrden, resolverPieza, esOrdenUi, emailDeActor,
 } from '@/lib/admin/bus';
 import { getBandejaEscalaciones } from '@/lib/admin/escalaciones';
+import { getAgentesParados } from '@/lib/admin/agentes-parados';
+import { leerResumenBandeja } from '@/lib/admin/cola-aprobacion';
 import { bandejaPendiente } from '@/lib/likida/agentes/cola';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ahoraMs } from '@/lib/saludo';
@@ -53,12 +55,14 @@ export default async function PaginaTuTurno({
   const { aviso, error } = await searchParams;
   const ahora = ahoraMs();
 
-  const [bus, escalaciones, urgentes, normales, prs] = await Promise.all([
+  const [bus, escalaciones, urgentes, normales, prs, parados, cola] = await Promise.all([
     getEstadoBus(),
     getBandejaEscalaciones(ahora),
     bandejaPendiente('urgente'),
     bandejaPendiente('normal'),
     getPrsAbiertos(),
+    getAgentesParados(ahora), // nunca lanza: null = sin dato
+    leerResumenBandeja(ahora),
   ]);
   // La misma cola que /admin/aprobaciones: lo urgente primero, sin remezclar.
   const envios = [...urgentes, ...normales];
@@ -113,6 +117,8 @@ export default async function PaginaTuTurno({
       envios={envios}
       prs={prs}
       ahora={ahora}
+      parados={parados}
+      cola={cola}
       aviso={aviso ? AVISOS[aviso] : undefined}
       error={error ? ERRORES[error] : undefined}
       sesionNombre={sesion.nombre ?? sesion.userId}

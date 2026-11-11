@@ -6,10 +6,12 @@ import { useSyncExternalStore } from 'react';
 import { TriangleAlert, Info, CheckCheck, ArrowRight } from 'lucide-react';
 import type { AlertaFlota } from '../calcular-alertas-flota';
 import { leerLeidas, marcarLeida, marcarTodasLeidas, suscribirCambios, SIN_LEIDAS } from '../notificaciones-leidas';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 const ESTILO = {
-  atencion: { fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: TriangleAlert, rotulo: 'Requiere atención' },
-  aviso: { fg: 'var(--muted)', bg: 'var(--canvas)', Icono: Info, rotulo: 'Aviso' },
+  atencion: { fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: TriangleAlert, rotulo: 'notif.rotulo.atencion' },
+  aviso: { fg: 'var(--muted)', bg: 'var(--canvas)', Icono: Info, rotulo: 'notif.rotulo.aviso' },
 } as const;
 
 /**
@@ -22,22 +24,23 @@ const ESTILO = {
  * descartaste.
  */
 export function ListaAlertas({ alertas }: { alertas: AlertaFlota[] }) {
+  const { t, tp } = useT('operacion', operacionEs);
   const leidas = useSyncExternalStore(suscribirCambios, leerLeidas, () => SIN_LEIDAS);
 
   const vivas = alertas.filter((a) => !leidas.has(a.id));
   const descartadas = alertas.length - vivas.length;
 
   return (
-    <MarcoPagina titulo="Notificaciones" apoyo="Lo que hoy necesita a una persona. Cada renglón lleva a la pantalla donde se resuelve." acciones={vivas.length > 0 ? (
+    <MarcoPagina titulo={t('notif.titulo')} apoyo={t('notif.apoyo')} acciones={vivas.length > 0 ? (
         <Boton tamano="sm" onClick={() => marcarTodasLeidas(vivas.map((a) => a.id))} icono={<CheckCheck width={13} height={13} strokeWidth={1.75} />}>
-          Marcar todas
+          {t('notif.marcar.todas')}
         </Boton>
       ) : undefined}>
       {vivas.length === 0 ? (
-        <EstadoVacio pantalla titulo={alertas.length === 0 ? 'Sin novedades' : 'Ya revisaste todo'}>
+        <EstadoVacio pantalla titulo={alertas.length === 0 ? t('notif.vacio.titulo') : t('notif.vacio.revisado')}>
           {alertas.length === 0
-            ? 'Nada de la flota pide a una persona en este momento.'
-            : `${descartadas} ${descartadas === 1 ? 'aviso descartado' : 'avisos descartados'} en este navegador.`}
+            ? t('notif.vacio.nada')
+            : tp('notif.descartadas', descartadas)}
         </EstadoVacio>
       ) : (
         <>
@@ -49,17 +52,17 @@ export function ListaAlertas({ alertas }: { alertas: AlertaFlota[] }) {
                   <e.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: e.fg }} />
                   <div className="min-w-0 flex-1">
                     <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                      style={{ color: e.fg, background: e.bg }}>{e.rotulo}</span>
+                      style={{ color: e.fg, background: e.bg }}>{t(e.rotulo)}</span>
                     <p className="text-[13px] mt-1.5">{a.texto}</p>
                     <div className="flex items-center gap-3 mt-2.5 flex-wrap">
                       <Link href={a.href}
                         className="hairline h-7 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]">
-                        Resolver
+                        {t('notif.resolver')}
                         <ArrowRight width={13} height={13} strokeWidth={1.75} />
                       </Link>
                       <button type="button" onClick={() => marcarLeida(a.id)}
                         className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>
-                        Marcar leído
+                        {t('notif.marcar.leido')}
                       </button>
                     </div>
                   </div>
@@ -70,16 +73,14 @@ export function ListaAlertas({ alertas }: { alertas: AlertaFlota[] }) {
 
           {descartadas > 0 && (
             <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
-              {descartadas} {descartadas === 1 ? 'aviso descartado' : 'avisos descartados'} en este navegador.
-              Si el número de un aviso cambia, vuelve a aparecer.
+              {tp('notif.descartadas', descartadas)} {t('notif.descartadas.cambio')}
             </p>
           )}
         </>
       )}
 
       <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
-        &quot;Marcar leído&quot; se guarda en este navegador, no en tu cuenta: son un cálculo en vivo
-        sobre tus datos, no mensajes archivables.
+        {t('notif.nota.leido')}
       </p>
     </MarcoPagina>
   );

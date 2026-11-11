@@ -4,22 +4,20 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Mail, Search } from 'lucide-react';
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
-import { AvisoResultado } from '../../../../admin/ui/aviso-resultado';
+import '../vigia.css';
+import { AvisoResultado, Boton as BotonV2, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 import type { EstadoRevisionUI, ResultadoEnvioUI } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
 import { TablaSinAtender } from './tabla';
 
 export type AccionRevisar = (previo: EstadoRevisionUI, fd: FormData) => Promise<EstadoRevisionUI>;
 export type AccionEnviar = (previo: ResultadoEnvioUI | null, fd: FormData) => Promise<ResultadoEnvioUI>;
 
-const ETIQUETA = 'block text-[11px] font-medium mb-1';
-const AYUDA = 'text-[11px] mt-1';
-
-function Boton({ children, Icono, secundario, formAction }: { children: React.ReactNode; Icono: typeof Search; secundario?: boolean; formAction?: (fd: FormData) => void }) {
+function Boton({ children, Ic, secundario, formAction }: { children: React.ReactNode; Ic: typeof Search; secundario?: boolean; formAction?: (fd: FormData) => void }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} formAction={formAction} className={`rv-btn ${secundario ? 'rv-btn--secondary' : 'rv-btn--primary'}`}>
-      <Icono width={14} height={14} strokeWidth={1.75} aria-hidden />{pending ? 'Un momento…' : children}
-    </button>
+    <BotonV2 type="submit" formAction={formAction} loading={pending} variante={secundario ? 'secondary' : 'primary'} icono={<Icono icono={Ic} tam={14} />}>
+      {pending ? 'Un momento…' : children}
+    </BotonV2>
   );
 }
 
@@ -30,43 +28,37 @@ export function FormaRevision({ revisar, enviar, flota, puedeEnviar, inicial }: 
   const [revision, despacharRevision] = useActionState(revisar, null);
   const [envio, despacharEnvio] = useActionState(enviar, null);
   return (
-    <div className="space-y-4">
-      <form action={despacharRevision} className="space-y-3" aria-describedby="sin-atender-aviso-prueba">
+    <div className="rv-vg__pila">
+      <form action={despacharRevision} className="rv-vg__pila" aria-describedby="sin-atender-aviso-prueba">
         {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
-        <p id="sin-atender-aviso-prueba" className={AYUDA} style={{ color: 'var(--muted)' }}>Lo que escribas aquí es solo una prueba y no se guarda: vale para esta revisión. Los campos vacíos usan lo que dejó guardado tu flota o, si no hay nada, sus plazos.</p>
-        <div className="grid sm:grid-cols-3 gap-3">
-          <label><span className={ETIQUETA}>Plazo normal (min)</span><input name="umbralMin" inputMode="numeric" className="w-full" /></label>
-          <label><span className={ETIQUETA}>Plazo de clientes críticos (min)</span><input name="umbralCriticoMin" inputMode="numeric" className="w-full" /></label>
-          <label><span className={ETIQUETA}>Plazo de lo urgente (min)</span><input name="umbralUrgenteMin" inputMode="numeric" className="w-full" /></label>
-          <label><span className={ETIQUETA}>Mensajes seguidos sin respuesta que cuentan como insistencia</span><input name="insistenciaMin" inputMode="numeric" className="w-full" /></label>
-          <label><span className={ETIQUETA}>Ventana de insistencia (min)</span><input name="insistenciaVentanaMin" inputMode="numeric" className="w-full" /></label>
+        <p id="sin-atender-aviso-prueba" className="rv-vg__nota">Lo que escribas aquí es solo una prueba y no se guarda: vale para esta revisión. Los campos vacíos usan lo que dejó guardado tu flota o, si no hay nada, sus plazos.</p>
+        <div className="rv-vg__cuad">
+          <CampoTexto etiqueta="Plazo normal (min)" name="umbralMin" inputMode="numeric" />
+          <CampoTexto etiqueta="Plazo de clientes críticos (min)" name="umbralCriticoMin" inputMode="numeric" />
+          <CampoTexto etiqueta="Plazo de lo urgente (min)" name="umbralUrgenteMin" inputMode="numeric" />
+          <CampoTexto etiqueta="Mensajes seguidos sin respuesta que cuentan como insistencia" name="insistenciaMin" inputMode="numeric" />
+          <CampoTexto etiqueta="Ventana de insistencia (min)" name="insistenciaVentanaMin" inputMode="numeric" />
         </div>
-        <div className="grid sm:grid-cols-2 gap-3">
-          <label><span className={ETIQUETA}>Palabras que marcan urgencia (separadas por coma)</span><input name="palabrasUrgentes" className="w-full" /></label>
-          <label><span className={ETIQUETA}>Palabras de temas importantes (separadas por coma)</span><input name="palabrasClave" className="w-full" placeholder="embarque" /></label>
+        <div className="rv-vg__cuad">
+          <CampoTexto etiqueta="Palabras que marcan urgencia (separadas por coma)" name="palabrasUrgentes" />
+          <CampoTexto etiqueta="Palabras de temas importantes (separadas por coma)" name="palabrasClave" placeholder="embarque" />
         </div>
-        <label className="block">
-          <span className={ETIQUETA}>Nombres de tu equipo, como salen en el chat (separados por coma)</span>
-          <input name="equipo" className="w-full" aria-describedby="sin-atender-equipo" />
-          <span id="sin-atender-equipo" className={AYUDA} style={{ color: 'var(--muted)' }}>Se suman a los nombres que tu flota ya guardó. Sirve para corregir quién es del equipo sin volver a subir el chat.</span>
-        </label>
+        <CampoTexto etiqueta="Nombres de tu equipo, como salen en el chat (separados por coma)" name="equipo"
+          ayuda="Se suman a los nombres que tu flota ya guardó. Sirve para corregir quién es del equipo sin volver a subir el chat." />
         {puedeEnviar && (
-          <label className="block sm:w-1/2">
-            <span className={ETIQUETA}>Fecha de corte para el resumen por correo (AAAA-MM-DD)</span>
-            <input name="fechaCorte" inputMode="numeric" placeholder="AAAA-MM-DD" className="w-full" aria-describedby="sin-atender-corte" />
-            <span id="sin-atender-corte" className={AYUDA} style={{ color: 'var(--muted)' }}>No se avisa de conversaciones anteriores a este día.</span>
-          </label>
+          <CampoTexto etiqueta="Fecha de corte para el resumen por correo (AAAA-MM-DD)" name="fechaCorte" inputMode="numeric" placeholder="AAAA-MM-DD"
+            ayuda="No se avisa de conversaciones anteriores a este día." />
         )}
-        <div className="flex flex-wrap gap-2">
-          <Boton Icono={Search} secundario>Revisar con estos ajustes</Boton>
-          {puedeEnviar && <Boton Icono={Mail} formAction={despacharEnvio}>Enviar resumen por correo</Boton>}
+        <div className="rv-vg__linea">
+          <Boton Ic={Search} secundario>Revisar con estos ajustes</Boton>
+          {puedeEnviar && <Boton Ic={Mail} formAction={despacharEnvio}>Enviar resumen por correo</Boton>}
         </div>
         <div aria-live="polite">{envio && <AvisoResultado estado={envio} />}</div>
       </form>
       {revision === null ? inicial : revision.ok ? (
-        <div className="space-y-2" aria-live="polite">
-          {revision.notas.map((n) => <p key={n} className="text-[12px]" style={{ color: 'var(--warn)' }}>{n}</p>)}
-          <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Resultado de esta revisión (no se guardó).</p>
+        <div className="rv-vg__pila" aria-live="polite">
+          {revision.notas.map((n) => <p key={n} className="rv-vg__nota" data-tono="warn">{n}</p>)}
+          <p className="rv-vg__nota">Resultado de esta revisión (no se guardó).</p>
           <TablaSinAtender alertas={revision.resultado.alertas} />
         </div>
       ) : <AvisoResultado estado={revision} />}

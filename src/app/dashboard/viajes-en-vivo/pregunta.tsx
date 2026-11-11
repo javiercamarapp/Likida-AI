@@ -4,7 +4,11 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { numero } from '@/lib/formato';
 import { leerRespuesta, PREGUNTAS_OPERACION, textoDeBloques, type BloqueVista } from './respuesta';
+import { Boton, CampoTexto } from '@/app/ui-v2/componentes';
 import { Dona, Serie } from './graficas';
+import './en-vivo.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 /**
  * La caja de preguntas del asistente DENTRO de la pantalla de viajes en vivo: el jefe de tráfico le pregunta a la
@@ -13,6 +17,7 @@ import { Dona, Serie } from './graficas';
  * Lo delicado el asistente lo deriva a una persona (aparece abajo, en «Tareas del asistente»: la caja pide el tablero de nuevo al terminar cada respuesta).
  */
 export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | null }) {
+  const { t } = useT('operacion', operacionEs);
   const router = useRouter();
   const [texto, setTexto] = useState('');
   const [ocupado, setOcupado] = useState(false);
@@ -29,7 +34,7 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
       const resp = await fetch(`/api/dashboard/chat${tenantParam ? `?tenant=${encodeURIComponent(tenantParam)}` : ''}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mensajes }),
       });
-      if (!resp.ok) throw new Error(resp.status === 429 ? 'Demasiadas preguntas seguidas; espera un momento.' : 'No se pudo consultar al asistente.');
+      if (!resp.ok) throw new Error(resp.status === 429 ? 'Demasiadas preguntas seguidas; espera un momento.' : t('vv.preg.error'));
       const r = leerRespuesta(await resp.text());
       if (r.ok) {
         setBloques(r.bloques);
@@ -40,46 +45,43 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
         router.refresh();
       } else setError(r.error);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'No se pudo consultar al asistente.');
+      setError(e instanceof Error ? e.message : t('vv.preg.error'));
     } finally {
       setOcupado(false);
     }
   }
 
   return (
-    <section aria-label="Pregúntale al asistente sobre la operación" className="card p-4 space-y-3">
-      <h2 className="text-[13px] font-medium">Pregúntale al asistente</h2>
-      <div className="flex flex-wrap gap-1.5">
+    <section aria-label={t('vv.preg.titulo')} className="rv-vv__preg">
+      <div className="rv-vv__sugerencias">
         {PREGUNTAS_OPERACION.map((p) => (
           <button key={p} type="button" disabled={ocupado} onClick={() => void preguntar(p)} className="rv-chip">{p}</button>
         ))}
       </div>
-      <form onSubmit={(e) => { e.preventDefault(); void preguntar(texto); }} className="flex gap-2">
-        <input
-          value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={500} placeholder="Ej. ¿cómo va la terminal de Guadalajara?"
-          aria-label="Tu pregunta" className="flex-1"
+      <form onSubmit={(e) => { e.preventDefault(); void preguntar(texto); }} className="rv-vv__forma">
+        <CampoTexto
+          etiqueta={t('vv.preg.label')} etiquetaOculta value={texto} onChange={(e) => setTexto(e.target.value)} maxLength={500}
+          placeholder={t('vv.preg.ph')}
         />
-        <button type="submit" disabled={ocupado || !texto.trim()} className="rv-btn rv-btn--secondary">{ocupado ? 'Consultando…' : 'Preguntar'}</button>
+        <Boton type="submit" disabled={ocupado || !texto.trim()}>{ocupado ? t('vv.preg.consultando') : t('vv.preg.preguntar')}</Boton>
       </form>
-      {error && <p role="alert" className="text-[12px]" style={{ color: 'var(--bad)' }}>{error}</p>}
+      {error && <p role="alert" className="rv-vv__sub">{error}</p>}
       {bloques && (
-        <div className="space-y-2 text-[13px]" aria-live="polite">
+        <div className="rv-vv__resp" aria-live="polite">
           {bloques.map((b, i) => b.tipo === 'texto'
             ? <p key={i}>{b.texto}</p>
             : b.tipo === 'cifra'
-              ? <div key={i} className="card px-3 py-2 inline-block"><div className="cifra-mono text-[20px] font-medium">{numero(b.valor)}</div>{b.nota && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>{b.nota}</div>}</div>
+              ? <div key={i} className="rv-vv__cifra"><strong>{numero(b.valor)}</strong>{b.nota && <span className="rv-vv__sub" data-tenue>{b.nota}</span>}</div>
               : b.tipo === 'dona' ? <Dona key={i} b={b} />
               : b.tipo === 'serie' ? <Serie key={i} b={b} />
               : (
-                <div key={i} className="card p-1.5 overflow-x-auto">
-                  <table aria-label="Datos de la respuesta" className="w-full border-collapse text-[12px]"><tbody>
-                    {b.filas.map(([k, v]) => <tr key={k} className="border-b last:border-b-0" style={{ borderColor: 'var(--line2)' }}><td className="px-2 py-1" style={{ color: 'var(--muted)' }}>{k}</td><td className="px-2 py-1 text-right">{v}</td></tr>)}
-                  </tbody></table>
-                </div>
+                <dl key={i} className="rv-vv__datos" aria-label={t('vv.preg.datos')}>
+                  {b.filas.flatMap(([k, v]) => [<dt key={`${k}-k`}>{k}</dt>, <dd key={`${k}-v`}>{v}</dd>])}
+                </dl>
               ))}
         </div>
       )}
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>El asistente solo lee y, si algo es delicado, deja una tarea para una persona; no decide ni mueve nada por su cuenta.</p>
+      <p className="rv-vv__sub" data-tenue>{t('vv.preg.nota')}</p>
     </section>
   );
 }

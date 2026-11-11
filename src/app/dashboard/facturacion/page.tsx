@@ -1,3 +1,6 @@
+import { getT } from '@/lib/i18n/servidor';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -17,7 +20,10 @@ import { BloqueEstadias } from './estadias';
 import { BloquePortalPago } from './portal';
 import type { ResultadoForma } from './forma';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Facturación a clientes' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.facturacion') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -48,6 +54,7 @@ export default async function PaginaFacturacion({
 }: {
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -102,9 +109,10 @@ export default async function PaginaFacturacion({
 
   async function guardarFactura(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede registrar facturas.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede') };
     try {
       const valores = validarFactura({
         clienteId: String(fd.get('clienteId') ?? ''),
@@ -124,8 +132,8 @@ export default async function PaginaFacturacion({
       return {
         ok: true,
         mensaje: valores.estatus === 'emitida'
-          ? `Factura registrada por ${mxn(valores.total)}. Ya entra a la cartera.`
-          : `Borrador registrado por ${mxn(valores.total)}. No le cobra a nadie hasta que llegue su UUID del CFDI.`,
+          ? tr('facturacion.page.facturaRegistradaPorYa', { v: mxn(valores.total) })
+          : tr('facturacion.page.borradorRegistradoPorNo', { v: mxn(valores.total) }),
       };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'registrar la factura') };
@@ -134,9 +142,10 @@ export default async function PaginaFacturacion({
 
   async function guardarPago(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede registrar pagos.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede2') };
     try {
       const valores = validarPago({
         facturaId: String(fd.get('facturaId') ?? ''),
@@ -147,7 +156,7 @@ export default async function PaginaFacturacion({
       });
       await registrarPago(s.tenantId, valores, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: `Pago de ${mxn(valores.monto)} registrado.` };
+      return { ok: true, mensaje: tr('facturacion.page.pagoRegistrado', { monto: mxn(valores.monto) }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'registrar el pago') };
     }
@@ -155,9 +164,10 @@ export default async function PaginaFacturacion({
 
   async function sellarEmitida(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede marcar facturas como emitidas.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede3') };
     try {
       // La SERIE no se manda aquí a propósito (RES-22, 0166). `marcarEmitida`
       // la acepta, pero sellar sin poder MOSTRAR la serie que la factura ya
@@ -170,7 +180,7 @@ export default async function PaginaFacturacion({
         cfdiUuid: String(fd.get('cfdiUuid') ?? ''),
       }, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'La factura quedó marcada como emitida y ya entra a la cartera.' };
+      return { ok: true, mensaje: tr('facturacion.page.laFacturaQuedoMarcada') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'marcar la factura como emitida') };
     }
@@ -178,13 +188,14 @@ export default async function PaginaFacturacion({
 
   async function cancelar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede cancelar facturas.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('facturacion.page.tuRolNoPuede4') };
     try {
       await cancelarFactura(s.tenantId, String(fd.get('facturaId') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Factura cancelada. Sus viajes vuelven a la lista de sin facturar.' };
+      return { ok: true, mensaje: tr('facturacion.page.facturaCanceladaSusViajes') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'cancelar la factura') };
     }
@@ -199,9 +210,11 @@ export default async function PaginaFacturacion({
     cancelar,
   };
 
+  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
   return (
+    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
     <>
-      <VistaFacturacion datos={datos} captura={captura} auditoria={auditoria} />
+      <VistaFacturacion tr={tr} datos={datos} captura={captura} auditoria={auditoria} />
       {/* Estadías y detención (0207): sección independiente — sus lecturas y
           su fallo no tocan la cartera ni el auditor. */}
       <BloqueEstadias sp={sp} />
@@ -210,5 +223,6 @@ export default async function PaginaFacturacion({
           entra aquí como propuesta y solo la conciliación la mueve. */}
       <BloquePortalPago sp={sp} />
     </>
+    </IdiomaProvider>
   );
 }

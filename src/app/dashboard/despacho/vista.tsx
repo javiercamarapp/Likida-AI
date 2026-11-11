@@ -6,10 +6,13 @@ import { numero, fechaCorta } from '@/lib/formato';
 import { FormaViaje, type AccionCrearViaje } from '../forma-viaje';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { AsignarFila, AsignarUnidadFila, BotonReenviar, AltaOperador, type AccionDespacho } from './acciones';
+import { PillAviso } from '../viajes/pills';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { BarraFiltros, EstadoVacio, FiltroBusqueda, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { Aviso, BarraFiltros, EstadoVacio, FilaTarjetas, FiltroBusqueda, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import './despacho.css';
+import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 /** Tope de "Por asignar" — declarado en pantalla cuando recorta. "En curso"
  *  ya no usa esta constante: FE-2 le dio su propia paginación con `count`
@@ -36,10 +39,10 @@ function hrefPaginaActivos(sufijo: string, folioPedido: string, pagina: number):
  * El encargado captura sólo operación. Los campos financieros y comerciales
  * se ofrecen únicamente a quien tiene permiso de dinero.
  */
-export function VistaDespacho({
+export function VistaDespacho({ tr = TR_OPERACION_ES,
   tablero, sinAsignar, totalSinAsignar, activos, sufijo, folioPedido, buscarCatalogo, totalOperadores, totalClientes, totalUnidades,
   puedeCapturarDinero = false, puedeCapturarAnticipo = false, topeAnticipo, topeAnticipoOrigen, carga, crear, asignarYAvisar, asignarUnidadViaje, reenviarAviso, altaOperador,
-}: {
+}: { tr?: TrOperacion;
   puedeCapturarDinero?: boolean;
   /** Quien despacha captura anticipo aunque no vea dinero (E1-B). */
   puedeCapturarAnticipo?: boolean;
@@ -69,6 +72,7 @@ export function VistaDespacho({
   reenviarAviso: AccionDespacho;
   altaOperador: AccionDespacho;
 }) {
+  const { t, idioma } = tr;
   // ── FE-M1 (auditoría 28): vacío de CONSULTA vs vacío de NEGOCIO ─────────
   // `activos.filas.length === 0` puede significar tres cosas MUY distintas,
   // y solo `activos.total` (el `count: 'exact'` de la propia consulta, no
@@ -101,52 +105,69 @@ export function VistaDespacho({
     && activos.filas.length === activos.porPagina
     && (activos.total === null || activos.pagina * activos.porPagina < activos.total);
 
+  const columnasActivos: ColumnaBase<ViajeEnCursoRow>[] = [
+    { id: 'viaje', titulo: t('dsp.col.viaje'), principal: true, celda: (v) => <span className="rv-dsp__folio">{v.folio}</span> },
+    { id: 'ruta', titulo: t('dsp.col.ruta'), celda: (v) => <span className="rv-dsp__ruta">{v.origen ?? '—'} → {v.destino ?? '—'}</span> },
+    { id: 'operador', titulo: t('dsp.col.operador'), celda: (v) => v.operadorNombre ? <span className="rv-dsp__nombre" title={v.operadorNombre}>{v.operadorNombre}</span> : <span className="rv-dsp__tenue">{t('dsp.sinasignar')}</span> },
+    {
+      id: 'unidad', titulo: t('dsp.col.unidad'),
+      celda: (v) => (
+        // "Asignar unidad después" vive aquí: el gemelo de asignar operador, sobre los viajes en curso. Sin catálogo no se pinta un
+        // select hueco — se enseña lo que hay (la unidad actual o el guion).
+        totalUnidades === 0 ? (
+          <span className="rv-dsp__mono">{v.unidadEco ?? '—'}</span>
+        ) : (
+          <AsignarUnidadFila viajeId={v.id} unidadId={v.unidadId} unidadEco={v.unidadEco}
+            buscarCatalogo={buscarCatalogo} totalUnidades={totalUnidades}
+            asignarUnidadViaje={asignarUnidadViaje} />
+        )
+      ),
+    },
+    { id: 'inicio', titulo: t('dsp.col.inicio'), celda: (v) => <span className="rv-dsp__mono">{fechaCorta(v.fechaInicio, idioma)}</span> },
+    { id: 'aviso', titulo: t('dsp.col.aviso'), celda: (v) => <PillAviso v={v} tr={tr} /> },
+    {
+      id: 'accion', titulo: t('dsp.col.accion'), alinear: 'der',
+      // Con operador y sin aceptar, siempre hay algo que mandar: "Avisar" si el aviso nunca salió (el fallo silencioso al crear),
+      // "Reavisar" para insistir.
+      celda: (v) => (!v.aceptadoEn && v.operadorNombre ? <BotonReenviar viajeId={v.id} yaAvisado={v.avisadoEn !== null} reenviarAviso={reenviarAviso} /> : null),
+    },
+  ];
+
   return (
-    <MarcoPagina titulo="Despacho" apoyo="Aquí se actúa: crea el viaje, asigna operador y unidad, avisa e insiste al chofer y da de alta operadores.">
+    <MarcoPagina titulo={t('dsp.titulo')} apoyo={t('dsp.apoyo')}>
 
       {tablero === null ? (
-        <div className="card p-4">
-          <p className="text-[12px] text-center" style={{ color: 'var(--muted)' }}>
-            No se pudo leer el tablero ahora mismo — las colas de abajo siguen siendo reales.
-          </p>
-        </div>
+        <Aviso tono="warn">{t('dsp.tablero.error')}</Aviso>
       ) : (
         <TiraCifras sello={selloHoy('Tablero de despacho')}>
-          <Cifra etiqueta="Viajes activos" valor={numero(tablero.viajesActivos)} info="despacho.viajes_activos" />
-          <Cifra etiqueta="Sin unidad" valor={numero(tablero.sinUnidad)} tono={tablero.sinUnidad > 0 ? 'warn' : undefined} info="despacho.sin_unidad" />
-          <Cifra etiqueta="Unidades libres" valor={numero(tablero.unidadesDisponibles)} info="despacho.unidades_libres" />
-          <Cifra etiqueta="En taller" valor={numero(tablero.unidadesEnTaller)} info="despacho.en_taller" />
-          <Cifra etiqueta="Incidencias" valor={numero(tablero.incidenciasAbiertas)} tono={tablero.incidenciasAbiertas > 0 ? 'warn' : undefined} info="despacho.incidencias" />
-          <Cifra etiqueta="POD pendientes" valor={numero(tablero.podPendientes)} info="despacho.pod_pendientes" />
+          <Cifra etiqueta={t('dsp.cifra.activos')} valor={numero(tablero.viajesActivos, idioma)} info="despacho.viajes_activos" />
+          <Cifra etiqueta={t('dsp.cifra.sinunidad')} valor={numero(tablero.sinUnidad, idioma)} tono={tablero.sinUnidad > 0 ? 'warn' : undefined} info="despacho.sin_unidad" />
+          <Cifra etiqueta={t('dsp.cifra.libres')} valor={numero(tablero.unidadesDisponibles, idioma)} info="despacho.unidades_libres" />
+          <Cifra etiqueta={t('dsp.cifra.taller')} valor={numero(tablero.unidadesEnTaller, idioma)} info="despacho.en_taller" />
+          <Cifra etiqueta={t('dsp.cifra.incidencias')} valor={numero(tablero.incidenciasAbiertas, idioma)} tono={tablero.incidenciasAbiertas > 0 ? 'warn' : undefined} info="despacho.incidencias" />
+          <Cifra etiqueta={t('dsp.cifra.pod')} valor={numero(tablero.podPendientes, idioma)} info="despacho.pod_pendientes" />
         </TiraCifras>
       )}
 
-      <div className="grid lg:grid-cols-3 gap-4 lg:items-start">
+      <FilaTarjetas variante="8-4">
         {/* ── La cola que reparte el día ── */}
-        <section className="card p-4 lg:col-span-2">
-          <TituloRecuadro info="despacho.por_asignar">Por asignar</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-            Viajes sin chofer — se asigna y el aviso de WhatsApp sale en el mismo paso
-          </p>
+        <Tarjeta titulo={t('dsp.porasignar')} info="despacho.por_asignar">
+          <p className="rv-dsp__nota">{t('dsp.porasignar.nota')}</p>
           {sinAsignar.length === 0 ? (
-            <EstadoVacio contenido icono={Inbox} titulo="Nada sin repartir">
-              Los viajes que crees sin operador caen aquí.
+            <EstadoVacio contenido icono={Inbox} titulo={t('dsp.nadasin')}>
+              {t('dsp.nadasin.nota')}
             </EstadoVacio>
           ) : (
-            <div className="space-y-3">
+            <div className="rv-dsp__cola">
               {sinAsignar.slice(0, MAX_FILAS).map((v) => (
-                <div key={v.id} className="rounded-xl hairline p-3 space-y-2" style={{ background: 'var(--canvas)' }}>
-                  <div className="flex items-center justify-between gap-3 text-[13px]">
-                    <span className="font-medium">{v.folio ?? 'Sin folio'}</span>
-                    <span className="truncate" style={{ color: 'var(--muted)' }}>
-                      {v.origen ?? '—'} → {v.destino ?? '—'}
-                    </span>
-                    <span className="shrink-0" style={{ color: 'var(--faint)' }}>{fechaCorta(v.fechaInicio)}</span>
+                <div key={v.id} className="rv-dsp__item">
+                  <div className="rv-dsp__item-cab">
+                    <span>{v.folio ?? t('dsp.sinfolio')}</span>
+                    <span className="rv-dsp__ruta">{v.origen ?? '—'} → {v.destino ?? '—'}</span>
+                    <span className="rv-dsp__fecha">{fechaCorta(v.fechaInicio, idioma)}</span>
                   </div>
                   {totalOperadores === 0 ? (
-                    <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                      No hay operadores dados de alta — usa el alta rápida de la derecha.
-                    </p>
+                    <p className="rv-dsp__nota">{t('dsp.sinoperadores')}</p>
                   ) : (
                     <AsignarFila viajeId={v.id} buscarCatalogo={buscarCatalogo}
                       totalOperadores={totalOperadores} asignarYAvisar={asignarYAvisar} />
@@ -154,138 +175,76 @@ export function VistaDespacho({
                 </div>
               ))}
               {(totalSinAsignar ?? sinAsignar.length) > MAX_FILAS && (
-                <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
-                  Se muestran {MAX_FILAS} — hay {numero((totalSinAsignar ?? sinAsignar.length) - MAX_FILAS)} más sin asignar.
+                <p className="rv-dsp__nota">
+                  {t('dsp.semuestran', { max: MAX_FILAS, n: numero((totalSinAsignar ?? sinAsignar.length) - MAX_FILAS, idioma) })}
                 </p>
               )}
             </div>
           )}
-        </section>
+        </Tarjeta>
 
         {/* ── Crear operación nueva ── */}
-        <section className="card p-4">
-          <TituloRecuadro info="despacho.nuevo_viaje" className="mb-1">Nuevo viaje</TituloRecuadro>
-          <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-            Nace abierto: desde ese momento el operador puede mandar comprobantes por WhatsApp
-          </p>
+        <Tarjeta titulo={t('dsp.nuevo')} info="despacho.nuevo_viaje">
+          <p className="rv-dsp__nota">{t('dsp.nuevo.nota')}</p>
           <FormaViaje action={crear} buscarCatalogo={buscarCatalogo} puedeCapturarDinero={puedeCapturarDinero} puedeCapturarAnticipo={puedeCapturarAnticipo} topeAnticipo={topeAnticipo} topeAnticipoOrigen={topeAnticipoOrigen}
             totalOperadores={totalOperadores} totalClientes={totalClientes} totalUnidades={totalUnidades} />
-        </section>
-      </div>
+        </Tarjeta>
+      </FilaTarjetas>
 
-      <div className="grid lg:grid-cols-3 gap-4 lg:items-start">
+      {/* A todo el ancho: con 7 columnas (select de unidad y botón de acción incluidos) no cabe en 8/12 y la acción quedaba cortada. */}
+      <FilaTarjetas variante="12">
         {/* ── Lo vivo, con el estado del aviso ── */}
-        <section className="card p-4 lg:col-span-2">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <TituloRecuadro info="despacho.en_curso">En curso</TituloRecuadro>
-              <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                Primero lo que nadie ha aceptado, y entre eso lo avisado hace más tiempo
-              </p>
-            </div>
-            {/* FE-2: buscador por folio — antes no había forma de llegar a
-                un viaje en curso que no estuviera entre los 12 más
-                urgentes de la primera página. GET plano, con el sufijo de
-                previsualización como hidden (mismo patrón que
-                `viajes/vista.tsx`) para no perderlo al buscar. */}
-            <BarraFiltros buscar accion="/dashboard/despacho" enLinea etiqueta="Buscar viaje en curso" nActivos={folioPedido ? 1 : 0}
+        <Tarjeta titulo={t('dsp.encurso')} info="despacho.en_curso"
+          acciones={(
+            // FE-2: buscador por folio — antes no había forma de llegar a un viaje en curso que no estuviera entre los 12 más urgentes
+            // de la primera página. GET plano, con el sufijo de previsualización como hidden para no perderlo al buscar.
+            <BarraFiltros buscar accion="/dashboard/despacho" enLinea etiqueta={t('dsp.buscar.aria')} nActivos={folioPedido ? 1 : 0}
               limpiarHref={`/dashboard/despacho${sufijo}`}
               ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}>
-              <FiltroBusqueda nombre="q" valor={folioPedido} placeholder="Folio…" etiqueta="Buscar viaje en curso por folio" />
+              <FiltroBusqueda nombre="q" valor={folioPedido} placeholder={t('dsp.buscar.ph')} etiqueta={t('dsp.buscar.folio')} />
             </BarraFiltros>
-          </div>
+          )}>
+          <p className="rv-dsp__nota">{t('dsp.encurso.orden')}</p>
           {activos.error !== null ? (
-            <EstadoVacio contenido icono={Truck} titulo="No se pudo leer En curso">
-              Vuelve a intentar en un momento.
+            <EstadoVacio contenido icono={Truck} titulo={t('dsp.encurso.noleyo')}>
+              {t('dsp.reintenta')}
             </EstadoVacio>
           ) : activosSinContar ? (
-            // `total === null`: la base no confirmó nada — "ningún viaje"
-            // sería una afirmación que la lectura no sostiene.
-            <EstadoVacio contenido icono={Truck} titulo="No se pudo contar los viajes">
-              No se pudo contar cuántos viajes en curso hay ahora mismo. Vuelve a intentar en un momento.
+            // `total === null`: la base no confirmó nada — "ningún viaje" sería una afirmación que la lectura no sostiene.
+            <EstadoVacio contenido icono={Truck} titulo={t('dsp.nocontar')}>
+              {t('dsp.nocontar.nota')}
             </EstadoVacio>
           ) : activosVacioDeNegocio ? (
-            // `total === 0`: aquí sí es cierto que no hay ni un viaje en
-            // curso (el folio buscado tampoco tiene coincidencias, si lo hay).
-            <EstadoVacio contenido icono={Truck} titulo={folioPedido ? 'Sin coincidencias' : 'Ningún viaje en curso ahora mismo'}>
-              {folioPedido ? `Ningún viaje en curso con folio "${folioPedido}".` : 'Los viajes con operador y sin cerrar aparecen aquí.'}
+            // `total === 0`: aquí sí es cierto que no hay ni un viaje en curso (el folio buscado tampoco tiene coincidencias, si lo hay).
+            <EstadoVacio contenido icono={Truck} titulo={folioPedido ? t('dsp.vacio.sincoincidencias') : t('dsp.vacio.ninguno')}>
+              {folioPedido ? t('dsp.vacio.foliosin', { folio: folioPedido }) : t('dsp.vacio.ninguno.nota')}
             </EstadoVacio>
           ) : activosVacioDeConsulta ? (
-            // `total > 0` pero ESTA página no trajo filas (FE-M1): un
-            // `?p=` guardado o "atrás" sobre una cola que ya avanzó. Los
-            // viajes existen — lo que está vacío es la página pedida, no
-            // la flota — y por eso el rango impreso es "0–0", nunca un
-            // cálculo sobre `pagina` que inventaría un rango que no existe.
-            <EstadoVacio contenido icono={Truck} titulo="Esta página no tiene viajes" accion={<div className="flex items-center gap-3 flex-wrap justify-center text-[12px]" style={{ color: 'var(--faint)' }}>
-                <span>0–0 de {numero(activos.total ?? 0)} en curso</span>
+            // `total > 0` pero ESTA página no trajo filas (FE-M1): un `?p=` guardado o "atrás" sobre una cola que ya avanzó. Los viajes
+            // existen — lo que está vacío es la página pedida, no la flota — y por eso el rango impreso es "0–0".
+            <EstadoVacio contenido icono={Truck} titulo={t('dsp.pagvacia')} accion={<div className="rv-dsp__pagina-vacia">
+                <span>{t('dsp.pagvacia.cuenta', { n: numero(activos.total ?? 0, idioma) })}</span>
                 <NavPaginas>
                   {activos.pagina > 1 && <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, activos.pagina - 1)} direccion="anterior" />}
                   {ultimaPaginaConDatos !== null && ultimaPaginaConDatos !== activos.pagina && (
-                    <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, ultimaPaginaConDatos)} direccion="siguiente" etiqueta={`Ir a la última página (${numero(ultimaPaginaConDatos)})`} />
+                    <EnlacePagina href={hrefPaginaActivos(sufijo, folioPedido, ultimaPaginaConDatos)} direccion="siguiente" etiqueta={t('dsp.pagvacia.ultima', { n: numero(ultimaPaginaConDatos, idioma) })} />
                   )}
                 </NavPaginas>
               </div>}>
               {folioPedido
-                ? `No hay viajes con folio "${folioPedido}" en esta página: hay ${numero(activos.total ?? 0)} coincidencias.`
-                : `Hay ${numero(activos.total ?? 0)} en curso, pero no en esta página.`}
+                ? t('dsp.pagvacia.folio', { folio: folioPedido, n: numero(activos.total ?? 0, idioma) })
+                : t('dsp.pagvacia.hay', { n: numero(activos.total ?? 0, idioma) })}
             </EstadoVacio>
           ) : (
-            <div className="overflow-x-auto">
-              <table aria-label="Viajes por despachar" className="w-full text-[13px]">
-                <thead>
-                  <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Viaje</th>
-                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Ruta</th>
-                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Operador</th>
-                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Unidad</th>
-                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Inicio</th>
-                    <th scope="col" className="etiqueta-mono text-[11px] uppercase font-normal pb-2">Aviso</th>
-                    <th scope="col" className="pb-2" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {activos.filas.map((v) => (
-                    <tr key={v.id} className="border-t" style={{ borderColor: 'var(--line2)' }}>
-                      <td className="py-2 font-medium">{v.folio}</td>
-                      <td className="py-2 truncate max-w-[180px]" style={{ color: 'var(--muted)' }}>
-                        {v.origen ?? '—'} → {v.destino ?? '—'}
-                      </td>
-                      <td className="py-2">{v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>Sin asignar</span>}</td>
-                      <td className="py-2 pr-2">
-                        {/* "Asignar unidad después" vive aquí: el gemelo de
-                            asignar operador, sobre los viajes en curso. Sin
-                            catálogo no se pinta un select hueco — se enseña
-                            lo que hay (la unidad actual o el guion). */}
-                        {totalUnidades === 0 ? (
-                          <span className="cifra-mono" style={{ color: 'var(--faint)' }}>{v.unidadEco ?? '—'}</span>
-                        ) : (
-                          <AsignarUnidadFila viajeId={v.id} unidadId={v.unidadId} unidadEco={v.unidadEco}
-                            buscarCatalogo={buscarCatalogo} totalUnidades={totalUnidades}
-                            asignarUnidadViaje={asignarUnidadViaje} />
-                        )}
-                      </td>
-                      <td className="py-2" style={{ color: 'var(--muted)' }}>{fechaCorta(v.fechaInicio)}</td>
-                      <td className="py-2"><PillAviso v={v} /></td>
-                      <td className="py-2 text-right">
-                        {/* Con operador y sin aceptar, siempre hay algo que
-                            mandar: "Avisar" si el aviso nunca salió (el fallo
-                            silencioso al crear), "Reavisar" para insistir. */}
-                        {!v.aceptadoEn && v.operadorNombre && (
-                          <BotonReenviar viajeId={v.id} yaAvisado={v.avisadoEn !== null} reenviarAviso={reenviarAviso} />
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {/* FE-2: `activos.total` es el conteo REAL de la consulta
-                  (`count: 'exact'`), no `filas.length` sobre un recorte
-                  fijo — y hay paginación de verdad para llegar al resto. */}
-              <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
-                <p className="text-[12px]" style={{ color: 'var(--faint)' }}>
+            <>
+              <TablaBase<ViajeEnCursoRow> etiqueta={t('dsp.tabla.etiqueta')} columnas={columnasActivos} filas={activos.filas} idFila={(v) => v.id} tarjetaMovil className="rv-dsp__tabla" />
+              {/* FE-2: `activos.total` es el conteo REAL de la consulta (`count: 'exact'`), no `filas.length` sobre un recorte fijo — y
+                  hay paginación de verdad para llegar al resto. */}
+              <div className="rv-dsp__pie">
+                <p>
                   {activos.total !== null
-                    ? `${numero((activos.pagina - 1) * activos.porPagina + 1)}–${numero((activos.pagina - 1) * activos.porPagina + activos.filas.length)} de ${numero(activos.total)} en curso`
-                    : `Página ${numero(activos.pagina)} — no se pudo contar el total.`}
+                    ? t('dsp.pie.rango', { desde: numero((activos.pagina - 1) * activos.porPagina + 1, idioma), hasta: numero((activos.pagina - 1) * activos.porPagina + activos.filas.length, idioma), total: numero(activos.total, idioma) })
+                    : t('dsp.pie.pagina', { n: numero(activos.pagina, idioma) })}
                 </p>
                 {(activos.pagina > 1 || activosPuedeAvanzar) && (
                   <NavPaginas>
@@ -294,78 +253,57 @@ export function VistaDespacho({
                   </NavPaginas>
                 )}
               </div>
-              {/* FE-B1: `truncada` se declara, no se esconde — al tope de
-                  `paginaMax` ya no queda "Siguiente" que pulsar (arriba),
-                  pero sin este párrafo el jefe de tráfico no tenía forma
-                  de saber que hay MÁS viajes en curso de los que esta
-                  paginación puede alcanzar. Mismo patrón que
-                  `descarga-sat/bandeja/vista.tsx` y `jornada/vista.tsx`. */}
+              {/* FE-B1: `truncada` se declara, no se esconde — al tope de `paginaMax` ya no queda "Siguiente" que pulsar, pero sin este
+                  párrafo el jefe de tráfico no tenía forma de saber que hay MÁS viajes en curso de los que esta paginación alcanza. */}
               {activos.truncada && (
-                <p className="text-[12px] mt-2" style={{ color: 'var(--warn)' }}>
-                  Se pueden recorrer hasta {numero(activos.paginaMax * activos.porPagina)} de{' '}
-                  {numero(activos.total ?? 0)} en curso — el resto está en el{' '}
-                  <Link href={`/dashboard/viajes${sufijo}`} className="underline">registro</Link>.
-                </p>
+                <Aviso tono="warn">
+                  {t('dsp.trunc.pre', { a: numero(activos.paginaMax * activos.porPagina, idioma), b: numero(activos.total ?? 0, idioma) })}
+                  <Link href={`/dashboard/viajes${sufijo}`} className="rv-dsp__enlace">{t('dsp.trunc.registro')}</Link>.
+                </Aviso>
               )}
-            </div>
+            </>
           )}
-        </section>
+        </Tarjeta>
+      </FilaTarjetas>
 
-        <div className="space-y-4">
+      <FilaTarjetas variante="6-6">
+        <div className="rv-dsp__pila">
           {/* ── Alta rápida ── */}
-          <section className="card p-4">
-            <TituloRecuadro info="despacho.alta_operador" className="mb-1">Alta rápida de operador</TituloRecuadro>
-            <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>
-              Nombre y WhatsApp — la lada 52 y los duplicados los cuida el servidor
-            </p>
+          <Tarjeta titulo={t('dsp.alta')} info="despacho.alta_operador">
+            <p className="rv-dsp__nota">{t('dsp.alta.nota')}</p>
             <AltaOperador altaOperador={altaOperador} />
-          </section>
+          </Tarjeta>
+        </div>
 
+        <div className="rv-dsp__pila">
           {/* ── Quién trae cuánto ── */}
-          <section className="card p-4">
-            <TituloRecuadro info="despacho.carga">Carga por operador</TituloRecuadro>
-            <p className="text-[11px] mb-3" style={{ color: 'var(--faint)' }}>El que trae más sale arriba — ¿a quién NO le cargas otro?</p>
+          <Tarjeta titulo={t('dsp.carga')} info="despacho.carga">
+            <p className="rv-dsp__nota">{t('dsp.carga.nota')}</p>
             {carga === null ? (
-              <EstadoVacio contenido icono={Users} titulo="No se pudo leer la carga">Vuelve a intentar en un momento.</EstadoVacio>
+              <EstadoVacio contenido icono={Users} titulo={t('dsp.carga.error')}>{t('dsp.reintenta')}</EstadoVacio>
             ) : carga.length === 0 ? (
-              <EstadoVacio contenido icono={Users} titulo="Sin operadores todavía">
-                Da de alta uno con el formulario de arriba.
+              <EstadoVacio contenido icono={Users} titulo={t('dsp.carga.vacio')}>
+                {t('dsp.carga.vacio.nota')}
               </EstadoVacio>
             ) : (
-              <div className="space-y-1.5">
+              <ul className="rv-dsp__carga">
                 {carga.slice(0, 8).map((c) => (
-                  <div key={c.operadorId} className="flex items-center justify-between gap-2 text-[12px]">
-                    <span className="truncate">
+                  <li key={c.operadorId}>
+                    <span>
                       {c.nombre}
-                      {!c.activo && <span className="text-[11px] ml-1" style={{ color: 'var(--faint)' }}>· inactivo</span>}
+                      {!c.activo && <span className="rv-dsp__inactivo">{t('dsp.inactivo')}</span>}
                     </span>
-                    <span className="cifra-mono shrink-0" style={{ color: 'var(--muted)' }}>
-                      {numero(c.enCurso)} en curso{c.sinPod > 0 ? ` · ${numero(c.sinPod)} sin POD` : ''}
+                    <span>
+                      {t('dsp.carga.fila', { n: numero(c.enCurso, idioma) })}{c.sinPod > 0 ? t('dsp.carga.sinpod', { n: numero(c.sinPod, idioma) }) : ''}
                     </span>
-                  </div>
+                  </li>
                 ))}
-                {carga.length > 8 && (
-                  <p className="text-[11px]" style={{ color: 'var(--faint)' }}>y {numero(carga.length - 8)} más.</p>
-                )}
-              </div>
+                {carga.length > 8 && <li className="rv-dsp__nota">{t('dsp.carga.mas', { n: numero(carga.length - 8, idioma) })}</li>}
+              </ul>
             )}
-          </section>
+          </Tarjeta>
         </div>
-      </div>
+      </FilaTarjetas>
     </MarcoPagina>
   );
-}
-
-/** El estado del aviso, con las cuatro marcas reales de la confirmación
- *  (0058): sin avisar → avisado (con el conteo) → aceptó / escalado.
- *  Exportada desde F2: el registro de Viajes pinta el MISMO estado — dos
- *  copias de este mapa se separan en el primer estatus nuevo. */
-export function PillAviso({ v }: { v: Pick<ViajeEnCursoRow, 'aceptadoEn' | 'escaladoEn' | 'avisadoEn' | 'avisosEnviados'> }) {
-  const pill = (texto: string, fg: string, bg: string) => (
-    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: fg, background: bg }}>{texto}</span>
-  );
-  if (v.aceptadoEn) return pill('Aceptó', 'var(--ok)', 'var(--okbg)');
-  if (v.escaladoEn) return pill('Escalado', 'var(--bad)', 'var(--badbg)');
-  if (v.avisadoEn) return pill(v.avisosEnviados > 1 ? `Avisado ×${v.avisosEnviados}` : 'Avisado', 'var(--warn)', 'var(--warnbg)');
-  return pill('Sin avisar', 'var(--muted)', 'var(--canvas)');
 }
