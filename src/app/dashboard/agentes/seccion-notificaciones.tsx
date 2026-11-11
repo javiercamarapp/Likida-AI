@@ -15,6 +15,7 @@ import { reclamarTurnoDePrueba, acuseDeEnvio } from './prueba-correo';
 import { FormaNotificaciones } from './notificaciones-forma';
 import { BotonPrueba, type EstadoPrueba } from './boton-prueba';
 import { getT } from '@/lib/i18n/servidor';
+import { ahoraMs } from '@/lib/saludo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA SECCIÓN «NOTIFICACIONES» — una sola, montada por los seis agentes.
@@ -158,7 +159,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
     // El turno se reclama ANTES de tocar la base: el freno es del botón
     // entero, no solo del envío, y un envío que luego falle lo consume igual
     // (mismo criterio que `reclamarAviso` en el motor).
-    const turno = reclamarTurnoDePrueba(`${sesion.userId}:${objetivo.id}`, Date.now());
+    const turno = reclamarTurnoDePrueba(`${sesion.userId}:${objetivo.id}`, ahoraMs());
     if (!turno.ok) {
       return { error: t('ch.acabas_de_mandarte_una_prueba_la', { faltanSegundos: turno.faltanSegundos }) };
     }
