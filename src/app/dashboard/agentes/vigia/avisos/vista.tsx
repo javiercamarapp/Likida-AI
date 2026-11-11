@@ -241,7 +241,6 @@ export function VistaAvisosVigia({ sufijo, grupos, total, hayMas = false, pendie
   const base = `/dashboard/agentes/vigia/avisos${sufijo}`;
   const conPendientes = `${base}${sufijo ? '&' : '?'}pendientes=1`;
   const sinLectura = sinMigrar || !!errorLectura;
-  const tarjetas = grupos.flatMap((g) => g.clientes.flatMap((c) => c.tarjetas));
   const mas = hayMas ? '+' : '';
   const nPend = typeof pendientes === 'number' ? pendientes : null;
   // Bandeja (Rovaq «Avisos»): segmentado Pendientes N / Todos → tira de 2 → UNA tarjeta de lista. Máximo dos avisos arriba:

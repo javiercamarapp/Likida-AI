@@ -42,7 +42,7 @@ describe('«¿Está lista la flota?» (pantallas)', () => {
   it('nunca muestra al cliente identificadores internos ni rutas del repositorio', () => {
     const data = { ...verde(), aprobadas: [], config: { ...verde().config, cohortePiloto: null as never } };
     const html = renderToStaticMarkup(<PanelPreflight preflight={evaluarPreflight(data)} />);
-    expect(html).not.toMatch(/[a-z]+(_[a-z0-9]+)+_v\d/);
+    expect(html).not.toMatch(/[a-z]+_[a-z0-9_]*_v\d/);
     expect(html).not.toContain('docs/');
     expect(html).not.toContain('.md');
     expect(html).toContain('Ir a hacerlo');

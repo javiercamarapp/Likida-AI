@@ -18,9 +18,9 @@ import { rico as ricoT } from '@/lib/i18n/rico';
 export function lenguajeLlano(texto: string): string {
   return texto
     .replace(/\s*\([^)]*docs\/[^)]*\)/gi, '')
-    .replace(/\s*\([^)]*\b[a-z]+(?:_[a-z0-9]+)+\b[^)]*\)/g, '')
+    .replace(/\s*\([^)]*\)/g, (m) => (/\b[a-z]+_[a-z0-9_]*[a-z0-9]\b/.test(m) ? '' : m))
     .replace(/\s*\(\d{3,4}\)/g, '')
-    .replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, '')
+    .replace(/\b[a-z]+_[a-z0-9_]*[a-z0-9]\b/g, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([.,;:])/g, '$1')
     .trim();
