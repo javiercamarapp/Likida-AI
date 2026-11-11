@@ -54,6 +54,8 @@ test('del resumen al registro navegando con el dedo, y la tabla es legible', asy
   // v1 trae un enlace directo al registro (además de Despacho): se prefiere ese. v2 solo trae la entrada «Viajes» → Despacho.
   const registroDirecto = nav.locator('a[href^="/dashboard/viajes"]');
   await ((await registroDirecto.count()) ? registroDirecto.first() : nav.locator(VIAJES).first()).tap();
+  // Se espera a que la navegación termine ANTES de decidir el camino (si no, se lee la URL del Resumen todavía).
+  await page.waitForURL(/\/dashboard\/(viajes|despacho)/);
   // v2: «Viajes» abre el grupo Despacho y el registro es su pestaña «Registro»; v1 lleva directo al registro.
   if (!/\/dashboard\/viajes/.test(page.url())) {
     await expect(page).toHaveURL(/\/dashboard\/despacho/);
