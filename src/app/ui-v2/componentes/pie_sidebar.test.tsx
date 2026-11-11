@@ -47,7 +47,7 @@ describe('PieSidebar: estados', () => {
     expect(h).toContain('title="Flota A"');
     expect(h).toContain('rv-ps-tema__riel');
     expect(h).toMatch(/aria-label="Tema claro\. Cambiar a: Seguir al sistema"/);
-    expect(h).toContain('title="Avisos: 2 pendientes"');
+    expect(h).toMatch(/role="tooltip"[^>]*>Avisos: 2 pendientes</);
   });
 });
 
@@ -66,7 +66,9 @@ describe('PieSidebar: conmutadores', () => {
     expect(bloque).toMatch(/value="en"[^>]*disabled=""|disabled=""[^>]*value="en"/);
     expect(bloque).not.toMatch(/value="es"[^>]*disabled=""|disabled=""[^>]*value="es"/);
     expect(bloque).toContain('aria-label="Inglés: próximamente"');
-    expect(bloque).toContain('title="Inglés: próximamente"');
+    // Tooltip del sistema (tarjeta, lateral): nunca el title nativo oscuro, que tapaba la fila Avisos.
+    expect(bloque).not.toContain('title=');
+    expect(bloque).toMatch(/role="tooltip"[^>]*>Inglés: próximamente</);
     expect(bloque).not.toContain('aria-label="English (US)"');
     expect(bloque).toMatch(/value="es"[^>]*checked|checked=""[^>]*value="es"/);
     expect(bloque).not.toMatch(/value="en"[^>]*checked=""|checked=""[^>]*value="en"/);
