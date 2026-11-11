@@ -1,12 +1,12 @@
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
-import { Banknote, ReceiptText, TrendingUp, Wallet, CalendarClock } from 'lucide-react';
 import type { Rentabilidad, Cobranza } from '@/lib/likida/comercial';
 import { mxn, fechaCorta, numero, porcentaje } from '@/lib/formato';
 import { EnlacePagina, NavPaginas } from '../paginador';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  BotonEnlace, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase,
+  BotonEnlace, EstadoError, EstadoVacio, StatusChip, TablaBase, Tarjeta, type ColumnaBase,
 } from '@/app/ui-v2/componentes';
 import './rentabilidad.css';
 
@@ -75,26 +75,31 @@ export function VistaRentabilidad({
     },
   ];
 
+  const sinRent = rentabilidad === null ? 'error' : rentabilidad.viajesConIngreso === 0 ? 'vacio' : 'ok';
+  const sinCob = cobranza === null ? 'error' : cobranza.total === 0 ? 'vacio' : 'ok';
+  // UNA tira de cinco (Rovaq `pc-kpis`): cada celda dice su propio estado — una lectura caída es «No disponible ahora. No es cero.», nunca un 0.
+  const cifras: PropsCifra[] = [
+    { etiqueta: tr('rentabilidad.vista.ingresoDeFletesLiquidados'), info: 'rentabilidad.ingreso', formato: 'mxn', valor: sinRent === 'ok' ? rentabilidad!.ingreso : null, estado: sinRent, mensaje: sinRent === 'vacio' ? tr('rentabilidad.vista.sinIngresoDeFlete') : undefined, reintentar: sinRent === 'error' },
+    { etiqueta: tr('rentabilidad.vista.costoComprobadoEsosMismos'), info: 'rentabilidad.costo', formato: 'mxn', valor: sinRent === 'ok' ? rentabilidad!.costoComprobado : null, estado: sinRent },
+    { etiqueta: tr('rentabilidad.vista.contribucionIngresoComprobad'), info: 'rentabilidad.contribucion', formato: 'mxn', valor: sinRent === 'ok' ? rentabilidad!.contribucion : null, estado: sinRent },
+    { etiqueta: tr('rentabilidad.vista.porCobrarFacturasVivas'), info: 'rentabilidad.por_cobrar', formato: 'mxn', valor: sinCob === 'ok' ? cobranza!.porCobrar : null, estado: sinCob, mensaje: sinCob === 'vacio' ? tr('rentabilidad.vista.sinFacturasEmitidas') : undefined, reintentar: sinCob === 'error' },
+    { etiqueta: tr('rentabilidad.vista.vencido'), info: 'rentabilidad.vencido', formato: 'mxn', valor: sinCob === 'ok' ? cobranza!.vencido : null, estado: sinCob, tono: sinCob === 'ok' && cobranza!.vencido > 0 ? 'bad' : undefined },
+  ];
+
   return (
-    <MarcoPagina titulo={tr('rentabilidad.vista.margenYCostos')} apoyo={tr('rentabilidad.vista.margenRealContraLo')}>
+    <EsqueletoPortada
+      titulo={tr('rentabilidad.vista.margenYCostos')} apoyo={tr('rentabilidad.vista.margenRealContraLo')}
+      cifras={cifras} etiquetaCifras={tr('rentabilidad.vista.margenYCostos')}
+      selloCifras={sinNada ? tr('rentabilidad.vista.sinDatosTodavia') : selloHoy(tr('rentabilidad.vista.selloViajesLiquidados'))}
+      metodo={rentabilidad !== null && rentabilidad.viajesConIngreso > 0 ? tr('rentabilidad.vista.contribucionNoEsUtilidad') : undefined}
+    >
       {sinNada ? (
-        <>
-          {/* Cinco cifras SIN DATO: la estructura de la pantalla, no ceros que parezcan medición. */}
-          <TiraCifras sello={tr('rentabilidad.vista.sinDatosTodavia')}>
-            <Cifra icono={<Icono icono={Banknote} />} etiqueta={tr('rentabilidad.vista.ingresoDeFletesLiquidados')} valor={null} estado="vacio" info="rentabilidad.ingreso" />
-            <Cifra icono={<Icono icono={ReceiptText} />} etiqueta={tr('rentabilidad.vista.costoComprobado')} valor={null} estado="vacio" info="rentabilidad.costo" />
-            <Cifra icono={<Icono icono={TrendingUp} />} etiqueta={tr('rentabilidad.vista.contribucion')} valor={null} estado="vacio" info="rentabilidad.contribucion" />
-            <Cifra icono={<Icono icono={Wallet} />} etiqueta={tr('rentabilidad.vista.porCobrar')} valor={null} estado="vacio" info="rentabilidad.por_cobrar" />
-            <Cifra icono={<Icono icono={CalendarClock} />} etiqueta={tr('rentabilidad.vista.vencido')} valor={null} estado="vacio" info="rentabilidad.vencido" />
-          </TiraCifras>
-          <EstadoVacio titulo={tr('rentabilidad.vista.faltanIngresoYFacturas')} contenido
-            accion={<BotonEnlace href={`/dashboard/facturacion${sufijo}`} variante="secondary" tamano="sm">{tr('rentabilidad.vista.registrarUnaFactura')}</BotonEnlace>}>
-            {tr('rentabilidad.vista.conElIngresoDe')}
-          </EstadoVacio>
-        </>
+        <EstadoVacio titulo={tr('rentabilidad.vista.faltanIngresoYFacturas')} contenido
+          accion={<BotonEnlace href={`/dashboard/facturacion${sufijo}`} variante="secondary" tamano="sm">{tr('rentabilidad.vista.registrarUnaFactura')}</BotonEnlace>}>
+          {tr('rentabilidad.vista.conElIngresoDe')}
+        </EstadoVacio>
       ) : (
         <>
-          {/* ── Rentabilidad ─────────────────────────────────────── */}
           {rentabilidad === null ? (
             <EstadoError>{tr('rentabilidad.vista.noPudeLeerLos')}</EstadoError>
           ) : rentabilidad.viajesConIngreso === 0 ? (
@@ -102,38 +107,17 @@ export function VistaRentabilidad({
               {tr('rentabilidad.vista.ningunViajeTraeIngreso')}
             </EstadoVacio>
           ) : (
-            <>
-              <TiraCifras sello={selloHoy(tr('rentabilidad.vista.selloViajesLiquidados'))}>
-                <Cifra
-                  icono={<Icono icono={Banknote} />}
-                  etiqueta={tr('rentabilidad.vista.ingresoDeFletesLiquidados')} valor={rentabilidad.ingreso} formato="mxn"
-                  info="rentabilidad.ingreso" />
-                <Cifra
-                  icono={<Icono icono={ReceiptText} />}
-                  etiqueta={tr('rentabilidad.vista.costoComprobadoEsosMismos')} valor={rentabilidad.costoComprobado} formato="mxn"
-                  info="rentabilidad.costo" />
-                <Cifra
-                  icono={<Icono icono={TrendingUp} />}
-                  etiqueta={tr('rentabilidad.vista.contribucionIngresoComprobad')} valor={rentabilidad.contribucion} formato="mxn"
-                  info="rentabilidad.contribucion" />
-              </TiraCifras>
-              <p className="rv-rent__nota">
-                {rentabilidad.margenPct !== null
-                  ? tr('rentabilidad.vista.margenMedidoSoloSobre', { v: porcentaje(rentabilidad.margenPct), v2: numero(rentabilidad.viajesConIngreso) })
-                  : tr('rentabilidad.vista.sinIngresoCapturadoEl')}
-                {rentabilidad.viajesSinIngreso > 0
-                  && ' ' + tr('rentabilidad.vista.viajesSinIngresoQuedan', { v: numero(rentabilidad.viajesSinIngreso) })}
-                {rentabilidad.viajesSinLiquidar !== null && rentabilidad.viajesSinLiquidar > 0
-                  && ' ' + tr('rentabilidad.vista.viajesSinLiquidacionVigente', { v: numero(rentabilidad.viajesSinLiquidar) })}
-              </p>
-              {/* Qué NO trae esa cifra. Va aquí y no en un tooltip porque es la diferencia entre "este viaje dejó dinero" y "este viaje dejó dinero ANTES de pagar al operador y el taller", y de esa distinción dependen decisiones de tarifa. */}
-              <p className="rv-rent__pie">
-                {tr('rentabilidad.vista.contribucionNoEsUtilidad')}
-              </p>
-            </>
+            <p className="rv-rent__nota">
+              {rentabilidad.margenPct !== null
+                ? tr('rentabilidad.vista.margenMedidoSoloSobre', { v: porcentaje(rentabilidad.margenPct), v2: numero(rentabilidad.viajesConIngreso) })
+                : tr('rentabilidad.vista.sinIngresoCapturadoEl')}
+              {rentabilidad.viajesSinIngreso > 0
+                && ' ' + tr('rentabilidad.vista.viajesSinIngresoQuedan', { v: numero(rentabilidad.viajesSinIngreso) })}
+              {rentabilidad.viajesSinLiquidar !== null && rentabilidad.viajesSinLiquidar > 0
+                && ' ' + tr('rentabilidad.vista.viajesSinLiquidacionVigente', { v: numero(rentabilidad.viajesSinLiquidar) })}
+            </p>
           )}
 
-          {/* ── Cobranza a clientes ──────────────────────────────── */}
           {cobranza === null ? (
             <EstadoError>{tr('rentabilidad.vista.noPudeLeerLas')}</EstadoError>
           ) : cobranza.total === 0 ? (
@@ -142,16 +126,6 @@ export function VistaRentabilidad({
             </EstadoVacio>
           ) : (
             <>
-              <TiraCifras sello={selloHoy(tr('rentabilidad.vista.selloViajesLiquidados'))}>
-                <Cifra
-                  icono={<Icono icono={Wallet} />}
-                  etiqueta={tr('rentabilidad.vista.porCobrarFacturasVivas')} valor={cobranza.porCobrar} formato="mxn"
-                  info="rentabilidad.por_cobrar" />
-                <Cifra
-                  icono={<Icono icono={CalendarClock} />}
-                  etiqueta={tr('rentabilidad.vista.vencido')} valor={cobranza.vencido} formato="mxn"
-                  info="rentabilidad.vencido" />
-              </TiraCifras>
               {cobranza.sinCondiciones > 0 && (
                 <p className="rv-rent__nota" data-tono="warn">
                   {cobranza.sinCondiciones === 1
@@ -167,10 +141,10 @@ export function VistaRentabilidad({
                   </p>
                 ) : (
                   <TablaBase<FilaCartera> etiqueta={tr('rentabilidad.vista.rentabilidadPorFolioY')} columnas={columnas} filas={cobranza.facturas}
-                    idFila={(f) => f.id} altoMaximo={false} tarjetaMovil />
+                    idFila={(f) => f.id} densa altoMaximo={false} tarjetaMovil />
                 )}
 
-                {/* ── La cartera viene PAGINADA (mig. 0152) ── Se dice el rango Y el total: recortar la lista está bien, recortar la cifra sin decirlo no. Las cifras de arriba (por cobrar, vencido) son de TODAS las facturas, no de esta página — por eso el renglón lo aclara. */}
+                {/* La cartera viene PAGINADA (mig. 0152): se dice el rango Y el total. Las cifras de arriba son de TODAS las facturas, no de esta página. */}
                 <div className="rv-rent__pie-lista">
                   <span className="rv-rent__pie">
                     {tr('rentabilidad.vista.facturasDe', { v: numero(desde), v2: numero(hasta), v3: numero(cobranza.total) }) + ' '}
@@ -188,6 +162,6 @@ export function VistaRentabilidad({
           )}
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }
