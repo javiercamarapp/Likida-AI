@@ -7,12 +7,21 @@ begin;
 insert into public.tenant (id, nombre) values
   ('10020000-0000-4000-8000-0000000000a1', 'Flota A 1002'),
   ('10020000-0000-4000-8000-0000000000b1', 'Flota B 1002');
-insert into auth.users (id, email) values
-  ('10020000-0000-4000-8000-0000000000c1', 'dueno-a-1002@test.invalid'),
-  ('10020000-0000-4000-8000-0000000000c2', 'contador-a-1002@test.invalid'),
-  ('10020000-0000-4000-8000-0000000000c3', 'dueno-b-1002@test.invalid'),
-  ('10020000-0000-4000-8000-0000000000c4', 'super-1002@test.invalid')
-on conflict (id) do nothing;
+-- Las personas existen en auth.users SOLO donde hay esquema auth de Supabase (pila local y producción, donde la 1002 pone la FK);
+-- el Postgres efímero del CI no lo trae y app_user.id = auth.users.id va sin FK por convención del repo.
+do $$
+begin
+  if to_regclass('auth.users') is not null then
+    execute $q$
+      insert into auth.users (id, email) values
+        ('10020000-0000-4000-8000-0000000000c1', 'dueno-a-1002@test.invalid'),
+        ('10020000-0000-4000-8000-0000000000c2', 'contador-a-1002@test.invalid'),
+        ('10020000-0000-4000-8000-0000000000c3', 'dueno-b-1002@test.invalid'),
+        ('10020000-0000-4000-8000-0000000000c4', 'super-1002@test.invalid')
+      on conflict (id) do nothing
+    $q$;
+  end if;
+end $$;
 insert into public.app_user (id, tenant_id, email, rol) values
   ('10020000-0000-4000-8000-0000000000c1', '10020000-0000-4000-8000-0000000000a1', 'dueno-a-1002@test.invalid', 'flota_admin'),
   ('10020000-0000-4000-8000-0000000000c2', '10020000-0000-4000-8000-0000000000a1', 'contador-a-1002@test.invalid', 'contador'),

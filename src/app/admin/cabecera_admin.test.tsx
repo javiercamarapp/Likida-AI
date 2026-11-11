@@ -32,17 +32,22 @@ describe('«Avisos» del pie de /admin: el contador real', () => {
     expect(html).not.toContain('data-estado="sin-dato"');
     expect(html).toContain('aria-label="Avisos: nada pendiente"');
   });
-  it('con 3 pendientes pinta el 3', () => {
+  it('con 3 pendientes pinta el punto (sin cifra) y dice cuántos en la etiqueta', () => {
     const html = con(3);
-    expect(html).toMatch(/data-urgente="no"[^>]*>3</);
+    expect(html).toMatch(/class="rv-ps-punto" data-urgente="no"/);
+    expect(html).not.toContain('rv-contador');
     expect(html).toContain('aria-label="Avisos: 3 pendientes"');
   });
-  it('con 12 pendientes y algo urgente pinta el 12 en modo urgente', () => {
+  it('con 12 pendientes y algo urgente pinta el punto en modo urgente', () => {
     const html = con(12, true);
-    expect(html).toMatch(/data-urgente="si"[^>]*>12</);
+    expect(html).toMatch(/class="rv-ps-punto" data-urgente="si"/);
     expect(html).toContain('12 pendientes, hay algo urgente');
   });
-  it('más de 99 se topa', () => { expect(con(250)).toMatch(/>99\+</); });
+  it('con muchos pendientes sigue siendo un punto: no pinta cifra y la etiqueta dice el total real', () => {
+    const html = con(250);
+    expect(html).not.toMatch(/>99\+</);
+    expect(html).toContain('aria-label="Avisos: 250 pendientes"');
+  });
   it('con la lectura caída dice «sin dato» y nunca pinta 0', () => {
     const html = con(null);
     expect(html).toContain('aria-label="Avisos: sin dato"');

@@ -81,7 +81,7 @@ describe('Inicio rediseñado: jerarquía, iconos animados y estados honestos', (
 
   it('cada tarjeta lleva su icono SVG animado (decorativo) y el texto del estado al lado', async () => {
     const h = await html('flota_admin');
-    for (const a of ['liquidacion', 'peajes', 'carta_porte', 'vigia', 'conductor']) expect(h).toContain(`class="rv-ia" data-agente="${a}"`.replace('class="rv-ia"', 'class="rv-ia"'));
+    for (const a of ['liquidacion', 'peajes', 'carta_porte', 'vigia', 'conductor']) expect(h).toContain(`class="rv-ia" data-agente="${a}"`);
     expect((h.match(/<svg[^>]*class="rv-ia"[^>]*aria-hidden="true"/g) ?? []).length).toBe(5);
   });
 

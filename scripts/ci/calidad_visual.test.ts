@@ -1,6 +1,6 @@
 // F22 — Guardas de choques visuales SIN red ni producción. Cada guarda tiene (a) su corrida real contra src/**/*.css con una
 // base que solo baja y (b) una prueba de sanidad: un caso sintético MALO que la hace fallar y uno BUENO que no.
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { alturasAViewport, colisionesDeClases, evaluarDesborde, evaluarH1, evaluarTitulosEncimados } from './calidad-visual.mjs';
@@ -8,10 +8,11 @@ import base from './calidad-visual-base.json';
 
 const RAIZ = join(__dirname, '..', '..');
 function hojas(dir: string, acc: Array<{ ruta: string; css: string }> = []) {
-  for (const n of readdirSync(dir)) {
-    const p = join(dir, n);
-    if (statSync(p).isDirectory()) hojas(p, acc);
-    else if (n.endsWith('.css')) acc.push({ ruta: relative(RAIZ, p), css: readFileSync(p, 'utf8') });
+  // Dirent evita el statSync previo a la lectura (carrera de sistema de archivos).
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) hojas(p, acc);
+    else if (e.name.endsWith('.css')) acc.push({ ruta: relative(RAIZ, p), css: readFileSync(p, 'utf8') });
   }
   return acc;
 }
