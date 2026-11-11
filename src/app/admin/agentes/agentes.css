@@ -23,3 +23,15 @@
 /* Menú «⋯» de la fila (Rovaq: acciones por fila dentro de un menú, 28 px): la destructiva «Apagar» vive ahí, no como botón rojo por fila. */
 .rv-agente-menu-btn.rv-btn { width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; justify-content: center; }
 .rv-agente-menu-btn svg { width: 16px; height: 16px; }
+
+/* Móvil (≤ 819 px): la ficha-fila de la tabla es UNA columna que puede encogerse (minmax(0,1fr)); sin esto el texto «nowrap» ensancha la
+   ficha y se sale por la derecha. Aquí sí pueden bajar de renglón, y nunca hay scroll horizontal de página. */
+@media (max-width: 819px) {
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub),
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub) > tr { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub) td { min-width: 0; flex-wrap: wrap; }
+  .rv-agente-nowrap, .rv-agente-fecha, .rv-agente-resultado, .rv-agente-enlace { white-space: normal; }
+  .rv-agente-resultado { flex-wrap: wrap; }
+  .rv-tb table[data-tarjeta] tbody:has(.rv-agente-sub) td > * { max-width: 100%; min-width: 0; }
+  .rv-agente-sub { overflow-wrap: anywhere; }
+}

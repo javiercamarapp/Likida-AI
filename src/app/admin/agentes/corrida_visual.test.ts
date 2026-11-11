@@ -46,4 +46,9 @@ describe('Última corrida del catálogo de agentes', () => {
     const src = readFileSync(new URL('./contenido.tsx', import.meta.url), 'utf8');
     expect(src).not.toContain("?? 'error'");
   });
+  it('móvil: las fichas de la tabla no se salen del ancho (columna minmax(0,1fr) y texto que baja de renglón)', () => {
+    const css = readFileSync(new URL('./agentes.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/grid-template-columns:\s*minmax\(0,\s*1fr\)/);
+    expect(css).toMatch(/\.rv-agente-nowrap[^{]*\{[^}]*white-space:\s*normal/);
+  });
 });
