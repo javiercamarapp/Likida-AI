@@ -1,6 +1,6 @@
 /* eslint-disable security/detect-non-literal-fs-filename -- lee el árbol de FUENTE del propio repo; ninguna ruta viene de entrada de usuario. */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fuentesDeProduccion, sinComentarios } from '@/lib/pruebas/codigo';
 import { APOYO_MAX } from '../ui-v2/componentes';
@@ -13,6 +13,21 @@ import { TODAS_LAS_RUTAS, ENTRADAS_DASHBOARD } from './rutas';
 const RAIZ = join(process.cwd(), 'src/app/dashboard');
 const fuente = (rel: string) => readFileSync(join(RAIZ, rel), 'utf8');
 const todas = fuentesDeProduccion(RAIZ);
+
+/** Diccionarios en español (todos los namespaces): `'clave': 'texto'`. Las pantallas migradas a i18n titulan con `titulo={t('clave')}`. */
+const DICCIONARIO_ES = readdirSync(join(process.cwd(), 'src/lib/i18n/es'))
+  .map((f) => readFileSync(join(process.cwd(), 'src/lib/i18n/es', f), 'utf8')).join('\n');
+function textoDeClave(clave: string): string | null {
+  const m = new RegExp(`'${clave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}':\\s*'((?:[^'\\\\]|\\\\.)*)'`).exec(DICCIONARIO_ES);
+  return m ? m[1].replace(/\\'/g, "'") : null;
+}
+/** El `titulo` de `<MarcoPagina>`: literal, o `{t('clave')}` resuelto contra el diccionario en español; `null` si es calculado. */
+function tituloDeMarco(src: string): string | null {
+  const lit = /<MarcoPagina\b[^>]*?\btitulo="([^"]*)"/s.exec(src);
+  if (lit) return lit[1];
+  const dic = /<MarcoPagina\b[^>]*?\btitulo=\{\s*\w+\('([^']+)'\)\s*\}/s.exec(src);
+  return dic ? textoDeClave(dic[1]) : null;
+}
 
 /** Las pantallas del panel que ya usan el marco único (se agregan aquí al migrarlas; una que vuelva atrás rompe la prueba). */
 const MIGRADAS = [
@@ -100,10 +115,10 @@ describe('el título es el nombre exacto de la entrada del menú', () => {
       // Las subpantallas que el menú anterior no nombraba (p. ej. `agentes/vigia/avisos`) conservan su título descriptivo hasta que la
       // fase que las migra (F10 para Automatización) las lleve al nombre de su entrada.
       if (!entrada || !anterior) continue;
-      const m = /<MarcoPagina\b[^>]*?\btitulo="([^"]*)"/s.exec(fuente(rel));
-      if (!m) continue; // título calculado (detalle)
+      const titulo = tituloDeMarco(fuente(rel));
+      if (titulo === null) continue; // título calculado (detalle)
       comparadas++;
-      if (m[1] !== entrada && m[1] !== anterior) mal.push(`${rel}: «${m[1]}» ≠ entrada «${entrada}» (ni su nombre anterior «${anterior}»)`);
+      if (titulo !== entrada && titulo !== anterior) mal.push(`${rel}: «${titulo}» ≠ entrada «${entrada}» (ni su nombre anterior «${anterior}»)`);
     }
     expect(comparadas).toBeGreaterThan(30);
     expect(mal).toEqual([]);
