@@ -1843,4 +1843,6 @@ export const dinero = {
   'timbrado.viajeId.timbrar.usoCfdi': 'Uso CFDI',
   'timbrado.viajeId.timbrar.verifiqueEnElPanel': 'Verifiqué en el panel de mi PAC que NO existe un CFDI de este viaje.',
   'timbrado.viajeId.timbrar.viElAcuseO': 'Vi el acuse o el estatus «Cancelado» de este CFDI.',
+  'contador.estimuloPeaje.operacionGuardar': 'guardar la declaración',
+  'contador.timbrado.operacionGuardar': 'guardar el perfil de timbrado',
 } as const;

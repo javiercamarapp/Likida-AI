@@ -59,7 +59,7 @@ export async function EstimuloPeaje({
 
   async function accion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
@@ -81,7 +81,7 @@ export async function EstimuloPeaje({
         s.userId,
       );
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar la declaración') };
+      return { error: mensajeParaPantalla(e, tr('contador.estimuloPeaje.operacionGuardar'), idioma) };
     }
     revalidatePath('/dashboard/contador');
     const califica = ingresos === 'menor' && parte === 'no';

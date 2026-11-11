@@ -29,13 +29,13 @@ const { default: DashboardChrome } = process.env.UI2_CHROME === 'v2'
   ? await import('@/app/dashboard/shell/chrome-v2')
   : await import('@/app/dashboard/chrome');
 const { BarraPagina, HeroSaludo, ChipFecha, TablaViajes } = await import('@/app/dashboard/resumen-visual');
-const { InsightDeAgente, FICHAS_CINCO_AGENTES } = await import('@/app/dashboard/inicio-cinco-agentes');
+const { FICHAS_CINCO_AGENTES } = await import('@/app/dashboard/inicio-cinco-agentes');
 const kit = await import('@/app/admin/ui/kit');
 const { TiraKpi, Sparkline, Columnas } = await import('@/app/ui-v2/graficas');
 const forma = await import('@/app/admin/ui/forma');
 const gr = await import('@/app/admin/ui/graficas');
 const { TarjetaInsight } = await import('@/app/dashboard/agentes/insights/tarjeta-insight');
-const { EsqTabla, EsqCifras, EsqGrafica } = await import('@/app/dashboard/bloque');
+const { EsqTabla, EsqCifras, EsqTarjeta } = await import('@/app/dashboard/bloque');
 const BTN_PRIMARIO = 'rv-btn rv-btn--primary';
 const BTN_SECUNDARIO = 'rv-btn';
 const ESTILO_PRIMARIO = undefined;
@@ -85,11 +85,9 @@ const VISTAS: Record<string, () => ReactNode> = {
                 <div className="text-[12px]" style={{ color: 'var(--muted)' }}>{f.descripcion}</div>
               </div>
             </div>
-            <InsightDeAgente
-              href={f.href} nombre={f.nombre}
-              proximamente={i === 3}
-              insights={i === 0 ? [insight('a', 'urgente', 'dato')] : i === 1 ? [insight('b', 'atencion', 'candidato', 'peajes')] : i === 2 ? [] : null}
-            />
+            {i === 0 ? <TarjetaInsight insight={insight('a', 'urgente', 'dato')} />
+              : i === 1 ? <TarjetaInsight insight={insight('b', 'atencion', 'candidato', 'peajes')} />
+              : <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{i === 3 ? 'Todavía no está activo en tu cuenta.' : 'Sin datos todavía.'}</p>}
           </div>
         ))}
       </div>
@@ -170,7 +168,7 @@ const VISTAS: Record<string, () => ReactNode> = {
       </div>
       <EsqCifras n={3} />
       <EsqTabla filas={4} />
-      <EsqGrafica alto={120} />
+      <EsqTarjeta alto={160} />
     </Pagina>
   ),
   '08-insights': () => (

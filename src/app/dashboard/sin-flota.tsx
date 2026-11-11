@@ -1,4 +1,7 @@
 import Link from 'next/link';
+import type { ReactNode } from 'react';
+import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
 import { Building2 } from 'lucide-react';
 import { EstadoVacio } from './estados';
 
@@ -24,15 +27,14 @@ import { EstadoVacio } from './estados';
 // columna tiene llave foránea contra `tenant` (app_user_tenant_id_fkey).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function AvisoSinFlota({ tenantId }: { tenantId: string }) {
+export async function AvisoSinFlota({ tenantId }: { tenantId: string }) {
+  const { t } = await getT('resto');
+  const codigo = (c: ReactNode) => <code className="text-xs">{c}</code>;
   return (
-    <EstadoVacio icono={<Building2 width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-      <strong>No hay ninguna flota dada de alta.</strong>{' '}
-      Este panel apunta a <code className="text-xs">{tenantId}</code> (el uuid de{' '}
-      <code className="text-xs">DEMO_TENANT_ID</code>), y esa fila no existe en la tabla{' '}
-      <code className="text-xs">tenant</code>. Lo de abajo son ceros de una flota inexistente, no cifras
-      de un cliente: sirve para mirar cómo se ve el panel, no para leer un número.{' '}
-      <Link href="/admin/flotas" className="underline font-medium">Dar de alta una flota</Link>.
+    <EstadoVacio icono={<Building2 width={17} height={17} strokeWidth={1.75} className="text-[var(--marca)]" />}>
+      <strong>{t('op.sf_titulo')}</strong>{' '}
+      {rico(t('op.sf_cuerpo', { tenantId }), { code: codigo })}{' '}
+      <Link href="/admin/flotas" className="underline font-medium">{t('op.sf_alta')}</Link>.
     </EstadoVacio>
   );
 }

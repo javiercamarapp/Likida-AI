@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToStaticMarkup, renderToReadableStream } from 'react-dom/server';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -121,8 +121,11 @@ describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
   const titulosDeDinero = ['Gasto total', 'Costo por viaje', 'Por recuperar', 'Diésel elegible para el estímulo', 'Tu motor fiscal', 'IVA acreditable'];
 
   it('los títulos vetados siguen siendo rótulos reales del producto (si no, la prueba no vigilaría nada)', () => {
-    const dir = join(RAIZ, 'src/lib/i18n/es');
-    const dic = readdirSync(dir).map((f) => readFileSync(join(dir, f), 'utf8')).join('\n');
+    const dic = [
+      readFileSync(join(RAIZ, 'src/lib/i18n/es/operacion.ts'), 'utf8'),
+      readFileSync(join(RAIZ, 'src/lib/i18n/es/dinero.ts'), 'utf8'),
+      readFileSync(join(RAIZ, 'src/lib/i18n/es/admin_dinero.ts'), 'utf8'),
+    ].join('\n');
     for (const titulo of ['Costo por viaje', 'Diésel elegible para el estímulo', 'Tu motor fiscal']) expect(dic, titulo).toContain(titulo);
   });
 

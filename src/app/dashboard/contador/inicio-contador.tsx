@@ -19,7 +19,6 @@ import { mxn, hoyMx } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { areaDeRuta } from '@/lib/auth/visibilidad';
 import { AUTOMATIZACIONES, DINERO_FISCAL, SISTEMA, type Item } from '../rutas';
-import { MotorFiscal } from '../resumen-visual';
 import {
   Aviso, BotonEnlace, EsqCifrasV2, EsqTarjetaV2, EstadoVacio, Icono, MarcoPagina, Tarjeta, clasesBoton,
 } from '@/app/ui-v2/componentes';
@@ -42,14 +41,12 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 /**
  * Inicio del PANEL DEL CONTADOR — el Resumen de quien vive del dinero y del
  * papel, y no despacha. Misma anatomía de página que el Resumen del dueño
- * (`inicio-contenido.tsx`): barra de página, saludo con chip de fecha sobre
- * el lienzo tenue, y tarjetas blancas encima. Lo que cambia es el contenido:
- * aquí no hay despacho, ni viajes recientes, ni carga por operador — hay
- * acreditables, deducibilidad y el papel que falta perseguir.
+ * (`resumen-v2.tsx`): `MarcoPagina`, tiras de cifras y tarjetas del kit. Lo que
+ * cambia es el contenido: aquí no hay despacho, ni viajes recientes, ni carga
+ * por operador — hay acreditables, deducibilidad y el papel que falta perseguir.
  *
- * VIVE EN SU PROPIO ARCHIVO, EXPORTADO, y no dentro de `page.tsx`, por las
- * dos razones que `InicioContenido` ya documenta (y que ya cobraron una vez
- * cada una): Next rechaza exports extra en una Page, y sin export el preview
+ * VIVE EN SU PROPIO ARCHIVO, EXPORTADO, y no dentro de `page.tsx`, por dos
+ * razones: Next rechaza exports extra en una Page, y sin export el preview
  * headless no puede montar el componente REAL sin sesión.
  */
 export async function InicioContador({
@@ -443,10 +440,7 @@ async function BloqueFiscal({ pResumenPerdidas, pResumenPerdidasSeries, periodoF
   const [resumenPerdidas, resumenPerdidasSeries] = await Promise.all([pResumenPerdidas, pResumenPerdidasSeries]);
   return (
     <Tarjeta titulo={`Tu motor fiscal — ${periodoFiscal.etiqueta}`}>
-      <div className="rv-cont__motor">
-        <MotorFiscalPeriodo series={resumenPerdidasSeries} />
-      </div>
-      <MotorFiscal resumen={resumenPerdidas} />
+      <MotorFiscalPeriodo series={resumenPerdidasSeries} causas={resumenPerdidas?.porCausa.map(({ titulo, n, monto }) => ({ titulo, n, monto })) ?? []} />
     </Tarjeta>
   );
 }
