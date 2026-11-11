@@ -154,7 +154,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // El motor del recorrido envuelve TODO el chrome (no solo la página): el menú Guía vive en la barra superior y necesita su contexto.
   // Idioma de la interfaz (i18n P0): cookie > preferencia del usuario > es. El layout RAÍZ no lo lee (públicas estáticas).
-  const idiomaDatos = await datosParaProveedor(['shell', 'operacion']);
+  const idiomaDatos = await datosParaProveedor(['shell', 'operacion', 'resto']);
   const arbol = onb && onb.principal ? (
     <TourProvider
       recorridos={onb.recorridos} ambito={`${tenantDelMenu ?? 'sin'}:${sesion.userId}`}

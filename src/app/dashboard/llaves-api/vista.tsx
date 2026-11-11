@@ -4,6 +4,8 @@ import { AREAS_DE_LLAVE, llaveVencida, type LlaveListada } from '@/lib/auth/llav
 import { EstadoVacio, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { FormaRevocar, type AccionForma } from './forma';
 import './llaves-api.css';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 /**
  * La lista de llaves, PURA PROPS — separada de la página (que es la puerta y
@@ -20,38 +22,35 @@ const ROTULO_AREA: Record<string, string> = Object.fromEntries(
 // muerta en la lista. Tachada pero VISIBLE: ocultar una llave revocada borraría de la pantalla la evidencia de qué se revocó y cuándo.
 const muerta = (l: LlaveListada): boolean => l.revocadaEn !== null || llaveVencida(l.expiraEn);
 
-export function ListaLlaves({ llaves, revocarLlave }: {
+export function ListaLlaves({ llaves, revocarLlave, t = T_RESTO_ES }: {
   llaves: LlaveListada[];
-  revocarLlave: AccionForma;
+  revocarLlave: AccionForma; t?: TResto;
 }) {
   if (llaves.length === 0) {
     return (
-      <EstadoVacio icono={KeyRound} titulo="Aún no hay llaves emitidas">
-        Nada fuera de este panel puede leer los datos de la flota, ni el TMS ni un tablero. Emite la primera aquí
-        abajo: se enseña completa <strong>una sola vez</strong> y de ahí en adelante solo se guarda su huella.
-      </EstadoVacio>
+      <EstadoVacio icono={KeyRound} titulo={t('llaves.aun_no_hay_llaves_emitidas')}>{rico(t('llaves.nada_fuera_de_este_panel_puede'), { strong: (c) => <strong>{c}</strong> })}</EstadoVacio>
     );
   }
 
   const columnas: ColumnaBase<LlaveListada>[] = [
-    { id: 'pista', titulo: 'Pista', celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta cifra-mono' : 'rv-lla__tenue cifra-mono'}>{l.prefijo}…</span> },
-    { id: 'nombre', titulo: 'Nombre', principal: true, celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : undefined}>{l.nombre}</span> },
-    { id: 'area', titulo: 'Área', celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : undefined}>{ROTULO_AREA[l.area] ?? l.area}</span> },
-    { id: 'creada', titulo: 'Creada', celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : 'rv-lla__tenue'}>{fechaMx(l.creadaEn)}</span> },
+    { id: 'pista', titulo: t('llaves.pista'), celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta cifra-mono' : 'rv-lla__tenue cifra-mono'}>{l.prefijo}…</span> },
+    { id: 'nombre', titulo: t('llaves.nombre'), principal: true, celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : undefined}>{l.nombre}</span> },
+    { id: 'area', titulo: t('llaves.area'), celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : undefined}>{ROTULO_AREA[l.area] ?? l.area}</span> },
+    { id: 'creada', titulo: t('llaves.creada'), celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : 'rv-lla__tenue'}>{fechaMx(l.creadaEn)}</span> },
     {
-      id: 'vence', titulo: 'Vence',
+      id: 'vence', titulo: t('llaves.vence'),
       // "no caduca" es la verdad de `expira_en` null, y una verdad incómoda a propósito: una llave eterna se ve como lo que es.
       celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : 'rv-lla__tenue'}>{l.expiraEn === null ? 'no caduca' : fechaMx(l.expiraEn)}</span>,
     },
     {
-      id: 'uso', titulo: 'Último uso',
+      id: 'uso', titulo: t('llaves.ultimo_uso'),
       // La verdad, no un guion: "nunca" es la respuesta a "¿la puedo revocar sin romperle nada a nadie?".
       celda: (l) => <span className={muerta(l) ? 'rv-lla__muerta' : 'rv-lla__tenue'}>{l.ultimoUsoEn === null ? 'nunca' : fechaHoraMx(l.ultimoUsoEn)}</span>,
     },
-    { id: 'estado', titulo: 'Estado', celda: (l) => <EstadoLlave l={l} revocarLlave={revocarLlave} /> },
+    { id: 'estado', titulo: t('llaves.estado'), celda: (l) => <EstadoLlave l={l} revocarLlave={revocarLlave} /> },
   ];
 
-  return <TablaBase etiqueta="Llaves de API" columnas={columnas} filas={llaves} idFila={(l) => l.id} altoMaximo={false} tarjetaMovil />;
+  return <TablaBase etiqueta={t('llaves.llaves_de_api')} columnas={columnas} filas={llaves} idFila={(l) => l.id} altoMaximo={false} tarjetaMovil />;
 }
 
 function EstadoLlave({ l, revocarLlave }: { l: LlaveListada; revocarLlave: AccionForma }) {
