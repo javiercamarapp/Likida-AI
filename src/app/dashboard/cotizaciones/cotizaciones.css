@@ -15,3 +15,7 @@
 .rv-cot__fila-acc { display: grid; justify-items: end; gap: 4px; }
 .rv-cot__fila-botones { display: flex; flex-wrap: wrap; gap: 8px; }
 .rv-cot__error { font-size: var(--t-micro); color: var(--bad); }
+
+/* F26: acciones en la fila de la tabla y detalle del cajón. */
+.rv-cot__acciones-fila { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.rv-cot__detalle { display: grid; gap: 10px; }
