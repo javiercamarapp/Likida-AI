@@ -9,6 +9,15 @@ import { REGIMENES, USOS_CFDI } from '@/lib/saas/fiscal';
 export function AltaFlota({ accion, planes }: { accion: AccionDeForma; planes: Array<{ clave: string; nombre: string }> | null }) {
   return (
     <FormaConAviso accion={accion} boton="Dar de alta" columnas="md:grid-cols-2">
+      <CamposAltaFlota planes={planes} />
+    </FormaConAviso>
+  );
+}
+
+/** Los campos del alta, sin envoltorio: los comparten el formulario de página (`AltaFlota`) y el cajón de «Nueva flota». */
+export function CamposAltaFlota({ planes }: { planes: Array<{ clave: string; nombre: string }> | null }) {
+  return (
+    <>
       <CampoTexto etiqueta="Nombre de la flota" name="nombre" required placeholder="Flota de ejemplo" />
       {planes === null ? (
         <CampoTexto etiqueta="Plan" name="planNoDisponible" disabled placeholder="No se pudieron leer los planes" ayuda="Asígnalo después desde la ficha." />
@@ -40,6 +49,6 @@ export function AltaFlota({ accion, planes }: { accion: AccionDeForma; planes: A
         ayuda="Con él, el bot reconoce al administrador cuando escribe." />
       <Casilla name="dedicacionExclusivaCarga" etiqueta="Exclusivamente autotransporte de carga federal"
         ayuda="Habilita la facilidad del 15 % de diésel en efectivo (RFA 2026, regla 2.9)." />
-    </FormaConAviso>
+    </>
   );
 }

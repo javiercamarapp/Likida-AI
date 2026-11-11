@@ -41,11 +41,16 @@ it('un teléfono ilegible deja el arranque en "Sin dato", nunca "0 de 6"', async
   expect(html).not.toMatch(/0 de 6/);
 });
 
-it('el alta ofrece el plan y se abre con ?alta=1', async () => {
-  const html = await render({ alta: '1' });
+it('el alta vive en un cajón («Nueva flota»), ofrece el plan y conserva su acción', async () => {
+  const html = await render();
+  expect(html).toContain('data-forma-cajon="alta-flota"');
+  expect(html).toContain('aria-haspopup="dialog"');
+  expect(html).toContain('Nueva flota');
   expect(html).toContain('Dar de alta una flota');
   expect(html).toContain('Pro');
-  expect(html).toMatch(/<details[^>]*open/);
+  expect(html).toContain('name="nombre"');
+  expect(html).toContain('name="emailAdmin"');
+  expect(html).not.toMatch(/<details/);
 });
 
 it('planes ilegibles: el alta lo dice, no ofrece un selector vacío', async () => {

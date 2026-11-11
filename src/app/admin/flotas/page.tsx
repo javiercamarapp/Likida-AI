@@ -9,21 +9,21 @@ import { telefonosJefe } from '@/lib/likida/contactos';
 import { getPlanes } from '@/lib/saas/suscripcion';
 import { numero } from '@/lib/formato';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { BotonEnlace, Disclosure, EstadoError, Icono, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { BotonEnlace, EstadoError, FormaEnCajon, Icono, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
 import { Cifra, TiraCifras } from '../../ui-v2/graficas';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { accionCrearFlota } from './acciones';
-import { AltaFlota } from './alta';
+import { CamposAltaFlota } from './alta';
 
 export const dynamic = 'force-dynamic';
 
 /** El marco de la pantalla, UNO solo (también para el error de lectura): encabezado y acción de alta no cambian entre estados. */
-function PantallaClientes({ children }: { children: ReactNode }) {
+function PantallaClientes({ children, alta }: { children: ReactNode; alta?: ReactNode }) {
   return (
     <MarcoPagina
       area="Negocio" titulo="Clientes"
       apoyo="Flotas dadas de alta, su plan y cuánto avanzó su arranque."
-      acciones={<BotonEnlace href="/admin/flotas?alta=1#alta" variante="primary" icono={<Icono icono={Plus} />}>Nueva flota</BotonEnlace>}
+      acciones={alta ?? <BotonEnlace href="/admin/flotas?alta=1" variante="primary" icono={<Icono icono={Plus} />}>Nueva flota</BotonEnlace>}
     >
       {children}
     </MarcoPagina>
@@ -87,7 +87,17 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
   ];
 
   return (
-    <PantallaClientes>
+    <PantallaClientes alta={(
+      /* «Nueva flota» abre el alta en un cajón, sin salir de la lista. La acción es la MISMA (`accionCrearFlota`, con su puerta, su segundo
+         factor y su bitácora); `?alta=1` (el enlace de antes) sigue abriéndolo. */
+      <FormaEnCajon
+        id="alta-flota" titulo="Dar de alta una flota" accion={accionCrearFlota} boton="Dar de alta" disparador="Nueva flota" tamano="l"
+        abiertoInicial={sp.alta === '1' || sp.abrir === 'alta-flota'}
+        descripcion="Plan, datos fiscales y administrador. El RFC se valida en el alta porque es la única oportunidad barata: con uno inválido, el motor apaga la comprobación de a nombre de quién vienen las facturas. Los datos fiscales se pueden completar después, pero a medias no se aceptan."
+      >
+        <CamposAltaFlota planes={planes} />
+      </FormaEnCajon>
+    )}>
       <TiraCifras etiqueta="Resumen de clientes">
         <Cifra etiqueta="Flotas dadas de alta" valor={r.tenants} formato="entero" />
         <Cifra
@@ -107,15 +117,6 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
         />
       </Tarjeta>
 
-      <div id="alta">
-        <Disclosure titulo="Dar de alta una flota" resumen="Plan, datos fiscales y administrador" abierto={sp.alta === '1'}>
-          <AltaFlota accion={accionCrearFlota} planes={planes} />
-          <p>
-            El RFC se valida en el alta porque es la única oportunidad barata: con uno inválido, el motor apaga la comprobación de a nombre
-            de quién vienen las facturas. Los datos fiscales se pueden completar después, pero a medias no se aceptan.
-          </p>
-        </Disclosure>
-      </div>
     </PantallaClientes>
   );
 }
