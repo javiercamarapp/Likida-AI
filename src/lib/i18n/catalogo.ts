@@ -4,6 +4,7 @@ import type { errores as erroresEs } from './es/errores';
 import type { graficas as graficasEs } from './es/graficas';
 import type { avisos as avisosEs } from './es/avisos';
 import type { login as loginEs } from './es/login';
+import type { dinero as dineroEs } from './es/dinero';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGO DE NAMESPACES — el único lugar donde se registra un diccionario nuevo.
@@ -23,6 +24,7 @@ export interface Diccionarios {
   graficas: typeof graficasEs;
   avisos: typeof avisosEs;
   login: typeof loginEs;
+  dinero: typeof dineroEs;
 }
 export type Namespace = keyof Diccionarios;
 
@@ -30,17 +32,17 @@ export type Namespace = keyof Diccionarios;
 export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Diccionarios[N]]: string };
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
-export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'login'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'login', 'dinero'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
 export const CARGADORES: Cargadores = {
   es: { shell: () => import('./es/shell').then((m) => m.shell), errores: () => import('./es/errores').then((m) => m.errores),
     graficas: () => import('./es/graficas').then((m) => m.graficas), avisos: () => import('./es/avisos').then((m) => m.avisos),
-    login: () => import('./es/login').then((m) => m.login) },
+    login: () => import('./es/login').then((m) => m.login), dinero: () => import('./es/dinero').then((m) => m.dinero) },
   en: { shell: () => import('./en/shell').then((m) => m.shell), errores: () => import('./en/errores').then((m) => m.errores),
     graficas: () => import('./en/graficas').then((m) => m.graficas), avisos: () => import('./en/avisos').then((m) => m.avisos),
-    login: () => import('./en/login').then((m) => m.login) },
+    login: () => import('./en/login').then((m) => m.login), dinero: () => import('./en/dinero').then((m) => m.dinero) },
 };
 
 /** Carga SOLO los namespaces pedidos, y SOLO en el idioma pedido. */
