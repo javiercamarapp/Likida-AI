@@ -1235,4 +1235,6 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26.usu_baja': 'Deactivated',
   'e26.usu_sin_wa': 'Active without WhatsApp',
   'e26.usu_que_puede_cada_rol': 'What each role can do',
+  'e26.sop_cerrados': 'Closed',
+  'e26.sop_sin_cerrados': 'No closed tickets',
 };

@@ -1233,4 +1233,6 @@ export const resto = {
   'e26.usu_baja': 'Dados de baja',
   'e26.usu_sin_wa': 'Activos sin WhatsApp',
   'e26.usu_que_puede_cada_rol': 'Qué puede hacer cada rol',
+  'e26.sop_cerrados': 'Cerrados',
+  'e26.sop_sin_cerrados': 'Sin tickets cerrados',
 } as const;
