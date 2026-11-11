@@ -56,9 +56,18 @@ describe('recargarSiChunkViejo', () => {
 });
 
 describe('los tres boundaries lo usan', () => {
-  it.each(['app/admin/error.tsx', 'app/dashboard/error.tsx', 'app/global-error.tsx'])('%s', (f) => {
-    const s = readFileSync(join(__dirname, '..', f), 'utf8');
-    expect(s).toContain("from '@/lib/recarga-chunk'");
-    expect(s).toContain('recargarSiChunkViejo(error)');
+  // Los boundaries ya no llaman a la lib directamente: pintan ErrorPanel, que llama a useRecuperacionChunk, que delega aquí
+  // (un solo mecanismo). Se prueba la cadena completa, no solo el primer eslabón.
+  const leer = (f: string) => readFileSync(join(__dirname, '..', f), 'utf8');
+  it.each(['app/admin/error.tsx', 'app/dashboard/error.tsx'])('%s pinta ErrorPanel', (f) => {
+    expect(leer(f)).toContain("from '../ui-v2/componentes/error-panel'");
+  });
+  it('global-error reusa la recuperación de chunk', () => {
+    expect(leer('app/global-error.tsx')).toContain('useRecuperacionChunk');
+  });
+  it('ErrorPanel usa la recuperación y esta delega en la lib de F16', () => {
+    expect(leer('app/ui-v2/componentes/error-panel.tsx')).toContain('useRecuperacionChunk(error, reset)');
+    expect(leer('app/ui-v2/componentes/recuperar-chunk.ts')).toContain("from '@/lib/recarga-chunk'");
+    expect(leer('app/ui-v2/componentes/recuperar-chunk.ts')).toContain('recargarSiChunkViejo(');
   });
 });

@@ -5,7 +5,6 @@ export const BASE_CONTROLES: Record<string, ConteoControles> = {
   'app/admin/agentes/[id]/insumos/zona-insumos.tsx': { R1: 3, R2: 1, R3: 0 },
   'app/admin/conversaciones/page.tsx': { R1: 1, R2: 0, R3: 0 },
   'app/admin/dev/mapa-actividad.tsx': { R1: 1, R2: 0, R3: 0 },
-  'app/admin/error.tsx': { R1: 1, R2: 1, R3: 0 },
   'app/admin/mapa-prospectos/cerebro.tsx': { R1: 11, R2: 2, R3: 1 },
   'app/admin/qa/banco-verdad.tsx': { R1: 4, R2: 0, R3: 0 },
   'app/admin/qa/lanzar-form.tsx': { R1: 5, R2: 0, R3: 0 },

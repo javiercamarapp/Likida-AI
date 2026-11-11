@@ -14,7 +14,7 @@ export const CLAVE_RECARGA_CHUNK = 'likida:recarga-chunk';
 /** No se recarga dos veces dentro de esta ventana. */
 export const VENTANA_RECARGA_CHUNK_MS = 60_000;
 
-const PATRON_CHUNK = /ChunkLoadError|Loading chunk [\w-]+ failed|Loading CSS chunk|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
+const PATRON_CHUNK = /ChunkLoadError|Loading chunk [^\s]+ failed|Loading CSS chunk|Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed/i;
 
 /** ¿Este error es un archivo de código que ya no existe en el servidor? */
 export function esErrorDeChunk(error: unknown): boolean {
