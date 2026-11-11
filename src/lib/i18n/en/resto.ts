@@ -992,6 +992,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.res.est_abierto': 'Open',
   'op.res.est_en_cuadre': 'Reconciling',
   'op.res.est_liquidado': 'Settled',
+  'op.ob.avance': '{n} of {total} profile items declared',
   'op.mapa_nota_en_vivo': "Trips the driver already accepted are drawn; the rest of the trips in progress are on Map. The arc is illustrative, not the truck's route.",
   'op.viajes_sin_seguimiento': '{n} in progress, none with driver tracking yet. See them on Map.',
   'op.preguntale_al_asistente': 'Ask the assistant',

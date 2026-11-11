@@ -990,6 +990,7 @@ export const resto = {
   'op.res.est_abierto': 'Abierto',
   'op.res.est_en_cuadre': 'En cuadre',
   'op.res.est_liquidado': 'Liquidado',
+  'op.ob.avance': '{n} de {total} datos del perfil declarados',
   'op.mapa_nota_en_vivo': 'Se dibujan los viajes que el conductor ya aceptó; el resto de los viajes en curso está en Mapa. El arco es ilustrativo, no la ruta del camión.',
   'op.viajes_sin_seguimiento': '{n} en curso, ninguno con seguimiento del conductor todavía. Los ves en Mapa.',
   'op.preguntale_al_asistente': 'Pregúntale al asistente',
