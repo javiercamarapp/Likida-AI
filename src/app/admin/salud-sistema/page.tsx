@@ -13,7 +13,12 @@ import { getT } from '@/lib/i18n/servidor';
 import { QuemaSlo, leerQuema } from '../quema-slo';
 import { getSLOs } from '@/lib/admin/slo';
 import { logger } from '@/lib/logger';
-import { BotonEnlace, MarcoPagina, EstadoVacio } from '../../ui-v2/componentes';
+import { BotonEnlace, MarcoPagina, EstadoVacio, ListaFuentes } from '../../ui-v2/componentes';
+import { ahoraMs } from '@/lib/saludo';
+import { evaluarFuentes, resumirFuentes } from '@/lib/likida/fuentes/estado';
+import { entradasDeLatidos, RELOJ_DE_FUENTE } from '@/lib/likida/fuentes/desde_latidos';
+import { filasDeEvaluaciones } from '@/lib/likida/fuentes/texto';
+import { leerSilencioWebhook } from '@/lib/likida/fuentes/leer';
 import { TiraCifras } from '../../ui-v2/graficas';
 import { obtenerPanoramaAccion } from '../requiere-accion';
 import { resumenRelojes } from '../crons/estado-relojes';
@@ -206,12 +211,14 @@ export default async function SaludSistemaPage() {
   const salud = envHealth();
   const falta = faltantes();
   // Las cuatro lecturas caen cada una por su lado y NINGUNA tumba la pantalla: una fuente ciega se dice «sin dato», nunca un cero.
-  const [supabase, latidos, slos, panorama, quemaSlo] = await Promise.all([
+  const [supabase, latidos, slos, panorama, quemaSlo, silencio, { t: tf }] = await Promise.all([
     medirSupabase(),
     detalleLatidos().catch((e: unknown) => { logger.error('admin.salud.latidos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     getSLOs().catch((e: unknown) => { logger.error('admin.salud.slos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     obtenerPanoramaAccion().catch(() => null),
     leerQuema(),
+    leerSilencioWebhook().catch(() => null),
+    getT('fuentes'),
   ]);
   const { t: tMon } = await getT('monitoreo');
   const lista = latidos === null ? null : CRONS.map((c) => ({ cron: c, l: latidos[c] }));
@@ -220,6 +227,10 @@ export default async function SaludSistemaPage() {
   const medidos = slos?.filter((x) => x.cumple !== null) ?? [];
   const incumplidos = medidos.filter((x) => x.cumple === false).length;
   const pendientes = panorama?.resumen.pendientes ?? null;
+  // F19: la MISMA pieza de estado por fuente que ve el cliente, aplicada al latido del reloj que lee cada fuente. Latidos ilegibles = «sin dato».
+  const evalsFuentes = evaluarFuentes(entradasDeLatidos(latidos), ahoraMs());
+  const resumenFuentes = resumirFuentes(evalsFuentes);
+  const avisoSilencio = silencio?.hayAlerta ? tf('conexiones.silencio', { horas: silencio.umbralHoras, viajes: silencio.viajesAbiertos ?? 0 }) : null;
 
   const renglones: RenglonSistema[] = [
     sentryActivo()
@@ -298,6 +309,16 @@ export default async function SaludSistemaPage() {
       ) : null}
 
       <section className="adm-sis-bloque"><QuemaSlo evaluaciones={quemaSlo} t={tMon} /></section>
+      <section className="adm-sis-bloque" aria-labelledby="fuentes-sistema">
+        <h2 className="adm-sis-titulo" id="fuentes-sistema">{tf('admin.titulo')}</h2>
+        <p className="adm-sis-nota">{tf('admin.apoyo')}</p>
+        <ListaFuentes
+          etiqueta={tf('admin.titulo')}
+          aviso={avisoSilencio}
+          resumen={[tf('conexiones.resumen', { alDia: resumenFuentes.alDia, total: resumenFuentes.total })]}
+          filas={filasDeEvaluaciones(evalsFuentes, tf, (e) => tf('admin.reloj', { cron: RELOJ_DE_FUENTE[e.id] }))}
+        />
+      </section>
 
       <section className="adm-sis-bloque" aria-labelledby="piezas-sistema">
         <h2 className="adm-sis-titulo" id="piezas-sistema">Cada pieza, medida o declarada sin medir</h2>

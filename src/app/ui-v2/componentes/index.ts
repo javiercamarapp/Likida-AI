@@ -33,6 +33,7 @@ export { SegmentedControl, type OpcionSegmentada } from './segmented';
 export { Tabs, type PestanaDef } from './tabs';
 export { TabsLinea, type PestanaLinea } from './tabs-linea';
 export { StatusChip, type TonoEstado } from './status-chip';
+export { ListaFuentes, type FilaFuente } from './lista-fuentes';
 export { TablaBase, type ColumnaBase } from './tabla-base';
 export { MarcaIntegracion, ChipFuente, IDS_INTEGRACION, esIntegracionConocida, type MarcaId } from './marca-integracion';
 // Comportamiento de formularios y avisos (movido desde admin/ui en la fase 0; `admin/ui/*` re-exporta lo mismo). `Aviso`, `Campo`,
