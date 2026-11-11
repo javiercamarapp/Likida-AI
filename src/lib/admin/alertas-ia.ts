@@ -94,7 +94,7 @@ export async function leerSenalesIa(ahoraMs: number): Promise<SenalesIa> {
   const [filas, viajes, respaldo] = await Promise.all([
     seguro(() => db.from('llm_costo').select('id', { count: 'exact', head: true }).gte('created_at', hace(HORAS_SIN_REGISTRO_IA * H))),
     seguro(() => db.from('viaje').select('id', { count: 'exact', head: true }).in('estatus', ['abierto', 'en_cuadre']).gte('created_at', hace(DIAS_VIAJE_ABIERTO_VIGENTE * 24 * H))),
-    seguro<Array<{ fase: string; modelo: string }>>(() => db.from('llm_costo').select('fase, modelo').in('fase', Object.keys(ROL_DE_FASE)).gte('created_at', hace(VENTANA_RESPALDO_HORAS * H)).limit(5000)),
+    seguro<Array<{ fase: string; modelo: string }>>(() => db.from('llm_costo').select('fase, modelo').in('fase', Object.keys(ROL_DE_FASE)).gte('created_at', hace(VENTANA_RESPALDO_HORAS * H)).order('created_at', { ascending: false }).order('id').limit(5000)),
   ]);
   return { filasEnVentana: filas.count, viajesAbiertos: viajes.count, filasRespaldo: respaldo.data };
 }

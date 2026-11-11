@@ -11,7 +11,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (t: string) => {
       consultas.push(t);
       const b: Record<string, unknown> = {};
-      for (const m of ['select', 'eq', 'in', 'limit']) b[m] = () => b;
+      for (const m of ['select', 'eq', 'in', 'order', 'limit']) b[m] = () => b;
       b.then = (res: (x: unknown) => unknown, rej: (e: unknown) => unknown) =>
         Promise.resolve(porTabla[t] ?? { data: [], error: null }).then(res, rej);
       return b;

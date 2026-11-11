@@ -93,6 +93,7 @@ export async function veredictoSalidasDeFlota(tenantId: string | null | undefine
       .from('suscripcion')
       .select('estado')
       .eq('tenant_id', tenantId)
+      .order('id')
       .limit(200), 'salidas_flota.suscripcion');
     if (error) throw new Error(error.message);
     const v = decidirSalidas(((data ?? []) as Array<{ estado?: unknown }>).map((f) => String(f.estado)));
@@ -123,8 +124,8 @@ export async function veredictoSalidasHaciaTelefono(telefono: string): Promise<V
   try {
     const variantes = variantesTelefono(telefono);
     const [op, us] = await Promise.all([
-      acotada(supabaseAdmin().from('operador').select('tenant_id').in('telefono', variantes).limit(20), 'salidas_flota.operador'),
-      acotada(supabaseAdmin().from('app_user').select('tenant_id').in('telefono', variantes).limit(20), 'salidas_flota.app_user'),
+      acotada(supabaseAdmin().from('operador').select('tenant_id').in('telefono', variantes).order('id').limit(20), 'salidas_flota.operador'),
+      acotada(supabaseAdmin().from('app_user').select('tenant_id').in('telefono', variantes).order('id').limit(20), 'salidas_flota.app_user'),
     ]);
     if (op.error) throw new Error(op.error.message);
     if (us.error) throw new Error(us.error.message);
