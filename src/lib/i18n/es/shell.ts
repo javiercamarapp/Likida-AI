@@ -242,7 +242,6 @@ export const shell = {
   'nav.n.terminos-y-mandato': 'Términos y mandato',
   'nav.n.arco': 'ARCO',
   'nav.n.normas': 'Normas',
-  'nav.n.ahora': 'Ahora',
   'nav.n.mis-reglas': 'Mis reglas',
   'nav.n.liquidacion': 'Liquidación',
   'nav.n.peajes': 'Peajes',

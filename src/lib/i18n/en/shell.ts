@@ -234,7 +234,6 @@ export const shell: Record<keyof typeof shellEs, string> = {
   'nav.n.terminos-y-mandato': 'Terms and mandate',
   'nav.n.arco': 'ARCO',
   'nav.n.normas': 'Standards',
-  'nav.n.ahora': 'Now',
   'nav.n.mis-reglas': 'My rules',
   'nav.n.liquidacion': 'Settlement',
   'nav.n.peajes': 'Tolls',
