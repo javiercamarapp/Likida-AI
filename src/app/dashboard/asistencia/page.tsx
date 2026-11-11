@@ -14,7 +14,7 @@ import { logger } from '@/lib/logger';
 import { BotonAccionMesa } from './boton-accion';
 import type { Metadata } from 'next';
 import {
-  BarraFiltros, BotonEnlace, CampoTexto, Chip, Disclosure, EstadoVacio, FiltroOpciones, FormaConAviso, Icono, StatusChip, type ResultadoAccion,
+  BarraPeriodo, BotonEnlace, CampoTexto, Chip, Disclosure, EstadoVacio, FormaConAviso, Icono, StatusChip, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import { TarjetaTabla } from '../bloque';
 import './asistencia.css';
@@ -201,15 +201,12 @@ export default async function PaginaMesaControl({
       titulo={t('asist.titulo')}
       apoyo={apoyo}
       filtros={leyoOk ? (
-        <BarraFiltros enLinea accion={RUTA} etiqueta={t('asist.filtros')} nActivos={filtro !== 'todas' ? 1 : 0} limpiarHref={hrefFiltro('todas')}
-          ocultos={[...new URLSearchParams(sufijoTenant(sp).replace(/^\?/, '')).entries()]}>
-          <FiltroOpciones etiqueta={t('asist.filtro.estado')} valor={filtro} porDefecto="todas"
-            opciones={[
-              { valor: 'todas', rotulo: t('asist.filtro.todas'), href: hrefFiltro('todas') },
-              { valor: 'criticas', rotulo: t('asist.filtro.criticas'), href: hrefFiltro('criticas') },
-              { valor: 'sin_tomar', rotulo: t('asist.filtro.sin_tomar'), href: hrefFiltro('sin_tomar') },
-            ]} />
-        </BarraFiltros>
+        <BarraPeriodo etiqueta={t('asist.filtros')}
+          periodo={{ etiqueta: t('asist.filtro.estado'), valor: filtro, opciones: [
+            { valor: 'todas', etiqueta: t('asist.filtro.todas'), href: hrefFiltro('todas') },
+            { valor: 'criticas', etiqueta: t('asist.filtro.criticas'), href: hrefFiltro('criticas') },
+            { valor: 'sin_tomar', etiqueta: t('asist.filtro.sin_tomar'), href: hrefFiltro('sin_tomar') },
+          ] }} />
       ) : undefined}
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Mesa de control')}

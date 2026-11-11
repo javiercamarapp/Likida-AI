@@ -33,15 +33,13 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       titulo={t('consola.resumen')}
       apoyo={t('consola.apoyo', { saludo: saludoTr(tr), nombre: nombre ?? 'Javier' })}
       acciones={<BotonEnlace variante="primary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>}
-      avisos={(
-        <>
-          <p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={1.75} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>
-          <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
-        </>
-      )}
+      avisos={<p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={1.75} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>}
     >
       {/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas, luego los paneles con filas-tarjeta. */}
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
+
+      {/* Un solo aviso FIJO arriba (el administrativo); el semáforo de salud es un bloque de contenido, no un segundo aviso apilado bajo él. */}
+      <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
 
       <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>

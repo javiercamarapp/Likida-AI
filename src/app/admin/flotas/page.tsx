@@ -28,8 +28,9 @@ function PantallaClientes({ children, filtros, pie, vistaRapida, t }: { children
     <EsqueletoTablaMaestra
       area="Negocio" titulo={t('flotas.clientes')}
       apoyo={t('flotas.flotas_dadas_de_alta')}
-      avisos={<Aviso tono="info">{t('flotas.aviso_admin')}</Aviso>}
-      filtros={filtros} pie={pie} vistaRapida={vistaRapida}
+      // Rovaq P2: el aviso administrativo va PRIMERO y luego los filtros (el esqueleto pinta filtros antes que avisos, así que el aviso entra con ellos).
+      filtros={<><Aviso tono="info">{t('flotas.aviso_admin')}</Aviso>{filtros}</>}
+      pie={pie} vistaRapida={vistaRapida}
     >
       {children}
     </EsqueletoTablaMaestra>
@@ -173,6 +174,7 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
           su segundo factor y su bitácora); `?alta=1` (el enlace de antes) baja hasta aquí por el ancla. */}
       <section id="alta-flota" className="adm-flota-alta">
         <Tarjeta titulo={t('flotas.dar_de_alta_una')}>
+          <p className="adm-eyebrow">{t('flotas.eb_nuevo_espacio')}</p>
           <p className="adm-din-nota">{t('flotas.plan_datos_fiscales_y')}</p>
           <AltaFlota accion={accionCrearFlota} planes={planes} t={t} />
         </Tarjeta>

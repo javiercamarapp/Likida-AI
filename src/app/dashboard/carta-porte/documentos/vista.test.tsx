@@ -122,11 +122,19 @@ describe('VistaDocumentos', () => {
   });
 
   it('exportación: enlaces del estándar y de los formatos guardados, con el tenant del superadmin', () => {
-    const h = html(<VistaDocumentos datos={datos([], { configs: [{ id: 'cfg-1', nombre: 'Cliente demo', formato: 'csv', config: {} }] })} acciones={todas} apiSufijo="&tenant=abc" />);
+    const aprobado = [doc({ id: 'ap1', estado: 'aprobado', aprobadoEn: 'x', viajeId: 'v1' })];
+    const h = html(<VistaDocumentos datos={datos(aprobado, { configs: [{ id: 'cfg-1', nombre: 'Cliente demo', formato: 'csv', config: {} }] })} acciones={todas} apiSufijo="&tenant=abc" />);
     expect(h).toContain('/api/export/carta-porte-docs?config=estandar&amp;formato=csv&amp;tenant=abc');
     expect(h).toContain('config=cfg-1&amp;formato=csv');
     expect(h).toMatch(/Cliente demo · CSV/);
     expect(h).toMatch(/apóstrofo/);
+  });
+
+  it('exportación sin documentos aprobados: botón punteado «No disponible ahora», sin enlaces de descarga', () => {
+    const h = html(<VistaDocumentos datos={datos([], { configs: [{ id: 'cfg-1', nombre: 'Cliente demo', formato: 'csv', config: {} }] })} acciones={todas} apiSufijo="&tenant=abc" />);
+    expect(h).toContain('rv-nd');
+    expect(h).toMatch(/No disponible ahora: aún no hay documentos aprobados/);
+    expect(h).not.toContain('/api/export/carta-porte-docs?config=');
   });
 
   it('sin acciones (rol sin permiso) no pinta formularios que no podrían usarse', () => {

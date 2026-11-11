@@ -15,10 +15,11 @@
 // muerto sin escribir su aborto — nunca un spinner eterno con cara de avance.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { usdCorto } from '../usd-corto';
 import { uniformes } from '@/app/admin/cifras-uniformes';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FileText, MessageCircle } from 'lucide-react';
-import { fechaHoraMx, usd4 } from '@/lib/formato';
+import { fechaHoraMx } from '@/lib/formato';
 import { Aviso, BotonEnlace, Disclosure, EstadoError, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import { TiraCifras } from '@/app/ui-v2/graficas';
@@ -195,7 +196,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
       id: 'paso', titulo: tx('qa_corrida_viva.la_corrida_paso_a_paso'),
       celda: (p) => (<>{p.nombre}{p.detalle && <span className="rv-qa-detalle">{p.detalle}</span>}</>),
     },
-    { id: 'costo', titulo: tx('qa_pantalla.costo_real'), alinear: 'der', celda: (p) => (p.costoUsd > 0 ? usd4(p.costoUsd) : '—') },
+    { id: 'costo', titulo: tx('qa_pantalla.costo_real'), alinear: 'der', celda: (p) => (p.costoUsd > 0 ? usdCorto(p.costoUsd) : '—') },
     {
       id: 'estado', titulo: tx('salud_sistema.estado'),
       celda: (p) => { const pp = pillPaso(tx)[p.estado] ?? pillPaso(tx).pendiente; return <StatusChip tono={pp.estado}>{pp.etiqueta}</StatusChip>; },
@@ -246,7 +247,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
               ? `${tx('qa_corrida_viva.pasada', { pasadas: corrida.pasadas })} ${enPasada ? tx('qa_corrida_viva.trabajando_ahora') : viva ? tx('qa_corrida_viva.pausada_entre_pasadas') : 'terminada'}`
               : undefined,
           },
-          { etiqueta: tx('qa_corrida_viva.costo_hasta_ahora_real'), valor: usd4(corrida.costoUsdTotal ?? 0), nota: tx('qa_corrida_viva.costo_registrado_nunca_estimado') },
+          { etiqueta: tx('qa_corrida_viva.costo_hasta_ahora_real'), valor: usdCorto(corrida.costoUsdTotal ?? 0), nota: tx('qa_corrida_viva.costo_registrado_nunca_estimado') },
           {
             etiqueta: tx('qa_corrida_viva.flota_de_prueba'), valor: corrida.tenantNombre,
             nota: `${corrida.inicio ? tx('qa_corrida_viva.inicio', { v: fechaHoraMx(corrida.inicio, idioma) }) : tx('qa_corrida_viva.sin_arrancar')}${corrida.fin ? ` · ${tx('qa_corrida_viva.fin', { v: fechaHoraMx(corrida.fin, idioma) })}` : ''}`,
@@ -304,7 +305,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
         mensaje={tx('qa_corrida_viva.todavia_no_arranca_el_primer_paso')}
         detalle={viva ? tx('qa_corrida_viva.esta_pantalla_se_actualiza_sola_cada') : undefined}
       >
-        <TablaBase etiqueta={tx('qa_corrida_viva.la_corrida_paso_a_paso')} columnas={columnasPasos} filas={corrida.pasos} idFila={(p) => String(p.n)} densa altoMaximo={false} />
+        <TablaBase etiqueta={tx('qa_corrida_viva.la_corrida_paso_a_paso')} columnas={columnasPasos} filas={corrida.pasos} idFila={(p) => String(p.n)} densa altoMaximo={false} tarjetaMovil />
       </Tarjeta>
 
       {/* ── El veredicto ──────────────────────────────────────────────── */}
@@ -314,7 +315,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
         mensaje={viva ? tx('qa_corrida_viva.los_oraculos_corren_al_final_de') : tx('qa_corrida_viva.esta_corrida_termino_sin_veredicto_los')}
       >
         {corrida.veredicto !== null && (
-          <TablaBase etiqueta={tx('qa_corrida_viva.veredicto_por_invariante')} columnas={columnasVeredicto} filas={corrida.veredicto} idFila={(v) => v.invariante} altoMaximo={false} />
+          <TablaBase etiqueta={tx('qa_corrida_viva.veredicto_por_invariante')} columnas={columnasVeredicto} filas={corrida.veredicto} idFila={(v) => v.invariante} altoMaximo={false} tarjetaMovil />
         )}
       </Tarjeta>
 

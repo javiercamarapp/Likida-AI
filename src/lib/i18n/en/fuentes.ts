@@ -37,7 +37,7 @@ export const fuentes: Record<keyof typeof fuentesEs, string> = {
   'detalle.atrasada_por_silencio': 'Delayed: {senal} {hace}; a signal normally arrives {cada}.',
   'conexiones.titulo': 'Status of your data sources',
   'conexiones.apoyo': 'Each source says whether it is up to date, delayed, down or not connected, based on when its last real signal arrived. Anything that could not be read says "no data": it is never shown as up to date.',
-  'conexiones.resumen': '{alDia} of {total} up to date',
+  'conexiones.resumen': '{alDia} of {total} data sources up to date',
   'conexiones.arranque': 'Setup: {conectadas} of {total} connected',
   'conexiones.silencio': 'No WhatsApp events in {horas} business hours with {viajes} open trips. Check that the number is still active and that drivers are writing.',
   'conexiones.cadencia': 'Expected cadence: one signal {cada}.',

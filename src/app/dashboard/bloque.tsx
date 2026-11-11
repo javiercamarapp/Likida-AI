@@ -111,3 +111,14 @@ export function TarjetaTabla({ titulo, contador, acciones, children }: { titulo:
     </Tarjeta>
   );
 }
+
+/** Acción bloqueada por una precondición (p. ej. exportar sin documentos aprobados): botón de contorno punteado que dice «No disponible ahora»
+ *  y el motivo en su título. No es un enlace ni un botón activo: nadie descarga un archivo vacío. Su caja es la del botón `sm` del kit (28 px). */
+export function DescargaNoDisponible({ rotulo, motivo }: { rotulo: string; motivo: string }) {
+  return (
+    <span className="rv-nd" title={motivo}>
+      <span className="rv-nd__rotulo">{rotulo}</span>
+      <span className="rv-nd__motivo">{motivo}</span>
+    </span>
+  );
+}

@@ -1,6 +1,7 @@
 import { ExternalLink } from 'lucide-react';
 import './facturas.css';
-import { AvisoCompacto, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import '../../estados.css';
+import { AvisoCompacto, Icono, StatusChip, TablaBase, Tarjeta, clasesBoton, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { CajonPortal } from './portal-cajon';
 import { fechaCorta } from '@/lib/formato';
 import type { EstadoVinculo } from '@/lib/likida/facturacion/vinculo_portal';
@@ -83,10 +84,18 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
     {
       id: 'accion', titulo: tx('facturas.portales.colAccion'), alinear: 'der',
       celda: (f) => (
-        <CajonPortal titulo={f.nombre} subtitulo={leyenda(f, tx)} disparador={tx('facturas.portales.vistaRapida')}>
-          {f.estado !== 'vinculado' && (
-            <a href={f.portal} target="_blank" rel="noopener noreferrer" className="rv-fact__enlace">{tx('rest.abrir_el_portal')}{' '}<Icono icono={ExternalLink} tam={14} /></a>
-          )}
+        <CajonPortal titulo={f.nombre} subtitulo={leyenda(f, tx)} disparador={tx('facturas.portales.vistaRapida')}
+          cifras={[
+            { etiqueta: tx('facturas.portales.cifraEstado'), valor: pildora(tx)[f.estado].rotulo },
+            { etiqueta: tx('facturas.portales.cifraVinculadoDesde'), valor: f.vinculadaEn ? fechaCorta(f.vinculadaEn) : '—' },
+            { etiqueta: tx('facturas.portales.cifraSesionCaida'), valor: f.caducadaEn ? fechaCorta(f.caducadaEn) : '—' },
+            { etiqueta: tx('facturas.portales.cifraReconexion'), valor: f.relogin === null ? '—' : f.relogin.permitido ? tx('facturas.portales.reconexionSi') : tx('facturas.portales.reconexionNo') },
+          ]}
+          pie={(
+            <a href={f.portal} target="_blank" rel="noopener noreferrer" className={clasesBoton('primary')}>
+              {tx('rest.abrir_el_portal')}<Icono icono={ExternalLink} tam={14} />
+            </a>
+          )}>
           {/* 0540: el paso humano del CAPTCHA/MFA con código de un solo uso. También con el portal vinculado: «re-vincular» antes de que caduque. */}
           <VincularAsistida clave={f.clave} nombre={f.nombre} flota={flota} />
           {/* El permiso de re-login es por portal (una flota puede querer reconexión en la gasolinera diaria y no en el portal de su facturación del año). */}
@@ -99,16 +108,18 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
   ];
 
   return (
-    <Tarjeta titulo={tx('rest.tus_portales')} estado={!vinculos ? 'error' : filas.length === 0 ? 'vacio' : 'ok'}
+    <Tarjeta titulo={tx('rest.tus_portales')} className="rv-tarjeta--tabla" estado={!vinculos ? 'error' : filas.length === 0 ? 'vacio' : 'ok'}
       mensaje={!vinculos ? tx('rest.no_se_pudo_leer_el_estado') : tx('rest.ningun_portal_por_vincular')}
       detalle={tx('rest.ninguno_de_los_comercios_de_tus')}>
-      <div className="rv-fact__pila">
-        <p className="rv-fact__nota">{tx('rest.portales_que_piden_tu_cuenta_entras')}</p>
-        {caducados.length > 0 && (
-          <AvisoCompacto tono="warn" resumen={caducados.length === 1
-            ? tx('rest.se_cayo_la_sesion_de_sus', { nombre: caducados[0].nombre })
-            : tx('rest.se_cayeron_sesiones_sus_tickets_estan', { length: caducados.length })} />
-        )}
+      <div className="rv-fact__pila rv-fact__portales">
+        <div className="rv-fact__portales-pad">
+          <p className="rv-fact__nota">{tx('rest.portales_que_piden_tu_cuenta_entras')}</p>
+          {caducados.length > 0 && (
+            <AvisoCompacto tono="warn" resumen={caducados.length === 1
+              ? tx('rest.se_cayo_la_sesion_de_sus', { nombre: caducados[0].nombre })
+              : tx('rest.se_cayeron_sesiones_sus_tickets_estan', { length: caducados.length })} />
+          )}
+        </div>
         <TablaBase<FilaPortal> etiqueta={tx('rest.tus_portales')} columnas={columnas} filas={filas} idFila={(f) => f.clave} tarjetaMovil />
       </div>
     </Tarjeta>

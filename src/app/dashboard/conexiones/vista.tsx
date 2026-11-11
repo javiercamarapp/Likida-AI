@@ -39,6 +39,8 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
     { etiqueta: rotulos.incompleto.rotulo, valor: n('incompleto'), tono: n('incompleto') > 0 ? 'warn' : undefined },
     { etiqueta: rotulos.sin_configurar.rotulo, valor: n('sin_configurar') },
     { etiqueta: rotulos.no_medible.rotulo, valor: n('no_medible'), tono: n('no_medible') > 0 ? 'warn' : undefined },
+    // Las conexiones en ensayo también cuentan: sin esta celda la tira sumaba menos que «Todas» del segmentado de abajo.
+    { etiqueta: rotulos.ensayo.rotulo, valor: n('ensayo') },
   ];
   return (
     <EsqueletoTablaMaestra titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy(t('cfg.estado_de_las_conexiones'))}>

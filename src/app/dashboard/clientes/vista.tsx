@@ -65,7 +65,8 @@ export function VistaClientes({
   // Sin un solo cliente no hay nada que medir: la tira sigue ahí (Rovaq) pero cada celda dice «—» y por qué, nunca un 0.
   const cifras = panel === null ? undefined : panel.clientes.length === 0
     ? [t('op.ingreso_de_fletes_capturado'), t('op.clientes_activos'), t('op.por_cobrar_a_clientes'), t('op.cl.k.sin_cliente')]
-      .map((etiqueta): PropsCifra => ({ etiqueta, valor: null, estado: 'vacio', mensaje: t('op.sin_clientes_todavia'), matiz: 8 }))
+      // El porqué se dice UNA vez (en la primera celda): repetirlo en las cuatro alarga la tira a 141 px.
+      .map((etiqueta, i): PropsCifra => ({ etiqueta, valor: null, estado: 'vacio', ...(i === 0 ? { mensaje: t('op.sin_clientes_todavia') } : {}), matiz: 8 }))
     : cifrasDeCartera(t, panel).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
   const avisos = panel === null ? undefined : avisosDeCartera(t, panel);
   return (
@@ -498,8 +499,10 @@ function BloqueSinIngreso({ panel, t = T_RESTO_ES }: { panel: PanelClientes; t?:
         {panel.sinIngreso.length < panel.sinIngresoTotal
           && t('op.se_listan_los_mas_recientes', { numero: numero(panel.sinIngreso.length) })}{' '}{t('op.mientras_falte_ese_viaje_no_entra')}</p>
 
-      <TablaBase<ViajeSinIngreso> etiqueta={t('op.viajes_por_ruta_del_cliente')} columnas={columnas} filas={panel.sinIngreso}
-        idFila={(v) => v.id} tarjetaMovil />
+      <div className="rv-cl__sin-ingreso">
+        <TablaBase<ViajeSinIngreso> etiqueta={t('op.viajes_por_ruta_del_cliente')} columnas={columnas} filas={panel.sinIngreso}
+          idFila={(v) => v.id} tarjetaMovil />
+      </div>
 
       {/* La frase que evita que esta columna se lea como una medición. */}
       <p className="rv-cl__pie">{t('op.esta_columna_dice_que_precio_de')}</p>

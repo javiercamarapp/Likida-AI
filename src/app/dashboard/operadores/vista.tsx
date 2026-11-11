@@ -173,11 +173,17 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
     });
   }
 
+  // Con las vigencias SIN REGISTRAR, «0 vencidas» no es una medición: nadie las ha capturado. Solo se puede afirmar cuando toda la flota cabe
+  // en esta página (una sola) y ninguna tiene fecha; con varias páginas el conteo de la base manda (no se inventa un «sin dato» parcial).
+  const sinVigencias = pag.paginas <= 1 && filas.length > 0 && filas.every((f) => !f.licenciaVence);
+  const vigencia = (v: number | undefined, tono: 'bad' | 'warn') => (sinVigencias
+    ? { valor: null, estado: 'vacio' as const, mensaje: t('op.cifra.sin_vigencias') }
+    : { valor: kpi(v), tono: v !== undefined && v > 0 ? tono : undefined });
   const cifras: PropsCifra[] = [
     { etiqueta: t('op.cifra.activos'), valor: kpi(conteos?.activos), nota: conteos ? t('op.cifra.total', { n: numero(conteos.total, idioma) }) : t('op.nocontar'), info: 'operadores.activos' },
     { etiqueta: t('op.cifra.sintel'), valor: kpi(conteos?.sinTelefono), nota: t('op.cifra.sintel.nota'), tono: conteos && conteos.sinTelefono > 0 ? 'warn' : undefined, info: 'operadores.sin_telefono' },
-    { etiqueta: t('op.cifra.vencidas'), valor: kpi(conteos?.licenciasVencidas), tono: conteos && conteos.licenciasVencidas > 0 ? 'bad' : undefined, info: 'operadores.licencias_vencidas' },
-    { etiqueta: t('op.cifra.vencen', { n: DIAS_AVISO }), valor: kpi(conteos?.licenciasPorVencer), tono: conteos && conteos.licenciasPorVencer > 0 ? 'warn' : undefined, info: 'operadores.licencias_por_vencer' },
+    { etiqueta: t('op.cifra.vencidas'), ...vigencia(conteos?.licenciasVencidas, 'bad'), info: 'operadores.licencias_vencidas' },
+    { etiqueta: t('op.cifra.vencen', { n: DIAS_AVISO }), ...vigencia(conteos?.licenciasPorVencer, 'warn'), info: 'operadores.licencias_por_vencer' },
   ];
 
   return (
@@ -222,6 +228,7 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
           titulo={editado.nombre}
           subtitulo={editado.telefono ?? t('op.sintelefono')}
           hrefCerrar={urlRegistro('/dashboard/operadores', sufijo, { q: pag.q || null, p: pag.pagina, editar: null })}
+          aviso={<AvisoCompacto tono="info" resumen={t('op.vr.aviso')} />}
           cifras={[
             { etiqueta: t('op.col.patio'), valor: editado.terminalNombre ?? '—' },
             { etiqueta: t('op.col.viajes'), valor: numero(editado.viajes, idioma) },

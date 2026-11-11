@@ -1,5 +1,6 @@
 import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import {
@@ -151,25 +152,23 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
 
   const decidir = urgente.ok !== null && normal.ok !== null ? urgente.ok.length + normal.ok.length : null;
 
-  function bandeja(titulo: string, r: { ok: PiezaEnCola[] | null; error: string | null }, urgenteBandeja: boolean) {
+  // UNA sola tarjeta «Por decidir» (Rovaq): las dos colas son subsecciones y un único vacío cuando ninguna tiene piezas.
+  function grupo(titulo: string, r: { ok: PiezaEnCola[] | null; error: string | null }, vacioTexto: string, extra?: ReactNode) {
     return (
-      <Tarjeta
-        titulo={r.ok !== null ? `${titulo} (${r.ok.length})` : titulo}
-        estado={r.error !== null ? 'error' : r.ok !== null && r.ok.length === 0 ? 'vacio' : 'ok'}
-        mensaje={r.error !== null
-          ? t('aprobaciones.no_se_pudo_leer')
-          : urgenteBandeja ? t('aprobaciones.nada_urgente_esperando') : t('aprobaciones.nada_pendiente')}
-        detalle={urgenteBandeja
-          ? t('aprobaciones.asi_debe_verse_casi')
-          : t('aprobaciones.las_piezas_llegan_aqui')}
-        acciones={urgenteBandeja ? <StatusChip tono="warn">{t('aprobaciones.sla_en_minutos')}</StatusChip> : undefined}
-      >
-        <div className="bj-cola">
-          {r.ok?.map((p) => <FormaPieza key={p.id} pieza={p} accion={accionResolver} />)}
+      <section className="bj-grupo" aria-label={titulo}>
+        <div className="bj-grupo__cab">
+          <h3 className="bj-grupo__titulo">{r.ok !== null ? `${titulo} (${r.ok.length})` : titulo}</h3>
+          {extra}
         </div>
-      </Tarjeta>
+        {r.error !== null
+          ? <p className="bj-grupo__nota" data-tono="bad">{t('aprobaciones.no_se_pudo_leer')}</p>
+          : r.ok !== null && r.ok.length === 0
+            ? <p className="bj-grupo__nota">{vacioTexto}</p>
+            : <div className="bj-cola">{r.ok?.map((p) => <FormaPieza key={p.id} pieza={p} accion={accionResolver} />)}</div>}
+      </section>
     );
   }
+  const ambasVacias = urgente.ok !== null && normal.ok !== null && urgente.ok.length === 0 && normal.ok.length === 0;
 
   const porAprobar = (
     <>
@@ -178,8 +177,17 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
           Con {estadoBandeja.pendientes}  {t('aprobaciones.piezas_pendientes_el_runner')}
         </Aviso>
       )}
-      {bandeja(t('aprobaciones.urgente_respuesta_a_ads'), urgente, true)}
-      {bandeja(t('aprobaciones.normal_prospeccion_y_contenido'), normal, false)}
+      <Tarjeta
+        titulo={decidir !== null ? t('aprobaciones.por_decidir_n', { n: decidir }) : t('aprobaciones.kpi_por_decidir')}
+        estado={ambasVacias ? 'vacio' : 'ok'}
+        mensaje={t('aprobaciones.nada_pendiente')}
+        detalle={t('aprobaciones.las_piezas_llegan_aqui')}
+      >
+        <div className="bj-grupos">
+          {grupo(t('aprobaciones.urgente_respuesta_a_ads'), urgente, t('aprobaciones.nada_urgente_esperando'), <StatusChip tono="warn">{t('aprobaciones.sla_en_minutos')}</StatusChip>)}
+          {grupo(t('aprobaciones.normal_prospeccion_y_contenido'), normal, t('aprobaciones.nada_pendiente'))}
+        </div>
+      </Tarjeta>
       <LimpiezaLote contar={accionContarLote} vaciar={accionVaciarLote} bandeja={estadoBandeja} />
     </>
   );

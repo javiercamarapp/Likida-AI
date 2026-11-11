@@ -333,4 +333,9 @@ export const admin_flotas: Record<keyof typeof admin_flotasEs, string> = {
   'soporte.nada_en_esta_vista': 'No tickets in this view',
   'soporte.vista': 'View',
   'a1r4.observado': 'Observed',
+  'flotas.eb_nuevo_espacio': 'New workspace',
+  'flotas_ficha.eb_atencion': 'Attention',
+  'flotas_ficha.eb_corridas': 'Runs',
+  'flotas_ficha.eb_datos': 'Data',
+  'flotas_ficha.eb_tickets': 'Tickets',
 };
