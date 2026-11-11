@@ -77,7 +77,13 @@ export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Rec
     <EsqueletoTablaMaestra
       titulo={t('crons_vista.relojes')}
       apoyo={t('crons_vista.los_procesos_programados_del_sistema_cuando')}
-      cifras={latidos === null ? undefined : [{ etiqueta: t('salud_sistema.relojes_a_tiempo'), valor: CRONS.length - malos.length, formato: 'entero', tono: malos.length > 0 ? 'bad' : parciales.length > 0 ? 'warn' : 'ok' }]}
+      cifras={latidos === null ? undefined : [
+        { etiqueta: t('crons_vista.kpi_total'), valor: CRONS.length, formato: 'entero' },
+        { etiqueta: t('salud_sistema.relojes_a_tiempo'), valor: CRONS.length - malos.length, formato: 'entero', tono: malos.length > 0 ? 'bad' : parciales.length > 0 ? 'warn' : 'ok' },
+        { etiqueta: t('crons_vista.kpi_sin_latir'), valor: sinLatir.length, formato: 'entero', tono: sinLatir.length > 0 ? 'bad' : undefined },
+        { etiqueta: t('crons_vista.kpi_con_fallo'), valor: conFallo.length, formato: 'entero', tono: conFallo.length > 0 ? 'bad' : undefined },
+        { etiqueta: t('crons_vista.kpi_parciales'), valor: parciales.length, formato: 'entero', tono: parciales.length > 0 ? 'warn' : undefined },
+      ]}
     >
       {latidos === null ? (
         <EstadoError reintentar>{t('crons_vista.no_se_pudo_leer_el_pulso')}</EstadoError>

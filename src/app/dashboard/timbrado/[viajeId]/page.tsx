@@ -63,7 +63,7 @@ export default async function PaginaTimbradoViaje({
       apoyo={tr('e26b.timb_apoyo')}
       volver={{ href: `${RUTA}${sufijoTenant(sp)}`, etiqueta: tr('timbrado.viajeId.page.volverATimbrado') }}
       acciones={(
-        <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
+        <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary">
           {tr('timbrado.viajeId.page.verElBorradorCompleto')}
         </BotonEnlace>
       )}
@@ -82,9 +82,9 @@ export default async function PaginaTimbradoViaje({
         </Aviso>
       )}
     >
-      <section className="rv-esq__paso rv-timb__paso" aria-label={tr('e26b.timb_paso_borrador')}>
+      <section className="rv-esq__paso rv-timb__paso" data-actual={borradorListo ? undefined : true} aria-label={tr('e26b.timb_paso_borrador')}>
         <div className="rv-esq__paso-cab">
-          <p role="heading" aria-level={2} className="rv-timb__paso-titulo">{tr('e26b.timb_paso_borrador')}</p>
+          <p role="heading" aria-level={2} className="rv-timb__paso-titulo"><span className="rv-timb__dot" aria-hidden="true">1</span>{tr('e26b.timb_paso_borrador')}</p>
           <Chip tono={borradorListo ? 'ok' : 'warn'} tamano="estado">{borradorListo ? tr('e26b.timb_paso_hecho') : tr('e26b.timb_paso_revisar')}</Chip>
         </div>
         <p className="rv-esq__paso-quien">{borradorListo ? tr('e26b.timb_borrador_ok') : tr('e26b.timb_borrador_falta', { n: numero(v.borrador.faltantes.length + v.borrador.fallas.length) })}</p>

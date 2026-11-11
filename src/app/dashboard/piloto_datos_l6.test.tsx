@@ -268,9 +268,12 @@ describe('Ajustes del verificador (L6)', () => {
     const vacio = chipsDeCola(pagina([fila(1, { operadorNombre: null, unidadEco: null })]), f, TERMS, []);
     expect(vacio.map((c) => c.valor)).toEqual(['elegido', 'elegida']);
   });
-  it('Viajes no repite el sello en cada cifra: uno solo, al pie de la tabla', () => {
+  it('Viajes: cada cifra de la tira lleva su sello de procedencia (Rovaq) y la tabla conserva el suyo, uno solo, al pie', () => {
     const h = pintarViajes();
-    expect(h.match(/Registro de viajes · leído/g)?.length).toBe(1);
+    const celdasKpi = h.match(/<div class="rv-kpi"/g)?.length ?? 0;
+    expect(celdasKpi).toBeGreaterThan(0);
+    expect(h.match(/<span class="rv-kpi__sello">Registro de viajes · leído/g)?.length).toBe(celdasKpi);
+    expect(h.match(/<time class="rv-sello__texto"[^>]*>Registro de viajes · leído/g)?.length).toBe(1);
   });
   it('la tarjeta-fila conserva roles ARIA de tabla', () => {
     const h = pintarViajes();

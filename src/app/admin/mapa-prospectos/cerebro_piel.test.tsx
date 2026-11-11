@@ -36,14 +36,22 @@ describe('Cerebro: contrato visual', () => {
     expect(fuera).not.toMatch(/transition\s*:/);
   });
 
-  it('cada etapa del embudo tiene su color en el CSS (token --chart-n o gris del sistema)', () => {
+  it('cada etapa del embudo tiene su tinta en el CSS (rampa monocroma de la decisión 10, «Perdido» hueco)', () => {
     const css = leer('cerebro.css');
-    for (const [estado, { color }] of Object.entries(COLOR_EMBUDO)) {
-      expect(color, estado).toMatch(/^var\(--(chart-[1-8]|muted|faint)\)$/);
-      // En el CSS cada token de datos lleva su respaldo (la guarda `tokens_definidos` no admite var() sin fallback para --chart-n).
-      const enCss = color.replace(/var\((--chart-\d)\)/, 'var($1, var(--muted))');
-      expect(css, estado).toContain(`[data-etapa="${estado}"], .cer-e-${estado} { --etapa: ${enCss}; }`);
+    for (const estado of Object.keys(COLOR_EMBUDO)) {
+      expect(css, estado).toContain(`[data-etapa="${estado}"]`);
+      expect(css, estado).toMatch(new RegExp(`\\.cer-e-${estado}[^{]*\\{ --etapa: `));
     }
+    // Las etapas con rótulo distinto se distinguen por la tinta: ninguna comparte valor con otra.
+    const tintas = [...css.matchAll(/\.cer-e-([a-z-]+) \{ --etapa: ([^;]+);/g)].filter((m) => !['perdido', 'lost'].includes(m[1])).map((m) => m[2]);
+    expect(new Set(tintas).size).toBe(tintas.length);
+  });
+
+  it('«lost» y «perdido» se rotulan igual y salen como UNA sola etapa en la leyenda', () => {
+    const html = renderToStaticMarkup(<Cerebro inicial={datos} />);
+    const leyenda = html.slice(html.indexOf('Leyenda del embudo'));
+    const bloque = leyenda.slice(0, leyenda.indexOf('</div>'));
+    expect(bloque.split('Perdido').length - 1).toBe(1);
   });
 
   it('el ala izquierda sigue existiendo y solo aparece desde 1900 px', () => {

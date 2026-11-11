@@ -12,7 +12,7 @@ import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type A
 import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
 import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 import {
-  AvisoCompacto, Boton, BotonEnlace, CampoTexto, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
+  AvisoCompacto, Boton, BotonEnlace, CampoTexto, Icono, StatusChip, TablaBase, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
@@ -86,11 +86,24 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
         { etiqueta: tx('f26d.reclamacion.monto'), valor: mxn(reporte.resumen.montoReclamable) },
         { etiqueta: tx('f26d.reclamacion.confirmadas'), valor: numero(reporte.resumen.confirmadas) },
         { etiqueta: tx('f26d.reclamacion.sin_datos'), valor: numero(reporte.resumen.sinDatos) },
+      ] : estado === 'sin_desglose' ? [
+        // Sin desglose no hay lectura: la tira va con guiones (nunca ceros) para que la página tenga la misma forma que con datos.
+        { etiqueta: tx('f26d.reclamacion.cruces'), valor: '—' },
+        { etiqueta: tx('f26d.reclamacion.monto'), valor: '—' },
+        { etiqueta: tx('f26d.reclamacion.confirmadas'), valor: '—' },
+        { etiqueta: tx('f26d.reclamacion.sin_datos'), valor: '—' },
       ] : undefined}
+      selloCifras={estado === 'sin_desglose' ? tx('f26d3.reclamacion.sin_desglose_sello') : undefined}
       etiquetaCifras={tx('rest.reporte_de_reclamacion_de_peajes')}
     >
+      <PasosReclamacion tx={tx} estado={estado} />
+
       {estado === 'sin_desglose' && (
-        <EstadoVacio icono={ShieldAlert} titulo={tx('rest.elige_un_desglose')}>{tx('rest.elige_un_desglose_en_el_agente')}</EstadoVacio>
+        <Tarjeta
+          titulo={tx('f26d3.reclamacion.tarjeta_reporte')} estado="vacio" iconoVacio={ShieldAlert}
+          mensaje={tx('rest.elige_un_desglose')} detalle={tx('rest.elige_un_desglose_en_el_agente')}
+          accionVacio={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`}>{tx('f26d3.reclamacion.ir_al_agente')}</BotonEnlace>}
+        />
       )}
 
       {estado === 'ok' && extras?.revision && desglose && (
@@ -193,5 +206,33 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
         </>
       )}
     </EsqueletoTablaMaestra>
+  );
+}
+
+/** Los cuatro pasos de la reclamación como tarjetas de paso (Rovaq FL): el actual lleva borde de tinta. El estado sale solo de si hay un desglose
+ *  elegido; no se cuenta nada que el sistema no haya medido. */
+function PasosReclamacion({ tx, estado }: { tx: TrAgentes['t']; estado: EstadoReclamacion }) {
+  const hayDesglose = estado === 'ok';
+  const pasos = [
+    { id: 1, estado: hayDesglose ? 'hecho' : 'actual' },
+    { id: 2, estado: hayDesglose ? 'actual' : 'siguiente' },
+    { id: 3, estado: 'siguiente' },
+    { id: 4, estado: 'siguiente' },
+  ] as const;
+  const tono = { hecho: 'ok', actual: 'neutral', siguiente: 'neutral' } as const;
+  return (
+    <ol className="rv-pj-pasos" aria-label={tx('f26d3.reclamacion.pasos_etiqueta')}>
+      {pasos.map((p) => (
+        <li key={p.id} className="rv-pj-paso" data-actual={p.estado === 'actual' || undefined} aria-current={p.estado === 'actual' ? 'step' : undefined}>
+          <div className="rv-pj-paso__cab">
+            <span className="rv-pj-paso__n" aria-hidden="true">{p.id}</span>
+            <StatusChip tono={tono[p.estado]}>{tx(`f26d3.reclamacion.estado_${p.estado}`)}</StatusChip>
+          </div>
+          {/* sin-info: nombre del paso en una tarjeta de progreso, no un recuadro de cifras */}
+          <h3 className="rv-pj-paso__titulo">{tx(`f26d3.reclamacion.paso_${p.id}`)}</h3>
+          <p className="rv-pj-paso__ayuda">{tx(`f26d3.reclamacion.paso_${p.id}_ayuda`)}</p>
+        </li>
+      ))}
+    </ol>
   );
 }

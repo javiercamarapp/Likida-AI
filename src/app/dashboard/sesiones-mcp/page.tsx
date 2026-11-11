@@ -10,7 +10,7 @@ import { listarSesionesMcp, revocarSesionesMcp, type SesionMcpUsuario } from '@/
 import type { ResultadoForma } from './forma';
 import { ListaSesionesMcp } from './vista';
 import './sesiones-mcp.css';
-import { AvisoCompacto, EstadoError } from '@/app/ui-v2/componentes';
+import { EstadoError } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
@@ -100,17 +100,16 @@ export default async function PaginaSesionesMcp({
   // Las cifras salen de las mismas filas que la tabla; si la lectura cayó no hay cifras (nunca un 0 que parezca «nadie conectado»).
   const ultimoUso = sesiones === null ? null : sesiones.reduce<string | null>((m, s) => (s.ultimoUsoEn !== null && (m === null || s.ultimoUsoEn > m) ? s.ultimoUsoEn : m), null);
   const cifras = sesiones === null ? undefined : [
-    { etiqueta: t('e26.mcp_personas'), valor: sesiones.length, nota: t('e26b.mcp_personas_nota') },
-    { etiqueta: t('e26.mcp_clientes'), valor: sesiones.reduce((n, s) => n + s.clientes.length, 0), nota: t('e26b.mcp_clientes_nota') },
-    { etiqueta: t('e26.mcp_ultimo_uso'), valor: ultimoUso === null ? null : fechaMx(ultimoUso), nota: ultimoUso === null ? t('e26b.mcp_sin_uso_nota') : t('e26b.mcp_ultimo_uso_nota') },
+    { etiqueta: t('e26.mcp_personas'), matiz: 1 as const, valor: sesiones.length, nota: t('e26b.mcp_personas_nota') },
+    { etiqueta: t('e26.mcp_clientes'), matiz: 1 as const, valor: sesiones.reduce((n, s) => n + s.clientes.length, 0), nota: t('e26b.mcp_clientes_nota') },
+    { etiqueta: t('e26.mcp_ultimo_uso'), matiz: 1 as const, valor: ultimoUso === null ? null : fechaMx(ultimoUso), nota: ultimoUso === null ? t('e26b.mcp_sin_uso_nota') : t('e26b.mcp_ultimo_uso_nota') },
   ];
 
   return (
     <EsqueletoTablaMaestra
       titulo={t('cfg.sesiones_mcp')} apoyo={t('cfg.quien_de_tu_equipo_tiene_claude')}
-      avisos={<AvisoCompacto tono="info" resumen={t('cfg.quien_conecta_claude_o_chatgpt_a')} mas={<p>{t('cfg.cuando_alguien_de_tu_equipo_conecta')}</p>} />}
       cifras={cifras} etiquetaCifras={t('cfg.sesiones_mcp')}
-      pie={t('cfg.el_nombre_del_cliente_lo_declaro')}
+      pie={`${t('cfg.quien_conecta_claude_o_chatgpt_a')} ${t('cfg.el_nombre_del_cliente_lo_declaro')}`}
     >
       {sesiones === null ? (
         <EstadoError reintentar>{t('cfg.no_pude_leer_las_sesiones_mcp')}</EstadoError>

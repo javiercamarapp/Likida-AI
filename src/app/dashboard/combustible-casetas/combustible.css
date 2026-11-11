@@ -18,3 +18,8 @@
 .rv-comb__datos dt { font-size: var(--t-body); color: var(--ink); }
 .rv-comb__datos dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
 .rv-comb__datos dd.rv-comb__tenue { grid-column: 1 / -1; text-align: left; font-weight: 400; font-size: var(--t-small); color: var(--muted); }
+
+/* Vacío de Rovaq dentro de una tarjeta (`ac-vacio`): caja punteada de 1 px, radio 8, padding 20/14 (igual que en los demás vacíos de la página). */
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+/* «Qué se sabe / Qué no se sabe»: cada caja a su alto, sin estirar la corta a la altura de la larga. */
+[data-ui="v2"] .rv-esq--panel .rv-esq__saberes { align-items: start; }

@@ -8,5 +8,7 @@
 .rv-techo-barra[data-alto]::-moz-progress-bar { background: var(--bad); }
 .rv-techo-forma { display: flex; align-items: center; gap: 6px; }
 .rv-techo-forma .rv-campo { width: 112px; }
+.rv-techo-forma--cajon { display: block; }
+.rv-techo-forma--cajon .rv-campo { width: 100%; }
 .rv-techo-nota { margin: 0; font-size: 13px; color: var(--muted); }
 .rv-techo-tenue { color: var(--muted); }

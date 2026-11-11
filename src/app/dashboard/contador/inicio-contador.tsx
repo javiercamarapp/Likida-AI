@@ -17,11 +17,11 @@ import { saludo, ahoraMs } from '@/lib/saludo';
 import { mxn, hoyMx, litros } from '@/lib/formato';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import {
-  Aviso, BotonEnlace, FilaTarjetas, Icono, TablaBase, Tarjeta, clasesBoton, type ColumnaBase,
+  Aviso, BarraPeriodo, BotonEnlace, FilaTarjetas, Icono, Tarjeta, clasesBoton,
 } from '@/app/ui-v2/componentes';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { preguntaPendienteEstimuloPeaje } from '@/lib/likida/perfil/preguntas';
-import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
+import { MotorFiscalPeriodo, PeriodoMotorProvider, SelectorPeriodoMotor } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
 import { Bloque } from '../bloque';
 import { EsqTarjetaV2 } from '@/app/ui-v2/componentes';
@@ -30,7 +30,7 @@ import { EstimuloPeaje } from './estimulo-peaje';
 import { PerfilErp } from './perfil-erp';
 import { Timbrado } from './timbrado';
 import { CajonConfigFiscal } from './cajon-config';
-import { DonaMini, type PropsCifra } from '@/app/ui-v2/graficas';
+import { BarList, ColumnasApiladas, DonaMini, KindBadge, type PeriodoApilado, type PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
@@ -133,6 +133,23 @@ export async function InicioContador({
         historico: resumirPerdidas(series.historico, opciones),
       };
     });
+  // Barras apiladas por mes (Rovaq «Brechas»): perdido / en riesgo / recuperable de cada mes del ejercicio, con el MISMO `resumirPerdidas`
+  // que las demás cifras. Un comprobante sin fecha no entra a ningún mes (no se le inventa uno). Hasta los 8 meses más recientes con dato.
+  const pBarrasMes: Promise<PeriodoApilado[] | null> =
+    Promise.all([pCfgFiscal, pGastosFiscales]).then(async ([cfg, gastos]) => {
+      if (!cfg || !gastos) return null;
+      const opciones = await opcionesFiscalesConPerfil(tenantId, cfg);
+      const porMes = new Map<string, GastoFiscal[]>();
+      for (const g of gastos) {
+        if (!g.fecha || !/^\d{4}-\d{2}/.test(g.fecha)) continue;
+        const mes = g.fecha.slice(0, 7);
+        porMes.set(mes, [...(porMes.get(mes) ?? []), g]);
+      }
+      return [...porMes.keys()].sort().slice(-8).map((mes) => {
+        const r = resumirPerdidas(porMes.get(mes) ?? [], opciones);
+        return { etiqueta: etiquetaMes(mes), partes: [r.montoPerdido, r.montoEnRiesgo, r.montoRecuperable] };
+      });
+    });
   // AUDITORÍA 25, FIS-C1/FIS-C2 (CRÍTICO): `resumirFiscal` necesita el
   // acumulado REAL del ejercicio (`combustibleEjercicio`) para partir el IVA
   // del diésel en efectivo igual que el motor — `opcionesDe(cfg)` solo trae
@@ -147,8 +164,8 @@ export async function InicioContador({
     ? safe<boolean>(async () => preguntaPendienteEstimuloPeaje(await getPerfilCrudo(tenantId)) !== null)
     : Promise.resolve<boolean | null>(null);
 
-  const [acred, resumenPerdidas, series, resumenFiscal] = await Promise.all([
-    pAcred, pResumenPerdidas, pResumenPerdidasSeries, pResumenFiscal,
+  const [acred, resumenPerdidas, resumenFiscal, barrasMes] = await Promise.all([
+    pAcred, pResumenPerdidas, pResumenFiscal, pBarrasMes,
   ]);
   const etq = periodoFiscal.etiqueta;
 
@@ -169,6 +186,7 @@ export async function InicioContador({
     : undefined;
 
   return (
+    <PeriodoMotorProvider>
     <EsqueletoPanelCifras
       titulo={tr('contador.inicioContador.contador')}
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
@@ -189,10 +207,9 @@ export async function InicioContador({
       )}
       titular={titular}
       filtros={(
-        <ul className="rv-esq__procedencia" aria-label={tr('contador.panel.alcance')}>
-          <li>{tr('contador.panel.alcanceEjercicio', { etiqueta: etq })}</li>
-          <li>{tr('contador.panel.alcanceFuente')}</li>
-        </ul>
+        // Rovaq: el segmentado de periodo y los chips de alcance en UNA fila de filtros, arriba de las cifras (no dentro de una tarjeta).
+        <BarraPeriodo etiqueta={tr('contador.panel.alcance')} selector={<SelectorPeriodoMotor />}
+          chips={[{ id: 'ejercicio', etiqueta: tr('contador.panel.alcanceEjercicio', { etiqueta: etq }) }, { id: 'fuente', etiqueta: tr('contador.panel.alcanceFuente') }]} />
       )}
       avisos={(
         <>
@@ -214,10 +231,17 @@ export async function InicioContador({
       selloCifras={selloHoy(tr('contador.inicioContador.selloCertificadas'))}
       variante="8-4"
       graficas={[
-        <Tarjeta key="motor" titulo={`${tr('contador.panel.motor')} — ${etq}`}>
-          <MotorFiscalPeriodo series={series} causas={(resumenPerdidas?.porCausa ?? []).map(({ titulo, n, monto }) => ({ titulo, n, monto }))} />
+        <Tarjeta key="barras" titulo={tr('contador.panel.barrasTitulo', { etiqueta: etq })} info="contador.en_riesgo"
+          estado={barrasMes === null ? 'error' : barrasMes.length === 0 ? 'vacio' : 'ok'} contenida
+          mensaje={barrasMes === null ? tr('contador.inicioContador.noSePudoCalcular') : tr('contador.panel.barrasVacio')}
+          detalle={tr('contador.panel.barrasVacioDetalle')} reintentar acciones={<KindBadge tipo="calculado" />}>
+          {barrasMes && barrasMes.length > 0 ? (
+            <ColumnasApiladas etiqueta={tr('contador.panel.barrasTitulo', { etiqueta: etq })} formato="mxn" matiz={8} alto={168}
+              series={[tr('contador.panel.barrasPerdido'), tr('contador.panel.barrasEnRiesgo'), tr('contador.panel.barrasRecuperable')]}
+              periodos={barrasMes} />
+          ) : null}
         </Tarjeta>,
-        <Tarjeta key="iva" titulo={tr('contador.panel.ivaTitulo')} info="contador.iva_documentado"
+        <Tarjeta key="iva" titulo={tr('contador.panel.ivaTitulo')} info="contador.iva_documentado" contenida acciones={<KindBadge tipo="observado" />}
           estado={resumenFiscal === null ? 'error' : resumenFiscal.n === 0 ? 'vacio' : 'ok'}
           mensaje={resumenFiscal === null ? tr('contador.inicioContador.noSePudoLeer2') : tr('contador.inicioContador.sinComprobantesLeidos')}
           detalle={tr('contador.inicioContador.todaviaNoHayComprobantes')} reintentar>
@@ -240,9 +264,10 @@ export async function InicioContador({
       metodo={LEYENDA_CORTA}
     >
       <Bloque mensaje={tr('contador.inicioContador.noSePudoCargar')} esqueleto={<EsqTarjetaV2 alto={240} />}>
-        <BloqueTablas pAcred={pAcred} pResumenPerdidas={pResumenPerdidas} sufijo={sufijo} hoy={hoy} />
+        <BloqueTablas pAcred={pAcred} pResumenPerdidas={pResumenPerdidas} pSeries={pResumenPerdidasSeries} pFacturacion={pFacturacion} sufijo={sufijo} hoy={hoy} />
       </Bloque>
     </EsqueletoPanelCifras>
+    </PeriodoMotorProvider>
   );
 }
 
@@ -252,50 +277,70 @@ async function BloquePeaje({ pPeajePendiente }: { pPeajePendiente: Promise<boole
   return <Aviso tono="warn" titulo={tr('contador.panel.peajeTitulo')}>{tr('contador.panel.peajeCuerpo')}</Aviso>;
 }
 
-/** Dónde pierdo (causas del motor) y dónde gano (lo certificado), cada fila con su fuente. */
-async function BloqueTablas({ pAcred, pResumenPerdidas, sufijo, hoy }: {
+/** «YYYY-MM» → «ene 26» (mes corto de México; sin día, el mes no se mueve por zona horaria). */
+function etiquetaMes(mes: string): string {
+  const [a, m] = mes.split('-').map(Number);
+  const nombre = new Intl.DateTimeFormat('es-MX', { month: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(a, m - 1, 1))).replace('.', '');
+  return `${nombre} ${String(a).slice(2)}`;
+}
+
+/** Puente de lo facturado a lo cobrado (Inferido: se deduce de la cartera), y debajo Dónde gano / Dónde pierdo, cada una con su sello. */
+async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, sufijo, hoy }: {
   pAcred: Promise<Acreditables | null>;
   pResumenPerdidas: Promise<ResumenPerdidas | null>;
+  pSeries: Promise<Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null>;
+  pFacturacion: Promise<FacturacionClientes | null>;
   sufijo: string;
   hoy: string;
 }) {
   const { t: tr } = await getT('dinero');
-  const [acred, resumenPerdidas] = await Promise.all([pAcred, pResumenPerdidas]);
+  const [acred, resumenPerdidas, series, facturacion] = await Promise.all([pAcred, pResumenPerdidas, pSeries, pFacturacion]);
   const causas = resumenPerdidas?.porCausa ?? [];
-  const colPierdo: ColumnaBase<(typeof causas)[number]>[] = [
-    { id: 'causa', titulo: tr('contador.panel.colCausa'), principal: true, celda: (c) => c.titulo },
-    { id: 'n', titulo: tr('contador.panel.colComprobantes'), alinear: 'der', celda: (c) => c.n },
-    { id: 'monto', titulo: tr('contador.panel.colMonto'), alinear: 'der', celda: (c) => mxn(c.monto) },
-  ];
-  const gano: Array<{ id: string; concepto: string; valor: string; fuente: string }> = acred === null ? [] : [
-    { id: 'iva', concepto: tr('contador.panel.ganoIva'), valor: mxn(acred.iva), fuente: tr('contador.panel.fuenteLiquidaciones') },
-    { id: 'peaje', concepto: tr('contador.panel.ganoPeaje'), valor: mxn(acred.peaje), fuente: tr('contador.panel.fuenteLiquidaciones') },
-    { id: 'diesel', concepto: tr('contador.panel.ganoDiesel'), valor: litros(acred.litrosDiesel), fuente: tr('contador.panel.fuenteLiquidaciones') },
-    ...(resumenPerdidas ? [{ id: 'recup', concepto: tr('contador.panel.ganoRecuperable'), valor: mxn(resumenPerdidas.montoRecuperable), fuente: tr('contador.panel.fuenteCausas') }] : []),
-  ];
-  const colGano: ColumnaBase<(typeof gano)[number]>[] = [
-    { id: 'concepto', titulo: tr('contador.panel.colConcepto'), principal: true, celda: (g) => g.concepto },
-    { id: 'valor', titulo: tr('contador.panel.colMonto'), alinear: 'der', celda: (g) => g.valor },
-    { id: 'fuente', titulo: tr('contador.panel.colFuente'), celda: (g) => g.fuente },
+  const cartera = facturacion?.cartera ?? null;
+  const gano = acred === null ? [] : [
+    { clave: 'iva', etiqueta: tr('contador.panel.ganoIva'), valor: acred.iva, texto: mxn(acred.iva) },
+    { clave: 'peaje', etiqueta: tr('contador.panel.ganoPeajeCorto'), valor: acred.peaje, texto: mxn(acred.peaje) },
+    ...(resumenPerdidas ? [{ clave: 'recup', etiqueta: tr('contador.panel.ganoRecuperable'), valor: resumenPerdidas.montoRecuperable, texto: mxn(resumenPerdidas.montoRecuperable) }] : []),
   ];
 
   return (
-    <FilaTarjetas variante="6-6">
-        <Tarjeta titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" estado={resumenPerdidas === null ? 'error' : causas.length === 0 ? 'vacio' : 'ok'}
-          mensaje={resumenPerdidas === null ? tr('contador.inicioContador.noSePudoCalcular') : tr('contador.panel.pierdoVacio')} detalle={tr('contador.panel.pierdoVacioDetalle')} reintentar>
-          <TablaBase<(typeof causas)[number]> etiqueta={tr('contador.panel.tablaPierdo')} columnas={colPierdo} filas={causas} idFila={(c) => c.causa} />
-        </Tarjeta>
-        <Tarjeta titulo={tr('contador.panel.tablaGano')} estado={acred === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCargar3')} reintentar
+    <>
+      <Tarjeta titulo={tr('contador.panel.puenteTitulo')} contenida acciones={<KindBadge tipo="inferido" />}
+        estado={cartera === null ? 'error' : cartera.facturasTotal === 0 ? 'vacio' : 'ok'}
+        mensaje={cartera === null ? tr('contador.panel.puenteNoLeido') : tr('contador.panel.puenteVacio')} detalle={tr('contador.panel.puenteVacioDetalle')} reintentar>
+        {cartera ? (
+          <>
+            <BarList etiqueta={tr('contador.panel.puenteTitulo')} maximo={Math.max(1, cartera.facturado)} items={[
+              { clave: 'facturado', etiqueta: tr('contador.panel.puenteFacturado'), valor: cartera.facturado, texto: mxn(cartera.facturado) },
+              { clave: 'cobrado', etiqueta: tr('contador.panel.puenteCobrado'), valor: cartera.cobrado, texto: mxn(cartera.cobrado) },
+              { clave: 'porCobrar', etiqueta: tr('contador.panel.puentePorCobrar'), valor: cartera.porCobrar, texto: mxn(cartera.porCobrar) },
+              { clave: 'vencido', etiqueta: tr('contador.panel.puenteVencido'), valor: cartera.vencido, texto: mxn(cartera.vencido) },
+            ]} />
+            <p className="rv-cont__nota">{tr('contador.panel.puenteNota')}</p>
+          </>
+        ) : null}
+      </Tarjeta>
+      <FilaTarjetas variante="6-6">
+        <Tarjeta titulo={tr('contador.panel.tablaGano')} contenida estado={acred === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCargar3')} reintentar
           acciones={(
-            // El CSV de liquidaciones (puerta que faltaba, auditoría 2): ruta protegida por sesión, rol y tenant; exige ventana (ESC-8), se lleva el MES EN CURSO y lo dice.
-            // Es un <a> y no un Link: un Link precargaría el CSV.
-            <a href={`/api/export/liquidaciones${sufijo}${sufijo ? '&' : '?'}desde=${hoy.slice(0, 8)}01&hasta=${hoy}`} download className={clasesBoton('ghost', 'sm')}>
-              <Icono icono={Download} /> {tr('contador.inicioContador.exportarCsvDelMes')}
-            </a>
+            <>
+              <KindBadge tipo="observado" />
+              {/* El CSV de liquidaciones (puerta que faltaba, auditoría 2): ruta protegida por sesión, rol y tenant; exige ventana (ESC-8), se lleva el MES EN CURSO y lo dice.
+                  Es un <a> y no un Link: un Link precargaría el CSV. */}
+              <a href={`/api/export/liquidaciones${sufijo}${sufijo ? '&' : '?'}desde=${hoy.slice(0, 8)}01&hasta=${hoy}`} download className={clasesBoton('ghost', 'sm')}>
+                <Icono icono={Download} /> {tr('contador.inicioContador.exportarCsvDelMes')}
+              </a>
+            </>
           )}>
-          <TablaBase<(typeof gano)[number]> etiqueta={tr('contador.panel.tablaGano')} columnas={colGano} filas={gano} idFila={(g) => g.id} />
+          <BarList etiqueta={tr('contador.panel.tablaGano')} items={gano} />
+          {acred ? <p className="rv-cont__nota">{tr('contador.panel.ganoDieselNota', { litros: litros(acred.litrosDiesel) })}</p> : null}
         </Tarjeta>
-    </FilaTarjetas>
+        <Tarjeta titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" contenida acciones={<KindBadge tipo="calculado" />}
+          estado={resumenPerdidas === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCalcular')} reintentar>
+          <MotorFiscalPeriodo series={series} causas={causas.map(({ titulo, n, monto }) => ({ titulo, n, monto }))} />
+        </Tarjeta>
+      </FilaTarjetas>
+    </>
   );
 }
 

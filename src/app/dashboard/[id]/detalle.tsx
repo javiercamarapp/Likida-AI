@@ -264,7 +264,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
       bloques={[
         <div key="izq" className="rv-liq__col">
         <Tarjeta titulo={tr('liquidacion.detalle.fichaTitulo')}>
-          <CamposSistema
+          <CamposSistema className="rv-liq__datos"
             etiqueta={tr('liquidacion.detalle.fichaTitulo')}
             campos={[
               { etiqueta: tr('liquidacion.detalle.inicio'), valor: d.viaje.fechaInicio ? fechaMx(d.viaje.fechaInicio) : '—' },
@@ -293,7 +293,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF × litros y esa cuota no la tenemos. `ieps` solo puede venir de
             filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}
         <Tarjeta titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
-          <CamposSistema
+          <CamposSistema className="rv-liq__datos"
             etiqueta={tr('liquidacion.detalle.acreditableTabla')}
             campos={[
               { etiqueta: tr('liquidacion.detalle.dieselElegible'), valor: d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—' },
@@ -333,10 +333,12 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
         </Tarjeta>
         </div>,
         /* ── Línea de tiempo ── */
-        <Tarjeta key="linea" titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo" contenida>
-          <LineaDeTiempo hitos={hitos} tr={tr} />
-          <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
-        </Tarjeta>,
+        <div key="linea" className="rv-liq__col">
+          <Tarjeta titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo" contenida>
+            <LineaDeTiempo hitos={hitos} tr={tr} />
+            <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
+          </Tarjeta>
+        </div>,
       ]}
     >
       {reintentarPdf && (

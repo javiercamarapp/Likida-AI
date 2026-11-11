@@ -58,7 +58,7 @@ export function BotonEjecutar({ ejecutarAhora, enCola, activo }: {
         </form>
       ) : (
         <Tooltip texto={!activo ? t('cobranza.controles.el_agente_esta_pausado') : enCola === 0 ? t('cobranza.controles.no_hay_a_quien_contactar') : t('cobranza.controles.correr_la_cobranza_ahora_sin')}><Boton variante="primary" onClick={() => setConfirmando(true)}
-          disabled={!activo || enCola === 0}
+          disabled={!activo || enCola === 0} className={!activo || enCola === 0 ? 'rv-ag-no-disponible' : undefined}
           icono={<Icono icono={Send} tam={14} />}>
           {t('cobranza.controles.ejecutar_ahora')}
         </Boton></Tooltip>

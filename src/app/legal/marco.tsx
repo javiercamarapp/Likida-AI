@@ -23,6 +23,12 @@ export interface SeccionLegal {
   parrafos: string[];
 }
 
+/** El círculo de color que marcaba lo pendiente se queda en el texto (la huella del documento lo cuenta) pero no se ve: lo pendiente se dice con negritas y con el aviso ámbar, sin emojis. */
+function conMarca(texto: string) {
+  if (!texto.includes('\u{1F534}')) return texto;
+  return texto.split('\u{1F534}').flatMap((trozo, i) => (i === 0 ? [trozo] : [<span key={`m${i}`} className="rv-pub__marca-falta" aria-hidden="true">{'\u{1F534}'}</span>, trozo]));
+}
+
 /**
  * `**negritas**` sin traer un motor de markdown entero a una página estática.
  * Solo negritas a propósito: es lo único que estos documentos necesitan, y un
@@ -35,7 +41,7 @@ export function ConNegritas({ texto }: { texto: string }) {
       {texto.split(/(\*\*[^*]+\*\*)/g).map((t, i) =>
         t.startsWith('**') && t.endsWith('**')
           ? <strong key={i}>{t.slice(2, -2)}</strong>
-          : <span key={i}>{t}</span>,
+          : <span key={i}>{conMarca(t)}</span>,
       )}
     </>
   );

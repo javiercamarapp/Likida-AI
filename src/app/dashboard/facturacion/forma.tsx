@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { useT } from '@/lib/i18n/proveedor';
 import { dinero } from '@/lib/i18n/es/dinero';
 // SOLO TIPOS de los módulos de servidor (importan `supabaseAdmin`): un import
@@ -7,7 +8,7 @@ import { dinero } from '@/lib/i18n/es/dinero';
 // como props desde la página. Mismo contrato que `clientes/forma.tsx`.
 import type { RenglonSinFacturar } from '@/lib/likida/facturacion_clientes';
 import {
-  Casilla, CampoFecha, CampoSelect, CampoTexto, Fieldset, FormaEnCajon,
+  Boton, BotonEnlace, CamposSistema, Casilla, CampoFecha, CampoSelect, CampoTexto, Drawer, Fieldset, FormaEnCajon,
   type AccionDeForma, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 
@@ -182,5 +183,38 @@ export function FormaCancelar({ accion, facturaId }: { accion: AccionForma; fact
       <input type="hidden" name="facturaId" value={facturaId} />
       <p className="text-[12px] text-[color:var(--muted)]">{tr('facturacion.forma.cancelarlaAquiRegistraLa')}</p>
     </FormaEnCajon>
+  );
+}
+
+// ── Vista rápida de un viaje por facturar ──────────────────────────────────
+
+/**
+ * «Vista rápida» (Rovaq: tabla 36/40 con el botón fantasma en la última columna y un cajón de 420). Enseña el renglón completo del viaje
+ * sin salir de la tabla y lleva a su liquidación. Todo llega ya formateado desde el servidor (`valor: null` = no se capturó y se dice
+ * «sin dato», jamás un cero ni un monto inventado).
+ */
+export function VistaRapidaViaje({ folio, filas, href, aviso }: {
+  folio: string;
+  filas: ReadonlyArray<{ etiqueta: string; valor: string | null }>;
+  href: string;
+  aviso: string | null;
+}) {
+  const { t: tr } = useT('dinero', dinero);
+  const [abierto, setAbierto] = useState(false);
+  return (
+    <>
+      <Boton type="button" variante="ghost" tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{tr('facturacion.vista.vistaRapida')}</Boton>
+      {/* La raíz corta la herencia del text-align de la celda (ver facturacion.css). */}
+      <div className="rv-fact__cajon-raiz">
+        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={folio} tamano="m">
+          <div className="rv-fact__pila">
+            <CamposSistema className="rv-fact__datos" etiqueta={folio}
+              campos={filas.map((f) => ({ etiqueta: f.etiqueta, valor: f.valor ?? <span className="rv-fact__sindato">{tr('facturacion.vista.sinDatoRapida')}</span> }))} />
+            {aviso ? <p className="rv-fact__nota">{aviso}</p> : null}
+            <BotonEnlace href={href} variante="secondary">{tr('facturacion.vista.verLiquidacion')}</BotonEnlace>
+          </div>
+        </Drawer>
+      </div>
+    </>
   );
 }

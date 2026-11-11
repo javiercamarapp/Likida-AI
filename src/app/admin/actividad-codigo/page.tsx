@@ -3,6 +3,7 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
 import { numero, fechaCorta } from '@/lib/formato';
 import { Aviso, FilaTarjetas, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { BotonReintentar } from '../../ui-v2/componentes/boton-reintentar';
 import { Columnas } from '../../ui-v2/graficas';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
@@ -44,7 +45,10 @@ export default async function ActividadCodigoPage() {
   // F26: el esqueleto se dibuja SIEMPRE. Sin lectura, cada bloque dice «No disponible ahora. No es cero.» (con Reintentar) o que GitHub
   // sigue calculando; nunca un cero ni una página casi vacía.
   const calculando = a.estado === 'calculando';
-  const sinLectura = { estado: calculando ? 'vacio' as const : 'error' as const, mensaje: calculando ? t('actividad_codigo.calculando') : undefined, reintentar: true };
+  // Neutro (caja punteada) para todo lo que no hay que alarmar: GitHub sin conectar, calculando o una lectura caída. NUNCA un rojo por
+  // celda ni un «Reintentar» por celda: el único Reintentar vive en el aviso de arriba y solo cuando la lectura de verdad falló.
+  const mensajeSinLectura = calculando ? t('actividad_codigo.calculando') : a.estado === 'sin_token' ? t('actividad_codigo.sin_conexion') : t('actividad_codigo.no_disponible');
+  const sinLectura = { estado: 'vacio' as const, mensaje: mensajeSinLectura };
   const mejor = ok ? a.semanas.reduce((m, s) => (s.total > m.total ? s : m), a.semanas[0]) : undefined;
   const max = ok ? Math.max(...a.semanas.flatMap((s) => s.dias), 1) : 1;
   const ancho = ok ? a.semanas.length * (CELDA + GAP) + 28 : 0;
@@ -68,7 +72,7 @@ export default async function ActividadCodigoPage() {
         {a.estado === 'error' && (
           <>
             <AvisoGitHub causa="error" />
-            <Aviso tono="warn">No se pudo leer la actividad: {a.detalle}. Esto NO significa que no haya commits.</Aviso>
+            <Aviso tono="warn" acciones={<BotonReintentar contexto="actividad de código" />}>No se pudo leer la actividad: {a.detalle}. Esto NO significa que no haya commits.</Aviso>
           </>
         )}
       </>}

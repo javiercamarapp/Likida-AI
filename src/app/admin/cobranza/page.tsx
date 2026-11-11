@@ -103,7 +103,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
             { etiqueta: t('cobranza.toques'), valor: String(sel.toques.length) },
             { etiqueta: t('facturas.periodo'), valor: `${sel.factura.periodoInicio} a ${sel.factura.periodoFin}` },
           ]}
-          pie={<BotonEnlace variante="suave" href="/admin/costos-facturacion">{t('cobranza.vr_abrir')}</BotonEnlace>}
+          pie={<BotonEnlace variante="primary" href="/admin/costos-facturacion">{t('cobranza.vr_abrir')}</BotonEnlace>}
         />
       ) : null}
       avisos={(
@@ -156,7 +156,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
             </p>
           ) : null}
           <TablaBase
-            etiqueta={t('cobranza.facturas_por_cobrar_y')} idFila={(f) => f.factura.id} tarjetaMovil densa filas={filasVistas}
+            etiqueta={t('cobranza.facturas_por_cobrar_y')} idFila={(f) => f.factura.id} tarjetaMovil filas={filasVistas}
             vacio={{ titulo: '0 mensualidades por cobrar', texto: t('cobranza.no_hay_ninguna_factura') }}
             columnas={[
               { id: 'flota', titulo: t('cobranza.flota'), principal: true, celda: (f) => f.factura.tenantNombre },

@@ -24,8 +24,12 @@ it('sin acceso a GitHub: lo dice explícito y sin jerga de variables — nunca "
   // R9: el aviso pasó de un vacío largo a un aviso compacto accionable (misma verdad: falta la variable, no hay «cero commits»).
   expect(html).toContain('Falta configurar el acceso a GitHub');
   expect(html).toContain('equipo técnico');
-  // F26: el esqueleto se dibuja con cada bloque «No disponible ahora. No es cero.» — jamás un cero.
-  expect(html).toContain('No disponible ahora');
+  // F26 ronda 3: sin conexión es una caja punteada neutra con la causa verdadera (GitHub sin conectar), sin rojo y sin «Reintentar»
+  // por celda; y jamás un cero.
+  expect(html).toContain('GitHub aún no está conectado');
+  expect(html).not.toContain('no respondió a tiempo');
+  expect(html).not.toContain('Reintentar');
+  expect(html).not.toMatch(/data-estado="error"/);
   expect(html).not.toMatch(/rv-kpi__valor"[^>]*>0</);
 });
 
@@ -42,6 +46,9 @@ it('error de lectura: muestra el detalle real y ACLARA que no significa "sin com
   expect(html).toContain('GitHub contestó 500');
   expect(html).toContain('Esto NO significa que no haya commits');
   expect(html).not.toContain('GITHUB_TOKEN');
+  // Un fallo real lleva UN solo «Reintentar» (el del aviso), no uno por celda; el rojo no se reparte.
+  expect(html.match(/>Reintentar</g)?.length).toBe(1);
+  expect(html).not.toMatch(/data-estado="error"/);
 });
 
 it('ok con datos reales: pinta el heatmap y los totales medidos', async () => {

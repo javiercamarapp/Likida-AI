@@ -218,6 +218,7 @@ export default async function PaginaFacturacion({
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
     <>
       <VistaFacturacion
+        sufijo={sufijoTenant(sp)}
         tr={tr} datos={datos} captura={captura} auditoria={auditoria}
         seccion={seccion}
         hrefSeccion={(k) => urlRegistro('/dashboard/facturacion', sufijoTenant(sp), { seccion: k === 'cartera' ? null : k })}

@@ -195,10 +195,18 @@ export default async function SoportePage({
   }
   const cerrado = detalle !== null && (detalle.estado === 'resuelto' || detalle.estado === 'cerrado');
 
+  // Rótulos con mayúscula y acentos para los valores del dominio (nunca el enum crudo en pantalla); fuera del dominio se enseña tal cual.
+  const rotCategoria = (c: string): string => ({
+    facturacion: t('e27.sop_cat_facturacion'), operacion: t('e27.sop_cat_operacion'), tecnico: t('e27.sop_cat_tecnico'), cuenta: t('e27.sop_cat_cuenta'), otro: t('e27.sop_cat_otro'),
+  } as Record<string, string>)[c] ?? c;
+  const rotPrioridad = (p: string): string => ({
+    baja: t('e27.sop_pri_baja'), media: t('e27.sop_pri_media'), alta: t('e27.sop_pri_alta'), urgente: t('e27.sop_pri_urgente'),
+  } as Record<string, string>)[p] ?? p;
+
   const columnas: ColumnaBase<TicketRow>[] = [
     { id: 'asunto', titulo: t('cfg.asunto'), principal: true, celda: (t) => <Link href={enlaceHilo(t.id)} className="rv-sop__enlace">{t.asunto}</Link> },
-    { id: 'categoria', titulo: t('cfg.categoria'), celda: (t) => <span className="rv-sop__tenue">{t.categoria}</span> },
-    { id: 'prioridad', titulo: t('cfg.prioridad'), celda: (t) => t.prioridad },
+    { id: 'categoria', titulo: t('cfg.categoria'), celda: (x) => <span className="rv-sop__tenue">{rotCategoria(x.categoria)}</span> },
+    { id: 'prioridad', titulo: t('cfg.prioridad'), celda: (x) => rotPrioridad(x.prioridad) },
     {
       id: 'estado', titulo: t('llaves.estado'),
       celda: (t) => { const pill = pillTicket(t.estado); return <StatusChip tono={pill.estado}>{pill.etiqueta}</StatusChip>; },
@@ -241,17 +249,17 @@ export default async function SoportePage({
         <FormaEnCajon id="abrir-ticket" titulo={t('cfg.abrir_un_ticket')} accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')} disparador={t('cfg.abrir_ticket')} abiertoInicial={false}>
           <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
           <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
-              {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
+              {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{rotCategoria(c)}</option>)}
           </CampoSelect>
           <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
-              {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
+              {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{rotPrioridad(p)}</option>)}
           </CampoSelect>
           <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
         </FormaEnCajon>
       ) : undefined}
       cifras={tickets ? [
-        { etiqueta: t('cfg.abiertos'), info: 'soporte.abiertos', valor: abiertos.length },
-        { etiqueta: t('cfg.sla_vencido'), info: 'soporte.sla_vencido', valor: vencidos.length, tono: vencidos.length > 0 ? 'bad' : undefined },
+        { etiqueta: t('cfg.abiertos'), info: 'soporte.abiertos', valor: abiertos.length, nota: t('e27.sop_abiertos_nota') },
+        { etiqueta: t('cfg.sla_vencido'), info: 'soporte.sla_vencido', valor: vencidos.length, tono: vencidos.length > 0 ? 'bad' : undefined, nota: t('e27.sop_vencido_nota') },
         { etiqueta: t('cfg.sin_sla_pactado'), info: 'soporte.sin_sla', valor: sinSla.length, nota: t('cfg.no_estan_vencidos_nadie_les_puso') },
       ] : undefined}
       etiquetaCifras={t('cfg.centro_de_ayuda')}
@@ -259,7 +267,7 @@ export default async function SoportePage({
       vistaRapida={pedido !== '' ? (
         <CajonTicket
           titulo={detalle ? detalle.asunto : t('cfg.conversacion')} hrefCerrar={verCerrados ? hrefPestana(true) : enlaceVolver}
-          subtitulo={detalle ? `${t('cfg.abierto_2', { categoria: detalle.categoria, prioridad: detalle.prioridad, fechaHoraMx: fechaHoraMx(detalle.abiertoEn, idioma) })}${detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn, idioma)}` : ' · sin SLA pactado'}${detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn, idioma)}` : ''}` : undefined}
+          subtitulo={detalle ? `${t('cfg.abierto_2', { categoria: rotCategoria(detalle.categoria), prioridad: rotPrioridad(detalle.prioridad), fechaHoraMx: fechaHoraMx(detalle.abiertoEn, idioma) })}${detalle.venceEn ? ` · vence ${fechaHoraMx(detalle.venceEn, idioma)}` : ' · sin SLA pactado'}${detalle.resueltoEn ? ` · resuelto ${fechaHoraMx(detalle.resueltoEn, idioma)}` : ''}` : undefined}
         >
           <div className="rv-sop__hilo">
             {hiloFallo ? (
