@@ -271,12 +271,18 @@ export default async function SoportePage({
     },
   ];
   const terminal = detalle !== null && ESTADOS_TICKET_CERRADO.has(detalle.estado);
+  const sinActividad = tickets !== null && tickets.length === 0
+    && conteos.abiertos === 0 && conteos.vencidos === 0 && conteos.sinSla === 0 && conteos.cerrados === 0;
 
   return (
     <MarcoPagina titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')}>
       {tickets === null ? (
         <EstadoError reintentar>{ta('soporte.no_se_pudo_leer')}</EstadoError>
       ) : (
+        sinActividad && pedido === '' ? (
+          // Cola sin un solo ticket (ni abiertos, ni vencidos, ni sin SLA, ni cerrados): cuatro ceros no son cuatro mediciones. Un solo estado vacío, dentro de su tarjeta.
+          <Tarjeta titulo={ta('soporte.cola_de_soporte')} estado="vacio" mensaje={ta('soporte.la_cola_esta_vacia')} detalle={ta('soporte.ninguna_flota_tiene_nada')} />
+        ) : (
         <>
           <TiraCifras etiqueta={ta('soporte.tickets_de_soporte')} items={[
             { etiqueta: ta('soporte.abiertos'), valor: conteos.abiertos, formato: 'entero', nota: ta('soporte.de_todas_las_flotas'), ...(conteos.abiertos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
@@ -357,9 +363,11 @@ export default async function SoportePage({
 
           <section className="adm-sis-bloque" aria-labelledby="cola-soporte">
             <h2 className="adm-sis-titulo" id="cola-soporte">{ta('soporte.la_cola_lo_mas')}</h2>
+            {tickets.length === 0 ? (
+              <Tarjeta titulo={ta('soporte.cola_de_soporte')} estado="vacio" mensaje={ta('soporte.la_cola_esta_vacia')} detalle={ta('soporte.ninguna_flota_tiene_nada')} />
+            ) : (
             <TablaLista<TicketCruzado>
               etiqueta={ta('soporte.cola_de_soporte')} columnas={columnas} filas={tickets} idFila={(t) => t.id} base="/admin/soporte" params={{ ticket: pedido || undefined }}
-              vacio={{ titulo: ta('soporte.la_cola_esta_vacia'), texto: ta('soporte.ninguna_flota_tiene_nada') }}
               pie={(
                 <p className="adm-sis-nota">
                   {recortado
@@ -370,6 +378,7 @@ export default async function SoportePage({
                 </p>
               )}
             />
+            )}
           </section>
 
           <Disclosure titulo={ta('soporte.que_pasa_cuando_vence')} resumen="Aviso al operador, una sola vez">
@@ -379,6 +388,7 @@ export default async function SoportePage({
             </p>
           </Disclosure>
         </>
+        )
       )}
     </MarcoPagina>
   );

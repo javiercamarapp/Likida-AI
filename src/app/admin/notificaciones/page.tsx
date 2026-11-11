@@ -21,7 +21,7 @@ export default async function NotificacionesPage({ searchParams }: { searchParam
   const fuente = await leerAvisosAdmin();
   const { t } = await getT('avisos');
   return (
-    <MarcoPagina titulo={t('notif.titulo')} apoyo={t('notif.apoyo')}>
+    <MarcoPagina area="Sistema" titulo={t('notif.titulo')} apoyo={t('notif.apoyo')}>
       <PaginaAvisos
         destino={{ panel: 'admin' }} ambito={{ tipo: 'admin' }} userId={s.userId} fuente={fuente}
         base="/admin/notificaciones" params={{}} sufijo="" seccion={sp.seccion === 'configuracion' ? 'configuracion' : 'avisos'}

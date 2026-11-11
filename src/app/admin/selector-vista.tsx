@@ -36,7 +36,6 @@ import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 type Vista = {
   href: string;
   titulo: string;
-  quien: string;
   que: string;
   Icono: typeof Building2;
 };
@@ -45,7 +44,6 @@ const VISTAS: Vista[] = [
   {
     href: '/dashboard?vista=demo&rol=flota_admin',
     titulo: 'Dueño de flota',
-    quien: 'flota_admin',
     que: 'Resumen con pesos: lo señalado por el motor, acreditables y monto comprobado.',
     Icono: Building2,
   },
@@ -56,14 +54,12 @@ const VISTAS: Vista[] = [
     // borrado, este botón apuntaba a Suscripción.
     href: '/dashboard/contador?vista=demo&rol=contador',
     titulo: 'Contador',
-    quien: 'contador',
     que: 'Acreditables del ejercicio, motor fiscal, deducibilidad y el papel que falta.',
     Icono: Landmark,
   },
   {
     href: '/dashboard?vista=demo&rol=encargado',
     titulo: 'Jefe de tráfico',
-    quien: 'encargado',
     que: 'Operación y nada de dinero: qué no tiene chofer, carga por operador, incidencias.',
     Icono: Send,
   },
@@ -86,7 +82,7 @@ export function SelectorVista({ tenants, t = trAdminInicioEs }: {
       <p className="m-0 mb-3 text-xs text-muted">{t('selector_vista.con_tu_propia_sesion')}</p>
       <div id="vistas" className="scroll-mt-24">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-          {VISTAS.map(({ href, titulo, quien, que, Icono }) => (
+          {VISTAS.map(({ href, titulo, que, Icono }) => (
             <Link key={href} href={href} className="block min-h-11 py-0.5 no-underline">
               <span className="flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 transition-colors hover:bg-[var(--canvas)]">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--marca)]">
@@ -95,7 +91,6 @@ export function SelectorVista({ tenants, t = trAdminInicioEs }: {
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="text-sm font-medium">{titulo}</span>
-                    <code className="text-[11px] text-muted">{quien}</code>
                     <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0 text-muted" aria-hidden="true" />
                   </span>
                   <span className="mt-1 block text-xs text-muted">{que}</span>

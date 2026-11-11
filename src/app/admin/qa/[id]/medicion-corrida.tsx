@@ -64,7 +64,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
         <p className="text-sm mt-2 m-0 rv-qa-mut">
           {viva
             ? 'La medición se escribe al final de la corrida (fase de oráculos), foto por foto contra la etiqueta que una persona confirmó.'
-            : 'Esta corrida terminó sin medición escrita — corre `npx tsx scripts/qa/medir-corrida.ts <id> --aplicar` si su tenant se conservó: se mide sobre lo persistido, sin gastar modelo.'}
+            : 'Esta corrida terminó sin medición escrita — el equipo técnico puede medirla después si la flota de prueba se conservó: se mide sobre lo ya guardado, sin gastar modelo.'}
         </p>
       )}
 

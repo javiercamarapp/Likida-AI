@@ -26,6 +26,8 @@ describe('Última corrida del catálogo de agentes', () => {
     const src = readFileSync(new URL('./contenido.tsx', import.meta.url), 'utf8');
     expect(src).not.toContain('tonoPorAntiguedad');
     expect(src).not.toContain('BotonEnlace');
-    expect(src).toContain('rv-agente-enlace');
+    // «Insumos» ya no es un enlace suelto por fila: vive con Configurar y Apagar en el menú «⋯» de la fila (AccionesAgente).
+    expect(src).toContain('AccionesAgente');
+    expect(src).toContain('etiquetaInsumos');
   });
 });

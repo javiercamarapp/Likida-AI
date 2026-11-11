@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import {
   listarAgentes, DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
@@ -17,7 +16,7 @@ import {
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
-import { KillSwitchAgente, ConfigurarAgente } from './acciones-agente';
+import { AccionesAgente } from './acciones-agente';
 import { getT } from '@/lib/i18n/servidor';
 import { haceTiempo, resultadoCorrida } from './corrida-visual';
 import './agentes.css';
@@ -128,11 +127,13 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
     },
     {
       id: 'estado', titulo: t('agentes_contenido.estado_real'),
+      // Solo el chip: el motivo (la misma frase larga en 30 filas) se dice UNA vez en el aviso de arriba; aquí queda en el título del chip.
       celda: ({ a, real, motivo }) => (
         <>
-          <StatusChip tono={TONO_ESTADO_REAL[real] as TonoEstado}>{ROTULO_ESTADO_REAL[real]}</StatusChip>
+          <span title={motivo && (real === 'bloqueado_bandeja' || real === 'parado') ? motivo : undefined}>
+            <StatusChip tono={TONO_ESTADO_REAL[real] as TonoEstado}>{ROTULO_ESTADO_REAL[real]}</StatusChip>
+          </span>
           {a.experimental ? <Chip>Experimental</Chip> : null}
-          {motivo && (real === 'bloqueado_bandeja' || real === 'parado') ? <span className="rv-agente-sub">{motivo}</span> : null}
         </>
       ),
     },
@@ -172,23 +173,21 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
           ? <span className="rv-agente-nowrap">{t('agentes_contenido.no_se_pudo_leer')}</span>
           : apagado === undefined
             ? <span className="rv-agente-nowrap">{t('agentes_contenido.sin_palanca_propia')}</span>
-            : <KillSwitchAgente palanca={`agente:${a.id}`} nombre={a.nombre} apagado={apagado} accion={accionPalanca} />,
+            : <StatusChip tono={apagado ? 'bad' : 'ok'}>{apagado ? 'Apagado' : 'Encendido'}</StatusChip>,
     },
     {
       id: 'acciones', titulo: t('agentes_contenido.acciones'),
-      celda: ({ a }) => (
-        <div className="rv-agente-acciones">
-          <ConfigurarAgente
-            id={a.id} nombre={a.nombre} accion={accionConfig} estados={estadosRotulo}
-            actual={{
-              estado: a.estado, runnerHabilitado: a.runnerHabilitado,
-              presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
-            }}
-          />
-          <Link className="rv-agente-enlace" href={`/admin/agentes/${a.id}/insumos`}>
-            {insumosPendientes === null ? t('agentes_contenido.insumos_2') : (insumosPendientes.get(a.id) ?? 0) > 0 ? t('agentes_contenido.insumos', { insumosPendientes: insumosPendientes.get(a.id) ?? 0 }) : t('agentes_contenido.insumos_2')}
-          </Link>
-        </div>
+      celda: ({ a, apagado }) => (
+        <AccionesAgente
+          id={a.id} nombre={a.nombre} palanca={`agente:${a.id}`}
+          apagado={a.estado === 'vivo' && typeof apagado === 'boolean' ? apagado : null}
+          accionPalanca={accionPalanca} accionConfig={accionConfig} estados={estadosRotulo}
+          actual={{
+            estado: a.estado, runnerHabilitado: a.runnerHabilitado,
+            presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
+          }}
+          etiquetaInsumos={insumosPendientes === null ? t('agentes_contenido.insumos_2') : (insumosPendientes.get(a.id) ?? 0) > 0 ? t('agentes_contenido.insumos', { insumosPendientes: insumosPendientes.get(a.id) ?? 0 }) : t('agentes_contenido.insumos_2')}
+        />
       ),
     },
   ];

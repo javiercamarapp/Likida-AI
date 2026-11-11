@@ -59,10 +59,10 @@ it('con conteo real de tenants en 0 (sin error), sí dice que no hay flotas dada
   expect(html).toContain('No hay ninguna flota dada de alta');
 });
 
-it('mapa de actividad: sin GITHUB_TOKEN dice EXACTAMENTE eso, no "sin pushes"', async () => {
+it('mapa de actividad: sin acceso a GitHub dice EXACTAMENTE eso (sin nombrar variables), no "sin pushes"', async () => {
   const html = await renderizar();
-  expect(html).toContain('Sin');
-  expect(html).toContain('GITHUB_TOKEN');
+  expect(html).toContain('Sin el acceso a GitHub no hay mapa');
+  expect(html).not.toContain('GITHUB_TOKEN');
   expect(html).toContain('no es que no haya pushes');
 });
 

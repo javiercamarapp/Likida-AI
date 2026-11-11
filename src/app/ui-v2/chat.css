@@ -380,8 +380,12 @@ summary.rv-chat__resumen::marker { content: ""; }
 }
 
 /* «Decide hoy» en la portada del Copiloto (F5): tarjetas con la decisión propuesta; el aspecto de la tarjeta es el del kit (.rv-tarjeta). */
-.rv-chat__briefing { order: 2; width: 100%; max-width: var(--col-chat, 46rem); margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
-.rv-chat__briefing-titulo { margin: 0; font-size: var(--t-card); font-weight: 600; }
+.rv-chat__briefing { order: 7; width: 100%; max-width: var(--col-chat, 46rem); margin-top: 14px; padding: 10px 14px; }
+.rv-chat__briefing-resumen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; list-style: none; }
+.rv-chat__briefing-resumen::-webkit-details-marker { display: none; }
+.rv-chat__briefing-resumen:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
+.rv-chat__briefing-cuerpo { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; max-height: min(40vh, 22rem); overflow-y: auto; }
+.rv-chat__briefing-titulo { margin: 0; font-size: var(--t-card); font-weight: 600; margin-right: auto; }
 .rv-chat__briefing-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .rv-chat__briefing-tarjeta { display: flex; flex-direction: column; gap: 6px; }
 .rv-chat__briefing-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

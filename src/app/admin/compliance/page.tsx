@@ -10,7 +10,7 @@ import { logger } from '@/lib/logger';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
 import { agregarDiasHabiles } from '@/lib/admin/dias-habiles';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
-import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
+import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
 import { TiraCifras } from '../../ui-v2/graficas';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
@@ -99,27 +99,27 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
   ];
 
   return (
-    <MarcoPagina titulo="Compliance y datos" apoyo="Las solicitudes de derechos de los titulares (ARCO): quién pide qué y cuánto falta para contestar.">
-      <TiraCifras etiqueta="Solicitudes ARCO" items={lectura === null ? [
+    <MarcoPagina titulo="Seguridad y datos" apoyo="Las solicitudes de derechos de los titulares (ARCO): quién pide qué y cuánto falta para contestar.">
+      {/* Sin una sola solicitud, dos ceros no son dos mediciones: el único estado vacío (abajo) lo dice una vez. */}
+      {lectura !== null && solicitudes.length === 0 ? null : <TiraCifras etiqueta="Solicitudes ARCO" items={lectura === null ? [
         { etiqueta: 'Por responder', valor: null, estado: 'error', mensaje: 'No se pudieron leer las solicitudes.', reintentar: true },
         { etiqueta: 'Vencen pronto', valor: null, estado: 'error', mensaje: 'No se pudieron leer las solicitudes.', reintentar: true },
       ] : [
         { etiqueta: 'Por responder', valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: 'Recibidas o en proceso, de todas las flotas.' },
         { etiqueta: 'Vencen pronto', valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: 'Plazo en 5 días hábiles o menos.' },
-      ]} />
+      ]} />}
 
       {lectura === null ? (
         <EstadoError reintentar>No se pudieron leer las solicitudes ARCO. Esto NO quiere decir que no haya ninguna: la responsable tiene 20 días hábiles para contestar y una pendiente puede estar corriendo sin verse.</EstadoError>
       ) : solicitudes.length === 0 ? (
-        <EstadoVacio titulo="Ninguna solicitud ARCO registrada">
-          Cuando un operador escribe PRIVACIDAD por WhatsApp, la solicitud queda registrada aquí y la flota, que es la responsable, tiene 20 días hábiles para responder.
-        </EstadoVacio>
+        <Tarjeta titulo="Solicitudes ARCO" estado="vacio" mensaje="Ninguna solicitud ARCO registrada"
+          detalle="Cuando un operador escribe PRIVACIDAD por WhatsApp, la solicitud queda registrada aquí y la flota, que es la responsable, tiene 20 días hábiles para responder." />
       ) : (
         <>
           <section className="adm-sis-bloque" aria-labelledby="arco-pendientes">
             <h2 className="adm-sis-titulo" id="arco-pendientes">Por responder</h2>
             {pendientes.length === 0 ? (
-              <EstadoVacio titulo="Nada por responder">Todas las solicitudes registradas ya tienen su respuesta.</EstadoVacio>
+              <Tarjeta titulo="Solicitudes ARCO" estado="vacio" mensaje="Nada por responder" detalle="Todas las solicitudes registradas ya tienen su respuesta." />
             ) : pendientes.map((s) => {
               const chip = CHIP_ARCO[s.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: s.estado };
               const vencida = s.venceEn < hoy;
@@ -154,11 +154,14 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
 
           <section className="adm-sis-bloque" aria-labelledby="arco-resueltas">
             <h2 className="adm-sis-titulo" id="arco-resueltas">Ya resueltas</h2>
-            <TablaLista<SolicitudArcoPanel>
-              etiqueta="Solicitudes de derechos de los titulares resueltas" columnas={columnas} filas={resueltas} idFila={(s) => s.id}
-              base="/admin/compliance" params={{ pagina: pagina > 1 ? String(pagina) : undefined }} paginacion={{ tamano: 25 }}
-              vacio={{ titulo: 'Aún no hay resueltas', texto: 'Aparecen aquí en cuanto se contesta la primera.' }}
-            />
+            {resueltas.length === 0 ? (
+              <Tarjeta titulo="Solicitudes ARCO" estado="vacio" mensaje="Aún no hay resueltas" detalle="Aparecen aquí en cuanto se contesta la primera." />
+            ) : (
+              <TablaLista<SolicitudArcoPanel>
+                etiqueta="Solicitudes de derechos de los titulares resueltas" columnas={columnas} filas={resueltas} idFila={(s) => s.id}
+                base="/admin/compliance" params={{ pagina: pagina > 1 ? String(pagina) : undefined }} paginacion={{ tamano: 25 }}
+              />
+            )}
           </section>
         </>
       )}
@@ -220,4 +223,4 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }
 
-export const metadata: Metadata = { title: 'Compliance & Datos' };
+export const metadata: Metadata = { title: 'Seguridad y datos' };

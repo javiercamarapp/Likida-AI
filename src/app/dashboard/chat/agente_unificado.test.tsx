@@ -46,7 +46,7 @@ describe('el cliente y el superadmin comparten estructura y clases', () => {
     const soloSuperadmin = [...s].filter((x) => !c.has(x)).sort();
     expect(soloCliente).toEqual(['rv-chat__clip']);
     // El briefing «Decide hoy» es de la portada del Copiloto (F5): su estructura propia es lo único que el superadmin tiene de más.
-    expect(soloSuperadmin).toEqual(['rv-btn--sm', 'rv-chat__briefing', 'rv-chat__briefing-acciones', 'rv-chat__briefing-titulo', 'rv-chat__nota']);
+    expect(soloSuperadmin).toEqual(['rv-btn--sm', 'rv-chat__briefing', 'rv-chat__briefing-acciones', 'rv-chat__briefing-cuerpo', 'rv-chat__briefing-resumen', 'rv-chat__briefing-titulo', 'rv-chat__nota', 'rv-tarjeta']);
   });
 
   it.each([['cliente', cliente], ['superadmin', superadmin]])('%s: portada completa (hero, recuadro, temas con punto, chips, historial) y cero style=', (_n, html) => {
@@ -81,12 +81,23 @@ describe('el cliente y el superadmin comparten estructura y clases', () => {
     expect(cliente).not.toContain('Tú confirmas cada acción');
   });
 
+  it('D10 (auditoría 11-nov): «Decide hoy» va DESPUÉS de los temas y plegado: nada entre el recuadro y los temas', () => {
+    const iDock = superadmin.indexOf('rv-chat__dock');
+    const iTemas = superadmin.indexOf('rv-chat__temas');
+    const iBriefing = superadmin.indexOf('rv-chat__briefing');
+    expect(iDock).toBeGreaterThan(-1);
+    expect(iTemas).toBeGreaterThan(iDock);
+    expect(iBriefing).toBeGreaterThan(iTemas);
+    expect(superadmin).toMatch(/<details[^>]*rv-chat__briefing/);
+    expect(superadmin).not.toMatch(/<details[^>]*rv-chat__briefing[^>]* open/);
+  });
+
   it('el panel lateral usa la misma pantalla en variante compacta', () => {
     const panel = renderToStaticMarkup(<AgenteConversacion modo="superadmin" variante="panel" marca="simbolo" />);
     expect(panel).toContain('data-variante="panel"');
     // El briefing «Decide hoy» es solo de la página: el panel, cerrado, no pide nada a la red.
     // El panel conserva TODAS las clases de la pantalla; solo suma la hoja del historial (el Drawer del motor de overlays).
-    for (const c of [...clases(superadmin)].filter((x) => !x.startsWith('rv-chat__hist') && !x.startsWith('rv-chat__briefing') && !['rv-btn--ghost', 'rv-btn--sm', 'rv-chat__nota'].includes(x))) expect(clases(panel).has(c), c).toBe(true);
+    for (const c of [...clases(superadmin)].filter((x) => !x.startsWith('rv-chat__hist') && !x.startsWith('rv-chat__briefing') && !['rv-btn--ghost', 'rv-btn--sm', 'rv-chat__nota', 'rv-tarjeta'].includes(x))) expect(clases(panel).has(c), c).toBe(true);
   });
 
   it('los perfiles son datos puros: ninguna función en textos ni temas (props serializables)', () => {

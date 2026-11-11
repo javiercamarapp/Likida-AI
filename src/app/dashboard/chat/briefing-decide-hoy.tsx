@@ -51,10 +51,22 @@ export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint
   }, [endpoint, intento]);
   const cargar = () => { setB(null); setIntento((i) => i + 1); };
 
+  const lista = b !== null && b !== 'error' ? b.tarjetas : [];
+  const urgentes = lista.filter((x) => x.severidad === 'alta').length;
+  const pendientes = lista.filter((x) => x.severidad === 'media').length;
+
   return (
-    <section className="rv-chat__briefing" aria-label={t('ch.decide_hoy')} aria-busy={b === null || undefined}>
-      {/* sin-info: portada del Copiloto, no es una cifra del dashboard del cliente */}
-      <h2 className="rv-chat__briefing-titulo">{t('ch.decide_hoy')}</h2>
+    // Tarjeta APARTE, plegada, DEBAJO de la portada (como Rovaq: logo, título, recuadro y temas centrados, sin tarjetas entre el recuadro y los temas).
+    // El resumen sigue diciendo si algo urge sin abrirla; una lectura caída se dice en el resumen, nunca «sin pendientes».
+    <details className="rv-chat__briefing rv-tarjeta" aria-busy={b === null || undefined}>
+      <summary className="rv-chat__briefing-resumen">
+        {/* sin-info: portada del Copiloto, no es una cifra del dashboard del cliente */}
+        <h2 className="rv-chat__briefing-titulo">{t('ch.decide_hoy')}</h2>
+        {urgentes > 0 && <StatusChip tono="bad">{rotulo(t).alta} · {urgentes}</StatusChip>}
+        {pendientes > 0 && <StatusChip tono="warn">{rotulo(t).media} · {pendientes}</StatusChip>}
+        {b === 'error' && <StatusChip tono="bad">{t('ch.no_disponible_ahora_no_es_cero')}</StatusChip>}
+      </summary>
+      <div className="rv-chat__briefing-cuerpo">
       {b === null && <p className="rv-chat__nota">{t('ch.leyendo_lo_que_espera_tu_decision')}</p>}
       {b === 'error' && (
         <p className="rv-chat__nota" role="alert">{t('ch.no_disponible_ahora_no_es_cero')}{' '}<button type="button" className="rv-btn rv-btn--ghost rv-btn--sm" onClick={cargar}>{t('cfg.reintentar')}</button>
@@ -86,6 +98,7 @@ export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint
       <div className="rv-chat__briefing-acciones">
         <Boton tamano="sm" variante="secondary" disabled={deshabilitado} onClick={() => onPreguntar(t('ch.que_debo_mirar_en_la_pantalla'))}>{t('ch.preguntar_sobre_esta_pantalla')}</Boton>
       </div>
-    </section>
+      </div>
+    </details>
   );
 }

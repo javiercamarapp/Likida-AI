@@ -67,12 +67,12 @@ async function marcarResultado(fd: FormData) {
   revalidatePath('/admin/evals');
 }
 
-const AGENTES: ReadonlyArray<{ agente: AgenteExaminado; titulo: string; comando: string }> = [
-  { agente: 'analista', titulo: 'El analista (chat del panel)', comando: 'npx tsx scripts/evals/correr-analista.ts' },
+const AGENTES: ReadonlyArray<{ agente: AgenteExaminado; titulo: string }> = [
+  { agente: 'analista', titulo: 'El analista (chat del panel)' },
   // E.26 (fase 2 de EVALOPS): las 32 preguntas doradas de 22-evaluacion.md.
   // El hash del contador cubre reglas + CORPUS (corpus_texto.ts): cambiar una
   // ficha de normas/ también acusa drift, como exige la regla de re-examen.
-  { agente: 'contador', titulo: 'El contador (examen fiscal de 32 preguntas doradas)', comando: 'npx tsx scripts/evals/correr-contador.ts' },
+  { agente: 'contador', titulo: 'El contador (examen fiscal de 32 preguntas doradas)' },
 ];
 
 interface PorCaso { id: string; veredicto: string; detalle: string | null; pregunta: string; tipo: string; clave: string | null }
@@ -85,7 +85,7 @@ interface CorridaFila { id: string; agente: string; veredicto: string | null; in
  * EVALOPS (0134 + 0254) — el estado del examen de CADA agente examinado y la
  * REGLA DE RE-EXAMEN con cara: si el prompt vivo no es el examinado, esta
  * página lo acusa en grande. Los exámenes se corren a mano (cuestan llamadas
- * reales); el comando de cada uno está en su tarjeta.
+ * reales).
  */
 export default async function Evals({
   searchParams,
@@ -94,7 +94,7 @@ export default async function Evals({
   await requireSuperadmin();
   const sp = await searchParams;
   const admin = supabaseAdmin();
-  const secciones: Array<{ agente: AgenteExaminado; titulo: string; comando: string; estado: EstadoEvals | null; porCaso: PorCaso[] }> = [];
+  const secciones: Array<{ agente: AgenteExaminado; titulo: string; estado: EstadoEvals | null; porCaso: PorCaso[] }> = [];
   let corridas: CorridaFila[] = [];
   // ADM-14 (auditoría 24, MEDIO): `r.data ?? []` sin comprobar `r.error` —
   // una lectura caída se pintaba idéntica a "ninguna corrida todavía", que
@@ -201,14 +201,14 @@ export default async function Evals({
         ]}
       />
 
-      {secciones.map(({ agente, titulo, comando, estado, porCaso }) => (
+      {secciones.map(({ agente, titulo, estado, porCaso }) => (
         <Tarjeta key={agente} titulo={titulo} estado={estado === null ? 'error' : 'ok'} mensaje={`No se pudo leer el estado del examen del ${agente}, que no es lo mismo que «todo pasó».`} reintentar>
           {estado !== null && (
             <>
               {/* ── EL GATE, con cara ── */}
               {estado.driftDePrompt ? (
                 <Aviso tono="error" titulo={`El prompt del ${agente} cambió desde el último examen${estado.ultima ? '' : ' (nunca se ha examinado)'}`}>
-                  Re-examina antes de desplegar cambios del agente. Regla de 22-evaluacion.md{agente === 'contador' ? ' (el hash cubre reglas + corpus de normas/)' : ''}. Corre: <code className="tabular">{comando}</code> (llamadas reales, se corre a mano).
+                  {`Re-examina antes de desplegar cambios del agente${agente === 'contador' ? ' (la huella cubre las reglas y el corpus de normas)' : ''}. El examen lo corre a mano el equipo técnico: usa llamadas reales al modelo.`}
                   <span className="rv-evals__sub">prompt vivo {estado.hashVivo.slice(0, 12)}… · último examinado {estado.ultima ? `${estado.ultima.promptHash.slice(0, 12)}…` : 'ninguno'}</span>
                 </Aviso>
               ) : (
