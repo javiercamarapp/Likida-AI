@@ -1059,4 +1059,9 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'cli.a.alta': '"{nombre}" is now registered. Assign their trips so their income starts being measured.',
   'conv.a.rol': 'Only the fleet owner or the dispatch manager edits the agreements.',
   'conv.a.grande': 'The file is larger than 4 MB: split it into parts.',
+  'mapa.unidad': 'Unit',
+  'mapa.reporto': 'Reported',
+  'mapa.origen': 'Source of the data',
+  'mapa.velocidad': 'Speed',
+  'mapa.coordenadas': 'Coordinates',
 };

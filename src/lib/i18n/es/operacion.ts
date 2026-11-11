@@ -1059,4 +1059,9 @@ export const operacion = {
   'cli.a.alta': '"{nombre}" ya está dado de alta. Asígnale sus viajes para que su ingreso empiece a medirse.',
   'conv.a.rol': 'Solo el dueño de la flota o el jefe de tráfico editan los convenios.',
   'conv.a.grande': 'El archivo pesa más de 4 MB: divídelo en partes.',
+  'mapa.unidad': 'Unidad',
+  'mapa.reporto': 'Reportó',
+  'mapa.origen': 'Origen del dato',
+  'mapa.velocidad': 'Velocidad',
+  'mapa.coordenadas': 'Coordenadas',
 } as const;
