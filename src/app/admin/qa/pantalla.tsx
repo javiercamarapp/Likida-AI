@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { fechaHoraMx, numero, usd, usd4 } from '@/lib/formato';
-import { MarcoPagina, Tarjeta, TablaBase, StatusChip, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { Tarjeta, TablaBase, StatusChip, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { resumenVeredicto, type CorridaQA, type EstadoCorrida } from '@/lib/admin/qa-tipos';
 import { LanzarForm, type FotoConUrl } from './lanzar-form';
 import { BancoVerdad, type UltimaLectura } from './banco-verdad';
@@ -60,14 +60,12 @@ export function PantallaQa({
   ];
 
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       area="Calidad"
       titulo={t('qa_corrida_viva.calidad')}
       apoyo={t('qa_pantalla.pruebas_reales_fotos_de_comprobantes_procesadas')}
-    >
-      <TiraCifras
-        etiqueta={t('qa_pantalla.pruebas_reales')}
-        items={[
+      etiquetaCifras={t('qa_pantalla.pruebas_reales')}
+      cifras={[
           bancoError === null
             ? { etiqueta: t('qa_banco_verdad.fotos_en_el_banco'), valor: fotos.length, formato: 'entero' }
             : { etiqueta: t('qa_banco_verdad.fotos_en_el_banco'), valor: null, estado: 'error', mensaje: t('qa_pantalla.no_se_pudo_leer', { bancoError }) },
@@ -77,21 +75,8 @@ export function PantallaQa({
           gastoError === null && gastoHoy !== null
             ? { etiqueta: t('qa_pantalla.gasto_real_de_hoy'), valor: usd4(gastoHoy), nota: t('qa_pantalla.de_de_tope_diario_suma_del', { usd: usd(topeDiaUsd) }) }
             : { etiqueta: t('qa_pantalla.gasto_de_hoy'), valor: null, estado: 'error', mensaje: t('qa_pantalla.no_se_pudo_leer_3', { v: gastoError ?? t('qa_pantalla.sin_dato') }) },
-        ]}
-      />
-
-      {/* ── Lanzar una corrida ─────────────────────────────────────────── */}
-      <LanzarForm
-        fotosIniciales={fotos}
-        bancoError={bancoError}
-        gastoHoyUsd={gastoHoy}
-        gastoError={gastoError}
-        topeDiaUsd={topeDiaUsd}
-        topeCorridaUsd={topeCorridaUsd}
-      />
-
-      {/* ── El banco de comprobantes reales: la ficha de cada foto y la medición del OCR contra ella ── */}
-      <BancoVerdad fotos={fotos} bancoError={bancoError} lecturasIniciales={lecturasIniciales} lecturasError={lecturasError} />
+      ]}
+    >
 
       {/* ── El historial ───────────────────────────────────────────────── */}
       {historialError !== null ? null : (
@@ -106,7 +91,21 @@ export function PantallaQa({
             {t(corridas.length === 1 ? 'qa_pantalla.corridas_una' : 'qa_pantalla.corridas_varias', { n: numero(corridas.length, idioma) })}{t('qa_pantalla.las_mas_nuevas_primero_cada_una')}</p>
         </Tarjeta>
       )}
-    </MarcoPagina>
+
+      {/* ── Lanzar una corrida ─────────────────────────────────────────── */}
+      <LanzarForm
+        fotosIniciales={fotos}
+        bancoError={bancoError}
+        gastoHoyUsd={gastoHoy}
+        gastoError={gastoError}
+        topeDiaUsd={topeDiaUsd}
+        topeCorridaUsd={topeCorridaUsd}
+      />
+
+      {/* ── El banco de comprobantes reales: la ficha de cada foto y la medición del OCR contra ella ── */}
+      <BancoVerdad fotos={fotos} bancoError={bancoError} lecturasIniciales={lecturasIniciales} lecturasError={lecturasError} />
+
+    </EsqueletoTablaMaestra>
   );
 }
 

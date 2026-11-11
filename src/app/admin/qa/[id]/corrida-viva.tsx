@@ -18,7 +18,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FileText, MessageCircle } from 'lucide-react';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
-import { Aviso, BotonEnlace, Disclosure, EstadoError, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, Disclosure, EstadoError, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import '../qa.css';
 import { pillCorrida } from '../pantalla';
@@ -380,7 +381,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
   );
 }
 
-/** La pantalla de una corrida: UN solo MarcoPagina. Si la lectura de la corrida falló (`errorLectura`), lo dice en lugar del cuerpo: no es que no exista, es que no se pudo mirar. */
+/** La pantalla de una corrida: UN solo marco (esqueleto de ficha). Si la lectura de la corrida falló (`errorLectura`), lo dice en lugar del cuerpo: no es que no exista, es que no se pudo mirar. */
 export function CorridaViva({ corridaInicial = null, errorLectura = null, ...resto }: {
   corridaInicial?: CorridaQA | null;
   errorLectura?: string | null;
@@ -391,19 +392,19 @@ export function CorridaViva({ corridaInicial = null, errorLectura = null, ...res
 }) {
   const { t: tx } = useT('admin_sistema', admin_sistemaEs);
   return (
-    <MarcoPagina
+    <EsqueletoFicha
       area={tx('qa_corrida_viva.calidad')}
+      volver={{ href: '/admin/qa', etiqueta: tx('qa_corrida_viva.volver_a_pruebas_reales') }}
       titulo={corridaInicial ? tx('qa_corrida_viva.corrida', { v: corridaInicial.id.slice(0, 8) }) : tx('qa_corrida_viva.calidad')}
       apoyo={corridaInicial
         ? tx('qa_corrida_viva.escenario_el_avance_el_veredicto_y', { v: escenarioPorId(corridaInicial.escenario)?.nombre ?? corridaInicial.escenario })
         : tx('qa_corrida_viva.la_corrida_de_pruebas_reales_no')}
-      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{tx('qa_corrida_viva.volver_a_pruebas_reales')}</BotonEnlace>}
     >
       {corridaInicial ? (
         <CuerpoCorrida corridaInicial={corridaInicial} fotosIniciales={resto.fotosIniciales ?? []} pdfsIniciales={resto.pdfsIniciales ?? []} medicionInicial={resto.medicionInicial} medicionErrorInicial={resto.medicionErrorInicial} />
       ) : (
         <EstadoError reintentar>{tx('qa_corrida_viva.no_se_pudo_leer_la_corrida', { v: errorLectura ?? '' })}</EstadoError>
       )}
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }
