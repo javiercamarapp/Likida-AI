@@ -5,9 +5,7 @@ vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: async () => ({}) }));
 vi.mock('@/lib/admin/negocio', () => ({ getConversacion: (...a: unknown[]) => getConversacion(...a) }));
 vi.mock('next/navigation', () => ({ notFound: () => { throw new Error('NEXT_NOT_FOUND'); } }));
 vi.mock('next/link', () => ({ default: () => null }));
-vi.mock('lucide-react', () => ({ ArrowLeft: () => null, MessageCircle: () => null }));
-vi.mock('../../../../dashboard/resumen-visual', () => ({ BarraPagina: () => null, TituloSeccion: () => null }));
-vi.mock('../../../ui/kit', () => ({ EstadoError: () => null }));
+vi.mock('lucide-react', async (importar) => ({ ...(await importar<typeof import('lucide-react')>()) }));
 
 const { default: Pagina } = await import('./page');
 const TENANT = '11111111-1111-4111-8111-111111111111';

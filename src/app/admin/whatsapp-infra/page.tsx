@@ -2,9 +2,9 @@ import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
 import { Smartphone, Info } from 'lucide-react';
-import { Disclosure, EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
 import { Cifra, TiraCifras } from '../../ui-v2/graficas';
-import { destinatarioEnmascarado } from '@/lib/meta/client';
+import { FilaConversacion } from '../conversaciones/hilo';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,31 +81,7 @@ export default async function WhatsappInfraPage() {
             <p className="m-0 text-sm text-muted">Sin conversaciones activas.</p>
           ) : (
             <div className="space-y-1.5">
-              {conversaciones.map((c) => (
-                <Disclosure
-                  key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`}
-                  titulo={
-                    <span className="block">
-                      {/* A37-S08-06 (minimización LFPDPPP): el teléfono sale enmascarado; el completo vive en el detalle de la conversación. */}
-                      <span className="block text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</span>
-                      <span className="block text-xs font-normal text-muted">{c.tenantNombre}</span>
-                    </span>
-                  }
-                  resumen={c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
-                >
-                  {c.turns.length > 0 && (
-                    <div className="space-y-2">
-                      {c.turns.slice(-6).map((t, i) => (
-                        <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                          <div className={`max-w-[80%] whitespace-pre-wrap rounded-xl px-3.5 py-2 text-sm ${t.role === 'user' ? 'border border-[var(--line2)] bg-[var(--canvas)]' : 'bg-[var(--marca)] text-[var(--marca-fg)]'}`}>
-                            {t.content}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Disclosure>
-              ))}
+              {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} />)}
             </div>
           )}
         </div>

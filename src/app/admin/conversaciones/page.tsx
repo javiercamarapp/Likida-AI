@@ -1,15 +1,15 @@
 import type { Metadata } from 'next';
 import { destinatarioEnmascarado } from '@/lib/meta/client';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import Link from 'next/link';
 import {
   getConversacionesActivas, contarConversacionesActivas, buscarConversaciones, TOPE_CONVERSACIONES,
   type ConversacionActiva,
 } from '@/lib/admin/negocio';
-import { MessageCircle, MessagesSquare, ChevronDown, Search } from 'lucide-react';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { MessageCircle, Search } from 'lucide-react';
+import { Boton, BotonEnlace, EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { Cifra, TiraCifras } from '../../ui-v2/graficas';
 import { HBars } from '../ui/graficas';
-import { ChartCard, EstadoVacio, KpiTile } from '../ui/kit';
+import { FilaConversacion } from './hilo';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,9 +23,8 @@ interface SearchParams { q?: string; p?: string }
  * los últimos 6 por espacio) y hay dos cifras de cabecera — ambas sumas
  * reales sobre esos mismos datos, no una fuente nueva.
  *
- * Anatomía de página (14-ago): BarraPagina + tarjetas sobre el lienzo tenue
- * (--g1); cada conversación es una lámina --surface con hairline dentro de
- * la tarjeta, el mismo material que usa la sección gemela de consola.tsx.
+ * Marco de página único (`MarcoPagina`); cada conversación es un desplegable
+ * del sistema (`FilaConversacion`, ver ./hilo.tsx).
  */
 export default async function ConversacionesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
@@ -42,32 +41,19 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   if (q) {
     const resultado = await buscarConversaciones({ q, pagina });
     return (
-      <main className="h-full">
-        <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-          <BarraPagina
-            icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-            titulo="Conversaciones de WhatsApp"
-          />
-          <div className="px-5 py-5 flex-1 space-y-2.5">
-            <CajaBusqueda q={q} />
-            <div className="card p-3">
-              <TituloSeccion>
-                {`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}
-              </TituloSeccion>
-              {resultado.filas.length === 0 ? (
-                <div className="mt-2">
-                  <EstadoVacio icono={<Search width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                    Ningún teléfono contiene &quot;{q}&quot;.
-                  </EstadoVacio>
-                </div>
-              ) : (
-                <ListaConversaciones conversaciones={resultado.filas} />
-              )}
-              <PaginadorConversaciones q={q} pagina={resultado.pagina} paginas={resultado.paginas} />
-            </div>
-          </div>
-        </div>
-      </main>
+      <MarcoPagina titulo="Conversaciones de WhatsApp">
+        <CajaBusqueda q={q} />
+        <Tarjeta titulo={`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}>
+          {resultado.filas.length === 0 ? (
+            <EstadoVacio titulo="Sin coincidencias" icono={Search} contenido>
+              Ningún teléfono contiene &quot;{q}&quot;.
+            </EstadoVacio>
+          ) : (
+            <ListaConversaciones conversaciones={resultado.filas} />
+          )}
+          <PaginadorConversaciones q={q} pagina={resultado.pagina} paginas={resultado.paginas} />
+        </Tarjeta>
+      </MarcoPagina>
     );
   }
 
@@ -82,62 +68,43 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   const recortado = total !== null && total > conversaciones.length;
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Conversaciones de WhatsApp"
+    <MarcoPagina titulo="Conversaciones de WhatsApp">
+      <CajaBusqueda q="" />
+
+      <TiraCifras etiqueta="Conversaciones de WhatsApp">
+        <Cifra
+          etiqueta="Conversaciones activas" valor={total} formato="entero"
+          estado={total === null ? 'vacio' : 'ok'}
+          mensaje="No se pudo contar — esto no significa que no haya ninguna."
         />
+        <Cifra etiqueta={`Mensajes en las ${conversaciones.length} que se listan`} valor={totalMensajes} formato="entero" />
+      </TiraCifras>
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          <CajaBusqueda q="" />
+      {/* Mensajes por conversación (c.turns.length) es un conteo real que ya se calcula para el resumen de arriba, así que un
+          ranking con HBars entre conversaciones es genuino — no una serie inventada. Solo con 2+ conversaciones: con 1 sola, un
+          "ranking" de una barra no compara nada. */}
+      {conversaciones.length > 1 && (
+        <Tarjeta titulo="Mensajes por conversación">
+          <HBars datos={conversaciones.map((c) => ({ etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato="entero" />
+        </Tarjeta>
+      )}
 
-          <div className="kit-kpis">
-            <KpiTile
-              icono={<MessageCircle width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-              etiqueta="Conversaciones activas" valor={total} formato="entero"
-              vacio={total === null ? 'No se pudo contar — esto no significa que no haya ninguna.' : undefined}
-            />
-            <KpiTile
-              icono={<MessagesSquare width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}
-              etiqueta={`Mensajes en las ${conversaciones.length} que se listan`} valor={totalMensajes} formato="entero"
-            />
-          </div>
-
-          {/* Mensajes por conversación (c.turns.length) es un conteo real que
-              ya se calcula para el resumen de arriba, así que un ranking con
-              HBars entre conversaciones es genuino — no una serie inventada.
-              Solo con 2+ conversaciones: con 1 sola, un "ranking" de una barra
-              no compara nada. */}
-          {conversaciones.length > 1 && (
-            <ChartCard titulo="Mensajes por conversación" tamano="S">
-              <HBars datos={conversaciones.map((c) => ({ etiqueta: destinatarioEnmascarado(c.telefono), valor: c.turns.length }))} formato="entero" />
-            </ChartCard>
-          )}
-
-          <div className="card p-3">
-            <TituloSeccion>
-              {recortado ? `Las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Todas las conversaciones'}
-            </TituloSeccion>
-            {conversaciones.length === 0 ? (
-              <div className="mt-2">
-                <EstadoVacio icono={<MessageCircle width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                  Sin conversaciones activas.
-                </EstadoVacio>
-              </div>
-            ) : (
-              <ListaConversaciones conversaciones={conversaciones} />
-            )}
-          </div>
-
-          <EstadoVacio>
-            Colas (activas/necesitan humano/escaladas/resueltas), búsqueda full-text, handoff a un humano — el bot de Likida es una máquina de estados determinística (foto→OCR→confirmar→liquidar), no un agente conversacional abierto que se pueda &quot;atorar&quot; y necesite ese patrón. Antes de construirlo hay que decidir si de verdad aplica.
-            <br /><br />
-            Volumen por canal, heatmap hora×día, histograma de mensajes por conversación — con 1 tenant y pocos días de historia no dicen nada real todavía.
+      <Tarjeta titulo={recortado ? `Las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Todas las conversaciones'}>
+        {conversaciones.length === 0 ? (
+          <EstadoVacio titulo="Sin conversaciones activas" icono={MessageCircle} contenido>
+            Sin conversaciones activas.
           </EstadoVacio>
-        </div>
-      </div>
-    </main>
+        ) : (
+          <ListaConversaciones conversaciones={conversaciones} />
+        )}
+      </Tarjeta>
+
+      <EstadoVacio titulo="Fuera de alcance hoy">
+        Colas (activas/necesitan humano/escaladas/resueltas), búsqueda full-text, handoff a un humano — el bot de Likida es una máquina de estados determinística (foto→OCR→confirmar→liquidar), no un agente conversacional abierto que se pueda &quot;atorar&quot; y necesite ese patrón. Antes de construirlo hay que decidir si de verdad aplica.
+        <br /><br />
+        Volumen por canal, heatmap hora×día, histograma de mensajes por conversación — con 1 tenant y pocos días de historia no dicen nada real todavía.
+      </EstadoVacio>
+    </MarcoPagina>
   );
 }
 
@@ -148,73 +115,23 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
  */
 function CajaBusqueda({ q }: { q: string }) {
   return (
-    <form className="card p-3 flex items-center gap-2" method="GET">
-      <Search width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} className="shrink-0" />
+    <form className="flex items-center gap-2" method="GET" role="search">
+      <Search width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
       <input
-        type="text" name="q" defaultValue={q} placeholder="Buscar por teléfono…"
-        className="flex-1 bg-transparent text-sm outline-none"
-        style={{ color: 'var(--ink)' }} data-anillo="envolvente"
+        type="text" name="q" defaultValue={q} placeholder="Buscar por teléfono…" aria-label="Buscar por teléfono"
+        className="rv-ctl min-w-0 flex-1"
       />
-      <button type="submit" className="text-xs px-2.5 py-1.5 rounded-lg hairline" style={{ color: 'var(--muted)' }}>
-        Buscar
-      </button>
-      {q && (
-        <Link href="/admin/conversaciones" className="text-xs px-2.5 py-1.5 rounded-lg hairline" style={{ color: 'var(--muted)' }}>
-          Limpiar
-        </Link>
-      )}
+      <Boton type="submit" variante="secondary" tamano="sm">Buscar</Boton>
+      {q && <BotonEnlace href="/admin/conversaciones" variante="ghost" tamano="sm">Limpiar</BotonEnlace>}
     </form>
   );
 }
 
-/** La lista de conversaciones — cada fila enlaza al detalle cuando se conoce
- *  el tenant (siempre, salvo la fila rara sin `tenant_id`). */
+/** La lista de conversaciones — cada fila enlaza al detalle cuando se conoce el tenant (siempre, salvo la fila rara sin `tenant_id`). */
 function ListaConversaciones({ conversaciones }: { conversaciones: ConversacionActiva[] }) {
   return (
-    <div className="space-y-1.5 mt-2">
-      {conversaciones.map((c) => {
-        const fila = (
-          <>
-            <div>
-              <div className="text-sm font-medium">{destinatarioEnmascarado(c.telefono)}</div>
-              <div className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>{c.tenantNombre}</div>
-            </div>
-            <div className="flex items-center gap-3 text-xs" style={{ color: 'var(--muted)' }}>
-              {c.turns.length > 0 ? `${c.turns.length} mensajes` : 'sin mensajes'}
-              <ChevronDown width={14} height={14} className="transition-transform group-open:rotate-180" />
-            </div>
-          </>
-        );
-        return (
-          <details key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} className="hairline rounded-lg overflow-hidden group" style={{ background: 'var(--surface)' }}>
-            <summary className="px-3 py-2.5 flex items-center justify-between gap-4 cursor-pointer list-none hover:bg-[var(--canvas)] transition-colors">
-              {fila}
-            </summary>
-            {c.turns.length > 0 && (
-              <div className="px-3 pb-3 pt-1 space-y-2 border-t" style={{ borderColor: 'var(--line2)' }}>
-                {c.turns.map((t, i) => (
-                  <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                    <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
-                      style={t.role === 'user'
-                        ? { background: 'var(--canvas)', border: '1px solid var(--line2)' }
-                        : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                      {t.content}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {c.tenantId && (
-              <div className="px-3 pb-2.5">
-                <Link href={`/admin/conversaciones/${c.tenantId}/${encodeURIComponent(c.telefono)}`}
-                  className="text-xs" style={{ color: 'var(--marca)' }}>
-                  Abrir en su propia página →
-                </Link>
-              </div>
-            )}
-          </details>
-        );
-      })}
+    <div className="space-y-1.5">
+      {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} completo />)}
     </div>
   );
 }
@@ -224,11 +141,11 @@ function PaginadorConversaciones({ q, pagina, paginas }: { q: string; pagina: nu
   if (paginas <= 1) return null;
   const href = (p: number) => `/admin/conversaciones?q=${encodeURIComponent(q)}&p=${p}`;
   return (
-    <div className="flex items-center justify-between mt-3 text-xs" style={{ color: 'var(--muted)' }}>
+    <div className="mt-3 flex items-center justify-between text-xs text-muted">
       <span>Página {pagina} de {paginas}</span>
       <div className="flex gap-2">
-        {pagina > 1 && <Link href={href(pagina - 1)} className="hairline rounded-lg px-2.5 py-1.5">Anterior</Link>}
-        {pagina < paginas && <Link href={href(pagina + 1)} className="hairline rounded-lg px-2.5 py-1.5">Siguiente</Link>}
+        {pagina > 1 && <BotonEnlace href={href(pagina - 1)} variante="secondary" tamano="sm">Anterior</BotonEnlace>}
+        {pagina < paginas && <BotonEnlace href={href(pagina + 1)} variante="secondary" tamano="sm">Siguiente</BotonEnlace>}
       </div>
     </div>
   );
