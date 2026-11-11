@@ -36,7 +36,10 @@ import { ConstanciaReportes } from './constancia-vista';
 import { TableroHitos, ORDEN_SEMAFORO, type FiltrosVista } from './tablero-hitos';
 import type { ResultadoOficina } from './acciones-forma';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Comunicación con operadores' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('conductores.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -101,6 +104,7 @@ export default async function PaginaAgenteConductores({
   }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/conductores', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/conductores')) redirect('/dashboard');
 
@@ -299,6 +303,7 @@ export default async function PaginaAgenteConductores({
 
   return (
     <VistaAgenteConductores
+      tr={tr}
       tablero={
         <>
           <Bloque mensaje="No se pudo revisar si la flota está lista." esqueleto={<EsqTarjetaV2 alto={60} />}>

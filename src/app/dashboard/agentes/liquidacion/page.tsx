@@ -48,7 +48,10 @@ import { hoyMx, inicioDiaMx, finDiaMx } from '@/lib/formato';
 import { cargarDetalle, leerIdDetalle } from './detalle_desglose';
 import { PaginaConteosNomina } from './conteos-nomina';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Liquidación automática' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('liquidacion.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 // A37-O7-06: las Server Actions de esta página corren bajo el límite de la página. La subida manual de desgloses y la importación
@@ -237,6 +240,7 @@ export default async function PaginaAgenteLiquidacion({
   }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/liquidacion', sp);
   if (!puedeVerRuta(rol, '/dashboard/agentes/liquidacion')) redirect('/dashboard');
   // `nomina` (0949): SOLO conteos, y antes de leer nada más (flash, canal, desgloses, KPIs, cola...). Ver `conteos-nomina.tsx`.
@@ -607,6 +611,7 @@ export default async function PaginaAgenteLiquidacion({
 
   return (
     <VistaAgenteLiquidacion
+      tr={tr}
       kpis={pKpis}
       liquidaciones={pLiqs}
       cola={{ cola: pCola, filtros, terminales: pTerminales, buscar: buscarFiltro, contexto, sufijo }}

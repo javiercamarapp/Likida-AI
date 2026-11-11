@@ -8,12 +8,12 @@ import { aCsvSinCcp, type ListadoSinCcp, type ColorAntiguedad } from '@/lib/liki
 import { estadoCatalogosSat, type ConteoCatalogosSat } from '@/lib/likida/carta_porte_docs/catalogos_sat';
 import { DireccionBuzon } from '../proveedores/controles';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import {
   Aviso, AvisoCompacto, clasesBoton, Disclosure, EstadoError, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
+import { TR_ES, rico, type TrAgentes, type TAgentes, selloHoyTr } from '../i18n-agentes';
 
 /**
  * La ventana del Agente de Carta Porte (Fases B-C del blueprint): los conteos
@@ -31,15 +31,15 @@ export interface BuzonCartaPorteVista { direccion: string | null; activo: boolea
  * La frase que dice que los grupos NO son un canal. Exportada para que la prueba
  * la distinga de cualquier otra mención: «grupo» solo puede aparecer aquí.
  */
-export const FRASE_SIN_GRUPOS = 'Los grupos de WhatsApp no se pueden leer: pide a tus clientes que escriban al correo o reenvíalos tú.';
+export const FRASE_SIN_GRUPOS = TR_ES.t('cartaporte.vista.los_grupos_de_whatsapp_no');
 
 type ViajeEnCola = EstadoCartaPorte['viajes'][number];
 
-const COLUMNAS_COLA: readonly ColumnaBase<ViajeEnCola>[] = [
-  { id: 'folio', titulo: 'Viaje', principal: true, celda: (v) => <span className="cifra-mono">{v.folio ?? v.viajeId.slice(0, 8)}</span> },
-  { id: 'ruta', titulo: 'Ruta', celda: (v) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'sin ruta capturada') },
+const COLUMNAS_COLA = (tx: TAgentes): readonly ColumnaBase<ViajeEnCola>[] => [
+  { id: 'folio', titulo: tx('cartaporte.vista.viaje'), principal: true, celda: (v) => <span className="cifra-mono">{v.folio ?? v.viajeId.slice(0, 8)}</span> },
+  { id: 'ruta', titulo: tx('cartaporte.vista.ruta'), celda: (v) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : tx('cartaporte.vista.sin_ruta_capturada')) },
   {
-    id: 'falta', titulo: 'Lo que falta declarar',
+    id: 'falta', titulo: tx('cartaporte.vista.lo_que_falta_declarar'),
     celda: (v) => (
       <span className="rv-cp__pendientes">
         <Icono icono={TriangleAlert} tam={14} />
@@ -49,7 +49,7 @@ const COLUMNAS_COLA: readonly ColumnaBase<ViajeEnCola>[] = [
   },
 ];
 
-export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, sinCcp, nombresCliente = {}, diasVentana = 30, catalogosSat }: {
+export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzon = null, insights, sinCcp, nombresCliente = {}, diasVentana = 30, catalogosSat, tr = TR_ES }: {
   datos: EstadoCartaPorte | null;
   sufijo?: string;
   notificaciones?: React.ReactNode;
@@ -63,8 +63,9 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   nombresCliente?: Record<string, string>;
   diasVentana?: number;
   /** CT-A345-04: filas cargadas por catálogo SAT. `undefined` = no se pide el aviso; `'no_leido'` = la lectura falló (no se finge «cargados»). */
-  catalogosSat?: ConteoCatalogosSat | 'no_leido';
+  catalogosSat?: ConteoCatalogosSat | 'no_leido'; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const conteo = (n: 'si' | 'no' | 'falta_declarar') =>
     datos === null ? null : datos.viajes.filter((v) => v.decision.necesita === n).length;
   const armables = datos === null ? null : datos.viajes.filter((v) => v.borrador.borrador !== null && v.borrador.fallas.length === 0).length;
@@ -72,82 +73,73 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
   const esperan = conteo('falta_declarar');
 
   return (
-    <MarcoPagina titulo="Carta Porte en automático" apoyo="Al despachar corre el árbol legal y pregunta por WhatsApp lo que falta declarar. Prepara y valida; nunca timbra.">
+    <MarcoPagina titulo={tx('cartaporte.vista.carta_porte_en_automatico')} apoyo={tx('cartaporte.vista.al_despachar_corre_el_arbol')}>
 
       <AvisoCompacto
         tono="info"
-        resumen="Al despachar un viaje, el agente pregunta por WhatsApp lo que falta declarar. Prepara el borrador y lo valida; nunca timbra."
-        mas="Corre el árbol legal (RMF 2.7.7) y le pregunta al jefe exactamente lo que falta declarar — o le da el veredicto con fundamento. Nunca afirma «no necesitas» por su cuenta, nunca inventa un dato del complemento y nunca timbra: prepara el borrador y lo valida contra lo que el PAC rechazaría seguro."
+        resumen={tx('cartaporte.vista.al_despachar_un_viaje_el')}
+        mas={tx('cartaporte.vista.corre_el_arbol_legal_rmf')}
       />
 
-      {catalogosSat !== undefined && <AvisoCatalogosSat catalogosSat={catalogosSat} />}
+      {catalogosSat !== undefined && <AvisoCatalogosSat tr={tr} catalogosSat={catalogosSat} />}
 
       {datos === null ? (
-        <EstadoError>No se pudieron leer los viajes en curso. Sin lectura no se pintan conteos: un cero fingido aquí diría «todo en regla».</EstadoError>
+        <EstadoError>{tx('cartaporte.vista.no_se_pudieron_leer_los')}</EstadoError>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Viajes en curso')}>
-            <Cifra info="carta_porte_agente.en_curso" etiqueta="Viajes en curso" valor={numero(datos.total)} />
-            <Cifra info="carta_porte_agente.esperan" etiqueta="Esperan declaración" valor={esperan === null ? null : numero(esperan)} tono={esperan !== null && esperan > 0 ? 'bad' : undefined} />
-            <Cifra info="carta_porte_agente.necesitan" etiqueta="Necesitan complemento" valor={conteo('si') === null ? null : numero(conteo('si') as number)} tono={(conteo('si') ?? 0) > 0 ? 'warn' : undefined} />
-            <Cifra info="carta_porte_agente.borradores" etiqueta="Borradores sin fallas" valor={armables === null ? null : numero(armables)} />
+          <TiraCifras sello={selloHoyTr(tr, tx('cartaporte.vista.sello_viajes_en_curso'))}>
+            <Cifra info="carta_porte_agente.en_curso" etiqueta={tx('cartaporte.vista.viajes_en_curso')} valor={numero(datos.total)} />
+            <Cifra info="carta_porte_agente.esperan" etiqueta={tx('cartaporte.vista.esperan_declaracion')} valor={esperan === null ? null : numero(esperan)} tono={esperan !== null && esperan > 0 ? 'bad' : undefined} />
+            <Cifra info="carta_porte_agente.necesitan" etiqueta={tx('cartaporte.vista.necesitan_complemento')} valor={conteo('si') === null ? null : numero(conteo('si') as number)} tono={(conteo('si') ?? 0) > 0 ? 'warn' : undefined} />
+            <Cifra info="carta_porte_agente.borradores" etiqueta={tx('cartaporte.vista.borradores_sin_fallas')} valor={armables === null ? null : numero(armables)} />
           </TiraCifras>
 
-          <Tarjeta titulo="Esperando al jefe" info="carta_porte_agente.cola"
-            estado={cola.length === 0 ? 'vacio' : 'ok'} iconoVacio={ScrollText} mensaje="Nada pendiente de declarar"
-            detalle="Cada viaje en curso ya tiene su veredicto (o no hay viajes). Al despachar uno nuevo, el agente pregunta solo."
-            acciones={<Link href={`/dashboard/carta-porte${sufijo}`} className={clasesBoton('secondary', 'sm')}>Declarar y capturar</Link>}>
-            <TablaBase etiqueta="Viajes esperando una declaración" columnas={COLUMNAS_COLA} filas={cola} idFila={(v) => v.viajeId} densa tarjetaMovil />
+          <Tarjeta titulo={tx('cartaporte.vista.esperando_al_jefe')} info="carta_porte_agente.cola"
+            estado={cola.length === 0 ? 'vacio' : 'ok'} iconoVacio={ScrollText} mensaje={tx('cartaporte.vista.nada_pendiente_de_declarar')}
+            detalle={tx('cartaporte.vista.cada_viaje_en_curso_ya')}
+            acciones={<Link href={`/dashboard/carta-porte${sufijo}`} className={clasesBoton('secondary', 'sm')}>{tx('cartaporte.vista.declarar_y_capturar')}</Link>}>
+            <TablaBase etiqueta={tx('cartaporte.vista.viajes_esperando_una_declaracion')} columnas={COLUMNAS_COLA(tx)} filas={cola} idFila={(v) => v.viajeId} densa tarjetaMovil />
             {datos.viajes.length < datos.total && (
               <p className="rv-cp__nota" data-tono="faint">
-                Los conteos por veredicto salen de los {numero(datos.viajes.length)} viajes más
-                próximos de {numero(datos.total)} en curso.
+                {tx('cartaporte.vista.los_conteos_por_veredicto_salen', { length: numero(datos.viajes.length), total: numero(datos.total) })}
               </p>
             )}
           </Tarjeta>
         </>
       )}
 
-      <ComoMandarDocumentos buzon={buzon} sufijo={sufijo} />
+      <ComoMandarDocumentos tr={tr} buzon={buzon} sufijo={sufijo} />
 
-      {sinCcp !== undefined && <ViajesSinCcp listado={sinCcp} />}
+      {sinCcp !== undefined && <ViajesSinCcp tr={tr} listado={sinCcp} />}
 
-      {insights !== undefined && <InsightsDelAgente insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
+      {insights !== undefined && <InsightsDelAgente tr={tr} insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
 
       <p className="rv-cp__nota">
-        Lo que el agente aprende de cada cliente —productos, remitentes, destinatarios y su número interno— vive en el{' '}
-        <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="rv-cp__enlace">catálogo del cliente</Link>.
+        {rico(tx('cartaporte.vista.lo_que_el_agente_aprende'), { v0: ' ', Link: <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="rv-cp__enlace">{tx('cartaporte.vista.catalogo_del_cliente')}</Link> })}
       </p>
       <p className="rv-cp__nota">
-        Los clientes que necesitan su referencia para cobrar, y los viajes cargados que aún no la traen:{' '}
-        <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="rv-cp__enlace">referencia del cliente</Link>.
+        {rico(tx('cartaporte.vista.los_clientes_que_necesitan_su'), { v0: ' ', Link: <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="rv-cp__enlace">{tx('cartaporte.vista.referencia_del_cliente')}</Link> })}
       </p>
 
-      <Tarjeta titulo="Lo que hace, y lo que jamás hará" info="carta_porte_agente.alcance">
-        <Disclosure titulo="Alcance del agente" resumen="Al despachar · Con lo capturado · Jamás" abierto variante="linea">
+      <Tarjeta titulo={tx('cartaporte.vista.lo_que_hace_y_lo')} info="carta_porte_agente.alcance">
+        <Disclosure titulo={tx('cartaporte.vista.alcance_del_agente')} resumen={tx('cartaporte.vista.al_despachar_con_lo_capturado')} abierto variante="linea">
           <div className="rv-cp__tres">
             <div className="rv-cp__col">
-              <p className="rv-cp__rotulo">Al despachar</p>
+              <p className="rv-cp__rotulo">{tx('cartaporte.vista.al_despachar')}</p>
               <p className="rv-cp__nota">
-                Corre el árbol legal y pregunta por WhatsApp: «¿la ruta pisa carretera federal?» con
-                botones, y si la unidad cabe en la excepción del C2, el radio («radio F-123 25»).
-                Cada declaración queda firmada con quién y cuándo.
+                {tx('cartaporte.vista.corre_el_arbol_legal_y')}
               </p>
             </div>
             <div className="rv-cp__col">
-              <p className="rv-cp__rotulo">Con lo capturado</p>
+              <p className="rv-cp__rotulo">{tx('cartaporte.vista.con_lo_capturado')}</p>
               <p className="rv-cp__nota">
-                Arma el borrador del complemento (37 datos, partidos 19 del cliente / 18 del
-                transportista) y lo pasa por las validaciones que el PAC rechaza seguro — «te faltó
-                esto, antes de salir» en vez de «rebotó el timbrado con el viaje entregado».
+                {tx('cartaporte.vista.arma_el_borrador_del_complemento')}
               </p>
             </div>
             <div className="rv-cp__col">
-              <p className="rv-cp__rotulo">Jamás</p>
+              <p className="rv-cp__rotulo">{tx('cartaporte.vista.jamas')}</p>
               <p className="rv-cp__nota">
-                No afirma «no necesitas Carta Porte» sin tu declaración firmada; no inventa claves del
-                SAT ni el número de permiso SICT (faltante = faltante); y no timbra — el CFDI lo emite
-                tu PAC de siempre.
+                {tx('cartaporte.vista.no_afirma_no_necesitas_carta')}
               </p>
             </div>
           </div>
@@ -164,54 +156,53 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
  * es el principal; el WhatsApp es 1:1 con la oficina, nunca un grupo) y, con el
  * buzón sin activar, el estado vacío que dice cómo empezar.
  */
-function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista | null | 'no_leido'; sufijo: string }) {
+function ComoMandarDocumentos({ buzon, sufijo, tr = TR_ES }: { buzon: BuzonCartaPorteVista | null | 'no_leido'; sufijo: string; tr?: TrAgentes; }) {
+  const { t: tx } = tr;
   const panel = `/dashboard/carta-porte/documentos${sufijo}`;
   return (
-    <Tarjeta titulo="Cómo mandarme documentos" info="carta_porte_agente.como_mandar">
+    <Tarjeta titulo={tx('cartaporte.vista.como_mandarme_documentos')} info="carta_porte_agente.como_mandar">
       <div className="rv-cp__pila">
         <div className="rv-cp__tres">
           <div className="rv-cp__col">
-            <p className="rv-cp__rotulo"><Icono icono={Mail} tam={14} /> 1 · Correo (el medio oficial)</p>
+            <p className="rv-cp__rotulo">{rico(tx('cartaporte.vista.1_correo_el_medio_oficial'), { el: <Icono icono={Mail} tam={14} /> })}</p>
             {buzon === 'no_leido' ? (
-              <EstadoError compacto>No se pudo leer el buzón de tu flota. Sin lectura no se enseña una dirección: una inventada se perdería.</EstadoError>
+              <EstadoError compacto>{tx('cartaporte.vista.no_se_pudo_leer_el')}</EstadoError>
             ) : buzon === null ? (
-              <EstadoVacio titulo="Aún no tienes buzón" icono={Inbox} contenido>
-                Actívalo en el panel de documentos y aquí verás la dirección para
-                que tus clientes (o tú) reenvíen los embarques.
+              <EstadoVacio titulo={tx('cartaporte.vista.aun_no_tienes_buzon')} icono={Inbox} contenido>
+                {tx('cartaporte.vista.activalo_en_el_panel_de')}
               </EstadoVacio>
             ) : buzon.direccion ? (
               <>
                 <DireccionBuzon direccion={buzon.direccion} />
-                {!buzon.activo && <p className="rv-cp__nota" data-tono="warn">El buzón está apagado: lo que llegue no se leerá hasta encenderlo en el panel.</p>}
+                {!buzon.activo && <p className="rv-cp__nota" data-tono="warn">{tx('cartaporte.vista.el_buzon_esta_apagado_lo')}</p>}
                 <p className="rv-cp__nota">
-                  Los adjuntos (PDF, Excel, XML, foto) y el texto del correo entran solos a la bandeja.
+                  {tx('cartaporte.vista.los_adjuntos_pdf_excel_xml')}
                 </p>
                 <p className="rv-cp__nota">
                   {buzon.remitentes.length > 0
-                    ? `Remitentes de tus clientes reconocidos: ${buzon.remitentes.join(', ')}. Uno distinto entra igual, marcado «remitente no reconocido».`
+                    ? tx('cartaporte.vista.remitentes_de_tus_clientes_reconocid', { v0: buzon.remitentes.join(', ') })
                     : AVISO_SIN_REMITENTES}
                 </p>
               </>
             ) : (
               <p className="rv-cp__nota" data-tono="warn">
-                {buzon.dominioConfigurado ? 'La dirección no se pudo armar.' : 'El dominio de correo de Likida no está configurado en este entorno: el buzón existe pero no hay dirección que dar.'}
+                {buzon.dominioConfigurado ? tx('cartaporte.vista.la_direccion_no_se_pudo') : tx('cartaporte.vista.el_dominio_de_correo_de')}
               </p>
             )}
           </div>
           <div className="rv-cp__col">
-            <p className="rv-cp__rotulo"><Icono icono={MessageCircle} tam={14} /> 2 · WhatsApp 1:1 de la oficina</p>
+            <p className="rv-cp__rotulo">{rico(tx('cartaporte.vista.2_whatsapp_1_1_de'), { el: <Icono icono={MessageCircle} tam={14} /> })}</p>
             <p className="rv-cp__nota">
-              Quien despacha reenvía el archivo al número de Likida, o pega el texto del embarque empezando
-              con la palabra «carta porte». Una foto debe llevar ese mismo pie.
+              {tx('cartaporte.vista.quien_despacha_reenvia_el_archivo')}
             </p>
           </div>
           <div className="rv-cp__col">
-            <p className="rv-cp__rotulo"><Icono icono={LayoutDashboard} tam={14} /> 3 · El panel</p>
-            <p className="rv-cp__nota">Sube el archivo a mano en la bandeja de documentos.</p>
-            <Link href={panel} className="rv-cp__enlace">Abrir la bandeja de documentos</Link>
+            <p className="rv-cp__rotulo">{rico(tx('cartaporte.vista.3_el_panel'), { el: <Icono icono={LayoutDashboard} tam={14} /> })}</p>
+            <p className="rv-cp__nota">{tx('cartaporte.vista.sube_el_archivo_a_mano')}</p>
+            <Link href={panel} className="rv-cp__enlace">{tx('cartaporte.vista.abrir_la_bandeja_de_documentos')}</Link>
           </div>
         </div>
-        <p className="rv-cp__frase">{FRASE_SIN_GRUPOS}</p>
+        <p className="rv-cp__frase">{tx('cartaporte.vista.los_grupos_de_whatsapp_no')}</p>
       </div>
     </Tarjeta>
   );
@@ -220,30 +211,32 @@ function ComoMandarDocumentos({ buzon, sufijo }: { buzon: BuzonCartaPorteVista |
 const pctTxt = (p: number | null): string => (p === null ? '—' : `${p} %`);
 const TONO_INSIGHT: Record<TarjetaInsight['tono'], string> = { bad: 'bad', warn: 'warn', info: 'info' };
 
-function TarjetaQuePaso({ t }: { t: TarjetaInsight }) {
+function TarjetaQuePaso({ tarjeta: t, tr = TR_ES }: { tarjeta: TarjetaInsight; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
     <div className="rv-cp__quepaso" data-tono={TONO_INSIGHT[t.tono]}>
       <p><strong>{t.quePaso}</strong></p>
-      <p className="rv-cp__nota"><b>Qué significa </b>{t.queSignifica}</p>
-      <p><b>Qué hacer </b>{t.queHacer}</p>
+      <p className="rv-cp__nota"><b>{tx('cartaporte.vista.que_significa')} </b>{t.queSignifica}</p>
+      <p><b>{tx('cartaporte.vista.que_hacer')} </b>{t.queHacer}</p>
     </div>
   );
 }
 
 /** Calidad por grupo: una lista de barras con el % sin tocar y el texto exacto («% (n)») — reemplaza la tabla a mano. */
-function CalidadPorGrupo({ titulo, filas, rotular }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string }) {
+function CalidadPorGrupo({ titulo, filas, rotular, tr = TR_ES }: { titulo: string; filas: CalidadGrupo[]; rotular: (clave: string) => string; tr?: TrAgentes; }) {
+  const { t: tx } = tr;
   const columnas: readonly ColumnaBase<CalidadGrupo>[] = [
-    { id: 'grupo', titulo: 'Grupo', principal: true, celda: (g) => rotular(g.clave) },
-    { id: 'aprobados', titulo: 'Aprobados', alinear: 'der', celda: (g) => numero(g.documentos) },
-    { id: 'sintocar', titulo: 'Sin tocar', alinear: 'der', celda: (g) => `${pctTxt(g.pctSinTocar)} (${numero(g.sinTocar)})` },
+    { id: 'grupo', titulo: tx('cartaporte.vista.grupo'), principal: true, celda: (g) => rotular(g.clave) },
+    { id: 'aprobados', titulo: tx('cartaporte.vista.aprobados'), alinear: 'der', celda: (g) => numero(g.documentos) },
+    { id: 'sintocar', titulo: tx('cartaporte.vista.sin_tocar'), alinear: 'der', celda: (g) => `${pctTxt(g.pctSinTocar)} (${numero(g.sinTocar)})` },
   ];
   return (
-    <Tarjeta titulo={titulo} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje="Sin documentos aprobados todavía" detalle="Cuando se aprueben documentos, aquí verás cuántos pasaron sin tocar.">
+    <Tarjeta titulo={titulo} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={tx('cartaporte.vista.sin_documentos_aprobados_todavia')} detalle={tx('cartaporte.vista.cuando_se_aprueben_documentos_aqui')}>
       {filas.length > 0 && (
         <>
-          <BarList etiqueta={`${titulo}: porcentaje sin tocar`} formato={(v) => `${v} %`}
+          <BarList etiqueta={tx('cartaporte.vista.porcentaje_sin_tocar', { titulo })} formato={(v) => `${v} %`}
             items={filas.slice(0, 5).map((g) => ({ clave: g.clave, etiqueta: rotular(g.clave), valor: g.pctSinTocar, texto: `${pctTxt(g.pctSinTocar)} (${numero(g.sinTocar)} de ${numero(g.documentos)})` }))} maximo={100} />
-          <Disclosure titulo="Ver la tabla" variante="linea">
+          <Disclosure titulo={tx('cartaporte.vista.ver_la_tabla')} variante="linea">
             <TablaBase etiqueta={titulo} columnas={columnas} filas={filas} idFila={(g) => g.clave} densa tarjetaMovil />
           </Disclosure>
         </>
@@ -256,50 +249,50 @@ function CalidadPorGrupo({ titulo, filas, rotular }: { titulo: string; filas: Ca
  * Cómo le va al agente (T-A3-37): % sin tocar, causas de rechazo, calidad por formato y cliente y estado de los
  * envíos. Solo conteos: ningún valor de un documento. Sin base, dice «—», nunca un 0 % que parezca medición.
  */
-function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights: InsightsAgente | 'no_leido'; nombresCliente: Record<string, string>; diasVentana: number }) {
-  const titulo = `Cómo le va al agente · últimos ${diasVentana} días`;
+function InsightsDelAgente({ insights, nombresCliente, diasVentana, tr = TR_ES }: { insights: InsightsAgente | 'no_leido'; nombresCliente: Record<string, string>; diasVentana: number; tr?: TrAgentes; }) {
+  const { t: tx } = tr;
+  const titulo = tx('cartaporte.vista.como_le_va_al_agente', { diasVentana });
   if (insights === 'no_leido') {
-    return <Tarjeta titulo={titulo} info="carta_porte_agente.resultados" estado="error" mensaje="No se pudieron leer los resultados del agente. Vuelve a intentar en un momento." reintentar />;
+    return <Tarjeta titulo={titulo} info="carta_porte_agente.resultados" estado="error" mensaje={tx('cartaporte.vista.no_se_pudieron_leer_los_2')} reintentar />;
   }
   const i = insights;
-  const nombre = (c: string) => (c === 'sin_cliente' ? 'Sin cliente asignado' : nombresCliente[c] ?? 'Cliente sin nombre');
+  const nombre = (c: string) => (c === 'sin_cliente' ? tx('cartaporte.vista.sin_cliente_asignado') : nombresCliente[c] ?? tx('cartaporte.vista.cliente_sin_nombre'));
   const e = i.envios;
   const hayAlgo = i.aprobados > 0 || e.enviados + e.rechazadosTms + e.pendientesReque + e.subidosAMano > 0 || (i.causasRechazo?.length ?? 0) > 0;
   return (
-    <Tarjeta titulo={titulo} info="carta_porte_agente.resultados" estado={hayAlgo ? 'ok' : 'vacio'} mensaje="Todavía no hay resultados que medir"
-      detalle="Cuando se aprueben documentos y salgan envíos, aquí verás cuántos pasaron sin tocar, por qué se rechazaron y qué falta enviar.">
+    <Tarjeta titulo={titulo} info="carta_porte_agente.resultados" estado={hayAlgo ? 'ok' : 'vacio'} mensaje={tx('cartaporte.vista.todavia_no_hay_resultados_que')}
+      detalle={tx('cartaporte.vista.cuando_se_aprueben_documentos_y')}>
       <div className="rv-cp__pila">
         {i.parcial && (
           <p className="rv-cp__nota" data-tono="warn" role="note">
-            Cifras de los {numero(i.parcial.leidos)} documentos más recientes de {numero(i.parcial.total)} de los últimos {diasVentana} días: son parciales.
+            {tx('cartaporte.vista.cifras_de_los_documentos_mas', { leidos: numero(i.parcial.leidos), total: numero(i.parcial.total), diasVentana })}
           </p>
         )}
-        <TiraCifras sello={selloHoy('Documentos de Carta Porte')}>
-          <Cifra info="carta_porte_agente.sin_tocar" etiqueta="Aprobados sin tocar" valor={pctTxt(i.pctSinTocar)} nota={i.aprobados === 0 ? 'Aún no hay aprobados' : `de ${numero(i.aprobados)} aprobados`} />
-          <Cifra info="carta_porte_agente.enviados" etiqueta="Enviados al sistema del cliente" valor={numero(e.enviados)} />
-          <Cifra info="carta_porte_agente.esperan_requerimiento" etiqueta="Esperan requerimiento" valor={numero(e.pendientesReque)} tono={e.pendientesReque > 0 ? 'warn' : undefined} />
-          <Cifra info="carta_porte_agente.rechazados_tms" etiqueta="Rechazados por el sistema del cliente" valor={numero(e.rechazadosTms)} tono={e.rechazadosTms > 0 ? 'bad' : undefined} />
+        <TiraCifras sello={selloHoyTr(tr, tx('cartaporte.vista.sello_documentos_de_carta_porte'))}>
+          <Cifra info="carta_porte_agente.sin_tocar" etiqueta={tx('cartaporte.vista.aprobados_sin_tocar')} valor={pctTxt(i.pctSinTocar)} nota={i.aprobados === 0 ? tx('cartaporte.vista.aun_no_hay_aprobados') : tx('cartaporte.vista.de_n_aprobados', { n: numero(i.aprobados) })} />
+          <Cifra info="carta_porte_agente.enviados" etiqueta={tx('cartaporte.vista.enviados_al_sistema_del_cliente')} valor={numero(e.enviados)} />
+          <Cifra info="carta_porte_agente.esperan_requerimiento" etiqueta={tx('cartaporte.vista.esperan_requerimiento')} valor={numero(e.pendientesReque)} tono={e.pendientesReque > 0 ? 'warn' : undefined} />
+          <Cifra info="carta_porte_agente.rechazados_tms" etiqueta={tx('cartaporte.vista.rechazados_por_el_sistema_del')} valor={numero(e.rechazadosTms)} tono={e.rechazadosTms > 0 ? 'bad' : undefined} />
         </TiraCifras>
         <p className="rv-cp__nota">
-          Tiempo típico de aprobado a enviado: {e.medianaAprobadoAEnviadoMin === null ? '— (aún no hay envíos medibles)' : `${e.medianaAprobadoAEnviadoMin} min (mediana)`}.
-          {e.pendienteMasViejoHoras !== null && ` El que más espera lleva ${e.pendienteMasViejoHoras} h.`}
+          {tx('cartaporte.vista.tiempo_tipico_de_aprobado_a', { v0: e.medianaAprobadoAEnviadoMin === null ? tx('cartaporte.vista.aun_no_hay_envios_medibles') : tx('cartaporte.vista.mediana_min', { n: e.medianaAprobadoAEnviadoMin }), v1: e.pendienteMasViejoHoras !== null ? tx('cartaporte.vista.el_que_mas_espera_lleva', { pendienteMasViejoHoras: e.pendienteMasViejoHoras }) : '' })}
         </p>
-        {i.tarjetas.length > 0 && <div className="rv-cp__dos">{i.tarjetas.map((t) => <TarjetaQuePaso key={t.id} t={t} />)}</div>}
+        {i.tarjetas.length > 0 && <div className="rv-cp__dos">{i.tarjetas.map((t) => <TarjetaQuePaso tr={tr} key={t.id} tarjeta={t} />)}</div>}
         <FilaTarjetas variante="6-6">
-          <CalidadPorGrupo titulo="Calidad por formato" filas={i.porFormato} rotular={(c) => c} />
-          <CalidadPorGrupo titulo="Calidad por cliente" filas={i.porCliente} rotular={nombre} />
+          <CalidadPorGrupo tr={tr} titulo={tx('cartaporte.vista.calidad_por_formato')} filas={i.porFormato} rotular={(c) => c} />
+          <CalidadPorGrupo tr={tr} titulo={tx('cartaporte.vista.calidad_por_cliente')} filas={i.porCliente} rotular={nombre} />
         </FilaTarjetas>
         <FilaTarjetas variante="6-6">
-          <Tarjeta titulo="Por qué se rechazan">
-            {i.causasRechazo === null ? <p className="rv-cp__nota">No disponible todavía en esta base.</p>
-              : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p className="rv-cp__nota">No hubo rechazos.</p>
+          <Tarjeta titulo={tx('cartaporte.vista.por_que_se_rechazan')}>
+            {i.causasRechazo === null ? <p className="rv-cp__nota">{tx('cartaporte.vista.no_disponible_todavia_en_esta')}</p>
+              : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p className="rv-cp__nota">{tx('cartaporte.vista.no_hubo_rechazos')}</p>
               : <ul className="rv-cp__lista">
                   {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="cifra-mono">{numero(c.documentos)}</span></li>)}
-                  {(i.rechazadosSinCausa ?? 0) > 0 && <li>Sin clasificar: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span></li>}
+                  {(i.rechazadosSinCausa ?? 0) > 0 && <li>{rico(tx('cartaporte.vista.sin_clasificar'), { span: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span> })}</li>}
                 </ul>}
           </Tarjeta>
-          <Tarjeta titulo="Lo que más se corrige">
-            {i.topCamposCorregidos.length === 0 ? <p className="rv-cp__nota">Nadie ha corregido campos en este periodo.</p>
+          <Tarjeta titulo={tx('cartaporte.vista.lo_que_mas_se_corrige')}>
+            {i.topCamposCorregidos.length === 0 ? <p className="rv-cp__nota">{tx('cartaporte.vista.nadie_ha_corregido_campos_en')}</p>
               : <ol className="rv-cp__lista rv-cp__lista--num">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
           </Tarjeta>
         </FilaTarjetas>
@@ -309,34 +302,33 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana }: { insights
 }
 
 const TONO_ANTIGUEDAD: Record<ColorAntiguedad, TonoEstado> = { verde: 'ok', ambar: 'warn', rojo: 'bad' };
-const ROTULO_ANTIGUEDAD: Record<ColorAntiguedad, string> = { verde: 'Reciente', ambar: 'Atención', rojo: 'Riesgo de multa' };
+const ROTULO_ANTIGUEDAD = (tx: TAgentes): Record<ColorAntiguedad, string> => ({ verde: tx('cartaporte.vista.antig_reciente'), ambar: tx('cartaporte.vista.atencion'), rojo: tx('cartaporte.vista.antig_riesgo') });
 
 interface FilaSinCcp { clave: string; cliente: string; folio: string; horas: number; dias: number; color: ColorAntiguedad }
 
-const COLUMNAS_SIN_CCP: readonly ColumnaBase<FilaSinCcp>[] = [
-  { id: 'cliente', titulo: 'Cliente', principal: true, celda: (f) => f.cliente },
-  { id: 'folio', titulo: 'Viaje', celda: (f) => f.folio },
-  { id: 'horas', titulo: 'Sin Carta Porte', alinear: 'der', celda: (f) => <span className="cifra-mono">{numero(f.horas)} h ({numero(f.dias)} d)</span> },
-  { id: 'estado', titulo: 'Antigüedad', celda: (f) => <StatusChip tono={TONO_ANTIGUEDAD[f.color]}>{ROTULO_ANTIGUEDAD[f.color]}</StatusChip> },
+const COLUMNAS_SIN_CCP = (tx: TAgentes): readonly ColumnaBase<FilaSinCcp>[] => [
+  { id: 'cliente', titulo: tx('cartaporte.vista.cliente'), principal: true, celda: (f) => f.cliente },
+  { id: 'folio', titulo: tx('cartaporte.vista.viaje'), celda: (f) => f.folio },
+  { id: 'horas', titulo: tx('cartaporte.vista.sin_carta_porte'), alinear: 'der', celda: (f) => <span className="cifra-mono">{numero(f.horas)} h ({numero(f.dias)} d)</span> },
+  { id: 'estado', titulo: tx('cartaporte.vista.antiguedad'), celda: (f) => <StatusChip tono={TONO_ANTIGUEDAD[f.color]}>{ROTULO_ANTIGUEDAD(tx)[f.color]}</StatusChip> },
 ];
 
 /**
  * T-A3-66 — viajes que ya salieron y siguen sin Carta Porte, por cliente y con su antigüedad. SOLO LECTURA: no envía
  * mensajes ni cierra viajes. El reporte semanal es un CSV que se baja desde aquí.
  */
-function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
+function ViajesSinCcp({ listado, tr = TR_ES }: { listado: ListadoSinCcp | 'no_leido'; tr?: TrAgentes; }) {
+  const { t: tx } = tr;
   if (listado === 'no_leido') {
-    return <Tarjeta titulo="Viajes salidos sin Carta Porte" info="carta_porte_agente.sin_ccp" estado="error" mensaje="No se pudo leer la lista de viajes salidos sin Carta Porte. Vuelve a intentar en un momento." reintentar />;
+    return <Tarjeta titulo={tx('cartaporte.vista.viajes_salidos_sin_carta_porte')} info="carta_porte_agente.sin_ccp" estado="error" mensaje={tx('cartaporte.vista.no_se_pudo_leer_la')} reintentar />;
   }
   // A3-01 (cierre100): null no es 0. Sin ningún viaje importado del TMS no se puede decir que no haya viajes sin Carta Porte:
   // ni cifra ni estado vacío verde, ni descarga.
   if (listado.sinDatosTms?.motivo === 'sin_viajes') {
     return (
-      <Tarjeta titulo="Viajes salidos sin Carta Porte" info="carta_porte_agente.sin_ccp">
+      <Tarjeta titulo={tx('cartaporte.vista.viajes_salidos_sin_carta_porte')} info="carta_porte_agente.sin_ccp">
         <Aviso tono="warn">
-          <strong>Sin datos del TMS:</strong> no se puede decir si hay viajes salidos sin Carta Porte. No hay ningún viaje importado del sistema de transporte en los últimos días
-          {listado.sinDatosTms.ultimoImportadoEn ? ` (el último que entró fue hace ${numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h)` : ''}.
-          Esto no significa que todo tenga Carta Porte.
+          {rico(tx('cartaporte.vista.no_se_puede_decir_si'), { strong: <strong>{tx('cartaporte.vista.sin_datos_del_tms')}</strong>, v1: listado.sinDatosTms.ultimoImportadoEn ? tx('cartaporte.vista.el_ultimo_que_entro_fue', { v0: numero(listado.sinDatosTms.horasDesdeImportacion ?? 0) }) : '' })}
         </Aviso>
       </Tarjeta>
     );
@@ -348,41 +340,41 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
     g.viajes.map((v) => ({
       clave: `${g.clienteId ?? 'sin_cliente'}-${v.viajeId}`,
       cliente: g.clienteNombre,
-      folio: `${v.folio ?? 'Sin folio'}${v.localAbierto ? ' · local abierto' : ''}`,
+      folio: `${v.folio ?? tx('cartaporte.vista.sin_folio')}${v.localAbierto ? ' · local abierto' : ''}`,
       horas: v.horas, dias: v.dias, color: v.color,
     })));
   const sinTabla = listado.vacio && (listado.truncado || !!listado.sinDatosTms);
   return (
-    <Tarjeta titulo={`Viajes salidos sin Carta Porte · ${numero(listado.total)}`} info="carta_porte_agente.sin_ccp"
-      estado={listado.vacio && !sinTabla ? 'vacio' : 'ok'} iconoVacio={CheckCircle2} mensaje="No hay viajes salidos sin Carta Porte"
-      detalle="Cuando salga uno sin complemento aparecerá aquí con las horas que lleva sin él."
+    <Tarjeta titulo={tx('cartaporte.vista.viajes_salidos_sin_carta_porte_2', { total: numero(listado.total) })} info="carta_porte_agente.sin_ccp"
+      estado={listado.vacio && !sinTabla ? 'vacio' : 'ok'} iconoVacio={CheckCircle2} mensaje={tx('cartaporte.vista.no_hay_viajes_salidos_sin')}
+      detalle={tx('cartaporte.vista.cuando_salga_uno_sin_complemento')}
       acciones={!listado.vacio ? (
         <a download="viajes-sin-carta-porte.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(aCsvSinCcp(listado))}`} className={clasesBoton('secondary', 'sm')}>
-          Descargar reporte (CSV)
+          {tx('cartaporte.vista.descargar_reporte_csv')}
         </a>
       ) : undefined}>
       <div className="rv-cp__pila">
         {listado.sinDatosTms?.motivo === 'importacion_vieja' && (
           <Aviso tono="warn">
-            La última importación de viajes del TMS fue hace {numero(listado.sinDatosTms.horasDesdeImportacion ?? 0)} h: esta lista puede estar atrasada y no debe leerse como «todo en regla».
+            {tx('cartaporte.vista.la_ultima_importacion_de_viajes', { v0: numero(listado.sinDatosTms.horasDesdeImportacion ?? 0) })}
           </Aviso>
         )}
         {ligados && (
           <p className="rv-cp__nota">
-            {numero(ligados.ligados)} de {numero(ligados.total)} viajes ligados a un documento por folio (cliente + folio).
+            {tx('cartaporte.vista.de_viajes_ligados_a_un', { ligados: numero(ligados.ligados), total: numero(ligados.total) })}
           </p>
         )}
         {pocoLigado && (
           <Aviso tono="warn">
-            Casi ningún viaje liga con un documento por folio: es posible que el folio del TMS no sea el mismo número que el folio del cliente. Confírmalo antes de leer esta lista como riesgo de multa.
+            {tx('cartaporte.vista.casi_ningun_viaje_liga_con')}
           </Aviso>
         )}
         {listado.truncado && (
           <Aviso tono="warn">
-            La lista está incompleta: hay más salidas de las que se pueden leer de una vez y faltan las más antiguas. Revisa los viajes viejos en Viajes.
+            {tx('cartaporte.vista.la_lista_esta_incompleta_hay')}
           </Aviso>
         )}
-        {!listado.vacio && <TablaBase etiqueta="Viajes salidos sin Carta Porte" columnas={COLUMNAS_SIN_CCP} filas={filas} idFila={(f) => f.clave} densa tarjetaMovil />}
+        {!listado.vacio && <TablaBase etiqueta={tx('cartaporte.vista.viajes_salidos_sin_carta_porte')} columnas={COLUMNAS_SIN_CCP(tx)} filas={filas} idFila={(f) => f.clave} densa tarjetaMovil />}
       </div>
     </Tarjeta>
   );
@@ -393,21 +385,22 @@ function ViajesSinCcp({ listado }: { listado: ListadoSinCcp | 'no_leido' }) {
  * una clave existe ni que no: degrada a «no se pudo verificar» y el PAC es quien valida al timbrar. Sin este aviso,
  * un documento «sin fallas» se leería como «clave verificada».
  */
-export const TEXTO_CATALOGOS_SAT_VACIOS = 'Los catálogos del SAT todavía no están cargados en Likida, así que las claves de estos catálogos no se verifican aquí: aparecen como «no se pudo verificar» y las valida tu PAC al timbrar. Un documento sin fallas no significa que sus claves estén verificadas.';
-export const TEXTO_CATALOGOS_SAT_NO_LEIDOS = 'No pudimos comprobar si los catálogos del SAT están cargados. No des por verificadas las claves de los documentos.';
+export const TEXTO_CATALOGOS_SAT_VACIOS = TR_ES.t('cartaporte.vista.los_catalogos_del_sat_todavia');
+export const TEXTO_CATALOGOS_SAT_NO_LEIDOS = TR_ES.t('cartaporte.vista.no_pudimos_comprobar_si_los');
 
-export function AvisoCatalogosSat({ catalogosSat }: { catalogosSat: ConteoCatalogosSat | 'no_leido' }) {
+export function AvisoCatalogosSat({ catalogosSat, tr = TR_ES }: { catalogosSat: ConteoCatalogosSat | 'no_leido'; tr?: TrAgentes; }) {
+  const { t: tx } = tr;
   if (catalogosSat === 'no_leido') {
-    return <div data-catalogos-sat="no_leido"><Aviso tono="warn">{TEXTO_CATALOGOS_SAT_NO_LEIDOS}</Aviso></div>;
+    return <div data-catalogos-sat="no_leido"><Aviso tono="warn">{tx('cartaporte.vista.no_pudimos_comprobar_si_los')}</Aviso></div>;
   }
   const { filas, vacios } = estadoCatalogosSat(catalogosSat);
   if (vacios.length === 0) return null;
   return (
     <div data-catalogos-sat={vacios.length === filas.length ? 'vacios' : 'parcial'}>
       <Aviso tono="warn">
-        {vacios.length === filas.length ? TEXTO_CATALOGOS_SAT_VACIOS : 'Faltan por cargar algunos catálogos del SAT: sus claves aparecen como «no se pudo verificar» y las valida tu PAC al timbrar.'}
+        {vacios.length === filas.length ? tx('cartaporte.vista.los_catalogos_del_sat_todavia') : tx('cartaporte.vista.faltan_por_cargar_algunos_catalogos')}
         <ul className="rv-cp__lista">
-          {filas.map((f) => <li key={f.catalogo}>{f.nombre}: {f.n === 0 ? 'sin cargar' : `${numero(f.n)} claves`}</li>)}
+          {filas.map((f) => <li key={f.catalogo}>{f.nombre}: {f.n === 0 ? tx('cartaporte.vista.sin_cargar') : tx('cartaporte.vista.n_claves', { n: numero(f.n) })}</li>)}
         </ul>
       </Aviso>
     </div>

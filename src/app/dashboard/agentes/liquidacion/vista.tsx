@@ -11,8 +11,9 @@ import { SeccionCola, type ColaProps } from './cola';
 // contra `TipoDiferencia` completo (M10) — aquí había 3 renglones para ~35 tipos.
 import { rotuloDiferencia as rotuloTipo } from './rotulo-diferencia';
 import { BarList, Columnas, Cifra, DonaMini, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { TR_ES, rico, type TrAgentes, selloHoyTr } from '../i18n-agentes';
+import { getT } from '@/lib/i18n/servidor';
 
 /** Los conteos del ciclo. `porRevisar` sale de los KPIs; los otros tres, de
  *  `contarViajes`. Van juntos porque los pinta UNA sola tarjeta. */
@@ -67,7 +68,7 @@ export interface ExtraAgenteLiquidacion {
  * consultas, cada una con un esqueleto de su alto.
  */
 export function VistaAgenteLiquidacion({
-  kpis, liquidaciones, cola, extra, sufijo, notificaciones, externas,
+  kpis, liquidaciones, cola, extra, sufijo, notificaciones, externas, tr = TR_ES,
 }: {
   /** Primario: falla CERRADO. Su bloque enseña `EstadoError` — nunca un
    *  "0 por revisar" que nadie midió. */
@@ -88,16 +89,17 @@ export function VistaAgenteLiquidacion({
   /** «Liquidaciones externas» (0370): las que calculó el SAP/TMS de la flota y
    *  Likida solo entrega. Entra ya renderizada (con su `Bloque`) por la misma
    *  razón que `notificaciones`: la vista no importa el repositorio de datos. */
-  externas?: React.ReactNode;
+  externas?: React.ReactNode; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   return (
-    <MarcoPagina titulo="Liquidación automática" apoyo="El agente arma la liquidación de cada viaje: lo que espera tu firma, lo que hizo solo y el criterio con el que juzga.">
+    <MarcoPagina titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('liquidacion.vista.el_agente_arma_la_liquidacion')}>
 
-      <Bloque mensaje="No se pudieron leer los indicadores del agente." esqueleto={<EsqCifrasV2 n={4} />}>
+      <Bloque mensaje={tx('liquidacion.vista.no_se_pudieron_leer_los')} esqueleto={<EsqCifrasV2 n={4} />}>
         <BloqueKpis kpis={kpis} />
       </Bloque>
 
-      <Bloque mensaje="No se pudo leer la cola de revisión." esqueleto={<EsqTablaV2 filas={5} />}>
+      <Bloque mensaje={tx('liquidacion.vista.no_se_pudo_leer_la')} esqueleto={<EsqTablaV2 filas={5} />}>
         <SeccionCola {...cola} />
       </Bloque>
 
@@ -105,31 +107,31 @@ export function VistaAgenteLiquidacion({
 
       {/* ── La evidencia de que trabaja ── */}
       <FilaTarjetas variante="4-4-4">
-        <Bloque mensaje="No se pudo contar el ciclo." esqueleto={<EsqTarjetaV2 alto={160} />}>
+        <Bloque mensaje={tx('liquidacion.vista.no_se_pudo_contar_el')} esqueleto={<EsqTarjetaV2 alto={160} />}>
           <BloqueCiclo ciclo={extra.ciclo} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer la actividad." esqueleto={<EsqTarjetaV2 alto={160} />}>
+        <Bloque mensaje={tx('liquidacion.vista.no_se_pudo_leer_la_2')} esqueleto={<EsqTarjetaV2 alto={160} />}>
           <BloqueCierres cierresPorDia={extra.cierresPorDia} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer el registro." esqueleto={<EsqTarjetaV2 alto={160} />}>
+        <Bloque mensaje={tx('liquidacion.vista.no_se_pudo_leer_el')} esqueleto={<EsqTarjetaV2 alto={160} />}>
           <BloqueHizoSolo hizoSolo={extra.hizoSolo} />
         </Bloque>
       </FilaTarjetas>
 
       {/* ── El criterio con el que juzga ── */}
       <FilaTarjetas variante="4-4-4">
-        <Bloque mensaje="No se pudo leer el desglose." esqueleto={<EsqTarjetaV2 alto={240} />}>
+        <Bloque mensaje={tx('liquidacion.vista.no_se_pudo_leer_el_2')} esqueleto={<EsqTarjetaV2 alto={240} />}>
           <BloqueDineroObservado porTipo={extra.porTipo} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer el desglose por operador." esqueleto={<EsqTarjetaV2 alto={240} />}>
+        <Bloque mensaje={tx('liquidacion.vista.no_se_pudo_leer_el_3')} esqueleto={<EsqTarjetaV2 alto={240} />}>
           <BloqueOperadores operadores={extra.operadores} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer la política." esqueleto={<EsqTarjetaV2 alto={240} />}>
+        <Bloque mensaje={tx('liquidacion.vista.no_se_pudo_leer_la_3')} esqueleto={<EsqTarjetaV2 alto={240} />}>
           <BloqueReglas politica={extra.politica} puedeVerReglas={extra.puedeVerReglas} sufijo={sufijo} />
         </Bloque>
       </FilaTarjetas>
 
-      <Bloque mensaje="No se pudieron leer los últimos cierres." esqueleto={<EsqTablaV2 filas={5} />}>
+      <Bloque mensaje={tx('liquidacion.vista.no_se_pudieron_leer_los_2')} esqueleto={<EsqTablaV2 filas={5} />}>
         <BloqueUltimosCierres liquidaciones={liquidaciones} sufijo={sufijo} />
       </Bloque>
 
@@ -143,27 +145,31 @@ export function VistaAgenteLiquidacion({
 // ═══════════════════════════════════════════════════════════════════════════
 
 async function BloqueKpis({ kpis: pKpis }: { kpis: Promise<DashboardKpis> }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const kpis = await pKpis;
   return (
-    <TiraCifras sello={selloHoy('Liquidaciones de la flota')}>
+    <TiraCifras sello={selloHoyTr(tr, tx('liquidacion.vista.liquidaciones_de_la_flota'))}>
       {/* FE-17: es el acumulado HISTÓRICO — a escala 50k son miles de millones y
           `$9,000,000,000.00` no cabe en un cuarto de fila. `mxnCompacto`
           abrevia SOLO a partir del millón; debajo es `mxn()` exacto. */}
-      <Cifra info="liquidacion.monto_comprobado" etiqueta="Monto comprobado" valor={mxnCompacto(kpis.montoComprobado)} nota="histórico" />
-      <Cifra info="liquidacion.tasa_cuadre" etiqueta="Tasa de cuadre" valor={`${numero(kpis.tasaCuadre)}%`} nota={`${numero(kpis.viajesLiquidados)} liquidaciones`} />
+      <Cifra info="liquidacion.monto_comprobado" etiqueta={tx('liquidacion.vista.monto_comprobado')} valor={mxnCompacto(kpis.montoComprobado, tr.idioma)} nota={tx('liquidacion.vista.historico_2')} />
+      <Cifra info="liquidacion.tasa_cuadre" etiqueta={tx('liquidacion.vista.tasa_de_cuadre')} valor={`${numero(kpis.tasaCuadre)}%`} nota={tx('liquidacion.vista.liquidaciones', { viajesLiquidados: numero(kpis.viajesLiquidados) })} />
       {/* BLOQ-6: desde la 0299 hay DOS estados y este KPI es el del MOTOR
           («no pude cuadrarla»), no el de la firma. La cola de abajo cuenta lo
           que espera FIRMA —que incluye las de diferencias— y sale de su
           propia consulta: dos números distintos con su rótulo distinto, en vez
           de dos versiones del mismo. */}
-      <Cifra info="liquidacion.por_revisar" etiqueta="Por revisar" valor={numero(kpis.porRevisar)} nota="el agente no pudo cuadrarlas"
+      <Cifra info="liquidacion.por_revisar" etiqueta={tx('liquidacion.vista.por_revisar')} valor={numero(kpis.porRevisar)} nota={tx('liquidacion.vista.el_agente_no_pudo_cuadrarlas')}
         tono={kpis.porRevisar > 0 ? 'warn' : undefined} />
-      <Cifra info="liquidacion.con_diferencias" etiqueta="Con diferencias" valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
+      <Cifra info="liquidacion.con_diferencias" etiqueta={tx('liquidacion.vista.con_diferencias')} valor={numero(kpis.conDiferencias)} tono={kpis.conDiferencias > 0 ? 'bad' : undefined} />
     </TiraCifras>
   );
 }
 
 async function BloqueCiclo({ ciclo }: { ciclo: Promise<CicloLiquidacion> }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const funnel = await ciclo;
   // Barras SOLO de lo VIVO (auditoría 13-ago): "Liquidados" es acumulado
   // histórico y en meses domina la escala — las etapas vivas se volverían
@@ -171,30 +177,30 @@ async function BloqueCiclo({ ciclo }: { ciclo: Promise<CicloLiquidacion> }) {
   const cicloVivoLegible = funnel.abiertos !== null && funnel.enCuadre !== null;
   const pasosVivos = cicloVivoLegible
     ? [
-        { clave: 'abiertos', etiqueta: 'Abiertos', valor: funnel.abiertos as number },
-        { clave: 'en_cuadre', etiqueta: 'En cuadre', valor: funnel.enCuadre as number },
-        { clave: 'por_revisar', etiqueta: 'Por revisar', valor: funnel.porRevisar },
+        { clave: 'abiertos', etiqueta: tx('liquidacion.vista.abiertos'), valor: funnel.abiertos as number },
+        { clave: 'en_cuadre', etiqueta: tx('liquidacion.vista.en_cuadre'), valor: funnel.enCuadre as number },
+        { clave: 'por_revisar', etiqueta: tx('liquidacion.vista.por_revisar'), valor: funnel.porRevisar },
       ]
     : [];
   const hayCicloVivo = cicloVivoLegible && pasosVivos.some((p) => p.valor > 0);
   if (!cicloVivoLegible) {
-    return <Tarjeta titulo="Viajes en curso" info="liquidacion.viajes_en_curso" estado="error" mensaje="No se pudo contar el ciclo ahora mismo. Queda pendiente; no es un cero." />;
+    return <Tarjeta titulo={tx('liquidacion.vista.viajes_en_curso')} info="liquidacion.viajes_en_curso" estado="error" mensaje={tx('liquidacion.vista.no_se_pudo_contar_el_2')} />;
   }
   if (!hayCicloVivo) {
     return (
-      <Tarjeta titulo="Viajes en curso" info="liquidacion.viajes_en_curso" estado="vacio" mensaje="Nada vivo en el ciclo" detalle="El próximo viaje que despaches aparece aquí.">
+      <Tarjeta titulo={tx('liquidacion.vista.viajes_en_curso')} info="liquidacion.viajes_en_curso" estado="vacio" mensaje={tx('liquidacion.vista.nada_vivo_en_el_ciclo')} detalle={tx('liquidacion.vista.el_proximo_viaje_que_despaches')}>
         {null}
       </Tarjeta>
     );
   }
   return (
-    <Tarjeta titulo="Viajes en curso" info="liquidacion.viajes_en_curso">
-      <p className="rv-liq-sub">La foto de ahora mismo, por etapa</p>
+    <Tarjeta titulo={tx('liquidacion.vista.viajes_en_curso')} info="liquidacion.viajes_en_curso">
+      <p className="rv-liq-sub">{tx('liquidacion.vista.la_foto_de_ahora_mismo')}</p>
       {/* BarList y no embudo A PROPÓSITO: el embudo imprime conversión paso a paso y este ciclo no es un embudo decreciente. */}
-      <BarList etiqueta="Viajes en curso por etapa" items={pasosVivos} />
+      <BarList etiqueta={tx('liquidacion.vista.viajes_en_curso_por_etapa')} items={pasosVivos} />
       {funnel.liquidados !== null && (
         <p className="rv-liq-pie">
-          <strong className="cifra-mono">{numero(funnel.liquidados)}</strong> viajes liquidados en total, histórico.
+          {rico(tx('liquidacion.vista.viajes_liquidados_en_total_historico'), { strong: <strong className="cifra-mono">{numero(funnel.liquidados)}</strong> })}
         </p>
       )}
     </Tarjeta>
@@ -204,49 +210,53 @@ async function BloqueCiclo({ ciclo }: { ciclo: Promise<CicloLiquidacion> }) {
 async function BloqueCierres({ cierresPorDia }: {
   cierresPorDia: Promise<Array<{ fecha: string; valor: number }> | null>;
 }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const dias = await cierresPorDia;
   const total = dias?.reduce((s, d) => s + d.valor, 0) ?? 0;
   if (dias === null) {
-    return <Tarjeta titulo="Cierres por día" info="liquidacion.cierres_por_dia" estado="error" mensaje="No se pudo leer la actividad ahora mismo." />;
+    return <Tarjeta titulo={tx('liquidacion.vista.cierres_por_dia')} info="liquidacion.cierres_por_dia" estado="error" mensaje={tx('liquidacion.vista.no_se_pudo_leer_la_4')} />;
   }
   if (total <= 0) {
     return (
-      <Tarjeta titulo="Cierres por día" info="liquidacion.cierres_por_dia" estado="vacio" mensaje="Sin cierres en 12 semanas" detalle="Cada día con cierres pinta su columna.">
+      <Tarjeta titulo={tx('liquidacion.vista.cierres_por_dia')} info="liquidacion.cierres_por_dia" estado="vacio" mensaje={tx('liquidacion.vista.sin_cierres_en_12_semanas')} detalle={tx('liquidacion.vista.cada_dia_con_cierres_pinta')}>
         {null}
       </Tarjeta>
     );
   }
   return (
-    <Tarjeta titulo="Cierres por día" info="liquidacion.cierres_por_dia">
-      <p className="rv-liq-sub">Últimas 12 semanas</p>
+    <Tarjeta titulo={tx('liquidacion.vista.cierres_por_dia')} info="liquidacion.cierres_por_dia">
+      <p className="rv-liq-sub">{tx('liquidacion.vista.ultimas_12_semanas')}</p>
       <Columnas
-        etiqueta="Liquidaciones cerradas por día, últimas 12 semanas"
-        datos={dias.map((d) => ({ etiqueta: fechaCorta(d.fecha), valor: d.valor, largo: fechaCorta(d.fecha) }))}
+        etiqueta={tx('liquidacion.vista.liquidaciones_cerradas_por_dia_ultim')}
+        datos={dias.map((d) => ({ etiqueta: fechaCorta(d.fecha, tr.idioma), valor: d.valor, largo: fechaCorta(d.fecha, tr.idioma) }))}
         formato="numero"
         alto={140}
         variacion={false}
         unidad="liquidaciones"
       />
-      <p className="rv-liq-pie">{numero(total)} liquidaciones cerradas en la ventana.</p>
+      <p className="rv-liq-pie">{tx('liquidacion.vista.liquidaciones_cerradas_en_la_ventana', { total: numero(total) })}</p>
     </Tarjeta>
   );
 }
 
 async function BloqueHizoSolo({ hizoSolo }: { hizoSolo: Promise<HizoSolo> }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const { hechos, huerfanos, docsProcesados, actividadIa } = await hizoSolo;
   if (hechos === null) {
-    return <Tarjeta titulo="Lo que hizo solo" info="liquidacion.hizo_solo" estado="error" mensaje="No se pudo leer el registro ahora mismo." />;
+    return <Tarjeta titulo={tx('liquidacion.vista.lo_que_hizo_solo')} info="liquidacion.hizo_solo" estado="error" mensaje={tx('liquidacion.vista.no_se_pudo_leer_el_4')} />;
   }
   if (hechos.length === 0 && !(huerfanos && huerfanos.resueltos > 0)) {
     return (
-      <Tarjeta titulo="Lo que hizo solo" info="liquidacion.hizo_solo" estado="vacio" mensaje="Aún nada que presumir"
-        detalle="Cuando el agente mande un recordatorio o escale un viaje sin que nadie se lo pida, queda escrito aquí.">
+      <Tarjeta titulo={tx('liquidacion.vista.lo_que_hizo_solo')} info="liquidacion.hizo_solo" estado="vacio" mensaje={tx('liquidacion.vista.aun_nada_que_presumir')}
+        detalle={tx('liquidacion.vista.cuando_el_agente_mande_un')}>
         {null}
       </Tarjeta>
     );
   }
   return (
-    <Tarjeta titulo="Lo que hizo solo" info="liquidacion.hizo_solo">
+    <Tarjeta titulo={tx('liquidacion.vista.lo_que_hizo_solo')} info="liquidacion.hizo_solo">
       <ul className="rv-liq-hechos">
         {hechos.map((h, i) => (
           <li key={i} className="rv-liq-hecho">
@@ -255,29 +265,26 @@ async function BloqueHizoSolo({ hizoSolo }: { hizoSolo: Promise<HizoSolo> }) {
             </span>
             <div className="rv-liq-hecho__texto">
               {h.tipo === 'recordatorio'
-                ? <span>Le recordó a <strong>{h.operador ?? 'el operador'}</strong> comprobar el viaje {h.folio}</span>
-                : <span>Escaló el viaje <strong>{h.folio}</strong> para atención humana</span>}
-              <span className="rv-liq-hecho__fecha">{fechaCorta(h.cuando)}</span>
+                ? <span>{rico(tx('liquidacion.vista.le_recordo_a_comprobar_el'), { strong: <strong>{h.operador ?? tx('liquidacion.vista.el_operador')}</strong>, folio: h.folio })}</span>
+                : <span>{rico(tx('liquidacion.vista.escalo_el_viaje_para_atencion'), { strong: <strong>{h.folio}</strong> })}</span>}
+              <span className="rv-liq-hecho__fecha">{fechaCorta(h.cuando, tr.idioma)}</span>
             </div>
           </li>
         ))}
         {huerfanos && huerfanos.resueltos > 0 && (
           <li className="rv-liq-hecho rv-liq-hecho--aparte">
             <span className="rv-liq-hecho__icono" data-tono="ok"><Icono icono={Link2} /></span>
-            <span className="rv-liq-hecho__texto">Amarró solo <strong>{numero(huerfanos.resueltos)}</strong> comprobantes que llegaron sin viaje asignado.</span>
+            <span className="rv-liq-hecho__texto">{rico(tx('liquidacion.vista.amarro_solo_comprobantes_que_llegaro'), { strong: <strong>{numero(huerfanos.resueltos)}</strong> })}</span>
           </li>
         )}
       </ul>
       {(docsProcesados !== null || actividadIa !== null) && (
         <p className="rv-liq-pie">
-          {docsProcesados !== null && (
-            <><strong className="cifra-mono">{numero(docsProcesados)}</strong> comprobantes leídos</>
-          )}
-          {docsProcesados !== null && actividadIa !== null && ' · '}
-          {actividadIa !== null && (
-            <><strong className="cifra-mono">{numero(actividadIa)}</strong> lecturas de IA</>
-          )}
-          {' '}— histórico.
+          {rico(tx('liquidacion.vista.historico'), { v0: docsProcesados !== null && (
+            <>{rico(tx('liquidacion.vista.comprobantes_leidos'), { strong: <strong className="cifra-mono">{numero(docsProcesados)}</strong> })}</>
+          ), v1: docsProcesados !== null && actividadIa !== null && ' · ', v2: actividadIa !== null && (
+            <>{rico(tx('liquidacion.vista.lecturas_de_ia'), { strong: <strong className="cifra-mono">{numero(actividadIa)}</strong> })}</>
+          ), v3: ' ' })}
         </p>
       )}
     </Tarjeta>
@@ -285,25 +292,27 @@ async function BloqueHizoSolo({ hizoSolo }: { hizoSolo: Promise<HizoSolo> }) {
 }
 
 export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<DineroObservadoTipo[] | null> }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const porTipo = await p;
   const totalObservado = porTipo?.reduce((s, t) => s + t.monto, 0) ?? 0;
   if (porTipo === null) {
-    return <Tarjeta titulo="Dinero observado" info="liquidacion.dinero_observado" estado="error" mensaje="No se pudo leer el desglose ahora mismo." />;
+    return <Tarjeta titulo={tx('liquidacion.vista.dinero_observado')} info="liquidacion.dinero_observado" estado="error" mensaje={tx('liquidacion.vista.no_se_pudo_leer_el_5')} />;
   }
   if (porTipo.length === 0) {
     return (
-      <Tarjeta titulo="Dinero observado" info="liquidacion.dinero_observado" estado="vacio" mensaje="Sin diferencias detectadas"
-        detalle="Cuando el agente atrape un gasto fuera de política o un ticket duplicado, aquí se desglosa.">
+      <Tarjeta titulo={tx('liquidacion.vista.dinero_observado')} info="liquidacion.dinero_observado" estado="vacio" mensaje={tx('liquidacion.vista.sin_diferencias_detectadas')}
+        detalle={tx('liquidacion.vista.cuando_el_agente_atrape_un')}>
         {null}
       </Tarjeta>
     );
   }
   return (
-    <Tarjeta titulo="Dinero observado" info="liquidacion.dinero_observado">
-      <p className="rv-liq-sub">Todas las diferencias que el motor registró, por tipo — histórico completo, no solo fuera de política o duplicado</p>
+    <Tarjeta titulo={tx('liquidacion.vista.dinero_observado')} info="liquidacion.dinero_observado">
+      <p className="rv-liq-sub">{tx('liquidacion.vista.todas_las_diferencias_que_el')}</p>
       <DonaMini
-        etiqueta="Dinero observado por tipo de diferencia"
-        centro={mxn(totalObservado)}
+        etiqueta={tx('liquidacion.vista.dinero_observado_por_tipo_de')}
+        centro={mxn(totalObservado, tr.idioma)}
         formato="mxn"
         gajos={porTipo.map((t) => ({ etiqueta: rotuloTipo(t.tipo), valor: t.monto }))}
       />
@@ -311,7 +320,7 @@ export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<D
         {porTipo.map((t) => (
           <li key={t.tipo} className="rv-liq-filas__fila">
             <span className="rv-liq-filas__rotulo">{rotuloTipo(t.tipo)} · {numero(t.n)}</span>
-            <span className="cifra-mono">{mxn(t.monto)}</span>
+            <span className="cifra-mono">{mxn(t.monto, tr.idioma)}</span>
           </li>
         ))}
       </ul>
@@ -322,21 +331,23 @@ export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<D
 async function BloqueOperadores({ operadores: p }: {
   operadores: Promise<Array<{ etiqueta: string; valor: number }> | null>;
 }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const operadores = await p;
   if (operadores === null) {
-    return <Tarjeta titulo="Diferencias por operador" info="liquidacion.por_operador" estado="error" mensaje="No se pudo leer el desglose ahora mismo." />;
+    return <Tarjeta titulo={tx('liquidacion.vista.diferencias_por_operador')} info="liquidacion.por_operador" estado="error" mensaje={tx('liquidacion.vista.no_se_pudo_leer_el_5')} />;
   }
   if (operadores.length === 0) {
     return (
-      <Tarjeta titulo="Diferencias por operador" info="liquidacion.por_operador" estado="vacio" mensaje="Ningún operador acumula diferencias" detalle="La señal que quieres ver.">
+      <Tarjeta titulo={tx('liquidacion.vista.diferencias_por_operador')} info="liquidacion.por_operador" estado="vacio" mensaje={tx('liquidacion.vista.ningun_operador_acumula_diferencias')} detalle={tx('liquidacion.vista.la_senal_que_quieres_ver')}>
         {null}
       </Tarjeta>
     );
   }
   return (
-    <Tarjeta titulo="Diferencias por operador" info="liquidacion.por_operador">
-      <p className="rv-liq-sub">Liquidaciones con diferencia, por operador</p>
-      <BarList etiqueta="Liquidaciones con diferencia por operador" items={operadores.map((o, i) => ({ clave: `${i}-${o.etiqueta}`, etiqueta: o.etiqueta, valor: o.valor }))} />
+    <Tarjeta titulo={tx('liquidacion.vista.diferencias_por_operador')} info="liquidacion.por_operador">
+      <p className="rv-liq-sub">{tx('liquidacion.vista.liquidaciones_con_diferencia_por_ope')}</p>
+      <BarList etiqueta={tx('liquidacion.vista.liquidaciones_con_diferencia_por_ope_2')} items={operadores.map((o, i) => ({ clave: `${i}-${o.etiqueta}`, etiqueta: o.etiqueta, valor: o.valor }))} />
     </Tarjeta>
   );
 }
@@ -344,25 +355,27 @@ async function BloqueOperadores({ operadores: p }: {
 async function BloqueReglas({ politica: p, puedeVerReglas, sufijo }: {
   politica: Promise<PoliticaGasto[] | null>; puedeVerReglas: boolean; sufijo: string;
 }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const politica = await p;
   /* "Ver", no "Editar": Configuración hoy es solo lectura — un botón que promete editar y no edita es un botón que miente.
      Cuando esa página edite, esto vuelve a ser "Editar". */
   const ver = puedeVerReglas ? (
-    <Link href={`/dashboard/configuracion${sufijo}`} title="Ver la configuración completa" className="rv-liq-enlace">
-      <Icono icono={Settings} tam={14} /> Ver
+    <Link href={`/dashboard/configuracion${sufijo}`} title={tx('liquidacion.vista.ver_la_configuracion_completa')} className="rv-liq-enlace">
+      {rico(tx('liquidacion.vista.ver'), { el: <Icono icono={Settings} tam={14} /> })}
     </Link>
   ) : null;
   if (politica === null) {
-    return <Tarjeta titulo="Sus reglas" info="liquidacion.reglas" acciones={ver} estado="error" mensaje="No se pudo leer la política ahora mismo." />;
+    return <Tarjeta titulo={tx('liquidacion.vista.sus_reglas')} info="liquidacion.reglas" acciones={ver} estado="error" mensaje={tx('liquidacion.vista.no_se_pudo_leer_la_5')} />;
   }
   return (
-    <Tarjeta titulo="Sus reglas" info="liquidacion.reglas" acciones={ver}>
+    <Tarjeta titulo={tx('liquidacion.vista.sus_reglas')} info="liquidacion.reglas" acciones={ver}>
       <ul className="rv-liq-filas">
         {politica.map((pg) => (
           <li key={pg.concepto} className="rv-liq-filas__fila">
             <span className="rv-liq-filas__rotulo">{etiquetaConcepto(pg.concepto)}</span>
             <span className="cifra-mono">
-              {pg.topeMonto !== undefined ? mxn(pg.topeMonto) : pg.requiereCfdi ? 'Requiere CFDI' : 'Sin tope'}
+              {pg.topeMonto !== undefined ? mxn(pg.topeMonto, tr.idioma) : pg.requiereCfdi ? tx('liquidacion.vista.requiere_cfdi') : tx('liquidacion.vista.sin_tope')}
             </span>
           </li>
         ))}
@@ -374,16 +387,18 @@ async function BloqueReglas({ politica: p, puedeVerReglas, sufijo }: {
 async function BloqueUltimosCierres({ liquidaciones, sufijo }: {
   liquidaciones: Promise<LiqRow[]>; sufijo: string;
 }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const liqs = await liquidaciones;
   const cierres = liqs.filter((l) => l.estatus !== 'revisar').slice(0, 5);
   return (
-    <Tarjeta titulo="Últimos cierres" info="liquidacion.ultimos_cierres">
+    <Tarjeta titulo={tx('liquidacion.vista.ultimos_cierres')} info="liquidacion.ultimos_cierres">
       {cierres.length === 0 ? (
-        <EstadoVacio icono={Bot} titulo="Aún sin cierres">
-          El agente todavía no cierra ninguna liquidación en esta flota.
+        <EstadoVacio icono={Bot} titulo={tx('liquidacion.vista.aun_sin_cierres')}>
+          {tx('liquidacion.vista.el_agente_todavia_no_cierra')}
         </EstadoVacio>
       ) : (
-        <TablaLiqs filas={cierres} sufijo={sufijo} conVer />
+        <TablaLiqs tr={tr} filas={cierres} sufijo={sufijo} conVer />
       )}
     </Tarjeta>
   );
@@ -395,27 +410,28 @@ const ESTATUS: Record<string, { rotulo: string; tono: TonoEstado }> = {
   revisar: { rotulo: 'Por revisar', tono: 'bad' },
 };
 
-function TablaLiqs({ filas, sufijo, conVer }: { filas: LiqRow[]; sufijo: string; conVer?: boolean }) {
+function TablaLiqs({ filas, sufijo, conVer, tr = TR_ES }: { filas: LiqRow[]; sufijo: string; conVer?: boolean; tr?: TrAgentes; }) {
+  const { t: tx } = tr;
   return (
     <TablaBase<LiqRow>
-      etiqueta="Viajes de la liquidación"
+      etiqueta={tx('liquidacion.vista.viajes_de_la_liquidacion')}
       filas={filas}
       idFila={(l) => l.id}
       tarjetaMovil
       columnas={[
-        { id: 'viaje', titulo: 'Viaje', principal: true, celda: (l) => <strong>{l.folio}</strong> },
-        { id: 'fecha', titulo: 'Fecha', celda: (l) => <span className="rv-liq-apagado">{fechaCorta(l.creadoEn)}</span> },
-        { id: 'comprobado', titulo: 'Comprobado', alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado)}</span> },
-        { id: 'diferencia', titulo: 'Diferencia', alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-liq-malo' : 'cifra-mono'}>{mxn(l.diferencia)}</span> },
+        { id: 'viaje', titulo: tx('liquidacion.vista.viaje'), principal: true, celda: (l) => <strong>{l.folio}</strong> },
+        { id: 'fecha', titulo: tx('liquidacion.vista.fecha'), celda: (l) => <span className="rv-liq-apagado">{fechaCorta(l.creadoEn, tr.idioma)}</span> },
+        { id: 'comprobado', titulo: tx('liquidacion.vista.comprobado'), alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado, tr.idioma)}</span> },
+        { id: 'diferencia', titulo: tx('liquidacion.vista.diferencia'), alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-liq-malo' : 'cifra-mono'}>{mxn(l.diferencia, tr.idioma)}</span> },
         {
-          id: 'estatus', titulo: 'Estatus', celda: (l) => {
+          id: 'estatus', titulo: tx('liquidacion.vista.estatus'), celda: (l) => {
             const e = ESTATUS[l.estatus] ?? { rotulo: l.estatus, tono: 'muted' as const };
             return <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>;
           },
         },
         ...(conVer ? [{
-          id: 'ver', titulo: 'Ver el viaje', alinear: 'der' as const, celda: (l: LiqRow) => (
-            <Link href={`/dashboard/${l.id}${sufijo}`} className="rv-liq-enlace">Ver <Icono icono={ArrowRight} tam={14} /></Link>
+          id: 'ver', titulo: tx('liquidacion.vista.ver_el_viaje'), alinear: 'der' as const, celda: (l: LiqRow) => (
+            <Link href={`/dashboard/${l.id}${sufijo}`} className="rv-liq-enlace">{rico(tx('liquidacion.vista.ver_2'), { el: <Icono icono={ArrowRight} tam={14} /> })}</Link>
           ),
         }] : []),
       ]}

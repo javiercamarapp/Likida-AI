@@ -8,12 +8,10 @@ import {
   validarConfigCobranza, armarMensajeCobranza, type ConfigCobranza,
 } from '@/lib/likida/agentes/cobranza_pura';
 import type { AccionSimple } from './controles';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
-const DIAS = [
-  { iso: 1, rotulo: 'L' }, { iso: 2, rotulo: 'M' }, { iso: 3, rotulo: 'X' },
-  { iso: 4, rotulo: 'J' }, { iso: 5, rotulo: 'V' }, { iso: 6, rotulo: 'S' },
-  { iso: 7, rotulo: 'D' },
-];
+const DIAS = [1, 2, 3, 4, 5, 6, 7] as const;
 
 /**
  * La estrategia del agente, editable, con su vista previa EN VIVO: el texto
@@ -33,6 +31,7 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
   ejemplo: { folio: string | null; dias: number } | null;
   guardar: AccionSimple;
 }) {
+  const { t } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(guardar, null);
   const [tiersTexto, setTiersTexto] = useState(config.tiers.join(', '));
   const [horaInicio, setHoraInicio] = useState(String(config.horaInicio));
@@ -58,33 +57,33 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
   return (
     <div className="rv-ag-notif__rejilla">
       <form action={accion} className="rv-ag-forma">
-        <CampoTexto id="cob-tiers" etiqueta="Tiers de insistencia (días sin comprobar)" name="tiers" value={tiersTexto}
+        <CampoTexto id="cob-tiers" etiqueta={t('cobranza.estrategia.tiers_de_insistencia_dias_sin')} name="tiers" value={tiersTexto}
           onChange={(e) => setTiersTexto(e.target.value)} placeholder="3, 7, 14"
-          ayuda="Hasta 5 valores de 1 a 60, separados por coma. A cada tier se insiste UNA vez." />
+          ayuda={t('cobranza.estrategia.hasta_5_valores_de_1')} />
 
         <div className="rv-ag-par">
-          <CampoSelect id="cob-inicio" etiqueta="Desde" name="horaInicio" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)}>
+          <CampoSelect id="cob-inicio" etiqueta={t('cobranza.estrategia.desde')} name="horaInicio" value={horaInicio} onChange={(e) => setHoraInicio(e.target.value)}>
             {Array.from({ length: 24 }, (_, h) => <option key={h} value={h}>{h}:00</option>)}
           </CampoSelect>
-          <CampoSelect id="cob-fin" etiqueta="Hasta" name="horaFin" value={horaFin} onChange={(e) => setHoraFin(e.target.value)}>
+          <CampoSelect id="cob-fin" etiqueta={t('cobranza.estrategia.hasta')} name="horaFin" value={horaFin} onChange={(e) => setHoraFin(e.target.value)}>
             {Array.from({ length: 24 }, (_, i) => i + 1).map((h) => <option key={h} value={h}>{h}:00</option>)}
           </CampoSelect>
         </div>
 
-        <Fieldset leyenda="Días permitidos (hora de México)">
+        <Fieldset leyenda={t('cobranza.estrategia.dias_permitidos_hora_de_mexico')}>
           <div className="rv-ag-dias">
             {DIAS.map((d) => (
-              <Casilla key={d.iso} name="dias" value={d.iso} checked={dias.includes(d.iso)} onChange={() => alternarDia(d.iso)} etiqueta={d.rotulo} />
+              <Casilla key={d} name="dias" value={d} checked={dias.includes(d)} onChange={() => alternarDia(d)} etiqueta={t(`comun.dia_${d}`)} />
             ))}
           </div>
         </Fieldset>
 
-        <CampoTextarea id="cob-instrucciones" etiqueta={`Instrucciones del mensaje (${instrucciones.length}/300)`} name="instrucciones"
+        <CampoTextarea id="cob-instrucciones" etiqueta={t('cobranza.estrategia.instrucciones_etiqueta', { n: instrucciones.length })} name="instrucciones"
           value={instrucciones} maxLength={300} rows={3} onChange={(e) => setInstrucciones(e.target.value)}
-          placeholder="Una línea tuya que viaja en cada mensaje — p. ej. «Si ya entregaste, mándame también la carta porte.»" />
+          placeholder={t('cobranza.estrategia.una_linea_tuya_que_viaja')} />
 
-        <CampoTexto id="cob-firma" etiqueta={`Firma (${firma.length}/80)`} name="firma" value={firma} maxLength={80} onChange={(e) => setFirma(e.target.value)}
-          placeholder="Nombre del despacho o del ejecutivo — p. ej. «Transportes Rivera»" />
+        <CampoTexto id="cob-firma" etiqueta={t('cobranza.estrategia.firma_etiqueta', { n: firma.length })} name="firma" value={firma} maxLength={80} onChange={(e) => setFirma(e.target.value)}
+          placeholder={t('cobranza.estrategia.nombre_del_despacho_o_del')} />
 
         <div className="rv-ag-notif__acciones">
           <BotonGuardar />
@@ -94,9 +93,9 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
 
       {/* La vista previa: el payload literal, no una maqueta */}
       <Campo etiqueta={ejemplo
-        ? `Así se lee en WhatsApp — el siguiente de la cola (${ejemplo.dias} días)`
-        : 'Así se lee en WhatsApp — plantilla con el primer tier'}
-        ayuda="Los días y el folio son los de cada viaje real al momento de mandar. Los asteriscos son las negritas de WhatsApp.">
+        ? t('cobranza.estrategia.asi_se_lee_en_whatsapp', { dias: ejemplo.dias })
+        : t('cobranza.estrategia.asi_se_lee_en_whatsapp_2')}
+        ayuda={t('cobranza.estrategia.los_dias_y_el_folio')}>
         <output className="rv-ag-previa" data-tono={'error' in borrador ? 'warn' : undefined}>
           {'error' in borrador
             ? borrador.error
@@ -108,10 +107,11 @@ export function FormaEstrategia({ config, ejemplo, guardar }: {
 }
 
 function BotonGuardar() {
+  const { t } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} disabled={pending}>
-      {pending ? 'Guardando…' : 'Guardar estrategia'}
+      {pending ? t('cobranza.estrategia.guardando') : t('cobranza.estrategia.guardar_estrategia')}
     </Boton>
   );
 }

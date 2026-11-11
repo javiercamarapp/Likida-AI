@@ -10,8 +10,9 @@ import {
   FormaBorrador, BotonConversacion, FormaResponder, FormaConfig, FormaAlta, FormaDirector, FormaServicio, AccionesContacto, type AccionVigia,
 } from './controles';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { AvisoCompacto, Chip as ChipV2, Disclosure, EsqCifrasV2, EsqTablaV2, FilaTarjetas, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { TR_ES, type TrAgentes, type TAgentes, selloHoyTr } from '../i18n-agentes';
+import { getT } from '@/lib/i18n/servidor';
 
 export interface AccionesVigia {
   decidir: AccionVigia;
@@ -29,10 +30,11 @@ const ENLACE = 'rv-vg__enlace';
 
 /** T-A4-22: el acceso a la bandeja de avisos de viaje, con cuántos esperan a una persona. Si no se pudo contar, el enlace va sin número. */
 export async function EnlaceAvisos({ sufijo, pendientes }: { sufijo: string; pendientes?: Promise<number | null> }) {
+  const { t: tx } = await getT('agentes');
   const n = pendientes ? await pendientes.catch(() => null) : null;
   return (
     <Link href={`/dashboard/agentes/vigia/avisos${sufijo}`} className={ENLACE}>
-      Avisos de viaje{typeof n === 'number' && n > 0 ? ` (${n} por revisar)` : ''}
+      {tx('vigia.vista.avisos_de_viaje', { v0: typeof n === 'number' && n > 0 ? tx('vigia.vista.n_por_revisar', { n }) : '' })}
     </Link>
   );
 }
@@ -69,43 +71,44 @@ export function ordenarPorPrioridad<T extends Pick<ConversacionTablero, 'id' | '
 }
 
 /** Por qué una conversación es una EXCEPCIÓN (vacío = no lo es). PURA. */
-export function motivosDeExcepcion(c: ConversacionTablero, slaMin: number, ahoraMs: number): string[] {
+export function motivosDeExcepcion(c: ConversacionTablero, slaMin: number, ahoraMs: number, tr: TrAgentes = TR_ES): string[] {
+  const { t: tx } = tr;
   const m: string[] = [];
   const espera = minutosDeEspera(c.sinRespuestaDesde, ahoraMs);
-  if (c.molestiaNivel >= 2) m.push(c.molestiaNivel >= 3 ? 'Muy molesto' : 'Molesto');
-  if (c.sinRespuestaDesde && espera >= slaMin) m.push(`Sin respuesta ${duracion(espera)}`);
-  if (c.escalamientoNivel > 0) m.push(`Escalada a nivel ${c.escalamientoNivel}`);
+  if (c.molestiaNivel >= 2) m.push(c.molestiaNivel >= 3 ? tx('vigia.vista.muy_molesto') : tx('vigia.vista.molesto'));
+  if (c.sinRespuestaDesde && espera >= slaMin) m.push(tx('vigia.vista.sin_respuesta_dur', { dur: duracion(espera) }));
+  if (c.escalamientoNivel > 0) m.push(tx('vigia.vista.escalada_nivel', { nivel: c.escalamientoNivel }));
   return m;
 }
 
-const NOMBRE_INTENCION: Record<string, string> = {
-  ubicacion: 'Dónde va su viaje', eta: 'A qué hora llega', documentos: 'Documentos pendientes', factura_pod: 'Factura / comprobante de entrega',
-  queja: 'Queja', pide_humano: 'Pide hablar con una persona', saludo: 'Saludo', otro: 'Otro / no se entendió',
-};
+const NOMBRE_INTENCION = (tx: TAgentes): Record<string, string> => ({
+  ubicacion: tx('vigia.vista.donde_va_su_viaje'), eta: tx('vigia.vista.a_que_hora_llega'), documentos: tx('vigia.vista.ni_documentos'), factura_pod: tx('vigia.vista.ni_factura_pod'),
+  queja: tx('vigia.vista.ni_queja'), pide_humano: tx('vigia.vista.pide_hablar_con_una_persona'), saludo: tx('vigia.vista.ni_saludo'), otro: tx('vigia.vista.otro_no_se_entendio'),
+});
 
-const NOMBRE_EVENTO: Record<string, string> = {
-  entrante: 'Llegó un mensaje', borrador: 'El Vigía redactó una respuesta', aprobado: 'Un gerente aprobó una respuesta', rechazado: 'Un gerente descartó una respuesta',
-  enviado: 'Se envió una respuesta', autoenviado: 'Se envió una respuesta sola (bajo riesgo validado)', fallo_envio: 'Falló un envío', tomada: 'Un gerente tomó el hilo',
-  devuelta: 'El hilo volvió al Vigía', cerrada: 'Se cerró una conversación', molestia: 'Se detectó molestia', sin_respuesta: 'Cliente sin respuesta',
-  escalada: 'Escalamiento', sin_destinatario: 'No había a quién avisar', optout: 'Un cliente pidió su baja', alta: 'Se autorizó un contacto',
-  baja_manual: 'Se dio de baja un contacto', suprimido: 'Se suprimieron los datos de un contacto (ARCO)', spam: 'Se detectó spam',
-  sin_dato: 'Faltaba un dato real: se consultó', inyeccion: 'Mensaje con instrucciones sospechosas', otro_cliente: 'Preguntó por un folio que no es suyo',
-  adjunto_enviado: 'Se envió el archivo adjunto (POD)', adjunto_pendiente: 'El archivo no salió: la ventana de 24 h del cliente está cerrada; mándaselo tú',
-  adjunto_fallo: 'No se pudo mandar el archivo adjunto: revísalo y mándaselo tú',
-  correo_enviado: 'Se mandó el aviso de escalamiento por correo (respaldo del WhatsApp)',
-  correo_fallo: 'No se pudo mandar el aviso por correo: revisa la configuración del correo',
-};
+const NOMBRE_EVENTO = (tx: TAgentes): Record<string, string> => ({
+  entrante: tx('vigia.vista.llego_un_mensaje'), borrador: tx('vigia.vista.el_vigia_redacto_una_respuesta'), aprobado: tx('vigia.vista.un_gerente_aprobo_una_respuesta'), rechazado: tx('vigia.vista.un_gerente_descarto_una_respuesta'),
+  enviado: tx('vigia.vista.se_envio_una_respuesta'), autoenviado: tx('vigia.vista.se_envio_una_respuesta_sola'), fallo_envio: tx('vigia.vista.fallo_un_envio'), tomada: tx('vigia.vista.un_gerente_tomo_el_hilo'),
+  devuelta: tx('vigia.vista.el_hilo_volvio_al_vigia'), cerrada: tx('vigia.vista.se_cerro_una_conversacion'), molestia: tx('vigia.vista.se_detecto_molestia'), sin_respuesta: tx('vigia.vista.ev_sin_respuesta'),
+  escalada: tx('vigia.vista.ev_escalada'), sin_destinatario: tx('vigia.vista.no_habia_a_quien_avisar'), optout: tx('vigia.vista.un_cliente_pidio_su_baja'), alta: tx('vigia.vista.se_autorizo_un_contacto'),
+  baja_manual: tx('vigia.vista.se_dio_de_baja_un'), suprimido: tx('vigia.vista.se_suprimieron_los_datos_de'), spam: tx('vigia.vista.se_detecto_spam'),
+  sin_dato: tx('vigia.vista.faltaba_un_dato_real_se'), inyeccion: tx('vigia.vista.ev_inyeccion'), otro_cliente: tx('vigia.vista.pregunto_por_un_folio_que'),
+  adjunto_enviado: tx('vigia.vista.se_envio_el_archivo_adjunto'), adjunto_pendiente: tx('vigia.vista.el_archivo_no_salio_la'),
+  adjunto_fallo: tx('vigia.vista.no_se_pudo_mandar_el'),
+  correo_enviado: tx('vigia.vista.se_mando_el_aviso_de'),
+  correo_fallo: tx('vigia.vista.no_se_pudo_mandar_el_2'),
+});
 
 /** El estado de un correo de respaldo, en palabras de la flota (la falta de configuración se dice tal cual: nada falla en silencio). */
-export const TEXTO_ESTADO_CORREO: Record<string, string> = {
-  enviando: 'En curso',
-  enviado: 'Enviado',
-  sin_configurar: 'No se pudo mandar por correo: falta configuración',
-  rechazado: 'El proveedor de correo lo rechazó',
-  red: 'No se pudo mandar por correo: falla de red o sin confirmar',
-};
+export const TEXTO_ESTADO_CORREO = (tx: TAgentes): Record<string, string> => ({
+  enviando: tx('vigia.vista.est_enviando'),
+  enviado: tx('vigia.vista.est_enviado'),
+  sin_configurar: tx('vigia.vista.no_se_pudo_mandar_por'),
+  rechazado: tx('vigia.vista.el_proveedor_de_correo_lo'),
+  red: tx('vigia.vista.no_se_pudo_mandar_por_2'),
+});
 
-export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '', avisosPendientes, standby = false }: {
+export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministrar, acciones, sufijo = '', avisosPendientes, standby = false, tr = TR_ES }: {
   datos: Promise<DatosTablero>;
   /** T-A4-32: perfil cinco_agentes → se ocultan los controles stand-by (autoenvío, POD adjunto). Sin perfil: idéntico a hoy. */
   standby?: boolean;
@@ -117,60 +120,61 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
   puedeDecidir: boolean;
   /** Solo el dueño configura, autoriza contactos y ejerce ARCO. */
   puedeAdministrar: boolean;
-  acciones: AccionesVigia;
+  acciones: AccionesVigia; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   return (
-    <MarcoPagina titulo="Servicio al cliente" apoyo="Atiende a los clientes de tu flota: clasifica, responde con datos reales y escala a una persona lo que lo requiere.">
+    <MarcoPagina titulo={tx('vigia.vista.servicio_al_cliente')} apoyo={tx('vigia.vista.atiende_a_los_clientes_de')}>
       {/* La navegación entre las secciones del agente son las pestañas del marco; aquí solo queda el aviso con número cuando algo espera. */}
       <Suspense fallback={null}><AvisosPorRevisar sufijo={sufijo} pendientes={avisosPendientes} /></Suspense>
-      <Bloque mensaje="No se pudo leer el tablero del Vigía." esqueleto={<EsqCifrasV2 n={4} />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_el')} esqueleto={<EsqCifrasV2 n={4} />}>
         <BloqueEstadoYKpis datos={datos} ahoraMs={ahoraMs} />
       </Bloque>
 
-      <Bloque mensaje="No se pudo leer la cola de aprobación." esqueleto={<EsqTablaV2 />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la')} esqueleto={<EsqTablaV2 />}>
         <BloqueAprobacion datos={datos} puedeDecidir={puedeDecidir} acciones={acciones} standby={standby} />
       </Bloque>
 
-      <Bloque mensaje="No se pudieron leer las excepciones." esqueleto={<EsqTablaV2 />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_las')} esqueleto={<EsqTablaV2 />}>
         <BloqueExcepciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
       </Bloque>
 
-      <Bloque mensaje="No se pudieron leer las conversaciones." esqueleto={<EsqTablaV2 />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_las_2')} esqueleto={<EsqTablaV2 />}>
         <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
       </Bloque>
 
       <FilaTarjetas variante="6-6">
-        <Bloque mensaje="No se pudo leer la configuración." esqueleto={<EsqTablaV2 />}>
+        <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_2')} esqueleto={<EsqTablaV2 />}>
           <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
         </Bloque>
-        <Bloque mensaje="No se pudo leer la bitácora." esqueleto={<EsqTablaV2 />}>
+        <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_3')} esqueleto={<EsqTablaV2 />}>
           <BloqueBitacora datos={datos} />
         </Bloque>
       </FilaTarjetas>
 
-      <Bloque mensaje="No se pudo leer la lista de directores." esqueleto={<EsqTablaV2 />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_4')} esqueleto={<EsqTablaV2 />}>
         <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
       </Bloque>
 
-      <Bloque mensaje="No se pudo leer la lista de servicio al cliente." esqueleto={<EsqTablaV2 />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_5')} esqueleto={<EsqTablaV2 />}>
         <BloqueServicio datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
       </Bloque>
 
-      <Bloque mensaje="No se pudieron leer los correos de respaldo." esqueleto={<EsqTablaV2 />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_los')} esqueleto={<EsqTablaV2 />}>
         <BloqueCorreos datos={datos} />
       </Bloque>
 
-      <Bloque mensaje="No se pudieron leer los contactos autorizados." esqueleto={<EsqTablaV2 />}>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudieron_leer_los_2')} esqueleto={<EsqTablaV2 />}>
         <BloqueContactos datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
       </Bloque>
 
-      <Tarjeta titulo="Los límites del Vigía" info="vigia.limites">
+      <Tarjeta titulo={tx('vigia.vista.los_limites_del_vigia')} info="vigia.limites">
         <ul className="rv-vg__bullets">
-          <li>Solo contesta a clientes que la flota autorizó aquí, con constancia de su consentimiento. Cualquier otro número recibe la respuesta de siempre.</li>
-          <li>Cada cifra de una respuesta sale de un dato real del viaje de ESE cliente. Si el dato no existe (por ejemplo la hora estimada de llegada, que Likida aún no guarda), dice que lo consulta y te avisa.</li>
-          <li>Un cliente jamás ve datos de otro cliente ni de otra flota. Si pregunta por un folio que no es suyo, no se confirma ni se niega nada.</li>
-          <li>Fuera de las 24 h de su último mensaje, WhatsApp solo permite plantillas aprobadas; el Vigía no manda texto libre fuera de esa ventana.</li>
-          <li>«BAJA» corta los mensajes de inmediato. Los chats se borran solos pasado el plazo de retención, y puedes suprimir los de un contacto (derechos ARCO) desde su fila.</li>
+          <li>{tx('vigia.vista.solo_contesta_a_clientes_que')}</li>
+          <li>{tx('vigia.vista.cada_cifra_de_una_respuesta')}</li>
+          <li>{tx('vigia.vista.un_cliente_jamas_ve_datos')}</li>
+          <li>{tx('vigia.vista.fuera_de_las_24_h')}</li>
+          <li>{tx('vigia.vista.baja_corta_los_mensajes_de')}</li>
         </ul>
       </Tarjeta>
     </MarcoPagina>
@@ -182,6 +186,8 @@ function Chip({ children, tono }: { children: React.ReactNode; tono?: 'warn' | '
 }
 
 export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<DatosTablero>; ahoraMs: number }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const d = await p;
   const sla = d.config.slaRespuestaMin;
   const vencidas = d.conversaciones.filter((c) => c.sinRespuestaDesde && minutosDeEspera(c.sinRespuestaDesde, ahoraMs) >= sla).length;
@@ -189,46 +195,47 @@ export async function BloqueEstadoYKpis({ datos: p, ahoraMs }: { datos: Promise<
   return (
     <div className="rv-vg__pila">
       {!d.config.habilitado && (
-        <AvisoCompacto tono="warn" resumen="El Vigía está apagado para tu flota: ningún cliente recibe respuesta. Autoriza a tus clientes y enciéndelo en «Configuración»." />
+        <AvisoCompacto tono="warn" resumen={tx('vigia.vista.el_vigia_esta_apagado_para')} />
       )}
-      <TiraCifras sello={selloHoy('Avisos de viaje')}>
-        <Cifra etiqueta="Conversaciones activas" info="vigia.conversaciones_activas" valor={numero(d.conversaciones.length)} nota="clientes con un hilo abierto" />
-        <Cifra etiqueta="Por aprobar" info="vigia.por_aprobar" valor={numero(d.pendientes.length)} nota="respuestas que esperan tu toque" tono={d.pendientes.length > 0 ? 'warn' : undefined} />
-        <Cifra etiqueta={`Sin respuesta (SLA ${numero(sla)} min)`} info="vigia.sin_respuesta" valor={numero(vencidas)} nota="esperan más de lo permitido" tono={vencidas > 0 ? 'bad' : undefined} />
-        <Cifra etiqueta="Molestos o escalados" info="vigia.molestos_escalados" valor={numero(molestasOEscaladas)} nota="requieren a una persona" tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
+      <TiraCifras sello={selloHoyTr(tr, tx('vigia.vista.sello_avisos_de_viaje'))}>
+        <Cifra etiqueta={tx('vigia.vista.conversaciones_activas')} info="vigia.conversaciones_activas" valor={numero(d.conversaciones.length)} nota={tx('vigia.vista.clientes_con_un_hilo_abierto')} />
+        <Cifra etiqueta={tx('vigia.vista.por_aprobar')} info="vigia.por_aprobar" valor={numero(d.pendientes.length)} nota={tx('vigia.vista.respuestas_que_esperan_tu_toque')} tono={d.pendientes.length > 0 ? 'warn' : undefined} />
+        <Cifra etiqueta={tx('vigia.vista.sin_respuesta_sla_min', { sla: numero(sla) })} info="vigia.sin_respuesta" valor={numero(vencidas)} nota={tx('vigia.vista.esperan_mas_de_lo_permitido')} tono={vencidas > 0 ? 'bad' : undefined} />
+        <Cifra etiqueta={tx('vigia.vista.molestos_o_escalados')} info="vigia.molestos_escalados" valor={numero(molestasOEscaladas)} nota={tx('vigia.vista.requieren_a_una_persona')} tono={molestasOEscaladas > 0 ? 'bad' : undefined} />
       </TiraCifras>
       <p className="rv-vg__nota">
-        Tiempo de primera respuesta:{' '}
-        {d.respuesta.muestra === 0
-          ? 'sin datos todavía — aún no se ha enviado ninguna respuesta en los últimos 7 días.'
-          : `mediana ${duracion(d.respuesta.medianaMin ?? 0)} y promedio ${duracion(d.respuesta.promedioMin ?? 0)}, medido sobre las últimas ${numero(d.respuesta.muestra)} respuestas enviadas (7 días).`}
+        {tx('vigia.vista.tiempo_de_primera_respuesta', { v0: ' ', v1: d.respuesta.muestra === 0
+          ? tx('vigia.vista.sin_datos_todavia_aun_no')
+          : tx('vigia.vista.mediana_y_promedio_medido_sobre', { v0: duracion(d.respuesta.medianaMin ?? 0), v1: duracion(d.respuesta.promedioMin ?? 0), muestra: numero(d.respuesta.muestra) }) })}
       </p>
     </div>
   );
 }
 
 export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, standby = false }: { datos: Promise<DatosTablero>; puedeDecidir: boolean; acciones: AccionesVigia; standby?: boolean }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const d = await p;
   return (
-    <Tarjeta titulo="Cola de aprobación" info="vigia.cola_aprobacion" estado={d.pendientes.length === 0 ? 'vacio' : 'ok'} iconoVacio={Inbox}
-      mensaje="Nada por aprobar" detalle="Nada por aprobar. Cada respuesta que el Vigía redacte aparecerá aquí.">
+    <Tarjeta titulo={tx('vigia.vista.cola_de_aprobacion')} info="vigia.cola_aprobacion" estado={d.pendientes.length === 0 ? 'vacio' : 'ok'} iconoVacio={Inbox}
+      mensaje={tx('vigia.vista.nada_por_aprobar')} detalle={tx('vigia.vista.nada_por_aprobar_cada_respuesta')}>
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Las respuestas que redactó el Vigía y esperan tu toque. También te llegan por WhatsApp con botones.
+          {tx('vigia.vista.las_respuestas_que_redacto_el')}
         </p>
         {d.pendientes.map((m) => (
           <article key={m.id} className="rv-vg__bloque">
             <div className="rv-vg__linea">
-              <strong>{m.clienteNombre ?? 'Cliente'}</strong>
-              {m.intencion && <Chip>{NOMBRE_INTENCION[m.intencion] ?? m.intencion}</Chip>}
-              {m.riesgo && <Chip tono={m.riesgo === 'alto' ? 'bad' : m.riesgo === 'medio' ? 'warn' : 'ok'}>Riesgo {m.riesgo}</Chip>}
-              {m.senales.includes('inyeccion') && <Chip tono="bad">Mensaje con instrucciones raras</Chip>}
-              {m.senales.includes('folio_ajeno') && <Chip tono="warn">Preguntó por un folio que no es suyo</Chip>}
-              {!standby && m.adjuntos.length > 0 && <Chip>Adjuntará: {m.adjuntos.join(', ')}</Chip>}
-              <span className="rv-vg__micro rv-vg__fin">{fechaHoraMx(m.creadoEn)}</span>
+              <strong>{m.clienteNombre ?? tx('vigia.vista.cliente')}</strong>
+              {m.intencion && <Chip>{NOMBRE_INTENCION(tx)[m.intencion] ?? m.intencion}</Chip>}
+              {m.riesgo && <Chip tono={m.riesgo === 'alto' ? 'bad' : m.riesgo === 'medio' ? 'warn' : 'ok'}>{tx('vigia.vista.riesgo', { riesgo: m.riesgo })}</Chip>}
+              {m.senales.includes('inyeccion') && <Chip tono="bad">{tx('vigia.vista.mensaje_con_instrucciones_raras')}</Chip>}
+              {m.senales.includes('folio_ajeno') && <Chip tono="warn">{tx('vigia.vista.pregunto_por_un_folio_que')}</Chip>}
+              {!standby && m.adjuntos.length > 0 && <Chip>{tx('vigia.vista.adjuntara', { v0: m.adjuntos.join(', ') })}</Chip>}
+              <span className="rv-vg__micro rv-vg__fin">{fechaHoraMx(m.creadoEn, tr.idioma)}</span>
             </div>
             <blockquote className="rv-vg__cita">
-              {m.mensajeCliente ?? '(archivo o mensaje sin texto)'}
+              {m.mensajeCliente ?? tx('vigia.vista.archivo_o_mensaje_sin_texto')}
             </blockquote>
             {puedeDecidir
               ? <FormaBorrador accion={acciones.decidir} id={m.id} texto={m.borrador} />
@@ -243,36 +250,38 @@ export async function BloqueAprobacion({ datos: p, puedeDecidir, acciones, stand
 export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, acciones }: {
   datos: Promise<DatosTablero>; ahoraMs: number; puedeDecidir: boolean; acciones: AccionesVigia;
 }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const d = await p;
   const filas = ordenarPorPrioridad(d.conversaciones, ahoraMs)
-    .map((c) => ({ c, motivos: motivosDeExcepcion(c, d.config.slaRespuestaMin, ahoraMs) }))
+    .map((c) => ({ c, motivos: motivosDeExcepcion(c, d.config.slaRespuestaMin, ahoraMs, tr) }))
     .filter((x) => x.motivos.length > 0);
   const vacio = filas.length === 0 && d.fallidos.length === 0;
   return (
-    <Tarjeta titulo="Excepciones" info="vigia.excepciones" estado={vacio ? 'vacio' : 'ok'} iconoVacio={Flame}
-      mensaje="Sin excepciones" detalle="Sin excepciones: nadie espera de más ni está molesto.">
+    <Tarjeta titulo={tx('vigia.vista.excepciones')} info="vigia.excepciones" estado={vacio ? 'vacio' : 'ok'} iconoVacio={Flame}
+      mensaje={tx('vigia.vista.sin_excepciones')} detalle={tx('vigia.vista.sin_excepciones_nadie_espera_de')}>
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Clientes molestos, sin respuesta pasado el SLA o ya escalados, y envíos que fallaron en las últimas 24 h.
+          {tx('vigia.vista.clientes_molestos_sin_respuesta_pasa')}
         </p>
         <ul className="rv-vg__lista">
           {filas.map(({ c, motivos }) => (
             <li key={c.id} className="rv-vg__linea rv-vg__nota">
-              <strong>{c.clienteNombre ?? 'Cliente'}</strong>
+              <strong>{c.clienteNombre ?? tx('vigia.vista.cliente')}</strong>
               <span>{c.contactoNombre ?? ''}</span>
               {motivos.map((m) => <Chip key={m} tono="bad">{m}</Chip>)}
-              {c.atendida && <Chip tono="ok">Atendida</Chip>}
+              {c.atendida && <Chip tono="ok">{tx('vigia.vista.atendida')}</Chip>}
               {puedeDecidir && c.control === 'agente' && (
-                <span className="rv-vg__fin"><BotonConversacion accion={acciones.conversacion} id={c.id} que="tomar" etiqueta="Yo me encargo" /></span>
+                <span className="rv-vg__fin"><BotonConversacion accion={acciones.conversacion} id={c.id} que="tomar" etiqueta={tx('vigia.vista.yo_me_encargo')} /></span>
               )}
             </li>
           ))}
           {d.fallidos.map((f) => (
             <li key={f.id} className="rv-vg__linea rv-vg__nota">
-              <strong>{f.clienteNombre ?? 'Cliente'}</strong>
-              <Chip tono="warn">Falló un envío</Chip>
-              <span>{f.error ?? 'sin detalle'}</span>
-              <span className="rv-vg__micro rv-vg__fin">{fechaHoraMx(f.creadoEn)}</span>
+              <strong>{f.clienteNombre ?? tx('vigia.vista.cliente')}</strong>
+              <Chip tono="warn">{tx('vigia.vista.fallo_un_envio')}</Chip>
+              <span>{f.error ?? tx('vigia.vista.sin_detalle')}</span>
+              <span className="rv-vg__micro rv-vg__fin">{fechaHoraMx(f.creadoEn, tr.idioma)}</span>
             </li>
           ))}
         </ul>
@@ -284,37 +293,39 @@ export async function BloqueExcepciones({ datos: p, ahoraMs, puedeDecidir, accio
 export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, acciones }: {
   datos: Promise<DatosTablero>; ahoraMs: number; puedeDecidir: boolean; acciones: AccionesVigia;
 }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const d = await p;
   return (
-    <Tarjeta titulo="Conversaciones activas" info="vigia.conversaciones" estado={d.conversaciones.length === 0 ? 'vacio' : 'ok'} iconoVacio={Hand}
-      mensaje="Sin hilos abiertos" detalle="Ningún cliente tiene un hilo abierto.">
+    <Tarjeta titulo={tx('vigia.vista.conversaciones_activas')} info="vigia.conversaciones" estado={d.conversaciones.length === 0 ? 'vacio' : 'ok'} iconoVacio={Hand}
+      mensaje={tx('vigia.vista.sin_hilos_abiertos')} detalle={tx('vigia.vista.ningun_cliente_tiene_un_hilo')}>
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Al tomar un hilo, el Vigía deja de redactar en él y contestas tú desde aquí.
+          {tx('vigia.vista.al_tomar_un_hilo_el')}
         </p>
         {ordenarPorPrioridad(d.conversaciones, ahoraMs).map((c) => {
           const espera = minutosDeEspera(c.sinRespuestaDesde, ahoraMs);
           return (
             <article key={c.id} className="rv-vg__bloque">
               <div className="rv-vg__linea">
-                <strong>{c.clienteNombre ?? 'Cliente'}</strong>
+                <strong>{c.clienteNombre ?? tx('vigia.vista.cliente')}</strong>
                 <span className="rv-vg__muted">{c.contactoNombre ?? ''}</span>
-                {(c.prioridad ?? 0) >= 2 && <Chip tono="bad">Prioridad alta</Chip>}
-                <Chip tono={c.control === 'humano' ? 'ok' : undefined}>{c.control === 'humano' ? 'Lo lleva una persona' : 'Lo lleva el Vigía'}</Chip>
+                {(c.prioridad ?? 0) >= 2 && <Chip tono="bad">{tx('vigia.vista.prioridad_alta')}</Chip>}
+                <Chip tono={c.control === 'humano' ? 'ok' : undefined}>{c.control === 'humano' ? tx('vigia.vista.lo_lleva_una_persona') : tx('vigia.vista.lo_lleva_el_vigia')}</Chip>
                 {c.sinRespuestaDesde
-                  ? <Chip tono={espera >= d.config.slaRespuestaMin ? 'bad' : 'warn'}>Espera {duracion(espera)}</Chip>
-                  : <Chip tono="ok">Al día</Chip>}
-                {c.molestiaNivel >= 2 && <Chip tono="bad">{c.molestiaNivel >= 3 ? 'Muy molesto' : 'Molesto'}</Chip>}
+                  ? <Chip tono={espera >= d.config.slaRespuestaMin ? 'bad' : 'warn'}>{tx('vigia.vista.espera', { espera: duracion(espera) })}</Chip>
+                  : <Chip tono="ok">{tx('vigia.vista.al_dia')}</Chip>}
+                {c.molestiaNivel >= 2 && <Chip tono="bad">{c.molestiaNivel >= 3 ? tx('vigia.vista.muy_molesto') : tx('vigia.vista.molesto')}</Chip>}
               </div>
               {c.ultimoMensajeCliente && (
-                <p className="rv-vg__nota">Último mensaje: «{c.ultimoMensajeCliente}»</p>
+                <p className="rv-vg__nota">{tx('vigia.vista.ultimo_mensaje', { ultimoMensajeCliente: c.ultimoMensajeCliente })}</p>
               )}
               {puedeDecidir && (
                 <div className="rv-vg__linea">
                   {c.control === 'agente'
-                    ? <BotonConversacion accion={acciones.conversacion} id={c.id} que="tomar" etiqueta="Yo me encargo" />
-                    : <BotonConversacion accion={acciones.conversacion} id={c.id} que="devolver" etiqueta="Devolver al Vigía" />}
-                  <BotonConversacion accion={acciones.conversacion} id={c.id} que="cerrar" etiqueta="Cerrar" />
+                    ? <BotonConversacion accion={acciones.conversacion} id={c.id} que="tomar" etiqueta={tx('vigia.vista.yo_me_encargo')} />
+                    : <BotonConversacion accion={acciones.conversacion} id={c.id} que="devolver" etiqueta={tx('vigia.vista.devolver_al_vigia')} />}
+                  <BotonConversacion accion={acciones.conversacion} id={c.id} que="cerrar" etiqueta={tx('vigia.vista.cerrar')} />
                 </div>
               )}
               {puedeDecidir && c.control === 'humano' && <FormaResponder accion={acciones.conversacion} id={c.id} />}
@@ -327,18 +338,20 @@ export async function BloqueConversaciones({ datos: p, ahoraMs, puedeDecidir, ac
 }
 
 export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones, standby = false }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia; standby?: boolean }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const { config } = await p;
   return (
-    <Tarjeta titulo="Configuración y SLA" info="vigia.configuracion">
+    <Tarjeta titulo={tx('vigia.vista.configuracion_y_sla')} info="vigia.configuracion">
       {puedeAdministrar ? (
         <FormaConfig accion={acciones.config} valores={config} standby={standby} />
       ) : (
         <ul className="rv-vg__ul">
-          <li>Vigía: {config.habilitado ? 'encendido' : 'apagado'}</li>
-          {!standby && <li>Modo: {config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado'}</li>}
-          <li>SLA de respuesta: {numero(config.slaRespuestaMin)} min · dueño a los {numero(config.slaRespuestaMin + config.escalarNivel2Min)} min · clientes críticos: {numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin))} min</li>
-          <li>Retención: {numero(config.retencionDias)} días</li>
-          <li className="rv-vg__faint">Solo el dueño de la flota cambia esto.</li>
+          <li>{tx('vigia.vista.vigia', { v0: config.habilitado ? 'encendido' : 'apagado' })}</li>
+          {!standby && <li>{tx('vigia.vista.modo', { v0: config.modoAprobacion === 'siempre' ? 'siempre aprobar' : 'autoenviar solo bajo riesgo ya validado' })}</li>}
+          <li>{tx('vigia.vista.sla_de_respuesta_min_dueno', { slaRespuestaMin: numero(config.slaRespuestaMin), v1: numero(config.slaRespuestaMin + config.escalarNivel2Min), v2: numero(Math.min(config.slaRespuestaMin, config.slaCriticoMin)) })}</li>
+          <li>{tx('vigia.vista.retencion_dias', { retencionDias: numero(config.retencionDias) })}</li>
+          <li className="rv-vg__faint">{tx('vigia.vista.solo_el_dueno_de_la')}</li>
         </ul>
       )}
     </Tarjeta>
@@ -346,19 +359,21 @@ export async function BloqueConfiguracion({ datos: p, puedeAdministrar, acciones
 }
 
 export async function BloqueBitacora({ datos: p }: { datos: Promise<DatosTablero> }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const { eventos } = await p;
   return (
-    <Tarjeta titulo="Bitácora" info="vigia.bitacora" estado={eventos.length === 0 ? 'vacio' : 'ok'} iconoVacio={History}
-      mensaje="Aún sin actividad" detalle="Aún sin actividad.">
+    <Tarjeta titulo={tx('vigia.vista.bitacora')} info="vigia.bitacora" estado={eventos.length === 0 ? 'vacio' : 'ok'} iconoVacio={History}
+      mensaje={tx('vigia.vista.aun_sin_actividad')} detalle={tx('vigia.vista.aun_sin_actividad_2')}>
       <div className="rv-vg__pila">
-        <p className="rv-vg__nota">Lo último que hizo el Vigía y quienes lo atienden. No guarda el texto de los clientes ni sus teléfonos.</p>
+        <p className="rv-vg__nota">{tx('vigia.vista.lo_ultimo_que_hizo_el')}</p>
         <ul className="rv-vg__lista">
           {eventos.map((e) => (
             <li key={e.id} className="rv-vg__linea rv-vg__nota">
               <Icono icono={Clock} tam={14} />
               <div>
-                <span>{NOMBRE_EVENTO[e.tipo] ?? e.tipo}{e.nivel ? ` (nivel ${e.nivel})` : ''}</span>
-                <span className="rv-vg__micro rv-vg__bloquear">{fechaHoraMx(e.creadoEn)}</span>
+                <span>{NOMBRE_EVENTO(tx)[e.tipo] ?? e.tipo}{e.nivel ? tx('vigia.vista.nivel_n', { nivel: e.nivel }) : ''}</span>
+                <span className="rv-vg__micro rv-vg__bloquear">{fechaHoraMx(e.creadoEn, tr.idioma)}</span>
               </div>
             </li>
           ))}
@@ -369,71 +384,73 @@ export async function BloqueBitacora({ datos: p }: { datos: Promise<DatosTablero
 }
 
 export async function BloqueContactos({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const d = await p;
   return (
-    <Tarjeta titulo="Clientes autorizados" info="vigia.clientes_autorizados">
+    <Tarjeta titulo={tx('vigia.vista.clientes_autorizados')} info="vigia.clientes_autorizados">
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Solo estos números reciben atención del Vigía. Por privacidad, aquí solo se ven las últimas 4 cifras.
+          {tx('vigia.vista.solo_estos_numeros_reciben_atencion')}
         </p>
         {d.contactos.length === 0 ? (
-          <p className="rv-vg__nota">Todavía no autorizas a ningún cliente.</p>
+          <p className="rv-vg__nota">{tx('vigia.vista.todavia_no_autorizas_a_ningun')}</p>
         ) : (
           <ul className="rv-vg__lista">
             {d.contactos.map((c) => (
               <li key={c.id} className="rv-vg__linea rv-vg__nota">
-                <strong>{c.clienteNombre ?? 'Cliente'}</strong>
-                <span>{c.nombre ?? 'Sin nombre'} · …{c.telefonoTerminacion}</span>
-                <Chip tono={c.estado === 'activo' ? 'ok' : 'warn'}>{c.estado === 'activo' ? 'Activo' : 'Dado de baja'}</Chip>
-                {c.consentimientoEn && <span className="rv-vg__micro">Consentimiento: {fechaHoraMx(c.consentimientoEn)}</span>}
+                <strong>{c.clienteNombre ?? tx('vigia.vista.cliente')}</strong>
+                <span>{c.nombre ?? tx('vigia.vista.sin_nombre')} · …{c.telefonoTerminacion}</span>
+                <Chip tono={c.estado === 'activo' ? 'ok' : 'warn'}>{c.estado === 'activo' ? tx('vigia.vista.activo') : tx('vigia.vista.dado_de_baja')}</Chip>
+                {c.consentimientoEn && <span className="rv-vg__micro">{tx('vigia.vista.consentimiento', { consentimientoEn: fechaHoraMx(c.consentimientoEn, tr.idioma) })}</span>}
                 {puedeAdministrar && <span className="rv-vg__fin"><AccionesContacto accion={acciones.contacto} id={c.id} activo={c.estado === 'activo'} /></span>}
               </li>
             ))}
           </ul>
         )}
         {puedeAdministrar ? (
-          <Disclosure titulo="Autorizar a un cliente" variante="linea" abierto={d.contactos.length === 0}>
+          <Disclosure titulo={tx('vigia.vista.autorizar_a_un_cliente')} variante="linea" abierto={d.contactos.length === 0}>
             {d.clientes.length === 0
-              ? <p className="rv-vg__nota">Primero da de alta al cliente en «Clientes».</p>
+              ? <p className="rv-vg__nota">{tx('vigia.vista.primero_da_de_alta_al')}</p>
               : <FormaAlta accion={acciones.alta} clientes={d.clientes} gerentes={d.gerentes} />}
           </Disclosure>
         ) : (
-          <p className="rv-vg__micro">Solo el dueño de la flota autoriza o da de baja contactos.</p>
+          <p className="rv-vg__micro">{tx('vigia.vista.solo_el_dueno_de_la_2')}</p>
         )}
       </div>
     </Tarjeta>
   );
 }
 
-const NOMBRE_NIVEL: Record<number, string> = { 1: 'Nivel 1 — gerente de servicio', 2: 'Nivel 2 — director o dueño' };
+const NOMBRE_NIVEL = (tx: TAgentes): Record<number, string> => ({ 1: tx('vigia.vista.nivel_1'), 2: tx('vigia.vista.nivel_2_director_o_dueno') });
 
 /** 0673: a quién avisa el Vigía en cada nivel. Solo el dueño la edita; el resto la ve. */
 export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const d = await p;
   return (
-    <Tarjeta titulo="A quién avisa el Vigía" info="vigia.directores">
+    <Tarjeta titulo={tx('vigia.vista.a_quien_avisa_el_vigia')} info="vigia.directores">
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Cuando un cliente espera de más o se molesta, el Vigía avisa al nivel 1 y, si nadie atiende, al nivel 2. Cada persona puede tener WhatsApp, correo o ambos.
-          {' '}{d.config.respaldoCorreo
-            ? 'El respaldo por correo está encendido: si el WhatsApp no sale, se manda por correo.'
-            : 'El respaldo por correo está apagado: solo se avisa por WhatsApp (enciéndelo en «Configuración y SLA»).'}
-          {' '}Sin lista, se avisa como siempre: al responsable del cliente o al jefe de la flota (nivel 1) y al dueño (nivel 2).
+          {tx('vigia.vista.cuando_un_cliente_espera_de', { v0: ' ', v1: d.config.respaldoCorreo
+            ? tx('vigia.vista.el_respaldo_por_correo_esta')
+            : tx('vigia.vista.el_respaldo_por_correo_esta_2'), v2: ' ' })}
         </p>
         {[1, 2].map((nivel) => {
           const lista = (d.directores ?? []).filter((x) => x.nivel === nivel);
           return (
             <div key={nivel} className="rv-vg__pila--s">
-              <p className="rv-vg__rotulo">{NOMBRE_NIVEL[nivel]}</p>
+              <p className="rv-vg__rotulo">{NOMBRE_NIVEL(tx)[nivel]}</p>
               {lista.length === 0 ? (
-                <p className="rv-vg__nota">Nadie en la lista: se avisa como siempre.</p>
+                <p className="rv-vg__nota">{tx('vigia.vista.nadie_en_la_lista_se')}</p>
               ) : (
                 <ul className="rv-vg__lista">
                   {lista.map((x) => (
                     <li key={x.id} className="rv-vg__bloque">
                       {!d.config.respaldoCorreo && !x.telefono && x.correo && (
                         <p role="alert" className="rv-vg__nota" data-tono="bad">
-                          {x.nombre} solo tiene correo y el respaldo por correo está apagado: no recibirá ningún aviso. Agrega su WhatsApp o enciende el respaldo en «Configuración y SLA».
+                          {tx('vigia.vista.solo_tiene_correo_y_el', { nombre: x.nombre })}
                         </p>
                       )}
                       {puedeAdministrar ? (
@@ -441,8 +458,8 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
                       ) : (
                         <div className="rv-vg__linea">
                           <strong>{x.nombre}</strong>
-                          {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
-                          {x.correo && <Chip>Correo</Chip>}
+                          {x.telefono && <Chip>{tx('vigia.vista.whatsapp', { v0: x.telefono.slice(-4) })}</Chip>}
+                          {x.correo && <Chip>{tx('vigia.vista.correo')}</Chip>}
                         </div>
                       )}
                     </li>
@@ -453,11 +470,11 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
           );
         })}
         {puedeAdministrar ? (
-          <Disclosure titulo="Agregar a la lista" variante="linea">
+          <Disclosure titulo={tx('vigia.vista.agregar_a_la_lista')} variante="linea">
             <FormaDirector accion={acciones.director} />
           </Disclosure>
         ) : (
-          <p className="rv-vg__micro">Solo el dueño de la flota cambia esta lista.</p>
+          <p className="rv-vg__micro">{tx('vigia.vista.solo_el_dueno_de_la_3')}</p>
         )}
       </div>
     </Tarjeta>
@@ -469,19 +486,20 @@ export async function BloqueDirectores({ datos: p, puedeAdministrar, acciones }:
  * que el cliente pide (p. ej. la caja de una unidad). Solo el dueño la edita; quien solo mira ve el teléfono enmascarado y ningún correo.
  */
 export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: { datos: Promise<DatosTablero>; puedeAdministrar: boolean; acciones: AccionesVigia }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const d = await p;
   const lista = d.servicio ?? [];
   const nombreCliente = new Map(d.clientes.map((c) => [c.id, c.nombre]));
   const accion = acciones.servicio;
   return (
-    <Tarjeta titulo="A quién avisa cuando no hay dato" info="vigia.servicio">
+    <Tarjeta titulo={tx('vigia.vista.a_quien_avisa_cuando_no')} info="vigia.servicio">
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Cuando un cliente pregunta algo que el sistema no tiene (por ejemplo, la caja de una unidad), el Vigía avisa en privado a estas personas de servicio al cliente.
-          {' '}Sin lista, se avisa como siempre: al responsable del cliente o al jefe de la flota. Hasta 10 personas.
+          {tx('vigia.vista.cuando_un_cliente_pregunta_algo', { v0: ' ' })}
         </p>
         {lista.length === 0 ? (
-          <p className="rv-vg__nota">Nadie en la lista: se avisa como siempre.</p>
+          <p className="rv-vg__nota">{tx('vigia.vista.nadie_en_la_lista_se')}</p>
         ) : (
           <ul className="rv-vg__lista">
             {lista.map((x) => (
@@ -491,10 +509,10 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
                 ) : (
                   <div className="rv-vg__linea">
                     <strong>{x.nombre}</strong>
-                    <Chip>{x.clienteId ? (nombreCliente.get(x.clienteId) ?? 'Un cliente') : 'Todos los clientes'}</Chip>
-                    {x.telefono && <Chip>WhatsApp …{x.telefono.slice(-4)}</Chip>}
-                    {x.correo && <Chip>Correo</Chip>}
-                    {!x.activo && <Chip>Pausado</Chip>}
+                    <Chip>{x.clienteId ? (nombreCliente.get(x.clienteId) ?? tx('vigia.vista.un_cliente')) : tx('vigia.vista.todos_los_clientes')}</Chip>
+                    {x.telefono && <Chip>{tx('vigia.vista.whatsapp', { v0: x.telefono.slice(-4) })}</Chip>}
+                    {x.correo && <Chip>{tx('vigia.vista.correo')}</Chip>}
+                    {!x.activo && <Chip>{tx('vigia.vista.pausado')}</Chip>}
                   </div>
                 )}
               </li>
@@ -502,11 +520,11 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
           </ul>
         )}
         {puedeAdministrar && accion ? (
-          <Disclosure titulo="Agregar a servicio al cliente" variante="linea">
+          <Disclosure titulo={tx('vigia.vista.agregar_a_servicio_al_cliente')} variante="linea">
             <FormaServicio accion={accion} clientes={d.clientes} />
           </Disclosure>
         ) : (
-          <p className="rv-vg__micro">Solo el dueño de la flota cambia esta lista.</p>
+          <p className="rv-vg__micro">{tx('vigia.vista.solo_el_dueno_de_la_3')}</p>
         )}
       </div>
     </Tarjeta>
@@ -515,20 +533,22 @@ export async function BloqueServicio({ datos: p, puedeAdministrar, acciones }: {
 
 /** 0674: los últimos avisos mandados por correo como respaldo y su resultado. */
 export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero> }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const { correos = [] } = await p;
   return (
-    <Tarjeta titulo="Avisos por correo (respaldo)" info="vigia.correos" estado={correos.length === 0 ? 'vacio' : 'ok'} iconoVacio={Mail}
-      mensaje="Ningún aviso por correo" detalle="Ningún aviso ha necesitado el respaldo por correo.">
+    <Tarjeta titulo={tx('vigia.vista.avisos_por_correo_respaldo')} info="vigia.correos" estado={correos.length === 0 ? 'vacio' : 'ok'} iconoVacio={Mail}
+      mensaje={tx('vigia.vista.ningun_aviso_por_correo')} detalle={tx('vigia.vista.ningun_aviso_ha_necesitado_el')}>
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Los últimos avisos que se intentaron por correo porque el WhatsApp no salió. Si dice «falta configuración», el correo de Likida aún no está encendido para tu flota: avísanos.
+          {tx('vigia.vista.los_ultimos_avisos_que_se')}
         </p>
         <ul className="rv-vg__lista">
           {correos.map((c) => (
             <li key={c.id} className="rv-vg__linea rv-vg__nota">
-              <Chip tono={c.estado === 'enviado' ? 'ok' : c.estado === 'enviando' ? undefined : 'bad'}>{TEXTO_ESTADO_CORREO[c.estado] ?? c.estado}</Chip>
-              <span>Nivel {c.nivel}</span>
-              <span className="rv-vg__micro rv-vg__fin">{fechaHoraMx(c.creadoEn)}</span>
+              <Chip tono={c.estado === 'enviado' ? 'ok' : c.estado === 'enviando' ? undefined : 'bad'}>{TEXTO_ESTADO_CORREO(tx)[c.estado] ?? c.estado}</Chip>
+              <span>{tx('vigia.vista.nivel', { nivel: c.nivel })}</span>
+              <span className="rv-vg__micro rv-vg__fin">{fechaHoraMx(c.creadoEn, tr.idioma)}</span>
             </li>
           ))}
         </ul>
@@ -542,12 +562,14 @@ export async function BloqueCorreos({ datos: p }: { datos: Promise<DatosTablero>
  * siempre rotulado como supuesto (no hay línea base real, B13) y nunca como porcentaje.
  */
 export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntrada> }) {
+  const tr = await getT('agentes');
+  const { t: tx } = tr;
   const tarjetas = tarjetasInsights(await p);
   return (
-    <Tarjeta titulo="Resultados del agente" info="vigia.resultados">
+    <Tarjeta titulo={tx('vigia.vista.resultados_del_agente')} info="vigia.resultados">
       <div className="rv-vg__pila">
         <p className="rv-vg__nota">
-          Cada número dice de dónde sale. Donde depende de un supuesto o de reglas sin validar con datos reales, va marcado.
+          {tx('vigia.vista.cada_numero_dice_de_donde')}
         </p>
         <div className="rv-vg__tarjetas">
           {tarjetas.map((t) => (
@@ -556,11 +578,11 @@ export async function BloqueInsights({ datos: p }: { datos: Promise<InsightsEntr
               <div className="rv-vg__cifra cifra-mono">{t.valor}</div>
               {t.rotulo && <div><Chip tono="warn">{t.rotulo}</Chip></div>}
               <dl className="rv-vg__pila--s">
-                <div><dt className="rv-vg__medio">Qué pasó: </dt><dd className="rv-vg__nota">{t.quePaso}</dd></div>
-                <div><dt className="rv-vg__medio">Qué significa: </dt><dd className="rv-vg__nota">{t.queSignifica}</dd></div>
-                <div><dt className="rv-vg__medio">Qué hacer: </dt><dd className="rv-vg__nota">{t.queHacer}</dd></div>
+                <div><dt className="rv-vg__medio">{tx('vigia.vista.que_paso')} </dt><dd className="rv-vg__nota">{t.quePaso}</dd></div>
+                <div><dt className="rv-vg__medio">{tx('vigia.vista.que_significa')} </dt><dd className="rv-vg__nota">{t.queSignifica}</dd></div>
+                <div><dt className="rv-vg__medio">{tx('vigia.vista.que_hacer')} </dt><dd className="rv-vg__nota">{t.queHacer}</dd></div>
               </dl>
-              <p className="rv-vg__micro">Fuente: {t.fuente}</p>
+              <p className="rv-vg__micro">{tx('vigia.vista.fuente', { fuente: t.fuente })}</p>
             </article>
           ))}
         </div>

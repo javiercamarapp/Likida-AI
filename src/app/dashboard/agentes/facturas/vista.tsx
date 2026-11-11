@@ -9,8 +9,8 @@ import { SeccionPortales, type FilaPortal } from './portales-vinculo';
 import type { AccionRelogin } from './relogin-controles';
 import { SeccionControlEmision, type DatosControl } from './control-emision';
 import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { AvisoCompacto, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { TR_ES, rico, type TrAgentes, selloHoyTr } from '../i18n-agentes';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
  *  silencio (los encabezados suman la lista COMPLETA). */
@@ -36,7 +36,7 @@ export interface ExtraAgenteFacturas {
  * Nada se pinta que no salga de un ticket real; el modo de emisión se
  * declara (en ensayo no se promete emisión).
  */
-export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos, autorizarRelogin, revocarRelogin, control }: {
+export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificaciones, portalesConAdaptador, portales, vinculosLeidos, autorizarRelogin, revocarRelogin, control, tr = TR_ES }: {
   tickets: TicketPorFacturar[];
   extra: ExtraAgenteFacturas;
   /**
@@ -70,8 +70,9 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
    * ese registro arrastra los adaptadores de Playwright, y esta vista corre en
    * el cliente. Lo resuelve la página, que sí es servidor.
    */
-  portalesConAdaptador: readonly string[];
+  portalesConAdaptador: readonly string[]; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   // Orden por VENCIMIENTO real (no por fecha del ticket): vencidos arriba,
   // desconocidos al final. Cotas finitas — Infinity-Infinity da NaN.
   const orden = (t: TicketPorFacturar) =>
@@ -94,18 +95,18 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   // Dónde se concentra el dinero sin factura (top 4 comercios + el resto).
   const porComercio = new Map<string, number>();
   for (const t of ordenados) {
-    const k = t.comercio?.nombre ?? 'Sin identificar';
+    const k = t.comercio?.nombre ?? tx('facturas.vista.sin_identificar');
     porComercio.set(k, (porComercio.get(k) ?? 0) + t.monto);
   }
   const comerciosTop = [...porComercio.entries()].sort((a, b) => b[1] - a[1]);
   const donaComercios = comerciosTop.slice(0, 4).map(([etiqueta, valor]) => ({ etiqueta, valor }));
   const restoComercios = comerciosTop.slice(4).reduce((s, [, v]) => s + v, 0);
-  if (restoComercios > 0) donaComercios.push({ etiqueta: 'Otros', valor: restoComercios });
+  if (restoComercios > 0) donaComercios.push({ etiqueta: tx('facturas.vista.otros_c'), valor: restoComercios });
 
   // Qué les falta a los incompletos, agregado (la primera falta de cada uno).
   const faltas = new Map<string, number>();
   for (const x of incompletos) {
-    const f = (x.r as Extract<Ruta, { via: 'incompleto' }>).falta[0] ?? 'dato ilegible';
+    const f = (x.r as Extract<Ruta, { via: 'incompleto' }>).falta[0] ?? tx('facturas.vista.dato_ilegible');
     faltas.set(f, (faltas.get(f) ?? 0) + 1);
   }
   const faltasTop = [...faltas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
@@ -115,30 +116,29 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   const bloqueados = teToca.filter((x) => (x.r as Extract<Ruta, { via: 'mensaje' }>).motivo === 'bloqueado');
 
   return (
-    <MarcoPagina titulo="Facturas en automático" apoyo="Tickets sin CFDI: lo que te toca a ti, lo que la máquina resuelve sola y lo que está incompleto o vencido.">
+    <MarcoPagina titulo={tx('facturas.vista.facturas_en_automatico')} apoyo={tx('facturas.vista.tickets_sin_cfdi_lo_que')}>
 
-      <TiraCifras sello={selloHoy('Tickets sin CFDI')}>
-        <Cifra info="facturas.por_facturar" etiqueta="Por facturar" valor={numero(ordenados.length)} nota="tickets sin CFDI, hoy" />
-        <Cifra info="facturas.monto_sin_factura" etiqueta="Monto sin factura" valor={mxn(montoSinFactura)} />
-        <Cifra info="facturas.urgentes" etiqueta="Urgentes (≤2 días)" valor={numero(urgentes.length)} tono={urgentes.length > 0 ? 'warn' : undefined} />
-        <Cifra info="facturas.vencidos" etiqueta="Vencidos" valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
+      <TiraCifras sello={selloHoyTr(tr, tx('facturas.vista.sello_tickets_sin_cfdi'))}>
+        <Cifra info="facturas.por_facturar" etiqueta={tx('facturas.vista.por_facturar')} valor={numero(ordenados.length)} nota={tx('facturas.vista.tickets_sin_cfdi_hoy')} />
+        <Cifra info="facturas.monto_sin_factura" etiqueta={tx('facturas.vista.monto_sin_factura')} valor={mxn(montoSinFactura, tr.idioma)} />
+        <Cifra info="facturas.urgentes" etiqueta={tx('facturas.vista.urgentes_2_dias')} valor={numero(urgentes.length)} tono={urgentes.length > 0 ? 'warn' : undefined} />
+        <Cifra info="facturas.vencidos" etiqueta={tx('facturas.vista.vencidos')} valor={numero(vencidos.length)} tono={vencidos.length > 0 ? 'bad' : undefined} />
       </TiraCifras>
 
       {/* En ensayo no se promete emisión: el aviso va arriba, a la vista, no escondido en un párrafo. */}
       {!extra.emite && (
-        <AvisoCompacto tono="warn" resumen="La emisión automática hoy está en ensayo: llena el portal sin emitir la factura."
-          mas="Si tu empresa aún no otorgó el mandato, el dueño lo hace en Términos y mandato. Mientras tanto puedes capturar los tickets tú con los datos ya listos." />
+        <AvisoCompacto tono="warn" resumen={tx('facturas.vista.la_emision_automatica_hoy_esta')}
+          mas={tx('facturas.vista.si_tu_empresa_aun_no')} />
       )}
 
       <FilaTarjetas variante="8-4">
         {/* ── TU COLA: lo único de esta página que espera una acción tuya ── */}
-        <Tarjeta titulo="Te toca a ti" info="facturas.te_toca"
+        <Tarjeta titulo={tx('facturas.vista.te_toca_a_ti')} info="facturas.te_toca"
           estado={teToca.length === 0 ? 'vacio' : 'ok'} iconoVacio={CheckCircle2}
-          mensaje="Hoy no te toca capturar nada"
-          detalle="Lo demás lo trae la máquina o le falta un dato.">
+          mensaje={tx('facturas.vista.hoy_no_te_toca_capturar')}
+          detalle={tx('facturas.vista.lo_demas_lo_trae_la')}>
           <p className="rv-fact__nota">
-            Portales que piden TU cuenta, o donde la máquina se topó con un muro — con los datos ya leídos
-            {monto(teToca) > 0 && <> · <span className="cifra-mono">{mxn(monto(teToca))}</span></>}
+            {rico(tx('facturas.vista.portales_que_piden_tu_cuenta'), { monto: monto(teToca) > 0 && <> · <span className="cifra-mono">{mxn(monto(teToca), tr.idioma)}</span></> })}
           </p>
           <ColaJefe
             filas={teToca.slice(0, MAX_TE_TOCA).map(({ t, r }): FilaJefe => {
@@ -146,7 +146,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
               return {
                 gastoId: t.gastoId,
                 fecha: t.fecha,
-                comercio: t.comercio?.nombre ?? 'Sin identificar',
+                comercio: t.comercio?.nombre ?? tx('facturas.vista.sin_identificar'),
                 portal: m.portal,
                 urlTicket: t.urlTicket,
                 concepto: etiquetaConcepto(t.concepto),
@@ -164,25 +164,21 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
         </Tarjeta>
 
         {/* ── Lo que hizo solo ── */}
-        <Tarjeta titulo="Lo que hizo solo" info="facturas.hizo_solo"
+        <Tarjeta titulo={tx('facturas.vista.lo_que_hizo_solo')} info="facturas.hizo_solo"
           estado={extra.conCfdi === null && bloqueados.length === 0 ? 'error' : 'ok'}
-          mensaje="No se pudo leer el acumulado ahora mismo.">
+          mensaje={tx('facturas.vista.no_se_pudo_leer_el')}>
           {extra.conCfdi !== null && (
             <p className="rv-fact__nota">
-              <span className="cifra-mono rv-fact__grande">{numero(extra.conCfdi)}</span>
-              tickets con factura ya amarrada — emitida sola, pescada del XML que mandaron o capturada a mano (el folio tecleado solo
-              se valida de forma, no contra el SAT), histórico.
+              {rico(tx('facturas.vista.tickets_con_factura_ya_amarrada'), { span: <span className="cifra-mono rv-fact__grande">{numero(extra.conCfdi)}</span> })}
             </p>
           )}
           {bloqueados.slice(0, MAX_MINI).map(({ t, r }) => (
             <p key={t.gastoId} className="rv-fact__nota">
-              <StatusChip tono="warn">Se rindió a propósito</StatusChip>{' '}
-              con <strong>{t.comercio?.nombre}</strong> ({(r as Extract<Ruta, { via: 'mensaje' }>).detalle ?? 'muro del portal'}) y te lo dejó listo
-              {t.bloqueo && <> · {fechaCorta(t.bloqueo.desde)}</>}
+              {rico(tx('facturas.vista.con_y_te_lo_dejo'), { chip: <StatusChip tono="warn">{tx('facturas.vista.se_rindio_a_proposito')}</StatusChip>, comercio: <strong>{t.comercio?.nombre}</strong>, detalle: (r as Extract<Ruta, { via: 'mensaje' }>).detalle ?? tx('facturas.vista.muro_del_portal'), fecha: t.bloqueo && <> · {fechaCorta(t.bloqueo.desde, tr.idioma)}</> })}
             </p>
           ))}
           {extra.conCfdi === 0 && bloqueados.length === 0 && (
-            <p className="rv-fact__nota">Aún no amarra su primera factura en esta flota — en cuanto emita una o pesque un XML, aquí se cuenta.</p>
+            <p className="rv-fact__nota">{tx('facturas.vista.aun_no_amarra_su_primera')}</p>
           )}
         </Tarjeta>
       </FilaTarjetas>
@@ -196,32 +192,32 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
 
       <FilaTarjetas variante="4-4-4">
         {/* ── Monitoreo: lo que NO tienes que hacer ── */}
-        <Tarjeta titulo="La máquina se encarga" info="facturas.maquina"
-          estado={maquina.length === 0 ? 'vacio' : 'ok'} mensaje="Nada en la cola automática" detalle="No hay tickets que la máquina pueda facturar ahora mismo.">
+        <Tarjeta titulo={tx('facturas.vista.la_maquina_se_encarga')} info="facturas.maquina"
+          estado={maquina.length === 0 ? 'vacio' : 'ok'} mensaje={tx('facturas.vista.nada_en_la_cola_automatica')} detalle={tx('facturas.vista.no_hay_tickets_que_la')}>
           <p className="rv-fact__nota">
             {extra.emite
-              ? 'Sin cuenta y con todo leído: los factura sola en la próxima corrida'
-              : 'Hoy en ensayo: puedes capturarlos tú con los datos ya listos'}
+              ? tx('facturas.vista.sin_cuenta_y_con_todo')
+              : tx('facturas.vista.hoy_en_ensayo_puedes_capturarlos')}
           </p>
-          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(maquina.length)} · {mxn(monto(maquina))}</span></p>
+          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(maquina.length)} · {mxn(monto(maquina), tr.idioma)}</span></p>
           <ul className="rv-fact__lista">
             {maquina.slice(0, MAX_MINI).map(({ t }) => (
               <li key={t.gastoId}>
                 <span>{t.comercio?.nombre} · {etiquetaConcepto(t.concepto)}</span>
-                <span className="cifra-mono">{mxn(t.monto)}</span>
+                <span className="cifra-mono">{mxn(t.monto, tr.idioma)}</span>
               </li>
             ))}
           </ul>
           {maquina.length > MAX_MINI && (
-            <p className="rv-fact__nota">y {numero(maquina.length - MAX_MINI)} más — el total de arriba los suma todos.</p>
+            <p className="rv-fact__nota">{tx('facturas.vista.y_mas_el_total_de', { n: numero(maquina.length - MAX_MINI) })}</p>
           )}
         </Tarjeta>
 
         {/* ── Incompletos: se dice QUÉ falta ── */}
-        <Tarjeta titulo="Incompletos" info="facturas.incompletos"
-          estado={incompletos.length === 0 ? 'vacio' : 'ok'} mensaje="Ninguno incompleto" detalle="Todo ticket sin factura tiene con qué facturarse.">
-          <p className="rv-fact__nota">Ni tú ni la máquina pueden con lo que hay — esto es lo que falta</p>
-          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(incompletos.length)} · {mxn(monto(incompletos))}</span></p>
+        <Tarjeta titulo={tx('facturas.vista.incompletos')} info="facturas.incompletos"
+          estado={incompletos.length === 0 ? 'vacio' : 'ok'} mensaje={tx('facturas.vista.ninguno_incompleto')} detalle={tx('facturas.vista.todo_ticket_sin_factura_tiene')}>
+          <p className="rv-fact__nota">{tx('facturas.vista.ni_tu_ni_la_maquina')}</p>
+          <p className="rv-fact__nota"><span className="cifra-mono rv-fact__grande">{numero(incompletos.length)} · {mxn(monto(incompletos), tr.idioma)}</span></p>
           <ul className="rv-fact__lista">
             {faltasTop.map(([f, n]) => (
               <li key={f}><span>{f}</span><span className="cifra-mono">{numero(n)}</span></li>
@@ -230,11 +226,11 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
         </Tarjeta>
 
         {/* ── Dónde está el dinero sin factura ── */}
-        <Tarjeta titulo="Sin factura, por comercio" info="facturas.por_comercio"
-          estado={donaComercios.length === 0 ? 'vacio' : 'ok'} mensaje="Ningún gasto sin factura" detalle="Cuando entre un comprobante sin CFDI, aquí se reparte.">
-          <p className="rv-fact__nota">Dónde se concentra el monto pendiente</p>
-          <BarList etiqueta="Monto sin factura por comercio" formato={mxn}
-            items={donaComercios.map((c) => ({ clave: c.etiqueta, etiqueta: c.etiqueta, valor: c.valor, texto: mxn(c.valor) }))} />
+        <Tarjeta titulo={tx('facturas.vista.sin_factura_por_comercio')} info="facturas.por_comercio"
+          estado={donaComercios.length === 0 ? 'vacio' : 'ok'} mensaje={tx('facturas.vista.ningun_gasto_sin_factura')} detalle={tx('facturas.vista.cuando_entre_un_comprobante_sin')}>
+          <p className="rv-fact__nota">{tx('facturas.vista.donde_se_concentra_el_monto')}</p>
+          <BarList etiqueta={tx('facturas.vista.monto_sin_factura_por_comercio')} formato={mxn}
+            items={donaComercios.map((c) => ({ clave: c.etiqueta, etiqueta: c.etiqueta, valor: c.valor, texto: mxn(c.valor, tr.idioma) }))} />
         </Tarjeta>
       </FilaTarjetas>
 

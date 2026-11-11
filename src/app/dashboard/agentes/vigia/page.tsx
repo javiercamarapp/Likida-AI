@@ -23,7 +23,10 @@ import { sufijoTenant } from '../../sufijo';
 import { VistaAgenteVigia } from './vista';
 import type { ResultadoVigia } from './controles';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Servicio al cliente' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('vigia.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -65,6 +68,7 @@ export default async function PaginaAgenteVigia({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
   // T-A4-32: bajo el perfil cinco_agentes el autoenvío y el POD adjunto son stand-by (ocultos e inoperantes; el código sigue).
@@ -253,6 +257,7 @@ export default async function PaginaAgenteVigia({
 
   return (
     <VistaAgenteVigia
+      tr={tr}
       datos={datos}
       ahoraMs={ahoraMs()}
       puedeDecidir={DECIDE.includes(rol)}

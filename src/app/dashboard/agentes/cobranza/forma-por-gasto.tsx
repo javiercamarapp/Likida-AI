@@ -9,6 +9,9 @@ import {
 import type { AccionSimple } from './controles';
 import { AvisoCompacto, Boton, Campo, CampoSelect, CampoTexto, Casilla, Fieldset } from '@/app/ui-v2/componentes';
 import '../agentes.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { rico } from '../i18n-agentes';
 
 /**
  * La configuración de la cobranza POR GASTO (0525), con su vista previa EN VIVO: el texto de la derecha es
@@ -23,6 +26,7 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
   instrucciones: string;
   guardar: AccionSimple;
 }) {
+  const { t } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(guardar, null);
   const [porGasto, setPorGasto] = useState(config.porGasto);
   const [tiersTexto, setTiersTexto] = useState(config.tiersGasto.join(', '));
@@ -50,22 +54,22 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
   return (
     <div className="rv-ag-notif__rejilla">
       <form action={accion} className="rv-ag-forma">
-        <Casilla name="porGasto" checked={porGasto} onChange={(e) => setPorGasto(e.target.checked)} etiqueta="Cobrar por gasto individual"
-          ayuda="Apagado, el agente cobra por viaje como siempre. Encendido, un viaje con gastos sin comprobante se cobra por gasto (un solo mensaje por chofer) y el cobro por viaje solo atiende a los viajes sin gastos." />
+        <Casilla name="porGasto" checked={porGasto} onChange={(e) => setPorGasto(e.target.checked)} etiqueta={t('cobranza.formagasto.cobrar_por_gasto_individual')}
+          ayuda={t('cobranza.formagasto.apagado_el_agente_cobra_por')} />
 
-        <CampoTexto id="cobg-tiers" etiqueta="Cadencia por gasto (días desde que se capturó)" name="tiersGasto" value={tiersTexto}
+        <CampoTexto id="cobg-tiers" etiqueta={t('cobranza.formagasto.cadencia_por_gasto_dias_desde')} name="tiersGasto" value={tiersTexto}
           onChange={(e) => setTiersTexto(e.target.value)} placeholder="1, 3, 7"
-          ayuda="Hasta 5 valores de 1 a 60. A cada gasto se le insiste UNA vez por valor." />
+          ayuda={t('cobranza.formagasto.hasta_5_valores_de_1')} />
 
         <div className="rv-ag-par">
-          <CampoSelect id="cobg-max" etiqueta="Mensajes por chofer al día" name="maxMensajesDia" value={maxDia} onChange={(e) => setMaxDia(e.target.value)}>
+          <CampoSelect id="cobg-max" etiqueta={t('cobranza.formagasto.mensajes_por_chofer_al_dia')} name="maxMensajesDia" value={maxDia} onChange={(e) => setMaxDia(e.target.value)}>
             {[1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
           </CampoSelect>
-          <CampoTexto id="cobg-umbral" etiqueta="Foto ilegible si la lectura es menor a" name="umbralFoto" tipo="number" min={0.1} max={0.95} step={0.05}
+          <CampoTexto id="cobg-umbral" etiqueta={t('cobranza.formagasto.foto_ilegible_si_la_lectura')} name="umbralFoto" tipo="number" min={0.1} max={0.95} step={0.05}
             value={umbral} onChange={(e) => setUmbral(e.target.value)} />
         </div>
 
-        <Fieldset leyenda="Conceptos que deben venir con factura (CFDI)">
+        <Fieldset leyenda={t('cobranza.formagasto.conceptos_que_deben_venir_con')}>
           <div className="rv-ag-dias">
             {CONCEPTOS_VALIDOS.map((c) => (
               <Casilla key={c} name="conceptosCfdi" value={c} checked={conceptos.includes(c)} onChange={() => alternar(c)} etiqueta={ROTULO_CONCEPTO_COBRANZA[c] ?? c} />
@@ -80,8 +84,8 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
       </form>
 
       <Campo
-        etiqueta={ejemplo.length > 0 ? 'Así se lee en WhatsApp — con gastos reales de la cola' : 'Así se lee en WhatsApp — con gastos de ejemplo'}
-        ayuda={<>La firma y la instrucción son las de la estrategia de arriba. Fuera de la ventana de 24 h de WhatsApp sale la plantilla <span className="cifra-mono">cobranza_gastos_v1</span> (nombre, cuántos gastos y el primero).</>}
+        etiqueta={ejemplo.length > 0 ? t('cobranza.formagasto.asi_se_lee_en_whatsapp') : t('cobranza.formagasto.asi_se_lee_en_whatsapp_2')}
+        ayuda={<>{rico(t('cobranza.formagasto.la_firma_y_la_instruccion'), { span: <span className="cifra-mono">cobranza_gastos_v1</span> })}</>}
       >
         <output className="rv-ag-previa" data-tono={'error' in borrador ? 'warn' : undefined}>
           {'error' in borrador ? borrador.error : armarMensajeGastos(items, firma, instrucciones)}
@@ -92,10 +96,11 @@ export function FormaPorGasto({ config, ejemplo, firma, instrucciones, guardar }
 }
 
 function BotonGuardar() {
+  const { t } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} disabled={pending}>
-      {pending ? 'Guardando…' : 'Guardar cobranza por gasto'}
+      {pending ? t('cobranza.formagasto.guardando') : t('cobranza.formagasto.guardar_cobranza_por_gasto')}
     </Boton>
   );
 }
