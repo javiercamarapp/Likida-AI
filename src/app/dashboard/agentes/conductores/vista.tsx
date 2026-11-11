@@ -159,24 +159,13 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
   const { t: tx } = tr;
   const kpis = await p;
   return (
-    <div className="rv-cd__pila--s">
+    <div className="rv-cd__pila--s rv-ag-sin-filete">
+      {/* UNA tira de 4 celdas iguales (Rovaq `pc-kpis`, sin filete). Lo demás del conteo (importados, tiempo en aceptar) va debajo, en la rejilla de indicadores. */}
       <TiraCifras sello={selloHoyTr(tr, tx('conductores.vista.viajes_de_la_flota'))}>
         <Cifra etiqueta={tx('conductores.vista.viajes_en_curso')} info="conductores.viajes_en_curso" valor={kpis.vivos === null ? '—' : numero(kpis.vivos)}
           nota={kpis.vivos === null ? tx('conductores.vista.no_se_pudo_contar') : tx('conductores.vista.abiertos_o_en_cuadre')} />
         <Cifra etiqueta={tx('conductores.vista.aceptados')} info="conductores.aceptados" valor={kpis.aceptados === null ? '—' : numero(kpis.aceptados)}
           nota={kpis.aceptados === null ? tx('conductores.vista.no_se_pudo_contar') : tx('conductores.vista.el_chofer_dijo_que_si')} />
-        {kpis.importados !== undefined && (
-          <Cifra etiqueta={tx('conductores.vista.en_seguimiento_por_importacion')} info="conductores.importados" valor={kpis.importados === null ? '—' : numero(kpis.importados)}
-            nota={kpis.importados === null ? tx('conductores.vista.no_se_pudo_contar') : tx('conductores.vista.cargados_por_archivo_no_los')} />
-        )}
-        {kpis.tiempoAceptacion !== undefined && (
-          <Cifra etiqueta={tx('conductores.vista.tiempo_en_aceptar')} info="conductores.tiempo_aceptar"
-            valor={kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null
-              ? '—' : `${numero(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10)} min`}
-            nota={kpis.tiempoAceptacion === null ? tx('conductores.vista.no_se_pudo_medir')
-              : kpis.tiempoAceptacion.minutos === null ? tx('conductores.vista.aun_sin_aceptaciones_del_chofer')
-                : tx('conductores.vista.media_de_aceptados_por_el', { n: numero(kpis.tiempoAceptacion.n), excluidosImportados: numero(kpis.tiempoAceptacion.excluidosImportados) })} />
-        )}
         <Cifra etiqueta={tx('conductores.vista.esperan_aceptar')} info="conductores.esperan" valor={kpis.esperan === null ? '—' : numero(kpis.esperan)}
           nota={kpis.esperan === null ? tx('conductores.vista.no_se_pudo_contar') : undefined}
           tono={(kpis.esperan ?? 0) > 0 ? 'warn' : undefined} />
@@ -184,6 +173,27 @@ export async function BloqueConteos({ kpis: p }: { kpis: Promise<ConteosConducto
           nota={kpis.escalados === null ? tx('conductores.vista.no_se_pudo_contar') : 'esperan cambio de chofer'}
           tono={(kpis.escalados ?? 0) > 0 ? 'bad' : undefined} />
       </TiraCifras>
+      {(kpis.importados !== undefined || kpis.tiempoAceptacion !== undefined) && (
+        <dl className="rv-ag-indic">
+          {kpis.importados !== undefined && (
+            <div>
+              <dt>{tx('conductores.vista.en_seguimiento_por_importacion')}</dt>
+              <dd><span className="rv-ag-indic__valor" data-vacio={kpis.importados === null || undefined}>{kpis.importados === null ? '—' : numero(kpis.importados)}</span></dd>
+              <dd className="rv-ag-indic__nota">{kpis.importados === null ? tx('conductores.vista.no_se_pudo_contar') : tx('conductores.vista.cargados_por_archivo_no_los')}</dd>
+            </div>
+          )}
+          {kpis.tiempoAceptacion !== undefined && (
+            <div>
+              <dt>{tx('conductores.vista.tiempo_en_aceptar')}</dt>
+              <dd><span className="rv-ag-indic__valor" data-vacio={kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null || undefined}>
+                {kpis.tiempoAceptacion === null || kpis.tiempoAceptacion.minutos === null ? '—' : `${numero(Math.round(kpis.tiempoAceptacion.minutos * 10) / 10)} min`}</span></dd>
+              <dd className="rv-ag-indic__nota">{kpis.tiempoAceptacion === null ? tx('conductores.vista.no_se_pudo_medir')
+                : kpis.tiempoAceptacion.minutos === null ? tx('conductores.vista.aun_sin_aceptaciones_del_chofer')
+                  : tx('conductores.vista.media_de_aceptados_por_el', { n: numero(kpis.tiempoAceptacion.n), excluidosImportados: numero(kpis.tiempoAceptacion.excluidosImportados) })}</dd>
+            </div>
+          )}
+        </dl>
+      )}
       {/* FE-5: aquí decía "se calculan sobre los 100 viajes más
           recientes" — un rótulo honesto sobre una cifra inútil (a 50k
           viajes/mes, 100 filas son ~90 minutos). Los cuatro conteos

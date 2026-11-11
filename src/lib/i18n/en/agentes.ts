@@ -3228,4 +3228,10 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'f26d4.soltar.pista': 'or drop the file here',
   'f26d4.cajon.cancelar': 'Cancel',
   'f26d4.liq.nota_enviados_detalle': 'Delivered {e} · bounced {r}',
+  'f26d5.cd.indicadores_hitos': 'Milestone indicators',
+  'f26d5.cd.sin_viajes_titulo': 'No trips being tracked',
+  'f26d5.liq.periodo_etq': 'Period',
+  'f26d5.liq.periodo_todo': 'All',
+  'f26d5.liq.periodo_hoy': 'Today',
+  'f26d5.vg.ajustes_revision': 'Review settings',
 };

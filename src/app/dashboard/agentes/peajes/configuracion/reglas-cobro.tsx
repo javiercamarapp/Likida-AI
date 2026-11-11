@@ -2,7 +2,8 @@ import { Upload, Trash2 } from 'lucide-react';
 import { numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ReglaCasetaVista, TagBajaVista, ExcepcionUnidadVista } from '@/lib/likida/peajes/revision_cobros';
-import { Tarjeta, Icono, Boton } from '@/app/ui-v2/componentes';
+import { Tarjeta, Icono, Boton, CampoArchivo } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '@/app/dashboard/agentes/zona-soltar';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -109,8 +110,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
       )}
 
       <form action={acciones.cargarCoordenadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap mb-4">
-        <input type="file" name="archivo" accept=".csv,.tsv" required aria-label={tx('rest.csv_de_coordenadas_de_casetas')}
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
+        <ZonaSoltar><CampoArchivo etiqueta={tx('rest.csv_de_coordenadas_de_casetas')} etiquetaOculta name="archivo" accept=".csv,.tsv" required /></ZonaSoltar>
         <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Upload} />{' '}{tx('rest.cargar_coordenadas')}</Boton>
         <span className="text-[11px] rv-pj-c-faint">{ricoT(tx('rest.opcional_csv_e0_nombre_lat_lng'), { e0: (c) => <span className="rv-ag-num">{c}</span> })}</span>
       </form>

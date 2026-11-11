@@ -227,7 +227,7 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
       <nav aria-label={tx('rest.volver')}>{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}</nav>
 
       {vigiaEncendido === false ? (
-        <Aviso>{tx('rest.el_vigia_esta_apagado_el_programa')}</Aviso>
+        <AvisoV2 tono="warn">{tx('rest.el_vigia_esta_apagado_el_programa')}</AvisoV2>
       ) : null}
       {vigiaEncendido === null ? (
         <p className="rv-vg__nota">{tx('rest.no_pude_confirmar_si_el_vigia')}</p>

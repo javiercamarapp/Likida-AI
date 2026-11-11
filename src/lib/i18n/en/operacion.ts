@@ -1175,7 +1175,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'ini5a.falta.vigia': 'It starts when the dispatch schedule is loaded or the first customer notice arrives.',
   'ini5a.falta.conductor': 'It starts when a driver reports a first milestone by WhatsApp.',
   'ini5a.espera.liquidacion': 'Waiting for a connection',
-  'ini5a.espera.peajes': 'Waiting for the toll statement',
+  'ini5a.espera.peajes': 'Awaiting toll statement',
   'ini5a.espera.conductor': 'Waiting for drivers',
   'ini5a.cierres.titulo': 'Settlements closed per week',
   'ini5a.cierres.nota': 'Last eight weeks · settled trips of your fleet',

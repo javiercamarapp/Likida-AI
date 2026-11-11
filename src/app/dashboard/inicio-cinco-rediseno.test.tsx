@@ -128,9 +128,9 @@ describe('Inicio rediseñado: jerarquía, iconos animados y estados honestos', (
   it('«en espera de conexión» solo se afirma con la señal medida: 0 estados de cuenta → Peajes espera; señal ilegible (null) no', async () => {
     dobles.corridas.mockResolvedValue(VACIAS);
     dobles.senales.mockResolvedValue({ ...SENALES, archivosRecibidos: 0 });
-    expect(texto(await html('flota_admin'))).toContain('En espera del estado de cuenta');
+    expect(texto(await html('flota_admin'))).toContain('Espera el estado de cuenta');
     dobles.senales.mockResolvedValue(SENALES);
-    expect(texto(await html('flota_admin'))).not.toContain('En espera del estado de cuenta');
+    expect(texto(await html('flota_admin'))).not.toContain('Espera el estado de cuenta');
   });
 
   it('cada tarjeta enlaza a su panel con el nombre accesible del agente', async () => {
