@@ -1,6 +1,7 @@
 import { Building2, FlaskConical } from 'lucide-react';
 import { AvisoCompacto, BarraFiltros, Boton, BotonEnlace, EstadoError, FiltroBusqueda, Icono, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { NavegacionFilas } from './navegacion-teclado';
 import '../resumen.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -97,10 +98,12 @@ export function ElegirFlotaContenido({
       {errorLista ? (
         <EstadoError reintentar>No se pudo leer la lista de flotas. La demostración sigue disponible.</EstadoError>
       ) : null}
-      <TablaBase
-        etiqueta="Flotas" columnas={columnas} filas={errorLista ? [demo] : filas} idFila={(f) => f.id} tarjetaMovil altoMaximo={false}
-        vacio={{ titulo: 'Sin flotas de clientes', texto: 'Aparecen aquí cuando se da de alta la primera flota.' }}
-      />
+      <NavegacionFilas>
+        <TablaBase
+          etiqueta="Flotas" columnas={columnas} filas={errorLista ? [demo] : filas} idFila={(f) => f.id} tarjetaMovil altoMaximo={false}
+          vacio={{ titulo: 'Sin flotas de clientes', texto: 'Aparecen aquí cuando se da de alta la primera flota.' }}
+        />
+      </NavegacionFilas>
       {seleccionActual && (
         <form action={accionQuitar}>
           <Boton type="submit" variante="secondary">Quitar la selección y volver al modo global</Boton>

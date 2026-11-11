@@ -256,8 +256,20 @@ export async function SeccionDesgloses(p: DesglosesProps) {
   const verSinPoliza = p.filtro === 'sin_poliza';
 
   const cifras = cifrasDeFichas({ fichas, tx, contexto: p.contexto, desde30 });
+  // Segmentado de periodo (Rovaq: píldora 30/24 + Filtros + chips): cada opción es un enlace que fija la ventana de la lista con las MISMAS fechas del cajón.
+  const desde7 = hoyMx(new Date(Date.parse(inicioDiaMx(hoy)) - 6 * 24 * 3600 * 1000));
+  const periodoVigente = !p.desde && !p.hasta ? 'todo' : p.desde === hoy && p.hasta === hoy ? 'hoy' : !p.hasta && p.desde === desde7 ? '7' : !p.hasta && p.desde === desde30 ? '30' : '';
   const filtros = (
     <BarraPeriodo etiqueta={tx('rest.periodo_y_filtros_de_desgloses')}
+      periodo={{
+        etiqueta: tx('f26d5.liq.periodo_etq'), valor: periodoVigente,
+        opciones: [
+          { valor: 'todo', etiqueta: tx('f26d5.liq.periodo_todo'), href: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) },
+          { valor: 'hoy', etiqueta: tx('f26d5.liq.periodo_hoy'), href: hrefConParams('', baseDes, { des_desde: hoy, des_hasta: hoy }) },
+          { valor: '7', etiqueta: tx('rest.ultimos_7_dias'), href: hrefConParams('', baseDes, { des_desde: desde7, des_hasta: null }) },
+          { valor: '30', etiqueta: tx('rest.ultimos_30_dias'), href: hrefConParams('', baseDes, { des_desde: desde30, des_hasta: null }) },
+        ],
+      }}
       chips={[
         ...(p.desde || p.hasta ? [{ id: 'rango', etiqueta: `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}`, hrefQuitar: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) }] : []),
         ...(p.filtro ? [{ id: 'estado', etiqueta: `Estado: ${rotuloFiltro(tx)[p.filtro]}`, hrefQuitar: hrefConParams('', baseDes, { des_estado: null }) }] : []),
@@ -272,10 +284,15 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
   // Orden de la tabla maestra de Rovaq: filtros → tira de cifras → UNA tarjeta con la tabla → lectura de los desgloses.
   return (
-    <div id="desgloses" className="rv-ag-pila">
+    <div id="desgloses" className="rv-ag-pila rv-ag-sin-filete">
     {filtros}
     <BloqueCifras cifras={cifras} etiqueta={tx('rest.desgloses_de_pago')} />
-    <Tarjeta titulo={tx('rest.desgloses_de_pago')} info="desgloses.lista" acciones={p.filtro ? <span className="rv-liq-sub">{tx('rest.filtro')}{' '}{rotuloFiltro(tx)[p.filtro]}</span> : undefined}>
+    <Tarjeta titulo={tx('rest.desgloses_de_pago')} info="desgloses.lista" acciones={(p.filtro || (typeof fichas.polizaProvisional === 'number' && fichas.polizaProvisional > 0)) ? (
+      <span className="rv-liq-linea">
+        {typeof fichas.polizaProvisional === 'number' && fichas.polizaProvisional > 0 ? <StatusChip tono="warn">{tx('f26d2.liq.poliza_provisional')}{' · '}{numero(fichas.polizaProvisional)}</StatusChip> : null}
+        {p.filtro ? <span className="rv-liq-sub">{tx('rest.filtro')}{' '}{rotuloFiltro(tx)[p.filtro]}</span> : null}
+      </span>
+    ) : undefined}>
       <p className="rv-liq-sub">{tx('rest.el_desglose_lo_calcula_el_sistema')}</p>
 
       {verSinPoliza ? (

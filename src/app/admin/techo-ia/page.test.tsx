@@ -77,7 +77,8 @@ describe('/admin/techo-ia', () => {
     // Un `ok` que no es de la lista no se pinta nunca (no hay forma de inyectar texto por la URL).
     const ajeno = await renderizar({ ok: '<img src=x onerror=alert(1)>' });
     expect(ajeno).not.toContain('onerror');
-    expect(ajeno).not.toContain('role="status"');
+    // (El aviso administrativo fijo es informativo; lo que no puede aparecer es un aviso de éxito.)
+    expect(ajeno).not.toContain('rv-aviso" data-tono="ok"');
   });
 
   it('la pantalla está en el menú de /admin', async () => {

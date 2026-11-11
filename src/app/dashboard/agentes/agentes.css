@@ -75,3 +75,24 @@
 .rv-ag-soltar__pista { font-size: var(--t-small, 12px); color: var(--muted); white-space: nowrap; }
 /* Los campos de un formulario de importación: rótulos de UNA línea (elipsis) y todos los controles en la escala de 32 px. */
 .rv-pj-forma--rejilla .rv-campo__etq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tira de cifras de un Hub (Rovaq `pc-kpis`): celdas iguales y SIN filete de color. Con el filete en solo unas celdas, las demás quedaban 3 px más abajo y
+   «parecía un error». Se activa con la clase `rv-ag-sin-filete` en un contenedor, o con la marca oculta `.rv-ag-sin-filete-marca` dentro del esqueleto. */
+[data-ui="v2"] .rv-ag-sin-filete .rv-kpis > .rv-kpi.rv-kpi,
+[data-ui="v2"] .rv-esq:has(.rv-ag-sin-filete-marca) .rv-kpis > .rv-kpi.rv-kpi { border-top-width: 0; min-height: 0; }
+[data-ui="v2"] .rv-ag-sin-filete .rv-kpi__etq,
+[data-ui="v2"] .rv-esq:has(.rv-ag-sin-filete-marca) .rv-kpi__etq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Una rejilla de indicadores dentro de una tarjeta (definiciones rótulo / cifra / nota): compacta, sin tira. */
+.rv-ag-indic { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr)); gap: 10px 20px; margin: 0; }
+.rv-ag-indic > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rv-ag-indic dt { margin: 0; font: 600 11px/1.3 var(--font-sans-ui, inherit); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.rv-ag-indic dd { margin: 0; }
+.rv-ag-indic__valor { font: 700 20px/1.15 var(--font-display, inherit); letter-spacing: -.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rv-ag-indic__valor[data-vacio] { font-size: 16px; font-weight: 600; color: var(--muted); }
+.rv-ag-indic__nota { font-size: 12px; line-height: 1.4; color: var(--muted); overflow-wrap: anywhere; }
+.rv-ag-indic__nota[data-tono="warn"] { color: var(--warn); }
+
+/* La tabla de datos que acompaña a una gráfica («Ver la tabla») usa la misma cabecera que las demás tablas: 36 px, texto en tinta, fondo del token. */
+[data-ui="v2"] .rv-ag-graf .rv-tabla-grafica__caja thead th { height: 36px; padding: 0 12px 0 14px; background: var(--tabla-cab-bg); color: var(--tabla-cab-ink); font: 600 12px/1.2 var(--font-sans-ui, inherit); border-bottom: 1px solid var(--line); }
+[data-ui="v2"] .rv-ag-graf .rv-tabla-grafica__caja tbody th, [data-ui="v2"] .rv-ag-graf .rv-tabla-grafica__caja tbody td { height: 40px; padding: 0 12px 0 14px; font-size: 13px; }

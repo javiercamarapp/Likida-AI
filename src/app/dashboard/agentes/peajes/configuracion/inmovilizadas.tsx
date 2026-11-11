@@ -2,7 +2,8 @@ import { Upload, Trash2 } from 'lucide-react';
 import { numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { InmovilizadaVista } from '@/lib/likida/peajes/datos';
-import { Tarjeta, Icono, Boton } from '@/app/ui-v2/componentes';
+import { Tarjeta, Icono, Boton, CampoArchivo } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '@/app/dashboard/agentes/zona-soltar';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -58,8 +59,7 @@ export function SeccionInmovilizadas({ datos, tr = TR_ES }: { datos: Inmovilizad
       )}
       {puedeEditar && (
         <form action={acciones.cargarInmovilizadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
-          <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls" required aria-label={tx('rest.archivo_de_unidades_inmovilizadas')}
-            className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
+          <ZonaSoltar><CampoArchivo etiqueta={tx('rest.archivo_de_unidades_inmovilizadas')} etiquetaOculta name="archivo" accept=".csv,.tsv,.xlsx,.xls" required /></ZonaSoltar>
           <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Upload} />{' '}{tx('rest.cargar_unidades_inmovilizadas')}</Boton>
           <span className="text-[11px] rv-pj-c-faint">{ricoT(tx('rest.csv_o_excel_con_e0_unidad'), { e0: (c) => <span className="rv-ag-num">{c}</span>, e1: (c) => <span className="rv-ag-num">{c}</span>, e2: (c) => <span className="rv-ag-num">{c}</span>, e3: (c) => <span className="rv-ag-num">{c}</span>, e4: (c) => <span className="rv-ag-num">{c}</span> })}</span>
         </form>

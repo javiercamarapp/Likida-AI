@@ -1,9 +1,8 @@
 import Link from 'next/link';
-import { Check, CircleHelp } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import type { PasoMarcha, GrupoPaso, ResumenMarcha } from '@/lib/likida/puesta_en_marcha';
 import { AUTOMATIZACIONES } from '../rutas';
-import { BotonEnlace, Icono, Tarjeta } from '@/app/ui-v2/componentes';
+import { BotonEnlace, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { EsqueletoConfiguracion, type SeccionConfig } from '@/app/ui-v2/esqueletos';
 import './arranque.css';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
@@ -101,14 +100,13 @@ function Paso({ p, puedeAdministrar, t = T_RESTO_ES }: { p: PasoMarcha; puedeAdm
   const puedeActuar = puedeAdministrar || !p.soloDueno;
   return (
     <li className="rv-ar__paso">
-      <span aria-hidden="true" className="rv-ar__marca" data-estado={p.estado}>
-        {hecho ? <Icono icono={Check} tam={14} /> : sinDato ? <Icono icono={CircleHelp} tam={14} /> : null}
+      <span className="rv-ar__estado">
+        <StatusChip tono={hecho ? 'ok' : sinDato ? 'warn' : 'muted'}>{hecho ? t('cfg.paso.hecho') : sinDato ? t('cfg.paso.sin_dato') : t('cfg.paso.para_revisar')}</StatusChip>
       </span>
       <div className="rv-ar__texto">
         <p className="rv-ar__titulo" data-hecho={hecho || undefined}>
           {p.titulo}
           {p.opcional && <span className="rv-ar__opcional">(opcional)</span>}
-          <span className="rv-sr">{hecho ? ' — hecho' : sinDato ? t('cfg.no_se_pudo_comprobar') : ' — pendiente'}</span>
         </p>
         <p className="rv-ar__detalle">
           {sinDato ? t('cfg.no_pude_comprobarlo_en_este_momento') : ''}{p.detalle}

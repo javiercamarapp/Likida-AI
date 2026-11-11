@@ -94,7 +94,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
     { etiqueta: t('patios.kpi'), valor: lista.length },
     { etiqueta: t('patios.col.operadores'), valor: lista.reduce((n, p) => n + p.operadores, 0) },
     { etiqueta: t('patios.col.unidades'), valor: lista.reduce((n, p) => n + p.unidades, 0) },
-    { etiqueta: t('patios.col.jefes'), valor: lista.reduce((n, p) => n + p.jefes, 0) },
+    { etiqueta: t('patios.cifra.jefes'), valor: lista.reduce((n, p) => n + p.jefes, 0) },
   ];
   return (
     <EsqueletoTablaMaestra

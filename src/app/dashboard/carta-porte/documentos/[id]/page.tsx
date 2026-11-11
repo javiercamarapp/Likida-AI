@@ -1,7 +1,9 @@
 import { getT } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
 import type { Metadata } from 'next';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+import { EstadoVacio } from '../../../estados';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
@@ -75,11 +77,20 @@ export default async function PaginaRevision({
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA_PADRE, sp);
   if (!puedeVerRuta(rol, RUTA_PADRE)) redirect('/dashboard');
-  if (!UUID.test(id)) notFound();
+  // Un id que no existe se dice DENTRO del marco (con su menú), no como un 404 global sin sidebar.
+  const noEncontrado = (
+    <MarcoPagina titulo={tr('cartaPorte.documentos.id.noEncontradoTitulo')} idTitulo="doc-no-encontrado">
+      <EstadoVacio pantalla titulo={tr('cartaPorte.documentos.id.noEncontradoTitulo')}
+        accion={{ href: `/dashboard/carta-porte/documentos${sufijoTenant(sp)}`, texto: tr('cartaPorte.documentos.id.volverALaBandeja') }}>
+        {tr('cartaPorte.documentos.id.noEncontradoNota')}
+      </EstadoVacio>
+    </MarcoPagina>
+  );
+  if (!UUID.test(id)) return noEncontrado;
 
   // Un error de lectura LANZA (error boundary); null = no es de esta flota — 404 honesto.
   const previo = await repo.leerDocumento(tenantId, id);
-  if (!previo) notFound();
+  if (!previo) return noEncontrado;
   // La primera apertura arranca el tiempo de revisión medido (idempotente).
   const doc = previo.estado === 'por_revisar' ? await abrirRevision(tenantId, id, userId) : previo;
 

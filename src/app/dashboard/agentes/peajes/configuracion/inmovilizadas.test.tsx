@@ -14,6 +14,11 @@ describe('SeccionInmovilizadas (A2 ola 1)', () => {
     expect(html).toContain('Cargar unidades inmovilizadas');
     expect(html).toContain('Nada viene precargado');
   });
+  it('el archivo se elige con el control del sistema (zona de soltar, en español), no con el input nativo en inglés', () => {
+    const html = renderToStaticMarkup(<SeccionInmovilizadas datos={{ ventanas: [], puedeEditar: true, acciones }} />);
+    expect(html).toContain('rv-ag-soltar');
+    expect(html).toContain('Seleccionar archivo');
+  });
   it('lista las ventanas con unidad, motivo y fechas; «hasta» vacío = sigue inmovilizada', () => {
     const html = renderToStaticMarkup(<SeccionInmovilizadas datos={{ ventanas: [v(), v({ id: 'w2', unidadEconomico: 'C2-09', hasta: null, motivo: 'siniestro' })], puedeEditar: true, acciones }} />);
     expect(html).toContain('C2-08');

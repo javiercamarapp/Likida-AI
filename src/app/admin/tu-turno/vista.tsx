@@ -127,20 +127,20 @@ export function VistaTuTurno({
   const urgentes = envios.filter((p) => p.prioridad === 'urgente').length;
   // El titular cuenta SOLO lo leído; una fuente caída se dice, no se suma como cero.
   const partes: string[] = [];
-  if (!piezasSinDato && bus.piezasPendientes.length > 0) partes.push(t('turno.parte_piezas', { n: numero(bus.piezasPendientes.length) }));
-  if (envios.length > 0) partes.push(t('turno.parte_envios', { n: numero(envios.length) }));
-  if (prs.estado === 'ok' && prs.prs.length > 0) partes.push(t('turno.parte_cambios', { n: numero(prs.prs.length) }));
-  if (totalEscalaciones !== null && totalEscalaciones > 0) partes.push(t('turno.parte_escalaciones', { n: numero(totalEscalaciones) }));
+  if (!piezasSinDato && bus.piezasPendientes.length > 0) partes.push(t((bus.piezasPendientes.length) === 1 ? 'turno.parte_piezas_uno' : 'turno.parte_piezas', { n: numero(bus.piezasPendientes.length) }));
+  if (envios.length > 0) partes.push(t((envios.length) === 1 ? 'turno.parte_envios_uno' : 'turno.parte_envios', { n: numero(envios.length) }));
+  if (prs.estado === 'ok' && prs.prs.length > 0) partes.push(t((prs.prs.length) === 1 ? 'turno.parte_cambios_uno' : 'turno.parte_cambios', { n: numero(prs.prs.length) }));
+  if (totalEscalaciones !== null && totalEscalaciones > 0) partes.push(t((totalEscalaciones) === 1 ? 'turno.parte_escalaciones_uno' : 'turno.parte_escalaciones', { n: numero(totalEscalaciones) }));
   const hayCiegas = piezasSinDato || prs.estado === 'error' || totalEscalaciones === null;
   const titular = (partes.length > 0 ? t('turno.titular_hay', { partes: partes.join(' · ') }) : t('turno.titular_nada')) + (hayCiegas ? ` ${t('turno.titular_sin_lectura')}` : '');
   // La siguiente mejor acción sale de las mismas cifras, en orden de daño: lo que frena a los agentes, lo urgente, lo vencido, lo demás.
   const siguiente: { texto: string; href: string; boton: string } | null =
     cola?.frenaAlRunner ? { texto: t('turno.sig_bandeja', { n: numero(cola.pendientes) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.ir_a_aprobaciones') }
-    : urgentes > 0 ? { texto: t('turno.sig_urgentes', { n: numero(urgentes) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.revisar_y_aprobar_en') }
-    : vencidas > 0 ? { texto: t('turno.sig_vencidas', { n: numero(vencidas) }), href: '/admin/escalaciones', boton: t('tu_turno_vista.la_cola_completa') }
-    : !piezasSinDato && bus.piezasPendientes.length > 0 ? { texto: t('turno.sig_piezas', { n: numero(bus.piezasPendientes.length) }), href: '#tt-piezas', boton: t('turno.sig_ver_piezas') }
-    : envios.length > 0 ? { texto: t('turno.sig_envios', { n: numero(envios.length) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.revisar_y_aprobar_en') }
-    : totalEscalaciones !== null && totalEscalaciones > 0 ? { texto: t('turno.sig_escalaciones', { n: numero(totalEscalaciones) }), href: '/admin/escalaciones', boton: t('tu_turno_vista.la_cola_completa') }
+    : urgentes > 0 ? { texto: t((urgentes) === 1 ? 'turno.sig_urgentes_uno' : 'turno.sig_urgentes', { n: numero(urgentes) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.revisar_y_aprobar_en') }
+    : vencidas > 0 ? { texto: t((vencidas) === 1 ? 'turno.sig_vencidas_uno' : 'turno.sig_vencidas', { n: numero(vencidas) }), href: '/admin/escalaciones', boton: t('tu_turno_vista.la_cola_completa') }
+    : !piezasSinDato && bus.piezasPendientes.length > 0 ? { texto: t((bus.piezasPendientes.length) === 1 ? 'turno.sig_piezas_uno' : 'turno.sig_piezas', { n: numero(bus.piezasPendientes.length) }), href: '#tt-piezas', boton: t('turno.sig_ver_piezas') }
+    : envios.length > 0 ? { texto: t((envios.length) === 1 ? 'turno.sig_envios_uno' : 'turno.sig_envios', { n: numero(envios.length) }), href: '/admin/aprobaciones', boton: t('tu_turno_vista.revisar_y_aprobar_en') }
+    : totalEscalaciones !== null && totalEscalaciones > 0 ? { texto: t((totalEscalaciones) === 1 ? 'turno.sig_escalaciones_uno' : 'turno.sig_escalaciones', { n: numero(totalEscalaciones) }), href: '/admin/escalaciones', boton: t('tu_turno_vista.la_cola_completa') }
     : null;
 
   const columnasRutinas: ColumnaBase<RutinaBus>[] = [
@@ -279,7 +279,7 @@ export function VistaTuTurno({
           </Tarjeta>
 
           {/* ── Siguiente mejor acción: sale de las mismas cifras, nunca de una estimación ── */}
-          <Tarjeta titulo={t('turno.siguiente_accion')} estado={siguiente === null ? 'vacio' : 'ok'} contenida
+          <Tarjeta className="bj-sig" titulo={t('turno.siguiente_accion')} estado={siguiente === null ? 'vacio' : 'ok'} contenida
             mensaje={t('turno.sig_nada')} detalle={hayCiegas ? t('turno.titular_sin_lectura') : t('turno.sig_nada_detalle')}>
             {siguiente ? (
               <div className="bj-bloque">
@@ -396,7 +396,7 @@ export function VistaTuTurno({
           </EstadoVacio>
         ) : (
           <>
-            <TablaBase etiqueta={t('tu_turno_vista.rutinas_programadas')} columnas={columnasRutinas} filas={bus.rutinas} idFila={(r) => r.nombre} densa />
+            <TablaBase etiqueta={t('tu_turno_vista.rutinas_programadas')} columnas={columnasRutinas} filas={bus.rutinas} idFila={(r) => r.nombre} densa tarjetaMovil />
             {/* ── EL EDITOR DE RUTINAS (Fase D, cerrado 17-ago-2026) ────────
                 El encargo se edita AQUÍ y viaja como orden editar_encargo: la Mac abre un PR chico con el cambio — jamás escritura
                 directa. Solo rutinas con encargo sembrado se pueden editar (sin el texto original no hay qué pre-llenar ni qué PR). */}

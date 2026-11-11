@@ -11,3 +11,14 @@
 
 /* Las filas de tarjetas de la portada se estiran a la altura de la más alta: sin tarjetas bajas junto a una alta. */
 .rv-ic__fila > .rv-tarjeta { height: 100%; }
+
+/* El chip de estado de cada agente es de UNA línea (22 px), nunca de dos ocupando todo el ancho; si el texto no cabe se recorta con puntos suspensivos. */
+[data-ui="v2"] .rv-ic__estado { flex-wrap: nowrap; }
+[data-ui="v2"] .rv-ic__estado > .rv-estado { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 22px; min-height: 22px; padding-block: 0; }
+
+/* Móvil: la tira de los cinco agentes se desliza DENTRO de sí misma. `contain: inline-size` impide que su contenido ensanche el documento
+   (antes la página entera medía 934 px sobre un viewport de 412). */
+.rv-ic__seccion { max-width: 100%; }
+@media (max-width: 819px) {
+  .rv-ic__agentes { max-width: 100%; contain: inline-size; overscroll-behavior-x: contain; }
+}

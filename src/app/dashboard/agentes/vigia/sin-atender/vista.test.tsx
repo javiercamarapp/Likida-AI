@@ -27,6 +27,11 @@ describe('conversaciones sin atender (pantalla)', () => {
     expect(h).toContain('2 h 0 min');
     expect(h).toContain('apagado');
   });
+  it('los ajustes de la revisión viven en un cajón (no a todo el ancho de la tarjeta) con su botón de apertura', () => {
+    const h = pintar();
+    expect(h).toContain('rv-ov--drawer');
+    expect(h).toContain('Ajustes de la revisión');
+  });
   it('quien no administra no ve el botón de enviar ni la fecha de corte', () => {
     const h = pintar({ puedeEnviar: false });
     expect(h).not.toContain('Enviar resumen por correo');

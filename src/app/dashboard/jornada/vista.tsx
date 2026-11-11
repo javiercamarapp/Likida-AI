@@ -1,5 +1,5 @@
 import { CajonAlta } from '../cajon-alta';
-import { TarjetaTabla } from '../bloque';
+import { DescargaNoDisponible, TarjetaTabla } from '../bloque';
 import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { CalendarClock, Download } from 'lucide-react';
@@ -196,10 +196,13 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
       apoyo={t('jor.apoyo')}
       acciones={(
         // `<a>` y no `Link`: es un archivo que baja, no una ruta que se precarga (un prefetch dispararía la exportación).
-        <a href={urlExport} className={clasesBoton('secondary', 'sm')}>
-          <Icono icono={Download} />
-          {t('jor.descargar')}
-        </a>
+        // Sin registros en el periodo no hay nada que bajar: el botón punteado lo dice en vez de ofrecer un CSV vacío. Con datos, 32 px (acción de cabecera).
+        lista.length === 0 ? <DescargaNoDisponible rotulo={t('jor.descargar')} motivo={t('jor.sin_registros_para_descargar')} /> : (
+          <a href={urlExport} className={clasesBoton('secondary', 'md')}>
+            <Icono icono={Download} />
+            {t('jor.descargar')}
+          </a>
+        )
       )}
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Registro de jornada')}

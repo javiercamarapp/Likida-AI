@@ -33,3 +33,8 @@ form:has(.rv-doc__zona input[type="file"]:required:invalid) button[type="submit"
 
 /* «Activar buzón» (y todo envío que sigue a un párrafo) lleva respiro arriba: no va pegado al texto. */
 .rv-doc__canales .rv-doc__nota ~ form { margin-top: 12px; }
+
+/* «No disponible ahora»: botón punteado (precondición sin cumplir). */
+.rv-nd { display: inline-flex; flex-direction: column; gap: 0; justify-content: center; min-height: 28px; padding: 3px 12px; border: 1px dashed var(--input); border-radius: 8px; color: var(--muted); font-size: var(--t-small); line-height: 1.25; cursor: not-allowed; }
+.rv-nd__rotulo { font-weight: 500; }
+.rv-nd__motivo { font-size: var(--t-micro); color: var(--faint); }

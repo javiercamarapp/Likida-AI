@@ -1,5 +1,13 @@
 /* /dashboard/chat — ajustes de la PÁGINA al lienzo de Rovaq (/preguntale), sin tocar ui-v2/chat.css (pieza compartida).
-   · La columna de conversación y el recuadro de escribir miden 650 px como en Rovaq (antes 736: 46 rem).
+   · La columna de conversación y el recuadro de escribir miden 736 px (medido en Rovaq /preguntale en Chrome, ronda 5; el catálogo decía 650).
    · Los chips de tema van en UNA línea de 32 px: si no caben en la fila, la fila baja; el rótulo nunca se parte en dos. */
-.rv-chat-pagina .rv-chat:not([data-variante="panel"]) { --col-chat: 650px; }
+.rv-chat-pagina .rv-chat:not([data-variante="panel"]) { --col-chat: 736px; }
 [data-ui="v2"] .rv-chat-pagina .rv-btn.rv-chat__tema { flex: none; white-space: nowrap; height: 32px; min-height: 32px; }
+
+/* F26 ronda 5 · el lienzo de /preguntale de Rovaq: SIN cabecera de escritorio (el lienzo de puntos ocupa todo el marco y «Historial» va arriba a la
+   derecha, dentro de la página), descripción de 13 px y título 20/600 con tracking -0.2 px. En móvil se conserva la cabecera de 57 px (logo y menú). */
+@media (min-width: 768px) {
+  [data-ui="v2"] .rv-col:has(.rv-chat-pagina) .rv-cab-esc { display: none; }
+}
+.rv-chat-pagina .rv-chat:not([data-variante="panel"]) .rv-chat__sub { font-size: 13px; line-height: 19px; }
+.rv-chat-pagina .rv-chat:not([data-variante="panel"]) .rv-chat__hero h1 { letter-spacing: -.2px; }

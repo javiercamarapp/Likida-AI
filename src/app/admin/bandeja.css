@@ -99,3 +99,23 @@
 
 /* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* F26 ronda 5 · Aprobaciones: UNA tarjeta «Por decidir» con las dos colas como subsecciones (antes dos tarjetas con vacío completo cada una). */
+.bj-grupos { display: flex; flex-direction: column; gap: 12px; }
+.bj-grupo { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bj-grupo + .bj-grupo { padding-top: 12px; border-top: 1px solid var(--line); }
+.bj-grupo__cab { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; }
+.bj-grupo__titulo { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .02em; color: var(--ink); }
+.bj-grupo__nota { margin: 0; font-size: 12px; color: var(--muted); }
+.bj-grupo__nota[data-tono="bad"] { color: var(--bad); }
+
+/* F26 ronda 5 · Escalaciones: los seis conteos por fuente como una fila de chips sobre la cola (la tira de arriba quedó en 4 celdas). */
+.bj-chips-fuente { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.bj-chips-fuente > li { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); font-size: 12px; color: var(--ink2, var(--muted)); }
+.bj-chips-fuente > li b { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--ink); }
+
+/* F26 ronda 5 · Tu turno: «Siguiente mejor acción» destacada (Rovaq `hoy-sig`): filete izquierdo de 3 px (negro en monocromo), título 16/600 y la acción primaria a la vista. */
+[data-ui="v2"] .rv-tarjeta.bj-sig { border-left: 3px solid var(--ink); }
+[data-ui="v2"] .rv-tarjeta.bj-sig .rv-tarjeta__titulo { font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+[data-ui="v2"] .rv-tarjeta.bj-sig .bj-siguiente { font-size: 14px; line-height: 1.45; font-weight: 500; }
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta.bj-sig { height: auto; align-self: start; }

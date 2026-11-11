@@ -21,9 +21,9 @@ it('sin acceso a GitHub: lo dice explícito y sin jerga de variables — nunca "
   dobles.getActividadCodigo.mockResolvedValue({ estado: 'sin_token' });
   const html = await renderizar();
   expect(html).not.toContain('GITHUB_TOKEN');
-  // R9: el aviso pasó de un vacío largo a un aviso compacto accionable (misma verdad: falta la variable, no hay «cero commits»).
-  expect(html).toContain('Falta configurar el acceso a GitHub');
-  expect(html).toContain('equipo técnico');
+  // F26 ronda 5: UN solo estado de página (antes aviso + 4 cifras «Sin dato» + 3 vacíos): la causa y la salida van en ese estado.
+  expect(html).toContain('Pídele al equipo técnico');
+  expect(html.match(/GitHub aún no está conectado/g)?.length).toBe(1);
   // F26 ronda 3: sin conexión es una caja punteada neutra con la causa verdadera (GitHub sin conectar), sin rojo y sin «Reintentar»
   // por celda; y jamás un cero.
   expect(html).toContain('GitHub aún no está conectado');

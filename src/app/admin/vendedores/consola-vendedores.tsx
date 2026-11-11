@@ -62,14 +62,14 @@ export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string |
   return (
     <EsqueletoTablaMaestra
       titulo={tx('mapa_prospectos.ventas')} apoyo={tx('vendedores_consola_vendedores.el_pipeline_del_censo_el_equipo')}
-      filtros={<Suspense fallback={null}><BloqueFiltros sp={sp} /></Suspense>}
+      filtros={<div className="ven-filtros"><Suspense fallback={null}><BloqueFiltros sp={sp} /></Suspense></div>}
     >
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis sp={sp} /></Suspense>
       <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo sp={sp} /></Suspense>
         {/* Las dos tarjetas de la derecha miden lo que dice su contenido y juntas llenan el alto del embudo: sin 140 px de aire. */}
         <div className="adm-pila">
-        <Tarjeta titulo={tx('vendedores_consola_vendedores.agente_asignador')}>
+        <Tarjeta titulo={tx('vendedores_consola_vendedores.agente_asignador')} className="ven-asignador">
           <p className="ven-tarjeta__tenue">{tx('vendedores_consola_vendedores.reparte_los_prospectos_sin_vendedor_en')}</p>
           <BotonRepartir accion={accionRepartir} />
           <Suspense fallback={<EsqTarjetaV2 alto={60} plana />}><BloqueCorridas /></Suspense>

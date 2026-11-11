@@ -61,8 +61,9 @@ export function Ficha360({
 
   const resumen = (
     <div className="rv-pila">
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       <Tarjeta titulo={t('flotas_ficha.senales_de_uso')} estado={f.pmf ? 'ok' : 'error'} mensaje={t('flotas_ficha.no_se_pudieron_leer_4')}>
+        <p className="adm-eyebrow">{t('flotas_ficha.eb_atencion')}</p>
         {f.pmf && (
           <ul className="adm-res-lista adm-res-lista--tarjetas">
             {[
@@ -84,27 +85,30 @@ export function Ficha360({
           </ul>
         )}
       </Tarjeta>
-      <Tarjeta titulo={t('flotas_ficha.ultimas_corridas_de_agentes')} estado={f.corridas === null ? 'error' : f.corridas.length === 0 ? 'vacio' : 'ok'}
-        mensaje={f.corridas === null ? t('flotas_ficha.no_se_pudieron_leer_2') : t('flotas_ficha.sin_corridas_de_agentes')}>
-        <TablaBase tarjetaMovil
+      <Tarjeta titulo={t('flotas_ficha.ultimas_corridas_de_agentes')} estado={f.corridas === null ? 'error' : 'ok'}
+        mensaje={t('flotas_ficha.no_se_pudieron_leer_2')}>
+        <p className="adm-eyebrow">{t('flotas_ficha.eb_corridas')}</p>
+        {f.corridas !== null && f.corridas.length === 0 ? <p className="adm-vacio-linea">{t('flotas_ficha.sin_corridas_de_agentes')}</p> : <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.corridas_de_agentes_de')} filas={f.corridas ?? []} idFila={(c) => `${c.agente}-${c.fin}`}
           columnas={[
             { id: 'agente', titulo: t('flotas_ficha.agente'), principal: true, celda: (c) => c.agente },
             { id: 'estado', titulo: t('flotas_ficha.estado'), celda: (c) => <StatusChip tono={TONO_CORRIDA[c.estado] ?? 'neutral'}>{c.estado}</StatusChip> },
             { id: 'cuando', titulo: t('flotas_ficha.cuando'), alinear: 'der', celda: (c) => `${c.disparo} · ${fechaCorta(c.fin)}` },
           ]}
-        />
+        />}
       </Tarjeta>
       </FilaTarjetas>
-      <FilaTarjetas variante="6-6">
+      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       <Tarjeta titulo={t('flotas_ficha.origen')}>
+        <p className="adm-eyebrow">{t('flotas_ficha.eb_datos')}</p>
         {!f.origenLegible ? <p>{t('flotas_ficha.origen_ilegible_ahora_mismo')}</p>
           : f.origen ? <p>{t('flotas_ficha.nacio_del_pipeline')} {f.origen.empresa} ({f.origen.fuente}{f.origen.cerradoEn ? `, cerrado ${fechaCorta(f.origen.cerradoEn)}` : ''}).</p>
             : <p>{t('flotas_ficha.no_nacio_del_pipeline')}</p>}
       </Tarjeta>
-      <Tarjeta titulo={t('flotas_ficha.soporte')} estado={f.tickets === null ? 'error' : f.tickets.length === 0 ? 'vacio' : 'ok'} mensaje={f.tickets === null ? t('flotas_ficha.no_se_pudieron_leer') : t('flotas_ficha.sin_tickets_de_esta')}
+      <Tarjeta titulo={t('flotas_ficha.soporte')} estado={f.tickets === null ? 'error' : 'ok'} mensaje={t('flotas_ficha.no_se_pudieron_leer')}
         acciones={<BotonEnlace href="/admin/soporte" variante="secondary" tamano="sm">{t('flotas_ficha.ver_soporte')}</BotonEnlace>}>
-        <TablaBase tarjetaMovil
+        <p className="adm-eyebrow">{t('flotas_ficha.eb_tickets')}</p>
+        {f.tickets !== null && f.tickets.length === 0 ? <p className="adm-vacio-linea">{t('flotas_ficha.sin_tickets_de_esta')}</p> : <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.tickets_de_la_flota')} filas={(f.tickets ?? []).slice(0, 5)} idFila={(t) => t.id}
           columnas={[
             { id: 'asunto', titulo: t('flotas_ficha.asunto'), principal: true, celda: (t) => t.asunto },
@@ -112,7 +116,7 @@ export function Ficha360({
               <StatusChip tono={t.estado === 'resuelto' ? 'ok' : t.horasRestantes !== null && t.horasRestantes < 0 ? 'bad' : 'neutral'}>{t.estado}</StatusChip>
             ) },
           ]}
-        />
+        />}
       </Tarjeta>
       </FilaTarjetas>
     </div>
