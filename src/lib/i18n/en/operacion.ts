@@ -362,6 +362,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'viajes.vr.ver': 'Quick view',
   'viajes.vr.sub': 'Trip {n} of {total}',
   'viajes.vr.abrir': 'Open trip',
+  'viajes.vr.aviso': 'This is a summary: the trip detail and its evidence are verified when you open it.',
   'viajes.vr.despacho': 'Follow in Dispatch',
   'viajes.vr.cerrar': 'Close',
   'viajes.estatus.liquidado': 'Settled',

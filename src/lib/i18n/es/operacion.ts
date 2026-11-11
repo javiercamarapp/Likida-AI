@@ -362,6 +362,7 @@ export const operacion = {
   'viajes.vr.ver': 'Vista rápida',
   'viajes.vr.sub': 'Viaje {n} de {total}',
   'viajes.vr.abrir': 'Abrir viaje',
+  'viajes.vr.aviso': 'Es un resumen: el detalle y la evidencia del viaje se verifican al abrirlo.',
   'viajes.vr.despacho': 'Seguir en Despacho',
   'viajes.vr.cerrar': 'Cerrar',
   'viajes.estatus.liquidado': 'Liquidado',
