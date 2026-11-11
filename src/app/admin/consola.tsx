@@ -32,23 +32,27 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       area={t('consola.eyebrow')}
       titulo={t('consola.resumen')}
       apoyo={t('consola.apoyo', { saludo: saludoTr(tr), nombre: nombre ?? 'Javier' })}
-      acciones={<BotonEnlace variante="primary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>}
+      acciones={(
+        <>
+          <Suspense fallback={null}><AccionExportarFlotas /></Suspense>
+          <BotonEnlace variante="primary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>
+        </>
+      )}
       avisos={<p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={1.75} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>}
     >
       {/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas, luego los paneles con filas-tarjeta. */}
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
 
-      {/* Un solo aviso FIJO arriba (el administrativo); el semáforo de salud es un bloque de contenido, no un segundo aviso apilado bajo él. */}
-      <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
-
-      <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
+      {/* Un solo aviso FIJO arriba (el administrativo, en la cabecera). El semáforo de salud ya no es un segundo aviso entre las cifras
+          y los paneles: vive dentro de «Operación», el panel que habla de la salud de los agentes. */}
+      <FilaTarjetas variante="6-6">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
       </FilaTarjetas>
 
       <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueSeries /></Suspense>
 
-      <Suspense fallback={<EsqTablaV2 />}><BloqueCalidad /></Suspense>
+      <Suspense fallback={<EsqTablaV2 />}><BloqueCalidad semaforo={<Suspense fallback={null}><BloqueSemaforo /></Suspense>} /></Suspense>
 
       <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloquePlataforma /></Suspense>
 
@@ -129,13 +133,13 @@ async function BloqueSeries() {
   const costo = r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.costoUsd }));
   const facturas = r.facturasPorDia.map((d) => ({ etiqueta: fechaCorta(d.dia), valor: d.n }));
   return (
-    <FilaTarjetas variante="6-6">
+    <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       {r.porDia.length > 1
         ? <Tarjeta titulo={t('consola.gasto_de_ia_por')} elevar entra="tarjeta"><Columnas datos={costo} etiqueta={t('consola.gasto_de_ia_por')} formato="usd" matiz={2} /></Tarjeta>
-        : <Tarjeta titulo={t('consola.gasto_de_ia_por')} estado="vacio" contenida mensaje={t('consola.sin_historial_suficiente')} detalle={t('consola.se_dibuja_cuando_haya')} />}
+        : <Tarjeta titulo={t('consola.gasto_de_ia_por')} elevar entra="tarjeta"><p className="adm-vacio-linea"><strong>{t('consola.sin_historial_suficiente')}</strong> {t('consola.se_dibuja_cuando_haya')}</p></Tarjeta>}
       {r.facturasPorDia.some((d) => d.n > 0)
         ? <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} elevar entra="tarjeta"><Columnas datos={facturas} etiqueta={t('consola.facturas_procesadas_por_dia_2')} formato="numero" matiz={1} /></Tarjeta>
-        : <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} estado="vacio" contenida mensaje={t('consola.sin_facturas_en_el')} detalle={t('consola.cada_comprobante_que_pasa')} />}
+        : <Tarjeta titulo={t('consola.facturas_procesadas_por_dia', { VENTANA_FACTURAS_DIAS })} elevar entra="tarjeta"><p className="adm-vacio-linea"><strong>{t('consola.sin_facturas_en_el')}</strong> {t('consola.cada_comprobante_que_pasa')}</p></Tarjeta>}
     </FilaTarjetas>
   );
 }
@@ -174,6 +178,14 @@ function csvFlotas(filas: ReadonlyArray<FilaFlota>, t: TrDe<'admin_inicio'>): st
   ].join('\n');
 }
 
+/** «Exportar CSV» vive en la cabecera (Rovaq: Copiloto + Exportar CSV), junto a la acción primaria; lee la misma lectura cacheada de la tabla. */
+async function AccionExportarFlotas() {
+  const { t } = await getT('admin_inicio');
+  const r = await resumenNegocio();
+  if (!r || r.flotas.length === 0) return null;
+  return <BotonEnlace variante="secondary" download="flotas.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${csvFlotas(r.flotas, t)}`)}`}>{t('a1r4.exportar_csv')}</BotonEnlace>;
+}
+
 async function BloqueFlotas() {
   const { t } = await getT('admin_inicio');
   const r = await resumenNegocio();
@@ -181,9 +193,6 @@ async function BloqueFlotas() {
     <section id="flotas" aria-label={t('consola.flotas')}>
       <Tarjeta titulo={t('consola.flotas')} elevar entra="tarjeta" acciones={(
         <>
-          {r && r.flotas.length > 0 ? (
-            <BotonEnlace tamano="sm" variante="secondary" download="flotas.csv" href={`data:text/csv;charset=utf-8,${encodeURIComponent(`\uFEFF${csvFlotas(r.flotas, t)}`)}`}>{t('a1r4.exportar_csv')}</BotonEnlace>
-          ) : null}
           <BotonEnlace tamano="sm" variante="ghost" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace>
         </>
       )}>

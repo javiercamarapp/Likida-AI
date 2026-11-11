@@ -280,7 +280,7 @@ async function BloqueAltas() {
   const vendedores = await cargarVendedores();
   const opcionesVendedor = (vendedores ?? []).map((v) => ({ id: v.id, nombre: v.nombre ?? v.email }));
   return (
-    <FilaTarjetas variante="6-6">
+    <FilaTarjetas variante="6-6" className="adm-fila-alto-contenido">
       <Tarjeta titulo={tx('vendedores_consola_vendedores.agregar_prospecto')}>
         <FormaProspecto accion={accionCrearProspecto} vendedores={opcionesVendedor} />
       </Tarjeta>

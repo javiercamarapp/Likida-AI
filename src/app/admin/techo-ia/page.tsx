@@ -27,7 +27,7 @@ const TITULO = 'Techo diario de IA — por flota';
 const ORIGEN: Record<FilaTechoIa['origen'], { tono: TonoEstado; rotulo: string }> = {
   tenant: { tono: 'ok', rotulo: 'Declarado' },
   plan: { tono: 'neutral', rotulo: 'Del plan' },
-  piso: { tono: 'warn', rotulo: 'Piso global' },
+  piso: { tono: 'neutral', rotulo: 'Piso global' },
   explicito: { tono: 'neutral', rotulo: 'Explícito' },
 };
 
