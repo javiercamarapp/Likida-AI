@@ -120,7 +120,7 @@ describe('chat «Pregunta a tus datos» bajo el perfil (abierto el 11-nov, D12, 
     await res.text();
     expect(ejecutarAnalista).toHaveBeenCalledTimes(1);
     // el rol y el tenant salen de la SESIÓN, no del cuerpo
-    expect(ejecutarAnalista.mock.calls[0]?.[0]).toMatchObject({ tenantId: CON, usuario: { rol: r } });
+    expect((ejecutarAnalista.mock.calls as unknown as unknown[][])[0]?.[0]).toMatchObject({ tenantId: CON, usuario: { rol: r } });
   });
 
   it('un rol que no existe (sin área) sigue sin poder conversar: 403 sin modelo ni gasto', async () => {

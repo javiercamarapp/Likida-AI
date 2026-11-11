@@ -357,3 +357,7 @@ button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset
 .rv-barlist__pista { display: block; height: 4px; border-radius: 999px; background: var(--line); overflow: hidden; }
 .rv-barlist__relleno { fill: var(--ink); }
 .rv-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ── Notificaciones del panel: alerta = Tarjeta con su chip de tipo ── */
+.rv-notif__texto { margin: 0; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.rv-notif__acciones { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

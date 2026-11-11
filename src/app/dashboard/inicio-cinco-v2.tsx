@@ -153,7 +153,7 @@ function TarjetaDeAgente({ ficha, d, corrida, ahora, puede, sufijo, pesos, senal
   const fase = faseDeAgente(corrida, ahora, { ...o, esperaConexion: esperaConexionDe(ficha.clave as ClaveIconoAgente, senales) });
   // Una flota sin un solo viaje liquidado: «0 por revisar» leería como medición de algo que aún no existe; se dice qué falta.
   const sinLiquidados = ficha.clave === 'liquidacion' && d.kpis !== null && d.kpis.viajesLiquidados === 0;
-  const cifra = prox ? { valor: null, etiqueta: 'sin dato', nota: 'Todavía no está activo en tu cuenta.' } : sinLiquidados ? { valor: null, etiqueta: 'por revisar', nota: 'Sin viajes liquidados todavía' } : cifraDeAgente(ficha.clave, { d, pesos: pesos?.cifras, corridaPeajes: ficha.clave === 'peajes' ? corrida : undefined });
+  const cifra = prox ? { valor: null, etiqueta: 'sin dato', nota: 'Todavía no está activo en tu cuenta.' } : sinLiquidados ? { valor: null, etiqueta: 'por revisar', nota: tr.t('ini5a.sin_liquidados') } : cifraDeAgente(ficha.clave, { d, pesos: pesos?.cifras, corridaPeajes: ficha.clave === 'peajes' ? corrida : undefined });
   const href = prox ? rutaProximamente(prox) : puede(ficha.href) ? ficha.href : null;
   return <TarjetaAgenteV3 ficha={ficha} estado={estado} fase={fase} cifra={cifra} href={href} sufijo={sufijo} tr={tr} />;
 }

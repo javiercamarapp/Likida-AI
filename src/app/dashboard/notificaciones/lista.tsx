@@ -1,17 +1,17 @@
 'use client';
 
-import { Boton, EstadoVacio, MarcoPagina } from '@/app/ui-v2/componentes';
-import Link from 'next/link';
+import { Boton, BotonEnlace, EstadoVacio, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { useSyncExternalStore } from 'react';
-import { TriangleAlert, Info, CheckCheck, ArrowRight } from 'lucide-react';
+import { CheckCheck, ArrowRight } from 'lucide-react';
 import type { AlertaFlota } from '../calcular-alertas-flota';
 import { leerLeidas, marcarLeida, marcarTodasLeidas, suscribirCambios, SIN_LEIDAS } from '../notificaciones-leidas';
 import { useT } from '@/lib/i18n/proveedor';
 import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
+/** El tono del chip por tipo de alerta: atención = ámbar con texto; aviso = neutro. Nunca solo color (el chip dice el rótulo). */
 const ESTILO = {
-  atencion: { fg: 'var(--warn)', bg: 'var(--warnbg)', Icono: TriangleAlert, rotulo: 'notif.rotulo.atencion' },
-  aviso: { fg: 'var(--muted)', bg: 'var(--canvas)', Icono: Info, rotulo: 'notif.rotulo.aviso' },
+  atencion: { tono: 'warn', rotulo: 'notif.rotulo.atencion' },
+  aviso: { tono: 'muted', rotulo: 'notif.rotulo.aviso' },
 } as const;
 
 /**
@@ -47,39 +47,25 @@ export function ListaAlertas({ alertas }: { alertas: AlertaFlota[] }) {
           {vivas.map((a) => {
             const e = ESTILO[a.tipo];
             return (
-              <section key={a.id} className="card p-4">
-                <div className="flex items-start gap-3">
-                  <e.Icono width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: e.fg }} />
-                  <div className="min-w-0 flex-1">
-                    <span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium"
-                      style={{ color: e.fg, background: e.bg }}>{t(e.rotulo)}</span>
-                    <p className="text-[13px] mt-1.5">{a.texto}</p>
-                    <div className="flex items-center gap-3 mt-2.5 flex-wrap">
-                      <Link href={a.href}
-                        className="hairline h-7 px-2.5 rounded-lg inline-flex items-center gap-1.5 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]">
-                        {t('notif.resolver')}
-                        <ArrowRight width={13} height={13} strokeWidth={1.75} />
-                      </Link>
-                      <button type="button" onClick={() => marcarLeida(a.id)}
-                        className="rv-btn rv-btn--ghost rv-btn--sm" style={{ color: 'var(--muted)' }}>
-                        {t('notif.marcar.leido')}
-                      </button>
-                    </div>
-                  </div>
+              <Tarjeta key={a.id} titulo={t(e.rotulo)} acciones={<StatusChip tono={e.tono}>{t(e.rotulo)}</StatusChip>} elevar entra="tarjeta">
+                <p className="rv-notif__texto">{a.texto}</p>
+                <div className="rv-notif__acciones">
+                  <BotonEnlace tamano="sm" variante="secondary" href={a.href} icono={<ArrowRight width={13} height={13} strokeWidth={1.75} />}>{t('notif.resolver')}</BotonEnlace>
+                  <Boton tamano="sm" variante="ghost" onClick={() => marcarLeida(a.id)}>{t('notif.marcar.leido')}</Boton>
                 </div>
-              </section>
+              </Tarjeta>
             );
           })}
 
           {descartadas > 0 && (
-            <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
+            <p className="rv-res__nota">
               {tp('notif.descartadas', descartadas)} {t('notif.descartadas.cambio')}
             </p>
           )}
         </>
       )}
 
-      <p className="text-[11px] pt-1" style={{ color: 'var(--faint)' }}>
+      <p className="rv-res__nota">
         {t('notif.nota.leido')}
       </p>
     </MarcoPagina>

@@ -1083,4 +1083,5 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'ini5a.cierres.nota': 'Last eight weeks · settled trips of your fleet',
   'ini5a.cierres.etiqueta': 'Settlements closed per week',
   'ini5a.cierres.vacio': 'No settlements in the last eight weeks',
+  'ini5a.sin_liquidados': 'No settled trips yet',
 };

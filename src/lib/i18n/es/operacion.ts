@@ -1083,4 +1083,5 @@ export const operacion = {
   'ini5a.cierres.nota': 'Últimas ocho semanas · viajes liquidados de tu flota',
   'ini5a.cierres.etiqueta': 'Liquidaciones cerradas por semana',
   'ini5a.cierres.vacio': 'Sin cierres en las últimas ocho semanas',
+  'ini5a.sin_liquidados': 'Sin viajes liquidados todavía',
 } as const;
