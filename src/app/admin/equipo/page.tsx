@@ -6,7 +6,6 @@ import { bajaPersonalLikidaHabilitada } from '@/lib/auth/baja_acceso';
 import { nombreDeRol, ROTULOS_ROL } from '@/lib/auth/roles';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { BarraFiltros, BotonEnlace, EstadoError, FilaTarjetas, FiltroBusqueda, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
-import { FilaConfig } from '../../ui-v2/esqueletos';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { FormaNuevoAcceso } from '../usuarios/nuevo/forma-nuevo-acceso';
 import { CambiarRol } from './cambiar-rol';
@@ -168,7 +167,9 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
           <FormaNuevoAcceso flotas={flotas} preseleccion={flotas.some((f) => f.id === flotaId) ? flotaId : ''} t={t} />
         </Tarjeta>
         <Tarjeta titulo={t('equipo.que_puede_hacer_cada')}>
-          {roles.map(([rol, r]) => <FilaConfig key={rol} rotulo={r.nombre} ayuda={r.detalle} />)}
+          <ul className="adm-roles">
+            {roles.map(([rol, r]) => <li key={rol}><strong>{r.nombre}</strong><span>{r.detalle}</span></li>)}
+          </ul>
           <p className="rv-esq__fila-ayuda">{t('equipo.el_chofer_no_tiene')}</p>
         </Tarjeta>
       </FilaTarjetas>

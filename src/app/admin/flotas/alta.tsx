@@ -11,7 +11,7 @@ import { trAdminFlotasEs } from '@/lib/i18n/tr_admin';
 export function AltaFlota({ accion, planes, t = trAdminFlotasEs }: { accion: AccionDeForma; planes: Array<{ clave: string; nombre: string }> | null; t?: TrDe<'admin_flotas'> }) {
   return (
     <div className="adm-forma-fina">
-      <FormaConAviso accion={accion} boton={t('flotas_alta.dar_de_alta')} columnas="md:grid-cols-2">
+      <FormaConAviso accion={accion} boton={t('flotas_alta.dar_de_alta')} columnas="md:grid-cols-1">
         <CamposAltaFlota planes={planes} t={t} />
       </FormaConAviso>
     </div>
