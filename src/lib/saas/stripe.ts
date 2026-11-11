@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // STRIPE — lo que Likida le cobra a la flota.
@@ -64,10 +64,7 @@ function llave(): string {
 export function exigirLlaveCoherente(): void {
   const entorno = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
   if (entorno === 'production' && modoStripe() === 'prueba') {
-    throw new DatoInvalido(
-      'La llave de Stripe en producción es de PRUEBA (sk_test). Con ella se crean suscripciones que se ven ' +
-      'reales y no cobran nada: la flota creería que ya contrató. No se opera hasta poner la llave sk_live.',
-    );
+    throw datoInvalido('stripe.la_llave_de_stripe_en');
   }
 }
 
@@ -404,11 +401,7 @@ export async function crearSuscripcionPorTransferencia(opciones: {
     idempotencia: `sub-transfer-${opciones.tenantId}`,
   }).catch((e: unknown) => {
     if (e instanceof ErrorStripe && e.codigo === 'idempotency_error') {
-      throw new DatoInvalido(
-        'Ya se mandó una contratación para esta flota hace un momento y todavía no se refleja. No se crea una ' +
-        'segunda suscripción: serían dos mensualidades cobrándose a la vez. Espera a que aparezca (o recarga) y, ' +
-        'si querías otro plan, cámbialo desde el plan que quede.',
-      );
+      throw datoInvalido('stripe.ya_se_mando_una_contratacion');
     }
     throw e;
   });
@@ -420,11 +413,7 @@ export async function crearSuscripcionPorTransferencia(opciones: {
   // reintenta con otra clave (ante la duda no se arriesga un doble cobro).
   if (s.status === 'canceled' || s.status === 'incomplete_expired') {
     logger.error('stripe.suscripcion_devuelta_muerta', { sub: s.id, status: s.status, tenantId: opciones.tenantId });
-    throw new DatoInvalido(
-      'Stripe devolvió la suscripción anterior de esta flota, que está cancelada, en lugar de crear una nueva ' +
-      '(pasa si se cancela y se vuelve a contratar en menos de 24 horas). No se creó ni se cobró nada. ' +
-      'Inténtalo de nuevo más tarde o escríbele a Likida.',
-    );
+    throw datoInvalido('stripe.stripe_devolvio_la_suscripcion_anterior');
   }
 
   const inv = s.latest_invoice;

@@ -36,7 +36,7 @@ import { acotada } from './presupuesto';
 // cifra fiscal se lea diferente en dos pantallas, y eso se lee como dos
 // cálculos distintos.
 import { round2 } from '@/lib/formato';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido } from './errores';
 
 // ── Forma del jsonb: fail-closed ───────────────────────────────────────────
 
@@ -729,12 +729,12 @@ export async function abrirTicket(
   t: { asunto: string; descripcion: string; categoria: string; prioridad: string },
 ): Promise<string> {
   const asunto = t.asunto.trim();
-  if (!asunto || asunto.length > 200) throw new DatoInvalido('El asunto es obligatorio (máx. 200 caracteres).');
+  if (!asunto || asunto.length > 200) throw datoInvalido('comercial.el_asunto_es_obligatorio_max');
   if (!(CATEGORIAS_TICKET as readonly string[]).includes(t.categoria)) {
-    throw new DatoInvalido('Esa categoría no existe.');
+    throw datoInvalido('comercial.esa_categoria_no_existe');
   }
   if (!(PRIORIDADES_TICKET as readonly string[]).includes(t.prioridad)) {
-    throw new DatoInvalido('Esa prioridad no existe.');
+    throw datoInvalido('comercial.esa_prioridad_no_existe');
   }
   const descripcion = t.descripcion.trim();
   const prioridad = t.prioridad as (typeof PRIORIDADES_TICKET)[number];

@@ -50,7 +50,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mxn } from '@/lib/formato';
 import { correoDelUsuario } from '@/lib/likida/jornada/firma';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { candidatosAnotados, type EstatusCfdi } from './bandeja';
 import { camposFiscalesDeXml, esFuncionAusente } from './liga_campos';
 
@@ -225,7 +225,7 @@ export async function ligarComprobante(
   gastoId: string,
   actor: ActorResolucion,
 ): Promise<ResultadoResolucion> {
-  if (!gastoId.trim()) throw new DatoInvalido('Falta decir con qué gasto se liga.');
+  if (!gastoId.trim()) throw datoInvalido('resolucion.falta_decir_con_que_gasto');
   const email = await firmaDe(actor);
   if (email === null) {
     return { ok: false, motivo: 'sin_firma', mensaje: 'No se pudo leer tu correo para firmar el cruce, así que no se hizo nada. Un cruce sin firma no queda en el expediente — vuelve a entrar y reinténtalo.' };
@@ -441,7 +441,7 @@ export async function ignorarComprobante(
 ): Promise<ResultadoResolucion> {
   const m = motivo.trim();
   if (m === '') {
-    throw new DatoInvalido('Archivar exige un motivo: sin él, dentro de seis meses nadie va a poder distinguir un comprobante que no correspondía de uno que se dejó pasar por descuido.');
+    throw datoInvalido('resolucion.archivar_exige_un_motivo_sin');
   }
   const email = await firmaDe(actor);
   if (email === null) {
@@ -526,7 +526,7 @@ export async function revertirResolucion(
 ): Promise<ResultadoResolucion> {
   const m = motivo.trim();
   if (m === '') {
-    throw new DatoInvalido('Deshacer exige un motivo: es lo que distingue una corrección de un borrado, y esta bandeja no borra nada.');
+    throw datoInvalido('resolucion.deshacer_exige_un_motivo_es');
   }
   const email = await firmaDe(actor);
   if (email === null) {

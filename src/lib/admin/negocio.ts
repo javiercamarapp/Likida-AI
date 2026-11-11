@@ -65,7 +65,7 @@ import { conteo, traerTodo } from '@/lib/likida/pg';
 import { acotada } from '@/lib/likida/presupuesto';
 import { round2, TZ_MX, hoyMx } from '@/lib/formato';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { desglosarPrecio } from '@/lib/saas/iva';
 import { facilidad15Vigente } from '@/lib/likida/perfil/preguntas';
 // Solo TIPOS: `import type` se borra al compilar, así que esto no arrastra el
@@ -1257,11 +1257,11 @@ export async function getInterruptoresPipelineDeTenant(tenantId: string): Promis
  *  0297 en base). LANZA si la escritura falla. */
 export async function apagarPipelineDeTenant(tenantId: string, pipeline: string, motivo: string, userId: string): Promise<void> {
   if (!esPipelineValido(pipeline)) {
-    throw new DatoInvalido(`"${pipeline}" no es un pipeline del catálogo (whatsapp/ocr/cuadre).`);
+    throw datoInvalido('negocio.no_es_un_pipeline_del', { pipeline });
   }
   const m = motivo.trim();
   if (!m) {
-    throw new DatoInvalido('Apagar exige un motivo: sin nota, en tres semanas nadie sabe si ya se puede encender.');
+    throw datoInvalido('negocio.apagar_exige_un_motivo_sin');
   }
   const { error } = await acotada(supabaseAdmin()
     .from('interruptor_tenant')
@@ -1280,7 +1280,7 @@ export async function apagarPipelineDeTenant(tenantId: string, pipeline: string,
  *  escritura falla. */
 export async function encenderPipelineDeTenant(tenantId: string, pipeline: string, userId: string): Promise<void> {
   if (!esPipelineValido(pipeline)) {
-    throw new DatoInvalido(`"${pipeline}" no es un pipeline del catálogo (whatsapp/ocr/cuadre).`);
+    throw datoInvalido('negocio.no_es_un_pipeline_del', { pipeline });
   }
   const { error } = await acotada(supabaseAdmin()
     .from('interruptor_tenant')
@@ -1305,7 +1305,7 @@ export async function encenderPipelineDeTenant(tenantId: string, pipeline: strin
 export async function fijarAgenteChoferHabilitado(tenantId: string, habilitado: boolean, motivo: string, userId: string): Promise<void> {
   const m = motivo.trim();
   if (m.length < 5) {
-    throw new DatoInvalido('Habilitar o deshabilitar el Agente 5 exige un motivo (mínimo 5 caracteres): es la decisión de que el agente le escriba a los choferes de esta flota.');
+    throw datoInvalido('negocio.habilitar_o_deshabilitar_el_agente');
   }
   const { data, error } = await acotada(supabaseAdmin()
     .from('agente_conductor_config')
@@ -1314,7 +1314,7 @@ export async function fijarAgenteChoferHabilitado(tenantId: string, habilitado: 
     .select('tenant_id'), 'fijarAgenteChoferHabilitado');
   if (error) throw new Error(`fijarAgenteChoferHabilitado(${tenantId}): ${error.message}`);
   if (!data || data.length === 0) {
-    throw new DatoInvalido('Esta flota todavía no tiene configuración del agente conductor: se crea al guardar su configuración en el panel de conductores. No se habilita nada sin ella.');
+    throw datoInvalido('negocio.esta_flota_todavia_no_tiene');
   }
   await anotarBitacora(
     {

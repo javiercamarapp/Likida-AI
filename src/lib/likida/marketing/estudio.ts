@@ -31,7 +31,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { firmarRutas } from '@/lib/admin/qa-storage';
 
 export const BUCKET_HOOKS = 'marketing_hooks_video';
@@ -110,8 +110,8 @@ export async function guardarHook(input: { videoRuta: string; hookTexto: string;
 async function guardarHookSinLimpieza(input: { videoRuta: string; hookTexto: string; actorId: string | null }): Promise<string> {
   const ruta = input.videoRuta.trim();
   const texto = input.hookTexto.trim();
-  if (!ruta) throw new DatoInvalido('Falta la ruta del video — sube el video antes de guardar el hook.');
-  if (!texto) throw new DatoInvalido('Anota qué hook usa el video: sin esa anotación, el banco es solo una carpeta de videos.');
+  if (!ruta) throw datoInvalido('estudio.falta_la_ruta_del_video');
+  if (!texto) throw datoInvalido('estudio.anota_que_hook_usa_el');
   const { data, error } = await acotada(supabaseAdmin().from('marketing_hook').insert({
     video_ruta: ruta, hook_texto: texto.slice(0, 4000), creado_por: input.actorId,
   }).select('id').single(), 'estudio.guardar_hook');
@@ -170,7 +170,7 @@ export function validarFotoReferencia(mime: string, bytes: number): void {
     throw new DatoInvalido(`Ese tipo de imagen (${mime || 'desconocido'}) no se acepta — manda jpg, png o webp.`);
   }
   if (bytes > TOPE_IMAGEN_BYTES) {
-    throw new DatoInvalido(`La foto pesa más de ${Math.round(TOPE_IMAGEN_BYTES / (1024 * 1024))} MB — comprímela e intenta de nuevo.`);
+    throw datoInvalido('estudio.la_foto_pesa_mas_de', { v: Math.round(TOPE_IMAGEN_BYTES / (1024 * 1024)) });
   }
 }
 
@@ -180,7 +180,7 @@ export function validarFotoReferencia(mime: string, bytes: number): void {
  *  Un LUGAR no es dato personal por sí mismo. */
 export function exigirConsentimientoReferencia(tipo: TipoReferencia, consentimiento: FormDataEntryValue | null): void {
   if (tipo === 'personaje' && consentimiento !== 'on') {
-    throw new DatoInvalido('Una foto de personaje exige confirmar que la persona retratada dio su consentimiento para usar su imagen en material publicitario.');
+    throw datoInvalido('estudio.una_foto_de_personaje_exige');
   }
 }
 
@@ -209,7 +209,7 @@ async function guardarReferenciaSinLimpieza(input: {
   tipo: TipoReferencia; nombre: string; etiqueta: string | null; fotoRuta: string; actorId: string | null;
 }): Promise<string> {
   const nombre = input.nombre.trim();
-  if (!nombre) throw new DatoInvalido('El nombre es obligatorio — sin él, la referencia no se puede pedir por nombre en un guion.');
+  if (!nombre) throw datoInvalido('estudio.el_nombre_es_obligatorio_sin');
   const { data, error } = await acotada(supabaseAdmin().from('marketing_referencia').insert({
     tipo: input.tipo, nombre: nombre.slice(0, 200),
     etiqueta: input.etiqueta?.trim() ? input.etiqueta.trim().slice(0, 500) : null,
@@ -230,12 +230,12 @@ async function guardarReferenciaSinLimpieza(input: {
  * un error.
  */
 export async function borrarReferencia(id: string): Promise<void> {
-  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new DatoInvalido('Referencia desconocida.');
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw datoInvalido('estudio.referencia_desconocida');
   const { data, error } = await acotada(supabaseAdmin().from('marketing_referencia')
     .select('foto_ruta').eq('id', id).maybeSingle(), 'estudio.borrar_referencia.leer');
   if (error) throw new Error(`borrarReferencia/leer: ${error.message}`);
   const ruta = (data as { foto_ruta?: unknown } | null)?.foto_ruta;
-  if (typeof ruta !== 'string' || !ruta) throw new DatoInvalido('Esa referencia ya no existe.');
+  if (typeof ruta !== 'string' || !ruta) throw datoInvalido('estudio.esa_referencia_ya_no_existe');
   const { error: eObj } = await supabaseAdmin().storage.from(BUCKET_REFERENCIAS).remove([ruta]);
   if (eObj) throw new Error(`borrarReferencia/objeto: ${eObj.message}`);
   const { error: eFila } = await acotada(supabaseAdmin().from('marketing_referencia')

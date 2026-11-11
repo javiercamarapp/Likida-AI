@@ -31,7 +31,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { traerTodo, conteo } from '@/lib/likida/pg';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { diasVencimientoPieza, motivoBandejaGlobalSinAtender, topeBandejaGlobal } from '@/lib/likida/agentes/runner';
 
@@ -66,17 +66,17 @@ const TIPO_RE = /^[a-z0-9_]{2,40}$/;
 export function normalizarParametros(p: ParametrosVencidas = {}): ParametrosNormalizados {
   const dias = p.dias ?? DIAS_VENCIDA_POR_OMISION;
   if (!Number.isInteger(dias) || dias < DIAS_VENCIDA_MIN || dias > DIAS_VENCIDA_MAX) {
-    throw new DatoInvalido(`Los días de vencimiento van de ${DIAS_VENCIDA_MIN} a ${DIAS_VENCIDA_MAX} (entero).`);
+    throw datoInvalido('cola_aprobacio.los_dias_de_vencimiento_van', { DIAS_VENCIDA_MIN, DIAS_VENCIDA_MAX });
   }
   const limite = p.limite ?? LIMITE_LOTE_POR_OMISION;
   if (!Number.isInteger(limite) || limite < 1 || limite > LIMITE_LOTE_MAX) {
-    throw new DatoInvalido(`El límite por lote va de 1 a ${LIMITE_LOTE_MAX} (entero).`);
+    throw datoInvalido('cola_aprobacio.el_limite_por_lote_va', { LIMITE_LOTE_MAX });
   }
   let tipos: string[] | null = null;
   if (p.tipos !== undefined) {
-    if (p.tipos.length === 0) throw new DatoInvalido('Si filtras por tipo, indica al menos uno.');
+    if (p.tipos.length === 0) throw datoInvalido('cola_aprobacio.si_filtras_por_tipo_indica');
     for (const t of p.tipos) {
-      if (!TIPO_RE.test(t)) throw new DatoInvalido(`El tipo de pieza "${t.slice(0, 40)}" no es válido.`);
+      if (!TIPO_RE.test(t)) throw datoInvalido('cola_aprobacio.el_tipo_de_pieza_no', { v: t.slice(0, 40) });
     }
     tipos = [...new Set(p.tipos)];
   }
@@ -173,7 +173,7 @@ export interface ResultadoLote extends ResumenVencidas {
 
 /** Confirma que el actor es un superadmin vigente. Falla cerrado. */
 async function exigirSuperadmin(actorId: string): Promise<string> {
-  if (!actorId) throw new DatoInvalido('No se pudo confirmar quién resuelve — recarga y vuelve a intentar.');
+  if (!actorId) throw datoInvalido('cola_aprobacio.no_se_pudo_confirmar_quien');
   const { data, error } = await acotada(
     supabaseAdmin().from('app_user').select('email, rol').eq('id', actorId).maybeSingle(),
     'colaAprobacion.actor',
@@ -181,7 +181,7 @@ async function exigirSuperadmin(actorId: string): Promise<string> {
   if (error) throw new Error(`colaAprobacion.actor: ${error.message}`);
   const f = data as { email?: string; rol?: string } | null;
   if (!f || f.rol !== 'superadmin' || !f.email) {
-    throw new DatoInvalido('Solo un superadmin puede resolver piezas por lote.');
+    throw datoInvalido('cola_aprobacio.solo_un_superadmin_puede_resolver');
   }
   return f.email;
 }

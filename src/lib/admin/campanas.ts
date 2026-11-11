@@ -16,7 +16,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { traerTodo } from '@/lib/likida/pg';
 
 export interface Campana {
@@ -98,9 +98,9 @@ export async function pausarCampana(id: string, actorId: string): Promise<Result
     .from('campana').select('id, canal, id_externo, nombre, estado')
     .eq('id', id).maybeSingle(), 'campanas.pausar.leer');
   if (error) throw new Error(`pausarCampana: ${error.message}`);
-  if (!data) throw new DatoInvalido('Esa campaña no existe — recarga.');
+  if (!data) throw datoInvalido('campanas.esa_campana_no_existe_recarga');
   const c = data as { id: string; canal: string; id_externo: string | null; nombre: string; estado: string };
-  if (c.estado !== 'activa') throw new DatoInvalido(`«${c.nombre}» no está activa (está ${c.estado}) — no hay gasto que pausar.`);
+  if (c.estado !== 'activa') throw datoInvalido('campanas.no_esta_activa_esta_no', { nombre: c.nombre, estado: c.estado });
 
   const token = process.env.META_ADS_TOKEN;
   let remotaConfirmada = false;
@@ -108,7 +108,7 @@ export async function pausarCampana(id: string, actorId: string): Promise<Result
     const r = await pausarEnMeta(c.id_externo, token);
     if (!r.ok) {
       // La plataforma NO confirmó: la fila se queda activa — la verdad.
-      throw new DatoInvalido(`Meta no aceptó la pausa (${r.detalle}) — la campaña SIGUE ACTIVA y gastando. Reintenta o pásala desde el Ads Manager.`);
+      throw datoInvalido('campanas.meta_no_acepto_la_pausa', { detalle: r.detalle });
     }
     remotaConfirmada = true;
   }
@@ -120,7 +120,7 @@ export async function pausarCampana(id: string, actorId: string): Promise<Result
     .select('id'), 'campanas.pausar');
   if (errUpd) throw new Error(`pausarCampana: ${errUpd.message}`);
   if (!Array.isArray(upd) || upd.length === 0) {
-    throw new DatoInvalido('Alguien más la resolvió antes — recarga.');
+    throw datoInvalido('campanas.alguien_mas_la_resolvio_antes');
   }
 
   await anotarBitacora(

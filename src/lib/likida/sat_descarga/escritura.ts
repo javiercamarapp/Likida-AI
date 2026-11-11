@@ -18,7 +18,7 @@ import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { hoyMx } from '@/lib/formato';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { resolverDescargaSat, estadoDescargaSat } from './index';
 import { VENTANA_MAX_DIAS } from './ciclo';
 import { rfcFiscalDelTenant, normalizarRfc, MENSAJE_RFC_NO_VERIFICADO, mensajeRfcAjeno } from './rfc_tenant';
@@ -36,13 +36,13 @@ export async function guardarConfigDescarga(
 ): Promise<void> {
   const rfc = datos.rfc.trim().toUpperCase();
   if (!RFC.test(rfc)) {
-    throw new DatoInvalido('El RFC no tiene forma de RFC (12 o 13 caracteres). Cópialo de tu constancia de situación fiscal.');
+    throw datoInvalido('escritura.el_rfc_no_tiene_forma');
   }
   if (datos.modo !== 'webservice' && datos.modo !== 'portal') {
-    throw new DatoInvalido('El modo tiene que ser «webservice» o «portal».');
+    throw datoInvalido('escritura.el_modo_tiene_que_ser');
   }
   if (!Number.isInteger(datos.peajeDiasAviso) || datos.peajeDiasAviso < 1 || datos.peajeDiasAviso > 25) {
-    throw new DatoInvalido('La anticipación del aviso de peaje va de 1 a 25 días: el derecho se vence el último día del mes, así que avisar con 26 sería avisar el día 5.');
+    throw datoInvalido('escritura.la_anticipacion_del_aviso_de');
   }
   // A37-S57-01 / A37-S18-01 (CRÍTICO): el RFC del buzón se ata al RFC fiscal
   // VERIFICADO del tenant (su RFC verificado, 0925). La forma no prueba pertenencia: con
@@ -151,7 +151,7 @@ export async function pedirRangoManual(
   actor: Actor = {},
 ): Promise<{ ok: boolean; mensaje: string }> {
   if (!FECHA.test(datos.desde) || !FECHA.test(datos.hasta)) {
-    throw new DatoInvalido('Las fechas van en formato AAAA-MM-DD.');
+    throw datoInvalido('escritura.las_fechas_van_en_formato');
   }
   // A37-S18-09: la forma AAAA-MM-DD no basta: '2026-02-31' pasaba (Date.parse da
   // NaN y NaN no supera el tope) y reventaba en la base. Se exige día real y
@@ -159,20 +159,20 @@ export async function pedirRangoManual(
   for (const f of [datos.desde, datos.hasta]) {
     const d = new Date(`${f}T00:00:00Z`);
     if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== f) {
-      throw new DatoInvalido(`«${f}» no es una fecha real del calendario.`);
+      throw datoInvalido('escritura.no_es_una_fecha_real', { f });
     }
   }
   if (datos.hasta > hoyMx()) {
-    throw new DatoInvalido('La fecha final no puede estar en el futuro.');
+    throw datoInvalido('escritura.la_fecha_final_no_puede');
   }
   if (datos.hasta < datos.desde) {
-    throw new DatoInvalido('La fecha final no puede ser anterior a la inicial.');
+    throw datoInvalido('escritura.la_fecha_final_no_puede_2');
   }
   const dias = Math.round(
     (Date.parse(`${datos.hasta}T00:00:00Z`) - Date.parse(`${datos.desde}T00:00:00Z`)) / 86_400_000,
   ) + 1;
   if (dias > VENTANA_MAX_DIAS) {
-    throw new DatoInvalido(`El rango máximo por solicitud es de ${VENTANA_MAX_DIAS} días y pediste ${dias}. Es un tope nuestro, no del SAT: repartir el año en pedazos evita que un fallo se lleve el rango entero. Pide este mes y luego el anterior.`);
+    throw datoInvalido('escritura.el_rango_maximo_por_solicitud', { VENTANA_MAX_DIAS, dias });
   }
 
   const prov = resolverDescargaSat();

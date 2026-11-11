@@ -31,7 +31,7 @@
 //     crear. La fuente de verdad es el error de Supabase, así que ese se
 //     TRADUCE después, por patrón (`descifrarErrorProvision`).
 // ═══════════════════════════════════════════════════════════════════════════
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { ROTULOS_ROL } from './roles';
 
 /**
@@ -104,17 +104,17 @@ const CORREO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  *  correo no puedan divergir. */
 function correoDeInvitacion(crudo: string): string {
   const email = crudo.trim().toLowerCase();
-  if (email === '') throw new DatoInvalido('Falta el correo: es con lo que esta persona va a entrar al panel.');
-  if (email.length > 160) throw new DatoInvalido('El correo no puede pasar de 160 caracteres.');
+  if (email === '') throw datoInvalido('invitar.falta_el_correo_es_con');
+  if (email.length > 160) throw datoInvalido('invitar.el_correo_no_puede_pasar');
   if (!CORREO_RE.test(email)) {
-    throw new DatoInvalido(`"${email}" no se ve como un correo. Escríbelo completo (nombre@empresa.com).`);
+    throw datoInvalido('invitar.no_se_ve_como_un', { email });
   }
   return email;
 }
 
 function nombreDeInvitacion(crudo: string): string | undefined {
   const nombre = crudo.trim();
-  if (nombre.length > 120) throw new DatoInvalido('El nombre no puede pasar de 120 caracteres.');
+  if (nombre.length > 120) throw datoInvalido('invitar.el_nombre_no_puede_pasar');
   return nombre || undefined;
 }
 
@@ -131,16 +131,14 @@ export function validarInvitacion(c: {
   // rebota — `superadmin` incluido, aunque el select nunca lo ofrezca.
   const rol = rolesInvitablesPara(ctx).find((r) => r.valor === c.rol)?.valor;
   if (!rol) {
-    throw new DatoInvalido('Elige el rol de la lista: contador, encargado o dueño. Ningún otro se puede invitar desde el panel.');
+    throw datoInvalido('invitar.elige_el_rol_de_la');
   }
 
   const telefono = c.telefono.trim();
   if (telefono !== '') {
     const digitos = telefono.replace(/[^\d]/g, '');
     if (digitos.length < 10) {
-      throw new DatoInvalido(
-        `El WhatsApp "${telefono}" tiene ${digitos.length} dígitos y un número mexicano necesita 10. Complétalo o déjalo vacío.`,
-      );
+      throw datoInvalido('invitar.el_whatsapp_tiene_digitos_y', { telefono, length: digitos.length });
     }
   }
 
@@ -193,10 +191,7 @@ export function descifrarErrorProvision(e: unknown): DatoInvalido | null {
   // podría existir a medias (Auth sí, app_user no) o en otra flota, y
   // afirmarlo sería inventar. Ver `esCorreoYaRegistrado`.
   if (esCorreoYaRegistrado(e)) {
-    return new DatoInvalido(
-      'Ese correo ya tiene una cuenta registrada en Likida, así que no se puede invitar de nuevo. ' +
-      'Si no aparece en tu equipo aquí abajo, avísale a Likida para revisarla.',
-    );
+    return datoInvalido('invitar.ese_correo_ya_tiene_una');
   }
 
   // El índice único global de 0059: un teléfono es LA llave de enrutamiento
@@ -204,10 +199,7 @@ export function descifrarErrorProvision(e: unknown): DatoInvalido | null {
   // crear el usuario de Auth — por eso el mensaje pide reintentar con otro
   // correo no: con otro NÚMERO, que es lo que estorbó.
   if (/app_user_telefono_uniq|telefono_identidad_unica/.test(m)) {
-    return new DatoInvalido(
-      'Ese WhatsApp ya identifica a otra cuenta, y el bot enruta por número: no puede ser de dos personas. ' +
-      'El alta no se completó — inténtalo con otro número o sin WhatsApp.',
-    );
+    return datoInvalido('invitar.ese_whatsapp_ya_identifica_a');
   }
 
   // El teléfono corto de `normalizarTelefonoOficina`. `validarInvitacion` lo

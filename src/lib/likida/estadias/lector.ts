@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
 import { traerTodo, traerPorIds, conteo } from '../pg';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import {
   armarEpisodios, resumirEstadias,
   type ContextoEstadias, type EpisodioEstadia, type PoliticaDetencion,
@@ -87,10 +87,10 @@ export async function guardarPoliticaDetencion(
 ): Promise<void> {
   const { horasLibres, tarifaHora } = valores;
   if (horasLibres !== null && (!Number.isFinite(horasLibres) || horasLibres < 0 || horasLibres > 240)) {
-    throw new DatoInvalido('Las horas libres deben ser un número entre 0 y 240, o quedar vacías (= no pactadas).');
+    throw datoInvalido('lector.las_horas_libres_deben_ser');
   }
   if (tarifaHora !== null && (!Number.isFinite(tarifaHora) || tarifaHora <= 0)) {
-    throw new DatoInvalido('La tarifa por hora debe ser mayor a cero, o quedar vacía (= no pactada).');
+    throw datoInvalido('lector.la_tarifa_por_hora_debe');
   }
 
   const admin = supabaseAdmin();
@@ -143,7 +143,7 @@ export async function vincularSitioCliente(
     .eq('id', clienteId)
     .select('id'), 'estadias.sitio');
   if (r.error) throw new Error(`estadias.sitio: ${r.error.message}`);
-  if (!r.data || r.data.length === 0) throw new DatoInvalido('Ese cliente no existe en tu flota.');
+  if (!r.data || r.data.length === 0) throw datoInvalido('lector.ese_cliente_no_existe_en');
 }
 
 /** El panel completo: episodios de la ventana + resumen + pactos. Lanza ante

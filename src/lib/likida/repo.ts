@@ -17,7 +17,7 @@ import {
   declararUmbralPeaje, declararFacilidad15,
   regimenElegiblePorClave, REGIMENES_ELEGIBLES_15,
 } from './perfil/preguntas';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido } from './errores';
 import type { CuadreParaResumen } from './cuadre/resumen';
 
 // El tope de consulta vive en `presupuesto.ts`, con `TOPE_CONSULTA_MS` y el
@@ -515,11 +515,11 @@ export async function reasignarOperador(tenantId: string, viajeId: string, opera
     // A37-S18-05: el operador ya trae OTRO viaje abierto (`uq_viaje_abierto_por_operador`, 0029). Es el rechazo más común del
     // despacho y tiene un mensaje escrito para pantalla — igual que en `crearViaje`; antes salía como un Error crudo.
     if (violaIndice(error, 'uq_viaje_abierto_por_operador')) {
-      throw new DatoInvalido('Ese operador ya trae un viaje abierto — ciérralo o asígnale otro chofer.');
+      throw datoInvalido('repo.ese_operador_ya_trae_un');
     }
     throw new Error(`reasignarOperador: ${error.message}`);
   }
-  if (!Array.isArray(data) || data.length === 0) throw new DatoInvalido('Ese viaje no existe en tu flota. Recarga la pantalla.');
+  if (!Array.isArray(data) || data.length === 0) throw datoInvalido('repo.ese_viaje_no_existe_en');
   return { cambio, operadorAnteriorId };
 }
 
@@ -1811,10 +1811,7 @@ export async function exigirRegimenCompatibleConFacilidad15(tenantId: string, re
     clave = (fila as { regimen_fiscal?: string | null } | null)?.regimen_fiscal ?? null;
   }
   if (regimenElegiblePorClave(clave) === false) {
-    throw new DatoInvalido(
-      `La flota está registrada con el régimen fiscal ${clave} ante el SAT, y la facilidad del 15% de la RFA 2026 regla 2.9 solo aplica a los regímenes ${REGIMENES_ELEGIBLES_15.join(' y ')}. `
-      + 'Si la flota cambió de régimen, corrige primero su régimen fiscal; si no, esta declaración imprimiría en el PDF una deducción que la norma le niega.',
-    );
+    throw datoInvalido('repo.la_flota_esta_registrada_con', { clave: String(clave), v: REGIMENES_ELEGIBLES_15.join(' y ') });
   }
 }
 

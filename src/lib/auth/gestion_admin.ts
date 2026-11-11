@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { rateLimit } from '@/lib/ratelimit';
 import { anotarAccionAdmin, type ActorAdmin } from '@/lib/admin/acciones_riesgo';
@@ -52,15 +52,12 @@ export interface ObjetivoGestion {
  * contesta: «no existe» y «no pude leer» son afirmaciones distintas.
  */
 export async function objetivoDeGestion(usuarioId: string): Promise<ObjetivoGestion> {
-  if (!esUuidValido(usuarioId)) throw new DatoInvalido('No se reconoce esa cuenta. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(usuarioId)) throw datoInvalido('gestion_admin.no_se_reconoce_esa_cuenta');
   const { data, error } = await supabaseAdmin().from('app_user').select('id, tenant_id, rol, activo').eq('id', usuarioId).maybeSingle();
   if (error) throw new Error(`objetivoDeGestion: ${error.message}`);
-  if (!data) throw new DatoInvalido('No se reconoce esa cuenta. Recarga la pantalla.');
+  if (!data) throw datoInvalido('gestion_admin.no_se_reconoce_esa_cuenta_2');
   if (!data.tenant_id || data.rol === 'superadmin' || data.rol === 'vendedor') {
-    throw new DatoInvalido(
-      'Esa cuenta es de Likida (superadmin o vendedor), no de una flota: todavía no se administra desde aquí. Dar de baja a personal de Likida '
-      + 'lleva su propio candado (nunca al último superadmin, nunca a uno mismo) y está pendiente de revisión.',
-    );
+    throw datoInvalido('gestion_admin.esa_cuenta_es_de_likida');
   }
   return { id: String(data.id), tenantId: String(data.tenant_id), rol: String(data.rol), activo: data.activo !== false };
 }
@@ -96,7 +93,7 @@ export async function cerrarSesionesDesdeAdmin(usuarioId: string, actor: ActorAd
 export async function reenviarAccesoDesdeAdmin(usuarioId: string, actor: ActorAdmin) {
   const o = await objetivoDeGestion(usuarioId);
   if (!(await rateLimit(`invitar:${o.tenantId}`, TOPE_INVITACIONES_HORA, 3_600_000))) {
-    throw new DatoInvalido(`Demasiados correos de acceso en una hora para esa flota (tope ${TOPE_INVITACIONES_HORA}). Espera un rato.`);
+    throw datoInvalido('gestion_admin.demasiados_correos_de_acceso_en', { TOPE_INVITACIONES_HORA });
   }
   const contexto: ContextoAcceso = { flotaNombre: await nombreDeFlota(o.tenantId), invitaNombre: null };
   return reenviarAcceso(o.tenantId, usuarioId, actorDe(actor), contexto);
@@ -125,17 +122,17 @@ export async function altaDeUsuarioDesdeAdmin(p: {
   actor: ActorAdmin;
 }): Promise<ResultadoAlta> {
   const { tenantId, rol, actor } = p;
-  if (!esUuidValido(tenantId)) throw new DatoInvalido('Elige una flota.');
+  if (!esUuidValido(tenantId)) throw datoInvalido('gestion_admin.elige_una_flota');
   if (!(ROLES_ALTA_ADMIN as readonly string[]).includes(rol)) {
-    throw new DatoInvalido('Elige uno de los tres roles de la lista. Superadmin y vendedor no se dan de alta desde aquí.');
+    throw datoInvalido('gestion_admin.elige_uno_de_los_tres');
   }
   const email = p.email.trim().toLowerCase();
-  if (!email) throw new DatoInvalido('Falta el correo.');
+  if (!email) throw datoInvalido('gestion_admin.falta_el_correo');
 
   const flotaNombre = await nombreDeFlota(tenantId);
-  if (flotaNombre === null) throw new DatoInvalido('Esa flota ya no existe.');
+  if (flotaNombre === null) throw datoInvalido('gestion_admin.esa_flota_ya_no_existe');
   if (!(await rateLimit(`invitar:${tenantId}`, TOPE_INVITACIONES_HORA, 3_600_000))) {
-    throw new DatoInvalido(`Demasiadas altas en una hora para esa flota (tope ${TOPE_INVITACIONES_HORA}). Espera un rato y vuelve a intentar.`);
+    throw datoInvalido('gestion_admin.demasiadas_altas_en_una_hora', { TOPE_INVITACIONES_HORA });
   }
 
   let userId: string;

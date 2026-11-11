@@ -30,7 +30,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { anotarBitacora } from './bitacora_escritura';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { enviarConFallback } from '@/lib/meta/enviar_con_fallback';
 import { opcionesDeEnvio, textoRenderizado, PLANTILLA } from '@/lib/meta/plantillas_catalogo';
@@ -261,8 +261,8 @@ export async function invitarOperadores(
   let pedidos = 0;
   if (opciones.ids) {
     const ids = [...new Set(opciones.ids.map((i) => String(i).trim()))];
-    if (ids.length === 0) throw new DatoInvalido('Elige al menos un operador para invitar.');
-    if (ids.some((i) => !esUuidValido(i))) throw new DatoInvalido('No se reconoce a alguno de los operadores. Vuelve a abrir la pantalla.');
+    if (ids.length === 0) throw datoInvalido('invitacion_ope.elige_al_menos_un_operador');
+    if (ids.some((i) => !esUuidValido(i))) throw datoInvalido('invitacion_ope.no_se_reconoce_a_alguno');
     pedidos = ids.length;
     modo = { tipo: 'ids', ids };
   } else {

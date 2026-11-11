@@ -32,7 +32,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { getBorradorViaje } from './carta_porte_datos';
@@ -172,7 +172,7 @@ export async function guardarPerfilFiscal(
     // Los CHECK de forma (RFC, régimen, CP) hablan por PostgREST; se traduce
     // al idioma del contador sin perder el original en el log.
     logger.warn('timbre.perfil_rechazado', { error: error.message });
-    throw new DatoInvalido('Revisa el formato: RFC de 12-13, régimen de 3 dígitos, CP de 5 dígitos.');
+    throw datoInvalido('carta_porte_ti.revisa_el_formato_rfc_de');
   }
   await anotarBitacora(
     { tenantId, actor, accion: 'timbre.perfil_guardado', entidad: 'tenant', entidadId: tenantId,
@@ -195,10 +195,10 @@ export async function guardarReceptorFiscal(
   }).eq('tenant_id', tenantId).eq('id', clienteId).select('id'), 'timbre.guardarReceptor');
   if (error) {
     logger.warn('timbre.receptor_rechazado', { error: error.message });
-    throw new DatoInvalido('Revisa el formato: régimen de 3 dígitos, uso CFDI tipo G03/S01, CP de 5 dígitos.');
+    throw datoInvalido('carta_porte_ti.revisa_el_formato_regimen_de');
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese cliente no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+    throw datoInvalido('carta_porte_ti.ese_cliente_no_esta_en');
   }
   await anotarBitacora(
     { tenantId, actor, accion: 'timbre.receptor_guardado', entidad: 'cliente', entidadId: clienteId,

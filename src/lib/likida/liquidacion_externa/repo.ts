@@ -13,7 +13,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
 import { exigir, traerTodo } from '../pg';
-import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
+import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja, datoInvalido } from '../errores';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { validarFormato, type FormatoFlota } from './formato_flota';
 import { PATRON_FOLIO } from '../orquestador/escalamiento';
@@ -272,7 +272,7 @@ export async function guardarTelefonosFlota(tenantId: string, t: TelefonosFlota,
   const ins = await acotada(supabaseAdmin().from('liquidacion_formato_flota').insert({ tenant_id: tenantId, formato: null, nombre_muestra: null, ...cambios }), 'liqext.telefonos_crear');
   if (ins.error) {
     if (ins.error.code === '23502') {
-      throw new DatoInvalido('Para guardar los teléfonos sin un Excel de muestra hace falta aplicar la migración 0645 en la base. Mientras tanto, sube el Excel de muestra y ahí los capturas.');
+      throw datoInvalido('repo.para_guardar_los_telefonos_sin');
     }
     throw new Error(`liquidacion_formato_flota crear teléfonos: ${ins.error.message}`);
   }
@@ -329,9 +329,7 @@ export async function resolverOperadorDestino(
   tenantId: string,
   ref: LiquidacionExternaNormalizada['operador'],
 ): Promise<OperadorDestino> {
-  const noEncontrado = () => new DatoInvalido(
-    'No encontré a ese operador en tu flota. Manda `operador.id`, `operador.telefono` o `operador.numeroEmpleado` de un chofer dado de alta en Likida.',
-  );
+  const noEncontrado = () => datoInvalido('repo.no_encontre_a_ese_operador');
   const lecturas: Array<Promise<OperadorDestino[]>> = [];
   const leer = async (columna: 'id' | 'telefono' | 'numero_empleado', valor: string): Promise<OperadorDestino[]> => {
     const res = await acotada(supabaseAdmin().from('operador')

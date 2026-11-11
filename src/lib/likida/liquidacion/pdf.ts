@@ -20,7 +20,7 @@ import type { ResultadoEstadiasPeriodo } from '../conductor/estadias_lectura';
 
 import { leyendaPdf } from '../cuadre/leyendas';
 import { LOGO_PNG_BASE64 } from '@/lib/marca/logo';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import type { Liquidacion, Viaje, Operador } from '@/types/likida';
 
 // Paleta (Apple) en 0–1 para pdf-lib
@@ -96,7 +96,7 @@ export async function generarLiquidacionPDF(
   // `en_cuadre` y admite gastos nuevos — el PDF emitido antes deja de
   // cuadrar con la base en cuanto llegue el comprobante bueno.
   if (liq.revision === 'rechazada') {
-    throw new DatoInvalido('Esta liquidación se rechazó y el viaje volvió a cuadre: no hay PDF que emitir todavía.');
+    throw datoInvalido('pdf.esta_liquidacion_se_rechazo_y');
   }
   const selloRevision = liq.revision === 'pendiente' || liq.revision == null
     ? 'PENDIENTE DE REVISIÓN — todavía no la firma una persona'

@@ -12,7 +12,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { ESTADOS_AGENTE, type EstadoAgente } from './definiciones';
 
@@ -42,12 +42,12 @@ export function validarCambioConfig(c: CambioConfigCrudo): CambioConfigValido {
   const out: CambioConfigValido = {};
   const estado = (c.estado ?? '').trim();
   if (estado) {
-    if (!ESTADOS_AGENTE.some((e) => e.valor === estado)) throw new DatoInvalido(`"${estado}" no es un estado de agente.`);
+    if (!ESTADOS_AGENTE.some((e) => e.valor === estado)) throw datoInvalido('config_agente.no_es_un_estado_de', { estado });
     out.estado = estado as EstadoAgente;
   }
   const runner = (c.runnerHabilitado ?? '').trim();
   if (runner) {
-    if (runner !== 'si' && runner !== 'no') throw new DatoInvalido('El runner se habilita con «si» o se deshabilita con «no».');
+    if (runner !== 'si' && runner !== 'no') throw datoInvalido('config_agente.el_runner_se_habilita_con');
     out.runner_habilitado = runner === 'si';
   }
   const pres = (c.presupuestoDiaUsd ?? '').trim().replace(',', '.');
@@ -55,8 +55,8 @@ export function validarCambioConfig(c: CambioConfigCrudo): CambioConfigValido {
     if (pres === 'sin_tope') out.presupuesto_dia_usd = null;
     else {
       const n = Number(pres);
-      if (!Number.isFinite(n) || n < 0) throw new DatoInvalido('El presupuesto por día debe ser un número de USD igual o mayor que cero.');
-      if (n > PRESUPUESTO_DIA_MAX_USD) throw new DatoInvalido(`El presupuesto por día no puede pasar de ${PRESUPUESTO_DIA_MAX_USD} USD desde esta pantalla.`);
+      if (!Number.isFinite(n) || n < 0) throw datoInvalido('config_agente.el_presupuesto_por_dia_debe');
+      if (n > PRESUPUESTO_DIA_MAX_USD) throw datoInvalido('config_agente.el_presupuesto_por_dia_no', { PRESUPUESTO_DIA_MAX_USD });
       out.presupuesto_dia_usd = Math.round(n * 100) / 100;
     }
   }
@@ -64,11 +64,11 @@ export function validarCambioConfig(c: CambioConfigCrudo): CambioConfigValido {
   if (modelo) {
     if (modelo === 'sin_declarar') out.modelo_rol = null;
     else {
-      if (!MODELO_RE.test(modelo)) throw new DatoInvalido('El rol de modelo solo admite minúsculas, números y . _ : -.');
+      if (!MODELO_RE.test(modelo)) throw datoInvalido('config_agente.el_rol_de_modelo_solo');
       out.modelo_rol = modelo;
     }
   }
-  if (Object.keys(out).length === 0) throw new DatoInvalido('No hay ningún cambio que guardar: elige al menos un campo.');
+  if (Object.keys(out).length === 0) throw datoInvalido('config_agente.no_hay_ningun_cambio_que');
   return out;
 }
 
@@ -86,9 +86,9 @@ export function diferencias(antes: Record<string, unknown>, nuevo: CambioConfigV
 
 /** Aplica el cambio con motivo y bitácora. LANZA con texto de pantalla; no devuelve éxito si no escribió. */
 export async function actualizarAgente(id: string, crudo: CambioConfigCrudo, motivo: string, actorId: string): Promise<ResultadoConfig> {
-  if (!ID_RE.test(id)) throw new DatoInvalido('Agente inválido.');
+  if (!ID_RE.test(id)) throw datoInvalido('config_agente.agente_invalido');
   const m = motivo.trim();
-  if (!m) throw new DatoInvalido('Configurar un agente exige un motivo: queda en la bitácora.');
+  if (!m) throw datoInvalido('config_agente.configurar_un_agente_exige_un');
   const nuevo = validarCambioConfig(crudo);
 
   const previo = await acotada(
@@ -98,11 +98,11 @@ export async function actualizarAgente(id: string, crudo: CambioConfigCrudo, mot
   );
   if (previo.error) throw new Error(`actualizarAgente: no se pudo leer el agente (${previo.error.message}).`);
   const fila = ((previo.data ?? [])[0] ?? null) as Record<string, unknown> | null;
-  if (!fila) throw new DatoInvalido(`No existe el agente "${id}".`);
+  if (!fila) throw datoInvalido('config_agente.no_existe_el_agente', { id });
   if (fila.presupuesto_dia_usd !== null && fila.presupuesto_dia_usd !== undefined) fila.presupuesto_dia_usd = Number(fila.presupuesto_dia_usd);
 
   const cambios = diferencias(fila, nuevo);
-  if (Object.keys(cambios).length === 0) throw new DatoInvalido('Ese agente ya está así: no hay nada que cambiar.');
+  if (Object.keys(cambios).length === 0) throw datoInvalido('config_agente.ese_agente_ya_esta_asi');
 
   const parche: Record<string, unknown> = {};
   for (const k of Object.keys(cambios)) parche[k] = (nuevo as Record<string, unknown>)[k];

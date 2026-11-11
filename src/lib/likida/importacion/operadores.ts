@@ -40,7 +40,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { acotada } from '../presupuesto';
 import { variantesTelefono } from '../conv';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import {
   normalizarTelefonoOperador, normalizarRfcOperador, normalizarFechaLicencia, TELEFONO_NO_DISPONIBLE,
 } from '../administracion';
@@ -101,16 +101,16 @@ export interface OperadorImportado {
  */
 export function validarOperadorImportado(c: OperadorCrudo, fila: number, opciones: OpcionesValidacionOperador = {}): OperadorImportado {
   const nombre = (c.nombre ?? '').replace(/\s+/g, ' ').trim();
-  if (nombre.length < 3) throw new DatoInvalido('el nombre necesita al menos 3 caracteres');
-  if (nombre.length > 120) throw new DatoInvalido('el nombre no puede pasar de 120 caracteres');
+  if (nombre.length < 3) throw datoInvalido('operadores.el_nombre_necesita_al_menos');
+  if (nombre.length > 120) throw datoInvalido('operadores.el_nombre_no_puede_pasar');
   const sinTelefono = !(c.telefono ?? '').trim();
-  if (sinTelefono && !opciones.sinTelefono) throw new DatoInvalido('sin teléfono — es la identidad del chofer para el bot');
+  if (sinTelefono && !opciones.sinTelefono) throw datoInvalido('operadores.sin_telefono_es_la_identidad');
   const telefono = sinTelefono ? '' : normalizarTelefonoOperador(c.telefono);
   const numeroEmpleado = (c.numeroEmpleado ?? '').trim().slice(0, 40) || null;
   const correo = correoDeOperador(c.correo);
-  if (correo === undefined) throw new DatoInvalido('el correo no tiene forma de correo (falta la @ o el dominio)');
+  if (correo === undefined) throw datoInvalido('operadores.el_correo_no_tiene_forma');
   if (sinTelefono && (!numeroEmpleado || !correo)) {
-    throw new DatoInvalido('sin teléfono: el operador necesita número de empleado y correo (es como se le encuentra y se le entrega el desglose)');
+    throw datoInvalido('operadores.sin_telefono_el_operador_necesita');
   }
   const licencia = (c.licencia ?? '').trim().slice(0, 40) || null;
   const licenciaTipo = (c.licenciaTipo ?? '').trim().slice(0, 10) || null;

@@ -1,4 +1,4 @@
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { round2 } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -93,7 +93,7 @@ export const FALTA_CRITERIO_IVA =
  */
 export function desglosarPrecio(precio: number, criterio: CriterioIva): DesgloseIva {
   if (!Number.isFinite(precio) || precio < 0) {
-    throw new DatoInvalido('El precio del plan no es una cifra válida, así que no hay nada que cobrar.');
+    throw datoInvalido('iva.el_precio_del_plan_no');
   }
   if (criterio === null || criterio === undefined) {
     throw new DatoInvalido(FALTA_CRITERIO_IVA);

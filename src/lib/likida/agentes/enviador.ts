@@ -49,7 +49,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { correoConfigurado } from '@/lib/correo/enviar';
 import { enviarPiezaPorCorreo, topeCorreoFrioDia, filtrarSuprimidos, TIPOS_CAMPANA } from './cola';
@@ -207,10 +207,10 @@ export async function correrEnviador(
   // lo prenda a propósito en Vercel — nunca por default de un deploy o de
   // una migración.
   if (!encendidoAhora) {
-    throw new DatoInvalido('El envío autónomo de campaña arranca APAGADO por decisión explícita — enciéndelo con LIKIDA_ENVIADOR_ENCENDIDO=true cuando decidas que puede empezar.');
+    throw datoInvalido('enviador.el_envio_autonomo_de_campana');
   }
   if (await estaApagado('agente:enviador')) {
-    throw new DatoInvalido('El enviador está apagado — se enciende desde /admin/observabilidad o ⌘K.');
+    throw datoInvalido('enviador.el_enviador_esta_apagado_se');
   }
   // Sin canal no hay envío, y la corrida LO DICE en vez de reportar 0/0 verde.
   if (!correoConfigurado()) {
@@ -283,7 +283,7 @@ export async function correrEnviador(
     const pieza = candidatas[i];
     try {
       const principal = pieza.prospecto?.correo?.trim().toLowerCase() ?? '';
-      if (!principal) throw new DatoInvalido('el prospecto no tiene correo principal capturado');
+      if (!principal) throw datoInvalido('enviador.el_prospecto_no_tiene_correo');
 
       // Las copias: TODOS los correos hallados de la empresa (0217), menos
       // el principal — y todo el conjunto pasa por la lista de bajas.
@@ -306,7 +306,7 @@ export async function correrEnviador(
       }
       const vivos = await filtrarSuprimidos([principal, ...copias]);
       if (!vivos.includes(principal)) {
-        throw new DatoInvalido('el correo principal está en la lista de bajas — no se le escribe');
+        throw datoInvalido('enviador.el_correo_principal_esta_en');
       }
 
       // Auto-APROBAR, anclado a pendiente (si un humano la resolvió en la
@@ -317,7 +317,7 @@ export async function correrEnviador(
       // por lo que sea una `pendiente` llegara hasta aquí con la palanca en
       // su default ('no'), se rechaza en vez de aprobarla sola.
       if (pieza.estado === 'pendiente' && !autoaprobar) {
-        throw new DatoInvalido('autoaprobación desactivada (LIKIDA_ENVIADOR_AUTOAPROBAR≠si) — la pieza pendiente no se aprueba sola');
+        throw datoInvalido('enviador.autoaprobacion_desactivada_likida_enviador_autoaprobar');
       }
       if (pieza.estado === 'pendiente') {
         const { data: ap, error: errAp } = await supabaseAdmin()
@@ -331,7 +331,7 @@ export async function correrEnviador(
           .eq('id', pieza.id).eq('estado', 'pendiente')
           .select('id');
         if (errAp) throw new Error(`auto-aprobación fallida: ${errAp.message}`);
-        if (!Array.isArray(ap) || ap.length === 0) throw new DatoInvalido('un humano la resolvió durante la ventana');
+        if (!Array.isArray(ap) || ap.length === 0) throw datoInvalido('enviador.un_humano_la_resolvio_durante');
       }
 
       // ENVIAR por la puerta de siempre (claim + tope + cadencia + CHECK).

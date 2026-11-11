@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { esRfcValido, rfcChecksumOk } from '@/lib/likida/intake/cfdi';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS DATOS FISCALES DE LA FLOTA — lo que el CFDI exige del receptor.
@@ -147,9 +147,7 @@ export interface FilaFiscalTenant {
 export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTenant {
   const rfc = d.rfc.toUpperCase().replace(/[^A-ZÑ&0-9]/g, '');
   if (!esRfcValido(rfc) || !rfcChecksumOk(rfc)) {
-    throw new DatoInvalido(
-      `El RFC "${d.rfc}" no pasa el dígito verificador. Con un RFC inválido el SAT rechaza el timbrado, y eso se descubre cuando ya cobramos y tu contador no tiene con qué deducir.`,
-    );
+    throw datoInvalido('fiscal.el_rfc_no_pasa_el', { rfc: d.rfc });
   }
 
   // ── EL RFC GENÉRICO NO ES UN RFC DE CLIENTE (auditoría prod, DAT-40) ─────
@@ -162,10 +160,7 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
   // SAT exige que ese RFC vaya con régimen 616 y uso S01, que no es nada de lo
   // que este catálogo ofrece.
   if (rfc === 'XAXX010101000' || rfc === 'XEXX010101000') {
-    throw new DatoInvalido(
-      'Ese es el RFC genérico (público en general). Un CFDI emitido a ese RFC no lo puede deducir nadie: pon el '
-      + 'RFC de tu empresa, tal como aparece en tu Constancia de Situación Fiscal.',
-    );
+    throw datoInvalido('fiscal.ese_es_el_rfc_generico');
   }
 
   // LA RAZÓN SOCIAL NO SE "LIMPIA" MÁS ALLÁ DE LOS ESPACIOS. El SAT la compara
@@ -174,38 +169,34 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
   // enfrente — nosotros no sabemos mejor que su Constancia de Situación Fiscal.
   const razonSocial = d.razonSocial.trim();
   if (razonSocial.length < 3) {
-    throw new DatoInvalido('Falta la razón social, tal como aparece en tu Constancia de Situación Fiscal.');
+    throw datoInvalido('fiscal.falta_la_razon_social_tal');
   }
 
   const cp = d.codigoPostal.trim();
   if (!/^[0-9]{5}$/.test(cp)) {
-    throw new DatoInvalido(`El código postal "${d.codigoPostal}" no son 5 dígitos.`);
+    throw datoInvalido('fiscal.el_codigo_postal_no_son', { codigoPostal: d.codigoPostal });
   }
 
   if (!REGIMENES.some((r) => r.clave === d.regimenFiscal)) {
-    throw new DatoInvalido('Elige un régimen fiscal de la lista.');
+    throw datoInvalido('fiscal.elige_un_regimen_fiscal_de');
   }
   // A37-S61-10: el tipo de persona del RFC (12 = moral, 13 = física) debe caber
   // en el régimen. Solo se rechaza lo que c_RegimenFiscal marca sin ambigüedad;
   // 624 y 626 admiten ambos tipos y no se restringen (ante duda, no adivinar).
   const esMoral = rfc.length === 12;
   if (esMoral && REGIMENES_SOLO_FISICA.includes(d.regimenFiscal)) {
-    throw new DatoInvalido(
-      `El RFC "${rfc}" es de persona moral y el régimen ${d.regimenFiscal} es solo de personas físicas. El SAT rechazaría la factura al timbrar. Revisa el régimen en tu Constancia de Situación Fiscal.`,
-    );
+    throw datoInvalido('fiscal.el_rfc_es_de_persona', { rfc, regimenFiscal: d.regimenFiscal });
   }
   if (!esMoral && REGIMENES_SOLO_MORAL.includes(d.regimenFiscal)) {
-    throw new DatoInvalido(
-      `El RFC "${rfc}" es de persona física y el régimen ${d.regimenFiscal} es solo de personas morales. El SAT rechazaría la factura al timbrar. Revisa el régimen en tu Constancia de Situación Fiscal.`,
-    );
+    throw datoInvalido('fiscal.el_rfc_es_de_persona_2', { rfc, regimenFiscal: d.regimenFiscal });
   }
   if (!USOS_CFDI.some((u) => u.clave === d.usoCfdi)) {
-    throw new DatoInvalido('Elige un uso de CFDI de la lista.');
+    throw datoInvalido('fiscal.elige_un_uso_de_cfdi');
   }
 
   const email = (d.email ?? '').trim();
   if (email && !/^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(email)) {
-    throw new DatoInvalido(`El correo "${d.email}" no tiene forma de correo. Ahí es donde te va a llegar tu CFDI.`);
+    throw datoInvalido('fiscal.el_correo_no_tiene_forma', { email: String(d.email) });
   }
 
   // AUDITORÍA 19 (legal C3 / C.16): el domicilio del aviso de privacidad. Se
@@ -214,9 +205,7 @@ export function validarDatosFiscales(d: DatosFiscalesCapturados): FilaFiscalTena
   // que la constancia. Vacío = null explícito ("no capturado"), nunca ''.
   const domicilio = (d.domicilioFiscal ?? '').trim();
   if (domicilio && domicilio.length < 10) {
-    throw new DatoInvalido(
-      'El domicilio fiscal se ve incompleto. Escríbelo entero —calle, número, colonia, código postal y ciudad—: es el que va a aparecer en el aviso de privacidad de tus operadores, y un aviso con medio domicilio no dice dónde reclamarte.',
-    );
+    throw datoInvalido('fiscal.el_domicilio_fiscal_se_ve');
   }
 
   return {

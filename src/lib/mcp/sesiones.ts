@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -268,7 +268,7 @@ export async function revocarSesionesMcp(
   revocadoPor?: string,
 ): Promise<number> {
   if (!esUuidValido(usuarioId)) {
-    throw new DatoInvalido('No se reconoce a ese usuario. Vuelve a abrir la pantalla.');
+    throw datoInvalido('sesiones.no_se_reconoce_a_ese');
   }
 
   const { data, error } = await acotada(supabaseAdmin()
@@ -280,7 +280,7 @@ export async function revocarSesionesMcp(
   // formas dicen lo mismo y `Number` las cubre.
   const tumbados = Number(data ?? 0);
   if (!Number.isFinite(tumbados) || tumbados <= 0) {
-    throw new DatoInvalido('No hay ninguna sesión MCP viva de ese usuario en tu flota. Puede que ya se hubiera cortado — recarga la pantalla.');
+    throw datoInvalido('sesiones.no_hay_ninguna_sesion_mcp');
   }
 
   // Best-effort, igual que en `llave-api-escritura`: los tokens YA se
