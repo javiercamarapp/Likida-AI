@@ -3,7 +3,7 @@ import { datosParaProveedor } from '@/lib/i18n/servidor';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import {
-  Aviso, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoError, EstadoVacio, Fieldset, FormaConAviso, Icono, StatusChip, TablaBase,
+  Aviso, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, EstadoError, Fieldset, FormaConAviso, Icono, StatusChip, TablaBase,
   type AccionDeForma, type ColumnaBase, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra, CajonVistaRapida } from '@/app/ui-v2/esqueletos';
