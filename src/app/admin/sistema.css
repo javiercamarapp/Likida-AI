@@ -34,3 +34,13 @@
 [data-ui="v2"] .adm-sis-error-fila { display: block; max-width: 60ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; color: var(--muted); }
 [data-ui="v2"] .adm-sis-dato { display: block; overflow-wrap: anywhere; }
 [data-ui="v2"] .adm-sis-fila__nombre { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+
+/* ── F26 ronda 2: kill switch con UNA acción de peligro, KPI de ficha a escala Rovaq ── */
+[data-ui="v2"] .adm-sis-apagar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+[data-ui="v2"] .adm-sis-apagar > * { min-width: 0; }
+[data-ui="v2"] .adm-sis-apagar__motivo { flex: 1 1 220px; }
+[data-ui="v2"] .adm-sis-encender { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+[data-ui="v2"] .adm-sis-linea-estado { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Una cifra sin dato conserva la escala de la tira (26/700, tracking -.03em): solo el color la apaga. */
+[data-ui="v2"] .adm-escala-kpi { display: contents; }
+[data-ui="v2"] .adm-escala-kpi .rv-kpi__valor[data-vacio] { font-size: 26px; font-weight: 700; letter-spacing: -.03em; }
