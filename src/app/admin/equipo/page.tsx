@@ -8,6 +8,7 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import { BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
 import type { PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
 import { TablaLista, hrefConParams, type ColumnaTabla } from '../../ui-v2/datos';
 import {
   accionCambiarRolUsuario, accionDarDeBajaUsuario, accionReactivarUsuario, accionReenviarAccesoUsuario, accionCerrarSesionesUsuario,
@@ -52,7 +53,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
   const marco = (hijos: React.ReactNode, extra: Partial<React.ComponentProps<typeof EsqueletoTablaMaestra>> = {}) => (
     <EsqueletoTablaMaestra
       area="Control" titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')}
-      acciones={<BotonEnlace href="/admin/usuarios/nuevo" variante="primary" tamano="sm">{t('equipo.nuevo_acceso')}</BotonEnlace>}
+      /* «Nuevo acceso» vive como pestaña del grupo (Personas · Nuevo acceso): repetirlo como primario ponía dos entradas a lo mismo. */
       {...extra}
     >{hijos}</EsqueletoTablaMaestra>
   );
@@ -92,7 +93,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
     },
   ];
 
-  const cifras: PropsCifra[] = [
+  const cifras: PropsCifra[] = uniformes([
     { etiqueta: t('equipo.personas_con_cuenta'), valor: todas.length, formato: 'entero' },
     { etiqueta: t('equipo.activas'), valor: conteo('activa'), formato: 'entero' },
     { etiqueta: t('equipo.de_baja'), valor: conteo('baja'), formato: 'entero' },
@@ -101,7 +102,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
       estado: lectura.accesoLegible ? 'ok' : 'error', mensaje: t('equipo.no_se_pudo_leer_2'),
       nota: lectura.accesoLegible ? t('equipo.se_les_dio_de') : undefined, tono: lectura.accesoLegible && nuncaEntraron > 0 ? 'warn' : undefined,
     },
-  ];
+  ]);
   const nActivos = (q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0);
 
   return marco(
