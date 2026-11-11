@@ -5,7 +5,7 @@ import sharp from 'sharp';
 
 function lcg(semilla: number): () => number {
   let s = semilla >>> 0;
-  return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 0x100000000; };
+  return () => { s = (Math.imul(s, 1664525) + 0x3c6ef35f) >>> 0; return s / 0x100000000; };
 }
 
 /** SVG del ticket: papel claro y renglones de "letras" negras. `desborde` lleva el texto de borde a borde (ticket recortado). */
@@ -29,7 +29,7 @@ export type VarianteFoto = 'buena' | 'oscura' | 'quemada' | 'desenfocada' | 'rec
 export async function fotoSintetica(v: VarianteFoto): Promise<string> {
   const ancho = v === 'chica' ? 500 : 1200;
   const alto = v === 'chica' ? 667 : 1600;
-  let img = sharp(Buffer.from(svgTicket(ancho, alto, v === 'recortada')));
+  let img = sharp(new TextEncoder().encode(svgTicket(ancho, alto, v === 'recortada')));
   if (v === 'oscura') img = img.linear(0.18, 0);
   if (v === 'quemada') img = img.linear(1, 175);
   if (v === 'desenfocada') img = img.blur(9);
