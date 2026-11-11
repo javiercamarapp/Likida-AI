@@ -34,7 +34,10 @@ import type { EstadoAnular } from './anular-desglose';
 import type { EstadoPeriodo } from './declarar-periodo';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Conciliación de peajes' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT('agentes')).t('peajes.page.titulo') };
+}
 
 export const dynamic = 'force-dynamic';
 // A37-O7-06: las Server Actions de esta página corren bajo el límite de la página. La subida manual de desgloses y la importación
@@ -69,6 +72,7 @@ export default async function PaginaAgentePeajes({
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string }>;
 }) {
   const sp = await searchParams;
+  const tr = await getT('agentes');
   // Querystring REAL (`?desglose=`): si la sesión expira a media navegación,
   // el rebote a /login la conserva — ver el comentario largo en guard.ts.
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/peajes', sp, querystringCompleto(sp));
@@ -354,6 +358,7 @@ export default async function PaginaAgentePeajes({
 
   return (
     <VistaAgentePeajes
+      tr={tr}
       conciliacion={conciliacion}
       lineas={lineas}
       desgloses={desgloses}
