@@ -4,7 +4,8 @@ import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { Tarjeta } from '@/app/ui-v2/componentes';
 import { Columnas } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
-import { TarjetaFase } from '../tarjeta-fase';
+import { TablaModelosFase } from '../tarjeta-fase';
+import { numero as num, usd as dolares, fechaCorta } from '@/lib/formato';
 import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ export const dynamic = 'force-dynamic';
  * cero gasto real, no un relleno.
  */
 export default async function AgenteCuadrePage() {
-  const { t } = await getT('admin_sistema');
+  const { t, idioma } = await getT('admin_sistema');
   await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo().catch(() => [])]);
   const cuadre = r.porFase.find((f) => f.fase === 'cuadre');
@@ -33,26 +34,27 @@ export default async function AgenteCuadrePage() {
         { etiqueta: t('agente_cuadre.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero' },
       ]}
       graficas={[
-        <TarjetaFase
-          key="fase"
+        <Tarjeta key="serie" titulo={t('agente_fase.serie_costo_dia')} estado={r.porDia.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('agente_cuadre.el_costo_por_dia_no_se')} contenida>
+          <Columnas etiqueta={t('capacidad_forecast.costo_de_ia_por_dia')} datos={r.porDia.map((d) => ({ etiqueta: fechaCorta(d.dia, idioma), valor: d.costoUsd }))} formato="usd" />
+        </Tarjeta>,
+        <TablaModelosFase
+          key="modelos"
           titulo={t('agente_cuadre.costo_por_modelo_cuadre')}
-          queHace={t('model_ops.compara_los_gastos_ya_capturados_contra')}
-          datos={cuadre}
           modelos={modelos}
-        />,
-        <Tarjeta
-          key="conciliacion"
-          titulo={t('agente_cuadre.conciliacion_automatica_contra_manual')}
-          estado="vacio"
-          mensaje={t('agente_cuadre.aun_no_se_mide')}
-          detalle={t('agente_cuadre.likida_sabe_cuantos_viajes_se_procesaron', { viajesProcesados: r.viajesProcesados })}
+          textos={{ modelo: t('agente_fase.col_modelo'), llamadas: t('agente_fase.col_llamadas'), costo: t('agente_fase.col_costo'), vacio: t('agente_fase.sin_modelos'), vacioDetalle: t('agente_fase.sin_modelos_detalle') }}
         />,
       ]}
-    >
-      <Tarjeta titulo={t('agente_cuadre.costo_de_ia_por_dia_todas')} estado={r.porDia.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('agente_cuadre.el_costo_por_dia_no_se')}>
-        <Columnas etiqueta={t('capacidad_forecast.costo_de_ia_por_dia')} datos={r.porDia.map((d) => ({ etiqueta: d.dia, valor: d.costoUsd }))} formato="usd" />
-      </Tarjeta>
-    </EsqueletoPanelCifras>
+      saberes={{
+        seSabe: {
+          titulo: t('saberes.se_sabe'),
+          items: [
+            t('agente_fase.se_gasto', { fase: 'Cuadre', costo: dolares(cuadre ? cuadre.costoUsd : 0), n: num(cuadre ? cuadre.n : 0) }),
+            t('agente_cuadre.se_viajes', { n: num(r.viajesProcesados) }),
+          ],
+        },
+        noSeSabe: { titulo: t('saberes.no_se_sabe'), items: [t('agente_cuadre.likida_sabe_cuantos_viajes_se_procesaron', { viajesProcesados: r.viajesProcesados })] },
+      }}
+    />
   );
 }
 

@@ -1,7 +1,7 @@
 import { cifrasUniformes } from '../../formato';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
-import { TriangleAlert, Upload, Download, RotateCcw, Layers } from 'lucide-react';
+import { TriangleAlert, Upload, Download, RotateCcw, Layers, Inbox } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
@@ -149,8 +149,9 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
         <EstadoError reintentar>{tr('cartaPorte.documentos.vista.noPudeLeerLos')}</EstadoError>
       ) : (
         <>
-          {acciones.subir ? <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} metricas={datos.metricas} /> : <NotaMetricas tr={tr} m={datos.metricas} />}
+          {/* La bandeja es el bloque principal (Rovaq: tira → tabla de cargas → zona de soltar); la zona de subir va después. */}
           <Bandeja tr={tr} datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
+          {acciones.subir ? <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} metricas={datos.metricas} /> : <NotaMetricas tr={tr} m={datos.metricas} />}
           <Canales tr={tr} buzon={datos.buzon} acciones={acciones} />
           <Perfiles tr={tr} perfiles={datos.perfiles} acciones={acciones} />
           <Exportacion tr={tr} configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
@@ -309,21 +310,24 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
         <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.envioAlTms')} valor={filtroEnvio} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorEstadoDe')}
           opciones={filtrosEnvio(datos.sinConexion, tr).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? raiz : `${raiz}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
       </BarraFiltros>
-      <TablaBase
-        etiqueta={tr('cartaPorte.documentos.vista.documentosDeCartaPorte')}
-        columnas={columnas}
-        filas={orden}
-        idFila={(d) => d.id}
-        tarjetaMovil
-        vacio={{
-          titulo: mios ? tr('cartaPorte.documentos.vista.tituloSinCasos') : tr('cartaPorte.documentos.vista.tituloSinDocumentos'),
-          texto: mios
+      {orden.length === 0 ? (
+        // El vacío de la bandeja es una caja punteada como los demás vacíos de la página, no texto suelto.
+        <EstadoVacio contenido icono={Inbox} titulo={mios ? tr('cartaPorte.documentos.vista.tituloSinCasos') : tr('cartaPorte.documentos.vista.tituloSinDocumentos')}>
+          {mios
             ? tr('cartaPorte.documentos.vista.noTienesCasosAsignados')
             : filtroEnvio === 'todos'
             ? tr('cartaPorte.documentos.vista.todaviaNoHaLlegado')
-            : tr('cartaPorte.documentos.vista.ningunDocumentoAprobadoTiene'),
-        }}
-      />
+            : tr('cartaPorte.documentos.vista.ningunDocumentoAprobadoTiene')}
+        </EstadoVacio>
+      ) : (
+        <TablaBase
+          etiqueta={tr('cartaPorte.documentos.vista.documentosDeCartaPorte')}
+          columnas={columnas}
+          filas={orden}
+          idFila={(d) => d.id}
+          tarjetaMovil
+        />
+      )}
       {datos.filas.length < datos.total && (
         <p className="rv-doc__nota">{tr('cartaPorte.documentos.vista.seMuestranDeLos', { v: numero(datos.filas.length), v2: numero(datos.total) })}</p>
       )}

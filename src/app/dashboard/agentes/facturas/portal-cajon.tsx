@@ -19,9 +19,13 @@ export function CajonPortal({ titulo, subtitulo, disparador, children }: {
   return (
     <>
       <Boton type="button" variante="ghost" tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{disparador}</Boton>
-      <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={titulo} descripcion={subtitulo} tamano="m">
-        <div className="rv-fact__pila">{children}</div>
-      </Drawer>
+      {/* La raíz del cajón corta la herencia del `text-align` de la celda numérica (TD alineada a la derecha) donde vive el <dialog>: sin ella el
+          cajón entero salía alineado a la derecha. `display: contents` no añade caja. */}
+      <div className="rv-fact__cajon-raiz">
+        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={titulo} descripcion={subtitulo} tamano="m">
+          <div className="rv-fact__pila">{children}</div>
+        </Drawer>
+      </div>
     </>
   );
 }

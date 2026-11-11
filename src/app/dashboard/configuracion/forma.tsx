@@ -93,6 +93,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
         <input type="hidden" name="salida" value={v.salida} />
 
         <section className="rv-cfg__grupo" aria-labelledby="aj-g-tab">
+          {/* sin-info: subtítulo de grupo dentro de la tarjeta «Ajustes», que ya lleva su ⓘ */}
           <h3 id="aj-g-tab" className="rv-cfg__grupo-tit">{t('cfg.tabulador_con_esto_el_motor_calcula')}</h3>
           <div className="rv-cfg__filas">
             <CampoTexto className="rv-fila-c" id="aj-rend" name="rendimientoPorDefecto" etiqueta={t('cfg.rendimiento_km_l')} value={v.rendimientoPorDefecto}
@@ -111,6 +112,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
         </section>
 
         <section className="rv-cfg__grupo" aria-labelledby="aj-g-erp">
+          {/* sin-info: subtítulo de grupo dentro de la tarjeta «Ajustes», que ya lleva su ⓘ */}
           <h3 id="aj-g-erp" className="rv-cfg__grupo-tit">{t('cfg.formato_de_salida_al_erp')}</h3>
           {FORMATOS.map((f) => (
             <Radio key={f.valor} name="formato_salida_ui" form="sin-formulario" disabled={!f.implementado}
@@ -122,6 +124,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
         </section>
 
         <section className="rv-cfg__grupo" aria-labelledby="aj-g-cta">
+          {/* sin-info: subtítulo de grupo dentro de la tarjeta «Ajustes», que ya lleva su ⓘ */}
           <h3 id="aj-g-cta" className="rv-cfg__grupo-tit">{t('cfg.catalogo_de_cuentas_de_tu_contador')}</h3>
           <CampoTextarea id="aj-cuentas" name="cuentas" etiqueta={t('cfg.catalogo_de_cuentas')} etiquetaOculta value={v.cuentas} onChange={set('cuentas')} rows={5}
             spellCheck={false} claseControl="cifra-mono"

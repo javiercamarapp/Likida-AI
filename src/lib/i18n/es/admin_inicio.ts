@@ -388,4 +388,5 @@ export const admin_inicio = {
   'aprobaciones.kpi_bandeja': 'Bandeja',
   'aprobaciones.kpi_frena': 'Frena a los agentes',
   'aprobaciones.kpi_libre': 'No frena',
+  'parados.ver_todos_en_escalaciones': 'Ver el detalle en Escalaciones',
 } as const;

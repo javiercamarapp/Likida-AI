@@ -92,7 +92,7 @@ describe('FUNC-P1-01: ningún estado válido desaparece del embudo', () => {
   it('el administrador ve el embudo de ventas con las cifras de la ruta y dice cuántos quedaron fuera', async () => {
     const html = await renderCompleto(await ConsolaVendedores({ nombre: 'Admin', sp: {} }));
     expect(html).toContain('Embudo de ventas');
-    expect(html).toContain('rv-embudo');
+    expect(html).toContain('rv-barlist');
     // 14 filas: 1 por estado persistido (11 canónicos + 3 alias); en ruta (sin cancelada, no-show, perdido ni su alias) = 14 - 4.
     expect(html).toContain('10 en la ruta');
     expect(html).toContain('Fuera de la ruta hay 4');

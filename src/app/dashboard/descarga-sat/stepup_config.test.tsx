@@ -54,7 +54,8 @@ function guardarDe(nodo: ReactNode): Accion | null {
   if (!nodo || typeof nodo !== 'object') return null;
   const p = (nodo as ReactElement<Record<string, unknown>>).props ?? {};
   if (typeof p.accion === 'function' && (p.accion as { name: string }).name === 'guardar') return p.accion as Accion;
-  return guardarDe(p.children as ReactNode);
+  // La forma vive en el cajón «Configurar buzón»: en la cabecera de la tarjeta (`acciones`) o, sin buzón declarado, en la acción del vacío (`accion`).
+  return guardarDe(p.children as ReactNode) ?? guardarDe(p.acciones as ReactNode) ?? guardarDe(p.accion as ReactNode);
 }
 const forma = (rfc: string, activa = 'activa') => {
   const f = new FormData(); f.set('rfc', rfc); f.set('modo', 'webservice'); f.set('peajeDiasAviso', '5'); f.set('activa', activa); return f;

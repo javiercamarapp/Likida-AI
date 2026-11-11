@@ -12,7 +12,7 @@ import {
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import { VacioAgente } from '../vacio-agente';
 import { conFilete } from '../cifras-filete';
-import { AvisoCompacto, Chip as ChipV2, Disclosure, EsqCifrasV2, EsqTablaV2, FilaTarjetas, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Chip as ChipV2, Disclosure, EsqCifrasV2, EsqTablaV2, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import { TR_ES, type TrAgentes, type TAgentes, selloHoyTr } from '../i18n-agentes';
 import { getT } from '@/lib/i18n/servidor';
 
@@ -145,19 +145,19 @@ export function VistaAgenteVigia({ datos, ahoraMs, puedeDecidir, puedeAdministra
         <BloqueConversaciones datos={datos} ahoraMs={ahoraMs} puedeDecidir={puedeDecidir} acciones={acciones} />
       </Bloque>
 
-      <FilaTarjetas variante="6-6">
-        <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_2')} esqueleto={<EsqTablaV2 />}>
-          <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
-        </Bloque>
-        <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_3')} esqueleto={<EsqTablaV2 />}>
-          <BloqueBitacora datos={datos} />
-        </Bloque>
-      </FilaTarjetas>
+      <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_3')} esqueleto={<EsqTablaV2 />}>
+        <BloqueBitacora datos={datos} />
+      </Bloque>
 
       {/* A quién avisa, correos de respaldo, clientes autorizados y límites: se configuran una vez, así que van plegados y la página no pasa
           de dos pantallas de lo que se atiende cada día. Todo sigue en la página (no se quita nada, solo se pliega). */}
       <Disclosure titulo={tx('f26d2.vigia.avisos_y_limites')} resumen={tx('f26d2.vigia.avisos_y_limites_resumen')}>
         <div className="rv-vg__pila">
+          {/* El formulario de Configuración y SLA (≈900 px) vive aquí, no en una fila 6/6 con la bitácora: se llena una vez y no deja huecos. */}
+          <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_2')} esqueleto={<EsqTablaV2 />}>
+            <BloqueConfiguracion datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} standby={standby} />
+          </Bloque>
+
           <Bloque mensaje={tx('vigia.vista.no_se_pudo_leer_la_4')} esqueleto={<EsqTablaV2 />}>
             <BloqueDirectores datos={datos} puedeAdministrar={puedeAdministrar} acciones={acciones} />
           </Bloque>

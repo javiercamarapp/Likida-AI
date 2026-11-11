@@ -30,3 +30,6 @@
 .rv-doc__zona:hover, .rv-doc__zona:focus-within { border-color: var(--ink); }
 /* Sin archivo elegido, el envío no es un primario activo: se ve punteado y no responde (la validación nativa de `required` lo respalda). */
 form:has(.rv-doc__zona input[type="file"]:required:invalid) button[type="submit"] { background: transparent; color: var(--muted); border: 1px dashed var(--line2, var(--line)); pointer-events: none; }
+
+/* «Activar buzón» (y todo envío que sigue a un párrafo) lleva respiro arriba: no va pegado al texto. */
+.rv-doc__canales .rv-doc__nota ~ form { margin-top: 12px; }

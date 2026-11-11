@@ -1,3 +1,5 @@
+import { CajonAlta } from '../cajon-alta';
+import { TarjetaTabla } from '../bloque';
 import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { CalendarClock, Download } from 'lucide-react';
@@ -266,12 +268,17 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
 
       {motivoIlegible !== null ? (
         <EstadoError reintentar>{`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`}</EstadoError>
-      ) : lista.length === 0 ? (
-        <EstadoVacio icono={CalendarClock} titulo={t('jor.vacio.titulo')}>
-          {t('jor.vacio')}
-        </EstadoVacio>
       ) : (
-        <TablaBase<FilaJornada> etiqueta={t('jor.tabla.etiqueta')} columnas={columnas} filas={lista} idFila={(f) => f.jornadaId} tarjetaMovil />
+        // La tabla y su vacío viven en una tarjeta (a sangre), nunca sueltos sobre el lienzo.
+        <TarjetaTabla titulo={t('jor.tabla.etiqueta')} contador={lista.length > 0 ? numero(lista.length, idioma) : undefined}>
+          {lista.length === 0 ? (
+            <EstadoVacio contenido icono={CalendarClock} titulo={t('jor.vacio.titulo')}>
+              {t('jor.vacio')}
+            </EstadoVacio>
+          ) : (
+            <TablaBase<FilaJornada> etiqueta={t('jor.tabla.etiqueta')} columnas={columnas} filas={lista} idFila={(f) => f.jornadaId} tarjetaMovil />
+          )}
+        </TarjetaTabla>
       )}
 
       {/* ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ──────────────
@@ -433,7 +440,13 @@ function PoliticaSeccion({ tr = TR_OPERACION_ES,
 }) {
   const { t } = tr;
   return (
-    <Tarjeta titulo={t('jor.umbrales.titulo')} info="jornada.umbrales">
+    <Tarjeta titulo={t('jor.umbrales.titulo')} info="jornada.umbrales"
+      // La configuración no vive abierta en la página: se edita en un cajón (Rovaq: filas de configuración en overlay, un primario por zona).
+      acciones={puedeCorregir ? (
+        <CajonAlta id="umbrales" titulo={t('jor.umbrales.titulo')} disparador={t('jor.umbrales.editar')} variante="secondary" tamano="xl">
+          <FormaPolitica politica={politica} declararPolitica={declararPolitica} />
+        </CajonAlta>
+      ) : undefined}>
       <p className="rv-jn__nota">
         Likida ya evalúa los topes de la ley (los artículos 61, 63, 68 y 69 de la LFT, y la tabla
         de jornada semanal por año del decreto del 1 de mayo de 2026). Aquí van los tuyos, si tu
@@ -444,9 +457,6 @@ function PoliticaSeccion({ tr = TR_OPERACION_ES,
         <p className="rv-jn__nota">
           {t('jor.umbrales.ninguno')}
         </p>
-      )}
-      {puedeCorregir && (
-        <FormaPolitica politica={politica} declararPolitica={declararPolitica} />
       )}
     </Tarjeta>
   );
@@ -510,7 +520,12 @@ export function AlertaTopeSeccion({ tr = TR_OPERACION_ES,
     { id: 'operadorEstado', titulo: t('jor.al.operador'), celda: (a) => rotulo(ROTULO_ESTADO_DESTINO, a.operadorEstado, t) },
   ];
   return (
-    <Tarjeta titulo={t('jor.alerta.titulo')} info="jornada.alerta_tope">
+    <Tarjeta titulo={t('jor.alerta.titulo')} info="jornada.alerta_tope"
+      acciones={puedeConfigurar && !configIlegible ? (
+        <CajonAlta id="alerta-tope" titulo={t('jor.alerta.titulo')} disparador={t('jor.alerta.configurar')} variante="secondary" tamano="xl">
+          <FormaAlertaTope config={config} guardarAlerta={guardarAlerta} />
+        </CajonAlta>
+      ) : undefined}>
       <p className="rv-jn__nota">
         {t('jor.alerta.nota')}
       </p>
@@ -527,7 +542,6 @@ export function AlertaTopeSeccion({ tr = TR_OPERACION_ES,
           {' · '}aviso al {config.umbralAvisoPct} %, crítico al {config.umbralCriticoPct} %
         </p>
       )}
-      {puedeConfigurar && !configIlegible && <FormaAlertaTope config={config} guardarAlerta={guardarAlerta} />}
 
       {/* sin-info: subtítulo de la lista dentro de «Alerta de tope de jornada», que ya se explica arriba */}
       <h3 className="rv-jn__sub rv-jn__sep">{t('jor.emitidas.titulo')}</h3>

@@ -29,7 +29,7 @@ vi.mock('@/lib/admin/capacidad', async (importar) => ({
 }));
 
 import CapacidadForecastPage from './page';
-async function renderizar() { return renderToStaticMarkup(await CapacidadForecastPage()); }
+async function renderizar() { return renderToStaticMarkup(await CapacidadForecastPage({})); }
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -23,14 +23,26 @@
 /* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas (pf-tile). */
 [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1023.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 479.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 479.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
+/* pf-tile de Rovaq: gap 16, padding 20, SIN filete, cifra 26/600. */
+[data-ui="v2"] .adm-res-tiles { gap: 16px; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 20px; border-top-width: 0; }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__valor { font-weight: 600; }
+@media (max-width: 767px) { [data-ui="v2"] .adm-res-tiles .rv-kpi { padding: 12px; } }
+/* Aviso de acceso: banner blanco con escudo (Rovaq P1), no una franja gris. */
+[data-ui="v2"] .adm-acceso { display: flex; align-items: center; gap: 10px; margin: 0; padding: 10px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: var(--t-body, 13px); color: var(--ink); }
+[data-ui="v2"] .adm-acceso svg { flex: none; color: var(--ink); }
 
 /* Ficha 360 (Rovaq P2b): seis tarjetas de cifra en 3 columnas y secciones apiladas con título de 13/600 (ov-section-title). */
 [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1023.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 479.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: minmax(0, 1fr); } }
+/* Móvil 412: rejilla de 2 columnas (Rovaq), nunca una pila de tarjetas de 120 px. */
+@media (max-width: 479.98px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; } }
 [data-ui="v2"] .adm-ficha-sec { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 72px; }
-[data-ui="v2"] .adm-ficha-sec__t { margin: 0; font: 600 var(--t-body, 13px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
+/* El título de sección vive en la tarjeta; el h2 queda solo para lectores de pantalla y anclas (?seccion=). */
+[data-ui="v2"] .adm-ficha-sec__t { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+[data-ui="v2"] .adm-plan { display: flex; flex-direction: column; gap: 12px; }
+[data-ui="v2"] .adm-plan__fila { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* Botón de envío de FormaConAviso a la escala de Rovaq (32 px, 13/500, radio 8) mientras la pieza compartida conserva su Tailwind heredado
    (pedido_compartido: forma.tsx debe usar <Boton>). Solo dentro de `.adm-forma-fina`. */
@@ -42,3 +54,37 @@
 [data-ui="v2"] .adm-pila { display: flex; flex-direction: column; gap: var(--sp-gap, 12px); min-width: 0; }
 [data-ui="v2"] .adm-forma-fina .rv-btn:disabled,
 [data-ui="v2"] .adm-forma-fina button[type="submit"]:disabled { background: transparent; color: var(--muted); border: 1px dashed #bfbfc2; opacity: 1; }
+
+/* Equipo (Rovaq CF): filas rótulo-control en el formulario de alta, select de rol de 28 px y acciones de fila. */
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-control { min-width: 0; }
+[data-ui="v2"] .adm-forma-filas .rv-esq__fila-control :is(input, select) { width: 100%; max-width: 320px; }
+[data-ui="v2"] .adm-persona { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+[data-ui="v2"] .adm-persona__nombre { font-weight: 500; color: var(--ink); }
+[data-ui="v2"] .adm-persona__correo, [data-ui="v2"] .adm-persona__meta { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+[data-ui="v2"] .adm-rol-celda { display: flex; flex-direction: column; gap: 2px; margin: 0; }
+[data-ui="v2"] .adm-rol-select { height: 28px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--input, var(--line)); background: var(--campo-bg, var(--surface)); color: var(--ink); font: 500 13px/1 var(--font-sans-ui, inherit); }
+[data-ui="v2"] .adm-rol-select:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+[data-ui="v2"] .adm-rol-aviso { font-size: 12px; color: var(--muted); }
+[data-ui="v2"] .adm-rol-aviso[data-error] { color: var(--bad); }
+[data-ui="v2"] .adm-acciones-fila { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+
+/* Mi perfil (CF): el nombre y su botón en UNA fila de 32 px; el valor de solo lectura sin caja. */
+[data-ui="v2"] .adm-perfil-form--fila { flex-direction: row; align-items: flex-end; gap: 8px; flex-wrap: wrap; width: 100%; }
+[data-ui="v2"] .adm-perfil-form--fila > :first-child { flex: 1 1 200px; min-width: 0; max-width: 320px; }
+[data-ui="v2"] .adm-perfil-valor { font-size: var(--t-body, 13px); color: var(--ink); overflow-wrap: anywhere; }
+
+/* «Qué no se sabe» (Rovaq): caja punteada dentro de su tarjeta, texto a la izquierda. */
+[data-ui="v2"] .adm-nosabe { border-style: dashed; background: transparent; }
+[data-ui="v2"] .adm-nosabe p { margin: 0 0 8px; font-size: var(--t-body, 13px); line-height: 1.5; color: var(--muted); text-align: left; }
+[data-ui="v2"] .adm-nosabe p:last-child { margin-bottom: 0; }
+
+/* Eyebrow de un panel (Rovaq): 12/500, mayúsculas, tracking 1.2, sobre el contenido de la tarjeta. */
+[data-ui="v2"] .adm-eyebrow { margin: 0 0 8px; font: 500 12px/1.2 var(--font-sans-ui, inherit); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+
+/* Elegir flota: la fila elegida va en tinta (negra con texto blanco), como la fila resaltada del selector de cliente de Rovaq. */
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) { background: var(--ink); color: var(--surface); }
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) :is(.adm-res-fila__titulo, .adm-flota-id, svg, th) { color: inherit; }
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]):hover { background: var(--ink); }
+
+/* Mismo vacío uniforme que dinero.css (pedido_compartido: unificar `.rv-vacio` en componentes.css). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }

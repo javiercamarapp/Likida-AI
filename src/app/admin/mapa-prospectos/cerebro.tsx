@@ -53,8 +53,11 @@ const Calles = dynamic(() => import('./calles'), { ssr: false });
 
 const ORDEN_EMBUDO = [
   'negociacion', 'proposal', 'pilot', 'demo', 'appointment', 'rescheduled',
-  'no-show', 'cancelled', 'contactado', 'nuevo', 'won', 'cerrado', 'lost', 'perdido',
+  'no-show', 'cancelled', 'contactado', 'nuevo', 'won', 'cerrado', 'perdido',
 ] as const;
+/** `lost` y `perdido` son el MISMO estado en dos vocabularios (migración del embudo): se rotulan igual, así que en la leyenda, el embudo y los
+ *  filtros salen como UNA etapa («Perdido») que suma las dos. */
+const etapaVisible = (estado: string): string => (estado === 'lost' ? 'perdido' : estado);
 const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'flota_propia', 'logistica', 'otro'];
 const fuentesTr = (tx: TSistema = T_SISTEMA_ES) => ([
   { clave: 'censo', nombre: tx('mapa_prospectos_cerebro.censo_vacantes') },
@@ -648,8 +651,8 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
 
   const porEtapa = useMemo(() => {
     const m = new Map<string, number>();
-    if (listo) for (const p of filtrados) m.set(p.estado, (m.get(p.estado) ?? 0) + 1);
-    else if (resumen) for (const [k, n] of Object.entries(resumen.porEtapa)) m.set(k, n);
+    if (listo) for (const p of filtrados) { const k = etapaVisible(p.estado); m.set(k, (m.get(k) ?? 0) + 1); }
+    else if (resumen) for (const [k0, n] of Object.entries(resumen.porEtapa)) { const k = etapaVisible(k0); m.set(k, (m.get(k) ?? 0) + n); }
     return m;
   }, [listo, filtrados, resumen]);
   const itemsEmbudo = useMemo(() => ORDEN_EMBUDO.map((e) => ({
@@ -659,7 +662,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
   const ranking = useMemo(() => [...nPorEstado.entries()]
     .sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0], 'es'))
     .map(([nombre, n]) => ({ nombre, n, paso: pasoDeRampa(n, maxEstado) })), [nPorEstado, maxEstado]);
-  const itemsPlazas = useMemo(() => ranking.slice(0, 8)
+  const itemsPlazas = useMemo(() => ranking.slice(0, 14)
     .map(({ nombre, n }) => ({ clave: nombre, etiqueta: nombre, valor: n, texto: numero(n, idioma) })), [ranking, idioma]);
   const limites = useMemo(() => limitesRampa(maxEstado), [maxEstado]);
   /** El detalle del estado elegido para el panel lateral: del resumen (instantáneo) y, cuando llegó, de la cartera filtrada. */
@@ -672,8 +675,8 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
     : null;
   const etapasSeleccion = seleccion
     ? (listo
-      ? ORDEN_EMBUDO.map((e) => [e, listaSeleccion.filter((p) => p.estado === e).length] as const)
-      : ORDEN_EMBUDO.map((e) => [e, resumen?.porEntidad[seleccion.nombre]?.porEtapa[e] ?? 0] as const)).filter(([, n]) => n > 0)
+      ? ORDEN_EMBUDO.map((e) => [e, listaSeleccion.filter((p) => etapaVisible(p.estado) === e).length] as const)
+      : ORDEN_EMBUDO.map((e) => [e, (resumen?.porEntidad[seleccion.nombre]?.porEtapa[e] ?? 0) + (e === 'perdido' ? (resumen?.porEntidad[seleccion.nombre]?.porEtapa.lost ?? 0) : 0)] as const)).filter(([, n]) => n > 0)
     : [];
 
   /** Una cifra de la tira: sin lectura NO es un cero, es «no se pudo leer» (la página ya avisó de la avería). */

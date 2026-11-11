@@ -17,8 +17,10 @@ it('R9: con todas las etapas vacías hay UNA pista honesta, no una tarjeta «Sin
   expect((h.match(/Ningún prospecto coincide/g) ?? []).length).toBe(1);
 });
 
-it('R9: con alguna etapa llena, las vacías son una línea sobria (sin tarjeta repetida)', () => {
+it('con alguna etapa llena es UNA tabla con sus filas y «Vista rápida»; las etapas vacías no repiten nada', () => {
   const h = renderToStaticMarkup(<TableroProspectos {...base} columnas={[col('nuevo', 'Nuevo', 1), col('contactado', 'Contactado', 0)] as never} />);
   expect(h).not.toContain('Sin datos por ahora');
-  expect(h).toContain('Sin prospectos en esta etapa.');
+  expect(h).not.toContain('Sin prospectos en esta etapa.');
+  expect(h).toContain('Empresa 0');
+  expect(h).toContain('Vista rápida');
 });

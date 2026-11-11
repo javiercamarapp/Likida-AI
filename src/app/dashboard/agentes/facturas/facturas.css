@@ -45,3 +45,7 @@
    alto mínimo ni el color de hover del botón suelto. Mayor especificidad que `[data-ui="v2"] .rv-btn`. */
 [data-ui="v2"] .rv-btn.rv-fact__cab { display: grid; justify-content: stretch; min-height: 0; padding: 8px 10px; border-radius: 12px; font: inherit; font-size: var(--t-body, 13px); font-weight: 400; text-align: left; color: var(--ink); }
 [data-ui="v2"] .rv-btn.rv-fact__cab:hover { background: var(--canvas); color: var(--ink); }
+
+/* Raíz del cajón «Vista rápida» dentro de una celda numérica: el panel hereda `text-align: start`, no el `right` de la celda. */
+.rv-fact__cajon-raiz { display: contents; text-align: start; }
+.rv-fact__cajon-raiz .rv-ov, .rv-fact__cajon-raiz .rv-ov__panel { text-align: start; }

@@ -51,3 +51,25 @@
 .rv-mp__zbtn:disabled { opacity: .45; cursor: default; }
 .rv-mp__zbtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .rv-mp__svg { transition: none; }
+
+/* Ronda 3 — panel lateral como Rovaq: borde y radio 12, ranking 1-8 con barras, desglose de viajes debajo y leyenda bajo el mapa. */
+.rv-mp__cab { display: inline-flex; align-items: center; gap: 8px; }
+.rv-mp__rejilla { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+@media (max-width: 1023.98px) { .rv-mp__rejilla { grid-template-columns: minmax(0, 1fr); } }
+.rv-mp__panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-mp__eyebrow { margin: 0; font-size: var(--t-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.rv-mp__rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rv-mp__rank-fila { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto; grid-template-rows: auto 4px; column-gap: 8px; row-gap: 4px; align-items: center; width: 100%; padding: 6px 8px; text-align: left; font: inherit; color: inherit; background: transparent; border: 0; border-radius: 8px; cursor: pointer; }
+.rv-mp__rank-fila:hover, .rv-mp__rank-fila[data-activo] { background: var(--canvas); }
+.rv-mp__rank-fila[data-activo] { box-shadow: inset 2px 0 0 var(--ink); }
+.rv-mp__rank-fila:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-mp__rank-n { font-size: var(--t-micro); color: var(--faint); font-variant-numeric: tabular-nums; }
+.rv-mp__rank-nombre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-small); font-weight: 500; }
+.rv-mp__rank-cuenta { font-size: var(--t-small); font-variant-numeric: tabular-nums; color: var(--muted); }
+.rv-mp__rank-barra { grid-column: 2 / -1; display: block; }
+.rv-mp__rank-pista { fill: var(--line); }
+.rv-mp__rank-valor { fill: var(--ink); }
+.rv-mp__panel .rv-mp__cards { max-height: 320px; }
+.rv-mp__leyenda { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--t-micro); color: var(--muted); }
+.rv-mp__leyenda li { display: inline-flex; align-items: center; gap: 6px; }
+.rv-mp__leyenda svg { flex: none; }
