@@ -1,3 +1,4 @@
+import { TarjetaTabla } from '../bloque';
 import { cifrasUniformes } from '../formato';
 import { Satellite, Truck } from 'lucide-react';
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
@@ -289,8 +290,10 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
         </EstadoVacio>
       ) : (
         <>
+          <TarjetaTabla titulo={t('un.tabla.etiqueta')} contador={numero(pag.filtrados, idioma)}>
           <TablaBase<UnidadRow> etiqueta={t('un.tabla.etiqueta')} columnas={columnas} filas={pag.filas} idFila={(u) => u.id} tarjetaMovil
             vacio={{ titulo: t('un.vacio.sincoincidencias'), texto: t('un.vacio.busqueda', { q: pag.q }) }} />
+          </TarjetaTabla>
           <p className="rv-un__nota">{t('un.nota.papel')}</p>
         </>
       )}

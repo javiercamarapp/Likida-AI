@@ -1,3 +1,4 @@
+import { TarjetaTabla } from '../bloque';
 import { cifrasUniformes } from '../formato';
 import { Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
@@ -266,8 +267,10 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
             : t('op.vacio.otro')}
         </EstadoVacio>
       ) : (
-        <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
-          vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
+        <TarjetaTabla titulo={t('op.registro')} contador={numero(pag.filtrados, idioma)}>
+          <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
+            vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
+        </TarjetaTabla>
       )}
     </EsqueletoTablaMaestra>
   );
