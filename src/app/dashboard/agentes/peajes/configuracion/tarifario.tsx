@@ -2,7 +2,8 @@ import { Upload } from 'lucide-react';
 import { mxn, numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { TarifaVista } from '@/lib/likida/peajes/datos';
-import { Tarjeta, Icono, Boton } from '@/app/ui-v2/componentes';
+import { Tarjeta, Icono, Boton, CampoArchivo } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '@/app/dashboard/agentes/zona-soltar';
 import '../peajes.css';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -48,8 +49,7 @@ export function SeccionTarifario({ datos, tr = TR_ES }: { datos: TarifarioVista;
       <p className="text-[11px] mb-3 rv-pj-c-faint">{ricoT(tx('rest.cuanto_cuesta_cruzar_cada_caseta_con'), { b: (c) => <b>{c}</b>, e2: (c) => <span className="rv-ag-num">{c}</span> })}</p>
 
       <form action={acciones.importarTarifas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
-        <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label={tx('rest.archivo_de_tarifas')}
-          className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
+        <ZonaSoltar><CampoArchivo etiqueta={tx('rest.archivo_de_tarifas')} etiquetaOculta name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required /></ZonaSoltar>
         <label className="flex items-center gap-1.5">{ricoT(tx('rest.e0_este_archivo_es_e0'), { e0: (c) => <span className="text-[11px] rv-pj-c-muted">{c}</span> })}<select name="origen" defaultValue="declarada" className="w-[210px] rv-ctl" aria-label={tx('rest.origen_del_archivo_de_tarifas')}>
             <option value="declarada">{tx('rest.una_tarifa_que_declaro_por_confirmar')}</option>
             <option value="proveedor">{tx('rest.el_tarifario_oficial_del_proveedor_queda')}</option>

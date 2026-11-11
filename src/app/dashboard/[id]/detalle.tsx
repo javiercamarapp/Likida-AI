@@ -290,13 +290,15 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             </div>
           )}
         </Tarjeta>
-        </div>,
-        /* ── Línea de tiempo ── */
-        <div key="linea" className="rv-liq__col">
+        {/* ── Línea de tiempo ──
+            Columnas EQUILIBRADAS (Rovaq, ficha de problema): la ficha y la línea de tiempo (cortas, de alto parecido) a la izquierda y el bloque fiscal
+            —el más largo— solo a la derecha. Antes la izquierda terminaba a media altura y quedaba un hueco de ~300 px. */}
           <Tarjeta titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo">
             <LineaDeTiempo hitos={hitos} tr={tr} />
             <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
           </Tarjeta>
+        </div>,
+        <div key="fiscal" className="rv-liq__col">
           {/* ── Acreditable / recuperable ──
               Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF × litros y esa cuota no la tenemos. `ieps` solo puede venir de
               filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}

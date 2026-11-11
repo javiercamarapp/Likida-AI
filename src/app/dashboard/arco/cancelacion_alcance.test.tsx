@@ -25,9 +25,10 @@ import ArcoPage from './page';
 type Accion = (previo: null, fd: FormData) => Promise<{ ok?: string; error?: string }>;
 function accionCancelacion(nodo: ReactNode): Accion | undefined {
   if (Array.isArray(nodo)) return nodo.map(accionCancelacion).find(Boolean);
-  if (!isValidElement<{ boton?: string; accion?: Accion; children?: ReactNode }>(nodo)) return;
+  if (!isValidElement<{ boton?: string; accion?: Accion; children?: ReactNode; secciones?: ReadonlyArray<{ contenido?: ReactNode }> }>(nodo)) return;
   if (nodo.props.boton === 'Ejecutar cancelación') return nodo.props.accion;
-  return accionCancelacion(nodo.props.children);
+  // La página usa `EsqueletoConfiguracion`: su contenido vive en `secciones[].contenido`, no en `children`.
+  return accionCancelacion(nodo.props.children) ?? accionCancelacion(nodo.props.secciones?.map((x) => x.contenido) as ReactNode);
 }
 function exigirAlcance(texto: string) {
   expect(texto).toMatch(/nombre.*teléfono/);

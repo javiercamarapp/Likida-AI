@@ -30,3 +30,7 @@
 
 /* Contención del desborde del documento: los `.rv-sr` absolutos escapaban del marco y alargaban la ventana (ver conexiones.css). */
 [data-ui="v2"] .rv-contenido { position: relative; }
+
+/* Ronda 5: el estado del paso es el chip con contorno del kit (Hecho / Para revisar), a su ancho, en una columna fija a la izquierda. */
+.rv-ar__estado { flex: none; min-width: 96px; display: inline-flex; }
+@media (max-width: 640px) { .rv-ar__estado { min-width: 0; } }

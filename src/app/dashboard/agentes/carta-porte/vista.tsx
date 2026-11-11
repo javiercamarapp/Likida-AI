@@ -96,6 +96,7 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       etiquetaCifras={tx('cartaporte.vista.carta_porte_en_automatico')}
       selloCifras={selloHoyTr(tr, tx('cartaporte.vista.sello_viajes_en_curso'))}
     >
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
       {datos === null ? (
         <EstadoError>{tx('cartaporte.vista.no_se_pudieron_leer_los')}</EstadoError>
       ) : (

@@ -10,7 +10,7 @@ export interface Gajo { etiqueta: string; valor: number | null }
 /** Dona de ≤5 gajos de UN matiz (tonos 100/72/52/34/20 %), 132 px, trazo 10. Más de 5 ⇒ los menores se
  *  agrupan en «Otros» (nunca más de 5 gajos). Valores nulos no suman ni se pintan: aparecen «—» en la
  *  leyenda. El número va impreso (centro y leyenda): el color nunca es la única señal. */
-export function DonaMini({ gajos, matiz = 8, etiqueta, centro, formato: formatoProp }: {
+export function DonaMini({ gajos, matiz = 1, etiqueta, centro, formato: formatoProp }: {
   gajos: readonly Gajo[];
   matiz?: Matiz;
   etiqueta: string;
@@ -25,7 +25,7 @@ export function DonaMini({ gajos, matiz = 8, etiqueta, centro, formato: formatoP
     ? [...ordenados.slice(0, 4), { etiqueta: 'Otros', valor: ordenados.slice(4).reduce((s, g) => s + g.valor, 0) }]
     : ordenados;
   const total = vistos.reduce((s, g) => s + g.valor, 0);
-  const T = 132, trazo = 10, r = (T - trazo) / 2, c = T / 2;
+  const T = 132, trazo = 16, r = (T - trazo) / 2, c = T / 2;
   const [activo, setActivo] = useState<number | null>(null);
   let acum = 0;
   return (

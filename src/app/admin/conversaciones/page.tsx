@@ -13,6 +13,7 @@ import { BarList, type PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FilaConversacion } from './hilo';
 import { getT } from '@/lib/i18n/servidor';
+import '../resumen.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -47,7 +48,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   if (q) {
     const resultado = await buscarConversaciones({ q, pagina });
     return (
-      <PantallaConversaciones filtros={<CajaBusqueda q={q} />}>
+      <PantallaConversaciones filtros={<CajaBusqueda q={q} />} apoyo={ts('conversaciones.apoyo')}>
         <Tarjeta titulo={`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}>
           {resultado.filas.length === 0 ? (
             <EstadoVacio titulo="Sin coincidencias" icono={Search} contenido>
@@ -75,6 +76,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   return (
     <PantallaConversaciones
       filtros={<CajaBusqueda q="" />}
+      apoyo={ts('conversaciones.apoyo')}
       etiquetaCifras="Conversaciones de WhatsApp"
       cifras={[
         {
@@ -82,7 +84,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
           estado: total === null ? 'vacio' : 'ok',
           mensaje: 'No se pudo contar — esto no significa que no haya ninguna.',
         },
-        { etiqueta: `Mensajes en las ${conversaciones.length} que se listan`, valor: totalMensajes, formato: 'entero' },
+        { etiqueta: ts('conversaciones.mensajes_listados'), valor: totalMensajes, formato: 'entero', nota: conversaciones.length > 0 ? ts('conversaciones.listadas_n', { n: numero(conversaciones.length) }) : undefined },
       ]}
     >
       {/* Mensajes por conversación (c.turns.length) es un conteo real que ya se calcula para el resumen de arriba, así que un
@@ -97,7 +99,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
       <Tarjeta titulo={recortado ? `Las ${TOPE_CONVERSACIONES} más recientes de ${total}` : 'Todas las conversaciones'}>
         {conversaciones.length === 0 ? (
           <EstadoVacio titulo="Sin conversaciones activas" icono={MessageCircle} contenido>
-            Sin conversaciones activas.
+            {ts('conversaciones.vacio_detalle')}
           </EstadoVacio>
         ) : (
           <ListaConversaciones conversaciones={conversaciones} />
@@ -117,8 +119,8 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   );
 }
 
-function PantallaConversaciones({ filtros, cifras, etiquetaCifras, children }: { filtros: ReactNode; cifras?: PropsCifra[]; etiquetaCifras?: string; children: ReactNode }) {
-  return <EsqueletoTablaMaestra titulo="Conversaciones de WhatsApp" filtros={filtros} cifras={cifras} etiquetaCifras={etiquetaCifras}>{children}</EsqueletoTablaMaestra>;
+function PantallaConversaciones({ filtros, cifras, etiquetaCifras, apoyo, children }: { filtros: ReactNode; cifras?: PropsCifra[]; etiquetaCifras?: string; apoyo?: string; children: ReactNode }) {
+  return <EsqueletoTablaMaestra titulo="Conversaciones de WhatsApp" apoyo={apoyo} filtros={filtros} cifras={cifras} etiquetaCifras={etiquetaCifras}>{children}</EsqueletoTablaMaestra>;
 }
 
 /**

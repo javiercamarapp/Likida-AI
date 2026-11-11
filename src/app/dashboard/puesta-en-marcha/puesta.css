@@ -1,7 +1,7 @@
 /* Puesta en marcha como el flujo /setup de Rovaq: aviso, barra de avance «N de M» y TODAS las tarjetas de paso completas, apiladas en una sola columna
    de ~880 px alineada a la izquierda (el marco ya pone el relleno). El paso que le toca a la persona lleva borde de tinta; no hay lista lateral ni detalle aparte. */
 .rv-pem.rv-pem.rv-pem { max-width: none; margin: 0; padding: 0; gap: 12px; }
-.rv-pem .rv-pem__cuerpo { display: flex; flex-direction: column; gap: 12px; max-width: 880px; width: 100%; }
+.rv-pem .rv-pem__cuerpo { display: flex; flex-direction: column; gap: 12px; max-width: 780px; width: 100%; }
 .rv-pem .rv-pem__avance { padding: 0; border: 0; background: transparent; display: flex; gap: 12px; align-items: center; }
 .rv-pem .rv-pem__avance-num { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0; }
 .rv-pem .rv-pem__avance-txt { margin: 0; font-size: 12px; }
@@ -31,4 +31,20 @@
   .rv-pem .rv-pem__paso-estado { grid-column: 1; grid-row: auto; justify-content: flex-start; }
 }
 @media (prefers-reduced-motion: no-preference) { .rv-pem__barra::-webkit-progress-value { transition: width 300ms cubic-bezier(.22, 1, .36, 1); } }
-.rv-pem.rv-pem--listo { max-width: 880px; }
+.rv-pem.rv-pem--listo { max-width: 780px; }
+
+/* Ronda 5: UNA columna de 780 px para pasos, «Después» y «¿Estoy listo?» (antes 750 / 520 / 1180). */
+.rv-pem .rv-pem__despues { width: 100%; }
+.rv-pem.rv-pem--listo { width: 100%; }
+/* Los chips de estado miden lo que dice su texto (22 px), no una caja fija de 128 px; el texto del subpaso arranca pegado al chip. */
+.rv-pem .rv-pem__sub-item > :first-child { min-width: 0; }
+.rv-pem .rv-pem__sub-item { align-items: flex-start; gap: 10px; }
+@media (max-width: 640px) { .rv-pem .rv-pem__sub-item { flex-direction: column; gap: 6px; } }
+/* «¿Estoy listo?»: la columna de texto no se desalinea cuando una fila trae «Abrir» o el chip «Listo»: chip, texto y enlace en columnas fijas. */
+.rv-pem .rv-pem__listo-fila { display: grid; grid-template-columns: 84px minmax(0, 1fr) 56px; align-items: start; column-gap: 12px; }
+.rv-pem .rv-pem__listo-fila > :first-child { justify-self: start; }
+.rv-pem .rv-pem__listo-enlace { min-height: 24px; justify-self: end; }
+@media (max-width: 640px) { .rv-pem .rv-pem__listo-fila { grid-template-columns: 84px minmax(0, 1fr); } .rv-pem .rv-pem__listo-enlace { grid-column: 2; justify-self: start; } }
+/* Acciones del paso: una línea (sin partir «Ir a Peajes» en dos), y «Omitir este paso» a la izquierda, no centrado en su propia fila. */
+.rv-pem .rv-pem__acciones .rv-btn { white-space: nowrap; }
+.rv-pem .rv-pem__paso > .rv-btn--ghost { align-self: flex-start; padding-left: 0; }

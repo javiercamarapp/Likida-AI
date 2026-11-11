@@ -9,10 +9,14 @@ import { Boton, Drawer } from '@/app/ui-v2/componentes';
  * El texto legal se dice UNA vez, dentro del cajón del portal abierto, no repetido en cada fila. El contenido (`VincularAsistida` y
  * `ControlesRelogin`) sigue siendo el de siempre, con sus acciones de servidor y sus puertas de permisos.
  */
-export function CajonPortal({ titulo, subtitulo, disparador, children }: {
+export function CajonPortal({ titulo, subtitulo, disparador, cifras, pie, children }: {
   titulo: string;
   subtitulo?: string;
   disparador: string;
+  /** Rovaq (vista rápida): cuadrícula 2×2 de cifras ya formateadas; sin dato, «—», nunca un 0 inventado. */
+  cifras?: readonly { etiqueta: string; valor: string }[];
+  /** El pie con la acción primaria del cajón (a la derecha). */
+  pie?: ReactNode;
   children: ReactNode;
 }) {
   const [abierto, setAbierto] = useState(false);
@@ -22,8 +26,15 @@ export function CajonPortal({ titulo, subtitulo, disparador, children }: {
       {/* La raíz del cajón corta la herencia del `text-align` de la celda numérica (TD alineada a la derecha) donde vive el <dialog>: sin ella el
           cajón entero salía alineado a la derecha. `display: contents` no añade caja. */}
       <div className="rv-fact__cajon-raiz">
-        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={titulo} descripcion={subtitulo} tamano="m">
-          <div className="rv-fact__pila">{children}</div>
+        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={titulo} descripcion={subtitulo} tamano="m" pie={pie ? <div className="rv-esq__vr-pie">{pie}</div> : undefined}>
+          <div className="rv-fact__pila">
+            {cifras && cifras.length > 0 ? (
+              <dl className="rv-esq__vr">
+                {cifras.map((c) => (<div key={c.etiqueta}><dt>{c.etiqueta}</dt><dd>{c.valor}</dd></div>))}
+              </dl>
+            ) : null}
+            {children}
+          </div>
         </Drawer>
       </div>
     </>

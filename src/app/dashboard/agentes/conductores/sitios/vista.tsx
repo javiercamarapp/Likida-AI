@@ -118,6 +118,7 @@ export function VistaSitios(p: PropsVistaSitios) {
       ]}
       etiquetaCifras={tx('rest.sitios_registrados')}
     >
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
       <Tarjeta titulo={tx('rest.sitios_registrados')} info="conductores_sitios.registrados"
         estado={p.sitios === null ? 'error' : p.sitios.length === 0 ? 'vacio' : 'ok'}
         mensaje={p.sitios === null ? tx('rest.no_se_pudo_leer_el_catalogo_3') : p.busqueda ? tx('rest.ningun_sitio_coincide_con_esa_busqueda') : tx('rest.aun_sin_sitios')}
