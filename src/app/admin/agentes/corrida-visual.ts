@@ -22,3 +22,23 @@ export function resultadoCorrida(estado: string, t: Tr): { texto: string; tono: 
   if (estado === 'fallo') return { texto: t('catalogo.corrida.fallo'), tono: 'bad' };
   return { texto: t('catalogo.corrida.otro', { estado }), tono: 'neutral' };
 }
+
+export type CorridaLeida = { inicio: string; estado: string } | null | 'error';
+
+/** Lee la última corrida de cada agente. `null` = la consulta respondió y NO hay corridas (estado neutro, honesto);
+ *  'error' = la consulta falló (error real, falla cerrado: nunca se oculta). Antes un `?? 'error'` confundía ambos casos. */
+export async function leerCorridas(
+  ids: readonly string[],
+  lector: (id: string) => Promise<{ inicio: string; estado: string } | null>,
+): Promise<Map<string, CorridaLeida>> {
+  const mapa = new Map<string, CorridaLeida>();
+  await Promise.all(ids.map(async (id) => {
+    try { mapa.set(id, await lector(id)); } catch { mapa.set(id, 'error'); }
+  }));
+  return mapa;
+}
+
+/** Lo que dice la celda para un agente: sin consultar nada más, el mapa manda. Un agente ausente del mapa sí es lectura fallida. */
+export function corridaDe(mapa: ReadonlyMap<string, CorridaLeida>, id: string): CorridaLeida {
+  return mapa.has(id) ? (mapa.get(id) as CorridaLeida) : 'error';
+}

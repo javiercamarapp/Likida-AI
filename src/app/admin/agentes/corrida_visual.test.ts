@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { agentes as es } from '@/lib/i18n/es/agentes';
 import { crearTraductor } from '@/lib/i18n/traducir';
-import { haceTiempo, resultadoCorrida } from './corrida-visual';
+import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
 
 const { t } = crearTraductor('es', es, es);
 const AHORA = Date.parse('2026-11-11T12:00:00Z');
@@ -29,5 +29,21 @@ describe('Última corrida del catálogo de agentes', () => {
     // «Insumos» ya no es un enlace suelto por fila: vive con Configurar y Apagar en el menú «⋯» de la fila (AccionesAgente).
     expect(src).toContain('AccionesAgente');
     expect(src).toContain('etiquetaInsumos');
+  });
+
+  it('un agente SIN corridas es neutro (null), no un falso «No se pudo leer»; un fallo real de la consulta sí es error', async () => {
+    const mapa = await leerCorridas(['a', 'b', 'c'], async (id) => {
+      if (id === 'a') return null;
+      if (id === 'b') return { inicio: '2026-11-11T10:00:00Z', estado: 'ok' };
+      throw new Error('boom');
+    });
+    expect(corridaDe(mapa, 'a')).toBeNull();
+    expect(corridaDe(mapa, 'b')).toEqual({ inicio: '2026-11-11T10:00:00Z', estado: 'ok' });
+    expect(corridaDe(mapa, 'c')).toBe('error');
+    expect(corridaDe(mapa, 'ausente')).toBe('error');
+  });
+  it('contenido.tsx ya no usa `?? \'error\'` sobre la corrida', () => {
+    const src = readFileSync(new URL('./contenido.tsx', import.meta.url), 'utf8');
+    expect(src).not.toContain("?? 'error'");
   });
 });
