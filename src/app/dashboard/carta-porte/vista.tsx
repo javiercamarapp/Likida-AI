@@ -74,7 +74,7 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
       titulo={tr('cartaPorte.vista.cartaPorte')}
       apoyo={tr('cartaPorte.vista.porCadaViajeEn')}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy('Viajes evaluados')}
+      selloCifras={selloHoy(tr('cartaPorte.vista.cifra.evaluados'))}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.folio ?? sel.viajeId.slice(0, 8)}

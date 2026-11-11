@@ -167,7 +167,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
       titulo={t('viajes.titulo')}
       apoyo={t('viajes.apoyo')}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy('Registro de viajes')}
+      selloCifras={selloHoy(t('viajes.sello'))}
       etiquetaCifras={t('viajes.sello')}
       filtros={(
         // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como

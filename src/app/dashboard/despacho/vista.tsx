@@ -163,7 +163,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
         </>
       )}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy('Viajes en curso')}
+      selloCifras={selloHoy(t('dsp.encurso'))}
       filtros={(
         // FE-2: buscador por folio — antes no había forma de llegar a un viaje en curso que no estuviera entre los 12 más urgentes
         // de la primera página. GET plano, con el sufijo de previsualización como hidden para no perderlo al buscar.

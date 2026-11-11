@@ -106,7 +106,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
         </CajonAlta>
       ) : undefined}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy('Patios de la flota')}
+      selloCifras={selloHoy(t('patios.tarjeta'))}
       avisos={(
         <AvisoCompacto tono="info"
           resumen={<>{t('patios.aviso')}

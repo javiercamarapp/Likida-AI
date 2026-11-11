@@ -249,7 +249,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       apoyo={t('un.apoyo')}
       acciones={acciones}
       cifras={cifrasUniformes(cifras)}
-      selloCifras={selloHoy('Parque de unidades')}
+      selloCifras={selloHoy(t('un.tabla.etiqueta'))}
       filtros={vacio ? undefined : (
         <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
           sustantivo="unidades" camposOcultos={camposOcultos} />
