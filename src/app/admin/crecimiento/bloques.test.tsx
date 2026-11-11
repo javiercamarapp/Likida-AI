@@ -70,11 +70,11 @@ describe('embudo de adquisición', () => {
     const h = await html(BloqueEmbudoAdquisicion);
     expect(h).toContain('130 prospectos del censo');
     // Tres etapas con gente = tres barras; 'negociacion' (alias histórico) suma en «Propuesta».
-    expect(h.match(/crc-embudo__fila/g)).toHaveLength(3);
-    expect(h).toContain('data-etapa="proposal"');
-    expect(h).toContain('width="100.00%"');
-    expect(h).toContain('width="25.00%"');
-    expect(h).toContain('width="5.00%"');
+    expect(h.match(/rv-barlist__fila/g)).toHaveLength(3);
+    expect(h).toContain('Propuesta');
+    expect(h).toMatch(/width="100(\.0+)?%"/);
+    expect(h).toMatch(/width="25(\.0+)?%"/);
+    expect(h).toMatch(/width="5(\.0+)?%"/);
     // Las siete etapas en cero NO son siete filas: van en una frase.
     expect(h).toContain('Sin prospectos todavía en: Cita agendada, Cita reprogramada');
     expect(h.match(/<svg/g)).toHaveLength(3);
@@ -98,18 +98,18 @@ describe('activación y cohortes', () => {
     const h = await html(BloqueActivacion);
     expect(h).toContain('El cero de «de pago» es un conteo real');
   });
-  it('el embudo de activación es la gráfica Embudo con la cifra exacta de cada etapa y la conversión contra la anterior', async () => {
+  it('el embudo de activación son barras de 6 px con la cifra exacta de cada etapa y la conversión contra la anterior', async () => {
     const h = await html(BloqueActivacion);
-    expect(h).toContain('rv-embudo');
-    expect(h).toContain('25.0% de la etapa anterior');
-    expect(h).toContain('0.0% de la etapa anterior'); // de pago: 0 de 1 activada; es un cero real, no un faltante
+    expect(h).toContain('rv-barlist');
+    expect(h).toContain('· 25%');
+    expect(h).toContain('· 0%'); // de pago: 0 de 1 activada; es un cero real, no un faltante
     expect(h).toContain('data-lift');
   });
   it('con los tres conteos en cero dice que el cero es real, no «sin datos»', async () => {
     dobles.getEmbudoActivacion.mockResolvedValue({ altas: 0, activadas: 0, dePago: 0 });
     const h = await html(BloqueActivacion);
     expect(h).toContain('las tres etapas valen cero');
-    expect(h).not.toContain('rv-embudo');
+    expect(h).not.toContain('rv-barlist');
   });
   it('lecturas caídas: no se pintan como cero flotas ni como cero uso', async () => {
     dobles.getEmbudoActivacion.mockResolvedValue(null);
