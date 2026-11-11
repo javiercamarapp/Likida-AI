@@ -16,6 +16,7 @@ import { VistaViajes, type FiltroViajes, type FilaRegistroViaje } from './vista'
 import type { ResultadoImportarUI } from './importar';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 import type { Metadata } from 'next';
+import { getT } from '@/lib/i18n/servidor';
 export const metadata: Metadata = { title: 'Viajes' };
 
 const MAX_IMPORT_BYTES = MAX_ARCHIVO_SUBIDA_BYTES;
@@ -98,17 +99,18 @@ export default async function PaginaViajes({
 
   async function importar(_prev: ResultadoImportarUI | null, fd: FormData): Promise<ResultadoImportarUI | null> {
     'use server';
+  const { t } = await getT('operacion');
     // Se repite ADENTRO (patrón del repo): POST directo posible. Importar
     // CREA viajes — el gate es el de asignar, no solo el de ver.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/viajes', sp, tenantId);
-    if (!puedeAsignar(sesion.rol)) return { error: 'Tu rol no puede crear viajes.' };
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este registro no es de tu flota.' };
+    if (!puedeAsignar(sesion.rol)) return { error: t('viajes.a.rol') };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: t('viajes.a.ajeno') };
 
     // A37-S21-06: importar es trabajo pesado (descomprime y recorre una hoja): tope por flota, y el doble clic no lo repite.
-    if (!(await rateLimit(`viajes-importar:${sesion.tenantId}`, 6, 60_000))) return { error: 'Demasiadas importaciones en poco tiempo. Espera un minuto.' };
+    if (!(await rateLimit(`viajes-importar:${sesion.tenantId}`, 6, 60_000))) return { error: t('viajes.a.demasiadas') };
 
     const archivo = fd.get('archivo');
-    if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el CSV o Excel con los viajes.' };
+    if (!(archivo instanceof File) || archivo.size === 0) return { error: t('viajes.a.elige') };
     if (archivo.size > MAX_IMPORT_BYTES) return { error: MENSAJE_ARCHIVO_GRANDE };
 
     let matriz: unknown[][];
@@ -116,12 +118,12 @@ export default async function PaginaViajes({
       // Lectura ACOTADA (filas, columnas y descompresión del zip) — la misma de los demás importadores (A37-S21-06).
       matriz = matrizDeArchivo(await archivo.arrayBuffer());
     } catch {
-      return { error: 'No pude leer el archivo — asegúrate de que sea CSV o Excel.' };
+      return { error: t('viajes.a.ilegible') };
     }
 
     // La hora de las citas del archivo viene sin zona: se lee como hora de la flota (T-A5-05).
     let zona: string | undefined;
-    try { zona = archivoTraeCitas(matriz) ? zonaOCdmx(await getZonaHorariaTenant(tenantId)) : undefined; } catch { return { error: 'No pude leer la zona horaria de tu flota — no importé nada. Vuelve a intentar.' }; }
+    try { zona = archivoTraeCitas(matriz) ? zonaOCdmx(await getZonaHorariaTenant(tenantId)) : undefined; } catch { return { error: t('viajes.a.zona') }; }
     const lectura = interpretarFilasViajes(matriz, { permitirFinanzas: puedeVerArea(sesion.rol, 'dinero'), zona });
     if (lectura.error && lectura.viajes.length === 0) return { error: lectura.error };
 
@@ -151,6 +153,7 @@ export default async function PaginaViajes({
 
   return (
     <VistaViajes
+      tr={await getT('operacion')}
       filas={filas}
       filtro={filtro}
       conteos={conteos ?? { total: null, abiertos: null, enCuadre: null, liquidados: null, escalados: null }}
