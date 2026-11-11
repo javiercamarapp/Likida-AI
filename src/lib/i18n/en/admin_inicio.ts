@@ -341,4 +341,13 @@ export const admin_inicio: Record<keyof typeof admin_inicioEs, string> = {
   'ficha_conv.eyebrow': 'Conversation record',
   'ficha_conv.mensajes': 'Messages',
   'ficha_conv.ultima': 'Last activity',
+  'consola.eyebrow': 'Platform console',
+  'consola.copiloto': 'Copilot',
+  'consola.acceso_admin': 'Administrative access: what you see spans every fleet.',
+  'consola.gasto_ia_mes': 'AI spend this month',
+  'consola.gasto_ia_mes_de': 'AI spend — {etiquetaMes}',
+  'resumen_mando.requieren_atencion': 'Need attention',
+  'resumen_mando.costos': 'Costs',
+  'resumen_mando.operacion': 'Operations',
+  'resumen_mando.trazabilidad': 'Traceability',
 };

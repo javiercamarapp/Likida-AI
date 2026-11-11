@@ -80,8 +80,8 @@
 .cer-punto { display: inline-block; width: 8px; height: 8px; border-radius: 999px; background: var(--etapa); flex: none; }
 
 /* Rótulos del mapa: código del estado y cifra, con el color de texto que le toca a cada paso de la rampa. */
-.cer-rotulo { font-weight: 600; fill: var(--ink); pointer-events: none; font-variant-numeric: tabular-nums; }
-.cer-rotulo[data-paso="4"], .cer-rotulo[data-paso="5"] { fill: var(--surface); }
+.cer-rotulo { font-weight: 600; fill: var(--ink); stroke: var(--surface); paint-order: stroke; stroke-linejoin: round; pointer-events: none; font-variant-numeric: tabular-nums; }
+.cer-rotulo[data-paso="4"], .cer-rotulo[data-paso="5"] { fill: var(--surface); stroke: var(--ink); }
 
 /* El ranking lateral */
 .cer-rank { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }

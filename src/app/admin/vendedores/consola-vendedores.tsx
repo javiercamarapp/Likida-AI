@@ -1,5 +1,5 @@
 import { Suspense, cache } from 'react';
-import { Building2, Activity, CheckCircle2, Inbox, Users } from 'lucide-react';
+import { Building2 } from 'lucide-react';
 import {
   ESTADOS_PROSPECTO, ESTADOS_VIVOS, TRANSICIONES_PROSPECTO,
   reglaComision, listarVendedores,
@@ -10,7 +10,7 @@ import { ultimasCorridasNegocio, duracionLegible, type CorridaRegistrada } from 
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
 import {
-  AvisoCompacto, BarraFiltros, EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, FiltroBusqueda, FiltroOpciones, Icono,
+  AvisoCompacto, BarraFiltros, EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, FiltroBusqueda, FiltroOpciones,
   StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
 } from '../../ui-v2/componentes';
 import { Embudo, TiraCifras } from '../../ui-v2/graficas';
@@ -18,6 +18,7 @@ import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { estadoProspectoTr } from '@/lib/i18n/rotulos_tr';
 import { embudoDeVentas } from './embudo-ventas';
+import { uniformes } from '../cifras-uniformes';
 import { TableroProspectos, type ColumnaTablero } from './tablero';
 import { FormaProspecto, FormaInvitarVendedor, BotonRepartir } from './formas';
 import {
@@ -134,15 +135,15 @@ async function BloqueKpis({ sp }: { sp: { vendedor?: string; q?: string } }) {
     );
   }
   return (
-    <TiraCifras etiqueta={tx('vendedores_consola_vendedores.pipeline_de_ventas')} items={[
-      { etiqueta: tx('vendedores_consola_vendedores.prospectos_en_el_pipeline'), valor: totalProspectos, formato: 'entero', icono: <Icono icono={Building2} /> },
-      { etiqueta: tx('vendedores_consola_vendedores.con_seguimiento'), valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
-      { etiqueta: tx('vendedores_consola_vendedores.ganados'), valor: totales?.won ?? 0, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
-      { etiqueta: tx('vendedores_consola_vendedores.vivos_sin_vendedor'), valor: vivosSinVendedor, formato: 'entero', icono: <Icono icono={Inbox} /> },
+    <TiraCifras etiqueta={tx('vendedores_consola_vendedores.pipeline_de_ventas')} items={uniformes([
+      { etiqueta: tx('vendedores_consola_vendedores.prospectos_en_el_pipeline'), valor: totalProspectos, formato: 'entero' },
+      { etiqueta: tx('vendedores_consola_vendedores.con_seguimiento'), valor: vivos, formato: 'entero' },
+      { etiqueta: tx('vendedores_consola_vendedores.ganados'), valor: totales?.won ?? 0, formato: 'entero' },
+      { etiqueta: tx('vendedores_consola_vendedores.vivos_sin_vendedor'), valor: vivosSinVendedor, formato: 'entero' },
       vendedores !== null
-        ? { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: vendedores.length, formato: 'entero', icono: <Icono icono={Users} /> }
-        : { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: null, estado: 'error', mensaje: tx('vendedores_consola_vendedores.no_se_pudo_leer_el_equipo'), icono: <Icono icono={Users} /> },
-    ]} />
+        ? { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: vendedores.length, formato: 'entero' }
+        : { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: null, estado: 'error' as const, mensaje: tx('vendedores_consola_vendedores.no_se_pudo_leer_el_equipo') },
+    ])} />
   );
 }
 

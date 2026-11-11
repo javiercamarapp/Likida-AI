@@ -16,10 +16,10 @@ import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-function Enviar({ icono, texto, textoPendiente }: { icono: React.ReactNode; texto: string; textoPendiente: string }) {
+function Enviar({ icono, texto, textoPendiente, variante = 'primary' }: { icono: React.ReactNode; texto: string; textoPendiente: string; variante?: 'primary' | 'secondary' }) {
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={pending ? undefined : icono}>
+    <Boton type="submit" variante={variante} loading={pending} icono={pending ? undefined : icono}>
       {pending ? textoPendiente : texto}
     </Boton>
   );
@@ -76,7 +76,7 @@ export function FormaInvitarVendedor({ accion }: { accion: AccionForma }) {
       </div>
       <Resultado estado={estado} />
       <div className="ven-forma__pie">
-        <Enviar icono={<Icono icono={UserPlus} />} texto={t('vendedores_consola_vendedores.invitar_vendedor')} textoPendiente={t('vendedores_formas.invitando')} />
+        <Enviar icono={<Icono icono={UserPlus} />} texto={t('vendedores_consola_vendedores.invitar_vendedor')} textoPendiente={t('vendedores_formas.invitando')} variante="secondary" />
       </div>
     </form>
   );
@@ -89,7 +89,7 @@ export function BotonRepartir({ accion }: { accion: AccionForma }) {
   return (
     <form action={despachar} className="ven-forma">
       <div className="ven-forma__pie">
-        <Enviar icono={<Icono icono={Shuffle} />} texto={t('vendedores_formas.repartir_pendientes')} textoPendiente={t('vendedores_formas.repartiendo')} />
+        <Enviar icono={<Icono icono={Shuffle} />} texto={t('vendedores_formas.repartir_pendientes')} textoPendiente={t('vendedores_formas.repartiendo')} variante="secondary" />
       </div>
       <Resultado estado={estado} />
     </form>
