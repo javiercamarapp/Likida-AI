@@ -365,6 +365,7 @@ export const resto = {
   'cfg.cortar_los_n_accesos_no_hay': 'Cortar los {n} accesos (no hay deshacer)',
   'op.dar_de_alta_el_cliente': 'dar de alta el cliente',
   'op.clientes': 'Clientes',
+  'op.convenios_titulo': 'Convenios',
   'op.quien_paga_el_flete_y_cuanto': 'Quién paga el flete y cuánto debe, con las tarifas por cliente. No se muestra una cartera a medias.',
   'op.no_pude_leer_tus_clientes_tarifas': 'No pude leer tus clientes, tarifas y facturas. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera.',
   'op.tu_rol_ve_esta_pantalla_pero': 'Tu rol ve esta pantalla pero no da de alta clientes ni tarifas: el catálogo de precios es una decisión del dueño de la flota.',

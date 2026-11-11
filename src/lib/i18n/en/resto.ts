@@ -367,6 +367,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'cfg.cortar_los_n_accesos_no_hay': 'Cut the {n} accesses (no undo)',
   'op.dar_de_alta_el_cliente': 'add the customer',
   'op.clientes': 'Customers',
+  'op.convenios_titulo': 'Agreements',
   'op.quien_paga_el_flete_y_cuanto': 'Who pays the freight and how much they owe, with rates by customer. A partial receivables book is not shown.',
   'op.no_pude_leer_tus_clientes_tarifas': 'I could not read your customers, rates and invoices. A partial receivables book is not shown: half a summed table looks the same as the whole table.',
   'op.tu_rol_ve_esta_pantalla_pero': 'Your role sees this screen but does not add customers or rates: the price catalog is a decision for the fleet owner.',

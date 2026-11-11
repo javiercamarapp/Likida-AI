@@ -83,7 +83,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
   ] : undefined;
   return (
     <EsqueletoTablaMaestra
-      titulo={t('op.clientes')}
+      titulo={t('op.convenios_titulo')}
       apoyo={p.verDinero
         ? t('op.por_cliente_puntos_a_a_b')
         : t('op.por_cliente_puntos_a_a_b_2')}
