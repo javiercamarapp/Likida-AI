@@ -65,7 +65,7 @@ Un respaldo restaurado trae a los titulares que ya habían pedido su cancelació
    - producción, si todavía se puede leer en solo lectura: `solicitud_arco` con `tipo = 'cancelacion' and estado = 'resuelta' and resuelta_en > <corte>`; su columna `evidencia` dice qué se tocó (migración 0173);
    - si producción ya no existe: las confirmaciones enviadas a los titulares y la bitácora de cumplimiento de `/admin/compliance` exportada antes del incidente; lo que no pueda reconstruirse se anota como hallazgo, no se omite en silencio.
 3. Por cada titular, volver a ejecutar la cancelación con el mismo ejecutor de la 0173 (anonimiza al titular, borra su hilo de WhatsApp, posiciones y avisos, desliga el gasto y marca las fotos para borrado en Storage). Es idempotente: reaplicarla sobre un titular ya cancelado no cambia nada.
-4. Verificar: cero filas con el teléfono o nombre original de cada titular en `operador`, `wa_mensaje` y `posicion`, y las fotos en `storage_huerfano_candidato` con motivo `arco`.
+4. Verificar: cero filas con el teléfono o nombre original de cada titular en `operador`, `wa_conversacion`, `envio_mensaje` y `posicion`, y las fotos en `storage_huerfano_candidato` con motivo `arco`.
 5. Registrar en el acta cuántas bajas se reaplicaron y cuántas no pudieron reconstruirse. Solo entonces se abren conexiones.
 
 En el ensayo con el desechable se hace el mismo recorrido con una solicitud sintética posterior al corte, para comprobar que el ejecutor corre sobre una base restaurada y que el paso cabe en el RTO.
