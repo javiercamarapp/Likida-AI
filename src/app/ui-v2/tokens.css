@@ -203,7 +203,8 @@
   --on-8: #ffffff;
 
   /* Neutros de gráfica */
-  --chart-barra: #2f2f33; --chart-fuerte: #0e0e10;
+  --chart-barra: #2f2f33;
+  --chart-fuerte: #0e0e10;
   --chart-rejilla: #0e0e1014;
   --chart-eje: #0e0e1033;
   --heat-0: #ececee;
@@ -416,7 +417,8 @@
   --on-7: #0e0e10;
   --on-8: #0e0e10;
 
-  --chart-barra: #d2d2d6; --chart-fuerte: #f4f4f5;
+  --chart-barra: #d2d2d6;
+  --chart-fuerte: #f4f4f5;
   --chart-rejilla: #f4f4f514;
   --chart-eje: #f4f4f533;
   --heat-0: #2a2a2f;
