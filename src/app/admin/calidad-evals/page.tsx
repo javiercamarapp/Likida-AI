@@ -49,11 +49,10 @@ type EstadoEvals = NonNullable<Awaited<ReturnType<typeof getEstadoEvals>>>;
 
 /** Una tarjeta de examen (analista o contador): drift de prompt, última corrida, casos activos y cómo correrlo. Las dos comparten
  *  forma; solo cambian el aviso de drift, las notas del runner y el script. */
-function TarjetaExamen({ titulo, estado, avisoDrift, script, conNotas }: {
+function TarjetaExamen({ titulo, estado, avisoDrift, conNotas }: {
   titulo: string;
   estado: EstadoEvals | null;
   avisoDrift: string;
-  script: string;
   conNotas?: boolean;
 }) {
   return (
@@ -90,7 +89,7 @@ function TarjetaExamen({ titulo, estado, avisoDrift, script, conNotas }: {
           {conNotas && estado.ultima?.notas && <p className="m-0 mt-2 text-xs text-muted">{estado.ultima.notas}</p>}
           <p className="m-0 mt-2 text-xs text-muted">
             El detalle y el juez humano viven en <Link href="/admin/evals" className="underline">Evals</Link>.
-            El examen se corre a mano (gasta llamadas reales): <code>{script}</code>.
+            El examen lo corre a mano el equipo técnico (gasta llamadas reales).
           </p>
         </>
       )}
@@ -133,16 +132,14 @@ export default async function CalidadEvalsPage() {
       <TarjetaExamen
         titulo={t('calidad_evals.el_examen_del_analista')}
         estado={evals}
-        avisoDrift="El prompt vivo NO es el examinado — la regla de re-examen (22-evaluacion.md) exige volver a correrlo antes de desplegar cambios del agente."
-        script="npx tsx scripts/evals/correr-analista.ts"
+        avisoDrift="El prompt vivo NO es el examinado — la regla de re-examen exige volver a correrlo antes de desplegar cambios del agente."
       />
 
       {/* ── 1b · El examen fiscal del contador (E.26, 0254) ───────────── */}
       <TarjetaExamen
         titulo={t('calidad_evals.el_examen_del_contador')}
         estado={evalsContador}
-        avisoDrift="El prompt vivo NO es el examinado (el hash cubre reglas + corpus de normas/) — re-examina antes de desplegar cambios del agente o de las fichas."
-        script="npx tsx scripts/evals/correr-contador.ts"
+        avisoDrift="El prompt vivo NO es el examinado (la huella cubre las reglas y el corpus de normas) — re-examina antes de desplegar cambios del agente o de las fichas."
         conNotas
       />
 

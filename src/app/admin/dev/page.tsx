@@ -92,7 +92,7 @@ export default async function DevPage() {
             contesta "generando" — se dice. Refresca en cada carga (force-dynamic). ── */}
       <Tarjeta titulo="Mapa de actividad — pushes por día">
         {mapa.estado === 'sin_token' && (
-          <p className="m-0 text-xs text-muted">Sin <code>GITHUB_TOKEN</code> no hay mapa — no es que no haya pushes.</p>
+          <p className="m-0 text-xs text-muted">Sin el acceso a GitHub no hay mapa — no es que no haya pushes.</p>
         )}
         {mapa.estado === 'error' && (
           <p className="m-0 text-xs text-muted">GitHub no contestó el histograma — recarga en un momento.</p>
@@ -171,7 +171,7 @@ export default async function DevPage() {
       {/* ── Actividad en vivo (17-ago): commits y CI reales, cada carga. Tres estados honestos — sin llave / API caída / datos. ── */}
       <Tarjeta titulo="Actividad del código — en vivo">
         {actividad.estado === 'sin_token' && (
-          <p className="m-0 text-xs text-muted">Sin la llave <code>GITHUB_TOKEN</code> esta sección no puede ver el repo — no es que no haya actividad.</p>
+          <p className="m-0 text-xs text-muted">Sin el acceso a GitHub esta sección no puede ver el repo — no es que no haya actividad.</p>
         )}
         {actividad.estado === 'error' && (
           <p className="m-0 text-xs text-muted">GitHub no contestó — no se sabe qué hay (que no es lo mismo que nada).</p>
