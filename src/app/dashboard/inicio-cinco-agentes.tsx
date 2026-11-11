@@ -1,37 +1,19 @@
-import Link from 'next/link';
-import { LayoutGrid, Route, Plus, Users, Truck, Container } from 'lucide-react';
-import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, fechaHoraMx, hoyMx } from '@/lib/formato';
-import { ultimasCorridas, duracionLegible, type AgenteConCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
-import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from './resumen-visual';
-import { AvisoSinFlota } from './sin-flota';
-import { Bloque, EsqTabla } from './bloque';
-import { moduloProximamenteDeRuta, puedeVerRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
+import { moduloProximamenteDeRuta, puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { AGENTES_INSIGHT, PESO_SEVERIDAD, type AgenteInsight, type Insight } from '@/lib/likida/insights/tipos';
-import { TarjetaInsight } from './agentes/insights/tarjeta-insight';
 import { InicioCincoV2 } from './inicio-cinco-v2';
 import type { RangoResumen } from './resumen-datos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL RESUMEN DE UNA FLOTA CON PERFIL `cinco_agentes` (mig. 0770).
 //
-// Reemplaza al Resumen de siempre SOLO bajo el perfil. El de siempre trae KPIs
-// fiscales y de dinero, el chat, la suscripción con planes y precios, y las
-// alertas de módulos que el perfil deja en stand-by: nada de eso se enseña
-// aquí. Lo que hay son los cinco agentes, cada uno con su enlace y con el
-// ÚNICO indicador que ya existe y es verdad para todos: cuándo corrió por
-// última vez y cómo terminó (`agente_corrida`). Sin corrida registrada se dice
-// «sin corridas registradas», nunca un cero con cara de medición. Bajo cada
-// agente va su insight más severo (qué pasó · qué significa · qué hacer, T-INS-02/03)
-// o el vacío llano; el detalle lo pule cada agente en su propia pantalla.
-//
-// Cero pesos en esta pantalla (el Resumen es de `operacion`).
+// Reemplaza al Resumen de siempre SOLO bajo el perfil: los cinco agentes, cada uno con su enlace y con el indicador que ya
+// existe y es verdad para todos (cuándo corrió por última vez y cómo terminó, `agente_corrida`). Sin corrida registrada se
+// dice «sin corridas registradas», nunca un cero con cara de medición. Este archivo lee los insights por agente
+// (`leerInsightsResumen`) y delega el dibujo en `InicioCincoV2`; el respaldo v1 se retiró el 11-nov-2026 (ninguna flota lo usaba).
 // ═══════════════════════════════════════════════════════════════════════════
 
 export { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
-import { FICHAS_CINCO_AGENTES, type FichaAgente } from './inicio-cinco-fichas';
-import { getT } from '@/lib/i18n/servidor';
-import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { FICHAS_CINCO_AGENTES } from './inicio-cinco-fichas';
 
 /**
  * Lectores de insights por agente: cada frente registra aquí el suyo cuando su regla
@@ -110,198 +92,29 @@ export async function leerInsightsResumen(
   return resumirInsights(await leerInsightsPorAgente(tenantId, lectores, visibles), visibles);
 }
 
-export const textoVacioResumen = (t: TResto = T_RESTO_ES) => (t('op.todavia_no_hay_datos_para_interpretar'));
-export const TEXTO_VACIO_RESUMEN = textoVacioResumen();
-export const textoErrorResumen = (t: TResto = T_RESTO_ES) => (t('op.no_pudimos_preparar_la_interpretacion_de'));
-export const TEXTO_ERROR_RESUMEN = textoErrorResumen();
-/**
- * CT-A12-05 / MX-030: mientras un agente no tenga lector registrado en `LECTORES_INSIGHTS`, «Todavía no hay datos» sería falso:
- * no es que no haya datos, es que esta tarjeta no lee ninguno. Se dice, y se manda a la pantalla del agente, que sí los tiene.
- */
-export const textoSinLectorResumen = (t: TResto = T_RESTO_ES) => (t('op.esta_tarjeta_todavia_no_interpreta_los'));
-export const TEXTO_SIN_LECTOR_RESUMEN = textoSinLectorResumen();
-export const textoProximamenteResumen = (t: TResto = T_RESTO_ES) => (t('op.todavia_no_esta_activo_en_tu'));
-export const TEXTO_PROXIMAMENTE_RESUMEN = textoProximamenteResumen();
-
-/** Qué se ve bajo cada agente: su insight más severo, el vacío llano, el error o «próximamente». */
-export function InsightDeAgente({
-  insights, proximamente = false, sinLector = false, href, nombre, sufijo = '', t = T_RESTO_ES,
-}: {
-  insights: readonly Insight[] | null | undefined;
-  proximamente?: boolean;
-  /** El agente no tiene lector en `LECTORES_INSIGHTS`: un vacío no quiere decir «sin datos». */
-  sinLector?: boolean;
-  href: string;
-  nombre: string;
-  sufijo?: string; t?: TResto;
-}) {
-  const principal = proximamente || !insights ? null : insightMasSevero(insights);
-  return (
-    <div className="mt-2" data-insight-agente>
-      {proximamente ? (
-        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="proximamente">{textoProximamenteResumen(t)}</p>
-      ) : insights == null ? (
-        <p role="alert" className="card p-3 text-[12px]" style={{ color: 'var(--ink)' }} data-estado="error">{textoErrorResumen(t)}</p>
-      ) : principal === null && sinLector ? (
-        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="sin_lector">{textoSinLectorResumen(t)}</p>
-      ) : principal === null ? (
-        <p className="card p-3 text-[12px]" style={{ color: 'var(--muted)' }} data-estado="vacio">{textoVacioResumen(t)}</p>
-      ) : (
-        <TarjetaInsight insight={principal} />
-      )}
-      {!proximamente && (
-        <Link href={`${href}${sufijo}`} className="inline-block mt-1.5 text-[12px] font-medium underline" style={{ color: 'var(--ink)' }}>{t('op.abrir', { nombre })}</Link>
-      )}
-    </div>
-  );
-}
-
-const ICONO_BARRA = { width: 15, height: 15, strokeWidth: 1.75, style: { color: 'var(--muted)' } } as const;
-
-/** Resuelve a `null` ante cualquier fallo: la tarjeta lo confiesa, nunca lo vuelve un cero. */
-async function ultima(tenantId: string, agente: AgenteConCorridas): Promise<CorridaRegistrada | null | undefined> {
-  try {
-    const l = await ultimasCorridas(tenantId, agente, 1);
-    return l[0];
-  } catch {
-    return null;
-  }
-}
-
-const etiquetaEstado = (t: TResto = T_RESTO_ES): Record<string, string> => ({ ok: t('op.termino_bien'), parcial: t('op.termino_con_pendientes'), fallo: t('op.fallo') });
-
-function Indicador({ corrida, t = T_RESTO_ES }: { corrida: CorridaRegistrada | null | undefined; t?: TResto }) {
-  if (corrida === null) {
-    return <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{t('op.no_se_pudo_leer_la_ultima')}</p>;
-  }
-  if (corrida === undefined) {
-    return <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{t('op.sin_corridas_registradas_todavia')}</p>;
-  }
-  const dur = duracionLegible(corrida.duracionMs);
-  return (
-    <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{t('op.ultima_corrida', { fechaHoraMx: fechaHoraMx(corrida.inicio) })}{' '}{etiquetaEstado(t)[corrida.estado] ?? corrida.estado}
-      {dur ? ` · ${dur}` : ''}
-    </p>
-  );
-}
-
-export async function TarjetaAgente({ ficha, tenantId, sufijo, insights }: { ficha: FichaAgente; tenantId: string; sufijo: string; insights: InsightsPorAgente }) {
-  const { t } = await getT('resto');
-  // «Próximamente» (fase 1): la ficha se ve pero no consulta nada de la flota y su enlace va al anuncio, no a la función.
-  const proximamente = moduloProximamenteDeRuta('cinco_agentes', ficha.href);
-  const corrida = ficha.corridas && !proximamente ? await ultima(tenantId, ficha.corridas) : undefined;
-  return (
-    <div data-agente-resumen={ficha.clave}>
-    <Link href={`${proximamente ? rutaProximamente(proximamente) : ficha.href}${sufijo}`} className="card p-4 block transition-opacity hover:opacity-85" data-agente={ficha.clave}>
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-          <ficha.Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        </div>
-        <div className="min-w-0">
-          <h3 className="text-[14px] font-medium">
-            {ficha.nombre}
-            {proximamente && (
-              <span className="ml-2 align-middle text-[11px] font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--canvas)', color: 'var(--muted)' }}>{t('op.proximamente')}</span>
-            )}
-          </h3>
-          <p className="text-[12px] mt-0.5" style={{ color: 'var(--ink2)' }}>{ficha.descripcion}</p>
-          <div className="mt-2">
-            {proximamente ? (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{t('op.todavia_no_esta_activo_en_tu_2')}</p>
-            ) : ficha.corridas ? <Indicador t={t} corrida={corrida} /> : (
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{t('op.abre_su_tablero_para_ver_y')}</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </Link>
-    <InsightDeAgente t={t} insights={insights[ficha.insight]} proximamente={!!proximamente} sinLector={!LECTORES_INSIGHTS[ficha.insight]} href={ficha.href} nombre={ficha.nombre} sufijo={sufijo} />
-    </div>
-  );
-}
-
-const ATAJOS: ReadonlyArray<{ href: string; nombre: string; Icono: typeof Route }> = [
-  { href: '/dashboard/despacho', nombre: 'Nuevo viaje', Icono: Plus },
-  { href: '/dashboard/viajes', nombre: 'Viajes', Icono: Truck },
-  { href: '/dashboard/operadores', nombre: 'Operadores', Icono: Users },
-  { href: '/dashboard/unidades', nombre: 'Unidades', Icono: Container },
-];
-
 export async function InicioCincoAgentes({
-  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', ui = 'v1', userId, soloLectura = false, veAsistente = false, rango, rol = '',
+  tenantId, tenantNombre, nombre, tenantExiste = true, sufijo = '', userId, soloLectura = false, veAsistente = false, rango, rol = '',
 }: {
   tenantId: string;
   tenantNombre: string | null;
   nombre: string | null;
   tenantExiste?: boolean;
   sufijo?: string;
-  /** Interfaz con la que se pinta (`versionUi`). Sin 'v2' el Resumen es el de siempre, idéntico. */
-  ui?: 'v1' | 'v2';
-  userId?: string;
+  userId?: string | null;
   soloLectura?: boolean;
   /** ¿El rol puede abrir Puesta en marcha? (lo decide la página con `puedeVerRuta`; por omisión NO: falla cerrado). */
   veAsistente?: boolean;
-  /** Periodo elegido en la barra de filtros (`?rango=`). Solo lo usa el Inicio v2. */
+  /** Periodo elegido en la barra de filtros (`?rango=`). */
   rango?: RangoResumen;
-  /** Rol efectivo (decide qué enlaces e insights se ofrecen en el Resumen v2). Por omisión vacío: falla cerrado. */
+  /** Rol efectivo (decide qué enlaces e insights se ofrecen en el Resumen). Por omisión vacío: falla cerrado. */
   rol?: string;
 }) {
-  const { t, idioma } = await getT('resto');
-  const diaMx = hoyMx(new Date(ahoraMs()));
-  if (ui === 'v2' && userId) {
-    const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, 'cinco_agentes');
-    return (
-      <InicioCincoV2
-        tenantId={tenantId} userId={userId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
-        sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} rango={rango} rol={rol}
-        principales={principales} fallidos={fallidos}
-      />
-    );
-  }
-  const insights = await leerInsightsPorAgente(tenantId);
+  const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, 'cinco_agentes');
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<LayoutGrid {...ICONO_BARRA} />}
-          titulo={t('op.resumen')}
-          derecha={tenantNombre && (
-            <span className="inline-block text-[11px] px-2 py-0.5 rounded-full font-medium shrink-0" style={{ color: 'var(--accent-fg)', background: 'var(--accent)' }}>{t('op.viendo_como_superadmin', { tenantNombre })}</span>
-          )}
-        />
-        <HeroSaludo
-          saludo={saludo()} nombre={nombre ?? 'equipo'}
-          tagline={t('op.tus_cinco_agentes_de_un_vistazo')}
-          derecha={<div className="shrink-0 pt-1"><ChipFecha>{fechaMx(diaMx, idioma)}</ChipFecha></div>}
-        />
-        <div className="px-5 pb-5 flex-1">
-          {!tenantExiste && <div className="mt-3"><AvisoSinFlota tenantId={tenantId} /></div>}
-
-          <div className="mt-3">
-            <TituloSeccion>{t('op.agentes')}</TituloSeccion>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 mt-2">
-              {FICHAS_CINCO_AGENTES.map((f) => (
-                <Bloque key={f.clave} mensaje={t('op.no_se_pudo_leer', { nombre: f.nombre })} esqueleto={<EsqTabla filas={2} titulo={false} />}>
-                  <TarjetaAgente ficha={f} tenantId={tenantId} sufijo={sufijo} insights={insights} />
-                </Bloque>
-              ))}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <TituloSeccion>{t('op.para_operarlos')}</TituloSeccion>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {ATAJOS.map((a) => (
-                <Link key={a.href} href={`${a.href}${sufijo}`}
-                  className="hairline h-8 px-3 rounded-lg text-[13px] font-medium inline-flex items-center gap-1.5 transition-opacity hover:opacity-85"
-                  style={{ background: 'var(--surface)' }}>
-                  <a.Icono width={15} height={15} strokeWidth={1.75} /> {a.nombre}
-                </Link>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
+    <InicioCincoV2
+      tenantId={tenantId} userId={userId ?? 'sin-usuario'} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
+      sufijo={sufijo} soloLectura={soloLectura} veAsistente={veAsistente} rango={rango} rol={rol}
+      principales={principales} fallidos={fallidos}
+    />
   );
 }

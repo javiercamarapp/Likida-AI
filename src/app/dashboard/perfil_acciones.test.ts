@@ -59,7 +59,6 @@ const ARCHIVOS: Record<string, Clase> = {
   'carta-porte/page.tsx': 'permitido',
   'conexiones/page.tsx': 'permitido',
   'despacho/page.tsx': 'permitido',
-  'inicio-contenido.tsx': 'permitido',                      // el Resumen de siempre: bajo el perfil no se monta
   'legal/page.tsx': 'permitido',
   'llaves-api/page.tsx': 'permitido',                        // Ola 1 · A1: el dueño emite la llave `administracion` del TMS bajo el perfil
   'patios/page.tsx': 'permitido',                            // Ola 1 · A1: ídem (catálogo operativo)

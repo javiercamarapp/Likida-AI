@@ -86,7 +86,7 @@ export default defineConfig({
         // archivos especiales del router (page/layout/loading/error), pero las
         // 8 fases del plan de agentes metieron el grueso de la pantalla en HERMANOS
         // de esos archivos: `vista.tsx`, `estrategia.tsx`, `controles.tsx`,
-        // `chat.tsx`, `inicio-contenido.tsx`. Esos SÍ se contaban.
+        // `chat.tsx`, `inicio-contenido.tsx` (retirado el 11-nov-2026). Esos SÍ se contaban.
         //
         // Medido ese día, con la lista vieja:
         //     70 vistas .tsx en src/app  →    225/6,269 líneas =  3.59%
@@ -99,8 +99,8 @@ export default defineConfig({
         // dijo — y el umbral sube de 67 a 78 para que la puerta quede MÁS dura
         // sobre lo que sí se puede probar en nodo, no más blanda.
         //
-        // Excluir de la MEDICIÓN no apaga pruebas: `avance-cierre.test.tsx` y
-        // `tablero-operacion.test.tsx` siguen corriendo y siguen fallando si se
+        // Excluir de la MEDICIÓN no apaga pruebas: las pruebas de las vistas
+        // (`vista.test.tsx`, etc.) siguen corriendo y siguen fallando si se
         // rompen. Solo dejan de contar en el porcentaje.
         'src/app/**/*.tsx',
       ],

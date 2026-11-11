@@ -2,13 +2,9 @@ import { redirect } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { sufijoTenant } from './sufijo';
 import { puedeVerArea, puedeVerRuta } from '@/lib/auth/visibilidad';
-import { InicioContenido } from './inicio-contenido';
-import { InicioOperacion } from './inicio-operacion';
 import { InicioCincoAgentes, leerInsightsResumen } from './inicio-cinco-agentes';
 import { ResumenV2 } from './resumen-v2';
 import { leerRango } from './resumen-datos';
-import { cookies } from 'next/headers';
-import { versionUi } from '@/lib/auth/version_ui';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { getPerfilCrudo } from '@/lib/likida/repo';
 import { onboardingFiscalListo, onboardingPospuesto } from '@/lib/likida/perfil/preguntas';
@@ -18,9 +14,9 @@ export const metadata: Metadata = { title: 'Resumen' };
 export const dynamic = 'force-dynamic';
 
 /** La página real: resuelve quién eres y a qué flota apuntas, y pinta el
- *  contenido (`inicio-contenido.tsx` — vive aparte para que el preview
- *  headless pueda montarlo sin sesión y porque Next rechaza exports extra
- *  en una Page). Un superadmin sin `?tenant=`/`?vista=demo` NI flota elegida
+ *  Resumen (`resumen-v2.tsx`, o `inicio-cinco-v2.tsx` bajo el perfil de cinco
+ *  agentes). El respaldo v1 (`InicioContenido`/`InicioOperacion`) se retiró el
+ *  11-nov-2026: ninguna flota lo usaba en producción. Un superadmin sin `?tenant=`/`?vista=demo` NI flota elegida
  *  en /admin/elegir-flota ya no llega aquí: `requireSessionTenant` lo manda
  *  al selector — el tenant implícito murió el 16-ago-2026 (ver guard.ts). */
 export default async function DashboardInicio({
@@ -29,7 +25,7 @@ export default async function DashboardInicio({
   searchParams: Promise<{ vista?: string; tenant?: string; rango?: string; rol?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, tenantNombre, nombre, rol, tenantExiste, userId, rolReal } = await resolverTenantEfectivo('/dashboard', sp);
+  const { tenantId, tenantNombre, nombre, rol, tenantExiste, userId } = await resolverTenantEfectivo('/dashboard', sp);
 
   // EL PERFIL DE LA FLOTA (0770): una flota con perfil `cinco_agentes` tiene su
   // propio Resumen reducido a los cinco agentes y NO pasa por el onboarding
@@ -37,32 +33,20 @@ export default async function DashboardInicio({
   // el propio perfil). Sin perfil, todo sigue como antes.
   const perfilFlota = await perfilDeTenant(tenantId);
   if (perfilFlota) {
-    // La misma versión con la que el layout eligió el chrome (`versionUi`, con el rol REAL: la cookie del superadmin
-    // solo vale para él). Sin v2 el Resumen es el de siempre.
-    const ui = await versionUi(tenantId, rolReal ?? rol, await cookies());
     return (
       <InicioCincoAgentes
         tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijoTenant(sp)}
-        ui={ui} userId={userId} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
+        userId={userId} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
         veAsistente={puedeVerRuta(rol, '/dashboard/puesta-en-marcha', perfilFlota)}
         // DECISIÓN (31-oct-2026): el perfil `cinco_agentes` SÍ ve pesos en el Inicio, pero solo dueño y finanzas, y solo por el lector
-        // propio `leerCifrasPesosCincoAgentes` (importe IAVE y extemporáneos). El encargado nunca; el Resumen de siempre no se toca.
+        // propio `leerCifrasPesosCincoAgentes` (importe IAVE y extemporáneos). El encargado nunca.
         rango={leerRango(sp.rango)} rol={rol}
       />
     );
   }
 
-  // DOS CASAS DISTINTAS EN LA MISMA PUERTA.
-  //
-  // El Resumen de arriba es del DUEÑO: abre con lo que el motor señaló en
-  // pesos, los acreditables fiscales y el monto comprobado. El encargado no
-  // ve nada de eso (visibilidad.ts), así que aterrizaba en una pantalla
-  // hecha para otro rol. No se le esconden secciones al Resumen del dueño —
-  // eso deja un queso gruyere—: se le da su propia pantalla, con las mismas
-  // piezas y otro contenido.
-  //
-  // El criterio es "¿ve dinero?" y no "¿es encargado?": un rol nuevo que
-  // tampoco vea finanzas cae aquí solo, sin tocar esta línea.
+  // El criterio de las dos casas es «¿ve dinero?» y no «¿es encargado?»: el Resumen v2 recibe `veDinero` y pinta los mismos
+  // recuadros con conteos (sin ningún peso) para un rol sin dinero; un rol nuevo que tampoco vea finanzas cae ahí solo.
   // El MISMO contrato de sufijo que el sidebar (sidebar-nav.tsx): los links
   // que esta página emite (tabla de viajes → detalle de liquidación) cargan
   // el ?tenant=/?vista= del superadmin; para roles reales queda vacío.
@@ -101,25 +85,14 @@ export default async function DashboardInicio({
   }
   if (faltaOnboarding) redirect(`/dashboard/onboarding${sufijo}`);
 
-  // El rediseño: una flota SIN perfil que ya tiene la interfaz v2 (misma versión con la que el layout eligió el chrome)
-  // recibe el Resumen v2 y no el de siempre dentro del chrome nuevo. El rol sin dinero (encargado) ve los mismos
-  // recuadros con conteos, sin ningún peso. Los enlaces y los insights se limitan a lo que ESE rol abre.
-  const ui = await versionUi(tenantId, rolReal ?? rol, await cookies());
-  if (ui === 'v2') {
-    const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, null);
-    return (
-      <ResumenV2
-        tenantId={tenantId} userId={userId ?? 'sin-usuario'} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
-        sufijo={sufijo} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
-        veAsistente={false} veDinero={puedeVerArea(rol, 'dinero')} rango={leerRango(sp.rango)}
-        principales={principales} fallidos={fallidos} rol={rol} perfil={null} avisoFiscalPospuesto={avisoFiscalPospuesto}
-      />
-    );
-  }
-
-  if (!puedeVerArea(rol, 'dinero')) {
-    return <InicioOperacion tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} />;
-  }
-
-  return <InicioContenido sp={sp} tenantId={tenantId} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste} sufijo={sufijo} avisoFiscalPospuesto={avisoFiscalPospuesto} />;
+  // Los enlaces y los insights del Resumen se limitan a lo que ESE rol abre.
+  const { principales, fallidos } = await leerInsightsResumen(tenantId, rol, null);
+  return (
+    <ResumenV2
+      tenantId={tenantId} userId={userId ?? 'sin-usuario'} tenantNombre={tenantNombre} nombre={nombre} tenantExiste={tenantExiste}
+      sufijo={sufijo} soloLectura={Boolean(sp.tenant || sp.vista || sp.rol || tenantNombre)}
+      veAsistente={false} veDinero={puedeVerArea(rol, 'dinero')} rango={leerRango(sp.rango)}
+      principales={principales} fallidos={fallidos} rol={rol} perfil={null} avisoFiscalPospuesto={avisoFiscalPospuesto}
+    />
+  );
 }
