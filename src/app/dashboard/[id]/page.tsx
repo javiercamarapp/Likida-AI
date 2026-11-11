@@ -59,6 +59,17 @@ function hrefWhatsApp(telefono: string | null): string | null {
   return `https://wa.me/52${digitos.replace(/^52/, '')}`;
 }
 
+/** El id de la liquidación (la más reciente) del viaje `viajeId` de la flota `tenantId`, o null. Nunca lanza: un fallo de lectura es «no existe». */
+async function liquidacionDeViaje(viajeId: string, tenantId: string): Promise<string | null> {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(viajeId)) return null;
+  try {
+    const { data } = await supabaseAdmin()
+      .from('liquidacion').select('id').eq('viaje_id', viajeId).eq('tenant_id', tenantId)
+      .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    return (data?.id as string | undefined) ?? null;
+  } catch { return null; }
+}
+
 export default async function Detalle({
   params, searchParams,
 }: { params: Promise<{ id: string }>; searchParams: Promise<{ tenant?: string; vista?: string; rol?: string }> }) {
@@ -111,7 +122,13 @@ export default async function Detalle({
   const sufijo = sufijoTenant(sp);
 
   const d = await getLiquidacionDetalle(id, tenantId);
-  if (!d) notFound();
+  if (!d) {
+    // El id de un VIAJE (el que traen atajos y enlaces de otras pantallas) lleva a la liquidación de ESE viaje, y solo si es de
+    // esta flota (`tenant_id` en la consulta): jamás se resuelve un id de otro tenant. Sin liquidación, sigue siendo «no existe».
+    const porViaje = await liquidacionDeViaje(id, tenantId);
+    if (porViaje) redirect(`/dashboard/${porViaje}${sufijo}`);
+    notFound();
+  }
   const e = etiquetaEstatus(d.estatus);
   const puedeReasignar = puedeAsignar(rol);
   // Reabrir es del dueño, no del encargado ni del contador: borra la
