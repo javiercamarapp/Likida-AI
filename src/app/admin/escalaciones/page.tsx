@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import { getT } from '@/lib/i18n/servidor';
 import { nombreFuenteTr } from '@/lib/i18n/rotulos_tr';
 import { urlCasoExamen } from '@/lib/admin/casos-regresion';
@@ -102,10 +103,10 @@ export default async function EscalacionesPage() {
       titulo={t('escalaciones.escalaciones')}
       apoyo={t('escalaciones.todo_lo_que_espera')}
       etiquetaCifras={t('escalaciones.escalaciones_por_fuente')}
-      cifras={legibles.map((f) => {
+      cifras={uniformes(legibles.map((f) => {
         const Icono = ICONO_FUENTE[f];
         return { etiqueta: nombreFuenteTr(f, tSis), valor: conteoDeFuente(f, bandeja.conteos), formato: 'entero' as const, icono: <Icono width={15} height={15} strokeWidth={1.75} /> };
-      })}
+      }))}
       /* Fuentes que NO se pudieron leer — dicho, nunca un 0. */
       avisos={ilegibles.length === 0 ? null : ilegibles.map((f) => (
         <Aviso key={f} tono="error" titulo={t('escalaciones.no_se_pudo_leer', { NOMBRE_FUENTE: nombreFuenteTr(f, tSis) })}>
@@ -116,6 +117,8 @@ export default async function EscalacionesPage() {
 
       {bandeja.cola.length === 0 ? (
         legibles.length > 0 && (
+          <section className="bj-bloque bj-caja" aria-labelledby="cola-escalaciones">
+          <h2 className="bj-titulo" id="cola-escalaciones">{t('escalaciones.la_cola_lo_mas')}</h2>
           <EstadoVacio titulo={ilegibles.length === 0 ? t('escalaciones.la_cola_esta_vacia') : t('escalaciones.sin_pendientes_en_lo')}>
             {ilegibles.length === 0 ? (
               <>
@@ -128,9 +131,10 @@ export default async function EscalacionesPage() {
               </>
             )}
           </EstadoVacio>
+          </section>
         )
       ) : (
-        <section className="bj-bloque" aria-labelledby="cola-escalaciones">
+        <section className="bj-bloque bj-caja" aria-labelledby="cola-escalaciones">
           <h2 className="bj-titulo" id="cola-escalaciones">{t('escalaciones.la_cola_lo_mas')}</h2>
           <TablaBase
             etiqueta={t('escalaciones.cola_de_escalaciones')} columnas={columnas} filas={cola50}

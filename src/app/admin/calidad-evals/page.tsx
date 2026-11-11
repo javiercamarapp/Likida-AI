@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import Link from 'next/link';
@@ -124,12 +125,18 @@ export default async function CalidadEvalsPage() {
     .slice(0, 6);
   const casos = evals !== null && evalsContador !== null ? evals.casosActivos + evalsContador.casosActivos : null;
 
+  const sabe: string[] = [
+    ...(corridas !== null && corridas.total > 0 ? [`${tx('calidad_evals.n_corridas', { n: numero(corridas.total, idioma) })} · ${tx('calidad_evals.n_ok', { n: numero(corridas.ok, idioma) })}`] : []),
+    ...(ocr !== null && ocr.precisionPct !== null ? [`${tx('calidad_evals.precision_de_campos')} ${porcentaje(ocr.precisionPct, 1, idioma)}`] : []),
+    ...(casos !== null ? [`${t('calidad_evals.kpi_casos')}: ${numero(casos, idioma)}`] : []),
+  ];
+
   return (
     <EsqueletoPanelCifras
       titulo={t('calidad_evals.calidad_evals')}
-      titular={t('calidad_evals.titular_corto')}
+      apoyo={t('calidad_evals.titular_corto')}
       etiquetaCifras={t('calidad_evals.calidad_evals')}
-      cifras={[
+      cifras={uniformes([
         corridas === null
           ? { etiqueta: t('calidad_evals.kpi_corridas'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') }
           : { etiqueta: t('calidad_evals.kpi_corridas'), valor: corridas.total, formato: 'entero' as const },
@@ -145,7 +152,7 @@ export default async function CalidadEvalsPage() {
         casos === null
           ? { etiqueta: t('calidad_evals.kpi_casos'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') }
           : { etiqueta: t('calidad_evals.kpi_casos'), valor: casos, formato: 'entero' as const, nota: t('calidad_evals.kpi_casos_nota') },
-      ]}
+      ])}
       graficas={[
         <Tarjeta key="veredicto" titulo={t('calidad_evals.grafica_veredicto')} contenida
           {...(corridas === null ? { estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') } : corridas.total === 0 ? { estado: 'vacio' as const, mensaje: t('calidad_evals.sin_corridas_ventana') } : { estado: 'ok' as const })}>
@@ -172,6 +179,20 @@ export default async function CalidadEvalsPage() {
           ) : null}
         </Tarjeta>,
       ]}
+      saberes={{
+        seSabe: {
+          titulo: tx('saberes.se_sabe'),
+          items: sabe.length > 0 ? sabe : [tx('calidad_evals.nada_medido')],
+        },
+        noSeSabe: {
+          titulo: tx('saberes.no_se_sabe'),
+          items: [
+            t('calidad_evals.feedback_del_contralor_sobre'),
+            t('calidad_evals.csat_necesita_encuestas_a'),
+            t('calidad_evals.drift_de_calidad_en'),
+          ],
+        },
+      }}
     >
       <FilaTarjetas variante="6-6">
         {/* ── 1 · El examen del analista (EVALOPS 0134) ── */}
@@ -189,87 +210,70 @@ export default async function CalidadEvalsPage() {
         />
       </FilaTarjetas>
 
-      {/* ── 2 · Los veredictos de las corridas de agentes (0102) ──────── */}
-      <Tarjeta titulo={t('calidad_evals.corridas_de_agentes_ultimos', { DIAS_VENTANA })}>
-        {corridas === null ? (
-          <p className="m-0 text-sm text-[var(--bad)]">
-            
-            {t('calidad_evals.no_se_pudieron_leer')}
-          </p>
-        ) : corridas.total === 0 ? (
-          <p className="m-0 text-sm text-muted">{rico(tx('calidad_evals.cero_corridas_en_la_ventana_eso'), { e0: (c) => <Link href="/admin/crons" className="underline">{c}</Link> })}</p>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-              <span className="tabular">{tx('calidad_evals.n_corridas', { n: numero(corridas.total, idioma) })}</span>
+      {/* ── 2 y 3 · Corridas de agentes (0102) y precisión del OCR (0239/0246): tabla y filas medidas, sin prosa ─ */}
+      <FilaTarjetas variante="6-6">
+        <Tarjeta
+          titulo={t('calidad_evals.corridas_de_agentes_ultimos', { DIAS_VENTANA })}
+          contenida
+          acciones={corridas !== null && corridas.total > 0 ? (
+            <span className="adm-sis-acciones">
               <StatusChip tono="ok">{tx('calidad_evals.n_ok', { n: numero(corridas.ok, idioma) })}</StatusChip>
-              {corridas.parcial > 0 && <StatusChip tono="warn">{tx('calidad_evals.n_parciales', { n: numero(corridas.parcial, idioma) })}</StatusChip>}
-              {corridas.fallo > 0
-                ? <StatusChip tono="bad">{tx('calidad_evals.n_fallos', { n: numero(corridas.fallo, idioma) })}</StatusChip>
-                : <span className="text-muted">{tx('calidad_evals.0_fallos')}</span>}
-            </div>
-            {corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) && (
-              <div className="mt-2">
-                <TablaBase
-                  etiqueta={t('calidad_evals.agentes_con_tropiezos_en')}
-                  columnas={columnasTropiezos(tx, idioma)}
-                  filas={corridas.porAgente.filter((a) => a.fallo > 0 || a.parcial > 0)}
-                  idFila={(a) => a.agente}
-                  altoMaximo={false}
-                />
-              </div>
-            )}
-            <p className="m-0 mt-2 text-xs text-muted">{rico(tx('calidad_evals.el_detalle_corrida_por_corrida_vive'), { e0: (c) => <Link href="/admin/corridas" className="underline">{c}</Link>, e1: (c) => <Link href="/admin/agentes" className="underline">{c}</Link> })}</p>
-          </>
-        )}
-      </Tarjeta>
-
-      {/* ── 3 · La precisión del OCR contra verdad de terreno (0239/0246) ─ */}
-      <Tarjeta titulo={t('calidad_evals.precision_del_ocr_banco')}>
-        {ocr === null ? (
-          <p className="m-0 text-sm text-[var(--bad)]">
-            
-            {t('calidad_evals.no_se_pudo_leer')}
-          </p>
-        ) : ocr.fotosMedidas === 0 ? (
-          <p className="m-0 text-sm text-muted">{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="underline">{c}</Link> })}</p>
-        ) : (
-          <>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-              <span>{tx('calidad_evals.precision_de_campos')}{' '}<span className="tabular font-semibold">
-                  {ocr.precisionPct === null ? tx('qa_medicion_corrida.sin_medir') : porcentaje(ocr.precisionPct, 1, idioma)}
+              {corridas.parcial > 0 ? <StatusChip tono="warn">{tx('calidad_evals.n_parciales', { n: numero(corridas.parcial, idioma) })}</StatusChip> : null}
+              {corridas.fallo > 0 ? <StatusChip tono="bad">{tx('calidad_evals.n_fallos', { n: numero(corridas.fallo, idioma) })}</StatusChip> : null}
+            </span>
+          ) : undefined}
+        >
+          {corridas === null ? (
+            <p className="adm-sis-vacio-linea">{t('calidad_evals.no_se_pudieron_leer')}</p>
+          ) : corridas.total === 0 ? (
+            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.cero_corridas_en_la_ventana_eso'), { e0: (c) => <Link href="/admin/crons" className="underline">{c}</Link> })}</p>
+          ) : corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) ? (
+            <TablaBase
+              etiqueta={t('calidad_evals.agentes_con_tropiezos_en')}
+              columnas={columnasTropiezos(tx, idioma)}
+              filas={corridas.porAgente.filter((a) => a.fallo > 0 || a.parcial > 0)}
+              idFila={(a) => a.agente}
+              altoMaximo={false}
+              densa
+            />
+          ) : (
+            <p className="adm-sis-vacio-linea">{tx('calidad_evals.0_fallos')}</p>
+          )}
+        </Tarjeta>
+        <Tarjeta titulo={t('calidad_evals.precision_del_ocr_banco')} contenida>
+          {ocr === null ? (
+            <p className="adm-sis-vacio-linea">{t('calidad_evals.no_se_pudo_leer')}</p>
+          ) : ocr.fotosMedidas === 0 ? (
+            <p className="adm-sis-vacio-linea">{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="underline">{c}</Link> })}</p>
+          ) : (
+            <ul className="adm-sis-lista">
+              <li>
+                <span>{tx('calidad_evals.precision_de_campos')}</span>
+                <span className="tabular">
+                  <b>{ocr.precisionPct === null ? tx('qa_medicion_corrida.sin_medir') : porcentaje(ocr.precisionPct, 1, idioma)}</b>
+                  {ocr.precisionPct !== null ? <span className="adm-sis-sub">{tx('calidad_evals.ok_medidos', { numero: numero(ocr.camposOk, idioma), numero2: numero(ocr.camposOk + ocr.camposMal, idioma) })}</span> : null}
                 </span>
-                {ocr.precisionPct !== null && (
-                  <span className="text-muted">{tx('calidad_evals.ok_medidos', { numero: numero(ocr.camposOk, idioma), numero2: numero(ocr.camposOk + ocr.camposMal, idioma) })}</span>
-                )}
-              </span>{rico(tx('calidad_evals.e0_foto_s_medidas_e0', { numero: numero(ocr.fotosMedidas, idioma) }), { e0: (c) => <span className="tabular text-muted">{c}</span> })}{ocr.alucinaciones > 0
-                ? <StatusChip tono="bad">{numero(ocr.alucinaciones, idioma)}{' '}{tx('calidad_evals.alucinacion_es')}</StatusChip>
-                : <StatusChip tono="ok">{tx('calidad_evals.0_alucinaciones')}</StatusChip>}
-              {ocr.camposNoMedidos > 0 && (
-                <span className="text-muted">{numero(ocr.camposNoMedidos, idioma)}{' '}{tx('calidad_evals.campo_s_sin_medir')}</span>
-              )}
-            </div>
-            <p className="m-0 mt-2 text-xs text-muted">{rico(tx('calidad_evals.misma_aritmetica_que_el_panel_de'), { e0: (c) => <Link href="/admin/qa" className="underline">{c}</Link> })}{' '}{ocr.ultimaMedicionEn ? fechaHoraMx(ocr.ultimaMedicionEn, idioma) : '—'}.
-            </p>
-          </>
-        )}
-      </Tarjeta>
-
-      {/* ── Lo que SIGUE sin fuente — con su razón, no con gráfica vacía ─ */}
-      <Tarjeta titulo={t('calidad_evals.lo_que_este_tablero')}>
-        <ul className="m-0 list-none space-y-2 p-0 text-sm">
-          {[
-            t('calidad_evals.feedback_del_contralor_sobre'),
-            t('calidad_evals.csat_necesita_encuestas_a'),
-            t('calidad_evals.drift_de_calidad_en'),
-          ].map((item) => (
-            <li key={item} className="flex items-start gap-2.5">
-              <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--muted)]" />
-              <span className="text-muted">{item}</span>
-            </li>
-          ))}
-        </ul>
-      </Tarjeta>
+              </li>
+              <li>
+                <span>{tx('calidad_evals.kpi_fotos_medidas')}</span>
+                <span className="tabular">{numero(ocr.fotosMedidas, idioma)}</span>
+              </li>
+              <li>
+                <span>{tx('calidad_evals.kpi_alucinaciones')}</span>
+                <span>{ocr.alucinaciones > 0
+                  ? <StatusChip tono="bad">{numero(ocr.alucinaciones, idioma)}{' '}{tx('calidad_evals.alucinacion_es')}</StatusChip>
+                  : <StatusChip tono="ok">{tx('calidad_evals.0_alucinaciones')}</StatusChip>}</span>
+              </li>
+              {ocr.camposNoMedidos > 0 ? (
+                <li><span>{tx('calidad_evals.kpi_sin_medir')}</span><span className="tabular">{numero(ocr.camposNoMedidos, idioma)}</span></li>
+              ) : null}
+              {ocr.ultimaMedicionEn ? (
+                <li><span>{tx('calidad_evals.kpi_ultima_medicion')}</span><span>{fechaHoraMx(ocr.ultimaMedicionEn, idioma)}</span></li>
+              ) : null}
+            </ul>
+          )}
+        </Tarjeta>
+      </FilaTarjetas>
     </EsqueletoPanelCifras>
   );
 }

@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import {
   listarAgentes, DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
@@ -248,13 +249,13 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         </Aviso>
       ) : null}
       etiquetaCifras={t('agentes_contenido.estado_de_los_agentes')}
-      cifras={[
+      cifras={uniformes([
           { etiqueta: t('agentes_contenido.agentes_vivos'), valor: vivos.length, estado: 'ok', nota: t('agentes_contenido.en_el_catalogo', { length: agentes.length }) },
           { etiqueta: t('agentes_contenido.corriendo_de_verdad'), valor: parados === null || interruptores === null ? null : corriendo, estado: parados === null || interruptores === null ? 'error' : 'ok', nota: t('agentes_contenido.con_corrida_reciente_y') },
           { etiqueta: t('agentes_contenido.bloqueados_o_parados'), valor: parados === null ? null : bloqueados + parados72, estado: parados === null ? 'error' : 'ok', tono: parados !== null && bloqueados + parados72 > 0 ? 'warn' : undefined, nota: t('agentes_contenido.h_sin_correr_o', { umbralHoras: parados?.umbralHoras ?? 72 }) },
           { etiqueta: t('agentes_contenido.apagados'), valor: apagados, estado: apagados === null ? 'error' : 'ok', tono: apagados ? 'bad' : undefined, nota: t('agentes_contenido.con_el_kill_switch') },
           { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: t('agentes_contenido.suma_de_los_agentes') },
-      ]}
+      ])}
     >
 
       <Tarjeta

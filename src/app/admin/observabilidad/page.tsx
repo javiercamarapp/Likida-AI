@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { revalidatePath } from 'next/cache';
@@ -136,12 +137,12 @@ export default async function ObservabilidadPage() {
       titulo={t('observabilidad.observabilidad')}
       apoyo={t('observabilidad.apagar_un_agente_en_segundos_ver')}
       etiquetaCifras={t('observabilidad.interruptores')}
-      cifras={[
+      cifras={uniformes([
         { etiqueta: t('observabilidad.kpi_apagados'), valor: apagados, formato: 'entero', estado: apagados === null ? 'error' : 'ok', reintentar: true, tono: apagados ? 'bad' : undefined, nota: interruptores === null ? undefined : t('observabilidad.kpi_de_interruptores', { n: interruptores.length }) },
         { etiqueta: t('observabilidad.kpi_corridas_fallo'), valor: conFallo, formato: 'entero', estado: conFallo === null ? 'error' : 'ok', reintentar: true, tono: conFallo ? 'bad' : undefined, nota: corridas === null ? undefined : t('observabilidad.kpi_de_corridas', { n: corridas.length }) },
         { etiqueta: t('observabilidad.kpi_p95'), valor: peor === null ? null : msLegible(peor.p95Ms), estado: rutas === null ? 'error' : peor === null ? 'vacio' : 'ok', reintentar: true, mensaje: rutas === null ? undefined : t('observabilidad.sin_muestras_todavia'), nota: peor?.nombre },
         { etiqueta: t('observabilidad.kpi_fallos_rutas', { dias }), valor: fallosRutas, formato: 'entero', estado: fallosRutas === null ? 'error' : 'ok', reintentar: true, tono: fallosRutas ? 'warn' : undefined },
-      ]}
+      ])}
       variante="6-6"
       graficas={[
         <Tarjeta key="estado" titulo={t('observabilidad.grafica_corridas')}
