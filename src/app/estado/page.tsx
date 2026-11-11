@@ -6,6 +6,7 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import Link from 'next/link';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import '../legal/publico-r2.css';
+import './estado.css';
 import { headers } from 'next/headers';
 import { cargarEstadoPublico, estadoMemoizado, type EstadoPublico } from './datos';
 import { clientIp, rateLimit } from '@/lib/ratelimit';

@@ -15,3 +15,13 @@
 @media (max-width: 640px) {
   [data-ui="v2"] .rv-notif .av-acciones { padding-left: 20px; }
 }
+/* UNA sola barra de una fila (Rovaq): segmentado a la izquierda y, a la derecha, los filtros con su rótulo EN LÍNEA (no encima) a 32 px. */
+[data-ui="v2"] .rv-notif .av-barra { align-items: center; margin-bottom: 0; }
+[data-ui="v2"] .rv-notif .av-filtros { align-items: center; gap: 8px; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-campo { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-campo__etq { margin: 0; font-size: var(--t-small, 12px); font-weight: 500; color: var(--muted); white-space: nowrap; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-ctl { min-width: 0; min-height: 32px; height: 32px; }
+[data-ui="v2"] .rv-notif .av-filtros .rv-btn { min-height: 32px; }
+@media (max-width: 640px) {
+  [data-ui="v2"] .rv-notif .av-filtros .rv-campo { flex: 1 1 140px; }
+}
