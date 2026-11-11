@@ -14,8 +14,9 @@ import { logger } from '@/lib/logger';
 import { BotonAccionMesa } from './boton-accion';
 import type { Metadata } from 'next';
 import {
-  BotonEnlace, CampoTexto, Chip, Disclosure, EstadoVacio, FormaConAviso, Icono, StatusChip, type ResultadoAccion,
+  BarraFiltros, BotonEnlace, CampoTexto, Chip, Disclosure, EstadoVacio, FiltroOpciones, FormaConAviso, Icono, StatusChip, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
+import { TarjetaTabla } from '../bloque';
 import './asistencia.css';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
@@ -71,7 +72,7 @@ async function gate(sp: { tenant?: string; rol?: string; vista?: string }, tenan
 export default async function PaginaMesaControl({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; ver?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; ver?: string; f?: string }>;
 }) {
   const { t, tp, idioma } = await getT('operacion');
   const sp = await searchParams;
@@ -157,6 +158,16 @@ export default async function PaginaMesaControl({
       tono: incidencias.some((i) => !i.reconocidaEn) ? 'warn' : undefined, info: 'asistencia.sin_tomar' },
   ] : undefined;
 
+  // Filtro de la mesa en memoria sobre las incidencias que la lectura del tenant YA trajo: todas · críticas · sin tomar.
+  const filtro = sp.f === 'criticas' || sp.f === 'sin_tomar' ? sp.f : 'todas';
+  const visibles = !leyoOk ? [] : filtro === 'criticas' ? incidencias.filter((i) => i.prioridad === 'critica') : filtro === 'sin_tomar' ? incidencias.filter((i) => !i.reconocidaEn) : incidencias;
+  const hrefFiltro = (f: string) => {
+    const qs = new URLSearchParams(sufijoTenant(sp).replace(/^\?/, ''));
+    if (f !== 'todas') qs.set('f', f);
+    const q = qs.toString();
+    return `${RUTA}${q ? `?${q}` : ''}`;
+  };
+
   const columnas: ColumnaTabla<IncidenciaMesa>[] = [
     {
       id: 'tipo', titulo: t('asist.col.tipo'), principal: true,
@@ -189,6 +200,17 @@ export default async function PaginaMesaControl({
     <EsqueletoTablaMaestra
       titulo={t('asist.titulo')}
       apoyo={apoyo}
+      filtros={leyoOk ? (
+        <BarraFiltros accion={RUTA} etiqueta={t('asist.filtros')} nActivos={filtro !== 'todas' ? 1 : 0} limpiarHref={hrefFiltro('todas')}
+          ocultos={[...new URLSearchParams(sufijoTenant(sp).replace(/^\?/, '')).entries()]}>
+          <FiltroOpciones etiqueta={t('asist.filtro.estado')} valor={filtro} porDefecto="todas"
+            opciones={[
+              { valor: 'todas', rotulo: t('asist.filtro.todas'), href: hrefFiltro('todas') },
+              { valor: 'criticas', rotulo: t('asist.filtro.criticas'), href: hrefFiltro('criticas') },
+              { valor: 'sin_tomar', rotulo: t('asist.filtro.sin_tomar'), href: hrefFiltro('sin_tomar') },
+            ]} />
+        </BarraFiltros>
+      ) : undefined}
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Mesa de control')}
       vistaRapida={sel ? (
@@ -286,21 +308,23 @@ export default async function PaginaMesaControl({
         </CajonVistaRapida>
       ) : null}
     >
-      {!leyoOk ? (
-        <EstadoVacio pantalla contenido icono={TriangleAlert} titulo={t('asist.error.titulo')}>
-          {t('asist.error')}
-        </EstadoVacio>
-      ) : incidencias.length === 0 ? (
-        <EstadoVacio pantalla contenido icono={ShieldCheck} titulo={t('asist.vacio.titulo')}>
-          {t('asist.vacio')}
-        </EstadoVacio>
-      ) : (
-        <TablaLista<IncidenciaMesa>
-          etiqueta={t('asist.tabla')} columnas={columnas} filas={incidencias} idFila={(i) => i.id}
-          base={RUTA} params={{}}
-          atributosFila={(i) => ({ 'data-critica': i.prioridad === 'critica' ? '' : undefined })}
-        />
-      )}
+      <TarjetaTabla titulo={t('asist.tabla')} contador={leyoOk ? numero(visibles.length, idioma) : undefined}>
+        {!leyoOk ? (
+          <EstadoVacio contenido icono={TriangleAlert} titulo={t('asist.error.titulo')}>
+            {t('asist.error')}
+          </EstadoVacio>
+        ) : visibles.length === 0 ? (
+          <EstadoVacio contenido icono={ShieldCheck} titulo={filtro === 'todas' ? t('asist.vacio.titulo') : t('asist.filtro.vacio')}>
+            {filtro === 'todas' ? t('asist.vacio') : t('asist.filtro.vacio.nota')}
+          </EstadoVacio>
+        ) : (
+          <TablaLista<IncidenciaMesa>
+            etiqueta={t('asist.tabla')} columnas={columnas} filas={visibles} idFila={(i) => i.id}
+            base={RUTA} params={{}}
+            atributosFila={(i) => ({ 'data-critica': i.prioridad === 'critica' ? '' : undefined })}
+          />
+        )}
+      </TarjetaTabla>
     </EsqueletoTablaMaestra>
   );
 }
