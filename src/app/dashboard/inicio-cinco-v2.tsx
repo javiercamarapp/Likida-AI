@@ -24,7 +24,6 @@ import { PrimerosPasos, TarjetaPuestaEnMarcha } from './inicio-cinco-cliente';
 import { coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
 import { conSufijo, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
 import { FiltrosResumen, ListaAtencion } from './resumen-cliente';
-import { getT } from '@/lib/i18n/servidor';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
