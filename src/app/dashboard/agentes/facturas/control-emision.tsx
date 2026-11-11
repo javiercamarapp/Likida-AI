@@ -105,7 +105,7 @@ function Limites({ c, esDueno, flota }: { c: ControlPantalla | 'sin_fila'; esDue
       {campo('maxTicketsLote', 'Tickets por lote', v.maxTicketsLote)}
       {campo('maxTicketsDia', tx('rest.tickets_por_dia'), v.maxTicketsDia)}
       {campo('maxMontoDia', tx('rest.monto_max_por_dia'), v.maxMontoDia)}
-      <Boton pendiente={p}>{tx('rest.guardar_limites')}</Boton>
+      <div className="rv-fact__pie"><Boton pendiente={p}>{tx('rest.guardar_limites')}</Boton></div>
     </form>
   );
 }

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { useT } from '@/lib/i18n/proveedor';
 import { dinero } from '@/lib/i18n/es/dinero';
 // SOLO TIPOS de los módulos de servidor (importan `supabaseAdmin`): un import
@@ -8,7 +9,7 @@ import { dinero } from '@/lib/i18n/es/dinero';
 // como props desde la página. Mismo contrato que `clientes/forma.tsx`.
 import type { RenglonSinFacturar } from '@/lib/likida/facturacion_clientes';
 import {
-  Boton, BotonEnlace, CamposSistema, Casilla, CampoFecha, CampoSelect, CampoTexto, Drawer, Fieldset, FormaEnCajon,
+  Boton, BotonEnlace, Casilla, CampoFecha, CampoSelect, CampoTexto, Drawer, Fieldset, FormaEnCajon,
   type AccionDeForma, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 
@@ -206,12 +207,21 @@ export function VistaRapidaViaje({ folio, filas, href, aviso }: {
       <Boton type="button" variante="ghost" tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{tr('facturacion.vista.vistaRapida')}</Boton>
       {/* La raíz corta la herencia del text-align de la celda (ver facturacion.css). */}
       <div className="rv-fact__cajon-raiz">
-        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={folio} tamano="m">
+        {/* Rovaq 06c: título + subtítulo, cuadrícula de cifras con divisores, aviso y la acción primaria en el pie. Las dos primeras filas
+            (ruta y cliente) son el subtítulo; el resto, la cuadrícula. «Sin dato» sigue siendo «sin dato», nunca 0. */}
+        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={folio} tamano="m"
+          descripcion={filas.slice(0, 2).map((f) => f.valor).filter(Boolean).join(' · ') || undefined}
+          pie={<div className="rv-fact__vr-pie"><BotonEnlace href={href} variante="primary" icono={<ArrowRight size={14} aria-hidden />}>{tr('facturacion.vista.verLiquidacion')}</BotonEnlace></div>}>
           <div className="rv-fact__pila">
-            <CamposSistema className="rv-fact__datos" etiqueta={folio}
-              campos={filas.map((f) => ({ etiqueta: f.etiqueta, valor: f.valor ?? <span className="rv-fact__sindato">{tr('facturacion.vista.sinDatoRapida')}</span> }))} />
+            <dl className="rv-fact__vr">
+              {filas.slice(2).map((f) => (
+                <div key={f.etiqueta}>
+                  <dt>{f.etiqueta}</dt>
+                  <dd>{f.valor ?? <span className="rv-fact__sindato">{tr('facturacion.vista.sinDatoRapida')}</span>}</dd>
+                </div>
+              ))}
+            </dl>
             {aviso ? <p className="rv-fact__nota">{aviso}</p> : null}
-            <BotonEnlace href={href} variante="secondary">{tr('facturacion.vista.verLiquidacion')}</BotonEnlace>
           </div>
         </Drawer>
       </div>

@@ -1,12 +1,11 @@
 'use client';
 
 import { createContext, useContext, useState, type ReactNode } from 'react';
-import { ReceiptText, TriangleAlert } from 'lucide-react';
 import { mxn } from '@/lib/formato';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
-import { Icono, SegmentedControl } from '@/app/ui-v2/componentes';
-import { BarList, Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { SegmentedControl } from '@/app/ui-v2/componentes';
+import { BarList } from '@/app/ui-v2/graficas';
 
 type Modo = 'semanal' | 'mensual' | 'historico';
 const MODOS: readonly Modo[] = ['semanal', 'mensual', 'historico'];
@@ -74,12 +73,17 @@ export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Mod
       {compartido ? null : (
         <SegmentedControl<Modo> tamano="sm" etiqueta={t('op.mf_periodo')} opciones={opcionesPeriodo([t('op.mf_opcion_semanal'), t('op.mf_opcion_mensual'), t('op.mf_opcion_historico')])} valor={modo} onChange={(v) => setModoLocal(MODOS.includes(v) ? v : 'semanal')} />
       )}
-      <TiraCifras>
-        <Cifra icono={<Icono icono={TriangleAlert} />} tono={r.montoEnRiesgo + r.montoPerdido > 0 ? 'bad' : undefined} info="contador.en_riesgo"
-          etiqueta={t('op.mf_en_riesgo', { ventana: ventana[modo] })} valor={r.montoEnRiesgo + r.montoPerdido} formato="mxn" />
-        <Cifra icono={<Icono icono={ReceiptText} />} tono={r.montoRecuperable > 0 ? 'ok' : undefined} info="contador.recuperable"
-          etiqueta={t('op.mf_recuperable', { ventana: ventana[modo] })} valor={r.montoRecuperable} formato="mxn" />
-      </TiraCifras>
+      {/* Filas de lista (Rovaq «Dónde pierdo»), no una tira de KPI anidada en la tarjeta. */}
+      <dl className="rv-cont__filas">
+        <div className="rv-cont__fila" data-tono={r.montoEnRiesgo + r.montoPerdido > 0 ? 'bad' : undefined}>
+          <dt>{t('op.mf_en_riesgo', { ventana: ventana[modo] })}</dt>
+          <dd className="cifra-mono">{mxn(r.montoEnRiesgo + r.montoPerdido)}</dd>
+        </div>
+        <div className="rv-cont__fila" data-tono={r.montoRecuperable > 0 ? 'ok' : undefined}>
+          <dt>{t('op.mf_recuperable', { ventana: ventana[modo] })}</dt>
+          <dd className="cifra-mono">{mxn(r.montoRecuperable)}</dd>
+        </div>
+      </dl>
       {top.length > 0 && (
         <BarList
           etiqueta={t('op.mf_causas')}

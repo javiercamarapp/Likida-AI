@@ -1,11 +1,12 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useSyncExternalStore } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
-import { AvisoResultado, Boton as BotonDs, Drawer, CampoFecha, CampoSelect, CampoTexto, Casilla, Disclosure, Icono } from '@/app/ui-v2/componentes';
+import { AvisoResultado, Boton as BotonDs, Drawer, type AccionDeForma, type ResultadoAccion, CampoFecha, CampoSelect, CampoTexto, Casilla, Disclosure, Icono } from '@/app/ui-v2/componentes';
 import './clientes.css';
 // SOLO TIPOS DE `clientes.ts`, y es una restricción real, no un gusto: ese
 // módulo importa `supabaseAdmin`, cuyo encabezado dice textualmente "NUNCA
@@ -19,10 +20,12 @@ import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 /** Cajón del alta (Rovaq: «Nuevo …» abre un cajón, no un bloque plegado en la página). Nace abierto cuando la URL trae `?nuevo=`; al cerrar
  *  navega a la misma pantalla sin ese parámetro (`hrefCerrar`). Foco, Esc, fondo y hoja inferior en móvil los da `Drawer`. */
-export function CajonAlta({ titulo, hrefCerrar, ancho = 'm', children }: { titulo: string; hrefCerrar: string; ancho?: 'm' | 'xl'; children: React.ReactNode }) {
+export function CajonAlta({ titulo, hrefCerrar, ancho = 'm', idPrefijo, children }: { titulo: string; hrefCerrar: string; ancho?: 'm' | 'xl'; idPrefijo?: string; children: React.ReactNode }) {
   const router = useRouter();
+  // Rovaq: la acción principal vive en el pie del cajón (overlay-foot), a la derecha. La forma portala ahí su botón de envío.
   return (
-    <Drawer abierto onCerrar={() => router.replace(hrefCerrar, { scroll: false })} titulo={titulo} tamano={ancho}>
+    <Drawer abierto onCerrar={() => router.replace(hrefCerrar, { scroll: false })} titulo={titulo} tamano={ancho}
+      pie={idPrefijo ? <div id={`${idPrefijo}-pie`} className="rv-cl__pie-cajon" /> : undefined}>
       {children}
     </Drawer>
   );
@@ -31,14 +34,23 @@ export function CajonAlta({ titulo, hrefCerrar, ancho = 'm', children }: { titul
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
-function Boton({ etiqueta }: { etiqueta: string }) {
+const SIN_SUSCRIPCION = () => () => {};
+/** El nodo del pie de un cajón (null en el servidor y en el primer render; ya existe cuando el cajón está montado). */
+function usePieDe(prefijo: string | undefined): HTMLElement | null {
+  return useSyncExternalStore(SIN_SUSCRIPCION, () => (prefijo ? document.getElementById(`${prefijo}-pie`) : null), () => null);
+}
+
+function Boton({ etiqueta, enPie }: { etiqueta: string; /** Prefijo de la forma que vive en un cajón: el botón se monta en su pie. */ enPie?: string }) {
   const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
-  return (
-    <BotonDs type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />} className="rv-cl__guardar">
+  const pie = usePieDe(enPie);
+  const boton = (
+    <BotonDs type="submit" form={enPie ? `${enPie}-forma` : undefined} variante="primary" loading={pending} icono={<Icono icono={Save} />} className="rv-cl__guardar">
       {pending ? t('cli.f.guardando') : etiqueta}
     </BotonDs>
   );
+  // Mientras el pie no existe (primer render) el botón queda en la forma; al montarse se mueve al pie del cajón.
+  return enPie && pie ? createPortal(boton, pie) : boton;
 }
 
 /** El aviso del resultado: el UNICO del panel. El error del servidor se enseña VERBATIM: los `DatoInvalido` están escritos para leerse aquí. */
@@ -64,7 +76,9 @@ export function Plegable({ resumen, children }: { resumen: string; children: Rea
  * un cliente de otra flota no encuentra fila y sale como error, no como
  * "guardado". El campo oculto dice QUÉ fila, nunca DE QUIÉN.
  */
-export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
+export function FormaCliente({ accion, id = '', inicial, idPrefijo, enCajon = false }: {
+  /** La forma vive en un cajón de alta: su botón de envío va al pie del cajón. */
+  enCajon?: boolean;
   accion: AccionForma;
   id?: string;
   inicial: ClienteCrudo;
@@ -77,7 +91,7 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
   return (
-    <form action={despachar} className="rv-forma">
+    <form action={despachar} className="rv-forma" id={enCajon ? `${idPrefijo}-forma` : undefined}>
       <input type="hidden" name="id" value={id} />
 
       <div className="rv-forma__rejilla">
@@ -98,7 +112,7 @@ export function FormaCliente({ accion, id = '', inicial, idPrefijo }: {
       <Casilla name="activo" defaultChecked={inicial.activo} etiqueta={t('cli.f.activo')} />
 
       <Aviso estado={estado} />
-      <Boton etiqueta={id ? t('cli.f.guardar') : t('cli.f.alta')} />
+      <Boton etiqueta={id ? t('cli.f.guardar') : t('cli.f.alta')} enPie={enCajon ? idPrefijo : undefined} />
     </form>
   );
 }
@@ -121,8 +135,9 @@ export interface OpcionModo {
  * validador del servidor sí sabe leer la coma y el separador de millares.
  */
 export function FormaTarifa({
-  accion, id = '', inicial, clienteNombre = '', idPrefijo, buscarCliente, totalClientes, modos,
+  accion, id = '', inicial, clienteNombre = '', idPrefijo, buscarCliente, totalClientes, modos, enCajon = false,
 }: {
+  enCajon?: boolean;
   accion: AccionForma;
   id?: string;
   inicial: TarifaCruda;
@@ -144,7 +159,7 @@ export function FormaTarifa({
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
   return (
-    <form action={despachar} className="rv-forma">
+    <form action={despachar} className="rv-forma" id={enCajon ? `${idPrefijo}-forma` : undefined}>
       <input type="hidden" name="id" value={id} />
       <input type="hidden" name="moneda" value="MXN" />
 
@@ -183,7 +198,30 @@ export function FormaTarifa({
       <Casilla name="activa" defaultChecked={inicial.activa} etiqueta={t('cli.f.tarifa.activa')} />
 
       <Aviso estado={estado} />
-      <Boton etiqueta={id ? t('cli.f.guardar') : t('cli.f.tarifa.agregar')} />
+      <Boton etiqueta={id ? t('cli.f.guardar') : t('cli.f.tarifa.agregar')} enPie={enCajon ? idPrefijo : undefined} />
+    </form>
+  );
+}
+
+
+/**
+ * Forma de un cajón de alta con acciones `ResultadoAccion` (cotizaciones): igual que `FormaConAviso`, pero la acción principal va en el
+ * pie del cajón, a la derecha (Rovaq overlay-foot), y no debajo del último campo. El botón se monta en el pie del `CajonAlta` con el mismo
+ * `idPrefijo`; el envío sigue siendo de la forma (atributo `form`) y se deshabilita mientras corre.
+ */
+export function FormaDeCajon({ accion, boton, idPrefijo, children }: { accion: AccionDeForma; boton: string; idPrefijo: string; children: React.ReactNode }) {
+  const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
+  const pie = usePieDe(idPrefijo);
+  const b = (
+    <BotonDs type="submit" form={`${idPrefijo}-forma`} variante="primary" disabled={pendiente} aria-busy={pendiente || undefined} className="rv-cl__guardar">
+      {pendiente ? 'Guardando…' : boton}
+    </BotonDs>
+  );
+  return (
+    <form action={enviar} id={`${idPrefijo}-forma`} className="rv-forma">
+      {children}
+      <AvisoResultado estado={estado} />
+      {pie ? createPortal(b, pie) : b}
     </form>
   );
 }

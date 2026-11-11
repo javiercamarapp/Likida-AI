@@ -395,6 +395,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.cerrar': 'Close',
   'op.cl.nueva_tarifa': 'New rate',
   'op.cl.nuevo_cliente': 'New client',
+  'op.cl.alcance': 'All customers and rates',
   'op.cl.cartera': 'Client portfolio',
   'op.cl.k.sin_cliente': 'Trips without a client',
   'op.cl.k.sin_cliente.nota': 'Without a client there is no per-client margin',

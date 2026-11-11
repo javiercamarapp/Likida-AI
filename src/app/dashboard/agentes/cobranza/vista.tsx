@@ -90,7 +90,6 @@ export function VistaAgenteCobranza({
         <Tarjeta
           titulo={tx('cobranza.vista.los_va_a_contactar')}
           info="cobranza.cola"
-          contenida
           acciones={
             <BotonEjecutar
               ejecutarAhora={acciones.ejecutarAhora}
@@ -118,7 +117,6 @@ export function VistaAgenteCobranza({
         <Tarjeta
           titulo={tx('cobranza.vista.a_quien_no_puede_escribirle')}
           info="cobranza.sin_telefono"
-          contenida
           estado={cola.sinTelefono.length === 0 ? 'vacio' : 'ok'}
           mensaje={tx('cobranza.vista.todos_tienen_telefono')}
           detalle={tx('cobranza.vista.todos_los_operadores_con_viajes')}

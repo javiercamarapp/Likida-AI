@@ -81,3 +81,9 @@
 [data-ui="v2"] .rv-liq__datos .rv-sis__etq { flex: none; }
 [data-ui="v2"] .rv-liq__datos .rv-sis__valor { min-width: 0; text-align: right; }
 [data-ui="v2"] .rv-liq__datos .rv-sis__nota { flex-basis: 100%; }
+
+/* Reabrir: casilla y botón de peligro juntos, sin hueco de 24 px. */
+.rv-liq__reabrir { display: grid; gap: 8px; justify-items: start; }
+.rv-liq__reabrir-pie { display: flex; }
+.rv-liq__reabrir-msg { margin: 0; font-size: var(--t-small, 13px); color: var(--muted); }
+.rv-liq__reabrir-msg[data-tono="bad"] { color: var(--bad); }
