@@ -18,7 +18,7 @@ import {
   FormaEscribirRegla, FormaElegirAMano, type ResultadoForma, type PlantillaEnPantalla,
 } from './forma';
 import { seccionesDeReglas } from './vista';
-import { Aviso, Disclosure, EstadoError } from '@/app/ui-v2/componentes';
+import { Disclosure, EstadoError } from '@/app/ui-v2/componentes';
 import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
 import './reglas.css';
 import type { Metadata } from 'next';
@@ -227,8 +227,9 @@ export default async function PaginaReglas({
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
     <EsqueletoConfiguracion
       titulo={tr('reglas.page.notificaciones')}
+      // Configuración sin eyebrow (Rovaq /setup): `area=""` apaga la etiqueta del menú. La línea de apoyo ya dice lo que decía el aviso repetido.
+      area=""
       apoyo={tr('reglas.page.escribeDeQueQuieres2')}
-      contexto={<Aviso tono="info">{tr('reglas.page.escribeDeQueQuieres')}</Aviso>}
       secciones={[
         {
           id: 'escribir', titulo: tr('reglas.page.escribeUnaRegla'),
