@@ -16,6 +16,7 @@ import { hrefWa, hrefCorreo, mensajeWa, correoProspecto } from '../mensajes';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { Boton, Chip, Icono, StatusChip, Tarjeta, clasesBoton } from '../../../ui-v2/componentes';
 import { EsqueletoFicha } from '../../../ui-v2/esqueletos';
+import { observadas } from '../../sello-observado';
 import { BarraPct } from '../cerebro';
 import '../cerebro.css';
 import { useT } from '@/lib/i18n/proveedor';
@@ -83,25 +84,20 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
 
   return (
     <EsqueletoFicha
-      area={t('mapa_prospectos_detalle.eyebrow')} titulo={p.empresa} apoyo={p.vacante ? t('mapa_prospectos_detalle.vacante_publicada', { vacante: p.vacante }) : resumen}
+      area={t('mapa_prospectos_detalle.eyebrow')} titulo={p.empresa} apoyo={p.vacante ? [t('mapa_prospectos_detalle.vacante_publicada', { vacante: p.vacante }), resumen].filter(Boolean).join(' · ') : resumen}
       volver={{ href: '/admin/mapa-prospectos', etiqueta: t('mapa_prospectos_detalle.volver_al_cerebro_de_ventas') }}
-      etiquetaResumen={t('mapa_prospectos_detalle.etiqueta_resumen')} etiquetaChips={t('mapa_prospectos_detalle.etiqueta_chips')}
-      chips={(
-        <>
-          <li><Chip><i className="cer-punto" data-etapa={etapa} aria-hidden="true" />{nombreEtapaTr(etapa, t)}</Chip></li>
-          {p.vacante && resumen ? <li><span className="cer-prospecto__tenue">{resumen}</span></li> : null}
-        </>
-      )}
-      etiquetaCifras={t('mapa_prospectos_detalle.etiqueta_cifras')}
-      cifras={[
-        { etiqueta: t('mapa_prospectos_detalle.urgencia'), valor: `${numero(p.urgencia, idioma)} %` },
-        { etiqueta: t('mapa_prospectos_detalle.cierre'), valor: `${numero(p.cierre, idioma)} %` },
-        { etiqueta: t('mapa_prospectos_detalle.datos'), valor: `${numero(p.completitud, idioma)} %` },
+            etiquetaCifras={t('mapa_prospectos_detalle.etiqueta_cifras')}
+      cifras={observadas([
+        // Los tres % son estimaciones deterministas (el pie de la lista de prospectos enseña el criterio): se sellan «Estimado», no «Observado».
+        { etiqueta: t('mapa_prospectos_detalle.urgencia'), valor: `${numero(p.urgencia, idioma)} %`, tipo: 'estimado' },
+        { etiqueta: t('mapa_prospectos_detalle.cierre'), valor: `${numero(p.cierre, idioma)} %`, tipo: 'estimado' },
+        { etiqueta: t('mapa_prospectos_detalle.datos'), valor: `${numero(p.completitud, idioma)} %`, tipo: 'estimado' },
         { etiqueta: t('mapa_prospectos_detalle.ultimo_toque'), valor: p.ultimoToque ? fechaHoraMx(p.ultimoToque, idioma) : null },
-      ]}
+      ], t('a1r4.observado'))}
       variante="12"
       bloques={[
-        <Tarjeta key="inv" titulo={t('mapa_prospectos_detalle.de_investigacion_calculadas')}>
+        <Tarjeta key="inv" titulo={t('mapa_prospectos_detalle.de_investigacion_calculadas')}
+          acciones={<Chip><i className="cer-punto" data-etapa={etapa} aria-hidden="true" />{nombreEtapaTr(etapa, t)}</Chip>}>
           <BarraPct etiqueta="ICP" pct={p.similitudIcpPct} serie="icp" />
           <p className="cer-prospecto__tenue">{t('mapa_prospectos_detalle.similitud_con_el_icp_giro_correcto')}</p>
           <BarraPct etiqueta={t('mapa_prospectos_detalle.necesid')} pct={p.necesidadPct} serie="necesidad" />
