@@ -18,6 +18,7 @@ vi.mock('@/lib/auth/admin-context', () => ({ leerSeleccionFlota: async () => nul
 vi.mock('@/app/api/dashboard/chat/tope', () => ({ topeDiaUsd: () => 0, gastoChatHoyUsd: async () => 0 }));
 vi.mock('./pulso-producto', () => ({ PulsoProducto: () => null }));
 vi.mock('./aviso-legal', () => ({ AvisoLegalPendiente: () => null }));
+vi.mock('./aviso-plan-en-pausa', () => ({ AvisoPlanEnPausa: () => null }));
 
 const getSessionTenant = vi.fn();
 vi.mock('@/lib/auth/session', () => ({ getSessionTenant: (...a: unknown[]) => getSessionTenant(...a) }));

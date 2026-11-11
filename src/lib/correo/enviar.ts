@@ -1,3 +1,4 @@
+import { veredictoSalidasDeFlota } from '@/lib/saas/salidas_flota';
 import { logger } from '@/lib/logger';
 import { armarHtml, armarHtmlSobrio, aTextoPlano, aTextoPlanoSobrio, type Correo } from './plantilla';
 import { LOGO_PNG_BASE64, LOGO_CID, LOGO_NOMBRE } from './logo';
@@ -83,6 +84,12 @@ export function sanearNombreRemitente(nombre: string | undefined): string | null
 
 export interface OpcionesEnvio {
   /**
+   * F20: la flota POR CUENTA DE LA CUAL sale este correo automático. Si su plan está pausado o cancelado, o no se
+   * puede leer, el correo NO sale (`rechazado`, detalle `plan_en_pausa`). Los correos de acceso, de seguridad y de
+   * Likida hacia sí misma no lo llevan.
+   */
+  tenantId?: string;
+  /**
    * La parte local del remitente. El default es `avisos`, que es lo que dice
    * un correo del sistema; los correos de ACCESO salen de `acceso@` porque no
    * son un aviso — son la llave de la cuenta, y quien archiva "avisos" en una
@@ -154,6 +161,13 @@ export async function enviarCorreo(
   correo: Correo,
   op: OpcionesEnvio = {},
 ): Promise<ResultadoEnvio> {
+  if (op.tenantId) {
+    const v = await veredictoSalidasDeFlota(op.tenantId);
+    if (!v.salen) {
+      logger.warn('correo.frenado_por_plan', { estado: v.estado, asunto: correo.asunto });
+      return { ok: false, motivo: 'rechazado', detalle: `plan_${v.estado === 'pausada' ? 'en_pausa' : v.estado}`, status: 503 };
+    }
+  }
   const llave = process.env.RESEND_API_KEY;
   const from = remitente(op.remitenteLocal, sanearNombreRemitente(op.remitenteNombre) ?? undefined);
   if (!llave || !from) {
