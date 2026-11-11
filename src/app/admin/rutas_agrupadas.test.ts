@@ -2,14 +2,23 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { AGENTES, NEGOCIO, CONTROL, SISTEMA, SECCIONES, FUERA_DEL_MENU, TODAS_LAS_RUTAS, entradaDeRuta, pestanaActiva, coincideBusqueda, planoBusqueda } from './rutas';
+import { COPILOTO, AGENTES, NEGOCIO, CONTROL, SISTEMA, SECCIONES, FUERA_DEL_MENU, TODAS_LAS_RUTAS, entradaDeRuta, pestanaActiva, coincideBusqueda, planoBusqueda } from './rutas';
 import { REDIRECCIONES_308 } from './guardas/redirecciones_308';
 
 // El menú de /admin pasó de 43 a 16 entradas SIN perder pantallas: cada página sigue siendo una ruta propia, agrupada como pestaña.
-const ENTRADAS = [...AGENTES, ...NEGOCIO, ...CONTROL, ...SISTEMA];
+const ENTRADAS = [COPILOTO, ...AGENTES, ...NEGOCIO, ...CONTROL, ...SISTEMA];
 const paginaExiste = (href: string) => existsSync(join(__dirname, href.replace('/admin', '') || '', 'page.tsx')) || href === '/admin';
 
 describe('menú de /admin agrupado en pestañas', () => {
+  it('Copiloto es entrada de primer nivel (justo debajo de Resumen): NO está dentro de ninguna sección', () => {
+    expect(COPILOTO.href).toBe('/admin/copiloto');
+    expect(SECCIONES.flatMap((s) => s.items).map((i) => i.href)).not.toContain('/admin/copiloto');
+    expect(AGENTES.map((i) => i.nombre)).toEqual(['Agentes', 'Calidad']);
+    // Sigue en ⌘K, segundo tras Inicio, y es la entrada de su ruta.
+    expect(TODAS_LAS_RUTAS.map((r) => r.href).slice(0, 2)).toEqual(['/admin', '/admin/copiloto']);
+    expect(entradaDeRuta('/admin/copiloto')?.nombre).toBe('Copiloto');
+  });
+
   it('tiene 15 entradas más el Resumen (16 en el sidebar; antes 43)', () => { expect(ENTRADAS).toHaveLength(15); });
 
   it('conserva lo que el dueño pidió que se quede: Copiloto, Cerebro de ventas y los paneles de cada agente', () => {

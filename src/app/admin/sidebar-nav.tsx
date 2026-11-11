@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
-import { type Item, SECCIONES, entradaDeRuta } from './rutas';
+import { type Item, COPILOTO, SECCIONES, entradaDeRuta } from './rutas';
 import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
 import { useRequiereAccion } from './cabecera-admin';
 import LogoV2 from '../dashboard/shell/logo-v2';
@@ -135,6 +135,8 @@ export default function SidebarNav() {
             <span className="rv-item__txt">{etiquetaNav({ t }, 'Resumen')}</span>
           </Link>
         </li>
+        {/* Copiloto: primer nivel, justo debajo de Resumen (no vive en el grupo Agentes). */}
+        <Fila item={COPILOTO} pathname={pathname} />
       </ul>
       {itemActual && (
         <section aria-labelledby="rv-g-pagina-actual" className="rv-grupo rv-pagina-actual" data-estatico>
