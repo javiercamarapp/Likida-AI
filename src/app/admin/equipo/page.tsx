@@ -119,7 +119,7 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
     lectura.accesoLegible ? `${numero(nuncaEntraron)} ${t('equipo.nunca_han_entrado').toLowerCase()}` : t('equipo.no_se_pudo_leer_2'),
   ].join(' · ');
   const nActivos = (q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0);
-  const { flotas } = await getResumenNegocio().catch(() => ({ flotas: [] as Array<{ id: string; nombre: string }> }));
+  const { flotas }: { flotas: ReadonlyArray<{ id: string; nombre: string }> } = await getResumenNegocio().catch(() => ({ flotas: [] }));
 
   const gestion = seleccionada ? (
     <GestionPersona

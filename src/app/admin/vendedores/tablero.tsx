@@ -117,7 +117,6 @@ function Detalle({
   // La acción primaria del pie: ganar si se puede; si no, el siguiente paso hacia adelante.
   const primaria = destinos.find(esGanado) ?? destinos.find((a) => !esPerdido(a) && orden.indexOf(a) > idx) ?? null;
   const secundarias = destinos.filter((a) => a !== primaria);
-  const redactable = redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado);
   const sinDato = tr('vendedores_tablero.sin_dato');
 
   return (
@@ -125,7 +124,10 @@ function Detalle({
       <div className="rv-esq__vr-cuerpo ven-detalle">
         <dl className="rv-esq__vr">
           <div><dt>{tr('vendedores_tablero.etapa')}</dt><dd>{etapa}</dd></div>
-          <div><dt>{tr('vendedores_consola_vendedores.vendedor')}</dt><dd>{conVendedor ? (t.vendedorNombre ?? tr('vendedores_consola_vendedores.sin_asignar')) : sinDato}</dd></div>
+          {/* En el tablero PROPIO del vendedor todas las tarjetas son suyas: no se le pinta «Sin asignar»; en su lugar, si la tarjeta ya lleva nota. */}
+          {conVendedor
+            ? <div><dt>{tr('vendedores_consola_vendedores.vendedor')}</dt><dd>{t.vendedorNombre ?? tr('vendedores_consola_vendedores.sin_asignar')}</dd></div>
+            : <div><dt>{tr('vendedores_tablero.nota')}</dt><dd>{t.notas ? tr('vendedores_tablero.con_nota') : tr('vendedores_tablero.sin_nota')}</dd></div>}
           <div><dt>{tr('vendedores_tablero.ciudad')}</dt><dd>{t.ciudad ?? sinDato}</dd></div>
           <div><dt>{tr('vendedores_tablero.vacante')}</dt><dd>{t.vacante ?? sinDato}</dd></div>
         </dl>
@@ -164,7 +166,7 @@ function Detalle({
         )}
 
         {/* El servidor re-valida la etapa: un botón escondido no es una regla. */}
-        {redactable && (
+        {redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado) && (
           <Boton tamano="sm" disabled={pendiente} className="ven-btn--ancho" onClick={() => correr(() => redactar(t.id))}>
             {pendiente ? tr('mapa_prospectos_detalle.redactando') : tr('vendedores_tablero.redactar_correo_cola_de_aprobacion')}
           </Boton>

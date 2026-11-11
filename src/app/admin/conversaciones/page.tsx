@@ -12,6 +12,7 @@ import { BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, Tarjeta } from 
 import { BarList, type PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FilaConversacion } from './hilo';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,6 +34,7 @@ const TITULO_MENSAJES = 'Mensajes por conversación';
 export default async function ConversacionesPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
+  const { t: ts } = await getT('admin_sistema');
   const sp = await searchParams;
   // ADM-1: sin `?q=` se conserva la vista de siempre (las 20 más recientes,
   // con las tarjetas y el ranking). CON `?q=` se cambia a `buscarConversaciones`
@@ -103,7 +105,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
       </Tarjeta>
 
       {/* Lo que NO se sabe va en su caja punteada, DENTRO de una tarjeta y a la izquierda (Rovaq «Qué no se sabe»), no como un párrafo centrado suelto. */}
-      <Tarjeta titulo="Qué no se sabe" className="adm-nosabe">
+      <Tarjeta titulo={ts('conversaciones.que_no_se_sabe')} className="adm-nosabe">
         <p>
           Colas (activas/necesitan humano/escaladas/resueltas), búsqueda full-text, handoff a un humano — el bot de Likida es una máquina de estados determinística (foto→OCR→confirmar→liquidar), no un agente conversacional abierto que se pueda &quot;atorar&quot; y necesite ese patrón. Antes de construirlo hay que decidir si de verdad aplica.
         </p>
