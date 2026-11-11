@@ -19,7 +19,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { sufijoTenant } from '../sufijo';
 import { FormaOnboarding, type Opcion } from './forma';
 import { ChatEntrevista } from './chat';
-import { estadoEntrevista, mensajeBienvenida } from '@/lib/likida/perfil/entrevista';
+import { estadoEntrevista, mensajeBienvenida, CATALOGO } from '@/lib/likida/perfil/entrevista';
 import { Boton, Disclosure, MarcoPagina, type ResultadoAccion } from '@/app/ui-v2/componentes';
 import './entrevista.css';
 import { getT } from '@/lib/i18n/servidor';
@@ -143,6 +143,11 @@ export default async function OnboardingFlotaPage({
         {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
           <form action={posponer} className="rv-ob__pospuesto">{t('op.no_tienes_a_la_mano_tus')}{' '}<Boton type="submit" variante="ghost" tamano="sm">{t('op.lo_confirmo_con_mi_contador')}</Boton>{' '}{t('op.el_resumen_se_abre_con_un')}</form>
         )}
+        {/* Indicador de avance (plantilla FL de Rovaq): cuántos datos del perfil ya están declarados, contados del perfil guardado, nunca estimados. */}
+        <div className="rv-ob__avance" role="group" aria-label={t('op.ob.avance', { n: entrevista.declaradas.length, total: CATALOGO.length })}>
+          <progress className="rv-ob__avance-barra" max={CATALOGO.length} value={entrevista.declaradas.length} aria-hidden="true" />
+          <span className="rv-ob__avance-txt">{t('op.ob.avance', { n: entrevista.declaradas.length, total: CATALOGO.length })}</span>
+        </div>
         <ChatEntrevista
           preguntaInicial={preguntaInicial}
           preguntaIdInicial={entrevista.siguiente?.id ?? null}

@@ -82,6 +82,8 @@ export function VistaConvenios(p: PropsVistaConvenios) {
     { etiqueta: t('op.convenios_activos'), valor: numero(lista.filter((c) => c.activo).length), info: 'convenios.activos' },
     { etiqueta: t('op.sin_instrucciones'), valor: numero(sinInstrucciones), tono: sinInstrucciones > 0 ? 'warn' : undefined, info: 'convenios.sin_instrucciones' },
   ] : undefined;
+  // La nota de método va DENTRO de la tarjeta de convenios (Rovaq), no suelta sobre el lienzo; sin tarjeta (estado ≠ ok) se queda al final.
+  const notaInstrucciones = <p className="rv-cv__pie">{rico(t('op.las_instrucciones_que_ya_se_le'), { e0: (c) => <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cv__enlace">{c}</Link> })}</p>;
   return (
     <EsqueletoTablaMaestra
       titulo={t('op.convenios_titulo')}
@@ -195,6 +197,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
               {pagina < paginas && <Link href={href({ pag: String(pagina + 1), editar: null })} className="rv-cv__enlace">{t('op.siguiente')}</Link>}
             </nav>
           )}
+          {notaInstrucciones}
         </Tarjeta>
       )}
 
@@ -231,7 +234,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
         <Aviso tono="warn">{t('op.la_edicion_de_convenios_en_pantalla')}</Aviso>
       ) : null}
       {!p.puedeEditar ? <p className="rv-cv__pie">{t('op.solo_el_dueno_de_la_flota')}</p> : null}
-      <p className="rv-cv__pie">{rico(t('op.las_instrucciones_que_ya_se_le'), { e0: (c) => <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cv__enlace">{c}</Link> })}</p>
+      {p.estado === 'ok' ? null : notaInstrucciones}
     </EsqueletoTablaMaestra>
   );
 }

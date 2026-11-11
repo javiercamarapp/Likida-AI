@@ -20,3 +20,7 @@
 
 /* Borrador (ficha): las tablas van a sangre dentro de su tarjeta (sin segundo marco) y los textos que las acompañan conservan su respiro. */
 .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > p { margin: 0; padding: 8px 14px; }
+
+/* Ronda 6: en la ficha del borrador los bloques de la fila 6-6 miden lo que mide su contenido (Rovaq «ficha de problema»): «Veredicto» no se estira
+   a la altura de «Validación contra el rechazo del PAC» dejando medio bloque vacío. */
+[data-ui="v2"] .rv-esq--ficha .rv-fila-tarjetas[data-variante="6-6"] { align-items: start; }

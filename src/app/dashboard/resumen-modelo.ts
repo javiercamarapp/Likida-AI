@@ -104,11 +104,17 @@ export interface DatosResumen {
   porTipo: DineroObservadoTipo[] | null;
   hechos: HechoSolo[] | null;
   escalados: number | null;
+  /** Los viajes más recientes de la flota (fila 6-6 de la portada). Opcional: la portada de cinco agentes no lo lee. `undefined` = no se pidió; `null` = se pidió y falló. */
+  recientes?: ViajeReciente[] | null;
 }
+
+/** Una fila de «Viajes recientes». `diferencia` solo se llena con acceso al dinero y si el viaje ya tiene liquidación (null = «—», nunca cero). */
+export interface ViajeReciente { id: string; folio: string; ruta: string | null; estatus: string; diferencia: number | null }
 
 /** Cuántas lecturas se intentaron y cuántas respondieron: el chip «Fuentes n de N» de la barra de filtros. */
 export function coberturaDe(d: DatosResumen): { ok: number; total: number } {
   const intentadas: unknown[] = [d.kpis, d.cartaPorte, d.cierres, d.hechos, d.escalados];
+  if (d.recientes !== undefined) intentadas.push(d.recientes);
   if (d.veDinero) intentadas.push(d.peajes, d.porTipo);
   return { ok: intentadas.filter((x) => x !== null).length, total: intentadas.length };
 }

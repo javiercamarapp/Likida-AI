@@ -67,7 +67,7 @@
 
 /* Maestro-detalle de las conexiones (Rovaq `/connections`): tarjetas-pestaña de 60 px a la izquierda, panel de detalle a la derecha. */
 .rv-cx__md { display: grid; gap: 12px; min-width: 0; }
-.rv-cx__md-cuerpo { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.rv-cx__md-cuerpo { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
 @media (max-width: 819px) { .rv-cx__md-cuerpo { grid-template-columns: minmax(0, 1fr); } }
 .rv-cx__tabs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .rv-cx__tab { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 60px; padding: 8px 12px; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; transition: border-color 120ms ease, background-color 120ms ease; }
@@ -88,8 +88,22 @@
 .rv-cx__pares dt { color: var(--muted); }
 .rv-cx__pares dd { margin: 0; min-width: 0; }
 /* Paleta monocroma: el logo de marca se ve en grises. */
-.rv-cx__marca [data-marca] { filter: grayscale(1); }
+.rv-cx__marca, .rv-cx__marca [data-marca] { filter: grayscale(1); }
 
 /* Contención del desborde del documento: los controles ocultos (.rv-sr, .rv-archivo__input) son absolutos; sin un ancestro posicionado salen del marco
    y alargan la ventana. Mientras el marco no lo declare (pedido a ui-v2/shell.css), esta página lo ancla. */
 [data-ui="v2"] .rv-contenido { position: relative; }
+
+/* Ronda 6: la tarjeta-pestaña mide 60 px (el chip y el nombre no se parten), el detalle va a la altura de su contenido y la zona
+   «Configurar sincronización» agrupa las secciones bajo un segmentado. */
+.rv-cx__tab { height: 60px; }
+.rv-cx__tab .rv-estado { flex: none; white-space: nowrap; }
+.rv-cx__tab-nombre { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rv-cx__config { display: grid; gap: 12px; min-width: 0; }
+.rv-cx__config-cab { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; }
+.rv-cx__config-titulo { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+.rv-cx__config-panel { display: grid; gap: 12px; min-width: 0; }
+.rv-cx__config-panel[hidden] { display: none; }
+
+/* Acción bloqueada (p. ej. «Revisar archivo» sin archivo): contorno punteado de 1 px, sin relleno gris (Rovaq). */
+.rv-cx__config .rv-btn:disabled { background: transparent; border: 1px dashed #bfbfc2; color: var(--muted); opacity: 1; }
