@@ -68,8 +68,8 @@ export function VistaClientes({
       apoyo={t('op.quien_paga_el_flete_y_cuanto')}
       acciones={puedeEditar && panel !== null ? (
         <>
-          <BotonEnlace href={hrefNuevo('tarifa')} variante="secondary" tamano="sm" scroll={false}>{t('op.cl.nueva_tarifa')}</BotonEnlace>
-          <BotonEnlace href={hrefNuevo('cliente')} variante="primary" tamano="sm" scroll={false}>{t('op.cl.nuevo_cliente')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('tarifa')} variante="secondary" tamano="sm">{t('op.cl.nueva_tarifa')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('cliente')} variante="primary" tamano="sm">{t('op.cl.nuevo_cliente')}</BotonEnlace>
         </>
       ) : undefined}
       avisos={avisos}
