@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { recargarSiChunkViejo } from '@/lib/recarga-chunk';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA ÚLTIMA RED: un fallo en el layout raíz.
@@ -29,6 +30,8 @@ export default function GlobalError({
   reset: () => void;
 }) {
   useEffect(() => {
+    // Chunk viejo tras un despliegue: se recarga UNA vez por ventana (F16); si no aplica, sigue el registro normal.
+    recargarSiChunkViejo(error);
     void import('@/lib/logger').then(({ logger }) =>
       logger.error('app.global_error', {
         digest: error.digest ?? 'sin-digest',

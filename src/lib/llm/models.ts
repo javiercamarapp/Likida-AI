@@ -35,6 +35,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { envPuesta } from '../env';
+import { logger } from '../logger';
 
 export type ModelRole = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'chat' | 'back_office' | 'analisis' | 'extraccion' | 'marketing' | 'codigo' | 'codigo_escritura' | 'qa' | 'piloto' | 'transcripcion' | 'contador' | 'conductor_hito' | 'vigia_cliente' | 'cartaporte_extractor' | 'cartaporte_extractor_escala' | 'cartaporte_extractor_escala2';
 
@@ -240,7 +241,64 @@ const ENV_KEY: Record<ModelRole, string> = {
  * "[SENSITIVE]" como modelo → 400 → el OCR facturó cero durante horas. `envPuesta`
  * rechaza el marcador y cae al default, que sí es un slug real. */
 export function modelFor(role: ModelRole): string {
-  return envPuesta(ENV_KEY[role]) ? (process.env[ENV_KEY[role]] as string) : DEFAULTS[role];
+  if (!envPuesta(ENV_KEY[role])) return DEFAULTS[role];
+  const slug = (process.env[ENV_KEY[role]] as string).trim();
+  const evaluados = MODELOS_EVALUADOS[role as RolDinero];
+  // F16: en los roles que tocan dinero NO se puede configurar un modelo que no haya pasado la evaluación.
+  // Cae al modelo por omisión, igual que con el marcador «[SENSITIVE]», pero aquí SÍ se deja registro.
+  if (evaluados && !evaluados.includes(slug)) {
+    registrarOverrideRechazado(role, slug);
+    return DEFAULTS[role];
+  }
+  return slug;
+}
+
+/** Roles cuya salida mueve dinero o un documento fiscal: un error aquí lo paga el contralor. */
+export type RolDinero = 'ocr' | 'cuadre' | 'cuadre_fallback' | 'cartaporte_extractor' | 'cartaporte_extractor_escala' | 'cartaporte_extractor_escala2';
+
+/**
+ * MODELOS EVALUADOS por rol de dinero (F16). Solo entra aquí un modelo con medición o examen documentado:
+ *   · ocr: `gemini-3.1-flash-lite` (default) y `gemini-3.6-flash`, medidos el 4-ago-2026 contra 18 comprobantes
+ *     (ver el bloque del rol `ocr` arriba). Los otros candidatos de ese banco (2.5-flash, 2.5-flash-lite,
+ *     3-flash-preview) tienen precio y respaldo pero NO resultado documentado: no entran hasta que corran el examen.
+ *   · cuadre / cuadre_fallback: Sonnet 5 y Opus 5, los dos del diseño del cuadre (escalación decidida).
+ *   · cartaporte_*: el peldaño de cada escalón tal como lo fija modelos-precios.md. Los slugs de 3.8-flash y
+ *     sonnet-5.5 siguen sin verificar contra el catálogo vivo; por eso son los únicos de su rol.
+ * Para sumar un modelo: correr el examen del rol, anotar el resultado junto al comentario del rol y
+ * añadir su slug aquí Y en `PRICES` y `FALLBACK` (openrouter.ts); una prueba exige las tres cosas.
+ */
+export const MODELOS_EVALUADOS: Record<RolDinero, readonly string[]> = {
+  ocr: ['google/gemini-3.1-flash-lite', 'google/gemini-3.6-flash'],
+  cuadre: ['anthropic/claude-sonnet-5', 'anthropic/claude-opus-5'],
+  cuadre_fallback: ['anthropic/claude-opus-5', 'anthropic/claude-sonnet-5'],
+  cartaporte_extractor: ['google/gemini-3.5-flash-lite'],
+  cartaporte_extractor_escala: ['google/gemini-3.8-flash'],
+  cartaporte_extractor_escala2: ['anthropic/claude-sonnet-5.5'],
+};
+
+export interface OverrideRechazado { role: ModelRole; slug: string; porDefecto: string; veces: number; ultimaVez: string }
+const RECHAZADOS = new Map<string, OverrideRechazado>();
+
+function registrarOverrideRechazado(role: ModelRole, slug: string): void {
+  const k = `${role}|${slug}`;
+  const previo = RECHAZADOS.get(k);
+  RECHAZADOS.set(k, { role, slug, porDefecto: DEFAULTS[role], veces: (previo?.veces ?? 0) + 1, ultimaVez: new Date().toISOString() });
+  // Un log por combinación y por instancia; el contador sigue subiendo para la guardia/panel.
+  if (!previo) {
+    logger.error('llm.override_modelo_no_evaluado', {
+      role, variable: ENV_KEY[role], slug, usado: DEFAULTS[role], evaluados: MODELOS_EVALUADOS[role as RolDinero],
+    });
+  }
+}
+
+/** Overrides de modelo rechazados en esta instancia (para el panel y las pruebas). */
+export function overridesRechazados(): OverrideRechazado[] {
+  return [...RECHAZADOS.values()];
+}
+
+/** Solo pruebas. */
+export function _reiniciarOverridesRechazados(): void {
+  RECHAZADOS.clear();
 }
 
 /** Parámetros por defecto por rol (esfuerzo de razonamiento, temperatura). */

@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { mxn } from '@/lib/formato';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
+import { Chip } from '../ui-v2/componentes/chip';
 
 interface Comprobante { concepto: string; monto: number; folio?: string; cfdiUuid?: string; rfcReceptor?: string; label: string }
 interface Bubble { from: 'op' | 'likida'; text: string }
@@ -57,7 +58,7 @@ export default function Demo() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const r = await res.json();
       const lines: string[] = [
-        `Listo, cuadré tu viaje 👇`,
+        `Listo, cuadré tu viaje (EJEMPLO, datos ficticios) 👇`,
         `• Comprobado: ${mxn(r.totalComprobado)}`,
         `• Anticipo: ${mxn(r.totalAnticipo)}`,
         r.diferencia > 0 ? `• Sobró ${mxn(r.diferencia)} (a favor de la empresa)` : r.diferencia < 0 ? `• Pusiste ${mxn(-r.diferencia)} de tu bolsa` : `• Cuadra exacto ✅`,
@@ -80,7 +81,7 @@ export default function Demo() {
     <MarcoPublico
       rotulo="Demo"
       titulo="Demo — Likida por WhatsApp"
-      apoyo="Simula al operador mandando sus comprobantes. El cuadre es real."
+      apoyo="Ejemplo con datos ficticios: simula al operador mandando sus comprobantes. El cuadre es real."
       ancho="estrecho"
     >
       {/* Teléfono */}
@@ -91,6 +92,8 @@ export default function Demo() {
             <div className="rv-demo__nombre">Likida</div>
             <div className="rv-pub__nota">en línea</div>
           </div>
+          {/* F16: todo lo que se ve aquí es de demostración (viaje, montos, folios y RFC ficticios): se rotula SIEMPRE. */}
+          <Chip tono="warn" className="ml-auto"><span data-testid="etiqueta-ejemplo">Ejemplo</span></Chip>
         </div>
 
         <div ref={scrollRef} className="rv-demo__hilo" aria-live="polite">

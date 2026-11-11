@@ -598,7 +598,9 @@ export async function crearProspecto(
    *  (blueprint del lead magnet: la unión se amplía AQUÍ antes de escribir la
    *  primera fila — un valor fuera del dominio declarado rompe tableros sin
    *  avisar; el comentario de la columna lo amplía la migración 0223). */
-  fuente: 'manual' | 'censo' | 'landing' = 'manual',
+  fuente: 'manual' | 'censo' | 'landing' | 'ads-meta' | 'ads-google' | 'campana' = 'manual',
+  /** De dónde llegó el visitante (utm_*, click id, referrer): ver `lib/marketing/atribucion`. Solo la calculadora lo manda. */
+  atribucion: Record<string, string> | null = null,
 ): Promise<string> {
   if (p.vendedorId !== null && !(await esVendedor(p.vendedorId))) {
     throw new DatoInvalido('Esa cuenta no es un vendedor. Vuelve a elegirlo de la lista.');
@@ -620,6 +622,7 @@ export async function crearProspecto(
     notas: p.notas,
     vendedor_id: p.vendedorId,
     fuente,
+    ...(atribucion ? { atribucion } : {}),
     duplicado_de: original,
   }).select('id').single(), 'crearProspecto');
 
