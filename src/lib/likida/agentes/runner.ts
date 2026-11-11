@@ -503,15 +503,40 @@ export function ordenarPorCosto<T extends { id: string }>(agentes: readonly T[])
 export async function gastoDelDiaUsd(agente: string): Promise<number> {
   const diaMx = hoyMx();
   const inicioDia = new Date(`${diaMx}T00:00:00-06:00`).toISOString();
-  const { data, error } = await acotada(supabaseAdmin()
-    .from('agente_corrida')
-    .select('costo_usd')
-    .eq('agente', agente)
-    .not('costo_usd', 'is', null)
-    .gte('inicio', inicioDia)
-    .limit(1000), 'runner.gasto_dia');
-  if (error) throw new Error(`gastoDelDiaUsd: ${error.message}`);
-  return ((data ?? []) as Array<{ costo_usd: unknown }>).reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
+  const r = await gastoDesdeUsd(agente, inicioDia);
+  if (r === null) throw new Error('gastoDelDiaUsd: no se pudo leer');
+  return r;
+}
+
+/**
+ * El gasto MEDIDO de un agente desde `inicioIso`. Con `origen` solo cuenta las corridas marcadas `resumen.origen = origen` y,
+ * en ese modo ESTRICTO, una fila sin costo hace el resultado `null` (no medible: quien decide gastar falla cerrado, jamás lo
+ * lee como cero) — es el contador del tope mensual del diagnóstico de la guardia (F14-C). Sin `origen` es el comportamiento
+ * histórico: suma lo medido e ignora las filas sin costo (esas las cuenta `corridasSinCostoHoy`). Un error de lectura LANZA
+ * sin `origen` y devuelve `null` con `origen`.
+ */
+export async function gastoDesdeUsd(agente: string, inicioIso: string, origen?: string): Promise<number | null> {
+  let q = supabaseAdmin().from('agente_corrida').select('costo_usd').eq('agente', agente).gte('inicio', inicioIso);
+  q = origen ? q.eq('resumen->>origen', origen) : q.not('costo_usd', 'is', null);
+  const { data, error } = await acotada(q.limit(1000), 'runner.gasto_dia');
+  if (error) {
+    if (origen) return null;
+    throw new Error(`gastoDelDiaUsd: ${error.message}`);
+  }
+  const filas = (data ?? []) as Array<{ costo_usd: unknown }>;
+  if (origen && (filas.length >= 1000 || filas.some((f) => f.costo_usd === null || f.costo_usd === undefined || !Number.isFinite(Number(f.costo_usd))))) return null;
+  return filas.reduce((s, f) => s + Number(f.costo_usd ?? 0), 0);
+}
+
+/** El gasto del MES (día de México) del diagnóstico de solo lectura. `null` = no medible. */
+export async function gastoMesDiagnosticoUsd(ahora: Date = new Date()): Promise<number | null> {
+  try {
+    const mx = new Date(ahora.getTime() - 6 * 3_600_000);
+    const inicioMes = new Date(`${mx.getUTCFullYear()}-${String(mx.getUTCMonth() + 1).padStart(2, '0')}-01T00:00:00-06:00`).toISOString();
+    return await gastoDesdeUsd('especialistas_incidente', inicioMes, 'diagnostico_f14');
+  } catch {
+    return null;
+  }
 }
 
 /**

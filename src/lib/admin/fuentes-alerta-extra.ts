@@ -46,7 +46,7 @@ export interface EntradaAlertasExtra {
   sonda?: { estado: 'ok' | 'llave_invalida' | 'sin_saldo' | 'sin_llave' | 'inalcanzable' } | null;
 }
 
-export type IdAlertaExtra = 'cron_sin_latido' | 'cron_estado_no_ok' | 'crons_ilegibles' | 'ia_credito_agotado' | 'ia_sin_registro' | 'ia_respaldo_alto';
+export type IdAlertaExtra = 'cron_sin_latido' | 'cron_estado_no_ok' | 'crons_ilegibles' | 'ia_credito_agotado' | 'ia_sin_registro' | 'ia_respaldo_alto' | 'diagnostico_tope' | 'diagnostico_sin_gasto';
 
 export interface AlertaExtra {
   id: IdAlertaExtra;
@@ -134,6 +134,14 @@ export function alertasExtra(e: EntradaAlertasExtra): AlertaExtra[] {
       id: 'ia_respaldo_alto', tipo: 'atencion', href: HREF_SALUD, items: Object.keys(ia.respaldo.porFase),
       texto: `${Math.round((ia.respaldo.tasa ?? 0) * 1000) / 10} % de las ${ia.respaldo.muestra} llamadas de IA de la última hora corrieron en el modelo de respaldo: el primario puede estar fallando.`,
     });
+  }
+  // F14-C: el diagnóstico de solo lectura se detuvo (tope mensual de IA o gasto ilegible). Solo existe con DIAGNOSTICO_ALERTAS=encendido.
+  const dg = e.latidos?.guardia?.detalle?.diagnostico;
+  const estadoDg = dg && typeof dg === 'object' ? (dg as Record<string, unknown>).estado : null;
+  if (estadoDg === 'tope') {
+    out.push({ id: 'diagnostico_tope', tipo: 'atencion', href: HREF_SALUD, items: ['diagnostico'], texto: 'El diagnóstico automático de alertas llegó a su tope mensual de IA y dejó de llamar al modelo hasta el mes siguiente.' });
+  } else if (estadoDg === 'gasto_ilegible') {
+    out.push({ id: 'diagnostico_sin_gasto', tipo: 'atencion', href: HREF_SALUD, items: ['diagnostico'], texto: 'El diagnóstico automático no puede medir su gasto de IA y por eso no llama al modelo (falla cerrado).' });
   }
   return out;
 }

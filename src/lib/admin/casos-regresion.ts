@@ -21,8 +21,10 @@ const PATRONES: ReadonlyArray<{ etiqueta: string; re: RegExp }> = [
   { etiqueta: 'CURP', re: /\b[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d\b/gi },
   { etiqueta: 'RFC', re: /\b[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}\b/gi },
   { etiqueta: 'NUMERO', re: /\b\d{8,}\b/g },
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (título/detalle de una alerta) y cuantificadores con tope
   { etiqueta: 'TELEFONO', re: /(?:\+?\s?52[\s-]?)?(?:\(?\d{2,3}\)?[\s.-]?){2,3}\d{2,4}(?!\d)/g },
   { etiqueta: 'PLACA', re: /\b[A-Z]{2,3}-\d{2,3}-\d{1,2}\b|\b\d{2}-[A-Z]{2}-[A-Z]{2}\b/g },
+  // eslint-disable-next-line security/detect-unsafe-regex -- entrada acotada (título/detalle de una alerta) y cuantificadores con tope
   { etiqueta: 'NOMBRE', re: /\b(chofer|operador|conductor|titular|contacto|nombre|cliente)\s*[:=-]?\s+((?:[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)(?:\s+(?:de\s+|del\s+|la\s+)?[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+){0,3})/g },
 ];
 

@@ -69,4 +69,10 @@ export const BANDERAS: readonly Bandera[] = [
     requiere: 'Gasto por paso en llamadas de visión (tope de IA por flota) y credencial compartida de la flota si el portal la pide.',
     pruebaDeHumo: 'Un comercio con ficha completa pasa a «operable» en /dashboard/conexiones; una corrida de prueba termina en captura sin emitir.',
   },
+  {
+    ...COMUN, variable: 'DIAGNOSTICO_ALERTAS', valorEncendido: 'encendido', registrada: '2026-11-11',
+    efecto: 'Ante una alerta S1/S2 nueva, un agente de SOLO LECTURA escribe un diagnóstico (causa, evidencia, arreglo propuesto) en Aprobaciones; nunca ejecuta nada.',
+    requiere: 'Tope de IA aprobado: US$20 al mes (DIAGNOSTICO_TOPE_USD, opcional). Llama al modelo de back office; sin migración.',
+    pruebaDeHumo: 'Con una alerta S2 de prueba, aparece una pieza «Diagnóstico propuesto» en /admin/aprobaciones y el latido de `guardia` trae `diagnostico.estado = "ok"` con el gasto del mes.',
+  },
 ];

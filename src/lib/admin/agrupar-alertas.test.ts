@@ -27,6 +27,7 @@ describe('agruparAlertas', () => {
     expect(lineasAgrupadas({ nuevos: [item(1)], ciegasNuevas: [] }, { ultimoCambio: 'abc1234' })[0]).toContain('abc1234');
   });
   it('cada runbook existe en disco', () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- rutas fijas del propio repo
     for (const r of Object.values(RUNBOOK_DE)) expect(existsSync(join(process.cwd(), r.ruta)), r.ruta).toBe(true);
   });
 });

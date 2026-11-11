@@ -4,7 +4,7 @@ import { COMPONENTES_ESTADO, detalleLatidos, leerLatido, puertaCron, purgarObser
 import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth, sondeoCiego } from '@/lib/admin/estado';
 import { alertasIaDeDetalle, alertasIaEncendidas, correrAlertasIa } from '@/lib/admin/alertas-ia';
 import { lineasAgrupadas } from '@/lib/admin/agrupar-alertas';
-import { evaluarQuemaSegura, lineasDeQuemaNueva, resumenQuema, quemaCompacta, quemaDeDetalle, ultimoCambioVisto } from '@/lib/admin/guardia-mejora';
+import { correrDiagnostico, estadoDiagnosticoDeDetalle, avisoTopeDiagnostico, evaluarQuemaSegura, lineasDeQuemaNueva, resumenQuema, quemaCompacta, quemaDeDetalle, ultimoCambioVisto } from '@/lib/admin/guardia-mejora';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { conRelojDuro } from '../_reloj_duro';
 import { appUrl } from '@/lib/env';
@@ -113,12 +113,14 @@ export async function GET(req: Request) {
 
     let cortadoPorReloj = false;
     let detalleBandeja: Record<string, unknown> = {};
+    let nuevosParaDiagnostico: Awaited<ReturnType<typeof clasificacionDeGuardia>>['items'] = [];
     let estadoNuevo: EstadoGuardia = { ...previo, rachaBandeja: bandejaError === null ? 0 : previo.rachaBandeja + 1 };
     if (clasificacion === CORTE) {
       cortadoPorReloj = true;
       logger.warn('cron.guardia.cortado_por_reloj', {});
     } else if (clasificacion !== null) {
       const decision = decidirAvisos(clasificacion, previo);
+      nuevosParaDiagnostico = decision.nuevos;
       for (const f of clasificacion.fuentesCiegas) {
         logger.warn('cron.guardia.fuente_ciega', { fuente: f.fuente, error: (f.error ?? 'sin detalle').slice(0, 160) });
       }
@@ -291,10 +293,24 @@ export async function GET(req: Request) {
       }
     }
 
+    // ── 8. Diagnóstico de solo lectura de las S1/S2 nuevas (F14-C) ─────────
+    // APAGADO por omisión (DIAGNOSTICO_ALERTAS=encendido). Tope de US$20 al mes y falla cerrado si el gasto no se puede leer.
+    // Solo propone (pieza en Aprobaciones); no ejecuta nada. Avisa una vez al cruzar el tope; la campana lo suma desde el latido.
+    let diagnosticoDetalle: Record<string, unknown> | undefined;
+    if (Date.now() < vence - 15_000) {
+      const d = await correrDiagnostico(nuevosParaDiagnostico, detallePrevioCrudo);
+      if (d) {
+        diagnosticoDetalle = { diagnostico: d.resultado.detalle, diagnosticadas: d.diagnosticadas };
+        if (d.resultado.estado === 'tope' && estadoDiagnosticoDeDetalle(detallePrevioCrudo) !== 'tope') {
+          await alertarOperador('guardia.diagnostico_tope', { error: avisoTopeDiagnostico(d.resultado.gastoMesUsd, d.resultado.topeUsd), codigo: 'guardia_diagnostico_tope' });
+        }
+      }
+    }
+
     const parcial = cortadoPorReloj || alertasIa.estado === 'error' || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal || gobiernoIa?.estado === 'error';
     const estado: EstadoLatido = parcial ? 'parcial' : 'ok';
     // `componentes` va en el latido: es lo que lee /estado para el estado ACTUAL (con la hora del propio latido).
-    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(alertasIaVigente ? { alertasIa: alertasIaVigente } : {}), ...(quemaDetalle ? { quema: quemaDetalle } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
+    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(alertasIaVigente ? { alertasIa: alertasIaVigente } : {}), ...(quemaDetalle ? { quema: quemaDetalle } : {}), ...(diagnosticoDetalle ?? {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
     logger.info('cron.guardia.ok', { ...detalleBandeja, componentes: JSON.stringify(medicion), parcial });
     await registrarLatido('guardia', estado, detalle);
     return NextResponse.json({ corrio: true, parcial, ...detalleBandeja, componentes: medicion });
