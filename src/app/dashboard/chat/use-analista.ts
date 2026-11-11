@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
+import type { DashboardKpis } from '@/lib/likida/analytics';
+import type { AcreditablesOFuera } from './respuestas';
 import { mxn, litros, horaMx } from '@/lib/formato';
 import { leerRespuestaAgente, cerrarPaso } from './transporte';
 import {
@@ -38,7 +39,7 @@ function leerDataUrl(archivo: File): Promise<string> {
   });
 }
 
-export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: { kpis: DashboardKpis | null; acred: Acreditables | null; endpoint?: string }) {
+export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: { kpis: DashboardKpis | null; acred: AcreditablesOFuera; endpoint?: string }) {
   const { t: tx } = useT('resto', restoEs);
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
