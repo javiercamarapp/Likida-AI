@@ -3,7 +3,7 @@ import { datosParaProveedor } from '@/lib/i18n/servidor';
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import {
-  Aviso, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, EstadoError, Fieldset, FormaConAviso, Icono, StatusChip, TablaBase,
+  Aviso, BotonEnlace, CamposSistema, CampoFecha, CampoSelect, CampoTexto, EstadoError, EstadoVacio, Fieldset, FormaConAviso, Icono, StatusChip, TablaBase,
   type AccionDeForma, type ColumnaBase, type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra, CajonVistaRapida } from '@/app/ui-v2/esqueletos';
@@ -11,6 +11,7 @@ import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { CajonAlta } from '../clientes/forma';
 import { sufijoTenant } from '../sufijo';
 import { urlRegistro } from '../paginar-registro';
+import '../caja-vacia.css';
 import './cotizaciones.css';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -198,12 +199,16 @@ export default async function PaginaCotizaciones({
   const dejan = ganancias.filter((g) => g !== null && g.pesos >= 0).length;
   const pierden = ganancias.filter((g) => g !== null && g.pesos < 0).length;
   const sinCalcular = ganancias.filter((g) => g === null).length;
-  const cifras: PropsCifra[] | undefined = panel && cot.length > 0 ? [
+  // Con cotizaciones, las cuatro cifras medidas; sin ninguna, las mismas cuatro en «—» (nunca un 0 que parezca medición).
+  const sinCot = (etiqueta: string): PropsCifra => ({ etiqueta, valor: null, estado: 'vacio', mensaje: tr('cotizaciones.page.k.sindato'), matiz: 8 });
+  const cifras: PropsCifra[] | undefined = panel ? (cot.length > 0 ? [
     { etiqueta: tr('cotizaciones.page.k.total'), valor: cot.length, formato: 'entero', nota: tr('cotizaciones.page.k.total.nota') },
     { etiqueta: tr('cotizaciones.page.k.vivas'), valor: cot.filter((q) => q.estado === 'borrador' || q.estado === 'enviada').length, formato: 'entero', nota: tr('cotizaciones.page.k.vivas.nota') },
     { etiqueta: tr('cotizaciones.page.k.dejan'), valor: dejan, formato: 'entero', nota: sinCalcular > 0 ? tr('cotizaciones.page.k.sincalcular', { n: numero(sinCalcular) }) : tr('cotizaciones.page.k.dejan.nota') },
     { etiqueta: tr('cotizaciones.page.k.pierden'), valor: pierden, formato: 'entero', nota: tr('cotizaciones.page.k.pierden.nota'), ...(pierden > 0 ? { tono: 'bad' as const } : {}) },
-  ] : undefined;
+  ].map((c): PropsCifra => ({ ...c, matiz: 8 })) : [
+    sinCot(tr('cotizaciones.page.k.total')), sinCot(tr('cotizaciones.page.k.vivas')), sinCot(tr('cotizaciones.page.k.dejan')), sinCot(tr('cotizaciones.page.k.pierden')),
+  ]) : undefined;
 
   const columnas: ColumnaBase<CotizacionRow>[] = [
     {
@@ -256,7 +261,8 @@ export default async function PaginaCotizaciones({
       apoyo={tr('cotizaciones.page.laGananciaRealDel')}
       acciones={panel ? (
         <>
-          <BotonEnlace href={hrefNuevo('costos')} variante="secondary">{tr('cotizaciones.page.costosDeclaradosDeLa')}</BotonEnlace>
+          {/* «Costos de la flota» vive UNA vez: en el aviso mientras falten costos, y aquí cuando ya están todos declarados. */}
+          {costosSinDeclarar === 0 && <BotonEnlace href={hrefNuevo('costos')} variante="secondary">{tr('cotizaciones.page.costosDeclaradosDeLa')}</BotonEnlace>}
           <BotonEnlace href={hrefNuevo('cotizacion')} variante="primary">{tr('cotizaciones.page.nuevaCotizacion')}</BotonEnlace>
         </>
       ) : undefined}
@@ -271,6 +277,10 @@ export default async function PaginaCotizaciones({
     >
       {!panel ? (
         <EstadoError reintentar>{tr('cotizaciones.page.noSePudoLeer')}</EstadoError>
+      ) : cot.length === 0 ? (
+        <div className="rv-caja-vacia">
+          <EstadoVacio titulo={tr('cotizaciones.page.sinCotizaciones')}>{tr('cotizaciones.page.laPrimeraSeArma')}</EstadoVacio>
+        </div>
       ) : (
         <TablaCotizaciones
           columnas={columnas} filas={cot} etiqueta={tr('cotizaciones.page.cotizaciones')}
@@ -302,19 +312,19 @@ export default async function PaginaCotizaciones({
         <CajonAlta titulo={tr('cotizaciones.page.costosDeclaradosDeLa')} hrefCerrar={hrefSinNuevo}>
           <p className="rv-cot__nota">{tr('cotizaciones.page.loQueTuDeclaras')}</p>
           <FormaConAviso accion={guardarConfig} boton="Guardar costos" columnas="md:grid-cols-1">
-            <Fieldset leyenda={tr('cotizaciones.page.porKilometro')}>
+            <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.porKilometro')}>
               <div className="rv-forma__rejilla">
                 <CampoTexto id="dieselPorKm" name="dieselPorKm" etiqueta={tr('cotizaciones.page.dieselKm')} defaultValue={vInicial(c?.dieselPorKm)} ayuda={tr('cotizaciones.page.combustiblePorKmComo')} />
                 <CampoTexto id="fijosPorKm" name="fijosPorKm" etiqueta={tr('cotizaciones.page.fijosKm')} defaultValue={vInicial(c?.fijosPorKm)} ayuda={tr('cotizaciones.page.segurosAdminDepreciacionPror')} />
               </div>
             </Fieldset>
-            <Fieldset leyenda={tr('cotizaciones.page.operador')}>
+            <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.operador')}>
               <div className="rv-forma__rejilla">
                 <CampoTexto id="salarioDia" name="salarioDia" etiqueta={tr('cotizaciones.page.salarioOperadorDia')} defaultValue={vInicial(c?.salarioDia)} />
                 <CampoTexto id="viaticosDia" name="viaticosDia" etiqueta={tr('cotizaciones.page.viaticosDia')} defaultValue={vInicial(c?.viaticosDia)} ayuda={tr('cotizaciones.page.siNoPagasViaticos')} />
               </div>
             </Fieldset>
-            <Fieldset leyenda={tr('cotizaciones.page.regresoYMarkup')}>
+            <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.regresoYMarkup')}>
               <div className="rv-forma__rejilla">
                 <CampoTexto id="factorRegresoVacio" name="factorRegresoVacio" etiqueta={tr('cotizaciones.page.factorDeRegreso1')} defaultValue={vInicial(c?.factorRegresoVacio)} ayuda={tr('cotizaciones.page.1RegresoCargado2')} />
                 <CampoTexto id="margenObjetivoPct" name="margenObjetivoPct" etiqueta={tr('cotizaciones.page.markupObjetivoSobreEl')} defaultValue={vInicial(c?.margenObjetivoPct)} ayuda={tr('cotizaciones.page.precioSugeridoCosto1')} />
@@ -328,7 +338,7 @@ export default async function PaginaCotizaciones({
         <CajonAlta titulo={tr('cotizaciones.page.nuevaCotizacion')} hrefCerrar={hrefSinNuevo} ancho="xl">
           <p className="rv-cot__nota">{tr('cotizaciones.page.siEstaRutaTiene')}</p>
           <FormaConAviso accion={cotizar} boton="Cotizar" columnas="md:grid-cols-1">
-            <Fieldset leyenda={tr('cotizaciones.page.ruta')}>
+            <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.ruta')}>
               <div className="rv-forma__rejilla">
                 <CampoSelect id="clienteId" name="clienteId" etiqueta={tr('cotizaciones.page.cliente')} defaultValue="">
                   {opcionesCliente.map((o) => <option key={o.valor} value={o.valor}>{o.texto}</option>)}
@@ -339,7 +349,7 @@ export default async function PaginaCotizaciones({
                 <CampoTexto id="dias" name="dias" etiqueta={tr('cotizaciones.page.diasDeViaje')} ayuda={tr('cotizaciones.page.losDeclaraQuienCotiza')} />
               </div>
             </Fieldset>
-            <Fieldset leyenda={tr('cotizaciones.page.precioYVigencia')}>
+            <Fieldset className="rv-cot__plano" leyenda={tr('cotizaciones.page.precioYVigencia')}>
               <div className="rv-forma__rejilla">
                 <CampoTexto id="casetasManual" name="casetasManual" etiqueta={tr('cotizaciones.page.casetasSiNoHay')} />
                 <CampoTexto id="precio" name="precio" etiqueta={tr('cotizaciones.page.precioACotizar')} ayuda={tr('cotizaciones.page.tuDecisionElSugerido')} />
