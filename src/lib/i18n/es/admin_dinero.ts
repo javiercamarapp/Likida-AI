@@ -374,4 +374,6 @@ export const admin_dinero = {
   'costos_facturacion.facturas_por_estado': 'Facturas por estado',
   'costos_facturacion.historial_recortado': 'La lista está recortada al tope de lectura: los meses más viejos pueden faltar.',
   'costos_facturacion.sin_facturas_emitidas': 'Sin facturas emitidas',
+  'consumo.avisos_mas': '{n} avisos más sobre el gasto de IA.',
+  'consumo.ver_avisos': 'Ver los avisos',
 } as const;

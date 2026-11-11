@@ -1352,4 +1352,7 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'mapa_prospectos_detalle.etiqueta_chips': 'Stage and context',
   'mapa_prospectos_detalle.etiqueta_resumen': 'Prospect summary',
   'mapa_prospectos_detalle.etiqueta_cifras': 'Prospect scores',
+  'capacidad_forecast.costo_diario_promedio_corto': 'Average daily cost',
+  'capacidad_forecast.costo_ia_por_viaje': 'AI cost per trip',
+  'capacidad_forecast.viajes_en_la_muestra': 'Trips in the sample',
 };

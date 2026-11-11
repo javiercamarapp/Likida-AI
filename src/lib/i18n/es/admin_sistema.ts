@@ -1350,4 +1350,7 @@ export const admin_sistema = {
   'mapa_prospectos_detalle.etiqueta_chips': 'Etapa y contexto',
   'mapa_prospectos_detalle.etiqueta_resumen': 'Resumen del prospecto',
   'mapa_prospectos_detalle.etiqueta_cifras': 'Puntajes del prospecto',
+  'capacidad_forecast.costo_diario_promedio_corto': 'Costo diario promedio',
+  'capacidad_forecast.costo_ia_por_viaje': 'Costo de IA por viaje',
+  'capacidad_forecast.viajes_en_la_muestra': 'Viajes en la muestra',
 } as const;

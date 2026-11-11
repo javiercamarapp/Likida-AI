@@ -376,4 +376,6 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'costos_facturacion.facturas_por_estado': 'Invoices by status',
   'costos_facturacion.historial_recortado': 'The list is capped at the read limit: older months may be missing.',
   'costos_facturacion.sin_facturas_emitidas': 'No invoices issued',
+  'consumo.avisos_mas': '{n} more AI spend notices.',
+  'consumo.ver_avisos': 'See the notices',
 };

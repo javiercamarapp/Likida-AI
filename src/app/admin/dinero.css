@@ -30,3 +30,6 @@
 [data-ui="v2"] .adm-flota-acciones { display: inline-flex; gap: 4px; justify-content: flex-end; }
 [data-ui="v2"] .adm-flota-paneles { display: flex; flex-wrap: wrap; gap: 8px; }
 [data-ui="v2"] .adm-flota-alta { scroll-margin-top: 72px; }
+
+/* La tarjeta de una fila de gráficas llena su celda: dos tarjetas de la misma fila miden lo mismo (Rovaq), sin hueco bajo la más baja. */
+[data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta { height: 100%; }
