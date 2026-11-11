@@ -1,5 +1,5 @@
-import Link from 'next/link';
-import { BarraFiltros, FiltroBusqueda } from '@/app/ui-v2/componentes';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarraFiltros, BotonEnlace, FiltroBusqueda, Icono } from '@/app/ui-v2/componentes';
 import { numero } from '@/lib/formato';
 import { urlRegistro, type PaginaRegistroUI } from './paginar-registro';
 
@@ -44,7 +44,7 @@ export function FiltroRegistro<T>({
         <FiltroBusqueda nombre={nombreQ} valor={q} placeholder={`Buscar en ${sustantivo}…`} etiqueta={`Buscar en ${sustantivo}`} />
       </BarraFiltros>
 
-      <div className="flex items-center gap-3 text-[12px]" style={{ color: 'var(--muted)' }}>
+      <div className="flex items-center gap-3 text-[12px] text-[var(--muted)]">
         <span>
           {hayFiltro
             ? `${numero(pagina.filtrados)} ${pagina.filtrados === 1 ? 'coincide' : 'coinciden'} de ${numero(pagina.total)}`
@@ -53,14 +53,14 @@ export function FiltroRegistro<T>({
         {paginas > 1 && (
           <span className="flex items-center gap-2">
             {pagina.pagina > 1 ? (
-              <Link href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina - 1, [nombreEditar]: null })}
-                className="underline hover:opacity-70 transition-opacity">← Anterior</Link>
-            ) : <span style={{ color: 'var(--faint)' }}>← Anterior</span>}
+              <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina - 1, [nombreEditar]: null })}
+                variante="ghost" tamano="sm" rel="prev" icono={<Icono icono={ChevronLeft} tam={14} />}>Anterior</BotonEnlace>
+            ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]"><Icono icono={ChevronLeft} tam={14} />Anterior</span>}
             <span className="tabular">Página {numero(pagina.pagina)} de {numero(paginas)}</span>
             {pagina.pagina < paginas ? (
-              <Link href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina + 1, [nombreEditar]: null })}
-                className="underline hover:opacity-70 transition-opacity">Siguiente →</Link>
-            ) : <span style={{ color: 'var(--faint)' }}>Siguiente →</span>}
+              <BotonEnlace href={urlRegistro(ruta, sufijo, { [nombreQ]: q || null, [nombreP]: pagina.pagina + 1, [nombreEditar]: null })}
+                variante="ghost" tamano="sm" rel="next">Siguiente<Icono icono={ChevronRight} tam={14} /></BotonEnlace>
+            ) : <span className="inline-flex items-center gap-1 px-2.5 text-[var(--faint)]">Siguiente<Icono icono={ChevronRight} tam={14} /></span>}
           </span>
         )}
       </div>

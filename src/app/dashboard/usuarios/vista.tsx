@@ -5,7 +5,8 @@ import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
 import {
   FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
-import { BotonEnlace, Disclosure, clasesBoton, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { BotonEnlace, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { MenuAcciones } from './menu-acciones';
 import './usuarios.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
@@ -132,14 +133,11 @@ function Acciones({ u, esYo, roles, acciones, t = T_RESTO_ES }: {
   if (!u.activo) return <FormaReactivar accion={acciones.reactivar} id={u.id} />;
   return (
     // UN solo control por renglón: «Acciones» abre el grupo (cada forma conserva su server action, su aviso y su diálogo de confirmación).
-    <details className="rv-usu__menu">
-      <summary className={clasesBoton('secondary', 'sm', 'rv-usu__menu-gatillo')} aria-label={`Acciones de ${u.nombre ?? u.email}`}>{t('cfg.acciones')}</summary>
-      <div className="rv-usu__acciones">
-        <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
-        <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
-        <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
-        <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
-      </div>
-    </details>
+    <MenuAcciones rotulo={t('cfg.acciones')} etiqueta={`Acciones de ${u.nombre ?? u.email}`}>
+      <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
+      <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />
+      <FormaCerrarSesiones accion={acciones.cerrarSesiones} id={u.id} />
+      <FormaDarDeBaja accion={acciones.darDeBaja} id={u.id} nombre={u.nombre ?? u.email} />
+    </MenuAcciones>
   );
 }

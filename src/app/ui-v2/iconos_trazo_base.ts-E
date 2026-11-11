@@ -1,0 +1,45 @@
+// Base del trinquete de iconos_trazo.test.ts: archivos con iconos de lucide en grosor distinto de 1.75, con su tope.
+// Solo puede BAJAR: al migrar un archivo a <Icono> (o a 1.75) se borra su línea. Un archivo nuevo no entra aquí.
+export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
+  'app/admin/agentes/[id]/insumos/zona-insumos.tsx': 1,
+  'app/admin/command-palette.tsx': 2,
+  'app/admin/qa/lanzar-form.tsx': 2,
+  'app/ui-v2/componentes/forma.tsx': 2,
+  'app/ui-v2/componentes/notificaciones.tsx': 1,
+  'app/dashboard/aviso-rol.tsx': 1,
+  'app/dashboard/chat/composer.tsx': 1,
+  'app/dashboard/chat/historial.tsx': 1,
+  'app/dashboard/chat/traza.tsx': 1,
+  'app/dashboard/forma-viaje.tsx': 1,
+  'app/dashboard/importador-masivo.tsx': 3,
+  'app/dashboard/inicio-contenido.tsx': 1,
+  'app/dashboard/inicio-operacion.tsx': 1,
+  'app/dashboard/kpi-periodo.tsx': 2,
+  'app/dashboard/motor-fiscal-periodo.tsx': 2,
+  'app/dashboard/primera-liquidacion.tsx': 1,
+  'app/dashboard/proximamente/proximamente.tsx': 1,
+  'app/dashboard/puesta-en-marcha/vista.tsx': 1,
+  'app/dashboard/sidebar-nav.tsx': 2,
+  'app/login/vista-login.tsx': 2,
+  'app/ui-v2/componentes/overlay.tsx': 1,
+  'app/ui-v2/datos/banda-cobertura.tsx': 1,
+  'app/ui-v2/datos/chips-filtro.tsx': 1,
+  'app/ui-v2/movimiento/tour/globo.tsx': 1,
+};
+
+// Iconos de lucide SIN strokeWidth declarado (se dibujan a 2). Mismo trinquete: solo baja.
+export const BASE_SIN_TRAZO: Record<string, number> = {
+  'app/admin/tu-turno/vista.tsx': 13,
+  'app/dashboard/chat/agente-conversacion.tsx': 1,
+  'app/dashboard/chat/composer.tsx': 3,
+  'app/dashboard/chat/historial.tsx': 3,
+  'app/dashboard/chat/mensajes.tsx': 6,
+  'app/dashboard/chat/traza.tsx': 1,
+  'app/dashboard/menu-adjuntar.tsx': 3,
+  'app/dashboard/puesta-en-marcha/vista.tsx': 6,
+  'app/dashboard/resumen-cliente.tsx': 7,
+  'app/dashboard/resumen-tarjetas.tsx': 2,
+  'app/dashboard/sidebar-nav.tsx': 2,
+  'app/ui-v2/movimiento/tour/globo.tsx': 1,
+  'app/ui-v2/movimiento/tour/lanzador.tsx': 2,
+};

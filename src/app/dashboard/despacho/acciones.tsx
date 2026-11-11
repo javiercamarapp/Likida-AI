@@ -4,7 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Send, UserPlus, RefreshCw } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { AvisoCompacto, Boton, CampoTexto, Icono } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, CampoTexto, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import { ComboCatalogo, type BuscarCatalogo } from '../combo-catalogo';
 import './despacho.css';
 import { useT } from '@/lib/i18n/proveedor';
@@ -103,9 +103,11 @@ function BotonAsignarUnidad({ texto }: { texto: string }) {
   const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" tamano="sm" disabled={pending} title={t('dsp.unidad.titulo')} aria-label={t('dsp.unidad.aria', { texto })}>
-      {pending ? t('dsp.asignando') : texto}
-    </Boton>
+    <Tooltip texto={t('dsp.unidad.titulo')}>
+      <Boton type="submit" tamano="sm" disabled={pending} aria-label={t('dsp.unidad.aria', { texto })}>
+        {pending ? t('dsp.asignando') : texto}
+      </Boton>
+    </Tooltip>
   );
 }
 
@@ -135,10 +137,12 @@ function BotonInsistir({ texto }: { texto: string }) {
   const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" tamano="sm" disabled={pending} title={t('dsp.aviso.titulo')} aria-label={t('dsp.aviso.aria', { texto })}
-      icono={<Icono icono={RefreshCw} tam={16} />}>
-      {pending ? t('dsp.enviando') : texto}
-    </Boton>
+    <Tooltip texto={t('dsp.aviso.titulo')}>
+      <Boton type="submit" tamano="sm" disabled={pending} aria-label={t('dsp.aviso.aria', { texto })}
+        icono={<Icono icono={RefreshCw} />}>
+        {pending ? t('dsp.enviando') : texto}
+      </Boton>
+    </Tooltip>
   );
 }
 

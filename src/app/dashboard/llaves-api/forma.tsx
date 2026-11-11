@@ -3,7 +3,7 @@
 import { useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { KeyRound, Check, Copy, ShieldAlert } from 'lucide-react';
-import { Boton, BotonConfirmar, CampoSelect, CampoTexto, AvisoResultado, Icono, clasesBoton } from '@/app/ui-v2/componentes';
+import { Boton, BotonConfirmar, CampoSelect, CampoTexto, AvisoResultado, Icono, Tooltip, clasesBoton } from '@/app/ui-v2/componentes';
 // SOLO TIPOS de `llave-api-escritura.ts`: ese módulo importa `supabaseAdmin`,
 // que no puede acabar en el bundle del navegador. El catálogo de áreas viaja
 // como PROP desde la página, igual que `MODOS_TARIFA` en /dashboard/clientes.
@@ -59,9 +59,9 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
         {/* `break-all` y no truncate: si el copiado falla, que al menos se
             pueda leer y transcribir completa. */}
         <code className="cifra-mono">{enClaro}</code>
-        <button type="button" aria-label={t('llaves.copiar_la_llave')} onClick={copiar} className="rv-icono-boton">
-          <Icono icono={copiado ? Check : Copy} />
-        </button>
+        <Tooltip texto={t('llaves.copiar_la_llave')}>
+          <Boton variante="ghost" tamano="sm" className="rv-btn--icono" aria-label={t('llaves.copiar_la_llave')} onClick={copiar} icono={<Icono icono={copiado ? Check : Copy} />}>{null}</Boton>
+        </Tooltip>
       </div>
       <p className="rv-lla__nota">{rico(t('llaves.se_manda_en_cada_peticion_como'), { e0: (c) => <code className="cifra-mono">{c}</code> })}</p>
     </div>

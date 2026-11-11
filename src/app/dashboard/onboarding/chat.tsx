@@ -4,7 +4,7 @@ import MenuAdjuntar from '../menu-adjuntar';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { ArrowUp, Search, Paperclip, X, FileText, Check } from 'lucide-react';
-import { Boton, BotonEnlace, Icono, cx } from '@/app/ui-v2/componentes';
+import { Boton, BotonEnlace, Icono, Tooltip, cx } from '@/app/ui-v2/componentes';
 import { AreaMini, DonaMini } from '@/app/ui-v2/graficas';
 import './entrevista.css';
 import { mxn, litros } from '@/lib/formato';
@@ -358,9 +358,9 @@ export function ChatEntrevista({
         <div className="rv-ob__adjunto">
           <Icono icono={FileText} tam={14} />
           <span>{documento.nombre}</span>
-          <button type="button" aria-label={t('op.quitar_archivo')} onClick={() => setDocumento(null)} className="rv-icono-boton">
-            <Icono icono={X} tam={14} />
-          </button>
+          <Tooltip texto={t('op.quitar_archivo')}>
+            <Boton variante="ghost" tamano="sm" className="rv-btn--icono" aria-label={t('op.quitar_archivo')} onClick={() => setDocumento(null)} icono={<Icono icono={X} tam={14} />}>{null}</Boton>
+          </Tooltip>
         </div>
       )}
       <input
@@ -380,13 +380,13 @@ export function ChatEntrevista({
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
           <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="rv-ob__archivo"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-          <button ref={botonClip} type="button" aria-label={t('op.adjuntar_comprobante')} title={t('op.adjuntar_comprobante')}
-            onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado} className="rv-icono-boton">
-            <Icono icono={Paperclip} />
-          </button>
-          <button type="submit" aria-label={t('op.enviar')} disabled={!puedeEnviar} className="rv-icono-boton rv-ob__enviar">
-            <Icono icono={ArrowUp} />
-          </button>
+          <Tooltip texto={t('op.adjuntar_comprobante')}>
+            <Boton ref={botonClip} variante="ghost" className="rv-btn--icono" aria-label={t('op.adjuntar_comprobante')}
+              onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado} icono={<Icono icono={Paperclip} />}>{null}</Boton>
+          </Tooltip>
+          <Tooltip texto={t('op.enviar')}>
+            <Boton type="submit" variante="primary" className="rv-btn--icono" aria-label={t('op.enviar')} disabled={!puedeEnviar} icono={<Icono icono={ArrowUp} />}>{null}</Boton>
+          </Tooltip>
         </div>
       </div>
     </form>
@@ -398,10 +398,10 @@ export function ChatEntrevista({
         <div key={c.categoria} className="rv-ob__tema">
           <div className="rv-ob__tema-titulo">{c.categoria}</div>
           {c.preguntas.map((rq) => (
-            <button key={rq} type="button" className="rv-ob__pregunta"
+            <Boton key={rq} variante="ghost" tamano="sm" className="rv-ob__pregunta !w-full !justify-start"
               onClick={() => { setRecomendar(false); preguntar(rq); }}>
               {rq}
-            </button>
+            </Boton>
           ))}
         </div>
       ))}
@@ -411,9 +411,9 @@ export function ChatEntrevista({
   const chipsRow = chips.length > 0 && (
     <div className="rv-ob__chips" data-portada={vacio || undefined}>
       {chips.map((c) => (
-        <button key={c.valor} type="button" onClick={() => preguntar(c.valor, c.etiqueta)} className="rv-chip">
+        <Boton key={c.valor} variante="suave" tamano="sm" onClick={() => preguntar(c.valor, c.etiqueta)}>
           {c.etiqueta}
-        </button>
+        </Boton>
       ))}
     </div>
   );

@@ -33,8 +33,6 @@
 .rv-ob__barra { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; position: relative; }
 .rv-ob__herramientas { display: flex; align-items: center; gap: 6px; }
 .rv-ob__archivo { display: none; }
-.rv-ob__enviar { background: var(--marca); color: var(--marca-fg); }
-.rv-ob__enviar:disabled { opacity: .35; }
 .rv-ob__adjunto { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 4px 6px 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--canvas); font-size: var(--t-small); font-weight: 500; }
 .rv-ob__adjunto span { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-ob__temas { width: 100%; max-height: 18rem; overflow-y: auto; display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
