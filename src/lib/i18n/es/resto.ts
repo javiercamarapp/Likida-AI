@@ -42,6 +42,7 @@ export const resto = {
   'cfg.tu_primera_operacion': 'Tu primera operación',
   'cfg.el_ciclo_completo_viaje_ticket_por': 'El ciclo completo: viaje, ticket por WhatsApp y liquidación.',
   'cfg.puesta_en_marcha': 'Puesta en marcha',
+  'cfg.arranque.titulo': 'Arranque de tu flota',
   'cfg.lo_que_falta_para_que_tu': 'Lo que falta para que tu flota opere sin ayuda, con el estado real de cada paso.',
   'cfg.tu_flota_esta_lista_para_operar': 'Tu flota está lista para operar',
   'cfg.lo_que_falta_para_operar_sin': 'Lo que falta para operar sin ayuda',

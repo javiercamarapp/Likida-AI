@@ -44,6 +44,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'cfg.tu_primera_operacion': 'Your first operation',
   'cfg.el_ciclo_completo_viaje_ticket_por': 'The full cycle: trip, receipt by WhatsApp and settlement.',
   'cfg.puesta_en_marcha': 'Getting started',
+  'cfg.arranque.titulo': 'Fleet kickoff',
   'cfg.lo_que_falta_para_que_tu': 'What is left for your fleet to run without help, with the real status of each step.',
   'cfg.tu_flota_esta_lista_para_operar': 'Your fleet is ready to operate',
   'cfg.lo_que_falta_para_operar_sin': 'What is left to operate without help',

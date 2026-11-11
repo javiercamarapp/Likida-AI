@@ -1,6 +1,6 @@
 import { cifrasUniformes } from '../formato';
 import { redirect } from 'next/navigation';
-import { MessageCircle, MessagesSquare } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { getHilosDeFlota, contarHilosDeFlota, TOPE_HILOS } from '@/lib/likida/conversaciones';
@@ -88,8 +88,8 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
   const sel = seleccion >= 0 ? hilos[seleccion] : null;
 
   const cifras: PropsCifra[] = [
-    { icono: <Icono icono={MessageCircle} />, etiqueta: t('conv.hilos'), info: 'conversaciones.hilos', valor: total, formato: 'entero', mensaje: total === null ? t('conv.hilos.nocuenta') : undefined },
-    { icono: <Icono icono={MessagesSquare} />, etiqueta: t('conv.mensajes.etiqueta', { n: hilos.length }), info: 'conversaciones.mensajes', valor: mensajes, formato: 'entero' },
+    { etiqueta: t('conv.hilos'), info: 'conversaciones.hilos', valor: total, formato: 'entero', mensaje: total === null ? t('conv.hilos.nocuenta') : undefined },
+    { etiqueta: t('conv.mensajes.etiqueta'), info: 'conversaciones.mensajes', valor: mensajes, formato: 'entero' },
   ];
   const columnas: ColumnaTabla<Hilo>[] = [
     { id: 'chofer', titulo: t('conv.col.chofer'), principal: true, celda: (h) => (<>{h.operadorNombre ?? h.telefono}{h.operadorNombre ? <span className="rv-tl__sub">{h.telefono}</span> : null}</>) },

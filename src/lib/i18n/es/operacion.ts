@@ -140,7 +140,7 @@ export const operacion = {
   'conv.sincoincidencias': 'Sin coincidencias',
   'conv.hilos': 'Hilos de tu flota',
   'conv.hilos.nocuenta': 'No se pudo contar — esto no significa que no haya ninguno.',
-  'conv.mensajes.etiqueta': 'Mensajes en los {n} que se listan',
+  'conv.mensajes.etiqueta': 'Mensajes en los hilos listados',
   'conv.tarjeta.recientes': 'Los {tope} más recientes de {total}',
   'conv.vr.ver': 'Vista rápida',
   'conv.vr.sub': 'Hilo {n} de {total}',

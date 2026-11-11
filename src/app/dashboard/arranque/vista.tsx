@@ -67,7 +67,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
 
   return (
     <EsqueletoConfiguracion
-      titulo={t('cfg.puesta_en_marcha')}
+      titulo={t('cfg.arranque.titulo')}
       apoyo={t('cfg.lo_que_falta_para_que_tu')}
       variante="pasos"
       contexto={(

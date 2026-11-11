@@ -140,7 +140,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'conv.sincoincidencias': 'No matches',
   'conv.hilos': 'Threads in your fleet',
   'conv.hilos.nocuenta': 'Could not be counted — this does not mean there are none.',
-  'conv.mensajes.etiqueta': 'Messages in the {n} threads listed',
+  'conv.mensajes.etiqueta': 'Messages in the listed threads',
   'conv.tarjeta.recientes': 'The {tope} most recent of {total}',
   'conv.vr.ver': 'Quick view',
   'conv.vr.sub': 'Thread {n} of {total}',
