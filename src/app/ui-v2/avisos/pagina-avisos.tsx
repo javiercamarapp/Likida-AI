@@ -1,7 +1,7 @@
 import { clienteAvisos } from '@/lib/avisos/cliente';
 import { getT } from '@/lib/i18n/servidor';
 import { ahoraMs } from '@/lib/saludo';
-import { TabsLinea } from '../componentes';
+import { BotonEnlace, TabsLinea } from '../componentes';
 import { resolverBandeja, type FuenteAvisos } from '@/lib/avisos/bandeja';
 import { leerPreferencias, leerSilencio } from '@/lib/avisos/estado';
 import { SILENCIO_POR_OMISION, type Ambito } from '@/lib/avisos/modelo';
@@ -10,7 +10,7 @@ import PanelAvisos from './panel-avisos';
 import ConfigAvisos from './config-avisos';
 
 /** Cuerpo (pestañas de sección + lista o configuración) de las dos pantallas de avisos (/admin/notificaciones y /dashboard/notificaciones): la lista y la configuración. */
-export default async function PaginaAvisos({ destino, ambito, userId, fuente, base, params, sufijo, seccion }: {
+export default async function PaginaAvisos({ destino, ambito, userId, fuente, base, params, sufijo, seccion, conPestanas = true }: {
   destino: Destino;
   ambito: Ambito;
   userId: string;
@@ -21,6 +21,8 @@ export default async function PaginaAvisos({ destino, ambito, userId, fuente, ba
   params: Record<string, string>;
   sufijo: string;
   seccion: 'avisos' | 'configuracion';
+  /** `false` cuando el marco de la pantalla YA trae su barra de pestañas (el panel del cliente: «Secciones de Notificaciones»): una segunda fila de pestañas sería dos niveles. */
+  conPestanas?: boolean;
 }) {
   const { t } = await getT('avisos');
   const db = clienteAvisos();
@@ -54,7 +56,15 @@ export default async function PaginaAvisos({ destino, ambito, userId, fuente, ba
   }
   return (
     <>
-      <TabsLinea etiqueta={t('notif.seccion.etiqueta')} pestanas={pestanas} actual={seccion === 'configuracion' ? 'configuracion' : 'avisos'} />
+      {conPestanas
+        ? <TabsLinea etiqueta={t('notif.seccion.etiqueta')} pestanas={pestanas} actual={seccion === 'configuracion' ? 'configuracion' : 'avisos'} />
+        : (
+          <div className="av-cambio">
+            <BotonEnlace tamano="sm" variante="secondary" href={seccion === 'configuracion' ? pestanas[0].href : pestanas[1].href}>
+              {seccion === 'configuracion' ? t('notif.seccion.avisos') : t('notif.seccion.config')}
+            </BotonEnlace>
+          </div>
+        )}
       {cuerpo}
     </>
   );

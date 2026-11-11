@@ -39,7 +39,7 @@ export default async function PaginaNotificaciones({
     <MarcoPagina titulo={tr('notif.titulo')} apoyo={tr('notif.apoyo')}>
       <PaginaAvisos
         destino={{ panel: 'flota', tenant: sp.tenant ?? null }} ambito={{ tipo: 'flota', tenantId: t.tenantId }} userId={t.userId} fuente={fuente}
-        base="/dashboard/notificaciones" params={params} sufijo={sufijoTenant(sp)} seccion={sp.seccion === 'configuracion' ? 'configuracion' : 'avisos'}
+        base="/dashboard/notificaciones" params={params} sufijo={sufijoTenant(sp)} seccion={sp.seccion === 'configuracion' ? 'configuracion' : 'avisos'} conPestanas={false}
       />
     </MarcoPagina>
   );
