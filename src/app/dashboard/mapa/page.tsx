@@ -234,7 +234,7 @@ export default async function PaginaMapa({
   ubicados.sort((a, b) => (b.dias ?? -1) - (a.dias ?? -1));
 
   return (
-    <VistaMapa ubicados={ubicados} sinUbicar={sinUbicar} totalVivos={totalVivos} tope={TOPE_MAPA}
+    <VistaMapa tr={await getT('operacion')} ubicados={ubicados} sinUbicar={sinUbicar} totalVivos={totalVivos} tope={TOPE_MAPA}
       rastreo={rastreo} />
   );
 }
