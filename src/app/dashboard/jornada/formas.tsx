@@ -34,13 +34,15 @@ export type AccionJornada = (previo: ResultadoAccion, fd: FormData) => Promise<R
 
 const VACIO: ResultadoAccion = { ok: true };
 
-function Boton({ texto, cargando, icono }: { texto: string; cargando: string; icono?: React.ReactNode }) {
+/** Botón compacto (28 px) de ancho de contenido. `pie`: va solo en el pie de la tarjeta, a la derecha (Rovaq: el guardar de una sección). */
+function Boton({ texto, cargando, icono, pie = false }: { texto: string; cargando: string; icono?: React.ReactNode; pie?: boolean }) {
   const { pending } = useFormStatus();
-  return (
-    <BotonDs type="submit" variante="primary" loading={pending} icono={icono}>
+  const b = (
+    <BotonDs type="submit" variante="primary" tamano="sm" loading={pending} icono={icono}>
       {pending ? cargando : texto}
     </BotonDs>
   );
+  return pie ? <div className="rv-jn__pie">{b}</div> : b;
 }
 
 /** El aviso del resultado: el UNICO del panel (`admin/ui/aviso-resultado`). El error
@@ -236,7 +238,7 @@ function FormaCaptura({
   const corregibles = anulados;
 
   return (
-    <form action={accion} className="rv-forma">
+    <form action={accion} className="rv-forma rv-jn__forma">
       {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
       <h3 className="rv-jn__sub">{t('jor.f.capturar.titulo')}</h3>
       <p className="rv-jn__nota">
@@ -270,7 +272,7 @@ function FormaCaptura({
         )}
         <CampoTexto name="nota" etiqueta={t('jor.f.nota')} obligatorio minLength={5} placeholder={t('jor.f.nota.ph')} />
       </div>
-      <Boton texto={t('jor.f.capturar')} cargando="Guardando…" icono={<Icono icono={Plus} />} />
+      <Boton pie texto={t('jor.f.capturar')} cargando="Guardando…" icono={<Icono icono={Plus} />} />
     </form>
   );
 }
@@ -279,7 +281,7 @@ function FormaCierre({ jornadaId, cerrarElDia }: { jornadaId: string; cerrarElDi
   const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(cerrarElDia, VACIO);
   return (
-    <form action={accion} className="rv-forma">
+    <form action={accion} className="rv-forma rv-jn__forma">
       {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
       <h3 className="rv-jn__sub">{t('jor.f.cerrar.titulo')}</h3>
       <p className="rv-jn__nota">
@@ -287,7 +289,7 @@ function FormaCierre({ jornadaId, cerrarElDia }: { jornadaId: string; cerrarElDi
       </p>
       <Aviso estado={estado} />
       <input type="hidden" name="jornadaId" value={jornadaId} />
-      <Boton texto={t('jor.f.cerrar')} cargando="Cerrando…" icono={<Icono icono={Lock} />} />
+      <Boton pie texto={t('jor.f.cerrar')} cargando="Cerrando…" icono={<Icono icono={Lock} />} />
     </form>
   );
 }
@@ -301,7 +303,7 @@ export function FormaPolitica({
   const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(declararPolitica, VACIO);
   return (
-    <form action={accion} className="rv-forma">
+    <form action={accion} className="rv-forma rv-jn__forma">
       <Aviso estado={estado} />
       <div className="rv-forma__rejilla">
         <CampoTexto name="horasMaxJornada" tipo="number" etiqueta={t('jor.f.umbral.jornada')} step="0.25" min="0.25" max="24"
@@ -313,7 +315,7 @@ export function FormaPolitica({
         <CampoTexto name="fundamento" etiqueta={t('jor.f.fundamento')}
           defaultValue={politica?.fundamento ?? ''} placeholder={t('jor.f.fundamento.ph')} />
       </div>
-      <Boton texto={t('jor.f.umbral.guardar')} cargando="Guardando…" />
+      <Boton pie texto={t('jor.f.umbral.guardar')} cargando="Guardando…" />
     </form>
   );
 }
@@ -344,7 +346,7 @@ export function FormaAlertaTope({
   const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(guardarAlerta, VACIO);
   return (
-    <form action={accion} className="rv-forma">
+    <form action={accion} className="rv-forma rv-jn__forma">
       <Aviso estado={estado} />
       <Casilla name="activa" etiqueta={t('jor.f.alerta.titulo')} defaultChecked={config?.activa ?? false} />
       <div className="rv-forma__rejilla">
@@ -367,7 +369,7 @@ export function FormaAlertaTope({
         <CampoTexto name="correoEncargado" tipo="email" etiqueta={t('jor.f.alerta.correo')} maxLength={254}
           defaultValue={config?.correoEncargado ?? ''} placeholder="encargado@tu-flota.mx" />
       </div>
-      <Boton texto={t('jor.f.alerta.guardar')} cargando="Guardando…" />
+      <Boton pie texto={t('jor.f.alerta.guardar')} cargando="Guardando…" />
     </form>
   );
 }

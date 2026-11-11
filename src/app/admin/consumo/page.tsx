@@ -6,12 +6,13 @@ import { avisosDeTopeEncendidos, DIAS_SIN_REGISTRO_AVISO, diasSinRegistroIa, lee
 import { listarAlertasTopeRecientes, type FilaAlertaTope } from '@/lib/llm/repo';
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx, numero, usd } from '@/lib/formato';
-import { Aviso, BotonEnlace, Disclosure, EstadoError, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { BarList, Columnas, ColumnasApiladas, type PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { gastoApiladoPorFlota } from './apilado';
 
+import { uniformes } from '../cifras-uniformes';
 import '../dinero.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -101,7 +102,7 @@ export default async function ConsumoPage() {
   const fallos = consumo ? consumo.agentes.reduce((s, a) => s + a.fallos30d, 0) : null;
   const gastoAgentes = consumo ? consumo.agentes.reduce((s, a) => s + a.gastado30dUsd, 0) : null;
 
-  const cifras: PropsCifra[] | undefined = todoCaido ? undefined : [
+  const cifras: PropsCifra[] | undefined = todoCaido ? undefined : uniformes([
     r
       ? { etiqueta: ta('consumo.gastado_en_ia_historico'), valor: r.costoIaUsd, formato: 'usd', deltaPct: r.tendenciaCosto === null ? null : { pct: r.tendenciaCosto, bueno: r.tendenciaCosto < 0 }, deltaNota: ta('consumo.ultimos_7_dias_vs') }
       : { etiqueta: ta('consumo.gastado_en_ia_historico'), valor: null, estado: 'error', reintentar: true },
@@ -112,29 +113,21 @@ export default async function ConsumoPage() {
       ? { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: gastoAgentes, formato: 'usd', nota: `${numero(corridas ?? 0)} corridas, ${numero(fallos ?? 0)} en fallo.` }
       : { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: null, estado: 'error', mensaje: ta('consumo.la_medicion_por_agente'), reintentar: true },
     { etiqueta: ta('consumo.credito_del_proveedor'), valor: cifraCred.valor, nota: cifraCred.nota, tono: cifraCred.tono, estado: cifraCred.valor === null ? 'vacio' : 'ok', mensaje: ta('consumo.no_se_pudo_comprobar_2') },
-  ];
+  ]);
+
+  // Como máximo DOS avisos visibles (Rovaq): los más graves primero (error antes que aviso) y el resto plegado en el segundo.
+  const avisosLista: AvisoItem[] = [
+    ...(textoCred.tono ? [{ tono: textoCred.tono, titulo: textoCred.titulo, texto: textoCred.texto }] : []),
+    ...problemas.map((i) => ({ tono: 'error' as const, titulo: i.titulo, texto: i.detalle })),
+    ...(!avisosEncendidos ? [{ tono: 'warn' as const, titulo: ta('consumo.los_avisos_de_tope'), texto: ta('consumo.una_flota_puede_llegar') }] : []),
+    ...(diasSin !== null && diasSin >= DIAS_SIN_REGISTRO_AVISO ? [{ tono: 'warn' as const, titulo: ta('consumo.sin_llamadas_de_ia', { diasSin: numero(diasSin) }), texto: ta('consumo.puede_ser_que_no') }] : []),
+  ].sort((x, y) => (x.tono === y.tono ? 0 : x.tono === 'error' ? -1 : 1));
 
   return (
     <EsqueletoPanelCifras
       titulo={ta('consumo.consumo_de_ia')} apoyo={ta('consumo.a_donde_se_va')} variante="8-4"
       etiquetaCifras={ta('consumo.gasto_de_ia')} cifras={cifras}
-      avisos={todoCaido ? undefined : (
-        <>
-          {textoCred.tono ? <Aviso tono={textoCred.tono} titulo={textoCred.titulo}>{textoCred.texto}</Aviso> : null}
-          {!avisosEncendidos ? (
-            <Aviso tono="warn" titulo={ta('consumo.los_avisos_de_tope')}>
-              {ta('consumo.una_flota_puede_llegar')}
-            </Aviso>
-          ) : null}
-          {diasSin !== null && diasSin >= DIAS_SIN_REGISTRO_AVISO ? (
-            <Aviso tono="warn" titulo={ta('consumo.sin_llamadas_de_ia', { diasSin: numero(diasSin) })}>
-              {ta('consumo.puede_ser_que_no')}
-            </Aviso>
-          ) : null}
-          {problemas.map((i) => <Aviso key={i.titulo} tono="error" titulo={i.titulo}>{i.detalle}</Aviso>)}
-
-        </>
-      )}
+      avisos={todoCaido ? undefined : <AvisosAcotados avisos={avisosLista} resto={ta} />}
       graficas={todoCaido ? undefined : [
         <Tarjeta key="gasto" titulo={ta('consumo.gasto_de_ia_por')} estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} contenida={!!r && r.porDia.length <= 1} mensaje={r ? ta('consumo.sin_historial_suficiente') : undefined} detalle={ta('consumo.hacen_falta_al_menos')} reintentar>
           {r ? (
@@ -251,6 +244,27 @@ export default async function ConsumoPage() {
       </Disclosure>
       </>}
     </EsqueletoPanelCifras>
+  );
+}
+
+interface AvisoItem { tono: 'error' | 'warn'; titulo: string; texto: string }
+
+/** Los avisos de la página, de dos en dos como máximo: el primero entero y, si hay más, un segundo aviso compacto que los pliega todos. */
+function AvisosAcotados({ avisos, resto }: { avisos: AvisoItem[]; resto: TrDe<'admin_dinero'> }) {
+  if (avisos.length === 0) return null;
+  const [primero, ...demas] = avisos;
+  return (
+    <>
+      <Aviso tono={primero.tono} titulo={primero.titulo}>{primero.texto}</Aviso>
+      {demas.length > 0 ? (
+        <AvisoCompacto
+          tono={demas.some((d) => d.tono === 'error') ? 'error' : 'warn'}
+          resumen={resto('consumo.avisos_mas', { n: numero(demas.length) })}
+          etiquetaMas={resto('consumo.ver_avisos')}
+          mas={<ul className="adm-din-lista">{demas.map((d) => <li key={d.titulo}><strong>{d.titulo}</strong> <span>{d.texto}</span></li>)}</ul>}
+        />
+      ) : null}
+    </>
   );
 }
 

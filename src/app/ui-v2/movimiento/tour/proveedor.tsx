@@ -322,6 +322,13 @@ export function TourProvider({ recorridos, ambito, soloLectura = false, rutasPer
     if (invitar && rutaInvitacion.current === null) rutaInvitacion.current = pathname ?? '';
     else if (rutaInvitacion.current !== null && (pathname ?? '') !== rutaInvitacion.current) { rutaInvitacion.current = null; guardarEst({ visto: true }, { invitacion: 'ahora_no', ofertas: ofertasRef.current + 1 }); }
   }, [invitar, pathname, guardarEst]);
+  // Esc cierra la invitación como «Ahora no» (decisión de identidad: Rovaq la cierra con Esc; el recorrido sigue sin arrancar solo).
+  useEffect(() => {
+    if (!invitar) return;
+    const alTecla = (e: KeyboardEvent) => { if (e.key === 'Escape') guardarEst({ visto: true }, { invitacion: 'ahora_no', ofertas: ofertasRef.current + 1 }); };
+    document.addEventListener('keydown', alTecla);
+    return () => document.removeEventListener('keydown', alTecla);
+  }, [invitar, guardarEst]);
   const principalCompleto = recorridos.find((r) => r.id === `${principal}.completo`);
 
   return (

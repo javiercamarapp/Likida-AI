@@ -6,7 +6,7 @@ import './conocimiento.css';
 import { buscarNormas, PUEDE_AFIRMARSE, JERARQUIA_ROTULO, type Norma } from '@/lib/likida/normas/tipos';
 import { Aviso, Boton, BotonEnlace, Chip, CampoTexto, Drawer, Icono, SegmentedControl, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
-import { useT } from '@/lib/i18n/proveedor';
+import { useFormato, useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 type FiltroEstado = 'todas' | 'afirmables' | 'sin_verificar';
@@ -21,6 +21,7 @@ type FiltroEstado = 'todas' | 'afirmables' | 'sin_verificar';
  */
 export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
   const { t } = useT('resto', restoEs);
+  const { fechaMx } = useFormato();
   const [q, setQ] = useState('');
   const [estado, setEstado] = useState<FiltroEstado>('todas');
   const [abierta, setAbierta] = useState<string | null>(null);
@@ -60,8 +61,8 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
       id: 'estado', titulo: t('llaves.estado'),
       celda: (n) => { const v = PUEDE_AFIRMARSE[n.estado_verificacion]; return <StatusChip tono={v?.puede ? 'ok' : 'warn'}>{v?.rotulo ?? n.estado_verificacion}</StatusChip>; },
     },
-    { id: 'rev', titulo: t('cfg.revisada_el'), celda: (n) => <span className="rv-conocimiento__nota">{n.verificado_el ?? t('e26.con_sin_fecha')}</span> },
-    { id: 'ver', titulo: '', alinear: 'der', celda: (n) => <Boton variante="ghost" tamano="sm" onClick={() => setAbierta(n.id)} aria-label={`${t('e26.con_ver')}: ${n.titulo ?? n.instrumento}`}>{t('e26.con_ver')}</Boton> },
+    { id: 'rev', titulo: t('cfg.revisada_el'), celda: (n) => <span className="rv-conocimiento__nota">{n.verificado_el ? fechaMx(n.verificado_el) : t('e26.con_sin_fecha')}</span> },
+    { id: 'ver', titulo: '', alinear: 'der', celda: (n) => <Boton variante="ghost" tamano="sm" className="rv-conocimiento__ver" onClick={() => setAbierta(n.id)} aria-label={`${t('e26.con_ver')}: ${n.titulo ?? n.instrumento}`}>{t('e26.con_ver')}</Boton> },
   ];
   const elegida = abierta ? normas.find((n) => n.id === abierta) ?? null : null;
   const vElegida = elegida ? PUEDE_AFIRMARSE[elegida.estado_verificacion] : undefined;
@@ -102,26 +103,31 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
       pie={t('e26.con_pie', { n: lista.length, total: normas.length })}
       vistaRapida={(
         <Drawer abierto={elegida !== null} onCerrar={() => setAbierta(null)} titulo={elegida ? (elegida.titulo ?? elegida.instrumento) : t('cfg.fichas')} descripcion={elegida ? elegida.instrumento : undefined} tamano="m"
-          pie={elegida?.fuente_url ? (
-            <BotonEnlace href={elegida.fuente_url} tamano="sm" variante="primary" target="_blank" rel="noopener noreferrer">{t('cfg.leer_la_fuente')}{' '}<Icono icono={ExternalLink} tam={14} /></BotonEnlace>
+          pie={elegida ? (
+            <div className="rv-esq__vr-pie">
+              <Boton variante="secondary" tamano="sm" onClick={() => setAbierta(null)}>{t('e26.con_cerrar')}</Boton>
+              {elegida.fuente_url ? (
+                <BotonEnlace href={elegida.fuente_url} tamano="sm" variante="suave" target="_blank" rel="noopener noreferrer">{t('cfg.leer_la_fuente')}{' '}<Icono icono={ExternalLink} tam={14} /></BotonEnlace>
+              ) : null}
+            </div>
           ) : undefined}>
           {elegida ? (
             <div className="rv-conocimiento__detalle">
-              <div className="rv-conocimiento__chips">
-                <Chip>{JERARQUIA_ROTULO[elegida.jerarquia] ?? `Nivel ${elegida.jerarquia}`}</Chip>
-                <StatusChip tono={vElegida?.puede ? 'ok' : 'warn'}>{vElegida?.rotulo ?? elegida.estado_verificacion}</StatusChip>
-              </div>
-              {elegida.articulo_o_regla ? <p className="rv-conocimiento__instrumento">{`Art./regla ${elegida.articulo_o_regla}`}</p> : null}
-              {vElegida ? <p className="rv-conocimiento__nota" data-puede={vElegida.puede || undefined}>{vElegida.nota}</p> : null}
+              <dl className="rv-esq__vr">
+                <div><dt>{t('e26.con_nivel')}</dt><dd>{JERARQUIA_ROTULO[elegida.jerarquia] ?? `Nivel ${elegida.jerarquia}`}</dd></div>
+                <div><dt>{t('llaves.estado')}</dt><dd>{vElegida?.rotulo ?? elegida.estado_verificacion}</dd></div>
+                <div><dt>{t('cfg.revisada_el')}</dt><dd>{elegida.verificado_el ? fechaMx(elegida.verificado_el) : t('e26.con_sin_fecha')}</dd></div>
+                <div><dt>{t('e26.con_articulo')}</dt><dd>{elegida.articulo_o_regla ?? '—'}</dd></div>
+              </dl>
+              {vElegida ? <Aviso tono={vElegida.puede ? 'info' : 'warn'}>{vElegida.nota}</Aviso> : null}
               {elegida.citasEnCodigo.length > 0 ? <p className="rv-conocimiento__nota">{t('cfg.se_aplica_como')}{' '}{elegida.citasEnCodigo.join(' · ')}</p> : null}
-              {elegida.verificado_el ? <p className="rv-conocimiento__nota">{t('cfg.revisada_el')}{' '}{elegida.verificado_el}</p> : null}
             </div>
           ) : null}
         </Drawer>
       )}
     >
       <TablaBase
-        etiqueta={t('cfg.fichas')} columnas={cols} filas={lista} idFila={(n) => n.id} densa altoMaximo={false} tarjetaMovil
+        etiqueta={t('cfg.fichas')} columnas={cols} filas={lista} idFila={(n) => n.id} altoMaximo={false} tarjetaMovil className="rv-conocimiento__tabla"
         vacio={{
           titulo: buscando ? t('cfg.ninguna_ficha_habla_de_eso') : t('cfg.no_hay_fichas_con_ese_estado'),
           texto: buscando ? t('cfg.no_se_muestra_la_mas_parecida') : t('cfg.prueba_con_otro_estado_de_verificacion'),

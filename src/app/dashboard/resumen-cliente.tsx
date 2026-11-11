@@ -134,7 +134,7 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, a
         <div className="rv-sig">
           <p className="rv-sig__titulo">{principal.titulo}</p>
           <p className="rv-sig__porque">{principal.porQue}</p>
-          <BotonEnlace variante="primary" href={principal.href} icono={<ArrowRight />}>{principal.textoBoton}</BotonEnlace>
+          {principal.href ? <BotonEnlace variante="primary" tamano="sm" href={principal.href} icono={<ArrowRight />}>{principal.textoBoton}</BotonEnlace> : null}
         </div>
       ) : (
         <div className="rv-sig">
@@ -142,9 +142,9 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, a
           <p className="rv-sig__porque">{t('op.no_hay_pasos_pendientes_ni_alertas')}</p>
         </div>
       )}
-      {despues.length > 0 || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.length ? t('op.despues_y_atajos') : t('op.atajos')}>
-        {despues.slice(0, 2).map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila">{rico(t('op.e0_despues_e0', { titulo: a.titulo }), { e0: (c) => <span>{c}</span> })}<ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
-        {atajos.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
+      {despues.some((a) => a.href) || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.some((a) => a.href) ? t('op.despues_y_atajos') : t('op.atajos')}>
+        {despues.filter((a) => a.href).slice(0, 2).map((a) => <li key={a.id}><Link href={a.href!} className="rv-atajos__fila">{rico(t('op.e0_despues_e0', { titulo: a.titulo }), { e0: (c) => <span>{c}</span> })}<ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
+        {atajos.slice(0, Math.max(0, 2 - despues.filter((a) => a.href).length)).map((a) => (
           <li key={a.href}><Link href={`${a.href}${sufijo}`} className="rv-atajos__fila"><span>{a.nombre}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>
         ))}
       </ul> : null}

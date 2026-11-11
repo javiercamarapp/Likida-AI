@@ -153,7 +153,8 @@ export default async function TrazaCorridaPage({
 }
 
 function PantallaCorrida(props: ComponentProps<typeof EsqueletoFicha>) {
-  return <EsqueletoFicha {...props} />;
+  // La cifra sin dato conserva la escala de la tira (26/700), como Rovaq: `adm-escala-kpi` (sistema.css) solo cambia el tamaño del «—».
+  return <div className="adm-escala-kpi"><EsqueletoFicha {...props} /></div>;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

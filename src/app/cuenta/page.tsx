@@ -7,6 +7,9 @@ import { sufijoTenant } from '@/app/dashboard/sufijo';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
 import { Monograma } from '../ui-v2/componentes/monograma';
+import { PreferenciasCuenta } from './preferencias';
+import { getT } from '@/lib/i18n/servidor';
+import '../legal/publico-r2.css';
 import './cuenta.css';
 import { nombreDeRol } from '@/lib/auth/roles';
 
@@ -32,38 +35,33 @@ export default async function Cuenta({
     redirect('/');
   }
 
+  const { t, idioma } = await getT('publico');
+  const nombre = s.nombre ?? (tenant?.nombre as string) ?? 'Likida';
   return (
     <MarcoPublico
-      rotulo="Cuenta"
-      titulo="Mi cuenta"
+      rotulo={t('cta.rotulo')}
+      titulo={t('cta.titulo')}
       ancho="estrecho"
       centrado
-      acciones={
-        <>
-          <form action={cerrarSesion}>
-            <Boton type="submit" variante="secondary" tamano="sm">Cerrar sesión</Boton>
-          </form>
-          <Link href={`/dashboard${sufijo}`} className="rv-pub__enlace">← Volver al panel</Link>
-        </>
-      }
     >
-      <div className="rv-pub__tarjeta">
-        {/* Tarjeta de cuenta (Rovaq): monograma de la persona y, bajo él, flota, usuario y rol en filas rótulo-valor. */}
-        <Monograma id={s.userId} nombre={s.nombre ?? (tenant?.nombre as string) ?? 'Likida'} tamano={40} />
-        <dl className="rv-pub__dl rv-cuenta__dl">
-          <div>
-            <dt>Flota</dt>
-            <dd>{(tenant?.nombre as string) ?? '—'}</dd>
-          </div>
-          <div>
-            <dt>Usuario</dt>
-            <dd>{s.nombre ?? s.userId}</dd>
-          </div>
-          <div>
-            <dt>Rol</dt>
-            <dd>{nombreDeRol(s.rol)}</dd>
-          </div>
-        </dl>
+      <div className="rv-flujo" aria-hidden="true" />
+      {/* Orden de Rovaq: tarjeta de cuenta (monograma de 28, nombre, rol y flota) → filas rótulo-control (idioma, tema) → Cerrar sesión al final. */}
+      <div className="rv-pub__tarjeta rv-cuenta__tarjeta">
+        <Monograma id={s.userId} nombre={nombre} tamano={28} />
+        <div className="rv-cuenta__quien">
+          <strong>{s.nombre ?? s.userId}</strong>
+          <span>{nombreDeRol(s.rol)} · {(tenant?.nombre as string) ?? '—'}</span>
+        </div>
+      </div>
+      <PreferenciasCuenta idiomaActivo={idioma} textos={{
+        idioma: t('cta.idioma'), tema: t('cta.tema'), temaClaro: t('cta.tema.claro'), temaSistema: t('cta.tema.sistema'), temaOscuro: t('cta.tema.oscuro'),
+        es: 'Español', en: 'English', enProximamente: t('cta.en_pronto'), fallo: t('cta.idioma.fallo'),
+      }} />
+      <div className="rv-cuenta__pie">
+        <Link href={`/dashboard${sufijo}`} className="rv-pub__enlace">{t('cta.volver')}</Link>
+        <form action={cerrarSesion}>
+          <Boton type="submit" variante="secondary" tamano="sm">{t('cta.cerrar')}</Boton>
+        </form>
       </div>
     </MarcoPublico>
   );

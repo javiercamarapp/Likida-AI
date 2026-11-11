@@ -1,5 +1,6 @@
 import { revalidatePath } from 'next/cache';
-import { Activity, BadgePercent, CheckCircle2, Inbox } from 'lucide-react';
+import { BadgePercent, Inbox } from 'lucide-react';
+import { getT } from '@/lib/i18n/servidor';
 import { getSessionTenant } from '@/lib/auth/session';
 import { veredictoMfaDeSesion } from '@/lib/auth/superadmin-mfa';
 import { MSG_MFA_SUPERADMIN } from '@/lib/auth/mfa';
@@ -176,10 +177,12 @@ export async function PanelVendedor({
   const vivos = ESTADOS_VIVOS.reduce((sum, e) => sum + totales[e], 0);
   const comision = reglaComision();
 
+  const { t: tv } = await getT('resto');
   const cifras = prospectos === null ? undefined : [
-    { etiqueta: esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)', valor: vivos, formato: 'entero' as const, icono: <Icono icono={Activity} /> },
-    { etiqueta: esVendedor ? 'Mis ganados' : 'Ganados (todos)', valor: totales.won, formato: 'entero' as const, icono: <Icono icono={CheckCircle2} /> },
-    { etiqueta: 'Propuesta o piloto', valor: totales.proposal + totales.pilot, formato: 'entero' as const, icono: <Icono icono={Inbox} /> },
+    // Sin icono en el rótulo (la celda ya lleva su punto de procedencia): solo rótulo, cifra y una nota que dice qué cuenta.
+    { etiqueta: esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)', valor: vivos, formato: 'entero' as const, nota: tv('e26b.vend_vivos_nota') },
+    { etiqueta: esVendedor ? 'Mis ganados' : 'Ganados (todos)', valor: totales.won, formato: 'entero' as const, nota: tv('e26b.vend_ganados_nota') },
+    { etiqueta: 'Propuesta o piloto', valor: totales.proposal + totales.pilot, formato: 'entero' as const, nota: tv('e26b.vend_propuesta_nota') },
   ];
 
   return (

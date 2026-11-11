@@ -1,7 +1,7 @@
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { ClienteMcpConectado, SesionMcpUsuario } from '@/lib/mcp/sesiones';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
-import { TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { FormaCortar, type AccionForma } from './forma';
 import './sesiones-mcp.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -75,10 +75,13 @@ export function ListaSesionesMcp({ sesiones, cortarSesiones, t = T_RESTO_ES }: {
       celda: (s) => <FormaCortar accion={cortarSesiones} usuarioId={s.userId} quien={s.nombre ?? s.email ?? t('cfg.usuario_de_la_flota')} cuantos={s.clientes.length} />,
     },
   ];
+  // El vacío vive DENTRO de su tarjeta (Rovaq: nunca suelto sobre el lienzo).
+  if (sesiones.length === 0) {
+    return <Tarjeta titulo={t('cfg.sesiones_mcp_conectadas')} estado="vacio" mensaje={t('cfg.nadie_tiene_un_cliente_conectado')} detalle={t('cfg.ni_claude_ni_chatgpt_estan_leyendo')} contenida />;
+  }
   return (
     <TablaBase
       etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={cols} filas={sesiones} idFila={(s) => s.userId} tarjetaMovil altoMaximo={false}
-      vacio={{ titulo: t('cfg.nadie_tiene_un_cliente_conectado'), texto: t('cfg.ni_claude_ni_chatgpt_estan_leyendo') }}
     />
   );
 }

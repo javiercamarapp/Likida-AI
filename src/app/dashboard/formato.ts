@@ -25,3 +25,15 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 export { TZ_MX, litros, fechaMx, fechaHoraMx } from '@/lib/formato';
+
+// ── Filete de las tiras de cifras ────────────────────────────────────────────────────────────────────────────────────────────────
+// El filete de 3 px lo pinta el matiz de la celda; sin matiz, `graficas.css` quita el borde Y sus 3 px de alto, y una tira con celdas de
+// los dos tipos queda desalineada (rótulo y cifra 3 px más arriba en unas que en otras). Aquí toda celda de una tira lleva matiz: el de lo
+// que su etiqueta mide, o el de volumen (tinta) si no cae en ninguna familia. Como `.hoy-kpis` de Rovaq: todas con filete o ninguna.
+import { matizDeEtiqueta } from '../ui-v2/graficas/matiz-etiqueta';
+import type { PropsCifra } from '../ui-v2/graficas';
+
+export function cifrasUniformes<T extends PropsCifra>(cifras: readonly T[] | undefined): T[] | undefined {
+  if (!cifras) return undefined;
+  return cifras.map((c) => (c.metrica || c.matiz ? c : { ...c, matiz: matizDeEtiqueta(c.etiqueta) ?? 8 }));
+}

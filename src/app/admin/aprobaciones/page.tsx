@@ -148,6 +148,8 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
     }
   }
 
+  const decidir = urgente.ok !== null && normal.ok !== null ? urgente.ok.length + normal.ok.length : null;
+
   function bandeja(titulo: string, r: { ok: PiezaEnCola[] | null; error: string | null }, urgenteBandeja: boolean) {
     return (
       <Tarjeta
@@ -244,6 +246,26 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
       titulo={t('aprobaciones.aprobaciones')}
       apoyo={t('aprobaciones.lo_que_los_agentes')}
       avisos={<Aviso tono="info">{t('aprobaciones.el_candado_es_de')}</Aviso>}
+      etiquetaCifras={t('aprobaciones.kpi_etiqueta')}
+      cifras={[
+        decidir === null
+          ? { etiqueta: t('aprobaciones.kpi_por_decidir'), valor: null, estado: 'error', reintentar: true }
+          : {
+            etiqueta: t('aprobaciones.kpi_por_decidir'), valor: decidir, formato: 'entero',
+            segmentos: [{ etiqueta: t('aprobaciones.kpi_urgentes'), valor: urgente.ok!.length }, { etiqueta: t('aprobaciones.kpi_normales'), valor: normal.ok!.length }],
+            tono: urgente.ok!.length > 0 ? 'warn' : undefined,
+            nota: urgente.ok!.length > 0 ? t('aprobaciones.kpi_n_urgentes', { n: urgente.ok!.length }) : undefined,
+          },
+        porEnviar === null
+          ? { etiqueta: t('aprobaciones.kpi_por_enviar'), valor: null, estado: 'error', reintentar: true }
+          : { etiqueta: t('aprobaciones.kpi_por_enviar'), valor: porEnviar.length, formato: 'entero' },
+        estadoBandeja === null || estadoBandeja === undefined || estadoBandeja.diasMasVieja === null
+          ? { etiqueta: t('aprobaciones.kpi_mas_vieja'), valor: null, estado: estadoBandeja ? 'vacio' : 'error', reintentar: true, mensaje: estadoBandeja ? t('aprobaciones.kpi_sin_pendientes') : undefined }
+          : { etiqueta: t('aprobaciones.kpi_mas_vieja'), valor: t('aprobaciones.kpi_dias', { n: estadoBandeja.diasMasVieja }), tono: estadoBandeja.diasMasVieja >= estadoBandeja.diasVencimiento ? 'warn' : undefined },
+        estadoBandeja === null || estadoBandeja === undefined
+          ? { etiqueta: t('aprobaciones.kpi_bandeja'), valor: null, estado: 'error', reintentar: true }
+          : { etiqueta: t('aprobaciones.kpi_bandeja'), valor: estadoBandeja.frenaAlRunner ? t('aprobaciones.kpi_frena') : t('aprobaciones.kpi_libre'), tono: estadoBandeja.frenaAlRunner ? 'bad' : 'ok' },
+      ]}
     >
       <VistasAprobaciones
         inicial={inicial}

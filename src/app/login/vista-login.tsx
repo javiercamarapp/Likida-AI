@@ -3,6 +3,7 @@ import { MailCheck, OctagonAlert } from 'lucide-react';
 import { Logo, GlifoAdorno } from '../logo';
 import { LoginArtwork } from '@/components/login/artwork';
 import { BotonEnvio } from './boton-envio';
+import { SelectorIdiomaLogin } from './selector-idioma';
 import { TurnstileWidget } from './turnstile-widget';
 import { login as loginEs } from '@/lib/i18n/es/login';
 import { crearTraductor, type Traductor } from '@/lib/i18n/traducir';
@@ -61,7 +62,9 @@ export function VistaLogin({ next, enviado, reenviado, error, entrarConGoogle, e
       <section className="login-column">
         <div className="login-inner">
           <header className="auth-brand">
-            <Logo alto="h-7" />
+            {/* La marca SIEMPRE en tinta (#0e0e10): el login es claro en cualquier tema (como Rovaq, `color-scheme: light`), y el tono automático seguiría al tema oscuro del panel. */}
+            <Logo alto="h-7" tono="positivo" />
+            <SelectorIdiomaLogin activo={tr.idioma} etiqueta={t('idioma.titulo')} noDisponible={t('idioma.pronto')} />
           </header>
 
           <div className="login-copy">

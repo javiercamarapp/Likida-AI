@@ -21,8 +21,9 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { mxn } from '@/lib/formato';
 import { sufijoTenant } from '../../sufijo';
 import {
-  AvisoCompacto, BotonEnlace, Campo, CampoSelect, CampoTexto, Casilla, Disclosure, FormaConAviso, Tarjeta, type ResultadoAccion,
+  AvisoCompacto, BotonEnlace, Campo, CampoSelect, CampoTexto, Casilla, Chip, Disclosure, FormaConAviso, type ResultadoAccion, type TonoChip,
 } from '@/app/ui-v2/componentes';
+import type { ReactNode } from 'react';
 import '../timbrado.css';
 
 /**
@@ -52,6 +53,22 @@ const t = (v: FormDataEntryValue | null): string | null => {
   const s = String(v ?? '').trim();
   return s === '' ? null : s;
 };
+
+/** TARJETA DE PASO (Rovaq «Flujo por pasos»): radio 12, padding 14x16, chip «Para revisar / Hecho»; el paso que no se puede dar ahora va en
+ *  punteado con «No disponible ahora». Solo cambia la piel de la sección de timbre: ninguna acción ni su puerta de permisos se tocan. */
+function PasoTimbre({ titulo, chip, tono, bloqueado, actual, children }: {
+  titulo: string; chip: string; tono: TonoChip; bloqueado?: boolean; actual?: boolean; children: ReactNode;
+}) {
+  return (
+    <section className="rv-esq__paso rv-timb__paso" data-actual={actual || undefined} data-bloqueado={bloqueado || undefined} aria-label={titulo}>
+      <div className="rv-esq__paso-cab">
+        <p role="heading" aria-level={2} className="rv-timb__paso-titulo">{titulo}</p>
+        <Chip tono={tono} tamano="estado">{chip}</Chip>
+      </div>
+      {children}
+    </section>
+  );
+}
 
 export async function SeccionTimbrado({ v, searchParams }: {
   v: ViajeCcp;
@@ -220,7 +237,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
   if (ctx.timbreVigente !== null) {
     const tv = ctx.timbreVigente;
     return (
-      <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+      <PasoTimbre titulo={tr('timbrado.viajeId.timbrar.timbre')} chip={tr('e26b.timb_paso_hecho')} tono="ok">
         <div className="rv-timb__bloque">
           <p className="rv-timb__texto">
             {tv.modo === 'sandbox' ? tr('timbrado.viajeId.timbrar.timbreDePruebaSandbox') + ' ' : tr('timbrado.viajeId.timbrar.timbrado') + ' '}
@@ -234,7 +251,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
           </div>
           {puedeEmitir && <CancelacionDelTimbre tr={tr} cancelacion={tv.cancelacion} cancelar={cancelarTimbre} confirmar={confirmarCancelacion} />}
         </div>
-      </Tarjeta>
+      </PasoTimbre>
     );
   }
 
@@ -243,7 +260,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
   // CFDI real. El bloqueo real es el unique de la base; esto solo lo explica.
   if (ctx.reservaPendiente !== null) {
     return (
-      <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+      <PasoTimbre titulo={tr('timbrado.viajeId.timbrar.timbre')} chip={tr('e26b.timb_paso_revisar')} tono="warn" actual>
         <div className="rv-timb__bloque">
           <AvisoCompacto tono="warn" resumen={motivoDeReservaViva(ctx.reservaPendiente)} />
           {ctx.reservaPendiente.reservadoEn !== null && (
@@ -261,18 +278,18 @@ export async function SeccionTimbrado({ v, searchParams }: {
             </>
           )}
         </div>
-      </Tarjeta>
+      </PasoTimbre>
     );
   }
 
   // ── Sin PAC: la verdad y cero botones ────────────────────────────────────
   if (!ctx.pac.configurado) {
     return (
-      <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+      <PasoTimbre titulo={tr('timbrado.viajeId.timbrar.timbre')} chip={tr('e26b.timb_paso_no_disp')} tono="neutral" bloqueado>
         <p className="rv-timb__texto">
           {tr('timbrado.viajeId.timbrar.sinPacConfiguradoEl')}
         </p>
-      </Tarjeta>
+      </PasoTimbre>
     );
   }
 
@@ -282,7 +299,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
   });
 
   return (
-    <Tarjeta titulo={tr('timbrado.viajeId.timbrar.timbre')}>
+    <PasoTimbre titulo={tr('timbrado.viajeId.timbrar.timbre')} chip={tr('e26b.timb_paso_revisar')} tono="neutral" actual>
       <div className="rv-timb__bloque">
         <p className="rv-timb__texto">
           {tr('timbrado.viajeId.timbrar.pacAmbienteElCfdi', { v: ctx.pac.proveedor?.toUpperCase() ?? '', v2: ctx.emisor.modo === 'sandbox' ? tr('timbrado.viajeId.timbrar.sandboxTimbresDePrueba') : tr('timbrado.viajeId.timbrar.produccion') })}
@@ -339,7 +356,7 @@ export async function SeccionTimbrado({ v, searchParams }: {
           </div>
         )}
       </div>
-    </Tarjeta>
+    </PasoTimbre>
   );
 }
 

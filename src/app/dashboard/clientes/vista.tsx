@@ -18,6 +18,7 @@ import {
   Aviso, BotonEnlace, EstadoError, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
+import '../caja-vacia.css';
 import './clientes.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 import { rico } from '@/lib/i18n/rico';
@@ -60,7 +61,11 @@ export function VistaClientes({
 }) {
   const hrefNuevo = (que: 'cliente' | 'tarifa') => urlRegistro(RUTA, sufijo, { nuevo: que });
   const hrefSinNuevo = urlRegistro(RUTA, sufijo, { nuevo: null });
-  const cifras = panel === null || panel.clientes.length === 0 ? undefined : cifrasDeCartera(t, panel);
+  // Sin un solo cliente no hay nada que medir: la tira sigue ahí (Rovaq) pero cada celda dice «—» y por qué, nunca un 0.
+  const cifras = panel === null ? undefined : panel.clientes.length === 0
+    ? [t('op.ingreso_de_fletes_capturado'), t('op.clientes_activos'), t('op.por_cobrar_a_clientes'), t('op.cl.k.sin_cliente')]
+      .map((etiqueta): PropsCifra => ({ etiqueta, valor: null, estado: 'vacio', mensaje: t('op.sin_clientes_todavia'), matiz: 8 }))
+    : cifrasDeCartera(t, panel).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
   const avisos = panel === null ? undefined : avisosDeCartera(t, panel);
   return (
     <EsqueletoTablaMaestra
@@ -68,8 +73,8 @@ export function VistaClientes({
       apoyo={t('op.quien_paga_el_flete_y_cuanto')}
       acciones={puedeEditar && panel !== null ? (
         <>
-          <BotonEnlace href={hrefNuevo('tarifa')} variante="secondary" tamano="sm">{t('op.cl.nueva_tarifa')}</BotonEnlace>
-          <BotonEnlace href={hrefNuevo('cliente')} variante="primary" tamano="sm">{t('op.cl.nuevo_cliente')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('tarifa')} variante="secondary">{t('op.cl.nueva_tarifa')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('cliente')} variante="primary">{t('op.cl.nuevo_cliente')}</BotonEnlace>
         </>
       ) : undefined}
       avisos={avisos}
@@ -297,7 +302,7 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
         )}
 
         {panel.clientes.length === 0 ? (
-          <EstadoVacio icono={Handshake} contenido titulo={t('op.sin_clientes_todavia')}>{t('op.por_eso_likida_ve_lo_que')}</EstadoVacio>
+          <div className="rv-caja-vacia"><EstadoVacio icono={Handshake} contenido titulo={t('op.sin_clientes_todavia')}>{t('op.por_eso_likida_ve_lo_que')}</EstadoVacio></div>
         ) : (
           <TablaBase<ClienteConMetricas> etiqueta={t('op.clientes_y_su_rfc')} columnas={columnas} filas={pagClientes.filas}
             idFila={(c) => c.id} tarjetaMovil
@@ -439,7 +444,7 @@ function BloqueTarifas({
         )}
 
         {panel.tarifas.length === 0 ? (
-          <EstadoVacio icono={Route} contenido titulo={t('op.sin_tarifas_capturadas')}>{t('op.con_al_menos_una_likida_puede')}</EstadoVacio>
+          <div className="rv-caja-vacia"><EstadoVacio icono={Route} contenido titulo={t('op.sin_tarifas_capturadas')}>{t('op.con_al_menos_una_likida_puede')}</EstadoVacio></div>
         ) : (
           <TablaBase<TarifaRow> etiqueta={t('op.rutas_por_cliente')} columnas={columnas} filas={pagTarifas.filas}
             idFila={(t) => t.id} tarjetaMovil

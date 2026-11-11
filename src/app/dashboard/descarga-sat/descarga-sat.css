@@ -25,3 +25,8 @@
 .rv-sat__cola { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .rv-sat__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; font-size: var(--t-small); color: var(--muted); }
 .rv-sat__enlace { text-decoration: underline; }
+
+/* Chips de alcance (radio 999, 28 px): enlaces a cada cola de la bandeja. */
+.rv-sat__chip { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 12px; border: 1px solid var(--line2, var(--line)); border-radius: 999px; background: var(--surface); color: var(--ink); font-size: var(--t-small); font-weight: 500; text-decoration: none; transition: background-color 120ms ease; }
+.rv-sat__chip:hover { background: var(--canvas); }
+.rv-sat__chip:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }

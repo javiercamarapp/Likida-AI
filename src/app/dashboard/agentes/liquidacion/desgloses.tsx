@@ -223,8 +223,6 @@ const rotuloFiltro = (tx: TAgentes = TR_ES.t): Record<FiltroDesglose, string> =>
 
 // ── La sección ─────────────────────────────────────────────────────────────
 
-const ayudaVentana = (tx: TAgentes = TR_ES.t) => (tx('rest.al_abrirla_la_lista_se_limita'));
-
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
 }

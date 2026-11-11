@@ -18,9 +18,9 @@ import { rico as ricoT } from '@/lib/i18n/rico';
 export function lenguajeLlano(texto: string): string {
   return texto
     .replace(/\s*\([^)]*docs\/[^)]*\)/gi, '')
-    .replace(/\s*\([^)]*\b[a-z]+(?:_[a-z0-9]+)+\b[^)]*\)/g, '')
+    .replace(/\s*\([^)]*\)/g, (m) => (/\b[a-z]+_[a-z0-9_]*[a-z0-9]\b/.test(m) ? '' : m))
     .replace(/\s*\(\d{3,4}\)/g, '')
-    .replace(/\b[a-z]+(?:_[a-z0-9]+)+\b/g, '')
+    .replace(/\b[a-z]+_[a-z0-9_]*[a-z0-9]\b/g, '')
     .replace(/\s{2,}/g, ' ')
     .replace(/\s+([.,;:])/g, '$1')
     .trim();
@@ -69,6 +69,7 @@ export function PanelPreflight({ preflight, sufijo = '', tr = TR_ES }: { preflig
               return (
                 <li key={c.id} className="rv-cd__paso" data-estado={ok ? 'ok' : 'falta'}>
                   <div className="rv-cd__paso-cab">
+                    {/* sin-info: título de paso de la lista de verificación, no un recuadro con cifra */}
                     <h3 className="rv-cd__paso-titulo">{c.titulo}</h3>
                     <Chip tono={ok ? 'ok' : 'warn'} tamano="estado">
                       <Icono icono={ok ? CircleCheck : CircleAlert} tam={14} etiqueta={ok ? tx('rest.en_orden') : tx('rest.falta')} />

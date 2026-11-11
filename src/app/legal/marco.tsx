@@ -14,6 +14,7 @@
 
 import { fechaMx } from '@/lib/formato';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import './publico-r2.css';
 
 export interface SeccionLegal {
   titulo: string;
@@ -47,8 +48,9 @@ export function ConNegritas({ texto }: { texto: string }) {
  * art. 29.
  */
 export function FaltaDato({ children }: { children: React.ReactNode }) {
+  // Aviso ÁMBAR (Rovaq: #fff7e5 con borde rgba(134,88,13,.22)), nunca un emoji de color: las faltas se marcan con el aviso, no con un círculo rojo.
   return (
-    <p className="rv-pub__aviso-falta">{children}</p>
+    <p className="rv-pub__aviso-falta" data-ambar="">{children}</p>
   );
 }
 
@@ -59,7 +61,7 @@ const ENLACES_LEGALES = [
 ] as const;
 
 export function PaginaLegal({
-  etiqueta, bajada, secciones, aviso, pie, vigenteDesde,
+  etiqueta, bajada, secciones, aviso, pie, vigenteDesde, piel = 'documento', titulo, rotulo, etiquetaIndice,
 }: {
   /** El rótulo chico de arriba: "Términos de servicio", "Política de privacidad". */
   etiqueta: string;
@@ -83,21 +85,41 @@ export function PaginaLegal({
    * verdad en vez de uno que se actualiza solo con el reloj.
    */
   vigenteDesde: string;
+  /**
+   * `documento` (por omisión): la piel de los textos con HUELLA (/terminos, /privacidad): sin cabecera de sitio, h1 «Likida» y sin
+   * índice, porque cualquier texto nuevo cambia la huella y obliga a todos a aceptar de nuevo (`lib/legal/huella_texto`).
+   * `sitio`: la piel del resto de las públicas (Rovaq `access-flow`): cabecera con el logo, h1 = el nombre del documento (`titulo`),
+   * eyebrow (`rotulo`) e ÍNDICE de secciones. Solo para documentos SIN huella (hoy: /aviso/prospectos).
+   */
+  piel?: 'documento' | 'sitio';
+  titulo?: string;
+  rotulo?: string;
+  /** Nombre accesible/encabezado del índice (solo piel `sitio`). */
+  etiquetaIndice?: string;
 }) {
+  const sitio = piel === 'sitio' && titulo !== undefined;
   return (
     <MarcoPublico
-      rotulo={etiqueta}
-      titulo="Likida"
+      rotulo={sitio ? (rotulo ?? etiqueta) : etiqueta}
+      titulo={sitio ? titulo : 'Likida'}
       apoyo={`Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`}
       pie={pie ?? undefined}
-      enlaces={ENLACES_LEGALES}
-      documento
+      enlaces={sitio ? undefined : ENLACES_LEGALES}
+      documento={!sitio}
     >
       {aviso}
 
+      {sitio ? (
+        <nav className="rv-legal__indice" aria-label={etiquetaIndice}>
+          <ol>
+            {secciones.map((s, i) => <li key={s.titulo}><a href={`#seccion-${i + 1}`}>{s.titulo}</a></li>)}
+          </ol>
+        </nav>
+      ) : null}
+
       <div className="rv-pub__prosa">
-        {secciones.map((s) => (
-          <section key={s.titulo} className="rv-pub__sec">
+        {secciones.map((s, i) => (
+          <section key={s.titulo} className="rv-pub__sec" id={sitio ? `seccion-${i + 1}` : undefined}>
             <h2>{s.titulo}</h2>
             {s.fundamento && <p className="rv-pub__nota">{s.fundamento}</p>}
             {s.parrafos.map((p, i) => (

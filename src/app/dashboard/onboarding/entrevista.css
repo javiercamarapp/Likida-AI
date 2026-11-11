@@ -56,3 +56,6 @@
 .rv-ob__form-apoyo { margin: 8px 0 16px; font-size: var(--t-micro); color: var(--muted); }
 .rv-ob__form-enlace { text-decoration: underline; text-underline-offset: 2px; }
 .rv-ob__forma { display: grid; gap: 16px; text-align: left; }
+
+/* Compositor como `agente-composer` de Rovaq: caja de ≤650 px (radio 12, sombra suave) con UN solo botón primario (el envío circular); «Consulta» pasa a secundario. */
+.rv-ob__caja { max-width: 650px; min-height: 58px; margin-inline: auto; box-shadow: 0 1px 3px rgba(14, 14, 16, .08); }

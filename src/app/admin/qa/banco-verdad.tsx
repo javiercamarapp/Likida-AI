@@ -186,7 +186,7 @@ export function BancoVerdad({ fotos, bancoError, lecturasIniciales, lecturasErro
 
         {/* ── El botón ───────────────────────────────────────────────────────── */}
         <div className="rv-qa-acciones">
-          <Boton variante="primary" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo)} loading={corriendo}
+          <Boton variante="primary" tamano="sm" onClick={() => void correrOcr()} disabled={Boolean(motivoBloqueo)} loading={corriendo}
             icono={corriendo ? undefined : <Icono icono={ScanLine} tam={14} />}>
             {corriendo ? t('qa_banco_verdad.corriendo_el_ocr_real') : tp('qa_banco_verdad.correr_el_ocr_contra', seleccion.size)}
           </Boton>
