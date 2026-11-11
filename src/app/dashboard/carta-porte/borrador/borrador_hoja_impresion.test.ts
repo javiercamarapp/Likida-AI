@@ -25,6 +25,7 @@ describe('borrador imprimible de Carta Porte (excepcion de marco)', () => {
   });
   it('sin emojis ni botones crudos', () => {
     expect(src).not.toMatch(/<button\b/);
-    expect(src).not.toMatch(/[\u{1F000}-\u{1FAFF}☀-➿]/u);
+    const emojis = [...src].filter((c) => { const n = c.codePointAt(0)!; return (n >= 0x1f000 && n <= 0x1faff) || (n >= 0x2600 && n <= 0x27bf); });
+    expect(emojis).toEqual([]);
   });
 });
