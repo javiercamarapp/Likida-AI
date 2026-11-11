@@ -7,8 +7,9 @@ import type { ResultadoPendientes } from '@/lib/likida/vigia/historial/pendiente
 import type { RespuestaRapidaFila } from '@/lib/likida/vigia/historial/repo';
 import { FilaBorrar, FilaCritico, FilaRetirarRapida, FormaAltaGrupo, FormaAprobarRapida, FormaImportar, type AccionGrupos, type AccionLote } from './formas';
 import '../vigia.css';
-import { Aviso, BotonEnlace, StatusChip, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { BarList } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -72,12 +73,26 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
     { id: 'delta', titulo: tx('rest.cambio'), alinear: 'der', celda: (t) => (t.delta === null ? tx('rest.historico_corto') : `${t.delta > 0 ? '+' : ''}${numero(t.delta)}`) },
   ];
   return (
-    <MarcoPagina titulo={tx('rest.grupos_de_clientes_e_historico')} apoyo={tx('rest.marca_los_grupos_de_whatsapp_de')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
-      <Aviso tono="info">{tx('rest.sube_el_chat_exportado_para_ver')}</Aviso>
-
-      {grupos === null ? (
-        <Aviso tono="error">{tx('rest.los_grupos_de_clientes_todavia_no')}</Aviso>
-      ) : (
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.grupos_de_clientes_e_historico')}
+      apoyo={tx('rest.marca_los_grupos_de_whatsapp_de')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
+      avisos={(
+        <>
+          <Aviso tono="info">{tx('rest.sube_el_chat_exportado_para_ver')}</Aviso>
+          {grupos === null ? <Aviso tono="error">{tx('rest.los_grupos_de_clientes_todavia_no')}</Aviso> : null}
+        </>
+      )}
+      // Tira de cifras solo con histórico real subido: sin él no se pinta ninguna (nunca ceros que parezcan medición).
+      cifras={grupos !== null && reporte !== null && reporte.mensajes > 0 ? [
+        { etiqueta: tx('f26d.historial.mensajes'), valor: numero(reporte.mensajes) },
+        { etiqueta: tx('f26d.historial.de_clientes'), valor: numero(reporte.mensajesCliente) },
+        { etiqueta: tx('f26d.historial.del_equipo'), valor: numero(reporte.mensajesEquipo) },
+        { etiqueta: tx('f26d.historial.mediana'), valor: duracion(reporte.tiempos.medianaMin) },
+      ] : undefined}
+      etiquetaCifras={tx('rest.grupos_de_clientes_e_historico')}
+    >
+      {grupos !== null && (
         <>
           <Seccion id="grupos" titulo={tx('rest.grupos')} info="vigia_historial.grupos">
             {grupos.length === 0 ? (
@@ -192,6 +207,6 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
           </Seccion>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
