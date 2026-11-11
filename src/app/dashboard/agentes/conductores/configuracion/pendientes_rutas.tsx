@@ -6,6 +6,9 @@ import { Aviso, type AccionSitio } from '../sitios/formas';
 import type { PendienteRevision } from '@/lib/likida/conductor/rutas';
 import '../conductores.css';
 import { Boton } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MANTENIMIENTO DE RUTAS (T-A5-50): las rutas autorizadas que llevan tiempo sin revisarse, de la más descuidada a la menos,
@@ -16,8 +19,9 @@ import { Boton } from '@/app/ui-v2/componentes';
 export type FilaPendienteRuta = PendienteRevision;
 
 function Revisada() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
-  return <Boton type="submit" tamano="sm" loading={pending}>{pending ? 'Marcando…' : 'Revisada'}</Boton>;
+  return <Boton type="submit" tamano="sm" loading={pending}>{pending ? 'Marcando…' : tx('rest.revisada')}</Boton>;
 }
 
 const textoSitios = (r: FilaPendienteRuta['ruta']): string => {
@@ -27,10 +31,11 @@ const textoSitios = (r: FilaPendienteRuta['ruta']): string => {
   return 'corredor completo';
 };
 
-const textoAntiguedad = (dias: number | null): string =>
-  dias === null ? 'Nunca se ha revisado' : `Sin revisar hace ${dias} día${dias === 1 ? '' : 's'}`;
+const textoAntiguedad = (dias: number | null, tx: TAgentes = TR_ES.t): string =>
+  dias === null ? tx('rest.nunca_se_ha_revisado') : tx(dias === 1 ? 'rest.sin_revisar_hace_n_dias.uno' : 'rest.sin_revisar_hace_n_dias.otros', { n: dias });
 
 function Fila({ p, accion }: { p: FilaPendienteRuta; accion: AccionSitio }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, enviar] = useActionState(accion, null);
   return (
     <li className="rv-cd__item">
@@ -39,7 +44,7 @@ function Fila({ p, accion }: { p: FilaPendienteRuta; accion: AccionSitio }) {
         <div>
           <div><span className="rv-cd__medio">{p.ruta.corredor}</span> <span className="rv-cd__muted">· {textoSitios(p.ruta)}</span></div>
           <div className="rv-cd__nota">
-            {textoAntiguedad(p.diasSinRevisar)}{p.vencida ? ' · vencida: el chofer no la recibe hasta que la renueves' : ''}
+            {textoAntiguedad(p.diasSinRevisar)}{p.vencida ? tx('rest.vencida_el_chofer_no_la_recibe') : ''}
           </div>
         </div>
         <span className="rv-cd__fin"><Revisada /></span>
@@ -52,21 +57,21 @@ function Fila({ p, accion }: { p: FilaPendienteRuta; accion: AccionSitio }) {
 export function PendientesRutas({ pendientes, totalRutas, dias, accionRevisada }: {
   pendientes: FilaPendienteRuta[]; totalRutas: number; dias: number; accionRevisada?: AccionSitio;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   if (pendientes.length === 0) {
     return (
       <p role="status" className="rv-cd__nota">
         {totalRutas === 0
-          ? 'Todavía no hay rutas cargadas; cuando importes las primeras, aquí verás cuáles necesitan revisión.'
-          : `Todas las rutas se revisaron en los últimos ${dias} días. No hay nada pendiente.`}
+          ? tx('rest.todavia_no_hay_rutas_cargadas_cuando')
+          : tx('rest.todas_las_rutas_se_revisaron_en', { dias })}
       </p>
     );
   }
   return (
     <div className="rv-cd__pila--s">
       <p className="rv-cd__nota">
-        {pendientes.length} ruta{pendientes.length === 1 ? '' : 's'} sin revisar en {dias} días o más. Ábrela en Google Maps, confirma que sigue bien y marca «Revisada».
-      </p>
-      <ul className="rv-cd__lista" aria-label="Rutas pendientes de revisión">
+        {tx(pendientes.length === 1 ? 'rest.n_ruta_sin_revisar_en_dias.uno' : 'rest.n_ruta_sin_revisar_en_dias.otros', { n: pendientes.length, dias })}</p>
+      <ul className="rv-cd__lista" aria-label={tx('rest.rutas_pendientes_de_revision')}>
         {pendientes.map((p) => (accionRevisada
           ? <Fila key={p.ruta.id} p={p} accion={accionRevisada} />
           : (

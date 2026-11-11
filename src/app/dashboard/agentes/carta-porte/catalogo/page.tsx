@@ -9,7 +9,11 @@ import { sufijoTenant } from '../../../sufijo';
 import { guardarFilaCatalogo, importarCatalogoCsv } from './actions';
 import { VistaCatalogo, type CatalogoVista, type ClienteVista } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Catálogo del cliente' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.catalogo_del_cliente') };
+}
 
 export const dynamic = 'force-dynamic';
 

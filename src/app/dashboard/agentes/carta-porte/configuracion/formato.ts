@@ -4,9 +4,12 @@
 // coincidan.
 
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
-export const ROTULO_ARRANQUE = 'No definidos por el cliente: valores de arranque';
-export const FRASE_SIN_DESTINATARIO = 'el jefe de tráfico';
+export const rotuloArranque = (tx: TAgentes = TR_ES.t) => (tx('rest.no_definidos_por_el_cliente_valores'));
+export const ROTULO_ARRANQUE = rotuloArranque();
+export const fraseSinDestinatario = (tx: TAgentes = TR_ES.t) => (tx('rest.el_jefe_de_trafico'));
+export const FRASE_SIN_DESTINATARIO = fraseSinDestinatario();
 
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const CORREO = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
@@ -43,36 +46,36 @@ export function entradaDeTexto(t: CamposTexto): Record<string, unknown> {
 export type ErroresCampos = Partial<Record<keyof ConfigSalida, string>>;
 
 /** Mensajes en español por campo, sin ir al servidor. Vacío = todo bien. */
-export function erroresEnLinea(t: CamposTexto): ErroresCampos {
+export function erroresEnLinea(t: CamposTexto, tx: TAgentes = TR_ES.t): ErroresCampos {
   const e: ErroresCampos = {};
   const entero = (v: string): boolean => !vacio(v) && Number.isFinite(Number(v)) && Number.isInteger(Number(v));
-  if (vacio(t.reintentosMax) || !Number.isFinite(Number(t.reintentosMax))) e.reintentosMax = 'Reintentos: escribe un número.';
-  else if (!entero(t.reintentosMax)) e.reintentosMax = 'Reintentos: debe ser un número entero.';
-  else if (Number(t.reintentosMax) < 0) e.reintentosMax = 'Reintentos: el mínimo es 0.';
-  else if (Number(t.reintentosMax) > 50) e.reintentosMax = 'Reintentos: el máximo es 50.';
+  if (vacio(t.reintentosMax) || !Number.isFinite(Number(t.reintentosMax))) e.reintentosMax = tx('rest.reintentos_escribe_un_numero');
+  else if (!entero(t.reintentosMax)) e.reintentosMax = tx('rest.reintentos_debe_ser_un_numero_entero');
+  else if (Number(t.reintentosMax) < 0) e.reintentosMax = tx('rest.reintentos_el_minimo_es_0');
+  else if (Number(t.reintentosMax) > 50) e.reintentosMax = tx('rest.reintentos_el_maximo_es_50');
   if (vacio(t.frecuenciaMin) || !Number.isFinite(Number(t.frecuenciaMin))) e.frecuenciaMin = 'Frecuencia: escribe los minutos.';
-  else if (!entero(t.frecuenciaMin)) e.frecuenciaMin = 'Frecuencia: debe ser un número entero de minutos.';
-  else if (Number(t.frecuenciaMin) < 5) e.frecuenciaMin = 'Frecuencia: el mínimo es 5 minutos.';
-  else if (Number(t.frecuenciaMin) > 1440) e.frecuenciaMin = 'Frecuencia: el máximo es 1440 minutos (24 horas).';
-  if (!vacio(t.ventanaInicio) && !HHMM.test(t.ventanaInicio.trim())) e.ventanaInicio = 'Inicio de la ventana: usa el formato HH:MM (24 horas).';
-  if (!vacio(t.ventanaFin) && !HHMM.test(t.ventanaFin.trim())) e.ventanaFin = 'Fin de la ventana: usa el formato HH:MM (24 horas).';
-  if (!e.ventanaInicio && !e.ventanaFin && vacio(t.ventanaInicio) !== vacio(t.ventanaFin)) e.ventanaInicio = 'Ventana horaria: escribe inicio y fin, o deja ambos vacíos.';
-  if (!vacio(t.destinatarioAlertaCorreo) && !CORREO.test(t.destinatarioAlertaCorreo.trim())) e.destinatarioAlertaCorreo = 'Correo de la alerta: el correo no es válido.';
-  if (!vacio(t.destinatarioRevisionCorreo) && !CORREO.test(t.destinatarioRevisionCorreo.trim())) e.destinatarioRevisionCorreo = 'Correo de la revisión: el correo no es válido.';
+  else if (!entero(t.frecuenciaMin)) e.frecuenciaMin = tx('rest.frecuencia_debe_ser_un_numero_entero');
+  else if (Number(t.frecuenciaMin) < 5) e.frecuenciaMin = tx('rest.frecuencia_el_minimo_es_5_minutos');
+  else if (Number(t.frecuenciaMin) > 1440) e.frecuenciaMin = tx('rest.frecuencia_el_maximo_es_1440_minutos');
+  if (!vacio(t.ventanaInicio) && !HHMM.test(t.ventanaInicio.trim())) e.ventanaInicio = tx('rest.inicio_de_la_ventana_usa_el');
+  if (!vacio(t.ventanaFin) && !HHMM.test(t.ventanaFin.trim())) e.ventanaFin = tx('rest.fin_de_la_ventana_usa_el');
+  if (!e.ventanaInicio && !e.ventanaFin && vacio(t.ventanaInicio) !== vacio(t.ventanaFin)) e.ventanaInicio = tx('rest.ventana_horaria_escribe_inicio_y_fin');
+  if (!vacio(t.destinatarioAlertaCorreo) && !CORREO.test(t.destinatarioAlertaCorreo.trim())) e.destinatarioAlertaCorreo = tx('rest.correo_de_la_alerta_el_correo');
+  if (!vacio(t.destinatarioRevisionCorreo) && !CORREO.test(t.destinatarioRevisionCorreo.trim())) e.destinatarioRevisionCorreo = tx('rest.correo_de_la_revision_el_correo');
   return e;
 }
 
 /** «Si el requerimiento no existe: reintento cada 60 min, hasta 6 veces, luego aviso a <destinatario>». */
-export function frasePrevia(reintentos: number, frecuenciaMin: number, destinatario: string): string {
+export function frasePrevia(reintentos: number, frecuenciaMin: number, destinatario: string, tx: TAgentes = TR_ES.t): string {
   const veces = reintentos === 1 ? '1 vez' : `${reintentos} veces`;
-  if (reintentos === 0) return `Si el requerimiento no existe: no se reintenta; se avisa de inmediato a ${destinatario}.`;
-  return `Si el requerimiento no existe: reintento cada ${frecuenciaMin} min, hasta ${veces}, luego aviso a ${destinatario}.`;
+  if (reintentos === 0) return tx('rest.si_el_requerimiento_no_existe_no', { destinatario });
+  return tx('rest.si_el_requerimiento_no_existe_reintento', { frecuenciaMin, veces, destinatario });
 }
 
 /** A quién llega el aviso hoy, en palabras: correo y/o persona configurados; si no hay nada, el jefe de tráfico. */
-export function nombreDestinatario(correo: string, usuarioNombre: string | null): string {
+export function nombreDestinatario(correo: string, usuarioNombre: string | null, tx: TAgentes = TR_ES.t): string {
   const partes = [usuarioNombre, vacio(correo) ? null : correo.trim()].filter((x): x is string => !!x);
-  return partes.length > 0 ? partes.join(' y ') : FRASE_SIN_DESTINATARIO;
+  return partes.length > 0 ? partes.join(' y ') : fraseSinDestinatario(tx);
 }
 
 /** Contrato que PS entregará para «Probar conexión». Mientras no exista, el botón no se pinta. */

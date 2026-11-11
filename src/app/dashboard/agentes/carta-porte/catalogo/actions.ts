@@ -14,6 +14,7 @@ import {
 } from '@/lib/likida/carta_porte_docs/catalogo_import';
 import { COLUMNAS_CLAVE, columnasDeFila, validarRegistro } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import type { ResultadoAccion } from '@/app/dashboard/carta-porte/documentos/forma_accion';
+import { getT } from '@/lib/i18n/servidor';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // IMPORTAR EL CATÁLOGO DEL CLIENTE POR CSV (T-A3-21).
@@ -37,20 +38,21 @@ const esTipo = (v: string): v is TipoPlantilla => (TIPOS_PLANTILLA as readonly s
  * solo si ninguna fila trae error). Campos: `tipo` (producto | parte | cliente_numero) y `archivo` (el CSV).
  */
 export async function importarCatalogoCsv(_previo: EstadoImportacion, fd: FormData): Promise<EstadoImportacion> {
+  const { t: tx } = await getT('agentes');
   // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
   // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
   const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
   if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede administrar el catálogo de Carta Porte.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.tu_rol_no_puede_administrar_el') };
   try {
     const tipo = String(fd.get('tipo') ?? '');
-    if (!esTipo(tipo)) return { ok: false, error: 'Elige qué vas a importar: productos, remitentes y destinatarios, o la tabla cliente → número.' };
+    if (!esTipo(tipo)) return { ok: false, error: tx('rest.elige_que_vas_a_importar_productos') };
     const archivo = fd.get('archivo');
     if (!(archivo instanceof File) || archivo.size === 0) return { ok: false, error: 'Elige un archivo CSV.' };
-    if (archivo.size > TOPE_BYTES_IMPORTACION) return { ok: false, error: `El archivo pesa más de ${TOPE_BYTES_IMPORTACION / 1024 / 1024} MB. Pártelo en varios.` };
+    if (archivo.size > TOPE_BYTES_IMPORTACION) return { ok: false, error: tx('rest.el_archivo_pesa_mas_de_mb', { v: TOPE_BYTES_IMPORTACION / 1024 / 1024 }) };
     const confirmar = String(fd.get('intencion') ?? '') === 'confirmar';
     if (!(await rateLimit(`cp-catalogo-import:${s.tenantId}`, confirmar ? 10 : 20, 60_000))) {
-      return { ok: false, error: 'Demasiadas importaciones en poco tiempo. Espera un minuto.' };
+      return { ok: false, error: tx('rest.demasiadas_importaciones_en_poco_tiempo_espera') };
     }
     const r = await importarCatalogo(
       { tenantId: s.tenantId, actorId: s.userId, tipo, bytes: new Uint8Array(await archivo.arrayBuffer()), confirmar },
@@ -67,7 +69,7 @@ export async function importarCatalogoCsv(_previo: EstadoImportacion, fd: FormDa
     return { ...r, tipo };
   } catch (e) {
     logger.error('carta_porte_docs.catalogo_import', { error: e instanceof Error ? e.message : String(e) });
-    return { ok: false, error: e instanceof Error && /migración 0792/.test(e.message) ? e.message : mensajeParaPantalla(e, 'importar el catálogo') };
+    return { ok: false, error: e instanceof Error && /migración 0792/.test(e.message) ? e.message : mensajeParaPantalla(e, tx('rest.importar_el_catalogo')) };
   }
 }
 
@@ -78,20 +80,21 @@ export async function importarCatalogoCsv(_previo: EstadoImportacion, fd: FormDa
  * (`validarRegistro`), y el cliente tiene que ser de la flota de la sesión. Deja bitácora con solo el tipo y el modo.
  */
 export async function guardarFilaCatalogo(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t: tx } = await getT('agentes');
   // MX-002: la flota que se pintó es la que escribe (la pantalla firma la flota en un campo oculto; la cookie del selector
   // es compartida entre pestañas). Sin firma válida —o con otra flota— no se escribe nada.
   const s = await resolverTenantAtadoFirmado(RUTA_CATALOGO, fd.get(CAMPO_FLOTA_PINTADA));
   if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA_CATALOGO)) return { ok: false, error: 'Tu rol no puede administrar el catálogo de Carta Porte.' };
+  if (!puedeVerRuta(s.rol, RUTA_CATALOGO)) return { ok: false, error: tx('rest.tu_rol_no_puede_administrar_el') };
   try {
     const tipo = String(fd.get('tipo') ?? '');
-    if (!esTipo(tipo)) return { ok: false, error: 'No reconozco qué parte del catálogo quieres cambiar. Recarga la pantalla.' };
+    if (!esTipo(tipo)) return { ok: false, error: tx('rest.no_reconozco_que_parte_del_catalogo') };
     const modo = String(fd.get('modo') ?? '') === 'nuevo' ? 'nuevo' : 'editar';
     const clienteId = String(fd.get('cliente_id') ?? '');
-    if (!(await rateLimit(`cp-catalogo-fila:${s.tenantId}`, 60, 60_000))) return { ok: false, error: 'Demasiados cambios en poco tiempo. Espera un minuto.' };
+    if (!(await rateLimit(`cp-catalogo-fila:${s.tenantId}`, 60, 60_000))) return { ok: false, error: tx('rest.demasiados_cambios_en_poco_tiempo_espera') };
     const puerto = puertoSupabase();
     // El cliente tiene que ser de ESTA flota: la lectura ya viene acotada al tenant de la sesión.
-    if (!(await puerto.clientes(s.tenantId)).some((c) => c.id === clienteId)) return { ok: false, error: 'Ese cliente no es de tu flota.' };
+    if (!(await puerto.clientes(s.tenantId)).some((c) => c.id === clienteId)) return { ok: false, error: tx('rest.ese_cliente_no_es_de_tu') };
 
     const valores: Record<string, string> = {};
     for (const c of columnasDeFila(tipo)) valores[c] = String(fd.get(`c_${c}`) ?? '');
@@ -102,17 +105,17 @@ export async function guardarFilaCatalogo(_previo: ResultadoAccion, fd: FormData
     const existentes = await puerto.existentes(s.tenantId, tipo, [clienteId]);
     const llave = (r: Record<string, unknown>): string => COLUMNAS_CLAVE[tipo].map((c) => String(r[c] ?? '')).join('|');
     const yaExiste = existentes.some((e) => llave(e) === llave(v.registro));
-    if (modo === 'editar' && !yaExiste) return { ok: false, error: 'Esa fila ya no existe. Recarga la pantalla.' };
-    if (modo === 'nuevo' && yaExiste) return { ok: false, error: 'Esa fila ya existe en el catálogo: edítala en lugar de agregarla.' };
+    if (modo === 'editar' && !yaExiste) return { ok: false, error: tx('rest.esa_fila_ya_no_existe_recarga') };
+    if (modo === 'nuevo' && yaExiste) return { ok: false, error: tx('rest.esa_fila_ya_existe_en_el') };
     await puerto.aplicarLote(s.tenantId, tipo, [v.registro], s.userId);
     await anotarBitacora(
       { tenantId: s.tenantId, actor: { id: s.userId }, accion: 'ccp.catalogo_editado', entidad: 'tenant', entidadId: s.tenantId, detalle: { tipo, modo } },
       { evento: 'carta_porte_docs.bitacora_no_escribio' },
     );
     revalidatePath(RUTA_CATALOGO);
-    return { ok: true, mensaje: modo === 'nuevo' ? 'Agregado al catálogo.' : 'Cambios guardados en el catálogo.' };
+    return { ok: true, mensaje: modo === 'nuevo' ? tx('rest.agregado_al_catalogo') : tx('rest.cambios_guardados_en_el_catalogo') };
   } catch (e) {
     logger.error('carta_porte_docs.catalogo_fila', { error: e instanceof Error ? e.message : String(e) });
-    return { ok: false, error: e instanceof Error && /migración 0792/.test(e.message) ? e.message : mensajeParaPantalla(e, 'guardar en el catálogo') };
+    return { ok: false, error: e instanceof Error && /migración 0792/.test(e.message) ? e.message : mensajeParaPantalla(e, tx('rest.guardar_en_el_catalogo')) };
   }
 }

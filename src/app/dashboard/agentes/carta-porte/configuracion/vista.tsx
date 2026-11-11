@@ -12,6 +12,8 @@ import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respues
 import { ROTULO_ARRANQUE, erroresEnLinea, frasePrevia, nombreDestinatario, textoDeConfig, type CamposTexto } from './formato';
 import '../carta-porte.css';
 import { Aviso, AvisoCompacto, BotonEnlace, CampoSelect, CampoTexto, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 /**
  * LA PANTALLA «CONFIGURACIÓN DE LA SALIDA» (T-A3-32): cómo sale la plantilla hacia el sistema del cliente, cuántas veces se
@@ -25,21 +27,22 @@ export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La
 export interface AccionesConfiguracion { guardar: AccionDoc; probar: AccionDoc }
 
 function Formulario({ config, personas, conector, ver }: { config: ConfigSalida; personas: PersonaVista[]; conector: { hay: boolean }; ver: VerComo }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [t, setT] = useState<CamposTexto>(() => textoDeConfig(config));
   const poner = (campo: keyof CamposTexto) => (e: { target: { value: string } }) => setT((p) => ({ ...p, [campo]: e.target.value }));
   const errores = erroresEnLinea(t);
   const nombreAlerta = personas.find((p) => p.id === t.destinatarioAlertaUsuario)?.nombre ?? null;
   const apiBloqueado = !conector.hay;
   const frase = errores.reintentosMax || errores.frecuenciaMin
-    ? 'Corrige los reintentos y la frecuencia para ver cómo quedaría el aviso.'
-    : frasePrevia(Number(t.reintentosMax), Number(t.frecuenciaMin), nombreDestinatario(t.destinatarioAlertaCorreo, nombreAlerta));
+    ? tx('rest.corrige_los_reintentos_y_la_frecuencia')
+    : frasePrevia(Number(t.reintentosMax), Number(t.frecuenciaMin), nombreDestinatario(t.destinatarioAlertaCorreo, nombreAlerta, tx));
   const campo = (id: keyof CamposTexto, rotulo: string, props: { inputMode?: 'numeric'; placeholder?: string; tipo?: 'email' } = {}) => (
     <CampoTexto id={`cs-${id}`} etiqueta={rotulo} name={id} value={t[id]} onChange={poner(id)} autoComplete="off" spellCheck={false}
       error={errores[id]} inputMode={props.inputMode} placeholder={props.placeholder} tipo={props.tipo} />
   );
   const persona = (id: keyof CamposTexto, rotulo: string) => (
     <CampoSelect id={`cs-${id}`} etiqueta={rotulo} name={id} value={t[id]} onChange={poner(id)}>
-      <option value="">Nadie en particular</option>
+      <option value="">{tx('rest.nadie_en_particular')}</option>
       {personas.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
     </CampoSelect>
   );
@@ -50,52 +53,52 @@ function Formulario({ config, personas, conector, ver }: { config: ConfigSalida;
       {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
       {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
 
-      <Tarjeta titulo="Cómo sale la plantilla">
+      <Tarjeta titulo={tx('rest.como_sale_la_plantilla')}>
         <div className="rv-cp__pila">
-          <CampoSelect id="cs-modo" etiqueta="Modo de salida" name="modo" value={t.modo} onChange={poner('modo')}
-            ayuda={apiBloqueado ? 'El modo API se activa cuando haya una conexión probada con el sistema del cliente. Mientras tanto, la plantilla se descarga y se sube a mano.' : undefined}>
-            <option value="descarga">Descarga (la subes tú al sistema del cliente)</option>
-            <option value="api" disabled={apiBloqueado}>API (el agente la sube solo){apiBloqueado ? ' — todavía no disponible' : ''}</option>
+          <CampoSelect id="cs-modo" etiqueta={tx('rest.modo_de_salida')} name="modo" value={t.modo} onChange={poner('modo')}
+            ayuda={apiBloqueado ? tx('rest.el_modo_api_se_activa_cuando') : undefined}>
+            <option value="descarga">{tx('rest.descarga_la_subes_tu_al_sistema')}</option>
+            <option value="api" disabled={apiBloqueado}>{tx('rest.api_el_agente_la_sube_solo')}{apiBloqueado ? tx('rest.todavia_no_disponible') : ''}</option>
           </CampoSelect>
-          {apiBloqueado && <AvisoCompacto tono="warn" resumen="La subida automática al sistema del cliente NO está disponible todavía: depende de la API que el cliente entregue." mas="Hasta entonces todo envío es descarga y subida a mano, y la existencia del requerimiento en su sistema no se puede verificar («desconocido»)." />}
+          {apiBloqueado && <AvisoCompacto tono="warn" resumen={tx('rest.la_subida_automatica_al_sistema_del')} mas={tx('rest.hasta_entonces_todo_envio_es_descarga')} />}
           <div className="rv-cp__cuad">
-            <CampoSelect id="cs-plantilla" etiqueta="Plantilla por defecto" name="plantillaPorDefecto" value={t.plantillaPorDefecto} onChange={poner('plantillaPorDefecto')}>
-              <option value="normal">Normal</option>
-              <option value="nueva">Nueva</option>
+            <CampoSelect id="cs-plantilla" etiqueta={tx('rest.plantilla_por_defecto')} name="plantillaPorDefecto" value={t.plantillaPorDefecto} onChange={poner('plantillaPorDefecto')}>
+              <option value="normal">{tx('rest.normal')}</option>
+              <option value="nueva">{tx('rest.nueva')}</option>
             </CampoSelect>
-            <CampoSelect id="cs-distancia" etiqueta="Formato de la distancia" name="distanciaFormato" value={t.distanciaFormato} onChange={poner('distanciaFormato')}>
-              <option value="texto_km">Texto con «km»</option>
-              <option value="numero">Solo el número</option>
+            <CampoSelect id="cs-distancia" etiqueta={tx('rest.formato_de_la_distancia')} name="distanciaFormato" value={t.distanciaFormato} onChange={poner('distanciaFormato')}>
+              <option value="texto_km">{tx('rest.texto_con_km')}</option>
+              <option value="numero">{tx('rest.solo_el_numero')}</option>
             </CampoSelect>
           </div>
         </div>
       </Tarjeta>
 
-      <Tarjeta titulo="Reintentos cuando el requerimiento no existe">
+      <Tarjeta titulo={tx('rest.reintentos_cuando_el_requerimiento_no_existe')}>
         <div className="rv-cp__pila">
           <div className="rv-cp__cuad">
             {campo('reintentosMax', 'Reintentos (veces)', { inputMode: 'numeric' })}
             {campo('frecuenciaMin', 'Frecuencia (minutos entre reintentos)', { inputMode: 'numeric' })}
-            {campo('ventanaInicio', 'Ventana: desde (HH:MM, hora de la flota)', { placeholder: '08:00' })}
-            {campo('ventanaFin', 'Ventana: hasta (HH:MM, hora de la flota)', { placeholder: '20:00' })}
+            {campo('ventanaInicio', tx('rest.ventana_desde_hh_mm_hora_de'), { placeholder: '08:00' })}
+            {campo('ventanaFin', tx('rest.ventana_hasta_hh_mm_hora_de'), { placeholder: '20:00' })}
           </div>
-          <CampoSelect id="cs-desconocido" etiqueta="Si el sistema del cliente no puede decir si el requerimiento existe" name="siTmsDesconocido" value={t.siTmsDesconocido} onChange={poner('siTmsDesconocido')}>
-            <option value="retener">Retener y avisar</option>
-            <option value="enviar">Enviar de todos modos</option>
+          <CampoSelect id="cs-desconocido" etiqueta={tx('rest.si_el_sistema_del_cliente_no')} name="siTmsDesconocido" value={t.siTmsDesconocido} onChange={poner('siTmsDesconocido')}>
+            <option value="retener">{tx('rest.retener_y_avisar')}</option>
+            <option value="enviar">{tx('rest.enviar_de_todos_modos')}</option>
           </CampoSelect>
           <p data-testid="vista-previa" className="rv-cp__nota">{frase}</p>
         </div>
       </Tarjeta>
 
-      <Tarjeta titulo="A quién se avisa">
+      <Tarjeta titulo={tx('rest.a_quien_se_avisa')}>
         <div className="rv-cp__pila">
           <div className="rv-cp__cuad">
             {persona('destinatarioAlertaUsuario', 'Alertas: persona')}
             {campo('destinatarioAlertaCorreo', 'Alertas: correo', { tipo: 'email' })}
-            {persona('destinatarioRevisionUsuario', 'Revisión de rechazos: persona')}
-            {campo('destinatarioRevisionCorreo', 'Revisión de rechazos: correo', { tipo: 'email' })}
+            {persona('destinatarioRevisionUsuario', tx('rest.revision_de_rechazos_persona'))}
+            {campo('destinatarioRevisionCorreo', tx('rest.revision_de_rechazos_correo'), { tipo: 'email' })}
           </div>
-          <p className="rv-cp__nota">Si no eliges a nadie, el aviso llega al jefe de tráfico por WhatsApp.</p>
+          <p className="rv-cp__nota">{tx('rest.si_no_eliges_a_nadie_el')}</p>
         </div>
       </Tarjeta>
     </>
@@ -112,13 +115,14 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
   primerMes?: PrimerMesFila | 'no_disponible';
   accionPrimerMes?: AccionDoc;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   return (
-    <MarcoPagina titulo="Configuración de la salida" apoyo="Cómo sale la plantilla hacia el sistema del cliente y qué hace el agente cuando algo falta." acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>Agente de Carta Porte</BotonEnlace>}>
-      {esArranque && <Aviso tono="warn">{ROTULO_ARRANQUE}. Ajústalos cuando el cliente los defina.</Aviso>}
+    <MarcoPagina titulo={tx('rest.configuracion_de_la_salida')} apoyo={tx('rest.como_sale_la_plantilla_hacia_el')} acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.agente_de_carta_porte')}</BotonEnlace>}>
+      {esArranque && <Aviso tono="warn">{ROTULO_ARRANQUE}{tx('rest.ajustalos_cuando_el_cliente_los_defina')}</Aviso>}
 
       <FormaAccion accion={acciones.guardar} className="rv-cp__pila">
         <Formulario config={config} personas={personas} conector={conector} ver={ver} />
-        <BotonEnvio etiqueta="Guardar configuración" pendiente="Guardando…" />
+        <BotonEnvio etiqueta={tx('conductores.forma.guardar_configuracion')} pendiente={tx('cobranza.formagasto.guardando')} />
       </FormaAccion>
       {conector.puedeProbar && (
         <FormaAccion accion={acciones.probar} className="rv-cp__pila">
@@ -126,12 +130,12 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
           {ver.rol && <input type="hidden" name="rol" value={ver.rol} />}
           {ver.vista && <input type="hidden" name="vista" value={ver.vista} />}
           {ver.flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={ver.flota} />}
-          <BotonEnvio variante="secundario" etiqueta="Probar conexión" pendiente="Probando…" />
+          <BotonEnvio variante="secundario" etiqueta={tx('rest.probar_conexion')} pendiente={tx('rest.probando')} />
         </FormaAccion>
       )}
       {primerMes && accionPrimerMes && <SeccionPrimerMes primerMes={primerMes} ver={ver} accion={accionPrimerMes} />}
       {accionesCcp && ccp === null && (
-        <Aviso tono="warn">No se pudieron leer los CCP timbrados recibidos. Recarga la pantalla; si sigue igual, avisa a soporte.</Aviso>
+        <Aviso tono="warn">{tx('rest.no_se_pudieron_leer_los_ccp')}</Aviso>
       )}
       {accionesCcp && ccp && <SeccionCcp activa={ccp.activa} filas={ccp.filas} ver={ver} acciones={accionesCcp} />}
     </MarcoPagina>

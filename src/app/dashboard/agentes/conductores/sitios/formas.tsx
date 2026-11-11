@@ -6,6 +6,9 @@ import { Save, Upload } from 'lucide-react';
 import '../conductores.css';
 import { Aviso as AvisoV2, Boton, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Icono } from '@/app/ui-v2/componentes';
 import { TIPOS_SITIO } from '@/lib/likida/conductor/sitios';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL EDITOR MÍNIMO DE SITIOS Y EL IMPORTADOR CSV (0385).
@@ -20,7 +23,7 @@ export type ResultadoSitio =
   | null;
 export type AccionSitio = (previo: ResultadoSitio, fd: FormData) => Promise<ResultadoSitio>;
 
-const TIPO_TEXTO: Record<string, string> = { cliente: 'Cliente', planta: 'Planta', anden: 'Andén', patio: 'Patio', punto_interes: 'Punto de interés' };
+const tipoTexto = (tx: TAgentes = TR_ES.t): Record<string, string> => ({ cliente: tx('vigia.vista.cliente'), planta: tx('rest.planta'), anden: tx('rest.anden'), patio: tx('rest.patio'), punto_interes: tx('rest.punto_de_interes') });
 
 function Boton1({ texto, icono }: { texto: string; icono: 'guardar' | 'subir' }) {
   const { pending } = useFormStatus();
@@ -55,42 +58,44 @@ export function FormaSitio({ accion, inicial, clientes, padres }: {
   accion: AccionSitio; inicial: SitioEditable;
   clientes: Array<{ id: string; nombre: string }>; padres: Array<{ id: string; nombre: string }>;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="rv-cd__pila" aria-label={inicial.id ? 'Editar sitio' : 'Nuevo sitio'}>
+    <form action={enviar} className="rv-cd__pila" aria-label={inicial.id ? tx('rest.editar_sitio') : tx('rest.nuevo_sitio')}>
       {inicial.id && <input type="hidden" name="id" value={inicial.id} />}
       <div className="rv-cd__cuad">
-        <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={inicial.nombre} required maxLength={120} />
-        <CampoSelect etiqueta="Tipo" name="tipo" defaultValue={inicial.tipo}>
-          {TIPOS_SITIO.map((t) => <option key={t} value={t}>{TIPO_TEXTO[t] ?? t}</option>)}
+        <CampoTexto etiqueta={tx('conductores.forma.nombre')} name="nombre" defaultValue={inicial.nombre} required maxLength={120} />
+        <CampoSelect etiqueta={tx('rest.tipo')} name="tipo" defaultValue={inicial.tipo}>
+          {TIPOS_SITIO.map((t) => <option key={t} value={t}>{tipoTexto(tx)[t] ?? t}</option>)}
         </CampoSelect>
-        <CampoTexto etiqueta="Código en el sistema del cliente (opcional)" name="codigo" defaultValue={inicial.codigo} maxLength={40} />
-        <CampoTexto etiqueta="Latitud (grados decimales)" name="lat" defaultValue={inicial.lat} required inputMode="decimal" placeholder="20.7200" />
-        <CampoTexto etiqueta="Longitud (negativa en México)" name="lng" defaultValue={inicial.lng} required inputMode="decimal" placeholder="-103.3900" />
-        <CampoTexto etiqueta="Radio en metros (25 a 100,000)" name="radio_m" defaultValue={inicial.radio_m} required inputMode="numeric" />
-        <CampoTexto etiqueta="Dirección (solo referencia; no se usa para calcular coordenadas)" name="direccion" defaultValue={inicial.direccion} maxLength={200} />
-        <CampoSelect etiqueta="Cliente (opcional)" name="cliente_id" defaultValue={inicial.cliente_id}>
+        <CampoTexto etiqueta={tx('rest.codigo_en_el_sistema_del_cliente')} name="codigo" defaultValue={inicial.codigo} maxLength={40} />
+        <CampoTexto etiqueta={tx('rest.latitud_grados_decimales')} name="lat" defaultValue={inicial.lat} required inputMode="decimal" placeholder="20.7200" />
+        <CampoTexto etiqueta={tx('rest.longitud_negativa_en_mexico')} name="lng" defaultValue={inicial.lng} required inputMode="decimal" placeholder="-103.3900" />
+        <CampoTexto etiqueta={tx('rest.radio_en_metros_25_a_100')} name="radio_m" defaultValue={inicial.radio_m} required inputMode="numeric" />
+        <CampoTexto etiqueta={tx('rest.direccion_solo_referencia_no_se_usa')} name="direccion" defaultValue={inicial.direccion} maxLength={200} />
+        <CampoSelect etiqueta={tx('rest.cliente_opcional')} name="cliente_id" defaultValue={inicial.cliente_id}>
           <option value="">—</option>{clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
         </CampoSelect>
-        <CampoSelect etiqueta="Pertenece a (opcional; un andén cuelga de su planta)" name="padre_id" defaultValue={inicial.padre_id}>
+        <CampoSelect etiqueta={tx('rest.pertenece_a_opcional_un_anden_cuelga')} name="padre_id" defaultValue={inicial.padre_id}>
           <option value="">—</option>{padres.filter((p) => p.id !== inicial.id).map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
         </CampoSelect>
       </div>
-      <div className="rv-cd__linea"><Boton1 texto={inicial.id ? 'Guardar cambios' : 'Crear sitio'} icono="guardar" /></div>
+      <div className="rv-cd__linea"><Boton1 texto={inicial.id ? tx('rest.guardar_cambios') : tx('rest.crear_sitio')} icono="guardar" /></div>
       <Aviso r={estado} />
     </form>
   );
 }
 
 export function FormaImportar({ accion }: { accion: AccionSitio }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="rv-cd__form" aria-label="Importar sitios desde CSV" encType="multipart/form-data">
-      <CampoArchivo etiqueta="Archivo CSV" name="archivo" accept=".csv,text/csv,text/plain" />
-      <CampoTextarea etiqueta="…o pega el contenido" name="csv" rows={5} spellCheck={false} claseControl="rv-cd__mono"
-        placeholder={'codigo,nombre,tipo,lat,lng,radio_m\nPL-ZAP,Planta Zapopan,planta,20.7200,-103.3900,300'} />
-      <CampoTexto etiqueta="Radio por defecto en metros (solo si el archivo no trae la columna)" name="radio_defecto" inputMode="numeric" placeholder="vacío = el archivo manda" />
-      <div className="rv-cd__linea"><Boton1 texto="Importar" icono="subir" /></div>
+    <form action={enviar} className="rv-cd__form" aria-label={tx('rest.importar_sitios_desde_csv')} encType="multipart/form-data">
+      <CampoArchivo etiqueta={tx('rest.archivo_csv')} name="archivo" accept=".csv,text/csv,text/plain" />
+      <CampoTextarea etiqueta={tx('rest.o_pega_el_contenido')} name="csv" rows={5} spellCheck={false} claseControl="rv-cd__mono"
+        placeholder={tx('rest.codigo_nombre_tipo_lat_lng_radio')} />
+      <CampoTexto etiqueta={tx('rest.radio_por_defecto_en_metros_solo')} name="radio_defecto" inputMode="numeric" placeholder={tx('rest.vacio_el_archivo_manda')} />
+      <div className="rv-cd__linea"><Boton1 texto={tx('rest.importar')} icono="subir" /></div>
       <Aviso r={estado} />
     </form>
   );

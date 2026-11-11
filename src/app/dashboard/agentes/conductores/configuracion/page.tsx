@@ -20,7 +20,11 @@ import { esTelefonoDemo } from '@/lib/meta/telefono_demo';
 import type { DatosVoluntarios, ResultadoConfig } from './forma';
 import type { ResultadoSitio } from '../sitios/formas';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Configuración del agente Conductor' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('conductores.forma.configuracion_del_agente_conductor') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -30,9 +34,10 @@ type ParametrosPagina = { vista?: string; tenant?: string; rol?: string; q?: str
 
 /** A nivel de módulo (no dentro del componente): una acción `'use server'` no puede cerrar sobre funciones locales. */
 async function ejecutarVoluntario(cual: 'alta' | 'baja', sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoConfig> {
+  const { t: tx } = await getT('agentes');
   const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
   if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };
   const email = await emailDeUsuario(s.userId).catch(() => null);
   const ctx = { tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email };
   const r = cual === 'alta' ? await altaVoluntarioDelPanel(ctx, fd) : await bajaVoluntarioDelPanel(ctx, fd);
@@ -42,13 +47,14 @@ async function ejecutarVoluntario(cual: 'alta' | 'baja', sp: ParametrosPagina, t
 
 /** T-A5-48: importar rutas autorizadas (CSV). A nivel de módulo por la misma razón. El permiso y el tenant salen de la SESIÓN. */
 async function ejecutarImportarRutas(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const { t: tx } = await getT('agentes');
   const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
   if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };
   const archivo = fd.get('archivo');
   let texto = '';
   if (archivo instanceof File && archivo.size > 0) {
-    if (archivo.size > MAX_BYTES_CSV_RUTAS) return { ok: false, error: 'El archivo pesa más de 1 MB; divídelo en partes.' };
+    if (archivo.size > MAX_BYTES_CSV_RUTAS) return { ok: false, error: tx('rest.el_archivo_pesa_mas_de_1') };
     texto = await archivo.text();
   } else if (typeof fd.get('csv') === 'string') texto = fd.get('csv') as string;
   const r = await importarRutasDelPanel({ tenantId: s.tenantId, rol: s.rol }, { texto });
@@ -58,9 +64,10 @@ async function ejecutarImportarRutas(sp: ParametrosPagina, tenantRenderizado: st
 
 /** T-A5-50: «Revisada». A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
 async function ejecutarRutaRevisada(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const { t: tx } = await getT('agentes');
   const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
   if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };
   const id = fd.get('id');
   const r = await marcarRutaRevisadaDelPanel({ tenantId: s.tenantId, rol: s.rol }, { id: typeof id === 'string' ? id : '' });
   if (r.ok) revalidatePath(RUTA);
@@ -69,9 +76,10 @@ async function ejecutarRutaRevisada(sp: ParametrosPagina, tenantRenderizado: str
 
 /** T-A5-52: alta de un documento del catálogo de un cliente. A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
 async function ejecutarAltaDocumento(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const { t: tx } = await getT('agentes');
   const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
   if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };
   const r = await altaDocumentoDelPanel({ tenantId: s.tenantId, rol: s.rol }, {
     clienteId: fd.get('clienteId'), nombre: fd.get('nombre'), tipo: fd.get('tipo'), requiereFirma: fd.get('requiereFirma'), requiereSello: fd.get('requiereSello'),
   });
@@ -81,9 +89,10 @@ async function ejecutarAltaDocumento(sp: ParametrosPagina, tenantRenderizado: st
 
 /** T-A5-52: baja de un documento del catálogo. A nivel de módulo por la misma razón; el permiso y el tenant salen de la SESIÓN. */
 async function ejecutarBajaDocumento(sp: ParametrosPagina, tenantRenderizado: string, fd: FormData): Promise<ResultadoSitio> {
+  const { t: tx } = await getT('agentes');
   const s = await resolverTenantAtado(RUTA, sp, tenantRenderizado);
   if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };
   const id = fd.get('id');
   const r = await bajaDocumentoDelPanel({ tenantId: s.tenantId, rol: s.rol }, { id: typeof id === 'string' ? id : '' });
   if (r.ok) revalidatePath(RUTA);
@@ -96,6 +105,7 @@ async function ejecutarBajaDocumento(sp: ParametrosPagina, tenantRenderizado: st
  * El jefe de tráfico la ve; el dueño la guarda (misma validación que el PUT).
  */
 export default async function PaginaConfigConductor({ searchParams }: { searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string }> }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -121,7 +131,7 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
     'use server';
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'No tienes acceso a esta configuración.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };
     const email = await emailDeUsuario(s.userId).catch(() => null);
     const r = await guardarConfigDelPanel({ tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email }, fd);
     if (r.ok) revalidatePath(RUTA);
