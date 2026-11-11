@@ -8,7 +8,7 @@ import { SILENCIO_POR_OMISION, type Aviso } from './modelo';
 function doble(resultado: { data?: unknown; error?: { message: string } | null }) {
   const llamadas: Array<[string, unknown[]]> = [];
   const cadena: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'limit', 'upsert', 'maybeSingle']) {
+  for (const m of ['select', 'eq', 'order', 'limit', 'upsert', 'maybeSingle']) {
     cadena[m] = (...a: unknown[]) => { llamadas.push([m, a]); return cadena; };
   }
   cadena.then = (res: (v: unknown) => unknown) => res({ data: resultado.data ?? null, error: resultado.error ?? null });
@@ -34,12 +34,12 @@ describe('leídas', () => {
   });
   it('marcar y desmarcar van por la función atómica y no llaman con lista vacía', async () => {
     const { db, llamadas } = doble({ data: 2 });
-    expect(await marcarLeidas(db, ADMIN, ['a', 'b'], true)).toEqual({ ok: true, cambiadas: 2 });
-    expect(llamadas).toContainEqual(['rpc', ['aviso_marcar', { p_ambito: 'admin', p_claves: ['a', 'b'], p_leido: true }]]);
+    expect(await marcarLeidas(db, ADMIN, 'u1', ['a', 'b'], true)).toEqual({ ok: true, cambiadas: 2 });
+    expect(llamadas).toContainEqual(['rpc', ['aviso_marcar', { p_usuario: 'u1', p_ambito: 'admin', p_claves: ['a', 'b'], p_leido: true }]]);
     const vacio = doble({});
-    expect(await marcarLeidas(vacio.db, ADMIN, [], true)).toEqual({ ok: true, cambiadas: 0 });
+    expect(await marcarLeidas(vacio.db, ADMIN, 'u1', [], true)).toEqual({ ok: true, cambiadas: 0 });
     expect(vacio.llamadas).toEqual([]);
-    expect(await marcarLeidas(doble({ error: { message: 'rls' } }).db, ADMIN, ['a'], false)).toEqual({ ok: false, error: 'rls' });
+    expect(await marcarLeidas(doble({ error: { message: 'rls' } }).db, ADMIN, 'u1', ['a'], false)).toEqual({ ok: false, error: 'rls' });
   });
 });
 

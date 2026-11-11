@@ -1,5 +1,6 @@
 // Estado PERSISTENTE de los avisos por persona (migración 1002): qué ya leyó, qué tipos recibe por qué canal y su horario de silencio.
-// Se habla con la base con la sesión de la persona (RLS por usuario y ámbito), no con la llave de servicio. Fallar cerrado y decirlo:
+// Se habla con la base con la llave de servicio (`clienteAvisos`): las tablas no tienen privilegios para anon ni authenticated (mig. 1002). Por
+// eso TODA función recibe la persona y el ámbito ya resueltos por el servidor y filtra por ellos. Fallar cerrado y decirlo:
 // supabase-js devuelve el error POR VALOR; aquí se comprueba siempre y se propaga como `{ ok: false }`, nunca como «no hay nada».
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -14,7 +15,8 @@ export const TOPE_LEIDAS = 1000;
 
 export async function leerLeidas(db: SupabaseClient, ambito: Ambito, userId: string): Promise<Resultado<{ leidas: Set<string> }>> {
   try {
-    const { data, error } = await db.from('aviso_leido').select('clave').eq('usuario_id', userId).eq('ambito', claveAmbito(ambito)).limit(TOPE_LEIDAS);
+    // orden-no-importa: la poda de aviso_marcar deja a lo más 1000 claves por persona y ámbito, así que el límite nunca corta; el orden solo fija el desempate
+    const { data, error } = await db.from('aviso_leido').select('clave').eq('usuario_id', userId).eq('ambito', claveAmbito(ambito)).order('leido_en', { ascending: false }).order('clave').limit(TOPE_LEIDAS);
     if (error) return { ok: false, error: error.message };
     return { ok: true, leidas: new Set((data ?? []).map((f) => String((f as { clave: unknown }).clave))) };
   } catch (e) {
@@ -23,10 +25,10 @@ export async function leerLeidas(db: SupabaseClient, ambito: Ambito, userId: str
 }
 
 /** Marca (o desmarca) claves como leídas, atómico en la base (`aviso_marcar`). Devuelve cuántas filas cambiaron. */
-export async function marcarLeidas(db: SupabaseClient, ambito: Ambito, claves: readonly string[], leido: boolean): Promise<Resultado<{ cambiadas: number }>> {
+export async function marcarLeidas(db: SupabaseClient, ambito: Ambito, userId: string, claves: readonly string[], leido: boolean): Promise<Resultado<{ cambiadas: number }>> {
   if (claves.length === 0) return { ok: true, cambiadas: 0 };
   try {
-    const { data, error } = await db.rpc('aviso_marcar', { p_ambito: claveAmbito(ambito), p_claves: [...claves], p_leido: leido });
+    const { data, error } = await db.rpc('aviso_marcar', { p_usuario: userId, p_ambito: claveAmbito(ambito), p_claves: [...claves], p_leido: leido });
     if (error) return { ok: false, error: error.message };
     return { ok: true, cambiadas: typeof data === 'number' ? data : 0 };
   } catch (e) {

@@ -1,4 +1,4 @@
-import { supabaseServer } from '@/lib/supabase/server';
+import { clienteAvisos } from '@/lib/avisos/cliente';
 import { getT } from '@/lib/i18n/servidor';
 import { ahoraMs } from '@/lib/saludo';
 import { TabsLinea } from '../componentes';
@@ -23,7 +23,7 @@ export default async function PaginaAvisos({ destino, ambito, userId, fuente, ba
   seccion: 'avisos' | 'configuracion';
 }) {
   const { t } = await getT('avisos');
-  const db = await supabaseServer();
+  const db = clienteAvisos();
   const qs = (extra: Record<string, string>) => {
     const u = new URLSearchParams({ ...params, ...extra });
     const s = u.toString();

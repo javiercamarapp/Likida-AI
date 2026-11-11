@@ -43,6 +43,7 @@ import { insigniaDeCookie, nombreCookieAvance } from './puesta-en-marcha/progres
 import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { datosParaProveedor } from '@/lib/i18n/servidor';
 import { resolverBandeja } from '@/lib/avisos/bandeja';
+import { clienteAvisos } from '@/lib/avisos/cliente';
 import { leerAvisosFlota } from '@/app/ui-v2/avisos/fuente-flota';
 
 // Título de la pestaña: cada pantalla exporta su nombre (el del menú) y la plantilla le pone «· Likida».
@@ -149,7 +150,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   let avisosPendientes: string | undefined;
   if (v2 && sesion.rol !== 'superadmin' && sesion.tenantId && puedeVerRuta(sesion.rol, HREF_AVISOS, perfil)) {
     try {
-      const b = await resolverBandeja(await supabaseServer(), { tipo: 'flota', tenantId: sesion.tenantId }, sesion.userId, await leerAvisosFlota(sesion.tenantId, sesion.rol));
+      const b = await resolverBandeja(clienteAvisos(), { tipo: 'flota', tenantId: sesion.tenantId }, sesion.userId, await leerAvisosFlota(sesion.tenantId, sesion.rol));
       if (b.noLeidos !== null) avisosPendientes = String(b.noLeidos);
     } catch { /* sin cifra */ }
   }

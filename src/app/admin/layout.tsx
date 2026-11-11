@@ -8,6 +8,7 @@ import AdminChrome from './chrome';
 import { ProveedorRequiereAccion } from './cabecera-admin';
 import { obtenerPanoramaAccion, SIN_DATO, type RequiereAccion } from './requiere-accion';
 import { resolverBandeja } from '@/lib/avisos/bandeja';
+import { clienteAvisos } from '@/lib/avisos/cliente';
 import { leerAvisosAdmin } from '@/app/ui-v2/avisos/fuente-admin';
 import { conteosDePestanas } from './conteos-pestanas';
 import { ProveedorConteosPestanas } from './conteos-pestanas-contexto';
@@ -48,7 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { bandeja, cola } = await obtenerPanoramaAccion();
   // El número de «Avisos» del pie: la MISMA bandeja que pinta /admin/notificaciones (`resolverBandeja`): no leídos de ESTA persona, sin
   // dato (`null`) si no se pudo leer qué ya leyó. Nunca la suma de conteos de antes (19 en el pie y una lista que no los mostraba).
-  const avisos = await resolverBandeja(await supabaseServer(), { tipo: 'admin' }, userId, await leerAvisosAdmin()).catch(() => null);
+  const avisos = await (async () => resolverBandeja(clienteAvisos(), { tipo: 'admin' }, userId, await leerAvisosAdmin()))().catch(() => null);
   const requiereAccion: RequiereAccion = avisos ? { pendientes: avisos.noLeidos, hayUrgente: avisos.hayCritico } : SIN_DATO;
   const conteosPestanas = conteosDePestanas(bandeja, cola);
 
