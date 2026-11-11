@@ -44,8 +44,6 @@ export interface AvisosPie { href: string; pendientes?: number | null; urgente?:
 
 export interface AccesoPie { href: string; texto: string; Icono: ComponentType<{ width?: number; height?: number; strokeWidth?: number; 'aria-hidden'?: boolean }> }
 
-const TOPE_VISIBLE = 99;
-
 /** El texto de «Avisos» para lectores de pantalla y tooltip. `null` = «sin dato», nunca «0». Sin traductor, en español. */
 export function etiquetaAvisos(a: Pick<AvisosPie, 'pendientes' | 'urgente'>, tr: TraductorShell = TRADUCTOR_ES): string {
   if (a.pendientes === undefined) return tr.t('pie.avisos.titulo');
@@ -305,9 +303,8 @@ export default function PieSidebar({ organizacion, avisos, acceso, tarjeta, extr
         <Bell className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
         <span className="rv-item__txt">{tr.t('pie.avisos.titulo')}</span>
         {p === null && <span className="rv-ps-sindato" data-estado="sin-dato" aria-hidden>?</span>}
-        {typeof p === 'number' && p > 0 && (
-          <span className="rv-contador" data-urgente={avisos.urgente ? 'si' : 'no'} aria-hidden>{p > TOPE_VISIBLE ? `${TOPE_VISIBLE}+` : p}</span>
-        )}
+        {/* Punto de no leídos (decisión 12: burdeos solo aquí). La cifra exacta va en el aria-label y el tooltip, no pintada. */}
+        {typeof p === 'number' && p > 0 && <span className="rv-ps-punto" data-urgente={avisos.urgente ? 'si' : 'no'} aria-hidden />}
       </Link></Tooltip>}
       {acceso && (
         <Link href={acceso.href} className="rv-ps-acceso" aria-label={acceso.texto} onClick={alNavegar}>

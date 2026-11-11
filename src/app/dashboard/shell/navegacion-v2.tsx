@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ChevronDown, Settings } from 'lucide-react';
+import { ChevronRight, Settings } from 'lucide-react';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
 import { etiquetaNav, etiquetaRol } from '@/lib/i18n/nav';
 import { moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Item } from '../rutas';
 import { useSufijoYRol } from '../sidebar-nav';
-import { menuPorPerfil, hrefActivo, hrefsDelMenu, HREF_NOTIFICACIONES, HREF_PUESTA_EN_MARCHA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
+import { menuPorPerfil, hrefActivo, hrefsDelMenu, HREF_NOTIFICACIONES, HREF_CONFIGURACION, HREF_PUESTA_EN_MARCHA, type MenuV2, type GrupoMenu } from './menu-por-perfil';
 import MenuCuenta from './menu-cuenta';
 import PieSidebar from '../../ui-v2/componentes/pie-sidebar';
 
@@ -96,6 +96,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
 }) {
   const activo = hrefActivo(pathname, menu);
   const props = { sufijo, activo, perfil, insignias, alNavegar };
+  const sueltos = menu.pie.filter((i) => i.href === HREF_CONFIGURACION);
   const colapsables = menu.grupos.filter((g) => !g.estatico && !plano);
   const grupoDelActivo = menu.grupos.find((g) => !g.estatico && g.items.some((i) => i.href === activo))?.id ?? null;
   // Siempre UNA sola categoría abierta. Navegar a una ruta de otra categoría la abre (y cierra la que estaba abierta): se ajusta
@@ -150,7 +151,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
               <button type="button" id={idT} className="rv-grupo__t rv-grupo__tog" aria-expanded={esta} aria-controls={`${idT}-c`}
                 onClick={() => setAbierta(esta ? null : g.id)}>
                 {etiquetaNav(tr, g.titulo)}
-                <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
+                <ChevronRight className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
               </button>
             </h2>
             <div id={`${idT}-c`} className="rv-grupo__cuerpo" role="region" aria-labelledby={idT}>
@@ -159,6 +160,8 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
           </section>
         );
       })}
+      {/* Ítem suelto bajo los grupos (Rovaq): Configuración. Solo existe si el rol la abre (viene del mismo filtro que el resto). */}
+      {sueltos.length > 0 && <Lista items={sueltos} {...props} />}
       {conPie && menu.pie.length > 0 && <Lista items={menu.pie} {...props} />}
     </>
   );
@@ -199,7 +202,7 @@ export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarS
   const org = flotaDelPie({ organizacion, flotas, tenantUrl });
   const activo = hrefActivo(pathname, menu);
   // Todo lo que el pie ya no pinta como fila (Mi perfil, Ayuda y, en el menú genérico, Plan y Configuración) va al menú de la tarjeta.
-  const filasMenuCuenta = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES);
+  const filasMenuCuenta = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES && i.href !== HREF_CONFIGURACION);
   const avance = avanceDe(insignias?.[HREF_PUESTA_EN_MARCHA]);
   const enMenu = menu.grupos.some((g) => g.items.some((i) => i.href === HREF_PUESTA_EN_MARCHA));
   const insigniaAvisos = insignias?.[HREF_NOTIFICACIONES];
