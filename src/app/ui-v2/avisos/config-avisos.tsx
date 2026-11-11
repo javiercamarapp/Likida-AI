@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Aviso as Franja, Boton, Campo, Casilla, StatusChip, Switch, Tarjeta } from '../componentes';
+import { Aviso as Franja, Boton, Campo, Casilla, StatusChip, Switch, TablaBase, Tarjeta, type ColumnaBase } from '../componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { avisos as avisosEs } from '@/lib/i18n/es/avisos';
 import { CANALES, CATEGORIAS, enSilencio, estaActivo, validarSilencio, type Canal, type Categoria, type Preferencia, type Silencio } from '@/lib/avisos/modelo';
@@ -53,6 +53,19 @@ export default function ConfigAvisos({ destino, ambito, prefs: prefsIniciales, s
     });
   };
 
+  const columnas: ColumnaBase<Categoria>[] = [
+    { id: 'tipo', titulo: t('notif.cfg.tipo'), principal: true, celda: (cat) => t(`notif.cat.${cat}` as 'notif.cat.sistema') },
+    ...CANALES.map((c): ColumnaBase<Categoria> => ({
+      id: c, titulo: t(`notif.cfg.canal.${c}` as 'notif.cfg.canal.app'),
+      celda: (cat) => (
+        <Casilla
+          etiqueta={<span className="sr-only">{t('notif.cfg.activar', { tipo: t(`notif.cat.${cat}` as 'notif.cat.sistema'), canal: t(`notif.cfg.canal.${c}` as 'notif.cfg.canal.app') })}</span>}
+          checked={estaActivo(prefs, cat, c)} disabled={ocupado} onChange={(e) => cambiar(cat, c, e.target.checked)}
+        />
+      ),
+    })),
+  ];
+
   return (
     <div className="av-pila">
       {errorPrefs ? <Franja tono="warn">{t('notif.cfg.err.prefs')}</Franja> : null}
@@ -71,33 +84,7 @@ export default function ConfigAvisos({ destino, ambito, prefs: prefsIniciales, s
 
       <Tarjeta titulo={t('notif.cfg.titulo')}>
         <p className="av-nota">{t('notif.cfg.apoyo')}</p>
-        <table className="av-matriz">
-          <caption className="sr-only">{t('notif.cfg.titulo')}</caption>
-          <thead>
-            <tr>
-              <th scope="col">{t('notif.cfg.tipo')}</th>
-              {CANALES.map((c) => <th scope="col" key={c}>{t(`notif.cfg.canal.${c}` as 'notif.cfg.canal.app')}</th>)}
-            </tr>
-          </thead>
-          <tbody>
-            {CATEGORIAS[ambito].map((cat) => {
-              const nombre = t(`notif.cat.${cat}` as 'notif.cat.sistema');
-              return (
-                <tr key={cat}>
-                  <th scope="row">{nombre}</th>
-                  {CANALES.map((c) => (
-                    <td key={c}>
-                      <Casilla
-                        etiqueta={<span className="sr-only">{t('notif.cfg.activar', { tipo: nombre, canal: t(`notif.cfg.canal.${c}` as 'notif.cfg.canal.app') })}</span>}
-                        checked={estaActivo(prefs, cat, c)} disabled={ocupado} onChange={(e) => cambiar(cat, c, e.target.checked)}
-                      />
-                    </td>
-                  ))}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <TablaBase etiqueta={t('notif.cfg.titulo')} columnas={columnas} filas={CATEGORIAS[ambito]} idFila={(cat) => cat} altoMaximo={false} />
       </Tarjeta>
 
       <Tarjeta titulo={t('notif.cfg.silencio.titulo')}>
