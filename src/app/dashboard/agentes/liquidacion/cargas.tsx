@@ -2,6 +2,7 @@ import { FileUp, Users } from 'lucide-react';
 import { AvisoCompacto, Boton, CampoArchivo, CampoTexto, Icono, Tarjeta } from '@/app/ui-v2/componentes';
 import './liquidacion.css';
 import '../agentes.css';
+import { ZonaSoltar } from '../zona-soltar';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -41,7 +42,7 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar, tr
               {/* sin-info: título de una forma dentro del recuadro, no de un recuadro */}
               <h3 className="rv-liq-forma__titulo"><Icono icono={FileUp} />{' '}{tx('rest.desgloses_export_de_bitacoras')}</h3>
               <p className="rv-liq-sub">{tx('rest.csv_o_excel_una_fila_por')}</p>
-              <CampoArchivo etiqueta={tx('rest.archivo_de_desgloses')} name="archivo" accept=".csv,.txt,.xlsx,.xls" required />
+              <ZonaSoltar><CampoArchivo etiqueta={tx('rest.archivo_de_desgloses')} name="archivo" accept=".csv,.txt,.xlsx,.xls" required /></ZonaSoltar>
               <p className="rv-liq-sub">{tx('rest.primero_pulsa_ver_vista_previa_cuenta')}</p>
               <CampoTexto etiqueta={tx('rest.correos_que_saldran_el_numero_de')} name="correos" inputMode="numeric" autoComplete="off" pattern="[0-9]*" />
               <div className="rv-ag-acciones">
@@ -53,7 +54,7 @@ export function SeccionCargas({ acciones, aviso, error, detalle, puedeCargar, tr
               {/* sin-info: título de una forma dentro del recuadro, no de un recuadro */}
               <h3 className="rv-liq-forma__titulo"><Icono icono={Users} />{' '}{tx('rest.correos_de_operadores_y_coordinadores')}</h3>
               <p className="rv-liq-sub">{ricoT(tx('rest.csv_o_excel_con_las_columnas'), { code: (c) => <code>{c}</code> })}</p>
-              <CampoArchivo etiqueta={tx('rest.archivo_de_correos')} name="archivo" accept=".csv,.txt,.xlsx,.xls" required />
+              <ZonaSoltar><CampoArchivo etiqueta={tx('rest.archivo_de_correos')} name="archivo" accept=".csv,.txt,.xlsx,.xls" required /></ZonaSoltar>
               <div className="rv-ag-acciones">
                 <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.subir_correos')}</Boton>
               </div>

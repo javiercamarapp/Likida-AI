@@ -15,6 +15,7 @@ import { rico } from '@/lib/i18n/rico';
 import type { BuscarCatalogo } from '../combo-catalogo';
 import { PanelRevision, type GastoAjustable } from './revision-panel';
 import { FormaReasignar } from './reasignar-forma';
+import { ReabrirForma } from './reabrir-forma';
 import type { RevisionDetalle } from '@/lib/likida/revision';
 import {
   Diferencia, LineaDeTiempo, PillRenglon, estadoRenglon, etiquetaFormaPago, plural, TIPOS_TOPE, type Hito,
@@ -289,54 +290,54 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             </div>
           )}
         </Tarjeta>
-        {/* ── Acreditable / recuperable ──
-            Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF × litros y esa cuota no la tenemos. `ieps` solo puede venir de
-            filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}
-        <Tarjeta titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
-          <CamposSistema className="rv-liq__datos"
-            etiqueta={tr('liquidacion.detalle.acreditableTabla')}
-            campos={[
-              { etiqueta: tr('liquidacion.detalle.dieselElegible'), valor: d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—' },
-              { etiqueta: tr('liquidacion.detalle.iepsDiesel'), valor: d.ieps > 0 ? mxn(d.ieps) : '—' },
-              { etiqueta: tr('liquidacion.detalle.ivaAcreditable'), valor: d.iva > 0 ? mxn(d.iva) : '—' },
-              { etiqueta: tr('liquidacion.detalle.peaje50'), valor: d.peaje > 0 ? mxn(d.peaje) : '—' },
-            ]}
-          />
-          {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático — el motor no verifica ninguna de las condiciones de la ficha
-              (ingresos < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
-          <p className="rv-liq__tenue">{hayAcred ? tr('liquidacion.detalle.acreditableNota') : tr('liquidacion.detalle.acreditableNada')}</p>
-
-          {/* ── De lo comprobado, cuánto sobrevive al SAT ──
-              Este reparto es la razón por la que el contralor compra, y hasta hoy solo existía en el PDF (auditoría 5, frontend, ALTO 2). */}
-          {deducibilidad && (
-            <div className="rv-liq__sub">
-              <p className="rv-liq__sub-titulo">{tr('liquidacion.detalle.deducibleTitulo')}</p>
-              <ul className="rv-liq__lista">
-                {deducibilidad.map((f) => (
-                  <li key={f.label} className="rv-liq__fila" data-tono={f.tono === 'malo' ? 'bad' : undefined}>
-                    <span className="rv-liq__fila-etq">
-                      {f.label}
-                      {f.pie && <span className="rv-liq__fila-pie">{f.pie}</span>}
-                    </span>
-                    <span className="rv-liq__cifra">{mxn(f.monto)}</span>
-                  </li>
-                ))}
-              </ul>
-              <p className="rv-liq__tenue">{tr('liquidacion.detalle.deducibleNota')}</p>
-            </div>
-          )}
-
-          {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
-              El mismo resumen que el PDF imprime desde el 1-ago, con las MISMAS funciones. La decisión se toma aquí; la advertencia (LFT
-              110/111/263: «no deducible» NO autoriza descontárselo al operador) va aquí. */}
-          {d.laboral && <SeccionLaboral laboral={d.laboral} tr={tr} />}
-        </Tarjeta>
         </div>,
         /* ── Línea de tiempo ── */
         <div key="linea" className="rv-liq__col">
-          <Tarjeta titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo" contenida>
+          <Tarjeta titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo">
             <LineaDeTiempo hitos={hitos} tr={tr} />
             <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
+          </Tarjeta>
+          {/* ── Acreditable / recuperable ──
+              Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF × litros y esa cuota no la tenemos. `ieps` solo puede venir de
+              filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}
+          <Tarjeta titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
+            <CamposSistema className="rv-liq__datos"
+              etiqueta={tr('liquidacion.detalle.acreditableTabla')}
+              campos={[
+                { etiqueta: tr('liquidacion.detalle.dieselElegible'), valor: d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—' },
+                { etiqueta: tr('liquidacion.detalle.iepsDiesel'), valor: d.ieps > 0 ? mxn(d.ieps) : '—' },
+                { etiqueta: tr('liquidacion.detalle.ivaAcreditable'), valor: d.iva > 0 ? mxn(d.iva) : '—' },
+                { etiqueta: tr('liquidacion.detalle.peaje50'), valor: d.peaje > 0 ? mxn(d.peaje) : '—' },
+              ]}
+            />
+            {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático — el motor no verifica ninguna de las condiciones de la ficha
+                (ingresos < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
+            <p className="rv-liq__tenue">{hayAcred ? tr('liquidacion.detalle.acreditableNota') : tr('liquidacion.detalle.acreditableNada')}</p>
+
+            {/* ── De lo comprobado, cuánto sobrevive al SAT ──
+                Este reparto es la razón por la que el contralor compra, y hasta hoy solo existía en el PDF (auditoría 5, frontend, ALTO 2). */}
+            {deducibilidad && (
+              <div className="rv-liq__sub">
+                <p className="rv-liq__sub-titulo">{tr('liquidacion.detalle.deducibleTitulo')}</p>
+                <ul className="rv-liq__lista">
+                  {deducibilidad.map((f) => (
+                    <li key={f.label} className="rv-liq__fila" data-tono={f.tono === 'malo' ? 'bad' : undefined}>
+                      <span className="rv-liq__fila-etq">
+                        {f.label}
+                        {f.pie && <span className="rv-liq__fila-pie">{f.pie}</span>}
+                      </span>
+                      <span className="rv-liq__cifra">{mxn(f.monto)}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="rv-liq__tenue">{tr('liquidacion.detalle.deducibleNota')}</p>
+              </div>
+            )}
+
+            {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
+                El mismo resumen que el PDF imprime desde el 1-ago, con las MISMAS funciones. La decisión se toma aquí; la advertencia (LFT
+                110/111/263: «no deducible» NO autoriza descontárselo al operador) va aquí. */}
+            {d.laboral && <SeccionLaboral laboral={d.laboral} tr={tr} />}
           </Tarjeta>
         </div>,
       ]}
@@ -409,9 +410,9 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           <p className="rv-liq__nota">
             {rico(tr('liquidacion.detalle.reabrirTexto'), { strong: (c) => <strong>{c}</strong> })}
           </p>
-          <FormaConAviso accion={reabrir} boton={tr('liquidacion.detalle.reabrirBoton')} columnas="md:grid-cols-1">
+          <ReabrirForma accion={reabrir} boton={tr('liquidacion.detalle.reabrirBoton')}>
             <Casilla name="confirmar" etiqueta={tr('liquidacion.detalle.reabrirEntiendo', { folio: d.folio })} />
-          </FormaConAviso>
+          </ReabrirForma>
         </Tarjeta>
       )}
 

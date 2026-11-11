@@ -47,7 +47,8 @@ export function itemsKpi(d: DatosResumen, sufijo: string, puede: PuedeRuta = sie
   return [
     { etiqueta: t('op.liquidaciones_cerradas'), metrica: 'volumen_viajes', info: 'resumen.liquidaciones_cerradas', href: hrefLiq, valor: k ? k.viajesLiquidados : null, sello: selloLiq, conteo: true },
     porRevisar,
-    { etiqueta: t('op.con_diferencias'), metrica: 'diferencias_por_cuadrar', info: 'resumen.con_diferencias', href: hrefLiq, valor: k ? k.conDiferencias : null, sello: selloLiq, conteo: true },
+    // Es un CONTEO de liquidaciones ya cerradas (observado), no una proyección: el sello «Estimado» queda para lo que se estima.
+    { etiqueta: t('op.con_diferencias'), metrica: 'diferencias_por_cuadrar', tipo: 'observado', info: 'resumen.con_diferencias', href: hrefLiq, valor: k ? k.conDiferencias : null, sello: selloLiq, conteo: true },
     cartaPorte,
   ];
 }

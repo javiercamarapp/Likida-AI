@@ -11,6 +11,7 @@ import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
 import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import '../dinero.css';
 
 import { getT } from '@/lib/i18n/servidor';
@@ -93,7 +94,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
     <EsqueletoTablaMaestra
       titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}
       etiquetaCifras={t('cobranza.cobranza_de_las_mensualidades')}
-      cifras={cifras}
+      cifras={cifras ? observadas(cifras, t('a1r4.observado')) : undefined}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.factura.tenantNombre} subtitulo={t('cobranza.vr_subtitulo', { n: posicion + 1, total: filasVistas.length })} hrefCerrar="/admin/cobranza"

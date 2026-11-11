@@ -7,7 +7,7 @@ import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta, puedeVerArea } from '@/lib/auth/visibilidad';
 import { getBorradorViaje, type ViajeCcp } from '@/lib/likida/carta_porte_datos';
 import { numero } from '@/lib/formato';
-import { AvisoCompacto, BotonEnlace, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BotonEnlace, EstadoVacio, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
 import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
 import '../../carta-porte.css';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
@@ -100,9 +100,11 @@ export default async function PaginaBorradorCcp({
           {b.borrador === null ? (
             <>
               <p className="text-[12px] text-[var(--muted)]">{tr('cartaPorte.borrador.viajeId.page.elBorradorAunNo')}</p>
-              <ul className="list-disc pl-5 text-[12px] space-y-1 text-[var(--warn)]">
-                {b.faltantes.map((f) => <li key={f}>{f}</li>)}
-              </ul>
+              <Aviso tono="warn">
+                <ul className="list-disc pl-5 text-[12px] space-y-1">
+                  {b.faltantes.map((f) => <li key={f}>{f}</li>)}
+                </ul>
+              </Aviso>
             </>
           ) : b.fallas.length === 0 ? (
             <div className="space-y-2">
@@ -139,7 +141,7 @@ export default async function PaginaBorradorCcp({
     >
       <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.mercancias', { v: numero(v.mercancias.length) })} className="rv-tarjeta--tabla">
         {v.mercancias.length === 0 ? (
-          <p className="text-[12px] text-[var(--warn)]">{tr('cartaPorte.borrador.viajeId.page.sinRenglonesCapturadosEl')}</p>
+          <EstadoVacio contenido titulo={tr('cartaPorte.borrador.viajeId.page.sinRenglonesCapturadosEl')} />
         ) : (
           <TablaBase
             etiqueta={tr('cartaPorte.borrador.viajeId.page.mercanciasDelBorradorDe')} altoMaximo={false}
@@ -183,8 +185,9 @@ export default async function PaginaBorradorCcp({
   );
 }
 
+/** Un dato que falta se marca con un chip de advertencia (mismo lenguaje que el resto del producto), no con texto ocre suelto. */
 function hueco(texto: string) {
-  return <em className="text-[var(--warn)]">{texto}</em>;
+  return <StatusChip tono="warn">{texto}</StatusChip>;
 }
 
 function TablaCampos({ v, responsable, tr = trEs }: { v: ViajeCcp; responsable: 'cliente' | 'transportista'; tr?: Tr }) {

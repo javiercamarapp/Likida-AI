@@ -1,35 +1,19 @@
 import type { Metadata } from 'next';
-import { EsqueletoConfiguracion } from '../../../ui-v2/esqueletos';
+import { redirect } from 'next/navigation';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { getResumenNegocio } from '@/lib/admin/negocio';
-import { getT } from '@/lib/i18n/servidor';
-import { FormaNuevoAcceso } from './forma-nuevo-acceso';
-import '../../resumen.css';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * Equipo › Nuevo acceso — da de alta a una persona de una flota: cuenta de acceso, asiento en la bitácora y correo de acceso. Reemplaza
- * el script que había que escribir y correr a mano. La URL no cambia (enlaces entrantes y correos ya enviados). `?flota=` deja la flota
- * preseleccionada (botón «Agregar usuario» de la ficha). El resultado se ve en la misma pantalla (`useActionState`).
+ * Equipo › Nuevo acceso — ya no tiene vista propia: el alta de una persona vive en la tarjeta «Invitar integrante» de Equipo (Rovaq: UN solo
+ * formulario). Antes eran dos pantallas con el mismo formulario y la misma acción de servidor (`accionNuevoAcceso`, con su puerta y su
+ * bitácora, que no cambian). La URL se conserva (enlaces entrantes, correos ya enviados y el botón «Agregar usuario» de la ficha) y lleva a
+ * Equipo con la flota preseleccionada (`?flota=`).
  */
 export default async function NuevoUsuario({ searchParams }: { searchParams?: Promise<{ flota?: string }> }) {
   await requireSuperadmin();
-  const [{ flotas }, sp, { t }] = await Promise.all([getResumenNegocio(), searchParams, getT('admin_flotas')]);
-  const preseleccion = flotas.some((f) => f.id === sp?.flota) ? sp?.flota : '';
-
-  return (
-    <EsqueletoConfiguracion
-      area="Control" titulo="Equipo"
-      apoyo="Da de alta a una persona de una flota y le mandamos el correo de acceso."
-      secciones={[{
-        id: 'nuevo-acceso', titulo: 'Nuevo acceso',
-        // La ayuda va como descripción de la tarjeta, no pegada al botón: el pie queda con una sola acción.
-        descripcion: 'Crea la cuenta de acceso y la persona en el panel, deja el asiento en la bitácora y le manda el correo de acceso. El primer ingreso (enlace por correo) confirma la cuenta. Si el canal de correo no está configurado, la pantalla lo dice y la cuenta queda creada: usa «Reenviar acceso» desde Personas. Los vendedores se dan de alta en Ventas.',
-        contenido: <FormaNuevoAcceso flotas={flotas} preseleccion={preseleccion} t={t} />,
-      }]}
-    />
-  );
+  const flota = (await searchParams)?.flota;
+  redirect(flota ? `/admin/equipo?flota=${encodeURIComponent(flota)}` : '/admin/equipo');
 }
 
 export const metadata: Metadata = { title: 'Nuevo acceso' };

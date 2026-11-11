@@ -232,7 +232,7 @@ export async function InicioContador({
       variante="8-4"
       graficas={[
         <Tarjeta key="barras" titulo={tr('contador.panel.barrasTitulo', { etiqueta: etq })} info="contador.en_riesgo"
-          estado={barrasMes === null ? 'error' : barrasMes.length === 0 ? 'vacio' : 'ok'} contenida
+          estado={barrasMes === null ? 'error' : barrasMes.length === 0 ? 'vacio' : 'ok'}
           mensaje={barrasMes === null ? tr('contador.inicioContador.noSePudoCalcular') : tr('contador.panel.barrasVacio')}
           detalle={tr('contador.panel.barrasVacioDetalle')} reintentar acciones={<KindBadge tipo="calculado" />}>
           {barrasMes && barrasMes.length > 0 ? (
@@ -241,7 +241,7 @@ export async function InicioContador({
               periodos={barrasMes} />
           ) : null}
         </Tarjeta>,
-        <Tarjeta key="iva" titulo={tr('contador.panel.ivaTitulo')} info="contador.iva_documentado" contenida acciones={<KindBadge tipo="observado" />}
+        <Tarjeta key="iva" titulo={tr('contador.panel.ivaTitulo')} info="contador.iva_documentado" acciones={<KindBadge tipo="observado" />}
           estado={resumenFiscal === null ? 'error' : resumenFiscal.n === 0 ? 'vacio' : 'ok'}
           mensaje={resumenFiscal === null ? tr('contador.inicioContador.noSePudoLeer2') : tr('contador.inicioContador.sinComprobantesLeidos')}
           detalle={tr('contador.inicioContador.todaviaNoHayComprobantes')} reintentar>
@@ -305,7 +305,8 @@ async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, s
 
   return (
     <>
-      <Tarjeta titulo={tr('contador.panel.puenteTitulo')} contenida acciones={<KindBadge tipo="inferido" />}
+      <FilaTarjetas variante="6-6">
+      <Tarjeta titulo={tr('contador.panel.puenteTitulo')} acciones={<KindBadge tipo="inferido" />}
         estado={cartera === null ? 'error' : cartera.facturasTotal === 0 ? 'vacio' : 'ok'}
         mensaje={cartera === null ? tr('contador.panel.puenteNoLeido') : tr('contador.panel.puenteVacio')} detalle={tr('contador.panel.puenteVacioDetalle')} reintentar>
         {cartera ? (
@@ -320,8 +321,7 @@ async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, s
           </>
         ) : null}
       </Tarjeta>
-      <FilaTarjetas variante="6-6">
-        <Tarjeta titulo={tr('contador.panel.tablaGano')} contenida estado={acred === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCargar3')} reintentar
+        <Tarjeta titulo={tr('contador.panel.tablaGano')} estado={acred === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCargar3')} reintentar
           acciones={(
             <>
               <KindBadge tipo="observado" />
@@ -335,7 +335,9 @@ async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, s
           <BarList etiqueta={tr('contador.panel.tablaGano')} items={gano} />
           {acred ? <p className="rv-cont__nota">{tr('contador.panel.ganoDieselNota', { litros: litros(acred.litrosDiesel) })}</p> : null}
         </Tarjeta>
-        <Tarjeta titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" contenida acciones={<KindBadge tipo="calculado" />}
+      </FilaTarjetas>
+      <FilaTarjetas variante="12">
+        <Tarjeta titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" acciones={<KindBadge tipo="calculado" />}
           estado={resumenPerdidas === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCalcular')} reintentar>
           <MotorFiscalPeriodo series={series} causas={causas.map(({ titulo, n, monto }) => ({ titulo, n, monto }))} />
         </Tarjeta>

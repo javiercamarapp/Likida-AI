@@ -10,7 +10,7 @@
 // Los seis candados de honestidad del blueprint viven en el motor; esta capa
 // solo pinta lo que el motor entrega — cifra y supuesto SIEMPRE juntos.
 // ═══════════════════════════════════════════════════════════════════════════
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import {
   calcularEstimacion, PRECIO_DIESEL_REFERENCIA, type ResultadoCalculadora,
@@ -19,7 +19,6 @@ import { mxn as mxnFmt, numero as numeroFmt, hoyMx } from '@/lib/formato';
 import { Boton } from '../ui-v2/componentes/boton';
 import { Aviso } from '../ui-v2/componentes/aviso';
 import { CampoTexto } from '../ui-v2/componentes/campos';
-import { Tarjeta } from '../ui-v2/componentes/tarjeta';
 import { KindBadge } from '../ui-v2/graficas/kind-badge';
 // El marco público no carga las piezas del panel: sin esto `.rv-campo` (rótulo sobre campo, ayuda debajo) y el sello de dato no tienen estilo.
 import '../ui-v2/piezas.css';
@@ -34,6 +33,19 @@ const num = (s: string): number | null => {
   const n = Number(s.replace(/[,$\s]/g, ''));
   return Number.isFinite(n) && n > 0 ? n : null;
 };
+
+/** Un bloque de la calculadora DENTRO de la tarjeta única del marco (Rovaq `access-flow`): h2 de 16/600 y, entre bloques, un divisor. Sin borde propio. */
+function Bloque({ titulo, acciones, children }: { titulo: string; acciones?: ReactNode; children: ReactNode }) {
+  return (
+    <section className="rv-calc__bloque">
+      <header className="rv-calc__bloque-cab">
+        <h2>{titulo}</h2>
+        {acciones}
+      </header>
+      {children}
+    </section>
+  );
+}
 
 export function Calculadora() {
   const { t } = useT('publico', publico);
@@ -99,7 +111,7 @@ export function Calculadora() {
   return (
     <div className="rv-calc">
       {/* ── Los tres datos ── */}
-      <Tarjeta titulo={t('cal.datos.titulo')} className="rv-calc__datos-tarjeta">
+      <Bloque titulo={t('cal.datos.titulo')}>
       <section className="rv-calc__datos">
         <CampoTexto etiqueta={t('cal.litros')} inputMode="decimal" value={litros}
           onChange={(e) => setLitros(e.target.value)} placeholder={t('cal.litros.ph')} ayuda={t('cal.litros.alt')} />
@@ -117,13 +129,13 @@ export function Calculadora() {
           <Boton variante="primary" onClick={calcular}>{t('cal.calcular')}</Boton>
         </div>
       </section>
-      </Tarjeta>
+      </Bloque>
 
       {/* ── El resultado — antes de pedir nada ── */}
       {r && (
         <section className="rv-calc__resultado">
           {/* Diésel */}
-          <Tarjeta titulo={t('cal.dsl.titulo')} acciones={'faltante' in r.diesel ? undefined : <KindBadge tipo="estimado" />}>
+          <Bloque titulo={t('cal.dsl.titulo')} acciones={'faltante' in r.diesel ? undefined : <KindBadge tipo="estimado" />}>
             {'faltante' in r.diesel ? (
               <p className="rv-calc__texto">{r.diesel.faltante}</p>
             ) : (
@@ -143,10 +155,10 @@ export function Calculadora() {
                 )}
               </div>
             )}
-          </Tarjeta>
+          </Bloque>
 
           {/* Peaje */}
-          <Tarjeta titulo={t('cal.peaje.titulo')} acciones={'faltante' in r.peaje ? undefined : <KindBadge tipo="estimado" />}>
+          <Bloque titulo={t('cal.peaje.titulo')} acciones={'faltante' in r.peaje ? undefined : <KindBadge tipo="estimado" />}>
             {'faltante' in r.peaje ? (
               <p className="rv-calc__texto">{r.peaje.faltante}</p>
             ) : (
@@ -158,10 +170,10 @@ export function Calculadora() {
                 </ul>
               </div>
             )}
-          </Tarjeta>
+          </Bloque>
 
           {/* Total + advertencias */}
-          <Tarjeta titulo={t('cal.total.titulo')} acciones={r.totalAnualMxn !== null ? <KindBadge tipo="estimado" /> : <KindBadge tipo="sin_dato" />}>
+          <Bloque titulo={t('cal.total.titulo')} acciones={r.totalAnualMxn !== null ? <KindBadge tipo="estimado" /> : <KindBadge tipo="sin_dato" />}>
             <div className="rv-calc__pila">
               <p className="rv-calc__cifra rv-calc__cifra--total">
                 {r.totalAnualMxn !== null ? mxn(r.totalAnualMxn) : t('cal.total.sin_datos')}
@@ -180,13 +192,13 @@ export function Calculadora() {
                 {r.advertencias.map((a, i) => <li key={i}>{a}</li>)}
               </ul>
             </div>
-          </Tarjeta>
+          </Bloque>
 
           {/* ── El contacto — después del resultado, nunca antes ── */}
           {envio === 'listo' ? (
             <Aviso tono="ok">{t('cal.contacto.listo')}</Aviso>
           ) : (
-            <Tarjeta titulo={t('cal.contacto.pregunta')}>
+            <Bloque titulo={t('cal.contacto.pregunta')}>
               <div className="rv-calc__pila">
                 <p className="rv-calc__texto">
                   {rico(t('cal.contacto.nota'), { enlace: (c) => <Link href="/aviso/prospectos">{c}</Link> })}
@@ -209,7 +221,7 @@ export function Calculadora() {
                   </Boton>
                 </div>
               </div>
-            </Tarjeta>
+            </Bloque>
           )}
         </section>
       )}

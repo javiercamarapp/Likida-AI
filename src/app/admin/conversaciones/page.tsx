@@ -107,10 +107,10 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
       {/* Lo que NO se sabe va en su caja punteada, DENTRO de una tarjeta y a la izquierda (Rovaq «Qué no se sabe»), no como un párrafo centrado suelto. */}
       <Tarjeta titulo={ts('conversaciones.que_no_se_sabe')} className="adm-nosabe">
         <p>
-          Colas (activas/necesitan humano/escaladas/resueltas), búsqueda full-text, handoff a un humano — el bot de Likida es una máquina de estados determinística (foto→OCR→confirmar→liquidar), no un agente conversacional abierto que se pueda &quot;atorar&quot; y necesite ese patrón. Antes de construirlo hay que decidir si de verdad aplica.
+          Todavía no hay colas por estado, búsqueda dentro de los mensajes ni traspaso a una persona: el bot sigue un flujo fijo (foto, lectura, confirmación y liquidación), no una charla abierta. Antes de construirlo hay que decidir si hace falta.
         </p>
         <p>
-          Volumen por canal, heatmap hora×día, histograma de mensajes por conversación — con 1 tenant y pocos días de historia no dicen nada real todavía.
+          Volumen por canal y por hora: con una sola flota y pocos días de historia no dice nada real todavía.
         </p>
       </Tarjeta>
     </PantallaConversaciones>

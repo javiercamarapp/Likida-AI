@@ -353,6 +353,7 @@ export default async function SuscripcionPage({
         </Tarjeta>
       )}
 
+      <div className="rv-sus__dos">
       {/* ── Estado: las cifras del plan viven en la tira de arriba; aquí solo lo que NO hay (lectura caída o sin suscripción). ── */}
       {suscripcionCaida ? (
         <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="error" mensaje={tr('suscripcion.page.noSePudoLeer')} reintentar />
@@ -361,7 +362,6 @@ export default async function SuscripcionPage({
         <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="vacio" mensaje={tr('suscripcion.page.sinSuscripcionTodavia')} detalle={tr('suscripcion.page.estaFlotaTodaviaNo2')} contenida />
       ) : null}
 
-      <div className="rv-sus__dos">
       {/* ── Datos fiscales ── */}
       <Tarjeta titulo={tr('suscripcion.page.datosParaTuFactura')} info="suscripcion.datos_factura"
         acciones={puedeFacturar ? <StatusChip tono="ok">{tr('suscripcion.page.completos')}</StatusChip> : <StatusChip tono="warn">{tr('suscripcion.page.faltan')}</StatusChip>}>

@@ -48,7 +48,7 @@ export default async function PaginaNotificaciones({
   const href = `/dashboard/notificaciones${qs.toString() ? `?${qs}` : ''}`;
   return (
     <MarcoPagina titulo={tr('notif.titulo')} apoyo={tr('notif.apoyo')}
-      acciones={<BotonEnlace href={href} variante="secondary" tamano="sm">{enConfiguracion ? tr('notif.seccion.avisos') : tr('e26b.avisos_configurar')}</BotonEnlace>}>
+      acciones={<BotonEnlace href={href} variante="secondary">{enConfiguracion ? tr('notif.seccion.avisos') : tr('e26b.avisos_configurar')}</BotonEnlace>}>
       <div className="rv-notif">
       {bandeja ? (
         <BloqueCifras etiqueta={tr('notif.titulo')} cifras={[

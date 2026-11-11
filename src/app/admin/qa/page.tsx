@@ -23,7 +23,7 @@ export const dynamic = 'force-dynamic';
  * vive en las tablas qa_foto / qa_corrida / qa_corrida_paso (mig. 0185); en
  * Storage quedan solo los bytes — ver qa-tipos.ts, cabecera.
  */
-export default async function QaPage({ searchParams }: { searchParams?: Promise<{ ver?: string }> } = {}) {
+export default async function QaPage({ searchParams }: { searchParams?: Promise<{ ver?: string }> }) {
   const { ver } = (await searchParams) ?? {};
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();

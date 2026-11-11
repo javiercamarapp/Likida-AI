@@ -1,3 +1,4 @@
+import { VacioAgente } from '../../vacio-agente';
 import Link from 'next/link';
 
 import { numero, fechaHoraMx } from '@/lib/formato';
@@ -96,7 +97,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
         <>
           <Seccion id="grupos" titulo={tx('rest.grupos')} info="vigia_historial.grupos">
             {grupos.length === 0 ? (
-              <p className="rv-vg__nota">{tx('rest.aun_no_hay_grupos_agrega_el')}</p>
+              <VacioAgente titulo={tx('rest.aun_no_hay_grupos_agrega_el')} />
             ) : (
               <TablaBase etiqueta={tx('rest.grupos_del_vigia')} columnas={columnasGrupos} filas={grupos} idFila={(g) => g.id} densa tarjetaMovil />
             )}
@@ -123,7 +124,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
               <>
                 <p className="rv-vg__nota">{tx('rest.cuando_un_cliente_escribe_algo_que')}</p>
                 {rapidas.length === 0 ? (
-                  <p className="rv-vg__nota">{tx('rest.aun_no_hay_respuestas_rapidas_aprobadas')}</p>
+                  <VacioAgente titulo={tx('rest.aun_no_hay_respuestas_rapidas_aprobadas')} />
                 ) : (
                   <ul className="rv-vg__lista">
                     {rapidas.map((r) => (
@@ -143,7 +144,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
 
           <Seccion id="reporte" titulo={grupoElegido ? tx('rest.reporte_del_grupo_elegido') : tx('rest.reporte_de_todos_los_grupos')} info="vigia_historial.reporte">
             {reporte === null || reporte.mensajes === 0 ? (
-              <p className="rv-vg__nota">{tx('rest.todavia_no_hay_historico_subido_sube')}</p>
+              <VacioAgente titulo={tx('rest.todavia_no_hay_historico_subido_sube')} />
             ) : (
               <div className="rv-vg__pila">
                 <p className="rv-vg__linea rv-vg__nota">{ricoT(tx('rest.e0_descargar_el_reporte_de_preguntas'), { e0: (c) => <span>{c}</span>, e1: (c) => <a href={`/api/export/vigia-faqs?${qExport}formato=xlsx${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{c}</a>, e2: (c) => <a href={`/api/export/vigia-faqs?${qExport}formato=pdf${sufijo ? `&${sufijo.slice(1)}` : ''}`} className="rv-vg__enlace">{c}</a> })}</p>
@@ -155,7 +156,7 @@ export function VistaHistorialVigia({ sufijo, grupos, clientes, reporte, pendien
                     <div className="rv-vg__pila">
                       <p className="rv-vg__micro">{tx('rest.foto_del_momento_de_la_exportacion')}{pendientes.fotoEn ? ` (${fechaHoraMx(pendientes.fotoEn)})` : ''}{tx('rest.no_en_vivo_el_vigia_no')}</p>
                       {pendientes.pendientes.length === 0 ? (
-                        <p className="rv-vg__nota">{tx('rest.no_quedo_ningun_mensaje_de_cliente')}</p>
+                        <VacioAgente titulo={tx('rest.no_quedo_ningun_mensaje_de_cliente')} />
                       ) : (
                         <ul className="rv-vg__lista">
                           {pendientes.pendientes.map((p) => (

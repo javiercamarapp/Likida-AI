@@ -22,7 +22,7 @@ vi.mock('./acciones', () => ({ accionPausarCampana: vi.fn(), accionRefrescarGast
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }));
 
-import { BloqueActivacion, BloqueCohortes, BloqueCostoYCampanas, BloqueEmbudoAdquisicion, BloqueIntro, BloqueSinInstrumentacion, BloqueUso } from './bloques';
+import { BloqueActivacion, BloqueCampanas, BloqueCifrasCrecimiento, BloqueCohortes, BloqueComisiones, BloqueCostoLead, BloqueEmbudoAdquisicion, BloqueIntro, BloqueUso } from './bloques';
 import { ControlCampanas } from './campanas';
 import CrecimientoPage from './page';
 
@@ -129,15 +129,15 @@ describe('activación y cohortes', () => {
 describe('costo por lead y campañas', () => {
   it('adquisición caída: lo dice', async () => {
     dobles.getAdquisicion.mockResolvedValue(null);
-    expect(await html(BloqueCostoYCampanas)).toContain('NO significa que no haya alertas');
+    expect(await html(BloqueCostoLead)).toContain('NO significa que no haya alertas');
   });
   it('campañas caídas: lo dicen y no afirman que no haya', async () => {
     dobles.listarCampanasConTotal.mockResolvedValue(null);
-    expect(await html(BloqueCostoYCampanas)).toContain('NO significa que no haya');
+    expect(await html(BloqueCampanas)).toContain('NO significa que no haya');
   });
   it('el costo por lead sin dato dice «no disponible», nunca $0', async () => {
     dobles.getAdquisicion.mockResolvedValue({ porFuente: [{ fuente: 'ads', leads: 3, ultimoCapturado: '2026-11-01T00:00:00Z', costo: null, costoNota: 'falta integración de gasto' }], alertas: [], sinFuenteDeDatos: [] });
-    const h = await html(BloqueCostoYCampanas);
+    const h = await html(BloqueCostoLead);
     expect(h).toContain('no disponible');
     expect(h).toContain('falta integración de gasto');
   });
@@ -147,7 +147,9 @@ describe('uso', () => {
   it('rotula el gasto de IA como proxy de uso, no como usuarios, y no inventa el delta de tokens', async () => {
     const h = await html(BloqueUso);
     expect(h).toContain('No es una métrica de usuarios');
-    expect(h).toContain('Tokens usados');
+    const cifras = await html(BloqueCifrasCrecimiento);
+    expect(cifras).toContain('Tokens usados');
+    expect(cifras).toContain('Observado');
   });
   it('lectura caída: no se pinta como uso cero', async () => {
     dobles.getResumenNegocio.mockRejectedValue(new Error('caída'));
@@ -157,7 +159,7 @@ describe('uso', () => {
 
 describe('comisiones de vendedores', () => {
   it('se declaran «falta»: no hay base y la pantalla no calcula ni una cifra', async () => {
-    const h = await html(async () => BloqueSinInstrumentacion());
+    const h = await html(async () => BloqueComisiones());
     expect(h).toContain('Comisiones de vendedores');
     expect(h).toContain('Falta: aún no hay base para calcularlas');
     expect(h).toContain('sería inventar una cifra');

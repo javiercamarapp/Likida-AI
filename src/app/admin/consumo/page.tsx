@@ -13,6 +13,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { gastoApiladoPorFlota } from './apilado';
 
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import '../dinero.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -24,6 +25,22 @@ export const dynamic = 'force-dynamic';
 // el crédito del proveedor (402) y los avisos de 80 % y 100 % del techo diario. Cada lectura cae por su lado: lo que no se pudo medir
 // se dice, nunca se pinta como cero.
 // ═══════════════════════════════════════════════════════════════════════════
+
+/** Nombre legible de un agente: el de su definición, o su id en snake_case pasado a palabras («analista_metricas» → «Analista metricas»). */
+const nombreLegible = (nombre: string | null | undefined, id: string): string => {
+  const base = nombre && nombre.trim() && nombre !== id ? nombre : id.replace(/_/g, ' ').trim();
+  return base.charAt(0).toUpperCase() + base.slice(1);
+};
+
+/** Una lista larga de ids al inicio del detalle («a, b, c, … — explicación») se resume con su conteo y se despliega a petición. */
+const ID_SIMPLE = /^[a-z0-9][a-z0-9_./-]*$/;
+function condensarDetalle(detalle: string, nombres: ReadonlyMap<string, string>): { resto: string; ids: string[] } | null {
+  const corte = detalle.indexOf(' — ');
+  const cabeza = corte === -1 ? detalle.trim() : detalle.slice(0, corte).trim();
+  const ids = cabeza.split(', ');
+  if (ids.length < 6 || !ids.every((id) => ID_SIMPLE.test(id))) return null;
+  return { ids: ids.map((id) => nombres.get(id) ?? nombreLegible(null, id)), resto: corte === -1 ? '' : detalle.slice(corte + 3).trim() };
+}
 
 const tonoInsight = (ta: TrDe<'admin_dinero'>): Record<Insight['tipo'], { tono: TonoEstado; rotulo: string }> => ({
   problema: { tono: 'bad', rotulo: 'Problema' },
@@ -95,6 +112,7 @@ export default async function ConsumoPage() {
   const cifraCred = cifraCredito(credito, ta);
   const problemas = (consumo?.insights ?? []).filter((i) => i.tipo === 'problema');
   const resto = (consumo?.insights ?? []).filter((i) => i.tipo !== 'problema');
+  const nombresAgentes = new Map((consumo?.agentes ?? []).map((a) => [a.agente, nombreLegible(a.nombre, a.agente)] as const));
   const diasSin = r ? diasSinRegistroIa(r.porDia, hoy) : null;
   const avisosEncendidos = avisosDeTopeEncendidos();
   const costoPorViaje = r && r.viajesProcesados > 0 ? r.costoIaUsd / r.viajesProcesados : null;
@@ -126,7 +144,7 @@ export default async function ConsumoPage() {
   return (
     <EsqueletoPanelCifras
       titulo={ta('consumo.consumo_de_ia')} apoyo={ta('consumo.a_donde_se_va')} variante="8-4"
-      etiquetaCifras={ta('consumo.gasto_de_ia')} cifras={cifras}
+      etiquetaCifras={ta('consumo.gasto_de_ia')} cifras={cifras ? observadas(cifras, ta('a1r4.observado')) : undefined}
       avisos={todoCaido ? undefined : <AvisosAcotados avisos={avisosLista} resto={ta} />}
       graficas={todoCaido ? undefined : [
         <Tarjeta key="gasto" titulo={ta('consumo.gasto_de_ia_por')} estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} contenida={!!r && r.porDia.length <= 1} mensaje={r ? ta('consumo.sin_historial_suficiente') : undefined} detalle={ta('consumo.hacen_falta_al_menos')} reintentar>
@@ -168,7 +186,7 @@ export default async function ConsumoPage() {
             vacio={{ titulo: ta('consumo.sin_agentes_con_registro'), texto: ta('consumo.aparecen_cuando_un_agente') }}
             filas={consumo.agentes}
             columnas={[
-              { id: 'agente', titulo: ta('consumo.agente'), principal: true, celda: (a) => <>{a.agente} <StatusChip tono={a.estado === 'vivo' ? 'ok' : 'neutral'}>{a.estado}{a.runnerHabilitado ? ta('consumo.automatico') : ''}</StatusChip></> },
+              { id: 'agente', titulo: ta('consumo.agente'), principal: true, celda: (a) => <>{nombreLegible(a.nombre, a.agente)} <StatusChip tono={a.estado === 'vivo' ? 'ok' : 'neutral'}>{a.estado}{a.runnerHabilitado ? ta('consumo.automatico') : ''}</StatusChip></> },
               { id: 'corridas', titulo: ta('consumo.corridas_30_d'), alinear: 'der', celda: (a) => numero(a.corridas30d) },
               { id: 'fallos', titulo: ta('consumo.fallos'), alinear: 'der', celda: (a) => (a.fallos30d > 0 ? <StatusChip tono="bad">{numero(a.fallos30d)}</StatusChip> : numero(a.fallos30d)) },
               { id: 'gasto', titulo: ta('consumo.gasto_30_d'), alinear: 'der', celda: (a) => usd(a.gastado30dUsd) },
@@ -229,7 +247,19 @@ export default async function ConsumoPage() {
             {resto.map((i) => (
               <li key={i.titulo}>
                 <StatusChip tono={tonoInsight(ta)[i.tipo].tono}>{tonoInsight(ta)[i.tipo].rotulo}</StatusChip>
-                <strong>{i.titulo}</strong> <span>{i.detalle}</span>
+                <strong>{i.titulo}</strong>
+                {(() => {
+                  const c = condensarDetalle(i.detalle, nombresAgentes);
+                  if (!c) return <span>{i.detalle}</span>;
+                  return (
+                    <>
+                      {c.resto ? <span>{c.resto}</span> : null}
+                      <Disclosure variante="linea" titulo={ta('a1r4.ver_cuales', { n: numero(c.ids.length) })}>
+                        <p className="adm-din-nota">{c.ids.join(', ')}</p>
+                      </Disclosure>
+                    </>
+                  );
+                })()}
               </li>
             ))}
           </ul>

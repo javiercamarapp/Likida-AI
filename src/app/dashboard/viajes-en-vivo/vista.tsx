@@ -178,7 +178,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
   accionUrl: string;
   ocultos: Record<string, string>;
   hrefMapa: string;
-  /** La caja de preguntas del asistente (componente de cliente). */
+  /** Hay chat disponible para este perfil: se ofrece el enlace a «Pregunta a tus datos» (la caja propia de esta página se retiró). */
   pregunta?: ReactNodeLike;
   tareas: ReactNodeLike;
   /** La sección «Notificaciones» (a quién le llega el aviso de una tarea nueva). Solo la ve quien puede configurarla. */
@@ -206,6 +206,8 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       acciones={(
         <>
           <ActualizarSolo />
+          {/* El chat vive en «Pregunta a tus datos» (un solo compositor); aquí solo se enlaza, sin una caja propia. */}
+          {pregunta ? <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/chat${ocultos.tenant ? `?tenant=${encodeURIComponent(ocultos.tenant)}` : ''}`}>{t('op.preguntale_al_asistente')}</BotonEnlace> : null}
           <BotonEnlace tamano="sm" href={hrefMapa}>{t('op.ver_el_mapa')}</BotonEnlace>
         </>
       )}
@@ -229,7 +231,6 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
         />
       </TarjetaTabla>
       {tareas}
-      {pregunta ? <Tarjeta titulo={t('op.preguntale_al_asistente')}>{pregunta}</Tarjeta> : null}
       {notificaciones ? <Tarjeta titulo={t('op.notificaciones_de_los_avisos')}>{notificaciones}</Tarjeta> : null}
     </EsqueletoTablaMaestra>
   );

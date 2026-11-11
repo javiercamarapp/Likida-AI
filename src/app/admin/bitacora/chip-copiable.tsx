@@ -18,7 +18,7 @@ export function ChipCopiable({ texto, copiar, copiado, mono = true }: { texto: s
   return (
     <span className="adm-bit-chip" data-mono={mono || undefined}>
       <span className="adm-bit-chip__texto">{texto}</span>
-      <button type="button" className="adm-bit-chip__copiar" onClick={alCopiar} aria-label={`${copiar}: ${texto}`}>{hecho ? copiado : copiar}</button>
+      <button type="button" className="rv-bit-copiar adm-bit-chip__copiar h-5" onClick={alCopiar} aria-label={`${copiar}: ${texto}`}>{hecho ? copiado : copiar}</button>
     </span>
   );
 }
