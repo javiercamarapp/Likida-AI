@@ -20,3 +20,6 @@
 .rv-reg__vr-dinero > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--t-body); }
 .rv-reg__vr-dinero dt { color: var(--muted); }
 .rv-reg__vr-dinero dd { margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* Sin la nota de diferencias (jefe de tráfico) la línea de procedencia es lo último de la tarjeta: no queda pegada al borde inferior. */
+[data-ui="v2"] .rv-tl__sellos:last-child { padding-bottom: 10px; }

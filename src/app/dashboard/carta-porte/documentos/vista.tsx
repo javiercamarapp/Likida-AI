@@ -1,4 +1,5 @@
 import { cifrasUniformes } from '../../formato';
+import { DescargaNoDisponible } from '../../bloque';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { TriangleAlert, Upload, Download, RotateCcw, Layers, Inbox } from 'lucide-react';
@@ -154,7 +155,7 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
           {acciones.subir ? <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} metricas={datos.metricas} /> : <NotaMetricas tr={tr} m={datos.metricas} />}
           <Canales tr={tr} buzon={datos.buzon} acciones={acciones} />
           <Perfiles tr={tr} perfiles={datos.perfiles} acciones={acciones} />
-          <Exportacion tr={tr} configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
+          <Exportacion tr={tr} configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} aprobados={datos.metricas.aprobados} />
         </>
       )}
     </EsqueletoTablaMaestra>
@@ -419,8 +420,9 @@ const EJEMPLO_CONFIG = `{
   ]
 }`;
 
-function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: ConfigVista[]; acciones: AccionesDocumentos; apiSufijo: string; tr?: Tr }) {
+function Exportacion({ configs, acciones, apiSufijo, aprobados, tr = trEs }: { configs: ConfigVista[]; acciones: AccionesDocumentos; apiSufijo: string; aprobados: number; tr?: Tr }) {
   const liga = (config: string, formato: string) => `/api/export/carta-porte-docs?config=${encodeURIComponent(config)}&formato=${formato}${apiSufijo}`;
+  // Sin documentos aprobados no hay nada que exportar: el botón activo bajaría un archivo vacío. Se dice, punteado, en vez de ofrecerlo.
   const descarga = (href: string, rotulo: string, clave: string) => (
     <BotonEnlace key={clave} tamano="sm" variante="secondary" href={href} icono={<Icono icono={Download} />}>{rotulo}</BotonEnlace>
   );
@@ -429,6 +431,11 @@ function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: Con
       <p className="rv-doc__nota">
         {rico(tr('cartaPorte.documentos.vista.soloSalenDocumentosStrong'), { strong: (c) => <strong>{c}</strong> })}
       </p>
+      {aprobados === 0 ? (
+        <div className="rv-doc__enlaces">
+          <DescargaNoDisponible rotulo={tr('cartaPorte.documentos.vista.exportarLoAprobado')} motivo={tr('cartaPorte.documentos.vista.sinAprobadosParaExportar')} />
+        </div>
+      ) : (
       <div className="rv-doc__enlaces">
         {descarga(liga('estandar', 'csv'), tr('cartaPorte.documentos.vista.estandarCsv'), 'csv')}
         {descarga(liga('estandar', 'json'), tr('cartaPorte.documentos.vista.estandarJson'), 'json')}
@@ -438,6 +445,7 @@ function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: Con
         {configs.map((c) => descarga(liga(c.id, c.formato), `${c.nombre} · ${c.formato.toUpperCase()}`, c.id))}
         {configs.map((c) => descarga(liga(c.id, 'xlsx'), `${c.nombre} · ${tr('cartaPorte.documentos.vista.excel')}`, `${c.id}-xlsx`))}
       </div>
+      )}
       {acciones.guardarExport && (
         <Disclosure variante="linea" titulo={tr('cartaPorte.documentos.vista.declararUnFormatoDestino')}>
           <FormaAccion accion={acciones.guardarExport} className="rv-doc__forma">
