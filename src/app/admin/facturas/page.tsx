@@ -122,7 +122,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
             { etiqueta: t('facturas.periodo'), valor: `${sel.periodoInicio} a ${sel.periodoFin}` },
             { etiqueta: t('facturas.pago'), valor: sel.pagadaEn ? fechaMx(sel.pagadaEn) : '—' },
           ]}
-          pie={<BotonEnlace variante="suave" href="/admin/costos-facturacion">{t('facturas.vr_abrir')}</BotonEnlace>}
+          pie={<BotonEnlace variante="primary" href="/admin/costos-facturacion">{t('facturas.vr_abrir')}</BotonEnlace>}
         />
       ) : null}
     >

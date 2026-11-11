@@ -18,7 +18,7 @@ import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FormaPieza, FormaEnvio, FormaLiberarAmbiguo, type ResultadoPieza } from './forma-pieza';
 import { RebotesYBajas } from './rebotes';
 import { LimpiezaLote, type ResultadoConteo, type ResultadoVaciado } from './lote';
-import { VistasAprobaciones, type VistaAprobaciones } from './vistas';
+import { BarraVistasAprobaciones, PanelesAprobaciones, ProveedorVistas, type VistaAprobaciones } from './vistas';
 import { leerEsperadas, leerParametrosLote } from './lote-parametros';
 import '../bandeja.css';
 
@@ -241,8 +241,15 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
     </>
   );
 
+  const conteos = {
+    aprobar: urgente.ok !== null && normal.ok !== null ? urgente.ok.length + normal.ok.length : null,
+    enviar: porEnviar !== null ? porEnviar.length : null,
+  };
+
   return (
+    <ProveedorVistas inicial={inicial}>
     <EsqueletoTablaMaestra
+      filtros={<BarraVistasAprobaciones conteos={conteos} />}
       titulo={t('aprobaciones.aprobaciones')}
       apoyo={t('aprobaciones.lo_que_los_agentes')}
       avisos={<Aviso tono="info">{t('aprobaciones.el_candado_es_de')}</Aviso>}
@@ -267,17 +274,9 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
           : { etiqueta: t('aprobaciones.kpi_bandeja'), valor: estadoBandeja.frenaAlRunner ? t('aprobaciones.kpi_frena') : t('aprobaciones.kpi_libre'), tono: estadoBandeja.frenaAlRunner ? 'bad' : 'ok' },
       ]}
     >
-      <VistasAprobaciones
-        inicial={inicial}
-        conteos={{
-          aprobar: urgente.ok !== null && normal.ok !== null ? urgente.ok.length + normal.ok.length : null,
-          enviar: porEnviar !== null ? porEnviar.length : null,
-        }}
-        porAprobar={porAprobar}
-        porEnviar={paraEnviar}
-        historial={historial}
-      />
+      <PanelesAprobaciones conteos={conteos} porAprobar={porAprobar} porEnviar={paraEnviar} historial={historial} />
     </EsqueletoTablaMaestra>
+    </ProveedorVistas>
   );
 }
 

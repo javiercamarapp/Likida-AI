@@ -52,12 +52,17 @@ export default async function WhatsappInfraPage() {
     <EsqueletoPanelCifras
       titulo={t('whatsapp_infra.whatsapp_infra')}
       etiquetaCifras={t('whatsapp_infra.conversaciones_de_whatsapp')}
-      cifras={[{
-        etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: total, formato: 'entero',
-        estado: total === null ? 'vacio' : 'ok',
-        mensaje: t('whatsapp_infra.no_se_pudo_contar'),
-        nota: t('whatsapp_infra.filas_vivas_en_wa_conversacion_ventana'),
-      }]}
+      cifras={[
+        {
+          etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: total, formato: 'entero',
+          estado: total === null ? 'vacio' : 'ok',
+          mensaje: t('whatsapp_infra.no_se_pudo_contar'),
+          nota: t('whatsapp_infra.filas_vivas_en_wa_conversacion_ventana'),
+        },
+        { etiqueta: t('whatsapp_infra.kpi_mostradas'), valor: conversaciones.length, formato: 'entero' },
+        { etiqueta: t('whatsapp_infra.kpi_numeros'), valor: 1, formato: 'entero', nota: t('whatsapp_infra.kpi_numeros_nota') },
+        { etiqueta: t('whatsapp_infra.kpi_sin_integrar'), valor: fueraDeAlcance(t).length, formato: 'entero', tono: 'warn' },
+      ]}
     >
 
       <Tarjeta titulo={t('whatsapp_infra.numero_operativo')}>

@@ -5,9 +5,9 @@ import {
   FILAS_BITACORA, leerPaginaAccesos, leerPaginaBitacora, normalizarFiltroBitacora, opcionesBitacora,
   type AccesoSuperadmin, type EntradaBitacora, type FiltroBitacora, type PaginaAccesos, type PaginaBitacora,
 } from '@/lib/admin/bitacora';
-import { fechaHoraMx } from '@/lib/formato';
+import { fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroFecha, FiltroOpciones, StatusChip, hrefConParams,
+  Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, hrefConParams,
   type OpcionFiltro,
 } from '@/app/ui-v2/componentes';
 import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
@@ -15,6 +15,7 @@ import { ahoraMs } from '@/lib/saludo';
 import { PiePaginas } from '../pie-paginas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { quienDe } from './quien';
+import { FiltroFechaIso } from './filtro-fecha-iso';
 import { etiquetaAccion, etiquetaEntidad, rotuloTipoAcceso } from './etiquetas';
 import '../sistema.css';
 
@@ -44,6 +45,23 @@ function columnasAccesos(t: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES, i
     { id: 'flota', titulo: t('bitacora.flota'), celda: (a) => a.tenantNombre ?? '—' },
     { id: 'ruta', titulo: t('bitacora.pantalla'), celda: (a) => <span className="adm-sis-dato">{a.ruta}</span> },
   ];
+}
+
+/** El panel de Rovaq (P7): «N REGISTROS» en versalitas, el título y el sello de solo lectura arriba; la tabla y su pie dentro del mismo marco.
+ *  Sin identificador de la persona que mira: esta pantalla no muestra ids ni correos (ver la nota de BitacoraPage). */
+function PanelRegistros({ total, titulo, rotulo, solo, children }: { total: number; titulo: string; rotulo: string; solo: string; children: React.ReactNode }) {
+  return (
+    <section className="adm-bit-panel" aria-label={titulo}>
+      <header className="adm-bit-panel__cab">
+        <div className="adm-bit-panel__tit">
+          <span className="adm-bit-panel__kicker">{numero(total)} {rotulo}</span>
+          <h2 className="adm-bit-panel__h">{titulo}</h2>
+        </div>
+        <span className="adm-bit-panel__id">{solo}</span>
+      </header>
+      {children}
+    </section>
+  );
 }
 
 /**
@@ -112,8 +130,8 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
         {vista === 'acciones' ? <FiltroBusqueda nombre="accion" valor={filtro.accion ?? ''} etiqueta={t('bitacora.accion')} placeholder={t('bitacora.accion_flota_usuario')} /> : null}
         {opcionesFlota ? <FiltroOpciones etiqueta={t('bitacora.flota')} nombre="flota" valor={filtro.tenantId ?? ''} opciones={opcionesFlota} /> : null}
         {opcionesPersona ? <FiltroOpciones etiqueta={t('bitacora.persona')} nombre="persona" valor={filtro.actorId ?? ''} opciones={opcionesPersona} /> : null}
-        <FiltroFecha nombre="desde" etiqueta={t('bitacora.desde')} valor={filtro.desde} />
-        <FiltroFecha nombre="hasta" etiqueta={t('bitacora.hasta')} valor={filtro.hasta} />
+        <FiltroFechaIso nombre="desde" etiqueta={t('bitacora.desde')} valor={filtro.desde} plantilla={ts('bitacora.plantilla_fecha')} />
+        <FiltroFechaIso nombre="hasta" etiqueta={t('bitacora.hasta')} valor={filtro.hasta} plantilla={ts('bitacora.plantilla_fecha')} />
       </BarraFiltros>
       </>}
       avisos={(opciones.flotas === null || opciones.personas === null || alReves || (vista === 'accesos' && accesos !== null && !accesos.existe)) ? <>
@@ -132,7 +150,7 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
       {alReves ? null : lecturaActual === null ? (
         <EstadoError reintentar>{t('bitacora.no_se_pudo_leer_2')}</EstadoError>
       ) : vista === 'acciones' && lectura ? (
-        <>
+        <PanelRegistros total={lectura.total} titulo={ts('bitacora.panel_acciones')} rotulo={ts(lectura.total === 1 ? 'bitacora.registro_uno' : 'bitacora.registros_otros')} solo={ts('bitacora.solo_lectura')}>
           <TablaLista<EntradaBitacora>
             etiqueta={t('bitacora.acciones_registradas')} columnas={columnasAcciones(t, ts, idioma)} filas={lectura.filas} idFila={(e) => String(e.id)} base="/admin/bitacora" params={params}
             vacio={nFiltros > 0
@@ -140,15 +158,15 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
               : { titulo: t('bitacora.la_bitacora_esta_vacia'), texto: t('bitacora.aun_no_se_ha') }}
           />
           <PiePaginas base="/admin/bitacora" params={params} pagina={lectura.pagina} paginas={lectura.paginas} total={lectura.total} tamano={FILAS_BITACORA} unidad="entradas" />
-        </>
+        </PanelRegistros>
       ) : accesos && accesos.existe ? (
-        <>
+        <PanelRegistros total={accesos.total} titulo={ts('bitacora.panel_accesos')} rotulo={ts(accesos.total === 1 ? 'bitacora.registro_uno' : 'bitacora.registros_otros')} solo={ts('bitacora.solo_lectura')}>
           <TablaLista<AccesoSuperadmin>
             etiqueta={t('bitacora.accesos_del_equipo')} columnas={columnasAccesos(t, ts, idioma)} filas={accesos.filas} idFila={(a) => String(a.id)} base="/admin/bitacora" params={params}
             vacio={{ titulo: t('bitacora.ningun_acceso_con_ese'), texto: t('bitacora.quita_un_filtro_o') }}
           />
           <PiePaginas base="/admin/bitacora" params={params} pagina={accesos.pagina} paginas={accesos.paginas} total={accesos.total} tamano={FILAS_BITACORA} unidad="accesos" />
-        </>
+        </PanelRegistros>
       ) : null}
 
       <p className="adm-sis-nota">

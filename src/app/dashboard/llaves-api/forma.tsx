@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useActionState } from 'react';
-import { useFormStatus } from 'react-dom';
-import { KeyRound, Check, Copy, ShieldAlert } from 'lucide-react';
+import { Check, Copy, ShieldAlert } from 'lucide-react';
 import { Boton, BotonConfirmar, CampoSelect, CampoTexto, AvisoResultado, Icono, Tooltip, clasesBoton } from '@/app/ui-v2/componentes';
 // SOLO TIPOS de `llave-api-escritura.ts`: ese módulo importa `supabaseAdmin`,
 // que no puede acabar en el bundle del navegador. El catálogo de áreas viaja
@@ -20,15 +19,6 @@ export type ResultadoForma =
   | { ok: false; error: string }
   | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
-
-function BotonEmitir({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }) {
-  const { pending } = useFormStatus();
-  return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={KeyRound} />}>
-      {pending ? ocupado : etiqueta}
-    </Boton>
-  );
-}
 
 /** El error del servidor, VERBATIM, con el aviso único del panel. */
 function AvisoError({ error }: { error: string }) {
@@ -72,8 +62,11 @@ export function SecretoUnaVez({ enClaro }: { enClaro: string }) {
  * El alta. Tras emitir, el resultado ENSEÑA el secreto una vez (arriba); el
  * renglón nuevo de la lista solo trae la pista.
  */
-export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
-  accion: AccionForma;
+export function FormaEmision({ estado, despachar, idForma, areas, vigencias, vigenciaDefault }: {
+  /** El estado y el envío los lleva el cajón (`CajonEmitirLlave`): el botón de emitir vive en el PIE del cajón y apunta a esta forma con `form=`. */
+  estado: ResultadoForma;
+  despachar: (fd: FormData) => void;
+  idForma: string;
   areas: ReadonlyArray<OpcionArea>;
   /** SEG-8: cuánto vale la llave. Como PROP, igual que las áreas — este
    *  componente no puede importar del módulo que arrastra `supabaseAdmin`. */
@@ -81,13 +74,12 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
   vigenciaDefault: string;
 }) {
   const { t } = useT('resto', restoEs);
-  const [estado, despachar] = useActionState(accion, null);
 
   return (
     <div className="rv-lla__forma">
       {estado?.ok && estado.secreto && <SecretoUnaVez enClaro={estado.secreto.enClaro} />}
 
-      <form action={despachar} className="rv-lla__forma">
+      <form id={idForma} action={despachar} className="rv-lla__forma">
         <div className="rv-lla__rejilla">
           <CampoTexto etiqueta={t('llaves.para_que_sistema_es')} id="llave-nombre" name="nombre" required maxLength={80}
             placeholder={t('llaves.tms_propio_tablero_de_tableau')} ayuda={t('llaves.el_nombre_es_lo_que_te')} />
@@ -108,7 +100,6 @@ export function FormaEmision({ accion, areas, vigencias, vigenciaDefault }: {
         </div>
 
         {estado && !estado.ok && <AvisoError error={estado.error} />}
-        <div><BotonEmitir etiqueta={t('llaves.emitir_llave')} ocupado={t('llaves.emitiendo')} /></div>
       </form>
     </div>
   );

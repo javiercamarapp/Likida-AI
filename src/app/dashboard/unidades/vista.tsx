@@ -1,4 +1,5 @@
 import { TarjetaTabla } from '../bloque';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { cifrasUniformes } from '../formato';
 import { Satellite, Truck } from 'lucide-react';
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
@@ -91,8 +92,10 @@ const INICIAL_VACIO: UnidadCruda = {
  */
 export function VistaUnidades({ tr = TR_OPERACION_ES,
   pag, bajas, totalBajas, conteos, totalActivasConocido, puedeEditar, guardar, cambiarEstado, sufijo, camposOcultos, proveedoresGps,
-  patios, patioDelJefe, terminalPorUnidad, editablePorUnidad, cargarUnidades, plantillaCsv, hrefPatios,
+  patios, patioDelJefe, terminalPorUnidad, editablePorUnidad, cargarUnidades, plantillaCsv, hrefPatios, taller,
 }: { tr?: TrOperacion;
+  /** El bloque del taller (órdenes y rutinas), armado en el servidor; entra como hijo del esqueleto para no quedar fuera del marco. */
+  taller?: import('react').ReactNode;
   /** La página del parque ACTIVO, ya cortada y ordenada por la base
    *  (auditoría 24). El `total` y el `filtrados` los CONTÓ la base; el largo
    *  de esta página no es ninguno de los dos. */
@@ -246,6 +249,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       apoyo={t('un.apoyo')}
       acciones={acciones}
       cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy(t('un.tabla.etiqueta'))}
       filtros={vacio ? undefined : (
         <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
           sustantivo="unidades" camposOcultos={camposOcultos} />
@@ -270,16 +274,15 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
             { etiqueta: 'Km', valor: editada.kmActual !== null ? `${numero(editada.kmActual, idioma)} km` : '—' },
             { etiqueta: t('un.col.taller'), valor: editada.ordenesAbiertas > 0 ? tp('un.orden', editada.ordenesAbiertas) : t('un.sinordenes') },
           ]}
-        >
-          {puedeCorregir ? (
-            <div className="rv-un__editor">
-              <p className="rv-un__nota">{t('un.corregir', { eco: editada.numeroEconomico })}</p>
+          // La vista rápida es de LECTURA (2x2 y pie); corregir la unidad es otro cajón que se abre desde el pie.
+          pie={puedeCorregir ? (
+            <CajonAlta id={`editar-${editada.id}`} titulo={t('un.corregir', { eco: editada.numeroEconomico })} disparador={t('op.editar')} primario tamano="xl">
               <FormaUnidad accion={guardar} id={editada.id} inicial={aInicial(editada)} idPrefijo={`u-${editada.id}`}
                 proveedoresGps={proveedoresGps} gpsVistoEn={editada.gpsVistoEn}
                 patios={patios} terminalId={terminalPorUnidad[editada.id] ?? ''} patioFijo={patioDelJefe !== null} />
-            </div>
-          ) : null}
-        </CajonVistaRapida>
+            </CajonAlta>
+          ) : undefined}
+        />
       ) : null}
     >
       {vacio ? (
@@ -322,6 +325,8 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
           </ul>
         </Tarjeta>
       )}
+
+      {taller}
     </EsqueletoTablaMaestra>
   );
 }

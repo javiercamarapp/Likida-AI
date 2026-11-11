@@ -19,6 +19,7 @@ import {
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import '../caja-vacia.css';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import './clientes.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 import { rico } from '@/lib/i18n/rico';
@@ -80,6 +81,7 @@ export function VistaClientes({
       avisos={avisos}
       cifras={cifras}
       etiquetaCifras={t('op.cl.cartera')}
+      selloCifras={selloHoy(t('op.cl.cartera'))}
     >
       {panel === null ? (
         <EstadoError reintentar>{t('op.no_pude_leer_tus_clientes_tarifas')}</EstadoError>
@@ -302,7 +304,8 @@ function BloqueClientes({ panel, puedeEditar, guardarCliente, sp, sufijo, campos
         )}
 
         {panel.clientes.length === 0 ? (
-          <div className="rv-caja-vacia"><EstadoVacio icono={Handshake} contenido titulo={t('op.sin_clientes_todavia')}>{t('op.por_eso_likida_ve_lo_que')}</EstadoVacio></div>
+          <div className="rv-caja-vacia"><EstadoVacio icono={Handshake} contenido titulo={t('op.sin_clientes_todavia')}
+            accion={puedeEditar ? <BotonEnlace href={urlRegistro(RUTA, sufijo, { nuevo: 'cliente' })} variante="primary">{t('op.cl.nuevo_cliente')}</BotonEnlace> : undefined}>{t('op.por_eso_likida_ve_lo_que')}</EstadoVacio></div>
         ) : (
           <TablaBase<ClienteConMetricas> etiqueta={t('op.clientes_y_su_rfc')} columnas={columnas} filas={pagClientes.filas}
             idFila={(c) => c.id} tarjetaMovil
@@ -444,7 +447,8 @@ function BloqueTarifas({
         )}
 
         {panel.tarifas.length === 0 ? (
-          <div className="rv-caja-vacia"><EstadoVacio icono={Route} contenido titulo={t('op.sin_tarifas_capturadas')}>{t('op.con_al_menos_una_likida_puede')}</EstadoVacio></div>
+          <div className="rv-caja-vacia"><EstadoVacio icono={Route} contenido titulo={t('op.sin_tarifas_capturadas')}
+            accion={puedeEditar ? <BotonEnlace href={urlRegistro(RUTA, sufijo, { nuevo: 'tarifa' })} variante="primary">{t('op.cl.nueva_tarifa')}</BotonEnlace> : undefined}>{t('op.con_al_menos_una_likida_puede')}</EstadoVacio></div>
         ) : (
           <TablaBase<TarifaRow> etiqueta={t('op.rutas_por_cliente')} columnas={columnas} filas={pagTarifas.filas}
             idFila={(t) => t.id} tarjetaMovil

@@ -72,9 +72,9 @@ describe('embudo de adquisición', () => {
     // Tres etapas con gente = tres barras; 'negociacion' (alias histórico) suma en «Propuesta».
     expect(h.match(/rv-barlist__fila/g)).toHaveLength(3);
     expect(h).toContain('Propuesta');
-    expect(h).toMatch(/width="100(\.0+)?%"/);
-    expect(h).toMatch(/width="25(\.0+)?%"/);
-    expect(h).toMatch(/width="5(\.0+)?%"/);
+    expect(h).toMatch(/width="100\.?0*%"/);
+    expect(h).toMatch(/width="25\.?0*%"/);
+    expect(h).toMatch(/width="5\.?0*%"/);
     // Las siete etapas en cero NO son siete filas: van en una frase.
     expect(h).toContain('Sin prospectos todavía en: Cita agendada, Cita reprogramada');
     expect(h.match(/<svg/g)).toHaveLength(3);

@@ -15,12 +15,14 @@
 html[data-overlay-abierto] { overflow: hidden; }
 
 .rv-ov {
+  text-align: start;
   padding: 0; border: 0; background: transparent; color: var(--ink);
   max-width: none; max-height: none; overflow: visible;
   font-size: 13px; line-height: 1.5;
 }
 .rv-ov::backdrop { background: var(--scrim, rgba(14, 14, 16, .4)); }
 .rv-ov__panel {
+  text-align: start;
   display: flex; flex-direction: column; background: var(--surface); color: var(--ink);
   border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-pop, none); overflow: hidden;
 }

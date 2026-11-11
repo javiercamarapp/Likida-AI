@@ -87,7 +87,15 @@ export default async function IntegracionesPage() {
     <EsqueletoTablaMaestra
       titulo={t('integraciones.integraciones')}
       apoyo={t('integraciones.los_servicios_reales_de_los_que')}
-      cifras={[{ etiqueta: t('integraciones.conectores'), valor: conectores.length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : conectores.some((c) => c.tono === 'warn') ? 'warn' : 'ok' }]}
+      cifras={[
+        { etiqueta: t('integraciones.conectores'), valor: conectores.length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : conectores.some((c) => c.tono === 'warn') ? 'warn' : 'ok' },
+        { etiqueta: t('integraciones.kpi_ok'), valor: conectores.filter((c) => c.tono === 'ok').length, formato: 'entero' },
+        { etiqueta: t('integraciones.kpi_atencion'), valor: conectores.filter((c) => c.tono === 'warn').length, formato: 'entero', tono: conectores.some((c) => c.tono === 'warn') ? 'warn' : undefined },
+        { etiqueta: t('integraciones.kpi_faltan'), valor: conectores.filter((c) => c.tono === 'bad').length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : undefined },
+        r === null
+          ? { etiqueta: t('integraciones.kpi_modelos'), valor: null, estado: 'vacio' as const, mensaje: t('integraciones.no_se_pudo_leer_el_gasto') }
+          : { etiqueta: t('integraciones.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' as const },
+      ]}
     >
       <Tarjeta titulo={t('integraciones.conectores')}>
         <TablaRenglones

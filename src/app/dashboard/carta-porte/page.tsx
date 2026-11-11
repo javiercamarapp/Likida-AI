@@ -35,7 +35,7 @@ const RUTA = '/dashboard/carta-porte';
 export default async function PaginaCartaPorte({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; ver?: string }>;
 }) {
   const { t: tr } = await getT('dinero');
   const sp = await searchParams;
@@ -138,6 +138,7 @@ export default async function PaginaCartaPorte({
       quitarMercancia={quitarMercancia}
       guardarDatosCliente={datosCliente}
       sufijo={sufijoTenant(sp)}
+      ver={sp.ver ?? null}
     />
     </IdiomaProvider>
   );

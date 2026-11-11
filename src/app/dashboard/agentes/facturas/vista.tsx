@@ -1,4 +1,5 @@
 import { CheckCircle2 } from 'lucide-react';
+import '../agentes.css';
 import './facturas.css';
 import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { enrutar, type Ruta } from '@/lib/likida/facturacion/enrutar';
@@ -10,7 +11,7 @@ import type { AccionRelogin } from './relogin-controles';
 import { SeccionControlEmision, type DatosControl } from './control-emision';
 import { BarList, type PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
-import { AvisoCompacto, FilaTarjetas, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraPeriodo, FilaTarjetas, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, type TrAgentes, selloHoyTr } from '../i18n-agentes';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
@@ -117,7 +118,13 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   const bloqueados = teToca.filter((x) => (x.r as Extract<Ruta, { via: 'mensaje' }>).motivo === 'bloqueado');
 
   const cifras: PropsCifra[] = ([
-    { info: 'facturas.por_facturar', etiqueta: tx('facturas.vista.por_facturar'), valor: numero(ordenados.length), nota: tx('facturas.vista.tickets_sin_cfdi_hoy') },
+    { info: 'facturas.por_facturar', etiqueta: tx('facturas.vista.por_facturar'), valor: numero(ordenados.length), nota: tx('facturas.vista.tickets_sin_cfdi_hoy'),
+      // Barra de 6 px (Rovaq pc-kpis): vencidos, urgentes y el resto de la cola; conjuntos disjuntos, suman el total.
+      segmentos: ordenados.length > 0 ? [
+        { etiqueta: tx('facturas.vista.vencidos'), valor: vencidos.length },
+        { etiqueta: tx('facturas.vista.urgentes_2_dias'), valor: urgentes.length },
+        { etiqueta: tx('facturas.vista.por_facturar'), valor: ordenados.length - vencidos.length - urgentes.length },
+      ] : undefined },
     { info: 'facturas.monto_sin_factura', etiqueta: tx('facturas.vista.monto_sin_factura'), valor: mxn(montoSinFactura, tr.idioma) },
     { info: 'facturas.urgentes', etiqueta: tx('facturas.vista.urgentes_2_dias'), valor: numero(urgentes.length), tono: urgentes.length > 0 ? 'warn' : undefined },
     { info: 'facturas.vencidos', etiqueta: tx('facturas.vista.vencidos'), valor: numero(vencidos.length), tono: vencidos.length > 0 ? 'bad' : undefined },
@@ -127,6 +134,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
     <EsqueletoTablaMaestra
       titulo={tx('facturas.vista.facturas_en_automatico')}
       apoyo={tx('facturas.vista.tickets_sin_cfdi_lo_que')}
+      filtros={<BarraPeriodo etiqueta={tx('facturas.vista.sello_tickets_sin_cfdi')} chips={[{ id: 'alcance', etiqueta: tx('facturas.vista.tickets_sin_cfdi_hoy') }]} />}
       cifras={cifras}
       etiquetaCifras={tx('facturas.vista.sello_tickets_sin_cfdi')}
       selloCifras={selloHoyTr(tr, tx('facturas.vista.sello_tickets_sin_cfdi'))}
@@ -136,7 +144,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
           mas={tx('facturas.vista.si_tu_empresa_aun_no')} />
       ) : undefined}
     >
-      <div className="flex flex-col gap-3">
+      <div className="rv-ag-pila">
       <FilaTarjetas variante="8-4">
         {/* ── TU COLA: lo único de esta página que espera una acción tuya ── */}
         <Tarjeta titulo={tx('facturas.vista.te_toca_a_ti')} info="facturas.te_toca"

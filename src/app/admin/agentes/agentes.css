@@ -19,6 +19,11 @@
 @media (min-width: 768px) {
   .rv-tb table td { vertical-align: middle; }
 }
+/* Filas de dos líneas (nombre + departamento · estado): 56 px como las de Rovaq con dos líneas (antes 41 px, apretadas). */
+@media (min-width: 820px) {
+  [data-ui="v2"] .rv-tb table:has(.rv-agente-sub) tbody th { height: 56px; padding-block: 8px; }
+  [data-ui="v2"] .rv-tb table:has(.rv-agente-sub) tbody td { padding-block: 8px; }
+}
 
 /* Menú «⋯» de la fila (Rovaq: acciones por fila dentro de un menú, 28 px): la destructiva «Apagar» vive ahí, no como botón rojo por fila. */
 .rv-agente-menu-btn.rv-btn { width: 28px; min-width: 28px; height: 28px; min-height: 28px; padding: 0; justify-content: center; }

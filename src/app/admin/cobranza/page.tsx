@@ -103,7 +103,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
             { etiqueta: t('cobranza.toques'), valor: String(sel.toques.length) },
             { etiqueta: t('facturas.periodo'), valor: `${sel.factura.periodoInicio} a ${sel.factura.periodoFin}` },
           ]}
-          pie={<BotonEnlace variante="suave" href="/admin/costos-facturacion">{t('cobranza.vr_abrir')}</BotonEnlace>}
+          pie={<BotonEnlace variante="primary" href="/admin/costos-facturacion">{t('cobranza.vr_abrir')}</BotonEnlace>}
         />
       ) : null}
       avisos={(

@@ -174,11 +174,11 @@ export default async function ConfiguracionPage({
   ];
 
   return (
-    <MarcoPagina titulo={t('cfg.configuracion')} apoyo={t('cfg.lo_que_el_motor_usa_para')} ancho="lectura">
+    <MarcoPagina titulo={t('cfg.configuracion')} apoyo={t('cfg.lo_que_el_motor_usa_para')}>
       {config === null ? (
         <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_configuracion')}</EstadoError>
       ) : (
-        <>
+        <div className="rv-cfg__rejilla">
           <Tarjeta titulo={t('cfg.la_empresa')} info="configuracion.empresa">
             <div className="rv-cfg__empresa">
               <span className="rv-cfg__sello" aria-hidden="true"><Icono icono={Building2} tam={18} /></span>
@@ -206,14 +206,19 @@ export default async function ConfiguracionPage({
             </FormaConAviso>
           </Tarjeta>
 
-          <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} ejemploIlegible={ejemploIlegible} guardar={guardar} catalogo={estadoCatalogo} />
+          <div className="rv-cfg__ancha">
+            <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} ejemploIlegible={ejemploIlegible} guardar={guardar} catalogo={estadoCatalogo} />
+          </div>
 
-          <Tarjeta titulo={t('cfg.unidades_calibradas')} info="configuracion.unidades">
-            <p className="rv-cfg__apoyo">{t('cfg.placas_con_consumo_propio_que_le')}</p>
-            <TablaBase etiqueta={t('cfg.rendimiento_base_por_placa')} columnas={columnasUnidades} filas={filasUnidades} idFila={(u) => u.placa} densa altoMaximo={false}
-              vacio={{ titulo: t('cfg.ninguna_placa_calibrada'), texto: t('cfg.todas_usan_el_rendimiento_por_defecto') }} />
-          </Tarjeta>
-        </>
+          {/* Sin placas calibradas el vacío vive en la caja punteada de la propia tarjeta (Rovaq `ac-vacio`), no suelto dentro de ella. */}
+          <div className="rv-cfg__ancha">
+            <Tarjeta titulo={t('cfg.unidades_calibradas')} info="configuracion.unidades" estado={filasUnidades.length === 0 ? 'vacio' : 'ok'}
+              mensaje={t('cfg.ninguna_placa_calibrada')} detalle={t('cfg.todas_usan_el_rendimiento_por_defecto')} contenida>
+              <p className="rv-cfg__apoyo">{t('cfg.placas_con_consumo_propio_que_le')}</p>
+              <TablaBase etiqueta={t('cfg.rendimiento_base_por_placa')} columnas={columnasUnidades} filas={filasUnidades} idFila={(u) => u.placa} densa altoMaximo={false} />
+            </Tarjeta>
+          </div>
+        </div>
       )}
     </MarcoPagina>
   );

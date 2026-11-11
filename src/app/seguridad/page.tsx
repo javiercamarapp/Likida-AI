@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { ShieldCheck, Lock, EyeOff, FileCheck2, Scale, FlaskConical, KeyRound } from 'lucide-react';
+import '../legal/publico-r2.css';
 
 export const metadata: Metadata = {
   title: 'Seguridad — Likida',

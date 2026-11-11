@@ -223,12 +223,12 @@ export function VistaAgentePeajes({
       {/* ── El desglose del PROVEEDOR (F5, PoC): tres cubetas y bitácora ── */}
       <Tarjeta
         titulo={tx('peajes.vista.desglose_del_proveedor_de_peaje')} info="peajes.desglose_proveedor"
-        acciones={(
+      >
+        <div className="rv-pj-cab-acc">
           <BotonEnlace href={`/dashboard/agentes/peajes/configuracion${sufijo}`} tamano="sm" icono={<Icono icono={Settings2} tam={14} />}>
             {tx('peajes.vista.configuracion_tags_casetas_mapeo_de', { v0: superficie.gps ? 'geocercas, ' : '' })}
           </BotonEnlace>
-        )}
-      >
+        </div>
         <p className="rv-pj-sub">
           {rico(tx('peajes.vista.el_excel_csv_o_pdf'), { v0: superficie.gps ? tx('peajes.vista.y_cuando_hay_catalogo_de') : '', b: <b>{tx('peajes.vista.cuadra')}</b>, b2: <b>{tx('peajes.vista.sin_respaldo')}</b>, b3: <b>{tx('peajes.vista.por_verificar')}</b>, v4: superficie.bitacoraEstimulo && tx('peajes.vista.de_lo_que_cuadra_sale') })}
         </p>

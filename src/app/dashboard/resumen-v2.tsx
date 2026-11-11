@@ -98,7 +98,7 @@ export async function ResumenV2({
         </Tarjeta>
       </FilaTarjetas>
 
-      <FilaTarjetas variante="6-6" llena>
+      <FilaTarjetas variante="6-6">
         <TarjetaCierres t={t} d={d} />
         <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
       </FilaTarjetas>

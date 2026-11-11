@@ -150,7 +150,8 @@ export function FormaViaje({ action, buscarCatalogo, totalOperadores, totalClien
         <Aviso tono="error">{estado.error}</Aviso>
       )}
 
-      <div>
+      {/* El primario va en un pie fijo del cajón (Rovaq `overlay-foot`: padding 12x16, acciones a la derecha), no suelto al final del cuerpo. */}
+      <div className="rv-fv__pie">
         <BotonCrear />
       </div>
     </form>
