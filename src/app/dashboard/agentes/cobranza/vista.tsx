@@ -7,7 +7,7 @@ import { FormaEstrategia } from './estrategia';
 import { CajonEstrategia } from './cajon-estrategia';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
-import { EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { BarraPeriodo, EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, selloHoyTr, rotuloDiasTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
 import './cobranza.css';
@@ -67,6 +67,8 @@ export function VistaAgenteCobranza({
     <EsqueletoTablaMaestra
       titulo={tx('cobranza.vista.seguimiento_de_comprobantes')}
       apoyo={tx('cobranza.vista.a_quien_insistira_el_agente')}
+      // Barra de alcance (Rovaq BF): dice la ventana de contacto y si el agente corre; son datos de su configuración, no filtros inventados.
+      filtros={<BarraPeriodo etiqueta={tx('cobranza.vista.cola_de_seguimiento')} chips={[{ id: 'ventana', etiqueta: ventana }, { id: 'estado', etiqueta: config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado') }]} />}
       cifras={cifras}
       etiquetaCifras={tx('cobranza.vista.cola_de_seguimiento')}
       selloCifras={selloHoyTr(tr, tx('cobranza.vista.cola_de_seguimiento'))}

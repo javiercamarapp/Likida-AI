@@ -6,7 +6,7 @@ import type { BuzonDeFlota } from '@/lib/correo/buzon_escritura';
 import { mxn, numero, fechaCorta } from '@/lib/formato';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
-import { AvisoCompacto, Boton, Disclosure, EstadoVacio, FilaTarjetas, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraPeriodo, Boton, Disclosure, EstadoVacio, FilaTarjetas, Icono, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { SelloDato, TablaLista, type ColumnaTabla, type ParamsURL } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 
@@ -99,6 +99,7 @@ export function VistaAgenteProveedores({
     <EsqueletoTablaMaestra
       titulo={tx('proveedores.vista.facturas_de_proveedores')}
       apoyo={tx('proveedores.vista.la_bandeja_donde_el_xml')}
+      filtros={<BarraPeriodo etiqueta={tx('proveedores.vista.sello_facturas_de_proveedores')} chips={[{ id: 'alcance', etiqueta: tx('proveedores.vista.sello_facturas_de_proveedores') }]} />}
       cifras={cifras}
       etiquetaCifras={tx('proveedores.vista.sello_facturas_de_proveedores')}
       selloCifras={selloHoyTr(tr, tx('proveedores.vista.sello_facturas_de_proveedores'))}

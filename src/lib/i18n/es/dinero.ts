@@ -1018,6 +1018,7 @@ export const dinero = {
   'descargaSat.vista.darDeAltaTus2': 'Dar de alta tus datos fiscales en TeleVía (alta única).',
   'descargaSat.vista.de1A25': 'De 1 a 25. El aviso del último día del mes sale siempre, además de éste.',
   'descargaSat.vista.declaraTuBuzon': 'Declara tu buzón',
+  'descargaSat.vista.configurarBuzon': 'Configurar buzón',
   'descargaSat.vista.descargasDelSatPor': 'Descargas del SAT por periodo',
   'descargaSat.vista.desde': 'Desde',
   'descargaSat.vista.efirmaDosPuntos': 'e.firma:',

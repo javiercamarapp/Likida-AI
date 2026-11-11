@@ -11,7 +11,7 @@ import type { AccionRelogin } from './relogin-controles';
 import { SeccionControlEmision, type DatosControl } from './control-emision';
 import { BarList, type PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
-import { AvisoCompacto, FilaTarjetas, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, BarraPeriodo, FilaTarjetas, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, type TrAgentes, selloHoyTr } from '../i18n-agentes';
 
 /** Topes de las listas — declarados en pantalla cuando recortan, nunca en
@@ -134,6 +134,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
     <EsqueletoTablaMaestra
       titulo={tx('facturas.vista.facturas_en_automatico')}
       apoyo={tx('facturas.vista.tickets_sin_cfdi_lo_que')}
+      filtros={<BarraPeriodo etiqueta={tx('facturas.vista.sello_tickets_sin_cfdi')} chips={[{ id: 'alcance', etiqueta: tx('facturas.vista.tickets_sin_cfdi_hoy') }]} />}
       cifras={cifras}
       etiquetaCifras={tx('facturas.vista.sello_tickets_sin_cfdi')}
       selloCifras={selloHoyTr(tr, tx('facturas.vista.sello_tickets_sin_cfdi'))}

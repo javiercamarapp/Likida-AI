@@ -1018,6 +1018,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'descargaSat.vista.darDeAltaTus2': 'Register your tax data with TeleVia (one-time registration).',
   'descargaSat.vista.de1A25': 'From 1 to 25. The notice for the last day of the month always goes out, in addition to this one.',
   'descargaSat.vista.declaraTuBuzon': 'Declare your mailbox',
+  'descargaSat.vista.configurarBuzon': 'Set up mailbox',
   'descargaSat.vista.descargasDelSatPor': 'SAT downloads by period',
   'descargaSat.vista.desde': 'From',
   'descargaSat.vista.efirmaDosPuntos': 'e.firma:',
