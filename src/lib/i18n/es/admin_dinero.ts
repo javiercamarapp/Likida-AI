@@ -367,4 +367,7 @@ export const admin_dinero = {
   'facturas.vista_rapida': 'Vista rápida',
   'facturas.vr_subtitulo': 'Factura {n} de {total}',
   'facturas.vr_abrir': 'Abrir Planes y cobro',
+  'cobranza.vista_rapida': 'Vista rápida',
+  'cobranza.vr_subtitulo': 'Factura {n} de {total}',
+  'cobranza.vr_abrir': 'Abrir Planes y cobro',
 } as const;

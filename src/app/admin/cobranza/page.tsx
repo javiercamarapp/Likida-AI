@@ -8,8 +8,8 @@ import { getPiezasDunningPlataforma, getUltimaCorridaDunningPlataforma, type Cor
 import { armarEstadoDunning, type SelloToque } from '@/lib/likida/cobranza_estado';
 import { toquesDeHoy, tituloToque } from '@/lib/likida/agentes/exito';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
-import { Aviso, AvisoCompacto, Disclosure, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import '../dinero.css';
 
 import { getT } from '@/lib/i18n/servidor';
@@ -48,12 +48,13 @@ async function leer<T>(nombre: string, f: () => Promise<T>): Promise<{ dato: T |
 }
 
 
-export default async function CobranzaPage() {
+export default async function CobranzaPage({ searchParams }: { searchParams?: Promise<{ ver?: string }> } = {}) {
   const { t } = await getT('admin_dinero');
   // La puerta de la PÁGINA, no solo la del layout: en Next un layout no se vuelve a ejecutar si la petición RSC declara que el cliente
   // ya lo tiene, así que lo único que protege estos datos de TODAS las flotas (service role) es esta llamada.
   await requireSuperadmin();
   const hoy = hoyMx();
+  const ver = ((await searchParams) ?? {}).ver ?? '';
   // Los totales se calculan sobre TODAS las pendientes/fallidas (conteo exacto de la base), no sobre las filas que se pintan; la lista
   // se acota a FILAS_MOSTRADAS y lo dice.
   const [facturas, corrida] = await Promise.all([
@@ -73,6 +74,9 @@ export default async function CobranzaPage() {
   const sinBase = !!estado && totalBase === 0 && estado.facturas.length === 0 && estado.propuestasPendientes === 0 && estado.propuestasEnviadas === 0;
   const hayError = facturas.error || piezas.error || corrida.error;
 
+  const posicion = ver ? filasVistas.findIndex((f) => f.factura.id === ver) : -1;
+  const sel = posicion >= 0 ? filasVistas[posicion] : null;
+
   const cifras = estado && !sinBase ? [
     { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
     { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
@@ -89,6 +93,18 @@ export default async function CobranzaPage() {
       titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}
       etiquetaCifras={t('cobranza.cobranza_de_las_mensualidades')}
       cifras={cifras}
+      vistaRapida={sel ? (
+        <CajonVistaRapida
+          titulo={sel.factura.tenantNombre} subtitulo={t('cobranza.vr_subtitulo', { n: posicion + 1, total: filasVistas.length })} hrefCerrar="/admin/cobranza"
+          cifras={[
+            { etiqueta: t('cobranza.total'), valor: mxn(sel.factura.monto) },
+            { etiqueta: t('cobranza.corte'), valor: sel.dias >= 0 ? t('cobranza.dias_desde_el_corte', { dias: sel.dias }) : t('cobranza.faltan_dias', { dias: -sel.dias }) },
+            { etiqueta: t('cobranza.toques'), valor: String(sel.toques.length) },
+            { etiqueta: t('facturas.periodo'), valor: `${sel.factura.periodoInicio} a ${sel.factura.periodoFin}` },
+          ]}
+          pie={<BotonEnlace variante="suave" href="/admin/costos-facturacion">{t('cobranza.vr_abrir')}</BotonEnlace>}
+        />
+      ) : null}
       avisos={(
         <>
           {hayError ? (
@@ -170,6 +186,7 @@ export default async function CobranzaPage() {
                   </span>
                 )),
               },
+              { id: 'vr', titulo: '', alinear: 'der', celda: (f) => <BotonEnlace href={`/admin/cobranza?ver=${encodeURIComponent(f.factura.id)}`} variante="ghost" tamano="sm">{t('cobranza.vista_rapida')}</BotonEnlace> },
             ]}
           />
         </Tarjeta>

@@ -369,4 +369,7 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'facturas.vista_rapida': 'Quick view',
   'facturas.vr_subtitulo': 'Invoice {n} of {total}',
   'facturas.vr_abrir': 'Open Plans and billing',
+  'cobranza.vista_rapida': 'Quick view',
+  'cobranza.vr_subtitulo': 'Invoice {n} of {total}',
+  'cobranza.vr_abrir': 'Open Plans and billing',
 };
