@@ -5,6 +5,10 @@ import { calcularAlertas } from '@/app/admin/calcular-alertas';
 import type { ConteosEscalaciones, FuenteEscalacion, ItemEscalacion } from '@/lib/admin/escalaciones';
 import type { AlertaExtra, IdAlertaExtra } from '@/lib/admin/fuentes-alerta-extra';
 import type { ResumenNegocio } from '@/lib/admin/negocio';
+import { crearTraductor } from '@/lib/i18n/traducir';
+import type { DiccionarioDe } from '@/lib/i18n/catalogo';
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { avisos as avisosEs } from '@/lib/i18n/es/avisos';
 import type { Aviso, Categoria, Severidad } from '@/lib/avisos/modelo';
 
 export interface EntradaAvisosAdmin {
@@ -59,17 +63,20 @@ function masAntigua(items: readonly ItemEscalacion[]): string | null {
   return mejor === null ? null : new Date(mejor).toISOString();
 }
 
+/** Sin traductor (pruebas, arneses) los avisos hablan español, igual que antes. */
+const trAvisosEs: TrDe<'avisos'> = crearTraductor<DiccionarioDe<'avisos'>>('es', avisosEs, avisosEs).t;
+
 // Las alertas extra que NO se pueden marcar como leídas: dicen que el sistema está caído o ciego.
 const EXTRA_NO_SILENCIABLE: ReadonlySet<IdAlertaExtra> = new Set<IdAlertaExtra>(['crons_ilegibles', 'cron_sin_latido', 'ia_credito_agotado', 'ia_sin_registro', 'webhook_en_silencio']);
 
-export function avisosDeAdmin(e: EntradaAvisosAdmin): Aviso[] {
+export function avisosDeAdmin(e: EntradaAvisosAdmin, t: TrDe<'avisos'> = trAvisosEs): Aviso[] {
   const out: Aviso[] = [];
 
   // ── Bandeja de escalaciones ───────────────────────────────────────────────
   if (e.bandeja === null) {
     out.push({
       clave: 'bandeja_ilegible|1', fuente: 'bandeja_ilegible', categoria: 'escalaciones', severidad: 'critica',
-      titulo: 'No se pudo leer la bandeja de escalaciones: puede haber pendientes que no se están viendo.',
+      titulo: t('gen.bandeja_ilegible'),
       detalle: null, href: HREF_ESCALACIONES, desde: null, silenciable: false,
     });
   } else {
@@ -105,7 +112,7 @@ export function avisosDeAdmin(e: EntradaAvisosAdmin): Aviso[] {
       const [alerta] = calcularAlertas(null, [], ciegos, null);
       out.push({
         clave: `fuentes_ilegibles|${[...nombres].sort().join(',')}`, fuente: 'fuentes_ilegibles', categoria: 'escalaciones', severidad: 'critica',
-        titulo: alerta?.texto ?? 'No se pudo leer una fuente de la bandeja de escalaciones.', detalle: null,
+        titulo: alerta?.texto ?? t('gen.fuente_ilegible'), detalle: null,
         href: alerta?.href ?? HREF_ESCALACIONES, desde: null, silenciable: false,
       });
     }
@@ -115,7 +122,7 @@ export function avisosDeAdmin(e: EntradaAvisosAdmin): Aviso[] {
   if (e.extras === null) {
     out.push({
       clave: 'extras_ilegibles|1', fuente: 'extras_ilegibles', categoria: 'sistema', severidad: 'critica',
-      titulo: 'No se pudieron leer las alertas de sistema (crons, IA, webhook): no se sabe si algo está caído.',
+      titulo: t('gen.extras_ilegibles'),
       detalle: null, href: '/admin/salud-sistema', desde: null, silenciable: false,
     });
   } else {
@@ -132,7 +139,7 @@ export function avisosDeAdmin(e: EntradaAvisosAdmin): Aviso[] {
   if (e.resumen === null) {
     out.push({
       clave: 'resumen_ilegible|1', fuente: 'resumen_ilegible', categoria: 'costos', severidad: 'critica',
-      titulo: 'No se pudo leer el resumen del negocio (costo de IA y flotas): las señales que dependen de él no se están evaluando.',
+      titulo: t('gen.resumen_ilegible'),
       detalle: null, href: '/admin', desde: null, silenciable: false,
     });
   } else {

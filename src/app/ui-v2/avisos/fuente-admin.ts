@@ -2,6 +2,7 @@
 // `server-only` por contenido (toca la base con la llave de servicio): nunca se importa desde un componente de cliente.
 import { obtenerPanoramaAccion } from '@/app/admin/requiere-accion';
 import { getResumenNegocio, type ResumenNegocio } from '@/lib/admin/negocio';
+import { getT } from '@/lib/i18n/servidor';
 import { avisosDeAdmin } from './generar-admin';
 import type { FuenteAvisos } from '@/lib/avisos/bandeja';
 
@@ -24,10 +25,12 @@ export function vaciarCacheAvisosAdmin(): void { cacheResumen = null; }
 /** Nunca lanza: lo que no se pudo leer sale como aviso crítico, no como silencio. */
 export async function leerAvisosAdmin(ahoraMs: number = Date.now()): Promise<FuenteAvisos> {
   const [panorama, r] = await Promise.all([obtenerPanoramaAccion(ahoraMs), resumen(ahoraMs)]);
+  // Nunca lanza: sin idioma resoluble (fuera de una petición) los avisos hablan español.
+  const t = await getT('avisos').then((r) => r.t).catch(() => undefined);
   const avisos = avisosDeAdmin({
     bandeja: panorama.bandeja ? { conteos: panorama.bandeja.conteos, cola: panorama.bandeja.cola } : null,
     extras: panorama.extras,
     resumen: r,
-  });
+  }, t);
   return { avisos, generadoEn: new Date(ahoraMs).toISOString() };
 }

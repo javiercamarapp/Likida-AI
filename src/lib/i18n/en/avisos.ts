@@ -105,4 +105,8 @@ export const avisos: Record<keyof typeof avisosEs, string> = {
   'notif.cfg.guardado': 'Preference saved.',
   'notif.cfg.err.prefs': 'Could not read your preferences; what you see is the default (everything on), not what is saved.',
   'notif.cfg.err.silencio': 'Could not read your quiet hours; what you see is the default, not what is saved.',
+  'gen.bandeja_ilegible': 'Could not read the escalations inbox: there may be pending items nobody is seeing.',
+  'gen.fuente_ilegible': 'Could not read a source of the escalations inbox.',
+  'gen.extras_ilegibles': 'Could not read the system alerts (crons, AI, webhook): it is not known whether something is down.',
+  'gen.resumen_ilegible': 'Could not read the business summary (AI cost and fleets): the signals that depend on it are not being evaluated.',
 };

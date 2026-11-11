@@ -104,4 +104,8 @@ export const avisos = {
   'notif.cfg.guardado': 'Preferencia guardada.',
   'notif.cfg.err.prefs': 'No se pudieron leer tus preferencias; lo que ves es el valor por omisión (todo encendido), no lo guardado.',
   'notif.cfg.err.silencio': 'No se pudo leer tu horario de silencio; lo que ves es el valor por omisión, no lo guardado.',
+  'gen.bandeja_ilegible': 'No se pudo leer la bandeja de escalaciones: puede haber pendientes que no se están viendo.',
+  'gen.fuente_ilegible': 'No se pudo leer una fuente de la bandeja de escalaciones.',
+  'gen.extras_ilegibles': 'No se pudieron leer las alertas de sistema (crons, IA, webhook): no se sabe si algo está caído.',
+  'gen.resumen_ilegible': 'No se pudo leer el resumen del negocio (costo de IA y flotas): las señales que dependen de él no se están evaluando.',
 } as const;
