@@ -11,9 +11,9 @@ import {
   crearLlaveApi, revocarLlaveApi, listarLlavesApi, llaveVencida, AREAS_DE_LLAVE, VIGENCIAS_DE_LLAVE,
   VIGENCIA_DEFAULT, type LlaveListada,
 } from '@/lib/auth/llave-api-escritura';
-import { FormaEmision, type ResultadoForma } from './forma';
+import type { ResultadoForma } from './forma';
 import { ListaLlaves } from './vista';
-import { AvisoCompacto, EstadoError } from '@/app/ui-v2/componentes';
+import { EstadoError } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { CajonEmitirLlave } from './cajon-emitir';
 import type { Metadata } from 'next';
@@ -124,23 +124,19 @@ export default async function PaginaLlavesApi({
   const sinCaducidad = llaves === null ? 0 : llaves.filter((l) => l.revocadaEn === null && l.expiraEn === null).length;
   const muertas = llaves === null ? 0 : llaves.filter((l) => l.revocadaEn !== null || llaveVencida(l.expiraEn)).length;
   const cifras = llaves === null ? undefined : [
-    { etiqueta: t('e26.llaves_vigentes'), valor: vigentes, nota: t('e26b.llaves_vigentes_nota'), segmentos: llaves.length > 0 ? [{ etiqueta: t('e26.llaves_vigentes'), valor: vigentes }, { etiqueta: t('e26.llaves_revocadas_vencidas'), valor: muertas }] : undefined },
-    { etiqueta: t('e26.llaves_sin_caducidad'), valor: sinCaducidad, nota: t('e26b.llaves_sin_caducidad_nota') },
-    { etiqueta: t('e26.llaves_revocadas_vencidas'), valor: muertas, nota: t('e26b.llaves_muertas_nota') },
+    { etiqueta: t('e26.llaves_vigentes'), matiz: 1 as const, valor: vigentes, nota: t('e26b.llaves_vigentes_nota'), segmentos: llaves.length > 0 ? [{ etiqueta: t('e26.llaves_vigentes'), valor: vigentes }, { etiqueta: t('e26.llaves_revocadas_vencidas'), matiz: 1 as const, valor: muertas }] : undefined },
+    { etiqueta: t('e26.llaves_sin_caducidad'), matiz: 1 as const, valor: sinCaducidad, nota: t('e26b.llaves_sin_caducidad_nota') },
+    { etiqueta: t('e26.llaves_revocadas_vencidas'), matiz: 1 as const, valor: muertas, nota: t('e26b.llaves_muertas_nota') },
   ];
 
   return (
     <EsqueletoTablaMaestra
       titulo={t('llaves.llaves_de_api')} apoyo={t('llaves.con_una_llave_un_sistema_tuyo')}
-      avisos={<AvisoCompacto tono="info"
-        resumen={t('llaves.con_una_llave_un_sistema_tuyo_2')}
-        mas={<p>{rico(t('llaves.la_llave_se_manda_como_e0'), { e0: (c) => <code className="cifra-mono">{c}</code>, e1: (c) => <code className="cifra-mono">{c}</code> })}</p>} />}
+      pie={rico(t('llaves.la_llave_se_manda_como_e0'), { e0: (c) => <code className="cifra-mono">{c}</code>, e1: (c) => <code className="cifra-mono">{c}</code> })}
       cifras={cifras} etiquetaCifras={t('llaves.llaves_de_api')}
       acciones={llaves === null ? undefined : (
-        <CajonEmitirLlave titulo={t('llaves.emitir_una_llave')} disparador={t('llaves.emitir_llave')} abiertoInicial={sp.abrir === 'emitir-llave'}>
-          <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
-            vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
-        </CajonEmitirLlave>
+        <CajonEmitirLlave titulo={t('llaves.emitir_una_llave')} disparador={t('llaves.emitir_llave')} abiertoInicial={sp.abrir === 'emitir-llave'}
+          accion={emitirLlave} areas={AREAS_DE_LLAVE} vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
       )}
     >
       {llaves === null ? (
