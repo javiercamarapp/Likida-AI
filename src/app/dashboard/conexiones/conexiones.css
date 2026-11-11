@@ -64,3 +64,25 @@
 .rv-cx__alerta { margin: 8px 0 0; font-size: var(--t-small); color: var(--bad); }
 .rv-cx__alerta ul { margin: 4px 0 0; padding-left: 20px; }
 .rv-cx__icono-linea { display: inline-flex; vertical-align: -3px; margin-right: 4px; }
+
+/* Maestro-detalle de las conexiones (Rovaq `/connections`): tarjetas-pestaña de 60 px a la izquierda, panel de detalle a la derecha. */
+.rv-cx__md { display: grid; gap: 12px; min-width: 0; }
+.rv-cx__md-cuerpo { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 819px) { .rv-cx__md-cuerpo { grid-template-columns: minmax(0, 1fr); } }
+.rv-cx__tabs { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-cx__tab { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 60px; padding: 8px 12px; text-align: left; font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; transition: border-color 120ms ease, background-color 120ms ease; }
+.rv-cx__tab:hover { background: var(--canvas); }
+.rv-cx__tab[data-activo] { border-color: var(--ink); }
+.rv-cx__tab:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-cx__tab-nombre { flex: 1; min-width: 0; font-size: var(--t-body); font-weight: 500; }
+.rv-cx__tab .rv-cx__marca { margin-top: 0; }
+.rv-cx__panel { padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); min-width: 0; }
+.rv-cx__panel-titulo { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: 14px; font-weight: 600; }
+.rv-cx__panel-titulo .rv-cx__marca { margin-top: 0; }
+.rv-cx__pares { margin: 0; display: grid; }
+.rv-cx__pares > div { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); font-size: var(--t-small); }
+.rv-cx__pares > div:first-child { border-top: 0; }
+.rv-cx__pares dt { color: var(--muted); }
+.rv-cx__pares dd { margin: 0; min-width: 0; }
+/* Paleta monocroma: el logo de marca se ve en grises. */
+.rv-cx__marca [data-marca] { filter: grayscale(1); }
