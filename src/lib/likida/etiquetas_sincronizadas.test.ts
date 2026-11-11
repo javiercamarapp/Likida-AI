@@ -154,7 +154,9 @@ function etiquetasAnidadas(ruta: string, ancla: string): Record<string, Record<s
   const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
   const i = src.indexOf(ancla);
   expect(i, `no se encontró el ancla "${ancla}" en ${ruta}`).toBeGreaterThanOrEqual(0);
-  const bloque = src.slice(i, src.indexOf('\n};', i) >= 0 ? src.indexOf('\n};', i) : src.indexOf('} as const', i));
+  // El mapa termina en `\n};`, en `} as const` o, si es una función que lo devuelve (para traducir los rótulos), en `\n});`.
+  const fines = ['\n};', '\n});', '} as const'].map((f) => src.indexOf(f, i)).filter((n) => n >= 0);
+  const bloque = src.slice(i, fines.length > 0 ? Math.min(...fines) : undefined);
   const out: Record<string, Record<string, string>> = {};
   for (const m of bloque.matchAll(/(\w+):\s*\{([^}]*)\}/g)) {
     const campos: Record<string, string> = {};
@@ -213,7 +215,7 @@ describe('etiquetas de estatus — las TRES copias coinciden en la severidad', (
   const copias: { ruta: string; ancla: string; campo: string }[] = [
     { ruta: '../../app/dashboard/estatus.ts', ancla: 'export const ESTATUS', campo: 'color' },
     { ruta: '../../app/dashboard/agentes/liquidacion/vista.tsx', ancla: 'const ESTATUS', campo: 'tono' },
-    { ruta: '../../app/dashboard/agentes/liquidacion/cola.tsx', ancla: 'const ROTULO_ESTADO', campo: 'fg' },
+    { ruta: '../../app/dashboard/agentes/liquidacion/cola.tsx', ancla: 'const rotuloEstado', campo: 'fg' },
   ];
 
   it('el barrido encuentra las tres copias (si esto falla, el patrón se quedó ciego)', () => {
