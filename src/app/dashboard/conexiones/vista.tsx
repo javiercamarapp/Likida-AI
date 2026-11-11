@@ -8,6 +8,7 @@ import './conexiones.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 import { ConectoresDetalle } from './conectores-detalle';
 import { estadoConector } from './estado-conector';
+import { ConfigurarSincronizacion } from './configurar';
 
 /**
  * La pantalla de Conexiones (F7): cada renglón es un estado MEDIDO con su
@@ -34,13 +35,14 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
   // Conteos por estado MEDIDO del conector (cada uno sale de la lectura; «no se pudo medir» tiene su propia celda, nunca se suma a «sin conectar»).
   const n = (e: Conector['estado']) => conectores.filter((c) => c.estado === e).length;
   const rotulos = estadoConector(t);
+  // Tira de 4 (Rovaq): «sin medir» y «en ensayo» comparten celda y la nota dice cuántas son de cada una (la suma sigue cuadrando con «Todas»).
+  const sinMedir = n('no_medible'), ensayo = n('ensayo');
   const cifras: PropsCifra[] = [
     { etiqueta: rotulos.listo.rotulo, valor: n('listo') },
     { etiqueta: rotulos.incompleto.rotulo, valor: n('incompleto'), tono: n('incompleto') > 0 ? 'warn' : undefined },
     { etiqueta: rotulos.sin_configurar.rotulo, valor: n('sin_configurar') },
-    { etiqueta: rotulos.no_medible.rotulo, valor: n('no_medible'), tono: n('no_medible') > 0 ? 'warn' : undefined },
-    // Las conexiones en ensayo también cuentan: sin esta celda la tira sumaba menos que «Todas» del segmentado de abajo.
-    { etiqueta: rotulos.ensayo.rotulo, valor: n('ensayo') },
+    { etiqueta: t('cfg.sin_medir_o_en_ensayo'), valor: sinMedir + ensayo, tono: sinMedir > 0 ? 'warn' : undefined,
+      nota: t('cfg.sin_medir_o_en_ensayo.nota', { sinMedir, ensayo }) },
   ];
   return (
     <EsqueletoTablaMaestra titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy(t('cfg.estado_de_las_conexiones'))}>
@@ -50,16 +52,10 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
         </Tarjeta>
       </div>
 
-      {estado}
-
-      {/* El orden es el del trabajo: primero QUÉ está medido, luego CON
-          QUÉ sabe conectar Likida, y al final DÓNDE se capturan los
-          accesos — que es lo que se hace después de leer las otras dos. */}
-      {integraciones}
-
-      {gps}
-
-      <div data-tour="conexiones.credenciales">{credenciales}</div>
+      {/* UNA zona «Configurar sincronización» (Rovaq): fuentes, catálogo de sistemas, GPS y credenciales como secciones de un segmentado, no siete tarjetas apiladas. */}
+      <ConfigurarSincronizacion secciones={[
+        { id: 'estado', nodo: estado }, { id: 'sistemas', nodo: integraciones }, { id: 'gps', nodo: gps }, { id: 'credenciales', nodo: credenciales },
+      ]} />
     </EsqueletoTablaMaestra>
   );
 }
