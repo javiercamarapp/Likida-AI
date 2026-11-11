@@ -17,7 +17,10 @@ import type { ResultadoImportarUI } from './importar';
 import { MAX_ARCHIVO_SUBIDA_BYTES, MENSAJE_ARCHIVO_GRANDE } from '@/lib/http/subidas_formulario';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Viajes' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.viajes') };
+}
 
 const MAX_IMPORT_BYTES = MAX_ARCHIVO_SUBIDA_BYTES;
 

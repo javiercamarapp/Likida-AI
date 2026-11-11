@@ -23,7 +23,10 @@ import { getConfig } from '@/lib/likida/config';
 import { topeAnticipoParaPanel, evaluarAnticipo, MENSAJE_POLITICA_ILEGIBLE, type TopeAnticipo } from '@/lib/likida/crear_viaje_wa';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Despacho' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.despacho') };
+}
 
 export const dynamic = 'force-dynamic';
 

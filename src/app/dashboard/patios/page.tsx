@@ -15,7 +15,10 @@ import { VistaPatios, type FilaPatio, type FilaJefe } from './vista';
 import type { ResultadoForma } from './formas';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Patios' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.patios') };
+}
 
 export const dynamic = 'force-dynamic';
 

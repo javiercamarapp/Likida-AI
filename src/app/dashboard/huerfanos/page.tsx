@@ -14,7 +14,10 @@ import { sufijoTenant } from '../sufijo';
 import { VistaHuerfanos } from './vista';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Comprobantes sin viaje' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.huerfanos') };
+}
 
 export const dynamic = 'force-dynamic';
 

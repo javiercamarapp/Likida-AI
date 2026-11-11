@@ -11,8 +11,12 @@ import { ConveniosNoDisponibles, listarCatalogosConvenio, listarConvenios, lista
 import { sufijoTenant } from '../sufijo';
 import { VistaConvenios } from './vista';
 import type { ResultadoSitio } from '../agentes/conductores/sitios/formas';
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Convenios de clientes' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.convenios') };
+}
 
 export const dynamic = 'force-dynamic';
 

@@ -30,7 +30,10 @@ import type { ResultadoForma } from './forma';
 import type { ResultadoEstado } from './estado';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Unidades' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.unidades') };
+}
 
 export const dynamic = 'force-dynamic';
 

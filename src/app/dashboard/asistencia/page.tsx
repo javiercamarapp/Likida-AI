@@ -21,7 +21,10 @@ import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { numero } from '@/lib/formato';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Mesa de control' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.asistencia') };
+}
 
 export const dynamic = 'force-dynamic';
 

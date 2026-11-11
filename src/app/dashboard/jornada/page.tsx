@@ -25,7 +25,10 @@ import { sufijoTenant } from '../sufijo';
 import { VistaJornada, type FilaJornada } from './vista';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Jornada' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.jornada') };
+}
 
 export const dynamic = 'force-dynamic';
 

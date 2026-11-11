@@ -11,7 +11,10 @@ import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import './conversaciones.css';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Conversaciones de WhatsApp' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.conversaciones') };
+}
 
 export const dynamic = 'force-dynamic';
 

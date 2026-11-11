@@ -31,7 +31,10 @@ import type { ResultadoForma } from './forma';
 import type { ResultadoInvitar } from './invitaciones';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Operadores' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.operadores') };
+}
 
 export const dynamic = 'force-dynamic';
 

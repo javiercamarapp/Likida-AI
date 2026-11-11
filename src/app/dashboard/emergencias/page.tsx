@@ -25,7 +25,10 @@ import {
 import { AccionFila } from './accion-fila';
 import './emergencias.css';
 import { getT } from '@/lib/i18n/servidor';
-export const metadata: Metadata = { title: 'Emergencias' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.emergencias') };
+}
 
 export const dynamic = 'force-dynamic';
 

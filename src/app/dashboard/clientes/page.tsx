@@ -14,8 +14,12 @@ import { sufijoTenant } from '../sufijo';
 import { camposDeSufijo } from '../paginar-campos';
 import { VistaClientes } from './vista';
 import type { ResultadoForma } from './forma';
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Clientes y tarifas' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('operacion');
+  return { title: t('meta.clientes') };
+}
 
 export const dynamic = 'force-dynamic';
 
