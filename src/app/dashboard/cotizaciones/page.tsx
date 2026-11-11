@@ -281,8 +281,8 @@ export default async function PaginaCotizaciones({
         <EstadoError reintentar>{tr('cotizaciones.page.noSePudoLeer')}</EstadoError>
       ) : cot.length === 0 ? (
         <div className="rv-caja-vacia">
-          <EstadoVacio titulo={tr('cotizaciones.page.sinCotizaciones')} icono={FileText} pantalla
-            accion={<BotonEnlace href={hrefNuevo('cotizacion')} variante="suave">{tr('cotizaciones.page.nuevaCotizacion')}</BotonEnlace>}>{tr('cotizaciones.page.laPrimeraSeArma')}</EstadoVacio>
+          {/* La acción («Nueva cotización») ya está en el encabezado, y es la única primaria de la pantalla: el vacío no la repite. */}
+          <EstadoVacio titulo={tr('cotizaciones.page.sinCotizaciones')} icono={FileText} pantalla>{tr('cotizaciones.page.laPrimeraSeArma')}</EstadoVacio>
         </div>
       ) : (
         <TablaCotizaciones
