@@ -71,7 +71,7 @@ export function PanelPreflight({ preflight, sufijo = '', tr = TR_ES }: { preflig
                   <div className="rv-cd__paso-cab">
                     <h3 className="rv-cd__paso-titulo">{c.titulo}</h3>
                     <Chip tono={ok ? 'ok' : 'warn'} tamano="estado">
-                      <Icono icono={ok ? CircleCheck : CircleAlert} tam={12} etiqueta={ok ? tx('rest.en_orden') : tx('rest.falta')} />
+                      <Icono icono={ok ? CircleCheck : CircleAlert} tam={14} etiqueta={ok ? tx('rest.en_orden') : tx('rest.falta')} />
                       {ok ? tx('f26d2.pre.hecho') : tx('f26d2.pre.para_revisar')}
                     </Chip>
                   </div>

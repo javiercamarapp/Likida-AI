@@ -1253,4 +1253,5 @@ export const resto = {
   'f26d2.inicio.fuentes_sin_lectura': '{n} sin lectura',
   'f26d2.inicio.flota_nueva': 'Flota nueva: sin actividad todavía',
   'f26d2.inicio.procedencia': 'Procedencia de las cifras',
+  'f26d2.boton.no_disponible': 'No disponible ahora',
 } as const;

@@ -1255,4 +1255,5 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'f26d2.inicio.fuentes_sin_lectura': '{n} not read',
   'f26d2.inicio.flota_nueva': 'New fleet: no activity yet',
   'f26d2.inicio.procedencia': 'Where the figures come from',
+  'f26d2.boton.no_disponible': 'Not available right now',
 };
