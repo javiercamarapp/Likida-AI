@@ -2,6 +2,7 @@
 
 import { useState, useSyncExternalStore, type ReactNode } from 'react';
 import { SegmentedControl } from '@/app/ui-v2/componentes';
+import { anclaTour } from '@/app/ui-v2/movimiento/tour/validar';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
 import './conexiones.css';
@@ -32,12 +33,13 @@ export function ConfigurarSincronizacion({ secciones }: { secciones: ReadonlyArr
   return (
     <section className="rv-cx__config" aria-label={t('cfg.configurar_sincronizacion')}>
       <div className="rv-cx__config-cab">
+        {/* sin-info: titulo de la zona de configuracion (segmentado); cada seccion lleva su propia explicacion */}
         <h2 className="rv-cx__config-titulo">{t('cfg.configurar_sincronizacion')}</h2>
         <SegmentedControl<IdSeccionConfig> etiqueta={t('cfg.configurar_sincronizacion')} tamano="sm" valor={activa} onChange={setManual}
           opciones={presentes.map((s) => ({ valor: s.id, etiqueta: rotulo[s.id] }))} />
       </div>
       {presentes.map((s) => (
-        <div key={s.id} className="rv-cx__config-panel" hidden={s.id !== activa} data-tour={s.id === 'credenciales' ? 'conexiones.credenciales' : undefined}>{s.nodo}</div>
+        <div key={s.id} className="rv-cx__config-panel" hidden={s.id !== activa} {...(s.id === 'credenciales' ? anclaTour('conexiones.credenciales') : {})}>{s.nodo}</div>
       ))}
     </section>
   );

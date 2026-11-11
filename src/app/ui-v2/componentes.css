@@ -66,7 +66,7 @@
 
 /* ── Estado vacío v2 ───────────────────────────────────────────────────── */
 .rv-vacio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 32px 16px; border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--surface); }
-.rv-vacio[data-compacto] { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; gap: 4px 12px; padding: 12px 14px; background: transparent; border-width: 1px; border-style: dashed; }
+.rv-vacio[data-compacto] { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; gap: 4px 12px; padding: 12px 14px; background: transparent; border-width: 1.5px; border-style: dotted; }
 .rv-vacio__arte { width: 160px; height: 96px; color: var(--ink2, var(--ink)); }
 .rv-vacio__titulo { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
 .rv-vacio__texto { margin: 0; max-width: 48ch; font-size: 13px; color: var(--muted); }
