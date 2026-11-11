@@ -174,9 +174,13 @@ describe('A37-S40-03 — markup objetivo vs margen sobre precio', () => {
   it('la pantalla rotula cada base: markup sobre el costo / % del precio', async () => {
     const { readFileSync } = await import('node:fs');
     const src = readFileSync('src/app/dashboard/cotizaciones/page.tsx', 'utf8');
-    expect(src).toContain('Markup objetivo sobre el costo (%)');
-    expect(src).not.toContain('etiqueta="Margen objetivo (%)"');
-    expect(src).toContain('del precio)');
+    // Los rótulos viven en el diccionario (i18n): la pantalla pide la clave y el texto en español sigue rotulando cada base.
+    const dic = readFileSync('src/lib/i18n/es/dinero.ts', 'utf8');
+    expect(src).toContain("'cotizaciones.page.markupObjetivoSobreEl'");
+    expect(dic).toContain("'cotizaciones.page.markupObjetivoSobreEl': 'Markup objetivo sobre el costo (%)'");
+    expect(src).not.toContain('Margen objetivo (%)');
+    expect(src).toContain("'cotizaciones.page.delPrecio'");
+    expect(dic).toContain("'cotizaciones.page.delPrecio': '({v} del precio)'");
   });
 });
 const round2Test = (n: number) => Math.round(n * 100) / 100;
