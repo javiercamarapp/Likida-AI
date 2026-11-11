@@ -14,6 +14,7 @@ import { Tooltip } from '../ui-v2/componentes/overlay';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
+import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
 // El sidebar de /admin usa las clases del sistema (`.rv-sb`, `.rv-item`, `.rv-grupo` de ui-v2/shell.css), las MISMAS que el del
 // dashboard (7-nov-2026, R8): ancho, hover, activo, colapso a riel y animación de entrada vienen de ahí. Lo único distinto es el
@@ -118,7 +119,7 @@ export default function SidebarNav() {
   // El ítem activo se deja a la vista cuando el árbol scrollea; espera a que termine de abrirse la sección (180 ms) para medir.
   useEffect(() => {
     const id = window.setTimeout(() => {
-      document.querySelector<HTMLElement>('.rv-sb__nav [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      dejarItemActivoALaVista();
     }, 200);
     return () => window.clearTimeout(id);
   }, [pathname, abierta]);

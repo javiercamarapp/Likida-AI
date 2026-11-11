@@ -27,6 +27,7 @@ import PieSidebar from '../../ui-v2/componentes/pie-sidebar';
 export { iniciales, anclaDe, avanceDe } from './nav-utiles';
 import { iniciales, anclaDe, avanceDe } from './nav-utiles';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
+import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
 type Insignias = Record<string, string> | undefined;
 
@@ -112,7 +113,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
   useEffect(() => {
     if (plano || !activo || typeof document === 'undefined') return;
     const id = window.setTimeout(() => {
-      document.querySelector<HTMLElement>('.rv-sb__nav [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      dejarItemActivoALaVista();
     }, 200);
     return () => window.clearTimeout(id);
   }, [plano, activo, abierta]);
