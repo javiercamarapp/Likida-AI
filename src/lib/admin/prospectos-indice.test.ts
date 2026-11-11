@@ -11,9 +11,13 @@ const d = vi.hoisted(() => ({
   falla: false,
   notas: new Map<string, string | null>(),
   idsPedidos: [] as string[][],
+  conteoBruto: 0,
 }));
 
-vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => ({}) }) }));
+// `conteoBruto` = lo que contesta el head count de cabecera (`duplicado_de is null`), que NO ve la marca DUPLICADO: de notas.
+vi.mock('@/lib/supabase/admin', () => ({
+  supabaseAdmin: () => ({ from: () => ({ select: () => ({ is: async () => ({ count: d.conteoBruto, error: null }) }) }) }),
+}));
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn(), warn: vi.fn(), info: vi.fn() } }));
 vi.mock('@/lib/likida/bitacora_escritura', () => ({ anotarBitacora: vi.fn() }));
 vi.mock('@/lib/likida/pg', async (importar) => ({
@@ -22,6 +26,7 @@ vi.mock('@/lib/likida/pg', async (importar) => ({
   traerTodoEnParalelo: async (_construir: unknown, consulta: string) => {
     d.lecturas.push(consulta);
     if (d.falla) throw new Error('base caída');
+    if (consulta.includes('delta')) return [];
     return consulta.includes('marcas de duplicado') ? d.marcadas : d.indice;
   },
   traerPorIds: async (ids: string[]) => {
@@ -31,7 +36,7 @@ vi.mock('@/lib/likida/pg', async (importar) => ({
 }));
 
 import {
-  embudoCanonico, getPipelineVendedores, getResumenProspectos, indiceProspectos, reiniciarIndiceProspectos, resumirIndice,
+  embudoCanonico, getDatosMapa, getPipelineVendedores, getResumenProspectos, indiceProspectos, reiniciarIndiceProspectos, resumirIndice,
 } from './prospectos-mapa';
 
 const fila = (id: string, o: Record<string, unknown> = {}) => ({
@@ -149,5 +154,22 @@ describe('el pipeline de /admin/vendedores', () => {
     await indiceProspectos();
     await getPipelineVendedores({}, 30);
     expect(d.lecturas.filter((l) => l === 'prospecto (indice)')).toHaveLength(2);
+  });
+});
+
+describe('el latido del Cerebro: su conteo usa LA definición de «vivo» de las filas que entrega', () => {
+  it('con 5 vivos marcados DUPLICADO: en notas, el total del servidor es 33,148 (no 33,153) y el cliente no pide la carga completa en cada latido', async () => {
+    d.conteoBruto = 33_153;
+    d.marcadas = Array.from({ length: 5 }, (_, i) => ({ id: `d${i}`, notas: 'DUPLICADO: de otro' }));
+    const r = await getDatosMapa({ desde: '2026-11-10T00:00:00.000Z' });
+    expect(r.delta).toBe(true);
+    expect(r.total).toBe(33_148);
+  });
+
+  it('una lectura caída se dice (fallo: true): no se pinta como «sin cambios»', async () => {
+    d.conteoBruto = 33_153;
+    d.falla = true;
+    const r = await getDatosMapa({ desde: '2026-11-10T00:00:00.000Z' });
+    expect(r.fallo).toBe(true); // la lectura del delta misma cayó: se dice, no se pinta como «sin cambios»
   });
 });

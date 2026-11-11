@@ -482,6 +482,22 @@ async function contarMapa(): Promise<number | null> {
   return todo.count - dup.count;
 }
 
+/**
+ * El conteo del servidor con LA MISMA definición de «vivo» que las filas que entrega: sin duplicado_de Y sin la marca `DUPLICADO:` en notas.
+ * `contarMapa` (head count) no ve la segunda mitad, y por eso decía 5 de más: el cliente comparaba 33,148 contra 33,153, concluía «se fue
+ * alguien» y pedía la carga COMPLETA en cada latido (la factura de 33 MB cada 5 minutos que el delta vino a quitar). Si la lectura de las
+ * marcas falla se queda el conteo bruto: sobra para el cliente, que pide la carga completa — el comportamiento seguro de antes.
+ */
+async function contarVivosDelMapa(): Promise<number | null> {
+  const bruto = await contarMapa();
+  if (bruto === null) return null;
+  try {
+    return bruto - (await leerMarcadasDuplicado()).length;
+  } catch {
+    return bruto;
+  }
+}
+
 /** A37-S22-05: cuánto se retrocede la marca del delta para no perder filas con commit tardío. */
 export const SOLAPE_DELTA_MS = 5 * 60 * 1000;
 
@@ -597,7 +613,7 @@ export async function getDatosMapa(
     // En la carga completa el conteo del servidor ES la lista (y
     // `traerTodoEnParalelo` ya demostró que llegó entera): no se paga un
     // viaje extra para preguntar lo que se acaba de leer.
-    total: desde ? await contarMapa() : vivas.length,
+    total: desde ? await contarVivosDelMapa() : vivas.length,
   };
 }
 
@@ -656,6 +672,16 @@ export function reiniciarIndiceProspectos(): void {
   memoIndice = null;
 }
 
+/** Los ids de los vivos (`duplicado_de is null`) que el deduplicador marcó SOLO en `notas`: unos cuantos, no miles. */
+async function leerMarcadasDuplicado(): Promise<string[]> {
+  const filas = await traerTodoEnParalelo<{ id: string; notas: string | null }>(
+    (d, h) => tablaProspecto().select('id, notas', conteo(d))
+      .is('duplicado_de', null).ilike('notas', '%DUPLICADO:%').order('id', { ascending: true }).range(d, h),
+    'prospecto (indice, marcas de duplicado)',
+  );
+  return filas.filter((f) => esDuplicado({ notas: f.notas })).map((f) => f.id);
+}
+
 async function leerIndice(): Promise<IndiceProspectos> {
   // Las dos lecturas son livianas y salen en paralelo: el índice (≈100 bytes por fila, sin `notas`) y los pocos vivos que el
   // deduplicador marcó SOLO en `notas` (0139). `notas` se lee únicamente de estos últimos.
@@ -665,13 +691,9 @@ async function leerIndice(): Promise<IndiceProspectos> {
         .is('duplicado_de', null).order('id', { ascending: true }).range(d, h),
       'prospecto (indice)',
     ),
-    traerTodoEnParalelo<{ id: string; notas: string | null }>(
-      (d, h) => tablaProspecto().select('id, notas', conteo(d))
-        .is('duplicado_de', null).ilike('notas', '%DUPLICADO:%').order('id', { ascending: true }).range(d, h),
-      'prospecto (indice, marcas de duplicado)',
-    ),
+    leerMarcadasDuplicado(),
   ]);
-  const duplicados = new Set(marcadas.filter((f) => esDuplicado({ notas: f.notas })).map((f) => f.id));
+  const duplicados = new Set(marcadas);
   const filas = crudas
     .filter((f) => !duplicados.has(f.id))
     .map((f): FilaIndice => ({
