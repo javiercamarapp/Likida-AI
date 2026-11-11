@@ -90,7 +90,6 @@ export default async function PaginaEstado() {
   const general = resumenGeneral(estado, t);
   return (
     <MarcoPublico
-      ancho="ancho"
       rotulo={t('est.rotulo')}
       titulo={t('est.titulo')}
       apoyo={t('est.apoyo')}
