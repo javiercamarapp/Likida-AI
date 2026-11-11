@@ -11,6 +11,8 @@ import { ARTICULOS, articuloPorSlug, type BloqueArticulo } from '@/lib/likida/ma
 import { fechaMx } from '@/lib/formato';
 import { PulsoSitio } from '../../calculadora/pulso';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
+import { trPublico } from '@/lib/i18n/publico_tr';
+import { rico } from '@/lib/i18n/rico';
 
 export function generateStaticParams() {
   return ARTICULOS.map((a) => ({ slug: a.slug }));
@@ -19,7 +21,7 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const a = articuloPorSlug(slug);
-  if (!a) return { title: 'Blog — Likida' };
+  if (!a) return { title: (await trPublico()).t('blog.meta.titulo') };
   return {
     title: `${a.titulo} — Likida`,
     description: a.resumen,
@@ -53,13 +55,14 @@ export default async function Articulo({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const a = articuloPorSlug(slug);
   if (!a) notFound();
+  const { t, idioma } = await trPublico();
 
   return (
     <MarcoPublico
-      rotulo="Blog · Likida"
+      rotulo={t('blog.art.rotulo')}
       titulo={a.titulo}
-      apoyo={fechaMx(a.fecha)}
-      derecha={<Link href="/blog" className="rv-pub__enlace">← Todos los artículos</Link>}
+      apoyo={fechaMx(a.fecha, idioma)}
+      derecha={<Link href="/blog" className="rv-pub__enlace">{t('blog.art.volver')}</Link>}
     >
       <PulsoSitio pagina={`blog:${a.slug}`} />
       <article className="rv-pub__prosa">
@@ -67,14 +70,14 @@ export default async function Articulo({ params }: { params: Promise<{ slug: str
       </article>
 
       <section className="rv-pub__tarjeta">
-        <p className="rv-pub__rotulo">Fundamento</p>
+        <p className="rv-pub__rotulo">{t('blog.art.fundamento')}</p>
         <ul className="rv-pub__vinetas">
           {a.fundamento.map((f, i) => <li key={i}>{f}</li>)}
         </ul>
       </section>
 
       <p className="rv-pub__prosa rv-pub__sec">
-        ¿Quieres el número con tus datos? <Link href="/calculadora">Usa la calculadora</Link> y te enseñamos los supuestos junto a cada cifra.
+        {rico(t('blog.art.cta'), { enlace: (c) => <Link href="/calculadora">{c}</Link> })}
       </p>
     </MarcoPublico>
   );

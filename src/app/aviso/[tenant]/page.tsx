@@ -3,6 +3,8 @@ import { getDatosResponsable } from '@/lib/likida/repo';
 import { avisoIntegral } from '@/lib/likida/privacidad';
 import { fechaMx } from '@/lib/formato';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
+import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL AVISO INTEGRAL DE UNA FLOTA. Página PÚBLICA, y tiene que serlo.
@@ -38,12 +40,15 @@ export const dynamic = 'force-dynamic';
  *  fecha en que alguien abre la página. Actualizar junto con el texto. */
 const VIGENTE_DESDE = '2026-09-01';
 
-export const metadata = {
-  title: 'Aviso de privacidad',
-  // El integral es público por obligación legal, pero no es contenido que deba
-  // rankear: es un documento dirigido a quien ya recibió la liga.
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata() {
+  const { t } = await getT('publico');
+  return {
+    title: t('av.meta.titulo'),
+    // El integral es público por obligación legal, pero no es contenido que deba
+    // rankear: es un documento dirigido a quien ya recibió la liga.
+    robots: { index: false, follow: false },
+  };
+}
 
 /** Negritas de `**así**` sin traer un parser de Markdown a una página estática. */
 function ConNegritas({ texto }: { texto: string }) {
@@ -60,6 +65,8 @@ function ConNegritas({ texto }: { texto: string }) {
 
 export default async function AvisoIntegral({ params }: { params: Promise<{ tenant: string }> }) {
   const { tenant } = await params;
+  // LEGAL: la interfaz en inglés está pendiente de revisión legal; el cuerpo del aviso (privacidad.ts) no se traduce aquí.
+  const { t, tp, idioma } = await getT('publico');
 
   // Un id que ni siquiera tiene forma de UUID no llega a consultar la base: es
   // ruido de un rastreador, y `maybeSingle` con un uuid inválido devuelve error
@@ -74,28 +81,23 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
   // falta cumple más que un 404 mudo que deja al operador sin documento por un
   // dato que le toca capturar a su empresa.
   if (!datos) notFound();
-  const nombreResponsable = datos.razonSocial || datos.nombreFlota || 'la empresa';
+  const nombreResponsable = datos.razonSocial || datos.nombreFlota || t('av.integral.responsable_por_omision');
 
   const secciones = avisoIntegral(datos);
   const pendientes = secciones.filter((s) => s.pendiente);
 
   return (
     <MarcoPublico
-      rotulo="Aviso de privacidad integral"
+      rotulo={t('av.integral.rotulo')}
       titulo={nombreResponsable}
-      apoyo={`Vigente desde el ${fechaMx(VIGENTE_DESDE)} · Ley Federal de Protección de Datos Personales en Posesión de los Particulares`}
+      apoyo={t('av.integral.apoyo', { fecha: fechaMx(VIGENTE_DESDE, idioma) })}
       pie={
-        <p>
-          La herramienta con la que se procesan estos datos la opera <strong>Likida</strong> como persona encargada, por
-          cuenta y bajo instrucciones de {nombreResponsable}. Este aviso está alojado aquí por encargo de la empresa; la
-          responsable de tus datos sigue siendo ella.
-        </p>
+        <p>{rico(t('av.integral.pie', { responsable: nombreResponsable }), { strong: (c) => <strong>{c}</strong> })}</p>
       }
     >
       {pendientes.length > 0 && (
         <p className="rv-pub__aviso-falta">
-          Este aviso tiene {pendientes.length === 1 ? 'un dato' : `${pendientes.length} datos`} que
-          la empresa aún no ha capturado. Aparece señalado más abajo en vez de quedar en blanco.
+          {tp('av.integral.faltan', pendientes.length)}
         </p>
       )}
 
@@ -104,7 +106,7 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
           <section key={s.titulo} className="rv-pub__sec">
             <h2>{s.titulo}</h2>
             <p className="rv-pub__nota">{s.fundamento}</p>
-            {s.pendiente && <p className="rv-pub__nota"><strong>Pendiente de capturar</strong></p>}
+            {s.pendiente && <p className="rv-pub__nota"><strong>{t('av.integral.pendiente')}</strong></p>}
             {s.parrafos.map((p, i) => (
               <p key={i}><ConNegritas texto={p} /></p>
             ))}
