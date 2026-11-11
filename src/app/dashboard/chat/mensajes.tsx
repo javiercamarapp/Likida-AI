@@ -11,6 +11,9 @@ import { descargar, repartoACsv, serieACsv, tablaACsv, textoParaCopiar, visuales
 import { useMovimientoReducido } from './movimiento';
 import type { PasoTraza, Respuesta } from './respuestas';
 import type { Turno } from './use-analista';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { rico } from '@/lib/i18n/rico';
 
 /** Escritura progresiva (como Vexa): máx. 4,5 s aunque la respuesta sea larga; con «reducir movimiento» sale completa de una vez.
  *  El texto COMPLETO va siempre en el árbol de accesibilidad (`rv-sr`) para que el lector de pantalla lo anuncie UNA vez, y lo que
@@ -54,10 +57,11 @@ export function BurbujaUsuario({ turno }: { turno: Turno }) {
 }
 
 function Sello({ r }: { r: Respuesta }) {
+  const { t: tx } = useT('resto', restoEs);
   if (!r.origen) return null;
   const partes = r.origen === 'analista' || r.origen === 'copiloto'
     ? [r.origen === 'copiloto' ? 'Respuesta del copiloto' : 'Respuesta del analista', r.hora, r.ms !== undefined ? textoMs(r.ms) : undefined]
-    : ['Respuesta de reserva · con lo último que ya estaba cargado', r.hora];
+    : [tx('ch.respuesta_de_reserva_con_lo_ultimo'), r.hora];
   return <p className="rv-chat__sello" data-origen={r.origen}>{partes.filter(Boolean).join(' · ')}</p>;
 }
 
@@ -73,6 +77,7 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
   endpointAccion?: string;
   onEjecutada?: (mensaje: string) => void;
 }) {
+  const { t: tx } = useT('resto', restoEs);
   const { r } = turno;
   const [copiado, setCopiado] = useState(false);
   const [errorArchivo, setErrorArchivo] = useState(false);
@@ -107,20 +112,18 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
           </div>
         ) : <TextoRespuesta texto={r.texto} escribir={turno.nuevo} onListo={alListo} />}
       </div>
-      {terminado && visuales.map((v, j) => <BloqueRespuesta key={j} v={v} indice={j} />)}
+      {terminado && visuales.map((v, j) => <BloqueRespuesta t={tx} key={j} v={v} indice={j} />)}
       {terminado && acciones && r.accion && (r.archivada ? (
         // Una acción reabierta del historial NO trae botón: la previsualización vieja describe el estado de AQUEL día; ejecutarla hoy
         // firmaría sobre un efecto que ya no es verdad. Se pide de nuevo y el servidor la re-propone.
         <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="archivada">
-          <p className="rv-accion__linea">Propuesta archivada del historial (<span className="rv-accion__objetivo">{r.accion.objetivo}</span>). Para ejecutarla, pídela de nuevo — se re-propone con el estado de hoy.</p>
+          <p className="rv-accion__linea">{tx('ch.propuesta_archivada_del_historial')}<span className="rv-accion__objetivo">{r.accion.objetivo}</span>{tx('ch.para_ejecutarla_pidela_de_nuevo_se')}</p>
         </section>
       ) : (
         <TarjetaAccion a={r.accion} endpoint={endpointAccion ?? ''} onEjecutada={(m) => onEjecutada?.(m)} />
       ))}
       {terminado && r.fuentes && r.fuentes.length > 0 && (
-        <div className="rv-chat__fuentes" role="group" aria-label="Fuentes">
-          <span className="rv-chat__nota">Fuentes:</span>
-          {r.fuentes.map((f) => (
+        <div className="rv-chat__fuentes" role="group" aria-label={tx('ch.fuentes')}>{rico(tx('ch.e0_fuentes_e0'), { e0: (c) => <span className="rv-chat__nota">{c}</span> })}{r.fuentes.map((f) => (
             <Link key={f.ruta} href={f.ruta} className="rv-chip rv-chat__fuente">{f.etiqueta}<ExternalLink width={12} height={12} strokeWidth={1.75} aria-hidden="true" /></Link>
           ))}
         </div>
@@ -128,38 +131,35 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
       {terminado && r.pasos && <TrazaFinal pasos={r.pasos} ms={r.ms} />}
       {terminado && <Sello r={r} />}
       {terminado && r.texto.trim() && (
-        <div className="rv-chat__acciones" role="group" aria-label="Acciones de la respuesta">
+        <div className="rv-chat__acciones" role="group" aria-label={tx('ch.acciones_de_la_respuesta')}>
           <button type="button" className="rv-btn rv-btn--secondary" onClick={() => void copiar()}>
             {copiado ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-            <span>{copiado ? 'Copiado' : 'Copiar'}</span>
+            <span>{copiado ? tx('ch.copiado') : tx('ch.copiar')}</span>
           </button>
           {tablas.map((t, i) => (
             <button key={i} type="button" className="rv-btn rv-btn--secondary"
-              aria-label={tablas.length > 1 ? `Descargar la tabla ${i + 1} como CSV` : 'Descargar la tabla como CSV'}
+              aria-label={tablas.length > 1 ? tx('ch.descargar_la_tabla_como_csv', { v: i + 1 }) : tx('ch.descargar_la_tabla_como_csv_2')}
               onClick={() => setErrorArchivo(!descargar(`likida-respuesta-${i + 1}.csv`, tablaACsv(t.filas), 'text/csv;charset=utf-8'))}>
               <FileSpreadsheet aria-hidden="true" /><span>CSV</span>
             </button>
           ))}
           {graficas.map((g, i) => (
             <button key={`g${i}`} type="button" className="rv-btn rv-btn--secondary"
-              aria-label={graficas.length > 1 ? `Descargar los datos de la gráfica ${i + 1} como CSV` : 'Descargar los datos de la gráfica como CSV'}
+              aria-label={graficas.length > 1 ? tx('ch.descargar_los_datos_de_la_grafica', { v: i + 1 }) : tx('ch.descargar_los_datos_de_la_grafica_2')}
               onClick={() => setErrorArchivo(!descargar(`likida-grafica-${i + 1}.csv`, g.tipo === 'serie' ? serieACsv(g.puntos) : repartoACsv(g.segmentos), 'text/csv;charset=utf-8'))}>
-              <FileSpreadsheet aria-hidden="true" strokeWidth={1.75} /><span>Datos CSV</span>
-            </button>
+              <FileSpreadsheet aria-hidden="true" strokeWidth={1.75} />{rico(tx('ch.e0_datos_csv_e0'), { e0: (c) => <span>{c}</span> })}</button>
           ))}
           {ultimo && (r.origen === 'analista' || r.origen === 'copiloto') && (
             <button type="button" className="rv-btn rv-btn--secondary rv-chat__solo" disabled={ocupado} onClick={() => onRepetir(turno.id)}>
-              <RefreshCw aria-hidden="true" /><span>Regenerar</span>
-            </button>
+              <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_regenerar_e0'), { e0: (c) => <span>{c}</span> })}</button>
           )}
-          {errorArchivo && <span role="alert" className="rv-chat__error-linea">No se pudo crear el archivo en este navegador.</span>}
+          {errorArchivo && <span role="alert" className="rv-chat__error-linea">{tx('ch.no_se_pudo_crear_el_archivo')}</span>}
         </div>
       )}
       {r.fallo && ultimo && (
         <div>
           <button type="button" className="rv-btn rv-btn--secondary" disabled={ocupado} onClick={() => onRepetir(turno.id)}>
-            <RefreshCw aria-hidden="true" /><span>Reintentar</span>
-          </button>
+            <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_reintentar_e0'), { e0: (c) => <span>{c}</span> })}</button>
         </div>
       )}
     </div>

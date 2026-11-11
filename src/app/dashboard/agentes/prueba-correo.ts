@@ -1,4 +1,5 @@
 import type { ResultadoEnvio } from '@/lib/correo/enviar';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA LÓGICA PURA DEL BOTÓN «MÁNDATE UNA PRUEBA» (auditoría 4, B5).
@@ -79,28 +80,28 @@ export interface AcusePrueba {
  * `getaddrinfo ENOTFOUND` en la pestaña del contralor no le dice qué hacer;
  * el de `rechazado` sí, porque ya llega saneado (`HTTP 403`, nunca el cuerpo).
  */
-export function acuseDeEnvio(envio: ResultadoEnvio, correo: string): AcusePrueba {
+export function acuseDeEnvio(envio: ResultadoEnvio, correo: string, t: TResto = T_RESTO_ES): AcusePrueba {
   if (envio.ok) {
     return {
       enviado: true,
-      mensaje: `Enviada. Revisa tu bandeja de ${ofuscarCorreo(correo)} — si en unos minutos no aparece, mira también la carpeta de spam.`,
+      mensaje: t('ch.enviada_revisa_tu_bandeja_de_si', { ofuscarCorreo: ofuscarCorreo(correo) }),
     };
   }
   switch (envio.motivo) {
     case 'sin_configurar':
       return {
         enviado: false,
-        mensaje: 'El correo saliente no está configurado: falta RESEND_API_KEY/RESEND_EMAIL_DOMAIN. Hasta que se conecte no sale ningún aviso — tampoco esta prueba.',
+        mensaje: t('ch.el_correo_saliente_no_esta_configurado'),
       };
     case 'rechazado':
       return {
         enviado: false,
-        mensaje: `El servidor de correo rechazó el envío (${envio.detalle}). El detalle completo quedó en los registros del sistema.`,
+        mensaje: t('ch.el_servidor_de_correo_rechazo_el', { detalle: envio.detalle }),
       };
     case 'red':
       return {
         enviado: false,
-        mensaje: 'No se pudo alcanzar el servidor de correo. Inténtalo de nuevo en un momento.',
+        mensaje: t('ch.no_se_pudo_alcanzar_el_servidor'),
       };
   }
 }

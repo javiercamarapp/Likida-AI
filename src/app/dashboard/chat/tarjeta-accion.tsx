@@ -3,6 +3,9 @@
 import { ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import type { AccionPropuesta } from './respuestas';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { rico } from '@/lib/i18n/rico';
 
 type Estado = 'lista' | 'ejecutando' | 'armada' | 'hecha' | 'cancelada';
 
@@ -18,6 +21,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   endpoint: string;
   onEjecutada: (mensaje: string) => void;
 }) {
+  const { t } = useT('resto', restoEs);
   const [motivo, setMotivo] = useState(a.motivoSugerido ?? '');
   const [estado, setEstado] = useState<Estado>('lista');
   const [error, setError] = useState<string | null>(null);
@@ -26,10 +30,10 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
 
   if (!a.implementada) {
     return (
-      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="no-implementada" aria-label="Acción no disponible">
-        <p className="rv-accion__titulo"><ShieldAlert width={14} height={14} strokeWidth={1.75} aria-hidden="true" />{a.accion} — todavía no está implementada desde el copiloto</p>
+      <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="no-implementada" aria-label={t('ch.accion_no_disponible')}>
+        <p className="rv-accion__titulo"><ShieldAlert width={14} height={14} strokeWidth={1.75} aria-hidden="true" />{a.accion}{' '}{t('ch.todavia_no_esta_implementada_desde_el')}</p>
         <p className="rv-accion__linea">{a.efecto}</p>
-        <p className="rv-chat__nota">Hoy se hace desde su pantalla del panel.</p>
+        <p className="rv-chat__nota">{t('ch.hoy_se_hace_desde_su_pantalla')}</p>
       </section>
     );
   }
@@ -37,14 +41,14 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   if (!a.intentId) {
     return (
       <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado="sin-llave">
-        <p className="rv-accion__linea">Esta propuesta ya no trae su llave de ejecución. Pídela de nuevo — el copiloto la re-propone con el estado de hoy.</p>
+        <p className="rv-accion__linea">{t('ch.esta_propuesta_ya_no_trae_su')}</p>
       </section>
     );
   }
   if (estado === 'hecha' || estado === 'cancelada') {
     return (
       <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} role="status">
-        <p className="rv-accion__linea">{estado === 'hecha' ? 'Acción ejecutada — el resultado quedó abajo.' : 'Acción cancelada. Nada se movió.'}</p>
+        <p className="rv-accion__linea">{estado === 'hecha' ? t('ch.accion_ejecutada_el_resultado_quedo_abajo') : t('ch.accion_cancelada_nada_se_movio')}</p>
       </section>
     );
   }
@@ -63,7 +67,7 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
       const d = await resp.json().catch(() => null);
       if (!resp.ok || !d?.ok) {
         setEstado(veniaArmada ? 'armada' : 'lista');
-        setError(typeof d?.error === 'string' ? d.error : 'No se pudo ejecutar. Inténtalo de nuevo.');
+        setError(typeof d?.error === 'string' ? d.error : t('ch.no_se_pudo_ejecutar_intentalo_de'));
         return;
       }
       if (d.armado === true) { setEstado('armada'); return; } // 'doble': falta la segunda confirmación
@@ -76,22 +80,20 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
   }
 
   return (
-    <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} aria-label="Confirmar acción">
-      <p className="rv-accion__titulo">Voy a {apagar ? 'apagar' : encender ? 'encender' : 'ejecutar'} <span className="rv-accion__objetivo">{a.objetivo}</span></p>
-      <label className="rv-accion__campo">
-        <span>Motivo (obligatorio)</span>
-        <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={encender ? 'Por qué se enciende — queda en la bitácora' : 'Por qué se apaga — queda en la bitácora'} />
+    <section className="rv-tarjeta rv-chat__bloque rv-accion" data-estado={estado} aria-label={t('ch.confirmar_accion')}>
+      <p className="rv-accion__titulo">{t('ch.voy_a')}{' '}{apagar ? 'apagar' : encender ? 'encender' : 'ejecutar'} <span className="rv-accion__objetivo">{a.objetivo}</span></p>
+      <label className="rv-accion__campo">{rico(t('ch.e0_motivo_obligatorio_e0'), { e0: (c) => <span>{c}</span> })}<input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder={encender ? t('ch.por_que_se_enciende_queda_en') : t('ch.por_que_se_apaga_queda_en')} />
       </label>
-      <p className="rv-accion__linea"><b>Efecto:</b> {a.efecto}</p>
-      <p className="rv-accion__linea"><b>Revertir:</b> {a.revertir}</p>
+      <p className="rv-accion__linea">{rico(t('ch.b_efecto_b'), { b: (c) => <b>{c}</b> })}{' '}{a.efecto}</p>
+      <p className="rv-accion__linea">{rico(t('ch.b_revertir_b'), { b: (c) => <b>{c}</b> })}{' '}{a.revertir}</p>
       {estado === 'armada' && (
-        <p className="rv-accion__aviso" role="status">Primera confirmación registrada — esta acción exige doble confirmación. Aprieta de nuevo para ejecutar.</p>
+        <p className="rv-accion__aviso" role="status">{t('ch.primera_confirmacion_registrada_esta_accion_exige')}</p>
       )}
       {error && <p className="rv-chat__error-linea" role="alert">{error}</p>}
       <div className="rv-accion__botones">
-        <button type="button" className="rv-btn rv-btn--secondary rv-btn--sm" onClick={() => setEstado('cancelada')}>Cancelar</button>
+        <button type="button" className="rv-btn rv-btn--secondary rv-btn--sm" onClick={() => setEstado('cancelada')}>{t('op.cancelar')}</button>
         <button type="button" className="rv-btn rv-btn--primary rv-btn--sm" disabled={estado === 'ejecutando'} onClick={() => void ejecutar()}>
-          {estado === 'ejecutando' ? (apagar ? 'Apagando…' : encender ? 'Encendiendo…' : 'Ejecutando…') : estado === 'armada' ? 'Confirmar de nuevo' : (apagar ? 'Apagar' : encender ? 'Encender' : 'Ejecutar')}
+          {estado === 'ejecutando' ? (apagar ? 'Apagando…' : encender ? 'Encendiendo…' : 'Ejecutando…') : estado === 'armada' ? t('ch.confirmar_de_nuevo') : (apagar ? t('ch.apagar') : encender ? 'Encender' : 'Ejecutar')}
         </button>
       </div>
     </section>

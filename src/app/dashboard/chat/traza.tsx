@@ -4,6 +4,8 @@ import { useId, useState } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import MarcaLikida from './marca';
 import { rotuloTool, type PasoTraza } from './respuestas';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 /** «850 ms» / «3.2 s»: solo lo que MIDIÓ el navegador entre el inicio y el fin del paso; nunca texto del modelo. */
 export function textoMs(ms?: number | null): string {
@@ -56,15 +58,15 @@ export function TrazaViva({ fase, pasos }: { fase: string; pasos: PasoTraza[] })
 
 /** El desglose guardado bajo una respuesta terminada: colapsado, con el tiempo total medido. */
 export function TrazaFinal({ pasos, ms }: { pasos: PasoTraza[]; ms?: number }) {
+  const { t } = useT('resto', restoEs);
   if (pasos.length === 0) return null;
   const total = ms !== undefined ? ` · ${textoMs(ms)}` : '';
   return (
     <details className="rv-traza__final">
-      <summary className="rv-btn rv-btn--secondary rv-chat__resumen">
-        Cómo llegué a esto ({pasos.length === 1 ? '1 paso' : `${pasos.length} pasos`}{total})
+      <summary className="rv-btn rv-btn--secondary rv-chat__resumen">{t('ch.como_llegue_a_esto')}{pasos.length === 1 ? '1 paso' : `${pasos.length} pasos`}{total})
       </summary>
       <ListaPasos pasos={pasos} />
-      <p className="rv-chat__nota">Los pasos y los tiempos son los que midió tu navegador mientras el agente consultaba; no incluyen texto del modelo.</p>
+      <p className="rv-chat__nota">{t('ch.los_pasos_y_los_tiempos_son')}</p>
     </details>
   );
 }
