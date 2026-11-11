@@ -58,8 +58,6 @@ function valores(l: string, css: boolean): string[] {
 }
 // Línea de la serie de datos (permitida): `--chart-1: …`, `--soft-3: …`, `--ink-5: …`, `--on-2: …`.
 const SERIE_DATOS = /--region-[a-z]+\s*:/; // las series --chart/--soft/--ink/--on-N ya NO están exentas (paleta monocroma, 11-nov-2026)
-/** Declaración permitida del azul de Rovaq: SOLO en tokens.css y SOLO estas dos familias de variables. */
-const AZUL_ROVAQ = /--(?:seg-activo|accion-cajon)-(?:bg|borde|fg|hover)\s*:|--tabla-cab-(?:bg|ink)\s*:/;
 // 11-nov-2026 (punto 10 del dueño): la excepción del azul de Rovaq QUEDA ANULADA. La lista permitida está vacía; esas familias de variables ahora son
 // grises y no admiten ni un solo tono con matiz azul.
 /** Valores exactos que la excepción admite (claro y oscuro); un tono nuevo obliga a tocar esta lista a propósito. */
