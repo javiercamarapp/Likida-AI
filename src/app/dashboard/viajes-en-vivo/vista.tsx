@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { Aviso, BarraFiltros, Boton, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { MapPin, MapPinOff, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
@@ -201,7 +202,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       )}
       filtros={<Filtros t={t} f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />}
       avisos={!tablero.gpsDisponible ? <Aviso tono="warn">{t('op.no_se_pudieron_leer_las_posiciones')}</Aviso> : undefined}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Viajes en curso')}
     >
       <TablaBase<FilaViaje>

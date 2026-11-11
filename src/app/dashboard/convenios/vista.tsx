@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { fechaMx, mxn, numero } from '@/lib/formato';
 import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
@@ -84,7 +85,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       apoyo={p.verDinero
         ? t('op.por_cliente_puntos_a_a_b')
         : t('op.por_cliente_puntos_a_a_b_2')}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Convenios')}
       avisos={(
         <>

@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { ShieldCheck, PhoneCall, HeartHandshake } from 'lucide-react';
@@ -231,7 +232,7 @@ export default async function PaginaEmergencias({
   ] : undefined;
 
   return (
-    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifras} selloCifras={selloHoy('Directorio de emergencia')}>
+    <EsqueletoTablaMaestra titulo={t('emg.titulo')} apoyo={t('emg.apoyo')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy('Directorio de emergencia')}>
       {!leyoOk && (
         <EstadoVacio pantalla contenido icono={ShieldCheck} titulo={t('emg.error.titulo')}>
           {t('emg.error')}

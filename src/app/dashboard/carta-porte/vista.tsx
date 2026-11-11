@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { TriangleAlert, CircleCheck, CircleHelp, Printer } from 'lucide-react';
@@ -60,7 +61,7 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
     <EsqueletoTablaMaestra
       titulo={tr('cartaPorte.vista.cartaPorte')}
       apoyo={tr('cartaPorte.vista.porCadaViajeEn')}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       avisos={(
         <>
           <AvisoCompacto tono="info"

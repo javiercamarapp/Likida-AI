@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { Eye, Inbox, FileUp } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
 import { PillAviso, PillEstatusViaje } from './pills';
@@ -162,7 +163,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
     <EsqueletoTablaMaestra
       titulo={t('viajes.titulo')}
       apoyo={t('viajes.apoyo')}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       etiquetaCifras={t('viajes.sello')}
       filtros={(
         // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como

@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { Satellite, Truck } from 'lucide-react';
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
 import { clasificarVigencia, avisoVigencias, DIAS_AVISO, type ConteoVigencias } from '@/lib/likida/vigencias';
@@ -243,7 +244,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       titulo={t('un.titulo')}
       apoyo={t('un.apoyo')}
       acciones={acciones}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       filtros={vacio ? undefined : (
         <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
           sustantivo="unidades" camposOcultos={camposOcultos} />
@@ -281,7 +282,8 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       ) : null}
     >
       {vacio ? (
-        <EstadoVacio pantalla contenido icono={Truck} titulo={t('un.vacio.titulo')}>
+        <EstadoVacio pantalla contenido icono={Truck} titulo={t('un.vacio.titulo')}
+          accion={puedeEditar ? { href: urlRegistro('/dashboard/unidades', sufijo, { abrir: 'alta' }), texto: t('un.alta.titulo') } : undefined}>
           {t('un.vacio.nota')}
           {puedeEditar ? t('un.vacio.manual') : ''}
         </EstadoVacio>

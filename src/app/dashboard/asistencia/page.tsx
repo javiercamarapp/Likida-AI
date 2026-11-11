@@ -9,7 +9,7 @@ import {
   ROTULO_EVENTO, type IncidenciaMesa,
 } from '@/lib/likida/mesa_control';
 import { NIVEL_MAXIMO } from '@/lib/likida/asistencia_escalamiento';
-import { fechaHoraMx } from '../formato';
+import { fechaHoraMx, cifrasUniformes } from '../formato';
 import { logger } from '@/lib/logger';
 import { BotonAccionMesa } from './boton-accion';
 import type { Metadata } from 'next';
@@ -189,7 +189,7 @@ export default async function PaginaMesaControl({
     <EsqueletoTablaMaestra
       titulo={t('asist.titulo')}
       apoyo={apoyo}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Mesa de control')}
       vistaRapida={sel ? (
         <CajonVistaRapida

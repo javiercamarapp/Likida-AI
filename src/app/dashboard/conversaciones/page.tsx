@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { redirect } from 'next/navigation';
 import { MessageCircle, MessagesSquare } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -96,7 +97,7 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
     <EsqueletoTablaMaestra
       titulo={t('conv.titulo')}
       apoyo={t('conv.apoyo')}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy(t('conv.sello'))}
       pie={errorCarga === null && hilos.length > 0 ? (recortado ? t('conv.tarjeta.recientes', { tope: TOPE_HILOS, total: total ?? 0 }) : t('conv.tarjeta.todos')) : undefined}
       vistaRapida={sel ? (

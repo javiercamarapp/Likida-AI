@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { Mail, FileText, ShieldCheck, Globe, MapPin, Stamp, type LucideIcon } from 'lucide-react';
 import type { Conector } from '@/lib/likida/conexiones';
 import { Icono, InfoTip, MarcaIntegracion, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
@@ -67,7 +68,7 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
     { etiqueta: rotulos.no_medible.rotulo, valor: n('no_medible'), tono: n('no_medible') > 0 ? 'warn' : undefined },
   ];
   return (
-    <EsqueletoTablaMaestra titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')} cifras={cifras}>
+    <EsqueletoTablaMaestra titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')} cifras={cifrasUniformes(cifras)}>
       {estado}
 
       <div data-tour="conexiones.estado">

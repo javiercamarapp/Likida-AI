@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { numero } from '@/lib/formato';
 import {
@@ -102,7 +103,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
           <FormaNuevoPatio accion={crear} />
         </CajonAlta>
       ) : undefined}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       avisos={(
         <AvisoCompacto tono="info"
           resumen={<>{t('patios.aviso')}
