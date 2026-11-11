@@ -289,4 +289,6 @@ export const admin_flotas: Record<keyof typeof admin_flotasEs, string> = {
   'equipo_gestion_persona.si_cerrar_sesiones': 'Yes, close sessions',
   'equipo_gestion_persona.pierde_el_acceso_al': 'Loses access to the panel, their sessions are closed and their API keys are revoked. Not allowed if they are the fleet’s only active owner. It is logged.',
   'equipo_gestion_persona.vuelve_a_entrar_con': 'Signs in again with the role they had. It is logged.',
+  'ficha.eyebrow': 'Client record',
+  'ficha.chips': 'Plan and subscription',
 };

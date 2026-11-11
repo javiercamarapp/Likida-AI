@@ -6,6 +6,7 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import { usd } from '@/lib/utils';
 import { valorLegible } from '../../valor-legible';
 import { Aviso, BotonEnlace, EstadoError, StatusChip, Tarjeta, type TonoEstado } from '../../../ui-v2/componentes';
+import type { ComponentProps } from 'react';
 import { EsqueletoFicha } from '../../../ui-v2/esqueletos';
 import { etiquetaContadorVigia, etiquetaInterruptor } from '../../observabilidad/etiquetas';
 import '../../sistema.css';
@@ -79,16 +80,16 @@ export default async function TrazaCorridaPage({
   // Lectura caída: el MISMO esqueleto, sin cifras ni bloques (la lectura caída se dice, no se pinta como una traza vacía).
   if (traza === undefined || !c) {
     return (
-      <EsqueletoFicha titulo={titulo} apoyo={apoyo} volver={volver}>
+      <PantallaCorrida titulo={titulo} apoyo={apoyo} volver={volver}>
         <EstadoError reintentar>{t('corridas_id.no_se_pudo_leer_la_corrida')}</EstadoError>
-      </EsqueletoFicha>
+      </PantallaCorrida>
     );
   }
 
   const { costo, costoNoDisponible } = traza;
   const resumen = c.resumen ? Object.entries(c.resumen).map(([k, v]) => [etiquetaContadorVigia(k, t), valorLegible(v)] as const).filter((p): p is readonly [string, string] => p[1] !== null) : [];
   return (
-    <EsqueletoFicha
+    <PantallaCorrida
       titulo={titulo}
       apoyo={apoyo}
       volver={volver}
@@ -147,8 +148,12 @@ export default async function TrazaCorridaPage({
         </div>
         <p className="adm-sis-nota">{t('corridas_id.abrir_el_panel_de_una_flota', { flota })}</p>
       </Tarjeta>
-    </EsqueletoFicha>
+    </PantallaCorrida>
   );
+}
+
+function PantallaCorrida(props: ComponentProps<typeof EsqueletoFicha>) {
+  return <EsqueletoFicha {...props} />;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

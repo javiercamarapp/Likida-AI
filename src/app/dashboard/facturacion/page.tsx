@@ -15,7 +15,9 @@ import {
 } from '@/lib/likida/facturacion_escritura';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { mxn } from '@/lib/formato';
-import { VistaFacturacion, type CapturaFacturacion } from './vista';
+import { VistaFacturacion, SECCIONES_FACTURACION, type CapturaFacturacion, type SeccionFacturacion } from './vista';
+import { sufijoTenant } from '../sufijo';
+import { urlRegistro } from '../paginar-registro';
 import { BloqueEstadias } from './estadias';
 import { BloquePortalPago } from './portal';
 import type { ResultadoForma } from './forma';
@@ -52,7 +54,7 @@ const RUTA = '/dashboard/facturacion';
 export default async function PaginaFacturacion({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; seccion?: string }>;
 }) {
   const { t: tr } = await getT('dinero');
   const sp = await searchParams;
@@ -210,18 +212,25 @@ export default async function PaginaFacturacion({
     cancelar,
   };
 
+  const seccion: SeccionFacturacion = (SECCIONES_FACTURACION as readonly string[]).includes(sp.seccion ?? '') ? (sp.seccion as SeccionFacturacion) : 'cartera';
   const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
   return (
     <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
     <>
-      <VistaFacturacion tr={tr} datos={datos} captura={captura} auditoria={auditoria} />
-      {/* Estadías y detención (0207): sección independiente — sus lecturas y
-          su fallo no tocan la cartera ni el auditor. */}
-      <BloqueEstadias sp={sp} />
-      {/* Portal de pago del cliente (0228): mismo criterio de independencia.
-          Lo que llega por el enlace público NO está en la cartera de arriba —
-          entra aquí como propuesta y solo la conciliación la mueve. */}
-      <BloquePortalPago sp={sp} />
+      <VistaFacturacion
+        tr={tr} datos={datos} captura={captura} auditoria={auditoria}
+        seccion={seccion}
+        hrefSeccion={(k) => urlRegistro('/dashboard/facturacion', sufijoTenant(sp), { seccion: k === 'cartera' ? null : k })}
+        extras={(
+          <>
+            {/* Estadías y detención (0207): sección independiente — sus lecturas y su fallo no tocan la cartera ni el auditor. */}
+            <BloqueEstadias sp={sp} />
+            {/* Portal de pago del cliente (0228): mismo criterio de independencia. Lo que llega por el enlace público NO está en la cartera
+                de arriba — entra aquí como propuesta y solo la conciliación la mueve. */}
+            <BloquePortalPago sp={sp} />
+          </>
+        )}
+      />
     </>
     </IdiomaProvider>
   );

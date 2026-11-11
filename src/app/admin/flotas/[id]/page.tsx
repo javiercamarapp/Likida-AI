@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
@@ -9,7 +9,8 @@ import {
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { leerAgenteChoferHabilitado } from '@/lib/likida/conductor/repo';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { EstadoError, MarcoPagina } from '../../../ui-v2/componentes';
+import { EstadoError } from '../../../ui-v2/componentes';
+import { EsqueletoFicha } from '../../../ui-v2/esqueletos';
 import type { ResultadoAccion } from '../../ui/forma';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { getOnboardingFlotas } from '@/lib/admin/onboarding';
@@ -21,7 +22,7 @@ import { Declaracion15 } from './declaracion-15';
 import { etiquetaInterruptor } from '../../observabilidad/etiquetas';
 import { getPlanes } from '@/lib/saas/suscripcion';
 import { accionGestionarPlan } from '../acciones-plan';
-import { Ficha360, encabezadoFicha } from './ficha';
+import { Ficha360, encabezadoFicha, cifrasFicha, chipsFicha } from './ficha';
 import { GestionPlan } from './gestion-plan';
 import { AvisoPlanEnPausa } from '../../../dashboard/aviso-plan-en-pausa';
 
@@ -98,7 +99,11 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
   const ficha = await getFichaCliente(id).catch(() => 'error' as const);
   if (ficha === null) notFound();
   if (ficha === 'error') {
-    return <PantallaFicha titulo={t('flotas.cliente')} apoyo={t('flotas.no_se_pudo_leer')}><EstadoError reintentar>{t('flotas.no_se_pudo_leer_2')}</EstadoError></PantallaFicha>;
+    return (
+      <PantallaFicha area={t('ficha.eyebrow')} titulo={t('flotas.cliente')} apoyo={t('flotas.no_se_pudo_leer')} volver={{ href: '/admin/flotas', etiqueta: t('flotas_ficha.volver_a_clientes') }}>
+        <EstadoError reintentar>{t('flotas.no_se_pudo_leer_2')}</EstadoError>
+      </PantallaFicha>
+    );
   }
 
   // Sección aparte, resiliente por su lado: sin la 0297 aplicada, o con la
@@ -133,7 +138,7 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
 
   const enc = encabezadoFicha(ficha, t);
   return (
-    <PantallaFicha {...enc}>
+    <PantallaFicha {...enc} area={t('ficha.eyebrow')} chips={chipsFicha(ficha)} etiquetaChips={t('ficha.chips')} cifras={cifrasFicha(ficha, t)} etiquetaCifras={t('flotas_ficha.resumen_de', { nombre: ficha.tenant.nombre })}>
     <AvisoPlanEnPausa tenantId={id} />
     <Ficha360
       t={t}
@@ -150,8 +155,8 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
 }
 
 /** El marco de la ficha, UNO solo para toda la ruta: el mismo encabezado cuando la lectura falla y cuando carga. */
-function PantallaFicha({ titulo, apoyo, acciones, children }: { titulo: string; apoyo: string; acciones?: ReactNode; children: ReactNode }) {
-  return <MarcoPagina area="Negocio" titulo={titulo} apoyo={apoyo} acciones={acciones}>{children}</MarcoPagina>;
+function PantallaFicha({ children, ...marco }: Omit<ComponentProps<typeof EsqueletoFicha>, 'children'> & { children: ReactNode }) {
+  return <EsqueletoFicha {...marco}>{children}</EsqueletoFicha>;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

@@ -287,4 +287,6 @@ export const admin_flotas = {
   'equipo_gestion_persona.si_cerrar_sesiones': 'Sí, cerrar sesiones',
   'equipo_gestion_persona.pierde_el_acceso_al': 'Pierde el acceso al panel, sus sesiones se cierran y se revocan sus llaves de API. No se permite si es el único dueño activo de la flota. Queda en la bitácora.',
   'equipo_gestion_persona.vuelve_a_entrar_con': 'Vuelve a entrar con el rol que tenía. Queda en la bitácora.',
+  'ficha.eyebrow': 'Ficha de cliente',
+  'ficha.chips': 'Plan y suscripción',
 } as const;

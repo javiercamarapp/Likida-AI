@@ -1,0 +1,5 @@
+/* Próximamente · solo lo que el vacío de página no trae: la lista corta de lo que hará el módulo. */
+.rv-prox__puntos { display: grid; gap: 4px; margin: 0 0 10px; padding: 0; list-style: none; text-align: left; font-size: var(--t-body); color: var(--ink); }
+.rv-prox__puntos li { position: relative; padding-left: 14px; }
+.rv-prox__puntos li::before { content: ""; position: absolute; left: 0; top: 0.6em; width: 5px; height: 5px; border-radius: 50%; background: var(--ink); }
+.rv-prox__nota { display: block; font-size: var(--t-small); color: var(--muted); }

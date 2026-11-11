@@ -10,7 +10,8 @@ import {
 } from '@/lib/likida/marketing/estudio';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { fechaHoraMx, hoyMx } from '@/lib/formato';
-import { Aviso, AvisoCompacto, Disclosure, EstadoError, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
+import { Aviso, AvisoCompacto, Disclosure, EstadoError, Tarjeta } from '../../ui-v2/componentes';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import '../dinero.css';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { SubirHook, type ResultadoFirmaHook, type ResultadoGuardar } from './subir-hook';
@@ -155,20 +156,35 @@ export default async function EstudioMarketingPage() {
   const masReciente = pendientes && pendientes.length > 0 ? pendientes.map((p) => p.creadoEn).sort().at(-1)! : null;
   const diasSinPiezas = masReciente ? Math.floor((Date.parse(`${hoyMx()}T00:00:00Z`) - Date.parse(`${masReciente.slice(0, 10)}T00:00:00Z`)) / 86_400_000) : null;
 
-  return (
-    <MarcoPagina titulo={t('marketing.crecimiento')} apoyo={t('marketing.estudio_de_marketing_los')}>
-      {diasSinPiezas !== null && diasSinPiezas >= DIAS_ESTANCADA ? (
-        <Aviso tono="warn" titulo={t('marketing.la_pieza_pendiente_mas', { diasSinPiezas })}>
-          
-          {t('marketing.no_han_llegado_piezas')}
-        </Aviso>
-      ) : null}
-      <AvisoCompacto
-        tono="info"
-        resumen="Entre más insumo le das, mejor salen las piezas. Ninguna se genera sola; publicar sigue siendo tu aprobación."
-        mas="Sube el video que te gustó o la foto del chofer o del patio, y abajo lees el guion, el carrusel, la promo del día y los encargos de imagen y video. No hay render en el servidor."
-      />
+  // Cada cifra es un conteo de lo que se leyó; una lectura caída es «No disponible», nunca 0.
+  const conteo = (etiqueta: string, lista: readonly unknown[] | null) =>
+    lista === null ? { etiqueta, valor: null, estado: 'error' as const, mensaje: t('marketing.no_se_pudo_leer'), reintentar: true } : { etiqueta, valor: lista.length, formato: 'entero' as const };
+  const cifras = [
+    conteo(t('marketing.k_hooks'), hooks),
+    conteo(t('marketing.k_referencias'), referencias),
+    conteo(t('marketing.k_pendientes'), pendientes),
+    conteo(t('marketing.k_publicadas'), aprobadas),
+  ];
 
+  return (
+    <EsqueletoPanelCifras
+      titulo={t('marketing.crecimiento')} apoyo={t('marketing.estudio_de_marketing_los')}
+      etiquetaCifras={t('marketing.k_etiqueta')} cifras={cifras}
+      avisos={(
+        <>
+          {diasSinPiezas !== null && diasSinPiezas >= DIAS_ESTANCADA ? (
+            <Aviso tono="warn" titulo={t('marketing.la_pieza_pendiente_mas', { diasSinPiezas })}>
+              {t('marketing.no_han_llegado_piezas')}
+            </Aviso>
+          ) : null}
+          <AvisoCompacto
+            tono="info"
+            resumen="Entre más insumo le das, mejor salen las piezas. Ninguna se genera sola; publicar sigue siendo tu aprobación."
+            mas="Sube el video que te gustó o la foto del chofer o del patio, y abajo lees el guion, el carrusel, la promo del día y los encargos de imagen y video. No hay render en el servidor."
+          />
+        </>
+      )}
+    >
       <Tarjeta titulo={t('marketing.banco_de_hooks', { hooks: hooks !== null ? ` (${hooks.length})` : '' })}>
         <p className="adm-din-nota">{t('marketing.sube_un_video_que')}</p>
         <SubirHook pedirFirma={accionPedirFirmaHook} guardar={accionGuardarHook} />
@@ -250,7 +266,7 @@ export default async function EstudioMarketingPage() {
           {t('marketing.la_generacion_real_de')}
         </p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

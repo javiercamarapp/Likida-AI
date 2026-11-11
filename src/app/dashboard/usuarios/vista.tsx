@@ -1,11 +1,11 @@
-import { Users } from 'lucide-react';
 import { fechaMx } from '@/lib/formato';
 import type { OpcionRol } from '@/lib/auth/invitar';
 import { nombreDeRol, detalleDeRol } from '@/lib/auth/roles';
 import {
   FormaInvitar, FormaCambiarRol, FormaDarDeBaja, FormaReactivar, FormaReenviarAcceso, FormaCerrarSesiones, type AccionForma,
 } from './forma';
-import { BotonEnlace, Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { BotonEnlace, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { MenuAcciones } from './menu-acciones';
 import './usuarios.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -90,34 +90,41 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
     }] : []),
   ];
 
+  // Cifras de las mismas filas que la tabla; con la lectura caída no hay cifras (nunca «0 integrantes»).
+  const cifras = usuarios === null ? undefined : [
+    { etiqueta: t('e26.usu_activos'), valor: usuarios.filter((u) => u.activo).length },
+    { etiqueta: t('e26.usu_baja'), valor: usuarios.filter((u) => !u.activo).length },
+    { etiqueta: t('e26.usu_sin_wa'), valor: usuarios.filter((u) => u.activo && !u.telefono).length },
+  ];
+  const catalogoRoles = rolesInvitar ?? roles;
+
   return (
-    <MarcoPagina titulo={t('cfg.usuarios_del_equipo')} apoyo={t('cfg.quien_entra_a_este_panel_y')}>
+    <EsqueletoTablaMaestra titulo={t('cfg.usuarios_del_equipo')} apoyo={t('cfg.quien_entra_a_este_panel_y')} cifras={cifras} etiquetaCifras={t('cfg.tu_equipo')}>
       {usuarios === null ? (
         <EstadoError accion={<BotonEnlace href="" tamano="sm">{t('cfg.reintentar')}</BotonEnlace>}>{t('cfg.no_se_pudo_cargar_el_equipo')}</EstadoError>
       ) : (
         <>
-          <Tarjeta titulo={t('cfg.tu_equipo')} info="usuarios.equipo">
-            {usuarios.length === 0 ? (
-              <EstadoVacio icono={Users} titulo={t('cfg.no_hay_cuentas_dadas_de_alta')} contenido>{t('cfg.cuando_invites_a_alguien_de_tu')}</EstadoVacio>
-            ) : (
-              <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} altoMaximo={false} tarjetaMovil />
-            )}
-          </Tarjeta>
-
           {puedeInvitar ? (
-            <Disclosure titulo={t('cfg.invitar_a_alguien_de_tu_equipo')}>
-              <FormaInvitar accion={acciones.invitar} roles={rolesInvitar ?? roles} />
-            </Disclosure>
+            <Tarjeta titulo={t('cfg.invitar_a_alguien_de_tu_equipo')} entra="tarjeta">
+              <FormaInvitar accion={acciones.invitar} roles={catalogoRoles} />
+            </Tarjeta>
           ) : (
             <p className="rv-usu__pie">{t('cfg.tu_rol_ve_el_equipo_pero')}</p>
           )}
 
-          <Tarjeta titulo={t('cfg.el_aislamiento_no_depende_de_esconder')}>
-            <p className="rv-usu__aislamiento">{t('cfg.cada_consulta_de_este_panel_va')}</p>
+          <Tarjeta titulo={t('e26.usu_que_puede_cada_rol')} info="usuarios.equipo">
+            <div className="rv-usu__roles rv-usu__roles--lista">
+              {catalogoRoles.map((r) => <p key={r.valor}><strong>{r.rotulo}:</strong> {r.detalle}</p>)}
+            </div>
+            <p className="rv-usu__aislamiento"><strong>{t('cfg.el_aislamiento_no_depende_de_esconder')}</strong> {t('cfg.cada_consulta_de_este_panel_va')}</p>
+          </Tarjeta>
+
+          <Tarjeta titulo={t('cfg.tu_equipo')} estado={usuarios.length === 0 ? 'vacio' : 'ok'} mensaje={t('cfg.no_hay_cuentas_dadas_de_alta')} detalle={t('cfg.cuando_invites_a_alguien_de_tu')} contenida>
+            <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} densa altoMaximo={false} tarjetaMovil />
           </Tarjeta>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

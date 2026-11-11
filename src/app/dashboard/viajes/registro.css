@@ -13,3 +13,10 @@
 
 /* Nombres de persona: una línea con elipsis (el completo va en el title) y un mínimo que impide la columna angosta que los partía en dos renglones. */
 .rv-reg__nombre { display: block; min-width: 140px; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Cajón de vista rápida: aviso del viaje y, solo con permiso de dinero, las tres cifras de la liquidación. */
+.rv-reg__vr-extra { display: grid; gap: 10px; justify-items: start; }
+.rv-reg__vr-dinero { display: grid; gap: 0; width: 100%; margin: 0; border-top: 1px solid var(--line); }
+.rv-reg__vr-dinero > div { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: var(--t-body); }
+.rv-reg__vr-dinero dt { color: var(--muted); }
+.rv-reg__vr-dinero dd { margin: 0; font-weight: 500; font-variant-numeric: tabular-nums; }

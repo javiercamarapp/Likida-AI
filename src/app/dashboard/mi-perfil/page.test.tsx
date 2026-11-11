@@ -121,7 +121,9 @@ function hallarAction(nodo: unknown, pista: string): ((fd: FormData) => Promise<
     return el.props.action as (fd: FormData) => Promise<void>;
   }
   const hijos = el.props?.children;
-  const lista = Array.isArray(hijos) ? hijos : hijos != null ? [hijos] : [];
+  // F26: la página monta `EsqueletoConfiguracion`, cuyas secciones viajan en `props.secciones[].contenido` (no como hijos).
+  const secciones = Array.isArray(el.props?.secciones) ? (el.props!.secciones as Array<{ contenido?: unknown }>).map((s) => s.contenido) : [];
+  const lista = [...(Array.isArray(hijos) ? hijos : hijos != null ? [hijos] : []), ...secciones];
   for (const h of lista) {
     const r = hallarAction(h, pista);
     if (r) return r;
@@ -378,7 +380,8 @@ function hallarAvatarAction(nodo: unknown): ((fd: FormData) => Promise<void>) | 
   const el = nodo as { type?: unknown; props?: Record<string, unknown> };
   if (el.props && typeof el.props.accion === 'function') return el.props.accion as (fd: FormData) => Promise<void>;
   const hijos = el.props?.children;
-  const lista = Array.isArray(hijos) ? hijos : hijos != null ? [hijos] : [];
+  const secciones = Array.isArray(el.props?.secciones) ? (el.props!.secciones as Array<{ contenido?: unknown }>).map((s) => s.contenido) : [];
+  const lista = [...(Array.isArray(hijos) ? hijos : hijos != null ? [hijos] : []), ...secciones];
   for (const h of lista) {
     const r = hallarAvatarAction(h);
     if (r) return r;

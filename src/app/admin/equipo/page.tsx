@@ -5,8 +5,9 @@ import { getPersonas, ordenarPorJerarquia, type Persona } from '@/lib/admin/pers
 import { bajaPersonalLikidaHabilitada } from '@/lib/auth/baja_acceso';
 import { nombreDeRol, ROTULOS_ROL } from '@/lib/auth/roles';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroBusqueda, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import type { PropsCifra } from '../../ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, hrefConParams, type ColumnaTabla } from '../../ui-v2/datos';
 import {
   accionCambiarRolUsuario, accionDarDeBajaUsuario, accionReactivarUsuario, accionReenviarAccesoUsuario, accionCerrarSesionesUsuario,
@@ -48,8 +49,12 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
   const flotaId = uno(sp.flota);
   const abrir = uno(sp.abrir);
 
-  const marco = (hijos: React.ReactNode) => (
-    <MarcoPagina area="Control" titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')}>{hijos}</MarcoPagina>
+  const marco = (hijos: React.ReactNode, extra: Partial<React.ComponentProps<typeof EsqueletoTablaMaestra>> = {}) => (
+    <EsqueletoTablaMaestra
+      area="Control" titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')}
+      acciones={<BotonEnlace href="/admin/usuarios/nuevo" variante="primary" tamano="sm">{t('equipo.nuevo_acceso')}</BotonEnlace>}
+      {...extra}
+    >{hijos}</EsqueletoTablaMaestra>
   );
 
   let lectura: Awaited<ReturnType<typeof getPersonas>>;
@@ -87,19 +92,20 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
     },
   ];
 
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('equipo.personas_con_cuenta'), valor: todas.length, formato: 'entero' },
+    { etiqueta: t('equipo.activas'), valor: conteo('activa'), formato: 'entero' },
+    { etiqueta: t('equipo.de_baja'), valor: conteo('baja'), formato: 'entero' },
+    {
+      etiqueta: t('equipo.nunca_han_entrado'), valor: lectura.accesoLegible ? nuncaEntraron : null, formato: 'entero',
+      estado: lectura.accesoLegible ? 'ok' : 'error', mensaje: t('equipo.no_se_pudo_leer_2'),
+      nota: lectura.accesoLegible ? t('equipo.se_les_dio_de') : undefined, tono: lectura.accesoLegible && nuncaEntraron > 0 ? 'warn' : undefined,
+    },
+  ];
+  const nActivos = (q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0);
+
   return marco(
     <>
-      <TiraCifras etiqueta={t('equipo.resumen_del_equipo')}>
-        <Cifra etiqueta={t('equipo.personas_con_cuenta')} valor={todas.length} formato="entero" />
-        <Cifra etiqueta={t('equipo.activas')} valor={conteo('activa')} formato="entero" />
-        <Cifra etiqueta={t('equipo.de_baja')} valor={conteo('baja')} formato="entero" />
-        <Cifra
-          etiqueta={t('equipo.nunca_han_entrado')} valor={lectura.accesoLegible ? nuncaEntraron : null} formato="entero"
-          estado={lectura.accesoLegible ? 'ok' : 'error'} mensaje={t('equipo.no_se_pudo_leer_2')}
-          nota={lectura.accesoLegible ? t('equipo.se_les_dio_de') : undefined} tono={lectura.accesoLegible && nuncaEntraron > 0 ? 'warn' : undefined}
-        />
-      </TiraCifras>
-
       {seleccionada && (
         <GestionPersona
           t={t}
@@ -111,22 +117,13 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
           }}
         />
       )}
+
       {abrir && !seleccionada && <Tarjeta titulo={t('equipo.persona_no_encontrada')} estado="vacio" mensaje={t('equipo.esa_cuenta_ya_no')} detalle={t('equipo.vuelve_a_la_lista')} />}
 
       <Tarjeta
         titulo={t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' })}
-        acciones={<BotonEnlace href="/admin/usuarios/nuevo" variante="primary" tamano="sm">{t('equipo.nuevo_acceso')}</BotonEnlace>}
         estado={todas.length === 0 ? 'vacio' : 'ok'} mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')}
       >
-        <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={(q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0)}
-          limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
-          <FiltroOpciones etiqueta={t('equipo.estado')} valor={estado} porDefecto="todas"
-            opciones={estados(t).map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
-          <FiltroBusqueda nombre="q" valor={q} placeholder={t('equipo.nombre_correo_rol_o')} etiqueta={t('equipo.buscar_persona')} />
-        </BarraFiltros>
-        {flotaId && (
-          <p>{t('equipo.solo_la_flota')} {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>{t('equipo.ver_todas')}</Link></p>
-        )}
         <TablaLista
           etiqueta={t('equipo.personas_con_acceso')} columnas={columnas} filas={filas} idFila={(p) => p.id}
           base="/admin/equipo" params={sp} orden="local" paginacion={{ tamano: 25 }}
@@ -148,6 +145,20 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
         </p>
       </Disclosure>
     </>,
+    {
+      cifras, etiquetaCifras: t('equipo.resumen_del_equipo'),
+      filtros: (
+        <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={nActivos}
+          limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
+          <FiltroOpciones etiqueta={t('equipo.estado')} valor={estado} porDefecto="todas"
+            opciones={estados(t).map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
+          <FiltroBusqueda nombre="q" valor={q} placeholder={t('equipo.nombre_correo_rol_o')} etiqueta={t('equipo.buscar_persona')} />
+        </BarraFiltros>
+      ),
+      avisos: flotaId ? (
+        <p>{t('equipo.solo_la_flota')} {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>{t('equipo.ver_todas')}</Link></p>
+      ) : null,
+    },
   );
 }
 

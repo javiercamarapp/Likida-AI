@@ -1346,4 +1346,8 @@ export const admin_sistema = {
   'rotulos.estado_prospecto.pilot': 'Piloto',
   'rotulos.estado_prospecto.won': 'Ganado',
   'rotulos.estado_prospecto.lost': 'Perdido',
+  'mapa_prospectos_detalle.eyebrow': 'Ficha de prospecto',
+  'mapa_prospectos_detalle.etiqueta_chips': 'Etapa y contexto',
+  'mapa_prospectos_detalle.etiqueta_resumen': 'Resumen del prospecto',
+  'mapa_prospectos_detalle.etiqueta_cifras': 'Puntajes del prospecto',
 } as const;

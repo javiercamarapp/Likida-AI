@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { AvisoCompacto, Boton, Fieldset, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Fieldset } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
 import { CampoTexto } from '../../ui-v2/componentes/campos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -99,33 +100,46 @@ export default async function MiPerfilPage({
             : 'El nombre no puede quedar vacío.';
 
   return (
-    <MarcoPagina area="Cuenta" titulo="Mi perfil" apoyo="Tu nombre y tu foto. El correo y el rol los define la cuenta." ancho="lectura">
-      {sp.ok && <AvisoCompacto tono="ok" resumen={sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'} />}
-      {sp.error && <AvisoCompacto tono="error" resumen={mensajeError} />}
-
-      <Tarjeta titulo="Foto">
-        <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
-      </Tarjeta>
-
-      <Tarjeta titulo="Nombre">
-        <form action={actualizarNombre} className="adm-perfil-form">
-          <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={s.nombre ?? ''} obligatorio />
-          <Boton type="submit" variante="primary">Guardar nombre</Boton>
-        </form>
-      </Tarjeta>
-
-      <Tarjeta titulo="Cuenta">
-        <Fieldset leyenda="Datos de acceso">
-          <dl className="adm-res-pares">
-            <dt>Correo</dt>
-            <dd>{(fila?.email as string) ?? '—'}</dd>
-            <dt>Rol</dt>
-            <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
-          </dl>
-        </Fieldset>
-        <p className="adm-res-pie">Correo y rol no son editables aquí: el correo está ligado a tu cuenta de acceso y el rol lo asigna otro superadmin.</p>
-      </Tarjeta>
-    </MarcoPagina>
+    <EsqueletoConfiguracion
+      area="Cuenta" titulo="Mi perfil" apoyo="Tu nombre y tu foto. El correo y el rol los define la cuenta."
+      avisos={(
+        <>
+          {sp.ok && <AvisoCompacto tono="ok" resumen={sp.ok === 'avatar' ? 'Foto de perfil actualizada.' : 'Nombre guardado.'} />}
+          {sp.error && <AvisoCompacto tono="error" resumen={mensajeError} />}
+        </>
+      )}
+      secciones={[
+        {
+          id: 'foto', titulo: 'Foto',
+          contenido: <AvatarUploader nombre={s.nombre ?? 'Javier'} avatarUrl={s.avatarUrl} accion={subirAvatar} />,
+        },
+        {
+          id: 'nombre', titulo: 'Nombre',
+          contenido: (
+            <form action={actualizarNombre} className="adm-perfil-form">
+              <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={s.nombre ?? ''} obligatorio />
+              <Boton type="submit" variante="primary">Guardar nombre</Boton>
+            </form>
+          ),
+        },
+        {
+          id: 'cuenta', titulo: 'Cuenta',
+          contenido: (
+            <>
+              <Fieldset leyenda="Datos de acceso">
+                <dl className="adm-res-pares">
+                  <dt>Correo</dt>
+                  <dd>{(fila?.email as string) ?? '—'}</dd>
+                  <dt>Rol</dt>
+                  <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
+                </dl>
+              </Fieldset>
+              <p className="adm-res-pie">Correo y rol no son editables aquí: el correo está ligado a tu cuenta de acceso y el rol lo asigna otro superadmin.</p>
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }
 

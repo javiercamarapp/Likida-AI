@@ -1,10 +1,10 @@
 import { Suspense } from 'react';
-import { Chip, EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { Columnas, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
-import { ahoraMs } from '@/lib/saludo';
 import { saludoTr } from '@/lib/i18n/operacion_tr';
-import { fechaCorta, fechaMx, hoyMx, numero, usd } from '@/lib/formato';
+import { fechaCorta, numero, usd } from '@/lib/formato';
 import { BloqueCaja, BloqueCalidad, BloquePlataforma, BloqueSemaforo, BloqueTuTurno } from './resumen-mando';
 import { conteosPlataforma, mrr as leerMrr, panorama, resumenNegocio, VENTANA_FACTURAS_DIAS } from './resumen-lecturas';
 import type { ResumenNegocio } from '@/lib/admin/negocio';
@@ -24,12 +24,10 @@ import { getT } from '@/lib/i18n/servidor';
  */
 export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
   const [{ t }, tr] = await Promise.all([getT('admin_inicio'), getT('operacion')]);
-  const fechaHoyMx = fechaMx(hoyMx(new Date(ahoraMs())));
   return (
-    <MarcoPagina
+    <EsqueletoPortada
       titulo={t('consola.resumen')}
       apoyo={t('consola.apoyo', { saludo: saludoTr(tr), nombre: nombre ?? 'Javier' })}
-      acciones={<Chip>{fechaHoyMx}</Chip>}
     >
       <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
 
@@ -47,7 +45,7 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloquePlataforma /></Suspense>
 
       <Suspense fallback={<EsqTablaV2 />}><BloqueFlotas /></Suspense>
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }
 
