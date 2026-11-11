@@ -111,12 +111,6 @@ export function VistaAgenteConductores({
         <BloqueConteos kpis={kpis} />
       </Bloque>
 
-      <nav aria-label="Herramientas del agente" className="rv-cd__herr">
-        <Link href={`/dashboard/agentes/conductores/sitios${sufijo}`} className="rv-cd__enlace">Catálogo de sitios (clientes, plantas y andenes)</Link>
-        <Link href={`/dashboard/agentes/conductores/estadias${sufijo}`} className="rv-cd__enlace">Estadías en andén</Link>
-        <Link href={`/dashboard/agentes/conductores/configuracion${sufijo}`} className="rv-cd__enlace">Configuración (recordatorios, horario, contactos)</Link>
-      </nav>
-
       {tablero}
 
       <FilaTarjetas variante="6-6">
@@ -412,18 +406,30 @@ export function TarjetaInsights({ insights, dias, discrepancias = null, recortad
         </div>
         <section aria-label="KPIs del piloto" className="rv-cd__pila">
           <p className="rv-cd__rotulo">KPIs del piloto</p>
-          <ul className="rv-cd__kpis">
-            {insights.kpisPiloto.map((k) => {
-              const t2 = textoKpiPiloto(k);
-              return (
-                <li key={k.id} className="rv-cd__kpi">
-                  <div className="rv-cd__nota">{k.nombre}</div>
-                  <div className="rv-cd__kpi-valor">{t2.valor}</div>
-                  <div className="rv-cd__nota">{k.rotulo} · {t2.comparacion}</div>
-                </li>
-              );
-            })}
-          </ul>
+          {/* Solo las cifras con valor son tarjetas; las que no tienen dato van en un bloque plegado, con «—» y sin cifra grande. */}
+          {insights.kpisPiloto.some((k) => k.valor !== null) && (
+            <ul className="rv-cd__kpis">
+              {insights.kpisPiloto.filter((k) => k.valor !== null).map((k) => {
+                const t2 = textoKpiPiloto(k);
+                return (
+                  <li key={k.id} className="rv-cd__kpi">
+                    <div className="rv-cd__nota">{k.nombre}</div>
+                    <div className="rv-cd__kpi-valor">{t2.valor}</div>
+                    <div className="rv-cd__nota">{k.rotulo} · {t2.comparacion}</div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {insights.kpisPiloto.some((k) => k.valor === null) && (
+            <Disclosure titulo={`Indicadores sin dato (${insights.kpisPiloto.filter((k) => k.valor === null).length})`} variante="linea">
+              <ul className="rv-cd__lista">
+                {insights.kpisPiloto.filter((k) => k.valor === null).map((k) => (
+                  <li key={k.id}><span className="rv-cd__medio">{k.nombre}</span> · — · sin dato · {k.rotulo}</li>
+                ))}
+              </ul>
+            </Disclosure>
+          )}
           {insights.kpisPiloto.some((k) => k.contraBase === 'sin dato') && (
             <p className="rv-cd__nota">
               Aún no hay línea base declarada para algunos indicadores: indícala en{' '}

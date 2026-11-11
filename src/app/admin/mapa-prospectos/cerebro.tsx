@@ -28,6 +28,8 @@ import {
 } from '@/lib/admin/prospectos-mapa-client';
 import { fechaHoraMx, numero, hoyMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
+import { useT } from '@/lib/i18n/proveedor';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { usePrefersReducedMotion } from '../ui/prefers-reduced-motion';
 import {
   Boton, Campo, CampoSelect, Fieldset, Disclosure, Drawer, FilaTarjetas, Icono, SegmentedControl, Tarjeta, clasesBoton, cx,
@@ -200,6 +202,7 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
 
 export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estadoInicial?: string }) {
   const reducido = usePrefersReducedMotion();
+  const tr = useT('shell', shellEs);
   // ── LA CARTERA, LIGERA (FE-16) ───────────────────────────────────────────
   // Llega empacada en tuplas y sin los textos largos; se desempaca UNA vez.
   // `listaRef` es la misma lista, accesible desde los manejadores sin
@@ -713,6 +716,9 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           );
         })()}
 
+        {filtrados.length > conCoords.length && (
+          <p className="cer-nota-sin-punto" role="status">{tr.tp('mapa.sinPunto', filtrados.length - conCoords.length)}</p>
+        )}
         {lucesRecortadas && (
           <p className="cer-nota-luces">
             Luces: las más calientes ({numero(pines.length)} de {numero(enSeleccion)}). Afina el filtro para verlas todas.

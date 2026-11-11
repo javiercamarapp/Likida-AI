@@ -33,10 +33,11 @@ describe('primitivas v2 · contrato de ESTILO-LIKIDA', () => {
     expect(tok).toMatch(/--t-ctl-sm: 500 12px\/1\.3/);
     expect(comp).toMatch(/@media \(max-width: 819px\) \{[^@]*\.rv-btn \{ min-height: 36px; \}\s*\[data-ui="v2"\] \.rv-btn--sm \{ min-height: var\(--ctl-h-movil, 36px\); \}/);
   });
-  it('botón deshabilitado: borde discontinuo y SIN opacidad', () => {
+  it('botón deshabilitado: borde sólido tenue (sin punteado) y SIN opacidad', () => {
     const m = /\.rv-btn:disabled,[^{]*\{([^}]*)\}/.exec(comp);
     expect(m?.[1]).toMatch(/opacity: 1/);
-    expect(m?.[1]).toMatch(/dashed/);
+    expect(m?.[1]).toMatch(/border: 1px solid var\(--line\)/);
+    expect(m?.[1]).not.toMatch(/dashed|dotted/);
   });
   it('tenue: tinta sobre el fondo del primario ≥ 4.5:1 en claro y oscuro', () => {
     expect(ratio('#0e0e10', '#e4e4e6')).toBeGreaterThanOrEqual(4.5);

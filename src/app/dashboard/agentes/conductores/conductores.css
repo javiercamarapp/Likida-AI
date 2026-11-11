@@ -58,7 +58,6 @@
 .rv-cd__columnas { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
 @media (min-width: 900px) { .rv-cd__columnas { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .rv-cd__ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--t-body, 13px); }
-.rv-cd__herr { display: flex; flex-wrap: wrap; gap: 8px; }
 .rv-cd__tabla-cuerpo { display: grid; gap: 12px; }
 .rv-cd__seccion-conf { display: grid; gap: 10px; }
 .rv-cd__dias { display: flex; flex-wrap: wrap; gap: 4px 14px; }

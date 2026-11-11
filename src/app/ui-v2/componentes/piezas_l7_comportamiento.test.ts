@@ -123,7 +123,7 @@ describe.skipIf(SIN_NAVEGADOR)('Campos · comportamiento en Chromium', () => {
   it('casilla indeterminada y deshabilitada: el estado se expone al navegador y no se puede enfocar', async () => {
     const p = await abrir();
     expect(await p.evaluate(() => (document.getElementById('c2') as HTMLInputElement).indeterminate)).toBe(true);
-    expect(await p.evaluate(() => getComputedStyle(document.getElementById('c3')!).borderTopStyle)).toBe('dashed');
+    expect(await p.evaluate(() => getComputedStyle(document.getElementById('c3')!).borderTopStyle)).not.toBe('dashed');
     await p.focus('#c1');
     await p.keyboard.press('Tab'); await p.keyboard.press('Tab');
     expect(await p.evaluate(() => document.activeElement?.id)).not.toBe('c3');

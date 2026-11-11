@@ -33,7 +33,7 @@
 .ven-btn:hover:not(:disabled) { background: var(--canvas); }
 .ven-btn:disabled { opacity: .5; cursor: not-allowed; }
 .ven-btn:focus-visible, .ven-select:focus-visible, .ven-nota textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.ven-btn--ancho { width: 100%; }
+.ven-btn--ancho { width: 100%; height: auto; min-height: 28px; padding: 5px 8px; line-height: 1.25; white-space: normal; text-wrap: balance; }
 .ven-btn[data-sentido="perdido"] { color: var(--bad); }
 .ven-btn[data-sentido="ganado"] { color: var(--ok); }
 .ven-select { width: 100%; height: 28px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; }
@@ -54,3 +54,9 @@
 .ven-corridas__error { color: var(--bad); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ven-regla { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; font-size: 13px; font-weight: 500; }
 .ven-regla p { margin: 0; }
+
+/* Desempeño por vendedor: 13 columnas. Relleno corto, cabeceras que envuelven y el nombre en una línea para que quepan en la tarjeta sin recortar «Conversión». */
+[data-ui="v2"] .card.ven-desempeno table thead th { padding: 6px 6px; height: auto; white-space: normal; line-height: 1.2; vertical-align: bottom; }
+[data-ui="v2"] .card.ven-desempeno table tbody td { padding: 0 6px; }
+[data-ui="v2"] .card.ven-desempeno table tbody th { padding: 0 8px; white-space: nowrap; }
+[data-ui="v2"] .card.ven-desempeno table thead th:first-child { padding-left: 8px; }

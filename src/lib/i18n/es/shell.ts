@@ -33,5 +33,8 @@ export const shell = {
   'pie.cuenta.fallback': 'Mi cuenta',
   'pie.cuenta.menu': 'Menú de la cuenta',
   'pie.cuenta.etiqueta': 'Cuenta',
+  // Mapa de prospectos (Cerebro de ventas)
+  'mapa.sinPunto.uno': '{n} prospecto sin coordenadas: cuenta en su estado pero no tiene punto en el mapa.',
+  'mapa.sinPunto.otros': '{n} prospectos sin coordenadas: cuentan en su estado pero no tienen punto en el mapa.',
   'pie.cuenta.salir': 'Cerrar sesión',
 } as const;

@@ -159,7 +159,7 @@
 }
 [data-ui="v2"] :is(input, select, textarea):not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], .sr-only):focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 [data-ui="v2"] :is(input, select, textarea)::placeholder { color: var(--muted); opacity: 1; }
-[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):disabled { border-style: dashed; border-color: var(--ctl-vacio-bd); background-color: var(--canvas); color: var(--ink2); cursor: not-allowed; }
+[data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea):disabled { border-style: solid; border-color: var(--line); background-color: var(--canvas); color: var(--muted); cursor: not-allowed; }
 [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size]), textarea)[aria-invalid="true"]:not(.sr-only, .bg-transparent, .border-0) { border-color: var(--bad); }
 @media (max-width: 819px) {
   /* Caja de 44 (toque) con 34 visibles: el borde transparente de 5 px agranda el área sin engordar el campo. */
@@ -169,7 +169,7 @@
     outline-offset: -5px;
   }
   [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0)[aria-invalid="true"] { border-color: transparent; box-shadow: inset 0 0 0 1px var(--bad); }
-  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0, [class*="pl-"], [class*="pr-"]) { padding-inline: 5px; }
+  [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"], [type="color"], [type="submit"], [type="button"], [type="reset"], [type="image"]), select:not([multiple], [size])):not(.sr-only, .bg-transparent, .border-0, [class*="pl-"], [class*="pr-"]) { padding-inline: 10px; }
   [data-ui="v2"] textarea:not(.sr-only, .bg-transparent, .border-0) { font-size: 16px; min-height: 88px; }
 }
 
@@ -208,7 +208,8 @@
 [data-ui="v2"] .rv-btn[aria-disabled="true"] {
   opacity: 1; cursor: not-allowed;
   background: var(--surface); color: var(--ink2);
-  border: 1px dashed color-mix(in srgb, var(--input) 55%, var(--surface));
+  border: 1px solid var(--line);
+  background: var(--canvas); color: var(--muted);
 }
 [data-ui="v2"] .rv-btn[aria-busy="true"] { cursor: progress; }
 [data-ui="v2"] .rv-btn__spinner {
@@ -308,8 +309,7 @@
 [data-ui="v2"] .rv-switch__input:checked + .rv-switch__pista { background: var(--marca, var(--ink)); border-color: var(--marca, var(--ink)); }
 [data-ui="v2"] .rv-switch__input:checked + .rv-switch__pista .rv-switch__perilla { left: 2px; transform: translateX(14px); background: var(--marca-fg, var(--surface)); }
 [data-ui="v2"] .rv-switch__input:focus-visible + .rv-switch__pista { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-switch__input:disabled + .rv-switch__pista { border-style: dashed; }
-[data-ui="v2"] .rv-switch__input:disabled ~ .rv-switch__etq { color: var(--muted); }
+[data-ui="v2"] [data-ui="v2"] .rv-switch__input:disabled ~ .rv-switch__etq { color: var(--muted); }
 [data-ui="v2"] .rv-switch__ayuda { font-size: 12px; color: var(--faint, var(--muted)); }
 @media (prefers-reduced-motion: no-preference) {
 [data-ui="v2"] .rv-switch__perilla { transition: transform var(--ui-fast) var(--ui-ease); }
@@ -333,17 +333,17 @@
 }
 @media (max-width: 819px) {
 [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea):disabled {
-    border-style: solid; border-color: transparent; box-shadow: none; outline: 1.5px dashed var(--ctl-vacio-bd); outline-offset: -5px;
+    border-style: solid; border-color: transparent; box-shadow: inset 0 0 0 1px var(--line); outline: 0; background-color: var(--canvas); color: var(--muted);
   }
 }
 @media (forced-colors: active) {
 [data-ui="v2"] :is(input:not([type="checkbox"], [type="radio"], [type="file"], [type="range"], [type="hidden"]), select, textarea):not(.sr-only, .bg-transparent, .border-0) {
     border: 1px solid ButtonText; box-shadow: none; outline-offset: 2px;
   }
-[data-ui="v2"] :is(input, select, textarea):disabled { border: 1px dashed GrayText; outline: 0; }
+[data-ui="v2"] :is(input, select, textarea):disabled { border: 1px solid GrayText; outline: 0; }
 [data-ui="v2"] .rv-btn { border: 1px solid ButtonText; }
 [data-ui="v2"] .rv-btn:disabled,
-[data-ui="v2"] .rv-btn[aria-disabled="true"] { border: 1px dashed GrayText; }
+[data-ui="v2"] .rv-btn[aria-disabled="true"] { border: 1px solid GrayText; }
 [data-ui="v2"] .rv-chip,
 [data-ui="v2"] .rv-kind { border: 1px solid CanvasText; }
 }
@@ -428,7 +428,7 @@
 [data-ui="v2"] .rv-fl:focus-visible, [data-ui="v2"] .rv-fl:focus-within { outline: 2px solid var(--ink); outline-offset: 2px; }
 [data-ui="v2"] .rv-fl[data-activo], [data-ui="v2"] .rv-fl[aria-pressed="true"] { background: var(--seg-activo-bg); border-color: var(--seg-activo-borde); color: var(--seg-activo-fg); }
 [data-ui="v2"] .rv-fl[data-activo]:hover, [data-ui="v2"] .rv-fl[aria-pressed="true"]:hover { background: var(--seg-activo-hover); }
-[data-ui="v2"] .rv-fl:disabled { cursor: not-allowed; border-style: dashed; color: var(--ink2); background: var(--surface); }
+[data-ui="v2"] .rv-fl:disabled { cursor: not-allowed; border-style: solid; color: var(--ink2); background: var(--surface); }
 [data-ui="v2"] .rv-fl svg { width: 14px; height: 14px; flex: none; }
 [data-ui="v2"] .rv-fl__etq { color: var(--muted); }
 [data-ui="v2"] .rv-fl[data-activo] .rv-fl__etq, [data-ui="v2"] .rv-fl[aria-pressed="true"] .rv-fl__etq { color: inherit; }

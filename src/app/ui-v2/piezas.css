@@ -23,7 +23,7 @@
 [data-ui="v2"] .rv-marca--radio .rv-marca__input:checked::after { display: block; left: 3px; top: 3px; width: 8px; height: 8px; border: 0; border-radius: 50%; background: var(--marca); transform: none; }
 [data-ui="v2"] .rv-marca__input:hover:not(:disabled) { border-color: var(--ink); }
 [data-ui="v2"] .rv-marca__input:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-marca__input:disabled { border-style: dashed; cursor: not-allowed; }
+[data-ui="v2"] .rv-marca__input:disabled { border-style: solid; cursor: not-allowed; }
 [data-ui="v2"] .rv-marca__input:disabled ~ .rv-marca__etq { color: var(--muted); }
 [data-ui="v2"] .rv-marca__fila:has(.rv-marca__input:disabled) { cursor: not-allowed; }
 [data-ui="v2"] .rv-marca__ayuda { padding-inline-start: 25px; font-size: var(--t-small); color: var(--muted); }
@@ -67,7 +67,7 @@
 [data-ui="v2"] .rv-archivo__boton { display: inline-flex; flex: none; align-items: center; gap: 6px; box-sizing: border-box; min-height: 32px; padding: 0 12px; border: 1px solid var(--input); border-radius: 8px; background: var(--surface); color: var(--ink); font: var(--t-ctl-sm); white-space: nowrap; cursor: pointer; }
 [data-ui="v2"] .rv-archivo__boton:hover { background: var(--ui-soft); }
 [data-ui="v2"] .rv-archivo__input:focus-visible + .rv-archivo__boton { outline: 2px solid var(--ink); outline-offset: 2px; }
-[data-ui="v2"] .rv-archivo__input:disabled + .rv-archivo__boton { border-style: dashed; color: var(--muted); cursor: not-allowed; }
+[data-ui="v2"] .rv-archivo__input:disabled + .rv-archivo__boton { border-style: solid; color: var(--muted); cursor: not-allowed; }
 [data-ui="v2"] .rv-archivo__nombre { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-body); font-weight: 400; color: var(--ink); }
 [data-ui="v2"] .rv-archivo__nombre[data-vacio] { color: var(--muted); }
 [data-ui="v2"] .rv-campo > [aria-invalid="true"] .rv-archivo__boton, [data-ui="v2"] .rv-archivo:has([aria-invalid="true"]) .rv-archivo__boton { border-color: var(--bad); }
@@ -105,7 +105,7 @@
 [data-ui="v2"] .rv-seg__btn[aria-checked="true"] { background: var(--seg-activo-bg); color: var(--seg-activo-fg); box-shadow: 0 0 0 1px var(--seg-activo-borde); }
 [data-ui="v2"] .rv-seg__btn[aria-checked="false"]:hover:not(:disabled) { background: var(--ui-soft); color: var(--ink); }
 [data-ui="v2"] .rv-seg__btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
-[data-ui="v2"] .rv-seg__btn:disabled { color: var(--muted); border: 1px dashed var(--line2); cursor: not-allowed; }
+[data-ui="v2"] .rv-seg__btn:disabled { color: var(--muted); border: 1px solid var(--line2); cursor: not-allowed; }
 [data-ui="v2"] .rv-seg__conteo { font-size: var(--t-small); font-weight: 500; font-family: var(--font-sans-ui, inherit); color: var(--muted); }
 /* Móvil: botones de 44 px de alto (zona táctil). */
 @media (max-width: 819px) {
@@ -251,3 +251,6 @@
 /* Controles de barra de herramientas: un <summary> con aspecto de botón mide lo mismo que un filtro (32), no más */
 [data-ui="v2"] summary.rv-btn { box-sizing: border-box; min-height: var(--ctl-h, 32px); }
 @media (max-width: 819px) { [data-ui="v2"] summary.rv-btn { min-height: 44px; } }
+
+/* Pila vertical con el ritmo del sistema: para los grupos de tarjetas que no cuelgan directamente de `.rv-marco` (pestañas de una ficha). */
+[data-ui="v2"] .rv-pila { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }

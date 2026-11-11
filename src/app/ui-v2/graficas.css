@@ -28,6 +28,8 @@
   color: inherit; text-decoration: none; border-top: 3px solid var(--cat, transparent);
   box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line);
 }
+/* El filete superior es de tinta en todas las tiras (como en el admin): el matiz de cada celda vive en su sparkline y en el punto móvil, no en un filete de color. */
+[data-ui="v2"] .rv-kpi { border-top-color: var(--ink); }
 a.rv-kpi:hover { background: var(--canvas); }
 a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-kpi[data-matiz="1"] { --cat: var(--chart-1, var(--muted)); } .rv-kpi[data-matiz="2"] { --cat: var(--chart-2, var(--muted)); }
@@ -125,9 +127,9 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 }
 [data-ui="v2"] .rv-kind__punto { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--ink); }
 [data-ui="v2"] .rv-kind[data-tipo="observado"] { padding: 0; color: var(--muted); }
-[data-ui="v2"] .rv-kind[data-tipo="estimado"] { border-style: dashed; border-color: var(--prov-est-bd); background: var(--prov-est-bg); }
+[data-ui="v2"] .rv-kind[data-tipo="estimado"] { border-style: solid; border-color: var(--prov-est-bd); background: var(--prov-est-bg); }
 [data-ui="v2"] .rv-kind[data-tipo="inferido"] { border-style: dotted; border-color: var(--prov-inf-bd); background: var(--prov-inf-bg); }
-[data-ui="v2"] .rv-kind[data-tipo="sin_dato"] { border-style: dashed; border-color: var(--prov-sin-bd); background: transparent; color: var(--muted); }
+[data-ui="v2"] .rv-kind[data-tipo="sin_dato"] { border-style: solid; border-color: var(--prov-sin-bd); background: transparent; color: var(--muted); }
 [data-ui="v2"] .rv-kpis {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 168px), 1fr));
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden;
