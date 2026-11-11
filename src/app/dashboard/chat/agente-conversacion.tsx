@@ -221,12 +221,13 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
           <div className="rv-chat__dock">{composer}</div>
           {!hay && (
             <>
-              {modo === 'superadmin' && !panel && <BriefingDecideHoy onPreguntar={preguntar} deshabilitado={a.ocupado} endpoint={endpointAccion} />}
               <TemasRapidos temas={listaTemas} onPreguntar={preguntar} deshabilitado={a.ocupado} />
               <p className="rv-chat__meta">
                 {tx.chips.map((c) => <span key={c.texto} className="rv-chip" title={c.ayuda}>{c.texto}</span>)}
               </p>
               <p className="rv-chat__pie">{tx.pie}</p>
+              {/* «Decide hoy»: tarjeta aparte, plegada y DESPUÉS de los temas (como Rovaq: logo, título, recuadro y temas, sin tarjetas entre medias). */}
+              {modo === 'superadmin' && !panel && <BriefingDecideHoy onPreguntar={preguntar} deshabilitado={a.ocupado} endpoint={endpointAccion} />}
             </>
           )}
         </div>
