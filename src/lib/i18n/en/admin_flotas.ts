@@ -305,4 +305,6 @@ export const admin_flotas: Record<keyof typeof admin_flotasEs, string> = {
   'flotas.vr_paneles': 'The panels open in another tab with the superadmin session; they change nothing about the fleet.',
   'flotas.sin_resultados': 'No fleet matches the filter.',
   'flotas_alta.dar_de_alta': 'Create',
+  'flotas_ficha.personas_activas': 'Active people',
+  'flotas_ficha.de_personas': 'of {total} in the fleet',
 };

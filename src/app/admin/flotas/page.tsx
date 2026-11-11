@@ -18,6 +18,7 @@ import { uniformes } from '../cifras-uniformes';
 import { accionCrearFlota } from './acciones';
 import { AltaFlota } from './alta';
 import '../dinero.css';
+import '../resumen.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';

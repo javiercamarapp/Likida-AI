@@ -370,4 +370,8 @@ export const admin_dinero = {
   'cobranza.vista_rapida': 'Vista rápida',
   'cobranza.vr_subtitulo': 'Factura {n} de {total}',
   'cobranza.vr_abrir': 'Abrir Planes y cobro',
+  'costos_facturacion.facturado_por_mes': 'Facturado por mes',
+  'costos_facturacion.facturas_por_estado': 'Facturas por estado',
+  'costos_facturacion.historial_recortado': 'La lista está recortada al tope de lectura: los meses más viejos pueden faltar.',
+  'costos_facturacion.sin_facturas_emitidas': 'Sin facturas emitidas',
 } as const;

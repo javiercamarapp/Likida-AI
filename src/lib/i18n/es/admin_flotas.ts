@@ -303,4 +303,6 @@ export const admin_flotas = {
   'flotas.vr_paneles': 'Los paneles se abren en otra pestaña con la sesión de superadmin; no cambian nada de la flota.',
   'flotas.sin_resultados': 'Ninguna flota coincide con el filtro.',
   'flotas_alta.dar_de_alta': 'Dar de alta',
+  'flotas_ficha.personas_activas': 'Personas activas',
+  'flotas_ficha.de_personas': 'de {total} en la flota',
 } as const;
