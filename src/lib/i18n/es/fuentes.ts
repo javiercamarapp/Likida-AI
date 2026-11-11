@@ -1,0 +1,52 @@
+// Namespace «fuentes»: estado de las fuentes de datos (F19 «Confianza del dato»). Fuente de verdad en español;
+// `en/fuentes.ts` lo espeja y el compilador exige las mismas claves.
+export const fuentes = {
+  // Nombres y señal que se lee de cada fuente
+  'nombre.whatsapp': 'WhatsApp (comprobantes de choferes)',
+  'nombre.tms': 'TMS o sistema de la flota',
+  'nombre.gps': 'GPS',
+  'nombre.peajes': 'Peajes',
+  'nombre.correo': 'Correo (buzón de facturas)',
+  'nombre.sat': 'SAT (descarga de CFDI)',
+  'senal.whatsapp': 'último comprobante recibido',
+  'senal.tms': 'última lectura correcta del sistema',
+  'senal.gps': 'última posición recibida',
+  'senal.peajes': 'último archivo de peajes procesado',
+  'senal.correo': 'último archivo recibido por el buzón',
+  'senal.sat': 'última descarga de paquete del SAT',
+  // Estados
+  'rotulo.al_dia': 'Al día',
+  'rotulo.atrasada': 'Atrasada',
+  'rotulo.caida': 'Caída',
+  'rotulo.sin_conectar': 'Sin conectar',
+  'rotulo.sin_dato': 'Sin dato',
+  // Tiempos
+  'hace.menosMin': 'hace menos de un minuto',
+  'hace.min': 'hace {n} min',
+  'hace.h': 'hace {n} h',
+  'hace.dias': 'hace {n} días',
+  'cada.min': 'cada {n} min',
+  'cada.h': 'cada {n} h',
+  'cada.dias': 'cada {n} días',
+  // Detalle por motivo
+  'detalle.lectura_caida': 'No se pudo leer esta fuente ahora mismo. Eso NO dice que esté bien ni que esté mal: dice que no se sabe.',
+  'detalle.no_configurada': 'Todavía no está conectada. No es una falla: falta conectarla.',
+  'detalle.sin_senal': 'Está conectada, pero todavía no ha llegado ni una señal.',
+  'detalle.sin_senal_con_falla': 'Está conectada pero nunca ha entregado nada, y reportó: {falla}',
+  'detalle.al_dia': 'Al día: {senal} {hace}.',
+  'detalle.falla_sin_recuperar': 'Reportó una falla sin recuperarse ({falla}). {senal} {hace}.',
+  'detalle.muestra_chica': 'Sin medir: en 30 días llegaron {n} señales, muy pocas para afirmar que esté callada. {senal} {hace}.',
+  'detalle.caida_por_silencio': 'Caída: {senal} {hace}; debería hablar {cada}.',
+  'detalle.atrasada_por_silencio': 'Atrasada: {senal} {hace}; lo normal es una señal {cada}.',
+  // Pantallas
+  'conexiones.titulo': 'Estado de tus fuentes de datos',
+  'conexiones.apoyo': 'Cada fuente dice si está al día, atrasada, caída o sin conectar, según cuándo llegó su última señal real. Lo que no se pudo leer dice «sin dato»: nunca se pinta como al día.',
+  'conexiones.resumen': '{alDia} de {total} al día',
+  'conexiones.arranque': 'Arranque: {conectadas} de {total} conectadas',
+  'conexiones.silencio': 'Ningún evento de WhatsApp en {horas} horas hábiles con {viajes} viajes abiertos. Revisa que el número siga activo y que los choferes estén escribiendo.',
+  'conexiones.cadencia': 'Cadencia esperada: una señal {cada}.',
+  'admin.titulo': 'Fuentes de datos del sistema',
+  'admin.apoyo': 'Misma medida que ve el cliente, aplicada al último latido del reloj que lee cada fuente.',
+  'admin.resumen': 'Fuentes al día',
+  'admin.reloj': 'Reloj que la lee: {cron}',
+} as const;
