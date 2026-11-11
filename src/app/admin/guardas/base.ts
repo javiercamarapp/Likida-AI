@@ -19,7 +19,6 @@ export const BASE_BARRA_PAGINA: Record<string, number> = {
 };
 export const BASE_H1_PROPIO: Record<string, number> = {
   'app/admin/calidad-evals/page.tsx': 1,
-  'app/admin/error.tsx': 1,
 };
 export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};

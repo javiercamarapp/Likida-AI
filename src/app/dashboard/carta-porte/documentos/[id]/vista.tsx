@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Check, Download, CircleHelp, FileSearch, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, Download, CircleHelp, Send, ShieldAlert, Trash2, TriangleAlert, Truck } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, usd4 } from '@/lib/formato';
 import { ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO, ROTULO_ORIGEN, ROTULO_ORIGEN_HALLAZGO, type FilaCampo, type Revision } from '@/lib/likida/carta_porte_docs/presentacion';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
@@ -7,6 +7,7 @@ import { CAUSAS_RECHAZO, type CausaRechazo } from '@/lib/likida/carta_porte_docs
 import { propuestaVacia, type PropuestaCatalogo } from '@/lib/likida/carta_porte_docs/catalogo_pantalla';
 import { FRASE_ENVIADO_SIMULADO, ROTULO_SIMULADO } from '@/lib/likida/carta_porte_docs/salida_simulada';
 import { lineasDelOriginal, marcaDeFila, resumenDeMarcas } from '@/lib/likida/carta_porte_docs/revision_formato';
+import { Chip, MarcoPagina } from '@/app/ui-v2/componentes';
 import { AvisosLectura } from './avisos_lectura';
 import { BotonEnvio, ETIQUETA, FormaAccion, type AccionDoc } from '../forma_accion';
 
@@ -153,17 +154,17 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
   const editable = doc.estado === 'por_revisar';
   const meta = doc.extraccion?.meta;
   return (
-    <main className="max-w-[1500px] mx-auto px-5 py-6 space-y-4">
+    <MarcoPagina
+      area="Carta Porte"
+      titulo={doc.nombreArchivo}
+      idTitulo="documento-titulo"
+      acciones={<Chip>{ROTULO_ESTADO[doc.estado]}</Chip>}
+    >
       <Link href={`/dashboard/carta-porte/documentos${sufijo}`} className="text-[12px] font-medium inline-flex items-center gap-1 hover:opacity-75" style={{ color: 'var(--marca)' }}>
         <ArrowLeft width={13} height={13} strokeWidth={1.75} /> Volver a los documentos
       </Link>
 
-      <header className="space-y-1">
-        <h1 className="font-display text-[20px] font-semibold flex flex-wrap items-center gap-2">
-          <FileSearch width={18} height={18} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />
-          <span className="break-all">{doc.nombreArchivo}</span>
-          <span className="text-[11px] font-medium px-2 py-0.5 rounded-full hairline" style={{ color: 'var(--muted)' }}>{ROTULO_ESTADO[doc.estado]}</span>
-        </h1>
+      <div className="space-y-1">
         <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
           {ROTULO_FORMATO[doc.formato] ?? doc.formato} · {ROTULO_CANAL[doc.canal] ?? doc.canal} · {pesoArchivo(doc.bytes)} · recibido {fechaHoraMx(doc.createdAt)}
           {doc.remitente ? ` · de ${doc.remitente}` : ''}{doc.asunto ? ` · «${doc.asunto}»` : ''}
@@ -229,10 +230,11 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
         )}
         {doc.estado === 'fallido' && <p className="text-[12px]" style={{ color: 'var(--bad)' }}>{doc.ultimoError}</p>}
         {doc.estado === 'rechazado' && <p className="text-[12px]" style={{ color: 'var(--muted)' }}>Rechazado: {doc.rechazoMotivo}</p>}
-      </header>
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
         <section aria-label="El documento" className="card p-3 space-y-2 xl:sticky xl:top-4 max-h-[85vh] overflow-auto">
+          {/* sin-info: rótulo del visor del archivo original, no una cifra ni un recuadro de datos */}
           <h2 className="text-[12px] font-medium">El documento</h2>
           {/* eslint-disable-next-line @next/next/no-img-element -- URL firmada de Storage: next/image exigiría declarar el dominio y optimizaría un documento que NO se debe recomprimir */}
           {original.tipo === 'imagen' && <img src={original.url} alt="Documento del cliente" className="w-full rounded-md hairline" />}
@@ -439,7 +441,7 @@ export function VistaRevision({ doc, revision, original, operadores, eventos, ac
           </ul>
         </details>
       )}
-    </main>
+    </MarcoPagina>
   );
 }
 
