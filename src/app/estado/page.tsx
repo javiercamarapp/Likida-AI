@@ -6,6 +6,7 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import Link from 'next/link';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import '../legal/publico-r2.css';
+import '../legal/flujo-publico.css';
 import './estado.css';
 import { headers } from 'next/headers';
 import { cargarEstadoPublico, estadoMemoizado, type EstadoPublico } from './datos';
@@ -94,6 +95,7 @@ export default async function PaginaEstado() {
       titulo={t('est.titulo')}
       apoyo={t('est.apoyo')}
     >
+      <div className="rv-flujo" aria-hidden="true" />
         <section aria-live="polite" className={`mt-8 flex items-center justify-between gap-4 rounded-xl px-5 py-4 ${ESTADO[general.estado].fondo}`}>
           <h2 className={`font-display text-[17px] font-semibold ${ESTADO[general.estado].texto}`}>{general.titulo}</h2>
           <Etiqueta estado={general.estado} t={t} />

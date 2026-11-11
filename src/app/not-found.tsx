@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { MarcoPublico } from './ui-v2/componentes/marco-publico';
 import { BotonEnlace } from './ui-v2/componentes/boton';
 import './legal/publico-r2.css';
+import './legal/flujo-publico.css';
 
 // El 404 es una pantalla de marca, no de panel: la única superficie que ve alguien que no ha entrado nunca (un enlace viejo
 // reenviado por WhatsApp, un resultado de buscador, un correo de hace meses). Se pinta con el MISMO marco público que el resto de las
@@ -20,7 +21,6 @@ export default function NoEncontrado() {
       titulo="Esta ruta no está en el mapa."
       apoyo="El enlace pudo cambiar de lugar o venir mal escrito. Vuelve al inicio: te deja en tu panel si ya iniciaste sesión, y en el acceso si no."
       ancho="estrecho"
-      centrado
       acciones={
         <>
           {/* `/` NO es una landing: es la puerta que reparte por sesión y por rol (`page.tsx` → `puertaDeEntrada`). */}
