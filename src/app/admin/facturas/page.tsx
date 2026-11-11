@@ -95,8 +95,8 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
             etiqueta={t('facturas.estado')} nombre="estado" valor={filtros.estado ?? ''}
             opciones={[{ valor: 'pendiente', rotulo: 'Pendiente' }, { valor: 'pagada', rotulo: 'Pagada' }, { valor: 'fallida', rotulo: 'Fallida' }, { valor: 'cancelada', rotulo: 'Cancelada' }]}
           />
-          <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} />
-          <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} />
+          <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} className="adm-fecha-es" />
+          <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} className="adm-fecha-es" />
         </BarraFiltros>
       )}
       avisos={(

@@ -74,7 +74,7 @@
 [data-ui="v2"] .adm-perfil-valor { font-size: var(--t-body, 13px); color: var(--ink); overflow-wrap: anywhere; }
 
 /* «Qué no se sabe» (Rovaq): caja punteada dentro de su tarjeta, texto a la izquierda. */
-[data-ui="v2"] .adm-nosabe { border-style: dashed; background: transparent; }
+[data-ui="v2"] .adm-nosabe { border-style: dashed; background: var(--canvas2, var(--canvas)); }
 [data-ui="v2"] .adm-nosabe p { margin: 0 0 8px; font-size: var(--t-body, 13px); line-height: 1.5; color: var(--muted); text-align: left; }
 [data-ui="v2"] .adm-nosabe p:last-child { margin-bottom: 0; }
 
