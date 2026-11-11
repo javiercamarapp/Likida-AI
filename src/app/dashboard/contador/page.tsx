@@ -29,7 +29,7 @@ export const dynamic = 'force-dynamic';
  * re-gatea adentro, porque el rol del render no es el de la acción.
  *
  * El contenido vive en `inicio-contador.tsx` exportado — mismas dos razones
- * que documenta `InicioContenido`: Next valida los exports de una Page (un
+ * que documenta `inicio-contador.tsx`: Next valida los exports de una Page (un
  * export extra rompe el build), y sin export el preview headless no puede
  * montar el componente REAL sin sesión.
  */

@@ -1,11 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderToStaticMarkup } from 'react-dom/server';
 
 vi.mock('next/navigation', () => ({ usePathname: () => '/dashboard', useSearchParams: () => new URLSearchParams('') }));
 
 const {
-  FICHAS_CINCO_AGENTES, InsightDeAgente, insightMasSevero, leerInsightsPorAgente, agentesInsightVisibles, resumirInsights, leerInsightsResumen,
-  TEXTO_VACIO_RESUMEN, TEXTO_ERROR_RESUMEN, TEXTO_PROXIMAMENTE_RESUMEN, TEXTO_SIN_LECTOR_RESUMEN, LECTORES_INSIGHTS,
+  FICHAS_CINCO_AGENTES, insightMasSevero, leerInsightsPorAgente, agentesInsightVisibles, resumirInsights, leerInsightsResumen, LECTORES_INSIGHTS,
 } = await import('./inicio-cinco-agentes');
 import type { Insight, AgenteInsight, Severidad } from '@/lib/likida/insights/tipos';
 
@@ -15,8 +13,6 @@ const mk = (agente: AgenteInsight, id: string, severidad: Severidad, quePaso = `
   queSignifica: 'Lectura sintética.', queHacer: 'Revisar la pantalla.',
   fuente: { tabla: 'tabla_sintetica', periodo: 'semana de prueba', n: 3 },
 });
-const pintar = (i: readonly Insight[] | null | undefined, extra: Partial<Parameters<typeof InsightDeAgente>[0]> = {}) =>
-  renderToStaticMarkup(<InsightDeAgente insights={i} href="/dashboard/agentes/x" nombre="Agente X" {...extra} />);
 
 describe('insightMasSevero', () => {
   it('elige el urgente sobre atención e info', () => {
@@ -31,45 +27,9 @@ describe('insightMasSevero', () => {
   });
 });
 
-describe('InsightDeAgente', () => {
-  it('con datos muestra la tarjeta del más severo (no la del resto) y el acceso a la pantalla', () => {
-    const h = pintar([mk('peajes', 'leve', 'info', 'Texto leve.'), mk('peajes', 'grave', 'urgente', 'Texto grave.')]);
-    expect(h).toContain('Texto grave.');
-    expect(h).not.toContain('Texto leve.');
-    expect(h).toContain('Fuente: tabla_sintetica');
-    expect(h).toContain('href="/dashboard/agentes/x"');
-    expect(h).toContain('Abrir Agente X');
-  });
-  it('sin datos dice el vacío llano, sin cifras', () => {
-    const h = pintar([]);
-    expect(h).toContain(TEXTO_VACIO_RESUMEN);
-    expect(h).toContain('data-estado="vacio"');
-    expect(TEXTO_VACIO_RESUMEN).not.toMatch(/\d/);
-    expect(h).not.toContain('data-insight="');
-  });
-  it('sin lector registrado NO dice «todavía no hay datos»: dice que la tarjeta no interpreta ese agente y manda a su pantalla', () => {
-    const h = pintar([], { sinLector: true });
-    expect(h).toContain(TEXTO_SIN_LECTOR_RESUMEN);
-    expect(h).toContain('data-estado="sin_lector"');
-    expect(h).not.toContain('Todavía no hay datos');
-    expect(h).toContain('Abrir Agente X');
-  });
-  it('el registro de lectores está vacío hoy: por eso la tarjeta real no puede afirmar «sin datos» (CT-A12-05)', () => {
+describe('registro de lectores de insights', () => {
+  it('el registro de lectores está vacío hoy: por eso un vacío no puede afirmarse como «sin datos» (CT-A12-05)', () => {
     expect(Object.keys(LECTORES_INSIGHTS)).toEqual([]);
-  });
-  it('lectura fallida se confiesa, no se vuelve un vacío', () => {
-    const h = pintar(null);
-    expect(h).toContain(TEXTO_ERROR_RESUMEN);
-    expect(h).toContain('role="alert"');
-  });
-  it('próximamente no enseña insight ni acceso a la función', () => {
-    const h = pintar([mk('vigia', 'v', 'urgente', 'No debe verse.')], { proximamente: true });
-    expect(h).toContain(TEXTO_PROXIMAMENTE_RESUMEN);
-    expect(h).not.toContain('No debe verse.');
-    expect(h).not.toContain('href=');
-  });
-  it('el acceso conserva el sufijo del superadmin', () => {
-    expect(pintar([], { sufijo: '?tenant=t1' })).toContain('href="/dashboard/agentes/x?tenant=t1"');
   });
 });
 
@@ -79,14 +39,12 @@ describe('leerInsightsPorAgente', () => {
     expect(Object.keys(r).sort()).toEqual(['carta-porte', 'conductores', 'liquidacion', 'peajes', 'vigia']);
     for (const v of Object.values(r)) expect(v).toEqual([]);
   });
-  it('con datos en los cinco, cada agente trae el suyo (5 tarjetas)', async () => {
+  it('con datos en los cinco, cada agente trae el suyo', async () => {
     const lectores = Object.fromEntries(
       FICHAS_CINCO_AGENTES.map((f) => [f.insight, async () => [mk(f.insight, `i-${f.insight}`, 'atencion', `Dato de ${f.insight}.`)]]),
     );
     const r = await leerInsightsPorAgente('t1', lectores);
-    const html = FICHAS_CINCO_AGENTES.map((f) => pintar(r[f.insight], { href: f.href, nombre: f.nombre })).join('');
-    expect((html.match(/data-insight="/g) ?? []).length).toBe(5);
-    for (const f of FICHAS_CINCO_AGENTES) expect(html).toContain(`Dato de ${f.insight}.`);
+    for (const f of FICHAS_CINCO_AGENTES) expect(insightMasSevero(r[f.insight] ?? [])?.quePaso).toBe(`Dato de ${f.insight}.`);
   });
   it('un lector que falla deja a ese agente en error y no tumba a los demás', async () => {
     const r = await leerInsightsPorAgente('t1', {

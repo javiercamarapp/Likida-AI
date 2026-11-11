@@ -245,12 +245,10 @@ describe('FE-14 — el esqueleto no provoca salto de layout', () => {
 //
 // FE-14 es una propiedad de las PÁGINAS, no de este módulo: alguien puede
 // dejar `bloque.tsx` intacto y volver a meter un Promise.all gigante en el
-// Resumen sin que ninguna prueba de arriba se entere. Esto mira las cuatro
-// pantallas que se migraron y exige que sigan partidas.
+// Resumen sin que ninguna prueba de arriba se entere. Esto mira las
+// pantallas que se migraron (el respaldo v1 del Resumen y del inicio de operación se retiró el 11-nov-2026) y exige que sigan partidas.
 // ═══════════════════════════════════════════════════════════════════════════
 const PANTALLAS: Array<{ nombre: string; archivo: string; minimo: number }> = [
-  { nombre: 'Resumen del dueño', archivo: 'src/app/dashboard/inicio-contenido.tsx', minimo: 6 },
-  { nombre: 'Inicio de operación', archivo: 'src/app/dashboard/inicio-operacion.tsx', minimo: 6 },
   { nombre: 'Panel del contador', archivo: 'src/app/dashboard/contador/inicio-contador.tsx', minimo: 4 },
   { nombre: 'Agente de Liquidación', archivo: 'src/app/dashboard/agentes/liquidacion/vista.tsx', minimo: 6 },
   { nombre: 'Agente de Conductores', archivo: 'src/app/dashboard/agentes/conductores/vista.tsx', minimo: 3 },

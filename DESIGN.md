@@ -187,7 +187,7 @@ lado, se enseña ahí.
 | Tokens | `src/app/globals.css` (`@theme` + `:root`) |
 | Primitivas compartidas | `src/app/admin/ui/kit.tsx` (`StatCard`, `KpiTile`, `StatusPill`, `ChartCard`, estados) |
 | Avisos, toasts y diálogo de confirmación | `src/app/admin/ui/{aviso-resultado,notificaciones,confirmar}.tsx` |
-| Barra superior del Resumen | `dashboard/resumen-visual.tsx` (`BarraPagina`, `ChipFecha`, `TablaViajes`) + `barra-acciones.tsx` (búsqueda / IA / campana) |
+| Encabezado y periodo del Resumen | `MarcoPagina` + `BarraPeriodo` (`ui-v2/componentes`); `resumen-v2.tsx` es la página canónica. El respaldo v1 (`inicio-contenido.tsx`, `inicio-operacion.tsx`, `barra-acciones.tsx`) se retiró el 11-nov-2026 |
 | Marco de las dos consolas | `src/app/marco.ts` (geometría) — material `.card`, ya no `.glass-panel` |
 | Sidebar de /dashboard | `src/app/dashboard/sidebar-nav.tsx` + `rutas.ts` |
 | Gráficas | `admin/charts.tsx`, `admin/ui/graficas.tsx` |

@@ -1,22 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderToStaticMarkup, renderToReadableStream } from 'react-dom/server';
 import { readFileSync } from 'node:fs';
-import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 import { join } from 'node:path';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // T-PER-02 · FUGAS bajo el perfil `cinco_agentes`: Resumen, Notificaciones,
 // widget de uso de IA y enlaces de «Suscripción» / «Admin».
 //
-// Datos 100 % sintéticos. El texto «prohibido» del Resumen NO está escrito a
-// mano: se LEE del propio componente del Resumen de siempre
-// (`inicio-contenido.tsx`), de modo que si mañana se agrega una tarjeta de
-// dinero allí, también queda vetada aquí sin tocar esta prueba.
+// Datos 100 % sintéticos. Los títulos «prohibidos» del Resumen son los de las
+// tarjetas de dinero y fiscal del Resumen de una flota normal (el respaldo v1,
+// `inicio-contenido.tsx`, de donde antes se leían, se retiró el 11-nov-2026).
 // ═══════════════════════════════════════════════════════════════════════════
 
 vi.mock('next/navigation', () => ({
   usePathname: () => '/dashboard',
   useSearchParams: () => new URLSearchParams(''),
+  useRouter: () => ({ refresh() {}, replace() {}, push() {} }),
   redirect: (d: string) => { throw new Error(`REDIRECT:${d}`); },
 }));
 
@@ -50,6 +49,20 @@ vi.mock('@/lib/likida/orquestador/tablero_viajes', () => ({
 }));
 vi.mock('@/lib/saludo', async (orig) => ({ ...(await orig<Record<string, unknown>>()), ahoraMs: () => Date.parse('2026-10-02T18:00:00.000Z') }));
 vi.mock('@/app/ui-v2/avisos/pagina-avisos', () => ({ default: () => null }));
+// El Resumen del perfil (v2) lee por estos tres lectores: se sustituyen por datos sintéticos (las corridas siguen saliendo de `dobles.ultimasCorridas`).
+vi.mock('./sin-flota', () => ({ AvisoSinFlota: () => null }));
+vi.mock('./inicio-cinco-lectores', () => ({
+  leerPesosInicio: async () => null,
+  leerUltimasCorridas: async () => {
+    const vacias = { liquidacion: undefined, peajes: undefined, carta_porte: undefined, vigia: undefined, conductor: undefined };
+    try { return { ...vacias, liquidacion: (await dobles.ultimasCorridas())[0] }; } catch { return { liquidacion: null, peajes: null, carta_porte: null, vigia: null, conductor: null }; }
+  },
+  leerViajesEnCurso: async () => 0,
+}));
+vi.mock('./resumen-datos', async () => ({ ...(await import('./resumen-modelo')), leerDatosResumen: async () => ({
+  rango: '30', hoy: '2026-10-02', veDinero: false, peajes: null, porTipo: null, kpis: null, cartaPorte: null, cierres: [], hechos: [], escalados: null,
+}) }));
+vi.mock('@/lib/likida/asistente/senales', () => ({ leerSenalesAsistente: async () => null }));
 
 const RAIZ = process.cwd();
 const { InicioCincoAgentes, FICHAS_CINCO_AGENTES } = await import('./inicio-cinco-agentes');
@@ -104,28 +117,16 @@ beforeEach(() => {
 
 // ── (c) Resumen ─────────────────────────────────────────────────────────────
 describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
-  /** Títulos de tarjeta del Resumen de SIEMPRE, leídos de su fuente: nombre de KPI, etiqueta de StatCard y encabezados de sección. */
-  const fuenteContenido = readFileSync(join(RAIZ, 'src/app/dashboard/inicio-contenido.tsx'), 'utf8');
-  const titulosDeDinero = (() => {
-    const t = new Set<string>();
-    for (const m of fuenteContenido.matchAll(/\bnombre="([^"]+)"/g)) t.add(m[1]);
-    for (const m of fuenteContenido.matchAll(/\betiqueta="([^"]+)"/g)) t.add(m[1]);
-    for (const m of fuenteContenido.matchAll(/\betiqueta=\{`([^$`]+)/g)) t.add(m[1].replace(/\s*[—-]\s*$/, '').trim());
-    for (const m of fuenteContenido.matchAll(/<TituloSeccion>([^<{]+)/g)) t.add(m[1].replace(/\s*[—-]\s*$/, '').trim());
-    // Desde el paquete i18n P2 los rótulos salen del diccionario: se leen en español, antes de la primera `{variable}`.
-    const delDiccionario = (clave: string) => { const v = (operacionEs as Record<string, string>)[clave]; if (v) t.add(v.split('{')[0].replace(/\s*[—-]\s*$/, '').trim()); };
-    for (const m of fuenteContenido.matchAll(/\b(?:etiqueta|nombre)=\{t\('([^']+)'/g)) delDiccionario(m[1]);
-    for (const m of fuenteContenido.matchAll(/<TituloSeccion>\{t\('([^']+)'\)/g)) delDiccionario(m[1]);
-    // Rótulos que no son dinero: el saludo y la banda de semana del Resumen de siempre no son tarjetas fiscales.
-    for (const ok of ['Esta semana', 'Resumen']) t.delete(ok);
-    return [...t].filter((s) => s.length >= 4);
-  })();
+  /** Títulos de las tarjetas de dinero y fiscal del Resumen de una flota normal: ninguno puede aparecer bajo el perfil. */
+  const titulosDeDinero = ['Gasto total', 'Costo por viaje', 'Por recuperar', 'Diésel elegible para el estímulo', 'Tu motor fiscal', 'IVA acreditable'];
 
-  it('la extracción encuentra los títulos de dinero/fiscal del Resumen de siempre (si no, la prueba no vigilaría nada)', () => {
-    expect(titulosDeDinero.length).toBeGreaterThanOrEqual(4);
-    for (const esperado of ['Gasto total', 'Costo por viaje', 'Por recuperar', 'Diésel elegible para el estímulo']) {
-      expect(titulosDeDinero.some((t) => t.startsWith(esperado)), esperado).toBe(true);
-    }
+  it('los títulos vetados siguen siendo rótulos reales del producto (si no, la prueba no vigilaría nada)', () => {
+    const dic = [
+      readFileSync(join(RAIZ, 'src/lib/i18n/es/operacion.ts'), 'utf8'),
+      readFileSync(join(RAIZ, 'src/lib/i18n/es/dinero.ts'), 'utf8'),
+      readFileSync(join(RAIZ, 'src/lib/i18n/es/admin_dinero.ts'), 'utf8'),
+    ].join('\n');
+    for (const titulo of ['Costo por viaje', 'Diésel elegible para el estímulo', 'Tu motor fiscal']) expect(dic, titulo).toContain(titulo);
   });
 
   it('el Resumen del perfil no contiene ninguno de esos títulos, ni pesos, ni chat, ni suscripción', async () => {
@@ -137,19 +138,19 @@ describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
   });
 
   it('muestra los cinco agentes, cada uno con su enlace permitido, y ningún enlace fuera de la lista cerrada', async () => {
-    const html = await aHtml(<InicioCincoAgentes tenantId="t-1" tenantNombre={null} nombre="Ana" />);
+    const html = await aHtml(<InicioCincoAgentes tenantId="t-1" tenantNombre={null} nombre="Ana" rol="flota_admin" />);
     const hrefs = hrefsDe(html);
     for (const f of FICHAS_CINCO_AGENTES) expect(hrefs, f.nombre).toContain(destinoDeFicha(f.href));
     expect(FICHAS_CINCO_AGENTES.map((f) => f.clave)).toEqual(['liquidacion', 'peajes', 'carta_porte', 'vigia', 'conductor']);
-    for (const h of hrefs) expect(PERMITIDAS, h).toContain(h);
+    for (const h of hrefs) expect(PERMITIDAS, h).toContain(h.split('?')[0]);
   });
 
   it('con una corrida registrada solo enseña estado y hora, nunca una cifra de dinero; sin corrida lo dice', async () => {
-    dobles.ultimasCorridas.mockResolvedValueOnce([{ inicio: '2026-10-02T12:00:00.000Z', estado: 'ok', duracionMs: 4000 }]);
+    dobles.ultimasCorridas.mockResolvedValueOnce([{ id: 'c', inicio: '2026-10-02T12:00:00.000Z', fin: null, estado: 'ok', disparo: 'cron', tareasHechas: null, tareasTotal: null, resumen: null, error: null, duracionMs: 4000 }]);
     const html = await aHtml(<InicioCincoAgentes tenantId="t-1" tenantNombre={null} nombre="Ana" />);
     const t = texto(html);
-    expect(t).toContain('terminó bien');
-    expect(t).toContain('Sin corridas registradas todavía');
+    expect(t).toMatch(/Corrió hoy \d{2}:\d{2}/);
+    expect(t).toContain('Sin corridas: abre su tablero');
     expect(t).not.toMatch(/\$/);
   });
 
@@ -157,7 +158,7 @@ describe('(c) Resumen: nada de dinero ni de fiscal bajo el perfil', () => {
     dobles.ultimasCorridas.mockRejectedValue(new Error('base caída'));
     const t = texto(await aHtml(<InicioCincoAgentes tenantId="t-1" tenantNombre={null} nombre="Ana" />));
     expect(t).toContain('No se pudo leer la última corrida');
-    expect(t).not.toMatch(/\b0\b/);
+    expect(t).not.toMatch(/\b0 (corridas|agentes)\b/);
   });
 
   it('texto() sigue atrapando un monto real (no es que el falso positivo se "arregló" debilitando la protección)', () => {

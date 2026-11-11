@@ -58,7 +58,6 @@ const ACCIONES_GUIA = {
 const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|resolverTenantAtadoOLanza|resolverTenantAtadoFirmado|requireSessionTenant|requireSession|resolverTenantApi)\(/;
 /** Archivos de acciones que NO cuelgan de una página y gatean con una ruta distinta a su carpeta. */
 const ACCIONES_RUTA_EXPLICITA = {
-  'src/app/dashboard/inicio-contenido.tsx': '/dashboard',                    // el Resumen de siempre; bajo el perfil no se monta
   'src/app/dashboard/agentes/seccion-notificaciones.tsx': '/dashboard/notificaciones', // el aviso por agente gatea con la ruta de su agente
   // Avisos (marcar leído, preferencias, silencio) vive en ui-v2 porque la comparten /admin y /dashboard: el panel de flota resuelve la
   // flota con `resolverTenantEfectivo('/dashboard/notificaciones')` (misma ruta y mismo veredicto que la pantalla) y el panel admin exige requireSuperadmin.
