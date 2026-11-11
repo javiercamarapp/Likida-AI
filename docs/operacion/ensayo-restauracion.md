@@ -56,6 +56,20 @@ Crear el proyecto es un gasto, por eso lo corres tú.
 
 El script deja el acta (sin datos de clientes) en `~/likida-respaldos/ensayo-restauracion/acta-*.txt` y una copia de los GRANT de producción en `acl-prod-*.sql`.
 
+## Paso ARCO: reaplicar las bajas resueltas antes de abrir conexiones
+
+Un respaldo restaurado trae a los titulares que ya habían pedido su cancelación después del corte del respaldo. Reabrir el servicio sin reaplicarlas resucita datos personales que la empresa ya prometió (y acreditó) haber cancelado: es un incumplimiento de la LFPDPPP aunque el sistema "funcione". Este paso es obligatorio en una restauración real y se ensaya en el desechable. **Va después de verificar filas/esquema/RLS y ANTES de repuntar las variables de Vercel o abrir cualquier conexión de clientes, del webhook de WhatsApp o de los crons.**
+
+1. Fijar el corte: la fecha y hora del respaldo restaurado (la lee el acta, «edad del respaldo»).
+2. Reunir las solicitudes ARCO de tipo `cancelacion` con `estado = 'resuelta'` y `resuelta_en` posterior al corte. La base restaurada NO las tiene (son posteriores al respaldo), así que la fuente es externa a ella:
+   - producción, si todavía se puede leer en solo lectura: `solicitud_arco` con `tipo = 'cancelacion' and estado = 'resuelta' and resuelta_en > <corte>`; su columna `evidencia` dice qué se tocó (migración 0173);
+   - si producción ya no existe: las confirmaciones enviadas a los titulares y la bitácora de cumplimiento de `/admin/compliance` exportada antes del incidente; lo que no pueda reconstruirse se anota como hallazgo, no se omite en silencio.
+3. Por cada titular, volver a ejecutar la cancelación con el mismo ejecutor de la 0173 (anonimiza al titular, borra su hilo de WhatsApp, posiciones y avisos, desliga el gasto y marca las fotos para borrado en Storage). Es idempotente: reaplicarla sobre un titular ya cancelado no cambia nada.
+4. Verificar: cero filas con el teléfono o nombre original de cada titular en `operador`, `wa_mensaje` y `posicion`, y las fotos en `storage_huerfano_candidato` con motivo `arco`.
+5. Registrar en el acta cuántas bajas se reaplicaron y cuántas no pudieron reconstruirse. Solo entonces se abren conexiones.
+
+En el ensayo con el desechable se hace el mismo recorrido con una solicitud sintética posterior al corte, para comprobar que el ejecutor corre sobre una base restaurada y que el paso cabe en el RTO.
+
 ## Qué verifica el script
 
 | Verificación | Cómo |
@@ -77,6 +91,7 @@ Todo se lee con SELECT de catálogo y `count(*)`; la salida solo trae nombres de
 - Esquema, RLS, políticas y privilegios iguales a producción; migraciones: destino = repo.
 - RTO medido (descifrar, esquema, datos, privilegios, verificar) de **90 minutos o menos** como objetivo propuesto. Razonamiento: el RTO declarado de 4 h debe cubrir además detección y decisión, crear el proyecto, repuntar las variables de Vercel (un redeploy, es decir un build) y el humo funcional. Dejar 90 minutos a la parte mecánica deja unas 2.5 h de holgura para lo humano. Es una propuesta sin datos; la primera corrida fija la línea base, se ajusta con ella y se repite cuando la base crezca.
 - Edad del respaldo de 24 h o menos.
+- El paso ARCO se completó (bajas posteriores al corte reaplicadas o documentadas como no reconstruibles) antes de abrir conexiones.
 - Cualquier `FALLA` en el resumen es no aceptado. Los `AVISO` se leen y se anotan; los `SALTADO` no cuentan como pasados.
 
 ## Si algo falla
