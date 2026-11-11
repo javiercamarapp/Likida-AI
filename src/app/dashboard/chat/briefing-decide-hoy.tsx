@@ -1,10 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 // Imports directos y no el barril de ui-v2: el barril arrastra `BotonReintentar` (next/navigation) al paquete del chat.
 import { StatusChip } from '../../ui-v2/componentes/status-chip';
-import { Boton } from '../../ui-v2/componentes/boton';
+import { Boton, BotonEnlace } from '../../ui-v2/componentes/boton';
 import { Icono } from '../../ui-v2/componentes/icono';
 import { MessageCircleQuestion } from 'lucide-react';
 import { useT } from '@/lib/i18n/proveedor';
@@ -69,7 +68,7 @@ export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint
       <div className="rv-chat__briefing-cuerpo">
       {b === null && <p className="rv-chat__nota">{t('ch.leyendo_lo_que_espera_tu_decision')}</p>}
       {b === 'error' && (
-        <p className="rv-chat__nota" role="alert">{t('ch.no_disponible_ahora_no_es_cero')}{' '}<button type="button" className="rv-btn rv-btn--ghost rv-btn--sm" onClick={cargar}>{t('cfg.reintentar')}</button>
+        <p className="rv-chat__nota" role="alert">{t('ch.no_disponible_ahora_no_es_cero')}{' '}<Boton variante="ghost" tamano="sm" onClick={cargar}>{t('cfg.reintentar')}</Boton>
         </p>
       )}
       {b !== null && b !== 'error' && (
@@ -84,7 +83,7 @@ export default function BriefingDecideHoy({ onPreguntar, deshabilitado, endpoint
                 <p className="rv-chat__nota">{tarjeta.detalle}</p>
                 {tarjeta.severidad !== 'info' && <p className="rv-chat__nota">{rico(t('ch.b_propuesta_b'), { b: (c) => <b>{c}</b> })}{' '}{tarjeta.decision}</p>}
                 <div className="rv-chat__briefing-acciones">
-                  {tarjeta.href && <Link href={tarjeta.href} className="rv-btn rv-btn--secondary rv-btn--sm">{t('ch.abrir_pantalla')}</Link>}
+                  {tarjeta.href && <BotonEnlace href={tarjeta.href} tamano="sm">{t('ch.abrir_pantalla')}</BotonEnlace>}
                   <Boton tamano="sm" variante="ghost" disabled={deshabilitado} onClick={() => onPreguntar(tarjeta.pregunta)} icono={<Icono icono={MessageCircleQuestion} />}>{t('ch.preguntar')}</Boton>
                 </div>
               </li>

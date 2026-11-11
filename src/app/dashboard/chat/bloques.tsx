@@ -36,18 +36,17 @@ export default function BloqueRespuesta({ v, indice, t = T_RESTO_ES }: { v: Visu
   }
   return (
     // FE-19: la tabla que devuelve el asistente es de ancho DESCONOCIDO (la arma una consulta): scrollea dentro de la tarjeta.
+    // Son pares «dato — valor» sin encabezados: una lista de definiciones (dl), no una <table> a mano.
     <section className="rv-tarjeta rv-chat__bloque rv-chat__bloque--tabla" data-i={Math.min(indice, 3)} data-tipo="tabla">
       <div className="rv-chat__tabla" tabIndex={0} role="region" aria-label={t('ch.tabla_de_la_respuesta')}>
-        <table aria-label={t('op.datos_de_la_respuesta_del_asistente')} data-densa>
-          <tbody>
-            {v.filas.map(([k, val]) => (
-              <tr key={k}>
-                <th scope="row">{k}</th>
-                <td className="num">{val}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <dl className="rv-chat__kv" aria-label={t('op.datos_de_la_respuesta_del_asistente')}>
+          {v.filas.map(([k, val]) => (
+            <div key={k} className="rv-chat__kv-fila">
+              <dt>{k}</dt>
+              <dd>{val}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </section>
   );

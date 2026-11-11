@@ -31,7 +31,7 @@ describe('chat: el historial en móvil es un Drawer del motor único (L3)', () =
 
   it('el contenido del historial se define UNA vez y la X propia de la columna no se duplica en la hoja', () => {
     expect(historial.match(/function CuerpoHistorial/g)?.length).toBe(1);
-    expect(historial).toMatch(new RegExp(`\\{escritorio && \\(\\s*<button type="button" aria-label=\\{t\\('${claveDe('Cerrar historial')}'\\)\\}`));
+    expect(historial).toMatch(new RegExp(`\\{escritorio && \\(\\s*<Tooltip texto=\\{t\\('${claveDe('Cerrar historial')}'\\)\\}>\\s*<Boton variante="ghost" aria-label=\\{t\\('${claveDe('Cerrar historial')}'\\)\\}`));
     expect(historial).toMatch(/escritorio=\{false\}/);
   });
 

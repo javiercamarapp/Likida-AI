@@ -2,7 +2,8 @@
 
 import { History, PanelRightClose, PencilLine, Search } from 'lucide-react';
 import { useMemo, useState, type RefObject } from 'react';
-import { Drawer } from '../../ui-v2/componentes/overlay';
+import { Drawer, Tooltip } from '../../ui-v2/componentes/overlay';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { fechaCorta, numero } from '@/lib/formato';
 import type { Conversacion } from './use-analista';
 import { useT } from '@/lib/i18n/proveedor';
@@ -34,10 +35,10 @@ export function BotonHistorial({ convs, expandido, oculto, onClick, boton }: {
 }) {
   const { t, idioma } = useT('resto', restoEs);
   return (
-    <button ref={boton} type="button" className="rv-btn rv-btn--secondary rv-chat__hist-boton" data-oculto={oculto || undefined}
+    <Boton ref={boton} className="rv-chat__hist-boton" data-oculto={oculto || undefined}
       aria-expanded={expandido} aria-controls="chat-historial" aria-label={t('ch.historial_de_conversaciones')} onClick={onClick}>
       <History aria-hidden="true" />{rico(t('ch.e0_historial_e0'), { e0: (c) => <span>{c}</span> })}{Array.isArray(convs) && <span className="rv-chat__hist-cuenta">{convs.length >= TOPE_CONVERSACIONES ? `${TOPE_CONVERSACIONES}+` : numero(convs.length, idioma)}</span>}
-    </button>
+    </Boton>
   );
 }
 
@@ -61,12 +62,14 @@ function CuerpoHistorial({ convs, activa, errorCarga, onNuevo, onAbrir, onCerrar
   return (
     <>
       <div className="rv-chat__hist-top">
-        <button type="button" onClick={onNuevo} data-autofocus className="rv-btn rv-btn--secondary rv-chat__hist-nuevo">
-          <PencilLine aria-hidden="true" />{rico(t('ch.e0_nuevo_chat_e0'), { e0: (c) => <span>{c}</span> })}</button>
+        <Boton onClick={onNuevo} data-autofocus className="rv-chat__hist-nuevo">
+          <PencilLine aria-hidden="true" />{rico(t('ch.e0_nuevo_chat_e0'), { e0: (c) => <span>{c}</span> })}</Boton>
         {escritorio && (
-          <button type="button" aria-label={t('ch.cerrar_historial')} title={t('ch.cerrar_historial')} onClick={onCerrar} className="rv-btn rv-btn--ghost rv-chat__redondo">
-            <PanelRightClose aria-hidden="true" />
-          </button>
+          <Tooltip texto={t('ch.cerrar_historial')}>
+            <Boton variante="ghost" aria-label={t('ch.cerrar_historial')} onClick={onCerrar} className="rv-chat__redondo">
+              <PanelRightClose aria-hidden="true" />
+            </Boton>
+          </Tooltip>
         )}
       </div>
       <label className="rv-chat__hist-buscar">
@@ -96,10 +99,12 @@ function CuerpoHistorial({ convs, activa, errorCarga, onNuevo, onAbrir, onCerrar
             <ul>
               {lista.map((c) => (
                 <li key={c.id}>
-                  <button type="button" className="rv-chat__hist-fila" aria-current={c.id === activa ? 'true' : undefined} title={c.titulo} onClick={() => onAbrir(c.id)}>
-                    <span className="rv-chat__hist-nombre">{c.titulo}</span>
-                    <span className="rv-chat__hist-fecha">{fechaCorta(c.actualizadoEn, idioma)}</span>
-                  </button>
+                  <Tooltip texto={c.titulo}>
+                    <Boton variante="ghost" className="rv-chat__hist-fila" aria-current={c.id === activa ? 'true' : undefined} onClick={() => onAbrir(c.id)}>
+                      <span className="rv-chat__hist-nombre">{c.titulo}</span>
+                      <span className="rv-chat__hist-fecha">{fechaCorta(c.actualizadoEn, idioma)}</span>
+                    </Boton>
+                  </Tooltip>
                 </li>
               ))}
             </ul>

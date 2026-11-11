@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Check, Copy, ExternalLink, FileSpreadsheet, RefreshCw, TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
+import { Boton } from '../../ui-v2/componentes/boton';
 import MarcaLikida from './marca';
 import BloqueRespuesta from './bloques';
 import TarjetaAccion from './tarjeta-accion';
@@ -132,34 +133,34 @@ export function RespuestaVista({ turno, ultimo, ocupado, fase, pasosVivos, onRep
       {terminado && <Sello r={r} />}
       {terminado && r.texto.trim() && (
         <div className="rv-chat__acciones" role="group" aria-label={tx('ch.acciones_de_la_respuesta')}>
-          <button type="button" className="rv-btn rv-btn--secondary" onClick={() => void copiar()}>
+          <Boton onClick={() => void copiar()}>
             {copiado ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
             <span>{copiado ? tx('ch.copiado') : tx('ch.copiar')}</span>
-          </button>
+          </Boton>
           {tablas.map((t, i) => (
-            <button key={i} type="button" className="rv-btn rv-btn--secondary"
+            <Boton key={i}
               aria-label={tablas.length > 1 ? tx('ch.descargar_la_tabla_como_csv', { v: i + 1 }) : tx('ch.descargar_la_tabla_como_csv_2')}
               onClick={() => setErrorArchivo(!descargar(`likida-respuesta-${i + 1}.csv`, tablaACsv(t.filas), 'text/csv;charset=utf-8'))}>
               <FileSpreadsheet aria-hidden="true" /><span>CSV</span>
-            </button>
+            </Boton>
           ))}
           {graficas.map((g, i) => (
-            <button key={`g${i}`} type="button" className="rv-btn rv-btn--secondary"
+            <Boton key={`g${i}`}
               aria-label={graficas.length > 1 ? tx('ch.descargar_los_datos_de_la_grafica', { v: i + 1 }) : tx('ch.descargar_los_datos_de_la_grafica_2')}
               onClick={() => setErrorArchivo(!descargar(`likida-grafica-${i + 1}.csv`, g.tipo === 'serie' ? serieACsv(g.puntos) : repartoACsv(g.segmentos), 'text/csv;charset=utf-8'))}>
-              <FileSpreadsheet aria-hidden="true" strokeWidth={1.75} />{rico(tx('ch.e0_datos_csv_e0'), { e0: (c) => <span>{c}</span> })}</button>
+              <FileSpreadsheet aria-hidden="true" strokeWidth={1.75} />{rico(tx('ch.e0_datos_csv_e0'), { e0: (c) => <span>{c}</span> })}</Boton>
           ))}
           {ultimo && (r.origen === 'analista' || r.origen === 'copiloto') && (
-            <button type="button" className="rv-btn rv-btn--secondary rv-chat__solo" disabled={ocupado} onClick={() => onRepetir(turno.id)}>
-              <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_regenerar_e0'), { e0: (c) => <span>{c}</span> })}</button>
+            <Boton className="rv-chat__solo" disabled={ocupado} onClick={() => onRepetir(turno.id)}>
+              <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_regenerar_e0'), { e0: (c) => <span>{c}</span> })}</Boton>
           )}
           {errorArchivo && <span role="alert" className="rv-chat__error-linea">{tx('ch.no_se_pudo_crear_el_archivo')}</span>}
         </div>
       )}
       {r.fallo && ultimo && (
         <div>
-          <button type="button" className="rv-btn rv-btn--secondary" disabled={ocupado} onClick={() => onRepetir(turno.id)}>
-            <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_reintentar_e0'), { e0: (c) => <span>{c}</span> })}</button>
+          <Boton disabled={ocupado} onClick={() => onRepetir(turno.id)}>
+            <RefreshCw aria-hidden="true" />{rico(tx('ch.e0_reintentar_e0'), { e0: (c) => <span>{c}</span> })}</Boton>
         </div>
       )}
     </div>

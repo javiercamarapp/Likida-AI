@@ -6,7 +6,6 @@ export const EXCEPCIONES: Record<string, Excepcion> = {
   // Controles que NO son botones de acción del kit (fila, tarjeta-botón, flecha minúscula, cabecera de grupo, campo embebido). Llevan tope
   // y se miden: no pueden crecer.
   'app/dashboard/barra-acciones.tsx': { razon: 'fila de resultados de la paleta de búsqueda: botón-fila con hover, no una acción', R1: 1 },
-  'app/dashboard/chat/composer.tsx': { razon: 'compositor del chat: campo embebido sin marco, su «x» de quitar archivo vive dentro de la píldora del adjunto', R1: 1 },
   'app/dashboard/kpi-periodo.tsx': { razon: 'flechas de periodo de 24 px del KPI (BOTON_PERIODO del kit de admin); K2/K3 las pasan a icono del kit', R1: 2 },
   'app/dashboard/motor-fiscal-periodo.tsx': { razon: 'flechas de periodo de 24 px (BOTON_PERIODO del kit de admin); igual que kpi-periodo', R1: 2 },
   'app/dashboard/sidebar-nav.tsx': { razon: 'cabecera plegable de grupo del menú antiguo (rotulo en mayúsculas); el marco nuevo lo reemplaza (K2)', R1: 1 },

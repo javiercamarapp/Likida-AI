@@ -3,6 +3,8 @@
 import { ArrowUp, FileText, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type RefObject } from 'react';
 import MenuAdjuntar from '../menu-adjuntar';
+import { Boton } from '../../ui-v2/componentes/boton';
+import { Tooltip } from '../../ui-v2/componentes/overlay';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
 
@@ -30,10 +32,12 @@ export function Adjuntar({ ocupado, onArchivo, anclaRef }: { ocupado: boolean; o
       <input ref={camara} type="file" accept="image/*" capture="environment" className="rv-sr" tabIndex={-1} aria-hidden="true" onChange={alElegir} />
       <input ref={imagen} type="file" accept="image/*" className="rv-sr" tabIndex={-1} aria-hidden="true" onChange={alElegir} />
       <input ref={archivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="rv-sr" tabIndex={-1} aria-hidden="true" onChange={alElegir} />
-      <button ref={anclaRef} type="button" className="rv-btn rv-btn--secondary rv-chat__redondo rv-chat__clip" aria-label={t('op.adjuntar_comprobante')} title={t('op.adjuntar_comprobante')}
-        aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)} disabled={ocupado}>
-        <Paperclip aria-hidden="true" />
-      </button>
+      <Tooltip texto={t('op.adjuntar_comprobante')}>
+        <Boton ref={anclaRef} className="rv-chat__redondo rv-chat__clip" aria-label={t('op.adjuntar_comprobante')}
+          aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu((v) => !v)} disabled={ocupado}>
+          <Paperclip aria-hidden="true" />
+        </Boton>
+      </Tooltip>
     </>
   );
 }
@@ -77,7 +81,7 @@ export default function Composer({ valor, onCambio, onEnviar, onDetener, generan
         <span className="rv-chat__documento">
           <FileText width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
           <span className="rv-chat__documento-nombre">{documento.nombre}</span>
-          <button type="button" aria-label={t('op.quitar_archivo')} onClick={onQuitarDocumento}><X width={12} height={12} strokeWidth={2} aria-hidden="true" /></button>
+          <Boton variante="ghost" className="rv-chat__quitar" aria-label={t('op.quitar_archivo')} onClick={onQuitarDocumento}><X width={12} height={12} strokeWidth={2} aria-hidden="true" /></Boton>
         </span>
       )}
       <label htmlFor="chat-pregunta" className="rv-sr">{etiquetaCampo ?? t('op.pregunta_sobre_tu_operacion_2')}</label>
@@ -86,8 +90,8 @@ export default function Composer({ valor, onCambio, onEnviar, onDetener, generan
       {adjuntos && <Adjuntar ocupado={ocupado} onArchivo={onArchivo} anclaRef={clip} />}
       {valor.length >= Math.floor(MAX_PREGUNTA * 0.8) && <span className="rv-chat__cuenta" aria-live="polite">{valor.length}/{MAX_PREGUNTA}</span>}
       {generando
-        ? <button type="button" className="rv-btn rv-btn--primary rv-chat__redondo rv-chat__enviar" aria-label={t('ch.detener_la_generacion')} onClick={onDetener}><Square aria-hidden="true" /></button>
-        : <button type="submit" className="rv-btn rv-btn--primary rv-chat__redondo rv-chat__enviar" aria-label={t('op.enviar')} disabled={vacio || ocupado}><ArrowUp aria-hidden="true" /></button>}
+        ? <Boton variante="primary" className="rv-chat__redondo rv-chat__enviar" aria-label={t('ch.detener_la_generacion')} onClick={onDetener}><Square aria-hidden="true" /></Boton>
+        : <Boton type="submit" variante="primary" className="rv-chat__redondo rv-chat__enviar" aria-label={t('op.enviar')} disabled={vacio || ocupado}><ArrowUp aria-hidden="true" /></Boton>}
     </form>
   );
 }
