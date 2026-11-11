@@ -79,3 +79,11 @@
 .bj-piezas--compacta .bj-pieza__titulo { min-height: 0; }
 .bj-siguiente { margin: 0; font: 600 13px/1.4 var(--font-sans-ui, inherit); color: var(--ink); }
 @media (max-width: 479px) { .bj-piezas--compacta .bj-pieza__marco { width: 72px; } }
+
+/* Pestañas subrayadas con contador (Rovaq pc-tabs) sobre el grupo de opciones de las vistas: filete inferior, 36 px, activa en 600 con subrayado de 2 px en tinta. */
+[data-ui="v2"] .bj-vistas > .rv-seg { width: 100%; padding: 0; gap: 20px; background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; overflow-x: auto; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 36px; padding: 0 2px; margin-bottom: -1px; border-radius: 0; border-bottom: 2px solid transparent; background: transparent; box-shadow: none; color: var(--muted); font-size: 13px; font-weight: 500; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn[aria-checked="true"] { color: var(--ink); font-weight: 600; border-bottom-color: var(--ink); background: transparent; box-shadow: none; }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn[aria-checked="false"]:hover:not(:disabled) { background: transparent; color: var(--ink); }
+[data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__conteo { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--canvas); color: var(--ink); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 819px) { [data-ui="v2"] .bj-vistas > .rv-seg .rv-seg__btn { min-height: 44px; } }
