@@ -1,4 +1,4 @@
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido, etiqueta } from './errores';
 import { parsearImporteMx } from '@/lib/formato';
 import type { LikidaConfig } from './config';
 
@@ -117,16 +117,16 @@ const RANGOS = {
 
 function numero(crudo: string, campo: string, rango: { min: number; max: number }): number {
   const t = crudo.trim();
-  if (t === '') throw new DatoInvalido(`Falta ${campo}.`);
+  if (t === '') throw datoInvalido('ajustes_operat.falta', { campo });
   // `Number('')` es 0 y `Number('  ')` también — de ahí el guard de arriba.
   // A36-R01-02: `Number('50,000'.replace(',', '.'))` daba 50 y entraba en rango.
   // Lo ambiguo («50,000», «1.234») se rechaza; la persona lo reescribe sin miles.
   const n = parsearImporteMx(t);
   if (!Number.isFinite(n)) {
-    throw new DatoInvalido(`${campo} tiene que ser un número claro. Escríbelo sin separador de miles (p. ej. 22.5 o 22,5): «50,000» o «1.234» no se sabe si son decimales o miles.`);
+    throw datoInvalido('ajustes_operat.tiene_que_ser_un_numero', { campo });
   }
   if (n < rango.min || n > rango.max) {
-    throw new DatoInvalido(`${campo} tiene que estar entre ${rango.min} y ${rango.max}.`);
+    throw datoInvalido('ajustes_operat.tiene_que_estar_entre_y', { campo, min: rango.min, max: rango.max });
   }
   return n;
 }
@@ -149,7 +149,7 @@ export function parsearCuentas(crudo: string): Record<string, string> {
   const vistos = new Set<string>();
   const lineas = crudo.split('\n');
   if (lineas.length > MAX_LINEAS_CUENTAS) {
-    throw new DatoInvalido(`El catálogo tiene demasiadas líneas (máximo ${MAX_LINEAS_CUENTAS}).`);
+    throw datoInvalido('ajustes_operat.el_catalogo_tiene_demasiadas_lineas', { MAX_LINEAS_CUENTAS });
   }
 
   for (let i = 0; i < lineas.length; i++) {
@@ -158,19 +158,19 @@ export function parsearCuentas(crudo: string): Record<string, string> {
 
     const corte = linea.indexOf('=');
     if (corte === -1) {
-      throw new DatoInvalido(`Línea ${i + 1}: falta el "=" (se escribe así: diesel=600-001).`);
+      throw datoInvalido('ajustes_operat.linea_falta_el_se_escribe', { v: i + 1 });
     }
 
     const concepto = linea.slice(0, corte).trim().toLowerCase();
     const cuenta = linea.slice(corte + 1).trim();
-    if (!concepto) throw new DatoInvalido(`Línea ${i + 1}: falta el concepto antes del "=".`);
-    if (!cuenta) throw new DatoInvalido(`Línea ${i + 1}: falta la cuenta después del "=".`);
-    if (concepto.length > MAX_CONCEPTO_CUENTAS) throw new DatoInvalido(`Línea ${i + 1}: el concepto es demasiado largo.`);
-    if (cuenta.length > 40) throw new DatoInvalido(`Línea ${i + 1}: la cuenta es demasiado larga.`);
+    if (!concepto) throw datoInvalido('ajustes_operat.linea_falta_el_concepto_antes', { v: i + 1 });
+    if (!cuenta) throw datoInvalido('ajustes_operat.linea_falta_la_cuenta_despues', { v: i + 1 });
+    if (concepto.length > MAX_CONCEPTO_CUENTAS) throw datoInvalido('ajustes_operat.linea_el_concepto_es_demasiado', { v: i + 1 });
+    if (cuenta.length > 40) throw datoInvalido('ajustes_operat.linea_la_cuenta_es_demasiado', { v: i + 1 });
     if (vistos.has(concepto)) {
       // Silenciarlo dejaría que la última línea gane sin avisar, y el contador
       // se quedaría buscando por qué su primera cuenta no se aplicó.
-      throw new DatoInvalido(`Línea ${i + 1}: "${concepto}" ya tiene cuenta más arriba.`);
+      throw datoInvalido('ajustes_operat.linea_ya_tiene_cuenta_mas', { v: i + 1, concepto });
     }
     vistos.add(concepto);
     // defineProperty: `cuentas['__proto__'] = x` cambiaría el prototipo en vez
@@ -204,18 +204,18 @@ export function esFormato(v: string): v is FormatoSalida {
  * en vez de todas, sin un solo error en el log.
  */
 export function validarAjustes(c: AjustesCrudos, opciones: { permitirCatalogoVacio?: boolean } = {}): AjustesValidos {
-  const rendimientoPorDefecto = numero(c.rendimientoPorDefecto, 'El rendimiento por defecto (km/L)', RANGOS.rendimiento);
-  const factorCarga = numero(c.factorCarga, 'El factor de carga', RANGOS.factorCarga);
-  const precioDieselPorDefecto = numero(c.precioDieselPorDefecto, 'El precio del diésel', RANGOS.precioDiesel);
-  const umbralPct = numero(c.umbralDesviacionPct, 'El umbral de desviación (%)', RANGOS.umbralPct);
+  const rendimientoPorDefecto = numero(c.rendimientoPorDefecto, etiqueta('etq.el_rendimiento_por_defecto_km'), RANGOS.rendimiento);
+  const factorCarga = numero(c.factorCarga, etiqueta('etq.el_factor_de_carga'), RANGOS.factorCarga);
+  const precioDieselPorDefecto = numero(c.precioDieselPorDefecto, etiqueta('etq.el_precio_del_diesel'), RANGOS.precioDiesel);
+  const umbralPct = numero(c.umbralDesviacionPct, etiqueta('etq.el_umbral_de_desviacion'), RANGOS.umbralPct);
 
   const salida = c.salida.trim();
-  if (!esFormato(salida)) throw new DatoInvalido('El formato de salida no es uno de los disponibles.');
+  if (!esFormato(salida)) throw datoInvalido('ajustes_operat.el_formato_de_salida_no');
   // Guardar un formato que el export no sabe escribir dejaría la config
   // diciendo una cosa y el archivo descargado siendo otra — y nadie se
   // enteraría, porque el CSV sale igual de bien.
   if (!FORMATOS.find((f) => f.valor === salida)!.implementado) {
-    throw new DatoInvalido('Ese formato todavía no lo escribe el export. Se construye contra el archivo de ejemplo de tu ERP — pídenoslo desde el Centro de ayuda.');
+    throw datoInvalido('ajustes_operat.ese_formato_todavia_no_lo');
   }
 
   const catalogoCuentas = parsearCuentas(c.cuentas);
@@ -226,7 +226,7 @@ export function validarAjustes(c: AjustesCrudos, opciones: { permitirCatalogoVac
     // A37-S17-02: el rechazo es al VACIAR un catálogo que existe (o que no se pudo leer). Una flota que NUNCA declaró
     // catálogo (`permitirCatalogoVacio`) puede guardar solo su tabulador/formato: `catalogoCuentas` sale `{}` y NO se
     // escribe (ver `guardarAjustesOperativos`), en vez de obligarla a inventar cuentas que el export usaría en asientos reales.
-    throw new DatoInvalido('El catálogo de cuentas no puede quedar vacío.');
+    throw datoInvalido('ajustes_operat.el_catalogo_de_cuentas_no');
   }
 
   return {
