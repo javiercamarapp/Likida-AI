@@ -3,7 +3,6 @@
 export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/admin/agentes/[id]/insumos/zona-insumos.tsx': 1,
   'app/admin/command-palette.tsx': 2,
-  'app/admin/qa/lanzar-form.tsx': 2,
   'app/ui-v2/componentes/forma.tsx': 2,
   'app/admin/ui/hilo-soporte.tsx': 1,
   'app/ui-v2/componentes/notificaciones.tsx': 1,

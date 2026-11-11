@@ -18,13 +18,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Camera, FileText, MessageCircle } from 'lucide-react';
 import { fechaHoraMx, usd4 } from '@/lib/formato';
-import { TituloSeccion } from '../../../dashboard/resumen-visual';
-import { BotonEnlace, EstadoError, MarcoPagina } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, Disclosure, EstadoError, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { TiraCifras } from '@/app/ui-v2/graficas';
 import '../qa.css';
-import { StatusPill, type Estado } from '../../ui/kit';
 import { pillCorrida } from '../pantalla';
 import { escenarioPorId } from '@/lib/admin/qa-escenarios';
-import type { CorridaQA, EstadoPaso } from '@/lib/admin/qa-tipos';
+import type { CorridaQA, EstadoPaso, PasoQA, FilaVeredicto } from '@/lib/admin/qa-tipos';
 import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
 import { MedicionCorrida } from './medicion-corrida';
 import { useT } from '@/lib/i18n/proveedor';
@@ -35,7 +34,7 @@ import { rico } from '@/lib/i18n/rico';
 export interface FotoFirmada { id: string; etiqueta: string; url: string | null }
 export interface PdfFirmado { path: string; url: string | null }
 
-const pillPaso = (tx: TSistema = T_SISTEMA_ES): Record<EstadoPaso, { estado: Estado; etiqueta: string }> => ({
+const pillPaso = (tx: TSistema = T_SISTEMA_ES): Record<EstadoPaso, { estado: TonoEstado; etiqueta: string }> => ({
   pendiente: { estado: 'neutral', etiqueta: tx('qa_corrida_viva.pendiente') },
   corriendo: { estado: 'neutral', etiqueta: tx('qa_corrida_viva.corriendo') },
   ok: { estado: 'ok', etiqueta: 'ok' },
@@ -43,7 +42,7 @@ const pillPaso = (tx: TSistema = T_SISTEMA_ES): Record<EstadoPaso, { estado: Est
   bad: { estado: 'bad', etiqueta: 'bad' },
 });
 
-const pillOraculo = (tx: TSistema = T_SISTEMA_ES): Record<'ok' | 'fallo' | 'no_verificado', { estado: Estado; etiqueta: string }> => ({
+const pillOraculo = (tx: TSistema = T_SISTEMA_ES): Record<'ok' | 'fallo' | 'no_verificado', { estado: TonoEstado; etiqueta: string }> => ({
   ok: { estado: 'ok', etiqueta: 'ok' },
   fallo: { estado: 'bad', etiqueta: tx('qa_corrida_viva.fallo') },
   no_verificado: { estado: 'warn', etiqueta: tx('qa_corrida_viva.no_verificado') },
@@ -172,7 +171,7 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
     return () => { montado = false; clearTimeout(t); clearInterval(timer); };
   }, [viva, corrida.carril, corrida.id, tx]);
 
-  const pill = pillCorrida(tx)[corrida.estado] ?? { estado: 'neutral' as Estado, etiqueta: corrida.estado };
+  const pill = pillCorrida(tx)[corrida.estado] ?? { estado: 'neutral' as TonoEstado, etiqueta: corrida.estado };
   const sinLatidoS = useMemo(() => {
     if (ahora === null) return null;   // todavía sin reloj del cliente
     const t = new Date(corrida.latidoEn).getTime();
@@ -188,255 +187,196 @@ function CuerpoCorrida({ corridaInicial, fotosIniciales, pdfsIniciales, medicion
     && (corrida.carril === 'rapido' || enPasada);
   const av = corrida.avance;
 
+  const columnasPasos: ColumnaBase<PasoQA>[] = [
+    { id: 'n', titulo: '#', principal: true, celda: (p) => <span className="rv-qa-mono">{p.n}</span> },
+    {
+      id: 'paso', titulo: tx('qa_corrida_viva.la_corrida_paso_a_paso'),
+      celda: (p) => (<>{p.nombre}{p.detalle && <span className="rv-qa-detalle">{p.detalle}</span>}</>),
+    },
+    { id: 'costo', titulo: tx('qa_pantalla.costo_real'), alinear: 'der', celda: (p) => (p.costoUsd > 0 ? usd4(p.costoUsd) : '—') },
+    {
+      id: 'estado', titulo: tx('salud_sistema.estado'),
+      celda: (p) => { const pp = pillPaso(tx)[p.estado] ?? pillPaso(tx).pendiente; return <StatusChip tono={pp.estado}>{pp.etiqueta}</StatusChip>; },
+    },
+  ];
+  const columnasVeredicto: ColumnaBase<FilaVeredicto>[] = [
+    {
+      id: 'invariante', titulo: tx('qa_corrida_viva.invariante'), principal: true,
+      celda: (v) => (
+        <Disclosure variante="linea" titulo={v.invariante}>
+          <div className="rv-qa-pila rv-qa-pila--corta">
+            <div>
+              <strong>{tx('qa_corrida_viva.esperado')}</strong>{' '}
+              <code className="rv-qa-mono">{json(v.esperado)}</code>
+            </div>
+            <div>
+              <strong>{tx('qa_corrida_viva.real')}</strong>{' '}
+              <code className="rv-qa-mono">{json(v.real)}</code>
+            </div>
+            {v.detalle && <div className="rv-qa-mut">{v.detalle}</div>}
+            <div className="rv-qa-mono rv-qa-tenue">{v.oraculo}</div>
+          </div>
+        </Disclosure>
+      ),
+    },
+    { id: 'estado', titulo: tx('salud_sistema.estado'), celda: (v) => { const pv = pillOraculo(tx)[v.estado]; return <StatusChip tono={pv.estado}>{pv.etiqueta}</StatusChip>; } },
+    { id: 'severidad', titulo: tx('trust_safety.severidad'), celda: (v) => (v.estado === 'ok' ? '—' : v.severidad) },
+  ];
+
   return (
-      <div className="space-y-2.5">
-          {/* ── Avisos de lectura (fallar cerrado, dicho) ─────────────────── */}
-          {errorLectura && (
-            <div className="card p-3 text-sm rv-qa-malo">{tx('qa_corrida_viva.no_se_pudo_leer_el_estado_2', { errorLectura })}</div>
-          )}
-          {posiblementeMuerta && (
-            <div className="card p-3 text-sm rv-qa-malo">{tx('qa_corrida_viva.el_motor_lleva_s_sin_dar', { sinLatidoS, tenantNombre: corrida.tenantNombre })}</div>
-          )}
+    <div className="rv-qa-pila">
+      {/* ── Avisos de lectura (fallar cerrado, dicho) ─────────────────── */}
+      {errorLectura && <Aviso tono="error">{tx('qa_corrida_viva.no_se_pudo_leer_el_estado_2', { errorLectura })}</Aviso>}
+      {posiblementeMuerta && <Aviso tono="error">{tx('qa_corrida_viva.el_motor_lleva_s_sin_dar', { sinLatidoS, tenantNombre: corrida.tenantNombre })}</Aviso>}
 
-          {/* ── El renglón resumen ────────────────────────────────────────── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">{tx('salud_sistema.estado')}</div>
-              <div className="mt-1"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></div>
-              {corrida.motivo && <div className="text-[10px] mt-1 rv-qa-mut">{corrida.motivo}</div>}
-            </div>
-            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">{tx('qa_corrida_viva.carril')}</div>
-              <div className="mt-1 text-sm font-medium">
-                {corrida.carril === 'completo' ? tx('qa_corrida_viva.completo_en_varias_pasadas') : tx('qa_corrida_viva.rapido_en_un_solo_proceso')}
-              </div>
-              {corrida.carril === 'completo' && (
-                <div className="text-[10px] mt-0.5 rv-qa-mut">{tx('qa_corrida_viva.pasada', { pasadas: corrida.pasadas })}{' '}{enPasada ? tx('qa_corrida_viva.trabajando_ahora') : viva ? tx('qa_corrida_viva.pausada_entre_pasadas') : 'terminada'}
-                </div>
+      {/* ── El renglón resumen ────────────────────────────────────────── */}
+      <TiraCifras
+        etiqueta={tx('qa_corrida_viva.calidad')}
+        items={[
+          {
+            etiqueta: tx('salud_sistema.estado'), valor: pill.etiqueta, nota: corrida.motivo ?? undefined,
+            tono: pill.estado === 'ok' || pill.estado === 'warn' || pill.estado === 'bad' ? pill.estado : undefined,
+          },
+          {
+            etiqueta: tx('qa_corrida_viva.carril'),
+            valor: corrida.carril === 'completo' ? tx('qa_corrida_viva.completo_en_varias_pasadas') : tx('qa_corrida_viva.rapido_en_un_solo_proceso'),
+            nota: corrida.carril === 'completo'
+              ? `${tx('qa_corrida_viva.pasada', { pasadas: corrida.pasadas })} ${enPasada ? tx('qa_corrida_viva.trabajando_ahora') : viva ? tx('qa_corrida_viva.pausada_entre_pasadas') : 'terminada'}`
+              : undefined,
+          },
+          { etiqueta: tx('qa_corrida_viva.costo_hasta_ahora_real'), valor: usd4(corrida.costoUsdTotal ?? 0), nota: tx('qa_corrida_viva.costo_registrado_nunca_estimado') },
+          {
+            etiqueta: tx('qa_corrida_viva.flota_de_prueba'), valor: corrida.tenantNombre,
+            nota: `${corrida.inicio ? tx('qa_corrida_viva.inicio', { v: fechaHoraMx(corrida.inicio, idioma) }) : tx('qa_corrida_viva.sin_arrancar')}${corrida.fin ? ` · ${tx('qa_corrida_viva.fin', { v: fechaHoraMx(corrida.fin, idioma) })}` : ''}`,
+          },
+        ]}
+      />
+
+      {/* ── EL AVANCE DEL CARRIL COMPLETO ─────────────────────────────
+          Cuántas van, cuántas faltan, y —si se cortó— POR QUÉ y CUÁLES
+          quedaron sin turno. Todo medido: cada número sale de una fila de
+          `qa_corrida_foto`, ninguno de una resta a ojo. */}
+      {corrida.carril === 'completo' && av !== null && (
+        <Tarjeta titulo={tx('qa_corrida_viva.el_avance_foto_por_foto')}>
+          <div className="rv-qa-pila rv-qa-pila--corta">
+            <div className="rv-qa-avance">
+              <div className="rv-qa-gran tabular">{rico(tx('qa_corrida_viva.e0_de_fotos_procesadas_e0', { ok: av.ok, total: av.total }), { e0: (c) => <span className="rv-qa-gran__sub">{c}</span> })}</div>
+              {av.sinTurno > 0 && <span className="rv-qa-mut">{tx('qa_corrida_viva.sin_turno_todavia', { sinTurno: av.sinTurno })}</span>}
+              {av.enVuelo > 0 && <span className="rv-qa-mut">{tx('qa_corrida_viva.en_vuelo', { enVuelo: av.enVuelo })}</span>}
+              {av.bad > 0 && <span className="rv-qa-bad">{tx('qa_corrida_viva.con_fallo', { bad: av.bad })}</span>}
+              {av.interrumpidas > 0 && (
+                <span className="rv-qa-warn">{tx(av.interrumpidas === 1 ? 'qa_corrida_viva.interrumpida_una' : 'qa_corrida_viva.interrumpida_varias', { interrumpidas: av.interrumpidas })}{' '}{tx('qa_corrida_viva.una_pasada_murio_con_ellas_en')}</span>
               )}
             </div>
-            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">{tx('qa_corrida_viva.costo_hasta_ahora_real')}</div>
-              <div className="mt-1 text-sm font-medium tabular">{usd4(corrida.costoUsdTotal ?? 0)}</div>
-              <div className="text-[10px] mt-0.5 rv-qa-mut">{tx('qa_corrida_viva.costo_registrado_nunca_estimado')}</div>
-            </div>
-            <div className="hairline rounded-lg px-3 py-2.5 rv-qa-fs">
-              <div className="text-xs rv-qa-mut">{tx('qa_corrida_viva.flota_de_prueba')}</div>
-              <div className="mt-1 text-xs font-mono break-all">{corrida.tenantNombre}</div>
-              <div className="text-[10px] mt-0.5 rv-qa-mut">
-                {corrida.inicio ? tx('qa_corrida_viva.inicio', { v: fechaHoraMx(corrida.inicio, idioma) }) : tx('qa_corrida_viva.sin_arrancar')}{corrida.fin ? ` · ${tx('qa_corrida_viva.fin', { v: fechaHoraMx(corrida.fin, idioma) })}` : ''}
-              </div>
-            </div>
-          </div>
+            <progress className="rv-qa-barra" value={av.ok + av.bad} max={Math.max(av.total, 1)} aria-label={tx('qa_corrida_viva.avance_de_la_corrida')} />
 
-          {/* ── EL AVANCE DEL CARRIL COMPLETO ─────────────────────────────
-              Cuántas van, cuántas faltan, y —si se cortó— POR QUÉ y CUÁLES
-              quedaron sin turno. Todo medido: cada número sale de una fila de
-              `qa_corrida_foto`, ninguno de una resta a ojo. */}
-          {corrida.carril === 'completo' && av !== null && (
-            <div className="card p-3">
-              <TituloSeccion>{tx('qa_corrida_viva.el_avance_foto_por_foto')}</TituloSeccion>
-              <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                <div className="font-display text-[22px] leading-tight font-semibold tabular">{rico(tx('qa_corrida_viva.e0_de_fotos_procesadas_e0', { ok: av.ok, total: av.total }), { e0: (c) => <span className="text-[14px] font-normal rv-qa-mut">{c}</span> })}</div>
-                {av.sinTurno > 0 && (
-                  <span className="text-xs rv-qa-mut">{tx('qa_corrida_viva.sin_turno_todavia', { sinTurno: av.sinTurno })}</span>
-                )}
-                {av.enVuelo > 0 && (
-                  <span className="text-xs rv-qa-mut">{tx('qa_corrida_viva.en_vuelo', { enVuelo: av.enVuelo })}</span>
-                )}
-                {av.bad > 0 && (
-                  <span className="text-xs rv-qa-bad">{tx('qa_corrida_viva.con_fallo', { bad: av.bad })}</span>
-                )}
-                {av.interrumpidas > 0 && (
-                  <span className="text-xs rv-qa-warn">{tx(av.interrumpidas === 1 ? 'qa_corrida_viva.interrumpida_una' : 'qa_corrida_viva.interrumpida_varias', { interrumpidas: av.interrumpidas })}{' '}{tx('qa_corrida_viva.una_pasada_murio_con_ellas_en')}</span>
-                )}
-              </div>
-              <div className="mt-1.5 h-1.5 rounded-full overflow-hidden rv-qa-fl2">
-                <progress className="rv-qa-barra" value={av.ok + av.bad} max={Math.max(av.total, 1)} aria-label={tx('qa_corrida_viva.avance_de_la_corrida')} />
-              </div>
-
-              {corrida.corte !== null && (
-                <p className={corrida.corte === 'dinero' ? 'text-xs mt-2 m-0 rv-qa-bad' : 'text-xs mt-2 m-0 rv-qa-mut'}>
-                  {corrida.corte === 'dinero'
-                    ? tx('qa_corrida_viva.la_ultima_pasada_paro_por_dinero')
-                    : tx('qa_corrida_viva.la_ultima_pasada_paro_por_reloj')}
-                </p>
-              )}
-
-              {av.sinTurnoIds.length > 0 && (
-                <details className="mt-2 text-xs rv-qa-mut">
-                  <summary className="cursor-pointer">{tx('qa_corrida_viva.las_que_no_han_tenido_turno', { length: av.sinTurnoIds.length })}</summary>
-                  <ul className="mt-1.5 space-y-0.5 max-h-40 overflow-y-auto pr-1">
-                    {av.sinTurnoIds.map((fid) => (
-                      <li key={fid} className="truncate">
-                        · {fotos.find((f) => f.id === fid)?.etiqueta ?? fid}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              )}
-
-              {viva && (
-                <p className="text-[11px] mt-2 m-0 rv-qa-faint">{tx('qa_corrida_viva.esta_pantalla_es_la_que_empuja')}</p>
-              )}
-              {avisoPasada && (
-                <p className="text-[11px] mt-1 m-0 font-mono rv-qa-faint">{avisoPasada}</p>
-              )}
-              {errorPasada && (
-                <p className="text-xs mt-1 m-0 rv-qa-bad">{tx('qa_corrida_viva.la_pasada_no_pudo_correr', { errorPasada })}</p>
-              )}
-            </div>
-          )}
-
-          {/* ── Los pasos (el ledger en vivo) ─────────────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>{tx('qa_corrida_viva.la_corrida_paso_a_paso')}</TituloSeccion>
-            {corrida.pasos.length === 0 ? (
-              <p className="text-sm mt-2 rv-qa-mut">{tx('qa_corrida_viva.todavia_no_arranca_el_primer_paso')}{viva ? tx('qa_corrida_viva.esta_pantalla_se_actualiza_sola_cada') : ''}.
-              </p>
-            ) : (
-              <div className="mt-2 space-y-1">
-                {corrida.pasos.map((p) => {
-                  const pp = pillPaso(tx)[p.estado] ?? pillPaso(tx).pendiente;
-                  return (
-                    <div key={p.n} className="flex items-start justify-between gap-3 text-sm py-1 border-b rv-qa-bl2">
-                      <div className="min-w-0">
-                        <span className="font-mono text-xs mr-2 rv-qa-mut">{p.n}.</span>
-                        {p.nombre}
-                        {p.detalle && <div className="text-xs mt-0.5 rv-qa-mut">{p.detalle}</div>}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {p.costoUsd > 0 && <span className="text-xs tabular rv-qa-mut">{usd4(p.costoUsd)}</span>}
-                        <StatusPill estado={pp.estado}>{pp.etiqueta}</StatusPill>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            {corrida.corte !== null && (
+              <Aviso tono={corrida.corte === 'dinero' ? 'error' : 'warn'}>
+                {corrida.corte === 'dinero'
+                  ? tx('qa_corrida_viva.la_ultima_pasada_paro_por_dinero')
+                  : tx('qa_corrida_viva.la_ultima_pasada_paro_por_reloj')}
+              </Aviso>
             )}
-          </div>
 
-          {/* ── El veredicto ──────────────────────────────────────────────── */}
-          <div className="card p-3">
-            <TituloSeccion>{tx('qa_corrida_viva.el_veredicto_el_llm_explora_el')}</TituloSeccion>
-            {corrida.veredicto === null ? (
-              <p className="text-sm mt-2 rv-qa-mut">
-                {viva ? tx('qa_corrida_viva.los_oraculos_corren_al_final_de') : tx('qa_corrida_viva.esta_corrida_termino_sin_veredicto_los')}
-              </p>
-            ) : (
-              <div className="overflow-x-auto mt-2">
-                <table aria-label={tx('qa_corrida_viva.veredicto_por_invariante')} className="w-full text-sm">
-                  <thead>
-                    <tr className="rv-qa-mut text-left">
-                      <th scope="col" className="px-2 py-1.5 font-medium">{tx('qa_corrida_viva.invariante')}</th>
-                      <th scope="col" className="px-2 py-1.5 font-medium">{tx('salud_sistema.estado')}</th>
-                      <th scope="col" className="px-2 py-1.5 font-medium">{tx('trust_safety.severidad')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {corrida.veredicto.map((v, i) => {
-                      const pv = pillOraculo(tx)[v.estado];
-                      return (
-                        <tr key={i} className="border-t align-top rv-qa-bl2">
-                          <td className="px-2 py-2">
-                            <details>
-                              <summary className="cursor-pointer font-medium">{v.invariante}</summary>
-                              <div className="mt-2 text-xs space-y-1.5">
-                                <div>
-                                  <span className="font-semibold">{tx('qa_corrida_viva.esperado')}</span>{' '}
-                                  <code className="font-mono break-all">{json(v.esperado)}</code>
-                                </div>
-                                <div>
-                                  <span className="font-semibold">{tx('qa_corrida_viva.real')}</span>{' '}
-                                  <code className="font-mono break-all">{json(v.real)}</code>
-                                </div>
-                                {v.detalle && <div className="rv-qa-mut">{v.detalle}</div>}
-                                <div className="font-mono rv-qa-faint">{v.oraculo}</div>
-                              </div>
-                            </details>
-                          </td>
-                          <td className="px-2 py-2 whitespace-nowrap"><StatusPill estado={pv.estado}>{pv.etiqueta}</StatusPill></td>
-                          <td className="px-2 py-2 whitespace-nowrap text-xs">{v.estado === 'ok' ? '—' : v.severidad}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* ── La precisión del OCR, medida ──────────────────────────────── */}
-          <MedicionCorrida medicion={medicion} error={medicionError} fotos={fotos} viva={viva} />
-
-          {/* ── Evidencia clicable ────────────────────────────────────────── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-            <div className="card p-3">
-              <TituloSeccion>{tx('qa_corrida_viva.la_conversacion_evidencia_solo_lectura')}</TituloSeccion>
-              {corrida.turnos.length === 0 ? (
-                <p className="text-sm mt-2 rv-qa-mut">
-                  {viva ? tx('qa_corrida_viva.los_turnos_aparecen_al_cierre_de') : tx('qa_corrida_viva.no_quedo_conversacion_registrada')}
-                </p>
-              ) : (
-                <div className="mt-2 space-y-1.5 max-h-80 overflow-y-auto pr-1">
-                  {corrida.turnos.map((t, i) => (
-                    <div key={i} className={`flex ${t.rol === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={t.rol === 'user' ? 'max-w-[85%] rounded-xl px-3 py-1.5 text-xs whitespace-pre-wrap hairline rv-qa-burbuja-user' : 'max-w-[85%] rounded-xl px-3 py-1.5 text-xs whitespace-pre-wrap hairline rv-qa-burbuja-bot'}>
-                        <span className="inline-flex items-center gap-1 font-medium text-[10px] opacity-70">
-                          <MessageCircle width={10} height={10} strokeWidth={1.75} /> {t.rol === 'user' ? tx('qa_corrida_viva.chofer_sintetico') : 'Likida'}
-                        </span>
-                        <div>{t.texto}</div>
-                      </div>
-                    </div>
+            {av.sinTurnoIds.length > 0 && (
+              <Disclosure variante="linea" titulo={tx('qa_corrida_viva.las_que_no_han_tenido_turno', { length: av.sinTurnoIds.length })}>
+                <ul className="rv-qa-lista rv-qa-lista--alta">
+                  {av.sinTurnoIds.map((fid) => (
+                    <li key={fid} className="rv-qa-trunca">{fotos.find((f) => f.id === fid)?.etiqueta ?? fid}</li>
                   ))}
-                </div>
-              )}
-            </div>
+                </ul>
+              </Disclosure>
+            )}
 
-            <div className="card p-3">
-              <TituloSeccion>{tx('qa_corrida_viva.fotos_y_pdf_de_esta_corrida')}</TituloSeccion>
-              <div className="mt-2 space-y-1.5">
-                {fotos.map((f) => (
-                  <div key={f.id} className="flex items-center justify-between gap-2 text-sm py-1 border-b rv-qa-bl2">
-                    <span className="inline-flex items-center gap-1.5 min-w-0">
-                      <Camera width={13} height={13} strokeWidth={1.75} className="rv-qa-mut" />
-                      <span className="truncate text-xs">{f.etiqueta}</span>
-                    </span>
-                    {f.url ? (
-                      <a href={f.url} target="_blank" rel="noreferrer" className="text-xs font-medium px-2 py-0.5 rounded-full hairline hover:opacity-70 shrink-0">{tx('qa_corrida_viva.abrir_firma_60_s')}</a>
-                    ) : (
-                      <span className="text-xs shrink-0 rv-qa-faint">{tx('qa_corrida_viva.sin_firma')}</span>
-                    )}
-                  </div>
-                ))}
-                {(corrida.pdfs ?? []).length === 0 ? (
-                  <p className="text-xs pt-1 rv-qa-mut">
-                    {viva ? tx('qa_corrida_viva.el_pdf_aparece_si_el_cierre') : tx('qa_corrida_viva.no_quedo_pdf_registrado_en_esta')}
-                  </p>
-                ) : (
-                  pdfs.map((p) => (
-                    <div key={p.path} className="flex items-center justify-between gap-2 text-sm py-1">
-                      <span className="inline-flex items-center gap-1.5 min-w-0">
-                        <FileText width={13} height={13} strokeWidth={1.75} className="rv-qa-mut" />
-                        <span className="truncate text-xs font-mono">{p.path.split('/').pop()}</span>
-                      </span>
-                      {p.url ? (
-                        <a href={p.url} target="_blank" rel="noreferrer" className="text-xs font-medium px-2 py-0.5 rounded-full hairline hover:opacity-70 shrink-0">{tx('qa_corrida_viva.abrir_pdf_firma_60_s')}</a>
-                      ) : (
-                        <span className="text-xs shrink-0 rv-qa-faint">{tx('qa_corrida_viva.borrado_con_el_tenant_retencion_conservar')}</span>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+            {viva && <p className="rv-qa-nota">{tx('qa_corrida_viva.esta_pantalla_es_la_que_empuja')}</p>}
+            {avisoPasada && <p className="rv-qa-nota rv-qa-mono">{avisoPasada}</p>}
+            {errorPasada && <Aviso tono="error">{tx('qa_corrida_viva.la_pasada_no_pudo_correr', { errorPasada })}</Aviso>}
           </div>
+        </Tarjeta>
+      )}
 
-          {/* ── La limpieza, dicha ────────────────────────────────────────── */}
-          {corrida.limpieza && (
-            <div className="card p-3 text-xs rv-qa-mut">{rico(tx('qa_corrida_viva.e0_limpieza_e0', { limpieza: corrida.limpieza }), { e0: (c) => <span className="font-semibold">{c}</span> })}</div>
-          )}
+      {/* ── Los pasos (el ledger en vivo) ─────────────────────────────── */}
+      <Tarjeta
+        titulo={tx('qa_corrida_viva.la_corrida_paso_a_paso')}
+        estado={corrida.pasos.length === 0 ? 'vacio' : 'ok'}
+        mensaje={tx('qa_corrida_viva.todavia_no_arranca_el_primer_paso')}
+        detalle={viva ? tx('qa_corrida_viva.esta_pantalla_se_actualiza_sola_cada') : undefined}
+      >
+        <TablaBase etiqueta={tx('qa_corrida_viva.la_corrida_paso_a_paso')} columnas={columnasPasos} filas={corrida.pasos} idFila={(p) => String(p.n)} densa altoMaximo={false} />
+      </Tarjeta>
+
+      {/* ── El veredicto ──────────────────────────────────────────────── */}
+      <Tarjeta
+        titulo={tx('qa_corrida_viva.el_veredicto_el_llm_explora_el')}
+        estado={corrida.veredicto === null ? 'vacio' : 'ok'}
+        mensaje={viva ? tx('qa_corrida_viva.los_oraculos_corren_al_final_de') : tx('qa_corrida_viva.esta_corrida_termino_sin_veredicto_los')}
+      >
+        {corrida.veredicto !== null && (
+          <TablaBase etiqueta={tx('qa_corrida_viva.veredicto_por_invariante')} columnas={columnasVeredicto} filas={corrida.veredicto} idFila={(v) => v.invariante} altoMaximo={false} />
+        )}
+      </Tarjeta>
+
+      {/* ── La precisión del OCR, medida ──────────────────────────────── */}
+      <MedicionCorrida medicion={medicion} error={medicionError} fotos={fotos} viva={viva} />
+
+      {/* ── Evidencia clicable ────────────────────────────────────────── */}
+      <div className="rv-qa-dos">
+        <Tarjeta
+          titulo={tx('qa_corrida_viva.la_conversacion_evidencia_solo_lectura')}
+          estado={corrida.turnos.length === 0 ? 'vacio' : 'ok'}
+          mensaje={viva ? tx('qa_corrida_viva.los_turnos_aparecen_al_cierre_de') : tx('qa_corrida_viva.no_quedo_conversacion_registrada')}
+        >
+          <div className="rv-qa-chat">
+            {corrida.turnos.map((t, i) => (
+              <div key={i} className={t.rol === 'user' ? 'rv-qa-fila-chat rv-qa-fila-chat--user' : 'rv-qa-fila-chat'}>
+                <div className={t.rol === 'user' ? 'rv-qa-burbuja rv-qa-burbuja-user' : 'rv-qa-burbuja rv-qa-burbuja-bot'}>
+                  <span className="rv-qa-burbuja__quien">
+                    <Icono icono={MessageCircle} tam={14} /> {t.rol === 'user' ? tx('qa_corrida_viva.chofer_sintetico') : 'Likida'}
+                  </span>
+                  <div>{t.texto}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Tarjeta>
+
+        <Tarjeta titulo={tx('qa_corrida_viva.fotos_y_pdf_de_esta_corrida')}>
+          <ul className="rv-qa-evidencia">
+            {fotos.map((f) => (
+              <li key={f.id}>
+                <span className="rv-qa-evidencia__nombre"><Icono icono={Camera} tam={14} /><span className="rv-qa-trunca">{f.etiqueta}</span></span>
+                {f.url ? (
+                  <BotonEnlace href={f.url} variante="secondary" tamano="sm" target="_blank" rel="noreferrer">{tx('qa_corrida_viva.abrir_firma_60_s')}</BotonEnlace>
+                ) : (
+                  <span className="rv-qa-tenue">{tx('qa_corrida_viva.sin_firma')}</span>
+                )}
+              </li>
+            ))}
+            {(corrida.pdfs ?? []).length === 0 ? (
+              <li className="rv-qa-nota">
+                {viva ? tx('qa_corrida_viva.el_pdf_aparece_si_el_cierre') : tx('qa_corrida_viva.no_quedo_pdf_registrado_en_esta')}
+              </li>
+            ) : (
+              pdfs.map((p) => (
+                <li key={p.path}>
+                  <span className="rv-qa-evidencia__nombre"><Icono icono={FileText} tam={14} /><span className="rv-qa-trunca rv-qa-mono">{p.path.split('/').pop()}</span></span>
+                  {p.url ? (
+                    <BotonEnlace href={p.url} variante="secondary" tamano="sm" target="_blank" rel="noreferrer">{tx('qa_corrida_viva.abrir_pdf_firma_60_s')}</BotonEnlace>
+                  ) : (
+                    <span className="rv-qa-tenue">{tx('qa_corrida_viva.borrado_con_el_tenant_retencion_conservar')}</span>
+                  )}
+                </li>
+              ))
+            )}
+          </ul>
+        </Tarjeta>
       </div>
+
+      {/* ── La limpieza, dicha ────────────────────────────────────────── */}
+      {corrida.limpieza && (
+        <Aviso tono="info">{rico(tx('qa_corrida_viva.e0_limpieza_e0', { limpieza: corrida.limpieza }), { e0: (c) => <strong>{c}</strong> })}</Aviso>
+      )}
+    </div>
   );
 }
 

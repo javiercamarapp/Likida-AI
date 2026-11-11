@@ -1297,6 +1297,7 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'qa_lanzar_form.carril_completo': ' · FULL LANE',
   'qa_lanzar_form.subiendo_al_banco': 'Uploading to the bank…',
   'qa_lanzar_form.elegida': 'Chosen · ',
+  'qa_lanzar_form.escenario': 'Scenario',
   'qa_lanzar_form.concepto': 'category',
   'qa_lanzar_form.quitar': 'remove {v}',
   'qa_lanzar_form.lanzando': 'Launching…',

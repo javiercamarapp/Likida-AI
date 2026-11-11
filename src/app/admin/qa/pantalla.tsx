@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import { fechaHoraMx, numero, usd, usd4 } from '@/lib/formato';
-import { MarcoPagina, Tarjeta, TablaBase, StatusChip, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { MarcoPagina, Tarjeta, TablaBase, StatusChip, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
-import type { Estado } from '../ui/kit';
 import { resumenVeredicto, type CorridaQA, type EstadoCorrida } from '@/lib/admin/qa-tipos';
 import { LanzarForm, type FotoConUrl } from './lanzar-form';
 import { BancoVerdad, type UltimaLectura } from './banco-verdad';
@@ -10,7 +9,7 @@ import './qa.css';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
 
-export const pillCorrida = (t: TSistema = T_SISTEMA_ES): Record<EstadoCorrida, { estado: Estado; etiqueta: string }> => ({
+export const pillCorrida = (t: TSistema = T_SISTEMA_ES): Record<EstadoCorrida, { estado: TonoEstado; etiqueta: string }> => ({
   pendiente: { estado: 'neutral', etiqueta: t('trust_safety.pendiente') },
   corriendo: { estado: 'neutral', etiqueta: t('qa_pantalla.corriendo') },
   ok: { estado: 'ok', etiqueta: 'OK' },
@@ -51,7 +50,7 @@ export function PantallaQa({
     { id: 'lanzada', titulo: t('qa_pantalla.lanzada'), celda: (c) => fechaHoraMx(c.creadaEn, idioma) },
     {
       id: 'estado', titulo: t('salud_sistema.estado'),
-      celda: (c) => { const pill = pillCorrida(t)[c.estado] ?? { estado: 'neutral' as Estado, etiqueta: c.estado }; return <StatusChip tono={pill.estado}>{pill.etiqueta}</StatusChip>; },
+      celda: (c) => { const pill = pillCorrida(t)[c.estado] ?? { estado: 'neutral' as TonoEstado, etiqueta: c.estado }; return <StatusChip tono={pill.estado}>{pill.etiqueta}</StatusChip>; },
     },
     {
       id: 'veredicto', titulo: t('qa_banco_verdad.veredicto'), alinear: 'der',
@@ -103,7 +102,7 @@ export function PantallaQa({
           detalle={t('qa_pantalla.elige_un_escenario_arriba_marca_tus')}
         >
           <TablaBase etiqueta={t('qa_pantalla.historial_de_corridas')} columnas={columnas} filas={corridas} idFila={(c) => c.id} tarjetaMovil />
-          <p className="text-xs rv-qa-mut">
+          <p className="rv-qa-nota">
             {t(corridas.length === 1 ? 'qa_pantalla.corridas_una' : 'qa_pantalla.corridas_varias', { n: numero(corridas.length, idioma) })}{t('qa_pantalla.las_mas_nuevas_primero_cada_una')}</p>
         </Tarjeta>
       )}

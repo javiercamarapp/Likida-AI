@@ -1295,6 +1295,7 @@ export const admin_sistema = {
   'qa_lanzar_form.carril_completo': ' · CARRIL COMPLETO',
   'qa_lanzar_form.subiendo_al_banco': 'Subiendo al banco…',
   'qa_lanzar_form.elegida': 'Elegida · ',
+  'qa_lanzar_form.escenario': 'Escenario',
   'qa_lanzar_form.concepto': 'concepto',
   'qa_lanzar_form.quitar': 'quitar {v}',
   'qa_lanzar_form.lanzando': 'Lanzando…',
