@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { ChevronDown, Settings } from 'lucide-react';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
@@ -25,8 +25,8 @@ import PieSidebar from '../../ui-v2/componentes/pie-sidebar';
 // UNA sola categoría abierta → pie fijo (Puesta en marcha <6/6 · tarjeta de cuenta; el resto, en el menú de la tarjeta).
 // ═══════════════════════════════════════════════════════════════════════════
 
-export { iniciales, anclaDe, avanceDe } from './nav-utiles';
-import { iniciales, anclaDe, avanceDe } from './nav-utiles';
+export { iniciales, anclaDe, avanceDe, flotaDelPie } from './nav-utiles';
+import { iniciales, anclaDe, avanceDe, flotaDelPie } from './nav-utiles';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
@@ -186,13 +186,17 @@ function FilaPuesta({ avance, sufijo, alNavegar, activo }: { avance: { n: number
  * usuario) y, arriba, «Puesta en marcha» (solo <6/6). Mi perfil, Ayuda, Plan y Configuración siguen en el menú de la tarjeta.
  * «Avisos» lleva la cifra solo si `insignias` la trae (número entero); sin ella no se pinta ninguna: nunca un 0 inventado.
  */
-export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, perfil, alNavegar, pathname, organizacion }: {
+export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarSesion, insignias, perfil, alNavegar, pathname, organizacion, flotas }: {
   menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null; rol: string; rolEtiqueta: string; nombre: string | null;
   usoIa?: { pct: number } | null; cerrarSesion?: () => Promise<void>; insignias?: Insignias; alNavegar?: () => void;
   /** La flota que se está viendo (nombre leído en el servidor). `null`/ausente = no se pudo saber: el pie lo dice. */
   organizacion?: { id: string; nombre: string } | null;
+  /** Solo el superadmin: las flotas, para que `?tenant=` (que el layout no ve) decida el nombre. `null` = lectura caída. */
+  flotas?: Array<{ id: string; nombre: string }> | null;
 }) {
   const tr = useT('shell', shellEs);
+  const tenantUrl = useSearchParams()?.get('tenant') ?? null;
+  const org = flotaDelPie({ organizacion, flotas, tenantUrl });
   const activo = hrefActivo(pathname, menu);
   // Todo lo que el pie ya no pinta como fila (Mi perfil, Ayuda y, en el menú genérico, Plan y Configuración) va al menú de la tarjeta.
   const filasMenuCuenta = menu.pie.filter((i) => i.href !== HREF_NOTIFICACIONES);
@@ -206,8 +210,8 @@ export function PieMenu({ menu, sufijo, rol, rolEtiqueta, nombre, usoIa, cerrarS
       alNavegar={alNavegar}
       extra={avance && enMenu ? <FilaPuesta avance={avance} sufijo={sufijo} alNavegar={alNavegar} activo={activo === HREF_PUESTA_EN_MARCHA} /> : undefined}
       organizacion={{
-        opciones: organizacion === undefined ? [] : organizacion ? [{ valor: organizacion.id, nombre: organizacion.nombre }] : null,
-        actual: organizacion?.id ?? null,
+        opciones: org === undefined ? [] : org ? [{ valor: org.id, nombre: org.nombre }] : null,
+        actual: org?.id ?? null,
         hrefIr: () => `/dashboard${sufijo}`,
       }}
       avisos={hayAvisos ? { href: `${HREF_NOTIFICACIONES}${sufijo}`, pendientes } : null}

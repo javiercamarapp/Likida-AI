@@ -725,7 +725,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 350;
 // Entrega 2 (w9, 10-nov-2026): +3 llamadas (2,543 -> 2,546), todas de `lib/admin/alertas-ia.ts` (`llm_costo` x2 y `viaje` x1, ver arriba). Las 2 `Array.from(` de `forma-en-cajon.tsx` dejaron de contar (falso positivo de DOM).
 // Entrega 3 (w12, 10-nov-2026): +12 llamadas (2,546 -> 2,558), todas de `lib/likida/fuentes/leer.ts` (ver arriba): 10 de las seis fuentes (whatsapp 2, tms 1, gps 1, peajes 1, correo 3, sat 2) y 2 del silencio del webhook (la tabla de último evento y los viajes abiertos).
 // `intake/__fixtures__/fotos_sinteticas.ts` dejó de contar (`Buffer.from` no es acceso a datos).
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_558;
+// w14/org (10-nov-2026): +1 llamada (2,558 -> 2,559), `dashboard/layout.tsx`: la lista de flotas (`tenant`: id, nombre; orden por nombre e id, limit 1000) que SOLO lee el superadmin para que el pie resuelva `?tenant=` (un layout no ve searchParams). Cruce intencional de superadmin; exención nominal en consultas_admin_filtran_tenant.
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_559;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

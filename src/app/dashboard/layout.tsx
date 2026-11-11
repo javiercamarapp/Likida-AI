@@ -100,6 +100,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
     } catch { organizacion = null; }
   }
 
+  // Solo el SUPERADMIN (v2): la lista de flotas para el pie. El layout no ve `?tenant=`; el pie (cliente) elige el nombre con esta lista y la URL.
+  // Lectura acotada, con orden y desempate; caída = `null` y el pie dice «Sin dato» (nunca el nombre de otra flota). Quien es de flota no la recibe.
+  let flotas: Array<{ id: string; nombre: string }> | null | undefined;
+  if (ui === 'v2' && sesion.rol === 'superadmin') {
+    try {
+      const { data, error } = await supabaseAdmin().from('tenant').select('id, nombre').order('nombre').order('id').limit(1000);
+      flotas = !error && data ? data.map((t) => ({ id: String(t.id), nombre: String(t.nombre ?? t.id) })) : null;
+    } catch { flotas = null; }
+  }
+
   async function cerrarSesion() {
     'use server';
     const sb = await supabaseServer();
@@ -147,6 +157,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       nombre={sesion.nombre} rol={sesion.rol} cerrarSesion={cerrarSesion} usoIa={usoIa} perfil={perfil}
       {...(v2 && avance ? { insignias: { '/dashboard/puesta-en-marcha': avance } } : {})}
       {...(v2 && organizacion !== undefined ? { organizacion } : {})}
+      {...(v2 && flotas !== undefined ? { flotas } : {})}
     >
       {contenido}
     </Chrome>
