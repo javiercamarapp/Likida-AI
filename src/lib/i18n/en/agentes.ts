@@ -3193,4 +3193,7 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'f26d2.liq.nota_retenidos': 'Held before sending',
   'f26d2.liq.nota_retenidos_provisional': '{n} with a provisional policy: human review before sending',
   'f26d2.liq.nota_sin_poliza': 'Waiting for their policy to go out',
+  'f26d2.cp.no_necesitan': 'Do not need a complement',
+  'f26d2.cp.sin_armar': 'No clean draft yet',
+  'f26d2.cp.ver_cuales': 'See which ones',
 };

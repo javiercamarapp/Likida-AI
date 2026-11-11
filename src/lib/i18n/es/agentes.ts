@@ -3191,4 +3191,7 @@ export const agentes = {
   'f26d2.liq.nota_retenidos': 'Detenidos antes de enviarse',
   'f26d2.liq.nota_retenidos_provisional': '{n} con póliza provisional: revisión humana antes de enviar',
   'f26d2.liq.nota_sin_poliza': 'Esperan su póliza para salir',
+  'f26d2.cp.no_necesitan': 'No necesitan complemento',
+  'f26d2.cp.sin_armar': 'Sin borrador sin fallas',
+  'f26d2.cp.ver_cuales': 'Ver cuáles son',
 } as const;
