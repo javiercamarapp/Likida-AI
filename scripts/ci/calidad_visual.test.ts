@@ -3,7 +3,6 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-// @ts-expect-error módulo .mjs sin tipos
 import { alturasAViewport, colisionesDeClases, evaluarDesborde, evaluarH1, evaluarTitulosEncimados } from './calidad-visual.mjs';
 import base from './calidad-visual-base.json';
 
