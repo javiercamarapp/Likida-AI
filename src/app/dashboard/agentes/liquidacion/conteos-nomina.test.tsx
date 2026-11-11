@@ -169,9 +169,9 @@ describe('contarParaNomina — los conteos y el aislamiento entre flotas', () =>
 });
 
 describe('la pantalla del rol nomina', () => {
-  it('pinta los seis conteos y NADA más: ni un peso, ni un nombre, ni un correo, ni un enlace', async () => {
+  it('pinta los conteos (cuatro celdas, entregados y rebotados en la nota de Enviados) y NADA más: ni un peso, ni un nombre, ni un correo, ni un enlace', async () => {
     const html = renderToStaticMarkup(await PaginaConteosNomina({ tenantId: A }));
-    for (const etiqueta of ['Recibidos hoy', 'Enviados', 'Entregados', 'Rebotados', 'Retenidos', 'Sin póliza']) expect(html).toContain(etiqueta);
+    for (const etiqueta of ['Recibidos hoy', 'Enviados', 'Entregados', 'rebotados', 'Retenidos', 'Sin póliza']) expect(html).toContain(etiqueta);
     // Dinero y nombres de los datos sintéticos de ARRIBA: ninguno llega a la pantalla.
     for (const prohibido of ['98765', '98,765', '1200', '555.55', 'Pedro', 'Luisa', 'Marco', 'Ajeno', '@ejemplo.test', '$', 'MXN']) {
       expect(html, prohibido).not.toContain(prohibido);

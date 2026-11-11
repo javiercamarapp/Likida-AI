@@ -3213,4 +3213,11 @@ export const agentes = {
   'f26d2.vigia.avisos_y_limites': 'Configuración y SLA, contactos, correos de respaldo y límites',
   'f26d2.vigia.avisos_y_limites_resumen': 'Se configuran una vez',
   'f26d2.vigia.ir_a_configuracion': 'Ir a Configuración y SLA',
+  'f26d4.vigia.atencion_del_dia': 'Atención del día',
+  'f26d4.vigia.sin_nada_que_atender': 'Nada que atender ahora',
+  'f26d4.vigia.sin_nada_que_atender_detalle': 'No hay respuestas por aprobar, excepciones, hilos abiertos ni actividad reciente.',
+  'f26d4.vigia.sin_tiempo_de_respuesta': 'Tiempo de primera respuesta: sin datos todavía.',
+  'f26d4.soltar.pista': 'o suelta el archivo aquí',
+  'f26d4.cajon.cancelar': 'Cancelar',
+  'f26d4.liq.nota_enviados_detalle': 'Entregados {e} · rebotados {r}',
 } as const;

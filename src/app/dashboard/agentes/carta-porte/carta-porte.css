@@ -44,3 +44,9 @@
    cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
 [data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
 [data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+
+/* Columnas iguales en tarjeta (Rovaq): cada una es una ficha de la MISMA altura, no un bloque suelto de alto desigual. */
+.rv-cp__tres { align-items: stretch; }
+.rv-cp__tres > .rv-cp__col { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+/* La nota de método al pie de la página (12 px, apagada): lo que antes eran párrafos sueltos entre tarjetas. */
+.rv-cp__metodo { display: grid; gap: 4px; margin: 0; }

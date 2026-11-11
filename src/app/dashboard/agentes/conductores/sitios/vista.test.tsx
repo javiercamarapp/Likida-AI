@@ -75,7 +75,7 @@ describe('el catálogo de sitios', () => {
     const html = pintar({ editando: S() });
     expect(html).toContain('Editar «Planta Zapopan»');
     expect(html).toContain('value="PL-ZAP"');
-    expect(html).toContain('Cancelar la edición');
+    expect(html).toContain('Cancelar');
   });
   it('avisa cuando hay más sitios de los que se listan', () => {
     expect(pintar({ hayMas: true })).toContain('Hay más sitios de los que se listan');
