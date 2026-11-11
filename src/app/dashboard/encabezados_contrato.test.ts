@@ -52,7 +52,7 @@ describe('las pantallas migradas usan el encabezado único', () => {
   for (const rel of MIGRADAS) {
     it(`${rel}: MarcoPagina (o EncabezadoPagina), sin BarraPagina, HeroSaludo ni h1 propio`, () => {
       const f = sinComentarios(fuente(rel));
-      expect(f, 'debe pintar el encabezado único').toMatch(/<MarcoPagina\b|<EncabezadoPagina\b|<Esqueleto(?:Portada|TablaMaestra|PanelCifras|Ficha|Configuracion)\b/);
+      expect(f, 'debe pintar el encabezado único').toMatch(/<MarcoPagina\b|<EncabezadoPagina\b|<MarcoConfigAgente\b|<Esqueleto(?:Portada|TablaMaestra|PanelCifras|Ficha|Configuracion)\b/);
       expect(f, 'la miga/barra superior ya no existe').not.toMatch(/<BarraPagina\b|<HeroSaludo\b/);
       expect(f, 'el h1 lo pone el encabezado único').not.toMatch(/<h1\b/);
     });

@@ -73,7 +73,7 @@ describe('anclas del recorrido', () => {
     const faltan: string[] = [];
     for (const [ruta, d] of Object.entries(PANTALLAS)) {
       const texto = archivosDe(ruta).map((f) => readFileSync(f, 'utf8')).join('\n');
-      if (!/MarcoPagina|EncabezadoPagina/.test(texto)) {
+      if (!/MarcoPagina|EncabezadoPagina|Esqueleto(?:Portada|TablaMaestra|PanelCifras|Ficha|Configuracion)|MarcoConfigAgente/.test(texto)) {
         sinEncabezado.push(ruta);
         // Sin el encabezado compartido, la pantalla pone el ancla de título en su propio encabezado.
         if (!/data-onboarding="pantalla\.titulo"/.test(texto)) faltan.push(`${ruta}: pantalla.titulo propio`);
