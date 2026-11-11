@@ -27,10 +27,12 @@ import { coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from 
 import { conSufijo, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
 import { FiltrosResumen, ListaAtencion } from './resumen-cliente';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import './inicio-cinco.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // INICIO v2 DE UNA FLOTA `cinco_agentes` (L11, rediseño 11-nov). Orden por jerarquía: «Hoy» (lo que espera decisión) · Puesta en marcha →
-// los cinco agentes con su fase real → franja de pesos (solo dueño y finanzas) → «Lo que hizo solo» y la gráfica de cierres → atajos. Lo rápido se lee de golpe; la lectura pesada de pesos (hasta tres meses de
+// los cinco agentes con su fase real → franja de pesos (solo dueño y finanzas) → «Lo que hizo solo» y la gráfica de cierres → atajos.
+// (Ronda 2: el orden calca la portada de Rovaq — filtros → procedencia → tira → los cinco agentes en el lugar de la fila 1 → fila 4-4-4 → cifras.) Lo rápido se lee de golpe; la lectura pesada de pesos (hasta tres meses de
 // archivos IAVE) va en `Suspense`, con un esqueleto por tarjeta, y NO bloquea el resto. Cada cifra dice fuente y periodo; sin dato nunca es $0.
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -78,6 +80,18 @@ export async function InicioCincoV2({
   // `veDinero=false`). En una flota nueva «0 por revisar» leería como medición de algo que no existe: ahí cada celda dice «sin dato».
   const cifras = itemsKpi(d, sufijo, puede, t).map((c) => (flotaNueva ? { ...c, valor: null, sello: undefined } : c));
 
+  // Cifras de las filas inferiores: se pintan solo las que existen (importe/extemporáneos para dueño y finanzas, la serie real de cierres).
+  const cartasInferiores = [verPesos ? 'importe' : null, verPesos ? 'extemporaneos' : null, serieCierres ? 'cierres' : null].filter((x) => x !== null);
+  const varianteInferior = cartasInferiores.length >= 3 ? 'rv-ic__fila--4-4-4' : cartasInferiores.length === 2 ? 'rv-ic__fila--6-6' : 'rv-ic__fila--12';
+  // Barra de procedencia (Rovaq): hasta cuándo son las cifras y qué falló, sin repetir el chip «Fuentes n de N» de la barra de filtros.
+  const procedencia = (
+    <>
+      <li>{t('f26d2.inicio.cifras_al', { fecha: fechaMx(d.hoy, idioma) })}</li>
+      {cob.ok < cob.total ? <li>{t('f26d2.inicio.fuentes_sin_lectura', { n: cob.total - cob.ok })}</li> : null}
+      {flotaNueva ? <li>{t('f26d2.inicio.flota_nueva')}</li> : null}
+    </>
+  );
+
   return (
     <EsqueletoPortada
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
@@ -86,21 +100,13 @@ export async function InicioCincoV2({
       acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
       avisos={!tenantExiste ? <AvisoSinFlota tenantId={tenantId} /> : undefined}
       filtros={<FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
+      procedencia={procedencia}
+      etiquetaProcedencia={t('f26d2.inicio.procedencia')}
       cifras={cifras}
       etiquetaCifras={t('op.tu_flota_en_likida')}
     >
 
-      {/* 1 · Lo que espera decisión HOY, con la puesta en marcha al lado: lo primero que se lee. */}
-      <div className={`rv-ic__fila ${senales ? 'rv-ic__fila--7-5' : 'rv-ic__fila--12'}`}>
-        <Tarjeta titulo="Hoy" info="inicio.hoy" acciones={<span className="rv-res__nota">{t('op.requiere_tu_atencion')}</span>} className="rv-ic__hoy" elevar entra="tarjeta">
-          {flotaNueva && senales
-            ? <PrimerosPasos senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
-            : <ListaAtencion filas={filas} senales={null} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />}
-        </Tarjeta>
-        {senales ? <TarjetaPuestaEnMarcha senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} /> : null}
-      </div>
-
-      {/* 2 · El estado real de cada uno de los cinco agentes. */}
+      {/* 1 · El estado real de cada uno de los cinco agentes, en el lugar de la fila 1 de la portada (mapa F26). */}
       <section className="rv-ic__seccion" aria-labelledby="rv-ic-agentes-t">
         <header className="rv-ic__seccion-cab">
           <p id="rv-ic-agentes-t" role="heading" aria-level={2} className="rv-ic__seccion-titulo">{tr.t('ini5a.agentes.titulo')}</p>
@@ -119,28 +125,35 @@ export async function InicioCincoV2({
         </div>
       </section>
 
-      {/* 3 · Las cifras: pesos (solo dueño y finanzas), lo que hizo solo y la serie real de cierres. */}
-      {verPesos ? (
-        <div className="rv-ic__fila rv-ic__fila--7-5">
-          <Suspense fallback={<EsqTarjetaV2 alto={120} />}><CarrilPesos pesosP={pesosP} cual="importe" ahora={ahora} /></Suspense>
-          <Suspense fallback={<EsqTarjetaV2 alto={120} />}><CarrilPesos pesosP={pesosP} cual="extemporaneos" ahora={ahora} /></Suspense>
-        </div>
-      ) : null}
-
-      <div className="rv-ic__fila rv-ic__fila--6-6">
+      {/* 2 · Fila 4-4-4 (Rovaq): lo que espera decisión HOY · la puesta en marcha (siguiente mejor acción) · lo que hizo solo. */}
+      <div className={`rv-ic__fila ${senales ? 'rv-ic__fila--4-4-4' : 'rv-ic__fila--6-6'}`}>
+        <Tarjeta titulo="Hoy" info="inicio.hoy" acciones={<span className="rv-res__nota">{t('op.requiere_tu_atencion')}</span>} className="rv-ic__hoy" elevar entra="tarjeta">
+          {flotaNueva && senales
+            ? <PrimerosPasos senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
+            : <ListaAtencion filas={filas} senales={null} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />}
+        </Tarjeta>
+        {senales ? <TarjetaPuestaEnMarcha senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} /> : null}
         <TarjetaHizoSolo24 t={t}
           hechos={hechosUltimas24h(d.hechos, ahora)} ahora={ahora}
           hrefLiquidacion={puede(RUTA_LIQUIDACION) ? conSufijo(RUTA_LIQUIDACION, sufijo) : null}
         />
-        {serieCierres ? (
-          <Tarjeta titulo={tr.t('ini5a.cierres.titulo')} acciones={<span className="rv-res__nota">{tr.t('ini5a.cierres.nota')}</span>} elevar entra="tarjeta">
-            <Columnas
-              datos={serieCierres.map((c) => ({ etiqueta: c.etiqueta, valor: c.valor, parcial: c.parcial }))}
-              etiqueta={tr.t('ini5a.cierres.etiqueta')} vacio={tr.t('ini5a.cierres.vacio')}
-            />
-          </Tarjeta>
-        ) : null}
       </div>
+
+      {/* 3 · Cifras: pesos (solo dueño y finanzas) y la serie real de cierres, en una fila de tantas tarjetas como existan. */}
+      {cartasInferiores.length > 0 ? (
+        <div className={`rv-ic__fila ${varianteInferior}`}>
+          {verPesos ? <Suspense fallback={<EsqTarjetaV2 alto={120} />}><CarrilPesos pesosP={pesosP} cual="importe" ahora={ahora} /></Suspense> : null}
+          {verPesos ? <Suspense fallback={<EsqTarjetaV2 alto={120} />}><CarrilPesos pesosP={pesosP} cual="extemporaneos" ahora={ahora} /></Suspense> : null}
+          {serieCierres ? (
+            <Tarjeta titulo={tr.t('ini5a.cierres.titulo')} acciones={<span className="rv-res__nota">{tr.t('ini5a.cierres.nota')}</span>} elevar entra="tarjeta">
+              <Columnas
+                datos={serieCierres.map((c) => ({ etiqueta: c.etiqueta, valor: c.valor, parcial: c.parcial }))}
+                etiqueta={tr.t('ini5a.cierres.etiqueta')} vacio={tr.t('ini5a.cierres.vacio')}
+              />
+            </Tarjeta>
+          ) : null}
+        </div>
+      ) : null}
 
       <TarjetaAtajos t={t} atajos={atajos} sufijo={sufijo} />
     </EsqueletoPortada>

@@ -4,7 +4,7 @@ import { rico } from '@/lib/i18n/rico';
 import { appUrl } from '@/lib/env';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { CreditCard, TriangleAlert } from 'lucide-react';
+import { TriangleAlert } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeAdministrar } from '@/lib/auth/permisos';
@@ -339,21 +339,18 @@ export default async function SuscripcionPage({
 
       {/* ── Estado: las cifras del plan viven en la tira de arriba; aquí solo lo que NO hay (lectura caída o sin suscripción). ── */}
       {suscripcionCaida ? (
-        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan">
-          <EstadoError reintentar>{tr('suscripcion.page.noSePudoLeer')}</EstadoError>
-        </Tarjeta>
+        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="error" mensaje={tr('suscripcion.page.noSePudoLeer')} reintentar />
       ) : suscripcion === null ? (
         <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan">
-          <EstadoVacio titulo={tr('suscripcion.page.sinSuscripcionTodavia')} icono={CreditCard} contenido>
-            {tr('suscripcion.page.estaFlotaTodaviaNo2')}
-          </EstadoVacio>
+          {/* Vacío de una línea (Rovaq `.empty dotted`, 12x14): sin icono ni 200 px de aire. */}
+          <p className="rv-sus__vacio" role="status"><strong>{tr('suscripcion.page.sinSuscripcionTodavia')}</strong> {tr('suscripcion.page.estaFlotaTodaviaNo2')}</p>
         </Tarjeta>
       ) : null}
 
       {/* ── Uso ── */}
       {uso && (
         <Tarjeta titulo={tr('suscripcion.page.loQueLlevasEste')} info="suscripcion.uso">
-          <div className="rv-sus__rejilla">
+          <div className="rv-sus__usos">
             <Uso tr={tr} etiqueta={tr('suscripcion.page.viajesCreadosEsteMes')} usado={uso.viajesMes} limite={uso.limiteViajesMes} />
             <Uso tr={tr} etiqueta={tr('suscripcion.page.operadoresActivos')} usado={uso.operadores} limite={uso.limiteOperadores} />
           </div>

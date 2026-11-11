@@ -7,5 +7,7 @@
 .rv-conocimiento__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 4px; }
 .rv-conocimiento__norma { display: grid; gap: 1px; min-width: 0; }
 .rv-conocimiento__norma strong { font-weight: 500; color: var(--ink); }
-.rv-conocimiento__detalle { display: grid; gap: 10px; }
+.rv-conocimiento__detalle { display: grid; gap: 12px; }
+.rv-conocimiento__ver { white-space: nowrap; }
 .rv-conocimiento__chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-conocimiento__tabla td { padding-block: 9px; }

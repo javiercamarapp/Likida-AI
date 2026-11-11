@@ -15,7 +15,7 @@ import { decidirPausa } from './pausa';
 import { ahoraMs } from '@/lib/saludo';
 import { registrarCorrida, ultimasCorridas, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { VistaAgenteCobranza } from './vista';
-import { SeccionPorGasto } from './seccion-por-gasto';
+import { SeccionPorGasto, ConfigPorGasto } from './seccion-por-gasto';
 import { SeccionNotificaciones } from '../seccion-notificaciones';
 import { FichaCorridas } from '../ficha-corridas';
 import type { Metadata } from 'next';
@@ -203,10 +203,12 @@ export default async function PaginaAgenteCobranza({
           : null,
       }}
       acciones={{ guardarEstrategia, alternarPausa, ejecutarAhora }}
+      configPorGasto={porGasto
+        ? <ConfigPorGasto tr={tr} config={porGasto.config} plan={porGasto.plan} firma={config.firma} instrucciones={config.instrucciones} guardar={guardarPorGasto} />
+        : undefined}
       gastosParaContactar={porGasto ? porGasto.plan.paraContactar.length : 0}
       porGasto={porGasto
-        ? <SeccionPorGasto tr={tr} config={porGasto.config} plan={porGasto.plan} tablero={tableroPorGasto}
-            firma={config.firma} instrucciones={config.instrucciones} guardar={guardarPorGasto} />
+        ? <SeccionPorGasto tr={tr} config={porGasto.config} plan={porGasto.plan} tablero={tableroPorGasto} />
         : (
           <Tarjeta titulo={tr.t('cobranza.page.por_gasto_titulo')} info="cobranza.gasto" estado="error"
             mensaje={tr.t('cobranza.page.por_gasto_error')} reintentar />

@@ -8,6 +8,8 @@ import { Aviso, BarraPeriodo, BotonEnlace, clasesBoton, EstadoError, hrefConPara
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { BarList } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
+import { conFilete } from '../../cifras-filete';
+import { TablaVacia } from '../../vacio-agente';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -59,9 +61,9 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
     { id: 'viaje', titulo: tx('liquidacion.vista.viaje'), principal: true, celda: (f) => <><span className="rv-cd__medio">{f.viaje.folio ?? tx('cobranza.vista.sin_folio_2')}</span><span className="rv-cd__micro rv-cd__bloquear">{f.viaje.clienteNombre ?? ''}</span></> },
     { id: 'chofer', titulo: tx('cobranza.gasto.chofer'), celda: (f) => <>{f.viaje.operadorNombre ?? '—'}<span className="rv-cd__micro rv-cd__bloquear">{f.viaje.terminalNombre ?? ''}</span></> },
     { id: 'parada', titulo: tx('rest.parada'), celda: (f) => <>{f.estancia.lugar === 'carga' ? tx('rest.carga') : tx('rest.descarga')}<span className="rv-cd__micro rv-cd__bloquear">{f.sitio ?? ''}</span></> },
-    { id: 'llegada', titulo: tx('rest.llegada_hora_del_mensaje'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
-    { id: 'salida', titulo: tx('rest.salida'), celda: (f) => <><span className="cifra-mono">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
-    { id: 'tiempo', titulo: tx('rest.tiempo'), alinear: 'der', celda: (f) => <span className="cifra-mono">{minutos(f.estancia.minutos)}</span> },
+    { id: 'llegada', titulo: tx('rest.llegada_hora_del_mensaje'), celda: (f) => <><span className="rv-ag-num">{horaExactaMx(f.estancia.llegada?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.llegada ? FUENTE[f.estancia.llegada.fuente] : ''}</span></> },
+    { id: 'salida', titulo: tx('rest.salida'), celda: (f) => <><span className="rv-ag-num">{horaExactaMx(f.estancia.salida?.en ?? null, zonaHoraria) || '—'}</span><span className="rv-cd__micro rv-cd__bloquear">{f.estancia.salida ? FUENTE[f.estancia.salida.fuente] : ''}</span></> },
+    { id: 'tiempo', titulo: tx('rest.tiempo'), alinear: 'der', celda: (f) => <span className="rv-ag-num">{minutos(f.estancia.minutos)}</span> },
     { id: 'estado', titulo: tx('proveedores.vista.estado'), celda: (f) => <StatusChip tono={f.estancia.fase === 'cerrada' ? 'ok' : f.estancia.fase === 'en_curso' ? 'warn' : 'muted'}>{faseTr(tx)[f.estancia.fase]}</StatusChip> },
     {
       id: 'respaldo', titulo: tx('rest.respaldo'),
@@ -96,7 +98,7 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
         campos: { items: criterios.map((c) => ({ tipo: 'select' as const, ...c })) },
       }}
       accion={csvUrl ? (
-        <a href={csvUrl} className={clasesBoton('primary', 'sm')}>
+        <a href={csvUrl} className={clasesBoton('secondary', 'sm')}>
           <Icono icono={Download} tam={14} />{tx('rest.csv_para_cobro_de_estadias')}</a>
       ) : undefined} />
   );
@@ -113,12 +115,12 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
           {!error && truncada ? <Aviso tono="warn">{tx('rest.hay_mas_viajes_con_llegada_en')}</Aviso> : null}
         </>
       )}
-      cifras={error ? undefined : [
+      cifras={error ? undefined : conFilete([
         { etiqueta: tx('rest.paradas_del_periodo'), info: 'conductores_estadias.paradas', valor: numero(resumen.paradas), nota: `${numero(resumen.cerradas)} cerradas · ${numero(resumen.enCurso)} en curso` },
         { etiqueta: tx('rest.tiempo_medio_en_carga'), info: 'conductores_estadias.medio_carga', valor: carga ? minutos(carga.promedio) : null, nota: carga ? `sobre ${numero(carga.n)} paradas cerradas` : tx('rest.ninguna_carga_cerrada') },
         { etiqueta: tx('rest.tiempo_medio_en_descarga'), info: 'conductores_estadias.medio_descarga', valor: descarga ? minutos(descarga.promedio) : null, nota: descarga ? `sobre ${numero(descarga.n)} paradas cerradas` : tx('rest.ninguna_descarga_cerrada') },
         { etiqueta: tx('rest.en_el_anden_ahora'), info: 'conductores_estadias.en_anden', valor: numero(resumen.enCurso), tono: resumen.enCurso > 0 ? 'warn' : undefined, nota: tx('rest.llegaron_y_aun_no_avisan_su') },
-      ]}
+      ])}
       etiquetaCifras={tx('rest.estadias_en_anden')}
       selloCifras={selloHoy(tx('rest.estadias_en_anden'))}
       agrupacion={!error && porCliente.length > 0 ? (
@@ -137,9 +139,12 @@ export function VistaEstadias({ sufijo, filtros, catalogos, filas, resumen, trun
       {error ? (
         <EstadoError compacto>{error}</EstadoError>
       ) : (
-        <Tarjeta titulo={tx('rest.paradas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={tx('rest.sin_paradas_en_el_periodo')}
-          detalle={tx('rest.ninguna_parada_con_llegada_registrada_en')}>
-          <TablaBase etiqueta={tx('rest.estadias_por_viaje_y_chofer')} columnas={COLUMNAS} filas={filas} idFila={(f) => `${f.viaje.id}-${f.estancia.lugar}`} densa tarjetaMovil />
+        <Tarjeta titulo={tx('rest.paradas')}>
+          {filas.length === 0 ? (
+            <TablaVacia etiqueta={tx('rest.estadias_por_viaje_y_chofer')} titulos={COLUMNAS.filter((c) => !c.tituloOculto).map((c) => c.titulo)} titulo={tx('rest.sin_paradas_en_el_periodo')}>{tx('rest.ninguna_parada_con_llegada_registrada_en')}</TablaVacia>
+          ) : (
+            <TablaBase etiqueta={tx('rest.estadias_por_viaje_y_chofer')} columnas={COLUMNAS} filas={filas} idFila={(f) => `${f.viaje.id}-${f.estancia.lugar}`} densa tarjetaMovil />
+          )}
         </Tarjeta>
       )}
     </EsqueletoTablaMaestra>

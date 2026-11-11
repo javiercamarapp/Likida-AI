@@ -17,7 +17,7 @@
 @media (max-width: 479.98px) { .rv-esq__cifras-sueltas { grid-template-columns: minmax(0, 1fr); } }
 
 /* Contenedor de la tabla maestra: la tabla va dentro de una tarjeta sin padding (a sangre), con el pie «25 de N» pegado. */
-.rv-esq__tabla { min-width: 0; }
+.rv-esq__tabla { display: grid; gap: 12px; min-width: 0; }
 .rv-esq__tabla-pie { margin: 8px 2px 0; font: 400 var(--t-small)/1.4 var(--font-sans-ui, inherit); color: var(--muted); }
 
 /* Nota de método bajo la última gráfica: 12 px apagada (Rovaq: «parcial: mes incompleto, no comparable»). */

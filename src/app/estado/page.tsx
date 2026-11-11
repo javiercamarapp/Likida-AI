@@ -5,6 +5,7 @@ import type { TrPublico } from '@/lib/i18n/publico_tr';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import Link from 'next/link';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import '../legal/publico-r2.css';
 import { headers } from 'next/headers';
 import { cargarEstadoPublico, estadoMemoizado, type EstadoPublico } from './datos';
 import { clientIp, rateLimit } from '@/lib/ratelimit';
@@ -33,12 +34,8 @@ const ESTADO: Record<EstadoMedido | 'sin_medicion', { clases: string; fondo: str
   sin_medicion: { clases: 'bg-[var(--surface)] text-muted', fondo: 'bg-[var(--surface)]', texto: 'text-muted' },
 };
 
-const CELDA: Record<CeldaDia, { fondo: string }> = {
-  ok: { fondo: 'bg-[var(--ok)]' },
-  degradado: { fondo: 'bg-[var(--warn)]' },
-  caido: { fondo: 'bg-[var(--bad)] ' },
-  sin_medicion: { fondo: 'bg-[var(--line)] opacity-55' },
-};
+/** Nivel de una celda del historial: lo desconocido se pinta punteado (`sin`), jamás en verde ni como cero. */
+const NIVEL_CELDA: Record<CeldaDia, 'ok' | 'warn' | 'bad' | 'sin'> = { ok: 'ok', degradado: 'warn', caido: 'bad', sin_medicion: 'sin' };
 
 function resumenGeneral(e: EstadoPublico, t: TrPublico['t']): { titulo: string; estado: EstadoMedido | 'sin_medicion' } {
   const vistos = Object.values(e.actual).filter((v): v is EstadoMedido => v !== null);
@@ -91,7 +88,7 @@ export default async function PaginaEstado() {
   const general = resumenGeneral(estado, t);
   return (
     <MarcoPublico
-      ancho="lectura"
+      ancho="ancho"
       rotulo={t('est.rotulo')}
       titulo={t('est.titulo')}
       apoyo={t('est.apoyo')}
@@ -108,38 +105,55 @@ export default async function PaginaEstado() {
               : t('est.ult.ninguna')}
         </p>
 
-        <div className="mt-8 space-y-6">
-          {estado.resumen.map((r) => {
-            const actual = estado.actual[r.componente] ?? 'sin_medicion';
-            const nombre = t(`est.c.${r.componente}.nombre`);
-            return (
-              <section key={r.componente} aria-labelledby={`c-${r.componente}`}>
-                <div className="flex items-center justify-between gap-3">
-                  <h2 id={`c-${r.componente}`} className="font-display text-[16px] font-semibold">{nombre}</h2>
-                  <Etiqueta estado={actual} t={t} />
-                </div>
-                <p className="mt-1 text-[13px] text-muted">{t(`est.c.${r.componente}.mide`)}</p>
-                {/* 30 celdas, de la más antigua a hoy. Cada una dice su día y su estado en texto, no solo en color. */}
-                <ul className="mt-3 flex gap-[3px]" aria-label={t('est.dias.aria', { nombre })}>
-                  {r.dias.map((d) => (
-                    <li
-                      key={d.dia}
-                      className={`h-7 flex-1 rounded-[3px] ${CELDA[d.celda].fondo}`}
-                      title={`${d.dia}: ${t(`est.dia.${d.celda}`)}`}
-                      aria-label={`${d.dia}: ${t(`est.dia.${d.celda}`)}`}
-                    />
-                  ))}
-                </ul>
-                <p className="mt-2 text-[12px] text-muted">
-                  {estado.historialIlegible
-                    ? t('est.hist.ilegible')
-                    : r.disponibilidadPct === null
-                      ? t('est.hist.sin')
-                      : t('est.hist.disp', { pct: r.disponibilidadPct.toFixed(2), muestras: numero(r.muestras, idioma), dias: r.diasMedidos })}
-                </p>
-              </section>
-            );
-          })}
+        {/* Semáforo por servicio en TABLA compacta (Rovaq): cabecera de 36, filas de 40; los días sin medición van punteados. */}
+        <div className="rv-estado__tabla">
+          <table>
+            <caption className="rv-sr">{t('est.tabla.aria')}</caption>
+            <thead>
+              <tr>
+                <th scope="col">{t('est.col.servicio')}</th>
+                <th scope="col">{t('est.col.estado')}</th>
+                <th scope="col">{t('est.col.dias')}</th>
+                <th scope="col">{t('est.col.disponibilidad')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estado.resumen.map((r) => {
+                const actual = estado.actual[r.componente] ?? 'sin_medicion';
+                const nombre = t(`est.c.${r.componente}.nombre`);
+                return (
+                  <tr key={r.componente}>
+                    <th scope="row" data-col="nombre" id={`c-${r.componente}`}>
+                      {nombre}
+                      <span className="rv-estado__nota">{t(`est.c.${r.componente}.mide`)}</span>
+                    </th>
+                    <td><Etiqueta estado={actual} t={t} /></td>
+                    <td>
+                      {/* 30 celdas, de la más antigua a hoy. Cada una dice su día y su estado en texto, no solo en color. */}
+                      <ul className="rv-estado__pista" aria-label={t('est.dias.aria', { nombre })}>
+                        {r.dias.map((d) => (
+                          <li
+                            key={d.dia}
+                            className="rv-estado__celda"
+                            data-nivel={NIVEL_CELDA[d.celda]}
+                            title={`${d.dia}: ${t(`est.dia.${d.celda}`)}`}
+                            aria-label={`${d.dia}: ${t(`est.dia.${d.celda}`)}`}
+                          />
+                        ))}
+                      </ul>
+                    </td>
+                    <td className="rv-estado__disp">
+                      {estado.historialIlegible
+                        ? t('est.hist.ilegible')
+                        : r.disponibilidadPct === null
+                          ? t('est.hist.sin')
+                          : t('est.hist.disp', { pct: r.disponibilidadPct.toFixed(2), muestras: numero(r.muestras, idioma), dias: r.diasMedidos })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
 
         <p className="mt-10 text-[12px] leading-relaxed text-muted">

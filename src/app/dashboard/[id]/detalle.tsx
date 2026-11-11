@@ -19,6 +19,7 @@ import type { RevisionDetalle } from '@/lib/likida/revision';
 import {
   Diferencia, LineaDeTiempo, PillRenglon, estadoRenglon, etiquetaFormaPago, plural, TIPOS_TOPE, type Hito,
 } from './vista';
+import '../caja-vacia.css';
 import './liquidacion.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -192,7 +193,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
   ];
 
   // Las cifras de la tira: valor en texto ya formateado (`mxn`), «—» cuando no se puede cruzar. Nada se rellena con un cero que nadie midió.
-  const cifras: PropsCifra[] = [
+  const cifras: PropsCifra[] = ([
     { etiqueta: tr('liquidacion.detalle.anticipo'), valor: mxn(d.totalAnticipo), nota: tr('liquidacion.detalle.anticipoNota'), info: 'liquidacion_detalle.anticipo' },
     {
       etiqueta: tr('liquidacion.detalle.comprobado'), valor: mxn(d.totalComprobado), info: 'liquidacion_detalle.comprobado',
@@ -212,14 +213,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
       info: 'liquidacion_detalle.sin_cfdi',
       nota: difsSinCfdi.length === 0 ? tr('liquidacion.detalle.sinCfdiTodoTrae') : sinCfdiCruzable ? plural(tr, 'liquidacion.detalle.sinCfdiNota', idsSinCfdi.size) : plural(tr, 'liquidacion.detalle.sinCfdiNoCruzable', difsSinCfdi.length),
     },
-    {
-      etiqueta: tr('liquidacion.detalle.sobreTope'),
-      valor: mxn(excedenteTope),
-      tono: difsTope.length > 0 ? 'warn' : undefined,
-      info: 'liquidacion_detalle.sobre_tope',
-      nota: difsTope.length === 0 ? tr('liquidacion.detalle.sobreTopeNada') : plural(tr, 'liquidacion.detalle.sobreTopeNota', difsTope.length),
-    },
-  ];
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 })); // filete en TODAS las celdas (Rovaq: tira de 4 con filete)
 
   return (
     <EsqueletoFicha
@@ -230,14 +224,14 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
       acciones={(
         <>
           {wa && (
-            <BotonEnlace tamano="sm" variante="secondary" href={wa} target="_blank" rel="noopener noreferrer" icono={<Icono icono={MessageCircle} />}>
+            <BotonEnlace variante="secondary" href={wa} target="_blank" rel="noopener noreferrer" icono={<Icono icono={MessageCircle} />}>
               {tr('liquidacion.detalle.verWhatsapp')}
             </BotonEnlace>
           )}
           {/* El PDF existía, estaba autenticado y no había forma de llegar a
               él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5). */}
           {pdfHref && (
-            <BotonEnlace tamano="sm" variante="primary" href={pdfHref} icono={<Icono icono={Download} />}>
+            <BotonEnlace variante="primary" href={pdfHref} icono={<Icono icono={Download} />}>
               {tr('liquidacion.detalle.descargarPdf')}
             </BotonEnlace>
           )}
@@ -249,6 +243,10 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           <li><StatusChip tono={estatus.estado}>{estatus.label}</StatusChip></li>
           {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
           <li className="rv-liq__nota">{tr('liquidacion.detalle.cerradaEl', { fecha: fechaMx(d.creadoEn) })}</li>
+          {/* «Sobre tope» sale de la tira (Rovaq: tira de 4) y se dice aquí, con el excedente real y cuántos comprobantes lo causan. */}
+          {difsTope.length > 0 && (
+            <li><StatusChip tono="warn">{tr('liquidacion.detalle.sobreTope')}: {mxn(excedenteTope)} · {plural(tr, 'liquidacion.detalle.sobreTopeNota', difsTope.length)}</StatusChip></li>
+          )}
         </>
       )}
       avisos={(
@@ -264,7 +262,8 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
       etiquetaCifras={tr('liquidacion.detalle.titulo', { folio: d.folio })}
       variante="6-6"
       bloques={[
-        <Tarjeta key="ficha" titulo={tr('liquidacion.detalle.fichaTitulo')}>
+        <div key="izq" className="rv-liq__col">
+        <Tarjeta titulo={tr('liquidacion.detalle.fichaTitulo')}>
           <CamposSistema
             etiqueta={tr('liquidacion.detalle.fichaTitulo')}
             campos={[
@@ -289,16 +288,11 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
                 actual={reasignar.actual} actualNombre={reasignar.actualNombre} total={reasignar.total} />
             </div>
           )}
-        </Tarjeta>,
-        /* ── Línea de tiempo ── */
-        <Tarjeta key="linea" titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo" contenida>
-          <LineaDeTiempo hitos={hitos} tr={tr} />
-          <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
-        </Tarjeta>,
-        /* ── Acreditable / recuperable ──
+        </Tarjeta>
+        {/* ── Acreditable / recuperable ──
             Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF × litros y esa cuota no la tenemos. `ieps` solo puede venir de
-            filas viejas escritas antes del cambio; se conserva para no ocultarlas. */
-        <Tarjeta key="acred" titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
+            filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}
+        <Tarjeta titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
           <CamposSistema
             etiqueta={tr('liquidacion.detalle.acreditableTabla')}
             campos={[
@@ -336,6 +330,12 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
               El mismo resumen que el PDF imprime desde el 1-ago, con las MISMAS funciones. La decisión se toma aquí; la advertencia (LFT
               110/111/263: «no deducible» NO autoriza descontárselo al operador) va aquí. */}
           {d.laboral && <SeccionLaboral laboral={d.laboral} tr={tr} />}
+        </Tarjeta>
+        </div>,
+        /* ── Línea de tiempo ── */
+        <Tarjeta key="linea" titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo" contenida>
+          <LineaDeTiempo hitos={hitos} tr={tr} />
+          <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
         </Tarjeta>,
       ]}
     >
@@ -371,7 +371,7 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           // guardado y cero filas en `gasto`. Una tabla con encabezados y nada
           // debajo se lee como "se perdieron los comprobantes"; esto dice qué
           // pasó y a dónde ir.
-          <EstadoVacio titulo={tr('liquidacion.detalle.sinRenglonesTitulo')}>{tr('liquidacion.detalle.sinRenglones', { total: mxn(d.totalComprobado) })}</EstadoVacio>
+          <div className="rv-caja-vacia"><EstadoVacio titulo={tr('liquidacion.detalle.sinRenglonesTitulo')}>{tr('liquidacion.detalle.sinRenglones', { total: mxn(d.totalComprobado) })}</EstadoVacio></div>
         ) : (
           <>
             <TablaBase
@@ -412,6 +412,20 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
           </FormaConAviso>
         </Tarjeta>
       )}
+
+      {/* Rovaq 06d cierra la ficha con «Qué se sabe / Qué no se sabe»: lo desconocido se dibuja, no se omite. */}
+      <div className="rv-esq__saberes">
+        <section className="rv-esq__saber" aria-labelledby="liq-saber-si">
+          {/* sin-info: encabezado de lista «lo que sí sabemos», no un recuadro con cifra */}
+          <h3 id="liq-saber-si">{tr('liquidacion.detalle.saberSiTitulo')}</h3>
+          <ul>{(['saberSi1', 'saberSi2', 'saberSi3'] as const).map((k) => <li key={k}>{tr(`liquidacion.detalle.${k}`)}</li>)}</ul>
+        </section>
+        <section className="rv-esq__saber" data-no-sabe="" aria-labelledby="liq-saber-no">
+          {/* sin-info: encabezado de lista «lo que no sabemos», no un recuadro con cifra */}
+          <h3 id="liq-saber-no">{tr('liquidacion.detalle.saberNoTitulo')}</h3>
+          <ul>{(['saberNo1', 'saberNo2', 'saberNo3'] as const).map((k) => <li key={k}>{tr(`liquidacion.detalle.${k}`)}</li>)}</ul>
+        </section>
+      </div>
 
       <p className="rv-liq__cierre">{LEYENDA_CORTA}</p>
     </EsqueletoFicha>

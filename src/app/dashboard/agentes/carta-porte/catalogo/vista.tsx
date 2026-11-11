@@ -118,9 +118,9 @@ function FormaFila({ tipo, clienteId, ver, accion, fila, modo }: {
 }
 
 function resumen(tipo: TipoPlantilla, f: Registro, tx: TAgentes = TR_ES.t): ReactNode {
-  if (tipo === 'producto') return <><strong className="cifra-mono">{textoDe(f.sku)}</strong><span className="rv-cp__tenue"> · {textoDe(f.bienes_transp)} · {textoDe(f.clave_unidad)}{f.embalaje ? ` · ${textoDe(f.embalaje)}` : ''}</span></>;
+  if (tipo === 'producto') return <><strong className="rv-ag-num">{textoDe(f.sku)}</strong><span className="rv-cp__tenue"> · {textoDe(f.bienes_transp)} · {textoDe(f.clave_unidad)}{f.embalaje ? ` · ${textoDe(f.embalaje)}` : ''}</span></>;
   if (tipo === 'parte') return <><span className="rv-cp__tenue">{textoDe(f.rol)}</span> <strong>{textoDe(f.alias)}</strong><span className="rv-cp__tenue">{f.rfc ? ` · ${textoDe(f.rfc)}` : ' · sin RFC'}{f.cp ? ` · CP ${textoDe(f.cp)}` : ''}</span></>;
-  return <><strong className="cifra-mono">{textoDe(f.numero_interno)}</strong>{f.activo === false && <span className="rv-cp__nota" data-tono="warn">{tx('rest.inactivo')}</span>}</>;
+  return <><strong className="rv-ag-num">{textoDe(f.numero_interno)}</strong>{f.activo === false && <span className="rv-cp__nota" data-tono="warn">{tx('rest.inactivo')}</span>}</>;
 }
 
 const COLUMNAS_FILTRO: Record<TipoPlantilla, string[]> = {

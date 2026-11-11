@@ -18,10 +18,11 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, BotonEnlace, CampoSelect, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, StatusChip, Tarjeta, type TonoEstado,
+  Aviso, BarraFiltros, BotonEnlace, CampoSelect, FiltroOpciones, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, StatusChip, Tarjeta, type TonoEstado,
 } from '../../ui-v2/componentes';
 import type { PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { HiloTicket } from './hilo';
@@ -30,6 +31,7 @@ import { CajonTicket } from './cajon-ticket';
 // las dos pantallas importan el MISMO mapa — el patrón de `dashboard/estatus.ts`.
 import { pillTicket } from '../../dashboard/soporte/estatus';
 import '../sistema.css';
+import '../resumen.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
@@ -52,6 +54,7 @@ function slaDe(t: TicketCruzado, ta: TrDe<'admin_flotas'>): { texto: string; ven
   return { texto: ta('soporte.faltan_h', { Math: numero(Math.round(t.horasRestantes)) }), vencido: false };
 }
 
+const conteoRotulo = (rotulo: string, n: number | null): string => (n === null ? rotulo : `${rotulo} (${numero(n)})`);
 const capital = (t: string): string => (t ? t.charAt(0).toUpperCase() + t.slice(1).replace(/_/g, ' ') : '—');
 const tonoDe = (estado: string): TonoEstado => pillTicket(estado).estado as TonoEstado;
 
@@ -117,7 +120,7 @@ async function flotaDelTicket(fd: FormData): Promise<{ id: string; tenantId: str
 export default async function SoportePage({
   searchParams,
 }: {
-  searchParams: Promise<{ ticket?: string }>;
+  searchParams: Promise<{ ticket?: string; vista?: string }>;
 }) {
   const { t: ta } = await getT('admin_flotas');
   await requireSuperadmin();
@@ -234,6 +237,16 @@ export default async function SoportePage({
     }
   }
 
+  // Pestañas de la plantilla TM (Rovaq «Soporte»): Abiertos / Esperando / Cerrados. «Esperando» es el estado `esperando` (la pelota está con
+  // el cliente); «Cerrados» junta resuelto y cerrado; «Abiertos» es todo lo demás. Los contadores salen de la lista leída y solo se
+  // pintan si no está recortada (si lo está, un contador de la lista mentiría sobre la cola); el de cerrados es el exacto de la base.
+  const vista: 'abiertos' | 'esperando' | 'cerrados' = sp.vista === 'esperando' || sp.vista === 'cerrados' ? sp.vista : 'abiertos';
+  const cerradoE = (e: string) => ESTADOS_TICKET_CERRADO.has(e);
+  const enVista = (x: TicketCruzado) => (vista === 'cerrados' ? cerradoE(x.estado) : vista === 'esperando' ? x.estado === 'esperando' : !cerradoE(x.estado) && x.estado !== 'esperando');
+  const visibles = tickets === null ? [] : tickets.filter(enVista);
+  const cuentaLista = (v: 'abiertos' | 'esperando') => (tickets === null || recortado ? null : tickets.filter((x) => (v === 'esperando' ? x.estado === 'esperando' : !cerradoE(x.estado) && x.estado !== 'esperando')).length);
+  const hrefVista = (v: string) => `/admin/soporte${v === 'abiertos' ? '' : `?vista=${v}`}`;
+  const hrefTicket = (id: string) => `/admin/soporte?${vista === 'abiertos' ? '' : `vista=${vista}&`}ticket=${encodeURIComponent(id)}`;
   const abiertoVencidos = (tickets ?? []).filter((t) => slaDe(t, ta).vencido && !ESTADOS_TICKET_CERRADO.has(t.estado)).map((t) => t.id);
   const avisos = tickets === null ? null : await avisosDeSlaPorTicket(abiertoVencidos);
 
@@ -242,7 +255,7 @@ export default async function SoportePage({
       id: 'asunto', titulo: ta('soporte.asunto'), principal: true,
       celda: (t) => (
         <>
-          <Link href={`/admin/soporte?ticket=${encodeURIComponent(t.id)}`}>{t.asunto}</Link>
+          <Link href={hrefTicket(t.id)}>{t.asunto}</Link>
           <span className="adm-sis-sub">{capital(t.categoria)}</span>
         </>
       ),
@@ -271,27 +284,39 @@ export default async function SoportePage({
         );
       },
     },
+    { id: 'vr', titulo: ta('soporte.abierto'), tituloOculto: true, alinear: 'der', celda: (t) => <BotonEnlace href={hrefTicket(t.id)} variante="ghost" tamano="sm">{ta('flotas.vista_rapida')}</BotonEnlace> },
   ];
   const terminal = detalle !== null && ESTADOS_TICKET_CERRADO.has(detalle.estado);
-  const sinActividad = tickets !== null && tickets.length === 0
-    && conteos.abiertos === 0 && conteos.vencidos === 0 && conteos.sinSla === 0 && conteos.cerrados === 0;
 
-  const cifras: PropsCifra[] | undefined = tickets === null || (sinActividad && pedido === '') ? undefined : [
+  // Con la lectura completa, cero es un dato real (cola vacía): la tira se pinta igual (Rovaq). Una lectura caída deja la tira fuera.
+  const cifras: PropsCifra[] | undefined = tickets === null ? undefined : uniformes([
       { etiqueta: ta('soporte.abiertos'), valor: conteos.abiertos, formato: 'entero', nota: ta('soporte.de_todas_las_flotas'), ...(conteos.abiertos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
       { etiqueta: ta('soporte.con_sla_vencido'), valor: conteos.vencidos, formato: 'entero', tono: (conteos.vencidos ?? 0) > 0 ? 'bad' : undefined, nota: ta('soporte.paso_el_plazo_y'), ...(conteos.vencidos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
       { etiqueta: ta('soporte.sin_sla_pactado'), valor: conteos.sinSla, formato: 'entero', nota: ta('soporte.no_estan_vencidos_nadie'), ...(conteos.sinSla === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
       { etiqueta: ta('soporte.resueltos_o_cerrados'), valor: conteos.cerrados, formato: 'entero', nota: ta('soporte.historico'), ...(conteos.cerrados === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
-    ];
+    ]);
 
   return (
-    <EsqueletoTablaMaestra titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')} etiquetaCifras={ta('soporte.tickets_de_soporte')} cifras={cifras}>
+    <EsqueletoTablaMaestra
+      titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')} etiquetaCifras={ta('soporte.tickets_de_soporte')} cifras={cifras}
+      filtros={tickets === null ? undefined : (
+        // La guarda `una_barra_de_pestanas` reserva las pestañas a la barra automática del grupo: la vista de la cola (Abiertos / Esperando /
+        // Cerrados, con su contador) es un filtro de enlace de la barra de filtros, no una segunda barra de pestañas.
+        <BarraFiltros enLinea etiqueta={ta('soporte.vistas_de_la_cola')}>
+          <FiltroOpciones
+            etiqueta={ta('soporte.vista')} valor={vista} porDefecto="abiertos"
+            opciones={[
+              { valor: 'abiertos', rotulo: conteoRotulo(ta('soporte.abiertos'), cuentaLista('abiertos')), href: hrefVista('abiertos') },
+              { valor: 'esperando', rotulo: conteoRotulo(ta('soporte.esperando'), cuentaLista('esperando')), href: hrefVista('esperando') },
+              { valor: 'cerrados', rotulo: conteoRotulo(ta('soporte.cerrados'), conteos.cerrados), href: hrefVista('cerrados') },
+            ]}
+          />
+        </BarraFiltros>
+      )}
+    >
       {tickets === null ? (
         <EstadoError reintentar>{ta('soporte.no_se_pudo_leer')}</EstadoError>
       ) : (
-        sinActividad && pedido === '' ? (
-          // Cola sin un solo ticket (ni abiertos, ni vencidos, ni sin SLA, ni cerrados): cuatro ceros no son cuatro mediciones. Un solo estado vacío, dentro de su tarjeta.
-          <Tarjeta titulo={ta('soporte.cola_de_soporte')} estado="vacio" mensaje={ta('soporte.la_cola_esta_vacia')} detalle={ta('soporte.ninguna_flota_tiene_nada')} />
-        ) : (
         <>
           {/* ── EL HILO Y LAS ACCIONES ───────────────────────────────────── */}
           {pedido !== '' && (
@@ -303,7 +328,7 @@ export default async function SoportePage({
                 {ta('soporte.puede_que_se_haya')}
               </EstadoVacio>
             ) : (
-              <CajonTicket titulo={detalle.asunto} descripcion={flotaDelDetalle ?? undefined} hrefCerrar="/admin/soporte">
+              <CajonTicket titulo={detalle.asunto} descripcion={flotaDelDetalle ?? undefined} hrefCerrar={hrefVista(vista)}>
                 <p><StatusChip tono={tonoDe(detalle.estado)}>{pillTicket(detalle.estado).etiqueta}</StatusChip></p>
                 <ul className="adm-sis-lista">
                   <li><span>Flota</span><span>{flotaDelDetalle}</span></li>
@@ -324,7 +349,7 @@ export default async function SoportePage({
                     {ta('soporte.para_escribir_en_el')}
                   </Aviso>
                 ) : null}
-                <div className="adm-sis-rejilla">
+                <div className="adm-sis-rejilla adm-forma-fina">
                   {terminal ? (
                     <div className="adm-sis-bloque">
                       <h3 className="adm-sis-titulo">Reabrir</h3>
@@ -366,11 +391,11 @@ export default async function SoportePage({
 
           <section className="adm-sis-bloque" aria-labelledby="cola-soporte">
             <h2 className="adm-sis-titulo" id="cola-soporte">{ta('soporte.la_cola_lo_mas')}</h2>
-            {tickets.length === 0 ? (
-              <Tarjeta titulo={ta('soporte.cola_de_soporte')} estado="vacio" mensaje={ta('soporte.la_cola_esta_vacia')} detalle={ta('soporte.ninguna_flota_tiene_nada')} />
+            {visibles.length === 0 ? (
+              <Tarjeta titulo={ta('soporte.cola_de_soporte')} estado="vacio" mensaje={tickets.length === 0 ? ta('soporte.la_cola_esta_vacia') : ta('soporte.nada_en_esta_vista')} detalle={ta('soporte.ninguna_flota_tiene_nada')} />
             ) : (
             <TablaLista<TicketCruzado>
-              etiqueta={ta('soporte.cola_de_soporte')} columnas={columnas} filas={tickets} idFila={(t) => t.id} base="/admin/soporte" params={{ ticket: pedido || undefined }}
+              etiqueta={ta('soporte.cola_de_soporte')} columnas={columnas} filas={visibles} idFila={(t) => t.id} base="/admin/soporte" params={{ ticket: pedido || undefined, vista: vista === 'abiertos' ? undefined : vista }}
               pie={(
                 <p className="adm-sis-nota">
                   {recortado
@@ -391,7 +416,6 @@ export default async function SoportePage({
             </p>
           </Disclosure>
         </>
-        )
       )}
     </EsqueletoTablaMaestra>
   );

@@ -378,7 +378,7 @@
 [data-ui="v2"] button.rv-chip:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 /* ═══ B4 · InfoTip (ⓘ) y su explicación unificada ═══ */
-[data-ui="v2"] .rv-info { position: relative; display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
+[data-ui="v2"] .rv-info { position: relative; display: inline-grid; place-items: center; flex: none; width: 32px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
 [data-ui="v2"] .rv-info::after { content: ""; position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
 [data-ui="v2"] .rv-info:hover, [data-ui="v2"] .rv-info[aria-expanded="true"] { background: var(--canvas); color: var(--ink); }
 [data-ui="v2"] .rv-info:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

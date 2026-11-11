@@ -7,6 +7,7 @@ import { ROTULOS_ROL } from '@/lib/auth/roles';
 import { getResumenNegocio } from '@/lib/admin/negocio';
 import { FormaConAviso } from '../../ui/forma';
 import { accionNuevoAcceso } from './acciones';
+import '../../resumen.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,6 +36,7 @@ export default async function NuevoUsuario({ searchParams }: { searchParams?: Pr
         id: 'nuevo-acceso', titulo: 'Nuevo acceso',
         contenido: (
           <>
+            <div className="adm-forma-fina">
             <FormaConAviso accion={accionNuevoAcceso} boton="Crear usuario" columnas="md:grid-cols-2">
               <CampoSelect etiqueta="Flota" name="tenantId" required defaultValue={preseleccion}>
                 <option value="" disabled>Elige una flota</option>
@@ -49,6 +51,7 @@ export default async function NuevoUsuario({ searchParams }: { searchParams?: Pr
               <CampoTexto etiqueta="WhatsApp (opcional)" name="telefono" placeholder="10 dígitos"
                 ayuda="Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat)." />
             </FormaConAviso>
+            </div>
             <p>
               Crea la cuenta de acceso y la persona en el panel, deja el asiento en la bitácora y le manda el correo de acceso. El primer ingreso
               (enlace por correo) confirma la cuenta. Si el canal de correo no está configurado, la pantalla lo dice y la cuenta queda creada:

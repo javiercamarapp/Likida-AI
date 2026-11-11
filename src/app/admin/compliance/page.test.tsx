@@ -46,6 +46,8 @@ function buscar(nodo: ReactNode, componente: unknown, salida: Elemento[] = []): 
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === componente) salida.push(nodo);
   buscar(nodo.props.children as ReactNode, componente, salida);
+  // Los paneles de las vistas viajan en una prop (`paneles`), no como hijos.
+  for (const p of Object.values((nodo.props.paneles ?? {}) as Record<string, ReactNode>)) buscar(p, componente, salida);
   return salida;
 }
 type AccionForma = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string }>;
@@ -203,9 +205,11 @@ it('F7: la pantalla no imprime nombres internos (tablas, plantillas ni variables
   expect(html).not.toMatch(/respuesta_arco|solicitud_arco|LIKIDA_/);
 });
 
-it('D11/D12 (auditoría 11-nov): sin solicitudes NO hay tira de dos ceros y el vacío vive DENTRO de una tarjeta', async () => {
+it('D11/D12 (auditoría 11-nov, F26): sin solicitudes la tira se dibuja con pista punteada (sin ceros) y el vacío vive DENTRO de una tarjeta', async () => {
   const html = (await import('react-dom/server')).renderToStaticMarkup(await CompliancePage({ searchParams: Promise.resolve({}) }));
-  expect(html).not.toContain('Vencen pronto');
+  expect(html).toContain('Vencen pronto');
+  expect(html).toContain('Sin solicitudes registradas');
+  expect(html).toContain('data-estado="vacio"');
   expect(html).toMatch(/rv-tarjeta[\s\S]*Ninguna solicitud ARCO registrada/);
   expect(html).toContain('Seguridad y datos');
 });

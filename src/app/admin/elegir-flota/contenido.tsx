@@ -56,10 +56,10 @@ export function ElegirFlotaContenido({
             <span className="adm-res-fila__titulo">{f.nombre}</span>
             <span className="adm-flota-id">{f.esDemo ? 'Datos de demostración — no es un cliente' : f.id}</span>
           </span>
+          {seleccionActual === f.id ? <StatusChip tono="ok">Activa</StatusChip> : null}
         </span>
       ),
     },
-    { id: 'estado', titulo: 'Estado', celda: (f) => (seleccionActual === f.id ? <StatusChip tono="ok">Activa</StatusChip> : '—') },
     {
       id: 'elegir', titulo: '', alinear: 'der',
       celda: (f) => {
@@ -68,7 +68,7 @@ export function ElegirFlotaContenido({
           <form action={accionElegir} className="adm-flota-form">
             <input type="hidden" name="flota" value={f.esDemo ? 'demo' : f.id} />
             <input type="hidden" name="next" value={next} />
-            <Boton type="submit" tamano="sm" variante={activa ? 'secondary' : 'primary'}>{activa ? 'Volver a elegirla' : 'Elegir'}</Boton>
+            <Boton type="submit" tamano="sm" variante={activa ? 'ghost' : 'secondary'}>{activa ? 'Volver a elegirla' : 'Elegir'}</Boton>
           </form>
         );
       },
@@ -85,7 +85,6 @@ export function ElegirFlotaContenido({
           <input type="hidden" name="next" value={next} />
           <Search width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
           <input type="text" name="q" defaultValue={consulta} placeholder="Buscar flota…" aria-label="Buscar flota" className="rv-ctl min-w-0 flex-1" />
-          <Boton type="submit" variante="secondary" tamano="sm">Buscar</Boton>
           {consulta && <BotonEnlace href={`/admin/elegir-flota?next=${encodeURIComponent(next)}`} variante="ghost" tamano="sm">Limpiar</BotonEnlace>}
         </form>
       )}

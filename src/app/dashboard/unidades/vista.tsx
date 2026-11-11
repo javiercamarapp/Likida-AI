@@ -284,7 +284,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
     >
       {vacio ? (
         <EstadoVacio pantalla contenido icono={Truck} titulo={t('un.vacio.titulo')}
-          accion={puedeEditar ? { href: urlRegistro('/dashboard/unidades', sufijo, { abrir: 'alta' }), texto: t('un.alta.titulo') } : undefined}>
+          accion={puedeEditar ? <BotonEnlace tamano="sm" href={urlRegistro('/dashboard/unidades', sufijo, { abrir: 'alta' })}>{t('un.alta.titulo')}</BotonEnlace> : undefined}>
           {t('un.vacio.nota')}
           {puedeEditar ? t('un.vacio.manual') : ''}
         </EstadoVacio>

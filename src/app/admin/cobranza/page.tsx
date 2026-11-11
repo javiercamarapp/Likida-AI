@@ -10,6 +10,7 @@ import { toquesDeHoy, tituloToque } from '@/lib/likida/agentes/exito';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
 import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
 import '../dinero.css';
 
 import { getT } from '@/lib/i18n/servidor';
@@ -70,14 +71,14 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
   const filasVistas = estado ? estado.facturas.slice(0, FILAS_MOSTRADAS) : [];
   const totalBase = facturas.dato?.total ?? 0;
   const truncada = !!facturas.dato && totalBase > facturas.dato.facturas.length;
-  // Sin facturas leídas, sin total en la base y sin propuestas: ninguna de las 4 cifras tiene base real que medir.
-  const sinBase = !!estado && totalBase === 0 && estado.facturas.length === 0 && estado.propuestasPendientes === 0 && estado.propuestasEnviadas === 0;
   const hayError = facturas.error || piezas.error || corrida.error;
 
   const posicion = ver ? filasVistas.findIndex((f) => f.factura.id === ver) : -1;
   const sel = posicion >= 0 ? filasVistas[posicion] : null;
 
-  const cifras = estado && !sinBase ? [
+  // Una lectura completa con todo en cero SÍ es un dato (cero mensualidades): se muestra (Rovaq pinta la tira y la tabla aunque estén en cero).
+  // Solo una lectura caída deja la tira vacía.
+  const cifras = estado ? uniformes([
     { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
     { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
     {
@@ -86,7 +87,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
       tono: estado.toquesSinPropuesta > 0 && !piezas.error ? 'warn' as const : undefined,
     },
     { etiqueta: t('cobranza.propuestas_pendientes_enviadas_por'), valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
-  ] : undefined;
+  ]) : undefined;
 
   return (
     <EsqueletoTablaMaestra
@@ -148,10 +149,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
       </Tarjeta>
 
       {estado ? (
-        <Tarjeta
-          titulo={t('cobranza.facturas_por_cobrar_y')} estado={estado.facturas.length === 0 ? 'vacio' : 'ok'}
-          mensaje="0 mensualidades por cobrar" detalle={t('cobranza.no_hay_ninguna_factura')}
-        >
+        <Tarjeta titulo={t('cobranza.facturas_por_cobrar_y')}>
           {estado.facturas.length > filasVistas.length || truncada ? (
             <p className="adm-din-nota" role="note">
               Mostrando {filasVistas.length} de {totalBase}; las cifras de arriba cubren {truncada ? `las ${estado.facturas.length} leídas (hay más en la base: sus totales están incompletos)` : 'todas'}.
@@ -159,6 +157,7 @@ export default async function CobranzaPage({ searchParams }: { searchParams?: Pr
           ) : null}
           <TablaBase
             etiqueta={t('cobranza.facturas_por_cobrar_y')} idFila={(f) => f.factura.id} tarjetaMovil densa filas={filasVistas}
+            vacio={{ titulo: '0 mensualidades por cobrar', texto: t('cobranza.no_hay_ninguna_factura') }}
             columnas={[
               { id: 'flota', titulo: t('cobranza.flota'), principal: true, celda: (f) => f.factura.tenantNombre },
               { id: 'monto', titulo: t('cobranza.total'), alinear: 'der', celda: (f) => mxn(f.factura.monto) },

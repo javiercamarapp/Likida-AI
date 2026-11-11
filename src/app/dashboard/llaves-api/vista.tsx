@@ -1,11 +1,10 @@
 import { KeyRound } from 'lucide-react';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import { AREAS_DE_LLAVE, llaveVencida, type LlaveListada } from '@/lib/auth/llave-api-escritura';
-import { EstadoVacio, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { FormaRevocar, type AccionForma } from './forma';
 import './llaves-api.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
-import { rico } from '@/lib/i18n/rico';
 
 /**
  * La lista de llaves, PURA PROPS — separada de la página (que es la puerta y
@@ -27,8 +26,10 @@ export function ListaLlaves({ llaves, revocarLlave, t = T_RESTO_ES }: {
   revocarLlave: AccionForma; t?: TResto;
 }) {
   if (llaves.length === 0) {
+    // El vacío vive DENTRO de su tarjeta (Rovaq: nunca suelto sobre el lienzo).
     return (
-      <EstadoVacio icono={KeyRound} titulo={t('llaves.aun_no_hay_llaves_emitidas')}>{rico(t('llaves.nada_fuera_de_este_panel_puede'), { strong: (c) => <strong>{c}</strong> })}</EstadoVacio>
+      <Tarjeta titulo={t('llaves.llaves_de_api')} estado="vacio" iconoVacio={KeyRound} mensaje={t('llaves.aun_no_hay_llaves_emitidas')}
+        detalle={t('llaves.nada_fuera_de_este_panel_puede').replace(/<\/?strong>/g, '')} contenida />
     );
   }
 

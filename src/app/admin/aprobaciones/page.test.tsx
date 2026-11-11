@@ -45,6 +45,7 @@ vi.mock('@/lib/admin/cola-aprobacion', async (importar) => ({
 
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
 vi.mock('next/cache', () => ({ revalidatePath: dobles.revalidatePath }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/aprobaciones', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/likida/agentes/cola', async (importar) => ({
   ...(await importar<typeof import('@/lib/likida/agentes/cola')>()),
   bandejaPendiente: dobles.bandejaPendiente,

@@ -178,18 +178,37 @@ describe('quien solo mira', () => {
 });
 
 describe('navegación', () => {
-  it('el enlace de regreso y el filtro conservan el sufijo de tenant', () => {
-    const h = pintar([], { sufijo: '?tenant=abc' });
-    expect(h).toContain('href="/dashboard/agentes/vigia?tenant=abc"');
+  it('el segmentado Pendientes / Todos conserva el sufijo de tenant y no repite el enlace «Volver»', () => {
+    const h = pintar([], { sufijo: '?tenant=abc', pendientes: 3 });
     expect(h).toContain('href="/dashboard/agentes/vigia/avisos?tenant=abc&amp;pendientes=1"');
-    expect(h).toContain('Solo pendientes');
+    expect(h).toContain('href="/dashboard/agentes/vigia/avisos?tenant=abc"');
+    expect(h).toContain('Pendientes 3');
+    expect(h).not.toContain('Volver a servicio al cliente');
   });
-  it('sin sufijo el filtro es ?pendientes=1; con el filtro puesto el chip pulsado quita el filtro', () => {
+  it('sin sufijo el filtro es ?pendientes=1; el activo lleva aria-current y el otro quita el filtro', () => {
     expect(pintar([])).toContain('href="/dashboard/agentes/vigia/avisos?pendientes=1"');
     const h = pintar([], { soloPendientes: true });
-    expect(h).toContain('aria-current="true"');
-    expect(h).toContain('Solo pendientes');
+    expect(h).toContain('aria-current="true" href="/dashboard/agentes/vigia/avisos?pendientes=1"');
     expect(h).toContain('href="/dashboard/agentes/vigia/avisos"');
+  });
+});
+
+describe('bandeja (BA): tira de 2 y UNA tarjeta de lista', () => {
+  it('pendientes en cero dice «Al día»; sin contar dice «—» y nunca 0', () => {
+    expect(pintar([], { pendientes: 0 })).toContain('Nadie espera una decisión');
+    const sin = pintar([aviso()], { pendientes: null });
+    expect(sin).toContain('Sin lectura');
+    expect(sin).not.toMatch(/rv-kpi__valor">0</);
+  });
+  it('los avisos van en una sola tarjeta «Avisos» y el vacío es punteado', () => {
+    const h = pintar([aviso()], { pendientes: 1 });
+    expect((h.match(/<h2 class="rv-tarjeta__titulo">/g) ?? []).length).toBe(1);
+    expect(pintar([], { pendientes: 0 })).toContain('rv-ag-vacio');
+  });
+  it('a lo más dos avisos arriba', () => {
+    const h = pintar([], { avisoEncendido: false, sinMigrar: true, errorLectura: 'No pude leer los avisos.' });
+    const arriba = /<div class="rv-esq__avisos">([\s\S]*?)<\/div><section class="rv-kpis"/.exec(h)?.[1] ?? '';
+    expect((arriba.match(/rv-aviso rv-aviso--compacto/g) ?? []).length).toBeLessThanOrEqual(2);
   });
 });
 
