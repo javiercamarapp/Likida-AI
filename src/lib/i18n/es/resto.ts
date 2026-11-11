@@ -127,6 +127,7 @@ export const resto = {
   'cfg.conectadas': 'Conectadas',
   'cfg.pendientes': 'Pendientes',
   'cfg.filtrar_conexiones': 'Filtrar las conexiones',
+  'cfg.solo_lectura_estado_medido': 'Solo lectura: el estado sale de lo medido, no se edita aquí.',
   'cfg.sin_conexiones_en_el_grupo': 'Sin conexiones en este grupo',
   'cfg.cambia_el_filtro': 'Cambia el filtro para ver las demás.',
   'cfg.det.estado': 'Estado',

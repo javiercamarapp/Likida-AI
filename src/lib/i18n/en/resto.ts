@@ -129,6 +129,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'cfg.conectadas': 'Connected',
   'cfg.pendientes': 'Pending',
   'cfg.filtrar_conexiones': 'Filter the connections',
+  'cfg.solo_lectura_estado_medido': 'Read only: the status comes from what was measured and is not edited here.',
   'cfg.sin_conexiones_en_el_grupo': 'No connections in this group',
   'cfg.cambia_el_filtro': 'Change the filter to see the others.',
   'cfg.det.estado': 'Status',
