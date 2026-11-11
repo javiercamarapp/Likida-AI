@@ -101,6 +101,7 @@ describe('PanelRevision', () => {
   });
 
   it('rechazar pide confirmación en una ventana del sistema con la consecuencia (no firma al primer clic)', () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee el revision-panel.tsx HERMANO de esta prueba, resuelto de import.meta.url; no viene de entrada de usuario.
     const fuente = readFileSync(new URL('./revision-panel.tsx', import.meta.url), 'utf8');
     expect(fuente).toMatch(/elegida === 'rechazar' \?[\s\S]*<BotonConfirmar/);
     expect(fuente).toContain("liquidacion.revision.rechazarTitulo");
