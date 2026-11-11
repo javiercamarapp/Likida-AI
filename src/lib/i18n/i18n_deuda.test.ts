@@ -27,6 +27,26 @@ const ESCANEADO = 'src/app';
 /** Archivos ya traducidos por completo: su deuda debe ser 0 y no pueden figurar en la base. */
 const MIGRADOS = [
   'src/app/ui-v2/componentes/pie-sidebar.tsx',
+  // P1 (F15): el marco del dashboard y de /admin y la pantalla de entrada.
+  'src/app/dashboard/shell/sidebar-v2.tsx',
+  'src/app/dashboard/shell/navegacion-v2.tsx',
+  'src/app/dashboard/shell/barra-inferior.tsx',
+  'src/app/dashboard/shell/hoja-mas.tsx',
+  'src/app/dashboard/shell/menu-cuenta.tsx',
+  'src/app/dashboard/shell/menu-guia.tsx',
+  'src/app/dashboard/shell/capa-carga.tsx',
+  'src/app/dashboard/shell/cabecera-escritorio.tsx',
+  'src/app/dashboard/shell/cabecera-movil.tsx',
+  'src/app/dashboard/shell/boton-buscar.tsx',
+  'src/app/dashboard/shell/paleta.tsx',
+  'src/app/dashboard/shell/saltar-contenido.tsx',
+  'src/app/admin/chrome.tsx',
+  'src/app/admin/sidebar-nav.tsx',
+  'src/app/admin/cabecera-admin.tsx',
+  'src/app/admin/navegacion-movil-admin.tsx',
+  'src/app/admin/command-palette.tsx',
+  'src/app/admin/salir-admin.tsx',
+  'src/app/login/vista-login.tsx',
 ];
 
 interface Base { version: 1; descripcion: string; archivos: Record<string, number> }

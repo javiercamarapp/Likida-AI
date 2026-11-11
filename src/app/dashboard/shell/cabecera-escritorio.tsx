@@ -3,6 +3,7 @@
 import { ChevronsLeft } from 'lucide-react';
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { etiquetaNav } from '@/lib/i18n/nav';
 import { useT } from '@/lib/i18n/proveedor';
 import { Tooltip } from '../../ui-v2/componentes/overlay';
 import { useRiel } from './colapso';
@@ -21,7 +22,8 @@ import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
  */
 export default function CabeceraEscritorio({ rol, perfil }: { rol: string; perfil?: PerfilTenant | null }) {
   const { riel, alternar } = useRiel();
-  const { t } = useT('shell', shellEs);
+  const tr = useT('shell', shellEs);
+  const { t } = tr;
   const { pathname, menu } = useMenuV2(rol, perfil);
   const href = hrefActivo(pathname, menu);
   // Solo una pantalla que el menú del rol conoce lleva título: nunca uno inventado.
@@ -38,7 +40,7 @@ export default function CabeceraEscritorio({ rol, perfil }: { rol: string; perfi
         {actual && (
           <span className="rv-cab-esc__titulo" aria-hidden>
             <actual.Icono width={15} height={15} strokeWidth={TRAZO_ICONO} aria-hidden />
-            <span>{actual.nombre}</span>
+            <span>{etiquetaNav(tr, actual.nombre)}</span>
           </span>
         )}
         <MenuGuia rol={rol} perfil={perfil} alineacion="inicio" />

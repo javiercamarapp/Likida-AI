@@ -162,20 +162,33 @@ export type RutaPlana = { href: string; nombre: string; Icono: typeof LayoutGrid
  *  pestaña con el de «Entrada · Pestaña» (así «Agentes · OCR» se encuentra por «ocr»). La primera pestaña comparte `href` con su entrada,
  *  así que no se repite: su nombre pasa a ser alias de la entrada («Bandeja» se encuentra por «tu turno»). Las tres pantallas fuera del
  *  menú también están. Una `href` aparece UNA sola vez (es la llave de la lista del buscador). */
-export const TODAS_LAS_RUTAS: RutaPlana[] = [
-  { href: '/admin', nombre: 'Inicio', Icono: LayoutGrid, alias: ['resumen', 'centro de mando'] },
-  ...ENTRADAS.flatMap((it): RutaPlana[] => {
-    const primera = (it.pestanas ?? []).find((p) => p.href === it.href);
-    const entrada: RutaPlana = {
-      href: it.href, nombre: it.nombre, Icono: it.Icono,
-      alias: [...(primera && primera.nombre !== it.nombre ? [primera.nombre] : []), ...(ALIAS_BUSQUEDA[it.href] ?? [])],
-    };
-    const resto = (it.pestanas ?? []).filter((p) => p.href !== it.href)
-      .map((p): RutaPlana => ({ href: p.href, nombre: `${it.nombre} · ${p.nombre}`, Icono: it.Icono, alias: ALIAS_BUSQUEDA[p.href] }));
-    return [entrada, ...resto];
-  }),
-  ...FUERA_DEL_MENU.map((f): RutaPlana => ({ href: f.href, nombre: f.nombre, Icono: f.Icono, alias: f.alias })),
-];
+export function todasLasRutas(traducir?: (nombre: string) => string): RutaPlana[] {
+  // Con `traducir` (otro idioma) los nombres salen traducidos y los nombres en español pasan a alias: «bandeja» sigue encontrando Inbox.
+  const nom = (n: string) => (traducir ? traducir(n) : n);
+  const conEspanol = (n: string): string[] => (traducir && traducir(n) !== n ? [n] : []);
+  return [
+    { href: '/admin', nombre: nom('Inicio'), Icono: LayoutGrid, alias: [...conEspanol('Inicio'), 'resumen', 'centro de mando'] },
+    ...ENTRADAS.flatMap((it): RutaPlana[] => {
+      const primera = (it.pestanas ?? []).find((p) => p.href === it.href);
+      const entrada: RutaPlana = {
+        href: it.href, nombre: nom(it.nombre), Icono: it.Icono,
+        alias: [
+          ...conEspanol(it.nombre),
+          ...(primera && primera.nombre !== it.nombre ? [nom(primera.nombre), ...conEspanol(primera.nombre)] : []),
+          ...(ALIAS_BUSQUEDA[it.href] ?? []),
+        ],
+      };
+      const resto = (it.pestanas ?? []).filter((p) => p.href !== it.href)
+        .map((p): RutaPlana => ({
+          href: p.href, nombre: `${nom(it.nombre)} · ${nom(p.nombre)}`, Icono: it.Icono,
+          alias: [...(traducir ? [`${it.nombre} · ${p.nombre}`] : []), ...(ALIAS_BUSQUEDA[p.href] ?? [])],
+        }));
+      return [entrada, ...resto];
+    }),
+    ...FUERA_DEL_MENU.map((f): RutaPlana => ({ href: f.href, nombre: nom(f.nombre), Icono: f.Icono, alias: [...conEspanol(f.nombre), ...(f.alias ?? [])] })),
+  ];
+}
+export const TODAS_LAS_RUTAS: RutaPlana[] = todasLasRutas();
 
 /** Minúsculas y sin acentos, para que «bitacora» encuentre «Bitácora» en ⌘K. */
 export const planoBusqueda = (t: string): string => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();

@@ -13,6 +13,7 @@ import { useRiel } from '../dashboard/shell/colapso';
 import { Tooltip } from '../ui-v2/componentes/overlay';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
+import { etiquetaNav, etiquetaRol } from '@/lib/i18n/nav';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
@@ -31,13 +32,14 @@ function idSeccion(titulo: string): string {
 }
 
 function Fila({ item, pathname }: { item: Item; pathname: string }) {
+  const nombre = etiquetaNav(useT('shell', shellEs), item.nombre);
   // La entrada está activa en su ruta Y en la de cualquiera de sus pestañas (p. ej. «Agentes» también en /admin/agente-ocr).
   const activo = entradaDeRuta(pathname)?.href === item.href;
   return (
     <li>
-      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={item.nombre} aria-label={item.nombre}>
+      <Link href={item.href} className="rv-item" aria-current={activo ? 'page' : undefined} title={nombre} aria-label={nombre}>
         <item.Icono className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        <span className="rv-item__txt">{item.nombre}</span>
+        <span className="rv-item__txt">{nombre}</span>
       </Link>
     </li>
   );
@@ -48,6 +50,7 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
   onAbrir: (titulo: string) => void;
 }) {
   // ACORDEÓN (orden de Javier, 17-ago): UNA sola sección abierta a la vez; el estado vive en el padre.
+  const tr = useT('shell', shellEs);
   const esta = abierta === titulo;
   if (items.length === 0) return null;
   const id = idSeccion(titulo);
@@ -57,7 +60,7 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
         <button type="button" id={id} className="rv-grupo__t rv-grupo__tog" onClick={() => onAbrir(titulo)}
           aria-expanded={esta} aria-controls={`${id}-items`}>
           {(() => { const Ico = ICONO_SECCION[titulo]; return Ico ? <Ico className="rv-grupo__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden /> : null; })()}
-          <span className="rv-grupo__tt">{titulo}</span>
+          <span className="rv-grupo__tt">{etiquetaNav(tr, titulo)}</span>
           <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
         </button>
       </h2>
@@ -82,7 +85,7 @@ export function MarcaAdmin() {
   const { t } = useT('shell', shellEs);
   return (
     <div className="rv-sb__marca">
-      <Link href="/admin" className="rv-sb__logo" aria-label="Likida, ir al inicio">
+      <Link href="/admin" className="rv-sb__logo" aria-label={t('marca.irInicio')}>
         <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
         <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
       </Link>
@@ -127,9 +130,9 @@ export default function SidebarNav() {
     <>
       <ul className="rv-lista">
         <li>
-          <Link href="/admin" className="rv-item" aria-current={resumenActivo ? 'page' : undefined} title="Resumen" aria-label="Resumen">
+          <Link href="/admin" className="rv-item" aria-current={resumenActivo ? 'page' : undefined} title={etiquetaNav({ t }, 'Resumen')} aria-label={etiquetaNav({ t }, 'Resumen')}>
             <LayoutGrid className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-            <span className="rv-item__txt">Resumen</span>
+            <span className="rv-item__txt">{etiquetaNav({ t }, 'Resumen')}</span>
           </Link>
         </li>
       </ul>
@@ -162,6 +165,7 @@ export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir, alNave
   /** La hoja «Más» del móvil la cierra al navegar. */
   alNavegar?: () => void;
 }) {
+  const tr = useT('shell', shellEs);
   const r = useRequiereAccion();
   const n = (nombre ?? '').trim();
   return (
@@ -171,20 +175,30 @@ export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir, alNave
         opciones: flotas === undefined ? [] : flotas === null ? null : flotas.map((f) => ({ valor: f.id, nombre: f.nombre })),
         actual: flotaActual ?? null,
         hrefIr: (id) => `/dashboard?tenant=${encodeURIComponent(id)}`,
-        textoIr: 'Ver como',
+        textoIr: tr.t('admin.verComo'),
         hrefSinOpcion: '/admin/elegir-flota',
       }}
       avisos={{ href: '/admin/notificaciones', pendientes: r ? r.pendientes : undefined, urgente: r?.hayUrgente }}
-      acceso={{ href: '/dashboard', texto: 'Panel del cliente', Icono: ArrowLeftRight }}
+      acceso={{ href: '/dashboard', texto: tr.t('admin.panelCliente'), Icono: ArrowLeftRight }}
       tarjeta={(
-        <TarjetaUsuario nombre={nombre} rolEtiqueta="Superadmin" iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} salir={salir} alElegir={alNavegar}
+        <TarjetaUsuario nombre={nombre} rolEtiqueta={etiquetaRol(tr, 'superadmin', 'Superadmin')} iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} salir={salir} alElegir={alNavegar}
           menu={(
             <Link role="menuitem" tabIndex={-1} href="/admin/mi-perfil" className="rv-menu__item" onClick={() => alNavegar?.()}>
               <span className="rv-menu__icono" aria-hidden><UserRound width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
-              <span>Mi perfil</span>
+              <span>{etiquetaNav(tr, 'Mi perfil')}</span>
             </Link>
           )} />
       )}
     />
+  );
+}
+
+/** El `<nav>` del sidebar de /admin (con su etiqueta en el idioma activo). */
+export function NavAdmin() {
+  const { t } = useT('shell', shellEs);
+  return (
+    <nav aria-label={t('nav.consola')} className="rv-sb__nav">
+      <SidebarNav />
+    </nav>
   );
 }

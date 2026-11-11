@@ -5,6 +5,7 @@ import type { graficas as graficasEs } from './es/graficas';
 import type { avisos as avisosEs } from './es/avisos';
 import type { monitoreo as monitoreoEs } from './es/monitoreo';
 import type { fuentes as fuentesEs } from './es/fuentes';
+import type { login as loginEs } from './es/login';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGO DE NAMESPACES — el único lugar donde se registra un diccionario nuevo.
@@ -25,6 +26,7 @@ export interface Diccionarios {
   avisos: typeof avisosEs;
   monitoreo: typeof monitoreoEs;
   fuentes: typeof fuentesEs;
+  login: typeof loginEs;
 }
 export type Namespace = keyof Diccionarios;
 
@@ -32,7 +34,7 @@ export type Namespace = keyof Diccionarios;
 export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Diccionarios[N]]: string };
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
-export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
@@ -40,11 +42,13 @@ export const CARGADORES: Cargadores = {
   es: { shell: () => import('./es/shell').then((m) => m.shell), errores: () => import('./es/errores').then((m) => m.errores),
     graficas: () => import('./es/graficas').then((m) => m.graficas), avisos: () => import('./es/avisos').then((m) => m.avisos),
     monitoreo: () => import('./es/monitoreo').then((m) => m.monitoreo),
-    fuentes: () => import('./es/fuentes').then((m) => m.fuentes) },
+    fuentes: () => import('./es/fuentes').then((m) => m.fuentes),
+    login: () => import('./es/login').then((m) => m.login) },
   en: { shell: () => import('./en/shell').then((m) => m.shell), errores: () => import('./en/errores').then((m) => m.errores),
     graficas: () => import('./en/graficas').then((m) => m.graficas), avisos: () => import('./en/avisos').then((m) => m.avisos),
     monitoreo: () => import('./en/monitoreo').then((m) => m.monitoreo),
-    fuentes: () => import('./en/fuentes').then((m) => m.fuentes) },
+    fuentes: () => import('./en/fuentes').then((m) => m.fuentes),
+    login: () => import('./en/login').then((m) => m.login) },
 };
 
 /** Carga SOLO los namespaces pedidos, y SOLO en el idioma pedido. */

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { login } from '@/lib/i18n/es/login';
 
 // AUDITORÍA 18, BAJO (B8) — `/login?enviado=1` era un estado terminal: el
 // ternario reemplazaba TODO el bloque de acciones por la tarjeta de
@@ -32,6 +33,8 @@ describe('/login?enviado=1 conserva el formulario (B8)', () => {
   });
 
   it('el aviso dice cómo reintentar con otro correo', () => {
-    expect(PAGINA.replace(/\s+/g, ' ')).toContain('te equivocaste de correo? Vuelve a escribirlo arriba');
+    // El texto vive en el diccionario es (i18n P1) y la vista lo pinta con su clave.
+    expect(PAGINA).toContain("t('enviado.nota')");
+    expect(login['enviado.nota']).toContain('te equivocaste de correo? Vuelve a escribirlo arriba');
   });
 });

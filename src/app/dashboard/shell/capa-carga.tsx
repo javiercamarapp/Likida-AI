@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 import LogoV2, { PROPORCION_LOGO } from './logo-v2';
 import { crearControlador, type EstadoCarga } from './controlador-carga';
 
@@ -45,6 +47,7 @@ export const MARCA_CARGA_PAGINA = { atributo: 'data-carga', valor: 'pagina' } as
 export const PENDIENTE = `.rv-contenido [${MARCA_CARGA_PAGINA.atributo}="${MARCA_CARGA_PAGINA.valor}"]`;
 
 export default function CapaCarga() {
+  const { t } = useT('shell', shellEs);
   const capa = useRef<HTMLDivElement>(null);
   const error = useRef<HTMLDivElement>(null);
 
@@ -89,12 +92,12 @@ export default function CapaCarga() {
   return (
     <>
       {/* `data-estado="inicial"` viaja en el HTML del servidor: visible desde el primer fotograma, sin script inline. */}
-      <div ref={capa} id="rv-carga" className="rv-carga" data-estado="inicial" role="status" aria-busy="true" aria-label="Cargando">
+      <div ref={capa} id="rv-carga" className="rv-carga" data-estado="inicial" role="status" aria-busy="true" aria-label={t('carga.cargando')}>
         <LogoV2 alto={ALTO_LOGO_CARGA} className="rv-respira" />
       </div>
       <div ref={error} className="rv-carga-error" role="alert" hidden>
-        <p><strong>No disponible ahora.</strong> No es cero: la consulta no respondió a tiempo.</p>
-        <button type="button" className="rv-btn" onClick={() => window.location.reload()}>Reintentar</button>
+        <p><strong>{t('carga.noDisponible')}</strong> {t('carga.noDisponible.detalle')}</p>
+        <button type="button" className="rv-btn" onClick={() => window.location.reload()}>{t('carga.reintentar')}</button>
       </div>
     </>
   );
