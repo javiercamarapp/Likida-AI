@@ -57,13 +57,13 @@ function valores(l: string, css: boolean): string[] {
   return [...l.matchAll(/(['"`])([^'"`]*)\1/g)].map((m) => m[2]);
 }
 // Línea de la serie de datos (permitida): `--chart-1: …`, `--soft-3: …`, `--ink-5: …`, `--on-2: …`.
-const SERIE_DATOS = /--(?:chart|soft|ink|on)-\d\s*:|--region-[a-z]+\s*:/;
+const SERIE_DATOS = /--region-[a-z]+\s*:/; // las series --chart/--soft/--ink/--on-N ya NO están exentas (paleta monocroma, 11-nov-2026)
 /** Declaración permitida del azul de Rovaq: SOLO en tokens.css y SOLO estas dos familias de variables. */
 const AZUL_ROVAQ = /--(?:seg-activo|accion-cajon)-(?:bg|borde|fg|hover)\s*:|--tabla-cab-(?:bg|ink)\s*:/;
+// 11-nov-2026 (punto 10 del dueño): la excepción del azul de Rovaq QUEDA ANULADA. La lista permitida está vacía; esas familias de variables ahora son
+// grises y no admiten ni un solo tono con matiz azul.
 /** Valores exactos que la excepción admite (claro y oscuro); un tono nuevo obliga a tocar esta lista a propósito. */
-export const AZULES_ROVAQ_PERMITIDOS = new Set(['#e6edfa', '#1f4fb0', '#d8e3f8', '#2f6bd8', '#1d2433', '#a9c1f2', '#26314a',
-  // Cabecera de tabla (`--tabla-cab-*`), medida en vivo en Rovaq el 10-nov: fondo #EEF6F9 y texto #145966; en oscuro, petróleo al 7 % y su tinta clara.
-  '#eef6f9', '#145966', '#162126', '#5bbdd3']);
+export const AZULES_ROVAQ_PERMITIDOS = new Set<string>();
 // Marca de terceros que no se puede recolorear (logotipo de Google).
 const MARCA_TERCEROS = /#4285F4/;
 
@@ -110,11 +110,6 @@ export function culpablesDe(f: string, fuente: string): string[] {
   const culpables: string[] = [];
   lineas.forEach((l, i) => {
     if (SERIE_DATOS.test(l)) return;
-    if (f === 'ui-v2/tokens.css' && AZUL_ROVAQ.test(l)) {
-      const hex = [...l.matchAll(/#([0-9a-fA-F]{6})\b/g)].map((m) => `#${m[1].toLowerCase()}`);
-      for (const h of hex) if (!AZULES_ROVAQ_PERMITIDOS.has(h)) culpables.push(`${f}:${i + 1} ${h} no está en la lista del azul de Rovaq`);
-      return;
-    }
     const donde = `${f}:${i + 1}`;
     if (TAILWIND_AZUL.test(l)) culpables.push(`${donde} clase de Tailwind azul`);
     if (NOMBRES_AZUL.test(l)) culpables.push(`${donde} nombre/valor de azul histórico`);
@@ -152,11 +147,15 @@ describe('sin azul de interfaz en el cromo v2, /login y las páginas públicas',
     });
   }
 
-  it('el azul de Rovaq está acotado: solo en tokens.css, solo en --seg-activo-* y --accion-cajon-*, con los tonos de la lista', () => {
+  it('el azul de Rovaq está ANULADO: ni --seg-activo-*, ni --accion-cajon-*, ni --tabla-cab-* admiten un tono azul, y la serie de datos es gris', () => {
     const tokens = readFileSync(join(RAIZ, 'ui-v2/tokens.css'), 'utf8');
     expect(culpablesDe('ui-v2/tokens.css', tokens)).toEqual([]);
     // La misma línea en cualquier otro archivo del cromo SÍ es culpable.
     expect(culpablesDe('ui-v2/componentes.css', '  --seg-activo-fg: #1f4fb0;').length).toBeGreaterThan(0);
+    expect(culpablesDe('ui-v2/tokens.css', '  --tabla-cab-ink: #145966;').length).toBeGreaterThan(0);
+    // Las series de datos (--chart/--soft/--ink/--on-N) ya no están exentas por ser «datos»: un matiz azul en ellas también es culpable.
+    expect(culpablesDe('ui-v2/tokens.css', '  --chart-1: #2f6bd8;').length).toBeGreaterThan(0);
+    expect(culpablesDe('ui-v2/tokens.css', '  --soft-1: #b0ccf8;').length).toBeGreaterThan(0);
     // En tokens.css, otra variable con el mismo azul o un tono nuevo en la familia permitida también lo son.
     expect(culpablesDe('ui-v2/tokens.css', '  --btn-bg: #1f4fb0;').length).toBeGreaterThan(0);
     expect(culpablesDe('ui-v2/tokens.css', '  --seg-activo-bg: #0b5fff;').length).toBeGreaterThan(0);

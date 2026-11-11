@@ -52,10 +52,10 @@ describe('cabecera de tablas con tinte y texto de Rovaq (punto 9)', () => {
   });
 });
 
-describe('Copiloto: tema activo azul como Rovaq (punto 10)', () => {
-  it('fondo = 10 % de --chart-1 sobre la superficie (= #EAF0FB) y borde --chart-1 (#2F6BD8)', () => {
-    expect(chat).toMatch(/\.rv-chat__tema\[aria-pressed="true"\] \{[^}]*border-color: var\(--chart-1, var\(--ink\)\); background: color-mix\(in srgb, var\(--chart-1, var\(--ink\)\) 10%, var\(--surface\)\)/);
-    expect(css('tokens.css')).toMatch(/--chart-1: #2f6bd8;/);
+describe('Copiloto: tema activo en alto contraste neutro (punto 10 del dueño, 11-nov; anula el azul de Rovaq)', () => {
+  it('fondo = 10 % de la tinta sobre la superficie y borde en tinta (sin azul)', () => {
+    expect(chat).toMatch(/\.rv-chat__tema\[aria-pressed="true"\] \{[^}]*border-color: var\(--ink\); background: color-mix\(in srgb, var\(--ink\) 10%, var\(--surface\)\)/);
+    expect(css('tokens.css')).toMatch(/--chart-1: #0e0e10;/);
   });
   it('el botón Historial mide 32 px', () => {
     expect(chat).toMatch(/\.rv-chat \.rv-btn\.rv-chat__hist-boton \{[^}]*height: 32px/);

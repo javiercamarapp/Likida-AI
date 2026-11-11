@@ -135,15 +135,15 @@ describe('cascada (Waterfall) en la capa v2', () => {
 });
 
 describe('identidad Rovaq · tokens del paquete B1 (10-nov-2026)', () => {
-  it('fondo hundido del contenido, sombra del marco, --line2 oscuro y cabecera de tabla con tinte', () => {
+  it('fondo hundido del contenido, sombra del marco, --line2 oscuro y cabecera de tabla en negro', () => {
     expect(tok).toMatch(/--ui-sunken: #f1f1f2;/);
     expect(tok).toMatch(/--ui-sunken: #0e0e10;/);
     expect(tok).toMatch(/--sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;/);
     expect(tok).toMatch(/--sh-marco: none;/);
     expect(tok).toMatch(/--line2: #34343a;/);
-    // Cabecera de tabla como Rovaq (medido en vivo, 10-nov): fondo #EEF6F9 y texto #145966; en oscuro, petróleo al 7 %.
-    expect(tok).toMatch(/--tabla-cab-bg: #eef6f9;\s*--tabla-cab-ink: #145966;/);
-    expect(tok).toMatch(/--tabla-cab-bg: #162126;\s*--tabla-cab-ink: #5bbdd3;/);
+    // Cabecera de tabla (punto 10 del dueño, 11-nov; anula el petróleo de Rovaq): texto NEGRO sobre fondo neutro; en oscuro, texto claro.
+    expect(tok).toMatch(/--tabla-cab-bg: #f1f1f2;\s*--tabla-cab-ink: #0e0e10;/);
+    expect(tok).toMatch(/--tabla-cab-bg: #1f1f23;\s*--tabla-cab-ink: #f4f4f5;/);
     const shell = readFileSync(join(__dirname, 'shell.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(shell).toMatch(/\.rv-col \{[^}]*background: var\(--ui-sunken\)/);
   });
