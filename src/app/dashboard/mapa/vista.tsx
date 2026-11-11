@@ -143,7 +143,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Viajes en curso')}
       variante="12"
-      graficas={[<MapaVivo key="mapa" viajes={ubicados} pines={rastreo.pines} />]}
+      graficas={[<MapaVivo key="mapa" viajes={ubicados} pines={rastreo.pines} sinUbicar={sinUbicar.length} />]}
       metodo={(
         // El tope se declara. Antes decía "los N viajes más recientes" mezclando liquidados y vivos; ahora la base ya filtró por estatus
         // y lo único que se recorta es cuántos caben dibujados.
