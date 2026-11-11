@@ -1233,6 +1233,8 @@ export const dinero = {
   'facturacion.vista.cobrado': 'Cobrado',
   'facturacion.vista.corriente': 'Corriente',
   'facturacion.vista.cubeta': 'Cubeta',
+  'facturacion.vista.carteraSinDato': 'Sin facturas todavía',
+  'facturacion.vista.carteraVaciaTitulo': 'Aún no hay facturas emitidas',
   'facturacion.vista.secciones': 'Secciones de facturación',
   'facturacion.vista.tab.cartera': 'Cartera',
   'facturacion.vista.tab.mesa': 'Por facturar',

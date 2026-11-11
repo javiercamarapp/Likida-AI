@@ -1233,6 +1233,8 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'facturacion.vista.cobrado': 'Collected',
   'facturacion.vista.corriente': 'Current',
   'facturacion.vista.cubeta': 'Bucket',
+  'facturacion.vista.carteraSinDato': 'No invoices yet',
+  'facturacion.vista.carteraVaciaTitulo': 'No invoices issued yet',
   'facturacion.vista.secciones': 'Billing sections',
   'facturacion.vista.tab.cartera': 'Receivables',
   'facturacion.vista.tab.mesa': 'To invoice',
