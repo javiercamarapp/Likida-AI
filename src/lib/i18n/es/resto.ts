@@ -1226,4 +1226,7 @@ export const resto = {
   'e26.mcp_nunca': 'nunca',
   'e26.mcp_acceso': 'Acceso',
   'e26.mcp_personas': 'Personas con acceso',
+  'e26.llaves_vigentes': 'Llaves vigentes',
+  'e26.llaves_sin_caducidad': 'Sin caducidad',
+  'e26.llaves_revocadas_vencidas': 'Revocadas o vencidas',
 } as const;

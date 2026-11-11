@@ -1228,4 +1228,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26.mcp_nunca': 'never',
   'e26.mcp_acceso': 'Access',
   'e26.mcp_personas': 'People with access',
+  'e26.llaves_vigentes': 'Active keys',
+  'e26.llaves_sin_caducidad': 'No expiry',
+  'e26.llaves_revocadas_vencidas': 'Revoked or expired',
 };
