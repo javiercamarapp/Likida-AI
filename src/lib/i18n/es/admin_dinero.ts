@@ -380,4 +380,5 @@ export const admin_dinero = {
   'a1r4.cr_prospectos': 'Prospectos en cartera',
   'a1r4.cr_flotas_alta': 'Flotas dadas de alta',
   'a1r4.cr_de_pago': '{n} de pago',
+  'a1r4.ver_cuales': 'Ver cuáles son ({n})',
 } as const;
