@@ -1,13 +1,13 @@
-import { ArrowRight, Inbox, FileUp } from 'lucide-react';
+import { Eye, Inbox, FileUp } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
 import { PillAviso, PillEstatusViaje } from './pills';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { BarraFiltros, BotonEnlace, Disclosure, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { BarraFiltros, BotonEnlace, Disclosure, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono } from '@/app/ui-v2/componentes';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './registro.css';
-import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
-import { ahoraMs } from '@/lib/saludo';
+import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 export type FiltroViajes = 'todos' | 'abiertos' | 'en_cuadre' | 'liquidados' | 'escalados';
@@ -45,12 +45,14 @@ const ROTULO_FILTRO = {
  *  significa nada (ver page.tsx). */
 export function hrefRegistro(
   sufijo: string,
-  controles: { f?: FiltroViajes | null; q?: string | null; c?: string | null },
+  controles: { f?: FiltroViajes | null; q?: string | null; c?: string | null; ver?: string | null },
 ): string {
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
   if (controles.f && controles.f !== 'todos') params.set('f', controles.f); else params.delete('f');
   if (controles.q) params.set('q', controles.q); else params.delete('q');
   if (controles.c) params.set('c', controles.c); else params.delete('c');
+  // `ver` abre el cajón de vista rápida de esa fila; sin él (cambiar de filtro, de búsqueda o de página) el cajón se cierra.
+  if (controles.ver) params.set('ver', controles.ver); else params.delete('ver');
   params.delete('p');
   const qs = params.toString();
   return `/dashboard/viajes${qs ? `?${qs}` : ''}`;
@@ -60,7 +62,7 @@ export function hrefRegistro(
 /** Las columnas del registro. Los tres pesos (anticipo, comprobado, diferencia) SOLO existen si el rol ve dinero: para el jefe de
  *  tráfico ni la cabecera se arma. El orden es el del servidor (cursor, del más reciente al más antiguo): ninguna cabecera ordena,
  *  porque ordenar solo la página visible fingiría ordenar el total. */
-function columnasViajes(sufijo: string, verDinero: boolean, tr: TrOperacion): ColumnaTabla<FilaRegistroViaje>[] {
+function columnasViajes(hrefVista: (id: string) => string, verDinero: boolean, tr: TrOperacion): ColumnaTabla<FilaRegistroViaje>[] {
   const { t, idioma } = tr;
   const dinero: ColumnaTabla<FilaRegistroViaje>[] = verDinero ? [
     { id: 'anticipo', titulo: t('viajes.col.anticipo'), alinear: 'der', celda: (v) => (v.anticipo === null ? <span className="rv-tl__nada">—</span> : mxn(v.anticipo, idioma)) },
@@ -92,11 +94,11 @@ function columnasViajes(sufijo: string, verDinero: boolean, tr: TrOperacion): Co
     { id: 'estatus', titulo: t('viajes.col.estatus'), corta: true, celda: (v) => <PillEstatusViaje estatus={v.estatus} tr={tr} /> },
     {
       id: 'accion', titulo: t('viajes.col.accion'), alinear: 'der', tituloOculto: true,
-      celda: (v) => v.liqId ? (
-        <BotonEnlace variante="ghost" tamano="sm" href={`/dashboard/${v.liqId}${sufijo}`} className="rv-tl__enlace">
-          {t('viajes.ver')} <Icono icono={ArrowRight} tam={16} />
+      celda: (v) => (
+        <BotonEnlace variante="ghost" tamano="sm" href={hrefVista(v.id)} className="rv-tl__enlace">
+          {t('viajes.vr.ver')} <Icono icono={Eye} tam={16} />
         </BotonEnlace>
-      ) : <span className="rv-tl__tenue rv-tl__nada">—</span>,
+      ),
     },
   ];
 }
@@ -108,7 +110,7 @@ function columnasViajes(sufijo: string, verDinero: boolean, tr: TrOperacion): Co
  * tres columnas no existen, ni vacías.
  */
 export function VistaViajes({ tr = TR_OPERACION_ES,
-  filas, filtro, conteos, sufijo, importar, puedeImportar, verDinero, q, cursor, siguiente, hayMas, porPagina,
+  filas, filtro, conteos, sufijo, importar, puedeImportar, verDinero, q, cursor, siguiente, hayMas, porPagina, ver = null,
 }: { tr?: TrOperacion;
   filas: FilaRegistroViaje[];
   filtro: FiltroViajes;
@@ -131,87 +133,117 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
   siguiente: string | null;
   hayMas: boolean;
   porPagina: number;
+  /** Id del viaje cuyo cajón de vista rápida está abierto (`?ver=`); `null` = cerrado. */
+  ver?: string | null;
 }) {
   const { t, idioma } = tr;
   const conteo = (n: number | null): { valor: string; estado?: 'error'; reintentar?: boolean } => (n === null ? { valor: '—', estado: 'error', reintentar: true } : { valor: numero(n, idioma) });
   const params = new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo);
+  const hrefVista = (id: string) => hrefRegistro(sufijo, { f: filtro, q, c: cursor, ver: id });
+  const hrefCerrar = hrefRegistro(sufijo, { f: filtro, q, c: cursor });
+  const seleccion = ver ? filas.findIndex((f) => f.id === ver) : -1;
+  const sel = seleccion >= 0 ? filas[seleccion] : null;
+  // «25 de N» solo cuando N es verdad: el conteo del filtro vigente, sin búsqueda (la búsqueda no tiene conteo propio) y sin paginar por cursor.
+  const totalFiltro = { todos: conteos.total, abiertos: conteos.abiertos, en_cuadre: conteos.enCuadre, liquidados: conteos.liquidados, escalados: conteos.escalados }[filtro];
+  const pie = !q && !cursor && totalFiltro !== null
+    ? t('viajes.pie.de', { n: numero(filas.length, idioma), total: numero(totalFiltro, idioma) })
+    : t('viajes.pie.pagina', { n: numero(filas.length, idioma) });
+
+  // Un conteo que no se pudo leer es `null`: NUNCA se pinta como 0. La celda dice «No disponible ahora. No es cero.» y ofrece Reintentar.
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('viajes.cifra.total'), ...conteo(conteos.total), nota: 'histórico', info: 'viajes.total' },
+    { etiqueta: t('viajes.cifra.abiertos'), ...conteo(conteos.abiertos), info: 'viajes.abiertos' },
+    { etiqueta: t('viajes.cifra.cuadre'), ...conteo(conteos.enCuadre), info: 'viajes.en_cuadre' },
+    { etiqueta: t('viajes.cifra.escalados'), ...conteo(conteos.escalados), tono: (conteos.escalados ?? 0) > 0 ? 'bad' : undefined, info: 'viajes.escalados' },
+  ];
+
   return (
-    <MarcoPagina titulo={t('viajes.titulo')} apoyo={t('viajes.apoyo')}>
-
-      {/* Un conteo que no se pudo leer es `null`: NUNCA se pinta como 0. La celda dice «No disponible ahora. No es cero.» y ofrece Reintentar. */}
-      <TiraCifras>
-        <Cifra etiqueta={t('viajes.cifra.total')} {...conteo(conteos.total)} nota="histórico" info="viajes.total" />
-        <Cifra etiqueta={t('viajes.cifra.abiertos')} {...conteo(conteos.abiertos)} info="viajes.abiertos" />
-        <Cifra etiqueta={t('viajes.cifra.cuadre')} {...conteo(conteos.enCuadre)} info="viajes.en_cuadre" />
-        <Cifra etiqueta={t('viajes.cifra.escalados')} {...conteo(conteos.escalados)}
-          tono={(conteos.escalados ?? 0) > 0 ? 'bad' : undefined} info="viajes.escalados" />
-      </TiraCifras>
-      <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente={t('viajes.sello')} leidoEn={ahoraMs()} edad={false} /></div>
-
-      <Tarjeta titulo={t('viajes.sello')} info="viajes.total" className="rv-reg">
-        {/* GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
-            campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente. */}
-        <BarraFiltros accion="/dashboard/viajes" enLinea buscar etiqueta={t('viajes.filtros')} nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
+    <EsqueletoTablaMaestra
+      titulo={t('viajes.titulo')}
+      apoyo={t('viajes.apoyo')}
+      cifras={cifras}
+      etiquetaCifras={t('viajes.sello')}
+      selloCifras={t('viajes.sello')}
+      filtros={(
+        // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
+        // campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente.
+        <BarraFiltros accion="/dashboard/viajes" buscar etiqueta={t('viajes.filtros')} nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
           ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
           <FiltroOpciones etiqueta={t('viajes.filtro.estado')} valor={filtro} porDefecto="todos"
             opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: t(ROTULO_FILTRO[f]), href: hrefRegistro(sufijo, { f, q }) }))} />
           <FiltroBusqueda nombre="q" valor={q} placeholder={t('viajes.buscar.ph')} etiqueta={t('viajes.buscar.aria')} />
         </BarraFiltros>
-
-        {puedeImportar && (
-          // Sin JavaScript ni estado: el plegable abre y cierra solo.
-          <Disclosure variante="linea" titulo={<><Icono icono={FileUp} tam={16} /> {t('viajes.importar.tms')}</>}>
-            <ImportarViajes importar={importar} verDinero={verDinero} />
-          </Disclosure>
-        )}
-
-        {filas.length === 0 ? (
-          <EstadoVacio contenido icono={Inbox} titulo={q || filtro !== 'todos' ? t('viajes.vacio.sincoincidencias') : t('viajes.vacio.sinviajes')}>
-            {q
-              ? (filtro !== 'todos' ? t('viajes.vacio.busqueda.filtro', { q, filtro: t(ROTULO_FILTRO[filtro]) }) : t('viajes.vacio.busqueda', { q }))
-              : filtro === 'todos'
-                ? t('viajes.vacio.primero')
-                : t('viajes.vacio.filtro', { filtro: t(ROTULO_FILTRO[filtro]) })}
-          </EstadoVacio>
-        ) : (
-          <TablaLista<FilaRegistroViaje>
-            etiqueta={t('viajes.tabla.etiqueta')}
-            columnas={columnasViajes(sufijo, verDinero, tr)}
-            filas={filas}
-            idFila={(v) => v.id}
-            base="/dashboard/viajes"
-            params={{}}
-            pie={verDinero ? (
-              <p className="rv-tl__nota">
-                {t('viajes.nota.diferencia')}
-              </p>
-            ) : undefined}
-          />
-        )}
-
-        {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de
-            `porPagina` filas por render. No se dice "página N de M":
-            ni se cuenta el total de la consulta filtrada ni se numera —
-            el cursor es la posición del último viaje visto, y "Siguientes"
-            continúa desde ahí sin que la base relea lo anterior. Hacia
-            atrás sirve el botón del navegador o "Volver al inicio". */}
-        <div className="rv-tl__sellos">
-          <SelloDato tipo="observado" fuente={t('viajes.sello')} leidoEn={ahoraMs()} edad={false} />
-        </div>
-
-        {(cursor || hayMas) && (
-          <div className="rv-reg__pie">
-            <span className="rv-reg__nota">
-              {t('viajes.pie', { n: numero(porPagina, idioma) })}
-            </span>
-            <NavPaginas>
-              {cursor ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q })} direccion="inicio" /> : null}
-              {hayMas && siguiente ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} direccion="siguiente" /> : null}
-            </NavPaginas>
+      )}
+      agrupacion={puedeImportar ? (
+        // Sin JavaScript ni estado: el plegable abre y cierra solo.
+        <Disclosure variante="linea" titulo={<><Icono icono={FileUp} tam={16} /> {t('viajes.importar.tms')}</>}>
+          <ImportarViajes importar={importar} verDinero={verDinero} />
+        </Disclosure>
+      ) : undefined}
+      pie={pie}
+      vistaRapida={sel ? (
+        <CajonVistaRapida
+          titulo={sel.folio}
+          subtitulo={t('viajes.vr.sub', { n: numero(seleccion + 1, idioma), total: numero(filas.length, idioma) })}
+          hrefCerrar={hrefCerrar}
+          cifras={[
+            { etiqueta: t('viajes.col.estatus'), valor: t(`viajes.estatus.${sel.estatus}` as 'viajes.estatus.abierto') },
+            { etiqueta: t('viajes.col.operador'), valor: sel.operadorNombre ?? '—' },
+            { etiqueta: t('viajes.col.unidad'), valor: sel.unidadEco ?? '—' },
+            { etiqueta: t('viajes.col.inicio'), valor: sel.fechaInicio ? fechaMx(sel.fechaInicio, idioma) : '—' },
+          ]}
+          pie={sel.liqId ? (
+            <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/${sel.liqId}${sufijo}`}>{t('viajes.vr.abrir')}</BotonEnlace>
+          ) : undefined}
+        >
+          <div className="rv-reg__vr-extra">
+            <PillAviso v={sel} tr={tr} />
+            {verDinero ? (
+              <dl className="rv-reg__vr-dinero">
+                <div><dt>{t('viajes.col.anticipo')}</dt><dd>{sel.anticipo === null ? '—' : mxn(sel.anticipo, idioma)}</dd></div>
+                <div><dt>{t('viajes.col.comprobado')}</dt><dd>{sel.comprobado === null ? '—' : mxn(sel.comprobado, idioma)}</dd></div>
+                <div><dt>{t('viajes.col.diferencia')}</dt><dd>{sel.diferencia === null ? '—' : sel.diferencia === 0 ? t('viajes.exacta') : mxn(Math.abs(sel.diferencia), idioma)}</dd></div>
+              </dl>
+            ) : null}
           </div>
-        )}
-      </Tarjeta>
-    </MarcoPagina>
+        </CajonVistaRapida>
+      ) : null}
+    >
+      {filas.length === 0 ? (
+        <EstadoVacio contenido icono={Inbox} titulo={q || filtro !== 'todos' ? t('viajes.vacio.sincoincidencias') : t('viajes.vacio.sinviajes')}>
+          {q
+            ? (filtro !== 'todos' ? t('viajes.vacio.busqueda.filtro', { q, filtro: t(ROTULO_FILTRO[filtro]) }) : t('viajes.vacio.busqueda', { q }))
+            : filtro === 'todos'
+              ? t('viajes.vacio.primero')
+              : t('viajes.vacio.filtro', { filtro: t(ROTULO_FILTRO[filtro]) })}
+        </EstadoVacio>
+      ) : (
+        <TablaLista<FilaRegistroViaje>
+          etiqueta={t('viajes.tabla.etiqueta')}
+          columnas={columnasViajes(hrefVista, verDinero, tr)}
+          filas={filas}
+          idFila={(v) => v.id}
+          base="/dashboard/viajes"
+          params={{}}
+          pie={(
+            <>
+              {verDinero ? <p className="rv-tl__nota">{t('viajes.nota.diferencia')}</p> : null}
+              {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de `porPagina` filas por render. No se dice "página N de M": el
+                  cursor es la posición del último viaje visto y "Siguientes" continúa desde ahí. Hacia atrás sirve el botón del navegador o
+                  "Volver al inicio". */}
+              {(cursor || hayMas) && (
+                <div className="rv-reg__pie">
+                  <span className="rv-reg__nota">{t('viajes.pie', { n: numero(porPagina, idioma) })}</span>
+                  <NavPaginas>
+                    {cursor ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q })} direccion="inicio" /> : null}
+                    {hayMas && siguiente ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} direccion="siguiente" /> : null}
+                  </NavPaginas>
+                </div>
+              )}
+            </>
+          )}
+        />
+      )}
+    </EsqueletoTablaMaestra>
   );
 }
-
