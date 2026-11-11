@@ -7,8 +7,6 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
   'app/ui-v2/componentes/forma.tsx': 2,
   'app/admin/ui/hilo-soporte.tsx': 1,
   'app/ui-v2/componentes/notificaciones.tsx': 1,
-  'app/dashboard/[id]/revision-panel.tsx': 3,
-  'app/dashboard/[id]/vista.tsx': 1,
   'app/dashboard/aviso-rol.tsx': 1,
   'app/dashboard/chat/composer.tsx': 1,
   'app/dashboard/chat/historial.tsx': 1,

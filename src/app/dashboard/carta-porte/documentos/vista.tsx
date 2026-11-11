@@ -282,8 +282,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
   ];
 
   return (
-    <section className="rv-doc__bloque">
-      <h2 className="rv-doc__h2">{tr('cartaPorte.documentos.vista.bandejaDeRevision')}</h2>
+    <Tarjeta titulo={tr('cartaPorte.documentos.vista.bandejaDeRevision')} info="carta_porte_docs.bandeja">
       <BarraFiltros etiqueta={tr('cartaPorte.documentos.vista.filtrosDeLaBandeja')} enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={raiz}>
         {conAsignacion && usuarioId !== null && (
           <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.asignacion')} valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorPersona')}
@@ -313,7 +312,7 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
       {datos.filas.length < datos.total && (
         <p className="rv-doc__nota">{tr('cartaPorte.documentos.vista.seMuestranDeLos', { v: numero(datos.filas.length), v2: numero(datos.total) })}</p>
       )}
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -359,8 +358,7 @@ function Canales({ buzon, acciones, tr = trEs }: { buzon: BuzonVista | null; acc
 
 function Perfiles({ perfiles, acciones, tr = trEs }: { perfiles: PerfilVista[]; acciones: AccionesDocumentos; tr?: Tr }) {
   return (
-    <section className="rv-doc__bloque">
-      <h2 className="rv-doc__h2">{tr('cartaPorte.documentos.vista.formatosQueLikidaYa')}</h2>
+    <Tarjeta titulo={tr('cartaPorte.documentos.vista.formatosQueLikidaYa')} info="carta_porte_docs.formatos">
       {perfiles.length === 0 ? (
         <EstadoVacio icono={Layers} contenido titulo={tr('cartaPorte.documentos.vista.tituloSinFormatos')}>{tr('cartaPorte.documentos.vista.todaviaNingunoCuandoApruebes')}</EstadoVacio>
       ) : (
@@ -385,7 +383,7 @@ function Perfiles({ perfiles, acciones, tr = trEs }: { perfiles: PerfilVista[]; 
           </Disclosure>
         ))
       )}
-    </section>
+    </Tarjeta>
   );
 }
 

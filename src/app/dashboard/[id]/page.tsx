@@ -13,9 +13,11 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { resolverTenantPedido } from '@/lib/auth/tenant-api';
 import { revalidatePath } from 'next/cache';
 import { reabrirViaje, mensajeParaPantalla } from '@/lib/likida/administracion';
-import type { ResultadoAccion } from '../../admin/ui/forma';
+import type { ResultadoAccion } from '@/app/ui-v2/componentes';
+import { getT } from '@/lib/i18n/servidor';
+import type { Tr } from '@/lib/i18n/dinero_tr';
 import { sufijoTenant } from '../sufijo';
-import { estadoDeColor } from './vista';
+import { estadoDeColor, plural } from './vista';
 import { DetalleLiquidacion } from './detalle';
 import { etiquetaEstatus } from '../estatus';
 import {
@@ -28,20 +30,24 @@ import { logger } from '@/lib/logger';
 import { corregirMontoGasto } from '@/lib/likida/gasto_correccion';
 import { disputaPendiente } from '@/lib/likida/gasto_disputa';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Liquidación' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('liquidacion.detalle.meta') };
+}
 
 export const dynamic = 'force-dynamic';
 
 // Este mapa YA NO pinta el renglón: lo pinta `etiquetaGasto` (abajo), que
-// delega en el motor. Se queda como traducción de respaldo y como el mapa que
-// `etiquetas_sincronizadas.test.ts` mantiene a la par de `label()` del motor.
-// Se desincronizó una vez al partir 'viaticos' en tres: el contralor veía
-// "hospedaje" en minúscula cruda en su tabla.
-const CONCEPTO: Record<string, string> = {
-  diesel: 'Diésel', caseta: 'Caseta', factura: 'Factura',
-  alimentacion: 'Alimentación', hospedaje: 'Hospedaje', transporte: 'Transporte', flete: 'Flete',
-  viaticos: 'Viáticos', otro: 'Otro',
-};
+// delega en el motor. Se queda como traducción de respaldo (con el diccionario
+// del idioma activo) y como el mapa que `etiquetas_sincronizadas.test.ts`
+// mantiene a la par de `label()` del motor. Se desincronizó una vez al partir
+// 'viaticos' en tres: el contralor veía "hospedaje" en minúscula cruda en su tabla.
+const CONCEPTO = {
+  diesel: 'liquidacion.accion.concepto.diesel', caseta: 'liquidacion.accion.concepto.caseta', factura: 'liquidacion.accion.concepto.factura',
+  alimentacion: 'liquidacion.accion.concepto.alimentacion', hospedaje: 'liquidacion.accion.concepto.hospedaje',
+  transporte: 'liquidacion.accion.concepto.transporte', flete: 'liquidacion.accion.concepto.flete',
+  viaticos: 'liquidacion.accion.concepto.viaticos', otro: 'liquidacion.accion.concepto.otro',
+} as const;
 
 /** `https://wa.me/52…` con el teléfono del operador tal como está en su
  *  ficha: solo dígitos, y la lada de México una sola vez. Sin teléfono no
@@ -58,6 +64,7 @@ export default async function Detalle({
 }: { params: Promise<{ id: string }>; searchParams: Promise<{ tenant?: string; vista?: string; rol?: string }> }) {
   const { id } = await params;
   const sp = await searchParams;
+  const { t: tr } = await getT('dinero');
 
   // Segunda capa (ver dashboard/page.tsx). El id va en la ruta de vuelta para
   // que tras el passcode aterrice en la liquidación que pidió.
@@ -121,9 +128,10 @@ export default async function Detalle({
    */
   async function reabrir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tra } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeAdministrar(s.rol)) {
-      return { error: 'Tu rol no puede reabrir un viaje liquidado. Pídeselo al dueño de la flota.' };
+      return { error: tra('liquidacion.accion.reabrirSinPermiso') };
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
@@ -134,9 +142,7 @@ export default async function Detalle({
     try {
       const { pdfPerdido } = await reabrirViaje(t, d!.folio, fd.get('confirmar') === 'on', { id: s.userId });
       revalidatePath(`/dashboard/${id}`);
-      return {
-        ok: `${d!.folio} quedó abierto y vuelve a aceptar comprobantes.${pdfPerdido ? ' El PDF anterior ya no es válido.' : ''}`,
-      };
+      return { ok: tra(pdfPerdido ? 'liquidacion.accion.reabrirOkConPdf' : 'liquidacion.accion.reabrirOk', { folio: d!.folio }) };
     } catch (err) {
       return { error: mensajeParaPantalla(err, 'reabrir el viaje') };
     }
@@ -153,13 +159,14 @@ export default async function Detalle({
    */
   async function reasignar(_previo: ResultadoAccion, formData: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tra } = await getT('dinero');
     // Repite la comprobación de permiso EN el server action: el `puedeAsignar`
     // de arriba solo decide si el <form> se pinta. Sin este segundo chequeo,
     // un contador que arme la petición a mano (misma sesión válida, sin el
     // botón) podría reasignar igual — el mismo criterio que ya usa
     // `requireSessionTenant` para no confiar solo en lo que el proxy filtra.
     const { tenantId: tDemo, rol: r } = await requireSessionTenant(`/dashboard/${id}`, sp);
-    if (!puedeAsignar(r)) return { error: 'Tu rol no puede reasignar choferes.' };
+    if (!puedeAsignar(r)) return { error: tra('liquidacion.accion.reasignarSinPermiso') };
     let t = tDemo;
     if (r === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
@@ -167,7 +174,7 @@ export default async function Detalle({
     if (!exigirFlotaPintada(t, tenantId)) return { error: MENSAJE_FLOTA_CAMBIO };
     const operadorId = String(formData.get('operadorId') ?? '');
     if (!operadorId) {
-      return { error: 'Elige un chofer de la lista: escribir un nombre a medias no basta, y adivinar a quién te referías no es cosa de este panel.' };
+      return { error: tra('liquidacion.accion.reasignarEligeChofer') };
     }
     let cambio: Awaited<ReturnType<typeof reasignarOperador>>;
     try {
@@ -198,9 +205,9 @@ export default async function Detalle({
     await instruccionesAlCambiarOperador(t, d!.viajeId, cambio);
     revalidatePath(`/dashboard/${id}`);
     if (avisoFallo) {
-      return { error: 'El viaje quedó a nombre del chofer que elegiste, pero el aviso de WhatsApp no salió — vuelve a intentarlo desde aquí.' };
+      return { error: tra('liquidacion.accion.reasignarAvisoFallo') };
     }
-    return { ok: 'Listo: el viaje quedó a nombre del chofer que elegiste.' };
+    return { ok: tra('liquidacion.accion.reasignarOk') };
   }
 
   /**
@@ -217,9 +224,10 @@ export default async function Detalle({
    */
   async function buscarOperadores(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
+    const { t: tra } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
-    if (!puedeAsignar(s.rol)) throw new Error('Tu rol no puede reasignar choferes.');
-    if (tipo !== 'operador') throw new Error('Catálogo desconocido.');
+    if (!puedeAsignar(s.rol)) throw new Error(tra('liquidacion.accion.reasignarSinPermiso'));
+    if (tipo !== 'operador') throw new Error(tra('liquidacion.accion.catalogoDesconocido'));
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
       t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
@@ -266,9 +274,10 @@ export default async function Detalle({
    */
   async function revisar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tra } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeVerArea(s.rol, 'dinero') || !puedeFirmarLiquidacion(s.rol)) {
-      return { error: 'Tu rol no firma liquidaciones. Pídeselo al dueño de la flota o a tu contador.' };
+      return { error: tra('liquidacion.revision.rolNoFirma') };
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
@@ -294,21 +303,15 @@ export default async function Detalle({
       revalidatePath(`/dashboard/${id}`);
       revalidatePath('/dashboard/agentes/liquidacion');
       if (r.revision === 'rechazada') {
-        return {
-          ok: `${r.folio} se rechazó y el viaje volvió a cuadre.${
-            r.choferAvisado ? ' Al operador ya le llegó el motivo por WhatsApp.'
-              : ' No se le pudo avisar al operador por WhatsApp: márcale tú.'}`,
-        };
+        return { ok: tra(r.choferAvisado ? 'liquidacion.accion.revisarRechazadaAvisado' : 'liquidacion.accion.revisarRechazadaSinAviso', { folio: r.folio }) };
       }
       if (r.revision === 'ajustada') {
-        const cuantos = r.ajustes.length;
         return {
-          ok: `${r.folio}: ${cuantos === 1 ? 'se corrigió 1 comprobante' : `se corrigieron ${cuantos} comprobantes`}. `
-            + `El comprobado quedó en ${mxn(r.totalComprobado)} y la diferencia en ${mxn(r.diferencia)}.`
-            + (r.pdfPendiente ? ' El ajuste y tu firma se guardaron; el PDF sigue pendiente. Usa Reintentar PDF para generarlo sin volver a ajustar.' : ''),
+          ok: plural(tra, r.pdfPendiente ? 'liquidacion.accion.revisarAjustadaPdf' : 'liquidacion.accion.revisarAjustada', r.ajustes.length,
+            { folio: r.folio, total: mxn(r.totalComprobado), diferencia: mxn(r.diferencia) }),
         };
       }
-      return { ok: `${r.folio} quedó aprobada con tu firma.` };
+      return { ok: tra('liquidacion.accion.revisarAprobada', { folio: r.folio }) };
     } catch (err) {
       return { error: mensajeParaPantalla(err, 'firmar la liquidación') };
     }
@@ -321,9 +324,10 @@ export default async function Detalle({
    */
   async function corregirMontoDisputado(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tra } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeVerArea(s.rol, 'dinero') || !puedeFirmarLiquidacion(s.rol)) {
-      return { error: 'Tu rol no corrige montos. Pídeselo al dueño de la flota o a tu contador.' };
+      return { error: tra('liquidacion.accion.corregirSinPermiso') };
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
@@ -332,33 +336,35 @@ export default async function Detalle({
     // El gasto tiene que ser de ESTA liquidación y seguir disputado: el id del formulario no se acepta a ciegas.
     const det = await getLiquidacionDetalle(id, t);
     const g = det?.gastos.find((x) => x.id === gastoId);
-    if (!g || !disputaPendiente(g.ocrExtra)) return { error: 'Ese comprobante ya no tiene una disputa pendiente en esta liquidación.' };
+    if (!g || !disputaPendiente(g.ocrExtra)) return { error: tra('liquidacion.accion.corregirSinDisputa') };
     const crudo = String(fd.get('monto') ?? '').replace(/\s/g, '').replace(/,/g, '');
     const [enteros = '', decimales = '', ...resto] = crudo.split('.');
     const monto = resto.length === 0 && /^\d+$/.test(enteros) && /^\d{0,2}$/.test(decimales) ? Number(crudo) : NaN;
-    if (!Number.isFinite(monto) || monto <= 0) return { error: 'Escribe el monto correcto en pesos, con hasta dos decimales.' };
+    if (!Number.isFinite(monto) || monto <= 0) return { error: tra('liquidacion.accion.corregirFormato') };
     const r = await corregirMontoGasto({
       tenantId: t, gastoId, montoNuevo: monto,
       actor: { id: s.userId }, motivo: String(fd.get('motivo') ?? ''),
     });
     revalidatePath(`/dashboard/${id}`);
-    if (r.ok) return { ok: `Monto corregido: ${mxn(r.antes)} → ${mxn(r.despues)}.` };
-    const MOTIVOS: Record<string, string> = {
-      monto_invalido: 'Ese monto no es válido (de $0.01 a $1,000,000).',
-      sin_motivo: 'Escribe el motivo de la corrección.',
-      sin_actor: 'No se pudo identificar quién corrige.',
-      no_existe: 'El comprobante ya no existe.',
-      liquidado: 'La liquidación sigue vigente: usa «Ajustar montos» (o rechaza la liquidación para que el viaje vuelva a cuadre).',
-      xml_verificado: 'Ese comprobante tiene CFDI verificado: su monto sale del XML y no se corrige a mano. Rechaza la liquidación para que el operador mande el comprobante correcto.',
-    };
-    return { error: MOTIVOS[r.motivo] ?? 'No se pudo corregir el monto. Inténtalo de nuevo.' };
+    if (r.ok) return { ok: tra('liquidacion.accion.corregirOk', { antes: mxn(r.antes), despues: mxn(r.despues) }) };
+    const MOTIVOS = {
+      monto_invalido: 'liquidacion.accion.corregirMontoInvalido',
+      sin_motivo: 'liquidacion.accion.corregirSinMotivo',
+      sin_actor: 'liquidacion.accion.corregirSinActor',
+      no_existe: 'liquidacion.accion.corregirNoExiste',
+      liquidado: 'liquidacion.accion.corregirLiquidado',
+      xml_verificado: 'liquidacion.accion.corregirXmlVerificado',
+    } as const;
+    const clave = (MOTIVOS as Record<string, (typeof MOTIVOS)[keyof typeof MOTIVOS]>)[r.motivo];
+    return { error: tra(clave ?? 'liquidacion.accion.corregirFallo') };
   }
 
   async function reintentarPdf(_previo: ResultadoAccion, _fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tra } = await getT('dinero');
     const s = await requireSessionTenant(`/dashboard/${id}`, sp);
     if (!puedeVerArea(s.rol, 'dinero') || !puedeFirmarLiquidacion(s.rol)) {
-      return { error: 'Tu rol no puede regenerar el PDF de una liquidación firmada.' };
+      return { error: tra('liquidacion.accion.pdfSinPermiso') };
     }
     let t = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) t = await resolverTenantPedido(supabaseAdmin(), t, sp.tenant);
@@ -366,8 +372,8 @@ export default async function Detalle({
     try {
       const r = await reintentarPdfAjustado(t, id);
       revalidatePath(`/dashboard/${id}`);
-      return r.regenerado ? { ok: 'Los dos PDF ya están disponibles. Tu firma y las cifras se conservaron.' }
-        : { error: 'El PDF sigue pendiente. Tu firma y las cifras se conservaron; vuelve a intentarlo o avisa a soporte.' };
+      return r.regenerado ? { ok: tra('liquidacion.accion.pdfOk') }
+        : { error: tra('liquidacion.accion.pdfPendiente') };
     } catch (error) { return { error: mensajeParaPantalla(error, 'regenerar el PDF') }; }
   }
 
@@ -379,10 +385,11 @@ export default async function Detalle({
 
   return (
     <DetalleLiquidacion
+      tr={tr}
       d={d}
       sufijo={sufijo}
       estatus={{ label: e.label, estado: estadoDeColor(e.color) }}
-      etiqueta={etiquetaGasto}
+      etiqueta={(g) => etiquetaGasto(g, tr)}
       // BE-A1/FE-M2: una liquidación RECHAZADA no tiene PDF vigente aunque
       // `pdfPath` siga guardado (la 0346 solo lo anula en 'ajustada'), y una
       // revisión que no se pudo LEER tampoco puede afirmar que sí está
@@ -407,7 +414,7 @@ export default async function Detalle({
         // Solo los comprobantes CON id se pueden ajustar: sin id no hay a qué
         // fila apuntarle, y la RPC lo rebotaría (LR017).
         gastos: d.gastos.filter((g) => g.id).map((g) => ({
-          id: g.id as string, etiqueta: etiquetaGasto(g), monto: g.monto,
+          id: g.id as string, etiqueta: etiquetaGasto(g, tr), monto: g.monto,
           disputa: disputaPendiente(g.ocrExtra),
         })),
         accion: puedeFirmar ? revisar : null,
@@ -430,7 +437,7 @@ export default async function Detalle({
  * `etiquetaConcepto` devuelve la clave cruda cuando su mapa no conoce el
  * concepto; ahí —y solo ahí— entra el mapa local como red.
  */
-function etiquetaGasto(g: { concepto: string; ocrExtra?: Record<string, unknown> }): string {
+function etiquetaGasto(g: { concepto: string; ocrExtra?: Record<string, unknown> }, tr: Tr): string {
   const delMotor = etiquetaConcepto(g.concepto, g.ocrExtra);
-  return delMotor === g.concepto ? (CONCEPTO[g.concepto] ?? g.concepto) : delMotor;
+  return delMotor === g.concepto ? (g.concepto in CONCEPTO ? tr(CONCEPTO[g.concepto as keyof typeof CONCEPTO]) : g.concepto) : delMotor;
 }

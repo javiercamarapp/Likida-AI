@@ -1,69 +1,36 @@
-import type { ReactNode } from 'react';
 import { AlertTriangle, Check } from 'lucide-react';
-import { StatusPill, type Estado } from '@/app/admin/ui/kit';
+import { Boton, Icono, StatusChip, type TonoEstado } from '@/app/ui-v2/componentes';
 import { mxn, fechaHoraMx } from '@/lib/formato';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import type { ClavePlural, Variables } from '@/lib/i18n/traducir';
+import type { DiccionarioDe } from '@/lib/i18n/catalogo';
 // La cubeta del motor, importada — nunca reconstruida. Ver `estadoRenglon` abajo.
 import { cubetaDe } from '@/lib/likida/cuadre/engine';
 import type { TipoDiferencia } from '@/types/likida';
+import './liquidacion.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// LAS PIEZAS DEL DETALLE DE LIQUIDACIÓN v2 (22-ago-2026).
+// LAS PIEZAS DEL DETALLE DE LIQUIDACIÓN (sistema ui-v2).
 //
 // Pura presentación, sin sesión ni consultas: la página (`page.tsx`) decide
-// qué se pinta y con qué permiso; aquí solo se dibuja con el lenguaje del
-// panel (DESIGN.md v3.1): tarjeta blanca con hairline, rótulo mono en
-// mayúsculas, cifra tabular, color solo en estatus. Cero tokens nuevos.
+// qué se pinta y con qué permiso; aquí solo se dibuja con las piezas del
+// sistema (StatusChip, Boton, Icono). Cero `style=`, cero tokens nuevos.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Botón primario (tinta) y secundario (blanco con hairline) — DESIGN.md §3.
- *  Máximo UNA primaria visible por vista; en el detalle es "Descargar PDF". */
-export const ESTILO_PRIMARIO = { background: 'var(--marca)', color: 'var(--marca-fg)' } as const;
-export const ESTILO_SECUNDARIO = { background: 'var(--surface)', color: 'var(--ink)' } as const;
+/** El plural del diccionario (`clave.uno` / `clave.otros`) para un traductor que solo trae `t`. */
+export function plural(tr: Tr, base: ClavePlural<DiccionarioDe<'dinero'>>, n: number, variables?: Variables): string {
+  return tr(`${base}.${n === 1 ? 'uno' : 'otros'}` as Parameters<Tr>[0], { n, ...variables });
+}
 
 /** El estatus de la LIQUIDACIÓN lo nombra `dashboard/estatus.ts` (fuente
  *  única, vigilada por `etiquetas_sincronizadas.test.ts`); aquí solo se
- *  traduce su token de color al `Estado` del kit para pintarlo como pill.
+ *  traduce su token de color al tono del chip de estado.
  *  Un color que no es semáforo (estatus desconocido) va neutro. */
-export function estadoDeColor(color: string): Estado {
+export function estadoDeColor(color: string): TonoEstado {
   if (color.includes('--color-ok')) return 'ok';
   if (color.includes('--color-warn')) return 'warn';
   if (color.includes('--color-bad')) return 'bad';
   return 'neutral';
-}
-
-/** Rótulo mono en mayúsculas — el de `TituloSeccion`, reutilizado aquí con
- *  el mismo tamaño para que el detalle se lea igual que el Resumen. */
-export function Rotulo({ children }: { children: ReactNode }) {
-  return (
-    <div className="etiqueta-mono text-[11px] uppercase" style={{ color: 'var(--faint)' }}>{children}</div>
-  );
-}
-
-/** La tarjeta de KPI del detalle: misma anatomía que la del registro de
- *  viajes (rótulo mono arriba, cifra tabular 20 px, sublínea gris). `tono`
- *  solo colorea la cifra y SIEMPRE viene acompañado de la sublínea que dice
- *  por qué: nunca color solo. */
-export function Kpi({ titulo, valor, nota, tono }: {
-  titulo: string; valor: ReactNode; nota?: ReactNode; tono?: 'ok' | 'warn' | 'bad';
-}) {
-  return (
-    <div className="card p-3.5 min-w-0">
-      <Rotulo>{titulo}</Rotulo>
-      <div className="cifra-mono text-[20px] font-medium mt-1 truncate"
-        style={tono ? { color: `var(--${tono})` } : undefined}>{valor}</div>
-      {nota && <div className="text-[11px] mt-0.5 truncate" style={{ color: 'var(--faint)' }}>{nota}</div>}
-    </div>
-  );
-}
-
-/** Una ficha "rótulo: valor" de la cabecera (fecha, ruta, operador…). */
-export function Dato({ titulo, children, ancho }: { titulo: string; children: ReactNode; ancho?: boolean }) {
-  return (
-    <div className={`min-w-0 ${ancho ? 'xl:col-span-2' : ''}`}>
-      <Rotulo>{titulo}</Rotulo>
-      <div className="text-[13px] font-medium mt-0.5 truncate">{children}</div>
-    </div>
-  );
 }
 
 // ── Línea de tiempo ──────────────────────────────────────────────────────
@@ -83,27 +50,20 @@ export interface Hito {
 /** avisado → aceptado → comprobantes → cuadre → PDF, con los sellos reales
  *  del viaje. Un hito sin sello se pinta hueco y lo dice; no se deduce una
  *  hora de otro hito (sería inventarla). */
-export function LineaDeTiempo({ hitos }: { hitos: Hito[] }) {
+export function LineaDeTiempo({ hitos, tr = trEs }: { hitos: Hito[]; tr?: Tr }) {
   return (
-    <ol className="space-y-0">
-      {hitos.map((h, i) => {
+    <ol className="rv-liq__tiempo">
+      {hitos.map((h) => {
         const hecho = h.cuando !== null || h.textoSinHora !== undefined;
-        const ultimo = i === hitos.length - 1;
         return (
-          <li key={h.etiqueta} className="flex gap-3">
-            <div className="flex flex-col items-center">
-              <span className="w-2.5 h-2.5 rounded-full mt-1.5 shrink-0"
-                style={hecho
-                  ? { background: 'var(--marca)' }
-                  : { border: '1.5px solid var(--line2)', background: 'var(--surface)' }} />
-              {!ultimo && <span className="flex-1 w-px my-1" style={{ borderLeft: '1px dashed var(--line2)' }} />}
-            </div>
-            <div className={`min-w-0 ${ultimo ? '' : 'pb-3.5'}`}>
-              <div className="text-[13px] font-medium leading-5" style={hecho ? undefined : { color: 'var(--muted)' }}>{h.etiqueta}</div>
-              <div className="cifra-mono text-[11px]" style={{ color: hecho ? 'var(--muted)' : 'var(--faint)' }}>
-                {h.cuando ? fechaHoraMx(h.cuando) : (h.textoSinHora ?? h.pendiente ?? 'Sin registro')}
+          <li key={h.etiqueta} className="rv-liq__hito" data-hecho={hecho || undefined}>
+            <span className="rv-liq__punto" aria-hidden="true" />
+            <div className="rv-liq__hito-cuerpo">
+              <div className="rv-liq__hito-etq">{h.etiqueta}</div>
+              <div className="rv-liq__hito-hora">
+                {h.cuando ? fechaHoraMx(h.cuando) : (h.textoSinHora ?? h.pendiente ?? tr('liquidacion.detalle.hitoSinRegistro'))}
               </div>
-              {h.nota && <div className="text-[11px] mt-0.5" style={{ color: 'var(--faint)' }}>{h.nota}</div>}
+              {h.nota && <div className="rv-liq__hito-nota">{h.nota}</div>}
             </div>
           </li>
         );
@@ -114,22 +74,20 @@ export function LineaDeTiempo({ hitos }: { hitos: Hito[] }) {
 
 // ── Diferencias ──────────────────────────────────────────────────────────
 
-export function Diferencia({ nota, monto }: { nota: string; monto: number }) {
+export function Diferencia({ nota, monto, tr = trEs }: { nota: string; monto: number; tr?: Tr }) {
   return (
-    <li className="flex items-start gap-3 py-2.5" style={{ borderBottom: '1px dashed var(--line2)' }}>
-      <AlertTriangle width={14} height={14} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--warn)' }} aria-hidden />
-      <span className="text-[13px] flex-1 min-w-0 leading-5">{nota}</span>
-      {monto > 0 && <span className="cifra-mono text-[13px] font-medium whitespace-nowrap">{mxn(monto)}</span>}
+    <li className="rv-liq__dif">
+      <Icono icono={AlertTriangle} className="rv-liq__dif-icono" />
+      <span className="rv-liq__dif-nota">{nota}</span>
+      {monto > 0 && <span className="rv-liq__cifra">{mxn(monto)}</span>}
       {/* No existe todavía la acción de aprobar/descontar una diferencia
           desde el panel (el cuadre es del motor y el descuento de nómina
           vive en el PDF del contralor). El botón se ve para que el flujo se
           entienda, y está deshabilitado con la razón a la vista: un botón
           que parece funcionar y no hace nada es un rótulo que miente. */}
-      <button type="button" disabled
-        title="Todavía no se puede aprobar ni descontar desde el panel: la decisión se toma sobre el PDF con tu contador."
-        className="rv-btn rv-btn--secondary rv-btn--sm shrink-0" style={ESTILO_SECUNDARIO}>
-        Aprobar / Descontar
-      </button>
+      <Boton disabled variante="secondary" tamano="sm" title={tr('liquidacion.detalle.aprobarDescontarRazon')}>
+        {tr('liquidacion.detalle.aprobarDescontar')}
+      </Boton>
     </li>
   );
 }
@@ -145,18 +103,27 @@ export function Diferencia({ nota, monto }: { nota: string; monto: number }) {
  *  del diésel de flota (RMF 3.3.1.7) — el contralor veía "05" crudo justo en
  *  la columna que sustenta la deducibilidad. `etiqueta_forma_pago.test.ts`
  *  vigila que toda clave que el motor admite tenga rótulo aquí. */
-const FORMA_PAGO: Record<string, string> = {
-  '01': 'Efectivo', '02': 'Cheque', '03': 'Transferencia', '04': 'Tarjeta de crédito',
-  '05': 'Monedero electrónico', '06': 'Dinero electrónico',
-  '28': 'Tarjeta de débito', '29': 'Tarjeta de servicios', '99': 'Por definir',
-};
+const FORMA_PAGO = {
+  '01': 'liquidacion.formaPago.c01', '02': 'liquidacion.formaPago.c02', '03': 'liquidacion.formaPago.c03',
+  '04': 'liquidacion.formaPago.c04', '05': 'liquidacion.formaPago.c05', '06': 'liquidacion.formaPago.c06',
+  '28': 'liquidacion.formaPago.c28', '29': 'liquidacion.formaPago.c29', '99': 'liquidacion.formaPago.c99',
+} as const;
 
-export function etiquetaFormaPago(clave?: string): string {
+export function etiquetaFormaPago(clave?: string, tr: Tr = trEs): string {
   if (!clave) return '—';
-  return FORMA_PAGO[clave] ?? clave;
+  return clave in FORMA_PAGO ? tr(FORMA_PAGO[clave as keyof typeof FORMA_PAGO]) : clave;
 }
 
-export type EstadoRenglon = { estado: Estado; etiqueta: string; validado?: boolean };
+type ClaveRenglon =
+  | 'noDeducible' | 'duplicado' | 'posibleDuplicado' | 'montoInvalido' | 'noFiscal' | 'sinCfdi' | 'sobreTope'
+  | 'porConfirmar' | 'porRevisar' | 'cfdiVigente' | 'cfdiValidado' | 'cfdiSinValidar';
+
+/** `etiqueta` sale SIEMPRE en español (la leen las pruebas y los registros); `clave` es la del diccionario para pintarla en el idioma activo. */
+export type EstadoRenglon = { estado: TonoEstado; etiqueta: string; clave: ClaveRenglon; validado?: boolean };
+
+const claveDic = (clave: ClaveRenglon) => `liquidacion.renglon.${clave}` as const;
+const rotuloEs = (clave: ClaveRenglon): string => trEs(claveDic(clave));
+const renglon = (estado: TonoEstado, clave: ClaveRenglon, extra: { validado?: boolean } = {}): EstadoRenglon => ({ estado, clave, etiqueta: rotuloEs(clave), ...extra });
 
 /**
  * AUDITORÍA 18-c3, ARQ-C3-1 (CRÍTICO) — y AUDITORÍA 28, ARQ-B2 (BAJO,
@@ -185,11 +152,11 @@ export type EstadoRenglon = { estado: Estado; etiqueta: string; validado?: boole
  * pone en ninguna de sus dos cubetas, así que la tabla tampoco puede afirmar
  * «No deducible» sobre ellos: se nombran por lo que son.
  */
-const ETIQUETA_CAPTURA: Record<string, string> = {
-  duplicado: 'Duplicado',
-  posible_duplicado_sin_folio: 'Posible duplicado',
-  monto_invalido: 'Monto inválido',
-  comprobante_no_fiscal: 'No es comprobante fiscal',
+const CLAVE_CAPTURA: Record<string, ClaveRenglon> = {
+  duplicado: 'duplicado',
+  posible_duplicado_sin_folio: 'posibleDuplicado',
+  monto_invalido: 'montoInvalido',
+  comprobante_no_fiscal: 'noFiscal',
 };
 /** Tipos que son "sobre tope": política o tope fiscal. */
 export const TIPOS_TOPE = new Set(['sobre_politica', 'viatico_excede_fiscal', 'efectivo_sobre_15', 'efectivo_sobre_tope']);
@@ -223,11 +190,11 @@ export function estadoRenglon(
   // `POR_CONFIRMAR` solo hacen `.includes()` contra sus listas: un tipo fuera
   // del dominio simplemente no casa con ninguna, igual que hoy.
   const cubeta = cubetaDe(g, tipos.map((tipo) => ({ tipo: tipo as TipoDiferencia })));
-  if (cubeta === 'no_deducible') return { estado: 'bad', etiqueta: 'No deducible' };
-  const captura = tipos.find((t) => t in ETIQUETA_CAPTURA);
-  if (captura) return { estado: 'warn', etiqueta: ETIQUETA_CAPTURA[captura] };
-  if (tipos.includes('sin_cfdi')) return { estado: 'warn', etiqueta: 'Sin CFDI' };
-  if (tipos.some((t) => TIPOS_TOPE.has(t))) return { estado: 'warn', etiqueta: 'Sobre tope' };
+  if (cubeta === 'no_deducible') return renglon('bad', 'noDeducible');
+  const captura = tipos.find((t) => t in CLAVE_CAPTURA);
+  if (captura) return renglon('warn', CLAVE_CAPTURA[captura]);
+  if (tipos.includes('sin_cfdi')) return renglon('warn', 'sinCfdi');
+  if (tipos.some((t) => TIPOS_TOPE.has(t))) return renglon('warn', 'sobreTope');
   // AUDITORÍA 28, ARQ-B2 (BAJO, reincidente 25/26/27): antes esta rama
   // preguntaba `TIPOS_POR_CONFIRMAR.has(t)` (copia de la lista del motor) y,
   // si no había diferencias, `pagoPendiente(g)` por separado (ARQ-25) — pero
@@ -235,27 +202,24 @@ export function estadoRenglon(
   // un ticket de diésel sin CFDI y sin diferencias caía al «Ticket» neutral
   // de abajo mientras el bloque de deducibilidad de la misma pantalla (que sí
   // llama `cubetaDe`) decía «Por confirmar» sobre el mismo comprobante.
-  if (cubeta === 'por_confirmar') return { estado: 'warn', etiqueta: 'Por confirmar' };
-  if (tipos.length > 0) return { estado: 'warn', etiqueta: 'Por revisar' };
-  if (g.estadoSat === 'vigente') return { estado: 'ok', etiqueta: 'CFDI vigente', validado: true };
-  if (g.cfdiValido) return { estado: 'ok', etiqueta: 'CFDI validado', validado: true };
+  if (cubeta === 'por_confirmar') return renglon('warn', 'porConfirmar');
+  if (tipos.length > 0) return renglon('warn', 'porRevisar');
+  if (g.estadoSat === 'vigente') return renglon('ok', 'cfdiVigente', { validado: true });
+  if (g.cfdiValido) return renglon('ok', 'cfdiValidado', { validado: true });
   // En este punto `cubeta` solo puede ser 'deducible' (no_deducible y
   // por_confirmar ya se filtraron arriba), y `cubetaDe` manda CUALQUIER gasto
   // sin CFDI a 'por_confirmar' (engine.ts:474) — así que `g.cfdiUuid` es
   // siempre verdadero aquí. Un «Ticket» sin CFDI que el motor declare
   // deducible no existe hoy (ver `estado_renglon.test.ts`); si algún camino
   // nuevo lo produjera, esta rama tendría que distinguirlo de nuevo.
-  return { estado: 'neutral', etiqueta: 'CFDI sin validar' };
+  return renglon('neutral', 'cfdiSinValidar');
 }
 
-export function PillRenglon({ e }: { e: EstadoRenglon }) {
+export function PillRenglon({ e, tr = trEs }: { e: EstadoRenglon; tr?: Tr }) {
   return (
-    <StatusPill estado={e.estado}>
-      {e.validado && <Check width={11} height={11} strokeWidth={2.5} aria-hidden />}
-      {e.etiqueta}
-    </StatusPill>
+    <StatusChip tono={e.estado}>
+      {e.validado && <Icono icono={Check} tam={14} />}
+      {tr(claveDic(e.clave))}
+    </StatusChip>
   );
 }
-
-/** Encabezado de tabla del panel (mismo `TH` que el Resumen y el registro). */
-export const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-3 py-2 whitespace-nowrap';

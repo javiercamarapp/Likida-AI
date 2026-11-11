@@ -1,0 +1,67 @@
+/* Detalle de liquidación · solo lo que las piezas del sistema no traen. */
+.rv-liq__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-liq__nota strong { color: var(--ink); font-weight: 600; }
+.rv-liq__tenue { margin: 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-liq__cierre { margin: 0; padding-top: 4px; font-size: var(--t-micro); color: var(--faint); }
+.rv-liq__cifra { font-variant-numeric: tabular-nums; font-size: var(--t-body); font-weight: 500; white-space: nowrap; }
+.rv-liq__sub { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rv-liq__sub-titulo { margin: 0; font-size: var(--t-small); font-weight: 600; color: var(--muted); }
+.rv-liq__fila { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rv-liq__fila:last-child { border-bottom: 0; }
+.rv-liq__fila-etq { min-width: 0; font-size: var(--t-body); font-weight: 500; }
+.rv-liq__fila-pie { display: block; margin-top: 2px; font-size: var(--t-micro); font-weight: 400; color: var(--muted); }
+.rv-liq__fila[data-tono="bad"] .rv-liq__cifra { color: var(--bad); }
+.rv-liq__lista { list-style: none; margin: 0; padding: 0; }
+
+/* Ficha y reasignación */
+.rv-liq__ficha-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.rv-liq__reasignar { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); justify-items: start; }
+.rv-liq__reasignar-forma { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; }
+.rv-liq__reasignar-forma .rv-ctl { min-width: 200px; max-width: 280px; }
+
+/* Línea de tiempo */
+.rv-liq__tiempo { list-style: none; margin: 0; padding: 0; display: grid; }
+.rv-liq__hito { position: relative; display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 10px; padding-bottom: 14px; }
+.rv-liq__hito:last-child { padding-bottom: 0; }
+.rv-liq__punto { width: 10px; height: 10px; margin-top: 5px; border-radius: 50%; border: 1.5px solid var(--line2, var(--line)); background: var(--surface); }
+.rv-liq__hito[data-hecho] .rv-liq__punto { border-color: var(--marca); background: var(--marca); }
+.rv-liq__hito:not(:last-child)::before { content: ""; position: absolute; left: 4px; top: 18px; bottom: 2px; width: 0; border-left: 1px dashed var(--line2, var(--line)); }
+.rv-liq__hito-etq { font-size: var(--t-body); font-weight: 500; line-height: 20px; color: var(--muted); }
+.rv-liq__hito[data-hecho] .rv-liq__hito-etq { color: var(--ink); }
+.rv-liq__hito-hora { font-size: var(--t-micro); font-variant-numeric: tabular-nums; color: var(--faint); }
+.rv-liq__hito[data-hecho] .rv-liq__hito-hora { color: var(--muted); }
+.rv-liq__hito-nota { margin-top: 2px; font-size: var(--t-micro); color: var(--faint); }
+
+/* Diferencias */
+.rv-liq__dif { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rv-liq__dif:last-child { border-bottom: 0; }
+.rv-liq__dif-icono { flex: none; margin-top: 2px; color: var(--warn); }
+.rv-liq__dif-nota { flex: 1 1 auto; min-width: 0; font-size: var(--t-body); line-height: 20px; }
+@media (max-width: 640px) { .rv-liq__dif { flex-wrap: wrap; } .rv-liq__dif-nota { flex-basis: calc(100% - 32px); } }
+
+/* Comprobantes */
+.rv-liq__bloque { display: grid; gap: 10px; min-width: 0; }
+.rv-liq__cab { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
+.rv-liq__h2 { margin: 0; font-size: var(--t-section); font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.rv-liq__sub-celda { display: block; font-size: var(--t-micro); color: var(--faint); }
+.rv-liq__uuid { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--t-micro); color: var(--faint); }
+.rv-liq__mono { font-variant-numeric: tabular-nums; }
+.rv-liq__vacio-celda { color: var(--faint); }
+.rv-liq__total { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-liq__total-etq { font-size: var(--t-small); font-weight: 600; }
+.rv-liq__total-etq span { margin-left: 8px; font-weight: 400; color: var(--muted); }
+.rv-liq__total-monto { font-size: var(--t-section); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Firma humana */
+.rv-liq__firma { display: grid; gap: 10px; }
+.rv-liq__firma-estado { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-liq__firma-estado strong { color: var(--ink); font-weight: 600; }
+.rv-liq__ajustes { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 2px; font-size: var(--t-small); color: var(--muted); }
+.rv-liq__opciones { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+.rv-liq__monto-fila { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(120px, 160px); align-items: center; gap: 8px; font-size: var(--t-small); }
+.rv-liq__monto-fila .rv-ctl { text-align: right; font-variant-numeric: tabular-nums; }
+.rv-liq__disputa { display: grid; gap: 6px; font-size: var(--t-small); }
+.rv-liq__disputa-item { display: grid; gap: 6px; }
+.rv-liq__corregir { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.rv-liq__corregir .rv-ctl { min-width: 140px; }
+.rv-liq__confirma { display: flex; flex-wrap: wrap; gap: 8px; }

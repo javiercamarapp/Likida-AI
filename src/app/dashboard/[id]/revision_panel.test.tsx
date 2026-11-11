@@ -77,24 +77,33 @@ describe('PanelRevision', () => {
   });
 
   // ── FE-M3 (auditoría 28) ──────────────────────────────────────────────
-  // Los tres radios de la firma son `<input class="sr-only">`: sin gancho de
-  // foco visible, `→`/Tab mueven la selección a ciegas y Enter firma la
-  // acción equivocada — el único control irreversible del producto (WCAG
-  // 2.4.7). El arreglo es una regla CSS aditiva en globals.css, así que la
-  // prueba tiene DOS mitades: el markup sigue teniendo el gancho que la
-  // regla necesita (input.sr-only hijo DIRECTO del label), y la regla existe.
-  it('FE-M3: el radio sr-only es hijo directo del label (gancho del foco visible)', () => {
+  // Los tres radios de la firma son el único control irreversible del producto:
+  // sin foco visible, `→`/Tab mueven la selección a ciegas y Enter firma la
+  // acción equivocada (WCAG 2.4.7). Antes eran `<input class="sr-only">` con un
+  // parche en globals.css; ahora son el `Radio` del sistema (ui-v2), que trae
+  // su propio anillo de foco de 2 px. La prueba tiene las mismas DOS mitades:
+  // el markup sigue siendo un radio NATIVO dentro de su `<label>` (teclado y
+  // lectores de pantalla gratis, y viaja en el FormData como `accion`), y la
+  // regla de foco visible del sistema existe.
+  it('FE-M3: cada decisión es un radio nativo del sistema dentro de su label, en un grupo con leyenda', () => {
     const html = pintar(estado());
-    // Si el input dejara de ser el primer hijo del <label>, el selector
-    // `label:has(> input[data-foco="etiqueta"]:focus-visible)` de globals.css deja de
-    // aplicar EN SILENCIO — de ahí la aserción sobre el orden exacto.
-    expect(html).toMatch(/<label[^>]*>\s*<input type="radio"[^>]*class="sr-only"[^>]*data-foco="etiqueta"/);
+    expect(html).toMatch(/<fieldset[^>]*><legend[^>]*>Qué hacer con esta liquidación<\/legend>/);
+    for (const v of ['aprobar', 'ajustar', 'rechazar']) {
+      expect(html).toMatch(new RegExp(`<label[^>]*>\\s*<input[^>]*type="radio"[^>]*name="accion"[^>]*value="${v}"|<label[^>]*>\\s*<input[^>]*name="accion"[^>]*value="${v}"`));
+    }
+    expect(html).not.toContain('sr-only"');
   });
 
-  it('FE-M3: globals.css pinta el foco visible del label cuando el radio interno lo tiene', () => {
-    // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee el globals.css HERMANO de esta prueba, resuelto de import.meta.url en tiempo de prueba; no viene de entrada de usuario.
-    const css = readFileSync(new URL('../../globals.css', import.meta.url), 'utf8');
-    expect(css).toMatch(/label:has\(>\s*input\[data-foco="etiqueta"\]:focus-visible\)\s*\{[^}]*outline:\s*3px solid/);
+  it('FE-M3: el sistema pinta el foco visible del radio', () => {
+    // eslint-disable-next-line security/detect-non-literal-fs-filename -- lee el piezas.css HERMANO de ui-v2, resuelto de import.meta.url en tiempo de prueba; no viene de entrada de usuario.
+    const css = readFileSync(new URL('../../ui-v2/piezas.css', import.meta.url), 'utf8');
+    expect(css).toMatch(/\.rv-marca__input:focus-visible\s*\{[^}]*outline:\s*2px solid/);
+  });
+
+  it('rechazar pide confirmación en una ventana del sistema con la consecuencia (no firma al primer clic)', () => {
+    const fuente = readFileSync(new URL('./revision-panel.tsx', import.meta.url), 'utf8');
+    expect(fuente).toMatch(/elegida === 'rechazar' \?[\s\S]*<BotonConfirmar/);
+    expect(fuente).toContain("liquidacion.revision.rechazarTitulo");
   });
 
   // ── FE-B3 (auditoría 28) ──────────────────────────────────────────────

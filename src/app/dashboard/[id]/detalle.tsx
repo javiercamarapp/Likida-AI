@@ -1,31 +1,37 @@
-import { ChevronLeft, Download, MessageCircle, RotateCcw } from 'lucide-react';
-import { BotonEnlace, MarcoPagina, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { ChevronLeft, Download, MessageCircle } from 'lucide-react';
+import {
+  Aviso, BotonEnlace, CamposSistema, Casilla, EstadoVacio, FilaTarjetas, FormaConAviso, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  type ColumnaBase, type ResultadoAccion, type TonoEstado,
+} from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import type { LiquidacionDetalle } from '@/lib/likida/analytics';
 import type { ResumenLaboral } from '@/lib/likida/laboral/pagadero';
 import { filasDeducibilidad } from '@/lib/likida/liquidacion/deducibilidad';
 import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { mxn, litros, fechaMx, fechaCorta } from '@/lib/formato';
-import { StatusPill, type Estado } from '@/app/admin/ui/kit';
-import { FormaConAviso, type ResultadoAccion } from '@/app/admin/ui/forma';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import type { BuscarCatalogo } from '../combo-catalogo';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { PanelRevision, type GastoAjustable } from './revision-panel';
 import { FormaReasignar } from './reasignar-forma';
 import type { RevisionDetalle } from '@/lib/likida/revision';
 import {
-  ESTILO_PRIMARIO, ESTILO_SECUNDARIO,
-  Dato, Rotulo, LineaDeTiempo, Diferencia, PillRenglon, TH,
-  estadoRenglon, etiquetaFormaPago, TIPOS_TOPE, type Hito,
+  Diferencia, LineaDeTiempo, PillRenglon, estadoRenglon, etiquetaFormaPago, plural, TIPOS_TOPE, type Hito,
 } from './vista';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
-import { selloHoy } from '@/app/dashboard/sello-hoy';
+import './liquidacion.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EL DETALLE DE LIQUIDACIÓN, EN PANTALLA (v2, 22-ago-2026).
+// EL DETALLE DE LIQUIDACIÓN, EN PANTALLA (sistema ui-v2).
 //
 // Pura props: la sesión, el tenant, los permisos y las acciones las decide
 // `page.tsx`; aquí se pinta. Así se puede mirar con fixtures bajo un preview
 // temporal (CLAUDE.md §Cómo se verifica) sin montar un login — y lo que se
 // mira es el componente REAL, no una copia.
+//
+// Orden de lectura (CONTRATO-VISUAL P5): encabezado → avisos que ponen en duda
+// lo demás → ficha → tira de cifras → tarjetas (acreditable y línea de tiempo,
+// diferencias) → comprobantes → firma → reabrir → leyenda.
 // ═══════════════════════════════════════════════════════════════════════════
 
 export interface PropsDetalle {
@@ -33,7 +39,7 @@ export interface PropsDetalle {
   /** `?tenant=`/`?vista=`/`?rol=` para los links de vuelta (sufijo.ts). */
   sufijo: string;
   /** Estatus de la liquidación ya resuelto por `dashboard/estatus.ts`. */
-  estatus: { label: string; estado: Estado };
+  estatus: { label: string; estado: TonoEstado };
   /** La etiqueta del renglón (la del motor, igual que el PDF) — vive en la
    *  página porque `etiquetas_panel.test.ts` la vigila ahí. */
   etiqueta: (g: { concepto: string; ocrExtra?: Record<string, unknown> }) => string;
@@ -76,9 +82,13 @@ export interface PropsDetalle {
     /** A37-P-01: corregir el monto de un comprobante disputado por el operador. `null` = sin permiso. */
     corregir?: ((previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>) | null;
   } | null;
+  /** El traductor del namespace «dinero» (la página lo obtiene con `getT`); sin él, español. */
+  tr?: Tr;
 }
 
-export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revisionIlegible, reintentarPdf, wa, reasignar, reabrir, revision }: PropsDetalle) {
+type Gasto = LiquidacionDetalle['gastos'][number];
+
+export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revisionIlegible, reintentarPdf, wa, reasignar, reabrir, revision, tr = trEs }: PropsDetalle) {
   // LA FOTO DEL TICKET SE GUARDA (CFF art. 30, conservación 5 años) PERO NO SE
   // ENSEÑA AQUÍ. El aviso de privacidad (privacidad.ts:498) le promete al
   // operador que un dato sensible que aparezca por accidente en su ticket "no
@@ -123,359 +133,291 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
   const montoSinCfdi = [...idsSinCfdi].reduce((s, gid) => s + (montoPorGasto.get(gid) ?? 0), 0);
   const difsTope = d.diferencias.filter((df) => TIPOS_TOPE.has(df.tipo));
   const excedenteTope = difsTope.reduce((s, df) => s + (df.monto > 0 ? df.monto : 0), 0);
-  const comprobantes = (n: number) => (n === 1 ? '1 comprobante' : `${n} comprobantes`);
+  const comprobantes = (n: number) => plural(tr, 'liquidacion.detalle.nComprobantes', n);
 
   const hitos: Hito[] = [
-    { etiqueta: 'Viaje avisado al chofer', cuando: d.viaje.avisadoEn, pendiente: 'Sin aviso registrado' },
-    { etiqueta: 'Chofer aceptó', cuando: d.viaje.aceptadoEn, pendiente: 'Sin confirmación registrada' },
-    ...(d.viaje.llegadaEn ? [{ etiqueta: 'Llegó a destino', cuando: d.viaje.llegadaEn }] : []),
-    ...(d.viaje.descargaEn ? [{ etiqueta: 'Descargando', cuando: d.viaje.descargaEn }] : []),
-    ...(d.viaje.regresoEn ? [{ etiqueta: 'De regreso', cuando: d.viaje.regresoEn }] : []),
+    { etiqueta: tr('liquidacion.detalle.hitoAvisado'), cuando: d.viaje.avisadoEn, pendiente: tr('liquidacion.detalle.hitoAvisadoVacio') },
+    { etiqueta: tr('liquidacion.detalle.hitoAcepto'), cuando: d.viaje.aceptadoEn, pendiente: tr('liquidacion.detalle.hitoAceptoVacio') },
+    ...(d.viaje.llegadaEn ? [{ etiqueta: tr('liquidacion.detalle.hitoLlego'), cuando: d.viaje.llegadaEn }] : []),
+    ...(d.viaje.descargaEn ? [{ etiqueta: tr('liquidacion.detalle.hitoDescarga'), cuando: d.viaje.descargaEn }] : []),
+    ...(d.viaje.regresoEn ? [{ etiqueta: tr('liquidacion.detalle.hitoRegreso'), cuando: d.viaje.regresoEn }] : []),
     {
-      etiqueta: 'Comprobantes por WhatsApp',
+      etiqueta: tr('liquidacion.detalle.hitoComprobantes'),
       cuando: d.comprobantesEntre.ultimo,
-      pendiente: 'Ninguno recibido',
+      pendiente: tr('liquidacion.detalle.hitoComprobantesVacio'),
       nota: d.comprobantesEntre.n > 0
-        ? `${comprobantes(d.comprobantesEntre.n)}${d.comprobantesEntre.n > 1 && d.comprobantesEntre.primero ? `, el primero ${fechaCorta(d.comprobantesEntre.primero)}` : ''}`
+        ? (d.comprobantesEntre.n > 1 && d.comprobantesEntre.primero
+          ? plural(tr, 'liquidacion.detalle.hitoPrimero', d.comprobantesEntre.n, { fecha: fechaCorta(d.comprobantesEntre.primero) })
+          : comprobantes(d.comprobantesEntre.n))
         : undefined,
     },
-    { etiqueta: 'Cuadre del motor', cuando: d.creadoEn },
+    { etiqueta: tr('liquidacion.detalle.hitoCuadre'), cuando: d.creadoEn },
     d.pdfPath
-      ? { etiqueta: 'PDF de liquidación', cuando: null, textoSinHora: 'Disponible para descargar' }
-      : { etiqueta: 'PDF de liquidación', cuando: null, pendiente: 'Sin generar' },
+      ? { etiqueta: tr('liquidacion.detalle.hitoPdf'), cuando: null, textoSinHora: tr('liquidacion.detalle.hitoPdfListo') }
+      : { etiqueta: tr('liquidacion.detalle.hitoPdf'), cuando: null, pendiente: tr('liquidacion.detalle.hitoPdfVacio') },
   ];
 
   const ruta = d.viaje.origen && d.viaje.destino
     ? `${d.viaje.origen} → ${d.viaje.destino}`
     : d.viaje.origen ?? d.viaje.destino ?? null;
   const sumaRenglones = d.gastos.reduce((s, g) => s + g.monto, 0);
+  const montoTotal = d.comprobantesCuadran ? d.totalComprobado : sumaRenglones;
+
+  const columnas: ColumnaBase<Gasto>[] = [
+    {
+      id: 'concepto', titulo: tr('liquidacion.detalle.colConcepto'), principal: true,
+      celda: (g) => (
+        <>
+          {etiqueta(g)}
+          {g.imagenUrl && <span className="rv-liq__sub-celda">{tr('liquidacion.detalle.fotoArchivada')}</span>}
+        </>
+      ),
+    },
+    {
+      id: 'folio', titulo: tr('liquidacion.detalle.colFolio'),
+      celda: (g) => (
+        <>
+          <span className={g.folio ? 'rv-liq__mono' : 'rv-liq__vacio-celda'}>{g.folio ?? '—'}</span>
+          {g.cfdiUuid && <span className="rv-liq__uuid" title={g.cfdiUuid}>{g.cfdiUuid}</span>}
+        </>
+      ),
+    },
+    { id: 'fecha', titulo: tr('liquidacion.detalle.colFecha'), celda: (g) => (g.fecha ? fechaMx(g.fecha) : '—') },
+    {
+      id: 'forma', titulo: tr('liquidacion.detalle.colFormaPago'),
+      celda: (g) => (g.formaPago ? etiquetaFormaPago(g.formaPago, tr) : <span className="rv-liq__vacio-celda">—</span>),
+    },
+    { id: 'monto', titulo: tr('liquidacion.detalle.colMonto'), alinear: 'der', celda: (g) => <span className="rv-liq__mono">{mxn(g.monto)}</span> },
+    { id: 'estado', titulo: tr('liquidacion.detalle.colEstado'), celda: (g) => <PillRenglon tr={tr} e={estadoRenglon(g, g.id ? (tiposPorGasto.get(g.id) ?? []) : [])} /> },
+  ];
 
   return (
     <MarcoPagina
-      area="Viajes"
-      titulo={`Liquidación del viaje ${d.folio}`}
-      apoyo="Lo anticipado, lo comprobado y la diferencia del viaje, con el fundamento de cada cifra."
+      area={tr('liquidacion.detalle.area')}
+      titulo={tr('liquidacion.detalle.titulo', { folio: d.folio })}
+      apoyo={tr('liquidacion.detalle.apoyo')}
       acciones={(
         <>
-          <BotonEnlace tamano="sm" href={`/dashboard/viajes${sufijo}`} icono={<ChevronLeft width={13} height={13} strokeWidth={1.75} aria-hidden />}>Viajes</BotonEnlace>
-          <div className="flex items-center gap-2 flex-wrap justify-end">
-                {wa && (
-                  <a href={wa} target="_blank" rel="noopener noreferrer" className="rv-btn rv-btn--secondary" style={ESTILO_SECUNDARIO}>
-                    <MessageCircle width={13} height={13} strokeWidth={1.75} aria-hidden /> Ver WhatsApp
-                  </a>
-                )}
-                {/* El PDF existía, estaba autenticado y no había forma de llegar a
-                    él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5). */}
-                {pdfHref && (
-                  <a href={pdfHref} className="rv-btn rv-btn--primary" style={ESTILO_PRIMARIO}>
-                    <Download width={13} height={13} strokeWidth={1.75} aria-hidden /> Descargar PDF
-                  </a>
-                )}
-              </div>
+          <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/viajes${sufijo}`} icono={<Icono icono={ChevronLeft} />}>{tr('liquidacion.detalle.volverViajes')}</BotonEnlace>
+          {wa && (
+            <BotonEnlace tamano="sm" variante="secondary" href={wa} target="_blank" rel="noopener noreferrer" icono={<Icono icono={MessageCircle} />}>
+              {tr('liquidacion.detalle.verWhatsapp')}
+            </BotonEnlace>
+          )}
+          {/* El PDF existía, estaba autenticado y no había forma de llegar a
+              él: `pdf_url` ni se seleccionaba (auditoría 5, frontend, MEDIO 5). */}
+          {pdfHref && (
+            <BotonEnlace tamano="sm" variante="primary" href={pdfHref} icono={<Icono icono={Download} />}>
+              {tr('liquidacion.detalle.descargarPdf')}
+            </BotonEnlace>
+          )}
         </>
       )}
     >
-          {/* No se pudo leer el estado de revisión (BE-A1/FE-M2): esta pantalla
-              NO puede afirmar que la liquidación está vigente, porque podría
-              estar rechazada y no lo sabemos. Va PRIMERO — antes que cualquier
-              otro aviso — porque pone en duda todo lo que sigue. */}
-          {revisionIlegible && (
-            <section className="card p-4" aria-label="No se pudo leer la revisión" style={{ borderColor: 'var(--bad)' }}>
-              <p className="text-[13px] font-medium" style={{ color: 'var(--bad)' }}>
-                No se pudo leer el estado de revisión de esta liquidación.
-              </p>
-              <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>
-                No se ofrece la descarga del PDF hasta confirmar que no fue rechazada. Recarga la
-                página; si el problema sigue, avisa a soporte antes de tratar esta liquidación como vigente.
-              </p>
-            </section>
-          )}
-          {reintentarPdf && (
-            <section className="card p-4" aria-label="PDF pendiente">
-              <p>El ajuste y la firma están guardados. Falta generar los dos ejemplares del PDF.</p>
-              <FormaConAviso accion={reintentarPdf} boton="Reintentar PDF" columnas="md:grid-cols-1"><span>Reintentar no cambia tu firma ni las cifras.</span></FormaConAviso>
-            </section>
-          )}
-          {/* ── Cabecera: folio, estatus y la ficha del viaje ── */}
-          <section className="card p-4">
-            <div className="flex items-start justify-between gap-4 flex-wrap">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <p className="font-display text-[20px] font-semibold leading-tight tabular">{d.folio}</p>
-                  <StatusPill estado={estatus.estado}>{estatus.label}</StatusPill>
-                </div>
-                {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una
-                    liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
-                <p className="text-[12px] mt-1" style={{ color: 'var(--muted)' }}>
-                  Liquidación cerrada el {fechaMx(d.creadoEn)}
-                </p>
-              </div>
+      {/* No se pudo leer el estado de revisión (BE-A1/FE-M2): esta pantalla
+          NO puede afirmar que la liquidación está vigente, porque podría
+          estar rechazada y no lo sabemos. Va PRIMERO — antes que cualquier
+          otro aviso — porque pone en duda todo lo que sigue. */}
+      {revisionIlegible && (
+        <Aviso tono="error" titulo={tr('liquidacion.detalle.revisionIlegibleTitulo')}>{tr('liquidacion.detalle.revisionIlegibleCuerpo')}</Aviso>
+      )}
+      {reintentarPdf && (
+        <Tarjeta titulo={tr('liquidacion.detalle.pdfPendienteTitulo')}>
+          <p className="rv-liq__nota">{tr('liquidacion.detalle.pdfPendienteTexto')}</p>
+          <FormaConAviso accion={reintentarPdf} boton={tr('liquidacion.detalle.reintentarPdf')} columnas="md:grid-cols-1">
+            <span className="rv-liq__tenue">{tr('liquidacion.detalle.reintentarPdfNota')}</span>
+          </FormaConAviso>
+        </Tarjeta>
+      )}
 
-              {/* ── Chofer asignado / reasignar ──
-                  Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un
-                  superadmin de paso por el tenant demo no mueve viajes de chofer. */}
-              {reasignar && (
-                <FormaReasignar accion={reasignar.accion} buscar={reasignar.buscar}
-                  actual={reasignar.actual} actualNombre={reasignar.actualNombre} total={reasignar.total} />
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-x-4 gap-y-3 mt-4 pt-3.5" style={{ borderTop: '1px dashed var(--line2)' }}>
-              <Dato titulo="Inicio del viaje">{d.viaje.fechaInicio ? fechaMx(d.viaje.fechaInicio) : '—'}</Dato>
-              <Dato titulo="Ruta" ancho>{ruta ?? <span style={{ color: 'var(--faint)' }}>Sin ruta capturada</span>}</Dato>
-              <Dato titulo="Operador">{d.operadorNombre}</Dato>
-              <Dato titulo="Unidad">
-                {d.viaje.unidadEco
-                  ? <>{d.viaje.unidadEco}{d.viaje.unidadPlacas && <span style={{ color: 'var(--muted)' }}> · {d.viaje.unidadPlacas}</span>}</>
-                  : <span style={{ color: 'var(--faint)' }}>Sin unidad</span>}
-              </Dato>
-              <Dato titulo="Cliente">{d.viaje.clienteNombre ?? <span style={{ color: 'var(--faint)' }}>Sin cliente</span>}</Dato>
-              <Dato titulo="Comprobantes">{d.comprobantesEntre.n > 0 ? comprobantes(d.comprobantesEntre.n) : '—'}</Dato>
-            </div>
-          </section>
-
-          {/* ── KPIs ── */}
-          <TiraCifras sello={selloHoy('Liquidación del viaje')}>
-            <Cifra etiqueta="Anticipo" valor={mxn(d.totalAnticipo)} nota="entregado al operador" info="liquidacion_detalle.anticipo" />
-            <Cifra etiqueta="Comprobado" valor={mxn(d.totalComprobado)}
-              nota={d.comprobantesCuadran ? `${comprobantes(d.gastos.length)} válidos` : 'total persistido al cierre'} info="liquidacion_detalle.comprobado" />
-            <Cifra
-              etiqueta="Diferencia"
-              valor={d.diferencia === 0 ? 'Cuadra exacto' : mxn(Math.abs(d.diferencia))}
-              tono={d.diferencia === 0 ? 'ok' : d.diferencia > 0 ? 'warn' : 'bad'}
-              nota={d.diferencia === 0 ? 'anticipo = comprobado' : d.diferencia > 0 ? 'sobrante · a favor de la empresa' : 'faltante · a favor del operador'}
-              info="liquidacion_detalle.diferencia"
-            />
-            <Cifra
-              etiqueta="Sin CFDI"
-              valor={difsSinCfdi.length === 0 ? mxn(0) : sinCfdiCruzable ? mxn(montoSinCfdi) : '—'}
-              tono={difsSinCfdi.length > 0 ? 'warn' : undefined}
-              info="liquidacion_detalle.sin_cfdi"
-              nota={difsSinCfdi.length === 0 ? 'todo lo que lo requería trae factura' : sinCfdiCruzable ? `${comprobantes(idsSinCfdi.size)} sin factura` : `${comprobantes(difsSinCfdi.length)} — monto no cruzable`}
-            />
-            <Cifra
-              etiqueta="Sobre tope"
-              valor={mxn(excedenteTope)}
-              tono={difsTope.length > 0 ? 'warn' : undefined}
-              info="liquidacion_detalle.sobre_tope"
-              nota={difsTope.length === 0 ? 'nada excede política ni tope fiscal' : `excedente en ${comprobantes(difsTope.length)}`}
-            />
-          </TiraCifras>
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-            <div className="xl:col-span-2 space-y-4">
-              {/* ── Acreditable / recuperable ──
-                  Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF
-                  × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
-                  viejas escritas antes del cambio; se conserva para no ocultarlas. */}
-              <section className="card p-4">
-                <TituloRecuadro info="liquidacion_detalle.acreditable" className="mb-2">Acreditable / recuperable</TituloRecuadro>
-                <div className="overflow-x-auto -mx-1">
-                  <table aria-label="Acreditable y recuperable" className="w-full border-collapse">
-                    <thead>
-                      <tr style={{ background: 'var(--canvas)' }}>
-                        <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Diésel elegible</th>
-                        <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>IEPS de diésel</th>
-                        <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>IVA acreditable</th>
-                        <th scope="col" className={`${TH} rounded-r-lg`} style={{ color: 'var(--muted)' }}>Peaje 50 %</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <Celda vacio={d.litrosDiesel <= 0}>{d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—'}</Celda>
-                        <Celda vacio={d.ieps <= 0}>{d.ieps > 0 ? mxn(d.ieps) : '—'}</Celda>
-                        <Celda vacio={d.iva <= 0}>{d.iva > 0 ? mxn(d.iva) : '—'}</Celda>
-                        <Celda vacio={d.peaje <= 0}>{d.peaje > 0 ? mxn(d.peaje) : '—'}</Celda>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-                {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático —
-                    el motor no verifica ninguna de las condiciones de la ficha (ingresos
-                    < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
-                <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-                  {hayAcred
-                    ? 'Diésel en litros (LIF 20-A fr. IV, estímulo por cuota semanal del DOF). El peaje al 50 % está sujeto a elegibilidad: ingresos menores a $300 M y autopistas de cuota, que el motor no verifica. IVA e IEPS sólo de CFDI con desglose.'
-                    : 'El motor no encontró conceptos acreditables en esta liquidación: sin CFDI de diésel con IEPS desglosado ni peaje con factura, no hay nada que recuperar.'}
-                </p>
-
-                {/* ── De lo comprobado, cuánto sobrevive al SAT ──
-                    Este reparto es la razón por la que el contralor compra, y hasta hoy
-                    solo existía en el PDF (auditoría 5, frontend, ALTO 2). */}
-                {deducibilidad && (
-                  <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
-                    <Rotulo>De lo comprobado, cuánto es deducible</Rotulo>
-                    <ul className="mt-1.5">
-                      {deducibilidad.map((f, i) => (
-                        <li key={f.label} className="flex items-start justify-between gap-4 py-2"
-                          style={i < deducibilidad.length - 1 ? { borderBottom: '1px dashed var(--line2)' } : undefined}>
-                          <div className="min-w-0">
-                            <div className="text-[13px] font-medium">{f.label}</div>
-                            {f.pie && <div className="text-[11px] mt-0.5" style={{ color: 'var(--muted)' }}>{f.pie}</div>}
-                          </div>
-                          <span className="cifra-mono text-[13px] font-medium whitespace-nowrap"
-                            style={{ color: f.tono === 'malo' ? 'var(--bad)' : 'var(--ink)' }}>{mxn(f.monto)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-                      Estimación con la información capturada; la determinación final es de su contador.
-                    </p>
-                  </div>
-                )}
-
-                {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
-                    El mismo resumen que el PDF imprime desde el 1-ago, con las
-                    MISMAS funciones (analytics lo calcula junto a las cubetas).
-                    Hasta hoy el contralor decidía el neto EN ESTA PANTALLA
-                    viendo solo la deducibilidad — y la advertencia de que «no
-                    deducible» NO autoriza descontárselo al operador (LFT
-                    110/111/263) solo aparecía en el PDF ya generado. La
-                    decisión se toma aquí; la advertencia va aquí. */}
-                {d.laboral && <SeccionLaboral laboral={d.laboral} />}
-              </section>
-
-              {/* ── Diferencias en lenguaje humano ── */}
-              {d.diferencias.length > 0 && (
-                <section className="card p-4">
-                  <TituloRecuadro info="liquidacion_detalle.diferencias" className="mb-1">
-                    Diferencias detectadas
-                    <span className="cifra-mono text-[12px] font-normal ml-2" style={{ color: 'var(--muted)' }}>{d.diferencias.length}</span>
-                  </TituloRecuadro>
-                  <ul>
-                    {d.diferencias.map((df, i) => <Diferencia key={i} nota={df.nota} monto={df.monto} />)}
-                  </ul>
-                </section>
-              )}
-            </div>
-
-            {/* ── Línea de tiempo ── */}
-            <section className="card p-4 xl:self-start">
-              <TituloRecuadro info="liquidacion_detalle.linea_tiempo" className="mb-3">Línea de tiempo</TituloRecuadro>
-              <LineaDeTiempo hitos={hitos} />
-              <p className="text-[11px] mt-3 pt-3" style={{ color: 'var(--faint)', borderTop: '1px dashed var(--line2)' }}>
-                Horas de recepción por WhatsApp, en hora de México. Un hito sin sello no se estima.
-              </p>
-            </section>
+      {/* ── Ficha: folio, estatus y los datos del viaje ── */}
+      <Tarjeta titulo={tr('liquidacion.detalle.fichaTitulo')}>
+        <div className="rv-liq__ficha-cab">
+          <StatusChip tono={estatus.estado}>{estatus.label}</StatusChip>
+          {/* Hora de México, no UTC: `.slice(0,10)` fechaba en agosto una
+              liquidación cerrada el 31 de julio a las 20:00 (ver formato.ts). */}
+          <p className="rv-liq__nota">{tr('liquidacion.detalle.cerradaEl', { fecha: fechaMx(d.creadoEn) })}</p>
+        </div>
+        <CamposSistema
+          etiqueta={tr('liquidacion.detalle.fichaTitulo')}
+          campos={[
+            { etiqueta: tr('liquidacion.detalle.inicio'), valor: d.viaje.fechaInicio ? fechaMx(d.viaje.fechaInicio) : '—' },
+            { etiqueta: tr('liquidacion.detalle.ruta'), valor: ruta ?? <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinRuta')}</span> },
+            { etiqueta: tr('liquidacion.detalle.operador'), valor: d.operadorNombre },
+            {
+              etiqueta: tr('liquidacion.detalle.unidad'),
+              valor: d.viaje.unidadEco
+                ? <>{d.viaje.unidadEco}{d.viaje.unidadPlacas && <span className="rv-liq__sub-celda"> · {d.viaje.unidadPlacas}</span>}</>
+                : <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinUnidad')}</span>,
+            },
+            { etiqueta: tr('liquidacion.detalle.cliente'), valor: d.viaje.clienteNombre ?? <span className="rv-liq__vacio-celda">{tr('liquidacion.detalle.sinCliente')}</span> },
+            { etiqueta: tr('liquidacion.detalle.comprobantes'), valor: d.comprobantesEntre.n > 0 ? comprobantes(d.comprobantesEntre.n) : '—' },
+          ]}
+        />
+        {/* ── Chofer asignado / reasignar ──
+            Solo dueño/encargado (permisos.ts: puedeAsignar) — un contador o un
+            superadmin de paso por el tenant demo no mueve viajes de chofer. */}
+        {reasignar && (
+          <div className="rv-liq__reasignar">
+            <FormaReasignar accion={reasignar.accion} buscar={reasignar.buscar}
+              actual={reasignar.actual} actualNombre={reasignar.actualNombre} total={reasignar.total} />
           </div>
+        )}
+      </Tarjeta>
 
-          {/* ── Comprobantes ──
-              Los renglones son los mismos que imprime el PDF (duplicados y
-              montos inválidos fuera) y el total va al pie, para que el
-              contralor no tenga que sumar la columna con el dedo. */}
-          <section className="card p-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-              <TituloRecuadro info="liquidacion_detalle.comprobantes">Comprobantes</TituloRecuadro>
-              {d.comprobantesExcluidos > 0 && (
-                <span className="text-[11px]" style={{ color: 'var(--muted)' }}>
-                  {d.comprobantesExcluidos === 1
-                    ? '1 comprobante excluido del total (duplicado o monto inválido); está explicado en las diferencias.'
-                    : `${d.comprobantesExcluidos} comprobantes excluidos del total (duplicados o montos inválidos); están explicados en las diferencias.`}
-                </span>
-              )}
+      {/* ── KPIs ── */}
+      <TiraCifras etiqueta={tr('liquidacion.detalle.titulo', { folio: d.folio })} sello={selloHoy(tr('liquidacion.detalle.selloFuente'))}>
+        <Cifra etiqueta={tr('liquidacion.detalle.anticipo')} valor={mxn(d.totalAnticipo)} nota={tr('liquidacion.detalle.anticipoNota')} info="liquidacion_detalle.anticipo" />
+        <Cifra etiqueta={tr('liquidacion.detalle.comprobado')} valor={mxn(d.totalComprobado)}
+          nota={d.comprobantesCuadran ? plural(tr, 'liquidacion.detalle.comprobadoValidos', d.gastos.length) : tr('liquidacion.detalle.comprobadoPersistido')} info="liquidacion_detalle.comprobado" />
+        <Cifra
+          etiqueta={tr('liquidacion.detalle.diferencia')}
+          valor={d.diferencia === 0 ? tr('liquidacion.detalle.cuadraExacto') : mxn(Math.abs(d.diferencia))}
+          tono={d.diferencia === 0 ? 'ok' : d.diferencia > 0 ? 'warn' : 'bad'}
+          nota={d.diferencia === 0 ? tr('liquidacion.detalle.cuadraNota') : d.diferencia > 0 ? tr('liquidacion.detalle.sobranteNota') : tr('liquidacion.detalle.faltanteNota')}
+          info="liquidacion_detalle.diferencia"
+        />
+        <Cifra
+          etiqueta={tr('liquidacion.detalle.sinCfdi')}
+          valor={difsSinCfdi.length === 0 ? mxn(0) : sinCfdiCruzable ? mxn(montoSinCfdi) : '—'}
+          tono={difsSinCfdi.length > 0 ? 'warn' : undefined}
+          info="liquidacion_detalle.sin_cfdi"
+          nota={difsSinCfdi.length === 0 ? tr('liquidacion.detalle.sinCfdiTodoTrae') : sinCfdiCruzable ? plural(tr, 'liquidacion.detalle.sinCfdiNota', idsSinCfdi.size) : plural(tr, 'liquidacion.detalle.sinCfdiNoCruzable', difsSinCfdi.length)}
+        />
+        <Cifra
+          etiqueta={tr('liquidacion.detalle.sobreTope')}
+          valor={mxn(excedenteTope)}
+          tono={difsTope.length > 0 ? 'warn' : undefined}
+          info="liquidacion_detalle.sobre_tope"
+          nota={difsTope.length === 0 ? tr('liquidacion.detalle.sobreTopeNada') : plural(tr, 'liquidacion.detalle.sobreTopeNota', difsTope.length)}
+        />
+      </TiraCifras>
+
+      <FilaTarjetas variante="8-4">
+        {/* ── Acreditable / recuperable ──
+            Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF
+            × litros y esa cuota no la tenemos. `ieps` solo puede venir de filas
+            viejas escritas antes del cambio; se conserva para no ocultarlas. */}
+        <Tarjeta titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
+          <CamposSistema
+            etiqueta={tr('liquidacion.detalle.acreditableTabla')}
+            campos={[
+              { etiqueta: tr('liquidacion.detalle.dieselElegible'), valor: d.litrosDiesel > 0 ? litros(d.litrosDiesel) : '—' },
+              { etiqueta: tr('liquidacion.detalle.iepsDiesel'), valor: d.ieps > 0 ? mxn(d.ieps) : '—' },
+              { etiqueta: tr('liquidacion.detalle.ivaAcreditable'), valor: d.iva > 0 ? mxn(d.iva) : '—' },
+              { etiqueta: tr('liquidacion.detalle.peaje50'), valor: d.peaje > 0 ? mxn(d.peaje) : '—' },
+            ]}
+          />
+          {/* AUDITORÍA 12, ALTO (fiscal): el peaje acreditable no es automático —
+              el motor no verifica ninguna de las condiciones de la ficha (ingresos
+              < $300M, autopistas de cuota). El PDF ya lo decía; el panel no. */}
+          <p className="rv-liq__tenue">{hayAcred ? tr('liquidacion.detalle.acreditableNota') : tr('liquidacion.detalle.acreditableNada')}</p>
+
+          {/* ── De lo comprobado, cuánto sobrevive al SAT ──
+              Este reparto es la razón por la que el contralor compra, y hasta hoy
+              solo existía en el PDF (auditoría 5, frontend, ALTO 2). */}
+          {deducibilidad && (
+            <div className="rv-liq__sub">
+              <p className="rv-liq__sub-titulo">{tr('liquidacion.detalle.deducibleTitulo')}</p>
+              <ul className="rv-liq__lista">
+                {deducibilidad.map((f) => (
+                  <li key={f.label} className="rv-liq__fila" data-tono={f.tono === 'malo' ? 'bad' : undefined}>
+                    <span className="rv-liq__fila-etq">
+                      {f.label}
+                      {f.pie && <span className="rv-liq__fila-pie">{f.pie}</span>}
+                    </span>
+                    <span className="rv-liq__cifra">{mxn(f.monto)}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="rv-liq__tenue">{tr('liquidacion.detalle.deducibleNota')}</p>
             </div>
-            {d.gastos.length === 0 ? (
-              // Pasa de verdad: en el tenant del demo hay liquidaciones con total
-              // guardado y cero filas en `gasto`. Una tabla con encabezados y nada
-              // debajo se lee como "se perdieron los comprobantes"; esto dice qué
-              // pasó y a dónde ir.
-              <p className="text-[13px] py-6 text-center" style={{ color: 'var(--muted)' }}>
-                Esta liquidación se cerró con un total de {mxn(d.totalComprobado)}, pero no hay comprobantes
-                individuales registrados — los renglones viven en el PDF.
-              </p>
-            ) : (
-              <div className="overflow-x-auto -mx-1">
-                <table aria-label="Renglones registrados del viaje" className="w-full border-collapse text-[13px]">
-                  <thead>
-                    <tr style={{ background: 'var(--canvas)' }}>
-                      <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Concepto</th>
-                      <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Folio / CFDI</th>
-                      <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Fecha</th>
-                      <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Forma de pago</th>
-                      <th scope="col" className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Monto</th>
-                      <th scope="col" className={`${TH} rounded-r-lg`} style={{ color: 'var(--muted)' }}>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.gastos.map((g, i) => {
-                      const er = estadoRenglon(g, g.id ? (tiposPorGasto.get(g.id) ?? []) : []);
-                      return (
-                        <tr key={g.id ?? i} className="border-b transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
-                          <td className="px-3 py-2.5 font-medium whitespace-nowrap">
-                            {etiqueta(g)}
-                            {g.imagenUrl && (
-                              <span className="block text-[11px] font-normal" style={{ color: 'var(--faint)' }}>Foto archivada</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5 min-w-0">
-                            <span className="cifra-mono block" style={{ color: g.folio ? 'var(--ink)' : 'var(--faint)' }}>{g.folio ?? '—'}</span>
-                            {g.cfdiUuid && (
-                              <span className="cifra-mono block text-[11px] truncate max-w-[260px]" style={{ color: 'var(--faint)' }} title={g.cfdiUuid}>
-                                {g.cfdiUuid}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: 'var(--muted)' }}>{g.fecha ? fechaMx(g.fecha) : '—'}</td>
-                          <td className="px-3 py-2.5 whitespace-nowrap" style={{ color: g.formaPago ? 'var(--ink)' : 'var(--faint)' }}>{etiquetaFormaPago(g.formaPago)}</td>
-                          <td className="px-3 py-2.5 text-right cifra-mono whitespace-nowrap">{mxn(g.monto)}</td>
-                          <td className="px-3 py-2.5 whitespace-nowrap"><PillRenglon e={er} /></td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  <tfoot>
-                    <tr>
-                      <th scope="row" colSpan={4} className="px-3 pt-3 pb-1 text-left text-[12px] font-medium">
-                        {d.comprobantesCuadran ? 'Total comprobado' : 'Suma de los renglones'}
-                        <span className="font-normal ml-2" style={{ color: 'var(--muted)' }}>{comprobantes(d.gastos.length)}</span>
-                      </th>
-                      <td className="px-3 pt-3 pb-1 text-right cifra-mono font-semibold whitespace-nowrap">
-                        {mxn(d.comprobantesCuadran ? d.totalComprobado : sumaRenglones)}
-                      </td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
-            {!d.comprobantesCuadran && d.gastos.length > 0 && (
-              <p className="text-[11px] mt-2" style={{ color: 'var(--muted)' }}>
-                Renglones tal como se capturaron: no se pudo reconstruir la liquidación, así que
-                esta suma puede no coincidir con el comprobado de arriba ({mxn(d.totalComprobado)}).
-              </p>
-            )}
-          </section>
-
-          {/* La firma va ANTES de «reabrir»: es lo que se hace todos los
-              días; reabrir es lo excepcional y destructivo. */}
-          {revision && (
-            <PanelRevision estado={revision.estado} gastos={revision.gastos}
-              accion={revision.accion} folio={d.folio} corregir={revision.corregir ?? null} />
           )}
 
-          {reabrir && (
-            <section className="card p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <RotateCcw width={14} height={14} strokeWidth={1.75} aria-hidden />
-                <TituloRecuadro info="liquidacion_detalle.reabrir" className="m-0">Reabrir este viaje</TituloRecuadro>
-              </div>
-              <p className="text-[12px] mb-3" style={{ color: 'var(--muted)' }}>
-                Vuelve a aceptar comprobantes por WhatsApp. <strong>Borra la liquidación actual y su PDF</strong> — si
-                ya se lo entregaste al operador o a tu contador, ese papel dejará de cuadrar con lo que el sistema diga
-                después. Se genera una nueva al cerrar otra vez.
-              </p>
-              <FormaConAviso accion={reabrir} boton="Reabrir viaje" columnas="md:grid-cols-1">
-                <label className="flex items-start gap-2 text-[13px]">
-                  <input type="checkbox" name="confirmar" className="w-4 h-4 mt-0.5" />
-                  <span>Entiendo que se borra la liquidación {d.folio} y su PDF.</span>
-                </label>
-              </FormaConAviso>
-            </section>
-          )}
+          {/* ── DEDUCIBLE ≠ PAGADERO (tableros al día, 28-ago-2026) ──
+              El mismo resumen que el PDF imprime desde el 1-ago, con las
+              MISMAS funciones (analytics lo calcula junto a las cubetas).
+              Hasta hoy el contralor decidía el neto EN ESTA PANTALLA
+              viendo solo la deducibilidad — y la advertencia de que «no
+              deducible» NO autoriza descontárselo al operador (LFT
+              110/111/263) solo aparecía en el PDF ya generado. La
+              decisión se toma aquí; la advertencia va aquí. */}
+          {d.laboral && <SeccionLaboral laboral={d.laboral} tr={tr} />}
+        </Tarjeta>
 
-          <p className="text-[11px] pt-2" style={{ color: 'var(--faint)' }}>
-            {LEYENDA_CORTA}
+        {/* ── Línea de tiempo ── */}
+        <Tarjeta titulo={tr('liquidacion.detalle.lineaTitulo')} info="liquidacion_detalle.linea_tiempo" contenida>
+          <LineaDeTiempo hitos={hitos} tr={tr} />
+          <p className="rv-liq__tenue">{tr('liquidacion.detalle.lineaNota')}</p>
+        </Tarjeta>
+      </FilaTarjetas>
+
+      {/* ── Diferencias en lenguaje humano ── */}
+      {d.diferencias.length > 0 && (
+        <Tarjeta titulo={`${tr('liquidacion.detalle.diferenciasTitulo')} · ${d.diferencias.length}`} info="liquidacion_detalle.diferencias">
+          <ul className="rv-liq__lista">
+            {d.diferencias.map((df, i) => <Diferencia key={i} nota={df.nota} monto={df.monto} tr={tr} />)}
+          </ul>
+          <p className="rv-liq__tenue">{tr('liquidacion.detalle.aprobarDescontarRazon')}</p>
+        </Tarjeta>
+      )}
+
+      {/* ── Comprobantes ──
+          Los renglones son los mismos que imprime el PDF (duplicados y
+          montos inválidos fuera) y el total va al pie, para que el
+          contralor no tenga que sumar la columna con el dedo. */}
+      <Tarjeta titulo={tr('liquidacion.detalle.comprobantesTitulo')} info="liquidacion_detalle.comprobantes">
+        {d.comprobantesExcluidos > 0 && (
+          <p className="rv-liq__nota">{plural(tr, 'liquidacion.detalle.excluidos', d.comprobantesExcluidos)}</p>
+        )}
+        {d.gastos.length === 0 ? (
+          // Pasa de verdad: en el tenant del demo hay liquidaciones con total
+          // guardado y cero filas en `gasto`. Una tabla con encabezados y nada
+          // debajo se lee como "se perdieron los comprobantes"; esto dice qué
+          // pasó y a dónde ir.
+          <EstadoVacio titulo={tr('liquidacion.detalle.sinRenglonesTitulo')}>{tr('liquidacion.detalle.sinRenglones', { total: mxn(d.totalComprobado) })}</EstadoVacio>
+        ) : (
+          <>
+            <TablaBase
+              etiqueta={tr('liquidacion.detalle.renglonesTabla')}
+              columnas={columnas}
+              filas={d.gastos}
+              idFila={(g) => g.id ?? `${g.concepto}-${g.folio ?? ''}-${g.fecha ?? ''}-${g.monto}`}
+              tarjetaMovil
+            />
+            <div className="rv-liq__total">
+              <span className="rv-liq__total-etq">
+                {d.comprobantesCuadran ? tr('liquidacion.detalle.totalComprobado') : tr('liquidacion.detalle.sumaRenglones')}
+                <span>{comprobantes(d.gastos.length)}</span>
+              </span>
+              <span className="rv-liq__total-monto">{mxn(montoTotal)}</span>
+            </div>
+          </>
+        )}
+        {!d.comprobantesCuadran && d.gastos.length > 0 && (
+          <p className="rv-liq__nota">{tr('liquidacion.detalle.noCuadran', { total: mxn(d.totalComprobado) })}</p>
+        )}
+      </Tarjeta>
+
+      {/* La firma va ANTES de «reabrir»: es lo que se hace todos los
+          días; reabrir es lo excepcional y destructivo. */}
+      {revision && (
+        <PanelRevision estado={revision.estado} gastos={revision.gastos}
+          accion={revision.accion} folio={d.folio} corregir={revision.corregir ?? null} />
+      )}
+
+      {reabrir && (
+        <Tarjeta titulo={tr('liquidacion.detalle.reabrirTitulo')} info="liquidacion_detalle.reabrir">
+          <p className="rv-liq__nota">
+            {rico(tr('liquidacion.detalle.reabrirTexto'), { strong: (c) => <strong>{c}</strong> })}
           </p>
+          <FormaConAviso accion={reabrir} boton={tr('liquidacion.detalle.reabrirBoton')} columnas="md:grid-cols-1">
+            <Casilla name="confirmar" etiqueta={tr('liquidacion.detalle.reabrirEntiendo', { folio: d.folio })} />
+          </FormaConAviso>
+        </Tarjeta>
+      )}
+
+      <p className="rv-liq__cierre">{LEYENDA_CORTA}</p>
     </MarcoPagina>
   );
 }
@@ -485,29 +427,15 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
  *  detalle entero. El texto es EL MISMO que imprime el PDF (`resumenLaboral`):
  *  dos redacciones de la misma obligación laboral serían dos opiniones
  *  legales, y este producto emite una. */
-export function SeccionLaboral({ laboral }: { laboral: ResumenLaboral }) {
+export function SeccionLaboral({ laboral, tr = trEs }: { laboral: ResumenLaboral; tr?: Tr }) {
   return (
-    <div className="mt-3 pt-3" style={{ borderTop: '1px dashed var(--line2)' }}>
-      <Rotulo>Lo que se le reembolsa al operador</Rotulo>
-      <div className="flex items-start justify-between gap-4 mt-1.5">
-        <p className="text-[12px] min-w-0">{laboral.texto}</p>
-        {laboral.montoPagadero > 0 && (
-          <span className="cifra-mono text-[13px] font-medium whitespace-nowrap">{mxn(laboral.montoPagadero)}</span>
-        )}
+    <div className="rv-liq__sub">
+      <p className="rv-liq__sub-titulo">{tr('liquidacion.detalle.laboralTitulo')}</p>
+      <div className="rv-liq__fila">
+        <span className="rv-liq__fila-etq">{laboral.texto}</span>
+        {laboral.montoPagadero > 0 && <span className="rv-liq__cifra">{mxn(laboral.montoPagadero)}</span>}
       </div>
-      <p className="text-[11px] mt-2" style={{ color: 'var(--faint)' }}>
-        Deducible y pagadero son veredictos distintos: que un gasto no sea deducible (ISR) no
-        autoriza descontárselo al operador (LFT 110 y 111; hospedaje y alimentación por demora
-        ajena, LFT 263-I). Es el mismo texto que imprime el PDF.
-      </p>
+      <p className="rv-liq__tenue">{tr('liquidacion.detalle.laboralNota')}</p>
     </div>
-  );
-}
-
-function Celda({ children, vacio }: { children: React.ReactNode; vacio: boolean }) {
-  return (
-    <td className="px-3 py-2.5 cifra-mono text-[15px] font-medium whitespace-nowrap" style={vacio ? { color: 'var(--faint)' } : undefined}>
-      {children}
-    </td>
   );
 }
