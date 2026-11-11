@@ -1,0 +1,29 @@
+/* Documentos de clientes · solo lo que las piezas del sistema no traen. */
+.rv-doc__bloque { display: grid; gap: 10px; min-width: 0; }
+.rv-doc__h2 { margin: 0; font-size: var(--t-section); font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+.rv-doc__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
+.rv-doc__tenue { margin: 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-doc__detalles { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+.rv-doc__sub { display: block; font-size: var(--t-micro); color: var(--faint); }
+.rv-doc__sub--tenue { color: var(--muted); }
+.rv-doc__archivo { display: block; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.rv-doc__mono { font-variant-numeric: tabular-nums; }
+.rv-doc__selecta { user-select: all; }
+.rv-doc__falta { display: inline-flex; flex-wrap: wrap; gap: 2px 6px; }
+.rv-doc__falta strong { font-weight: 600; }
+.rv-doc__falta [data-tono="bad"] { color: var(--bad); }
+.rv-doc__falta [data-tono="warn"] { color: var(--warn); }
+.rv-doc__falta [data-tono="ok"] { color: var(--ok); }
+.rv-doc__falta [data-tono="muted"] { color: var(--muted); }
+.rv-doc__accion { display: inline-flex; justify-content: flex-end; }
+.rv-doc__canales { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--ui-rhythm, 12px); }
+@media (max-width: 1023px) { .rv-doc__canales { grid-template-columns: minmax(0, 1fr); } }
+.rv-doc__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: var(--t-small); }
+.rv-doc__lista li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.rv-doc__enlaces { display: flex; flex-wrap: wrap; gap: 8px; }
+.rv-doc__pie { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: var(--t-micro); color: var(--faint); }
+.rv-doc__pie svg { flex: none; margin-top: 2px; }
+.rv-doc__rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+.rv-doc__forma { display: grid; gap: 12px; }
+.rv-doc__codigo { font-variant-numeric: tabular-nums; }
+.rv-doc__sub [data-tono="warn"] { color: var(--warn); }

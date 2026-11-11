@@ -1,8 +1,6 @@
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
-import Link from 'next/link';
-import { FileInput, TriangleAlert, Mail, MessageCircle, Upload, Download, RotateCcw, Layers } from 'lucide-react';
-import { EstadoVacio, EstadoError } from '../../estados';
+import { TriangleAlert, Upload, Download, RotateCcw, Layers } from 'lucide-react';
 import { fechaHoraMx, numero, pesoArchivo, porcentaje, usd4 } from '@/lib/formato';
 import { AVISO_SIN_REMITENTES } from '@/lib/correo/remitente';
 import { soloMisCasos } from '@/lib/likida/carta_porte_docs/revisor';
@@ -10,8 +8,12 @@ import { prioridadEstado, ROTULO_CANAL, ROTULO_ESTADO, ROTULO_FORMATO } from '@/
 import { MINUTOS_CAPTURA_MANUAL_EMBARQUE, type MetricasAgente } from '@/lib/likida/carta_porte_docs/metricas';
 import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_docs/repo';
 import { BotonEnvio, FormaAccion, type AccionDoc } from './forma_accion';
-import { BarraFiltros, CamposSistema, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Disclosure, FiltroOpciones, MarcoPagina, Aviso, BotonEnlace, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
-import type { InfoClave } from '@/app/ui-v2/info-catalogo';
+import {
+  AvisoCompacto, Aviso, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, CamposSistema, Disclosure, EstadoError, EstadoVacio,
+  FiltroOpciones, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
+} from '@/app/ui-v2/componentes';
+import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import './documentos.css';
 
 /**
  * LOS DOCUMENTOS DE TUS CLIENTES — la bandeja del Agente de Carta Porte multi-formato.
@@ -107,25 +109,9 @@ export interface AccionesDocumentos {
   volverVersion: AccionDoc | null;
 }
 
-const PILL: Record<DocumentoFila['estado'], { fg: string; bg: string }> = {
-  por_revisar: { fg: 'var(--warn)', bg: 'var(--warnbg, var(--canvas))' },
-  aprobado: { fg: 'var(--ok)', bg: 'var(--okbg)' },
-  rechazado: { fg: 'var(--muted)', bg: 'var(--canvas)' },
-  fallido: { fg: 'var(--bad)', bg: 'var(--badbg)' },
-  recibido: { fg: 'var(--muted)', bg: 'var(--canvas)' },
-  procesando: { fg: 'var(--muted)', bg: 'var(--canvas)' },
-  dividido: { fg: 'var(--muted)', bg: 'var(--canvas)' },
+const TONO_ESTADO: Record<DocumentoFila['estado'], TonoEstado> = {
+  por_revisar: 'warn', aprobado: 'ok', rechazado: 'muted', fallido: 'bad', recibido: 'neutral', procesando: 'info', dividido: 'muted',
 };
-
-function Cifra({ rotulo, valor, nota, info }: { rotulo: string; valor: string; nota?: string; info: InfoClave }) {
-  return (
-    <div className="card p-3.5 space-y-0.5">
-      <p className="text-[11px] flex items-center gap-1" style={{ color: 'var(--muted)' }}>{rotulo}<InfoTip clave={info} /></p>
-      <p className="cifra-mono text-[20px] font-medium">{valor}</p>
-      {nota && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
-    </div>
-  );
-}
 
 export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', filtroEnvio = 'todos', perfilRestringido = false, soloMios = false, usuarioId = null, tr = trEs }: {
   datos: DatosDocumentos | null; acciones: AccionesDocumentos; sufijo?: string;
@@ -146,7 +132,7 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
       </Aviso>
 
       {datos === null ? (
-        <EstadoError mensaje={tr('cartaPorte.documentos.vista.noPudeLeerLos')} />
+        <EstadoError reintentar>{tr('cartaPorte.documentos.vista.noPudeLeerLos')}</EstadoError>
       ) : (
         <>
           <Metricas tr={tr} m={datos.metricas} />
@@ -163,53 +149,50 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
 
 function Metricas({ m, tr = trEs }: { m: MetricasAgente; tr?: Tr }) {
   return (
-    <section className="space-y-2" aria-label={tr('cartaPorte.documentos.vista.metricasDelAgente')}>
+    <>
       {m.parcial && (
-        <p className="text-[12px]" role="note" style={{ color: 'var(--warn)' }}>
-          {tr('cartaPorte.documentos.vista.cifrasDeLosMas', { v: numero(m.parcial.leidos), v2: numero(m.parcial.total) })}
-        </p>
+        <AvisoCompacto tono="warn" resumen={tr('cartaPorte.documentos.vista.cifrasDeLosMas', { v: numero(m.parcial.leidos), v2: numero(m.parcial.total) })} />
       )}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Cifra info="carta_porte_docs.recibidos" rotulo={tr('cartaPorte.documentos.vista.documentosRecibidos90Dias')} valor={numero(m.recibidos)} nota={tr('cartaPorte.documentos.vista.porRevisarSinPoder', { v: numero(m.porRevisar), v2: numero(m.fallidos) })} />
-        <Cifra info="carta_porte_docs.aprobados" rotulo={tr('cartaPorte.documentos.vista.aprobados')} valor={numero(m.aprobados)} nota={`${numero(m.rechazados)} rechazados`} />
+      <TiraCifras etiqueta={tr('cartaPorte.documentos.vista.metricasDelAgente')}>
+        <Cifra info="carta_porte_docs.recibidos" etiqueta={tr('cartaPorte.documentos.vista.documentosRecibidos90Dias')} valor={numero(m.recibidos)} nota={tr('cartaPorte.documentos.vista.porRevisarSinPoder', { v: numero(m.porRevisar), v2: numero(m.fallidos) })} />
+        <Cifra info="carta_porte_docs.aprobados" etiqueta={tr('cartaPorte.documentos.vista.aprobados')} valor={numero(m.aprobados)} nota={tr('cartaPorte.documentos.vista.rechazados', { n: numero(m.rechazados) })} />
         <Cifra
           info="carta_porte_docs.sin_correccion"
-          rotulo={tr('cartaPorte.documentos.vista.aprobadosSinCorreccion')}
+          etiqueta={tr('cartaPorte.documentos.vista.aprobadosSinCorreccion')}
           valor={m.pctSinCorreccion === null ? '—' : porcentaje(m.pctSinCorreccion, 0)}
           nota={m.pctSinCorreccion === null ? tr('cartaPorte.documentos.vista.aunNoHayAprobados') : tr('cartaPorte.documentos.vista.deConfirmarUnDato', { v: numero(m.sinCorreccion), v2: numero(m.aprobados) })}
         />
         <Cifra
           info="carta_porte_docs.tiempo_ahorrado"
-          rotulo={tr('cartaPorte.documentos.vista.tiempoAhorradoPorEmbarque')}
+          etiqueta={tr('cartaPorte.documentos.vista.tiempoAhorradoPorEmbarque')}
           valor={m.minutosAhorradosPorEmbarque === null ? '—' : `${numero(m.minutosAhorradosPorEmbarque)} min`}
           nota={m.minutosAhorradosPorEmbarque === null
             ? tr('cartaPorte.documentos.vista.seCalculaConEl')
             : tr('cartaPorte.documentos.vista.estimacionMinDeCaptura', { v: numero(MINUTOS_CAPTURA_MANUAL_EMBARQUE), v2: numero(m.minutosRevisionPromedio ?? 0), v3: numero(m.aprobadosMedidos) })}
         />
-      </div>
-      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
+      </TiraCifras>
+      <p className="rv-doc__tenue">
         {tr('cartaPorte.documentos.vista.costoDeIaEn', { v: usd4(m.costoUsdTotal), v2: m.costoUsdPorDocumento !== null ? ' ' + tr('cartaPorte.documentos.vista.porDocumento', { v: usd4(m.costoUsdPorDocumento) }) : '', v3: m.sinModelo > 0 ? ' ' + tr('cartaPorte.documentos.vista.documentosSeLeyeronSin', { v: numero(m.sinModelo) }) : '', v4: m.aprobadosSinMedir > 0 ? ' ' + tr('cartaPorte.documentos.vista.aprobadosNoTienenTiempo', { v: numero(m.aprobadosSinMedir) }) : '' })}
       </p>
-    </section>
+    </>
   );
 }
 
 function Subir({ accion, clientes, tr = trEs }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }>; tr?: Tr }) {
   return (
-    <section className="card p-4 space-y-3">
-      <TituloRecuadro info="carta_porte_docs.subir"><Upload width={14} height={14} strokeWidth={1.75} /> {tr('cartaPorte.documentos.vista.subirUnDocumento')}</TituloRecuadro>
+    <Tarjeta titulo={tr('cartaPorte.documentos.vista.subirUnDocumento')} info="carta_porte_docs.subir">
       <FormaAccion accion={accion} enctype="multipart/form-data">
         <div className="rv-forma__rejilla">
           <CampoArchivo id="cp-archivo" name="archivo" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt"
-            etiqueta={tr('cartaPorte.documentos.vista.archivoPdfFotoExcel')} />
+            textoBoton={tr('cartaPorte.documentos.vista.seleccionarArchivo')} etiqueta={tr('cartaPorte.documentos.vista.archivoPdfFotoExcel')} />
           <CampoSelect id="cp-cliente" name="clienteId" defaultValue="" etiqueta={tr('cartaPorte.documentos.vista.deQueClienteEs')}>
             <option value="">{tr('cartaPorte.documentos.vista.sinIndicar')}</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </CampoSelect>
         </div>
-        <BotonEnvio etiqueta={tr('cartaPorte.documentos.vista.subirYLeer')} pendiente="Leyendo el documento…" />
+        <BotonEnvio icono={<Icono icono={Upload} />} etiqueta={tr('cartaPorte.documentos.vista.subirYLeer')} pendiente={tr('cartaPorte.documentos.vista.leyendoElDocumento')} />
       </FormaAccion>
-    </section>
+    </Tarjeta>
   );
 }
 
@@ -220,109 +203,115 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
   const base = datos.filas.filter((d) => pasaFiltroEnvio(d, datos.envios, filtroEnvio));
   const orden = (mios ? soloMisCasos(base, datos.asignados ?? {}, usuarioId) : base).sort((a, b) => prioridadEstado(a.estado) - prioridadEstado(b.estado) || (a.createdAt < b.createdAt ? 1 : -1));
   const cliente = new Map(datos.clientes.map((c) => [c.id, c.nombre]));
+  const raiz = `/dashboard/carta-porte/documentos${sufijo}`;
+
+  const faltaDe = (d: DocumentoFila) => {
+    const v = d.validacion;
+    const lin = datos.linaje?.[d.id];
+    if (d.estado === 'por_revisar' && v) {
+      return (
+        <span className="rv-doc__falta">
+          {v.bloqueos > 0 && <strong data-tono="bad">{tr('cartaPorte.documentos.vista.porCorregir', { v: numero(v.bloqueos) })}</strong>}
+          {v.bloqueos > 0 && v.porConfirmar > 0 && ' · '}
+          {v.porConfirmar > 0 && <strong data-tono="warn">{tr('cartaPorte.documentos.vista.porConfirmar', { v: numero(v.porConfirmar) })}</strong>}
+          {v.bloqueos === 0 && v.porConfirmar === 0 && <span data-tono="ok">{tr('cartaPorte.documentos.vista.listoParaAprobar')}</span>}
+        </span>
+      );
+    }
+    if (d.estado === 'fallido') return <span className="rv-doc__falta"><span data-tono="bad">{d.ultimoError ?? tr('cartaPorte.documentos.vista.noSePudoLeer')}</span></span>;
+    if (d.estado === 'aprobado') {
+      const envio = datos.envios?.[d.id] ? rotuloEnvio(datos.envios[d.id], datos.sinConexion, tr) : tr('cartaPorte.documentos.vista.sinEnvio');
+      return perfilRestringido ? (
+        <span className="rv-doc__falta"><span data-tono="muted">{tr('cartaPorte.documentos.vista.envioAlTms2', { v: envio })}</span></span>
+      ) : (
+        <span className="rv-doc__falta">
+          <span data-tono={d.viajeId ? 'ok' : 'warn'}>{d.viajeId ? tr('cartaPorte.documentos.vista.conViaje') : tr('cartaPorte.documentos.vista.sinViajeTodavia')}</span>
+          <span data-tono="muted"> · {tr('cartaPorte.documentos.vista.tmsDosPuntos')} {envio}</span>
+        </span>
+      );
+    }
+    if (d.estado === 'rechazado') return <span className="rv-doc__falta"><span data-tono="muted">{d.rechazoMotivo}</span></span>;
+    if (d.estado === 'dividido') return <span className="rv-doc__falta"><span data-tono="muted">{lin?.rol === 'padre' ? tr('cartaPorte.documentos.vista.traeEmbarquesCadaUno', { v: numero(lin.total) }) : tr('cartaPorte.documentos.vista.seSeparoEnUn')}</span></span>;
+    return '—';
+  };
+
+  const columnas: ColumnaBase<DocumentoFila>[] = [
+    { id: 'estado', titulo: tr('cartaPorte.documentos.vista.estado'), celda: (d) => <StatusChip tono={TONO_ESTADO[d.estado]}>{ROTULO_ESTADO[d.estado]}</StatusChip> },
+    {
+      id: 'archivo', titulo: tr('cartaPorte.documentos.vista.archivo'), principal: true,
+      celda: (d) => {
+        const lin = datos.linaje?.[d.id];
+        return (
+          <>
+            <span className="rv-doc__archivo">{d.nombreArchivo}</span>
+            <span className="rv-doc__sub">
+              {pesoArchivo(d.bytes)}{d.clienteId && cliente.get(d.clienteId) ? ` · ${cliente.get(d.clienteId)}` : ''} · {ROTULO_FORMATO[d.formato] ?? d.formato} · {ROTULO_CANAL[d.canal] ?? d.canal}
+              {d.riesgoInyeccion && <span data-tono="warn"> {tr('cartaPorte.documentos.vista.traeInstruccionesParaUn')}</span>}
+            </span>
+            {lin?.rol === 'hijo' && (
+              <span className="rv-doc__sub rv-doc__sub--tenue">
+                <Icono icono={Layers} tam={14} />{' '}
+                {tr('cartaPorte.documentos.vista.embarqueDe', { n: numero(lin.indice ?? 0), total: numero(lin.total) })}{lin.clave ? ' ' + tr('cartaPorte.documentos.vista.folio', { clave: lin.clave }) : ''}
+              </span>
+            )}
+          </>
+        );
+      },
+    },
+    { id: 'falta', titulo: tr('cartaPorte.documentos.vista.loQueFalta'), celda: faltaDe },
+    ...(conAsignacion ? [{
+      id: 'asignado', titulo: tr('cartaPorte.documentos.vista.asignadoA'),
+      celda: (d: DocumentoFila) => datos.asignados?.[d.id]
+        ? (nombreDe.get(datos.asignados[d.id]) ?? tr('cartaPorte.documentos.vista.otraPersona'))
+        : <span className="rv-doc__sub">{d.estado === 'por_revisar' ? tr('cartaPorte.documentos.vista.todosLosRevisores') : '—'}</span>,
+    } satisfies ColumnaBase<DocumentoFila>] : []),
+    { id: 'recibido', titulo: tr('cartaPorte.documentos.vista.recibido'), celda: (d) => fechaHoraMx(d.createdAt) },
+    {
+      id: 'accion', titulo: tr('cartaPorte.documentos.vista.accion'), alinear: 'der',
+      celda: (d) => (d.estado === 'recibido' || (d.estado === 'fallido' && d.intentos < 5)) && acciones.procesar ? (
+        <FormaAccion accion={acciones.procesar} className="rv-doc__accion">
+          <input type="hidden" name="documentoId" value={d.id} />
+          <BotonEnvio variante="secundario" etiqueta={d.estado === 'fallido' ? tr('cartaPorte.documentos.vista.reintentar') : tr('cartaPorte.documentos.vista.leerAhora')} pendiente={tr('cartaPorte.documentos.vista.leyendo')} icono={<Icono icono={RotateCcw} />} />
+        </FormaAccion>
+      ) : (
+        <BotonEnlace tamano="sm" variante="ghost" href={`/dashboard/carta-porte/documentos/${d.id}${sufijo}`}>
+          {d.estado === 'por_revisar' ? tr('cartaPorte.documentos.vista.revisar') : tr('cartaPorte.documentos.vista.ver')}
+        </BotonEnlace>
+      ),
+    },
+  ];
+
   return (
-    <section className="space-y-2">
-      <TituloRecuadro info="carta_porte_docs.bandeja">{tr('cartaPorte.documentos.vista.bandejaDeRevision')}</TituloRecuadro>
-      <BarraFiltros etiqueta={tr('cartaPorte.documentos.vista.filtrosDeLaBandeja')} enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={`/dashboard/carta-porte/documentos${sufijo}`}>
+    <section className="rv-doc__bloque">
+      <h2 className="rv-doc__h2">{tr('cartaPorte.documentos.vista.bandejaDeRevision')}</h2>
+      <BarraFiltros etiqueta={tr('cartaPorte.documentos.vista.filtrosDeLaBandeja')} enLinea nActivos={(mios ? 1 : 0) + (filtroEnvio !== 'todos' ? 1 : 0)} limpiarHref={raiz}>
         {conAsignacion && usuarioId !== null && (
-          <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.asignacion')} valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel="Filtrar por persona asignada"
+          <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.asignacion')} valor={mios ? 'mios' : 'todos'} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorPersona')}
             opciones={[
-              { valor: 'todos', rotulo: 'Todos', href: `/dashboard/carta-porte/documentos${sufijo}` },
-              { valor: 'mios', rotulo: 'Mis casos', href: `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}mios=1` },
+              { valor: 'todos', rotulo: tr('cartaPorte.documentos.vista.filtroTodos'), href: raiz },
+              { valor: 'mios', rotulo: tr('cartaPorte.documentos.vista.misCasos'), href: `${raiz}${sufijo ? '&' : '?'}mios=1` },
             ]} />
         )}
         <FiltroOpciones etiqueta={tr('cartaPorte.documentos.vista.envioAlTms')} valor={filtroEnvio} porDefecto="todos" ariaLabel={tr('cartaPorte.documentos.vista.filtrarPorEstadoDe')}
-          opciones={filtrosEnvio(datos.sinConexion, tr).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? `/dashboard/carta-porte/documentos${sufijo}` : `/dashboard/carta-porte/documentos${sufijo}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
+          opciones={filtrosEnvio(datos.sinConexion, tr).map((f) => ({ valor: f.clave, rotulo: f.rotulo, href: f.clave === 'todos' ? raiz : `${raiz}${sufijo ? '&' : '?'}envio=${f.clave}` }))} />
       </BarraFiltros>
-      {orden.length === 0 ? (
-        <EstadoVacio icono={<FileInput width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          {mios
+      <TablaBase
+        etiqueta={tr('cartaPorte.documentos.vista.documentosDeCartaPorte')}
+        columnas={columnas}
+        filas={orden}
+        idFila={(d) => d.id}
+        tarjetaMovil
+        vacio={{
+          titulo: mios ? tr('cartaPorte.documentos.vista.tituloSinCasos') : tr('cartaPorte.documentos.vista.tituloSinDocumentos'),
+          texto: mios
             ? tr('cartaPorte.documentos.vista.noTienesCasosAsignados')
             : filtroEnvio === 'todos'
             ? tr('cartaPorte.documentos.vista.todaviaNoHaLlegado')
-            : tr('cartaPorte.documentos.vista.ningunDocumentoAprobadoTiene')}
-        </EstadoVacio>
-      ) : (
-        <div className="card overflow-x-auto">
-          <table aria-label={tr('cartaPorte.documentos.vista.documentosDeCartaPorte')} className="w-full text-[12px]">
-            <thead>
-              <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                {[tr('cartaPorte.documentos.vista.estado'), tr('cartaPorte.documentos.vista.archivo'), tr('cartaPorte.documentos.vista.formatoCanal'), tr('cartaPorte.documentos.vista.loQueFalta'), ...(conAsignacion ? [tr('cartaPorte.documentos.vista.asignadoA')] : []), tr('cartaPorte.documentos.vista.recibido'), ''].map((h) => <th scope="col" key={h} className="px-3 py-2 font-medium text-[11px]">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {orden.map((d) => {
-                const p = PILL[d.estado];
-                const v = d.validacion;
-                const lin = datos.linaje?.[d.id];
-                return (
-                  <tr key={d.id} className="border-t" style={{ borderColor: 'var(--line)' }}>
-                    <td className="px-3 py-2"><span className="inline-flex px-2 py-0.5 rounded-full text-[11px] font-medium" style={{ color: p.fg, background: p.bg }}>{ROTULO_ESTADO[d.estado]}</span></td>
-                    <td className="px-3 py-2 max-w-[260px]">
-                      <p className="truncate font-medium">{d.nombreArchivo}</p>
-                      <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                        {pesoArchivo(d.bytes)}{d.clienteId && cliente.get(d.clienteId) ? ` · ${cliente.get(d.clienteId)}` : ''}
-                        {d.riesgoInyeccion && <span style={{ color: 'var(--warn)' }}> {tr('cartaPorte.documentos.vista.traeInstruccionesParaUn')}</span>}
-                      </p>
-                      {lin?.rol === 'hijo' && (
-                        <p className="text-[11px]" style={{ color: 'var(--muted)' }}>
-                          <Layers width={11} height={11} strokeWidth={1.75} className="inline -mt-0.5 mr-1" />
-                          {tr('cartaPorte.documentos.vista.embarqueDe', { n: numero(lin.indice ?? 0), total: numero(lin.total) })}{lin.clave ? ' ' + tr('cartaPorte.documentos.vista.folio', { clave: lin.clave }) : ''}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">{ROTULO_FORMATO[d.formato] ?? d.formato} · {ROTULO_CANAL[d.canal] ?? d.canal}</td>
-                    <td className="px-3 py-2">
-                      {d.estado === 'por_revisar' && v ? (
-                        <span>
-                          {v.bloqueos > 0 && <strong style={{ color: 'var(--bad)' }}>{tr('cartaPorte.documentos.vista.porCorregir', { v: numero(v.bloqueos) })}</strong>}
-                          {v.bloqueos > 0 && v.porConfirmar > 0 && ' · '}
-                          {v.porConfirmar > 0 && <strong style={{ color: 'var(--warn)' }}>{tr('cartaPorte.documentos.vista.porConfirmar', { v: numero(v.porConfirmar) })}</strong>}
-                          {v.bloqueos === 0 && v.porConfirmar === 0 && <span style={{ color: 'var(--ok)' }}>{tr('cartaPorte.documentos.vista.listoParaAprobar')}</span>}
-                        </span>
-                      ) : d.estado === 'fallido' ? (
-                        <span style={{ color: 'var(--bad)' }}>{d.ultimoError ?? tr('cartaPorte.documentos.vista.noSePudoLeer')}</span>
-                      ) : d.estado === 'aprobado' ? (
-                        perfilRestringido ? (
-                          <span style={{ color: 'var(--muted)' }}>{tr('cartaPorte.documentos.vista.envioAlTms2', { v: datos.envios?.[d.id] ? rotuloEnvio(datos.envios[d.id], datos.sinConexion, tr) : tr('cartaPorte.documentos.vista.sinEnvio') })}</span>
-                        ) : (
-                          <span style={{ color: d.viajeId ? 'var(--ok)' : 'var(--warn)' }}>{d.viajeId ? tr('cartaPorte.documentos.vista.conViaje') : tr('cartaPorte.documentos.vista.sinViajeTodavia')}<span style={{ color: 'var(--muted)' }}> · {tr('cartaPorte.documentos.vista.tmsDosPuntos')} {datos.envios?.[d.id] ? rotuloEnvio(datos.envios[d.id], datos.sinConexion, tr) : tr('cartaPorte.documentos.vista.sinEnvio')}</span></span>
-                        )
-                      ) : d.estado === 'rechazado' ? (
-                        <span style={{ color: 'var(--muted)' }}>{d.rechazoMotivo}</span>
-                      ) : d.estado === 'dividido' ? (
-                        <span style={{ color: 'var(--muted)' }}>{lin?.rol === 'padre' ? tr('cartaPorte.documentos.vista.traeEmbarquesCadaUno', { v: numero(lin.total) }) : tr('cartaPorte.documentos.vista.seSeparoEnUn')}</span>
-                      ) : '—'}
-                    </td>
-                    {conAsignacion && (
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {datos.asignados?.[d.id]
-                          ? (nombreDe.get(datos.asignados[d.id]) ?? tr('cartaPorte.documentos.vista.otraPersona'))
-                          : <span style={{ color: 'var(--faint)' }}>{d.estado === 'por_revisar' ? tr('cartaPorte.documentos.vista.todosLosRevisores') : '—'}</span>}
-                      </td>
-                    )}
-                    <td className="px-3 py-2 whitespace-nowrap">{fechaHoraMx(d.createdAt)}</td>
-                    <td className="px-3 py-2 whitespace-nowrap text-right">
-                      {(d.estado === 'recibido' || (d.estado === 'fallido' && d.intentos < 5)) && acciones.procesar ? (
-                        <FormaAccion accion={acciones.procesar} className="inline">
-                          <input type="hidden" name="documentoId" value={d.id} />
-                          <BotonEnvio variante="secundario" etiqueta={d.estado === 'fallido' ? 'Reintentar' : 'Leer ahora'} pendiente="Leyendo…" icono={<RotateCcw width={13} height={13} strokeWidth={1.75} />} />
-                        </FormaAccion>
-                      ) : (
-                        <Link href={`/dashboard/carta-porte/documentos/${d.id}${sufijo}`} className="text-[12px] font-medium hover:opacity-75" style={{ color: 'var(--marca)' }}>
-                          {d.estado === 'por_revisar' ? tr('cartaPorte.documentos.vista.revisar') : tr('cartaPorte.documentos.vista.ver')}
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            : tr('cartaPorte.documentos.vista.ningunDocumentoAprobadoTiene'),
+        }}
+      />
       {datos.filas.length < datos.total && (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{tr('cartaPorte.documentos.vista.seMuestranDeLos', { v: numero(datos.filas.length), v2: numero(datos.total) })}</p>
+        <p className="rv-doc__nota">{tr('cartaPorte.documentos.vista.seMuestranDeLos', { v: numero(datos.filas.length), v2: numero(datos.total) })}</p>
       )}
     </section>
   );
@@ -330,14 +319,11 @@ function Bandeja({ datos, acciones, sufijo, filtroEnvio, perfilRestringido, solo
 
 function Canales({ buzon, acciones, tr = trEs }: { buzon: BuzonVista | null; acciones: AccionesDocumentos; tr?: Tr }) {
   return (
-    <section className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-      <div className="card p-4 space-y-2.5">
-        <TituloRecuadro info="carta_porte_docs.correo"><Mail width={14} height={14} strokeWidth={1.75} /> {tr('cartaPorte.documentos.vista.correoDeTuFlota')}</TituloRecuadro>
+    <section className="rv-doc__canales">
+      <Tarjeta titulo={tr('cartaPorte.documentos.vista.correoDeTuFlota')} info="carta_porte_docs.correo">
         {buzon === null ? (
           <>
-            <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              {tr('cartaPorte.documentos.vista.activaUnBuzonPropio')}
-            </p>
+            <p className="rv-doc__nota">{tr('cartaPorte.documentos.vista.activaUnBuzonPropio')}</p>
             {acciones.activarBuzon && (
               <FormaAccion accion={acciones.activarBuzon}><BotonEnvio etiqueta={tr('cartaPorte.documentos.vista.activarBuzon')} /></FormaAccion>
             )}
@@ -345,15 +331,14 @@ function Canales({ buzon, acciones, tr = trEs }: { buzon: BuzonVista | null; acc
         ) : (
           <>
             {buzon.direccion ? (
-              <p className="text-[12px]">{tr('cartaPorte.documentos.vista.direccion')} <code className="cifra-mono select-all">{buzon.direccion}</code>{!buzon.activo && <strong style={{ color: 'var(--warn)' }}> {tr('cartaPorte.documentos.vista.apagado')}</strong>}</p>
-            ) : (
-              <p className="text-[12px] px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
-                {buzon.dominioConfigurado ? tr('cartaPorte.documentos.vista.laDireccionNoSe') : tr('cartaPorte.documentos.vista.elDominioDeCorreo')}
+              <p className="rv-doc__nota">
+                {tr('cartaPorte.documentos.vista.direccion')} <code className="rv-doc__codigo rv-doc__selecta">{buzon.direccion}</code>
+                {!buzon.activo && <StatusChip tono="warn">{tr('cartaPorte.documentos.vista.apagado')}</StatusChip>}
               </p>
+            ) : (
+              <AvisoCompacto tono="warn" resumen={buzon.dominioConfigurado ? tr('cartaPorte.documentos.vista.laDireccionNoSe') : tr('cartaPorte.documentos.vista.elDominioDeCorreo')} />
             )}
-            {buzon.activo && buzon.remitentes.length === 0 && (
-              <p className="text-[12px] px-3 py-2 rounded-lg" style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>{AVISO_SIN_REMITENTES}</p>
-            )}
+            {buzon.activo && buzon.remitentes.length === 0 && <AvisoCompacto tono="warn" resumen={AVISO_SIN_REMITENTES} />}
             {acciones.guardarRemitentes && (
               <FormaAccion accion={acciones.guardarRemitentes}>
                 <CampoTextarea id="cp-remitentes" name="remitentes" rows={3} defaultValue={buzon.remitentes.join('\n')}
@@ -364,48 +349,41 @@ function Canales({ buzon, acciones, tr = trEs }: { buzon: BuzonVista | null; acc
             )}
           </>
         )}
-      </div>
-      <div className="card p-4 space-y-2">
-        <TituloRecuadro info="carta_porte_docs.whatsapp"><MessageCircle width={14} height={14} strokeWidth={1.75} /> WhatsApp</TituloRecuadro>
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          {tr('cartaPorte.documentos.vista.quienDespachaEnTu')}
-        </p>
-      </div>
+      </Tarjeta>
+      <Tarjeta titulo="WhatsApp" info="carta_porte_docs.whatsapp">
+        <p className="rv-doc__nota">{tr('cartaPorte.documentos.vista.quienDespachaEnTu')}</p>
+      </Tarjeta>
     </section>
   );
 }
 
 function Perfiles({ perfiles, acciones, tr = trEs }: { perfiles: PerfilVista[]; acciones: AccionesDocumentos; tr?: Tr }) {
   return (
-    <section className="space-y-2">
-      <TituloRecuadro info="carta_porte_docs.formatos"><Layers width={14} height={14} strokeWidth={1.75} /> {tr('cartaPorte.documentos.vista.formatosQueLikidaYa')}</TituloRecuadro>
+    <section className="rv-doc__bloque">
+      <h2 className="rv-doc__h2">{tr('cartaPorte.documentos.vista.formatosQueLikidaYa')}</h2>
       {perfiles.length === 0 ? (
-        <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-          {tr('cartaPorte.documentos.vista.todaviaNingunoCuandoApruebes')}
-        </p>
+        <EstadoVacio icono={Layers} contenido titulo={tr('cartaPorte.documentos.vista.tituloSinFormatos')}>{tr('cartaPorte.documentos.vista.todaviaNingunoCuandoApruebes')}</EstadoVacio>
       ) : (
-        <div className="space-y-2">
-          {perfiles.map((p) => (
-            <Disclosure key={p.id} titulo={p.nombre} resumen={tr('cartaPorte.documentos.vista.versionCamposReconocidos', { v: ROTULO_FORMATO[p.formato] ?? p.formato, versionActiva: p.versionActiva, v2: numero(p.mapeos) })}>
-              <ul className="space-y-1.5 text-[12px]">
-                {p.versiones.map((v) => (
-                  <li key={v.version} className="flex flex-wrap items-center gap-2">
-                    <span className="cifra-mono">v{v.version}</span>
-                    <span style={{ color: 'var(--muted)' }}>{v.nota ?? tr('cartaPorte.documentos.vista.versionInicial')}</span>
-                    {v.version === p.versionActiva ? (
-                      <span className="text-[11px] font-medium" style={{ color: 'var(--ok)' }}>{tr('cartaPorte.documentos.vista.activa')}</span>
-                    ) : acciones.volverVersion && (
-                      <FormaAccion accion={acciones.volverVersion} className="inline">
-                        <input type="hidden" name="perfilId" value={p.id} /><input type="hidden" name="version" value={v.version} />
-                        <BotonEnvio variante="secundario" etiqueta={tr('cartaPorte.documentos.vista.volverAEsta')} pendiente="…" />
-                      </FormaAccion>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </Disclosure>
-          ))}
-        </div>
+        perfiles.map((p) => (
+          <Disclosure key={p.id} titulo={p.nombre} resumen={tr('cartaPorte.documentos.vista.versionCamposReconocidos', { v: ROTULO_FORMATO[p.formato] ?? p.formato, versionActiva: p.versionActiva, v2: numero(p.mapeos) })}>
+            <ul className="rv-doc__lista">
+              {p.versiones.map((v) => (
+                <li key={v.version}>
+                  <span className="rv-doc__codigo">v{v.version}</span>
+                  <span className="rv-doc__sub--tenue">{v.nota ?? tr('cartaPorte.documentos.vista.versionInicial')}</span>
+                  {v.version === p.versionActiva ? (
+                    <StatusChip tono="ok">{tr('cartaPorte.documentos.vista.activa')}</StatusChip>
+                  ) : acciones.volverVersion && (
+                    <FormaAccion accion={acciones.volverVersion} className="rv-doc__accion">
+                      <input type="hidden" name="perfilId" value={p.id} /><input type="hidden" name="version" value={v.version} />
+                      <BotonEnvio variante="secundario" etiqueta={tr('cartaPorte.documentos.vista.volverAEsta')} pendiente="…" />
+                    </FormaAccion>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </Disclosure>
+        ))
       )}
     </section>
   );
@@ -426,35 +404,33 @@ const EJEMPLO_CONFIG = `{
 
 function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: ConfigVista[]; acciones: AccionesDocumentos; apiSufijo: string; tr?: Tr }) {
   const liga = (config: string, formato: string) => `/api/export/carta-porte-docs?config=${encodeURIComponent(config)}&formato=${formato}${apiSufijo}`;
+  const descarga = (href: string, rotulo: string, clave: string) => (
+    <BotonEnlace key={clave} tamano="sm" variante="secondary" href={href} icono={<Icono icono={Download} />}>{rotulo}</BotonEnlace>
+  );
   return (
-    <section className="space-y-2">
-      <TituloRecuadro info="carta_porte_docs.exportar"><Download width={14} height={14} strokeWidth={1.75} /> {tr('cartaPorte.documentos.vista.exportarLoAprobado')}</TituloRecuadro>
-      <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
+    <Tarjeta titulo={tr('cartaPorte.documentos.vista.exportarLoAprobado')} info="carta_porte_docs.exportar">
+      <p className="rv-doc__nota">
         {rico(tr('cartaPorte.documentos.vista.soloSalenDocumentosStrong'), { strong: (c) => <strong>{c}</strong> })}
       </p>
-      <div className="flex flex-wrap gap-2 text-[12px]">
-        <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'csv')}>{tr('cartaPorte.documentos.vista.estandarCsv')}</a>
-        <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'json')}>{tr('cartaPorte.documentos.vista.estandarJson')}</a>
-        <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga('estandar', 'xlsx')}>{tr('cartaPorte.documentos.vista.estandarExcel')}</a>
+      <div className="rv-doc__enlaces">
+        {descarga(liga('estandar', 'csv'), tr('cartaPorte.documentos.vista.estandarCsv'), 'csv')}
+        {descarga(liga('estandar', 'json'), tr('cartaPorte.documentos.vista.estandarJson'), 'json')}
+        {descarga(liga('estandar', 'xlsx'), tr('cartaPorte.documentos.vista.estandarExcel'), 'xlsx')}
         {/* A37-L-03: si una descarga se cortó, los aprobados ya figuran como exportados; esta liga los baja todos otra vez. */}
-        <a className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={`${liga('estandar', 'csv')}&todos=1`}>{tr('cartaPorte.documentos.vista.volverADescargarTodos')}</a>
-        {configs.map((c) => (
-          <a key={c.id} className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga(c.id, c.formato)}>{c.nombre} · {c.formato.toUpperCase()}</a>
-        ))}
-        {configs.map((c) => (
-          <a key={`${c.id}-xlsx`} className="hairline rounded-lg px-3 h-8 inline-flex items-center hover:opacity-80" href={liga(c.id, 'xlsx')}>{c.nombre} · {tr('cartaPorte.documentos.vista.excel')}</a>
-        ))}
+        {descarga(`${liga('estandar', 'csv')}&todos=1`, tr('cartaPorte.documentos.vista.volverADescargarTodos'), 'todos')}
+        {configs.map((c) => descarga(liga(c.id, c.formato), `${c.nombre} · ${c.formato.toUpperCase()}`, c.id))}
+        {configs.map((c) => descarga(liga(c.id, 'xlsx'), `${c.nombre} · ${tr('cartaPorte.documentos.vista.excel')}`, `${c.id}-xlsx`))}
       </div>
       {acciones.guardarExport && (
-        <Disclosure titulo={tr('cartaPorte.documentos.vista.declararUnFormatoDestino')}>
-          <FormaAccion accion={acciones.guardarExport} className="space-y-3">
+        <Disclosure variante="linea" titulo={tr('cartaPorte.documentos.vista.declararUnFormatoDestino')}>
+          <FormaAccion accion={acciones.guardarExport} className="rv-doc__forma">
             <div className="rv-forma__rejilla">
               <CampoTexto id="cp-exp-nombre" name="nombre" required maxLength={80} placeholder={tr('cartaPorte.documentos.vista.clienteDemo')} etiqueta={tr('cartaPorte.documentos.vista.nombreSiYaExiste')} />
               <CampoSelect id="cp-exp-formato" name="formato" defaultValue="csv" etiqueta={tr('cartaPorte.documentos.vista.formato')}>
                 <option value="csv">CSV</option><option value="json">JSON</option>
               </CampoSelect>
             </div>
-            <CampoTextarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} etiqueta={tr('cartaPorte.documentos.vista.mapeoJson')} claseControl="cifra-mono"
+            <CampoTextarea id="cp-exp-config" name="config" rows={10} required defaultValue={EJEMPLO_CONFIG} etiqueta={tr('cartaPorte.documentos.vista.mapeoJson')} claseControl="rv-doc__codigo"
               ayuda={<>{rico(tr('cartaPorte.documentos.vista.codePormercanciaFalseCode'), { code: (c) => <code>{c}</code> })}</>} />
             <Disclosure variante="linea" titulo={tr('cartaPorte.documentos.vista.camposDelSistema')}>
               <CamposSistema etiqueta={tr('cartaPorte.documentos.vista.camposQueSePueden')} campos={[
@@ -466,13 +442,14 @@ function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: Con
             <BotonEnvio etiqueta={tr('cartaPorte.documentos.vista.guardarFormato')} />
           </FormaAccion>
           {configs.length > 0 && acciones.borrarExport && (
-            <ul className="pt-3 space-y-1 text-[12px]">
+            <ul className="rv-doc__lista">
               {configs.map((c) => (
-                <li key={c.id} className="flex items-center gap-2">
+                <li key={c.id}>
                   <span>{c.nombre}</span>
-                  <FormaAccion accion={acciones.borrarExport as AccionDoc} className="inline">
+                  <FormaAccion accion={acciones.borrarExport as AccionDoc} className="rv-doc__accion">
                     <input type="hidden" name="id" value={c.id} />
-                    <BotonEnvio variante="peligro" etiqueta={tr('cartaPorte.documentos.vista.quitar')} pendiente="…" />
+                    <BotonEnvio variante="peligro" etiqueta={tr('cartaPorte.documentos.vista.quitar')} pendiente="…"
+                      confirmar={{ titulo: tr('cartaPorte.documentos.vista.quitarFormatoTitulo', { nombre: c.nombre }), descripcion: tr('cartaPorte.documentos.vista.quitarFormatoAlcance'), etiquetaConfirmar: tr('cartaPorte.documentos.vista.quitarFormato') }} />
                   </FormaAccion>
                 </li>
               ))}
@@ -480,10 +457,10 @@ function Exportacion({ configs, acciones, apiSufijo, tr = trEs }: { configs: Con
           )}
         </Disclosure>
       )}
-      <p className="text-[11px] flex items-start gap-1.5" style={{ color: 'var(--faint)' }}>
-        <TriangleAlert width={12} height={12} strokeWidth={1.75} className="mt-0.5 shrink-0" />
+      <p className="rv-doc__pie">
+        <Icono icono={TriangleAlert} tam={14} />
         {tr('cartaPorte.documentos.vista.elArchivoLoAbre')}
       </p>
-    </section>
+    </Tarjeta>
   );
 }
