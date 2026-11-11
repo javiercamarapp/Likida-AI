@@ -1,7 +1,8 @@
 -- REVERSA: drop function if exists public.aviso_marcar(uuid, text, text[], boolean);
 --          drop table if exists public.aviso_silencio, public.aviso_preferencia, public.aviso_leido;
 -- 1002 · Avisos por persona: qué avisos ya leyó (antes solo localStorage), qué tipos recibe por qué canal y su horario de silencio.
--- PROPUESTA de la entrega w14/notif (11-nov-2026), corregida en la integración w15: pendiente de revisión del dueño y de aplicación; NO aplicada.
+-- Entrega w14/notif (11-nov-2026), corregida en la integración w15. APLICADA en producción el 11-nov-2026 (MCP apply_migration),
+-- verificada: RLS activa sin políticas, sin select para anon/authenticated, aviso_marcar solo para service_role.
 -- Idempotente (create … if not exists) para que el rango reaplicable no la rompa.
 --
 -- Diseño:
