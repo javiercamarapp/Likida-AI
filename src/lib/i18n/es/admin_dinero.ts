@@ -376,4 +376,8 @@ export const admin_dinero = {
   'costos_facturacion.sin_facturas_emitidas': 'Sin facturas emitidas',
   'consumo.avisos_mas': '{n} avisos más sobre el gasto de IA.',
   'consumo.ver_avisos': 'Ver los avisos',
+  'a1r4.observado': 'Observado',
+  'a1r4.cr_prospectos': 'Prospectos en cartera',
+  'a1r4.cr_flotas_alta': 'Flotas dadas de alta',
+  'a1r4.cr_de_pago': '{n} de pago',
 } as const;

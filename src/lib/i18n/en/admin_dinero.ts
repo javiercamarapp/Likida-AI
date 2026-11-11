@@ -378,4 +378,8 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'costos_facturacion.sin_facturas_emitidas': 'No invoices issued',
   'consumo.avisos_mas': '{n} more AI spend notices.',
   'consumo.ver_avisos': 'See the notices',
+  'a1r4.observado': 'Observed',
+  'a1r4.cr_prospectos': 'Prospects in pipeline',
+  'a1r4.cr_flotas_alta': 'Fleets signed up',
+  'a1r4.cr_de_pago': '{n} paying',
 };
