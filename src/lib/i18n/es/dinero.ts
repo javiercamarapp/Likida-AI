@@ -2051,6 +2051,8 @@ export const dinero = {
   'e26b.arco_por_responder_nota': 'solicitudes abiertas sin respuesta',
   'e26b.arco_pronto_nota': 'a punto de agotar el plazo',
   'e26b.arco_vencidas_nota': 'el plazo de respuesta ya se agotó',
+  'e26b.arco_plazos': 'Plazos de respuesta',
+  'e26b.arco_no_medible': 'No medible',
   'r4.rent_periodo': 'Periodo de los viajes',
   'r4.rent_p_todo': 'Todo',
   'r4.rent_p_30d': '30 días',

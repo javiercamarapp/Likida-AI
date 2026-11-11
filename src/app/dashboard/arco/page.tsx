@@ -14,11 +14,12 @@ import { fechaMx, hoyMx } from '@/lib/formato';
 import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
 import type { Metadata } from 'next';
 import {
-  CampoTexto, EstadoError, EstadoVacio, FormaConAviso, StatusChip, Tarjeta,
+  CampoTexto, Chip, EstadoError, EstadoVacio, FormaConAviso, InfoTip, StatusChip,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
+import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import './arco.css';
-import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
+import { EsqueletoConfiguracion, FilaConfig } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 export async function generateMetadata(): Promise<Metadata> {
   const { t: tr } = await getT('dinero');
@@ -197,18 +198,36 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   const vencenPronto = pendientes.filter((s) => venceDentroDe(s.venceEn, hoy, DIAS_VENCE_PRONTO));
   const vencidas = pendientes.filter((s) => yaVencio(s.venceEn, hoy));
 
+  // Una celda de plazo: el número va en un chip (la urgencia es un estado, nunca un filete ni un color en la cifra); `null` = no medible.
+  const plazo = (n: number, tono: 'neutral' | 'warn' | 'bad') => (errorCarga
+    ? <Chip tono="neutral">{tr('e26b.arco_no_medible')}</Chip>
+    : <Chip tono={n > 0 ? tono : 'ok'}>{n}</Chip>);
+  const filaPlazo = (id: string, etiqueta: string, nota: string, info: InfoClave, n: number, tono: 'neutral' | 'warn' | 'bad') => (
+    <FilaConfig key={id} idRotulo={`arco-${id}`} rotulo={etiqueta} ayuda={nota}>
+      <span className="rv-arco__plazo">{plazo(n, tono)}<InfoTip clave={info} /></span>
+    </FilaConfig>
+  );
+
   return (
-    <EsqueletoPortada
+    <EsqueletoConfiguracion
       titulo={tr('arco.page.solicitudesArco')} apoyo={tr('arco.page.solicitudesDeTusOperadores2')}
-      etiquetaCifras={tr('arco.page.solicitudesArco')} selloCifras={selloHoy(tr('arco.page.selloArco'))}
-      /* H7 (auditoría 24): `null` es NO MEDIBLE («—», no «0») cuando la lectura falló: «0 vencidas sin responder» con la base caída es la mentira que un responsable obligado por el art. 31 no se puede permitir. */
-      cifras={[
-        { etiqueta: tr('arco.page.porResponder'), info: 'arco.por_responder', valor: errorCarga ? null : pendientes.length, nota: tr('e26b.arco_por_responder_nota') },
-        { etiqueta: tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO }), info: 'arco.vencen_pronto', valor: errorCarga ? null : vencenPronto.length, nota: tr('e26b.arco_pronto_nota') },
-        { etiqueta: tr('arco.page.vencidasSinResponder'), info: 'arco.vencidas', valor: errorCarga ? null : vencidas.length, nota: tr('e26b.arco_vencidas_nota'), tono: !errorCarga && vencidas.length > 0 ? 'bad' : undefined },
-      ]}
-    >
-      <Tarjeta titulo={tr('arco.page.solicitudesDeTusOperadores')} info="arco.solicitudes">
+      /* H7 (auditoría 24): la lectura caída es «no medible» (chip neutro), jamás «0 vencidas sin responder»: con la base caída, ese cero es la mentira que un responsable obligado por el art. 31 no se puede permitir. */
+      secciones={[
+        {
+          id: 'plazos', titulo: tr('e26b.arco_plazos'),
+          estado: { texto: selloHoy(tr('arco.page.selloArco')), tono: 'neutral' },
+          contenido: (
+            <>
+              {filaPlazo('por-responder', tr('arco.page.porResponder'), tr('e26b.arco_por_responder_nota'), 'arco.por_responder', pendientes.length, 'warn')}
+              {filaPlazo('pronto', tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO }), tr('e26b.arco_pronto_nota'), 'arco.vencen_pronto', vencenPronto.length, 'warn')}
+              {filaPlazo('vencidas', tr('arco.page.vencidasSinResponder'), tr('e26b.arco_vencidas_nota'), 'arco.vencidas', vencidas.length, 'bad')}
+            </>
+          ),
+        },
+        {
+          id: 'solicitudes', titulo: tr('arco.page.solicitudesDeTusOperadores'),
+          contenido: (
+            <>
         {errorCarga ? (
           <EstadoError reintentar>
             {tr('arco.page.noSePudieronLeer', { v: errorCarga.slice(0, 120) })}
@@ -277,7 +296,10 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
             })}
           </ul>
         )}
-      </Tarjeta>
-    </EsqueletoPortada>
+            </>
+          ),
+        },
+      ]}
+    />
   );
 }
