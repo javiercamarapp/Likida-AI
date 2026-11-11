@@ -296,18 +296,18 @@ export default async function SuscripcionPage({
   const cifrasPlan: PropsCifra[] = [];
   if (!suscripcionCaida && suscripcion !== null) {
     cifrasPlan.push(
-      { etiqueta: 'Plan', matiz: 1, valor: suscripcion.planNombre, nota: `Desde ${fechaMx(suscripcion.inicio)}` },
-      { etiqueta: tr('suscripcion.page.mensualidad'), matiz: 1, valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
+      { etiqueta: 'Plan', valor: suscripcion.planNombre, nota: `Desde ${fechaMx(suscripcion.inicio)}` },
+      { etiqueta: tr('suscripcion.page.mensualidad'), valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
     );
   }
   if (uso) {
     cifrasPlan.push(
-      { etiqueta: tr('suscripcion.page.viajesCreadosEsteMes'), matiz: 1, valor: uso.viajesMes, nota: uso.limiteViajesMes === null ? tr('suscripcion.vista.sinLimiteEnEste') : tr('suscripcion.page.deLimiteDelPlan', { limite: uso.limiteViajesMes }) },
-      { etiqueta: tr('suscripcion.page.operadoresActivos'), matiz: 1, valor: uso.operadores, nota: uso.limiteOperadores === null ? tr('suscripcion.vista.sinLimiteEnEste') : tr('suscripcion.page.deLimiteDelPlan', { limite: uso.limiteOperadores }) },
+      { etiqueta: tr('suscripcion.page.viajesCreadosEsteMes'), valor: uso.viajesMes, nota: uso.limiteViajesMes === null ? tr('suscripcion.vista.sinLimiteEnEste') : tr('suscripcion.page.deLimiteDelPlan', { limite: uso.limiteViajesMes }) },
+      { etiqueta: tr('suscripcion.page.operadoresActivos'), valor: uso.operadores, nota: uso.limiteOperadores === null ? tr('suscripcion.vista.sinLimiteEnEste') : tr('suscripcion.page.deLimiteDelPlan', { limite: uso.limiteOperadores }) },
     );
   }
   if (!suscripcionCaida && suscripcion !== null) {
-    cifrasPlan.push({ etiqueta: tr('suscripcion.page.proximoCorte'), matiz: 1, valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : tr('suscripcion.page.sinFechaDeCorte') });
+    cifrasPlan.push({ etiqueta: tr('suscripcion.page.proximoCorte'), valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : tr('suscripcion.page.sinFechaDeCorte') });
   }
 
   return (
@@ -375,7 +375,7 @@ export default async function SuscripcionPage({
           </EstadoVacio>
         ) : (
           <div className="rv-sus__fiscales">
-          <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales" columnas="md:grid-cols-1">
+          <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales" columnas="md:grid-cols-2">
             <CampoTexto className="rv-fila-c" id="rfc" name="rfc" etiqueta="RFC" obligatorio defaultValue={fiscales?.rfc ?? ''}
               placeholder="TIN010101AB1" ayuda={tr('suscripcion.page.seValidaElDigito')} />
             <CampoTexto className="rv-fila-c" id="razonSocial" name="razonSocial" etiqueta={tr('suscripcion.page.razonSocial')} obligatorio
