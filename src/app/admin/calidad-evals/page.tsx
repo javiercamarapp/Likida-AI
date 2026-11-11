@@ -7,6 +7,7 @@ import { ahoraMs } from '@/lib/saludo';
 import { numero, porcentaje, fechaHoraMx } from '@/lib/formato';
 import { Aviso, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -105,6 +106,7 @@ const COLUMNAS_TROPIEZOS: ColumnaBase<AgenteCorridas>[] = [
 ];
 
 export default async function CalidadEvalsPage() {
+  const { t } = await getT('admin_agentes');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const desdeIso = new Date(ahoraMs() - DIAS_VENTANA * 24 * 3600 * 1000).toISOString();
@@ -119,19 +121,17 @@ export default async function CalidadEvalsPage() {
   ]);
 
   return (
-    <MarcoPagina titulo="Calidad & Evals">
-      <Tarjeta titulo="La calidad que ya se mide, junta">
+    <MarcoPagina titulo={t('calidad_evals.calidad_evals')}>
+      <Tarjeta titulo={t('calidad_evals.la_calidad_que_ya')}>
         <p className="m-0 text-sm leading-relaxed text-muted">
-          Cuatro fuentes reales: el examen del analista (EVALOPS), el examen fiscal del contador
-          (las 32 preguntas doradas de 22-evaluacion.md), el veredicto de cada corrida de agente,
-          y la precisión del OCR contra verdad de terreno etiquetada a mano. Nada aquí se mide nuevo —
-          cada tarjeta enlaza a su detalle. Lo que sigue sin fuente está abajo, con su razón.
+          
+          {t('calidad_evals.cuatro_fuentes_reales_el')}
         </p>
       </Tarjeta>
 
       {/* ── 1 · El examen del analista (EVALOPS 0134) ─────────────────── */}
       <TarjetaExamen
-        titulo="El examen del analista"
+        titulo={t('calidad_evals.el_examen_del_analista')}
         estado={evals}
         avisoDrift="El prompt vivo NO es el examinado — la regla de re-examen (22-evaluacion.md) exige volver a correrlo antes de desplegar cambios del agente."
         script="npx tsx scripts/evals/correr-analista.ts"
@@ -139,7 +139,7 @@ export default async function CalidadEvalsPage() {
 
       {/* ── 1b · El examen fiscal del contador (E.26, 0254) ───────────── */}
       <TarjetaExamen
-        titulo="El examen del contador — 32 preguntas doradas"
+        titulo={t('calidad_evals.el_examen_del_contador')}
         estado={evalsContador}
         avisoDrift="El prompt vivo NO es el examinado (el hash cubre reglas + corpus de normas/) — re-examina antes de desplegar cambios del agente o de las fichas."
         script="npx tsx scripts/evals/correr-contador.ts"
@@ -147,10 +147,11 @@ export default async function CalidadEvalsPage() {
       />
 
       {/* ── 2 · Los veredictos de las corridas de agentes (0102) ──────── */}
-      <Tarjeta titulo={`Corridas de agentes — últimos ${DIAS_VENTANA} días`}>
+      <Tarjeta titulo={t('calidad_evals.corridas_de_agentes_ultimos', { DIAS_VENTANA })}>
         {corridas === null ? (
           <p className="m-0 text-sm text-[var(--bad)]">
-            No se pudieron leer las corridas — esto NO significa que no haya fallos.
+            
+            {t('calidad_evals.no_se_pudieron_leer')}
           </p>
         ) : corridas.total === 0 ? (
           <p className="m-0 text-sm text-muted">
@@ -170,7 +171,7 @@ export default async function CalidadEvalsPage() {
             {corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) && (
               <div className="mt-2">
                 <TablaBase
-                  etiqueta="Agentes con tropiezos en la evaluación"
+                  etiqueta={t('calidad_evals.agentes_con_tropiezos_en')}
                   columnas={COLUMNAS_TROPIEZOS}
                   filas={corridas.porAgente.filter((a) => a.fallo > 0 || a.parcial > 0)}
                   idFila={(a) => a.agente}
@@ -187,10 +188,11 @@ export default async function CalidadEvalsPage() {
       </Tarjeta>
 
       {/* ── 3 · La precisión del OCR contra verdad de terreno (0239/0246) ─ */}
-      <Tarjeta titulo="Precisión del OCR — banco de verdad de terreno">
+      <Tarjeta titulo={t('calidad_evals.precision_del_ocr_banco')}>
         {ocr === null ? (
           <p className="m-0 text-sm text-[var(--bad)]">
-            No se pudo leer la medición del OCR — esto NO significa que no haya medición.
+            
+            {t('calidad_evals.no_se_pudo_leer')}
           </p>
         ) : ocr.fotosMedidas === 0 ? (
           <p className="m-0 text-sm text-muted">
@@ -226,12 +228,12 @@ export default async function CalidadEvalsPage() {
       </Tarjeta>
 
       {/* ── Lo que SIGUE sin fuente — con su razón, no con gráfica vacía ─ */}
-      <Tarjeta titulo="Lo que este tablero todavía no puede mostrar">
+      <Tarjeta titulo={t('calidad_evals.lo_que_este_tablero')}>
         <ul className="m-0 list-none space-y-2 p-0 text-sm">
           {[
-            'Feedback 👍/👎 del contralor sobre respuestas del analista — necesita su tabla propia (migración) y el control en la pantalla del chat; no existe y no se finge.',
-            'CSAT — necesita encuestas a usuarios reales, que no existen.',
-            'Drift de calidad EN PRODUCCIÓN (muestreo de conversaciones reales con juez) — el diseño está en 22-evaluacion.md (J2/J4); hoy solo se examina el banco, no el tráfico.',
+            t('calidad_evals.feedback_del_contralor_sobre'),
+            t('calidad_evals.csat_necesita_encuestas_a'),
+            t('calidad_evals.drift_de_calidad_en'),
           ].map((item) => (
             <li key={item} className="flex items-start gap-2.5">
               <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--muted)]" />
@@ -244,4 +246,7 @@ export default async function CalidadEvalsPage() {
   );
 }
 
-export const metadata: Metadata = { title: 'Calidad & Evals' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_agentes');
+  return { title: t('calidad_evals.calidad_evals') };
+}

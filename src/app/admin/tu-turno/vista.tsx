@@ -19,6 +19,8 @@ import { contarPorCausa, etiquetaCausa } from '../escalaciones/agentes-parados';
 import { BotonEnvio } from './boton_envio';
 import '../bandeja.css';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
 /** El tope de piezas pendientes que trae `leerEstadoBus` (lib/admin/bus.ts).
@@ -27,59 +29,62 @@ const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 const TOPE_PIEZAS = 50;
 
 /** "hace 3 h" — mismo formato que la bandeja de escalaciones. */
-function edadDe(desdeIso: string, ahora: number): string {
+function edadDe(desdeIso: string, ahora: number, t: TrDe<'admin_inicio'>): string {
   const horas = (ahora - new Date(desdeIso).getTime()) / 3_600_000;
   if (Number.isNaN(horas)) return '—';
-  if (horas < 1) return 'hace menos de 1 h';
-  if (horas < 48) return `hace ${Math.floor(horas)} h`;
-  return `hace ${Math.floor(horas / 24)} d`;
+  if (horas < 1) return t('turno.hace_menos_1h');
+  if (horas < 48) return t('turno.hace_horas', { n: Math.floor(horas) });
+  return t('turno.hace_dias', { n: Math.floor(horas / 24) });
 }
 
-const NOMBRE_ORDEN: Record<string, string> = {
-  correr_ahora: 'correr ahora',
-  kill_switch_on: 'apagar todas',
-  kill_switch_off: 'encender todas',
-  editar_encargo: 'editar encargo',
-  nota: 'nota',
+const nombreOrden = (tipo: string, t: TrDe<'admin_inicio'>): string => {
+  const ROTULOS: Record<string, string> = {
+    correr_ahora: t('turno.orden_correr_ahora'),
+    kill_switch_on: t('turno.orden_apagar_todas'),
+    kill_switch_off: t('turno.orden_encender_todas'),
+    editar_encargo: t('turno.orden_editar_encargo'),
+    nota: t('turno.orden_nota'),
+  };
+  return ROTULOS[tipo] ?? tipo;
 };
 
 export type AccionForm = (fd: FormData) => Promise<void>;
 
 /** El resumen de «Agentes que no corrieron» para Tu turno; el detalle y el porqué de cada uno viven en Escalaciones. */
-function TarjetaAgentesParados({ parados, cola }: { parados: AgentesParados | null | undefined; cola: ResumenBandejaCola | null | undefined }) {
+function TarjetaAgentesParados({ parados, cola, t }: { parados: AgentesParados | null | undefined; cola: ResumenBandejaCola | null | undefined; t: TrDe<'admin_inicio'> }) {
   if (parados === null || parados === undefined) {
     return (
-      <Tarjeta titulo="Agentes que no corrieron" estado="error"
-        mensaje="No se pudo leer el catálogo de agentes o sus corridas. No es que no haya agentes parados." />
+      <Tarjeta titulo={t('tu_turno_vista.agentes_que_no_corrieron')} estado="error"
+        mensaje={t('tu_turno_vista.no_se_pudo_leer')} />
     );
   }
   if (parados.parados.length === 0) {
     return (
-      <Tarjeta titulo="Agentes que no corrieron" estado="vacio" mensaje="Ningún agente parado"
-        detalle={`Los ${numero(parados.habilitados)} agentes habilitados corrieron en las últimas ${numero(parados.umbralHoras)} h.`} />
+      <Tarjeta titulo={t('tu_turno_vista.agentes_que_no_corrieron')} estado="vacio" mensaje={t('tu_turno_vista.ningun_agente_parado')}
+        detalle={t('tu_turno_vista.los_agentes_habilitados_corrieron', { habilitados: numero(parados.habilitados), umbralHoras: numero(parados.umbralHoras) })} />
     );
   }
   const causas = contarPorCausa(parados.parados).slice(0, 3);
   return (
-    <Tarjeta titulo="Agentes que no corrieron"
-      acciones={<BotonEnlace href="/admin/escalaciones#agentes-parados" variante="secondary" tamano="sm">Ver cuáles y por qué</BotonEnlace>}>
+    <Tarjeta titulo={t('tu_turno_vista.agentes_que_no_corrieron')}
+      acciones={<BotonEnlace href="/admin/escalaciones#agentes-parados" variante="secondary" tamano="sm">{t('tu_turno_vista.ver_cuales_y_por')}</BotonEnlace>}>
       <ul className="bj-lista">
         <li>
           <span className="bj-lista__texto">
-            {numero(parados.parados.length)} de {numero(parados.habilitados)} agentes habilitados llevan más de {numero(parados.umbralHoras)} h sin correr
+            {t('turno.parados_resumen', { n: numero(parados.parados.length), habilitados: numero(parados.habilitados), umbral: numero(parados.umbralHoras) })}
           </span>
         </li>
         {causas.map((c) => (
           <li key={c.causa ?? 'sin-dato'}>
-            <span className="bj-lista__texto">{etiquetaCausa(c.causa) ?? 'Sin dato del motivo'}</span>
+            <span className="bj-lista__texto">{etiquetaCausa(c.causa, t) ?? t('tu_turno_vista.sin_dato_del_motivo')}</span>
             <span className="bj-lista__apoyo">{numero(c.n)}</span>
           </li>
         ))}
       </ul>
       {cola?.frenaAlRunner && (
-        <Aviso tono="error" titulo="La bandeja de aprobación los frena."
-          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">Ir a Aprobaciones</BotonEnlace>}>
-          {numero(cola.pendientes)} piezas pendientes esperan tu decisión; el límite de ejecución automática no se toca.
+        <Aviso tono="error" titulo={t('tu_turno_vista.la_bandeja_de_aprobacion')}
+          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">{t('tu_turno_vista.ir_a_aprobaciones')}</BotonEnlace>}>
+          {t('turno.piezas_pendientes_esperan', { n: numero(cola.pendientes) })}
         </Aviso>
       )}
     </Tarjeta>
@@ -93,7 +98,7 @@ function TarjetaAgentesParados({ parados, cola }: { parados: AgentesParados | nu
  */
 export function VistaTuTurno({
   bus, escalaciones, envios, prs, ahora, aviso, error, sesionNombre,
-  accionPieza, accionOrden, parados, cola,
+  accionPieza, accionOrden, parados, cola, t = trAdminInicioEs,
 }: {
   bus: EstadoBus;
   escalaciones: BandejaEscalaciones;
@@ -108,17 +113,18 @@ export function VistaTuTurno({
   /** «Agentes que no corrieron» (`getAgentesParados`); `null` = no se pudo leer, `undefined` = la página no lo pidió. */
   parados?: AgentesParados | null;
   cola?: ResumenBandejaCola | null;
+  t?: TrDe<'admin_inicio'>;
 }) {
   // ADM-4: tres de las seis fuentes vienen topadas; el total sale de los conteos REALES. Lectura caída = null («—»), nunca 0.
   const totalEscalaciones = totalEscalacionesLegible(escalaciones);
   const piezasSinDato = bus.errores.some((e) => /pieza/i.test(e));
 
   const columnasRutinas: ColumnaBase<RutinaBus>[] = [
-    { id: 'rutina', titulo: 'Rutina', principal: true, celda: (r) => r.nombre },
-    { id: 'horario', titulo: 'Horario', celda: (r) => r.horario || '—' },
-    { id: 'ultima', titulo: 'Última corrida', celda: (r) => (r.ultimaCorrida ? fechaHoraMx(r.ultimaCorrida.inicio) : 'sin corridas en el bus') },
+    { id: 'rutina', titulo: t('tu_turno_vista.rutina'), principal: true, celda: (r) => r.nombre },
+    { id: 'horario', titulo: t('tu_turno_vista.horario'), celda: (r) => r.horario || '—' },
+    { id: 'ultima', titulo: t('tu_turno_vista.ultima_corrida'), celda: (r) => (r.ultimaCorrida ? fechaHoraMx(r.ultimaCorrida.inicio) : t('tu_turno_vista.sin_corridas_en_el')) },
     {
-      id: 'veredicto', titulo: 'Veredicto',
+      id: 'veredicto', titulo: t('tu_turno_vista.veredicto'),
       celda: (r) => (r.ultimaCorrida ? (
         <>
           {r.ultimaCorrida.exitCode !== null && (
@@ -130,43 +136,43 @@ export function VistaTuTurno({
       ) : '—'),
     },
     {
-      id: 'accion', titulo: 'Acción', alinear: 'der',
+      id: 'accion', titulo: t('tu_turno_vista.accion'), alinear: 'der',
       celda: (r) => (
         <form action={accionOrden}>
           <input type="hidden" name="tipo" value="correr_ahora" />
           <input type="hidden" name="rutina" value={r.nombre} />
-          <BotonEnvio><Play {...ICONO} /> Correr ahora</BotonEnvio>
+          <BotonEnvio><Play {...ICONO} />  {t('tu_turno_vista.correr_ahora')}</BotonEnvio>
         </form>
       ),
     },
   ];
 
   return (
-    <MarcoPagina titulo="Tu turno" apoyo="Todo lo que espera tu decisión, de todas las fuentes.">
+    <MarcoPagina titulo={t('tu_turno_vista.tu_turno')} apoyo={t('tu_turno_vista.todo_lo_que_espera')}>
       {aviso && <Aviso tono="ok">{aviso}</Aviso>}
       {error && <Aviso tono="error">{error}</Aviso>}
       {bus.errores.length > 0 && (
-        <Aviso tono="warn" titulo="Fuentes que no se pudieron leer (no son ceros).">{bus.errores.join(' · ')}</Aviso>
+        <Aviso tono="warn" titulo={t('tu_turno_vista.fuentes_que_no_se')}>{bus.errores.join(' · ')}</Aviso>
       )}
 
       {/* Cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
       <TiraCifras
-        etiqueta="Lo que espera tu turno"
+        etiqueta={t('tu_turno_vista.lo_que_espera_tu')}
         items={[
           {
-            etiqueta: 'Piezas para tu tap', icono: <ImageIcon {...ICONO} />, formato: 'entero',
+            etiqueta: t('tu_turno_vista.piezas_para_tu_tap'), icono: <ImageIcon {...ICONO} />, formato: 'entero',
             valor: piezasSinDato ? null : bus.piezasPendientes.length,
-            nota: piezasSinDato ? 'No se pudo leer la cola de piezas' : bus.piezasPendientes.length >= TOPE_PIEZAS ? `Se cuentan las ${TOPE_PIEZAS} más recientes; hay más detrás` : undefined,
+            nota: piezasSinDato ? t('tu_turno_vista.no_se_pudo_leer_2') : bus.piezasPendientes.length >= TOPE_PIEZAS ? t('tu_turno_vista.se_cuentan_las_mas', { TOPE_PIEZAS }) : undefined,
           },
-          { etiqueta: 'Envíos por aprobar', icono: <ListChecks {...ICONO} />, valor: envios.length, formato: 'entero' },
+          { etiqueta: t('tu_turno_vista.envios_por_aprobar'), icono: <ListChecks {...ICONO} />, valor: envios.length, formato: 'entero' },
           {
-            etiqueta: 'Cambios por aprobar', icono: <GitPullRequest {...ICONO} />, formato: 'entero',
+            etiqueta: t('tu_turno_vista.cambios_por_aprobar'), icono: <GitPullRequest {...ICONO} />, formato: 'entero',
             valor: prs.estado === 'ok' ? prs.prs.length : null,
-            nota: prs.estado === 'ok' ? undefined : prs.estado === 'sin_token' ? 'Falta conectar GitHub' : 'GitHub no contestó',
+            nota: prs.estado === 'ok' ? undefined : prs.estado === 'sin_token' ? t('tu_turno_vista.falta_conectar_github') : t('tu_turno_vista.github_no_contesto'),
           },
           {
-            etiqueta: 'Escalaciones', icono: <Inbox {...ICONO} />, valor: totalEscalaciones, formato: 'entero',
-            nota: totalEscalaciones === null ? 'No se pudo leer ninguna fuente' : undefined,
+            etiqueta: t('tu_turno_vista.escalaciones'), icono: <Inbox {...ICONO} />, valor: totalEscalaciones, formato: 'entero',
+            nota: totalEscalaciones === null ? t('tu_turno_vista.no_se_pudo_leer_3') : undefined,
           },
         ]}
       />
@@ -175,14 +181,15 @@ export function VistaTuTurno({
       <section className="bj-bloque" aria-labelledby="tt-piezas">
         {/* FE-13: `leerEstadoBus` trae 50 piezas pendientes como tope. Con la cola llena, "(50)" se lee como el total. */}
         <h2 className="bj-titulo" id="tt-piezas">
-          Piezas para tu tap ({bus.piezasPendientes.length}{bus.piezasPendientes.length >= TOPE_PIEZAS ? '+' : ''})
+          {t('turno.piezas_para_tap', { n: bus.piezasPendientes.length, mas: bus.piezasPendientes.length >= TOPE_PIEZAS ? '+' : '' })}
         </h2>
         {bus.piezasPendientes.length >= TOPE_PIEZAS && (
-          <p className="bj-nota">Se listan las {TOPE_PIEZAS} más recientes — hay más esperando detrás.</p>
+          <p className="bj-nota">{t('turno.se_listan_recientes', { n: TOPE_PIEZAS })}</p>
         )}
         {bus.piezasPendientes.length === 0 ? (
-          <EstadoVacio titulo="No hay piezas esperando" contenido>
-            Las piezas que preparan las rutinas automáticas aparecen aquí para que las apruebes. Si esperabas alguna, revisa que las rutinas estén encendidas.
+          <EstadoVacio titulo={t('tu_turno_vista.no_hay_piezas_esperando')} contenido>
+            
+            {t('tu_turno_vista.las_piezas_que_preparan')}
           </EstadoVacio>
         ) : (
           <div className="bj-piezas">
@@ -193,19 +200,19 @@ export function VistaTuTurno({
                     // eslint-disable-next-line @next/next/no-img-element -- URL firmada de storage, dominio propio
                     <img src={p.mediaUrl} alt={p.titulo} loading="lazy" />
                   ) : (
-                    <span><ImageIcon {...ICONO} /> Sin imagen</span>
+                    <span><ImageIcon {...ICONO} />  {t('tu_turno_vista.sin_imagen')}</span>
                   )}
                 </div>
                 <div className="bj-pieza__cuerpo">
                   <div className="bj-pieza__meta">
                     <StatusChip tono="neutral">{p.tipo}</StatusChip>
                     <span>{p.rutina}</span>
-                    <span className="bj-pieza__edad">{edadDe(p.creadoEn, ahora)}</span>
+                    <span className="bj-pieza__edad">{edadDe(p.creadoEn, ahora, t)}</span>
                   </div>
                   <h3 className="bj-pieza__titulo" title={p.titulo}>{p.titulo}</h3>
                   {p.copyMd && (
                     <details className="bj-pieza__copy">
-                      <summary>Ver el copy</summary>
+                      <summary>{t('tu_turno_vista.ver_el_copy')}</summary>
                       <pre>{p.copyMd}</pre>
                     </details>
                   )}
@@ -232,9 +239,9 @@ export function VistaTuTurno({
       <FilaTarjetas variante="6-6">
         {/* ── 2 · Envíos redactados (0117) — dinero directo, se resuelven en Aprobaciones ─ */}
         <Tarjeta
-          titulo={`Envíos por aprobar (${envios.length})`}
-          estado={envios.length === 0 ? 'vacio' : 'ok'} contenida mensaje="Nada redactado esperando tu firma"
-          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">Revisar y aprobar en la cola</BotonEnlace>}
+          titulo={t('tu_turno_vista.envios_por_aprobar_2', { length: envios.length })}
+          estado={envios.length === 0 ? 'vacio' : 'ok'} contenida mensaje={t('tu_turno_vista.nada_redactado_esperando_tu')}
+          acciones={<BotonEnlace href="/admin/aprobaciones" variante="secondary" tamano="sm">{t('tu_turno_vista.revisar_y_aprobar_en')}</BotonEnlace>}
         >
           <ul className="bj-lista">
             {envios.slice(0, 5).map((p) => (
@@ -249,17 +256,17 @@ export function VistaTuTurno({
 
         {/* ── 4 · Escalaciones — el top; la cola completa vive en su pantalla ── */}
         <Tarjeta
-          titulo={`Escalaciones (${totalEscalaciones === null ? '—' : totalEscalaciones})`}
+          titulo={t('tu_turno_vista.escalaciones_2', { totalEscalaciones: totalEscalaciones === null ? '—' : totalEscalaciones })}
           estado={totalEscalaciones === null ? 'error' : totalEscalaciones === 0 ? 'vacio' : 'ok'} contenida
-          mensaje={totalEscalaciones === null ? 'No se pudo leer ninguna fuente de escalaciones. No es cero.' : 'Nada escalado a un humano ahora mismo'}
-          acciones={<BotonEnlace href="/admin/escalaciones" variante="secondary" tamano="sm">La cola completa</BotonEnlace>}
+          mensaje={totalEscalaciones === null ? t('tu_turno_vista.no_se_pudo_leer_4') : t('tu_turno_vista.nada_escalado_a_un')}
+          acciones={<BotonEnlace href="/admin/escalaciones" variante="secondary" tamano="sm">{t('tu_turno_vista.la_cola_completa')}</BotonEnlace>}
         >
           <ul className="bj-lista">
             {escalaciones.cola.slice(0, 5).map((it, i) => (
               <li key={`${it.fuente}-${i}`}>
                 <StatusChip tono={it.vence && new Date(it.vence).getTime() < ahora ? 'bad' : 'neutral'}>{it.fuente}</StatusChip>
                 {it.href ? <Link className="bj-lista__texto" href={it.href}>{it.titulo}</Link> : <span className="bj-lista__texto">{it.titulo}</span>}
-                <span className="bj-lista__apoyo">{edadDe(it.desde, ahora)}</span>
+                <span className="bj-lista__apoyo">{edadDe(it.desde, ahora, t)}</span>
               </li>
             ))}
           </ul>
@@ -269,19 +276,19 @@ export function VistaTuTurno({
       <FilaTarjetas variante="6-6">
         {/* ── 3 · Cambios de código (PRs) — la aprobación de CÓDIGO es fusionarlos en GitHub, no un botón aquí ── */}
         {prs.estado === 'sin_token' ? (
-          <Tarjeta titulo="Cambios por aprobar" estado="vacio" contenida mensaje="Falta conectar GitHub"
-            detalle="Sin ese acceso no se pueden ver los cambios de código pendientes. Es un dato que falta, no un cero." />
+          <Tarjeta titulo={t('tu_turno_vista.cambios_por_aprobar')} estado="vacio" contenida mensaje={t('tu_turno_vista.falta_conectar_github')}
+            detalle={t('tu_turno_vista.sin_ese_acceso_no')} />
         ) : prs.estado === 'error' ? (
-          <Tarjeta titulo="Cambios por aprobar" estado="error"
-            mensaje="GitHub no contestó: no se sabe cuántos cambios esperan, y eso no es lo mismo que ninguno." />
+          <Tarjeta titulo={t('tu_turno_vista.cambios_por_aprobar')} estado="error"
+            mensaje={t('tu_turno_vista.github_no_contesto_no')} />
         ) : (
-          <Tarjeta titulo="Cambios por aprobar" estado={prs.prs.length === 0 ? 'vacio' : 'ok'} contenida mensaje="No hay cambios por aprobar" detalle="Cuando alguien proponga un cambio de código, lo verás aquí.">
+          <Tarjeta titulo={t('tu_turno_vista.cambios_por_aprobar')} estado={prs.prs.length === 0 ? 'vacio' : 'ok'} contenida mensaje={t('tu_turno_vista.no_hay_cambios_por')} detalle={t('tu_turno_vista.cuando_alguien_proponga_un')}>
             <ul className="bj-lista">
               {prs.prs.map((pr) => (
                 <li key={pr.numero}>
                   <GitPullRequest {...ICONO} aria-hidden="true" />
                   <a className="bj-lista__texto" href={pr.url} target="_blank" rel="noreferrer">#{pr.numero} · {pr.titulo}</a>
-                  <span className="bj-lista__apoyo">{edadDe(pr.creadoEn, ahora)}</span>
+                  <span className="bj-lista__apoyo">{edadDe(pr.creadoEn, ahora, t)}</span>
                 </li>
               ))}
             </ul>
@@ -289,57 +296,58 @@ export function VistaTuTurno({
         )}
 
         {/* ── Agentes que no corrieron y por qué (P0 de visibilidad) ──────── */}
-        <TarjetaAgentesParados parados={parados} cola={cola} />
+        <TarjetaAgentesParados t={t} parados={parados} cola={cola} />
       </FilaTarjetas>
 
       {/* ── 5 · Las rutinas de la Mac — estado y mando ───────────────────── */}
       <section className="bj-bloque" aria-labelledby="tt-rutinas">
         <div className="bj-titulo-fila">
-          <h2 className="bj-titulo" id="tt-rutinas">Rutinas automáticas ({bus.rutinas.length})</h2>
+          <h2 className="bj-titulo" id="tt-rutinas">{t('turno.rutinas_automaticas', { n: bus.rutinas.length })}</h2>
           <div className="bj-acciones">
             <form action={accionOrden}>
               <input type="hidden" name="tipo" value="kill_switch_on" />
               {/* A37-S08-03: un toque accidental apagaba TODAS las rutinas. */}
               <BotonConfirmar
-                etiqueta="Apagar todas" icono={<PowerOff {...ICONO} />} tono="peligro"
-                etiquetaConfirmar="Sí, apagar todas" titulo="Apagar todas las rutinas"
-                descripcion={`Se encola la orden de apagado: se detienen las ${bus.rutinas.length} rutinas en la siguiente revisión (≤5 min) hasta que las enciendas.`}
+                etiqueta={t('tu_turno_vista.apagar_todas')} icono={<PowerOff {...ICONO} />} tono="peligro"
+                etiquetaConfirmar="Sí, apagar todas" titulo={t('tu_turno_vista.apagar_todas_las_rutinas')}
+                descripcion={t('tu_turno_vista.se_encola_la_orden', { length: bus.rutinas.length })}
                 className={clasesBoton('danger', 'sm')}
               />
             </form>
             <form action={accionOrden}>
               <input type="hidden" name="tipo" value="kill_switch_off" />
               <BotonConfirmar
-                etiqueta="Encender todas" icono={<Power {...ICONO} />} tono="normal"
-                etiquetaConfirmar="Sí, encender todas" titulo="Encender todas las rutinas"
-                descripcion={`Se encola la orden de encendido: se reactivan las ${bus.rutinas.length} rutinas en la siguiente revisión (≤5 min). Pueden gastar modelo y publicar.`}
+                etiqueta={t('tu_turno_vista.encender_todas')} icono={<Power {...ICONO} />} tono="normal"
+                etiquetaConfirmar="Sí, encender todas" titulo={t('tu_turno_vista.encender_todas_las_rutinas')}
+                descripcion={t('tu_turno_vista.se_encola_la_orden_2', { length: bus.rutinas.length })}
                 className={clasesBoton('secondary', 'sm')}
               />
             </form>
           </div>
         </div>
         {bus.killSwitchPendiente && (
-          <p className="bj-nota">Hay una orden de apagado o encendido esperando la siguiente revisión.</p>
+          <p className="bj-nota">{t('turno.orden_esperando')}</p>
         )}
         {bus.rutinas.length === 0 ? (
-          <EstadoVacio titulo="Aún no hay rutinas registradas" icono={Bot} contenido>
-            Cuando el equipo técnico dé de alta las rutinas automáticas, aparecerán aquí con su estado.
+          <EstadoVacio titulo={t('tu_turno_vista.aun_no_hay_rutinas')} icono={Bot} contenido>
+            
+            {t('tu_turno_vista.cuando_el_equipo_tecnico')}
           </EstadoVacio>
         ) : (
           <>
-            <TablaBase etiqueta="Rutinas programadas" columnas={columnasRutinas} filas={bus.rutinas} idFila={(r) => r.nombre} densa />
+            <TablaBase etiqueta={t('tu_turno_vista.rutinas_programadas')} columnas={columnasRutinas} filas={bus.rutinas} idFila={(r) => r.nombre} densa />
             {/* ── EL EDITOR DE RUTINAS (Fase D, cerrado 17-ago-2026) ────────
                 El encargo se edita AQUÍ y viaja como orden editar_encargo: la Mac abre un PR chico con el cambio — jamás escritura
                 directa. Solo rutinas con encargo sembrado se pueden editar (sin el texto original no hay qué pre-llenar ni qué PR). */}
             {bus.rutinas.filter((r) => r.encargoMd).map((r) => (
-              <Disclosure key={`ed-${r.nombre}`} titulo={`Editar encargo · ${r.nombre}`}>
+              <Disclosure key={`ed-${r.nombre}`} titulo={t('tu_turno_vista.editar_encargo', { nombre: r.nombre })}>
                 <form action={accionOrden} className="bj-item__forma">
                   <input type="hidden" name="tipo" value="editar_encargo" />
                   <input type="hidden" name="rutina" value={r.nombre} />
-                  <CampoTextarea etiqueta={`Encargo de ${r.nombre}`} etiquetaOculta name="contenido" defaultValue={r.encargoMd} required maxLength={20000} rows={12} />
+                  <CampoTextarea etiqueta={t('tu_turno_vista.encargo_de', { nombre: r.nombre })} etiquetaOculta name="contenido" defaultValue={r.encargoMd} required maxLength={20000} rows={12} />
                   <div className="bj-item__fila">
-                    <BotonEnvio variante="primary">Encolar el cambio (la Mac abre el PR)</BotonEnvio>
-                    <p className="bj-nota">Nada se escribe directo: apruebas el PR en GitHub y el sembrado nocturno actualiza el catálogo.</p>
+                    <BotonEnvio variante="primary">{t('tu_turno_vista.encolar_el_cambio_la')}</BotonEnvio>
+                    <p className="bj-nota">{t('tu_turno_vista.nada_se_escribe_directo')}</p>
                   </div>
                 </form>
               </Disclosure>
@@ -349,13 +357,13 @@ export function VistaTuTurno({
       </section>
 
       {/* ── 6 · Órdenes recientes — el acuse de la Mac ───────────────────── */}
-      <Tarjeta titulo="Órdenes recientes" estado={bus.ordenesRecientes.length === 0 ? 'vacio' : 'ok'} mensaje="Aún no has ordenado nada por el bus">
+      <Tarjeta titulo={t('tu_turno_vista.ordenes_recientes')} estado={bus.ordenesRecientes.length === 0 ? 'vacio' : 'ok'} mensaje={t('tu_turno_vista.aun_no_has_ordenado')}>
         <ul className="bj-lista">
           {bus.ordenesRecientes.map((o) => (
             <li key={o.id}>
               <StatusChip tono={o.estado === 'hecha' ? 'ok' : o.estado === 'fallida' ? 'bad' : 'neutral'}>{o.estado}</StatusChip>
-              <span>{NOMBRE_ORDEN[o.tipo] ?? o.tipo}{o.rutina ? ` · ${o.rutina}` : ''}</span>
-              <span className="bj-lista__apoyo">{edadDe(o.creadoEn, ahora)}</span>
+              <span>{nombreOrden(o.tipo, t)}{o.rutina ? ` · ${o.rutina}` : ''}</span>
+              <span className="bj-lista__apoyo">{edadDe(o.creadoEn, ahora, t)}</span>
               {o.resultado && <span className="bj-lista__texto bj-lista__apoyo">— {o.resultado}</span>}
             </li>
           ))}
@@ -363,8 +371,7 @@ export function VistaTuTurno({
       </Tarjeta>
 
       <p className="bj-nota">
-        Sesión: {sesionNombre} · Las órdenes se ejecutan en la siguiente revisión (≤5 min) y firma el
-        resultado aquí. Esta pantalla nunca toca la Mac directo.
+        {t('turno.sesion_pie', { sesionNombre })}
       </p>
     </MarcoPagina>
   );

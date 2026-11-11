@@ -2,6 +2,8 @@ import { CampoSelect, CampoTexto, Casilla } from '../../ui-v2/componentes/campos
 import { FormaConAviso, type AccionDeForma } from '../ui/forma';
 import { REGIMENES, USOS_CFDI } from '@/lib/saas/fiscal';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminFlotasEs } from '@/lib/i18n/tr_admin';
 /**
  * El formulario de alta de una flota. Presentacional: la acción de servidor (`accionCrearFlota`, con su puerta, su segundo factor y su
  * bitácora) llega por prop. `planes === null` = no se pudieron leer los planes: se dice, no se ofrece un selector vacío como si no hubiera.
@@ -15,40 +17,40 @@ export function AltaFlota({ accion, planes }: { accion: AccionDeForma; planes: A
 }
 
 /** Los campos del alta, sin envoltorio: los comparten el formulario de página (`AltaFlota`) y el cajón de «Nueva flota». */
-export function CamposAltaFlota({ planes }: { planes: Array<{ clave: string; nombre: string }> | null }) {
+export function CamposAltaFlota({ planes, t = trAdminFlotasEs }: { planes: Array<{ clave: string; nombre: string }> | null; t?: TrDe<'admin_flotas'> }) {
   return (
     <>
-      <CampoTexto etiqueta="Nombre de la flota" name="nombre" required placeholder="Flota de ejemplo" />
+      <CampoTexto etiqueta={t('flotas_alta.nombre_de_la_flota')} name="nombre" required placeholder={t('flotas_alta.flota_de_ejemplo')} />
       {planes === null ? (
-        <CampoTexto etiqueta="Plan" name="planNoDisponible" disabled placeholder="No se pudieron leer los planes" ayuda="Asígnalo después desde la ficha." />
+        <CampoTexto etiqueta={t('flotas_alta.plan')} name="planNoDisponible" disabled placeholder={t('flotas_alta.no_se_pudieron_leer')} ayuda={t('flotas_alta.asignalo_despues_desde_la')} />
       ) : (
-        <CampoSelect etiqueta="Plan" name="planClave" defaultValue="" ayuda="Empieza en «prueba»: no cuenta para el MRR hasta activarlo desde la ficha.">
-          <option value="">Sin plan por ahora</option>
+        <CampoSelect etiqueta={t('flotas_alta.plan')} name="planClave" defaultValue="" ayuda={t('flotas_alta.empieza_en_prueba_no')}>
+          <option value="">{t('flotas_alta.sin_plan_por_ahora')}</option>
           {planes.map((p) => <option key={p.clave} value={p.clave}>{p.nombre}</option>)}
         </CampoSelect>
       )}
-      <CampoTexto etiqueta="RFC" name="rfc" placeholder="Opcional" ayuda="Se rechaza si no pasa el dígito verificador." />
-      <CampoTexto etiqueta="Ciudad" name="ciudad" placeholder="Opcional" />
-      <CampoTexto etiqueta="Razón social" name="razonSocial" placeholder="Opcional"
-        ayuda="Tal cual su Constancia de Situación Fiscal: el SAT la compara contra lo que tiene para ese RFC." />
-      <CampoTexto etiqueta="Código postal fiscal" name="codigoPostalFiscal" placeholder="5 dígitos, opcional"
-        ayuda="El del domicilio fiscal ante el SAT, no el del patio." />
-      <CampoSelect etiqueta="Uso del CFDI" name="usoCfdi" defaultValue="">
-        <option value="">Sin declarar</option>
+      <CampoTexto etiqueta="RFC" name="rfc" placeholder={t('flotas_alta.opcional')} ayuda={t('flotas_alta.se_rechaza_si_no')} />
+      <CampoTexto etiqueta={t('flotas_alta.ciudad')} name="ciudad" placeholder={t('flotas_alta.opcional')} />
+      <CampoTexto etiqueta={t('flotas_alta.razon_social')} name="razonSocial" placeholder={t('flotas_alta.opcional')}
+        ayuda={t('flotas_alta.tal_cual_su_constancia')} />
+      <CampoTexto etiqueta={t('flotas_alta.codigo_postal_fiscal')} name="codigoPostalFiscal" placeholder={t('flotas_alta.5_digitos_opcional')}
+        ayuda={t('flotas_alta.el_del_domicilio_fiscal')} />
+      <CampoSelect etiqueta={t('flotas_alta.uso_del_cfdi')} name="usoCfdi" defaultValue="">
+        <option value="">{t('flotas_alta.sin_declarar')}</option>
         {USOS_CFDI.map((u) => <option key={u.clave} value={u.clave}>{u.clave} — {u.nombre}</option>)}
       </CampoSelect>
-      <CampoSelect etiqueta="Régimen fiscal" name="regimenFiscal" defaultValue=""
-        ayuda="La facilidad del 15 % (RFA 2.9) exige 624 Coordinados o 612 persona física; cualquier otro no califica.">
-        <option value="">Sin declarar</option>
+      <CampoSelect etiqueta={t('flotas_alta.regimen_fiscal')} name="regimenFiscal" defaultValue=""
+        ayuda={t('flotas_alta.la_facilidad_del_15')}>
+        <option value="">{t('flotas_alta.sin_declarar')}</option>
         {REGIMENES.map((r) => <option key={r.clave} value={r.clave}>{r.clave} — {r.nombre}</option>)}
       </CampoSelect>
-      <CampoTexto etiqueta="Correo del administrador" name="emailAdmin" tipo="email" placeholder="dueño@flota.mx"
-        ayuda="Recibe el correo de acceso. Sin él, la flota nace sin quién pueda entrar." />
-      <CampoTexto etiqueta="Nombre del administrador" name="nombreAdmin" placeholder="Opcional" />
-      <CampoTexto etiqueta="WhatsApp del administrador" name="telefonoAdmin" placeholder="10 dígitos, opcional"
-        ayuda="Con él, el bot reconoce al administrador cuando escribe." />
-      <Casilla name="dedicacionExclusivaCarga" etiqueta="Exclusivamente autotransporte de carga federal"
-        ayuda="Habilita la facilidad del 15 % de diésel en efectivo (RFA 2026, regla 2.9)." />
+      <CampoTexto etiqueta={t('flotas_alta.correo_del_administrador')} name="emailAdmin" tipo="email" placeholder={t('flotas_alta.dueno_flota_mx')}
+        ayuda={t('flotas_alta.recibe_el_correo_de')} />
+      <CampoTexto etiqueta={t('flotas_alta.nombre_del_administrador')} name="nombreAdmin" placeholder={t('flotas_alta.opcional')} />
+      <CampoTexto etiqueta={t('flotas_alta.whatsapp_del_administrador')} name="telefonoAdmin" placeholder={t('flotas_alta.10_digitos_opcional')}
+        ayuda={t('flotas_alta.con_el_el_bot')} />
+      <Casilla name="dedicacionExclusivaCarga" etiqueta={t('flotas_alta.exclusivamente_autotransporte_de_carga')}
+        ayuda={t('flotas_alta.habilita_la_facilidad_del')} />
     </>
   );
 }

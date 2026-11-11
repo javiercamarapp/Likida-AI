@@ -1,3 +1,4 @@
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -19,20 +20,24 @@ export const dynamic = 'force-dynamic';
  * uno conserva su propio catch, o sea su propia leyenda honesta.
  */
 export default async function CrecimientoPage() {
+  const { t: ta } = await getT('admin_dinero');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
 
   return (
-    <MarcoPagina titulo="Crecimiento" apoyo="De dónde vienen los clientes: prospectos, costo por lead, campañas y activación, solo con lo que se puede medir.">
+    <MarcoPagina titulo={ta('crecimiento.crecimiento')} apoyo={ta('crecimiento.de_donde_vienen_los')}>
       <Suspense fallback={<EsqTarjetaV2 alto={84} />}><BloqueIntro /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueEmbudoAdquisicion /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueCostoYCampanas /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueActivacion /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueCohortes /></Suspense>
       <Suspense fallback={<><EsqTarjetaV2 alto={240} /><EsqCifrasV2 n={2} /></>}><BloqueUso /></Suspense>
-      <BloqueSinInstrumentacion />
+      <BloqueSinInstrumentacion ta={ta} />
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Crecimiento' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: ta } = await getT('admin_dinero');
+  return { title: ta('crecimiento.crecimiento') };
+}

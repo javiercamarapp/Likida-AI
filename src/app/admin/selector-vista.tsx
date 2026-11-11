@@ -2,6 +2,8 @@ import Link from 'next/link';
 import { Building2, Landmark, Send, ArrowRight } from 'lucide-react';
 import { Tarjeta } from '../ui-v2/componentes';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { trAdminInicioEs } from '@/lib/i18n/tr_admin';
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PUERTA A LOS OTROS CUATRO PANELES — desde el de Javier, sin credenciales.
 //
@@ -72,16 +74,16 @@ const VISTAS: Vista[] = [
  * cuatro vistas abren vacías y hay que decirlo AQUÍ, antes del clic: si no,
  * el primero que se prueba se lee como una pantalla rota.
  */
-export function SelectorVista({ tenants }: {
+export function SelectorVista({ tenants, t = trAdminInicioEs }: {
   /** Cuántas flotas hay. `null` = NO SE PUDO CONTAR (FE-24): antes un fallo
    *  de la consulta llegaba como 0 y la pantalla afirmaba "no hay ninguna
    *  flota dada de alta", que con la base caída es falso — y manda a dar de
    *  alta una flota que puede ya existir. */
-  tenants: number | null;
+  tenants: number | null; t?: TrDe<'admin_inicio'>;
 }) {
   return (
-    <Tarjeta titulo="Entrar a los otros paneles">
-      <p className="m-0 mb-3 text-xs text-muted">Con tu propia sesión — no hacen falta credenciales de nadie</p>
+    <Tarjeta titulo={t('selector_vista.entrar_a_los_otros')}>
+      <p className="m-0 mb-3 text-xs text-muted">{t('selector_vista.con_tu_propia_sesion')}</p>
       <div id="vistas" className="scroll-mt-24">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {VISTAS.map(({ href, titulo, quien, que, Icono }) => (
@@ -106,19 +108,19 @@ export function SelectorVista({ tenants }: {
         <p className="m-0 mt-3 text-xs text-muted">
           {tenants === null ? (
             <>
-              No se pudo contar cuántas flotas hay, así que no se sabe si estas vistas van a abrir con
-              datos o vacías. Recarga en un momento — esto NO significa que no haya flotas.
+              
+              {t('selector_vista.no_se_pudo_contar')}
             </>
           ) : tenants === 0 ? (
             <>
-              No hay ninguna flota dada de alta, así que las tres vistas abren VACÍAS y lo dicen en pantalla —
-              sirven para mirar el frontend, no para leer una cifra.{' '}
-              <Link href="/admin/flotas" className="font-medium underline">Dar de alta una flota</Link>.
+              
+              {t('selector_vista.no_hay_ninguna_flota')}{' '}
+              <Link href="/admin/flotas" className="font-medium underline">{t('selector_vista.dar_de_alta_una')}</Link>.
             </>
           ) : (
             <>
-              Cambian lo que se te ENSEÑA, no lo que puedes hacer: tu sesión sigue siendo la de superadmin y cada
-              vista lleva una cinta que lo dice, con el regreso a esta consola.
+              
+              {t('selector_vista.cambian_lo_que_se')}
             </>
           )}
         </p>

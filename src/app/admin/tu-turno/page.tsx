@@ -13,6 +13,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ahoraMs } from '@/lib/saludo';
 import { VistaTuTurno } from './vista';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -35,16 +37,16 @@ export const dynamic = 'force-dynamic';
  */
 /** A37-S08-07: la URL lleva solo CÓDIGOS cerrados; el texto sale de aquí. Un enlace `?error=<texto>` ajeno ya no
  *  se pinta con el estilo de alerta de la consola (suplantación de contenido). */
-const AVISOS: Record<string, string> = {
-  pieza_aprobada: 'Pieza aprobada — la Mac la ve al instante.',
-  pieza_descartada: 'Pieza descartada.',
-  encargo: 'Encargo encolado — la Mac abre un PR chico con el cambio (tú lo apruebas en GitHub).',
-  orden: 'Orden encolada — la Mac la toma en su siguiente latido (≤5 min).',
-};
-const ERRORES: Record<string, string> = {
-  pieza: 'No se pudo resolver la pieza. Revisa que siga pendiente y recarga; si persiste, mira los registros del servidor.',
-  orden: 'No se pudo encolar la orden. Revisa que el tipo sea válido y, en un encargo, que lleve contenido; si persiste, mira los registros del servidor.',
-};
+const avisos = (t: TrDe<'admin_inicio'>): Record<string, string> => ({
+  pieza_aprobada: t('tu_turno.pieza_aprobada_la_mac'),
+  pieza_descartada: t('tu_turno.pieza_descartada'),
+  encargo: t('tu_turno.encargo_encolado_la_mac'),
+  orden: t('tu_turno.orden_encolada_la_mac'),
+});
+const errores = (t: TrDe<'admin_inicio'>): Record<string, string> => ({
+  pieza: t('tu_turno.no_se_pudo_resolver'),
+  orden: t('tu_turno.no_se_pudo_encolar'),
+});
 
 export default async function PaginaTuTurno({
   searchParams,
@@ -52,6 +54,7 @@ export default async function PaginaTuTurno({
   searchParams: Promise<{ aviso?: string; error?: string }>;
 }) {
   const sesion = await requireSuperadmin();
+  const { t } = await getT('admin_inicio');
   const { aviso, error } = await searchParams;
   const ahora = ahoraMs();
 
@@ -112,6 +115,7 @@ export default async function PaginaTuTurno({
 
   return (
     <VistaTuTurno
+      t={t}
       bus={bus}
       escalaciones={escalaciones}
       envios={envios}
@@ -119,8 +123,8 @@ export default async function PaginaTuTurno({
       ahora={ahora}
       parados={parados}
       cola={cola}
-      aviso={aviso ? AVISOS[aviso] : undefined}
-      error={error ? ERRORES[error] : undefined}
+      aviso={aviso ? avisos(t)[aviso] : undefined}
+      error={error ? errores(t)[error] : undefined}
       sesionNombre={sesion.nombre ?? sesion.userId}
       accionPieza={accionPieza}
       accionOrden={accionOrden}
@@ -128,4 +132,7 @@ export default async function PaginaTuTurno({
   );
 }
 
-export const metadata: Metadata = { title: 'Tu turno' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_inicio');
+  return { title: t('tu_turno.tu_turno') };
+}
