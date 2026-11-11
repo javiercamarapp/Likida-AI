@@ -77,9 +77,10 @@ export default async function PaginaClientes({
    */
   async function buscarClienteAccion(tipo: TipoCatalogo, q: string): Promise<OpcionCatalogo[]> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) throw new Error('Tu rol no puede ver la cartera de clientes.');
-    if (tipo !== 'cliente') throw new Error('Catálogo desconocido.');
+    if (!puedeVerRuta(s.rol, RUTA)) throw new Error(t('cli.a.rolver'));
+    if (tipo !== 'cliente') throw new Error(t('cli.a.catalogo'));
     return buscarCatalogo(s.tenantId, 'cliente', typeof q === 'string' ? q : '');
   }
 
@@ -102,10 +103,11 @@ export default async function PaginaClientes({
 
   async function guardarCliente(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver la cartera de clientes.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('cli.a.rolver') };
     if (!puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota da de alta clientes y fija tarifas.' };
+      return { ok: false, error: t('cli.a.dueno') };
     }
 
     // El id dice QUÉ fila, nunca DE QUIÉN: el tenant sale de la sesión que se
@@ -132,8 +134,8 @@ export default async function PaginaClientes({
       return {
         ok: true,
         mensaje: id
-          ? `"${valores.nombre}" quedó actualizado.`
-          : `"${valores.nombre}" ya está dado de alta. Asígnale sus viajes para que su ingreso empiece a medirse.`,
+          ? t('cli.a.actualizado', { nombre: valores.nombre })
+          : t('cli.a.alta', { nombre: valores.nombre }),
       };
     } catch (e) {
       // `DatoInvalido` sale VERBATIM (dice qué corregir); cualquier otra cosa
@@ -145,10 +147,11 @@ export default async function PaginaClientes({
 
   async function guardarTarifa(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+  const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede ver la cartera de clientes.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('cli.a.rolver') };
     if (!puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota da de alta clientes y fija tarifas.' };
+      return { ok: false, error: t('cli.a.dueno') };
     }
 
     const id = String(fd.get('id') ?? '').trim();
@@ -172,8 +175,8 @@ export default async function PaginaClientes({
       return {
         ok: true,
         mensaje: id
-          ? 'Tarifa actualizada. El precio nuevo aplica desde la fecha en que la pusiste a regir.'
-          : 'Tarifa guardada. Ya se usa para decir qué precio aplicaría a cada viaje.',
+          ? t('cli.a.tarifa.act')
+          : t('cli.a.tarifa.ok'),
       };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la tarifa' : 'agregar la tarifa') };
