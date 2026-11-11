@@ -1,3 +1,5 @@
+import { TarjetaTabla } from '../bloque';
+import { cifrasUniformes } from '../formato';
 import { Phone, PhoneOff, IdCard, UserPlus } from 'lucide-react';
 import { numero, fechaCorta } from '@/lib/formato';
 import { clasificarVigencia, DIAS_AVISO } from '@/lib/likida/vigencias';
@@ -197,7 +199,7 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
           </CajonAlta>
         </>
       ) : undefined}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy(t('op.sello'))}
       filtros={!ilegible && (pag.filtrados > 0 || hayFiltro) ? (
         <FiltroRegistro ruta="/dashboard/operadores" sufijo={sufijo} pagina={pag}
@@ -258,14 +260,17 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
       {ilegible ? (
         <EstadoError reintentar>{t('op.error')}</EstadoError>
       ) : pag.filtrados === 0 && !hayFiltro ? (
-        <EstadoVacio pantalla contenido icono={UserPlus} titulo={t('op.vacio.titulo')}>
+        <EstadoVacio pantalla contenido icono={UserPlus} titulo={t('op.vacio.titulo')}
+          accion={puedeEditar ? { href: urlRegistro('/dashboard/operadores', sufijo, { abrir: 'alta' }), texto: t('op.vacio.alta') } : undefined}>
           {puedeEditar
             ? t('op.vacio.admin')
             : t('op.vacio.otro')}
         </EstadoVacio>
       ) : (
-        <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
-          vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
+        <TarjetaTabla titulo={t('op.registro')} contador={numero(pag.filtrados, idioma)}>
+          <TablaBase<FilaOperador> etiqueta={t('op.tabla.etiqueta')} columnas={columnas} filas={filas} idFila={(f) => f.operadorId} tarjetaMovil
+            vacio={{ titulo: t('op.vacio.sincoincidencias'), texto: t('op.vacio.busqueda', { q: pag.q }) }} />
+        </TarjetaTabla>
       )}
     </EsqueletoTablaMaestra>
   );

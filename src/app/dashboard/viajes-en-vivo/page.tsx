@@ -91,7 +91,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
   }
 
   return (
-    <main className="p-4 md:p-6">
+    <>
       <VistaViajesEnVivo t={tx}
         tablero={tablero}
         filtros={{ terminalId, clienteId, soloExcepciones }}
@@ -108,6 +108,6 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
           </Bloque>
         ) : null}
       />
-    </main>
+    </>
   );
 }

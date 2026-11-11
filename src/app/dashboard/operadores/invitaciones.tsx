@@ -3,7 +3,7 @@
 import { useActionState, useCallback } from 'react';
 import { Send } from 'lucide-react';
 import { numero } from '@/lib/formato';
-import { AvisoResultado, BotonConfirmar, Icono, Tarjeta, clasesBoton, leerResultado, useNotificar } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoResultado, BotonConfirmar, Icono, clasesBoton, leerResultado, useNotificar } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 import './operadores.css';
@@ -45,48 +45,46 @@ export function InvitarPendientes({ pendientes, conFallo, accion, hrefGuia }: {
   const { t, tp, idioma } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   if (pendientes === 0 && conFallo === 0 && !estado) return null;
+  // Un aviso de una o dos líneas con la acción a la derecha (`notice-bar` de Rovaq). El primario de la zona es «Dar de alta» de la
+  // cabecera: aquí los botones son secundarios (un solo primario por zona).
+  const acciones = (
+    <form action={despachar} className="rv-eq__fila">
+      {pendientes > 0 && (
+        <BotonConfirmar
+          etiqueta={t('op.inv.enviar', { n: numero(pendientes, idioma) })} tono="normal"
+          nombreConfirmar="modo" valorConfirmar="pendientes"
+          titulo={t('op.inv.enviar.titulo', { n: numero(Math.min(pendientes, 40), idioma) })}
+          descripcion={pendientes > 40 ? t('op.inv.enviar.resto', { conf: t('op.inv.confirmacion'), n: numero(pendientes - 40, idioma) }) : t('op.inv.enviar.tope', { conf: t('op.inv.confirmacion') })}
+          etiquetaConfirmar={t('op.inv.enviar.si')}
+          className={clasesBoton('secondary', 'sm')}
+          icono={<Icono icono={Send} />}
+        />
+      )}
+      {conFallo > 0 && (
+        <BotonConfirmar
+          etiqueta={t('op.inv.reintentar', { n: numero(conFallo, idioma) })} tono="normal"
+          nombreConfirmar="modo" valorConfirmar="fallidas"
+          titulo={t('op.inv.reintentar.titulo', { n: numero(Math.min(conFallo, 40), idioma) })}
+          descripcion={t('op.inv.confirmacion')}
+          etiquetaConfirmar={t('op.inv.reintentar.si')}
+          className={clasesBoton('secondary', 'sm')}
+        />
+      )}
+    </form>
+  );
   return (
-    <Tarjeta titulo={t('op.inv.titulo')} info="whatsapp.avance">
-      <div className="rv-eq__bloque">
-        <p className="rv-eq__texto">
-          {pendientes > 0
-            ? <strong>{tp('op.inv.esperan', pendientes, { n: numero(pendientes, idioma) })}</strong>
-            : t('op.inv.todos')}
-          {t('op.inv.llega')}{' '}
-          <a href={hrefGuia} className="rv-eq__enlace">{t('op.inv.guia')}</a>.
-        </p>
-        {conFallo > 0 && (
-          <p className="rv-eq__texto" data-tono="warn">
-            {tp('op.inv.fallo', conFallo, { n: numero(conFallo, idioma) })}
-          </p>
-        )}
-        <form action={despachar} className="rv-eq__fila">
-          {pendientes > 0 && (
-            <BotonConfirmar
-              etiqueta={t('op.inv.enviar', { n: numero(pendientes, idioma) })} tono="normal"
-              nombreConfirmar="modo" valorConfirmar="pendientes"
-              titulo={t('op.inv.enviar.titulo', { n: numero(Math.min(pendientes, 40), idioma) })}
-              descripcion={pendientes > 40 ? t('op.inv.enviar.resto', { conf: t('op.inv.confirmacion'), n: numero(pendientes - 40, idioma) }) : t('op.inv.enviar.tope', { conf: t('op.inv.confirmacion') })}
-              etiquetaConfirmar={t('op.inv.enviar.si')}
-              className={clasesBoton('primary')}
-              icono={<Icono icono={Send} />}
-            />
-          )}
-          {conFallo > 0 && (
-            <BotonConfirmar
-              etiqueta={t('op.inv.reintentar', { n: numero(conFallo, idioma) })} tono="normal"
-              nombreConfirmar="modo" valorConfirmar="fallidas"
-              titulo={t('op.inv.reintentar.titulo', { n: numero(Math.min(conFallo, 40), idioma) })}
-              descripcion={t('op.inv.confirmacion')}
-              etiquetaConfirmar={t('op.inv.reintentar.si')}
-              className={clasesBoton('secondary')}
-            />
-          )}
-        </form>
-        <AvisoResultado estado={estado} />
-        <Fallidas estado={estado} />
-      </div>
-    </Tarjeta>
+    <>
+      <Aviso tono={conFallo > 0 ? 'warn' : 'info'} titulo={t('op.inv.titulo')} acciones={acciones}>
+        {pendientes > 0
+          ? <strong>{tp('op.inv.esperan', pendientes, { n: numero(pendientes, idioma) })}</strong>
+          : t('op.inv.todos')}
+        {t('op.inv.llega')}{' '}
+        <a href={hrefGuia} className="rv-eq__enlace">{t('op.inv.guia')}</a>.
+        {conFallo > 0 ? ` ${tp('op.inv.fallo', conFallo, { n: numero(conFallo, idioma) })}` : ''}
+      </Aviso>
+      {estado ? <AvisoResultado estado={estado} /> : null}
+      <Fallidas estado={estado} />
+    </>
   );
 }
 

@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../../formato';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { TriangleAlert, Upload, Download, RotateCcw, Layers } from 'lucide-react';
@@ -141,15 +142,14 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
           )}
         </>
       )}
-      cifras={datos === null ? undefined : cifrasMetricas(datos.metricas, tr)}
+      cifras={datos === null ? undefined : cifrasUniformes(cifrasMetricas(datos.metricas, tr))}
       etiquetaCifras={tr('cartaPorte.documentos.vista.metricasDelAgente')}
     >
       {datos === null ? (
         <EstadoError reintentar>{tr('cartaPorte.documentos.vista.noPudeLeerLos')}</EstadoError>
       ) : (
         <>
-          <NotaMetricas tr={tr} m={datos.metricas} />
-          {acciones.subir && <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} />}
+          {acciones.subir ? <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} metricas={datos.metricas} /> : <NotaMetricas tr={tr} m={datos.metricas} />}
           <Bandeja tr={tr} datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
           <Canales tr={tr} buzon={datos.buzon} acciones={acciones} />
           <Perfiles tr={tr} perfiles={datos.perfiles} acciones={acciones} />
@@ -189,13 +189,16 @@ function NotaMetricas({ m, tr = trEs }: { m: MetricasAgente; tr?: Tr }) {
   );
 }
 
-function Subir({ accion, clientes, tr = trEs }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }>; tr?: Tr }) {
+function Subir({ accion, clientes, metricas, tr = trEs }: { accion: AccionDoc; clientes: Array<{ id: string; nombre: string }>; metricas: MetricasAgente; tr?: Tr }) {
   return (
     <Tarjeta titulo={tr('cartaPorte.documentos.vista.subirUnDocumento')} info="carta_porte_docs.subir">
       <FormaAccion accion={accion} enctype="multipart/form-data">
-        <div className="rv-forma__rejilla">
+        {/* Zona de soltar de Rovaq (`/imports`): 1.5px dashed #d6d6d9 sobre el lienzo, radio 12, 20×16. Sin archivo elegido el envío queda apagado (punteado). */}
+        <div className="rv-doc__zona">
           <CampoArchivo id="cp-archivo" name="archivo" required accept=".pdf,.png,.jpg,.jpeg,.webp,.xlsx,.xls,.csv,.xml,.eml,.txt"
             textoBoton={tr('cartaPorte.documentos.vista.seleccionarArchivo')} etiqueta={tr('cartaPorte.documentos.vista.archivoPdfFotoExcel')} />
+        </div>
+        <div className="rv-forma__rejilla">
           <CampoSelect id="cp-cliente" name="clienteId" defaultValue="" etiqueta={tr('cartaPorte.documentos.vista.deQueClienteEs')}>
             <option value="">{tr('cartaPorte.documentos.vista.sinIndicar')}</option>
             {clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -203,6 +206,7 @@ function Subir({ accion, clientes, tr = trEs }: { accion: AccionDoc; clientes: A
         </div>
         <BotonEnvio icono={<Icono icono={Upload} />} etiqueta={tr('cartaPorte.documentos.vista.subirYLeer')} pendiente={tr('cartaPorte.documentos.vista.leyendoElDocumento')} />
       </FormaAccion>
+      <NotaMetricas tr={tr} m={metricas} />
     </Tarjeta>
   );
 }

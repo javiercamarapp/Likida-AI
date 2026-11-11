@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { MapPinOff } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
@@ -139,7 +140,7 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
     <EsqueletoPanelCifras
       titulo={t('mapa.titulo')}
       apoyo={t('mapa.apoyo')}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Viajes en curso')}
       variante="12"
       graficas={[<MapaVivo key="mapa" viajes={ubicados} pines={rastreo.pines} />]}

@@ -3,7 +3,10 @@
 import { nivelDePosicion, ROTULO_FRESCURA, type NivelFrescura } from '@/lib/likida/gps_salud';
 import { useState } from 'react';
 import { numero } from '@/lib/formato';
-import { Boton, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Boton, Disclosure, EstadoVacio, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
+import '../estados.css';
 import { VIEWBOX, TRAZO_MEXICO, PUNTOS_MEXICO } from './mexico-geo';
 import './mapa.css';
 
@@ -94,14 +97,28 @@ export function MapaVivo({ viajes, pines = [] }: {
 }) {
   const [fijo, setFijo] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
+  const { t } = useT('operacion', operacionEs);
+  // Zoom del lienzo (1 a 3): recorta el viewBox alrededor del viaje activo (o del centro). Solo cambia el encuadre, nunca los datos.
+  const [zoom, setZoom] = useState(1);
   const activoId = hover ?? fijo ?? viajes[0]?.id ?? null;
   const activo = viajes.find((v) => v.id === activoId) ?? null;
+
+  const ancho = VIEWBOX.w / zoom, alto = VIEWBOX.h / zoom;
+  const cx = activo ? (activo.ox + activo.dx) / 2 : VIEWBOX.w / 2;
+  const cy = activo ? (activo.oy + activo.dy) / 2 : VIEWBOX.h / 2;
+  const vx = Math.min(Math.max(cx - ancho / 2, 0), VIEWBOX.w - ancho);
+  const vy = Math.min(Math.max(cy - alto / 2, 0), VIEWBOX.h - alto);
 
   return (
     <Tarjeta titulo="Viajes en curso sobre México" info="mapa.en_el_mapa">
       <div className="rv-mp__rejilla">
         <div className="rv-mp__lienzo">
-          <svg viewBox={`0 0 ${VIEWBOX.w} ${VIEWBOX.h}`} className="rv-mp__svg" role="img"
+          <div className="rv-mp__zoom" role="group" aria-label={t('mapa.zoom')}>
+            <button type="button" className="rv-mp__zbtn" onClick={() => setZoom((z) => Math.min(3, z + 0.5))} disabled={zoom >= 3} aria-label={t('mapa.zoom.mas')}>+</button>
+            <button type="button" className="rv-mp__zbtn" onClick={() => setZoom((z) => Math.max(1, z - 0.5))} disabled={zoom <= 1} aria-label={t('mapa.zoom.menos')}>−</button>
+            <button type="button" className="rv-mp__zbtn" onClick={() => setZoom(1)} disabled={zoom === 1} aria-label={t('mapa.zoom.reset')}>⤢</button>
+          </div>
+          <svg viewBox={`${vx.toFixed(1)} ${vy.toFixed(1)} ${ancho.toFixed(1)} ${alto.toFixed(1)}`} className="rv-mp__svg" role="img"
             aria-label="Mapa de México con los viajes en curso">
             {/* La tierra: trazo tenue + la matriz de puntos */}
             <path d={TRAZO_MEXICO} fillRule="evenodd" fill="var(--g1)" stroke="var(--line2)" strokeWidth={0.7} />
@@ -191,7 +208,7 @@ export function MapaVivo({ viajes, pines = [] }: {
         {/* Las cards de los viajes — hover ilumina, clic fija */}
         <div className="rv-mp__cards">
           {viajes.length === 0 ? (
-            <p className="rv-mp__nota">Aquí van las tarjetas de cada viaje en curso, con sus días en ruta y sus fotos recibidas.</p>
+            <EstadoVacio titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>
           ) : viajes.map((v) => {
             const esActivo = v.id === activoId;
             return (
@@ -217,6 +234,19 @@ export function MapaVivo({ viajes, pines = [] }: {
           })}
         </div>
       </div>
+      {viajes.length > 0 ? (
+        <Disclosure variante="linea" titulo={t('mapa.tabla.eq')}>
+          <TablaBase<ViajeEnMapa> etiqueta={t('mapa.tabla.eq')} densa altoMaximo={false} tarjetaMovil filas={viajes} idFila={(v) => v.id}
+            columnas={[
+              { id: 'folio', titulo: t('mapa.tabla.folio'), principal: true, celda: (v) => v.folio },
+              { id: 'ruta', titulo: t('mapa.tabla.ruta'), celda: (v) => `${v.origenNombre} → ${v.destinoNombre}` },
+              { id: 'operador', titulo: t('mapa.tabla.operador'), celda: (v) => v.operadorNombre ?? '—' },
+              { id: 'dias', titulo: t('mapa.tabla.dias'), celda: (v) => (v.dias === null ? '—' : numero(v.dias)) },
+              { id: 'km', titulo: t('mapa.tabla.km'), celda: (v) => numero(v.kmRecta) },
+              { id: 'estado', titulo: t('mapa.tabla.estado'), celda: (v) => (v.escalado ? <StatusChip tono="bad">Escalado</StatusChip> : <StatusChip tono="ok">En ruta</StatusChip>) },
+            ]} />
+        </Disclosure>
+      ) : null}
     </Tarjeta>
   );
 }
