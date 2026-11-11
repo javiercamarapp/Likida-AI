@@ -1240,4 +1240,6 @@ export const resto = {
   'e26.con_sin_fecha': 'sin fecha',
   'e26.con_ver': 'Ver ficha',
   'e26.con_pie': '{n} de {total} fichas',
+  'e26.perfil_mfa_activo': 'Activo',
+  'e26.perfil_mfa_inactivo': 'Sin activar',
 } as const;
