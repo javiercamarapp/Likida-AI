@@ -14,7 +14,7 @@ export function FormaSubirMuestra({ accion, etiqueta, boton }: { accion: (fd: Fo
     <form action={accion} encType="multipart/form-data" className="rv-liq-acciones rv-liq-acciones--forma">
       <CampoArchivo etiqueta={etiqueta} name="archivo" accept=".xlsx,.xls,.ods,.csv" required
         onChange={(e) => setHayArchivo((e.currentTarget.files?.length ?? 0) > 0)} />
-      <Boton type="submit" tamano="sm" variante={hayArchivo ? 'primary' : 'secondary'} disabled={!hayArchivo}
+      <Boton type="submit" tamano="md" variante={hayArchivo ? 'primary' : 'secondary'} disabled={!hayArchivo}
         className={hayArchivo ? undefined : 'rv-ag-no-disponible'} icono={<Icono icono={Upload} tam={14} />}>{boton}</Boton>
     </form>
   );

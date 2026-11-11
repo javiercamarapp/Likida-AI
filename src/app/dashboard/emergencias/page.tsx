@@ -22,8 +22,9 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
 import {
-  CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoVacio, FormaConAviso, StatusChip, Tarjeta, type ResultadoAccion,
+  CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FormaConAviso, StatusChip, Tarjeta, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
+import { CajonAlta } from '../cajon-alta';
 import { AccionFila } from './accion-fila';
 import '../estados.css';
 import './emergencias.css';
@@ -244,7 +245,18 @@ export default async function PaginaEmergencias({
         <div className="rv-em__pila">
           {/* ── Póliza ──────────────────────────────────────────────────── */}
           <Tarjeta titulo={t('emg.poliza.titulo')} info="emergencias.poliza"
-            contenida>
+            contenida
+            acciones={(
+              <CajonAlta id="poliza" titulo={t('emg.poliza.titulo')} disparador={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.capturar')} variante="secondary" tamano="xl">
+                <FormaConAviso accion={guardarPolizaAction} boton={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.guardar')} columnas="md:grid-cols-2">
+                <CampoTexto name="aseguradora" etiqueta={t('emg.poliza.aseguradora')} obligatorio defaultValue={poliza?.aseguradora ?? ''} />
+                <CampoTexto name="numeroPoliza" etiqueta={t('emg.poliza.numero')} obligatorio defaultValue={poliza?.numeroPoliza ?? ''} />
+                <CampoTexto name="telefonoSiniestros" etiqueta={t('emg.poliza.telefono')} obligatorio defaultValue={poliza?.telefonoSiniestros ?? ''}
+                  ayuda={t('emg.poliza.telefono.ayuda')} />
+                <CampoFecha name="vigenciaHasta" etiqueta={t('emg.poliza.hasta')} defaultValue={poliza?.vigenciaHasta ?? ''} />
+              </FormaConAviso>
+              </CajonAlta>
+            )}>
             {!poliza && (
               <EstadoVacio contenido icono={ShieldCheck} titulo={t('emg.poliza.vacio')}>{t('emg.poliza.vacio.nota')}</EstadoVacio>
             )}
@@ -256,20 +268,30 @@ export default async function PaginaEmergencias({
                 })}
               </p>
             )}
-            <Disclosure variante="linea" titulo={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.capturar')} abierto={!poliza}>
-              <FormaConAviso accion={guardarPolizaAction} boton={poliza ? t('emg.poliza.reemplazar') : t('emg.poliza.guardar')} columnas="md:grid-cols-2">
-                <CampoTexto name="aseguradora" etiqueta={t('emg.poliza.aseguradora')} obligatorio defaultValue={poliza?.aseguradora ?? ''} />
-                <CampoTexto name="numeroPoliza" etiqueta={t('emg.poliza.numero')} obligatorio defaultValue={poliza?.numeroPoliza ?? ''} />
-                <CampoTexto name="telefonoSiniestros" etiqueta={t('emg.poliza.telefono')} obligatorio defaultValue={poliza?.telefonoSiniestros ?? ''}
-                  ayuda={t('emg.poliza.telefono.ayuda')} />
-                <CampoFecha name="vigenciaHasta" etiqueta={t('emg.poliza.hasta')} defaultValue={poliza?.vigenciaHasta ?? ''} />
-              </FormaConAviso>
-            </Disclosure>
           </Tarjeta>
 
           {/* ── Proveedores ─────────────────────────────────────────────── */}
           <Tarjeta titulo={t('emg.prov.titulo')} info="emergencias.proveedores"
-            contenida>
+            contenida
+            acciones={(
+              <CajonAlta id="proveedor" titulo={t('emg.prov.agregar.titulo')} disparador={t('emg.prov.agregar.titulo')} variante="secondary" tamano="xl">
+                <FormaConAviso accion={altaProveedor} boton={t('emg.prov.agregar')} columnas="md:grid-cols-3">
+                <CampoSelect name="tipo" etiqueta={t('emg.prov.tipo')} obligatorio defaultValue="">
+                  <option value="">{t('emg.elige')}</option>
+                  {TIPOS_PROVEEDOR.map((t) => <option key={t} value={t}>{t}</option>)}
+                </CampoSelect>
+                <CampoTexto name="nombre" etiqueta={t('emg.prov.nombre')} obligatorio placeholder={t('emg.prov.nombre.ph')} />
+                <CampoTexto name="telefono" etiqueta={t('emg.prov.telefono')} obligatorio placeholder={t('emg.prov.telefono.ph')} />
+                <CampoTexto name="radioKm" tipo="number" etiqueta={t('emg.prov.radio')} min={0} />
+                {/* Posición del proveedor (Capa C): con ella la cascada mide la cercanía real al incidente. Opcional en pareja — sin las
+                    dos, el proveedor se lista sin ordenar y el aviso lo dice. Campos de texto a propósito: las longitudes de México son
+                    negativas y un number con min=0 las rechazaría. */}
+                <CampoTexto name="lat" etiqueta={t('emg.prov.lat')} placeholder="19.4326" />
+                <CampoTexto name="lng" etiqueta={t('emg.prov.lon')} placeholder="-99.1332" />
+                <CampoTexto name="notas" etiqueta={t('emg.prov.notas')} placeholder={t('emg.prov.notas.ph')} />
+              </FormaConAviso>
+              </CajonAlta>
+            )}>
             {proveedores.length === 0 && (
               <EstadoVacio contenido icono={PhoneCall} titulo={t('emg.prov.vacio')}>{t('emg.prov.vacio.nota')}</EstadoVacio>
             )}
@@ -298,28 +320,30 @@ export default async function PaginaEmergencias({
                 ))}
               </ul>
             )}
-            <Disclosure variante="linea" titulo={t('emg.prov.agregar.titulo')} abierto={proveedores.length === 0}>
-              <FormaConAviso accion={altaProveedor} boton={t('emg.prov.agregar')} columnas="md:grid-cols-3">
-                <CampoSelect name="tipo" etiqueta={t('emg.prov.tipo')} obligatorio defaultValue="">
-                  <option value="">{t('emg.elige')}</option>
-                  {TIPOS_PROVEEDOR.map((t) => <option key={t} value={t}>{t}</option>)}
-                </CampoSelect>
-                <CampoTexto name="nombre" etiqueta={t('emg.prov.nombre')} obligatorio placeholder={t('emg.prov.nombre.ph')} />
-                <CampoTexto name="telefono" etiqueta={t('emg.prov.telefono')} obligatorio placeholder={t('emg.prov.telefono.ph')} />
-                <CampoTexto name="radioKm" tipo="number" etiqueta={t('emg.prov.radio')} min={0} />
-                {/* Posición del proveedor (Capa C): con ella la cascada mide la cercanía real al incidente. Opcional en pareja — sin las
-                    dos, el proveedor se lista sin ordenar y el aviso lo dice. Campos de texto a propósito: las longitudes de México son
-                    negativas y un number con min=0 las rechazaría. */}
-                <CampoTexto name="lat" etiqueta={t('emg.prov.lat')} placeholder="19.4326" />
-                <CampoTexto name="lng" etiqueta={t('emg.prov.lon')} placeholder="-99.1332" />
-                <CampoTexto name="notas" etiqueta={t('emg.prov.notas')} placeholder={t('emg.prov.notas.ph')} />
-              </FormaConAviso>
-            </Disclosure>
           </Tarjeta>
 
           {/* ── Contactos de emergencia ─────────────────────────────────── */}
           <Tarjeta titulo={t('emg.cont.titulo')} info="emergencias.contactos"
-            contenida>
+            contenida
+            acciones={operadores.length > 0 ? (
+              <CajonAlta id="contacto" titulo={t('emg.cont.agregar.titulo')} disparador={t('emg.cont.agregar.titulo')} variante="secondary" tamano="xl">
+                <FormaConAviso accion={altaContacto} boton={t('emg.cont.agregar')} columnas="md:grid-cols-3">
+                  <CampoSelect name="operadorId" etiqueta={t('emg.cont.operador')} obligatorio defaultValue="">
+                    <option value="">{t('emg.elige')}</option>
+                    {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
+                  </CampoSelect>
+                  <CampoTexto name="nombre" etiqueta={t('emg.cont.nombre')} obligatorio />
+                  <CampoTexto name="telefono" etiqueta={t('emg.cont.telefono')} obligatorio placeholder={t('emg.cont.telefono.ph')} />
+                  <CampoTexto name="parentesco" etiqueta={t('emg.cont.parentesco')} placeholder={t('emg.cont.parentesco.ph')} />
+                  <CampoSelect name="avisarSiLesionados" etiqueta={t('emg.cont.lesionados')} defaultValue="no"
+                    ayuda={t('emg.cont.lesionados.ayuda')}>
+                    <option value="no">{t('emg.cont.no')}</option>
+                    <option value="si">{t('emg.cont.si')}</option>
+                  </CampoSelect>
+                </FormaConAviso>
+              </CajonAlta>
+            ) : undefined}>
+            {operadores.length === 0 && <p className="rv-em__nota">{t('emg.cont.sinoperadores')}</p>}
             {contactos.length === 0 && (
               <EstadoVacio contenido icono={HeartHandshake} titulo={t('emg.cont.vacio')}>{t('emg.cont.vacio.nota')}</EstadoVacio>
             )}
@@ -345,26 +369,6 @@ export default async function PaginaEmergencias({
                   </li>
                 ))}
               </ul>
-            )}
-            {operadores.length === 0 ? (
-              <p className="rv-em__nota">{t('emg.cont.sinoperadores')}</p>
-            ) : (
-              <Disclosure variante="linea" titulo={t('emg.cont.agregar.titulo')} abierto={contactos.length === 0}>
-                <FormaConAviso accion={altaContacto} boton={t('emg.cont.agregar')} columnas="md:grid-cols-3">
-                  <CampoSelect name="operadorId" etiqueta={t('emg.cont.operador')} obligatorio defaultValue="">
-                    <option value="">{t('emg.elige')}</option>
-                    {operadores.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
-                  </CampoSelect>
-                  <CampoTexto name="nombre" etiqueta={t('emg.cont.nombre')} obligatorio />
-                  <CampoTexto name="telefono" etiqueta={t('emg.cont.telefono')} obligatorio placeholder={t('emg.cont.telefono.ph')} />
-                  <CampoTexto name="parentesco" etiqueta={t('emg.cont.parentesco')} placeholder={t('emg.cont.parentesco.ph')} />
-                  <CampoSelect name="avisarSiLesionados" etiqueta={t('emg.cont.lesionados')} defaultValue="no"
-                    ayuda={t('emg.cont.lesionados.ayuda')}>
-                    <option value="no">{t('emg.cont.no')}</option>
-                    <option value="si">{t('emg.cont.si')}</option>
-                  </CampoSelect>
-                </FormaConAviso>
-              </Disclosure>
             )}
           </Tarjeta>
         </div>

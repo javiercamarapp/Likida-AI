@@ -7,13 +7,13 @@ import {
 } from '@/lib/likida/vendedores';
 import { getPipelineVendedores, type PipelineVendedores } from '@/lib/admin/prospectos-mapa';
 import { ultimasCorridasNegocio, duracionLegible, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
-import { fechaHoraMx, numero } from '@/lib/formato';
+import { fechaHoraMx, numero, porcentaje } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
 import {
   AvisoCompacto, BarraFiltros, EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, FiltroBusqueda, FiltroOpciones,
   StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
 } from '../../ui-v2/componentes';
-import { Embudo, TiraCifras } from '../../ui-v2/graficas';
+import { BarList, TiraCifras } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { estadoProspectoTr } from '@/lib/i18n/rotulos_tr';
@@ -59,11 +59,13 @@ const cargarCorridas = cache(() => safe<CorridaRegistrada[]>(() => ultimasCorrid
  */
 export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string | null; sp: { vendedor?: string; q?: string }; tx?: TSistema }) {
   return (
-    <EsqueletoTablaMaestra titulo={tx('mapa_prospectos.ventas')} apoyo={tx('vendedores_consola_vendedores.el_pipeline_del_censo_el_equipo')}>
+    <EsqueletoTablaMaestra
+      titulo={tx('mapa_prospectos.ventas')} apoyo={tx('vendedores_consola_vendedores.el_pipeline_del_censo_el_equipo')}
+      filtros={<Suspense fallback={null}><BloqueFiltros sp={sp} /></Suspense>}
+    >
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis sp={sp} /></Suspense>
-      <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo sp={sp} /></Suspense>
-      <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
       <FilaTarjetas variante="6-6">
+        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo sp={sp} /></Suspense>
         <Tarjeta titulo={tx('vendedores_consola_vendedores.agente_asignador')}>
           <p className="ven-tarjeta__tenue">{tx('vendedores_consola_vendedores.reparte_los_prospectos_sin_vendedor_en')}</p>
           <BotonRepartir accion={accionRepartir} />
@@ -71,9 +73,10 @@ export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string |
           {/* Lo que NO existe no se pinta como si existiera: los agentes que buscan leads y hacen el primer acercamiento son roadmap. */}
           <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{tx('vendedores_consola_vendedores.proximamente_agentes_que_busquen_leads_nuevos')}</p>
         </Tarjeta>
-        <BloqueComisiones tx={tx} />
       </FilaTarjetas>
+      <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
       <Suspense fallback={<EsqTablaV2 filas={4} />}><BloqueDesempeno /></Suspense>
+      <BloqueComisiones tx={tx} />
       <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueAltas /></Suspense>
     </EsqueletoTablaMaestra>
   );
@@ -155,9 +158,15 @@ async function BloqueEmbudo({ sp }: { sp: { vendedor?: string; q?: string } }) {
   if (!totales) return <Tarjeta titulo={titulo} estado="error" mensaje={t('ventas.embudo.error')} reintentar elevar entra="tarjeta" />;
   const { etapas, fuera, enRuta } = embudoDeVentas(totales);
   if (enRuta === 0) return <Tarjeta titulo={titulo} estado="vacio" mensaje={t('ventas.embudo.vacio')} contenida elevar entra="tarjeta" />;
+  // Embudo compacto (Rovaq «Análisis»): una fila por etapa con barra de 6 px, la cifra exacta y su parte de la primera etapa en píldora.
+  const base = etapas.find((e) => e.valor !== null && e.valor > 0)?.valor ?? null;
+  const items = etapas.map((e) => ({
+    clave: e.etiqueta, etiqueta: e.etiqueta, valor: e.valor,
+    texto: e.valor === null ? '—' : base ? `${numero(e.valor, idioma)} · ${porcentaje((e.valor / base) * 100, 0)}` : numero(e.valor, idioma),
+  }));
   return (
     <Tarjeta titulo={titulo} elevar entra="tarjeta">
-      <Embudo etapas={etapas} etiqueta={t('ventas.embudo.etiqueta')} formato="numero" />
+      <BarList items={items} etiqueta={t('ventas.embudo.etiqueta')} matiz={8} />
       <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t('ventas.embudo.nota', { enRuta: numero(enRuta, idioma), fuera: numero(fuera, idioma) })}</p>
     </Tarjeta>
   );
@@ -192,6 +201,20 @@ async function BloqueCorridas() {
   );
 }
 
+/** La barra de filtros VA ARRIBA de las cifras (Rovaq TM: cabecera → filtros → tira → tabla). Filtro por GET: los searchParams SON el estado
+ *  del filtro, así que el enlace se comparte y el refresh no lo pierde. */
+async function BloqueFiltros({ sp }: { sp: { vendedor?: string; q?: string } }) {
+  const { t: tx } = await getT('admin_sistema');
+  const { opcionesVendedor, hayFiltro } = await derivarPipeline(sp);
+  return (
+    <BarraFiltros accion={RUTA} buscar etiqueta={tx('vendedores_consola_vendedores.filtrar_el_pipeline')} limpiarHref={RUTA} nActivos={hayFiltro ? 1 : 0}>
+      <FiltroOpciones nombre="vendedor" etiqueta={tx('vendedores_consola_vendedores.vendedor')} valor={sp.vendedor ?? ''}
+        opciones={[{ valor: '', rotulo: tx('vendedores_consola_vendedores.todos_los_vendedores') }, { valor: 'sin', rotulo: tx('vendedores_consola_vendedores.sin_asignar') }, ...opcionesVendedor.map((v) => ({ valor: v.id, rotulo: v.nombre }))]} />
+      <FiltroBusqueda nombre="q" valor={sp.q ?? ''} placeholder={tx('vendedores_consola_vendedores.empresa_vacante_o_ciudad')} etiqueta={tx('vendedores_consola_vendedores.buscar_prospecto')} maxLength={120} />
+    </BarraFiltros>
+  );
+}
+
 async function BloqueTablero({ sp }: { sp: { vendedor?: string; q?: string } }) {
   const { t: tx } = await getT('admin_sistema');
   const { columnas, opcionesVendedor, hayFiltro, totalProspectos } = await derivarPipeline(sp);
@@ -199,14 +222,7 @@ async function BloqueTablero({ sp }: { sp: { vendedor?: string; q?: string } }) 
     return <Tarjeta titulo={tx('vendedores_consola_vendedores.pipeline_de_prospectos')} estado="error" mensaje={tx('vendedores_consola_vendedores.no_se_pudo_leer_el_pipeline_2')} reintentar />;
   }
   return (
-    <Tarjeta titulo={tx('vendedores_consola_vendedores.pipeline_de_prospectos')} acciones={(
-      /* Filtro por GET: los searchParams SON el estado del filtro, así que el link se comparte y el refresh no lo pierde. */
-      <BarraFiltros accion={RUTA} enLinea buscar etiqueta={tx('vendedores_consola_vendedores.filtrar_el_pipeline')} limpiarHref={RUTA} nActivos={hayFiltro ? 1 : 0}>
-        <FiltroOpciones nombre="vendedor" etiqueta={tx('vendedores_consola_vendedores.vendedor')} valor={sp.vendedor ?? ''}
-          opciones={[{ valor: '', rotulo: tx('vendedores_consola_vendedores.todos_los_vendedores') }, { valor: 'sin', rotulo: tx('vendedores_consola_vendedores.sin_asignar') }, ...opcionesVendedor.map((v) => ({ valor: v.id, rotulo: v.nombre }))]} />
-        <FiltroBusqueda nombre="q" valor={sp.q ?? ''} placeholder={tx('vendedores_consola_vendedores.empresa_vacante_o_ciudad')} etiqueta={tx('vendedores_consola_vendedores.buscar_prospecto')} maxLength={120} />
-      </BarraFiltros>
-    )}>
+    <Tarjeta titulo={tx('vendedores_consola_vendedores.pipeline_de_prospectos')}>
       {totalProspectos === 0 ? (
         <EstadoVacio titulo={tx('vendedores_consola_vendedores.sin_prospectos_todavia')} icono={Building2}>{tx('vendedores_consola_vendedores.agrega_el_primero_en_agregar_prospecto')}</EstadoVacio>
       ) : (
@@ -250,7 +266,7 @@ async function BloqueDesempeno() {
   // Cifras REALES de la tabla prospecto.
   return (
     <Tarjeta titulo={tx('vendedores_consola_vendedores.desempeno_por_vendedor')}>
-      <TablaBase etiqueta={tx('vendedores_consola_vendedores.prospectos_por_vendedor_y_estado')} columnas={columnas} filas={vendedores} idFila={(v) => v.id} densa tarjetaMovil className="ven-desempeno" />
+      <TablaBase etiqueta={tx('vendedores_consola_vendedores.prospectos_por_vendedor_y_estado')} columnas={columnas} filas={vendedores} idFila={(v) => v.id} tarjetaMovil className="ven-desempeno" />
     </Tarjeta>
   );
 }

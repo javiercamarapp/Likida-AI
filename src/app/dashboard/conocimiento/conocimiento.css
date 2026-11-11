@@ -11,3 +11,6 @@
 .rv-conocimiento__ver { white-space: nowrap; }
 .rv-conocimiento__chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .rv-conocimiento__tabla td { padding-block: 9px; }
+
+/* La tira de tres cifras: la celda con ⓘ (32 px) fija el alto del rótulo de TODAS, así las cifras quedan a la misma altura. */
+[data-ui="v2"] .rv-esq:has(.rv-conocimiento__tabla) .rv-kpi__cab { min-height: 32px; }

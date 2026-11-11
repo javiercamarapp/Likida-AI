@@ -35,7 +35,7 @@ export function EsqueletoFicha({ volver, chips, descripcion, avisos, cifras, for
     <MarcoPagina
       className="rv-esq rv-esq--ficha"
       {...marco}
-      acciones={<>{acciones}<BotonEnlace href={volver.href} variante="secondary" tamano="sm">{volver.etiqueta}</BotonEnlace></>}
+      acciones={<>{acciones}<BotonEnlace href={volver.href} variante="secondary">{volver.etiqueta}</BotonEnlace></>}
     >
       {chips || descripcion ? (
         <section className="rv-tarjeta rv-esq__resumen" aria-label={etiquetaResumen}>

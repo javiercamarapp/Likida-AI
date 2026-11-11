@@ -9,6 +9,7 @@ import { getBorradorViaje, type ViajeCcp } from '@/lib/likida/carta_porte_datos'
 import { numero } from '@/lib/formato';
 import { AvisoCompacto, BotonEnlace, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
 import { EsqueletoFicha } from '@/app/ui-v2/esqueletos';
+import '../../carta-porte.css';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { cifrasUniformes } from '../../../formato';
 import { sufijoTenant } from '../../../sufijo';
@@ -70,7 +71,7 @@ export default async function PaginaBorradorCcp({
 
   return (
     <EsqueletoFicha
-      area="Carta Porte"
+      area={tr('cartaPorte.borrador.viajeId.page.area')}
       titulo={tr('cartaPorte.borrador.viajeId.page.borradorDeComplementoCarta', { rotulo })}
       volver={{ href: `${RUTA_PADRE}${sufijoTenant(sp)}`, etiqueta: tr('cartaPorte.borrador.viajeId.page.volverACartaPorte') }}
       chips={(
@@ -136,12 +137,12 @@ export default async function PaginaBorradorCcp({
         </Tarjeta>,
       ]}
     >
-      <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.mercancias', { v: numero(v.mercancias.length) })}>
+      <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.mercancias', { v: numero(v.mercancias.length) })} className="rv-tarjeta--tabla">
         {v.mercancias.length === 0 ? (
           <p className="text-[12px] text-[var(--warn)]">{tr('cartaPorte.borrador.viajeId.page.sinRenglonesCapturadosEl')}</p>
         ) : (
           <TablaBase
-            etiqueta={tr('cartaPorte.borrador.viajeId.page.mercanciasDelBorradorDe')} densa altoMaximo={false}
+            etiqueta={tr('cartaPorte.borrador.viajeId.page.mercanciasDelBorradorDe')} altoMaximo={false}
             filas={v.mercancias} idFila={(m) => m.id}
             columnas={[
               { id: 'descripcion', titulo: tr('cartaPorte.borrador.viajeId.page.descripcion'), principal: true, celda: (m) => m.descripcion },
@@ -156,11 +157,11 @@ export default async function PaginaBorradorCcp({
       </Tarjeta>
 
       <FilaTarjetas variante="6-6">
-        <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.delCliente19')}>
+        <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.delCliente19')} className="rv-tarjeta--tabla">
           <p className="text-[11px] text-[var(--muted)]">{tr('cartaPorte.borrador.viajeId.page.laRegla27')}</p>
           <TablaCampos tr={tr} v={v} responsable="cliente" />
         </Tarjeta>
-        <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.delTransportista18')}>
+        <Tarjeta titulo={tr('cartaPorte.borrador.viajeId.page.delTransportista18')} className="rv-tarjeta--tabla">
           <TablaCampos tr={tr} v={v} responsable="transportista" />
         </Tarjeta>
       </FilaTarjetas>
@@ -191,7 +192,7 @@ function TablaCampos({ v, responsable, tr = trEs }: { v: ViajeCcp; responsable: 
   return (
     <div>
       <TablaBase
-        etiqueta={responsable} densa altoMaximo={false} filas={campos} idFila={(c) => c.clave}
+        etiqueta={responsable} altoMaximo={false} filas={campos} idFila={(c) => c.clave}
         columnas={[
           { id: 'dato', titulo: tr('cartaPorte.borrador.viajeId.page.dato'), principal: true, celda: (c) => c.rotulo },
           {

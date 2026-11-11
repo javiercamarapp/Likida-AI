@@ -390,4 +390,5 @@ export const admin_inicio: Record<keyof typeof admin_inicioEs, string> = {
   'aprobaciones.kpi_bandeja': 'Queue',
   'aprobaciones.kpi_frena': 'Holding agents back',
   'aprobaciones.kpi_libre': 'Not blocking',
+  'parados.ver_todos_en_escalaciones': 'See the detail in Escalations',
 };

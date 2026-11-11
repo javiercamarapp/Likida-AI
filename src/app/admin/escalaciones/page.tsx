@@ -91,10 +91,10 @@ export default async function EscalacionesPage() {
       id: 'resolver', titulo: t('escalaciones.se_resuelve_en'), alinear: 'der',
       // Sin pantalla a la cual llevar, se dice — un link que rebota es peor que ninguno.
       celda: (it) => (it.href
-        ? <BotonEnlace href={it.href} variante="secondary" tamano="sm">Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
+        ? <BotonEnlace href={it.href} variante="secondary" tamano="sm" className="bj-nowrap">Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
         : 'sin ficha'),
     },
-    { id: 'caso', titulo: '', alinear: 'der', celda: (it) => <BotonEnlace href={urlCasoExamen(it)} variante="ghost" tamano="sm">{tMon('caso.boton')}</BotonEnlace> },
+    { id: 'caso', titulo: '', alinear: 'der', celda: (it) => <BotonEnlace href={urlCasoExamen(it)} variante="ghost" tamano="sm" className="bj-nowrap">{tMon('caso.boton')}</BotonEnlace> },
   ];
 
   return (
@@ -146,7 +146,7 @@ export default async function EscalacionesPage() {
         </section>
       )}
 
-      <BloqueAgentesParados datos={parados} cola={cola} t={t} />
+      <BloqueAgentesParados datos={parados} cola={cola} t={t} tope={10} />
     </EsqueletoTablaMaestra>
   );
 }

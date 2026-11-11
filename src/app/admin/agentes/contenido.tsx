@@ -233,7 +233,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
             { etiqueta: t('agentes_contenido.vr_exito'), valor: exitoSel && exitoSel.total > 0 ? `${Math.round((exitoSel.ok / exitoSel.total) * 100)} %` : '—' },
             { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: consumo === null ? '—' : usd(costoDe.get(sel.a.id) ?? 0) },
           ]}
-          pie={<BotonEnlace variante="suave" href={`/admin/agentes/${sel.a.id}/insumos`}>{t('agentes_contenido.vr_abrir')}</BotonEnlace>}
+          pie={<BotonEnlace variante="primary" href={`/admin/agentes/${sel.a.id}/insumos`}>{t('agentes_contenido.vr_abrir')}</BotonEnlace>}
         >
           <p className="rv-agente-sub">{sel.a.descripcion || t('agentes_contenido.vr_sin_descripcion')}</p>
           <p className="rv-agente-sub">{sel.a.modeloRol ?? t('agentes_contenido.vr_modelo_sin_declarar')} · {sel.a.presupuestoDiaUsd === null ? t('agentes_contenido.sin_tope_declarado') : t('agentes_contenido.dia', { presupuestoDiaUsd: usd(sel.a.presupuestoDiaUsd) })}</p>

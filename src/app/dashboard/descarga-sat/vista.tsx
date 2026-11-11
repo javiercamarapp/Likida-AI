@@ -259,15 +259,15 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
             accion={(
         <CajonConfigFiscal id="buzon" titulo={tr('descargaSat.vista.declaraTuBuzon')} descripcion={tr('descargaSat.vista.elRfcDelQue')} disparador={tr('descargaSat.vista.configurarBuzon')}>
           <FormaConAviso accion={guardar} boton="Guardar" columnas="md:grid-cols-1">
-            <CampoTexto id="rfc" name="rfc" etiqueta={tr('descargaSat.vista.rfcDelBuzon')} defaultValue={cfg?.rfc ?? ''} placeholder="EKU9003173C9" obligatorio />
-            <CampoSelect id="modo" name="modo" etiqueta={tr('descargaSat.vista.servicioDelSat')} defaultValue={cfg?.modo ?? 'webservice'}>
+            <CampoTexto id="rfc" name="rfc" etiqueta={tr('descargaSat.vista.rfcDelBuzon')} defaultValue="" placeholder="EKU9003173C9" obligatorio />
+            <CampoSelect id="modo" name="modo" etiqueta={tr('descargaSat.vista.servicioDelSat')} defaultValue="webservice">
               <option value="webservice">{tr('descargaSat.vista.webService200000')}</option>
               <option value="portal">{tr('descargaSat.vista.portal2000Al')}</option>
             </CampoSelect>
             <CampoTexto id="peajeDiasAviso" name="peajeDiasAviso" tipo="number" etiqueta={tr('descargaSat.vista.avisoDeCierreDe')}
-              defaultValue={String(cfg?.peajeDiasAviso ?? DIAS_AVISO_DEFECTO)}
+              defaultValue={String(DIAS_AVISO_DEFECTO)}
               ayuda={tr('descargaSat.vista.de1A25')} />
-            <CampoSelect id="activa" name="activa" etiqueta={tr('descargaSat.vista.estado')} defaultValue={cfg?.activa === false ? 'pausada' : 'activa'}>
+            <CampoSelect id="activa" name="activa" etiqueta={tr('descargaSat.vista.estado')} defaultValue="activa">
               <option value="activa">{tr('descargaSat.vista.activaSeDescargaSola')}</option>
               <option value="pausada">{tr('descargaSat.vista.pausadaNoSePide')}</option>
             </CampoSelect>

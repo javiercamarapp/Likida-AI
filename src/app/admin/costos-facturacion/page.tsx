@@ -318,7 +318,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
               ) : null}
               {/* El total manda (es lo que entra al banco) y el desglose va debajo: es lo que va a salir en el CFDI. Sin desglose se dice, porque esa factura NO se va a poder timbrar. */}
               <TablaBase
-                etiqueta={t('costos_facturacion.facturas_por_cobrar')} idFila={(f) => f.id} tarjetaMovil densa filas={porCobrar}
+                etiqueta={t('costos_facturacion.facturas_por_cobrar')} idFila={(f) => f.id} tarjetaMovil filas={porCobrar}
                 columnas={[
                   { id: 'flota', titulo: t('costos_facturacion.flota'), principal: true, celda: (f) => f.tenantNombre },
                   { id: 'periodo', titulo: t('costos_facturacion.periodo'), celda: (f) => `${f.periodoInicio} a ${f.periodoFin}` },
@@ -369,7 +369,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
               />
             </BarraFiltros>
             <TablaBase
-              etiqueta={t('costos_facturacion.plan_y_estado_de')} idFila={(f) => f.id} tarjetaMovil densa filas={filasFlota}
+              etiqueta={t('costos_facturacion.plan_y_estado_de')} idFila={(f) => f.id} tarjetaMovil filas={filasFlota}
               vacio={{ titulo: t('costos_facturacion.ninguna_flota_con_ese'), texto: t('costos_facturacion.quita_el_filtro_para') }}
               columnas={[
                 { id: 'flota', titulo: t('costos_facturacion.flota'), principal: true, celda: (f) => f.nombre },

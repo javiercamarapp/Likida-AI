@@ -1,0 +1,5 @@
+/* /dashboard/chat — ajustes de la PÁGINA al lienzo de Rovaq (/preguntale), sin tocar ui-v2/chat.css (pieza compartida).
+   · La columna de conversación y el recuadro de escribir miden 650 px como en Rovaq (antes 736: 46 rem).
+   · Los chips de tema van en UNA línea de 32 px: si no caben en la fila, la fila baja; el rótulo nunca se parte en dos. */
+.rv-chat-pagina .rv-chat:not([data-variante="panel"]) { --col-chat: 650px; }
+[data-ui="v2"] .rv-chat-pagina .rv-btn.rv-chat__tema { flex: none; white-space: nowrap; height: 32px; min-height: 32px; }

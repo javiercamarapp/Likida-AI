@@ -13,7 +13,7 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
-import { VistasConContador } from '../aprobaciones/vistas';
+import { BarraVistas, PanelesVistas, ProveedorVistas, type OpcionVista } from '../aprobaciones/vistas';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
@@ -127,8 +127,16 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
     </>
   );
 
+  const opcionesVistas: readonly OpcionVista<VistaCompliance>[] = [
+    { valor: 'pendientes', etiqueta: t('compliance.por_responder'), conteo: pendientes.length },
+    { valor: 'resueltas', etiqueta: t('compliance.ya_resueltas'), conteo: resueltas.length },
+    { valor: 'obligaciones', etiqueta: t('compliance.ob_pestana'), conteo: obligaciones.length },
+  ];
+
   return (
+    <ProveedorVistas inicial="pendientes">
     <EsqueletoTablaMaestra
+      filtros={lectura === null ? undefined : <BarraVistas<VistaCompliance> etiqueta={t('compliance.vistas')} opciones={opcionesVistas} />}
       titulo={t('compliance.seguridad_y_datos')}
       apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}
       etiquetaCifras={t('compliance.solicitudes_arco')}
@@ -154,13 +162,8 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
       {lectura === null ? (
         <EstadoError reintentar>{t('compliance.no_se_pudieron_leer_las_solicitudes_2')}</EstadoError>
       ) : (
-        <VistasConContador<VistaCompliance>
-          etiqueta={t('compliance.vistas')} inicial="pendientes"
-          opciones={[
-            { valor: 'pendientes', etiqueta: t('compliance.por_responder'), conteo: pendientes.length },
-            { valor: 'resueltas', etiqueta: t('compliance.ya_resueltas'), conteo: resueltas.length },
-            { valor: 'obligaciones', etiqueta: t('compliance.ob_pestana'), conteo: obligaciones.length },
-          ]}
+        <PanelesVistas<VistaCompliance>
+          opciones={opcionesVistas}
           paneles={{
             pendientes: solicitudes.length === 0 ? (
               <Tarjeta titulo={t('compliance.solicitudes_arco')} estado="vacio" mensaje={t('compliance.ninguna_solicitud_arco_registrada')}
@@ -220,6 +223,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
         />
       )}
     </EsqueletoTablaMaestra>
+    </ProveedorVistas>
   );
 }
 

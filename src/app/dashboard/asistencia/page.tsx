@@ -201,7 +201,7 @@ export default async function PaginaMesaControl({
       titulo={t('asist.titulo')}
       apoyo={apoyo}
       filtros={leyoOk ? (
-        <BarraFiltros accion={RUTA} etiqueta={t('asist.filtros')} nActivos={filtro !== 'todas' ? 1 : 0} limpiarHref={hrefFiltro('todas')}
+        <BarraFiltros enLinea accion={RUTA} etiqueta={t('asist.filtros')} nActivos={filtro !== 'todas' ? 1 : 0} limpiarHref={hrefFiltro('todas')}
           ocultos={[...new URLSearchParams(sufijoTenant(sp).replace(/^\?/, '')).entries()]}>
           <FiltroOpciones etiqueta={t('asist.filtro.estado')} valor={filtro} porDefecto="todas"
             opciones={[
