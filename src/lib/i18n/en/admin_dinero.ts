@@ -383,4 +383,5 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'a1r4.cr_flotas_alta': 'Fleets signed up',
   'a1r4.cr_de_pago': '{n} paying',
   'a1r4.ver_cuales': 'See which ones ({n})',
+  'a1r4.techo_apoyo': 'How much each fleet can spend on AI per day, where its cap comes from and how much it has used today.',
 };

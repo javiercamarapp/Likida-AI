@@ -381,4 +381,5 @@ export const admin_dinero = {
   'a1r4.cr_flotas_alta': 'Flotas dadas de alta',
   'a1r4.cr_de_pago': '{n} de pago',
   'a1r4.ver_cuales': 'Ver cuáles son ({n})',
+  'a1r4.techo_apoyo': 'Cuánto puede gastar en IA cada flota por día, de dónde sale su tope y cuánto lleva hoy.',
 } as const;
