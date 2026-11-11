@@ -68,7 +68,7 @@ describe('título de pestaña por pantalla «<Pantalla> · Likida»', () => {
       const page = join(dir, 'page.tsx');
       let src = '';
       try { src = fuente(page); } catch { continue; } // la vista no cuelga de un page.tsx de su carpeta (p. ej. subcomponentes)
-      if (!/export const metadata\b/.test(src)) sinTitulo.push(page);
+      if (!/export (const metadata\b|async function generateMetadata\b)/.test(src)) sinTitulo.push(page); // generateMetadata: el título sale del diccionario (i18n)
     }
     expect(sinTitulo).toEqual([]);
   });
