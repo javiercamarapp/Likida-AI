@@ -151,7 +151,7 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
       pie={<p>Esta página la genera Likida por cuenta de {v.flota}. No pide contraseñas ni datos de tarjeta: si algo te los pide, no es esto.</p>}
     >
       {/* ── EL SALDO ─────────────────────────────────────────────────────── */}
-      <section className="py-6" style={{ borderBottom: '1px solid var(--line)' }}>
+      <section className="border-b border-[var(--line)] py-6">
         <Renglon etiqueta="Total de la factura" valor={mxn(f.total)} />
         <Renglon
           etiqueta="Pagado"
@@ -167,7 +167,7 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
         {f.cfdiUuid && <Renglon etiqueta="Folio fiscal (UUID)" valor={f.cfdiUuid} />}
 
         {f.saldo === null && (
-          <p className="mt-4 text-[13px]" style={{ color: 'var(--warn, var(--muted))' }}>
+          <p className="mt-4 text-[13px]">
             Ahora mismo no podemos calcular tu saldo. No quiere decir que esté en
             cero: quiere decir que no pudimos consultarlo. Vuelve en unos minutos.
           </p>
@@ -176,17 +176,17 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
 
       {/* ── LO QUE YA REGISTRASTE ────────────────────────────────────────── */}
       {v.propuestas.length > 0 && (
-        <section className="py-6" style={{ borderBottom: '1px solid var(--line)' }}>
-          <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+        <section className="border-b border-[var(--line)] py-6">
+          <h2 className="text-base font-semibold">
             Pagos que has registrado aquí
           </h2>
           <ul className="mt-3 space-y-2">
             {v.propuestas.map((p, i) => (
               <li key={i} className="text-[14px] break-words">
-                <span style={{ color: 'var(--ink)' }}>{mxn(p.monto)}</span>
+                <span>{mxn(p.monto)}</span>
                 {' · '}{fechaMx(p.fecha)}{' · ref. '}{p.referencia}
                 {' — '}
-                <span style={{ color: 'var(--muted)' }}>{rotuloEstado(p.estado)}</span>
+                <span>{rotuloEstado(p.estado)}</span>
               </li>
             ))}
           </ul>
@@ -201,8 +201,8 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
       )}
 
       {/* ── EL FORMULARIO ────────────────────────────────────────────────── */}
-      <section className="py-6" style={{ borderBottom: '1px solid var(--line)' }}>
-        <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+      <section className="border-b border-[var(--line)] py-6">
+        <h2 className="text-base font-semibold">
           Registrar un pago
         </h2>
         {saldado ? (
@@ -229,7 +229,7 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
 
       {/* ── EL COMPLEMENTO DE PAGO ───────────────────────────────────────── */}
       <section className="py-6">
-        <h2 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
+        <h2 className="text-base font-semibold">
           Tu complemento de pago (REP)
         </h2>
         <p className="mt-2 text-[14px] break-words">{textoDelRep(
@@ -246,7 +246,7 @@ function Contenido({ v, token }: { v: VistaPortal; token: string }) {
             {rep.tieneXml ? (
               <a
                 className="mt-2 inline-block underline"
-                style={{ color: 'var(--ink)' }}
+               
                 href={`/pago/${encodeURIComponent(token)}/complemento/${encodeURIComponent(rep.cfdiUuid)}`}
               >
                 Descargar el XML de este complemento
@@ -276,8 +276,7 @@ function Renglon({ etiqueta, valor, fuerte }: { etiqueta: string; valor: string;
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 py-1">
       <span className="text-[14px]">{etiqueta}</span>
       <span
-        className={fuerte ? 'text-lg font-semibold' : 'text-[14px]'}
-        style={{ color: 'var(--ink)', wordBreak: 'break-word' }}
+        className={`break-words ${fuerte ? 'text-lg font-semibold' : 'text-[14px]'}`}
       >
         {valor}
       </span>
