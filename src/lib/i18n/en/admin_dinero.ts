@@ -366,4 +366,7 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'marketing.k_pendientes': 'Pending pieces',
   'marketing.k_publicadas': 'Published pieces',
   'marketing.k_etiqueta': 'Marketing studio',
+  'facturas.vista_rapida': 'Quick view',
+  'facturas.vr_subtitulo': 'Invoice {n} of {total}',
+  'facturas.vr_abrir': 'Open Plans and billing',
 };

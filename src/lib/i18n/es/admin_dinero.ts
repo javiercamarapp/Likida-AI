@@ -364,4 +364,7 @@ export const admin_dinero = {
   'marketing.k_pendientes': 'Piezas pendientes',
   'marketing.k_publicadas': 'Piezas publicadas',
   'marketing.k_etiqueta': 'Estudio de marketing',
+  'facturas.vista_rapida': 'Vista rápida',
+  'facturas.vr_subtitulo': 'Factura {n} de {total}',
+  'facturas.vr_abrir': 'Abrir Planes y cobro',
 } as const;
