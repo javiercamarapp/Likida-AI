@@ -357,4 +357,8 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'marketing.que_no_hace_el': 'What the studio does not do yet',
   'marketing.la_generacion_real_de': 'Actual image and video generation is still an explicit extension point, not something activated here: the studio delivers the input and the approval; the render lives in the owner’s local flow.',
   'marketing.estudio_de_marketing': 'Marketing studio',
+  'techo_ia.k_declarado': 'With a declared cap',
+  'techo_ia.k_cerca': 'At 80% or more today',
+  'techo_ia.k_piso': 'Global floor',
+  'techo_ia.k_piso_nota': 'Daily cap when the fleet has neither a declared cap nor a plan.',
 };

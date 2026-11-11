@@ -355,4 +355,8 @@ export const admin_dinero = {
   'marketing.que_no_hace_el': 'Qué no hace el estudio todavía',
   'marketing.la_generacion_real_de': 'La generación real de imagen y video sigue siendo un punto de extensión explícito, no algo activado aquí: el estudio entrega el insumo y la aprobación; el render vive en el flujo local del dueño.',
   'marketing.estudio_de_marketing': 'Estudio de marketing',
+  'techo_ia.k_declarado': 'Con techo declarado',
+  'techo_ia.k_cerca': 'Al 80 % o más hoy',
+  'techo_ia.k_piso': 'Piso global',
+  'techo_ia.k_piso_nota': 'Techo diario cuando la flota no declara ni tiene plan.',
 } as const;
