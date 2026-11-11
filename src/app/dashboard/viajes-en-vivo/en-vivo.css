@@ -34,3 +34,7 @@
 .rv-vv__leyenda svg { vertical-align: middle; margin-right: 6px; }
 .rv-vv__ext { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; font-size: var(--t-micro); color: var(--muted); }
 .rv-vv__num { font-variant-numeric: tabular-nums; }
+
+/* Preguntas sugeridas (Rovaq ctl-q): 32 px, blancas, borde neutro; nunca el aspecto de «seleccionado». */
+.rv-vv__q { min-height: 32px; background: var(--surface); border: 1px solid var(--line2); font-weight: 400; }
+.rv-vv__q:hover:not(:disabled) { background: var(--canvas); }

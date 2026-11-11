@@ -95,7 +95,7 @@ export function VistaConvenios(p: PropsVistaConvenios) {
             <FormaImportarConvenios accion={p.accionImportar} />
           </CajonAlta>
           {edicionDisponible ? (
-            <CajonAlta id="alta" titulo={t('op.nuevo_convenio')} descripcion={t('op.da_de_alta_un_convenio_y')} disparador={t('op.capturar_un_convenio')} primario abiertoInicial={lista.length === 0 && p.estado === 'ok'}>
+            <CajonAlta id="alta" titulo={t('op.nuevo_convenio')} descripcion={t('op.da_de_alta_un_convenio_y')} disparador={t('op.capturar_un_convenio')} primario tamano="xl">
               <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
             </CajonAlta>
           ) : null}

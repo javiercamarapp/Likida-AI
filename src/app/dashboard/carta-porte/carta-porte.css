@@ -17,3 +17,6 @@
 .rv-ccp__rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .rv-ccp__acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .rv-ccp__enlace { text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }
+
+/* Borrador (ficha): las tablas van a sangre dentro de su tarjeta (sin segundo marco) y los textos que las acompañan conservan su respiro. */
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > p { margin: 0; padding: 8px 14px; }

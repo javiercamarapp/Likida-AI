@@ -1,4 +1,5 @@
 import { TarjetaTabla } from '../bloque';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { numero } from '@/lib/formato';
@@ -90,7 +91,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
   }
   // Cifras sobre los patios que SÍ se leyeron; si la lista no se pudo leer no hay tira (nunca ceros de relleno).
   const cifras: PropsCifra[] | undefined = ilegible ? undefined : [
-    { etiqueta: t('patios.titulo'), valor: lista.length },
+    { etiqueta: t('patios.kpi'), valor: lista.length },
     { etiqueta: t('patios.col.operadores'), valor: lista.reduce((n, p) => n + p.operadores, 0) },
     { etiqueta: t('patios.col.unidades'), valor: lista.reduce((n, p) => n + p.unidades, 0) },
     { etiqueta: t('patios.col.jefes'), valor: lista.reduce((n, p) => n + p.jefes, 0) },
@@ -105,6 +106,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
         </CajonAlta>
       ) : undefined}
       cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy(t('patios.tarjeta'))}
       avisos={(
         <AvisoCompacto tono="info"
           resumen={<>{t('patios.aviso')}
@@ -112,7 +114,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
           mas="Las plantillas de carga masiva también saben a dónde va cada camión. Un jefe con patio solo corrige operadores, unidades y jornadas de ese patio." />
       )}
     >
-      <TarjetaTabla titulo={t('patios.titulo')} contador={ilegible ? undefined : numero(lista.length)}>
+      <TarjetaTabla titulo={t('patios.tarjeta')} contador={ilegible ? undefined : numero(lista.length)}>
         {ilegible ? (
           <EstadoError reintentar>{t('patios.error.lista')}</EstadoError>
         ) : lista.length === 0 ? (

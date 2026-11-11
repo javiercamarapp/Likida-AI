@@ -30,3 +30,15 @@
    ya se apila como tarjetas (`tarjetaMovil`), y ahí no aplica el ancho mínimo. */
 .rv-dsp__tabla table td:last-child { white-space: nowrap; width: 1%; }
 @media (min-width: 820px) { .rv-dsp__tabla table { min-width: 720px; } }
+
+/* Ronda 3 — «En curso» a sangre (la tabla ya trae su borde: la tarjeta no pone un segundo marco con margen) y, en móvil, la tabla pasa a tarjeta-fila sin
+   forzar anchos que la desbordan. Las notas y el pie conservan su respiro dentro de la tarjeta sin relleno. */
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__nota, .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__pie { padding: 8px 14px; }
+@media (max-width: 819.98px) {
+  .rv-dsp__tabla table td:last-child { white-space: normal; width: auto; }
+  .rv-dsp__nombre { min-width: 0; max-width: 100%; }
+  .rv-dsp__tabla table, .rv-dsp__tabla { min-width: 0; max-width: 100%; }
+}
+
+/* Pie de acción del cajón «Nuevo viaje»: pegado al fondo del cuerpo desplazable, con el borde y el respiro del pie de cualquier overlay. */
+.rv-fv__pie { position: sticky; bottom: -16px; z-index: 1; display: flex; justify-content: flex-end; gap: 8px; margin: 8px -16px -16px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }

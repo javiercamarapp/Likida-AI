@@ -72,6 +72,7 @@ function formularios(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === 'form') salida.push(nodo);
   formularios(nodo.props.children as ReactNode, salida);
+  formularios(nodo.props.acciones as ReactNode, salida); // las formas de alta viven en el cajón del encabezado de cada tarjeta
   return salida;
 }
 
@@ -83,6 +84,7 @@ function formasConAviso(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === FormaConAviso) salida.push(nodo);
   formasConAviso(nodo.props.children as ReactNode, salida);
+  formasConAviso(nodo.props.acciones as ReactNode, salida); // las formas de alta viven en el cajón del encabezado de cada tarjeta
   return salida;
 }
 
@@ -92,6 +94,7 @@ function accionesFila(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === AccionFila) salida.push(nodo);
   accionesFila(nodo.props.children as ReactNode, salida);
+  accionesFila(nodo.props.acciones as ReactNode, salida); // las formas de alta viven en el cajón del encabezado de cada tarjeta
   return salida;
 }
 const deFila = (pagina: ReactNode, etiqueta: string) => {

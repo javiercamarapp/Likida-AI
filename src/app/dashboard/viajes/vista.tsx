@@ -1,4 +1,5 @@
 import { cifrasUniformes } from '../formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { TarjetaTabla } from '../bloque';
 import { CajonAlta } from '../cajon-alta';
 import { Eye, Inbox } from 'lucide-react';
@@ -166,11 +167,12 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
       titulo={t('viajes.titulo')}
       apoyo={t('viajes.apoyo')}
       cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy(t('viajes.sello'))}
       etiquetaCifras={t('viajes.sello')}
       filtros={(
         // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
         // campos ocultos para no perderse al enviar; el estado es un enlace (hrefRegistro) con la búsqueda vigente.
-        <BarraFiltros accion="/dashboard/viajes" buscar etiqueta={t('viajes.filtros')} nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
+        <BarraFiltros enLinea accion="/dashboard/viajes" buscar etiqueta={t('viajes.filtros')} nActivos={(filtro !== 'todos' ? 1 : 0) + (q ? 1 : 0)} limpiarHref={hrefRegistro(sufijo, {})}
           ocultos={[...params.entries(), ...(filtro !== 'todos' ? [['f', filtro] as [string, string]] : [])]}>
           <FiltroOpciones etiqueta={t('viajes.filtro.estado')} valor={filtro} porDefecto="todos"
             opciones={(Object.keys(ROTULO_FILTRO) as FiltroViajes[]).map((f) => ({ valor: f, rotulo: t(ROTULO_FILTRO[f]), href: hrefRegistro(sufijo, { f, q }) }))} />
@@ -195,7 +197,10 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
           ]}
           pie={sel.liqId ? (
             <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/${sel.liqId}${sufijo}`}>{t('viajes.vr.abrir')}</BotonEnlace>
-          ) : undefined}
+          ) : (
+            // Sin liquidación todavía no hay ficha que abrir: el viaje se sigue en Despacho. La vista rápida siempre cierra con su acción primaria.
+            <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/despacho${sufijo}`}>{t('viajes.vr.despacho')}</BotonEnlace>
+          )}
         >
           <div className="rv-reg__vr-extra">
             <PillAviso v={sel} tr={tr} />
