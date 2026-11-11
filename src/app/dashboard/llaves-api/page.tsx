@@ -124,7 +124,7 @@ export default async function PaginaLlavesApi({
   const sinCaducidad = llaves === null ? 0 : llaves.filter((l) => l.revocadaEn === null && l.expiraEn === null).length;
   const muertas = llaves === null ? 0 : llaves.filter((l) => l.revocadaEn !== null || llaveVencida(l.expiraEn)).length;
   const cifras = llaves === null ? undefined : [
-    { etiqueta: t('e26.llaves_vigentes'), matiz: 1 as const, valor: vigentes, nota: t('e26b.llaves_vigentes_nota'), segmentos: llaves.length > 0 ? [{ etiqueta: t('e26.llaves_vigentes'), valor: vigentes }, { etiqueta: t('e26.llaves_revocadas_vencidas'), matiz: 1 as const, valor: muertas }] : undefined },
+    { etiqueta: t('e26.llaves_vigentes'), matiz: 1 as const, valor: vigentes, nota: t('e26b.llaves_vigentes_nota'), segmentos: llaves.length > 0 ? [{ etiqueta: t('e26.llaves_vigentes'), valor: vigentes }, { etiqueta: t('e26.llaves_revocadas_vencidas'), valor: muertas }] : undefined },
     { etiqueta: t('e26.llaves_sin_caducidad'), matiz: 1 as const, valor: sinCaducidad, nota: t('e26b.llaves_sin_caducidad_nota') },
     { etiqueta: t('e26.llaves_revocadas_vencidas'), matiz: 1 as const, valor: muertas, nota: t('e26b.llaves_muertas_nota') },
   ];
