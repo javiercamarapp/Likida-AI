@@ -231,6 +231,7 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
   diaMx: string;
   sufijo: string;
 }) {
+  const { t: tx } = await getT('resto');
   const { t, tp } = await getT('operacion');
   const [sinAsignar, incidencias, tablero, unidades, operadores] =
     await Promise.all([pSinAsignar, pIncidencias, pTablero, pUnidades, pOperadores]);
@@ -307,7 +308,7 @@ async function BloqueAlertas({ pSinAsignar, pIncidencias, pTablero, pUnidades, p
       {ciegas.length > 0 && (
         <AvisoCompacto tono="warn"
           resumen={t('ini.op.nosepudo', { lista: ciegas.join(' · ') })}
-          mas="Las alertas de esa parte pueden faltar. Es un fallo de lectura, no un «todo en orden»." />
+          mas={tx('op.las_alertas_de_esa_parte_pueden')} />
       )}
 
       {alertas.length > 0 && (
@@ -425,6 +426,7 @@ async function BloqueTablero({ pTablero }: { pTablero: Promise<TableroOperacion 
 }
 
 async function BloqueSinAsignar({ pSinAsignar, sufijo }: { pSinAsignar: Promise<ViajesSinAsignar | null>; sufijo: string }) {
+  const { t: tx } = await getT('resto');
   const { t, idioma } = await getT('operacion');
   const sinAsignar = await pSinAsignar;
   return (
@@ -453,9 +455,7 @@ async function BloqueSinAsignar({ pSinAsignar, sufijo }: { pSinAsignar: Promise<
             </li>
           ))}
           {sinAsignar.total > sinAsignar.filas.length && (
-            <li className="px-5 py-2 border-t text-[12px]" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>
-              Se muestran {sinAsignar.filas.length} — hay {sinAsignar.total - sinAsignar.filas.length} más sin chofer.{' '}
-              <Link href={`/dashboard/despacho${sufijo}`} className="underline">{t('ini.op.endespacho')}</Link>
+            <li className="px-5 py-2 border-t text-[12px]" style={{ borderColor: 'var(--line2)', color: 'var(--muted)' }}>{tx('op.se_muestran_hay_mas_sin_chofer', { length: sinAsignar.filas.length, v: sinAsignar.total - sinAsignar.filas.length })}{' '}<Link href={`/dashboard/despacho${sufijo}`} className="underline">{t('ini.op.endespacho')}</Link>
             </li>
           )}
         </ul>

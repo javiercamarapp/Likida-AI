@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resto } from '@/lib/i18n/es/resto';
 
 /**
  * AUDITORÍA 28, FIS-M1 (MEDIO). La RFA 2026 regla 2.9 (normas/rfa-2026-2.9.yaml,
@@ -19,9 +20,10 @@ import { describe, expect, it } from 'vitest';
 describe('forma.tsx — la pregunta de dedicación exclusiva no cubre pasaje/turismo', () => {
   it('la etiqueta del selector "dedicacion" no menciona pasaje ni turismo', () => {
     const src = readFileSync(resolve(process.cwd(), 'src/app/dashboard/onboarding/forma.tsx'), 'utf8');
-    const m = /nombre="dedicacion"\s+etiqueta="([^"]+)"/.exec(src);
+    // La etiqueta sale del diccionario es: el fuente trae `etiqueta={t('clave')}`.
+    const m = /nombre="dedicacion"\s+etiqueta=\{t\('([^']+)'\)\}/.exec(src);
     expect(m, 'no se encontró el Selector nombre="dedicacion" en forma.tsx').not.toBeNull();
-    const etiqueta = (m as RegExpExecArray)[1].toLowerCase();
+    const etiqueta = (resto as Record<string, string>)[(m as RegExpExecArray)[1]].toLowerCase();
     expect(etiqueta).not.toMatch(/pasaje|turismo/);
     expect(etiqueta).toMatch(/carga federal/);
   });

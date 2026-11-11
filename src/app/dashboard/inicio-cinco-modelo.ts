@@ -3,6 +3,7 @@ import type { CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import type { HechoSolo } from '@/lib/likida/analytics';
 import { PERIODO_RANGO, type DatosResumen, type FilaAtencion } from './resumen-modelo';
 import type { CifrasPesosCincoAgentes, SelloCifra } from './cinco-agentes-cifras-modelo';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MODELO PURO DEL INICIO v2 DE UNA FLOTA `cinco_agentes` (L11). Sin base, sin red, sin importar nada de servidor: lo usan las
@@ -31,17 +32,17 @@ const dia = (iso: string | number) => hoyMx(new Date(iso));
  */
 export function estadoDeAgente(
   corrida: CorridaRegistrada | null | undefined, ahora: number,
-  o: { registraCorridas: boolean; proximamente?: boolean },
+  o: { registraCorridas: boolean; proximamente?: boolean }, t: TResto = T_RESTO_ES,
 ): EstadoAgente {
-  if (o.proximamente) return { punto: 'muted', texto: 'Todavía no está activo' };
-  if (!o.registraCorridas) return { punto: 'muted', texto: 'Sin corridas: abre su tablero' };
-  if (corrida === null) return { punto: 'warn', texto: 'No se pudo leer la última corrida' };
-  if (corrida === undefined) return { punto: 'muted', texto: 'Sin corridas registradas' };
+  if (o.proximamente) return { punto: 'muted', texto: t('op.todavia_no_esta_activo') };
+  if (!o.registraCorridas) return { punto: 'muted', texto: t('op.sin_corridas_abre_su_tablero') };
+  if (corrida === null) return { punto: 'warn', texto: t('op.no_se_pudo_leer_la_ultima_2') };
+  if (corrida === undefined) return { punto: 'muted', texto: t('op.sin_corridas_registradas') };
   const hoy = dia(ahora) === dia(corrida.inicio);
   const cuando = `${hoy ? 'hoy' : fechaCorta(corrida.inicio)} ${horaMx(corrida.inicio)}`;
-  if (corrida.estado === 'fallo') return { punto: 'bad', texto: `Falló ${cuando}` };
+  if (corrida.estado === 'fallo') return { punto: 'bad', texto: t('op.fallo_2', { cuando }) };
   if (corrida.estado === 'parcial') return { punto: 'warn', texto: `Con pendientes ${cuando}` };
-  return hoy ? { punto: 'ok', texto: `Corrió ${cuando}` } : { punto: 'muted', texto: `Última corrida ${cuando}` };
+  return hoy ? { punto: 'ok', texto: t('op.corrio', { cuando }) } : { punto: 'muted', texto: t('op.ultima_corrida_2', { cuando }) };
 }
 
 // ── Una cifra real (conteo) por agente ────────────────────────────────────
@@ -62,38 +63,38 @@ export interface EntradaCifras {
   corridaPeajes?: CorridaRegistrada | null;
 }
 
-export function cifraDeAgente(clave: string, e: EntradaCifras): CifraAgente {
+export function cifraDeAgente(clave: string, e: EntradaCifras, t: TResto = T_RESTO_ES): CifraAgente {
   const periodo = PERIODO_RANGO[e.d.rango];
   switch (clave) {
     case 'liquidacion': {
       const k = e.d.kpis;
-      if (!k) return { valor: null, etiqueta: 'por revisar', nota: 'No se pudo leer. No es cero.', error: true };
-      return { valor: String(k.porRevisar), etiqueta: 'por revisar', nota: `de ${k.viajesLiquidados} cerradas · ${periodo}` };
+      if (!k) return { valor: null, etiqueta: t('op.por_revisar'), nota: t('op.no_se_pudo_leer_no_es'), error: true };
+      return { valor: String(k.porRevisar), etiqueta: t('op.por_revisar'), nota: `de ${k.viajesLiquidados} cerradas · ${periodo}` };
     }
     case 'peajes': {
       if (e.pesos) {
         const x = e.pesos.extemporaneos;
-        if (x.n === null) return { valor: null, etiqueta: 'candidatos extemporáneos', nota: x.motivo ?? 'Sin dato' }; // el Reintentar vive UNA vez, en el bloque de pesos
-        return { valor: String(x.n), etiqueta: x.n === 1 ? 'candidato extemporáneo' : 'candidatos extemporáneos', nota: `${x.periodo} · ${x.sello}` };
+        if (x.n === null) return { valor: null, etiqueta: t('op.candidatos_extemporaneos'), nota: x.motivo ?? 'Sin dato' }; // el Reintentar vive UNA vez, en el bloque de pesos
+        return { valor: String(x.n), etiqueta: x.n === 1 ? t('op.candidato_extemporaneo') : t('op.candidatos_extemporaneos'), nota: `${x.periodo} · ${x.sello}` };
       }
       const c = e.corridaPeajes;
-      if (c && c.tareasHechas !== null && c.tareasTotal !== null) return { valor: `${c.tareasHechas} de ${c.tareasTotal}`, etiqueta: 'tareas, última corrida', nota: null };
-      return { valor: null, etiqueta: 'sin dato', nota: 'Sin tareas registradas en su última corrida' };
+      if (c && c.tareasHechas !== null && c.tareasTotal !== null) return { valor: `${c.tareasHechas} de ${c.tareasTotal}`, etiqueta: t('op.tareas_ultima_corrida'), nota: null };
+      return { valor: null, etiqueta: t('op.sin_dato'), nota: t('op.sin_tareas_registradas_en_su_ultima') };
     }
     case 'carta_porte': {
       const cp = e.d.cartaPorte;
-      if (cp === null) return { valor: null, etiqueta: 'completas', nota: 'No se puede afirmar con los viajes leídos', error: false };
-      if (cp.total === 0) return { valor: null, etiqueta: 'completas', nota: 'Sin viajes abiertos' };
-      return { valor: `${cp.completas} / ${cp.total}`, etiqueta: 'completas', nota: 'viajes abiertos' };
+      if (cp === null) return { valor: null, etiqueta: 'completas', nota: t('op.no_se_puede_afirmar_con_los'), error: false };
+      if (cp.total === 0) return { valor: null, etiqueta: 'completas', nota: t('op.sin_viajes_abiertos') };
+      return { valor: `${cp.completas} / ${cp.total}`, etiqueta: 'completas', nota: t('op.viajes_abiertos') };
     }
     case 'conductor': {
       const n = e.d.escalados;
-      if (n === null) return { valor: null, etiqueta: 'escalados', nota: 'No se pudo leer. No es cero.', error: true };
+      if (n === null) return { valor: null, etiqueta: 'escalados', nota: t('op.no_se_pudo_leer_no_es'), error: true };
       return { valor: String(n), etiqueta: n === 1 ? 'viaje escalado' : 'viajes escalados', nota: 'ahora' };
     }
     default:
       // Servicio al cliente: todavía no hay un lector de conteos ligero (pendientes de aprobar). No se inventa.
-      return { valor: null, etiqueta: 'sin dato', nota: 'Abre su tablero para ver y aprobar las respuestas.' };
+      return { valor: null, etiqueta: t('op.sin_dato'), nota: t('op.abre_su_tablero_para_ver_y') };
   }
 }
 
@@ -152,15 +153,15 @@ export function cuandoMx(iso: string, ahora: number): string {
 // ── Fila «viajes en curso» de «Hoy» ───────────────────────────────────────
 
 /** La fila informativa de viajes abiertos. 0 → sin fila (el relleno honesto dice «sin pendientes»); `null` → se confiesa que no se pudo leer. */
-export function filaViajesEnCurso(n: number | null, enlace: string | null): FilaAtencion | null {
+export function filaViajesEnCurso(n: number | null, enlace: string | null, t: TResto = T_RESTO_ES): FilaAtencion | null {
   if (n === null) {
-    return { id: 'en-curso-sin-lectura', severidad: 'atencion', titulo: 'Viajes en curso', detalle: 'No se pudo leer ahora. No es cero.', href: null, sinPendiente: true };
+    return { id: 'en-curso-sin-lectura', severidad: 'atencion', titulo: t('op.viajes_en_curso'), detalle: t('op.no_se_pudo_leer_ahora_no'), href: null, sinPendiente: true };
   }
   if (n === 0) return null;
   return {
     id: 'en-curso', severidad: 'info', titulo: `${n} ${n === 1 ? 'viaje en curso' : 'viajes en curso'}`,
-    detalle: 'Abiertos: aún sin cerrar ni liquidar.', href: enlace,
-    queSignifica: 'Son los viajes de tu flota que siguen abiertos; los agentes les dan seguimiento.',
-    queHacer: 'Abre Viajes para ver cuál sigue sin reportar.', fuente: 'Viajes de tu flota, ahora', textoAccion: 'Abrir Viajes',
+    detalle: t('op.abiertos_aun_sin_cerrar_ni_liquidar'), href: enlace,
+    queSignifica: t('op.son_los_viajes_de_tu_flota'),
+    queHacer: t('op.abre_viajes_para_ver_cual_sigue'), fuente: t('op.viajes_de_tu_flota_ahora'), textoAccion: t('op.abrir_viajes'),
   };
 }

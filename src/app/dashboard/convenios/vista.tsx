@@ -9,10 +9,12 @@ import './convenios.css';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { FileText } from 'lucide-react';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // SOLO tipos del repositorio: la vista no arrastra al bundle el acceso a datos.
 
-const MOMENTO_TEXTO = { despacho: 'al despachar', acercamiento: 'al acercarse', ambos: 'al despachar y al acercarse' } as const;
+const momentoTexto = (t: TResto = T_RESTO_ES) => ({ despacho: 'al despachar', acercamiento: 'al acercarse', ambos: t('op.al_despachar_y_al_acercarse_2') } as const);
 const LUGAR_TEXTO = { origen: 'planta de carga', destino: 'planta de descarga', ambos: 'las dos plantas' } as const;
 const MODO_TEXTO = { por_viaje: 'por viaje', por_km: 'por km', por_tonelada: 'por tonelada' } as const;
 
@@ -41,6 +43,8 @@ export interface PropsVistaConvenios {
   editarId?: string | null;
   /** Página de la lista (1-based, `?pag=`). */
   pagina?: number;
+  /** Traductor del namespace resto (por omisión, español). */
+  t?: TResto;
 }
 
 /** Cuántos convenios se pintan por página. */
@@ -53,6 +57,7 @@ const vigencia = (c: ConvenioFila): string => {
 };
 
 export function VistaConvenios(p: PropsVistaConvenios) {
+  const t = p.t ?? T_RESTO_ES;
   const lista = p.convenios ?? [];
   const paginas = Math.max(1, Math.ceil(lista.length / CONVENIOS_POR_PAGINA));
   const pagina = Math.min(Math.max(Math.trunc(p.pagina ?? 1) || 1, 1), paginas);
@@ -60,56 +65,46 @@ export function VistaConvenios(p: PropsVistaConvenios) {
   const href = (extra: Record<string, string | null>): string => {
     const q = new URLSearchParams(p.sufijo.startsWith('?') ? p.sufijo.slice(1) : '');
     for (const [k, v] of Object.entries(extra)) { if (v === null) q.delete(k); else q.set(k, v); }
-    const t = q.toString();
-    return `/dashboard/convenios${t ? `?${t}` : ''}`;
+    const qs = q.toString();
+    return `/dashboard/convenios${qs ? `?${qs}` : ''}`;
   };
   const puedeEditarEnPantalla = p.estado === 'ok' && p.puedeEditar && !!p.accionGuardar && !!p.catalogos;
   // La base sin la 0656 no trae versiones: la edición se apaga y se dice (importar sigue funcionando).
   const edicionDisponible = puedeEditarEnPantalla && lista.every((c) => c.version !== null);
   const descarga = (tipo: string) => `/api/export/convenios?tipo=${tipo}${p.sufijo.startsWith('?') ? `&${p.sufijo.slice(1)}` : ''}`;
   return (
-    <MarcoPagina titulo="Clientes" apoyo={p.verDinero
-        ? 'Por cliente: puntos A a B, instrucciones de operación, tarifa y requisitos de cobro. El agente solo dice lo que el convenio dice.'
-        : 'Por cliente: puntos A a B e instrucciones de operación. El agente solo dice lo que el convenio dice.'}>
+    <MarcoPagina titulo={t('op.clientes')} apoyo={p.verDinero
+        ? t('op.por_cliente_puntos_a_a_b')
+        : t('op.por_cliente_puntos_a_a_b_2')}>
       <AvisoCompacto tono="info"
-        resumen="Todo nace del convenio: el punto A→B y las instrucciones de operación. Al despachar un viaje del cliente se ligan al viaje y le llegan al operador por WhatsApp. El agente solo dice lo que el convenio dice."
+        resumen={t('op.todo_nace_del_convenio_el_punto')}
         mas={(
-          <p>
-            Las instrucciones cubren por dónde entrar, con quién reportarse, documentos y peculiaridades de la planta{p.verDinero ? ', más la tarifa y los requisitos de cobro' : ''}.
-            Al acercarse a la planta se le recuerdan al operador, y puede preguntar «¿por dónde entro?». Sin instrucciones registradas, el agente lo dice y lo manda con el jefe de tráfico.
-          </p>
+          <p>{t('op.las_instrucciones_cubren_por_donde_entrar')}{p.verDinero ? t('op.mas_la_tarifa_y_los_requisitos') : ''}{t('op.al_acercarse_a_la_planta_se')}</p>
         )} />
 
       {p.estado === 'ok' && (
         <TiraCifras sello={selloHoy('Convenios')}>
-          <Cifra etiqueta="Convenios activos" valor={numero(lista.filter((c) => c.activo).length)} info="convenios.activos" />
-          <Cifra etiqueta="Sin instrucciones" valor={numero(lista.filter((c) => c.activo && c.instrucciones.length === 0).length)}
+          <Cifra etiqueta={t('op.convenios_activos')} valor={numero(lista.filter((c) => c.activo).length)} info="convenios.activos" />
+          <Cifra etiqueta={t('op.sin_instrucciones')} valor={numero(lista.filter((c) => c.activo && c.instrucciones.length === 0).length)}
             tono={lista.some((c) => c.activo && c.instrucciones.length === 0) ? 'warn' : undefined} info="convenios.sin_instrucciones" />
         </TiraCifras>
       )}
 
       {p.estado === 'no_disponible' && (
-        <Aviso tono="warn">
-          Los convenios todavía no están disponibles en tu cuenta; avísale a Likida y los habilita. Mientras tanto los viajes se despachan como siempre, sin instrucciones.
-        </Aviso>
+        <Aviso tono="warn">{t('op.los_convenios_todavia_no_estan_disponibles')}</Aviso>
       )}
       {p.estado === 'error' && (
-        <Aviso tono="error">No se pudieron leer los convenios ahora mismo. Intenta de nuevo en un momento.</Aviso>
+        <Aviso tono="error">{t('op.no_se_pudieron_leer_los_convenios')}</Aviso>
       )}
 
       {p.estado === 'ok' && (
-        <Tarjeta titulo="Convenios registrados" info="convenios.registrados"
+        <Tarjeta titulo={t('op.convenios_registrados')} info="convenios.registrados"
           acciones={p.puedeExportar ? (
-            <span className="rv-cv__descargas">
-              <a href={descarga('instrucciones')} className="rv-cv__enlace">Descargar instrucciones (CSV, sin dinero)</a>
-              <a href={descarga('texto')} className="rv-cv__enlace">Descargar texto para tu sistema</a>
-              {p.verDinero && <a href={descarga('completo')} className="rv-cv__enlace">Descargar completo (con tarifa)</a>}
+            <span className="rv-cv__descargas">{rico(t('op.e0_descargar_instrucciones_csv_sin_dinero'), { e0: (c) => <a href={descarga('instrucciones')} className="rv-cv__enlace">{c}</a>, e1: (c) => <a href={descarga('texto')} className="rv-cv__enlace">{c}</a> })}{p.verDinero && <a href={descarga('completo')} className="rv-cv__enlace">{t('op.descargar_completo_con_tarifa')}</a>}
             </span>
           ) : undefined}>
           {lista.length === 0 ? (
-            <EstadoVacio contenido icono={FileText} titulo="Todavía no hay convenios">
-              Importa tu archivo más abajo: hasta entonces los viajes se despachan sin instrucciones.
-            </EstadoVacio>
+            <EstadoVacio contenido icono={FileText} titulo={t('op.todavia_no_hay_convenios')}>{t('op.importa_tu_archivo_mas_abajo_hasta')}</EstadoVacio>
           ) : (
             <ul className="rv-cv__lista">
               {visibles.map((c) => (
@@ -127,41 +122,38 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                     )}
                   </div>
                   <p className="rv-cv__nota">
-                    {c.origen ?? '¿origen?'} → {c.destino ?? '¿destino?'}
-                    {(c.sitioOrigenNombre || c.sitioDestinoNombre) && <> · sitios: {c.sitioOrigenNombre ?? '—'} → {c.sitioDestinoNombre ?? '—'}</>}
+                    {c.origen ?? t('op.origen')} → {c.destino ?? t('op.destino')}
+                    {(c.sitioOrigenNombre || c.sitioDestinoNombre) && <>{t('op.sitios')}{' '}{c.sitioOrigenNombre ?? '—'} → {c.sitioDestinoNombre ?? '—'}</>}
                     {' · '}{vigencia(c)}
                   </p>
                   {edicionDisponible && c.version !== null && (p.editarId === c.id ? (
-                    <div className="rv-cv__editor">
-                      <Link href={href({ editar: null, pag: pagina > 1 ? String(pagina) : null })} className="rv-cv__enlace">Cerrar la edición</Link>
-                      <div className="rv-cv__caja">
+                    <div className="rv-cv__editor">{rico(t('op.e0_cerrar_la_edicion_e0'), { e0: (c) => <Link href={href({ editar: null, pag: pagina > 1 ? String(pagina) : null })} className="rv-cv__enlace">{c}</Link> })}<div className="rv-cv__caja">
                         <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} convenio={{ ...c, version: c.version }} />
                       </div>
                     </div>
                   ) : (
-                    <Link href={href({ editar: c.id, pag: pagina > 1 ? String(pagina) : null })} className="rv-cv__enlace">Editar convenio e instrucciones</Link>
+                    <Link href={href({ editar: c.id, pag: pagina > 1 ? String(pagina) : null })} className="rv-cv__enlace">{t('op.editar_convenio_e_instrucciones')}</Link>
                   ))}
                   {c.instrucciones.length === 0 ? (
-                    <StatusChip tono="warn">Sin instrucciones de operación: el operador no recibirá nada de este convenio.</StatusChip>
+                    <StatusChip tono="warn">{t('op.sin_instrucciones_de_operacion_el_operador')}</StatusChip>
                   ) : (
-                    <Disclosure variante="linea" titulo={`${c.instrucciones.length} instrucci${c.instrucciones.length === 1 ? 'ón' : 'ones'}`}>
+                    <Disclosure variante="linea" titulo={t(c.instrucciones.length === 1 ? 'op.n_instruccion.uno' : 'op.n_instruccion.otros', { n: c.instrucciones.length })}>
                       <ul className="rv-cv__instrucciones">
                         {c.instrucciones.map((i, n) => (
                           <li key={n}>
                             <span className="rv-cv__cliente">{ETIQUETA_CATEGORIA[i.categoria]}:</span> {i.texto}
-                            <span className="rv-cv__tenue"> ({LUGAR_TEXTO[i.lugar]}, {MOMENTO_TEXTO[i.momento]})</span>
+                            <span className="rv-cv__tenue"> ({LUGAR_TEXTO[i.lugar]}, {momentoTexto(t)[i.momento]})</span>
                           </li>
                         ))}
                       </ul>
-                      <Disclosure variante="linea" titulo="Texto para pegar en tu sistema">
+                      <Disclosure variante="linea" titulo={t('op.texto_para_pegar_en_tu_sistema')}>
                         <pre className="rv-cv__pre">{textoParaSistemaDeLaFlota(c)}</pre>
                       </Disclosure>
                     </Disclosure>
                   )}
                   {p.verDinero && c.comercial && (
-                    <p className="rv-cv__nota">
-                      Tarifa: {c.comercial.modo && c.comercial.precio !== null ? `${mxn(c.comercial.precio)} ${c.comercial.moneda} ${MODO_TEXTO[c.comercial.modo]}` : 'sin tarifa pactada'}
-                      {c.comercial.requisitos.length > 0 && <> · Para cobrar: {c.comercial.requisitos.join(', ')}</>}
+                    <p className="rv-cv__nota">{t('op.tarifa')}{' '}{c.comercial.modo && c.comercial.precio !== null ? `${mxn(c.comercial.precio)} ${c.comercial.moneda} ${MODO_TEXTO[c.comercial.modo]}` : 'sin tarifa pactada'}
+                      {c.comercial.requisitos.length > 0 && <>{t('op.para_cobrar')}{' '}{c.comercial.requisitos.join(', ')}</>}
                     </p>
                   )}
                 </li>
@@ -169,24 +161,18 @@ export function VistaConvenios(p: PropsVistaConvenios) {
             </ul>
           )}
           {paginas > 1 && (
-            <nav aria-label="Páginas de convenios" className="rv-cv__paginas">
-              <span className="rv-cv__nota">Convenios {numero((pagina - 1) * CONVENIOS_POR_PAGINA + 1)}–{numero(Math.min(pagina * CONVENIOS_POR_PAGINA, lista.length))} de {numero(lista.length)}</span>
-              {pagina > 1 && <Link href={href({ pag: pagina - 1 > 1 ? String(pagina - 1) : null, editar: null })} className="rv-cv__enlace">Anterior</Link>}
-              {pagina < paginas && <Link href={href({ pag: String(pagina + 1), editar: null })} className="rv-cv__enlace">Siguiente</Link>}
+            <nav aria-label={t('op.paginas_de_convenios')} className="rv-cv__paginas">{rico(t('op.e0_convenios_de_e0', { numero: numero((pagina - 1) * CONVENIOS_POR_PAGINA + 1), numero2: numero(Math.min(pagina * CONVENIOS_POR_PAGINA, lista.length)), numero3: numero(lista.length) }), { e0: (c) => <span className="rv-cv__nota">{c}</span> })}{pagina > 1 && <Link href={href({ pag: pagina - 1 > 1 ? String(pagina - 1) : null, editar: null })} className="rv-cv__enlace">{t('op.anterior')}</Link>}
+              {pagina < paginas && <Link href={href({ pag: String(pagina + 1), editar: null })} className="rv-cv__enlace">{t('op.siguiente')}</Link>}
             </nav>
           )}
         </Tarjeta>
       )}
 
       {p.estado === 'ok' && p.puedeEditar && p.accionCorregir && p.viajes && (
-        <Tarjeta titulo="Convenio ligado a cada viaje en curso" info="convenios.ligado_viaje">
-          <p className="rv-cv__nota">
-            Si el sistema ligó el convenio equivocado, o no pudo elegir porque varios empataban, corrígelo aquí: se vuelve a tomar la foto de
-            instrucciones del convenio que elijas y queda como corrección manual (el despacho automático ya no lo cambia). Puedes mandarle de nuevo
-            las instrucciones al operador.
-          </p>
+        <Tarjeta titulo={t('op.convenio_ligado_a_cada_viaje_en')} info="convenios.ligado_viaje">
+          <p className="rv-cv__nota">{t('op.si_el_sistema_ligo_el_convenio')}</p>
           {p.viajes.length === 0 ? (
-            <p className="rv-cv__nota">No hay viajes abiertos con cliente.</p>
+            <p className="rv-cv__nota">{t('op.no_hay_viajes_abiertos_con_cliente')}</p>
           ) : (
             <ul className="rv-cv__lista">
               {p.viajes.map((v) => (
@@ -194,14 +180,14 @@ export function VistaConvenios(p: PropsVistaConvenios) {
                   <div className="rv-cv__cab">
                     <span className="rv-cv__cliente">{v.folio}</span>
                     <span>· {v.cliente ?? 'sin cliente'}</span>
-                    <span className="rv-cv__nota">{v.origen ?? '¿origen?'} → {v.destino ?? '¿destino?'}{v.operador ? ` · ${v.operador}` : ''}</span>
+                    <span className="rv-cv__nota">{v.origen ?? t('op.origen')} → {v.destino ?? t('op.destino')}{v.operador ? ` · ${v.operador}` : ''}</span>
                   </div>
                   <p className="rv-cv__nota" data-tono={v.convenioNombre || v.ligadoPor === null ? undefined : 'warn'}>
                     {v.ligadoPor === null
-                      ? 'Sin convenio ligado todavía (nunca se despachó con convenio, o varios empataron).'
+                      ? t('op.sin_convenio_ligado_todavia_nunca_se')
                       : v.convenioNombre
-                        ? `Ligado: «${v.convenioNombre}» (${v.ligadoPor === 'manual' ? 'corrección manual' : 'automático'}) · ${v.instrucciones} instrucci${v.instrucciones === 1 ? 'ón' : 'ones'}${v.despachoEnviado ? ' · ya enviadas al operador' : ''}`
-                        : 'Sin convenio (decisión de la oficina o convenio borrado): no se le manda nada al operador.'}
+                        ? t('op.ligado_convenio', { convenio: v.convenioNombre, por: v.ligadoPor === 'manual' ? t('op.correccion_manual') : t('op.automatico'), instrucciones: t(v.instrucciones === 1 ? 'op.n_instruccion.uno' : 'op.n_instruccion.otros', { n: v.instrucciones }), enviadas: v.despachoEnviado ? t('op.ya_enviadas_al_operador') : '' })
+                        : t('op.sin_convenio_decision_de_la_oficina')}
                   </p>
                   <FormaCorregirConvenio accion={p.accionCorregir!} viajeId={v.viajeId} folio={v.folio} actual={v.convenioId} opciones={v.opciones} />
                 </li>
@@ -212,42 +198,28 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       )}
 
       {puedeEditarEnPantalla && (edicionDisponible ? (
-        <Tarjeta titulo="Nuevo convenio" info="convenios.nuevo">
-          <Disclosure variante="linea" titulo="Capturar un convenio" abierto={lista.length === 0}>
-            <p className="rv-cv__nota">
-              Da de alta un convenio y su calle de instrucciones sin subir un archivo. El cliente tiene que existir en Clientes y los sitios salen del catálogo de sitios.
-              La tarifa y los requisitos de cobro no se editan aquí: entran por la importación con permiso de finanzas.
-            </p>
+        <Tarjeta titulo={t('op.nuevo_convenio')} info="convenios.nuevo">
+          <Disclosure variante="linea" titulo={t('op.capturar_un_convenio')} abierto={lista.length === 0}>
+            <p className="rv-cv__nota">{t('op.da_de_alta_un_convenio_y')}</p>
             <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
           </Disclosure>
         </Tarjeta>
       ) : (
-        <Aviso tono="warn">
-          La edición de convenios en pantalla todavía no está disponible en tu cuenta; avísale a Likida y la habilita. Mientras tanto puedes importar el archivo.
-        </Aviso>
+        <Aviso tono="warn">{t('op.la_edicion_de_convenios_en_pantalla')}</Aviso>
       ))}
 
       {p.puedeEditar ? (
-        <Tarjeta titulo="Importar desde CSV o Excel" info="convenios.importar">
-          <Disclosure variante="linea" titulo="Importar un archivo" abierto={lista.length === 0}>
-            <p className="rv-cv__nota">
-              <strong>Una fila por instrucción.</strong> Columnas: <code>cliente, convenio</code> (obligatorias), <code>origen, destino, sitio_origen, sitio_destino, vigente_desde, vigente_hasta, notas</code>,
-              y por instrucción <code>categoria</code> (puerta, reportarse, peculiaridad, documentos, horario, seguridad, otro), <code>instruccion</code>, <code>momento</code> (despacho, acercamiento, ambos)
-              y <code>lugar</code> (origen, destino, ambos){p.verDinero ? <>; con permiso de finanzas también <code>tarifa_modo, tarifa_precio, moneda, requisitos_cobro</code></> : ''}.
-              El cliente tiene que existir en Clientes y los sitios en el catálogo de sitios (por código o nombre): nada se inventa. Todo o nada: si una fila falla, no se importa ninguna y te decimos cuál corregir.
-              Re-subir el mismo archivo actualiza por cliente + convenio; no duplica, y las instrucciones que ya no trae se quitan.{' '}
-              {p.puedeExportar && <a href={descarga('plantilla')} className="rv-cv__enlace">Descargar la plantilla</a>}
+        <Tarjeta titulo={t('op.importar_desde_csv_o_excel')} info="convenios.importar">
+          <Disclosure variante="linea" titulo={t('op.importar_un_archivo')} abierto={lista.length === 0}>
+            <p className="rv-cv__nota">{rico(t('op.strong_una_fila_por_instruccion_strong'), { strong: (c) => <strong>{c}</strong>, code: (c) => <code>{c}</code> })}{p.verDinero ? <>{rico(t('op.con_permiso_de_finanzas_tambien_code'), { code: (c) => <code>{c}</code> })}</> : ''}{t('op.el_cliente_tiene_que_existir_en')}{' '}{p.puedeExportar && <a href={descarga('plantilla')} className="rv-cv__enlace">{t('op.descargar_la_plantilla')}</a>}
             </p>
             <FormaImportarConvenios accion={p.accionImportar} />
           </Disclosure>
         </Tarjeta>
       ) : (
-        <p className="rv-cv__pie">Solo el dueño de la flota o el jefe de tráfico editan los convenios.</p>
+        <p className="rv-cv__pie">{t('op.solo_el_dueno_de_la_flota')}</p>
       )}
-      <p className="rv-cv__pie">
-        Las instrucciones que ya se le mandaron a un operador no cambian si editas el convenio después, salvo que marques «llevar este cambio a los viajes en curso»: cada viaje conserva las que se le dijeron.{' '}
-        <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cv__enlace">Catálogo de sitios</Link>
-      </p>
+      <p className="rv-cv__pie">{rico(t('op.las_instrucciones_que_ya_se_le'), { e0: (c) => <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cv__enlace">{c}</Link> })}</p>
     </MarcoPagina>
   );
 }

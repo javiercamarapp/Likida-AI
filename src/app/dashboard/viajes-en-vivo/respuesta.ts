@@ -1,3 +1,4 @@
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 // ═══════════════════════════════════════════════════════════════════════════
 // LEER LA RESPUESTA DEL ASISTENTE — puro. `/api/dashboard/chat` contesta NDJSON (pasos y un evento final `fin` o
 // `error`) o, en los caminos de tope diario, JSON plano con `bloques`. El cliente no es frontera de confianza al
@@ -46,7 +47,7 @@ function aBloques(crudo: unknown): BloqueVista[] {
   return salida;
 }
 
-export function leerRespuesta(texto: string): RespuestaAsistente {
+export function leerRespuesta(texto: string, t: TResto = T_RESTO_ES): RespuestaAsistente {
   let final: Record<string, unknown> | null = null;
   for (const linea of texto.split('\n')) {
     const l = linea.trim();
@@ -56,16 +57,16 @@ export function leerRespuesta(texto: string): RespuestaAsistente {
       if (ev && typeof ev === 'object' && (ev.t === 'fin' || ev.t === 'error' || Array.isArray(ev.bloques) || typeof ev.error === 'string')) final = ev;
     } catch { /* una línea rota no tumba las demás */ }
   }
-  if (!final) return { ok: false, error: 'No llegó una respuesta del asistente.' };
+  if (!final) return { ok: false, error: t('op.no_llego_una_respuesta_del_asistente') };
   if (final.t === 'error' || (typeof final.error === 'string' && !Array.isArray(final.bloques))) {
-    return { ok: false, error: typeof final.error === 'string' ? final.error.slice(0, 200) : 'El asistente no pudo responder.' };
+    return { ok: false, error: typeof final.error === 'string' ? final.error.slice(0, 200) : t('op.el_asistente_no_pudo_responder') };
   }
   const bloques = aBloques(final.bloques);
-  return bloques.length > 0 ? { ok: true, bloques } : { ok: false, error: 'La respuesta del asistente venía vacía.' };
+  return bloques.length > 0 ? { ok: true, bloques } : { ok: false, error: t('op.la_respuesta_del_asistente_venia_vacia') };
 }
 
 /** Una línea de texto que dice lo que una gráfica enseña (para el historial del asistente y para quien no puede verla). */
-export function resumenDeBloque(b: BloqueVista): string | null {
+export function resumenDeBloque(b: BloqueVista, t: TResto = T_RESTO_ES): string | null {
   if (b.tipo === 'dona') {
     const total = b.segmentos.reduce((t, x) => t + x.valor, 0);
     return b.segmentos.map((x) => `${x.etiqueta}: ${x.valor}${total > 0 ? ` (${Math.round((x.valor / total) * 100)} %)` : ''}`).join(', ');
@@ -73,7 +74,7 @@ export function resumenDeBloque(b: BloqueVista): string | null {
   if (b.tipo === 'serie') {
     const v = b.puntos.map((p) => p.valor);
     const primero = b.puntos[0]; const ultimo = b.puntos[b.puntos.length - 1];
-    return `Serie de ${b.puntos.length} puntos, del ${primero.dia} (${primero.valor}) al ${ultimo.dia} (${ultimo.valor}); mínimo ${Math.min(...v)}, máximo ${Math.max(...v)}.`;
+    return t('op.serie_de_puntos_del_al_minimo', { length: b.puntos.length, dia: primero.dia, valor: primero.valor, dia2: ultimo.dia, valor2: ultimo.valor, minimo: Math.min(...v), maximo: Math.max(...v) });
   }
   return null;
 }
@@ -84,9 +85,10 @@ export function textoDeBloques(bloques: readonly BloqueVista[]): string {
   return partes.join(' ').slice(0, 1_800) || 'Listo.';
 }
 
-export const PREGUNTAS_OPERACION = [
-  '¿Qué viajes tienen excepciones ahora?',
-  '¿Hay algún chofer sin señal de vida?',
-  '¿Qué clientes llevan esperando respuesta?',
-  '¿Todo está funcionando? ¿Algún agente falló?',
-] as const;
+export const preguntasOperacion = (t: TResto = T_RESTO_ES) => ([
+  t('op.que_viajes_tienen_excepciones_ahora'),
+  t('op.hay_algun_chofer_sin_senal_de'),
+  t('op.que_clientes_llevan_esperando_respuesta'),
+  t('op.todo_esta_funcionando_algun_agente_fallo'),
+] as const);
+export const PREGUNTAS_OPERACION = preguntasOperacion();

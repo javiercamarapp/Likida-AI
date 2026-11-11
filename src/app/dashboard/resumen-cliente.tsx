@@ -9,6 +9,10 @@ import { armarPasosCincoAgentes, type SenalesAsistente } from '@/lib/likida/asis
 import { conPaso } from './puesta-en-marcha/con-paso';
 import { useDeclaraciones } from './puesta-en-marcha/usar-declaraciones';
 import { elegirAcciones, RANGOS, ROTULO_RANGO, type FilaAtencion, type RangoResumen } from './resumen-modelo';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // Piezas de cliente del Resumen v2: la barra de periodo, «Requiere tu atención» (con su panel lateral de detalle) y «Siguiente
 // mejor acción». Las dos últimas leen las declaraciones del navegador para que la Puesta en marcha coincida con el asistente.
@@ -17,14 +21,15 @@ import { elegirAcciones, RANGOS, ROTULO_RANGO, type FilaAtencion, type RangoResu
  *  el estado vive en la URL (`?rango=7|30|todo`, como siempre) y cada opción es un enlace que conserva los demás parámetros (tenant, vista, rol…).
  *  No hay moneda ni «Filtros»: el Resumen no tiene otros criterios y no se inventan. */
 export function FiltrosResumen({ rango, fuentes }: { rango: RangoResumen; fuentes: string }) {
+  const { t } = useT('resto', restoEs);
   const ruta = usePathname();
   const params = useSearchParams();
   const actuales: Record<string, string> = {};
   params?.forEach((v, k) => { actuales[k] = v; });
   return (
     <BarraPeriodo
-      etiqueta="Periodo del resumen"
-      periodo={{ etiqueta: 'Periodo de las cifras', valor: rango, opciones: RANGOS.map((r) => ({ valor: r, etiqueta: ROTULO_RANGO[r], href: hrefConParams(ruta ?? '', actuales, { rango: r }) })) }}
+      etiqueta={t('op.periodo_del_resumen')}
+      periodo={{ etiqueta: t('op.periodo_de_las_cifras'), valor: rango, opciones: RANGOS.map((r) => ({ valor: r, etiqueta: ROTULO_RANGO[r], href: hrefConParams(ruta ?? '', actuales, { rango: r }) })) }}
       chips={[{ id: 'fuentes', etiqueta: fuentes }]}
     />
   );
@@ -40,7 +45,7 @@ function useMarcha(senales: SenalesAsistente | null, ambito: string, soloLectura
   }, [senales, declaraciones, sufijo]);
 }
 
-const ROTULO_SEV = { accion: 'Te toca a ti', atencion: 'En espera o por mirar', info: 'Informativo' } as const;
+const rotuloSev = (t: TResto = T_RESTO_ES) => ({ accion: t('op.te_toca_a_ti'), atencion: t('op.en_espera_o_por_mirar'), info: t('op.informativo') } as const);
 
 function FilaVisual({ f, onAbrir }: { f: FilaAtencion; onAbrir?: () => void }) {
   const cuerpo = (
@@ -51,7 +56,7 @@ function FilaVisual({ f, onAbrir }: { f: FilaAtencion; onAbrir?: () => void }) {
         <span className="rv-at__detalle" title={f.detalle}>{f.detalle}</span>
       </span>
       {f.sinPendiente && f.severidad === 'info' ? <Check width={16} height={16} aria-hidden="true" className="rv-at__ok" /> : onAbrir ? <ChevronRight width={16} height={16} aria-hidden="true" className="rv-at__flecha" /> : null}
-      <span className="rv-sr">{ROTULO_SEV[f.severidad]}</span>
+      <span className="rv-sr">{rotuloSev(/*t*/)[f.severidad]}</span>
     </>
   );
   return onAbrir
@@ -62,6 +67,7 @@ function FilaVisual({ f, onAbrir }: { f: FilaAtencion; onAbrir?: () => void }) {
 export function ListaAtencion({ filas, senales, ambito, soloLectura, sufijo, visibles = 3 }: {
   filas: readonly FilaAtencion[]; senales: SenalesAsistente | null; ambito: string; soloLectura: boolean; sufijo: string; visibles?: number;
 }) {
+  const { t } = useT('resto', restoEs);
   const marcha = useMarcha(senales, ambito, soloLectura, sufijo);
   const [panel, setPanel] = useState<'todas' | string | null>(null);
   const todas = useMemo<FilaAtencion[]>(() => {
@@ -69,38 +75,38 @@ export function ListaAtencion({ filas, senales, ambito, soloLectura, sufijo, vis
     const { r, paso, href } = marcha;
     const f: FilaAtencion = {
       id: 'marcha', severidad: paso.estado === 'atencion' || paso.estado === 'sin_dato' || paso.responsable !== 'tu_lado' ? 'atencion' : 'accion',
-      titulo: `Puesta en marcha: ${r.listos} de ${r.total} pasos`, detalle: `Sigue: ${paso.titulo}`, href,
-      queSignifica: paso.resumen, queHacer: paso.accion?.texto, fuente: 'Señales de tu cuenta y lo que declaraste en este navegador', textoAccion: 'Continuar',
+      titulo: t('op.puesta_en_marcha_de_pasos', { listos: r.listos, total: r.total }), detalle: `Sigue: ${paso.titulo}`, href,
+      queSignifica: paso.resumen, queHacer: paso.accion?.texto, fuente: t('op.senales_de_tu_cuenta_y_lo'), textoAccion: t('op.continuar'),
     };
     // El relleno «sin pendientes» cede su lugar a la fila real.
     const reales = filas.filter((x) => !x.sinPendiente);
     const relleno = filas.filter((x) => x.sinPendiente);
     return [f, ...reales, ...relleno];
-  }, [filas, marcha]);
+  }, [filas, marcha, t]);
   const mostradas = todas.slice(0, visibles);
   const actual = panel && panel !== 'todas' ? todas.find((f) => f.id === panel) ?? null : null;
   const abrible = (f: FilaAtencion) => (f.sinPendiente ? undefined : () => setPanel(f.id));
 
   return (
     <>
-      <ul className="rv-at" aria-label="Requiere tu atención">
+      <ul className="rv-at" aria-label={t('op.requiere_tu_atencion')}>
         {mostradas.map((f) => <li key={f.id}><FilaVisual f={f} onAbrir={abrible(f)} /></li>)}
       </ul>
       <div className="rv-at__pie">
-        <Boton tamano="sm" variante="ghost" onClick={() => setPanel('todas')} icono={<ArrowRight />}>Ver todas{todas.length > visibles ? ` (${todas.length})` : ''}</Boton>
+        <Boton tamano="sm" variante="ghost" onClick={() => setPanel('todas')} icono={<ArrowRight />}>{t('op.ver_todas')}{todas.length > visibles ? ` (${todas.length})` : ''}</Boton>
       </div>
       <PanelLateral
         abierto={panel !== null} onCerrar={() => setPanel(null)} ancho={420}
-        titulo={actual ? actual.titulo : 'Requiere tu atención'}
-        descripcion={actual ? ROTULO_SEV[actual.severidad] : 'Lo que espera una decisión o una mirada tuya.'}
+        titulo={actual ? actual.titulo : t('op.requiere_tu_atencion')}
+        descripcion={actual ? rotuloSev(t)[actual.severidad] : t('op.lo_que_espera_una_decision_o')}
         pie={actual?.href ? <BotonEnlace variante="secondary" href={actual.href} icono={<ArrowRight />}>{actual.textoAccion ?? 'Abrir'}</BotonEnlace> : undefined}
       >
         {actual ? (
           <dl className="rv-infotexto">
-            <div><dt>Qué pasa</dt><dd>{actual.detalle}</dd></div>
-            {actual.queSignifica ? <div><dt>Qué significa</dt><dd>{actual.queSignifica}</dd></div> : null}
-            {actual.queHacer ? <div><dt>Qué hacer</dt><dd>{actual.queHacer}</dd></div> : null}
-            {actual.fuente ? <div><dt>Fuente y corte</dt><dd>{actual.fuente}</dd></div> : null}
+            <div><dt>{t('op.que_pasa')}</dt><dd>{actual.detalle}</dd></div>
+            {actual.queSignifica ? <div><dt>{t('op.que_significa')}</dt><dd>{actual.queSignifica}</dd></div> : null}
+            {actual.queHacer ? <div><dt>{t('op.que_hacer')}</dt><dd>{actual.queHacer}</dd></div> : null}
+            {actual.fuente ? <div><dt>{t('op.fuente_y_corte')}</dt><dd>{actual.fuente}</dd></div> : null}
           </dl>
         ) : (
           <ul className="rv-at rv-at--panel">
@@ -117,6 +123,7 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, a
   /** Los atajos que ESTE rol abre (el servidor ya los filtró con `puedeVerRuta`). */
   atajos: ReadonlyArray<{ href: string; nombre: string }>;
 }) {
+  const { t } = useT('resto', restoEs);
   const marcha = useMarcha(senales, ambito, soloLectura, sufijo);
   const acciones = elegirAcciones({ marcha: marcha ? { titulo: marcha.paso.titulo, resumen: marcha.paso.resumen, href: marcha.href } : null, filas });
   const [principal, ...despues] = acciones;
@@ -130,12 +137,12 @@ export function SiguienteAccion({ filas, senales, ambito, soloLectura, sufijo, a
         </div>
       ) : (
         <div className="rv-sig">
-          <p className="rv-sig__titulo">Nada urgente por hacer hoy</p>
-          <p className="rv-sig__porque">No hay pasos pendientes ni alertas de los agentes en este periodo.</p>
+          <p className="rv-sig__titulo">{t('op.nada_urgente_por_hacer_hoy')}</p>
+          <p className="rv-sig__porque">{t('op.no_hay_pasos_pendientes_ni_alertas')}</p>
         </div>
       )}
-      {despues.length > 0 || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.length ? 'Después y atajos' : 'Atajos'}>
-        {despues.slice(0, 2).map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila"><span>Después: {a.titulo}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
+      {despues.length > 0 || atajos.length > 0 ? <ul className="rv-atajos" aria-label={despues.length ? t('op.despues_y_atajos') : t('op.atajos')}>
+        {despues.slice(0, 2).map((a) => <li key={a.id}><Link href={a.href} className="rv-atajos__fila">{rico(t('op.e0_despues_e0', { titulo: a.titulo }), { e0: (c) => <span>{c}</span> })}<ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>)}
         {atajos.slice(0, Math.max(0, 2 - despues.length)).map((a) => (
           <li key={a.href}><Link href={`${a.href}${sufijo}`} className="rv-atajos__fila"><span>{a.nombre}</span><ChevronRight width={16} height={16} aria-hidden="true" /></Link></li>
         ))}

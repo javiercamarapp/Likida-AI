@@ -7,6 +7,10 @@ import { Aviso as AvisoDs, Boton, CampoArchivo, CampoSelect, CampoTexto, CampoTe
 import './convenios.css';
 import { CATEGORIAS, ETIQUETA_CATEGORIA, LUGARES, MAX_INSTRUCCIONES_POR_CONVENIO, MAX_TEXTO_INSTRUCCION, MOMENTOS, type Instruccion } from '@/lib/likida/convenios/tipos';
 import type { ResultadoSitio } from '../agentes/conductores/sitios/formas';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL IMPORTADOR DE CONVENIOS (CSV o Excel) — todo o nada, con la fila de cada problema.
@@ -35,12 +39,13 @@ function BotonImportar() {
 }
 
 export function FormaImportarConvenios({ accion }: { accion: AccionConvenio }) {
+  const { t } = useT('resto', restoEs);
   const [estado, enviar] = useActionState(accion, null);
   return (
-    <form action={enviar} className="rv-forma" aria-label="Importar convenios desde CSV o Excel" encType="multipart/form-data">
-      <CampoArchivo name="archivo" etiqueta="Archivo CSV o Excel (.xlsx)" accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
-      <CampoTextarea name="csv" etiqueta="…o pega el contenido" rows={5} spellCheck={false} claseControl="rv-cv__mono"
-        placeholder={'cliente,convenio,categoria,instruccion,momento,lugar\nCliente Uno,Ruta norte,puerta,Puerta 3 lado poniente,ambos,destino'} />
+    <form action={enviar} className="rv-forma" aria-label={t('op.importar_convenios_desde_csv_o_excel')} encType="multipart/form-data">
+      <CampoArchivo name="archivo" etiqueta={t('op.archivo_csv_o_excel_xlsx')} accept=".csv,.xlsx,.xls,text/csv,text/plain,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+      <CampoTextarea name="csv" etiqueta={t('op.o_pega_el_contenido')} rows={5} spellCheck={false} claseControl="rv-cv__mono"
+        placeholder={t('op.cliente_convenio_categoria_instruccion_momento_lugar')} />
       <div className="rv-cv__fila"><BotonImportar /></div>
       <Aviso r={estado} />
     </form>
@@ -53,15 +58,16 @@ export interface OpcionCorregir { id: string; nombre: string }
 export function FormaCorregirConvenio({ accion, viajeId, folio, actual, opciones }: {
   accion: AccionConvenio; viajeId: string; folio: string; actual: string | null; opciones: OpcionCorregir[];
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, enviar, pendiente] = useActionState(accion, null);
   return (
-    <form action={enviar} className="rv-forma__fila" aria-label={`Corregir el convenio del viaje ${folio}`}>
+    <form action={enviar} className="rv-forma__fila" aria-label={t('op.corregir_el_convenio_del_viaje', { folio })}>
       <input type="hidden" name="viajeId" value={viajeId} />
-      <CampoSelect name="convenioId" etiqueta="Convenio del viaje" defaultValue={actual ?? ''} className="rv-cv__selector">
-        <option value="">Sin convenio (no mandar instrucciones)</option>
+      <CampoSelect name="convenioId" etiqueta={t('op.convenio_del_viaje')} defaultValue={actual ?? ''} className="rv-cv__selector">
+        <option value="">{t('op.sin_convenio_no_mandar_instrucciones')}</option>
         {opciones.map((o) => <option key={o.id} value={o.id}>{o.nombre}</option>)}
       </CampoSelect>
-      <Casilla name="reenviar" value="si" defaultChecked etiqueta="Mandar de nuevo las instrucciones al operador" />
+      <Casilla name="reenviar" value="si" defaultChecked etiqueta={t('op.mandar_de_nuevo_las_instrucciones_al')} />
       <Boton type="submit" variante="secondary" loading={pendiente}>
         {pendiente ? 'Guardando…' : 'Corregir convenio'}
       </Boton>
@@ -76,7 +82,7 @@ export function FormaCorregirConvenio({ accion, viajeId, folio, actual, opciones
 // requisitos de cobro no se editan aquí (son dinero: entran por la importación).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const MOMENTO_OPCION = { despacho: 'Al despachar', acercamiento: 'Al acercarse a la planta', ambos: 'Al despachar y al acercarse' } as const;
+const momentoOpcion = (t: TResto = T_RESTO_ES) => ({ despacho: t('op.al_despachar'), acercamiento: t('op.al_acercarse_a_la_planta'), ambos: t('op.al_despachar_y_al_acercarse') } as const);
 const LUGAR_OPCION = { origen: 'Planta de carga', destino: 'Planta de descarga', ambos: 'Las dos plantas' } as const;
 
 export interface CatalogosFormaConvenio {
@@ -111,6 +117,7 @@ function BotonGuardar({ texto }: { texto: string }) {
 }
 
 export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionConvenio; catalogos: CatalogosFormaConvenio; convenio?: ConvenioEditable }) {
+  const { t } = useT('resto', restoEs);
   const editando = !!convenio;
   const [campos, setCampos] = useState({
     clienteId: '', nombre: convenio?.nombre ?? '', origen: convenio?.origen ?? '', destino: convenio?.destino ?? '',
@@ -139,71 +146,69 @@ export function FormaConvenio({ accion, catalogos, convenio }: { accion: AccionC
   const etiquetaSitio = (g: { nombre: string; codigo: string | null }) => (g.codigo ? `${g.nombre} (${g.codigo})` : g.nombre);
 
   return (
-    <form action={enviar} className="rv-forma" aria-label={editando ? `Editar el convenio ${convenio?.nombre}` : 'Nuevo convenio'}>
+    <form action={enviar} className="rv-forma" aria-label={editando ? `Editar el convenio ${convenio?.nombre}` : t('op.nuevo_convenio')}>
       {editando && <input type="hidden" name="convenioId" value={convenio.id} />}
       {editando && <input type="hidden" name="version" value={convenio.version} />}
       <div className="rv-forma__rejilla">
         {editando ? (
-          <div className="rv-campo"><span className="rv-campo__etq">Cliente</span><p className="rv-cv__fijo">{convenio.cliente}</p></div>
+          <div className="rv-campo">{rico(t('op.e0_cliente_e0'), { e0: (c) => <span className="rv-campo__etq">{c}</span> })}<p className="rv-cv__fijo">{convenio.cliente}</p></div>
         ) : (
-          <CampoSelect name="clienteId" etiqueta="Cliente" value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} obligatorio>
-            <option value="">Elige un cliente…</option>
+          <CampoSelect name="clienteId" etiqueta={t('cfg.cliente')} value={campos.clienteId} onChange={(e) => poner('clienteId', e.target.value)} obligatorio>
+            <option value="">{t('op.elige_un_cliente')}</option>
             {catalogos.clientes.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
           </CampoSelect>
         )}
-        <CampoTexto name="nombre" etiqueta="Nombre del convenio (la ruta)" value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} obligatorio placeholder="Ruta norte" />
-        <CampoTexto name="origen" etiqueta="Origen (punto A)" value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} />
-        <CampoTexto name="destino" etiqueta="Destino (punto B)" value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} />
-        <CampoSelect name="sitioOrigenId" etiqueta="Sitio de carga (catálogo de sitios)" value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)}>
-          <option value="">Sin sitio</option>
+        <CampoTexto name="nombre" etiqueta={t('op.nombre_del_convenio_la_ruta')} value={campos.nombre} onChange={(e) => poner('nombre', e.target.value)} maxLength={120} obligatorio placeholder={t('op.ruta_norte')} />
+        <CampoTexto name="origen" etiqueta={t('op.origen_punto_a')} value={campos.origen} onChange={(e) => poner('origen', e.target.value)} maxLength={160} />
+        <CampoTexto name="destino" etiqueta={t('op.destino_punto_b')} value={campos.destino} onChange={(e) => poner('destino', e.target.value)} maxLength={160} />
+        <CampoSelect name="sitioOrigenId" etiqueta={t('op.sitio_de_carga_catalogo_de_sitios')} value={campos.sitioOrigenId} onChange={(e) => poner('sitioOrigenId', e.target.value)}>
+          <option value="">{t('op.sin_sitio')}</option>
           {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
         </CampoSelect>
-        <CampoSelect name="sitioDestinoId" etiqueta="Sitio de descarga (catálogo de sitios)" value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)}>
-          <option value="">Sin sitio</option>
+        <CampoSelect name="sitioDestinoId" etiqueta={t('op.sitio_de_descarga_catalogo_de_sitios')} value={campos.sitioDestinoId} onChange={(e) => poner('sitioDestinoId', e.target.value)}>
+          <option value="">{t('op.sin_sitio')}</option>
           {catalogos.sitios.map((g) => <option key={g.id} value={g.id}>{etiquetaSitio(g)}</option>)}
         </CampoSelect>
-        <CampoFecha name="vigenteDesde" etiqueta="Vigente desde" value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} />
-        <CampoFecha name="vigenteHasta" etiqueta="Vigente hasta" value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} />
+        <CampoFecha name="vigenteDesde" etiqueta={t('op.vigente_desde')} value={campos.vigenteDesde} onChange={(e) => poner('vigenteDesde', e.target.value)} />
+        <CampoFecha name="vigenteHasta" etiqueta={t('op.vigente_hasta')} value={campos.vigenteHasta} onChange={(e) => poner('vigenteHasta', e.target.value)} />
       </div>
-      <CampoTextarea name="notas" etiqueta="Notas internas (no se mandan al operador)" rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} />
+      <CampoTextarea name="notas" etiqueta={t('op.notas_internas_no_se_mandan_al')} rows={2} maxLength={1000} value={campos.notas} onChange={(e) => poner('notas', e.target.value)} />
 
-      <Fieldset leyenda="Instrucciones de operación (la «calle de instrucciones»)" ayuda="Las filas sin texto se ignoran. Las que quites de la lista se borran del convenio al guardar.">
+      <Fieldset leyenda={t('op.instrucciones_de_operacion_la_calle_de')} ayuda={t('op.las_filas_sin_texto_se_ignoran')}>
         {filas.map((f, n) => (
           <div key={n} className="rv-cv__instruccion">
-            <CampoSelect name="ins_categoria" etiqueta={`Tema de la instrucción ${n + 1}`} etiquetaOculta value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)}>
+            <CampoSelect name="ins_categoria" etiqueta={t('op.tema_de_la_instruccion', { v: n + 1 })} etiquetaOculta value={f.categoria} onChange={(e) => ponerFila(n, 'categoria', e.target.value)}>
               {CATEGORIAS.map((c) => <option key={c} value={c}>{ETIQUETA_CATEGORIA[c]}</option>)}
             </CampoSelect>
-            <CampoTexto name="ins_texto" etiqueta={`Texto de la instrucción ${n + 1}`} etiquetaOculta value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} placeholder="Puerta 3, lado poniente" />
-            <CampoSelect name="ins_momento" etiqueta={`Cuándo se manda la instrucción ${n + 1}`} etiquetaOculta value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)}>
-              {MOMENTOS.map((m) => <option key={m} value={m}>{MOMENTO_OPCION[m]}</option>)}
+            <CampoTexto name="ins_texto" etiqueta={t('op.texto_de_la_instruccion', { v: n + 1 })} etiquetaOculta value={f.texto} onChange={(e) => ponerFila(n, 'texto', e.target.value)} maxLength={MAX_TEXTO_INSTRUCCION} placeholder={t('op.puerta_3_lado_poniente')} />
+            <CampoSelect name="ins_momento" etiqueta={t('op.cuando_se_manda_la_instruccion', { v: n + 1 })} etiquetaOculta value={f.momento} onChange={(e) => ponerFila(n, 'momento', e.target.value)}>
+              {MOMENTOS.map((m) => <option key={m} value={m}>{momentoOpcion(t)[m]}</option>)}
             </CampoSelect>
-            <CampoSelect name="ins_lugar" etiqueta={`A qué planta aplica la instrucción ${n + 1}`} etiquetaOculta value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)}>
+            <CampoSelect name="ins_lugar" etiqueta={t('op.a_que_planta_aplica_la_instruccion', { v: n + 1 })} etiquetaOculta value={f.lugar} onChange={(e) => ponerFila(n, 'lugar', e.target.value)}>
               {LUGARES.map((l) => <option key={l} value={l}>{LUGAR_OPCION[l]}</option>)}
             </CampoSelect>
-            <Tooltip texto="Quitar esta instrucción del convenio">
-              <Boton variante="ghost" tamano="sm" aria-label={`Quitar la instrucción ${n + 1}`}
+            <Tooltip texto={t('op.quitar_esta_instruccion_del_convenio')}>
+              <Boton variante="ghost" tamano="sm" aria-label={t('op.quitar_la_instruccion', { v: n + 1 })}
                 onClick={() => setFilas((fs) => (fs.length === 1 ? [{ ...FILA_NUEVA }] : fs.filter((_, i) => i !== n)))}>
                 <Icono icono={Trash2} tam={14} />
               </Boton>
             </Tooltip>
           </div>
         ))}
-        <Boton variante="secondary" disabled={filas.length >= MAX_INSTRUCCIONES_POR_CONVENIO} onClick={() => setFilas((fs) => [...fs, { ...FILA_NUEVA }])} icono={<Icono icono={Plus} />}>
-          Agregar instrucción
-        </Boton>
+        <Boton variante="secondary" disabled={filas.length >= MAX_INSTRUCCIONES_POR_CONVENIO} onClick={() => setFilas((fs) => [...fs, { ...FILA_NUEVA }])} icono={<Icono icono={Plus} />}>{t('op.agregar_instruccion')}</Boton>
       </Fieldset>
 
       {editando && (
         <div className="rv-cv__casillas">
           <Casilla name="llevarAViajes" value="si" checked={llevar} onChange={(e) => setLlevar(e.target.checked)}
-            etiqueta="Llevar este cambio a los viajes en curso de este convenio (si no, conservan las instrucciones que ya se les dijeron)." />
+            etiqueta={t('op.llevar_este_cambio_a_los_viajes')} />
           {llevar && (
             <Casilla className="rv-cv__sangria" name="reenviar" value="si" checked={reenviar} onChange={(e) => setReenviar(e.target.checked)}
-              etiqueta="Volver a mandar las instrucciones de despacho a los operadores que ya las habían recibido." />
+              etiqueta={t('op.volver_a_mandar_las_instrucciones_de')} />
           )}
         </div>
       )}
-      <div className="rv-cv__fila"><BotonGuardar texto={editando ? 'Guardar cambios' : 'Crear convenio'} /></div>
+      <div className="rv-cv__fila"><BotonGuardar texto={editando ? t('op.guardar_cambios') : t('op.crear_convenio')} /></div>
       <Aviso r={estado} />
     </form>
   );
