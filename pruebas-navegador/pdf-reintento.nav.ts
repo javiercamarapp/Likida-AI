@@ -106,7 +106,7 @@ test.describe('PDF firmado: pendiente → reintento sin segunda firma', () => {
     expect(pendiente).toEqual({ ...firmado, pdf_url: null });
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await expect(page.getByRole('region', { name: 'PDF pendiente' })).toContainText('El ajuste y la firma están guardados');
+    await expect(page.locator('section').filter({ has: page.getByText('PDF pendiente', { exact: true }) })).toContainText('El ajuste y la firma están guardados');
     await expect(page.getByRole('button', { name: 'Reintentar PDF', exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath('pdf-pendiente.png'), fullPage: true });
     const encargado = await browser.newContext({ storageState: ESTADOS.encargado });

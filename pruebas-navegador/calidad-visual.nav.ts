@@ -25,7 +25,9 @@ async function medir(page: Page) {
     const visible = (el: Element) => {
       const r = (el as HTMLElement).getBoundingClientRect();
       const e = getComputedStyle(el);
-      return r.width > 0 && r.height > 0 && e.visibility !== 'hidden' && e.display !== 'none' && !el.closest('[hidden]');
+      return r.width > 0 && r.height > 0 && e.visibility !== 'hidden' && e.display !== 'none' && !el.closest('[hidden]')
+        // El cuerpo de un <details> cerrado no se ve, aunque Chromium le calcule caja (content-visibility): no cuenta para encimados.
+        && !(el.closest('details:not([open])') && !el.closest('summary'));
     };
     const h1 = [...document.querySelectorAll('h1')].filter(visible).map((el) => (el.textContent ?? '').trim());
     const cajas = [...document.querySelectorAll('h1, h2, h3')].filter(visible).map((el) => {

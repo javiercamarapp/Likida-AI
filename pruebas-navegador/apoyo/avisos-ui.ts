@@ -11,21 +11,19 @@ export function pie(page: Page): Locator {
   return page.locator(PIE).first();
 }
 
-/** El número del pie: el del contador si lo hay; «nada pendiente» = 0; «sin dato» = null (nunca se confunde con 0). */
+/** El número del pie (el total de su etiqueta accesible); «nada pendiente» = 0; «sin dato» = null (nunca se confunde con 0). */
 export async function numeroPie(page: Page): Promise<number | null> {
   const enlace = pie(page);
   await expect(enlace).toBeAttached();
   const etiqueta = (await enlace.getAttribute('aria-label')) ?? '';
   if (/sin dato/i.test(etiqueta)) return null;
-  const contador = enlace.locator('.rv-contador');
-  if ((await contador.count()) === 0) {
-    expect(etiqueta, 'sin contador, el pie debe decir que no hay nada pendiente').toMatch(/nada pendiente/i);
+  // El pie es un punto de no leídos (sin cifra): el total vive en la etiqueta accesible («Avisos: 5 pendientes…»).
+  const m = /(\d+)\s+pendiente/i.exec(etiqueta);
+  if (!m) {
+    expect(etiqueta, 'sin total en la etiqueta, el pie debe decir que no hay nada pendiente').toMatch(/nada pendiente/i);
     return 0;
   }
-  const texto = ((await contador.textContent()) ?? '').trim();
-  const n = Number.parseInt(texto, 10);
-  expect(Number.isFinite(n), `contador del pie ilegible: «${texto}»`).toBe(true);
-  return n;
+  return Number.parseInt(m[1], 10);
 }
 
 export type Pestana = 'No leídas' | 'Leídas' | 'Todas';
