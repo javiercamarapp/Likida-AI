@@ -36,7 +36,7 @@ vi.mock('@/lib/supabase/admin', () => ({
     from: (t: string) => {
       const b: Record<string, unknown> = {};
       let esDeLaFlota = false;
-      for (const m of ['select', 'eq', 'limit']) b[m] = () => b;
+      for (const m of ['select', 'eq', 'order', 'limit']) b[m] = () => b;
       b.in = (_c: string, v: string[]) => { esDeLaFlota = v.some((x) => x.endsWith('5512345678')); return b; };
       const r = (): R => (t === 'suscripcion' ? plan
         : { data: t === 'operador' && esDeLaFlota ? [{ tenant_id: 't1' }] : [], error: null });
