@@ -98,6 +98,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'cartaPorte.borrador.viajeId.page.cifraTransportista': 'Carrier data',
   'cartaPorte.borrador.viajeId.page.cifraValidacion': 'Validation',
   'cartaPorte.borrador.viajeId.page.veredicto': 'Verdict',
+  'cartaPorte.borrador.viajeId.page.area': 'Cargo Waybill record',
   'cartaPorte.borrador.viajeId.page.volverACartaPorte': 'Back to Carta Porte',
   'cartaPorte.documentos.forma.procesando': 'Processing…',
   'cartaPorte.documentos.id.avisosLectura.avisos': 'Notices',

@@ -98,6 +98,7 @@ export const dinero = {
   'cartaPorte.borrador.viajeId.page.cifraTransportista': 'Datos del transportista',
   'cartaPorte.borrador.viajeId.page.cifraValidacion': 'Validación',
   'cartaPorte.borrador.viajeId.page.veredicto': 'Veredicto',
+  'cartaPorte.borrador.viajeId.page.area': 'Ficha de Carta Porte',
   'cartaPorte.borrador.viajeId.page.volverACartaPorte': 'Volver a Carta Porte',
   'cartaPorte.documentos.forma.procesando': 'Procesando…',
   'cartaPorte.documentos.id.avisosLectura.avisos': 'Avisos',
