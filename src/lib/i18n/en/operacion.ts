@@ -600,7 +600,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'un.col.estado': 'Status',
   'un.col.papeles': 'Documents',
   'un.col.taller': 'Shop',
-  'un.orden.uno': '1 open order',
+  'un.orden.uno': '{n} open order',
   'un.sinordenes': 'No orders',
   'un.col.rastreo': 'Tracking',
   'un.gps.ligada': ' · linked, no position yet',

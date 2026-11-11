@@ -129,7 +129,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
   plantillaCsv: string;
   hrefPatios: string;
 }) {
-  const { t, idioma } = tr;
+  const { t, tp, idioma } = tr;
   const nombrePatio = new Map(patios.map((p) => [p.id, p.nombre] as const));
   // AUDITORÍA 20 (H4): las bajas ya no se pierden. Esta vista SIEMPRE filtró
   // `activo`, así que hasta hoy una unidad inactiva desaparecía de la pantalla
@@ -201,7 +201,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
     {
       id: 'taller', titulo: t('un.col.taller'),
       celda: (u) => (u.ordenesAbiertas > 0
-        ? <StatusChip tono="warn">{u.ordenesAbiertas === 1 ? t('un.orden.uno') : t('un.orden.otros', { n: u.ordenesAbiertas })}</StatusChip>
+        ? <StatusChip tono="warn">{tp('un.orden', u.ordenesAbiertas)}</StatusChip>
         : <span className="rv-un__tenue">{t('un.sinordenes')}</span>),
     },
     // Sin lectura de odómetro NO es 0 km: «—».

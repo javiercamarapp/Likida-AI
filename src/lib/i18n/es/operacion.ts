@@ -600,7 +600,7 @@ export const operacion = {
   'un.col.estado': 'Estado',
   'un.col.papeles': 'Papeles',
   'un.col.taller': 'Taller',
-  'un.orden.uno': '1 orden abierta',
+  'un.orden.uno': '{n} orden abierta',
   'un.sinordenes': 'Sin órdenes',
   'un.col.rastreo': 'Rastreo',
   'un.gps.ligada': ' · ligada, sin posición todavía',
