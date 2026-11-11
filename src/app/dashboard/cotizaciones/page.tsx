@@ -256,8 +256,8 @@ export default async function PaginaCotizaciones({
       apoyo={tr('cotizaciones.page.laGananciaRealDel')}
       acciones={panel ? (
         <>
-          <BotonEnlace href={hrefNuevo('costos')} variante="secondary" tamano="sm">{tr('cotizaciones.page.costosDeclaradosDeLa')}</BotonEnlace>
-          <BotonEnlace href={hrefNuevo('cotizacion')} variante="primary" tamano="sm">{tr('cotizaciones.page.nuevaCotizacion')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('costos')} variante="secondary">{tr('cotizaciones.page.costosDeclaradosDeLa')}</BotonEnlace>
+          <BotonEnlace href={hrefNuevo('cotizacion')} variante="primary">{tr('cotizaciones.page.nuevaCotizacion')}</BotonEnlace>
         </>
       ) : undefined}
       avisos={panel && costosSinDeclarar > 0 ? (
