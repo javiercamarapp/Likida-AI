@@ -13,6 +13,7 @@ import { PulsoSitio } from '../../calculadora/pulso';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 import { trPublico } from '@/lib/i18n/publico_tr';
 import { rico } from '@/lib/i18n/rico';
+import '../../legal/publico-r2.css';
 
 export function generateStaticParams() {
   return ARTICULOS.map((a) => ({ slug: a.slug }));

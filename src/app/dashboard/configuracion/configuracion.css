@@ -7,6 +7,14 @@
 .rv-cfg__tenue { color: var(--muted); }
 /* Plantilla CF (Rovaq): UNA columna de ≤760 px, igual que Topes de gasto (misma familia de pestañas: el contenido no salta de ancho). */
 .rv-cfg__split { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1100px) { .rv-cfg__split { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
+.rv-cfg__rejilla { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1100px) { .rv-cfg__rejilla { grid-template-columns: repeat(2, minmax(0, 1fr)); } .rv-cfg__rejilla > .rv-cfg__ancha { grid-column: 1 / -1; } }
+/* Grupos de la forma de ajustes: subtítulo 13/600 sobre sus filas, sin caja ni leyenda incrustada en el borde (no hay fieldset con marco en Rovaq). */
+.rv-cfg__grupo { display: grid; gap: 4px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.rv-cfg__grupo + .rv-cfg__grupo { padding-top: 12px; border-top: 1px solid var(--line); }
+.rv-cfg__grupo-tit { margin: 0 0 4px; font-size: var(--t-body); font-weight: 600; color: var(--ink); }
+.rv-cfg__filas { display: grid; }
 .rv-cfg__forma { display: grid; gap: 12px; }
 .rv-cfg__lateral { display: grid; gap: 12px; }
 .rv-cfg__lineas { display: grid; gap: 6px; margin-top: 10px; }

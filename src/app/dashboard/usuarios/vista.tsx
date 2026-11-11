@@ -81,7 +81,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
       id: 'rol', titulo: 'Rol',
       celda: (u) => (puedeInvitar && u.activo && u.id !== userId && u.rol !== 'superadmin'
         ? <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
-        : <StatusChip tono={u.activo && u.rol === 'flota_admin' ? 'ok' : 'neutral'}>{nombreDeRol(u.rol)}</StatusChip>),
+        : <StatusChip tono="neutral">{nombreDeRol(u.rol)}</StatusChip>),
     },
     { id: 'estado', titulo: t('llaves.estado'), celda: (u) => (u.activo ? <StatusChip tono="ok">{t('e26b.usu_activo')}</StatusChip> : <StatusChip tono="bad">{t('cfg.dada_de_baja')}</StatusChip>) },
     {
@@ -122,7 +122,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
           </FilaTarjetas>
 
           <Tarjeta titulo={t('cfg.tu_equipo')} estado={usuarios.length === 0 ? 'vacio' : 'ok'} mensaje={t('cfg.no_hay_cuentas_dadas_de_alta')} detalle={t('cfg.cuando_invites_a_alguien_de_tu')} contenida>
-            <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} densa altoMaximo={false} tarjetaMovil />
+            <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} densa altoMaximo={false} tarjetaMovil className="rv-usu__tabla" />
           </Tarjeta>
         </>
       )}
