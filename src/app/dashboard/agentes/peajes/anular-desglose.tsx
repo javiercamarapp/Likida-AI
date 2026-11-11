@@ -3,7 +3,7 @@
 import { useState, useActionState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Ban } from 'lucide-react';
-import { AvisoResultado, Boton, CampoTextarea, DialogoConfirmar, Icono, type ResultadoUI } from '@/app/ui-v2/componentes';
+import { AvisoResultado, Boton, CampoTextarea, DialogoConfirmar, Icono, type ResultadoUI, Tooltip } from '@/app/ui-v2/componentes';
 import './peajes.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
@@ -30,8 +30,7 @@ export function BotonAnular({ anular, desgloseId }: { anular: AccionAnular; desg
   return (
     <form action={accion} className="rv-pj-control" onSubmit={() => setAbierto(false)}>
       <input type="hidden" name="desglose" value={desgloseId} />
-      <Boton variante="danger" onClick={() => setAbierto(true)} icono={<Icono icono={Ban} />}
-        title={tx('rest.para_un_archivo_subido_por_error')}>{tx('rest.anular')}</Boton>
+      <Tooltip texto={tx('rest.para_un_archivo_subido_por_error')}><Boton variante="danger" onClick={() => setAbierto(true)} icono={<Icono icono={Ban} />}>{tx('rest.anular')}</Boton></Tooltip>
       <DialogoConfirmar
         abierto={abierto} titulo={tx('rest.anular_este_desglose')} tono="peligro" cierraConFondo={false}
         etiquetaConfirmar={tx('rest.anular_desglose')} tipoConfirmar="submit" pendiente={pendiente}

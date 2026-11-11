@@ -4,7 +4,7 @@ import { useState, useActionState, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
-import { Boton, Icono } from '@/app/ui-v2/componentes';
+import { Boton, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import './peajes.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
@@ -55,8 +55,7 @@ export function BotonConciliar({ conciliar, desgloseId }: {
           <Boton onClick={() => setConfirmando(false)}>{tx('cobranza.controles.cancelar')}</Boton>
         </form>
       ) : (
-        <Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}
-          title={tx('rest.volver_a_cruzar_todas_las_lineas')}>{tx('rest.conciliar')}</Boton>
+        <Tooltip texto={tx('rest.volver_a_cruzar_todas_las_lineas')}><Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}>{tx('rest.conciliar')}</Boton></Tooltip>
       )}
 
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}

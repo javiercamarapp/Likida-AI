@@ -1,5 +1,5 @@
 import { AlertTriangle, Check } from 'lucide-react';
-import { Boton, Icono, StatusChip, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Boton, Icono, StatusChip, type TonoEstado, Tooltip } from '@/app/ui-v2/componentes';
 import { mxn, fechaHoraMx } from '@/lib/formato';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import type { ClavePlural, Variables } from '@/lib/i18n/traducir';
@@ -85,9 +85,9 @@ export function Diferencia({ nota, monto, tr = trEs }: { nota: string; monto: nu
           vive en el PDF del contralor). El botón se ve para que el flujo se
           entienda, y está deshabilitado con la razón a la vista: un botón
           que parece funcionar y no hace nada es un rótulo que miente. */}
-      <Boton disabled variante="secondary" tamano="sm" title={tr('liquidacion.detalle.aprobarDescontarRazon')}>
+      <Tooltip texto={tr('liquidacion.detalle.aprobarDescontarRazon')}><Boton disabled variante="secondary" tamano="sm">
         {tr('liquidacion.detalle.aprobarDescontar')}
-      </Boton>
+      </Boton></Tooltip>
     </li>
   );
 }

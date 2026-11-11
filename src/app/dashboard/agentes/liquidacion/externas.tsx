@@ -1,8 +1,7 @@
 import Link from 'next/link';
 import {
   AvisoCompacto, BarraFiltros, Boton, CampoArchivo, EstadoVacio, FiltroFecha, FiltroOpciones, Icono, StatusChip, TablaBase, Tarjeta,
-  type TonoEstado,
-} from '@/app/ui-v2/componentes';
+  type TonoEstado, Tooltip } from '@/app/ui-v2/componentes';
 import { Truck, Download, RefreshCw, FileText, FileSpreadsheet, Send, Settings2 } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
 import './liquidacion.css';
@@ -305,13 +304,13 @@ function AccionesFila({ l, p, formato, avisos, tr = TR_ES }: { l: LiquidacionExt
       {formato?.copia && p.reenviarCopia && l.estado !== 'pendiente' && l.estado !== 'fallida' && (
         <form action={p.reenviarCopia}>
           <input type="hidden" name="id" value={l.id} />
-          <Boton type="submit" variante="ghost" tamano="sm" icono={<Icono icono={Send} />} title={tx('rest.reenvia_la_copia_al_jefe_de')}>{tx('rest.copia_al_jefe')}</Boton>
+          <Tooltip texto={tx('rest.reenvia_la_copia_al_jefe_de')}><Boton type="submit" variante="ghost" tamano="sm" icono={<Icono icono={Send} />}>{tx('rest.copia_al_jefe')}</Boton></Tooltip>
         </form>
       )}
       {puedeReavisar && p.reavisar && (
         <form action={p.reavisar}>
           <input type="hidden" name="id" value={l.id} />
-          <Boton type="submit" variante="ghost" tamano="sm" icono={<Icono icono={Send} />} title={tx('rest.vuelve_a_avisar_a_la_persona')}>{tx('rest.reavisar')}</Boton>
+          <Tooltip texto={tx('rest.vuelve_a_avisar_a_la_persona')}><Boton type="submit" variante="ghost" tamano="sm" icono={<Icono icono={Send} />}>{tx('rest.reavisar')}</Boton></Tooltip>
         </form>
       )}
       {l.estado === 'fallida' && p.puedeReintentar && (
