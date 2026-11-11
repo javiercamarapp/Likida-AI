@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import Link from 'next/link';
 import {
   Play, Power, PowerOff, GitPullRequest, Image as ImageIcon, Bot,
@@ -203,7 +204,7 @@ export function VistaTuTurno({
       ) : null}
       /* Cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */
       etiquetaCifras={t('tu_turno_vista.lo_que_espera_tu')}
-      cifras={[
+      cifras={uniformes([
           {
             etiqueta: t('tu_turno_vista.piezas_para_tu_tap'), formato: 'entero',
             valor: piezasSinDato ? null : bus.piezasPendientes.length,
@@ -219,7 +220,7 @@ export function VistaTuTurno({
             etiqueta: t('tu_turno_vista.escalaciones'), valor: totalEscalaciones, formato: 'entero',
             nota: totalEscalaciones === null ? t('tu_turno_vista.no_se_pudo_leer_3') : undefined,
           },
-      ]}
+      ])}
     >
 
       {ver('piezas') ? (

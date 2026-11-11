@@ -22,6 +22,7 @@
 // Moneda, número y porcentaje SOLO por lib/formato.ts.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import { useMemo } from 'react';
 import { Aviso, BotonEnlace, Disclosure, Tarjeta, TablaBase, Tooltip, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
@@ -108,7 +109,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
             {/* ── Los números de arriba ─────────────────────────────────────── */}
             <TiraCifras
               etiqueta={t('qa_medicion_corrida.la_precision_del_ocr_medida_contra')}
-              items={[
+              items={uniformes([
                 {
                   etiqueta: t('qa_medicion_corrida.exactitud_global'),
                   valor: medicion.global.exactitud === null ? t('qa_medicion_corrida.sin_medir') : porcentaje(medicion.global.exactitud * 100, 1, idioma),
@@ -146,7 +147,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
                   valor: numero(medicion.global.noMedidos, idioma),
                   nota: t('qa_medicion_corrida.campos_sin_vara_ilegibles_fallo_tecnico'),
                 },
-              ]}
+              ])}
             />
 
             {/* ── El desglose por campo ─────────────────────────────────────── */}
