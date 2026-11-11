@@ -1,3 +1,4 @@
+import { TarjetaTabla } from '../bloque';
 import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { numero } from '@/lib/formato';
@@ -111,18 +112,20 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
           mas="Las plantillas de carga masiva también saben a dónde va cada camión. Un jefe con patio solo corrige operadores, unidades y jornadas de ese patio." />
       )}
     >
-      {ilegible ? (
-        <EstadoError reintentar>{t('patios.error.lista')}</EstadoError>
-      ) : lista.length === 0 ? (
-        <EstadoVacio titulo={t('patios.vacio.titulo')}>
-          {puedeAdministrar
-            ? t('patios.vacio.admin')
-            : t('patios.vacio.otro')}
-        </EstadoVacio>
-      ) : (
-        <TablaBase<FilaPatio> etiqueta={t('patios.tabla.etiqueta')} columnas={columnas} filas={lista}
-          idFila={(p) => p.id} tarjetaMovil />
-      )}
+      <TarjetaTabla titulo={t('patios.titulo')} contador={ilegible ? undefined : numero(lista.length)}>
+        {ilegible ? (
+          <EstadoError reintentar>{t('patios.error.lista')}</EstadoError>
+        ) : lista.length === 0 ? (
+          <EstadoVacio titulo={t('patios.vacio.titulo')}>
+            {puedeAdministrar
+              ? t('patios.vacio.admin')
+              : t('patios.vacio.otro')}
+          </EstadoVacio>
+        ) : (
+          <TablaBase<FilaPatio> etiqueta={t('patios.tabla.etiqueta')} columnas={columnas} filas={lista}
+            idFila={(p) => p.id} tarjetaMovil />
+        )}
+      </TarjetaTabla>
       <p className="rv-pt__nota">
         {t('patios.nota.pre')} <Link href={hrefOperadores} className="rv-pt__enlace">{t('patios.nota.operadores')}</Link> {t('comun.y')} <Link href={hrefUnidades} className="rv-pt__enlace">{t('patios.nota.unidades')}</Link>{t('patios.nota.post')}
       </p>
