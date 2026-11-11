@@ -22,7 +22,7 @@ import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
 import { calcularSinCfdi } from './sin-cfdi';
 import type { Metadata } from 'next';
-import { EstadoError, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { BarraPeriodo, EstadoError, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { BarList, Columnas, DonaMini, type ColumnaDato, type PropsCifra } from '@/app/ui-v2/graficas';
 import './combustible.css';
@@ -218,6 +218,10 @@ export default async function CombustibleCasetasPage({
           </StatusChip>
         )}
       </>}
+      // Barra de filtros (Rovaq BF): aquí el alcance es fijo y real —los totales por concepto son históricos y la serie mensual sale de la
+      // ventana de comprobantes que se declara—, así que la barra lo DICE en chips informativos y no inventa un selector sin efecto.
+      filtros={<BarraPeriodo etiqueta={tr('combustibleCasetas.page.alcanceFiltros')}
+        chips={[{ id: 'ventana', etiqueta: tr('combustibleCasetas.page.alcanceVentana', { n: numero(VENTANA_DOCUMENTOS) }) }, { id: 'historico', etiqueta: tr('combustibleCasetas.page.alcanceHistorico') }]} />}
       etiquetaCifras={tr('combustibleCasetas.page.gastosDeLaFlota')}
       selloCifras={selloHoy(tr('combustibleCasetas.page.gastosDeLaFlota'))}
       cifras={porConcepto === null ? undefined : ([
@@ -225,12 +229,12 @@ export default async function CombustibleCasetasPage({
           icono: <Icono icono={Fuel} />,
           // FE-9: `getGastoPorConcepto` no tiene ventana (histórico completo) — junto al tile vecino, que sí declara la suya ("últimos 100 comprobantes"), esto se leía como "del mes".
           etiqueta: tr('combustibleCasetas.page.gastadoEnCombustible'), info: 'combustible_casetas.gastado_combustible', valor: diesel?.total ?? 0, formato: 'mxn',
-          nota: diesel ? tr('combustibleCasetas.page.historicoCargasRegistradas', { v: numero(diesel.n) }) : tr('combustibleCasetas.page.sinCargasRegistradasTodavia'),
+          nota: diesel ? (diesel.n === 1 ? tr('combustibleCasetas.page.historicoCargaUna') : tr('combustibleCasetas.page.historicoCargasRegistradas', { v: numero(diesel.n) })) : tr('combustibleCasetas.page.sinCargasRegistradasTodavia'),
         },
         {
           icono: <Icono icono={RouteIcon} />,
           etiqueta: tr('combustibleCasetas.page.gastadoEnCasetas'), info: 'combustible_casetas.gastado_casetas', valor: caseta?.total ?? 0, formato: 'mxn',
-          nota: caseta ? tr('combustibleCasetas.page.historicoCasetasRegistradas', { v: numero(caseta.n) }) : tr('combustibleCasetas.page.sinCasetasRegistradasTodavia'),
+          nota: caseta ? (caseta.n === 1 ? tr('combustibleCasetas.page.historicoCasetaUna') : tr('combustibleCasetas.page.historicoCasetasRegistradas', { v: numero(caseta.n) })) : tr('combustibleCasetas.page.sinCasetasRegistradasTodavia'),
         },
         {
           icono: <Icono icono={Fuel} />,
@@ -253,7 +257,7 @@ export default async function CombustibleCasetasPage({
       ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }))}
       variante="8-4"
       graficas={porConcepto === null ? undefined : porConcepto.length > 1 ? [
-        meses.length > 1 ? (
+        meses.length >= 1 ? (
           <Tarjeta key="b" titulo={tr('combustibleCasetas.panel.gastoPorMes')} info="combustible_casetas.gastado_combustible">
             <Columnas etiqueta={tr('combustibleCasetas.panel.gastoPorMes')} datos={meses} formato="mxn" matiz={2} variacion={false} />
             <p className="rv-comb__nota">{tr('combustibleCasetas.panel.ventanaNota', { n: numero(VENTANA_DOCUMENTOS) })}</p>
@@ -263,7 +267,7 @@ export default async function CombustibleCasetasPage({
             <BarList etiqueta={tr('combustibleCasetas.page.gastoPorConcepto')} items={itemsConcepto} formato={mxn} />
           </Tarjeta>
         ),
-        <Tarjeta key="d" titulo={tr('combustibleCasetas.page.repartoDelGasto')}>
+        <Tarjeta key="d" titulo={tr('combustibleCasetas.page.repartoDelGasto')} contenida>
           <DonaMini etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
         </Tarjeta>,
       ] : [
