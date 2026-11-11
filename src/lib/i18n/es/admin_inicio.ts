@@ -339,4 +339,13 @@ export const admin_inicio = {
   'ficha_conv.eyebrow': 'Ficha de conversación',
   'ficha_conv.mensajes': 'Mensajes',
   'ficha_conv.ultima': 'Última actividad',
+  'consola.eyebrow': 'Consola de plataforma',
+  'consola.copiloto': 'Copiloto',
+  'consola.acceso_admin': 'Acceso administrativo: lo que ves cruza todas las flotas.',
+  'consola.gasto_ia_mes': 'Gasto de IA del mes',
+  'consola.gasto_ia_mes_de': 'Gasto de IA — {etiquetaMes}',
+  'resumen_mando.requieren_atencion': 'Requieren atención',
+  'resumen_mando.costos': 'Costos',
+  'resumen_mando.operacion': 'Operación',
+  'resumen_mando.trazabilidad': 'Trazabilidad',
 } as const;

@@ -19,3 +19,8 @@
 [data-ui="v2"] .adm-perfil-form { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 [data-ui="v2"] .adm-flota-form { margin: 0; }
 [data-ui="v2"] .adm-flota-id { font-size: var(--t-small); color: var(--muted); overflow-wrap: anywhere; }
+
+/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas (pf-tile). */
+[data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 1023.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 479.98px) { [data-ui="v2"] .adm-res-tiles { grid-template-columns: minmax(0, 1fr); } }

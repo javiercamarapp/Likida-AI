@@ -20,3 +20,18 @@
 [data-ui="v2"] .adm-din-bloque > p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
 [data-ui="v2"] .adm-din-video { width: 100%; max-height: 160px; border-radius: 8px; }
 [data-ui="v2"] .adm-din-miniatura { display: block; width: 100%; height: 80px; object-fit: cover; border-radius: 8px; }
+
+/* Botón de envío de FormaConAviso a la escala de Rovaq (32 px, 13/500, radio 8) mientras la pieza compartida conserva su Tailwind heredado
+   (pedido_compartido: forma.tsx debe usar <Boton>). Solo dentro de `.adm-forma-fina`. */
+[data-ui="v2"] .adm-forma-fina button[type="submit"],
+[data-ui="v2"] .adm-forma-fina button[type="button"].text-sm { height: 32px; padding: 0 12px; font-size: 13px; font-weight: 500; line-height: 1; border-radius: 8px; width: auto; }
+
+/* Flotas (Rovaq P2): gasto de IA con mini barra, acciones de fila y bloque «Crear organización». */
+[data-ui="v2"] .adm-flota-gasto { display: inline-flex; align-items: center; gap: 8px; font-size: var(--t-small); white-space: nowrap; }
+[data-ui="v2"] .adm-flota-gasto progress { width: 56px; height: 6px; border: 0; border-radius: 999px; overflow: hidden; background: var(--line); accent-color: var(--ink); appearance: none; }
+[data-ui="v2"] .adm-flota-gasto progress::-webkit-progress-bar { background: var(--line); }
+[data-ui="v2"] .adm-flota-gasto progress::-webkit-progress-value { background: var(--ink); }
+[data-ui="v2"] .adm-flota-gasto progress[data-alto]::-webkit-progress-value { background: var(--bad); }
+[data-ui="v2"] .adm-flota-acciones { display: inline-flex; gap: 4px; justify-content: flex-end; }
+[data-ui="v2"] .adm-flota-paneles { display: flex; flex-wrap: wrap; gap: 8px; }
+[data-ui="v2"] .adm-flota-alta { scroll-margin-top: 72px; }
