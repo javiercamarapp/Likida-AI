@@ -1,21 +1,50 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { Code2, ExternalLink } from 'lucide-react';
+import { ExternalLink } from 'lucide-react';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getActividadGitHub, getMapaCommits, getAutoresCommits } from '@/lib/admin/github';
 import { MapaActividad } from './mapa-actividad';
 import { getEventosSeguridad, type FilaSeguridad } from '@/lib/seguridad/eventos';
 import { getSLOs, type Slo } from '@/lib/admin/slo';
 import { fechaHoraMx } from '@/lib/formato';
-import { StatusPill } from '../ui/kit';
 import { AvisoGitHub } from '../ui/aviso-github';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
 import { SelectorVista } from '../selector-vista';
 
 export const dynamic = 'force-dynamic';
 
 // Confirmado con `git remote -v` en el repo — no es una URL adivinada.
 const REPO_URL = 'https://github.com/javiercamarapp/likida.ai';
+
+
+const COLUMNAS_SLO: ColumnaBase<Slo>[] = [
+  { id: 'nombre', titulo: 'Objetivo', principal: true, celda: (s) => s.nombre },
+  { id: 'objetivo', titulo: 'Objetivo declarado', celda: (s) => <span className="text-muted">obj. {s.objetivo}</span> },
+  {
+    // cumple=null jamás se pinta verde: sin muestra o sin lectura es «sin medir», con su propio tono.
+    id: 'medido', titulo: 'Medido', alinear: 'der',
+    celda: (s) => (
+      <StatusChip tono={s.cumple === true ? 'ok' : s.cumple === false ? 'bad' : 'muted'}>
+        <span className="tabular">{s.medido}</span>
+      </StatusChip>
+    ),
+  },
+  { id: 'ventana', titulo: 'Ventana', celda: (s) => <span className="etiqueta-mono text-[11px] uppercase text-muted">{s.ventana}</span> },
+];
+
+const COLUMNAS_SEGURIDAD: ColumnaBase<FilaSeguridad>[] = [
+  {
+    id: 'tipo', titulo: 'Qué y de dónde', principal: true,
+    celda: (e) => (
+      <>
+        <StatusChip tono={e.severidad === 'alta' ? 'bad' : e.severidad === 'media' ? 'warn' : 'neutral'}>{e.tipo.replace(/_/g, ' ')}</StatusChip>
+        <span className="ml-2 text-muted">· {e.origen}</span>
+        {e.actor && <span className="ml-2 text-muted">· {e.actor}</span>}
+      </>
+    ),
+  },
+  { id: 'cuando', titulo: 'Cuándo', alinear: 'der', celda: (e) => <span className="tabular text-muted">{fechaHoraMx(e.creadoEn)}</span> },
+];
 
 /**
  * Dev — `requireSuperadmin()` ya lo hizo el layout.
@@ -51,187 +80,153 @@ export default async function DevPage() {
   // quizá ya existe. `null` viaja como `null` y el selector lo dice.
   const tenants = conteoTenants.error ? null : conteoTenants.count ?? 0;
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Code2 width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo="Dev"
-        />
+    <MarcoPagina titulo="Dev">
+      {/* "Entrar a los otros paneles" — vivía en el Inicio; Javier lo mandó aquí el 17-ago: es herramienta de desarrollo, no de operación. */}
+      <SelectorVista tenants={tenants} />
 
-        {/* "Entrar a los otros paneles" — vivía en el Inicio; Javier lo mandó
-            aquí el 17-ago: es herramienta de desarrollo, no de operación. */}
-        <SelectorVista tenants={tenants} />
+      {/* Falta de configuración (no corregible por código): UN aviso corto con la variable, no tres vacíos largos. */}
+      {(mapa.estado === 'sin_token' || actividad.estado === 'sin_token') && <AvisoGitHub causa="sin_token" />}
+      {mapa.estado !== 'sin_token' && actividad.estado !== 'sin_token' && (mapa.estado === 'error' || actividad.estado === 'error') && <AvisoGitHub causa="error" />}
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          {/* Falta de configuración (no corregible por código): UN aviso corto con la variable, no tres vacíos largos. */}
-          {(mapa.estado === 'sin_token' || actividad.estado === 'sin_token') && <AvisoGitHub causa="sin_token" />}
-          {mapa.estado !== 'sin_token' && actividad.estado !== 'sin_token' && (mapa.estado === 'error' || actividad.estado === 'error') && <AvisoGitHub causa="error" />}
-          {/* ── El mapa de puntos: 26 semanas de pushes, un punto por día.
-                La intensidad es commits/día; GitHub lo precalcula y a veces
-                contesta "generando" — se dice. Refresca en cada carga
-                (force-dynamic). ── */}
-          <div className="card p-3">
-            <TituloSeccion>Mapa de actividad — pushes por día</TituloSeccion>
-            <div className="mt-2">
-              {mapa.estado === 'sin_token' && (
-                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>Sin <code>GITHUB_TOKEN</code> no hay mapa — no es que no haya pushes.</p>
-              )}
-              {mapa.estado === 'error' && (
-                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>GitHub no contestó el histograma — recarga en un momento.</p>
-              )}
-              {mapa.estado === 'generando' && (
-                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>GitHub está recalculando el histograma tras el último push — recarga en unos segundos.</p>
-              )}
-              {mapa.estado === 'ok' && (
-                <div className="flex gap-5 items-start">
-                  <div className="min-w-0 flex-1">
-                    <MapaActividad semanas={mapa.semanas.slice(-26)} total={mapa.total} />
-                  </div>
-                  {/* Por integrante (orden del 17-ago): quién empujó cuánto —
-                      52 semanas de /stats/contributors, mismos tres estados
-                      honestos que el histograma. */}
-                  <div className="w-44 shrink-0">
-                    <p className="etiqueta-mono text-[10px] uppercase mb-1.5" style={{ color: 'var(--muted)' }}>Por integrante</p>
-                    {autores.estado === 'ok' && autores.autores.map((a) => (
-                      <div key={a.nombre} className="flex items-center justify-between py-0.5">
-                        <span className="text-[12px] truncate" style={{ color: 'var(--ink2)' }}>{a.nombre}</span>
-                        <span className="text-[12px] tabular font-medium" style={{ color: 'var(--ink)' }}>{a.pushes}</span>
-                      </div>
-                    ))}
-                    {autores.estado === 'generando' && (
-                      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>GitHub lo está recalculando…</p>
-                    )}
-                    {(autores.estado === 'error' || autores.estado === 'sin_token') && (
-                      <p className="text-[11px]" style={{ color: 'var(--muted)' }}>No se pudo leer — no es que nadie haya empujado.</p>
-                    )}
-                  </div>
-                </div>
-              )}
+      {/* ── El mapa de puntos: 26 semanas de pushes, un punto por día. La intensidad es commits/día; GitHub lo precalcula y a veces
+            contesta "generando" — se dice. Refresca en cada carga (force-dynamic). ── */}
+      <Tarjeta titulo="Mapa de actividad — pushes por día">
+        {mapa.estado === 'sin_token' && (
+          <p className="m-0 text-xs text-muted">Sin <code>GITHUB_TOKEN</code> no hay mapa — no es que no haya pushes.</p>
+        )}
+        {mapa.estado === 'error' && (
+          <p className="m-0 text-xs text-muted">GitHub no contestó el histograma — recarga en un momento.</p>
+        )}
+        {mapa.estado === 'generando' && (
+          <p className="m-0 text-xs text-muted">GitHub está recalculando el histograma tras el último push — recarga en unos segundos.</p>
+        )}
+        {mapa.estado === 'ok' && (
+          <div className="flex items-start gap-5">
+            <div className="min-w-0 flex-1">
+              <MapaActividad semanas={mapa.semanas.slice(-26)} total={mapa.total} />
             </div>
-          </div>
-
-          {/* ── SLOs (fase 7): objetivos DECLARADOS contra datos reales.
-                cumple=null jamás se pinta verde — sin muestra o sin lectura
-                se dice con esas palabras. ── */}
-          <div className="card p-3">
-            <TituloSeccion>SLOs — objetivos contra lo medido</TituloSeccion>
-            <div className="mt-2">
-              {slos === null && (
-                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>No se pudieron leer los SLOs.</p>
-              )}
-              {slos !== null && slos.map((s) => (
-                <div key={s.clave} className="flex items-center gap-2.5 py-1.5 text-[12.5px]" style={{ borderBottom: '1px solid var(--line)' }}>
-                  <span className="w-2 h-2 rounded-full shrink-0" style={{
-                    background: s.cumple === true ? 'var(--ok)' : s.cumple === false ? 'var(--bad)' : 'var(--muted)',
-                  }} />
-                  <span className="min-w-0 flex-1" style={{ color: 'var(--ink)' }}>{s.nombre}</span>
-                  <span className="shrink-0" style={{ color: 'var(--muted)' }}>obj. {s.objetivo}</span>
-                  <span className="shrink-0 tabular font-medium" style={{ color: s.cumple === false ? 'var(--bad)' : 'var(--ink)' }}>{s.medido}</span>
-                  <span className="etiqueta-mono text-[10px] uppercase shrink-0" style={{ color: 'var(--faint)' }}>{s.ventana}</span>
+            {/* Por integrante (orden del 17-ago): quién empujó cuánto — 52 semanas de /stats/contributors, mismos tres estados
+                honestos que el histograma. */}
+            <div className="w-44 shrink-0">
+              <p className="etiqueta-mono m-0 mb-1.5 text-[11px] uppercase text-muted">Por integrante</p>
+              {autores.estado === 'ok' && autores.autores.map((a) => (
+                <div key={a.nombre} className="flex items-center justify-between py-0.5">
+                  <span className="truncate text-xs text-[var(--ink2)]">{a.nombre}</span>
+                  <span className="tabular text-xs font-medium">{a.pushes}</span>
                 </div>
               ))}
+              {autores.estado === 'generando' && (
+                <p className="m-0 text-xs text-muted">GitHub lo está recalculando…</p>
+              )}
+              {(autores.estado === 'error' || autores.estado === 'sin_token') && (
+                <p className="m-0 text-xs text-muted">No se pudo leer — no es que nadie haya empujado.</p>
+              )}
             </div>
           </div>
+        )}
+      </Tarjeta>
 
-          {/* ── Trust & Safety (0133): lo que los detectores atraparon.
-                Firma inválida, intents rechazados, cifras sin respaldo —
-                la memoria de seguridad consultable, no solo logs. ── */}
-          <div className="card p-3">
-            <TituloSeccion>Eventos de seguridad</TituloSeccion>
-            <div className="mt-2">
-              {seguridad === null && (
-                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                  No se pudieron leer — que no es lo mismo que «no hay eventos».
-                </p>
-              )}
-              {seguridad !== null && seguridad.length === 0 && (
-                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                  Sin eventos registrados. Los detectores están cableados (firmas, intents, guardia de cifras) — el silencio aquí es bueno de verdad.
-                </p>
-              )}
-              {seguridad !== null && seguridad.map((e) => (
-                <div key={e.id} className="flex items-center gap-2 py-1 text-[12px]" style={{ borderBottom: '1px solid var(--line)' }}>
-                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: e.severidad === 'alta' ? 'var(--bad)' : e.severidad === 'media' ? 'var(--warn, #d97706)' : 'var(--muted)' }} />
-                  <span className="font-medium" style={{ color: 'var(--ink)' }}>{e.tipo.replace(/_/g, ' ')}</span>
-                  <span style={{ color: 'var(--muted)' }}>· {e.origen}</span>
-                  {e.actor && <span className="truncate" style={{ color: 'var(--faint)' }}>· {e.actor}</span>}
-                  <span className="ml-auto tabular shrink-0" style={{ color: 'var(--muted)' }}>{fechaHoraMx(e.creadoEn)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+      {/* ── SLOs (fase 7): objetivos DECLARADOS contra datos reales. cumple=null jamás se pinta verde — sin muestra o sin lectura se
+            dice con esas palabras. ── */}
+      <Tarjeta titulo="SLOs — objetivos contra lo medido">
+        {slos === null && (
+          <p className="m-0 text-xs text-muted">No se pudieron leer los SLOs.</p>
+        )}
+        {slos !== null && (
+          <TablaBase
+            etiqueta="SLOs — objetivos contra lo medido"
+            columnas={COLUMNAS_SLO}
+            filas={slos}
+            idFila={(s) => s.clave}
+            altoMaximo={false}
+          />
+        )}
+      </Tarjeta>
 
-          {/* ── Actividad en vivo (17-ago): commits y CI reales, cada carga.
-                Tres estados honestos — sin llave / API caída / datos. ── */}
-          <div className="card p-3">
-            <TituloSeccion>Actividad del código — en vivo</TituloSeccion>
-            <div className="mt-2">
-              {actividad.estado === 'sin_token' && (
-                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>Sin la llave <code>GITHUB_TOKEN</code> esta sección no puede ver el repo — no es que no haya actividad.</p>
-              )}
-              {actividad.estado === 'error' && (
-                <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>GitHub no contestó — no se sabe qué hay (que no es lo mismo que nada).</p>
-              )}
-              {actividad.estado === 'ok' && (
-                <div className="grid gap-3 lg:grid-cols-2">
-                  <div>
-                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>Últimos commits</p>
-                    <ul className="space-y-1">
-                      {actividad.commits.map((c) => (
-                        <li key={c.sha} className="text-[12px] flex items-center gap-2">
-                          <code className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>{c.sha}</code>
-                          <a href={c.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{c.mensaje}</a>
-                          <span className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>{fechaHoraMx(c.fecha)}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium mb-1.5" style={{ color: 'var(--muted)' }}>CI — últimas corridas</p>
-                    <ul className="space-y-1">
-                      {actividad.ci.map((w, i) => (
-                        <li key={`${w.url}-${i}`} className="text-[12px] flex items-center gap-2">
-                          <StatusPill estado={w.conclusion === 'success' ? 'ok' : w.conclusion === 'failure' ? 'bad' : 'neutral'}>
-                            {w.conclusion ?? w.estado}
-                          </StatusPill>
-                          <a href={w.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{w.nombre}</a>
-                          <span className="shrink-0 text-[11px]" style={{ color: 'var(--muted)' }}>{w.rama}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+      {/* ── Trust & Safety (0133): lo que los detectores atraparon. Firma inválida, intents rechazados, cifras sin respaldo — la
+            memoria de seguridad consultable, no solo logs. ── */}
+      <Tarjeta titulo="Eventos de seguridad">
+        {seguridad === null && (
+          <p className="m-0 text-xs text-muted">
+            No se pudieron leer — que no es lo mismo que «no hay eventos».
+          </p>
+        )}
+        {seguridad !== null && seguridad.length === 0 && (
+          <p className="m-0 text-xs text-muted">
+            Sin eventos registrados. Eso NO prueba que no haya pasado nada: solo cubre lo que las fuentes emiten (la cobertura exacta está en Trust &amp; Safety).
+          </p>
+        )}
+        {seguridad !== null && seguridad.length > 0 && (
+          <TablaBase
+            etiqueta="Eventos de seguridad recientes"
+            columnas={COLUMNAS_SEGURIDAD}
+            filas={seguridad}
+            idFila={(e) => String(e.id)}
+            altoMaximo={false}
+            densa
+          />
+        )}
+      </Tarjeta>
 
-          <div className="card p-3">
-            <TituloSeccion>Repositorio</TituloSeccion>
-            <div className="mt-2">
-              <a href={REPO_URL} target="_blank" rel="noopener noreferrer"
-                className="hairline rounded-lg px-3 py-1.5 flex items-center gap-2.5 transition-colors hover:bg-[var(--canvas)]"
-                style={{ background: 'var(--surface)' }}>
-                <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0" style={{ color: 'var(--muted)' }} />
-                <div className="min-w-0">
-                  <div className="text-[13px] font-medium">Código — GitHub</div>
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>javiercamarapp/likida.ai. Se enlaza en vez de reconstruirse.</div>
-                </div>
-              </a>
+      {/* ── Actividad en vivo (17-ago): commits y CI reales, cada carga. Tres estados honestos — sin llave / API caída / datos. ── */}
+      <Tarjeta titulo="Actividad del código — en vivo">
+        {actividad.estado === 'sin_token' && (
+          <p className="m-0 text-xs text-muted">Sin la llave <code>GITHUB_TOKEN</code> esta sección no puede ver el repo — no es que no haya actividad.</p>
+        )}
+        {actividad.estado === 'error' && (
+          <p className="m-0 text-xs text-muted">GitHub no contestó — no se sabe qué hay (que no es lo mismo que nada).</p>
+        )}
+        {actividad.estado === 'ok' && (
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div>
+              <p className="m-0 mb-1.5 text-xs font-medium text-muted">Últimos commits</p>
+              <ul className="m-0 list-none space-y-1 p-0">
+                {actividad.commits.map((c) => (
+                  <li key={c.sha} className="flex items-center gap-2 text-xs">
+                    <code className="shrink-0 text-[11px] text-muted">{c.sha}</code>
+                    <a href={c.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{c.mensaje}</a>
+                    <span className="shrink-0 text-[11px] text-muted">{fechaHoraMx(c.fecha)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="m-0 mb-1.5 text-xs font-medium text-muted">CI — últimas corridas</p>
+              <ul className="m-0 list-none space-y-1 p-0">
+                {actividad.ci.map((w, i) => (
+                  <li key={`${w.url}-${i}`} className="flex items-center gap-2 text-xs">
+                    <StatusChip tono={w.conclusion === 'success' ? 'ok' : w.conclusion === 'failure' ? 'bad' : 'neutral'}>
+                      {w.conclusion ?? w.estado}
+                    </StatusChip>
+                    <a href={w.url} target="_blank" rel="noreferrer" className="truncate hover:opacity-70">{w.nombre}</a>
+                    <span className="shrink-0 text-[11px] text-muted">{w.rama}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
+        )}
+      </Tarjeta>
 
-          <div className="card p-3">
-            <TituloSeccion>Lo que falta</TituloSeccion>
-            <div className="mt-2">
-              <p className="text-[12px] m-0" style={{ color: 'var(--muted)' }}>Calendario de contribuciones, deploys de Vercel con estado de build, feature flags,
-                tiempo de merge/cobertura/error budget y changelog — lo de GitHub ya entra en vivo arriba (17-ago);
-                lo de Vercel sigue sin integración. Vercel y Sentry ya están enlazados desde
-                Inicio/Observabilidad.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </main>
+      <Tarjeta titulo="Repositorio">
+        <a href={REPO_URL} target="_blank" rel="noopener noreferrer"
+          className="flex items-center gap-2.5 rounded-lg border border-[var(--line)] bg-[var(--surface)] px-3 py-1.5 transition-colors hover:bg-[var(--canvas)]">
+          <ExternalLink width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
+          <span className="min-w-0">
+            <span className="block text-[13px] font-medium">Código — GitHub</span>
+            <span className="block text-xs text-muted">javiercamarapp/likida.ai. Se enlaza en vez de reconstruirse.</span>
+          </span>
+        </a>
+      </Tarjeta>
+
+      <Tarjeta titulo="Lo que falta">
+        <p className="m-0 text-xs text-muted">
+          Calendario de contribuciones, deploys de Vercel con estado de build, feature flags,
+          tiempo de merge/cobertura/error budget y changelog — lo de GitHub ya entra en vivo arriba (17-ago);
+          lo de Vercel sigue sin integración. Vercel y Sentry ya están enlazados desde Inicio/Observabilidad.
+        </p>
+      </Tarjeta>
+    </MarcoPagina>
   );
 }
 

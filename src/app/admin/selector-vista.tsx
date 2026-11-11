@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { Building2, Landmark, Send, ArrowRight } from 'lucide-react';
+import { Tarjeta } from '../ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PUERTA A LOS OTROS CUATRO PANELES — desde el de Javier, sin credenciales.
@@ -79,55 +80,47 @@ export function SelectorVista({ tenants }: {
   tenants: number | null;
 }) {
   return (
-    <section id="vistas" className="p-5 border-t scroll-mt-24" style={{ borderColor: 'var(--line)' }}>
-      <div className="flex items-baseline justify-between gap-3 flex-wrap">
-        <h2 className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-          Entrar a los otros paneles
-        </h2>
-        <span className="text-xs" style={{ color: 'var(--faint)' }}>
-          Con tu propia sesión — no hacen falta credenciales de nadie
-        </span>
-      </div>
+    <Tarjeta titulo="Entrar a los otros paneles" acciones={<span className="text-xs font-normal text-muted">Con tu propia sesión — no hacen falta credenciales de nadie</span>}>
+      <div id="vistas" className="scroll-mt-24">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {VISTAS.map(({ href, titulo, quien, que, Icono }) => (
+            <Link key={href} href={href}
+              className="flex items-start gap-3 rounded-xl border border-[var(--line)] p-3 transition-colors hover:bg-[var(--canvas)]">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--line)] bg-[var(--surface)] text-[var(--marca)]">
+                <Icono width={17} height={17} strokeWidth={1.75} aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-2">
+                  <span className="text-sm font-medium">{titulo}</span>
+                  <code className="text-[11px] text-muted">{quien}</code>
+                  <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0 text-muted" aria-hidden="true" />
+                </span>
+                <span className="mt-1 block text-xs text-muted">{que}</span>
+              </span>
+            </Link>
+          ))}
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-        {VISTAS.map(({ href, titulo, quien, que, Icono }) => (
-          <Link key={href} href={href}
-            className="card p-4 flex items-start gap-3 hover:shadow-md transition-shadow">
-            <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-              style={{ background: 'var(--surface)', border: '1px solid var(--line)' }}>
-              <Icono width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">{titulo}</span>
-                <code className="text-[10px]" style={{ color: 'var(--faint)' }}>{quien}</code>
-                <ArrowRight width={13} height={13} strokeWidth={1.75} className="ml-auto shrink-0" style={{ color: 'var(--muted)' }} />
-              </div>
-              <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>{que}</p>
-            </div>
-          </Link>
-        ))}
+        <p className="m-0 mt-3 text-xs text-muted">
+          {tenants === null ? (
+            <>
+              No se pudo contar cuántas flotas hay, así que no se sabe si estas vistas van a abrir con
+              datos o vacías. Recarga en un momento — esto NO significa que no haya flotas.
+            </>
+          ) : tenants === 0 ? (
+            <>
+              No hay ninguna flota dada de alta, así que las tres vistas abren VACÍAS y lo dicen en pantalla —
+              sirven para mirar el frontend, no para leer una cifra.{' '}
+              <Link href="/admin/flotas" className="font-medium underline">Dar de alta una flota</Link>.
+            </>
+          ) : (
+            <>
+              Cambian lo que se te ENSEÑA, no lo que puedes hacer: tu sesión sigue siendo la de superadmin y cada
+              vista lleva una cinta que lo dice, con el regreso a esta consola.
+            </>
+          )}
+        </p>
       </div>
-
-      <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-        {tenants === null ? (
-          <>
-            No se pudo contar cuántas flotas hay, así que no se sabe si estas vistas van a abrir con
-            datos o vacías. Recarga en un momento — esto NO significa que no haya flotas.
-          </>
-        ) : tenants === 0 ? (
-          <>
-            No hay ninguna flota dada de alta, así que las tres vistas abren VACÍAS y lo dicen en pantalla —
-            sirven para mirar el frontend, no para leer una cifra.{' '}
-            <Link href="/admin/flotas" className="underline font-medium">Dar de alta una flota</Link>.
-          </>
-        ) : (
-          <>
-            Cambian lo que se te ENSEÑA, no lo que puedes hacer: tu sesión sigue siendo la de superadmin y cada
-            vista lleva una cinta que lo dice, con el regreso a esta consola.
-          </>
-        )}
-      </p>
-    </section>
+    </Tarjeta>
   );
 }
