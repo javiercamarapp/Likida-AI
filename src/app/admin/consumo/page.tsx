@@ -7,7 +7,9 @@ import { listarAlertasTopeRecientes, type FilaAlertaTope } from '@/lib/llm/repo'
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx, numero, usd } from '@/lib/formato';
 import { Aviso, BotonEnlace, Disclosure, EstadoError, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { BarList, Columnas, TiraCifras } from '@/app/ui-v2/graficas';
+import { BarList, Columnas, ColumnasApiladas, TiraCifras } from '@/app/ui-v2/graficas';
+import { getT } from '@/lib/i18n/servidor';
+import { gastoApiladoPorFlota } from './apilado';
 
 import '../dinero.css';
 
@@ -83,6 +85,7 @@ export default async function ConsumoPage() {
     listarAlertasTopeRecientes(desdeAvisos).catch(() => null),
   ]);
   const todoCaido = r === null && consumo === null;
+  const { t } = await getT('graficas');
 
   const textoCred = textoCredito(credito);
   const cifraCred = cifraCredito(credito);
@@ -145,6 +148,16 @@ export default async function ConsumoPage() {
           {r ? <BarList etiqueta="Gasto por fase" items={r.porFase.slice(0, 8).map((f) => ({ clave: f.fase, etiqueta: FASE_ROTULO[f.fase] ?? f.fase, valor: f.costoUsd, texto: usd(f.costoUsd), nota: `${numero(f.n)} llamadas` }))} formato={usd} /> : null}
         </Tarjeta>
       </FilaTarjetas>
+
+      {proposito && proposito.filas.length > 0 ? (
+        <Tarjeta titulo={t('consumo.propositos.titulo')} elevar entra="tarjeta">
+          {(() => {
+            const g = gastoApiladoPorFlota(proposito.filas);
+            return <ColumnasApiladas etiqueta={t('consumo.propositos.etiqueta')} series={g.series.map((s) => t(`consumo.propositos.${s}`))} periodos={g.periodos} formato="usd" />;
+          })()}
+          <p className="adm-din-nota">{t('consumo.propositos.nota')}</p>
+        </Tarjeta>
+      ) : null}
 
       <Tarjeta titulo="Por agente, gasto medido contra su techo" estado={consumo ? 'ok' : 'error'} mensaje="La medición por agente no se pudo leer" reintentar>
         {consumo ? (
