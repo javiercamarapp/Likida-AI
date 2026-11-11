@@ -9,6 +9,9 @@ import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { useFormato, useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
 
+/** Filas por tramo (Rovaq: «25 de N» y «Ver más»). */
+const PAGINA = 25;
+
 type FiltroEstado = 'todas' | 'afirmables' | 'sin_verificar';
 
 /**
@@ -25,6 +28,7 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
   const [q, setQ] = useState('');
   const [estado, setEstado] = useState<FiltroEstado>('todas');
   const [abierta, setAbierta] = useState<string | null>(null);
+  const [visibles, setVisibles] = useState(PAGINA);
 
   const porEstado = (n: Norma) => {
     if (estado === 'todas') return true;
@@ -79,13 +83,13 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
             etiqueta={t('cfg.buscar_una_norma')}
             etiquetaOculta
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => { setQ(e.target.value); setVisibles(PAGINA); }}
             placeholder={t('cfg.peaje_20_a_diesel_carta_porte')}
           />
           <SegmentedControl<FiltroEstado>
             etiqueta={t('cfg.estado_de_verificacion')}
             valor={estado}
-            onChange={setEstado}
+            onChange={(v) => { setEstado(v); setVisibles(PAGINA); }}
             opciones={[
               { valor: 'todas', etiqueta: t('cfg.todas'), conteo: conteo('todas') },
               { valor: 'afirmables', etiqueta: t('cfg.se_puede_afirmar'), conteo: conteo('afirmables') },
@@ -100,7 +104,14 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
         { etiqueta: t('cfg.sin_verificar'), matiz: 1, valor: conteo('sin_verificar'), tono: conteo('sin_verificar') > 0 ? 'warn' : undefined },
       ]}
       etiquetaCifras={t('cfg.fichas')}
-      pie={t('e26.con_pie', { n: lista.length, total: normas.length })}
+      pie={(
+        <>
+          {t('e26.con_pie', { n: Math.min(visibles, lista.length), total: lista.length })}
+          {visibles < lista.length ? (
+            <Boton variante="ghost" tamano="sm" className="rv-conocimiento__mas" onClick={() => setVisibles((v) => v + PAGINA)}>{t('r6.con_mas')}</Boton>
+          ) : null}
+        </>
+      )}
       vistaRapida={(
         <Drawer abierto={elegida !== null} onCerrar={() => setAbierta(null)} titulo={elegida ? (elegida.titulo ?? elegida.instrumento) : t('cfg.fichas')} descripcion={elegida ? elegida.instrumento : undefined} tamano="m"
           pie={elegida ? (
@@ -127,7 +138,7 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
       )}
     >
       <TablaBase
-        etiqueta={t('cfg.fichas')} columnas={cols} filas={lista} idFila={(n) => n.id} altoMaximo={false} tarjetaMovil className="rv-conocimiento__tabla"
+        etiqueta={t('cfg.fichas')} columnas={cols} filas={lista.slice(0, visibles)} idFila={(n) => n.id} altoMaximo={false} className="rv-conocimiento__tabla"
         vacio={{
           titulo: buscando ? t('cfg.ninguna_ficha_habla_de_eso') : t('cfg.no_hay_fichas_con_ese_estado'),
           texto: buscando ? t('cfg.no_se_muestra_la_mas_parecida') : t('cfg.prueba_con_otro_estado_de_verificacion'),

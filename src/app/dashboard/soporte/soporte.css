@@ -11,3 +11,14 @@
 .rv-sop__barra { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-width: 0; }
 /* Acción de la cabecera («Abrir ticket»): 32 px / 13 px como toda acción de PageHeader en Rovaq; el disparador compartido de `FormaEnCajon` viene a 28. */
 [data-ui="v2"] .rv-sop__cab .rv-btn { min-height: 32px; padding: 6px 12px; font-size: var(--t-body, 13px); }
+
+/* Tira de cifras como la `pc-kpis` de Rovaq (igual que /vendedor y Avisos): sin filete superior y con la PISTA punteada de 6 px. La pista es solo forma (no mide nada) y se omite con la celda en error o sin dato. */
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi { min-height: 0; border-top-width: 0; }
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .rv-esq:has(.rv-sop__tabla) .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; }

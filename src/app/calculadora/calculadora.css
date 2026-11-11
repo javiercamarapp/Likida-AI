@@ -1,7 +1,6 @@
 /* Calculadora pública: formulario y resultado con las piezas del sistema; solo la rejilla y el tipo de cifra viven aquí. */
 .rv-calc { display: grid; gap: 0; margin-top: 20px; }
-/* UNA sola tarjeta (la del marco, `rv-flujo`): la calculadora se ensancha a 720 y sus bloques se separan con divisor y h2 de 16/600, sin tarjetas anidadas. */
-[data-ui="v2"] .rv-pub__main[data-ancho]:has(> .rv-flujo):has(.rv-calc) { max-width: 720px; }
+/* UNA sola tarjeta (la del marco, `rv-flujo`) y UN solo ancho para todo el marco público (640, como el `access-flow` de Rovaq): el formulario y la prosa llenan la columna de 544 y los bloques se separan con divisor y h2 de 16/600, sin tarjetas anidadas. */
 .rv-calc__bloque { display: grid; gap: 12px; padding: 20px 0; border-top: 1px solid var(--line); }
 .rv-calc__bloque:first-child { padding-top: 0; border-top: 0; }
 .rv-calc__bloque:last-child { padding-bottom: 0; }
