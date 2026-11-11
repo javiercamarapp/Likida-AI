@@ -10,9 +10,10 @@ import type { DocumentoFila, EstadoEnvioTms } from '@/lib/likida/carta_porte_doc
 import { BotonEnvio, FormaAccion, type AccionDoc } from './forma_accion';
 import {
   AvisoCompacto, Aviso, BarraFiltros, BotonEnlace, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, CamposSistema, Disclosure, EstadoError, EstadoVacio,
-  FiltroOpciones, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
+  FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './documentos.css';
 
 /**
@@ -126,16 +127,28 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
   usuarioId?: string | null; tr?: Tr;
 }) {
   return (
-    <MarcoPagina titulo={tr('cartaPorte.documentos.vista.documentosDeClientes')} apoyo={tr('cartaPorte.documentos.vista.losDocumentosQueMandan')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/carta-porte${sufijo}`}>{tr('cartaPorte.documentos.vista.volverACartaPorte')}</BotonEnlace>}>
-      <Aviso tono="info">
-        {rico(tr('cartaPorte.documentos.vista.tusClientesMandanLa'), { strong: (c) => <strong>{c}</strong> })}
-      </Aviso>
-
+    <EsqueletoTablaMaestra
+      titulo={tr('cartaPorte.documentos.vista.documentosDeClientes')}
+      apoyo={tr('cartaPorte.documentos.vista.losDocumentosQueMandan')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/carta-porte${sufijo}`}>{tr('cartaPorte.documentos.vista.volverACartaPorte')}</BotonEnlace>}
+      avisos={(
+        <>
+          <Aviso tono="info">
+            {rico(tr('cartaPorte.documentos.vista.tusClientesMandanLa'), { strong: (c) => <strong>{c}</strong> })}
+          </Aviso>
+          {datos?.metricas.parcial && (
+            <AvisoCompacto tono="warn" resumen={tr('cartaPorte.documentos.vista.cifrasDeLosMas', { v: numero(datos.metricas.parcial.leidos), v2: numero(datos.metricas.parcial.total) })} />
+          )}
+        </>
+      )}
+      cifras={datos === null ? undefined : cifrasMetricas(datos.metricas, tr)}
+      etiquetaCifras={tr('cartaPorte.documentos.vista.metricasDelAgente')}
+    >
       {datos === null ? (
         <EstadoError reintentar>{tr('cartaPorte.documentos.vista.noPudeLeerLos')}</EstadoError>
       ) : (
         <>
-          <Metricas tr={tr} m={datos.metricas} />
+          <NotaMetricas tr={tr} m={datos.metricas} />
           {acciones.subir && <Subir tr={tr} accion={acciones.subir} clientes={datos.clientes} />}
           <Bandeja tr={tr} datos={datos} acciones={acciones} sufijo={sufijo} filtroEnvio={filtroEnvio} perfilRestringido={perfilRestringido} soloMios={soloMios} usuarioId={usuarioId} />
           <Canales tr={tr} buzon={datos.buzon} acciones={acciones} />
@@ -143,38 +156,36 @@ export function VistaDocumentos({ datos, acciones, sufijo = '', apiSufijo = '', 
           <Exportacion tr={tr} configs={datos.configs} acciones={acciones} apiSufijo={apiSufijo} />
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
-function Metricas({ m, tr = trEs }: { m: MetricasAgente; tr?: Tr }) {
+function cifrasMetricas(m: MetricasAgente, tr: Tr = trEs): PropsCifra[] {
+  return [
+    { info: 'carta_porte_docs.recibidos', etiqueta: tr('cartaPorte.documentos.vista.documentosRecibidos90Dias'), valor: numero(m.recibidos), nota: tr('cartaPorte.documentos.vista.porRevisarSinPoder', { v: numero(m.porRevisar), v2: numero(m.fallidos) }) },
+    { info: 'carta_porte_docs.aprobados', etiqueta: tr('cartaPorte.documentos.vista.aprobados'), valor: numero(m.aprobados), nota: tr('cartaPorte.documentos.vista.rechazados', { n: numero(m.rechazados) }) },
+    {
+      info: 'carta_porte_docs.sin_correccion',
+      etiqueta: tr('cartaPorte.documentos.vista.aprobadosSinCorreccion'),
+      valor: m.pctSinCorreccion === null ? '—' : porcentaje(m.pctSinCorreccion, 0),
+      nota: m.pctSinCorreccion === null ? tr('cartaPorte.documentos.vista.aunNoHayAprobados') : tr('cartaPorte.documentos.vista.deConfirmarUnDato', { v: numero(m.sinCorreccion), v2: numero(m.aprobados) }),
+    },
+    {
+      info: 'carta_porte_docs.tiempo_ahorrado',
+      etiqueta: tr('cartaPorte.documentos.vista.tiempoAhorradoPorEmbarque'),
+      valor: m.minutosAhorradosPorEmbarque === null ? '—' : `${numero(m.minutosAhorradosPorEmbarque)} min`,
+      nota: m.minutosAhorradosPorEmbarque === null
+        ? tr('cartaPorte.documentos.vista.seCalculaConEl')
+        : tr('cartaPorte.documentos.vista.estimacionMinDeCaptura', { v: numero(MINUTOS_CAPTURA_MANUAL_EMBARQUE), v2: numero(m.minutosRevisionPromedio ?? 0), v3: numero(m.aprobadosMedidos) }),
+    },
+  ];
+}
+
+function NotaMetricas({ m, tr = trEs }: { m: MetricasAgente; tr?: Tr }) {
   return (
-    <>
-      {m.parcial && (
-        <AvisoCompacto tono="warn" resumen={tr('cartaPorte.documentos.vista.cifrasDeLosMas', { v: numero(m.parcial.leidos), v2: numero(m.parcial.total) })} />
-      )}
-      <TiraCifras etiqueta={tr('cartaPorte.documentos.vista.metricasDelAgente')}>
-        <Cifra info="carta_porte_docs.recibidos" etiqueta={tr('cartaPorte.documentos.vista.documentosRecibidos90Dias')} valor={numero(m.recibidos)} nota={tr('cartaPorte.documentos.vista.porRevisarSinPoder', { v: numero(m.porRevisar), v2: numero(m.fallidos) })} />
-        <Cifra info="carta_porte_docs.aprobados" etiqueta={tr('cartaPorte.documentos.vista.aprobados')} valor={numero(m.aprobados)} nota={tr('cartaPorte.documentos.vista.rechazados', { n: numero(m.rechazados) })} />
-        <Cifra
-          info="carta_porte_docs.sin_correccion"
-          etiqueta={tr('cartaPorte.documentos.vista.aprobadosSinCorreccion')}
-          valor={m.pctSinCorreccion === null ? '—' : porcentaje(m.pctSinCorreccion, 0)}
-          nota={m.pctSinCorreccion === null ? tr('cartaPorte.documentos.vista.aunNoHayAprobados') : tr('cartaPorte.documentos.vista.deConfirmarUnDato', { v: numero(m.sinCorreccion), v2: numero(m.aprobados) })}
-        />
-        <Cifra
-          info="carta_porte_docs.tiempo_ahorrado"
-          etiqueta={tr('cartaPorte.documentos.vista.tiempoAhorradoPorEmbarque')}
-          valor={m.minutosAhorradosPorEmbarque === null ? '—' : `${numero(m.minutosAhorradosPorEmbarque)} min`}
-          nota={m.minutosAhorradosPorEmbarque === null
-            ? tr('cartaPorte.documentos.vista.seCalculaConEl')
-            : tr('cartaPorte.documentos.vista.estimacionMinDeCaptura', { v: numero(MINUTOS_CAPTURA_MANUAL_EMBARQUE), v2: numero(m.minutosRevisionPromedio ?? 0), v3: numero(m.aprobadosMedidos) })}
-        />
-      </TiraCifras>
-      <p className="rv-doc__tenue">
-        {tr('cartaPorte.documentos.vista.costoDeIaEn', { v: usd4(m.costoUsdTotal), v2: m.costoUsdPorDocumento !== null ? ' ' + tr('cartaPorte.documentos.vista.porDocumento', { v: usd4(m.costoUsdPorDocumento) }) : '', v3: m.sinModelo > 0 ? ' ' + tr('cartaPorte.documentos.vista.documentosSeLeyeronSin', { v: numero(m.sinModelo) }) : '', v4: m.aprobadosSinMedir > 0 ? ' ' + tr('cartaPorte.documentos.vista.aprobadosNoTienenTiempo', { v: numero(m.aprobadosSinMedir) }) : '' })}
-      </p>
-    </>
+    <p className="rv-doc__tenue">
+      {tr('cartaPorte.documentos.vista.costoDeIaEn', { v: usd4(m.costoUsdTotal), v2: m.costoUsdPorDocumento !== null ? ' ' + tr('cartaPorte.documentos.vista.porDocumento', { v: usd4(m.costoUsdPorDocumento) }) : '', v3: m.sinModelo > 0 ? ' ' + tr('cartaPorte.documentos.vista.documentosSeLeyeronSin', { v: numero(m.sinModelo) }) : '', v4: m.aprobadosSinMedir > 0 ? ' ' + tr('cartaPorte.documentos.vista.aprobadosNoTienenTiempo', { v: numero(m.aprobadosSinMedir) }) : '' })}
+    </p>
   );
 }
 

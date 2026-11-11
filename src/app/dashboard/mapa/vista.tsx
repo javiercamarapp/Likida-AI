@@ -3,9 +3,10 @@ import { MapPinOff } from 'lucide-react';
 import { numero, fechaHoraMx } from '@/lib/formato';
 import { nivelDePosicion, contarPorFrescura, ROTULO_FRESCURA, TONO_FRESCURA, MINUTOS_ATRASADA } from '@/lib/likida/gps_salud';
 import { MapaVivo, type ViajeEnMapa, type PinUnidad } from './mapa-vivo';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { Aviso, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import './mapa.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -113,40 +114,45 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
   const dibujados = ubicados.length + sinUbicar.length;
   const recortado = totalVivos !== null && totalVivos > dibujados;
 
+  // FE-5: este KPI contaba los vivos ENTRE las 100 filas más recientes — ~90 minutos de operación a 50k viajes/mes. Ahora es el conteo
+  // real de la flota; lo acotado es el DIBUJO. AUDITORÍA 20 (H5): el GPS existía y no se veía. `—` cuando la lectura no se pudo hacer:
+  // nunca un 0 inventado, que aquí significaría "ninguna unidad reporta".
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('mapa.cifra.encurso'), valor: totalVivos === null ? '—' : numero(totalVivos, idioma),
+      nota: totalVivos === null ? t('mapa.nocontar') : t('mapa.abiertos'), info: 'mapa.viajes_en_curso' },
+    { etiqueta: t('mapa.cifra.enmapa'), valor: numero(ubicados.length, idioma), info: 'mapa.en_el_mapa' },
+    { etiqueta: t('mapa.cifra.sinubicar'), valor: numero(sinUbicar.length, idioma),
+      nota: sinUbicar.length > 0 ? t('mapa.sinubicar.nota') : undefined,
+      tono: sinUbicar.length > 0 ? 'warn' : undefined, info: 'mapa.sin_ubicar' },
+    { etiqueta: t('mapa.cifra.escalados'), valor: numero(escalados, idioma), tono: escalados > 0 ? 'bad' : undefined, info: 'mapa.escalados' },
+    { etiqueta: t('mapa.cifra.unidades'),
+      valor: rastreo.unidadesConPosicion === null ? '—' : numero(rastreo.unidadesConPosicion, idioma),
+      nota: rastreo.error !== null
+        ? t('mapa.norastreo')
+        : rastreo.ultimaPosicion !== null
+          ? `última: ${fechaHoraMx(rastreo.ultimaPosicion, idioma)}`
+          : t('mapa.sinposicion'),
+      tono: rastreo.error !== null ? 'warn' : undefined, info: 'mapa.unidades_con_posicion' },
+  ];
+
   return (
-    <MarcoPagina titulo={t('mapa.titulo')} apoyo={t('mapa.apoyo')}>
-
-      <TiraCifras sello={selloHoy('Viajes en curso')}>
-        {/* FE-5: este KPI contaba los vivos ENTRE las 100 filas más recientes — ~90 minutos de operación a 50k viajes/mes. Ahora es
-            el conteo real de la flota; lo acotado es el DIBUJO. */}
-        <Cifra etiqueta={t('mapa.cifra.encurso')} valor={totalVivos === null ? '—' : numero(totalVivos, idioma)}
-          nota={totalVivos === null ? t('mapa.nocontar') : t('mapa.abiertos')} info="mapa.viajes_en_curso" />
-        <Cifra etiqueta={t('mapa.cifra.enmapa')} valor={numero(ubicados.length, idioma)} info="mapa.en_el_mapa" />
-        <Cifra etiqueta={t('mapa.cifra.sinubicar')} valor={numero(sinUbicar.length, idioma)}
-          nota={sinUbicar.length > 0 ? t('mapa.sinubicar.nota') : undefined}
-          tono={sinUbicar.length > 0 ? 'warn' : undefined} info="mapa.sin_ubicar" />
-        <Cifra etiqueta={t('mapa.cifra.escalados')} valor={numero(escalados, idioma)} tono={escalados > 0 ? 'bad' : undefined} info="mapa.escalados" />
-        {/* AUDITORÍA 20 (H5): el GPS existía y no se veía. `null` cuando la lectura no se pudo hacer — nunca un 0 inventado, que aquí
-            significaría "ninguna unidad reporta". */}
-        <Cifra etiqueta={t('mapa.cifra.unidades')}
-          valor={rastreo.unidadesConPosicion === null ? '—' : numero(rastreo.unidadesConPosicion, idioma)}
-          nota={rastreo.error !== null
-            ? t('mapa.norastreo')
-            : rastreo.ultimaPosicion !== null
-              ? `última: ${fechaHoraMx(rastreo.ultimaPosicion, idioma)}`
-              : t('mapa.sinposicion')}
-          tono={rastreo.error !== null ? 'warn' : undefined} info="mapa.unidades_con_posicion" />
-      </TiraCifras>
-      {/* El tope se declara. Antes decía "los N viajes más recientes" mezclando liquidados y vivos; ahora la base ya filtró por estatus
-          y lo único que se recorta es cuántos caben dibujados. */}
-      <p className="rv-mp__nota">
-        {recortado
-          ? t('mapa.dibujan.n', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) })
-          : t('mapa.dibujan.todos')}
-      </p>
-
-      <MapaVivo viajes={ubicados} pines={rastreo.pines} />
-
+    <EsqueletoPanelCifras
+      titulo={t('mapa.titulo')}
+      apoyo={t('mapa.apoyo')}
+      cifras={cifras}
+      selloCifras={selloHoy('Viajes en curso')}
+      variante="12"
+      graficas={[<MapaVivo key="mapa" viajes={ubicados} pines={rastreo.pines} />]}
+      metodo={(
+        // El tope se declara. Antes decía "los N viajes más recientes" mezclando liquidados y vivos; ahora la base ya filtró por estatus
+        // y lo único que se recorta es cuántos caben dibujados.
+        <>
+          {recortado
+            ? t('mapa.dibujan.n', { tope: numero(tope, idioma), total: numero(totalVivos!, idioma) })
+            : t('mapa.dibujan.todos')}
+        </>
+      )}
+    >
       {/* ── EL GPS, CON SUS PALABRAS ──────────────────────────────────
           Tres estados y ninguno se confunde con otro: no se pudo leer / no hay conector ni un solo pin / esto es lo que reportaron las
           unidades. El tercero se lista con hora y proveedor porque una coordenada sin cuándo ni quién la mandó no es verificable. */}
@@ -235,6 +241,6 @@ export function VistaMapa({ tr = TR_OPERACION_ES, ubicados, sinUbicar, totalVivo
           </ul>
         </Tarjeta>
       )}
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }

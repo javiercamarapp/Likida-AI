@@ -1,6 +1,8 @@
 import { Mail, FileText, ShieldCheck, Globe, MapPin, Stamp, type LucideIcon } from 'lucide-react';
 import type { Conector } from '@/lib/likida/conexiones';
-import { Icono, InfoTip, MarcoPagina, MarcaIntegracion, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Icono, InfoTip, MarcaIntegracion, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './conexiones.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
@@ -55,8 +57,17 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
   /** La sección «GPS»: salud por integración, push propio, huérfanos y mapeo (W3). */
   gps?: React.ReactNode; t?: TResto;
 }) {
+  // Conteos por estado MEDIDO del conector (cada uno sale de la lectura; «no se pudo medir» tiene su propia celda, nunca se suma a «sin conectar»).
+  const n = (e: Conector['estado']) => conectores.filter((c) => c.estado === e).length;
+  const rotulos = estadoConector(t);
+  const cifras: PropsCifra[] = [
+    { etiqueta: rotulos.listo.rotulo, valor: n('listo') },
+    { etiqueta: rotulos.incompleto.rotulo, valor: n('incompleto'), tono: n('incompleto') > 0 ? 'warn' : undefined },
+    { etiqueta: rotulos.sin_configurar.rotulo, valor: n('sin_configurar') },
+    { etiqueta: rotulos.no_medible.rotulo, valor: n('no_medible'), tono: n('no_medible') > 0 ? 'warn' : undefined },
+  ];
   return (
-    <MarcoPagina titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')}>
+    <EsqueletoTablaMaestra titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')} cifras={cifras}>
       {estado}
 
       <div data-tour="conexiones.estado">
@@ -92,6 +103,6 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
       {gps}
 
       <div data-tour="conexiones.credenciales">{credenciales}</div>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

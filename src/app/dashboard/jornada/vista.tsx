@@ -13,10 +13,11 @@ import type { SemanaEvaluada } from '@/lib/likida/jornada/semanas';
 import type { AlertaDeJornada } from '@/lib/likida/jornada/alerta_tope_datos';
 import { ROTULO_NIVEL, horasTexto } from '@/lib/likida/jornada/alerta_tope';
 import { FormasJornada, FormaPolitica, FormaAlertaTope, type AccionJornada, type ConfigAlertaForma } from './formas';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  Aviso, AvisoCompacto, BarraPeriodo, clasesBoton, EstadoError, EstadoVacio, hrefConParams, Icono, InfoTip, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, AvisoCompacto, BarraPeriodo, clasesBoton, EstadoError, EstadoVacio, hrefConParams, Icono, InfoTip, StatusChip, TablaBase, Tarjeta, BotonEnlace,
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import './jornada.css';
@@ -167,45 +168,41 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
         </>
       ),
     },
+    {
+      id: 'vr', titulo: t('jor.vr.ver'), alinear: 'der', tituloOculto: true,
+      celda: (f) => <BotonEnlace variante="ghost" tamano="sm" href={hrefJornada(f)}>{t('jor.vr.ver')}</BotonEnlace>,
+    },
   ];
   const hrefJornada = (f: FilaJornada) => `/dashboard/jornada${sufijo ? `${sufijo}&` : '?'}desde=${desde}&hasta=${hasta}&abrir=${f.jornadaId}`;
+  const hrefCerrar = `/dashboard/jornada${sufijo ? `${sufijo}&` : '?'}desde=${desde}&hasta=${hasta}${operador ? `&operador=${encodeURIComponent(operador)}` : ''}`;
+  const sel = abrir !== null ? lista.find((f) => f.jornadaId === abrir) : undefined;
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('jor.cifra.sinregistro'), valor: cuenta && numero(cuenta.sinRegistro, idioma),
+      nota: t('jor.cifra.sinregistro.nota'), tono: cuenta && cuenta.sinRegistro > 0 ? 'warn' : undefined, info: 'jornada.sin_registro' },
+    { etiqueta: t('jor.cifra.exceso'), valor: cuenta && numero(cuenta.conExceso, idioma),
+      nota: t('jor.cifra.exceso.nota'), tono: cuenta && cuenta.conExceso > 0 ? 'bad' : undefined, info: 'jornada.posible_exceso' },
+    { etiqueta: t('jor.cifra.insuficiente'), valor: cuenta && numero(cuenta.insuficientes, idioma),
+      nota: t('jor.cifra.insuficiente.nota'), tono: cuenta && cuenta.insuficientes > 0 ? 'warn' : undefined, info: 'jornada.dato_insuficiente' },
+    { etiqueta: t('jor.cifra.sinconformidad'), valor: cuenta && numero(cuenta.sinConformidad, idioma),
+      nota: t('jor.cifra.sinconformidad.nota'), tono: cuenta && cuenta.sinConformidad > 0 ? 'warn' : undefined, info: 'jornada.sin_conformidad' },
+  ];
 
   return (
-    <MarcoPagina titulo={t('jor.titulo')} apoyo={t('jor.apoyo')}>
-
-      {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al pie: una flota que crea que esto sustituye la bitácora de horas
-          de servicio se lleva la multa del art. 83 con nuestro archivo en la mano. */}
-      <AvisoCompacto tono="warn" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas="Ver más: alcance legal"
-        mas={(
-          <>
-            <strong>{t('jor.nota.ley')}</strong> <InfoTip clave="jornada.alcance" />
-            <p>{LEYENDA_NOM_087}</p>
-            <p>{LEYENDA_VEREDICTOS}</p>
-          </>
-        )} />
-
-      <TiraCifras sello={selloHoy('Registro de jornada')}>
-        <Cifra etiqueta={t('jor.cifra.sinregistro')} valor={cuenta && numero(cuenta.sinRegistro, idioma)}
-          nota={t('jor.cifra.sinregistro.nota')} tono={cuenta && cuenta.sinRegistro > 0 ? 'warn' : undefined} info="jornada.sin_registro" />
-        <Cifra etiqueta={t('jor.cifra.exceso')} valor={cuenta && numero(cuenta.conExceso, idioma)}
-          nota={t('jor.cifra.exceso.nota')} tono={cuenta && cuenta.conExceso > 0 ? 'bad' : undefined} info="jornada.posible_exceso" />
-        <Cifra etiqueta={t('jor.cifra.insuficiente')} valor={cuenta && numero(cuenta.insuficientes, idioma)}
-          nota={t('jor.cifra.insuficiente.nota')} tono={cuenta && cuenta.insuficientes > 0 ? 'warn' : undefined} info="jornada.dato_insuficiente" />
-        <Cifra etiqueta={t('jor.cifra.sinconformidad')} valor={cuenta && numero(cuenta.sinConformidad, idioma)}
-          nota={t('jor.cifra.sinconformidad.nota')} tono={cuenta && cuenta.sinConformidad > 0 ? 'warn' : undefined} info="jornada.sin_conformidad" />
-      </TiraCifras>
-
-      <Tarjeta titulo={t('jor.periodo.del', { desde, hasta })} info="jornada.registro"
-        acciones={(
-          // `<a>` y no `Link`: es un archivo que baja, no una ruta que se precarga (un prefetch dispararía la exportación).
-          <a href={urlExport} className={clasesBoton('secondary', 'sm')}>
-            <Icono icono={Download} />
-            {t('jor.descargar')}
-          </a>
-        )}>
-
-        {/* El filtro de fechas por GET: mueve TODO lo que hay debajo, incluida la liga de descarga. Un rótulo que dice «del X al Y»
-            tiene que ser cierto para las dos cosas. */}
+    <EsqueletoTablaMaestra
+      titulo={t('jor.titulo')}
+      apoyo={t('jor.apoyo')}
+      acciones={(
+        // `<a>` y no `Link`: es un archivo que baja, no una ruta que se precarga (un prefetch dispararía la exportación).
+        <a href={urlExport} className={clasesBoton('secondary', 'sm')}>
+          <Icono icono={Download} />
+          {t('jor.descargar')}
+        </a>
+      )}
+      cifras={cifras}
+      selloCifras={selloHoy('Registro de jornada')}
+      filtros={(
+        // El filtro de fechas por GET: mueve TODO lo que hay debajo, incluida la liga de descarga. Un rótulo que dice «del X al Y»
+        // tiene que ser cierto para las dos cosas.
         <BarraPeriodo etiqueta={t('jor.periodo.aria')}
           chips={[
             { id: 'rango', etiqueta: t('jor.periodo.del', { desde: fechaMx(desde, idioma), hasta: fechaMx(hasta, idioma) }) },
@@ -218,26 +215,63 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
             // FE-19: con cientos de choferes la ventana por omisión nace truncada casi siempre; sin este selector la única forma de ver a UN operador era teclear su id en la URL.
             campos: operadores && operadores.length > 0 ? { items: [{ tipo: 'select', nombre: 'operador', etiqueta: t('jor.operador'), valor: operador ?? '', opciones: [{ valor: '', rotulo: 'Todos' }, ...operadores.map((o) => ({ valor: o.id, rotulo: o.nombre }))] }] } : undefined,
           }} />
-        {operadores === null && (
-          <p className="rv-jn__aviso">
-            No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.
-          </p>
-        )}
+      )}
+      avisos={(
+        <>
+          {/* QUÉ ES ESTE DOCUMENTO Y QUÉ NO ES. Va arriba, no en una nota al pie: una flota que crea que esto sustituye la bitácora de horas
+              de servicio se lleva la multa del art. 83 con nuestro archivo en la mano. */}
+          <AvisoCompacto tono="warn" resumen={LEYENDA_NO_ES_BITACORA_83} etiquetaMas="Ver más: alcance legal"
+            mas={(
+              <>
+                <strong>{t('jor.nota.ley')}</strong> <InfoTip clave="jornada.alcance" />
+                <p>{LEYENDA_NOM_087}</p>
+                <p>{LEYENDA_VEREDICTOS}</p>
+              </>
+            )} />
+          {operadores === null && (
+            <p className="rv-jn__aviso">
+              No se pudo leer el catálogo de operadores — el filtro por URL (<code>?operador=</code>) sigue funcionando.
+            </p>
+          )}
+        </>
+      )}
+      vistaRapida={sel ? (
+        // El detalle y las correcciones del día abierto. Un solo día a la vez: pintar un formulario por cada renglón mete cientos de
+        // forms en una pantalla donde se corrige uno (la lección de FE-12 en /dashboard/operadores).
+        <CajonVistaRapida
+          titulo={sel.operadorNombre}
+          subtitulo={t('jor.vr.sub', { n: numero(lista.indexOf(sel) + 1, idioma), total: numero(lista.length, idioma) })}
+          hrefCerrar={hrefCerrar}
+          cifras={[
+            { etiqueta: t('jor.col.dia'), valor: sel.dia },
+            { etiqueta: t('jor.col.estado'), valor: sel.estado === 'cerrado' ? 'Cerrado' : t('jor.abierto') },
+            { etiqueta: t('jor.col.lectura'), valor: ROTULO_VEREDICTO[sel.riesgo.veredicto] },
+            { etiqueta: t('jor.col.descanso'), valor: sel.jornada.minutosDescanso === null ? t('jor.sindescanso') : `${sel.jornada.minutosDescanso} min` },
+          ]}
+        >
+          <FormasJornada
+            fila={sel}
+            puedeCorregir={puedeCorregir && sel.editable}
+            anularMarca={anularMarca}
+            capturarMarca={capturarMarca}
+            cerrarElDia={cerrarElDia}
+          />
+        </CajonVistaRapida>
+      ) : null}
+    >
+      {truncada && (
+        <EstadoError>{t('jor.truncada')}</EstadoError>
+      )}
 
-        {truncada && (
-          <EstadoError>{t('jor.truncada')}</EstadoError>
-        )}
-
-        {motivoIlegible !== null ? (
-          <EstadoError reintentar>{`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`}</EstadoError>
-        ) : lista.length === 0 ? (
-          <EstadoVacio icono={CalendarClock} titulo={t('jor.vacio.titulo')}>
-            {t('jor.vacio')}
-          </EstadoVacio>
-        ) : (
-          <TablaBase<FilaJornada> etiqueta={t('jor.tabla.etiqueta')} columnas={columnas} filas={lista} idFila={(f) => f.jornadaId} tarjetaMovil />
-        )}
-      </Tarjeta>
+      {motivoIlegible !== null ? (
+        <EstadoError reintentar>{`${motivoIlegible} No se enseña media lista: media lista se ve igual que la lista entera, solo más corta — y aquí eso sería afirmar que unos operadores no reportaron.`}</EstadoError>
+      ) : lista.length === 0 ? (
+        <EstadoVacio icono={CalendarClock} titulo={t('jor.vacio.titulo')}>
+          {t('jor.vacio')}
+        </EstadoVacio>
+      ) : (
+        <TablaBase<FilaJornada> etiqueta={t('jor.tabla.etiqueta')} columnas={columnas} filas={lista} idFila={(f) => f.jornadaId} tarjetaMovil />
+      )}
 
       {/* ── EL EJE SEMANAL (tableros al día, 28-ago-2026) ──────────────
           El tope del decreto es SEMANAL: un contralor podía tener catorce días verdes uno por uno y una semana de 63 h — y esta
@@ -245,18 +279,6 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
           bien» con el recorte. */}
       {motivoIlegible === null && (
         <SeccionSemanas semanas={semanas} truncada={truncada} tr={tr} />
-      )}
-
-      {/* El detalle y las correcciones del día abierto. Un solo día a la vez: pintar un formulario por cada renglón mete cientos de
-          forms en una pantalla donde se corrige uno (la lección de FE-12 en /dashboard/operadores). */}
-      {abrir !== null && lista.some((f) => f.jornadaId === abrir) && (
-        <FormasJornada
-          fila={lista.find((f) => f.jornadaId === abrir)!}
-          puedeCorregir={puedeCorregir && lista.find((f) => f.jornadaId === abrir)!.editable}
-          anularMarca={anularMarca}
-          capturarMarca={capturarMarca}
-          cerrarElDia={cerrarElDia}
-        />
       )}
 
       <PoliticaSeccion
@@ -278,7 +300,7 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
           guardarAlerta={guardarAlerta}
         />
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

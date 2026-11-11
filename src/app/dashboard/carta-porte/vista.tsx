@@ -7,8 +7,10 @@ import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
 import { numero } from '@/lib/formato';
 import { FormaDeclaracion, FormaMercancia, FormaDatosCliente, BotonBorrarMercancia, type AccionForma } from './forma';
 import {
-  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta,
+  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, StatusChip, Tarjeta,
 } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './carta-porte.css';
 
 /**
@@ -45,22 +47,36 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
   sufijo?: string; tr?: Tr;
 }) {
   const acciones: AccionesCcp = { declarar, agregarMercancia, quitarMercancia, guardarDatosCliente };
+  // Las cifras cuentan SOLO los viajes evaluados (puede haber más: la nota lo dice); sin lectura no hay tira (nunca ceros de relleno).
+  const evaluados = datos?.viajes ?? [];
+  const cuenta = (k: string) => evaluados.filter((v) => v.decision.necesita === k).length;
+  const cifras: PropsCifra[] | undefined = datos === null ? undefined : [
+    { etiqueta: tr('cartaPorte.vista.cifra.evaluados'), valor: numero(evaluados.length), nota: datos.viajes.length < datos.total ? tr('cartaPorte.vista.cifra.nota', { v: numero(datos.total) }) : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.necesitan'), valor: numero(cuenta('si')), tono: cuenta('si') > 0 ? 'warn' : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.faltan'), valor: numero(cuenta('falta_declarar')), tono: cuenta('falta_declarar') > 0 ? 'bad' : undefined },
+    { etiqueta: tr('cartaPorte.vista.cifra.sinComplemento'), valor: numero(cuenta('no')) },
+  ];
   return (
-    <MarcoPagina titulo={tr('cartaPorte.vista.cartaPorte')} apoyo={tr('cartaPorte.vista.porCadaViajeEn')}>
-      <AvisoCompacto tono="info"
-        resumen={tr('cartaPorte.vista.laLeyLimitaLa')}
-        mas={<p>{rico(tr('cartaPorte.vista.seEvaluaComoStrong'), { strong: (c) => <strong>{c}</strong> })}</p>} />
+    <EsqueletoTablaMaestra
+      titulo={tr('cartaPorte.vista.cartaPorte')}
+      apoyo={tr('cartaPorte.vista.porCadaViajeEn')}
+      cifras={cifras}
+      avisos={(
+        <>
+          <AvisoCompacto tono="info"
+            resumen={tr('cartaPorte.vista.laLeyLimitaLa')}
+            mas={<p>{rico(tr('cartaPorte.vista.seEvaluaComoStrong'), { strong: (c) => <strong>{c}</strong> })}</p>} />
 
-      {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del
-          siniestro. Es incondicional a propósito — Likida hoy no captura
-          ValorMercancia, así que no hay un "por viaje" que evaluar: el
-          dato correcto es que se declara AL EMITIR con el PAC, y la
-          consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
-      <Aviso tono="warn" titulo={AVISO_VALOR_MERCANCIA.titulo}>
-        {AVISO_VALOR_MERCANCIA.cuerpo}{' '}
-        <span className="rv-ccp__tenue">{AVISO_VALOR_MERCANCIA.fundamento}</span>
-      </Aviso>
-
+          {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del siniestro. Es incondicional a propósito — Likida hoy no captura
+              ValorMercancia, así que no hay un "por viaje" que evaluar: el dato correcto es que se declara AL EMITIR con el PAC, y la
+              consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
+          <Aviso tono="warn" titulo={AVISO_VALOR_MERCANCIA.titulo}>
+            {AVISO_VALOR_MERCANCIA.cuerpo}{' '}
+            <span className="rv-ccp__tenue">{AVISO_VALOR_MERCANCIA.fundamento}</span>
+          </Aviso>
+        </>
+      )}
+    >
       {datos !== null && datos.hazmatDeclarado === true && (
         <Aviso tono="warn">
           {rico(tr('cartaPorte.vista.tuFlotaDeclaroQue'), { strong: (c) => <strong>{c}</strong> })}
@@ -87,7 +103,7 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
           )}
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
