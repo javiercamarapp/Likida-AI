@@ -264,6 +264,8 @@ a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 [data-ui="v2"] .rv-colum__base { stroke: var(--chart-eje); stroke-width: 1; }
 [data-ui="v2"] .rv-gr__rejilla { stroke: var(--chart-rejilla); stroke-width: 1; }
 [data-ui="v2"] .rv-gr__marca { font: 500 12px/1 var(--font-sans-ui, inherit); fill: var(--muted); font-variant-numeric: tabular-nums; }
+/* Unidad del eje Y («US$», «MXN», «cierres»), arriba a la izquierda del eje, como Rovaq rotula sus ejes con unidad. */
+[data-ui="v2"] .rv-gr__unidad { font: 600 11px/1 var(--font-sans-ui, inherit); fill: var(--muted); letter-spacing: .02em; }
 [data-ui="v2"] .rv-gr__nota { font: 500 12px/1 var(--font-sans-ui, inherit); fill: var(--muted); }
 [data-ui="v2"] .rv-gr__directa { font: 600 12px/1 var(--font-sans-ui, inherit); fill: var(--ink); font-variant-numeric: tabular-nums; }
 [data-ui="v2"] .rv-colum__col { outline: none; }
