@@ -84,6 +84,12 @@ describe('movimiento', () => {
 });
 
 describe('pie del sidebar y tokens de shell', () => {
+  it('el pie es GRIS como el de Rovaq: fondo hundido (--ui-sunken, claro y oscuro), borde superior y sin franja blanca debajo', () => {
+    const r = regla('[data-ui="v2"] .rv-sb__pie', sinComentarios.indexOf('@media (min-width: 768px)'));
+    expect(r).toMatch(/background:\s*var\(--ui-sunken\)/);
+    expect(r).toMatch(/border-top:\s*1px solid var\(--ui-border\)/);
+    expect(sinComentarios).toMatch(/\.rv-sb \{[^}]*padding-bottom: 0;/);
+  });
   it('el pie es UN solo bloque y cabe en el techo: la suma sale de las reglas del CSS (no de números escritos a mano)', () => {
     const alto = (sel: string) => Number(/(?:^|[\s;{])height:\s*(\d+)px/.exec(regla(sel))?.[1]);
     const filas = [alto('[data-ui="v2"] .rv-puesta'), alto('[data-ui="v2"] .rv-cuenta')];
@@ -174,7 +180,7 @@ describe('riel, topbar y barra inferior móvil (lote L2a)', () => {
     const bloque = dentro.slice(0, cierre);
     expect(bloque).toMatch(/\.rv-sb \{ transition: width 180ms cubic-bezier\(0\.22, 1, 0\.36, 1\); \}/);
     expect(bloque).toMatch(/\.rv-chev-plegar \{ transition: transform 180ms/);
-    expect(sinComentarios).toMatch(/\.rv-cab-esc__plegar\[aria-expanded="false"\] \.rv-chev-plegar[^{]*\{ transform: rotate\(180deg\)/);
+    expect(sinComentarios).toMatch(/\.rv-sb__plegar\[aria-expanded="false"\] \.rv-chev-plegar[^{]*\{ transform: rotate\(180deg\)/);
   });
 
   it('el riel conserva todos los ítems alcanzables: el acordeón se abre completo y el texto se oculta de forma visual', () => {
