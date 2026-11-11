@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { Boton, Drawer } from '@/app/ui-v2/componentes';
 
 /**
@@ -19,9 +20,13 @@ export function CajonPortal({ titulo, subtitulo, disparador, children }: {
   return (
     <>
       <Boton type="button" variante="ghost" tamano="sm" aria-haspopup="dialog" onClick={() => setAbierto(true)}>{disparador}</Boton>
-      <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={titulo} descripcion={subtitulo} tamano="m">
-        <div className="rv-fact__pila">{children}</div>
-      </Drawer>
+      {/* El cajón se pinta en <body>: dentro de la celda numérica (TD alineada a la derecha) heredaba su text-align y salía todo a la derecha. */}
+      {abierto && typeof document !== 'undefined' && createPortal(
+        <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={titulo} descripcion={subtitulo} tamano="m">
+          <div className="rv-fact__pila">{children}</div>
+        </Drawer>,
+        document.body,
+      )}
     </>
   );
 }
