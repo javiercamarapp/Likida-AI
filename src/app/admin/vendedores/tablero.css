@@ -54,15 +54,12 @@
 .ven-regla { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; font-size: 13px; font-weight: 500; }
 .ven-regla p { margin: 0; }
 
-<<<<<<< HEAD
 /* Desempeño por vendedor: 13 columnas. Relleno corto, cabeceras que envuelven y el nombre en una línea para que quepan en la tarjeta sin recortar «Conversión». */
 [data-ui="v2"] .card.ven-desempeno table thead th { padding: 6px 6px; height: auto; white-space: normal; line-height: 1.2; vertical-align: bottom; }
 [data-ui="v2"] .card.ven-desempeno table tbody td { padding: 0 6px; }
 [data-ui="v2"] .card.ven-desempeno table tbody th { padding: 0 8px; white-space: nowrap; }
 [data-ui="v2"] .card.ven-desempeno table thead th:first-child { padding-left: 8px; }
-=======
 /* La tarjeta abre el cajón de detalle; sus acciones viven allí. */
 .ven-tarjeta__abrir { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
 .ven-tarjeta__abrir:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 4px; }
 .ven-detalle { display: flex; flex-direction: column; gap: 12px; }
->>>>>>> w8/g
