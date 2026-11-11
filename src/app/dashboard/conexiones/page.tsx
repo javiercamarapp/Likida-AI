@@ -34,13 +34,18 @@ import { appUrl } from '@/lib/env';
 import { ahoraMs } from '@/lib/saludo';
 import { sufijoTenant } from '../sufijo';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Conexiones' };
+import { getT } from '@/lib/i18n/servidor';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('cfg.conexiones') };
+}
 
 export const dynamic = 'force-dynamic';
 
 const RUTA = '/dashboard/conexiones';
 
-const MOTIVO_CONECTOR_FUERA_DEL_PERFIL = 'Este sistema no está incluido en el plan de tu cuenta.';
+const motivoConectorFueraDelPerfil = (t: TResto = T_RESTO_ES) => (t('cfg.este_sistema_no_esta_incluido_en'));
 
 /** Una action es un endpoint alcanzable por POST directo: ocultar el conector en la pantalla no basta, se vuelve a negar aquí. */
 async function conectorFueraDelPerfil(tenantId: string, conectorId: string): Promise<boolean> {
@@ -64,6 +69,7 @@ export default async function PaginaConexiones({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -100,11 +106,11 @@ export default async function PaginaConexiones({
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota guarda credenciales.' };
+      return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota') };
     }
 
     const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
-    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: MOTIVO_CONECTOR_FUERA_DEL_PERFIL };
+    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: motivoConectorFueraDelPerfil(t) };
     // Los valores se reconstruyen contra los campos DECLARADOS del conector:
     // lo que el formulario mande de más ni siquiera se lee (y el motor
     // vuelve a filtrar de todos modos).
@@ -119,7 +125,7 @@ export default async function PaginaConexiones({
       revalidatePath(RUTA);
       // "Guardada" y no "conectada": nadie la ha probado contra el sistema
       // real — decir otra cosa sería fingir una conexión viva.
-      return { ok: true, mensaje: 'Guardada y cifrada en el cofre — SIN PROBAR contra el sistema real todavía. Usa «Probar conexión» para verificarla.' };
+      return { ok: true, mensaje: t('cfg.guardada_y_cifrada_en_el_cofre') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la credencial') };
     }
@@ -145,11 +151,11 @@ export default async function PaginaConexiones({
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota prueba las conexiones.' };
+      return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_2') };
     }
 
     const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
-    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: MOTIVO_CONECTOR_FUERA_DEL_PERFIL };
+    if (await conectorFueraDelPerfil(s.tenantId, conectorId)) return { ok: false, error: motivoConectorFueraDelPerfil(t) };
     try {
       const r = await probarCredencial(s.tenantId, conectorId, { id: s.userId });
       // El sello ya quedó en la fila: se revalida para que el renglón de arriba
@@ -166,7 +172,7 @@ export default async function PaginaConexiones({
           : r.detalle,
       };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'probar la conexión') };
+      return { ok: false, error: mensajeParaPantalla(e, t('cfg.probar_la_conexion')) };
     }
   }
 
@@ -175,7 +181,7 @@ export default async function PaginaConexiones({
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota desactiva credenciales.' };
+      return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_3') };
     }
 
     const conectorId = typeof fd.get('conector') === 'string' ? (fd.get('conector') as string).trim().slice(0, 64) : '';
@@ -185,7 +191,7 @@ export default async function PaginaConexiones({
     try {
       await desactivarCredencial(s.tenantId, conectorId, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Credencial desactivada.' };
+      return { ok: true, mensaje: t('cfg.credencial_desactivada') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'desactivar la credencial') };
     }
@@ -198,8 +204,8 @@ export default async function PaginaConexiones({
     'use server';
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: 'Solo el dueño de la flota genera el secreto del GPS propio.' };
-    if (!cofreConfigurado()) return { ok: false, error: 'El cofre de credenciales no está configurado en este entorno: no se puede guardar el secreto cifrado.' };
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_4') };
+    if (!cofreConfigurado()) return { ok: false, error: t('cfg.el_cofre_de_credenciales_no_esta') };
     try {
       const { secreto, version } = await generarSecretoPush(s.tenantId);
       await anotarBitacora({ tenantId: s.tenantId, actor: { id: s.userId }, accion: 'gps.push_secreto_generado', entidad: 'tenant', entidadId: s.tenantId, detalle: { version } });
@@ -219,7 +225,7 @@ export default async function PaginaConexiones({
     });
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return vacio(MENSAJE_FLOTA_CAMBIO);
-    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return vacio('Solo el dueño de la flota liga dispositivos GPS.');
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return vacio(t('cfg.solo_el_dueno_de_la_flota_5'));
     const r = await mapearGpsDesdeArchivo({ tenantId: s.tenantId, alcance: { tipo: 'flota' }, actor: { id: s.userId }, datos: fd });
     if (r.confirmado) revalidatePath(RUTA);
     return r;
@@ -230,7 +236,7 @@ export default async function PaginaConexiones({
     'use server';
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: 'Solo el dueño de la flota importa sus geocercas.' };
+    if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_6') };
     const r = await importarGeocercasDeTablaPropia({ tenantId: s.tenantId, rol: s.rol });
     if (!r.ok) return r;
     revalidatePath(RUTA);
@@ -243,12 +249,12 @@ export default async function PaginaConexiones({
   const [fuentes, silencio] = await Promise.all([leerFuentesDeFlota(tenantId, ahora), leerSilencioWebhook(ahora, tenantId)]);
 
   return (
-    <VistaConexiones
+    <VistaConexiones t={t}
       conectores={conectores}
       estado={<SeccionEstado entradas={fuentes} silencio={silencio} ahoraMs={ahora} />}
-      integraciones={<SeccionIntegraciones integraciones={catalogoIntegraciones({ credencialesRastreo }).filter((i) => perfil === null || integracionPermitidaEnPerfil(perfil, i.id))} />}
+      integraciones={<SeccionIntegraciones t={t} integraciones={catalogoIntegraciones({ credencialesRastreo }).filter((i) => perfil === null || integracionPermitidaEnPerfil(perfil, i.id))} />}
       gps={panelGps.error !== null ? (
-        <EstadoError titulo="GPS no disponible ahora" reintentar>{panelGps.error}</EstadoError>
+        <EstadoError titulo={t('cfg.gps_no_disponible_ahora')} reintentar>{panelGps.error}</EstadoError>
       ) : (
         <SeccionGps
           salud={panelGps.salud} push={panelGps.push} endpoint={panelGps.endpoint}
@@ -259,7 +265,7 @@ export default async function PaginaConexiones({
         />
       )}
       credenciales={(
-        <SeccionCredenciales
+        <SeccionCredenciales t={t}
           cofreListo={cofreConfigurado()}
           puedeAdministrarCofre={puedeAdministrar(rol)}
           guardadas={guardadas}

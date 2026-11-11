@@ -2,6 +2,8 @@
 
 import { useActionState } from 'react';
 import { AvisoResultado, BotonConfirmar, clasesBoton } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 /**
  * El botón de cortar accesos MCP. Mismo molde que `FormaRevocar` de
@@ -36,18 +38,17 @@ export function FormaCortar({ accion, usuarioId, quien, cuantos }: {
   quien: string;
   cuantos: number;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
 
   return (
     <form action={despachar} className="rv-mcp__forma">
       <input type="hidden" name="usuarioId" value={usuarioId} />
       <BotonConfirmar
-        etiqueta={cuantos === 1 ? 'Cortar el acceso' : `Cortar los ${cuantos} accesos`} tono="peligro"
-        etiquetaConfirmar="Sí, cortar el acceso"
-        titulo={cuantos === 1 ? `Cortar el acceso de ${quien}` : `Cortar los ${cuantos} accesos de ${quien}`}
-        descripcion={`${cuantos === 1
-          ? `El cliente MCP de ${quien} deja de leer en ese instante.`
-          : `Los ${cuantos} clientes MCP de ${quien} dejan de leer en ese instante.`} No hay deshacer: para volver a conectar, ${quien} tiene que autorizar de nuevo desde su cliente.`}
+        etiqueta={cuantos === 1 ? t('cfg.cortar_el_acceso') : t('cfg.cortar_los_n_accesos', { cuantos })} tono="peligro"
+        etiquetaConfirmar={t('cfg.si_cortar_el_acceso')}
+        titulo={cuantos === 1 ? t('cfg.cortar_el_acceso_de', { quien }) : t('cfg.cortar_los_accesos_de', { cuantos, quien })}
+        descripcion={cuantos === 1 ? t('cfg.mcp_cortar_uno', { quien }) : t('cfg.mcp_cortar_varios', { cuantos, quien })}
         className={clasesBoton('danger', 'sm')}
       />
       {estado && !estado.ok && <AvisoError error={estado.error} />}

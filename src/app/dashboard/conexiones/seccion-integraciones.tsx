@@ -1,6 +1,8 @@
 import { MarcaIntegracion, StatusChip, Tarjeta, type MarcaId, type TonoEstado } from '@/app/ui-v2/componentes';
 import './conexiones.css';
 import { porCategoria, ESTADO_INTEGRACION, type Integracion } from '@/lib/likida/integraciones';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «CON QUÉ SISTEMAS CONECTA LIKIDA» — lo que era /dashboard/integraciones.
@@ -38,13 +40,10 @@ const MARCA: Record<string, MarcaId> = { export_csv: 'csv', sap_b1: 'sap', whats
  * toda la diferencia para quien va a comprar. Por eso `por_archivo` se pinta
  * NEUTRO y no ámbar — es un estado terminado, no uno a medias.
  */
-export function SeccionIntegraciones({ integraciones }: { integraciones: Integracion[] }) {
+export function SeccionIntegraciones({ integraciones, t = T_RESTO_ES }: { integraciones: Integracion[]; t?: TResto }) {
   return (
-    <Tarjeta titulo="Con qué sistemas conecta Likida">
-      <p className="rv-cx__apoyo">
-        Likida es una capa sobre lo que ya usas — no reemplaza tu ERP ni tu TMS. Cada renglón dice
-        cómo entra el dato <strong>hoy</strong>, no lo que podría llegar a hacer.
-      </p>
+    <Tarjeta titulo={t('cfg.con_que_sistemas_conecta_likida')}>
+      <p className="rv-cx__apoyo">{rico(t('cfg.likida_es_una_capa_sobre_lo'), { strong: (c) => <strong>{c}</strong> })}</p>
 
       {porCategoria(integraciones).map(([categoria, items]) => (
         <div key={categoria} className="rv-cx__grupo">
@@ -64,12 +63,12 @@ export function SeccionIntegraciones({ integraciones }: { integraciones: Integra
 
                 <dl className="rv-cx__datos">
                   <div>
-                    <dt>Cómo conecta hoy</dt>
+                    <dt>{t('cfg.como_conecta_hoy')}</dt>
                     <dd>{i.comoConectaHoy}</dd>
                   </div>
                   {i.paraSubirDeEscalon && (
                     <div>
-                      <dt>Para dar el siguiente paso</dt>
+                      <dt>{t('cfg.para_dar_el_siguiente_paso')}</dt>
                       <dd data-tenue>{i.paraSubirDeEscalon}</dd>
                     </div>
                   )}
@@ -80,10 +79,7 @@ export function SeccionIntegraciones({ integraciones }: { integraciones: Integra
         </div>
       ))}
 
-      <p className="rv-cx__pie">
-        ¿Falta el sistema que tú usas? Es exactamente lo que se conecta contigo en el arranque —
-        escríbenos desde el Centro de ayuda.
-      </p>
+      <p className="rv-cx__pie">{t('cfg.falta_el_sistema_que_tu_usas')}</p>
     </Tarjeta>
   );
 }

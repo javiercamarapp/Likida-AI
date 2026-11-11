@@ -20,7 +20,11 @@ import {
   MarcoPagina, Tarjeta, TablaBase, EstadoError, FormaConAviso, CampoTextarea, Icono, type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import './configuracion.css';
-export const metadata: Metadata = { title: 'Configuración' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('cfg.configuracion') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -46,6 +50,7 @@ export default async function ConfiguracionPage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/configuracion', sp);
   if (!puedeVerRuta(rol, '/dashboard/configuracion')) redirect('/dashboard');
@@ -99,7 +104,7 @@ export default async function ConfiguracionPage({
     // una server action es alcanzable sin pasar por la página.
     const s = await resolverTenantAtadoOLanza('/dashboard/configuracion', sp, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/configuracion')) {
-      return { ok: false, error: 'Tu rol no puede cambiar la configuración de la flota.' };
+      return { ok: false, error: t('cfg.tu_rol_no_puede_cambiar_la') };
     }
     try {
       // A37-S17-02: vaciar el catálogo sigue prohibido, pero una flota que NUNCA lo declaró puede guardar su tabulador sin inventar
@@ -137,7 +142,7 @@ export default async function ConfiguracionPage({
     // TODOS los CFDI de gasto de la flota.
     const s = await resolverTenantAtadoOLanza('/dashboard/configuracion', sp, tenantId);
     if (!puedeVerRuta(s.rol, '/dashboard/configuracion')) {
-      return { error: 'Tu rol no puede cambiar la configuración de la flota.' };
+      return { error: t('cfg.tu_rol_no_puede_cambiar_la') };
     }
     try {
       // El RFC principal se relee CONTRA EL TENANT EFECTIVO, no el del render:
@@ -150,8 +155,8 @@ export default async function ConfiguracionPage({
       revalidatePath('/dashboard/configuracion');
       return {
         ok: rfcs.length === 0
-          ? 'Listo: esta flota factura con un solo RFC. Los CFDI a nombre de cualquier otro vuelven a salir a revisión.'
-          : `Listo: el motor ya acepta CFDI de gasto a nombre de ${rfcs.join(', ')}.`,
+          ? t('cfg.listo_esta_flota_factura_con_un')
+          : t('cfg.listo_el_motor_ya_acepta_cfdi', { rfcs: rfcs.join(', ') }),
       };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'guardar los RFC adicionales') };
@@ -163,29 +168,25 @@ export default async function ConfiguracionPage({
   type FilaUnidad = { placa: string; rendimientoBase: number; capacidadTanque: number };
   const filasUnidades: FilaUnidad[] = unidades.map(([placa, u]) => ({ placa, rendimientoBase: u.rendimientoBase, capacidadTanque: u.capacidadTanque }));
   const columnasUnidades: ColumnaBase<FilaUnidad>[] = [
-    { id: 'placa', titulo: 'Placa', principal: true, celda: (u) => <span className="cifra-mono">{u.placa}</span> },
-    { id: 'rend', titulo: 'Rendimiento base', alinear: 'der', celda: (u) => <span className="tabular">{u.rendimientoBase} km/L</span> },
-    { id: 'tanque', titulo: 'Capacidad de tanque', alinear: 'der', celda: (u) => <span className="tabular">{u.capacidadTanque} L</span> },
+    { id: 'placa', titulo: t('cfg.placa'), principal: true, celda: (u) => <span className="cifra-mono">{u.placa}</span> },
+    { id: 'rend', titulo: t('cfg.rendimiento_base'), alinear: 'der', celda: (u) => <span className="tabular">{u.rendimientoBase} km/L</span> },
+    { id: 'tanque', titulo: t('cfg.capacidad_de_tanque'), alinear: 'der', celda: (u) => <span className="tabular">{u.capacidadTanque} L</span> },
   ];
 
   return (
-    <MarcoPagina titulo="Configuración" apoyo="Lo que el motor usa para cuadrar tus viajes.">
+    <MarcoPagina titulo={t('cfg.configuracion')} apoyo={t('cfg.lo_que_el_motor_usa_para')}>
       {config === null ? (
-        <EstadoError reintentar>No se pudo leer la configuración de esta flota. No es que esté vacía: la lectura falló.</EstadoError>
+        <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_configuracion')}</EstadoError>
       ) : (
         <>
-          <Tarjeta titulo="La empresa" info="configuracion.empresa">
+          <Tarjeta titulo={t('cfg.la_empresa')} info="configuracion.empresa">
             <div className="rv-cfg__empresa">
               <span className="rv-cfg__sello" aria-hidden="true"><Icono icono={Building2} tam={18} /></span>
               <div>
                 <p className="rv-cfg__rfc cifra-mono">{config.empresa.rfc}</p>
-                <p className="rv-cfg__nota">
-                  RFC contra el que se valida que un CFDI de gasto sea tuyo. Si no coincide con el receptor del
-                  comprobante, el motor lo marca como no verificable. No se edita aquí: cambiarlo apaga esa
-                  validación sobre todo tu histórico — se corrige con nosotros.
-                </p>
+                <p className="rv-cfg__nota">{t('cfg.rfc_contra_el_que_se_valida')}</p>
                 {config.empresa.rfcsAdicionales && config.empresa.rfcsAdicionales.length > 0 && (
-                  <p className="rv-cfg__nota">También se aceptan: {config.empresa.rfcsAdicionales.join(', ')}</p>
+                  <p className="rv-cfg__nota">{t('cfg.tambien_se_aceptan')}{' '}{config.empresa.rfcsAdicionales.join(', ')}</p>
                 )}
               </div>
             </div>
@@ -195,28 +196,22 @@ export default async function ConfiguracionPage({
               RFC principal sigue sin formulario (cambiarlo apaga la
               validación de receptor sobre todo el histórico); éstos se
               SUMAN a él y por eso sí son del cliente. */}
-          <Tarjeta titulo="Otras razones sociales que facturas" info="configuracion.rfcs_adicionales">
-            <p className="rv-cfg__apoyo">
-              Si tu operación factura con más de un RFC (dos empresas del mismo grupo, la razón social
-              vieja y la nueva), decláralos aquí y el motor aceptará como tuyos los CFDI de gasto
-              timbrados a cualquiera de ellos. Sin esto, salen «a revisar» uno por uno.
-              Máximo {MAX_RFCS_ADICIONALES}. Dejarlo vacío y guardar los borra: vuelves a facturar con un
-              solo RFC.
-            </p>
-            <FormaConAviso accion={guardarRfcs} boton="Guardar RFC adicionales" columnas="md:grid-cols-1">
-              <CampoTextarea etiqueta="RFC adicionales — uno por línea o separados por coma" id="rfcsAdicionales" name="rfcsAdicionales" rows={3} spellCheck={false}
+          <Tarjeta titulo={t('cfg.otras_razones_sociales_que_facturas')} info="configuracion.rfcs_adicionales">
+            <p className="rv-cfg__apoyo">{t('cfg.si_tu_operacion_factura_con_mas', { MAX_RFCS_ADICIONALES })}</p>
+            <FormaConAviso accion={guardarRfcs} boton={t('cfg.guardar_rfc_adicionales')} columnas="md:grid-cols-1">
+              <CampoTextarea etiqueta={t('cfg.rfc_adicionales_uno_por_linea_o')} id="rfcsAdicionales" name="rfcsAdicionales" rows={3} spellCheck={false}
                 defaultValue={(config.empresa.rfcsAdicionales ?? []).join('\n')} claseControl="cifra-mono"
                 placeholder={`Distinto de ${rfcPrincipal}`}
-                ayuda={`Se comprueban forma y dígito verificador, igual que en el alta de la flota. El RFC principal (${rfcPrincipal}) no va aquí.`} />
+                ayuda={t('cfg.se_comprueban_forma_y_digito_verificador', { rfcPrincipal })} />
             </FormaConAviso>
           </Tarjeta>
 
           <FormaAjustes inicial={inicial} ejemploKm={ejemploKm} ejemploIlegible={ejemploIlegible} guardar={guardar} catalogo={estadoCatalogo} />
 
-          <Tarjeta titulo="Unidades calibradas" info="configuracion.unidades">
-            <p className="rv-cfg__apoyo">Placas con consumo propio, que le ganan al rendimiento por defecto de arriba.</p>
-            <TablaBase etiqueta="Rendimiento base por placa" columnas={columnasUnidades} filas={filasUnidades} idFila={(u) => u.placa} altoMaximo={false}
-              vacio={{ titulo: 'Ninguna placa calibrada', texto: 'Todas usan el rendimiento por defecto. Darlas de alta una por una todavía se hace con nosotros.' }} />
+          <Tarjeta titulo={t('cfg.unidades_calibradas')} info="configuracion.unidades">
+            <p className="rv-cfg__apoyo">{t('cfg.placas_con_consumo_propio_que_le')}</p>
+            <TablaBase etiqueta={t('cfg.rendimiento_base_por_placa')} columnas={columnasUnidades} filas={filasUnidades} idFila={(u) => u.placa} altoMaximo={false}
+              vacio={{ titulo: t('cfg.ninguna_placa_calibrada'), texto: t('cfg.todas_usan_el_rendimiento_por_defecto') }} />
           </Tarjeta>
         </>
       )}

@@ -5,6 +5,7 @@ import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
 import { EstadoVacio, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { FormaCortar, type AccionForma } from './forma';
 import './sesiones-mcp.css';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 /**
  * La lista de sesiones MCP, PURA PROPS — mismo corte que `ListaLlaves` en
@@ -25,64 +26,57 @@ function rotuloCliente(c: ClienteMcpConectado): string {
   return c.cliente ?? 'Cliente MCP sin nombre';
 }
 
-const COLUMNAS: ColumnaBase<ClienteMcpConectado>[] = [
-  { id: 'cliente', titulo: 'Cliente', principal: true, celda: (c) => rotuloCliente(c) },
-  { id: 'conectado', titulo: 'Conectado', celda: (c) => <span className="rv-mcp__tenue">{fechaMx(c.otorgadoEn)}</span> },
+const columnas = (t: TResto = T_RESTO_ES): ColumnaBase<ClienteMcpConectado>[] => ([
+  { id: 'cliente', titulo: t('cfg.cliente'), principal: true, celda: (c) => rotuloCliente(c) },
+  { id: 'conectado', titulo: t('cfg.conectado'), celda: (c) => <span className="rv-mcp__tenue">{fechaMx(c.otorgadoEn)}</span> },
   {
-    id: 'uso', titulo: 'Último uso',
+    id: 'uso', titulo: t('llaves.ultimo_uso'),
     // La verdad, no un guion: "nunca" es la respuesta a "¿lo puedo cortar sin romperle nada a nadie?".
     celda: (c) => <span className="rv-mcp__tenue">{c.ultimoUsoEn === null ? 'nunca' : fechaHoraMx(c.ultimoUsoEn)}</span>,
   },
-  { id: 'vence', titulo: 'Vence', celda: (c) => <span className="rv-mcp__tenue">{fechaHoraMx(c.expiraEn)}</span> },
-];
+  { id: 'vence', titulo: t('llaves.vence'), celda: (c) => <span className="rv-mcp__tenue">{fechaHoraMx(c.expiraEn)}</span> },
+]);
 
-export function TablaClientesMcp({ clientes }: { clientes: ClienteMcpConectado[] }) {
-  return <TablaBase etiqueta="Sesiones MCP conectadas" columnas={COLUMNAS} filas={clientes} idFila={(c) => c.familia} densa altoMaximo={false} tarjetaMovil />;
+export function TablaClientesMcp({ clientes, t = T_RESTO_ES }: { clientes: ClienteMcpConectado[]; t?: TResto }) {
+  return <TablaBase etiqueta={t('cfg.sesiones_mcp_conectadas')} columnas={columnas(t)} filas={clientes} idFila={(c) => c.familia} densa altoMaximo={false} tarjetaMovil />;
 }
 
-export function ListaSesionesMcp({ sesiones, cortarSesiones }: {
+export function ListaSesionesMcp({ sesiones, cortarSesiones, t = T_RESTO_ES }: {
   sesiones: SesionMcpUsuario[];
-  cortarSesiones: AccionForma;
+  cortarSesiones: AccionForma; t?: TResto;
 }) {
   if (sesiones.length === 0) {
     return (
-      <EstadoVacio icono={PlugZap} titulo="Nadie tiene un cliente conectado">
-        Ni Claude ni ChatGPT están leyendo estos datos desde fuera del panel. Cuando alguien autorice uno,
-        aparece aquí con su último uso y con el botón para cortarlo.
-      </EstadoVacio>
+      <EstadoVacio icono={PlugZap} titulo={t('cfg.nadie_tiene_un_cliente_conectado')}>{t('cfg.ni_claude_ni_chatgpt_estan_leyendo')}</EstadoVacio>
     );
   }
 
   return (
     <div className="rv-mcp__lista">
       {sesiones.map((s) => (
-        <TarjetaUsuarioMcp key={s.userId} s={s} cortarSesiones={cortarSesiones} />
+        <TarjetaUsuarioMcp t={t} key={s.userId} s={s} cortarSesiones={cortarSesiones} />
       ))}
     </div>
   );
 }
 
-function TarjetaUsuarioMcp({ s, cortarSesiones }: {
+function TarjetaUsuarioMcp({ s, cortarSesiones, t = T_RESTO_ES }: {
   s: SesionMcpUsuario;
-  cortarSesiones: AccionForma;
+  cortarSesiones: AccionForma; t?: TResto;
 }) {
-  const quien = s.nombre ?? s.email ?? 'Usuario de la flota';
+  const quien = s.nombre ?? s.email ?? t('cfg.usuario_de_la_flota');
   const rol = ROL_LABEL[s.rol as RolAppUser] ?? s.rol;
 
   return (
     <Tarjeta titulo={quien} info="mi_perfil.clientes_mcp">
       <div className="rv-mcp__cab">
         <div>
-          <p className="rv-mcp__detalle">{s.email ?? 'sin correo en el padrón'} · {rol}</p>
-          <p className="rv-mcp__nota">
-            {/* El rol del TOKEN, no el de hoy: es el que decide qué lee el
-                cliente MCP mientras el acceso siga vivo. */}
-            El acceso lee lo que ve el rol con el que se autorizó ({rol}), nunca escribe.
-          </p>
+          <p className="rv-mcp__detalle">{s.email ?? t('cfg.sin_correo_en_el_padron')} · {rol}</p>
+          <p className="rv-mcp__nota">{t('cfg.el_acceso_lee_lo_que_ve', { rol })}</p>
         </div>
         <FormaCortar accion={cortarSesiones} usuarioId={s.userId} quien={quien} cuantos={s.clientes.length} />
       </div>
-      <TablaClientesMcp clientes={s.clientes} />
+      <TablaClientesMcp t={t} clientes={s.clientes} />
     </Tarjeta>
   );
 }
