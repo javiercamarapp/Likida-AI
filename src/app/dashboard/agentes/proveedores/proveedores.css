@@ -2,7 +2,9 @@
 .rv-prov__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; max-width: 72ch; }
 .rv-prov__subir { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 /* Zona de carga punteada (patrón de Importaciones): el control nativo de archivo vive dentro de una caja con borde discontinuo. */
-.rv-prov__zona { display: grid; gap: 6px; padding: 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--canvas); align-content: start; }
+.rv-prov__zona { display: grid; gap: 6px; padding: 20px 16px; border: 1.5px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--canvas); align-content: start; min-width: 0; }
+.rv-prov__zona input[type="file"] { width: 100%; min-width: 0; font-size: var(--t-small, 12px); color: var(--muted); }
+.rv-prov__zona input[type="file"]::file-selector-button { height: 28px; margin-inline-end: 8px; padding: 0 12px; border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--surface); color: var(--ink); font: 500 var(--t-small, 12px) inherit; cursor: pointer; }
 .rv-prov__export { display: grid; gap: 8px; justify-items: start; padding-top: 12px; border-top: 1px solid var(--line); }
 .rv-prov__nota[data-tono="warn"] { color: var(--warn); }
 .rv-prov__nota[data-tono="bad"] { color: var(--bad); }
@@ -12,7 +14,11 @@
 .rv-prov__decision { display: grid; gap: 4px; min-width: 190px; }
 .rv-prov__direccion { padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: var(--t-small, 12px); overflow-wrap: anywhere; }
 .rv-btn[data-copiado] { color: var(--ok); }
-.rv-prov__forma { display: grid; gap: 12px; max-width: 560px; }
+.rv-prov__forma { display: grid; gap: 12px; }
+.rv-prov__cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 32px; }
+.rv-prov__col { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.rv-prov__pie { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+@media (max-width: 767.98px) { .rv-prov__cols { grid-template-columns: minmax(0, 1fr); } }
 .rv-prov__par { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; }
 .rv-prov__msg { margin: 0; font-size: var(--t-micro, 11px); color: var(--muted); }
 .rv-prov__msg[data-tono="bad"] { color: var(--bad); }
