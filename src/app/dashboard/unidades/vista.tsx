@@ -91,8 +91,10 @@ const INICIAL_VACIO: UnidadCruda = {
  */
 export function VistaUnidades({ tr = TR_OPERACION_ES,
   pag, bajas, totalBajas, conteos, totalActivasConocido, puedeEditar, guardar, cambiarEstado, sufijo, camposOcultos, proveedoresGps,
-  patios, patioDelJefe, terminalPorUnidad, editablePorUnidad, cargarUnidades, plantillaCsv, hrefPatios,
+  patios, patioDelJefe, terminalPorUnidad, editablePorUnidad, cargarUnidades, plantillaCsv, hrefPatios, taller,
 }: { tr?: TrOperacion;
+  /** El bloque del taller (órdenes y rutinas), armado en el servidor; entra como hijo del esqueleto para no quedar fuera del marco. */
+  taller?: import('react').ReactNode;
   /** La página del parque ACTIVO, ya cortada y ordenada por la base
    *  (auditoría 24). El `total` y el `filtrados` los CONTÓ la base; el largo
    *  de esta página no es ninguno de los dos. */
@@ -322,6 +324,8 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
           </ul>
         </Tarjeta>
       )}
+
+      {taller}
     </EsqueletoTablaMaestra>
   );
 }
