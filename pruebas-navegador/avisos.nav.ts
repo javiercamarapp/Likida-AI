@@ -130,7 +130,7 @@ for (const id of IDENTIDADES) {
         const ruta = new URL(href, 'http://x').pathname;
         const r = await page.goto(href);
         expect(r?.status(), `${href} respondió error`).toBeLessThan(400);
-        await expect(page, `${href} rebotó a otra pantalla`).toHaveURL(new RegExp(`${ruta.replace(/\//g, '\\/')}`));
+        await expect(page, `${href} rebotó a otra pantalla`).toHaveURL(new RegExp(`${ruta.replace(/[\\^$.*+?()[\]{}|/]/g, '\\$&')}`));
         await expect(page.locator('body')).not.toContainText(/Application error|Algo salió mal/i);
       }
     });
