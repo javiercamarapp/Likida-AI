@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState } from 'react';
-import { Aviso, Boton, CampoTexto, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { Aviso, Boton, CampoTexto, Disclosure, StatusChip } from '../../ui-v2/componentes';
 import { AvisoResultado } from '../../ui-v2/componentes/aviso-resultado';
 import { BotonConfirmar } from '../../ui-v2/componentes/confirmar';
 import { clasesBoton } from '../../ui-v2/componentes/boton';
@@ -36,7 +36,9 @@ export function LimpiezaLote({ contar, vaciar, bandeja }: {
   const r = conteo?.resumen;
 
   return (
-    <Tarjeta titulo={t('aprobaciones_lote.limpiar_piezas_vencidas')}>
+    // Plegada por omisión (Rovaq: la acción de mantenimiento no compite con la cola): solo abre sola si la bandeja está frenando al runner.
+    <Disclosure titulo={t('aprobaciones_lote.limpiar_piezas_vencidas')} abierto={bandeja?.frenaAlRunner === true}
+      resumen={bandeja ? t('aprobaciones_lote.resumen_pendientes', { n: numero(bandeja.pendientes, idioma) }) : undefined}>
       <div className="bj-lote">
         {bandeja === null ? (
           <Aviso tono="warn">{t('aprobaciones_lote.no_se_pudo_leer_el_estado')}</Aviso>
@@ -103,6 +105,6 @@ export function LimpiezaLote({ contar, vaciar, bandeja }: {
 
         <AvisoResultado estado={vaciado} />
       </div>
-    </Tarjeta>
+    </Disclosure>
   );
 }

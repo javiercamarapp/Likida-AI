@@ -1,6 +1,6 @@
 import { getT } from '@/lib/i18n/servidor';
 import Link from 'next/link';
-import { Plus, Landmark, Route as RouteIcon, ReceiptText, Fuel, Download } from 'lucide-react';
+import { Plus, Landmark, ChartNoAxesColumn, Route as RouteIcon, ReceiptText, Fuel, Download } from 'lucide-react';
 import {
   getAcreditables, getKpis, detectarAnomalias,
   type Acreditables, type DashboardKpis, type Anomalia,
@@ -200,7 +200,7 @@ export async function InicioContador({
             <Timbrado searchParams={searchParams} tenantExiste={tenantExiste} sufijo={sufijo} />
           </CajonConfigFiscal>
           {/* La acción primaria del contador no es despachar: es meter el papel (Facturación es lectura Y captura desde la auditoría 4). */}
-          <BotonEnlace variante="primary" href={`/dashboard/facturacion${sufijo}`} icono={<Icono icono={Plus} />}>
+          <BotonEnlace variante="secondary" href={`/dashboard/facturacion${sufijo}`} icono={<Icono icono={Plus} />}>
             {tr('contador.inicioContador.registrarFactura')}
           </BotonEnlace>
         </>
@@ -208,7 +208,10 @@ export async function InicioContador({
       titular={titular}
       filtros={(
         // Rovaq: el segmentado de periodo y los chips de alcance en UNA fila de filtros, arriba de las cifras (no dentro de una tarjeta).
-        <BarraPeriodo etiqueta={tr('contador.panel.alcance')} selector={<SelectorPeriodoMotor />}
+        // El segmentado de 7 días / 30 días / Histórico solo mueve «Dónde pierdo» (lo demás se corta al ejercicio): vive DENTRO de esa tarjeta,
+        // con su propio rótulo, y la barra de arriba dice solo el alcance común de la pantalla (ejercicio y fuente). Dos periodos en una misma
+        // barra hacían creer que el filtro movía todo.
+        <BarraPeriodo etiqueta={tr('contador.panel.alcance')}
           chips={[{ id: 'ejercicio', etiqueta: tr('contador.panel.alcanceEjercicio', { etiqueta: etq }) }, { id: 'fuente', etiqueta: tr('contador.panel.alcanceFuente') }]} />
       )}
       avisos={(
@@ -234,7 +237,8 @@ export async function InicioContador({
         <Tarjeta key="barras" titulo={tr('contador.panel.barrasTitulo', { etiqueta: etq })} info="contador.en_riesgo"
           estado={barrasMes === null ? 'error' : barrasMes.length === 0 ? 'vacio' : 'ok'}
           mensaje={barrasMes === null ? tr('contador.inicioContador.noSePudoCalcular') : tr('contador.panel.barrasVacio')}
-          detalle={tr('contador.panel.barrasVacioDetalle')} reintentar acciones={<KindBadge tipo="calculado" />}>
+          detalle={tr('contador.panel.barrasVacioDetalle')} reintentar acciones={<KindBadge tipo="calculado" />}
+          iconoVacio={ChartNoAxesColumn} contenida={barrasMes !== null && barrasMes.length === 0}>
           {barrasMes && barrasMes.length > 0 ? (
             <ColumnasApiladas etiqueta={tr('contador.panel.barrasTitulo', { etiqueta: etq })} formato="mxn" matiz={8} alto={168}
               series={[tr('contador.panel.barrasPerdido'), tr('contador.panel.barrasEnRiesgo'), tr('contador.panel.barrasRecuperable')]}
@@ -247,7 +251,7 @@ export async function InicioContador({
           detalle={tr('contador.inicioContador.todaviaNoHayComprobantes')} reintentar>
           {resumenFiscal && resumenFiscal.n > 0 ? (
             <>
-              <DonaMini etiqueta={tr('contador.panel.ivaTitulo')} centro={mxn(resumenFiscal.ivaAcreditable + resumenFiscal.ivaNoAcreditable)}
+              <DonaMini matiz={1} etiqueta={tr('contador.panel.ivaTitulo')} centro={mxn(resumenFiscal.ivaAcreditable + resumenFiscal.ivaNoAcreditable)}
                 gajos={[
                   { etiqueta: tr('contador.inicioContador.ivaAcreditableDocumentado'), valor: resumenFiscal.ivaAcreditable },
                   { etiqueta: tr('contador.inicioContador.ivaDesglosadoQueNo'), valor: resumenFiscal.ivaNoAcreditable },
@@ -337,7 +341,7 @@ async function BloqueTablas({ pAcred, pResumenPerdidas, pSeries, pFacturacion, s
         </Tarjeta>
       </FilaTarjetas>
       <FilaTarjetas variante="12">
-        <Tarjeta titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" acciones={<KindBadge tipo="calculado" />}
+        <Tarjeta titulo={tr('contador.panel.tablaPierdo')} info="contador.en_riesgo" acciones={<><SelectorPeriodoMotor /><KindBadge tipo="calculado" /></>}
           estado={resumenPerdidas === null ? 'error' : 'ok'} mensaje={tr('contador.inicioContador.noSePudoCalcular')} reintentar>
           <MotorFiscalPeriodo series={series} causas={causas.map(({ titulo, n, monto }) => ({ titulo, n, monto }))} />
         </Tarjeta>

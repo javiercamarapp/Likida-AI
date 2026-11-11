@@ -7,6 +7,7 @@ import { FormaEstrategia } from './estrategia';
 import { CajonEstrategia } from './cajon-estrategia';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import '../proveedores/proveedores.css';
 import { BarraPeriodo, EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, selloHoyTr, rotuloDiasTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
@@ -84,7 +85,7 @@ export function VistaAgenteCobranza({
         </>
       )}
     >
-      <div className="rv-ag-pila">
+      <div className="rv-ag-pila rv-ag-compacto">
       <FilaTarjetas variante="8-4">
         {/* ── La cola honesta ── */}
         <Tarjeta

@@ -22,12 +22,13 @@
 // Moneda, número y porcentaje SOLO por lib/formato.ts.
 // ═══════════════════════════════════════════════════════════════════════════
 
+import { usdCorto } from '../usd-corto';
 import { uniformes } from '@/app/admin/cifras-uniformes';
 import { useMemo } from 'react';
 import { Aviso, BotonEnlace, Disclosure, Tarjeta, TablaBase, Tooltip, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import '../qa.css';
-import { mxn, numero, porcentaje, usd4, fechaCorta } from '@/lib/formato';
+import { mxn, numero, porcentaje, fechaCorta } from '@/lib/formato';
 import { NOMBRE_CLAVE_VERDAD, type ClaveVerdad } from '@/lib/admin/qa-tipos';
 import { esAlucinacion, type MedicionCampo, type ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
 import type { FotoFirmada } from './corrida-viva';
@@ -151,7 +152,7 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
             />
 
             {/* ── El desglose por campo ─────────────────────────────────────── */}
-            <TablaBase etiqueta={t('qa_medicion_corrida.exactitud_por_campo')} columnas={columnas} filas={medicion.porCampo} idFila={(c) => c.clave} densa altoMaximo={false} />
+            <TablaBase etiqueta={t('qa_medicion_corrida.exactitud_por_campo')} columnas={columnas} filas={medicion.porCampo} idFila={(c) => c.clave} densa altoMaximo={false} tarjetaMovil />
 
             {/* ── Por qué salieron campos del denominador ───────────────────── */}
             {medicion.noMedidosPorMotivo.length > 0 && (
@@ -189,14 +190,14 @@ export function MedicionCorrida({ medicion, error, fotos, viva }: {
                       <div className="rv-qa-pila rv-qa-pila--corta">
                         <div className="rv-qa-meta">
                           <span>{t('qa_medicion_corrida.modelo')} <span className="rv-qa-mono">{f.modelo}</span></span>
-                          <span>{t('qa_medicion_corrida.costo', { v: usd4(f.costoUsd) })}</span>
+                          <span>{t('qa_medicion_corrida.costo', { v: usdCorto(f.costoUsd) })}</span>
                           {url ? (
                             <BotonEnlace href={url} variante="secondary" tamano="sm" target="_blank" rel="noreferrer">{t('qa_medicion_corrida.abrir_la_foto_firma_60_s')}</BotonEnlace>
                           ) : (
                             <span className="rv-qa-tenue">{t('qa_medicion_corrida.foto_sin_firma_ahora_mismo')}</span>
                           )}
                         </div>
-                        <TablaBase etiqueta={t('qa_medicion_corrida.campos_medidos_de_la_foto')} columnas={columnasFoto} filas={f.medicion.campos} idFila={(c) => c.clave} densa altoMaximo={false} />
+                        <TablaBase etiqueta={t('qa_medicion_corrida.campos_medidos_de_la_foto')} columnas={columnasFoto} filas={f.medicion.campos} idFila={(c) => c.clave} densa altoMaximo={false} tarjetaMovil />
                         {f.motivo && <p className="rv-qa-nota rv-qa-warn">{f.motivo}</p>}
                       </div>
                     </Disclosure>

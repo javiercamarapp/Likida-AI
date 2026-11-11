@@ -119,8 +119,9 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null, tr =
       acciones={alta ? <div className="rv-fact__alta">{alta}</div> : undefined}
       filtros={pestanas ? (
         <>
-          <BarraPeriodo etiqueta={tr('facturacion.vista.facturacionAClientes')} chips={datos ? [{ id: 'alcance', etiqueta: tr('facturacion.vista.alcanceAl', { v: fechaMx(datos.hoy) }) }] : []} />
+          {/* Rovaq (hub): pestañas subrayadas pegadas a la cabecera, y DESPUÉS la barra de alcance y la tira. */}
           {pestanas}
+          <BarraPeriodo etiqueta={tr('facturacion.vista.facturacionAClientes')} chips={datos ? [{ id: 'alcance', etiqueta: tr('facturacion.vista.alcanceAl', { v: fechaMx(datos.hoy) }) }] : []} />
         </>
       ) : undefined}
       avisos={tabulada && datos !== null && !vacioTotal ? (seccion === 'cartera' ? avisosCartera(datos, tr) : seccion === 'mesa' ? avisosMesa(datos, tr) : undefined) : undefined}
@@ -137,7 +138,7 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null, tr =
         // llena vive AQUÍ MISMO, no en una promesa.
         <div className="rv-fact__bloques">
           <div className="rv-caja-vacia">
-            <EstadoVacioV2 titulo={tr('facturacion.vista.carteraVaciaTitulo')}>
+            <EstadoVacioV2 titulo={tr('facturacion.vista.carteraVaciaTitulo')} icono={FileText}>
               {rico(tr('facturacion.vista.estaPantallaTrabajaCon'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
             </EstadoVacioV2>
           </div>
@@ -247,7 +248,7 @@ function BloqueCartera({ datos, captura, conTitulo = true, tr = trEs }: { datos:
 
       {c.facturas.length === 0 ? (
         <div className="rv-caja-vacia">
-          <EstadoVacioV2 titulo={tr('facturacion.vista.carteraVaciaTitulo')} contenido>
+          <EstadoVacioV2 titulo={tr('facturacion.vista.carteraVaciaTitulo')} icono={FileText} contenido>
             {tr('facturacion.vista.todaviaNoHayUna')}
           </EstadoVacioV2>
         </div>

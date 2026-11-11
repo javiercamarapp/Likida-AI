@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import type { ComponentProps, ReactNode } from 'react';
+import { Info } from 'lucide-react';
 import { Aviso, Boton, BotonEnlace, CampoTexto, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { CajonVistaRapida } from '../../ui-v2/esqueletos/cajon-vista-rapida';
@@ -44,7 +45,7 @@ const MENSAJE_ERROR: Record<string, string> = {
   guardar: 'No se pudo guardar el techo. Recarga e inténtalo de nuevo; si persiste, avisa a soporte.',
 };
 
-export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; ver?: string }> }) {
+export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; ver?: string; como?: string }> }) {
   const { t } = await getT('admin_dinero');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
@@ -123,33 +124,48 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
     </CajonVistaRapida>
   ) : null;
 
+  const cajonComo = !elegida && sp.como === '1' ? (
+    <CajonVistaRapida
+      titulo={t('techo_ia.como_enlace')}
+      subtitulo={t('techo_ia.techo_que_aplica')}
+      hrefCerrar="/admin/techo-ia"
+      cifras={[
+        { etiqueta: t('techo_ia.como_piso'), valor: usd(datos.pisoUsd) },
+        { etiqueta: t('techo_ia.como_min'), valor: usd(TECHO_IA_MIN_USD) },
+        { etiqueta: t('techo_ia.como_max'), valor: usd(TECHO_IA_MAX_USD) },
+        { etiqueta: t('techo_ia.k_declarado'), valor: String(datos.filas.filter((f) => f.origen === 'tenant').length) },
+      ]}
+    >
+      <ol className="rv-techo-como">
+        <li>{t('techo_ia.como_paso1')}</li>
+        <li>{t('techo_ia.como_paso2')}</li>
+        <li>{t('techo_ia.como_paso3', { piso: usd(datos.pisoUsd) })}</li>
+      </ol>
+      <p className="rv-techo-nota">{t('techo_ia.como_freno')}</p>
+      <p className="rv-techo-nota">{t('techo_ia.como_rango', { min: usd(TECHO_IA_MIN_USD), max: usd(TECHO_IA_MAX_USD) })}</p>
+    </CajonVistaRapida>
+  ) : null;
+
   return (
     <PantallaTecho
       apoyo={t('a1r4.techo_apoyo')}
       etiquetaCifras={t('techo_ia.flotas')}
       cifras={observadas(uniformes(cifras), t('a1r4.observado'))}
-      vistaRapida={cajon}
+      vistaRapida={cajon ?? cajonComo}
       avisos={(
         <>
+          <Aviso tono="info">{t('techo_ia.aviso_admin')}</Aviso>
           {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}
           {sp.error && MENSAJE_ERROR[sp.error] && <Aviso tono="error">{MENSAJE_ERROR[sp.error]}</Aviso>}
         </>
       )}
     >
-      <Tarjeta titulo={t('techo_ia.como_se_decide_el')}>
-        <p className="rv-techo-nota">
-          1) el que declares aquí; 2) si no hay, el que le toca por el tamaño de su plan; 3) si tampoco, el piso global de{' '}
-          <span className="tabular">{usd(datos.pisoUsd)}</span> al día. Pasado el techo, la IA de esa flota se frena hasta el día siguiente
-          (el camino del chofer conserva una reserva). Rango declarable: {usd(TECHO_IA_MIN_USD)} a {usd(TECHO_IA_MAX_USD)} por día;
-          para apagar la IA de una flota usa el interruptor, no un techo de cero.
-        </p>
-        {datos.gastoIlegible && (
-          <Aviso tono="warn">{t('techo_ia.el_gasto_de_hoy')}</Aviso>
-        )}
-        {datos.truncado && (
-          <p className="rv-techo-nota">{t('techo_ia.hay_mas_flotas_de')}</p>
-        )}
-      </Tarjeta>
+      {datos.gastoIlegible && (
+        <Aviso tono="warn">{t('techo_ia.el_gasto_de_hoy')}</Aviso>
+      )}
+      {datos.truncado && (
+        <p className="rv-techo-nota">{t('techo_ia.hay_mas_flotas_de')}</p>
+      )}
 
       <Tarjeta titulo={t('techo_ia.flotas')}>
         <TablaBase
@@ -161,6 +177,10 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
           tarjetaMovil
           vacio={{ titulo: t('techo_ia.sin_flotas'), texto: t('techo_ia.todavia_no_hay_flotas') }}
         />
+        {/* Rovaq P5: «ⓘ Cómo se calcula…» bajo la tabla; abre un cajón, no una tarjeta de párrafo a todo el ancho. */}
+        <BotonEnlace href="/admin/techo-ia?como=1" variante="ghost" tamano="sm" icono={<Info width={14} height={14} strokeWidth={1.75} aria-hidden="true" />}>
+          {t('techo_ia.como_enlace')}
+        </BotonEnlace>
       </Tarjeta>
     </PantallaTecho>
   );

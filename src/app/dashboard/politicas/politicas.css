@@ -25,3 +25,9 @@
 @media (max-width: 819px) {
   [data-ui="v2"] .rv-pol__tabla table[data-tarjeta] :is(tbody, tr, th, td) { box-sizing: border-box; max-width: 100%; min-width: 0; }
 }
+/* Móvil 412 (ronda 5): la fila-tarjeta es una rejilla de UNA columna que se ajusta al ancho de la tarjeta (`minmax(0, 1fr)`), no al contenido más largo sin cortar; el rótulo (th) y el valor
+ * (td) parten línea en vez de empujar la fila 3 px fuera del viewport. */
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-pol__tabla table[data-tarjeta] tbody tr { grid-template-columns: minmax(0, 1fr); }
+  [data-ui="v2"] .rv-pol__tabla table[data-tarjeta] tbody :is(th, td) { white-space: normal; overflow-wrap: anywhere; }
+}

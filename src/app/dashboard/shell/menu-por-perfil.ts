@@ -152,5 +152,9 @@ export function hrefActivo(pathname: string, menu: MenuV2): string | null {
       if (coincide && (mejor === null || h.length > mejor.largo)) mejor = { largo: h.length, href: it.href };
     }
   }
+  if (mejor === null && /^\/dashboard\/[0-9a-f-]{8,}$/i.test(pathname)) {
+    // Ficha de un viaje (`/dashboard/<id de liquidacion>`): vive bajo «Viajes».
+    return todosLosItems(menu).find((it) => it.href === '/dashboard/despacho')?.href ?? null;
+  }
   return mejor?.href ?? null;
 }

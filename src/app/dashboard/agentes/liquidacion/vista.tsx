@@ -225,7 +225,7 @@ async function BloqueCierres({ cierresPorDia }: {
     );
   }
   return (
-    <Tarjeta titulo={tx('liquidacion.vista.cierres_por_dia')} info="liquidacion.cierres_por_dia">
+    <Tarjeta titulo={tx('liquidacion.vista.cierres_por_dia')} info="liquidacion.cierres_por_dia" className="rv-ag-graf">
       <p className="rv-liq-sub">{tx('liquidacion.vista.ultimas_12_semanas')}</p>
       <Columnas
         etiqueta={tx('liquidacion.vista.liquidaciones_cerradas_por_dia_ultim')}

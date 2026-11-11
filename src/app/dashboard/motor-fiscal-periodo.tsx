@@ -77,11 +77,11 @@ export function MotorFiscalPeriodo({ series, causas = [] }: { series: Record<Mod
       <dl className="rv-cont__filas">
         <div className="rv-cont__fila" data-tono={r.montoEnRiesgo + r.montoPerdido > 0 ? 'bad' : undefined}>
           <dt>{t('op.mf_en_riesgo', { ventana: ventana[modo] })}</dt>
-          <dd className="cifra-mono">{mxn(r.montoEnRiesgo + r.montoPerdido)}</dd>
+          <dd>{mxn(r.montoEnRiesgo + r.montoPerdido)}</dd>
         </div>
         <div className="rv-cont__fila" data-tono={r.montoRecuperable > 0 ? 'ok' : undefined}>
           <dt>{t('op.mf_recuperable', { ventana: ventana[modo] })}</dt>
-          <dd className="cifra-mono">{mxn(r.montoRecuperable)}</dd>
+          <dd>{mxn(r.montoRecuperable)}</dd>
         </div>
       </dl>
       {top.length > 0 && (

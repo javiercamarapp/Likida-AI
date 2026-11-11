@@ -15,3 +15,14 @@
 
 /* El caparazón completo (sidebar 232 + marco flotante): la fila ocupa el alto y el contenido no se pega a la cabecera móvil. */
 [data-ui="v2"] .vnd-fila { min-height: 0; }
+
+/* Tira de cifras como la `pc-kpi` de Rovaq: rótulo, cifra, PISTA punteada de 6 px (solo forma; no mide nada) y nota. Sin ella cada celda dejaba ~45 px vacíos. */
+[data-ui="v2"] .vnd-fila .rv-kpi { min-height: 0; }
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__cab { order: 1; }
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__fila { order: 2; }
+[data-ui="v2"] .vnd-fila .rv-kpi:not([data-estado])::after {
+  content: ''; order: 3; display: block; height: 6px; margin: 4px 0; border-radius: 3px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 4px, transparent 4px 7px);
+}
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__nota { order: 4; }
+[data-ui="v2"] .vnd-fila .rv-kpi > .rv-kpi__pie { order: 5; margin-top: 0; }

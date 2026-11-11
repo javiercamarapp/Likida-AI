@@ -234,8 +234,7 @@ export default async function CalidadEvalsPage() {
               filas={corridas.porAgente.filter((a) => a.fallo > 0 || a.parcial > 0)}
               idFila={(a) => a.agente}
               altoMaximo={false}
-              densa
-            />
+              densa tarjetaMovil />
           ) : (
             <p className="adm-sis-vacio-linea">{tx('calidad_evals.0_fallos')}</p>
           )}

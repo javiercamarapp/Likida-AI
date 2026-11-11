@@ -1,6 +1,7 @@
 import { CheckCircle2 } from 'lucide-react';
 import '../agentes.css';
 import './facturas.css';
+import '../proveedores/proveedores.css';
 import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
 import { enrutar, type Ruta } from '@/lib/likida/facturacion/enrutar';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
@@ -144,7 +145,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
           mas={tx('facturas.vista.si_tu_empresa_aun_no')} />
       ) : undefined}
     >
-      <div className="rv-ag-pila">
+      <div className="rv-ag-pila rv-ag-compacto">
       <FilaTarjetas variante="8-4">
         {/* ── TU COLA: lo único de esta página que espera una acción tuya ── */}
         <Tarjeta titulo={tx('facturas.vista.te_toca_a_ti')} info="facturas.te_toca"

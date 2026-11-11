@@ -1175,7 +1175,7 @@ export const operacion = {
   'ini5a.falta.vigia': 'Arranca al cargar el programa de despacho o recibir el primer aviso de un cliente.',
   'ini5a.falta.conductor': 'Arranca cuando un operador reporte su primer hito por WhatsApp.',
   'ini5a.espera.liquidacion': 'En espera de conexión',
-  'ini5a.espera.peajes': 'En espera del estado de cuenta',
+  'ini5a.espera.peajes': 'Espera el estado de cuenta',
   'ini5a.espera.conductor': 'En espera de operadores',
   'ini5a.cierres.titulo': 'Liquidaciones cerradas por semana',
   'ini5a.cierres.nota': 'Últimas ocho semanas · viajes liquidados de tu flota',

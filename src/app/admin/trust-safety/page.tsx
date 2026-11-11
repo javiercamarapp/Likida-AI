@@ -148,7 +148,7 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
         ) : (
           <>
             <p className="m-0 mb-3 text-xs text-muted">{t('trust_safety.de_fuentes_emiten_las_demas_estan', { length: cobertura.filter((f) => f.emite).length, length2: cobertura.length })}</p>
-            <TablaBase etiqueta={t('trust_safety.cobertura_por_fuente_de_seguridad')} columnas={columnasCobertura(t, idioma)} filas={cobertura} idFila={(f) => f.id} altoMaximo={false} />
+            <TablaBase etiqueta={t('trust_safety.cobertura_por_fuente_de_seguridad')} columnas={columnasCobertura(t, idioma)} filas={cobertura} idFila={(f) => f.id} altoMaximo={false} tarjetaMovil />
             <Disclosure titulo={t('trust_safety.detalle_tecnico')} variante="linea" resumen={String(cobertura.length)}>
               <ul className="adm-sis-lista">
                 {cobertura.map((f) => <li key={f.id}><span>{f.titulo}</span><span className="break-words text-xs text-muted">{f.donde}</span></li>)}

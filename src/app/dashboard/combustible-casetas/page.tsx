@@ -239,14 +239,14 @@ export default async function CombustibleCasetasPage({
         {
           icono: <Icono icono={Fuel} />,
           // A23-ALTO: una lectura caída NO se pinta como "0 litros elegibles": es una cifra fiscal; sin lectura, «—» con su mensaje.
-          etiqueta: vl.rotulo, info: 'combustible_casetas.litros_elegibles', valor: acred ? acred.litrosDiesel : null, formato: 'litros',
+          etiqueta: tr('combustibleCasetas.page.litrosParaEstimulo'), info: 'combustible_casetas.litros_elegibles', valor: acred ? acred.litrosDiesel : null, formato: 'litros',
           ...(acred === null ? { estado: 'vacio' as const, mensaje: tr('combustibleCasetas.page.noSePudoLeer') } : {}),
           nota: vl.nota,
         },
         {
           icono: <Icono icono={Receipt} />,
           // Sin comprobantes el valor es null: «—», nunca un «0 %» que se lea como «todo facturado». «sin comprobantes» y «la consulta falló» no comparten mensaje.
-          etiqueta: tr('combustibleCasetas.page.sinCfdiCombustibleY'), info: 'combustible_casetas.sin_cfdi', valor: sinCfdiEstado.pct, formato: 'porcentaje',
+          etiqueta: tr('combustibleCasetas.panel.sinCfdi'), info: 'combustible_casetas.sin_cfdi', valor: sinCfdiEstado.pct, formato: 'porcentaje',
           ...(sinCfdiEstado.estado === 'error'
             ? { estado: 'vacio' as const, mensaje: tr('combustibleCasetas.page.noSePudoLeer2') }
             : sinCfdiEstado.estado === 'sin_datos'
@@ -257,18 +257,16 @@ export default async function CombustibleCasetasPage({
       ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }))}
       variante="8-4"
       graficas={porConcepto === null ? undefined : porConcepto.length > 1 ? [
-        meses.length >= 1 ? (
+        // Una sola barra no es una serie: con menos de dos meses la tarjeta de «Gasto por mes» (680 px para una barra) no se pinta y el
+        // reparto toma el ancho completo; el desglose por concepto ya va debajo de la dona (sin repetirlo en otra tarjeta).
+        ...(meses.length >= 2 ? [(
           <Tarjeta key="b" titulo={tr('combustibleCasetas.panel.gastoPorMes')} info="combustible_casetas.gastado_combustible">
             <Columnas etiqueta={tr('combustibleCasetas.panel.gastoPorMes')} datos={meses} formato="mxn" matiz={2} variacion={false} />
             <p className="rv-comb__nota">{tr('combustibleCasetas.panel.ventanaNota', { n: numero(VENTANA_DOCUMENTOS) })}</p>
           </Tarjeta>
-        ) : (
-          <Tarjeta key="b" titulo={tr('combustibleCasetas.page.gastoPorConcepto')}>
-            <BarList etiqueta={tr('combustibleCasetas.page.gastoPorConcepto')} items={itemsConcepto} formato={mxn} />
-          </Tarjeta>
-        ),
+        )] : []),
         <Tarjeta key="d" titulo={tr('combustibleCasetas.page.repartoDelGasto')}>
-          <DonaMini etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
+          <DonaMini matiz={1} etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
           {/* Rovaq (Brechas «Por canal»): la dona lleva debajo su lista de barras y llena el alto de la tarjeta vecina. */}
           <BarList etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} items={itemsConcepto} formato={mxn} />
         </Tarjeta>,

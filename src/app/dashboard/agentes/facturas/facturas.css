@@ -54,3 +54,9 @@
 
 /* Cajón del portal: los botones fantasma alinean su texto con «Abrir el portal» (sin 8 px de sangría). */
 .rv-fact__cajon-raiz .rv-fact__pila .rv-btn--ghost { margin-inline-start: -8px; }
+
+/* F26 ronda 5 · «Tus portales»: la tabla llega a sangre dentro de su tarjeta (Rovaq: padding 0), sin un segundo borde ni radio propios. */
+.rv-fact__portales { gap: 8px; }
+.rv-fact__portales-pad { display: grid; gap: 8px; padding: 12px 14px 0; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-fact__portales .rv-tb { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-fact__portales .rv-tb__region { border-top: 1px solid var(--line); }

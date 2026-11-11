@@ -54,7 +54,7 @@ export default async function PaginaNotificaciones({
         <BloqueCifras etiqueta={tr('notif.titulo')} cifras={[
           bandeja.noLeidos === null
             ? { etiqueta: tr('e26b.avisos_sin_leer'), valor: null, estado: 'error', reintentar: true }
-            : { etiqueta: tr('e26b.avisos_sin_leer'), valor: bandeja.noLeidos, nota: tr('e26b.avisos_sin_leer_nota'), tono: bandeja.hayCritico ? 'bad' : undefined },
+            : { etiqueta: tr('e26b.avisos_sin_leer'), valor: bandeja.noLeidos, nota: tr('e26b.avisos_sin_leer_nota'), tono: bandeja.hayCritico ? 'bad' : bandeja.noLeidos === 0 ? 'ok' : undefined },
           { etiqueta: tr('e26b.avisos_cargados'), valor: bandeja.avisos.length, nota: tr('e26b.avisos_cargados_nota') },
         ]} />
       ) : null}

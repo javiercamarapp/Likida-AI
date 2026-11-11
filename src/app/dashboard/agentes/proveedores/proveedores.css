@@ -30,3 +30,15 @@
 .rv-prov__resumen [data-tono="warn"] { color: var(--warn); }
 .rv-prov__resumen [data-tono="bad"] { color: var(--bad); }
 .rv-prov__rotulo { margin: 0; font-size: var(--t-micro, 11px); font-weight: 500; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+
+/* F26 ronda 5 · páginas de agentes compactas (cobranza, facturas, proveedores). Rovaq `ac-vacio`: UN renglón (icono fuera, título 13/600 y texto 12 en
+   la misma línea), no un bloque de 120-220 px con icono y tres líneas; seis vacíos apilados alargaban la página a ~1,550 px. Solo con la clase
+   `rv-ag-compacto` (la ponen estas tres páginas), así que no toca a las demás pantallas que comparten este archivo. */
+[data-ui="v2"] .rv-ag-compacto .rv-vacio.rv-vacio:not([data-pantalla]) {
+  flex: 0 0 auto; min-height: 0; max-height: none; flex-direction: row; flex-wrap: wrap; align-items: baseline; justify-content: flex-start;
+  gap: 2px 8px; padding: 10px 14px; text-align: left;
+}
+[data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__icono { display: none; }
+[data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__titulo { margin: 0; font-size: 13px; font-weight: 600; }
+[data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__texto { margin: 0; font-size: 12px; }
+[data-ui="v2"] .rv-ag-compacto .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo { flex: 0 0 auto; }

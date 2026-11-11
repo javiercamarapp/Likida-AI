@@ -63,6 +63,7 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
       ] : undefined}
       etiquetaCifras={tx('rest.sin_atender')}
     >
+      <span className="rv-ag-sin-filete-marca" hidden aria-hidden="true" />
       {error === null && (
         <>
           <Seccion id="sin-atender-lista" titulo={tx('rest.sin_atender')} info="vigia_sin_atender.lista">

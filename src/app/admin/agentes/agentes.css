@@ -19,10 +19,9 @@
 @media (min-width: 768px) {
   .rv-tb table td { vertical-align: middle; }
 }
-/* Filas de dos líneas (nombre + departamento · estado): 56 px como las de Rovaq con dos líneas (antes 41 px, apretadas). */
+/* Filas de dos líneas (nombre + departamento · estado): 58 px como Organizaciones de Rovaq (td con padding de 10 px; antes 41 px, pegadas al divisor). */
 @media (min-width: 820px) {
-  [data-ui="v2"] .rv-tb table:has(.rv-agente-sub) tbody th { height: 56px; padding-block: 8px; }
-  [data-ui="v2"] .rv-tb table:has(.rv-agente-sub) tbody td { padding-block: 8px; }
+  [data-ui="v2"] .rv-tl:has(.rv-agente-sub) .rv-tl__td { height: auto; min-height: 56px; padding-block: 10px; }
 }
 
 /* Menú «⋯» de la fila (Rovaq: acciones por fila dentro de un menú, 28 px): la destructiva «Apagar» vive ahí, no como botón rojo por fila. */
@@ -43,3 +42,7 @@
 
 /* F26 ronda 4: el vacío dentro de una tarjeta va punteado (Rovaq `ac-vacio`: 1 px, radio 8, 20×14). */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* F26 ronda 5 · zona de soltar de Insumos (Rovaq): 1.5 px punteado, fondo hundido, radio 12, padding 20×16. */
+[data-ui="v2"] .rv-insumos-zona { gap: 6px; padding: 20px 16px; border: 1.5px dashed var(--line2); border-radius: 12px; background: var(--canvas); text-align: center; }
+[data-ui="v2"] .rv-insumos-zona:hover, [data-ui="v2"] .rv-insumos-zona--sobre { border-color: var(--ink); }

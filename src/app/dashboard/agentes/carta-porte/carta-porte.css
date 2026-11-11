@@ -50,3 +50,8 @@
 .rv-cp__tres > .rv-cp__col { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
 /* La nota de método al pie de la página (12 px, apagada): lo que antes eran párrafos sueltos entre tarjetas. */
 .rv-cp__metodo { display: grid; gap: 4px; margin: 0; }
+
+/* Botones del ancho de su contenido (32 px), alineados al pie de la sección: dentro de una pila (grid) un botón se estiraba a todo el ancho. */
+.rv-cp__pila > .rv-btn, .rv-cp__pila > button[type="submit"], .rv-cp__bloque .rv-cp__pila > .rv-btn { justify-self: start; width: auto; }
+/* Las columnas de «Cómo mandarme documentos» miden lo que mide su contenido (no se estiran a la del buzón). */
+.rv-cp__tres { align-items: start; }

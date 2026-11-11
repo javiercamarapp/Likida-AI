@@ -14,7 +14,8 @@ import { SeccionCorreoAvisos, type CorreoAvisosVista } from './correo-avisos';
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
-import { BotonEnlace, EstadoVacio, Icono, StatusChip, TituloRecuadro, Boton, Disclosure, Tooltip } from '@/app/ui-v2/componentes';
+import { BotonEnlace, EstadoVacio, Icono, StatusChip, TituloRecuadro, Boton, Disclosure, Tooltip, CampoArchivo } from '@/app/ui-v2/componentes';
+import { ZonaSoltar } from '@/app/dashboard/agentes/zona-soltar';
 import { SeccionConfig } from './seccion';
 import '../peajes.css';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
@@ -259,8 +260,7 @@ function SubirCsv({ accion, etiqueta, extra, tr = TR_ES }: { accion: Accion; eti
   const { t: tx } = tr;
   return (
     <form action={accion} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
-      <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label={etiqueta}
-        className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
+      <ZonaSoltar><CampoArchivo etiqueta={etiqueta} etiquetaOculta name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required /></ZonaSoltar>
       {extra}
       <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Upload} />{' '}{tx('rest.cargar')}</Boton>
     </form>

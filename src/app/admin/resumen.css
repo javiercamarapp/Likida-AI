@@ -111,6 +111,14 @@
 [data-ui="v2"] .adm-res-fila__ver:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* Una fila de dos paneles no estira al más bajo hasta el alto del más alto con un vacío dentro. */
 [data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+[data-ui="v2"] .rv-fila-tarjetas.adm-fila-alto-contenido > .rv-tarjeta { height: auto; }
+/* Rótulo de panel (Rovaq pf-panel): el eyebrow va ARRIBA del título. La tarjeta compartida pinta título y luego cuerpo; el cuerpo se
+   disuelve en la tarjeta y el eyebrow (primer hijo del cuerpo) pasa primero. (pedido_compartido: prop `eyebrow` en Tarjeta.) */
+[data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo { display: contents; }
+[data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo > .adm-eyebrow:first-child { order: -1; margin: 0 0 -4px; }
+[data-ui="v2"] .rv-tarjeta:has(> .rv-tarjeta__cuerpo > .adm-eyebrow:first-child) > .rv-tarjeta__cuerpo > :not(.adm-eyebrow:first-child) { order: 1; }
+/* Vacío de una línea dentro de un panel (Rovaq ac-vacio): borde punteado, radio 8, relleno 20×14; sin tarjeta alta con un hueco. */
+[data-ui="v2"] .adm-vacio-linea { margin: 0; padding: 20px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; font-size: 13px; line-height: 1.4; color: var(--muted); text-align: center; }
 /* Ficha 360 y consola: las tarjetas de cifra van SIN filete (Rovaq `pf-tile`); el color de dato no pinta un borde grueso. */
 [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { border-top-width: 0; padding: 20px; }
 @media (max-width: 767px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { padding: 12px; } }
@@ -119,3 +127,18 @@
 /* Select de rol y Revocar de la tabla de integrantes: 28 px, Revocar en peligro (Rovaq). */
 /* Notificaciones: la configuración es una acción de la cabecera; el botón duplicado de la bandeja compartida no se pinta aquí. */
 [data-ui="v2"] .adm-notif .av-cambio { display: none; }
+
+/* Notificaciones: la configuración es una acción de la cabecera; el botón duplicado de la bandeja compartida no se pinta aquí. */
+[data-ui="v2"] .adm-notif .av-cambio { display: none; }
+
+/* Roles (Rovaq /settings/team): lista compacta con punto negro, nombre 13/600 y su descripción en 12 px; sin filas de configuración de 60 px. */
+[data-ui="v2"] .adm-roles { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+[data-ui="v2"] .adm-roles li { position: relative; display: flex; flex-direction: column; gap: 1px; padding-left: 14px; }
+[data-ui="v2"] .adm-roles li::before { content: ""; position: absolute; left: 2px; top: 7px; width: 5px; height: 5px; border-radius: 999px; background: var(--ink); }
+[data-ui="v2"] .adm-roles strong { font-size: 13px; font-weight: 600; color: var(--ink); line-height: 1.4; }
+[data-ui="v2"] .adm-roles span { font-size: 12px; line-height: 1.4; color: var(--muted); }
+
+/* Selector de cliente con teclado: la fila resaltada es NEGRA con texto blanco (Rovaq P2c); los botones de la fila se invierten con ella. */
+[data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] > * { background: var(--ink); color: var(--surface); }
+[data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] :is(.adm-res-fila__titulo, .adm-flota-id, svg) { color: var(--surface); }
+[data-ui="v2"] .adm-sel-tabla tbody tr[data-resaltada] .rv-btn { background: transparent; color: var(--surface); border-color: var(--surface); }
