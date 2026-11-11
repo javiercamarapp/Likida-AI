@@ -84,3 +84,9 @@
 
 /* Cifras de tabla y de texto: numerales tabulares en la tipografía de la interfaz (Rovaq usa monoespaciada solo en los rótulos del menú). */
 .rv-ag-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Rovaq: los bloques de una tabla maestra se apilan a 12 px (el contenedor no los separaba y las tarjetas quedaban pegadas) y el vacío de una tarjeta
+   es la caja punteada de `ac-vacio` (1 px, radio 8, padding 20/14), no un hueco alto sin borde. Se repite en el CSS de cada agente para que lo
+   cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
+[data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
