@@ -79,7 +79,7 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
         />
       </TiraCifras>
 
-      <Tarjeta titulo={recortado ? t('conv.tarjeta.recientes', { tope: TOPE_HILOS, total }) : t('conv.tarjeta.todos')} info="conversaciones.hilos">
+      <Tarjeta titulo={recortado ? t('conv.tarjeta.recientes', { tope: TOPE_HILOS, total: total ?? 0 }) : t('conv.tarjeta.todos')} info="conversaciones.hilos">
         {errorCarga !== null ? (
           <EstadoError reintentar>
             {t('conv.error')}
