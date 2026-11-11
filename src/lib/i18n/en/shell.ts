@@ -33,4 +33,7 @@ export const shell: Record<keyof typeof shellEs, string> = {
   'mapa.sinPunto.uno': '{n} prospect has no coordinates: it counts in its state but has no point on the map.',
   'mapa.sinPunto.otros': '{n} prospects have no coordinates: they count in their state but have no point on the map.',
   'pie.cuenta.salir': 'Sign out',
+  'vendedor.rotulo': 'Sales reps',
+  'vendedor.soporte': 'Viewing as superadmin · all prospects',
+  'vendedor.salir': 'Sign out',
 };

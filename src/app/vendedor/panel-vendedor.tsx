@@ -1,5 +1,5 @@
 import { revalidatePath } from 'next/cache';
-import { Activity, BadgePercent, CalendarDays, CheckCircle2, Inbox } from 'lucide-react';
+import { Activity, BadgePercent, CheckCircle2, Inbox } from 'lucide-react';
 import { getSessionTenant } from '@/lib/auth/session';
 import { veredictoMfaDeSesion } from '@/lib/auth/superadmin-mfa';
 import { MSG_MFA_SUPERADMIN } from '@/lib/auth/mfa';
@@ -10,10 +10,9 @@ import {
   type ProspectoRow, type VendedorRow,
 } from '@/lib/likida/vendedores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { saludo, ahoraMs } from '@/lib/saludo';
-import { fechaMx, hoyMx } from '@/lib/formato';
-import { StatCard, EstadoVacio } from '../admin/ui/kit';
-import { BarraPagina, ChipFecha, HeroSaludo, TituloSeccion } from '../dashboard/resumen-visual';
+import { anotarAccionVendedor, type AccionRegistrada } from '@/lib/likida/vendedores_registro';
+import { MarcoPagina, Tarjeta, Icono, Aviso } from '../ui-v2/componentes';
+import { TiraCifras } from '../ui-v2/graficas';
 import { TableroProspectos, type ColumnaTablero, type ResultadoAccion } from '../admin/vendedores/tablero';
 
 const RUTA = '/vendedor';
@@ -45,6 +44,8 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 export async function ejecutarComoVendedor(
   hacer: (ancla: { soloDeVendedor?: string }) => Promise<void>,
   operacion: string,
+  /** Qué dejar en la bitácora cuando la acción salga bien (ids y etapas; nunca texto libre). */
+  registro?: { accion: AccionRegistrada; entidadId: string; detalle: Record<string, unknown> },
 ): Promise<ResultadoAccion> {
   const s = await getSessionTenant();
   if (!s || (s.rol !== 'vendedor' && s.rol !== 'superadmin')) {
@@ -56,6 +57,7 @@ export async function ejecutarComoVendedor(
   }
   try {
     await hacer(s.rol === 'vendedor' ? { soloDeVendedor: s.userId } : {});
+    if (registro) await anotarAccionVendedor({ userId: s.userId, rol: s.rol }, registro.accion, registro.entidadId, registro.detalle);
     revalidatePath(RUTA);
     return { ok: true };
   } catch (e) {
@@ -76,10 +78,11 @@ export async function ejecutarComoVendedor(
  * puede pintar, pero no escribir.
  */
 export async function PanelVendedor({
-  userId, nombre, rol, col, pag,
+  userId, rol, col, pag,
 }: {
   userId: string;
-  nombre: string | null;
+  /** Lo manda la página; el nombre ya vive en la cabecera. */
+  nombre?: string | null;
   rol: string;
   /** FE-10: qué columna está EXPANDIDA (`?col=<estado>`). Un valor fuera del
    *  dominio se ignora — un link viejo o manipulado se lee como "ninguna". */
@@ -102,6 +105,7 @@ export async function PanelVendedor({
     return ejecutarComoVendedor(
       (ancla) => cambiarEstadoProspecto(String(id), String(a), ancla),
       'mover el prospecto',
+      { accion: 'prospecto.movido', entidadId: String(id), detalle: { a: String(a) } },
     );
   }
 
@@ -110,6 +114,8 @@ export async function PanelVendedor({
     return ejecutarComoVendedor(
       (ancla) => actualizarNotasProspecto(String(id), String(nota), ancla),
       'guardar la nota',
+      // Solo el largo: el texto de la nota es del vendedor y la bitácora sobrevive a un borrado ARCO.
+      { accion: 'prospecto.nota', entidadId: String(id), detalle: { largo: String(nota).length } },
     );
   }
 
@@ -169,87 +175,58 @@ export async function PanelVendedor({
   }
   const vivos = ESTADOS_VIVOS.reduce((sum, e) => sum + totales[e], 0);
   const comision = reglaComision();
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
 
   return (
-    <main>
-      <div className="rounded-2xl overflow-hidden flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina icono={<Activity {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo={esVendedor ? 'Mis prospectos' : 'Prospectos (soporte)'} />
-        <HeroSaludo
-          saludo={saludo()} nombre={nombre ?? 'vendedor'}
-          tagline="Tu cartera del censo: cada tarjeta es una empresa que ya nombró el dolor"
-          derecha={
-            <div className="shrink-0 pt-1">
-              <ChipFecha icono={<CalendarDays {...ICONO} style={{ color: 'var(--muted)' }} />}>
-                {fechaMx(hoyMx(new Date(ahoraMs())))}
-              </ChipFecha>
+    <MarcoPagina
+      titulo={esVendedor ? 'Mis prospectos' : 'Prospectos (soporte)'}
+    >
+      {prospectos === null ? (
+        <Aviso tono="error">
+          No se pudieron cargar tus prospectos en este momento. Recarga la página — esto NO
+          significa que no tengas: significa que no se pudo leer.
+        </Aviso>
+      ) : (
+        <>
+          <TiraCifras etiqueta={esVendedor ? 'Mi cartera' : 'Cartera (todos)'} items={[
+            { etiqueta: esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)', valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
+            { etiqueta: esVendedor ? 'Mis ganados' : 'Ganados (todos)', valor: totales.won, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
+            { etiqueta: 'Propuesta o piloto', valor: totales.proposal + totales.pilot, formato: 'entero', icono: <Icono icono={Inbox} /> },
+          ]} />
+
+          {/* La regla de comisión, con su aclaración pegada: 50/20 es la regla pactada; el dinero sale de cobros reales, hoy $0. */}
+          <Tarjeta titulo="Tu comisión">
+            <div className="vnd-comision">
+              <Icono icono={BadgePercent} tam={16} />
+              <div>
+                <p className="vnd-comision__regla">{comision.primerMes}</p>
+                <p className="vnd-comision__regla">{comision.recurrente}</p>
+                <p className="vnd-comision__nota">
+                  Falta el cálculo: aún no hay registro de comisiones ni la liga de cada prospecto cerrado con su flota y su factura pagada, así que no se muestra ninguna cifra.
+                </p>
+              </div>
             </div>
-          }
-        />
+          </Tarjeta>
 
-        <div className="px-5 pb-5 flex-1 space-y-2">
-          {prospectos === null ? (
-            <div className="card p-4 mt-2">
-              <p className="text-sm m-0">
-                No se pudieron cargar tus prospectos en este momento. Recarga la página — esto NO
-                significa que no tengas: significa que no se pudo leer.
-              </p>
-            </div>
-          ) : (
-            <>
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <StatCard icono={<Activity {...ICONO} />} etiqueta={esVendedor ? 'Mi cartera viva' : 'Cartera viva (todos)'} valor={vivos} formato="entero" />
-                <StatCard icono={<CheckCircle2 {...ICONO} />} etiqueta={esVendedor ? 'Mis ganados' : 'Ganados (todos)'} valor={totales.won} formato="entero" />
-                <StatCard icono={<Inbox {...ICONO} />} etiqueta="Propuesta o piloto" valor={totales.proposal + totales.pilot} formato="entero" />
-              </div>
-
-              {/* La regla de comisión, con su aclaración pegada: 50/20 es la
-                  regla pactada; el dinero sale de cobros reales, hoy $0. */}
-              <div className="card p-3">
-                <TituloSeccion>Tu comisión</TituloSeccion>
-                <div className="mt-2 flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                    <BadgePercent width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-                  </div>
-                  <div className="text-[13px] space-y-1">
-                    <p className="m-0 font-medium">{comision.primerMes}</p>
-                    <p className="m-0 font-medium">{comision.recurrente}</p>
-                    <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>
-                      Falta el cálculo: aún no hay registro de comisiones ni la liga de cada prospecto cerrado con su flota y su factura pagada, así que no se muestra ninguna cifra.
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="card p-3">
-                <TituloSeccion>{esVendedor ? 'Tu tablero' : 'El tablero completo'}</TituloSeccion>
-                <div className="mt-2.5">
-                  {prospectos.length === 0 ? (
-                    <EstadoVacio icono={<Inbox width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-                      Todavía no tienes prospectos asignados. En cuanto te asignen los primeros (a mano
-                      o con el asignador), aparecen aquí con la empresa y la vacante que publicó.
-                    </EstadoVacio>
-                  ) : (
-                    columnas !== null && (
-                      <TableroProspectos
-                        columnas={columnas}
-                        orden={ESTADOS_PROSPECTO.map((e) => e.valor)}
-                        transiciones={TRANSICIONES_PROSPECTO}
-                        rotulos={Object.fromEntries(ESTADOS_PROSPECTO.map((e) => [e.valor, e.rotulo]))}
-                        vendedores={[]}
-                        mover={accionMover}
-                        guardarNota={accionNota}
-                        conVendedor={!esVendedor}
-                      />
-                    )
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </main>
+          <Tarjeta titulo={esVendedor ? 'Tu tablero' : 'El tablero completo'}
+            estado={prospectos.length === 0 ? 'vacio' : 'ok'}
+            mensaje="Sin prospectos asignados"
+            detalle="En cuanto te asignen los primeros (a mano o con el asignador), aparecen aquí con la empresa y la vacante que publicó."
+            iconoVacio={Inbox}>
+            {columnas !== null && (
+              <TableroProspectos
+                columnas={columnas}
+                orden={ESTADOS_PROSPECTO.map((e) => e.valor)}
+                transiciones={TRANSICIONES_PROSPECTO}
+                rotulos={Object.fromEntries(ESTADOS_PROSPECTO.map((e) => [e.valor, e.rotulo]))}
+                vendedores={[]}
+                mover={accionMover}
+                guardarNota={accionNota}
+                conVendedor={!esVendedor}
+              />
+            )}
+          </Tarjeta>
+        </>
+      )}
+    </MarcoPagina>
   );
 }

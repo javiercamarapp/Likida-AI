@@ -37,4 +37,8 @@ export const shell = {
   'mapa.sinPunto.uno': '{n} prospecto sin coordenadas: cuenta en su estado pero no tiene punto en el mapa.',
   'mapa.sinPunto.otros': '{n} prospectos sin coordenadas: cuentan en su estado pero no tienen punto en el mapa.',
   'pie.cuenta.salir': 'Cerrar sesión',
+  // Cabecera de /vendedor
+  'vendedor.rotulo': 'Vendedores',
+  'vendedor.soporte': 'Viendo como superadmin · todos los prospectos',
+  'vendedor.salir': 'Salir',
 } as const;

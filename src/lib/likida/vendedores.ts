@@ -635,10 +635,10 @@ export async function crearProspecto(
 /**
  * Alta de un vendedor. REUSA el alta real del repo — `provisionarUsuario`
  * (Auth + app_user) con rol `vendedor` y tenant null — y la validación pura
- * de `invitar.ts`. Igual que el flujo D6: NO se manda correo de invitación
- * (esa plantilla existe y nadie la emite todavía) — el vendedor entra
- * tecleando su correo en /login y le llega el magic link de Supabase; la
- * pantalla lo dice tal cual en vez de prometer un correo que no sale.
+ * de `invitar.ts`. El correo de invitación NO sale de aquí: lo
+ * manda la acción (`vendedores_registro.ts`) después de comprobar que el
+ * canal está encendido; esta función solo da de alta la cuenta. El vendedor
+ * entra tecleando su correo en /login (magic link de Supabase).
  */
 export async function invitarVendedor(correo: string, nombre: string): Promise<{ userId: string; email: string }> {
   const v = validarInvitacionVendedor({ email: correo, nombre });
