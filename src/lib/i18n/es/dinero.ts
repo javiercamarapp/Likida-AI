@@ -1890,7 +1890,7 @@ export const dinero = {
   'timbrado.viajeId.page.tituloViaje': 'Timbrado — viaje {rotulo}',
   'timbrado.viajeId.page.unidadEco': '· Unidad {unidadEconomico}',
   'timbrado.viajeId.page.verElBorradorCompleto': 'Ver el borrador completo',
-  'timbrado.viajeId.page.volverATimbrado': 'Volver a Timbrado',
+  'timbrado.viajeId.page.volverATimbrado': 'Volver a Carta Porte',
   'timbrado.viajeId.timbrar.03Transferencia01Efectivo': '03 transferencia · 01 efectivo',
   'timbrado.viajeId.timbrar.apartadoDesde': 'Apartado desde {reservadoEn}.',
   'timbrado.viajeId.timbrar.bloqueoLiberadoYaPuedes': 'Bloqueo liberado. Ya puedes volver a timbrar este viaje.',

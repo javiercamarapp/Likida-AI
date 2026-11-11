@@ -1,7 +1,7 @@
 import { getT } from '@/lib/i18n/servidor';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroChip, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './timbrado.css';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
@@ -96,9 +96,14 @@ export default async function PaginaTimbrado({
     <EsqueletoTablaMaestra
       titulo={tr('timbrado.page.cartaPorte')}
       filtros={filas ? (
-        <BarraFiltros etiqueta={tr('e26b.timb_filtros')} nActivos={filtro === 'todos' ? 0 : 1} limpiarHref={RUTA + (sufijo ? sufijo : '')}>
-          {FILTROS.map((x) => <FiltroChip key={x} activo={filtro === x} href={hrefFiltro(x)}>{rotuloFiltro[x]}</FiltroChip>)}
-        </BarraFiltros>
+        // Filtro EXCLUYENTE = segmentado en píldora (30/24), el mismo de /descarga-sat/bandeja; la URL manda y mueve la tabla entera.
+        <div className="rv-timb__filtro">
+          <nav className="rv-seg rv-bp__seg" data-tam="sm" aria-label={tr('e26b.timb_filtros')}>
+            {FILTROS.map((x) => (
+              <Link key={x} href={hrefFiltro(x)} prefetch={false} scroll={false} className="rv-seg__btn" aria-current={filtro === x ? 'true' : undefined}>{rotuloFiltro[x]}</Link>
+            ))}
+          </nav>
+        </div>
       ) : undefined}
       apoyo={pac.configurado
         ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? tr('timbrado.page.dePruebasLosTimbres') : tr('timbrado.page.deProduccion')}.`
@@ -123,6 +128,7 @@ export default async function PaginaTimbrado({
           accionVacio={filas.length === 0 && puedeVerRuta(rol, '/dashboard/carta-porte')
             ? <BotonEnlace href={`/dashboard/carta-porte${sufijo}`} variante="secondary" tamano="sm">{tr('timbrado.page.irACartaPorte')}</BotonEnlace>
             : undefined}
+          contenida
         />
       ) : (
         <TablaBase

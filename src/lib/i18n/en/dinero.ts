@@ -1890,7 +1890,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'timbrado.viajeId.page.tituloViaje': 'Stamping — trip {rotulo}',
   'timbrado.viajeId.page.unidadEco': '· Unit {unidadEconomico}',
   'timbrado.viajeId.page.verElBorradorCompleto': 'View the full draft',
-  'timbrado.viajeId.page.volverATimbrado': 'Back to Stamping',
+  'timbrado.viajeId.page.volverATimbrado': 'Back to Carta Porte',
   'timbrado.viajeId.timbrar.03Transferencia01Efectivo': '03 transfer · 01 cash',
   'timbrado.viajeId.timbrar.apartadoDesde': 'Reserved since {reservadoEn}.',
   'timbrado.viajeId.timbrar.bloqueoLiberadoYaPuedes': 'Block released. You can stamp this trip again.',
