@@ -1,8 +1,10 @@
 import { NextResponse } from 'next/server';
-import { clasificacionDeGuardia, decidirApp, decidirAvisos, decidirBaseCaida, estadoDeDetalle, estadoTrasAviso, lineasDeAviso, huellaDeClave, memoriaDeEstado, ESTADO_GUARDIA_INICIAL, SONDEOS_FALLIDOS_PARA_CAIDA, type EstadoGuardia } from '@/lib/admin/guardia';
+import { clasificacionDeGuardia, decidirApp, decidirAvisos, decidirBaseCaida, estadoDeDetalle, estadoTrasAviso, huellaDeClave, memoriaDeEstado, ESTADO_GUARDIA_INICIAL, SONDEOS_FALLIDOS_PARA_CAIDA, type EstadoGuardia } from '@/lib/admin/guardia';
 import { COMPONENTES_ESTADO, detalleLatidos, leerLatido, puertaCron, purgarObservabilidad, registrarEstado, registrarLatido, type EstadoLatido } from '@/lib/admin/salud';
 import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth, sondeoCiego } from '@/lib/admin/estado';
 import { alertasIaDeDetalle, alertasIaEncendidas, correrAlertasIa } from '@/lib/admin/alertas-ia';
+import { lineasAgrupadas } from '@/lib/admin/agrupar-alertas';
+import { evaluarQuemaSegura, lineasDeQuemaNueva, quemaCompacta, quemaDeDetalle, ultimoCambioVisto } from '@/lib/admin/guardia-mejora';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { conRelojDuro } from '../_reloj_duro';
 import { appUrl } from '@/lib/env';
@@ -125,7 +127,7 @@ export async function GET(req: Request) {
       }
       let avisoSalio = true;
       if (decision.nuevos.length > 0 || decision.ciegasNuevas.length > 0) {
-        const lineas = lineasDeAviso(decision);
+        const lineas = lineasAgrupadas(decision, { ultimoCambio: await ultimoCambioVisto() });
         // `cual`: la huella de lo nuevo — dos tandas distintas de incidentes son dos alarmas aunque caigan en la misma hora
         // (el piso por evento del correo se parte por huella; sin esto el segundo grupo se descartaba).
         avisoSalio = await alertarOperador('guardia.incidente_nuevo', {
@@ -268,10 +270,31 @@ export async function GET(req: Request) {
     if (Date.now() < vence - 6_000) alertasIa = await correrAlertasIa(inicio, alertasIaPrevias);
     const alertasIaVigente = alertasIa.estado === 'ok' ? alertasIa.detalle : alertasIa.estado === 'omitido' && alertasIaEncendidas() ? alertasIaPrevias : null;
 
+    // ── 7. Quema del presupuesto de error (F14-A) ──────────────────────────
+    // Dos ventanas sobre los SLO que ya mide la guardia, sin cron nuevo. Sin muestra = `sin_medir` (no alerta ni tranquiliza).
+    // Avisa solo la TRANSICIÓN a página. No lanza.
+    let quemaDetalle: Record<string, string> | undefined;
+    if (Date.now() < vence - 6_000) {
+      const ev = await evaluarQuemaSegura();
+      if (ev) {
+        const nuevas = lineasDeQuemaNueva(ev, quemaDeDetalle(detallePrevioCrudo), await ultimoCambioVisto());
+        let aviso = true;
+        if (nuevas.length > 0) {
+          aviso = await alertarOperador('guardia.quema_slo', {
+            codigo: 'guardia_quema_slo', cual: huellaDeClave(nuevas.join('\n')), resumen: `${nuevas.length} grupo(s) de quema del presupuesto de error`,
+            ...Object.fromEntries(nuevas.slice(0, 4).map((l, i) => [`quema_${i + 1}`, l])),
+          });
+        }
+        const compacta = quemaCompacta(ev);
+        // Si el aviso no salió, no se anota como página: la siguiente pasada vuelve a intentarlo.
+        quemaDetalle = aviso ? compacta : Object.fromEntries(Object.entries(compacta).map(([k, v]) => [k, v === 'pagina' ? 'ninguna' : v]));
+      }
+    }
+
     const parcial = cortadoPorReloj || alertasIa.estado === 'error' || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal || gobiernoIa?.estado === 'error';
     const estado: EstadoLatido = parcial ? 'parcial' : 'ok';
     // `componentes` va en el latido: es lo que lee /estado para el estado ACTUAL (con la hora del propio latido).
-    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(alertasIaVigente ? { alertasIa: alertasIaVigente } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
+    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(alertasIaVigente ? { alertasIa: alertasIaVigente } : {}), ...(quemaDetalle ? { quema: quemaDetalle } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
     logger.info('cron.guardia.ok', { ...detalleBandeja, componentes: JSON.stringify(medicion), parcial });
     await registrarLatido('guardia', estado, detalle);
     return NextResponse.json({ corrio: true, parcial, ...detalleBandeja, componentes: medicion });
