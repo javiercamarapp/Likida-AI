@@ -15,3 +15,11 @@
 }
 /* Pie de sección: una sola acción primaria a la derecha, con un divisor. */
 [data-ui="v2"] .rv-fila-pie { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+
+/* Configuración en DOS columnas (Rovaq «Equipo» y «Retención»: rejilla de 2 tarjetas). Se activa con un marcador `rv-cfg-dos` en el contexto de la página; las
+ * secciones con tabla o contenido ancho llevan `rv-cfg-ancha` y ocupan las dos. Bajo 1100 px vuelve a una sola columna. Sin `content:`. */
+[data-ui="v2"] .rv-cfg-dos { display: none; }
+@media (min-width: 1100px) {
+  [data-ui="v2"] .rv-esq--config:has(.rv-cfg-dos) .rv-esq__cfg { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  [data-ui="v2"] .rv-esq--config:has(.rv-cfg-dos) .rv-esq__cfg > .rv-tarjeta:has(.rv-cfg-ancha) { grid-column: 1 / -1; }
+}
