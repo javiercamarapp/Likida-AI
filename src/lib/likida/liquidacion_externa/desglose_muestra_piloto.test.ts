@@ -210,18 +210,17 @@ describe('P0-5 · BitacoraID alfanumérico', () => {
 });
 
 describe('P0-3 · catálogo de conceptos: punto único, sin inventar', () => {
-  it('los conceptos que el cliente aún no entregó siguen sin reconocerse (revisión), no se inventan', () => {
-    for (const d of ['IMSS', 'ISPT', 'Hora extra', 'Préstamo', 'Gastos de viaje', 'Aviso de descuento']) {
-      const r = conv({ Deducciones: [{ Descripcion: d, Monto: 10 }] });
-      expect(codigos(r), d).toContain('concepto_desconocido');
+  it('un concepto fuera del catálogo sigue yendo a revisión (no se adivina)', () => {
+    for (const d of ['Concepto Inventado', 'Bonificacion rara', 'Descuento']) {
+      expect(codigos(conv({ Deducciones: [{ Descripcion: d, Monto: 10 }] })), d).toContain('concepto_desconocido');
     }
   });
 
   it('un catálogo adicional (alias por flota, hoy sin cablear) se suma al base sin tocarlo', () => {
-    const adicional = [{ categoria: 'imss', lado: 'deduccion' as const, patron: /\bimss\b/ }];
-    const r = convertirBitacoraMuestra({ ...BITACORA_MUESTRA, Deducciones: [{ Descripcion: 'IMSS', Monto: 10 }] }, { padron: PADRON, conceptosAdicionales: adicional });
+    const adicional = [{ categoria: 'categoria_nueva', lado: 'deduccion' as const, patron: /^concepto nuevo$/ }];
+    const r = convertirBitacoraMuestra({ ...BITACORA_MUESTRA, Deducciones: [{ Descripcion: 'Concepto Nuevo', Monto: 10 }] }, { padron: PADRON, conceptosAdicionales: adicional });
     expect(r.revision).toEqual([]);
-    expect(r.categorias.find((c) => c.donde === 'Deducciones[0]')?.categoria).toBe('imss');
-    expect(CATALOGO_CONCEPTOS_MUESTRA.some((c) => c.categoria === 'imss')).toBe(false);
+    expect(r.categorias.find((c) => c.donde === 'Deducciones[0]')?.categoria).toBe('categoria_nueva');
+    expect(CATALOGO_CONCEPTOS_MUESTRA.some((c) => c.categoria === 'categoria_nueva')).toBe(false);
   });
 });

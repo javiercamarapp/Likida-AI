@@ -77,7 +77,7 @@ export const CONTRATOS_DESGLOSE_TMS = {
 export type CodigoRevision =
   | 'fila_invalida' | 'bitacora_invalida' | 'operador_vacio' | 'operador_sin_padron' | 'operador_no_encontrado' | 'operador_homonimo' | 'operador_sin_numero'
   | 'operador_no_coincide' | 'numero_empleado_invalido' | 'tipo_operador_invalido' | 'poliza_invalida' | 'numero_pago_invalido' | 'folio_invalido'
-  | 'neto_invalido' | 'total_no_cuadra'
+  | 'neto_invalido' | 'total_no_cuadra' | 'ajuste_redondeo_excesivo'
   | 'unidad_invalida' | 'fecha_invalida' | 'fechas_invertidas' | 'bitacora_repetida'
   | 'estructura_invalida' | 'sin_renglones' | 'descripcion_vacia'
   | 'monto_nulo' | 'monto_no_numerico' | 'monto_negativo' | 'monto_decimales' | 'monto_excesivo'
@@ -140,7 +140,8 @@ export class EnvoltorioInvalido extends CampoInvalido {
 // ── Catálogo de conceptos (texto libre ⇒ reconocimiento) ────────────────────
 
 type Lado = 'percepcion' | 'deduccion';
-interface Concepto { categoria: string; lado: Lado; patron: RegExp }
+/** `ambos`: el concepto es válido en cualquiera de los dos bloques (solo el ajuste de redondeo). */
+interface Concepto { categoria: string; lado: Lado | 'ambos'; patron: RegExp }
 
 /**
  * Alias sobre el texto YA normalizado (sin acentos, minúsculas). Es heurístico y editable: lo que no case NO se descarta, pasa
@@ -151,12 +152,19 @@ export type { Concepto as ConceptoMuestra };
 
 // ── P0-3 · PUNTO ÚNICO donde se agregan conceptos ───────────────────────────
 // El catálogo de abajo es CERRADO y vive en código: un concepto fuera de él manda la bitácora a revisión (`concepto_desconocido`).
-// El catálogo REAL (texto exacto de `Descripcion` y su lado) lo entrega el cliente; NO se inventa aquí. Para agregar conceptos:
-//   1. una entrada nueva en `CATALOGO_CONCEPTOS_MUESTRA` (categoría, lado, patrón sobre texto YA normalizado);
-//   2. su caso en `desglose_muestra_tms.test.ts`.
-// Es un cambio de código + deploy. Alias por flota SIN deploy (columna jsonb en `liquidacion_correo_config` + pantalla de
-// configuración + migración) es tamaño M y NO se hizo: `reconocer` ya acepta un catálogo adicional (`CatalogoConceptos`) para que
-// esa pieza futura solo tenga que inyectarlo desde la configuración de la flota.
+// El catálogo REAL del cliente (valores exactos de `Descripcion`, 11-nov-2026) está cubierto: ver la tabla en la hoja técnica y los
+// casos en `desglose_muestra_catalogo.test.ts`. Para agregar otro concepto: una entrada nueva aquí (categoría, lado, patrón) y su caso.
+// La comparación tolera mayúsculas, acentos, puntos y espacios dobles: el patrón se prueba contra el texto normalizado
+// (`normalizarConcepto`) Y contra su forma sin puntuación (`claveConcepto`: «Bono E.C» ⇒ «bono e c», «DEV.INFONAVIT» ⇒ «dev infonavit»).
+// La CATEGORÍA es informativa: no se calcula nada con ella. Lo que ve el operador en el Excel es siempre la `Descripcion` ORIGINAL del
+// cliente; los renombres, `conceptos_viaje` y `conceptos_prohibidos` de la config de la flota también trabajan sobre ese texto original.
+// Alias por flota SIN deploy (columna jsonb en `liquidacion_correo_config` + pantalla + migración) es tamaño M y NO se hizo:
+// `reconocer` ya acepta un catálogo adicional (`CatalogoConceptos`) para que esa pieza futura solo tenga que inyectarlo.
+//
+// AJUSTE DE REDONDEO («Dif en registro»): llega en Percepciones O en Deducciones y siempre son centavos (diferencia de redondeo del
+// sistema del cliente). Se acepta en ambos bloques y SE CONSERVA como renglón con su signo según el bloque, para que el neto cuadre con
+// el del cliente. TOPE: |monto| < 1.00 peso; un ajuste de 1.00 o más NO es redondeo y manda la bitácora a revisión
+// (`ajuste_redondeo_excesivo`). Un monto 0 se ignora como cualquier renglón en cero.
 export const CATALOGO_CONCEPTOS_MUESTRA: readonly Concepto[] = [
   { categoria: 'sueldo', lado: 'percepcion', patron: /\b(sueldo|salario|pago de viaje|complemento)\b/ },
   { categoria: 'bono', lado: 'percepcion', patron: /\bbonos?\b/ },
@@ -169,11 +177,28 @@ export const CATALOGO_CONCEPTOS_MUESTRA: readonly Concepto[] = [
   { categoria: 'anticipo', lado: 'deduccion', patron: /\banticipos?\b/ },
   { categoria: 'descuento_financiero', lado: 'deduccion', patron: /\b(descuento financiero|desc\.? ?fin)\b/ },
   { categoria: 'otros', lado: 'deduccion', patron: /\b(diesel|urea)\b/ },
+  // ── Catálogo real del cliente (11-nov-2026) que los alias de arriba no cubren ──
+  { categoria: 'ajuste_redondeo', lado: 'ambos', patron: /^dif en registro$/ },
+  { categoria: 'viaticos', lado: 'percepcion', patron: /^boletos autobus$/ },
+  { categoria: 'domingo_laborado', lado: 'percepcion', patron: /^domingo laborado$/ },
+  { categoria: 'hora_extra', lado: 'percepcion', patron: /^horas? extras?$/ },
+  { categoria: 'otros', lado: 'percepcion', patron: /^otros$/ },
+  { categoria: 'imss', lado: 'deduccion', patron: /^imss$/ },
+  { categoria: 'ispt', lado: 'deduccion', patron: /^(ispt|isr)$/ },
+  { categoria: 'prestamo', lado: 'deduccion', patron: /^prestamos?$/ },
+  { categoria: 'aviso_descuento', lado: 'deduccion', patron: /^aviso( de)? descuento$/ },
+  { categoria: 'gastos_viaje', lado: 'deduccion', patron: /^gastos de viaje$/ },
 ];
+
+/** Forma sin puntuación: «Bono E.C» ⇒ «bono e c», «DEV.INFONAVIT» ⇒ «dev infonavit». */
+export function claveConcepto(s: string): string {
+  return normalizarConcepto(s).replace(/[^a-z0-9ñ]+/g, ' ').trim();
+}
 
 function reconocer(descripcion: string, adicional: CatalogoConceptos = []): Concepto | null {
   const n = normalizarConcepto(descripcion);
-  return [...CATALOGO_CONCEPTOS_MUESTRA, ...adicional].find((c) => c.patron.test(n)) ?? null;
+  const k = claveConcepto(descripcion);
+  return [...CATALOGO_CONCEPTOS_MUESTRA, ...adicional].find((c) => c.patron.test(n) || c.patron.test(k)) ?? null;
 }
 
 // ── Montos: texto, no flotantes ─────────────────────────────────────────────
@@ -394,7 +419,8 @@ export function convertirBitacoraMuestra(raw: unknown, config: Pick<ConfigMuestr
       if (c === null) motivo('concepto_desconocido', `${donde}.Descripcion`, 'Descripción que no está en el catálogo de conceptos; revisar (el renglón se conserva).');
       else {
         categorias.push({ donde, categoria: c.categoria });
-        if (c.lado !== lado) motivo('concepto_lado_inesperado', `${donde}.Descripcion`, `Concepto «${c.categoria}» llega en ${clave}; normalmente va del otro lado.`);
+        if (c.lado !== 'ambos' && c.lado !== lado) motivo('concepto_lado_inesperado', `${donde}.Descripcion`, `Concepto «${c.categoria}» llega en ${clave}; normalmente va del otro lado.`);
+        if (c.categoria === 'ajuste_redondeo' && m.centavos >= 100) motivo('ajuste_redondeo_excesivo', `${donde}.Monto`, 'Un ajuste de redondeo («Dif en registro») es de centavos (menos de 1.00); este no lo es: revisar en el origen.');
       }
       centavosPorBloque[lado] += m.centavos;
       bloques[lado].push({ concepto: desc, monto: m.centavos / 100 });
