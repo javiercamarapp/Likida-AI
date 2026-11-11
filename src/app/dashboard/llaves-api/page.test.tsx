@@ -43,7 +43,13 @@ function buscarProp<T>(nodo: ReactNode, componente: unknown, propName: string): 
   if (Array.isArray(nodo)) { for (const hijo of nodo) { const r = buscarProp<T>(hijo, componente, propName); if (r !== undefined) return r; } return undefined; }
   if (!isValidElement<Record<string, unknown>>(nodo)) return undefined;
   if (nodo.type === componente && propName in nodo.props) return nodo.props[propName] as T;
-  return buscarProp<T>(nodo.props.children as ReactNode, componente, propName);
+  // Se recorren también las props de ranura (`acciones`, `avisos`…): «Emitir llave» vive en la cabecera de la página, no en los hijos.
+  for (const valor of Object.values(nodo.props)) {
+    if (valor === null || typeof valor !== 'object') continue;
+    const r = buscarProp<T>(valor as ReactNode, componente, propName);
+    if (r !== undefined) return r;
+  }
+  return undefined;
 }
 
 const SP = Promise.resolve({});

@@ -3,10 +3,11 @@ import type { Rentabilidad, Cobranza } from '@/lib/likida/comercial';
 import { mxn, fechaCorta, numero, porcentaje } from '@/lib/formato';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
-import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
+import { BarList } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  BotonEnlace, EstadoError, EstadoVacio, StatusChip, TablaBase, Tarjeta, type ColumnaBase,
+  BotonEnlace, StatusChip, TablaBase, Tarjeta, type ColumnaBase,
 } from '@/app/ui-v2/componentes';
 import './rentabilidad.css';
 
@@ -86,82 +87,94 @@ export function VistaRentabilidad({
     { etiqueta: tr('rentabilidad.vista.vencido'), info: 'rentabilidad.vencido', formato: 'mxn', valor: sinCob === 'ok' ? cobranza!.vencido : null, estado: sinCob, tono: sinCob === 'ok' && cobranza!.vencido > 0 ? 'bad' : undefined },
   ];
 
+  // «Qué se sabe / Qué no se sabe» (Rovaq PC): solo hechos leídos de las dos consultas; lo que no se mide se DICE, no se rellena.
+  const seSabe: string[] = [];
+  const noSeSabe: string[] = [];
+  if (rentabilidad !== null && rentabilidad.viajesConIngreso > 0) {
+    seSabe.push(tr('e26b.rent_se_sabe_viajes', { n: numero(rentabilidad.viajesConIngreso) }));
+    noSeSabe.push(tr('rentabilidad.vista.contribucionNoEsUtilidad'));
+  } else {
+    noSeSabe.push(tr('e26b.rent_no_sabe_margen'));
+  }
+  if (rentabilidad !== null && rentabilidad.viajesSinIngreso > 0) noSeSabe.push(tr('rentabilidad.vista.viajesSinIngresoQuedan', { v: numero(rentabilidad.viajesSinIngreso) }));
+  if (rentabilidad !== null && rentabilidad.viajesSinLiquidar !== null && rentabilidad.viajesSinLiquidar > 0) noSeSabe.push(tr('rentabilidad.vista.viajesSinLiquidacionVigente', { v: numero(rentabilidad.viajesSinLiquidar) }));
+  if (cobranza !== null && cobranza.total > 0) seSabe.push(tr('e26b.rent_se_sabe_facturas', { n: numero(cobranza.total) }));
+  if (cobranza !== null && cobranza.sinCondiciones > 0) noSeSabe.push(cobranza.sinCondiciones === 1 ? tr('rentabilidad.vista.1FacturaNoTiene') : tr('rentabilidad.vista.facturasNoTienenFecha', { sinCondiciones: cobranza.sinCondiciones }));
+  if (rentabilidad === null) noSeSabe.push(tr('rentabilidad.vista.noPudeLeerLos'));
+  if (cobranza === null) noSeSabe.push(tr('rentabilidad.vista.noPudeLeerLas'));
+  if (seSabe.length === 0) seSabe.push(tr('e26b.rent_se_sabe_nada'));
+
+  const accionRegistrar = <BotonEnlace href={`/dashboard/facturacion${sufijo}`} variante="secondary" tamano="sm">{tr('rentabilidad.vista.registrarUnaFactura')}</BotonEnlace>;
+  const titular = sinRent === 'ok' && rentabilidad!.margenPct !== null
+    ? tr('e26b.rent_titular', { pct: porcentaje(rentabilidad!.margenPct), n: numero(rentabilidad!.viajesConIngreso) })
+    : undefined;
+
+  // Las gráficas: cada tarjeta dice su propio estado. Sin dato es «No disponible ahora. No es cero.», nunca una barra en cero.
+  const graficaMargen = (
+    <Tarjeta key="margen" titulo={tr('e26b.rent_grafica_margen')} info="rentabilidad.contribucion"
+      estado={sinRent === 'ok' ? 'ok' : sinRent}
+      mensaje={sinRent === 'error' ? tr('rentabilidad.vista.noPudeLeerLos') : sinNada ? tr('rentabilidad.vista.faltanIngresoYFacturas') : tr('rentabilidad.vista.sinIngresoDeFlete')}
+      detalle={sinRent === 'vacio' ? (sinNada ? tr('rentabilidad.vista.conElIngresoDe') : tr('rentabilidad.vista.ningunViajeTraeIngreso')) : undefined}
+      accionVacio={sinNada ? accionRegistrar : undefined} reintentar={sinRent === 'error'} contenida>
+      {sinRent === 'ok' ? (
+        <BarList etiqueta={tr('e26b.rent_grafica_margen')} formato={mxn} matiz={1} items={[
+          { clave: 'ingreso', etiqueta: tr('e26b.rent_barra_ingreso'), valor: rentabilidad!.ingreso },
+          { clave: 'costo', etiqueta: tr('e26b.rent_barra_costo'), valor: rentabilidad!.costoComprobado },
+          { clave: 'contribucion', etiqueta: tr('e26b.rent_barra_contribucion'), valor: Math.max(0, rentabilidad!.contribucion), texto: mxn(rentabilidad!.contribucion) },
+        ]} />
+      ) : null}
+    </Tarjeta>
+  );
+  const graficaCartera = (
+    <Tarjeta key="cartera" titulo={tr('e26b.rent_grafica_cartera')} info="rentabilidad.por_cobrar"
+      estado={sinCob === 'ok' ? 'ok' : sinCob}
+      mensaje={sinCob === 'error' ? tr('rentabilidad.vista.noPudeLeerLas') : tr('rentabilidad.vista.sinFacturasEmitidas')}
+      detalle={sinCob === 'vacio' ? tr('rentabilidad.vista.aunNoHayFacturas') : undefined}
+      accionVacio={sinCob === 'vacio' && !sinNada ? accionRegistrar : undefined} reintentar={sinCob === 'error'} contenida>
+      {sinCob === 'ok' ? (
+        <BarList etiqueta={tr('e26b.rent_grafica_cartera')} formato={mxn} matiz={2} items={[
+          { clave: 'por_cobrar', etiqueta: tr('e26b.rent_barra_por_cobrar'), valor: cobranza!.porCobrar },
+          { clave: 'vencido', etiqueta: tr('rentabilidad.vista.vencido'), valor: cobranza!.vencido },
+        ]} />
+      ) : null}
+    </Tarjeta>
+  );
+
   return (
-    <EsqueletoPortada
-      titulo={tr('rentabilidad.vista.margenYCostos')} apoyo={tr('rentabilidad.vista.margenRealContraLo')}
+    <EsqueletoPanelCifras
+      titulo={tr('rentabilidad.vista.margenYCostos')} apoyo={tr('rentabilidad.vista.margenRealContraLo')} titular={titular}
       cifras={cifras} etiquetaCifras={tr('rentabilidad.vista.margenYCostos')}
       selloCifras={sinNada ? tr('rentabilidad.vista.sinDatosTodavia') : selloHoy(tr('rentabilidad.vista.selloViajesLiquidados'))}
-      metodo={rentabilidad !== null && rentabilidad.viajesConIngreso > 0 ? tr('rentabilidad.vista.contribucionNoEsUtilidad') : undefined}
+      graficas={[graficaMargen, graficaCartera]}
+      saberes={{ seSabe: { titulo: tr('e26b.rent_se_sabe'), items: seSabe }, noSeSabe: { titulo: tr('e26b.rent_no_se_sabe'), items: noSeSabe } }}
     >
-      {sinNada ? (
-        <EstadoVacio titulo={tr('rentabilidad.vista.faltanIngresoYFacturas')} contenido
-          accion={<BotonEnlace href={`/dashboard/facturacion${sufijo}`} variante="secondary" tamano="sm">{tr('rentabilidad.vista.registrarUnaFactura')}</BotonEnlace>}>
-          {tr('rentabilidad.vista.conElIngresoDe')}
-        </EstadoVacio>
-      ) : (
-        <>
-          {rentabilidad === null ? (
-            <EstadoError>{tr('rentabilidad.vista.noPudeLeerLos')}</EstadoError>
-          ) : rentabilidad.viajesConIngreso === 0 ? (
-            <EstadoVacio titulo={tr('rentabilidad.vista.sinIngresoDeFlete')} contenido>
-              {tr('rentabilidad.vista.ningunViajeTraeIngreso')}
-            </EstadoVacio>
-          ) : (
+      {cobranza !== null && cobranza.total > 0 ? (
+        <Tarjeta titulo={tr('rentabilidad.vista.carteraPorCobrar')}>
+          {cobranza.facturas.length === 0 ? (
+            // `total > 0` pero esta página no trajo filas: es un `?p=` fuera de rango, NO una cartera vacía — las cifras de arriba (de la cartera completa) siguen siendo ciertas. El renglón de paginación de abajo ya trae "Anteriores"
             <p className="rv-rent__nota">
-              {rentabilidad.margenPct !== null
-                ? tr('rentabilidad.vista.margenMedidoSoloSobre', { v: porcentaje(rentabilidad.margenPct), v2: numero(rentabilidad.viajesConIngreso) })
-                : tr('rentabilidad.vista.sinIngresoCapturadoEl')}
-              {rentabilidad.viajesSinIngreso > 0
-                && ' ' + tr('rentabilidad.vista.viajesSinIngresoQuedan', { v: numero(rentabilidad.viajesSinIngreso) })}
-              {rentabilidad.viajesSinLiquidar !== null && rentabilidad.viajesSinLiquidar > 0
-                && ' ' + tr('rentabilidad.vista.viajesSinLiquidacionVigente', { v: numero(rentabilidad.viajesSinLiquidar) })}
+              {tr('rentabilidad.vista.estaPaginaNoTiene', { v: numero(cobranza.total) })}
             </p>
-          )}
-
-          {cobranza === null ? (
-            <EstadoError>{tr('rentabilidad.vista.noPudeLeerLas')}</EstadoError>
-          ) : cobranza.total === 0 ? (
-            <EstadoVacio titulo={tr('rentabilidad.vista.sinFacturasEmitidas')} contenido>
-              {tr('rentabilidad.vista.aunNoHayFacturas')}
-            </EstadoVacio>
           ) : (
-            <>
-              {cobranza.sinCondiciones > 0 && (
-                <p className="rv-rent__nota" data-tono="warn">
-                  {cobranza.sinCondiciones === 1
-                    ? tr('rentabilidad.vista.1FacturaNoTiene')
-                    : tr('rentabilidad.vista.facturasNoTienenFecha', { sinCondiciones: cobranza.sinCondiciones })}
-                </p>
-              )}
-              <Tarjeta titulo={tr('rentabilidad.vista.carteraPorCobrar')}>
-                {cobranza.facturas.length === 0 ? (
-                  // `total > 0` pero esta página no trajo filas: es un `?p=` fuera de rango, NO una cartera vacía — las cifras de arriba (de la cartera completa) siguen siendo ciertas. El renglón de paginación de abajo ya trae "Anteriores".
-                  <p className="rv-rent__nota">
-                    {tr('rentabilidad.vista.estaPaginaNoTiene', { v: numero(cobranza.total) })}
-                  </p>
-                ) : (
-                  <TablaBase<FilaCartera> etiqueta={tr('rentabilidad.vista.rentabilidadPorFolioY')} columnas={columnas} filas={cobranza.facturas}
-                    idFila={(f) => f.id} densa altoMaximo={false} tarjetaMovil />
-                )}
-
-                {/* La cartera viene PAGINADA (mig. 0152): se dice el rango Y el total. Las cifras de arriba son de TODAS las facturas, no de esta página. */}
-                <div className="rv-rent__pie-lista">
-                  <span className="rv-rent__pie">
-                    {tr('rentabilidad.vista.facturasDe', { v: numero(desde), v2: numero(hasta), v3: numero(cobranza.total) }) + ' '}
-                    {tr('rentabilidad.vista.lasVencidasPrimeroPor')}
-                  </span>
-                  {(cobranza.pagina > 1 || hayMas) && (
-                    <NavPaginas>
-                      {cobranza.pagina > 1 && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina - 1)} direccion="anterior" />}
-                      {hayMas && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina + 1)} direccion="siguiente" />}
-                    </NavPaginas>
-                  )}
-                </div>
-              </Tarjeta>
-            </>
+            <TablaBase<FilaCartera> etiqueta={tr('rentabilidad.vista.rentabilidadPorFolioY')} columnas={columnas} filas={cobranza.facturas}
+              idFila={(f) => f.id} densa altoMaximo={false} tarjetaMovil />
           )}
-        </>
-      )}
-    </EsqueletoPortada>
+
+          {/* La cartera viene PAGINADA (mig. 0152): se dice el rango Y el total. Las cifras de arriba son de TODAS las facturas, no de esta página. */}
+          <div className="rv-rent__pie-lista">
+            <span className="rv-rent__pie">
+              {tr('rentabilidad.vista.facturasDe', { v: numero(desde), v2: numero(hasta), v3: numero(cobranza.total) }) + ' '}
+              {tr('rentabilidad.vista.lasVencidasPrimeroPor')}
+            </span>
+            {(cobranza.pagina > 1 || hayMas) && (
+              <NavPaginas>
+                {cobranza.pagina > 1 && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina - 1)} direccion="anterior" />}
+                {hayMas && <EnlacePagina href={hrefPagina(sufijo, cobranza.pagina + 1)} direccion="siguiente" />}
+              </NavPaginas>
+            )}
+          </div>
+        </Tarjeta>
+      ) : null}
+    </EsqueletoPanelCifras>
   );
 }

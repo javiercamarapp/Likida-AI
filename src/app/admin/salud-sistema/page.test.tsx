@@ -37,7 +37,7 @@ vi.mock('@/lib/ratelimit', () => ({ redisConfigurado: dobles.redisConfigurado })
 vi.mock('@/lib/likida/presupuesto', () => ({ acotada: dobles.acotada }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }), usePathname: () => '/admin/salud-sistema', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/admin/salud', async (importar) => ({ ...(await importar<typeof import('@/lib/admin/salud')>()), detalleLatidos: dobles.detalleLatidos }));
-vi.mock('@/lib/admin/slo', () => ({ getSLOs: dobles.getSLOs }));
+vi.mock('@/lib/admin/slo', () => ({ getSLOs: dobles.getSLOs, getLatencias: async () => ({ ventanaDias: 7, rutas: [], crons: [], ia: [] }) }));
 vi.mock('../requiere-accion', () => ({ obtenerPanoramaAccion: dobles.obtenerPanoramaAccion }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => ({ select: () => 'query-fantasma' }) }) }));
 

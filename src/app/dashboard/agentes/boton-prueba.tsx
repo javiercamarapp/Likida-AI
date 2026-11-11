@@ -55,8 +55,14 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
 function BotonMandar({ apagado }: { apagado: boolean }) {
   const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
-  const boton = (
-    <Boton type="submit" variante="secondary" loading={pending} disabled={pending || apagado}
+  // Disponible: secundario blanco con borde (Rovaq). No disponible de verdad: «No disponible ahora» punteado, que se lee como lo que es
+  // y no como un secundario gris que parece apagado sin estarlo.
+  const boton = apagado ? (
+    <Boton type="submit" variante="secondary" tamano="sm" disabled className="rv-ag-no-disponible">
+      {t('f26d2.boton.no_disponible')}
+    </Boton>
+  ) : (
+    <Boton type="submit" variante="secondary" tamano="sm" loading={pending} disabled={pending}
       icono={<Icono icono={Send} tam={14} />}>
       {pending ? 'Mandando…' : t('ch.mandate_una_prueba')}
     </Boton>

@@ -1,0 +1,6 @@
+/* Estado vacío dentro de su propia caja punteada (Rovaq: «vacío punteado en tarjeta»). Envuelve un <EstadoVacio> con
+   `<div className="rv-caja-vacia">`; solo cambia el marco, no la pieza. Pedido compartido: que EstadoVacio ofrezca `caja`. */
+[data-ui="v2"] .rv-caja-vacia > .rv-vacio {
+  border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--surface);
+  padding: 20px 16px;
+}

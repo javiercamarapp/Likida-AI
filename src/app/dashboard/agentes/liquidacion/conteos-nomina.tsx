@@ -1,8 +1,9 @@
 import { hoyMx, inicioDiaMx } from '@/lib/formato';
 import { contarParaNomina, type ConteosNomina } from '@/lib/likida/liquidacion_externa/repo';
-import { Tarjeta } from '@/app/ui-v2/componentes';
+import { AvisoCompacto } from '@/app/ui-v2/componentes';
+import { BloqueCifras } from '@/app/ui-v2/esqueletos';
 import './liquidacion.css';
-import { Ficha, VistaDesgloses } from './desgloses';
+import { cifrasDeFichas, VistaDesgloses } from './desgloses';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -37,19 +38,11 @@ export async function leerConteosNomina(tenantId: string): Promise<ConteosNomina
 
 export function SeccionConteosNomina({ conteos, tr = TR_ES }: { conteos: ConteosNomina; tr?: TrAgentes }) {
   const { t: tx } = tr;
+  // La misma tira del dueño, SIN enlaces: la lista a la que llevarían tiene nombres y netos.
   return (
-    <div id="desgloses">
-      <Tarjeta titulo={tx('rest.desgloses_de_pago')}>
-        <p className="rv-liq-sub">{tx('rest.cuantos_desgloses_de_pago_hay_en')}</p>
-        <div className="rv-liq-fichas">
-          <Ficha tr={tr} etiqueta={tx('rest.recibidos_hoy')} valor={conteos.recibidosHoy} ayuda={tx('rest.desgloses_que_llegaron_hoy_del_sistema')} />
-          <Ficha tr={tr} etiqueta={tx('rest.enviados_30_dias')} valor={conteos.enviados} ayuda={tx('rest.correos_que_salieron_en_los_ultimos')} />
-          <Ficha tr={tr} etiqueta={tx('rest.entregados_30_dias')} valor={conteos.entregados} ayuda={tx('rest.correos_de_los_ultimos_30_dias')} />
-          <Ficha tr={tr} etiqueta={tx('rest.rebotados_30_dias')} valor={conteos.rebotados} tono="bad" ayuda={tx('rest.correos_de_los_ultimos_30_dias_2')} />
-          <Ficha tr={tr} etiqueta={tx('rest.retenidos')} valor={conteos.retenidos} tono="bad" ayuda={tx('rest.desgloses_detenidos_antes_de_enviarse')} />
-          <Ficha tr={tr} etiqueta={tx('rest.sin_poliza')} valor={conteos.sinPoliza} tono="bad" ayuda={tx('rest.bitacoras_que_esperan_su_poliza_para')} />
-        </div>
-      </Tarjeta>
+    <div id="desgloses" className="rv-ag-pila">
+      <AvisoCompacto tono="info" resumen={tx('rest.cuantos_desgloses_de_pago_hay_en')} />
+      <BloqueCifras cifras={cifrasDeFichas({ fichas: conteos, tx })} etiqueta={tx('rest.desgloses_de_pago')} />
     </div>
   );
 }

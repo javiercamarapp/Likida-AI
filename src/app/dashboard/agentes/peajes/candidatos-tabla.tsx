@@ -143,7 +143,7 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
       acciones={(
         <span className="rv-pj-total">
           <span className="rv-pj-rotulo">{hayFiltro ? tx('rest.cruces_con_este_filtro') : tx('rest.cruces_candidatos')}</span>
-          <strong className="cifra-mono rv-pj-total__valor">{numero(tabla.total)}</strong>
+          <strong className="rv-ag-num rv-pj-total__valor">{numero(tabla.total)}</strong>
           <span className="rv-pj-nota">{mxn(tabla.monto)}</span>
         </span>
       )}
@@ -199,8 +199,8 @@ export function TablaCandidatosCobros({ tabla, error, desglose, sufijo, decidir,
               { id: 'categoria', titulo: tx('rest.categoria_2'), celda: (c) => <>{c.etiquetaCategoria}{c.critica && <strong className="rv-pj-nota rv-pj-malo">{tx('rest.critico')}</strong>}</> },
               { id: 'caseta', titulo: tx('rest.caseta'), celda: (c) => c.caseta ?? '—' },
               { id: 'tag', titulo: tx('rest.tag_unidad'), celda: (c) => <>{c.tag ?? '—'}{c.unidad && <span className="rv-pj-nota">{c.unidad}</span>}</> },
-              { id: 'clase', titulo: tx('rest.clase'), alinear: 'der', celda: (c) => <span className="cifra-mono">{c.clase ?? '—'}</span> },
-              { id: 'importe', titulo: tx('rest.importe'), alinear: 'der', celda: (c) => <span className="cifra-mono">{mxn(c.monto)}</span> },
+              { id: 'clase', titulo: tx('rest.clase'), alinear: 'der', celda: (c) => <span className="rv-ag-num">{c.clase ?? '—'}</span> },
+              { id: 'importe', titulo: tx('rest.importe'), alinear: 'der', celda: (c) => <span className="rv-ag-num">{mxn(c.monto)}</span> },
               {
                 id: 'quepaso', titulo: tx('conductores.vista.que_paso'),
                 celda: (c) => (

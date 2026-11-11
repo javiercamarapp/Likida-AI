@@ -174,7 +174,7 @@ export default async function ConfiguracionPage({
   ];
 
   return (
-    <MarcoPagina titulo={t('cfg.configuracion')} apoyo={t('cfg.lo_que_el_motor_usa_para')}>
+    <MarcoPagina titulo={t('cfg.configuracion')} apoyo={t('cfg.lo_que_el_motor_usa_para')} ancho="lectura">
       {config === null ? (
         <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_configuracion')}</EstadoError>
       ) : (

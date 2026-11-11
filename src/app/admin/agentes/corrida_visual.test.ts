@@ -25,7 +25,8 @@ describe('Última corrida del catálogo de agentes', () => {
   it('la pantalla ya no pinta la fecha con un chip de tono por antigüedad ni «Insumos» como botón', () => {
     const src = readFileSync(new URL('./contenido.tsx', import.meta.url), 'utf8');
     expect(src).not.toContain('tonoPorAntiguedad');
-    expect(src).not.toContain('BotonEnlace');
+    // «Vista rápida» (ghost) y el pie del cajón sí son enlaces; «Insumos» no es un botón suelto en la fila.
+    expect(src).toContain('agentes_contenido.vista_rapida');
     // «Insumos» ya no es un enlace suelto por fila: vive con Configurar y Apagar en el menú «⋯» de la fila (AccionesAgente).
     expect(src).toContain('AccionesAgente');
     expect(src).toContain('etiquetaInsumos');

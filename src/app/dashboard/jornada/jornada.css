@@ -20,3 +20,12 @@
 .rv-jn__extra { display: block; font-size: var(--t-micro); color: var(--warn); }
 .rv-jn__apagado { color: var(--muted); }
 .rv-jn__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+
+/* Formularios de configuración como Rovaq: columna de ≤780 px, un campo por fila y UN botón compacto (28 px) a la derecha del pie. Nunca una
+   barra negra del ancho de la tarjeta. */
+.rv-jn__forma { max-width: 780px; }
+.rv-jn__forma .rv-forma__rejilla { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.rv-jn__pie { display: flex; justify-content: flex-end; margin-top: 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.rv-jn__pie > button { width: auto; flex: none; }
+.rv-jn__bloque + .rv-jn__sub, .rv-jn__bloque > .rv-jn__sub { margin-top: 4px; }
+.rv-jn__sep { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }

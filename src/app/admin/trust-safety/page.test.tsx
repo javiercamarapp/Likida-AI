@@ -51,7 +51,7 @@ describe('/admin/trust-safety — la pantalla dice lo medido', () => {
   it('base caída: lo DICE en las dos zonas, sin pintar ceros ni tabla vacía', async () => {
     getEventosSeguridad.mockRejectedValue(new Error('base caída'));
     resumenEventosSeguridad.mockRejectedValue(new Error('base caída'));
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('NO significa que haya cero eventos');
     expect(html).toContain('no es lo mismo que «no hay eventos»');
   });
@@ -59,7 +59,7 @@ describe('/admin/trust-safety — la pantalla dice lo medido', () => {
   it('vacío: NO se afirma que el silencio sea bueno — solo cubre lo que las fuentes emiten (CT-SEG-11)', async () => {
     getEventosSeguridad.mockResolvedValue([]);
     resumenEventosSeguridad.mockResolvedValue({ total: 0, d30: { alta: 0, media: 0, info: 0 } });
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('NO prueba que no haya pasado nada');
     expect(html).not.toContain('el silencio aquí es bueno de verdad');
     expect(html).not.toContain('detectores están cableados');
@@ -68,7 +68,7 @@ describe('/admin/trust-safety — la pantalla dice lo medido', () => {
   it('una ráfaga agrupada (0681) se pinta con su conteo; una señal única, sin sufijo', async () => {
     getEventosSeguridad.mockResolvedValue([evento({ repeticiones: 412 }), evento({ id: 'ev-2', tipo: 'rate_limit', repeticiones: 1 })]);
     resumenEventosSeguridad.mockResolvedValue({ total: 2, d30: { alta: 1, media: 1, info: 0 } });
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('×412');
     expect(html).not.toContain('×1<');
   });
@@ -76,7 +76,7 @@ describe('/admin/trust-safety — la pantalla dice lo medido', () => {
   it('con eventos: la lista declara «mostrando N de M» con la M contada en la base', async () => {
     getEventosSeguridad.mockResolvedValue([evento(), evento({ id: 'ev-2', severidad: 'media', tipo: 'rate_limit' })]);
     resumenEventosSeguridad.mockResolvedValue({ total: 137, d30: { alta: 3, media: 20, info: 40 } });
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('de 137 eventos históricos');
     expect(html).toContain('firma invalida');
     // Los conteos por severidad de 30 días llegan a sus tarjetas.
@@ -86,14 +86,14 @@ describe('/admin/trust-safety — la pantalla dice lo medido', () => {
   it('resumen caído pero lista viva: la M ausente se declara, jamás se inventa', async () => {
     getEventosSeguridad.mockResolvedValue([evento()]);
     resumenEventosSeguridad.mockRejectedValue(new Error('timeout'));
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('el total histórico no se pudo contar ahora mismo');
   });
 
   it('lo que NO hay sigue dicho: mitigación no es detección', async () => {
     getEventosSeguridad.mockResolvedValue([]);
     resumenEventosSeguridad.mockResolvedValue({ total: 0, d30: { alta: 0, media: 0, info: 0 } });
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('eso es mitigación, no detección');
     expect(html).toContain('jailbreak');
   });
@@ -112,7 +112,7 @@ describe('/admin/trust-safety — la cobertura REAL, medida (CT-SEG-11)', () => 
       fuente({ id: 'rate_limit', titulo: 'Rate limits que bloquean', par: { origen: 'ratelimit', tipo: 'rate_limit' }, emite: false, donde: 'src/lib/ratelimit.ts bloquea y no registra', filas30d: 0 }),
       fuente({ id: 'mfa_fallido', titulo: 'Segundo factor fallido', par: null, emite: false, donde: 'mfa.ts decide pero no registra', filas30d: null }),
     ]);
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Cobertura');
     expect(html).toContain('Login fallido');
     expect(html).toMatch(/Emite/);
@@ -127,7 +127,7 @@ describe('/admin/trust-safety — la cobertura REAL, medida (CT-SEG-11)', () => 
   it('una fuente que emite y tiene 0 en 30 días NO se vende como «todo bien»: se dice que es silencio o fuente rota, no se distingue', async () => {
     vacios();
     coberturaEventosSeguridad.mockResolvedValue([fuente({ filas30d: 0 })]);
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('0 en 30 días');
     expect(html).toContain('no se distingue');
   });
@@ -135,7 +135,7 @@ describe('/admin/trust-safety — la cobertura REAL, medida (CT-SEG-11)', () => 
   it('cobertura caída: se dice, sin pintar ceros ni la tabla', async () => {
     vacios();
     coberturaEventosSeguridad.mockRejectedValue(new Error('base caída'));
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('No se pudo medir la cobertura');
     expect(html).not.toContain('Login fallido');
   });
@@ -153,7 +153,7 @@ describe('/admin/trust-safety — la lista de pendientes sale de la cobertura me
       fuente({ id: 'rate_limit', titulo: 'Rate limits que bloquean', emite: true, filas30d: 4 }),
       fuente({ id: 'inyeccion_prompt', titulo: 'Inyección de prompt detectada', emite: false, filas30d: 0 }),
     ]);
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     const bloque = html.slice(html.indexOf('Qué se registra y qué está pendiente'));
     expect(bloque).toContain('Pendiente, hoy no se registra');
     expect(bloque).toContain('Inyección de prompt detectada');
@@ -163,14 +163,14 @@ describe('/admin/trust-safety — la lista de pendientes sale de la cobertura me
   it('si toda fuente declarada emite, NO se vende como cobertura total', async () => {
     vacios();
     coberturaEventosSeguridad.mockResolvedValue([fuente()]);
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('Todas las fuentes declaradas emiten');
     expect(html).toContain('lo no listado arriba no está medido');
   });
 
   it('«Emite» se explica como «hay código que escribe la señal», no como detección completa', async () => {
     vacios();
-    const html = renderToStaticMarkup(await TrustSafetyPage());
+    const html = renderToStaticMarkup(await TrustSafetyPage({ searchParams: Promise.resolve({}) }));
     expect(html).toContain('no significa que la detección sea completa');
   });
 

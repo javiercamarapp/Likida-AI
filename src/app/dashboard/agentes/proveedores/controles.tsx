@@ -29,7 +29,7 @@ export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores
   }, [estado, router]);
 
   return (
-    <div>
+    <div className="rv-prov__zona">
       <form action={accion} className="rv-prov__linea">
         <CampoArchivo etiqueta={tx('rest.xml_de_la_factura_de_proveedor')} name="archivo" accept=".xml,text/xml,application/xml" required />
         <BotonSubir />
@@ -48,12 +48,12 @@ function ResultadoSubida({ estado }: { estado: { error?: string; aviso?: string 
   );
 }
 
-function BotonSubir({ rotulo = 'Subir a la bandeja', pendienteRotulo = 'Leyendo…' }: {
-  rotulo?: string; pendienteRotulo?: string;
+function BotonSubir({ rotulo = 'Subir a la bandeja', pendienteRotulo = 'Leyendo…', variante = 'primary' }: {
+  rotulo?: string; pendienteRotulo?: string; variante?: 'primary' | 'secondary';
 }) {
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Upload} tam={14} />}>
+    <Boton type="submit" variante={variante} loading={pending} icono={<Icono icono={Upload} tam={14} />}>
       {pending ? pendienteRotulo : rotulo}
     </Boton>
   );
@@ -74,11 +74,12 @@ export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }
   }, [estado, router]);
 
   return (
-    <div>
+    <div className="rv-prov__zona">
       <form action={accion} className="rv-prov__linea">
         <CampoArchivo etiqueta={tx('rest.foto_de_la_factura_de_proveedor')} name="archivo" accept="image/jpeg,image/png,image/webp" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)} />
-        <BotonSubir rotulo={tx('rest.leer_foto_con_ia')} pendienteRotulo={tx('rest.leyendo_la_foto')} />
+        {/* Un solo primario por zona: el XML es la vía principal; la foto (lectura con IA) es secundaria. */}
+        <BotonSubir variante="secondary" rotulo={tx('rest.leer_foto_con_ia')} pendienteRotulo={tx('rest.leyendo_la_foto')} />
       </form>
       <p className="rv-prov__nota" data-tono="faint">{tx('rest.maximo_4_mb_por_foto')}</p>
       <ResultadoSubida estado={estado} />

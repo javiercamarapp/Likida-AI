@@ -41,7 +41,7 @@ export function ConstanciaReportes({ constancia, dias, hayMas, tr = TR_ES }: { c
                   <span className="rv-cd__medio">{o.operadorNombre ?? tx('cobranza.vista.operador_sin_nombre')}</span>
                   <span className="rv-cd__muted">{estadoTr(tx)[o.estado]}</span>
                   {o.estado !== 'sin_dato' && (
-                    <span>{ricoT(tx('rest.e0_de_e0_hitos_reportados_en', { numero: numero(o.reportados), numero2: numero(o.esperados), numero3: numero(o.viajes) }), { e0: (c) => <span className="cifra-mono">{c}</span> })}{' '}{o.viajes === 1 ? 'viaje' : 'viajes'}</span>
+                    <span>{ricoT(tx('rest.e0_de_e0_hitos_reportados_en', { numero: numero(o.reportados), numero2: numero(o.esperados), numero3: numero(o.viajes) }), { e0: (c) => <span className="rv-ag-num">{c}</span> })}{' '}{o.viajes === 1 ? 'viaje' : 'viajes'}</span>
                   )}
                   {o.estado !== 'sin_dato' && (
                     <span className="rv-cd__muted">{tx('rest.por_el_operador', { numero: numero(o.reportadosPorOperador), numero2: numero(o.cubiertosPorOficinaOSistema) })}{' '}{o.cubiertosPorOficinaOSistema === 1 ? 'cubierto' : 'cubiertos'}{' '}{tx('rest.por_oficina_o_sistema')}</span>

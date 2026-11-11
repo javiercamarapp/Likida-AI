@@ -38,8 +38,8 @@ export function SubirDesglose({ subirDesglose }: { subirDesglose: AccionSubir })
       </form>
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
       {estado?.resumen && (
-        <p className="rv-pj-sub" role="status">{tx('rest.cruce_corrido')}{' '}<strong className="cifra-mono">{estado.resumen.conciliadas}</strong> de{' '}
-          <span className="cifra-mono">{estado.resumen.totalLineas}</span>{' '}{tx('rest.lineas_conciliadas_solas')}{estado.resumen.porConciliar > 0 && <>{tx('rest.esperan_a_un_humano_en_la', { porConciliar: estado.resumen.porConciliar })}</>}.
+        <p className="rv-pj-sub" role="status">{tx('rest.cruce_corrido')}{' '}<strong className="rv-ag-num">{estado.resumen.conciliadas}</strong> de{' '}
+          <span className="rv-ag-num">{estado.resumen.totalLineas}</span>{' '}{tx('rest.lineas_conciliadas_solas')}{estado.resumen.porConciliar > 0 && <>{tx('rest.esperan_a_un_humano_en_la', { porConciliar: estado.resumen.porConciliar })}</>}.
         </p>
       )}
     </div>

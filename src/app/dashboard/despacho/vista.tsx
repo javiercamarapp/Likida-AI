@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { Inbox, Truck, Users } from 'lucide-react';
 import type { TableroOperacion, ViajeSinAsignar, CargaOperador } from '@/lib/likida/operacion';
@@ -161,8 +162,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
           </CajonAlta>
         </>
       )}
-      cifras={cifras}
-      selloCifras={selloHoy('Tablero de despacho')}
+      cifras={cifrasUniformes(cifras)}
       filtros={(
         // FE-2: buscador por folio — antes no había forma de llegar a un viaje en curso que no estuviera entre los 12 más urgentes
         // de la primera página. GET plano, con el sufijo de previsualización como hidden para no perderlo al buscar.
@@ -304,6 +304,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
           )}
         </Tarjeta>
       </FilaTarjetas>
+      <p className="rv-dsp__nota">{selloHoy('Tablero de despacho')}</p>
     </EsqueletoTablaMaestra>
   );
 }

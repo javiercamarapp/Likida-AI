@@ -118,7 +118,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
               : (reporte.resumen.reclamables === 0 ? tx('rest.sin_cruces_para_reclamar') : tx(reporte.resumen.reclamables === 1 ? 'rest.n_cruce_para_pedir_revision.uno' : 'rest.n_cruce_para_pedir_revision.otros', { n: numero(reporte.resumen.reclamables) }))}
             info="peajes_reclamacion.cruces"
             acciones={(
-              <span className="rv-pj-total">{ricoT(tx('rest.e0_monto_reclamable_e0'), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}<strong className="cifra-mono rv-pj-total__valor">{mxn(reporte.resumen.montoReclamable)}</strong>
+              <span className="rv-pj-total">{ricoT(tx('rest.e0_monto_reclamable_e0'), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}<strong className="rv-ag-num rv-pj-total__valor">{mxn(reporte.resumen.montoReclamable)}</strong>
               </span>
             )}
           >
@@ -144,7 +144,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
               {motivosVisibles.map((m) => (
                 <div key={m} className="rv-pj-caja">
                   <span className="rv-pj-rotulo">{ETIQUETA_MOTIVO_RECLAMACION[m]}</span>
-                  <span><strong className="rv-pj-caja__monto cifra-mono">{numero(reporte.resumen.porMotivo[m].n)}</strong> <span className="rv-pj-nota">{mxn(reporte.resumen.porMotivo[m].monto)}</span></span>
+                  <span><strong className="rv-pj-caja__monto rv-ag-num">{numero(reporte.resumen.porMotivo[m].n)}</strong> <span className="rv-pj-nota">{mxn(reporte.resumen.porMotivo[m].monto)}</span></span>
                 </div>
               ))}
             </div>
@@ -163,7 +163,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
                   { id: 'fecha', titulo: tx('rest.fecha_y_hora'), principal: true, celda: (c) => <>{c.fecha}{c.hora && <span className="rv-pj-nota">{c.hora.slice(0, 8)}</span>}</> },
                   { id: 'caseta', titulo: tx('rest.caseta'), celda: (c) => c.casetaCatalogo || c.caseta || '—' },
                   { id: 'tag', titulo: tx('rest.tag_unidad'), celda: (c) => <>{c.tag || '—'}{c.unidad && <span className="rv-pj-nota">{c.unidad}</span>}</> },
-                  { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (c) => <span className="cifra-mono">{mxn(c.monto)}</span> },
+                  { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (c) => <span className="rv-ag-num">{mxn(c.monto)}</span> },
                   {
                     id: 'porque', titulo: candidato ? tx('rest.por_que_es_candidato') : tx('rest.por_que_se_reclama'),
                     celda: (c) => (

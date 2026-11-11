@@ -120,10 +120,13 @@ export default async function PaginaLlavesApi({
   }
 
   // Cifras de las mismas filas que la tabla; con la lectura caída no hay cifras (nunca «0 llaves»).
+  const vigentes = llaves === null ? 0 : llaves.filter((l) => l.revocadaEn === null && !llaveVencida(l.expiraEn)).length;
+  const sinCaducidad = llaves === null ? 0 : llaves.filter((l) => l.revocadaEn === null && l.expiraEn === null).length;
+  const muertas = llaves === null ? 0 : llaves.filter((l) => l.revocadaEn !== null || llaveVencida(l.expiraEn)).length;
   const cifras = llaves === null ? undefined : [
-    { etiqueta: t('e26.llaves_vigentes'), valor: llaves.filter((l) => l.revocadaEn === null && !llaveVencida(l.expiraEn)).length },
-    { etiqueta: t('e26.llaves_sin_caducidad'), valor: llaves.filter((l) => l.revocadaEn === null && l.expiraEn === null).length },
-    { etiqueta: t('e26.llaves_revocadas_vencidas'), valor: llaves.filter((l) => l.revocadaEn !== null || llaveVencida(l.expiraEn)).length },
+    { etiqueta: t('e26.llaves_vigentes'), valor: vigentes, nota: t('e26b.llaves_vigentes_nota'), segmentos: llaves.length > 0 ? [{ etiqueta: t('e26.llaves_vigentes'), valor: vigentes }, { etiqueta: t('e26.llaves_revocadas_vencidas'), valor: muertas }] : undefined },
+    { etiqueta: t('e26.llaves_sin_caducidad'), valor: sinCaducidad, nota: t('e26b.llaves_sin_caducidad_nota') },
+    { etiqueta: t('e26.llaves_revocadas_vencidas'), valor: muertas, nota: t('e26b.llaves_muertas_nota') },
   ];
 
   return (
@@ -133,17 +136,17 @@ export default async function PaginaLlavesApi({
         resumen={t('llaves.con_una_llave_un_sistema_tuyo_2')}
         mas={<p>{rico(t('llaves.la_llave_se_manda_como_e0'), { e0: (c) => <code className="cifra-mono">{c}</code>, e1: (c) => <code className="cifra-mono">{c}</code> })}</p>} />}
       cifras={cifras} etiquetaCifras={t('llaves.llaves_de_api')}
+      acciones={llaves === null ? undefined : (
+        <CajonEmitirLlave titulo={t('llaves.emitir_una_llave')} disparador={t('llaves.emitir_llave')} abiertoInicial={sp.abrir === 'emitir-llave'}>
+          <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
+            vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
+        </CajonEmitirLlave>
+      )}
     >
       {llaves === null ? (
         <EstadoError reintentar>{t('llaves.no_pude_leer_las_llaves_de')}</EstadoError>
       ) : (
-        <>
-          <CajonEmitirLlave titulo={t('llaves.emitir_una_llave')} disparador={t('llaves.emitir_llave')} abiertoInicial={sp.abrir === 'emitir-llave'}>
-            <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
-              vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
-          </CajonEmitirLlave>
-          <ListaLlaves t={t} llaves={llaves} revocarLlave={revocarLlave} />
-        </>
+        <ListaLlaves t={t} llaves={llaves} revocarLlave={revocarLlave} />
       )}
     </EsqueletoTablaMaestra>
   );

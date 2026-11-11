@@ -21,3 +21,9 @@
 .rv-ar__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px 24px; grid-template-columns: repeat(2, minmax(0, 1fr)); font-size: var(--t-small); }
 .rv-ar__lista span { color: var(--muted); }
 @media (max-width: 640px) { .rv-ar__lista { grid-template-columns: minmax(0, 1fr); } .rv-ar__paso { flex-wrap: wrap; } .rv-ar__accion { min-width: 0; text-align: left; } }
+
+/* Barra fina de ~140 px («3 de 6 que puedes hacer ahora», Rovaq `/setup`) en lugar de la dona. */
+.rv-ar__barra { flex: none; width: 140px; height: 6px; appearance: none; border: 0; border-radius: 999px; background: var(--line); overflow: hidden; }
+.rv-ar__barra::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+.rv-ar__barra::-webkit-progress-value { background: var(--ink); border-radius: 999px; }
+.rv-ar__barra::-moz-progress-bar { background: var(--ink); border-radius: 999px; }

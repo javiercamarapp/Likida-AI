@@ -5,7 +5,6 @@ import type { PasoMarcha, GrupoPaso, ResumenMarcha } from '@/lib/likida/puesta_e
 import { AUTOMATIZACIONES } from '../rutas';
 import { BotonEnlace, Icono, Tarjeta } from '@/app/ui-v2/componentes';
 import { EsqueletoConfiguracion, type SeccionConfig } from '@/app/ui-v2/esqueletos';
-import { ProgresoAnillo } from '@/app/ui-v2/graficas';
 import './arranque.css';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -75,7 +74,7 @@ export function VistaPuestaEnMarcha({ pasos, resumen, puedeAdministrar, hrefAuto
         <Tarjeta titulo={resumen.completo ? t('cfg.tu_flota_esta_lista_para_operar') : t('cfg.lo_que_falta_para_operar_sin')} info="arranque.avance"
           acciones={<span className="rv-ar__nota">{numero(resumen.hechos)}{' '}{t('cfg.de_pasos', { numero: numero(resumen.total) })}</span>}>
           <div className="rv-ar__avance">
-            <ProgresoAnillo valor={resumen.total === 0 ? 0 : Math.round((resumen.hechos / resumen.total) * 100)} etiqueta={t('cfg.avance_de_la_puesta_en_marcha')} />
+            <progress role="progressbar" className="rv-ar__barra" max={resumen.total || 1} value={resumen.hechos} aria-valuemin={0} aria-valuemax={resumen.total || 1} aria-valuenow={resumen.hechos} aria-label={t('cfg.avance_de_la_puesta_en_marcha')} />
             <div className="rv-ar__resumen">
               {resumen.hayDatoFaltante && (
                 <p className="rv-ar__aviso">{t('cfg.algunos_pasos_no_se_pudieron_comprobar')}</p>

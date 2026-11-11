@@ -10,3 +10,11 @@
 .rv-comb__linea { display: grid; gap: 4px; padding: 12px 0; border-top: 1px solid var(--line); }
 .rv-comb__linea:first-child { border-top: 0; }
 .rv-comb__forma { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-top: 4px; }
+
+/* CFDI consolidado: tres datos en lista de definición, sin tira anidada dentro de una tarjeta. */
+.rv-comb__datos { display: grid; gap: 10px; margin: 0; }
+.rv-comb__datos > div { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.rv-comb__datos > div:first-child { padding-top: 0; border-top-width: 0; }
+.rv-comb__datos dt { font-size: var(--t-body); color: var(--ink); }
+.rv-comb__datos dd { margin: 0; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+.rv-comb__datos dd.rv-comb__tenue { grid-column: 1 / -1; text-align: left; font-weight: 400; font-size: var(--t-small); color: var(--muted); }

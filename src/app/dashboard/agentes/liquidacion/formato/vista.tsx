@@ -1,12 +1,14 @@
-import { ArrowLeft, Upload, Trash2, Save } from 'lucide-react';
+import { ArrowLeft, Trash2, Save } from 'lucide-react';
 
 // SOLO tipos: el repo importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ConfigFormatoFlota, TelefonosFlota } from '@/lib/likida/liquidacion_externa/repo';
 import { ETIQUETA_CAMPO_RENGLON, ETIQUETA_CAMPO_ENCABEZADO } from '@/lib/likida/liquidacion_externa/formato_flota';
 import {
-  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoArchivo, CampoSelect, CampoTexto, CampoTextarea, Icono, Tarjeta,
+  AvisoCompacto, Boton, BotonEnlace, Casilla, CampoSelect, CampoTexto, CampoTextarea, Icono, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import '../liquidacion.css';
+import { VacioAgente } from '../../vacio-agente';
+import { FormaSubirMuestra } from './forma-muestra';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
 
@@ -43,20 +45,13 @@ export function VistaFormatoLiquidacion({ sufijo, aviso, error, config, telefono
       <Tarjeta titulo={tx('rest.1_tu_formato')} info="liquidacion_formato.formato">
         <p className="rv-liq-sub">{tx('rest.tu_calculas_la_liquidacion_en_tu')}</p>
         {puedeAdministrar ? (
-          <form action={acciones.subirMuestra} encType="multipart/form-data" className="rv-liq-acciones rv-liq-acciones--forma">
-            <CampoArchivo etiqueta={tx('rest.excel_de_muestra_xlsx')} name="archivo" accept=".xlsx,.xls,.ods,.csv" required />
-            <Boton type="submit" variante="primary" icono={<Icono icono={Upload} />}>{f ? tx('rest.reemplazar_muestra') : tx('rest.subir_muestra')}</Boton>
-          </form>
+          <FormaSubirMuestra accion={acciones.subirMuestra} etiqueta={tx('rest.excel_de_muestra_xlsx')} boton={f ? tx('rest.reemplazar_muestra') : tx('rest.subir_muestra')} />
         ) : (
           <p className="rv-liq-sub">{tx('rest.solo_el_dueno_de_la_flota_5')}</p>
         )}
+        {/* Sin formato: una línea punteada dentro de la misma tarjeta, no otra tarjeta de 105 px. */}
+        {!f && <VacioAgente titulo={tx('rest.sin_formato_todavia')}>{tx('rest.todavia_no_hay_formato_las_liquidaciones')}</VacioAgente>}
       </Tarjeta>
-
-      {!f && (
-        <Tarjeta titulo={tx('rest.sin_formato_todavia')}>
-          <p className="rv-liq-sub">{tx('rest.todavia_no_hay_formato_las_liquidaciones')}</p>
-        </Tarjeta>
-      )}
 
       {!f && acciones.guardarTelefonos && (
         <Tarjeta titulo={tx('rest.2_a_quien_se_le_avisa')} info="liquidacion_formato.avisos">

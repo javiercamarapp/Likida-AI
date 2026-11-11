@@ -112,8 +112,9 @@ describe.skipIf(SIN_NAVEGADOR)('B4 · InfoTip (ⓘ) como cajón (R8)', () => {
     expect(r.exp).toBe('true');
     expect(r.popover).toBe(0);
     expect(r.marca).toBe(true);
-    expect(r.btn).toBeGreaterThanOrEqual(20);
-    expect(r.btn).toBeLessThanOrEqual(24);
+    // F26: el botón «i» mide 32×32 como en Rovaq (CATALOGO: radio 8, borde #d6d6d9); antes 24 px.
+    expect(r.btn).toBeGreaterThanOrEqual(32);
+    expect(r.btn).toBeLessThanOrEqual(32);
     await p.keyboard.press('Escape');
     expect(await p.locator('dialog[open]').count()).toBe(0);
     expect(await p.evaluate(() => document.activeElement?.classList.contains('rv-info'))).toBe(true);
