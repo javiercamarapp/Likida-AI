@@ -186,7 +186,7 @@ function CeldaHito({ h, puedeActuar, accion, viajeId, tr = TR_ES }: { h: HitoVis
         <span>{h.etiqueta}</span>
       </div>
       {resuelto && h.horaMensaje ? (
-        <div className="cifra-mono" title={tx('rest.hora_del_mensaje_del_chofer_no')}>{fechaHoraMx(h.horaMensaje)}</div>
+        <div className="rv-ag-num" title={tx('rest.hora_del_mensaje_del_chofer_no')}>{fechaHoraMx(h.horaMensaje)}</div>
       ) : (
         <div className="rv-cd__faint">
           {h.estado === 'omitido' ? textoOmitido(h) : h.estado === 'escalado' ? `escalado${h.atendidaEn ? ' · atendido' : ''}` : h.tocaDesde ? `toca desde ${fechaHoraMx(h.tocaDesde)}` : 'pendiente'}
@@ -211,7 +211,7 @@ function CeldaHito({ h, puedeActuar, accion, viajeId, tr = TR_ES }: { h: HitoVis
       {h.reporte && h.reporte.reubicaciones > 0 && (
         <Disclosure titulo={h.reporte.reubicaciones === 1 ? tx('rest.1_cambio_de_rampa_o_contacto') : tx('rest.cambios_de_rampa_o_contacto', { reubicaciones: h.reporte.reubicaciones })} variante="linea">
           <ol className="rv-cd__lista">
-            {h.reporte.historial.map((r) => <li key={r.en} className="rv-cd__micro" data-tono="muted"><span className="cifra-mono">{fechaHoraMx(r.en)}</span> · {r.rampa ?? tx('rest.sin_rampa_registrada')}</li>)}
+            {h.reporte.historial.map((r) => <li key={r.en} className="rv-cd__micro" data-tono="muted"><span className="rv-ag-num">{fechaHoraMx(r.en)}</span> · {r.rampa ?? tx('rest.sin_rampa_registrada')}</li>)}
           </ol>
         </Disclosure>
       )}
@@ -247,7 +247,7 @@ function DocumentosCierreFila({ r, tr = TR_ES }: { r: ResumenDocumentosCierre; t
   return (
     <p className="rv-cd__icono-linea" data-tono={faltan > 0 ? 'warn' : 'ok'} aria-label={tx('rest.documentos_de_cierre')}>
       <Icono icono={faltan > 0 ? FileWarning : FileCheck2} tam={14} />
-      <span>{ricoT(tx('rest.e0_documentos_de_cierre_e0'), { e0: (c) => <span className="rv-cd__medio">{c}</span> })}{' '}<span className="cifra-mono">{numero(r.recibidos)}</span> de <span className="cifra-mono">{numero(r.total)}</span> recibidos
+      <span>{ricoT(tx('rest.e0_documentos_de_cierre_e0'), { e0: (c) => <span className="rv-cd__medio">{c}</span> })}{' '}<span className="rv-ag-num">{numero(r.recibidos)}</span> de <span className="rv-ag-num">{numero(r.total)}</span> recibidos
         {faltan > 0 && <>{tx('rest.faltan')}{' '}{r.faltantes.map((f) => f.nombreSolicitado).join(', ')}</>}
         {porRevisar > 0 && <span> · {numero(porRevisar)} {porRevisar === 1 ? tx('rest.con_foto_por_revisar_calidad') : tx('rest.con_fotos_por_revisar_calidad')}</span>}
       </span>
@@ -260,7 +260,7 @@ function ResumenEstancia({ e, tr = TR_ES }: { e: Estancia; tr?: TrAgentes }) {
   const texto = e.fase === 'cerrada' ? `${minutos(e.minutos ?? 0)} (cerrada)`
     : e.fase === 'en_curso' ? tx('rest.y_sigue_en_el_anden', { minutos: minutos(e.minutos ?? 0) })
       : e.fase === 'incoherente' ? 'horas incoherentes' : e.fase === 'sin_llegada' ? 'sin llegada registrada' : 'sin salida registrada';
-  return <span>{e.lugar === 'carga' ? tx('rest.en_carga') : tx('rest.en_descarga')}: <span className="cifra-mono">{texto}</span></span>;
+  return <span>{e.lugar === 'carga' ? tx('rest.en_carga') : tx('rest.en_descarga')}: <span className="rv-ag-num">{texto}</span></span>;
 }
 
 export function TarjetaViaje({ f, puedeActuar, accion, accionSitios, sitios, sitiosHayMas = false, tr = TR_ES }: {
@@ -340,13 +340,13 @@ export function EpisodiosSenalVida({ episodios, dias, hayMas, tr = TR_ES }: { ep
                 <span className="rv-cd__medio">{e.folio}</span>
                 <span className="rv-cd__muted">{e.chofer}</span>
                 <StatusChip tono="muted">{e.motivo}</StatusChip>
-                <span className="cifra-mono rv-cd__micro">desde {fechaHoraMx(e.abiertoEn)}</span>
+                <span className="rv-ag-num rv-cd__micro">desde {fechaHoraMx(e.abiertoEn)}</span>
                 <StatusChip tono={e.urgente ? 'bad' : e.abierto ? 'warn' : 'ok'}>{e.abierto ? tx('rest.abierto') : tx('rest.cerrado')}</StatusChip>
               </div>
               <div>{e.estado}</div>
               {e.pasos.length > 0 && (
                 <ol className="rv-cd__linea rv-cd__micro" data-tono="muted">
-                  {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="cifra-mono">{fechaHoraMx(p.en)}</span></li>)}
+                  {e.pasos.map((p) => <li key={p.texto}>{p.texto} · <span className="rv-ag-num">{fechaHoraMx(p.en)}</span></li>)}
                 </ol>
               )}
             </li>
@@ -381,8 +381,8 @@ export function ReubicacionesPorCliente({ filas, csv, tr = TR_ES }: { filas: Reu
                   <span className="rv-cd__muted">{tx('rest.sin_dato_2', { numero: numero(f.viajes) })}{' '}{f.viajes === 1 ? 'viaje' : 'viajes'}{' '}{tx('rest.sin_respuesta_del_chofer')}</span>
                 ) : (
                   <>
-                    <span><span className="cifra-mono">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? tx('rest.reubicacion') : 'reubicaciones'}</span>
-                    <span><span className="cifra-mono">{numero(f.minutos ?? 0)}</span> min</span>
+                    <span><span className="rv-ag-num">{numero(f.reubicaciones ?? 0)}</span> {f.reubicaciones === 1 ? tx('rest.reubicacion') : 'reubicaciones'}</span>
+                    <span><span className="rv-ag-num">{numero(f.minutos ?? 0)}</span> min</span>
                     <span className="rv-cd__muted">{tx('rest.en_de', { numero: numero(f.viajesReubicados ?? 0), numero2: numero(f.viajesConDato) })}{' '}{f.viajesConDato === 1 ? tx('rest.viaje_con_dato') : tx('rest.viajes_con_dato')}</span>
                   </>
                 )}
@@ -416,7 +416,7 @@ export function TableroHitos({
         <span className="rv-cd__linea">
           {ORDEN_SEMAFORO.map((s) => (
             <span key={s} className="rv-cd__linea">
-              <PuntoSemaforo s={s} tr={tr} /><span className="cifra-mono rv-cd__muted">{numero(tablero.conteos[s])}</span>
+              <PuntoSemaforo s={s} tr={tr} /><span className="rv-ag-num rv-cd__muted">{numero(tablero.conteos[s])}</span>
             </span>
           ))}
         </span>

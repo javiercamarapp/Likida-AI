@@ -5,7 +5,8 @@ import {
 import { Truck, Download, RefreshCw, FileText, FileSpreadsheet, Send, Settings2 } from 'lucide-react';
 import { fechaCorta, numero, hoyMx, fechaHoraMx } from '@/lib/formato';
 import './liquidacion.css';
-import { Ficha } from './desgloses';
+import { BloqueCifras } from '@/app/ui-v2/esqueletos';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { dinero } from '@/lib/likida/liquidacion_externa/presentacion';
 import { motivoDeFallo } from '@/lib/likida/liquidacion_externa/api';
 import {
@@ -132,6 +133,13 @@ function textoImportacion(m: 'importada' | 'importacion_error', imp: ExternasPro
   return det ? `${base} ${det}` : base;
 }
 
+/** Una celda de la tira de «Liquidaciones externas»: `null` = no se pudo contar («—» con su leyenda), jamás un cero que parezca medición. */
+function cifraExterna(etiqueta: string, valor: number | null, o: { alerta?: boolean; ayuda: string; href: string }, tx: TAgentes): PropsCifra {
+  return valor === null
+    ? { etiqueta, valor: null, estado: 'vacio', mensaje: tx('conductores.vista.no_se_pudo_contar'), href: o.href }
+    : { etiqueta, valor: numero(valor), nota: o.ayuda, href: o.href, tono: o.alerta && valor > 0 ? 'bad' : undefined };
+}
+
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
 }
@@ -163,25 +171,19 @@ export async function SeccionExternas(p: ExternasProps) {
       {p.subirArchivo && (
         <form action={p.subirArchivo} className="rv-liq-acciones rv-liq-acciones--forma">
           <CampoArchivo etiqueta={tx('rest.subir_liquidaciones_csv_o_excel_de')} name="archivo" accept=".csv,.txt,.xlsx,.xls,.ods" required />
-          <Boton type="submit" variante="primary">{tx('rest.subir_y_entregar')}</Boton>
+          <Boton type="submit" variante="primary" tamano="sm">{tx('rest.subir_y_entregar')}</Boton>
         </form>
       )}
 
       {/* ── Las fichas: lo que pide a una persona, primero ── */}
-      <div className="rv-liq-fichas">
-        <Ficha etiqueta={tx('rest.no_coincide')} valor={fichas.noCoincide} tono="bad" ayuda={tx('rest.el_chofer_dice_que_su_liquidacion')}
-          href={query(p.contexto, [['ext_estado', 'no_coincide']])} />
-        <Ficha etiqueta={tx('rest.fallaron')} valor={fichas.porEstado.fallida} tono="bad" ayuda={rotuloEstado(tx).fallida.ayuda}
-          href={query(p.contexto, [['ext_estado', 'fallida']])} />
-        <Ficha etiqueta={tx('rest.pendientes')} valor={fichas.porEstado.pendiente} ayuda={rotuloEstado(tx).pendiente.ayuda}
-          href={query(p.contexto, [['ext_estado', 'pendiente']])} />
-        <Ficha etiqueta={tx('rest.en_cola')} valor={fichas.porEstado.en_cola} ayuda={rotuloEstado(tx).en_cola.ayuda}
-          href={query(p.contexto, [['ext_estado', 'en_cola']])} />
-        <Ficha etiqueta={tx('rest.enviadas')} valor={fichas.porEstado.enviada} ayuda={rotuloEstado(tx).enviada.ayuda}
-          href={query(p.contexto, [['ext_estado', 'enviada']])} />
-        <Ficha etiqueta={tx('rest.con_respuesta')} valor={fichas.porEstado.acusada} ayuda={rotuloEstado(tx).acusada.ayuda}
-          href={query(p.contexto, [['ext_estado', 'acusada']])} />
-      </div>
+      <BloqueCifras etiqueta={tx('rest.liquidaciones_externas')} cifras={[
+        cifraExterna(tx('rest.no_coincide'), fichas.noCoincide, { alerta: true, ayuda: tx('rest.el_chofer_dice_que_su_liquidacion'), href: query(p.contexto, [['ext_estado', 'no_coincide']]) }, tx),
+        cifraExterna(tx('rest.fallaron'), fichas.porEstado.fallida, { alerta: true, ayuda: rotuloEstado(tx).fallida.ayuda, href: query(p.contexto, [['ext_estado', 'fallida']]) }, tx),
+        cifraExterna(tx('rest.pendientes'), fichas.porEstado.pendiente, { ayuda: rotuloEstado(tx).pendiente.ayuda, href: query(p.contexto, [['ext_estado', 'pendiente']]) }, tx),
+        cifraExterna(tx('rest.en_cola'), fichas.porEstado.en_cola, { ayuda: rotuloEstado(tx).en_cola.ayuda, href: query(p.contexto, [['ext_estado', 'en_cola']]) }, tx),
+        cifraExterna(tx('rest.enviadas'), fichas.porEstado.enviada, { ayuda: rotuloEstado(tx).enviada.ayuda, href: query(p.contexto, [['ext_estado', 'enviada']]) }, tx),
+        cifraExterna(tx('rest.con_respuesta'), fichas.porEstado.acusada, { ayuda: rotuloEstado(tx).acusada.ayuda, href: query(p.contexto, [['ext_estado', 'acusada']]) }, tx),
+      ]} />
 
       <div className="rv-liq-barras">
         <BarraFiltros accion="?" enLinea ocultos={p.contexto} etiqueta={tx('rest.filtros_de_liquidaciones_externas')} nActivos={p.filtroEstado ? 1 : 0} limpiarHref={query(p.contexto)}>
@@ -230,7 +232,7 @@ export async function SeccionExternas(p: ExternasProps) {
               },
               { id: 'operador', titulo: tx('conductores.forma.operador'), celda: (l) => <span className="rv-liq-apagado">{l.operadorNombre ?? '—'}</span> },
               { id: 'periodo', titulo: tx('rest.periodo'), celda: (l) => <span className="rv-liq-apagado">{fechaCorta(l.periodoDesde)} – {fechaCorta(l.periodoHasta)}</span> },
-              { id: 'total', titulo: tx('rest.total_de_tu_sistema'), alinear: 'der', celda: (l) => <span className="cifra-mono">{dinero(l.total, l.moneda)}</span> },
+              { id: 'total', titulo: tx('rest.total_de_tu_sistema'), alinear: 'der', celda: (l) => <span className="rv-ag-num">{dinero(l.total, l.moneda)}</span> },
               {
                 id: 'estado', titulo: tx('proveedores.vista.estado'),
                 celda: (l) => {

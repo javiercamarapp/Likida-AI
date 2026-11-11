@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { evaluarPreflight, type DatosPreflight } from '@/lib/likida/conductor/preflight_piloto';
 import { plantillasRequeridas } from '@/lib/likida/conductor/plantillas_requeridas';
 import { CONFIG_CONDUCTOR_DEFAULT } from '@/lib/likida/conductor/config';
-import { BannerPreflight, PanelPreflight } from './preflight';
+import { BannerPreflight, PanelPreflight, lenguajeLlano } from './preflight';
 
 const verde = (): DatosPreflight => ({
   config: { activo: true, perfilSeguimiento: 'esenciales', solicitudesMin: [0, 15, 30, 45], cohortePiloto: 'sin_tableta_ni_macros' }, zonaDeclarada: 'America/Mexico_City',
@@ -31,11 +31,23 @@ describe('«¿Está lista la flota?» (pantallas)', () => {
     const html = renderToStaticMarkup(<PanelPreflight preflight={evaluarPreflight({ ...verde(), contactos: [] })} />);
     expect(html).toContain('¿Está lista la flota?');
     expect((html.match(/<li /g) ?? []).length).toBe(9);
-    expect((html.match(/Qué hacer:/g) ?? []).length).toBe(1);
+    expect((html.match(/Qué se pide/g) ?? []).length).toBe(1);
+    expect(html).toContain('Para revisar');
     expect(html).toContain('Falta 1 cosa');
     const todo = renderToStaticMarkup(<PanelPreflight preflight={evaluarPreflight(verde())} />);
     expect(todo).toContain('Todo en orden');
-    expect(todo).not.toContain('Qué hacer:');
+    expect(todo).not.toContain('Qué se pide');
+  });
+
+  it('nunca muestra al cliente identificadores internos ni rutas del repositorio', () => {
+    const data = { ...verde(), aprobadas: [], config: { ...verde().config, cohortePiloto: null as never } };
+    const html = renderToStaticMarkup(<PanelPreflight preflight={evaluarPreflight(data)} />);
+    expect(html).not.toMatch(/[a-z]+(_[a-z0-9]+)+_v\d/);
+    expect(html).not.toContain('docs/');
+    expect(html).not.toContain('.md');
+    expect(html).toContain('Ir a hacerlo');
+    expect(lenguajeLlano('Define la cohorte (criterio en docs/operacion/cohorte-piloto.md); sin cohorte no se enciende.')).toBe('Define la cohorte; sin cohorte no se enciende.');
+    expect(lenguajeLlano('Faltan 2 de 5 plantillas (conductor_solicitud_llegada_carga_v1, aviso_jefe_trafico_v1): el agente calla.')).toBe('Faltan 2 de 5 plantillas: el agente calla.');
   });
 
   it('sin lectura: lo dice, no pinta una lista inventada', () => {

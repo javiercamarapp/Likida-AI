@@ -1265,4 +1265,9 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26.con_pie': '{n} of {total} sheets',
   'e26.perfil_mfa_activo': 'On',
   'e26.perfil_mfa_inactivo': 'Off',
+  'f26d2.inicio.cifras_al': 'Figures as of {fecha}',
+  'f26d2.inicio.fuentes_sin_lectura': '{n} not read',
+  'f26d2.inicio.flota_nueva': 'New fleet: no activity yet',
+  'f26d2.inicio.procedencia': 'Where the figures come from',
+  'f26d2.boton.no_disponible': 'Not available right now',
 };

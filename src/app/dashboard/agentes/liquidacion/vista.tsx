@@ -200,7 +200,7 @@ async function BloqueCiclo({ ciclo }: { ciclo: Promise<CicloLiquidacion> }) {
       <BarList etiqueta={tx('liquidacion.vista.viajes_en_curso_por_etapa')} items={pasosVivos} />
       {funnel.liquidados !== null && (
         <p className="rv-liq-pie">
-          {rico(tx('liquidacion.vista.viajes_liquidados_en_total_historico'), { strong: <strong className="cifra-mono">{numero(funnel.liquidados)}</strong> })}
+          {rico(tx('liquidacion.vista.viajes_liquidados_en_total_historico'), { strong: <strong className="rv-ag-num">{numero(funnel.liquidados)}</strong> })}
         </p>
       )}
     </Tarjeta>
@@ -281,9 +281,9 @@ async function BloqueHizoSolo({ hizoSolo }: { hizoSolo: Promise<HizoSolo> }) {
       {(docsProcesados !== null || actividadIa !== null) && (
         <p className="rv-liq-pie">
           {rico(tx('liquidacion.vista.historico'), { v0: docsProcesados !== null && (
-            <>{rico(tx('liquidacion.vista.comprobantes_leidos'), { strong: <strong className="cifra-mono">{numero(docsProcesados)}</strong> })}</>
+            <>{rico(tx('liquidacion.vista.comprobantes_leidos'), { strong: <strong className="rv-ag-num">{numero(docsProcesados)}</strong> })}</>
           ), v1: docsProcesados !== null && actividadIa !== null && ' · ', v2: actividadIa !== null && (
-            <>{rico(tx('liquidacion.vista.lecturas_de_ia'), { strong: <strong className="cifra-mono">{numero(actividadIa)}</strong> })}</>
+            <>{rico(tx('liquidacion.vista.lecturas_de_ia'), { strong: <strong className="rv-ag-num">{numero(actividadIa)}</strong> })}</>
           ), v3: ' ' })}
         </p>
       )}
@@ -320,7 +320,7 @@ export async function BloqueDineroObservado({ porTipo: p }: { porTipo: Promise<D
         {porTipo.map((t) => (
           <li key={t.tipo} className="rv-liq-filas__fila">
             <span className="rv-liq-filas__rotulo">{rotuloTipo(t.tipo, tx)} · {numero(t.n)}</span>
-            <span className="cifra-mono">{mxn(t.monto, tr.idioma)}</span>
+            <span className="rv-ag-num">{mxn(t.monto, tr.idioma)}</span>
           </li>
         ))}
       </ul>
@@ -374,7 +374,7 @@ async function BloqueReglas({ politica: p, puedeVerReglas, sufijo }: {
         {politica.map((pg) => (
           <li key={pg.concepto} className="rv-liq-filas__fila">
             <span className="rv-liq-filas__rotulo">{etiquetaConcepto(pg.concepto)}</span>
-            <span className="cifra-mono">
+            <span className="rv-ag-num">
               {pg.topeMonto !== undefined ? mxn(pg.topeMonto, tr.idioma) : pg.requiereCfdi ? tx('liquidacion.vista.requiere_cfdi') : tx('liquidacion.vista.sin_tope')}
             </span>
           </li>
@@ -421,8 +421,8 @@ function TablaLiqs({ filas, sufijo, conVer, tr = TR_ES }: { filas: LiqRow[]; suf
       columnas={[
         { id: 'viaje', titulo: tx('liquidacion.vista.viaje'), principal: true, celda: (l) => <strong>{l.folio}</strong> },
         { id: 'fecha', titulo: tx('liquidacion.vista.fecha'), celda: (l) => <span className="rv-liq-apagado">{fechaCorta(l.creadoEn, tr.idioma)}</span> },
-        { id: 'comprobado', titulo: tx('liquidacion.vista.comprobado'), alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado, tr.idioma)}</span> },
-        { id: 'diferencia', titulo: tx('liquidacion.vista.diferencia'), alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-liq-malo' : 'cifra-mono'}>{mxn(l.diferencia, tr.idioma)}</span> },
+        { id: 'comprobado', titulo: tx('liquidacion.vista.comprobado'), alinear: 'der', celda: (l) => <span className="rv-ag-num">{mxn(l.comprobado, tr.idioma)}</span> },
+        { id: 'diferencia', titulo: tx('liquidacion.vista.diferencia'), alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'rv-ag-num rv-liq-malo' : 'rv-ag-num'}>{mxn(l.diferencia, tr.idioma)}</span> },
         {
           id: 'estatus', titulo: tx('liquidacion.vista.estatus'), celda: (l) => {
             const e = ESTATUS[l.estatus] ?? { rotulo: l.estatus, tono: 'muted' as const };

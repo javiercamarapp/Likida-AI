@@ -14,6 +14,7 @@ import {
   type ColumnaBase, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { VacioAgente } from '../vacio-agente';
 import { TR_ES, rico, type TrAgentes, type TAgentes, selloHoyTr } from '../i18n-agentes';
 
 /**
@@ -37,7 +38,7 @@ export const FRASE_SIN_GRUPOS = TR_ES.t('cartaporte.vista.los_grupos_de_whatsapp
 type ViajeEnCola = EstadoCartaPorte['viajes'][number];
 
 const COLUMNAS_COLA = (tx: TAgentes): readonly ColumnaBase<ViajeEnCola>[] => [
-  { id: 'folio', titulo: tx('cartaporte.vista.viaje'), principal: true, celda: (v) => <span className="cifra-mono">{v.folio ?? v.viajeId.slice(0, 8)}</span> },
+  { id: 'folio', titulo: tx('cartaporte.vista.viaje'), principal: true, celda: (v) => <span className="rv-ag-num">{v.folio ?? v.viajeId.slice(0, 8)}</span> },
   { id: 'ruta', titulo: tx('cartaporte.vista.ruta'), celda: (v) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : tx('cartaporte.vista.sin_ruta_capturada')) },
   {
     id: 'falta', titulo: tx('cartaporte.vista.lo_que_falta_declarar'),
@@ -78,21 +79,19 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
     <EsqueletoTablaMaestra
       titulo={tx('cartaporte.vista.carta_porte_en_automatico')}
       apoyo={tx('cartaporte.vista.al_despachar_corre_el_arbol')}
-      avisos={(
-        <>
-          <AvisoCompacto
-            tono="info"
-            resumen={tx('cartaporte.vista.al_despachar_un_viaje_el')}
-            mas={tx('cartaporte.vista.corre_el_arbol_legal_rmf')}
-          />
-          {catalogosSat !== undefined && <AvisoCatalogosSat tr={tr} catalogosSat={catalogosSat} />}
-        </>
-      )}
+      avisos={catalogosSat !== undefined ? <AvisoCatalogosSat tr={tr} catalogosSat={catalogosSat} /> : undefined}
       cifras={datos === null ? undefined : [
-        { info: 'carta_porte_agente.en_curso', etiqueta: tx('cartaporte.vista.viajes_en_curso'), valor: numero(datos.total) },
+        { info: 'carta_porte_agente.en_curso', etiqueta: tx('cartaporte.vista.viajes_en_curso'), valor: numero(datos.total),
+          // La barra solo se pinta si los tres veredictos salen de TODOS los viajes en curso: con la muestra recortada sería una proporción inventada.
+          segmentos: datos.viajes.length === datos.total && datos.total > 0
+            ? [{ etiqueta: tx('cartaporte.vista.necesitan_complemento'), valor: sinConteo }, { etiqueta: tx('cartaporte.vista.esperan_declaracion'), valor: esperan }, { etiqueta: tx('f26d2.cp.no_necesitan'), valor: conteo('no') }]
+            : undefined },
         { info: 'carta_porte_agente.esperan', etiqueta: tx('cartaporte.vista.esperan_declaracion'), valor: esperan === null ? null : numero(esperan), tono: esperan !== null && esperan > 0 ? 'bad' : undefined },
         { info: 'carta_porte_agente.necesitan', etiqueta: tx('cartaporte.vista.necesitan_complemento'), valor: sinConteo === null ? null : numero(sinConteo), tono: (sinConteo ?? 0) > 0 ? 'warn' : undefined },
-        { info: 'carta_porte_agente.borradores', etiqueta: tx('cartaporte.vista.borradores_sin_fallas'), valor: armables === null ? null : numero(armables) },
+        { info: 'carta_porte_agente.borradores', etiqueta: tx('cartaporte.vista.borradores_sin_fallas'), valor: armables === null ? null : numero(armables),
+          segmentos: (sinConteo ?? 0) > 0 && armables !== null && sinConteo !== null && datos.viajes.length === datos.total
+            ? [{ etiqueta: tx('cartaporte.vista.borradores_sin_fallas'), valor: Math.min(armables, sinConteo) }, { etiqueta: tx('f26d2.cp.sin_armar'), valor: Math.max(0, sinConteo - armables) }]
+            : undefined },
       ]}
       etiquetaCifras={tx('cartaporte.vista.carta_porte_en_automatico')}
       selloCifras={selloHoyTr(tr, tx('cartaporte.vista.sello_viajes_en_curso'))}
@@ -102,10 +101,12 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       ) : (
         <>
           <Tarjeta titulo={tx('cartaporte.vista.esperando_al_jefe')} info="carta_porte_agente.cola"
-            estado={cola.length === 0 ? 'vacio' : 'ok'} iconoVacio={ScrollText} mensaje={tx('cartaporte.vista.nada_pendiente_de_declarar')}
-            detalle={tx('cartaporte.vista.cada_viaje_en_curso_ya')}
             acciones={<Link href={`/dashboard/carta-porte${sufijo}`} className={clasesBoton('secondary', 'sm')}>{tx('cartaporte.vista.declarar_y_capturar')}</Link>}>
-            <TablaBase etiqueta={tx('cartaporte.vista.viajes_esperando_una_declaracion')} columnas={COLUMNAS_COLA(tx)} filas={cola} idFila={(v) => v.viajeId} densa tarjetaMovil />
+            {cola.length === 0 ? (
+              <VacioAgente icono={ScrollText} titulo={tx('cartaporte.vista.nada_pendiente_de_declarar')}>{tx('cartaporte.vista.cada_viaje_en_curso_ya')}</VacioAgente>
+            ) : (
+              <TablaBase etiqueta={tx('cartaporte.vista.viajes_esperando_una_declaracion')} columnas={COLUMNAS_COLA(tx)} filas={cola} idFila={(v) => v.viajeId} densa tarjetaMovil />
+            )}
             {datos.viajes.length < datos.total && (
               <p className="rv-cp__nota" data-tono="faint">
                 {tx('cartaporte.vista.los_conteos_por_veredicto_salen', { length: numero(datos.viajes.length), total: numero(datos.total) })}
@@ -294,13 +295,13 @@ function InsightsDelAgente({ insights, nombresCliente, diasVentana, tr = TR_ES }
             {i.causasRechazo === null ? <p className="rv-cp__nota">{tx('cartaporte.vista.no_disponible_todavia_en_esta')}</p>
               : i.causasRechazo.length === 0 && i.rechazadosSinCausa === 0 ? <p className="rv-cp__nota">{tx('cartaporte.vista.no_hubo_rechazos')}</p>
               : <ul className="rv-cp__lista">
-                  {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="cifra-mono">{numero(c.documentos)}</span></li>)}
-                  {(i.rechazadosSinCausa ?? 0) > 0 && <li>{rico(tx('cartaporte.vista.sin_clasificar'), { span: <span className="cifra-mono">{numero(i.rechazadosSinCausa ?? 0)}</span> })}</li>}
+                  {i.causasRechazo.map((c) => <li key={c.causa}>{c.rotulo}: <span className="rv-ag-num">{numero(c.documentos)}</span></li>)}
+                  {(i.rechazadosSinCausa ?? 0) > 0 && <li>{rico(tx('cartaporte.vista.sin_clasificar'), { span: <span className="rv-ag-num">{numero(i.rechazadosSinCausa ?? 0)}</span> })}</li>}
                 </ul>}
           </Tarjeta>
           <Tarjeta titulo={tx('cartaporte.vista.lo_que_mas_se_corrige')}>
             {i.topCamposCorregidos.length === 0 ? <p className="rv-cp__nota">{tx('cartaporte.vista.nadie_ha_corregido_campos_en')}</p>
-              : <ol className="rv-cp__lista rv-cp__lista--num">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="cifra-mono">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
+              : <ol className="rv-cp__lista rv-cp__lista--num">{i.topCamposCorregidos.map((c) => <li key={c.campo}>{c.campo}: <span className="rv-ag-num">{numero(c.correcciones)}</span> {c.correcciones === 1 ? 'vez' : 'veces'}</li>)}</ol>}
           </Tarjeta>
         </FilaTarjetas>
       </div>
@@ -316,7 +317,7 @@ interface FilaSinCcp { clave: string; cliente: string; folio: string; horas: num
 const COLUMNAS_SIN_CCP = (tx: TAgentes): readonly ColumnaBase<FilaSinCcp>[] => [
   { id: 'cliente', titulo: tx('cartaporte.vista.cliente'), principal: true, celda: (f) => f.cliente },
   { id: 'folio', titulo: tx('cartaporte.vista.viaje'), celda: (f) => f.folio },
-  { id: 'horas', titulo: tx('cartaporte.vista.sin_carta_porte'), alinear: 'der', celda: (f) => <span className="cifra-mono">{numero(f.horas)} h ({numero(f.dias)} d)</span> },
+  { id: 'horas', titulo: tx('cartaporte.vista.sin_carta_porte'), alinear: 'der', celda: (f) => <span className="rv-ag-num">{numero(f.horas)} h ({numero(f.dias)} d)</span> },
   { id: 'estado', titulo: tx('cartaporte.vista.antiguedad'), celda: (f) => <StatusChip tono={TONO_ANTIGUEDAD[f.color]}>{ROTULO_ANTIGUEDAD(tx)[f.color]}</StatusChip> },
 ];
 
@@ -398,18 +399,23 @@ export const TEXTO_CATALOGOS_SAT_NO_LEIDOS = TR_ES.t('cartaporte.vista.no_pudimo
 export function AvisoCatalogosSat({ catalogosSat, tr = TR_ES }: { catalogosSat: ConteoCatalogosSat | 'no_leido'; tr?: TrAgentes; }) {
   const { t: tx } = tr;
   if (catalogosSat === 'no_leido') {
-    return <div data-catalogos-sat="no_leido"><Aviso tono="warn">{tx('cartaporte.vista.no_pudimos_comprobar_si_los')}</Aviso></div>;
+    return <div data-catalogos-sat="no_leido"><AvisoCompacto tono="warn" resumen={tx('cartaporte.vista.no_pudimos_comprobar_si_los')} /></div>;
   }
   const { filas, vacios } = estadoCatalogosSat(catalogosSat);
   if (vacios.length === 0) return null;
+  // Rovaq `notice-bar`: UNA línea con la acción «Ver cuáles son»; la lista de catálogos va detrás, no a 7 líneas de alto antes de la tira.
   return (
     <div data-catalogos-sat={vacios.length === filas.length ? 'vacios' : 'parcial'}>
-      <Aviso tono="warn">
-        {vacios.length === filas.length ? tx('cartaporte.vista.los_catalogos_del_sat_todavia') : tx('cartaporte.vista.faltan_por_cargar_algunos_catalogos')}
-        <ul className="rv-cp__lista">
-          {filas.map((f) => <li key={f.catalogo}>{f.nombre}: {f.n === 0 ? tx('cartaporte.vista.sin_cargar') : tx('cartaporte.vista.n_claves', { n: numero(f.n) })}</li>)}
-        </ul>
-      </Aviso>
+      <AvisoCompacto
+        tono="warn"
+        resumen={vacios.length === filas.length ? tx('cartaporte.vista.los_catalogos_del_sat_todavia') : tx('cartaporte.vista.faltan_por_cargar_algunos_catalogos')}
+        etiquetaMas={tx('f26d2.cp.ver_cuales')}
+        mas={(
+          <ul className="rv-cp__lista">
+            {filas.map((f) => <li key={f.catalogo}>{f.nombre}: {f.n === 0 ? tx('cartaporte.vista.sin_cargar') : tx('cartaporte.vista.n_claves', { n: numero(f.n) })}</li>)}
+          </ul>
+        )}
+      />
     </div>
   );
 }
