@@ -45,7 +45,7 @@ export function KillSwitchAgente({ palanca, nombre, apagado, accion }: {
   return (
     <div className="rv-agente-fila-accion">
       <StatusChip tono={apagado ? 'bad' : 'ok'}>{apagado ? 'Apagado' : 'Encendido'}</StatusChip>
-      <Boton tamano="sm" variante={apagado ? 'secondary' : 'danger'} icono={<Icono icono={Power} />} onClick={() => setAbierto(true)} aria-label={`${apagado ? 'Encender' : 'Apagar'} ${nombre}`}>
+      <Boton tamano="sm" variante="secondary" icono={<Icono icono={Power} />} onClick={() => setAbierto(true)} aria-label={`${apagado ? 'Encender' : 'Apagar'} ${nombre}`}>
         {apagado ? 'Encender' : 'Apagar'}
       </Boton>
       <Modal

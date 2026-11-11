@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import {
   listarAgentes, DEPARTAMENTOS, DISPARADORES, ESTADOS_AGENTE, type AgenteDefinido,
 } from '@/lib/likida/agentes/definiciones';
@@ -12,11 +13,12 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, BotonEnlace, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
+  Aviso, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import { KillSwitchAgente, ConfigurarAgente } from './acciones-agente';
+import { haceTiempo, resultadoCorrida } from './corrida-visual';
 import './agentes.css';
 
 export type AccionAlta = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
@@ -53,14 +55,7 @@ async function ultimaCorridaDe(agente: string): Promise<{ inicio: string; estado
   return f ? { inicio: String(f.inicio), estado: String(f.estado) } : null;
 }
 
-const TONO_CORRIDA: Record<string, TonoEstado> = { ok: 'ok', parcial: 'warn', fallo: 'bad' };
 const HORAS = 3_600_000;
-
-/** Tono por antigüedad: una última corrida vieja NO se pinta como «viva». */
-function tonoPorAntiguedad(inicioIso: string, ahora: number): TonoEstado {
-  const h = (ahora - Date.parse(inicioIso)) / HORAS;
-  return h < 48 ? 'ok' : h < 168 ? 'warn' : 'bad';
-}
 
 type Corrida = { inicio: string; estado: string } | null | 'error';
 interface Fila { a: AgenteDefinido; real: EstadoReal; motivo: string | null; corrida: Corrida; apagado: boolean | null | undefined }
@@ -146,8 +141,16 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
           ? <span className="rv-agente-nowrap">{a.estado === 'vivo' ? 'Sin corridas todavía' : 'No corre en el producto'}</span>
           : (
             <>
-              <StatusChip tono={tonoPorAntiguedad(corrida.inicio, ahora)}>{fechaHoraMx(corrida.inicio)}</StatusChip>
-              <span className="rv-agente-sub">Terminó: <StatusChip tono={TONO_CORRIDA[corrida.estado] ?? 'neutral'}>{corrida.estado}</StatusChip></span>
+              <span className="rv-agente-fecha">{fechaHoraMx(corrida.inicio)}</span>
+              {(() => {
+                const r = resultadoCorrida(corrida.estado);
+                return (
+                  <span className="rv-agente-sub rv-agente-resultado">
+                    {r.tono ? <StatusChip tono={r.tono}>{r.texto}</StatusChip> : r.texto}
+                    <span> · {haceTiempo(corrida.inicio, ahora)}</span>
+                  </span>
+                );
+              })()}
             </>
           ),
     },
@@ -155,7 +158,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
       id: 'autonomia', titulo: 'Autonomía',
       celda: ({ a }) => {
         const n = autonomiaDe(a.id);
-        return <Chip>{`${n.nivel} · ${NOMBRE_NIVEL[n.nivel]}`}</Chip>;
+        return <span className="rv-agente-nowrap">{`${n.nivel} · ${NOMBRE_NIVEL[n.nivel]}`}</span>;
       },
     },
     {
@@ -179,9 +182,9 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
               presupuestoDiaUsd: a.presupuestoDiaUsd, modeloRol: a.modeloRol,
             }}
           />
-          <BotonEnlace variante="ghost" tamano="sm" href={`/admin/agentes/${a.id}/insumos`}>
+          <Link className="rv-agente-enlace" href={`/admin/agentes/${a.id}/insumos`}>
             {insumosPendientes === null ? 'Insumos' : (insumosPendientes.get(a.id) ?? 0) > 0 ? `Insumos (${insumosPendientes.get(a.id)})` : 'Insumos'}
-          </BotonEnlace>
+          </Link>
         </div>
       ),
     },
@@ -225,6 +228,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
           filas={filas}
           idFila={(f) => f.a.id}
           tarjetaMovil
+          altoMaximo={false}
           vacio={{ titulo: 'Sin agentes' }}
         />
       </Tarjeta>

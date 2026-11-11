@@ -8,3 +8,14 @@
 @media (max-width: 767.98px) { .rv-agente-fila-accion, .rv-agente-acciones { flex-wrap: wrap; } }
 .rv-agente-alta { display: grid; gap: 12px; }
 @media (min-width: 768px) { .rv-agente-alta { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+/* Tabla del catálogo (11-nov): columnas alineadas y una sola línea por dato. La fecha es texto llano; el resultado va debajo; «Insumos» es un enlace del sistema. */
+.rv-agente-fecha { display: block; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--ink); }
+.rv-agente-resultado { display: flex; align-items: center; flex-wrap: nowrap; gap: 4px; white-space: nowrap; }
+.rv-agente-enlace { font-size: var(--t-small); font-weight: 500; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }
+.rv-agente-enlace:hover { color: var(--muted); }
+.rv-agente-enlace:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; border-radius: 4px; }
+.rv-agente-acciones { gap: 12px; }
+@media (min-width: 768px) {
+  .rv-tb table td { vertical-align: middle; }
+}
