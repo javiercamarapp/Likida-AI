@@ -8,10 +8,11 @@ import { AVISO_VALOR_MERCANCIA } from '@/lib/likida/relojes_legales';
 import { numero } from '@/lib/formato';
 import { FormaDeclaracion, FormaMercancia, FormaDatosCliente, BotonBorrarMercancia, type AccionForma } from './forma';
 import {
-  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, StatusChip, Tarjeta,
+  Aviso, AvisoCompacto, BotonEnlace, Disclosure, EstadoError, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { TarjetaTabla } from '../bloque';
 import './carta-porte.css';
 
 /**
@@ -71,10 +72,8 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
           {/* FASE 6 (relojes legales): el aviso que nadie da ANTES del siniestro. Es incondicional a propósito — Likida hoy no captura
               ValorMercancia, así que no hay un "por viaje" que evaluar: el dato correcto es que se declara AL EMITIR con el PAC, y la
               consecuencia de no hacerlo es una cifra concreta, no un regaño. */}
-          <Aviso tono="warn" titulo={AVISO_VALOR_MERCANCIA.titulo}>
-            {AVISO_VALOR_MERCANCIA.cuerpo}{' '}
-            <span className="rv-ccp__tenue">{AVISO_VALOR_MERCANCIA.fundamento}</span>
-          </Aviso>
+          <AvisoCompacto tono="warn" resumen={AVISO_VALOR_MERCANCIA.titulo}
+            mas={<p>{AVISO_VALOR_MERCANCIA.cuerpo}{' '}<span className="rv-ccp__tenue">{AVISO_VALOR_MERCANCIA.fundamento}</span></p>} />
         </>
       )}
     >
@@ -96,7 +95,20 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
         </EstadoVacio>
       ) : (
         <>
-          {datos.viajes.map((v) => <TarjetaViaje tr={tr} key={v.viajeId} v={v} acciones={acciones} sufijo={sufijo} />)}
+          <TarjetaTabla titulo={tr('cartaPorte.vista.cifra.evaluados')} contador={numero(datos.viajes.length)}>
+            <TablaBase<ViajeCcp>
+              etiqueta={tr('cartaPorte.vista.cifra.evaluados')} densa altoMaximo={false} tarjetaMovil
+              filas={datos.viajes} idFila={(v) => v.viajeId}
+              columnas={[
+                { id: 'folio', titulo: tr('cartaPorte.vista.col.folio'), principal: true, celda: (v) => <a className="rv-ccp__enlace" href={`#viaje-${v.viajeId}`}>{v.folio ?? v.viajeId.slice(0, 8)}</a> },
+                { id: 'ruta', titulo: tr('cartaPorte.vista.col.ruta'), celda: (v) => (v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino ?? '—') },
+                { id: 'decision', titulo: tr('cartaPorte.vista.col.decision'), celda: (v) => <StatusChip tono={pillDe(tr)[v.decision.necesita].tono}>{pillDe(tr)[v.decision.necesita].rotulo}</StatusChip> },
+                { id: 'transportista', titulo: tr('cartaPorte.vista.col.transportista'), celda: (v) => `${numero(18 - v.checklist.faltanTransportista)} / 18` },
+                { id: 'cliente', titulo: tr('cartaPorte.vista.col.cliente'), celda: (v) => `${numero(19 - v.checklist.faltanCliente)} / 19` },
+                { id: 'borrador', titulo: tr('cartaPorte.vista.col.borrador'), celda: (v) => <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijo}`} variante="ghost" tamano="sm">{tr('cartaPorte.vista.col.abrir')}</BotonEnlace> },
+              ]} />
+          </TarjetaTabla>
+          {datos.viajes.map((v) => <div key={v.viajeId} id={`viaje-${v.viajeId}`}><TarjetaViaje tr={tr} v={v} acciones={acciones} sufijo={sufijo} /></div>)}
           {datos.viajes.length < datos.total && (
             <p className="rv-ccp__nota">
               {tr('cartaPorte.vista.seEvaluanLosViajes', { v: numero(datos.viajes.length), v2: numero(datos.total) })}
