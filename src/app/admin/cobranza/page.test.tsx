@@ -70,14 +70,15 @@ it('sin facturas dice 0 por cobrar como estado real, no como error', async () =>
   expect(h).not.toContain('No se pudo leer todo');
 });
 
-it('R9: sin facturas ni propuestas NO hay tira de cuatro cifras vacías: un solo estado vacío dentro de su tarjeta', async () => {
+it('ronda 2: con la lectura completa y todo en cero SÍ hay tira (cero real, mismo filete en las cuatro) y la tabla con su vacío', async () => {
   dobles.getPorCobrarTodas.mockResolvedValue({ facturas: [], total: 0 });
   const h = await html();
   expect(h).not.toContain('Sin facturas que medir todavía');
-  expect(h).not.toContain('Cobranza de las mensualidades');
+  expect(h).toContain('Cobranza de las mensualidades');
   expect(h).toContain('0 mensualidades por cobrar');
-  expect(h).not.toContain('0 · $0.00');
-  expect(h).not.toContain('0 / 0');
+  expect(h).toContain('0 · $0.00');
+  expect(h).toContain('0 / 0');
+  expect((h.match(/data-matiz="8"/g) ?? []).length).toBe(4);
 });
 
 it('si no se pudo leer algo, lo dice y NO afirma que no hay facturas ni propuestas', async () => {

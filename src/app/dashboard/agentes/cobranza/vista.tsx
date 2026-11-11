@@ -4,11 +4,13 @@ import type { ConfigCobranza } from '@/lib/likida/agentes/cobranza_pura';
 import { numero, fechaCorta } from '@/lib/formato';
 import { BotonEjecutar, BotonPausa, type AccionSimple, type AccionEjecutar } from './controles';
 import { FormaEstrategia } from './estrategia';
+import { CajonEstrategia } from './cajon-estrategia';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
-import { Disclosure, EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EstadoVacio, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { TR_ES, rico, selloHoyTr, rotuloDiasTr, type TrAgentes, type TAgentes } from '../i18n-agentes';
 import '../agentes.css';
+import './cobranza.css';
 
 export interface ExtraAgenteCobranza {
   /** ¿AHORA MISMO está dentro de su ventana de contacto? (calculado en el
@@ -30,7 +32,7 @@ export interface ExtraAgenteCobranza {
  * Sus cifras son días y contactos, todas medidas.
  */
 export function VistaAgenteCobranza({
-  cola, config, bitacora, extra, acciones, notificaciones, porGasto, gastosParaContactar = 0, tr = TR_ES,
+  cola, config, bitacora, extra, acciones, notificaciones, porGasto, configPorGasto, gastosParaContactar = 0, tr = TR_ES,
 }: {
   cola: ColaCobranza;
   config: ConfigCobranza;
@@ -43,6 +45,8 @@ export function VistaAgenteCobranza({
   notificaciones?: React.ReactNode;
   /** La sección de cobranza POR GASTO (0525), ya renderizada en el servidor. */
   porGasto?: React.ReactNode;
+  /** El formulario de la cobranza por gasto, ya renderizado: va en el cajón de configuración, no en la pantalla. */
+  configPorGasto?: React.ReactNode;
   /** Choferes con gastos en tier hoy: «Ejecutar ahora» también los cubre. */
   gastosParaContactar?: number;
   /** El traductor del namespace `agentes` (la página lo arma con `getT`). Sin él, español. */
@@ -52,12 +56,12 @@ export function VistaAgenteCobranza({
   const idioma = tr.idioma;
   const ventana = `${rotuloDiasTr(config.diasSemana, tx)} · ${config.horaInicio}–${config.horaFin} ${tx('comun.horas_sufijo')}`;
 
-  const cifras: PropsCifra[] = [
+  const cifras: PropsCifra[] = ([
     { info: 'cobranza.para_contactar', etiqueta: tx('cobranza.vista.para_contactar'), valor: numero(cola.paraContactar.length), nota: tx('cobranza.vista.alcanzaron_un_tier_sin_contacto') },
     { info: 'cobranza.no_puede_contactar', etiqueta: tx('cobranza.vista.no_puede_contactar'), valor: numero(cola.sinTelefono.length), nota: tx('cobranza.vista.sin_telefono_capturado'), tono: cola.sinTelefono.length > 0 ? 'warn' : undefined },
     { info: 'cobranza.viajes_vigilados', etiqueta: tx('cobranza.vista.viajes_vigilados'), valor: numero(cola.vigilados), nota: tx('cobranza.vista.abiertos_o_en_cuadre') },
     { info: 'cobranza.estado', etiqueta: tx('cobranza.vista.estado'), valor: config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado'), nota: ventana, tono: config.activo ? undefined : 'warn' },
-  ];
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
 
   return (
     <EsqueletoTablaMaestra
@@ -66,6 +70,17 @@ export function VistaAgenteCobranza({
       cifras={cifras}
       etiquetaCifras={tx('cobranza.vista.cola_de_seguimiento')}
       selloCifras={selloHoyTr(tr, tx('cobranza.vista.cola_de_seguimiento'))}
+      acciones={(
+        <>
+          <BotonPausa alternarPausa={acciones.alternarPausa} activo={config.activo} />
+          <CajonEstrategia id="estrategia" titulo={tx('cobranza.vista.su_estrategia')} descripcion={tx('cobranza.vista.cuando_insiste_en_que_horario')} disparador={tx('cobranza.vista.editar_la_estrategia')}>
+            <section aria-label={tx('cobranza.vista.su_estrategia')}>
+              <FormaEstrategia config={config} ejemplo={extra.ejemplo} guardar={acciones.guardarEstrategia} />
+            </section>
+            {configPorGasto}
+          </CajonEstrategia>
+        </>
+      )}
     >
       <div className="flex flex-col gap-3">
       <FilaTarjetas variante="8-4">
@@ -73,6 +88,7 @@ export function VistaAgenteCobranza({
         <Tarjeta
           titulo={tx('cobranza.vista.los_va_a_contactar')}
           info="cobranza.cola"
+          contenida
           acciones={
             <BotonEjecutar
               ejecutarAhora={acciones.ejecutarAhora}
@@ -100,6 +116,7 @@ export function VistaAgenteCobranza({
         <Tarjeta
           titulo={tx('cobranza.vista.a_quien_no_puede_escribirle')}
           info="cobranza.sin_telefono"
+          contenida
           estado={cola.sinTelefono.length === 0 ? 'vacio' : 'ok'}
           mensaje={tx('cobranza.vista.todos_tienen_telefono')}
           detalle={tx('cobranza.vista.todos_los_operadores_con_viajes')}
@@ -122,6 +139,7 @@ export function VistaAgenteCobranza({
       <Tarjeta
         titulo={tx('cobranza.vista.bitacora_de_contactos')}
         info="cobranza.bitacora"
+        contenida
         estado={bitacora === null ? 'error' : bitacora.length === 0 ? 'vacio' : 'ok'}
         mensaje={bitacora === null ? tx('cobranza.vista.no_se_pudo_leer_la') : tx('cobranza.vista.aun_sin_contactos')}
         detalle={tx('cobranza.vista.cada_intento_del_agente_queda')}
@@ -138,18 +156,6 @@ export function VistaAgenteCobranza({
       </Tarjeta>
 
       {porGasto}
-
-      {/* ── La estrategia del cliente, con vista previa (las "Pruebas") ── */}
-      <Tarjeta titulo={tx('cobranza.vista.su_estrategia')} info="cobranza.estrategia" acciones={<BotonPausa alternarPausa={acciones.alternarPausa} activo={config.activo} />}>
-        <p className="rv-ag-notif__nota">{tx('cobranza.vista.cuando_insiste_en_que_horario')}</p>
-        <Disclosure titulo={tx('cobranza.vista.editar_la_estrategia')} resumen={ventana} abierto>
-          <FormaEstrategia
-            config={config}
-            ejemplo={extra.ejemplo}
-            guardar={acciones.guardarEstrategia}
-          />
-        </Disclosure>
-      </Tarjeta>
 
       {notificaciones}
       </div>

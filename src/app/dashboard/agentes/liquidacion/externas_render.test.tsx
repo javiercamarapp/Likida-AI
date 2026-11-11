@@ -81,9 +81,9 @@ describe('las fichas: un conteo que no se pudo leer NO es cero', () => {
 
   it('«No coincide» y «Fallaron» con casos se resaltan; con cero no', async () => {
     const con = await pintar([fila()]);
-    expect(con).toContain('data-alerta="true"');
+    expect(con).toContain('data-tono="bad"');
     const sin = await pintar([fila()], { fichas: { porEstado: { pendiente: 0, en_cola: 0, enviada: 0, acusada: 0, fallida: 0 }, noCoincide: 0 } });
-    expect(sin).not.toContain('data-alerta="true"');
+    expect(sin).not.toContain('data-tono="bad"');
   });
 
   it('cada ficha filtra: sus links llevan el estado y conservan el contexto (tenant)', async () => {

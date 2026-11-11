@@ -1,30 +1,26 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
-import { SegmentedControl } from '../../../ui-v2/componentes/segmented';
+import { useEffect, type ReactNode } from 'react';
 
 export interface SeccionFicha { valor: string; etiqueta: string; contenido: ReactNode }
 
 /**
- * Las secciones de la ficha 360 (SegmentedControl, no pestañas: la ficha no es un hub). El servidor ya leyó y pintó TODAS las secciones
- * (una sola pasada); aquí solo se muestra una. La elegida viaja en `?seccion=` (history.replaceState, sin recargar) para que un enlace
- * de una alerta caiga en la sección correcta; `inicial` la decide el servidor leyendo esa misma URL.
+ * Las secciones de la ficha 360, APILADAS en una sola página (Rovaq P2b no tiene pestañas ni píldoras de sección): cada una con su título
+ * de 13/600 y su ancla `#ficha-<valor>`. El servidor ya leyó y pintó TODAS en una sola pasada. `?seccion=` (enlaces de las alertas) deja de
+ * esconder las otras: lleva la vista a esa sección (`inicial`, decidida por el servidor leyendo esa misma URL).
  */
 export function SeccionesFicha({ secciones, inicial }: { secciones: readonly SeccionFicha[]; inicial: string }) {
-  const [activa, setActiva] = useState(secciones.some((s) => s.valor === inicial) ? inicial : secciones[0]?.valor ?? '');
-  const elegir = (v: string) => {
-    setActiva(v);
-    try {
-      const u = new URL(window.location.href);
-      u.searchParams.set('seccion', v);
-      window.history.replaceState(window.history.state, '', u);
-    } catch { /* sin historial (previa): la selección sigue funcionando */ }
-  };
+  useEffect(() => {
+    if (!inicial || inicial === secciones[0]?.valor) return;
+    document.getElementById(`ficha-${inicial}`)?.scrollIntoView({ block: 'start' });
+  }, [inicial, secciones]);
   return (
     <>
-      <SegmentedControl etiqueta="Sección de la ficha" opciones={secciones.map((s) => ({ valor: s.valor, etiqueta: s.etiqueta }))} valor={activa} onChange={elegir} />
       {secciones.map((s) => (
-        <section key={s.valor} aria-label={s.etiqueta} hidden={s.valor !== activa} className="rv-ficha__seccion">{s.contenido}</section>
+        <section key={s.valor} id={`ficha-${s.valor}`} aria-labelledby={`ficha-${s.valor}-t`} className="rv-ficha__seccion adm-ficha-sec adm-forma-fina">
+          <h2 id={`ficha-${s.valor}-t`} className="adm-ficha-sec__t">{s.etiqueta}</h2>
+          {s.contenido}
+        </section>
       ))}
     </>
   );

@@ -1,0 +1,33 @@
+/* Vacíos como Rovaq (`ac-vacio` y vacío de página). Las reglas cuelgan de [data-ui="v2"] y ganan por especificidad a componentes.css/piezas.css
+   (compartidos, no se editan): vacío dentro de tarjeta = caja punteada compacta (1px dashed, radio 8, 20×14, 13px apagado); vacío de página =
+   tarjeta punteada con icono de 72 px en círculo gris, título 14/600 y texto corto. Un vacío nunca flota sobre el lienzo sin caja. */
+[data-ui="v2"] .rv-vacio.rv-vacio:not([data-pantalla]) {
+  border: 1px dashed var(--line2, var(--line)); border-radius: 8px; background: transparent; padding: 14px 20px; gap: 4px;
+}
+[data-ui="v2"] .rv-vacio.rv-vacio:not([data-pantalla]) .rv-vacio__texto { font-size: 13px; color: var(--ink2, var(--muted)); }
+[data-ui="v2"] .rv-vacio[data-pantalla] {
+  border: 1px dashed var(--line2, var(--line)); border-radius: 12px; padding: 32px 16px; gap: 6px; background: var(--surface);
+}
+[data-ui="v2"] .rv-vacio[data-pantalla] .rv-vacio__titulo { font-size: 14px; font-weight: 600; }
+[data-ui="v2"] .rv-vacio[data-pantalla] .rv-vacio__texto { max-width: 350px; }
+[data-ui="v2"] .rv-vacio[data-pantalla] .rv-vacio__icono {
+  width: 72px; height: 72px; margin-bottom: 4px; border-radius: 50%; background: var(--canvas); align-items: center; justify-content: center;
+}
+[data-ui="v2"] .rv-vacio[data-pantalla] .rv-vacio__icono svg { width: 28px; height: 28px; }
+[data-ui="v2"] .rv-vacio[data-pantalla][data-contenido] { max-height: none; overflow: visible; }
+
+/* Tabla dentro de tarjeta (Rovaq «Problemas»): la tarjeta no lleva relleno; la cabecera (título + contador + acciones) lleva el suyo y la tabla,
+   con su cabecera de 36 px y filas de 40, llega al borde. Esquinas recortadas al radio de 12. */
+[data-ui="v2"] .rv-tarjeta.rv-tarjeta--tabla { padding: 0; gap: 0; overflow: hidden; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cab { height: auto; min-height: 44px; padding: 6px 14px; border-bottom: 1px solid var(--line); }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cab .rv-tarjeta__acciones { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo { padding: 0; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tl__pie, [data-ui="v2"] .rv-tarjeta--tabla .rv-reg__pie { padding: 10px 14px; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tl__sellos { padding: 0 14px; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tl__nota { padding: 0 14px 10px; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-vacio { margin: 14px; }
+[data-ui="v2"] .rv-tarjeta__contador { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 819px) { [data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo { padding: 10px; } }
+
+/* Los hijos de una tabla maestra (tabla, notas, tarjetas de apoyo) van separados por el gap de 12 px de Rovaq, no pegados. */
+[data-ui="v2"] .rv-esq__tabla { display: grid; gap: 12px; min-width: 0; }

@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { CalendarClock, Download } from 'lucide-react';
 import { fechaMx, numero, TZ_MX } from '@/lib/formato';
@@ -198,7 +199,7 @@ export function VistaJornada({ tr = TR_OPERACION_ES,
           {t('jor.descargar')}
         </a>
       )}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Registro de jornada')}
       filtros={(
         // El filtro de fechas por GET: mueve TODO lo que hay debajo, incluida la liga de descarga. Un rótulo que dice «del X al Y»
@@ -529,7 +530,7 @@ export function AlertaTopeSeccion({ tr = TR_OPERACION_ES,
       {puedeConfigurar && !configIlegible && <FormaAlertaTope config={config} guardarAlerta={guardarAlerta} />}
 
       {/* sin-info: subtítulo de la lista dentro de «Alerta de tope de jornada», que ya se explica arriba */}
-      <h3 className="rv-jn__sub">{t('jor.emitidas.titulo')}</h3>
+      <h3 className="rv-jn__sub rv-jn__sep">{t('jor.emitidas.titulo')}</h3>
       {alertas === null ? (
         <Aviso tono="error">{t('jor.emitidas.noleyo')}</Aviso>
       ) : ordenadas.length === 0 ? (

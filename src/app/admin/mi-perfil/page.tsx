@@ -118,7 +118,7 @@ export default async function MiPerfilPage({
           contenido: (
             <form action={actualizarNombre} className="adm-perfil-form">
               <CampoTexto etiqueta="Nombre" name="nombre" defaultValue={s.nombre ?? ''} obligatorio />
-              <Boton type="submit" variante="primary">Guardar nombre</Boton>
+              <Boton type="submit" variante="secondary">Guardar nombre</Boton>
             </form>
           ),
         },

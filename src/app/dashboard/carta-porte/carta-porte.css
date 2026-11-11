@@ -16,3 +16,4 @@
 .rv-ccp__pie { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 .rv-ccp__rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
 .rv-ccp__acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-ccp__enlace { text-decoration: underline; text-underline-offset: 2px; font-weight: 500; }

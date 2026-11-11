@@ -7,7 +7,7 @@ import {
 import {
   Aviso, Boton, BotonEnlace, Chip, Drawer, type TonoChip,
 } from '@/app/ui-v2/componentes';
-import { ProgresoAnillo } from '@/app/ui-v2/graficas';
+import './puesta.css';
 import { anclaTour } from '@/app/ui-v2/movimiento/tour';
 import {
   armarPasosCincoAgentes, etiquetaGlobal, MOTIVO_MINIMO, ROTULO_ESTADO, RESPONSABLES_POR_OMISION,
@@ -94,7 +94,7 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
       <div className="rv-pem__cuerpo">
         <aside className="rv-pem__lateral" aria-label={t('op.tus_pasos')}>
           <section className="rv-pem__avance" {...anclaTour('asistente.avance')}>
-            <ProgresoAnillo valor={r.avance} tamano={76} grosor={7} etiqueta={t('cfg.avance_de_la_puesta_en_marcha')} />
+            <progress className="rv-pem__barra" max={r.total || 1} value={r.listos} aria-label={t('cfg.avance_de_la_puesta_en_marcha')} />
             <div>
               <p className="rv-pem__avance-num">{r.listos} de {r.total}</p>
               <p className="rv-pem__avance-txt">
@@ -175,7 +175,7 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
   return (
     <article className="rv-pem__paso">
       <header className="rv-pem__paso-cab">
-        <p className="rv-pem__paso-rotulo etiqueta-mono">{paso.numero ? `Paso ${paso.numero}` : t('op.despues')}</p>
+        <p className="rv-pem__paso-rotulo">{paso.numero ? `Paso ${paso.numero}` : t('op.despues')}</p>
         <h2 className="rv-pem__paso-titulo font-display">{paso.titulo}</h2>
         <p className="rv-pem__paso-resumen">{paso.resumen}</p>
         <div className="rv-pem__paso-estado">

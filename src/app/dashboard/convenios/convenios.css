@@ -28,3 +28,7 @@
 @media (max-width: 900px) { .rv-cv__instruccion { grid-template-columns: minmax(0, 1fr); } }
 .rv-cv__casillas { display: grid; gap: 6px; font-size: var(--t-small); }
 .rv-cv__sangria { margin-left: 24px; }
+
+/* Descargas como botones de 28 px (borde #d6d6d9) en su propia línea: en móvil bajan y se parten por botón, nunca se montan sobre el título. */
+.rv-cv__descargas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.rv-cv__descargas > * { min-width: 0; max-width: 100%; white-space: normal; text-align: center; }

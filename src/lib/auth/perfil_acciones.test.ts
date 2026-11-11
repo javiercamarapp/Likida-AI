@@ -223,7 +223,8 @@ describe('(a) escaneo de las server actions de dashboard, admin y vendedor', () 
 
 type Pagina = (props: { searchParams: Promise<Record<string, string>>; params?: Promise<Record<string, string>> }) => Promise<unknown>;
 
-const STAND_BY: { nombre: string; ruta: string; cargar: () => Promise<{ default: Pagina }> }[] = [
+/** `consultas`: querystrings con los que la pantalla entrega sus acciones cuando viven en un cajón que solo se monta al abrirlo (`?nuevo=…`). */
+const STAND_BY: { nombre: string; ruta: string; cargar: () => Promise<{ default: Pagina }>; consultas?: Record<string, string>[] }[] = [
   { nombre: 'facturación', ruta: '/dashboard/facturacion', cargar: () => import('@/app/dashboard/facturacion/page') as never },
   { nombre: 'cobranza', ruta: '/dashboard/agentes/cobranza', cargar: () => import('@/app/dashboard/agentes/cobranza/page') as never },
   { nombre: 'proveedores', ruta: '/dashboard/agentes/proveedores', cargar: () => import('@/app/dashboard/agentes/proveedores/page') as never },
@@ -233,7 +234,7 @@ const STAND_BY: { nombre: string; ruta: string; cargar: () => Promise<{ default:
   { nombre: 'reglas', ruta: '/dashboard/reglas', cargar: () => import('@/app/dashboard/reglas/page') as never },
   { nombre: 'clientes', ruta: '/dashboard/clientes', cargar: () => import('@/app/dashboard/clientes/page') as never },
   { nombre: 'convenios', ruta: '/dashboard/convenios', cargar: () => import('@/app/dashboard/convenios/page') as never },
-  { nombre: 'cotizaciones', ruta: '/dashboard/cotizaciones', cargar: () => import('@/app/dashboard/cotizaciones/page') as never },
+  { nombre: 'cotizaciones', ruta: '/dashboard/cotizaciones', cargar: () => import('@/app/dashboard/cotizaciones/page') as never, consultas: [{}, { nuevo: 'cotizacion' }, { nuevo: 'costos' }] },
 ];
 
 type Accion = (...args: unknown[]) => Promise<unknown>;
@@ -281,7 +282,7 @@ beforeEach(() => {
   getSessionTenant.mockResolvedValue(dueno(CON));
 });
 
-describe.each(STAND_BY)('(b) $nombre ($ruta): las acciones que entregó la página, con el perfil ya aplicado', ({ ruta, cargar }) => {
+describe.each(STAND_BY)('(b) $nombre ($ruta): las acciones que entregó la página, con el perfil ya aplicado', ({ ruta, cargar, consultas }) => {
   it('la ruta de la pantalla está en stand-by del perfil (la muestra es de verdad de stand-by)', () => {
     expect(rutaPermitidaEnPerfil('cinco_agentes', ruta)).toBe(false);
   });
@@ -290,8 +291,11 @@ describe.each(STAND_BY)('(b) $nombre ($ruta): las acciones que entregó la pági
     const Pagina = (await cargar()).default;
 
     // 1) La pantalla nace SIN perfil (formulario abierto en el navegador).
-    const arbol = await Pagina(SP);
-    const acciones = [...accionesDe(arbol)];
+    const conjunto = new Set<Accion>();
+    for (const sp of consultas ?? [{}]) {
+      for (const a of accionesDe(await Pagina({ ...SP, searchParams: Promise.resolve(sp) }))) conjunto.add(a);
+    }
+    const acciones = [...conjunto];
     console.info(`[T-PER-03] ${ruta}: ${acciones.length} acciones entregadas`);
     expect(acciones.length, `la página ${ruta} no entregó ninguna server action: la prueba no probaría nada`).toBeGreaterThan(0);
 

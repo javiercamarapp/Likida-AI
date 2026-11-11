@@ -138,7 +138,7 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
 
   const enc = encabezadoFicha(ficha, t);
   return (
-    <PantallaFicha {...enc} area={t('ficha.eyebrow')} chips={chipsFicha(ficha)} etiquetaChips={t('ficha.chips')} cifras={cifrasFicha(ficha, t)} etiquetaCifras={t('flotas_ficha.resumen_de', { nombre: ficha.tenant.nombre })}>
+    <PantallaFicha {...enc} area={t('ficha.eyebrow')} chips={chipsFicha(ficha)} etiquetaChips={t('ficha.chips')} formaCifras="tarjetas" cifras={cifrasFicha(ficha, t, { personas: personasTodas === null ? null : personasTodas.personas.filter((p) => p.tenantId === id), casillas: arranque?.casillas ?? null })} etiquetaCifras={t('flotas_ficha.resumen_de', { nombre: ficha.tenant.nombre })}>
     <AvisoPlanEnPausa tenantId={id} />
     <Ficha360
       t={t}

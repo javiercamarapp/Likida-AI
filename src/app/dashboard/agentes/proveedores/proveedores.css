@@ -1,6 +1,8 @@
 /* Facturas de proveedores · archivo propio de la pantalla. Solo tokens del sistema. */
 .rv-prov__nota { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.5; max-width: 72ch; }
-.rv-prov__subir { display: grid; gap: 8px; max-width: 560px; }
+.rv-prov__subir { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+/* Zona de carga punteada (patrón de Importaciones): el control nativo de archivo vive dentro de una caja con borde discontinuo. */
+.rv-prov__zona { display: grid; gap: 6px; padding: 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--canvas); align-content: start; }
 .rv-prov__export { display: grid; gap: 8px; justify-items: start; padding-top: 12px; border-top: 1px solid var(--line); }
 .rv-prov__nota[data-tono="warn"] { color: var(--warn); }
 .rv-prov__nota[data-tono="bad"] { color: var(--bad); }

@@ -5,3 +5,7 @@
 .rv-em__nombre { font-weight: 500; }
 .rv-em__dato { color: var(--muted); }
 .rv-em__acciones { margin-left: auto; display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* Las tres tarjetas del directorio separadas por 12 px, como el resto de bloques de Rovaq. */
+.rv-em__pila { display: grid; gap: 12px; min-width: 0; }
+.rv-em__pila .rv-tarjeta__cuerpo { display: grid; gap: 10px; }

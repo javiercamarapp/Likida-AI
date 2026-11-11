@@ -1,10 +1,13 @@
-import { Eye, Inbox, FileUp } from 'lucide-react';
+import { cifrasUniformes } from '../formato';
+import { TarjetaTabla } from '../bloque';
+import { CajonAlta } from '../cajon-alta';
+import { Eye, Inbox } from 'lucide-react';
 import { numero, fechaMx, mxn } from '@/lib/formato';
 import { PillAviso, PillEstatusViaje } from './pills';
 import { ImportarViajes, type AccionImportar } from './importar';
 import { EnlacePagina, NavPaginas } from '../paginador';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
-import { BarraFiltros, BotonEnlace, Disclosure, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono } from '@/app/ui-v2/componentes';
+import { BarraFiltros, BotonEnlace, EstadoVacio, FiltroBusqueda, FiltroOpciones, Icono } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './registro.css';
 import { ahoraMs } from '@/lib/saludo';
@@ -162,7 +165,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
     <EsqueletoTablaMaestra
       titulo={t('viajes.titulo')}
       apoyo={t('viajes.apoyo')}
-      cifras={cifras}
+      cifras={cifrasUniformes(cifras)}
       etiquetaCifras={t('viajes.sello')}
       filtros={(
         // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como
@@ -174,13 +177,11 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
           <FiltroBusqueda nombre="q" valor={q} placeholder={t('viajes.buscar.ph')} etiqueta={t('viajes.buscar.aria')} />
         </BarraFiltros>
       )}
-      agrupacion={puedeImportar ? (
-        // Sin JavaScript ni estado: el plegable abre y cierra solo.
-        <Disclosure variante="linea" titulo={<><Icono icono={FileUp} tam={16} /> {t('viajes.importar.tms')}</>}>
+      acciones={puedeImportar ? (
+        <CajonAlta id="importar" titulo={t('viajes.importar.tms')} disparador={t('viajes.importar.tms')} tamano="xl">
           <ImportarViajes importar={importar} verDinero={verDinero} />
-        </Disclosure>
+        </CajonAlta>
       ) : undefined}
-      pie={pie}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.folio}
@@ -209,42 +210,44 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
         </CajonVistaRapida>
       ) : null}
     >
-      {filas.length === 0 ? (
-        <EstadoVacio contenido icono={Inbox} titulo={q || filtro !== 'todos' ? t('viajes.vacio.sincoincidencias') : t('viajes.vacio.sinviajes')}>
-          {q
-            ? (filtro !== 'todos' ? t('viajes.vacio.busqueda.filtro', { q, filtro: t(ROTULO_FILTRO[filtro]) }) : t('viajes.vacio.busqueda', { q }))
-            : filtro === 'todos'
-              ? t('viajes.vacio.primero')
-              : t('viajes.vacio.filtro', { filtro: t(ROTULO_FILTRO[filtro]) })}
-        </EstadoVacio>
-      ) : (
-        <TablaLista<FilaRegistroViaje>
-          etiqueta={t('viajes.tabla.etiqueta')}
-          columnas={columnasViajes(hrefVista, verDinero, tr)}
-          filas={filas}
-          idFila={(v) => v.id}
-          base="/dashboard/viajes"
-          params={{}}
-          pie={(
-            <>
-              <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente={t('viajes.sello')} leidoEn={ahoraMs()} edad={false} /></div>
-              {verDinero ? <p className="rv-tl__nota">{t('viajes.nota.diferencia')}</p> : null}
-              {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de `porPagina` filas por render. No se dice "página N de M": el
-                  cursor es la posición del último viaje visto y "Siguientes" continúa desde ahí. Hacia atrás sirve el botón del navegador o
-                  "Volver al inicio". */}
-              {(cursor || hayMas) && (
-                <div className="rv-reg__pie">
-                  <span className="rv-reg__nota">{t('viajes.pie', { n: numero(porPagina, idioma) })}</span>
-                  <NavPaginas>
-                    {cursor ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q })} direccion="inicio" /> : null}
-                    {hayMas && siguiente ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} direccion="siguiente" /> : null}
-                  </NavPaginas>
-                </div>
-              )}
-            </>
-          )}
-        />
-      )}
+      <TarjetaTabla titulo={t('viajes.tabla.etiqueta')} contador={pie}>
+        {filas.length === 0 ? (
+          <EstadoVacio contenido icono={Inbox} titulo={q || filtro !== 'todos' ? t('viajes.vacio.sincoincidencias') : t('viajes.vacio.sinviajes')}>
+            {q
+              ? (filtro !== 'todos' ? t('viajes.vacio.busqueda.filtro', { q, filtro: t(ROTULO_FILTRO[filtro]) }) : t('viajes.vacio.busqueda', { q }))
+              : filtro === 'todos'
+                ? t('viajes.vacio.primero')
+                : t('viajes.vacio.filtro', { filtro: t(ROTULO_FILTRO[filtro]) })}
+          </EstadoVacio>
+        ) : (
+          <TablaLista<FilaRegistroViaje>
+            etiqueta={t('viajes.tabla.etiqueta')}
+            columnas={columnasViajes(hrefVista, verDinero, tr)}
+            filas={filas}
+            idFila={(v) => v.id}
+            base="/dashboard/viajes"
+            params={{}}
+            pie={(
+              <>
+                <div className="rv-tl__sellos"><SelloDato tipo="observado" fuente={t('viajes.sello')} leidoEn={ahoraMs()} edad={false} /></div>
+                {verDinero ? <p className="rv-tl__nota">{t('viajes.nota.diferencia')}</p> : null}
+                {/* Paginación por CURSOR (escala 50k, 22-ago-2026): nunca más de `porPagina` filas por render. No se dice "página N de M": el
+                    cursor es la posición del último viaje visto y "Siguientes" continúa desde ahí. Hacia atrás sirve el botón del navegador o
+                    "Volver al inicio". */}
+                {(cursor || hayMas) && (
+                  <div className="rv-reg__pie">
+                    <span className="rv-reg__nota">{t('viajes.pie', { n: numero(porPagina, idioma) })}</span>
+                    <NavPaginas>
+                      {cursor ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q })} direccion="inicio" /> : null}
+                      {hayMas && siguiente ? <EnlacePagina href={hrefRegistro(sufijo, { f: filtro, q, c: siguiente })} direccion="siguiente" /> : null}
+                    </NavPaginas>
+                  </div>
+                )}
+              </>
+            )}
+          />
+        )}
+      </TarjetaTabla>
     </EsqueletoTablaMaestra>
   );
 }

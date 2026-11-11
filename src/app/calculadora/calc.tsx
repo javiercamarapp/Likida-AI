@@ -20,6 +20,10 @@ import { Boton } from '../ui-v2/componentes/boton';
 import { Aviso } from '../ui-v2/componentes/aviso';
 import { CampoTexto } from '../ui-v2/componentes/campos';
 import { Tarjeta } from '../ui-v2/componentes/tarjeta';
+import { KindBadge } from '../ui-v2/graficas/kind-badge';
+// El marco público no carga las piezas del panel: sin esto `.rv-campo` (rótulo sobre campo, ayuda debajo) y el sello de dato no tienen estilo.
+import '../ui-v2/piezas.css';
+import '../ui-v2/graficas.css';
 import './calculadora.css';
 import { atribucionDeUrl } from '@/lib/marketing/atribucion';
 import { useIdioma, useT } from '@/lib/i18n/proveedor';
@@ -95,6 +99,7 @@ export function Calculadora() {
   return (
     <div className="rv-calc">
       {/* ── Los tres datos ── */}
+      <Tarjeta titulo={t('cal.datos.titulo')} className="rv-calc__datos-tarjeta">
       <section className="rv-calc__datos">
         <CampoTexto etiqueta={t('cal.litros')} inputMode="decimal" value={litros}
           onChange={(e) => setLitros(e.target.value)} placeholder={t('cal.litros.ph')} ayuda={t('cal.litros.alt')} />
@@ -112,12 +117,13 @@ export function Calculadora() {
           <Boton variante="primary" onClick={calcular}>{t('cal.calcular')}</Boton>
         </div>
       </section>
+      </Tarjeta>
 
       {/* ── El resultado — antes de pedir nada ── */}
       {r && (
         <section className="rv-calc__resultado">
           {/* Diésel */}
-          <Tarjeta titulo={t('cal.dsl.titulo')}>
+          <Tarjeta titulo={t('cal.dsl.titulo')} acciones={'faltante' in r.diesel ? undefined : <KindBadge tipo="estimado" />}>
             {'faltante' in r.diesel ? (
               <p className="rv-calc__texto">{r.diesel.faltante}</p>
             ) : (
@@ -140,7 +146,7 @@ export function Calculadora() {
           </Tarjeta>
 
           {/* Peaje */}
-          <Tarjeta titulo={t('cal.peaje.titulo')}>
+          <Tarjeta titulo={t('cal.peaje.titulo')} acciones={'faltante' in r.peaje ? undefined : <KindBadge tipo="estimado" />}>
             {'faltante' in r.peaje ? (
               <p className="rv-calc__texto">{r.peaje.faltante}</p>
             ) : (
@@ -155,7 +161,7 @@ export function Calculadora() {
           </Tarjeta>
 
           {/* Total + advertencias */}
-          <Tarjeta titulo={t('cal.total.titulo')}>
+          <Tarjeta titulo={t('cal.total.titulo')} acciones={r.totalAnualMxn !== null ? <KindBadge tipo="estimado" /> : <KindBadge tipo="sin_dato" />}>
             <div className="rv-calc__pila">
               <p className="rv-calc__cifra rv-calc__cifra--total">
                 {r.totalAnualMxn !== null ? mxn(r.totalAnualMxn) : t('cal.total.sin_datos')}

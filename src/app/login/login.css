@@ -51,7 +51,7 @@
 
 .login-editorial .login-campo {
   width: 100%; min-width: 0; min-height: var(--login-hit); padding: 10px 16px; border: 1px solid var(--login-input); border-radius: var(--login-r-card);
-  background: var(--login-soft); color: var(--login-ink); font: 500 14px/1.4 var(--login-sans);
+  background: var(--login-surface); color: var(--login-ink); font: 500 14px/1.4 var(--login-sans);
 }
 .login-editorial .login-campo::placeholder { color: var(--login-muted); }
 .login-editorial .login-campo:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; box-shadow: 0 0 0 4px #0e0e1012; }
@@ -149,3 +149,11 @@
 .login-g-verde { fill: #34A853; }
 .login-g-amarillo { fill: #FBBC05; }
 .login-g-rojo { fill: #EA4335; }
+
+/* Selector de idioma de la fila de la marca (Rovaq `.login-locales`): dos enlaces pequeños, el activo en tinta. */
+.login-editorial .login-locales { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.login-editorial .login-locale { min-height: 28px; min-width: 32px; padding: 0 8px; border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--login-muted); font: 500 12px/1 var(--login-sans); letter-spacing: .04em; cursor: pointer; }
+.login-editorial .login-locale[aria-pressed='true'] { color: var(--login-ink); border-color: var(--login-line); background: var(--login-surface); }
+.login-editorial .login-locale:not(:disabled):not([aria-pressed='true']):hover { color: var(--login-ink); background: var(--login-soft); }
+.login-editorial .login-locale:disabled:not([aria-pressed='true']) { opacity: .5; cursor: not-allowed; }
+.login-editorial .login-locale:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; }
