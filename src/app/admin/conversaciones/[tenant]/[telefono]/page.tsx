@@ -1,12 +1,11 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, MessageCircle } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { getConversacion, type ConversacionActiva } from '@/lib/admin/negocio';
 import { fechaHoraMx } from '@/lib/formato';
-import { BarraPagina, TituloSeccion } from '../../../../dashboard/resumen-visual';
-import { EstadoError } from '../../../ui/kit';
+import { BotonEnlace, EstadoError, MarcoPagina, Tarjeta } from '../../../../ui-v2/componentes';
+import { HiloMensajes } from '../../hilo';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,55 +45,30 @@ export default async function ConversacionPage({
   }
   if (conversacion === null) notFound();
 
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
-
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<MessageCircle {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo={conversacion === undefined ? 'Conversación' : `Conversación — ${conversacion.telefono}`}
-          derecha={
-            <Link href="/admin/conversaciones" className="text-xs flex items-center gap-1.5 hairline rounded-lg px-2.5 py-1.5" style={{ color: 'var(--muted)' }}>
-              <ArrowLeft width={13} height={13} strokeWidth={1.75} /> Volver
-            </Link>
-          }
-        />
-        <div className="px-5 py-5 flex-1">
-          {conversacion === undefined ? (
-            <EstadoError mensaje="No se pudo leer la conversación. La consulta falló — no es que no exista, es que no se pudo mirar." />
-          ) : (
-            <>
-              <div className="card p-3 mb-2.5">
-                <TituloSeccion>{conversacion.tenantNombre}</TituloSeccion>
-                <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                  Última actividad: {fechaHoraMx(conversacion.actualizadaEn)} · {conversacion.turns.length} mensaje{conversacion.turns.length === 1 ? '' : 's'}
-                </p>
-              </div>
-              <div className="card p-3">
-                <TituloSeccion>Historial completo</TituloSeccion>
-                {conversacion.turns.length === 0 ? (
-                  <p className="mt-2 text-sm" style={{ color: 'var(--muted)' }}>Sin mensajes en la ventana rodante.</p>
-                ) : (
-                  <div className="space-y-2 mt-2">
-                    {conversacion.turns.map((t, i) => (
-                      <div key={i} className={`flex ${t.role === 'user' ? 'justify-start' : 'justify-end'}`}>
-                        <div className="max-w-[80%] px-3.5 py-2 rounded-xl text-sm whitespace-pre-wrap"
-                          style={t.role === 'user'
-                            ? { background: 'var(--canvas)', border: '1px solid var(--line2)' }
-                            : { background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                          {t.content}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </main>
+    <MarcoPagina
+      titulo={conversacion === undefined ? 'Conversación' : `Conversación — ${conversacion.telefono}`}
+      acciones={<BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm" icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Volver</BotonEnlace>}
+    >
+      {conversacion === undefined ? (
+        <EstadoError>No se pudo leer la conversación. La consulta falló — no es que no exista, es que no se pudo mirar.</EstadoError>
+      ) : (
+        <>
+          <Tarjeta titulo={conversacion.tenantNombre}>
+            <p className="m-0 text-xs text-muted">
+              Última actividad: {fechaHoraMx(conversacion.actualizadaEn)} · {conversacion.turns.length} mensaje{conversacion.turns.length === 1 ? '' : 's'}
+            </p>
+          </Tarjeta>
+          <Tarjeta titulo="Historial completo">
+            {conversacion.turns.length === 0 ? (
+              <p className="m-0 text-sm text-muted">Sin mensajes en la ventana rodante.</p>
+            ) : (
+              <HiloMensajes turnos={conversacion.turns} />
+            )}
+          </Tarjeta>
+        </>
+      )}
+    </MarcoPagina>
   );
 }
 
