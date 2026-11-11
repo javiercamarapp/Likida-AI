@@ -15,6 +15,7 @@
 import { fechaMx } from '@/lib/formato';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import './publico-r2.css';
+import './marco-legal.css';
 
 export interface SeccionLegal {
   titulo: string;
@@ -92,8 +93,8 @@ export function PaginaLegal({
    */
   vigenteDesde: string;
   /**
-   * `documento` (por omisión): la piel de los textos con HUELLA (/terminos, /privacidad): sin cabecera de sitio, h1 «Likida» y sin
-   * índice, porque cualquier texto nuevo cambia la huella y obliga a todos a aceptar de nuevo (`lib/legal/huella_texto`).
+   * `documento` (por omisión): la piel de los textos con HUELLA (/terminos, /privacidad): h1 = nombre del documento, logo en una
+   * cabecera de sitio pintada por CSS (sin texto) y sin índice, porque cualquier texto nuevo cambia la huella y obliga a todos a aceptar de nuevo (`lib/legal/huella_texto`).
    * `sitio`: la piel del resto de las públicas (Rovaq `access-flow`): cabecera con el logo, h1 = el nombre del documento (`titulo`),
    * eyebrow (`rotulo`) e ÍNDICE de secciones. Solo para documentos SIN huella (hoy: /aviso/prospectos).
    */
@@ -104,11 +105,14 @@ export function PaginaLegal({
   etiquetaIndice?: string;
 }) {
   const sitio = piel === 'sitio' && titulo !== undefined;
+  const textoVigencia = `Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`;
+  // Piel `documento`: el <h1> es el NOMBRE del documento («Términos de servicio»), como en las demás públicas; «Likida» (la marca) va dentro del
+  // apoyo como nombre accesible del logo. Mismo texto y mismo ORDEN que antes (rótulo, «Likida», vigencia) → la huella no cambia.
   return (
     <MarcoPublico
-      rotulo={sitio ? (rotulo ?? etiqueta) : etiqueta}
-      titulo={sitio ? titulo : 'Likida'}
-      apoyo={`Vigente desde el ${fechaMx(vigenteDesde)} · ${bajada}`}
+      rotulo={sitio ? (rotulo ?? etiqueta) : undefined}
+      titulo={sitio ? titulo : etiqueta}
+      apoyo={sitio ? textoVigencia : <><span className="rv-legal__marca">Likida</span>{' '}{textoVigencia}</>}
       pie={pie ?? undefined}
       enlaces={sitio ? undefined : ENLACES_LEGALES}
       documento={!sitio}

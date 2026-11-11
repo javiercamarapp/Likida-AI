@@ -2056,6 +2056,8 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'e26b.arco_por_responder_nota': 'open requests without an answer',
   'e26b.arco_pronto_nota': 'about to run out of time',
   'e26b.arco_vencidas_nota': 'the response deadline has already passed',
+  'e26b.arco_plazos': 'Response deadlines',
+  'e26b.arco_no_medible': 'Not measurable',
   'r4.rent_periodo': 'Trips period',
   'r4.rent_p_todo': 'All',
   'r4.rent_p_30d': '30 days',

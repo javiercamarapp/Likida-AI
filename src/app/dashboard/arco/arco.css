@@ -9,3 +9,4 @@
 .rv-arco__ref { display: block; font-size: var(--t-micro); color: var(--muted); }
 .rv-arco__nota { margin: 0; font-size: var(--t-small); color: var(--muted); }
 .rv-arco__acciones { display: grid; gap: 8px; max-width: 640px; }
+.rv-arco__plazo { display: inline-flex; align-items: center; gap: 6px; }

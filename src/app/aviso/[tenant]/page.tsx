@@ -97,7 +97,7 @@ export default async function AvisoIntegral({ params }: { params: Promise<{ tena
       }
     >
       {pendientes.length > 0 && (
-        <p className="rv-pub__aviso-falta">
+        <p className="rv-pub__aviso-falta" data-ambar="">
           {tp('av.integral.faltan', pendientes.length)}
         </p>
       )}
