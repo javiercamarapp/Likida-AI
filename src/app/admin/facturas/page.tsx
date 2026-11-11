@@ -132,7 +132,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
         <Tarjeta titulo={t('facturas.facturas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={nFiltros > 0 ? t('facturas.ninguna_factura_con_ese') : t('facturas.aun_no_hay_facturas')}
           detalle={nFiltros > 0 ? t('facturas.quita_el_filtro_o') : t('facturas.aparecen_aqui_en_cuanto')}>
           <TablaBase
-            etiqueta={t('facturas.facturas_de_la_mensualidad')} idFila={(f) => f.id} tarjetaMovil densa filas={filas}
+            etiqueta={t('facturas.facturas_de_la_mensualidad')} idFila={(f) => f.id} tarjetaMovil filas={filas}
             columnas={[
               { id: 'flota', titulo: t('facturas.flota'), principal: true, celda: (f) => f.tenantNombre },
               { id: 'periodo', titulo: t('facturas.periodo'), celda: (f) => `${f.periodoInicio} a ${f.periodoFin}` },

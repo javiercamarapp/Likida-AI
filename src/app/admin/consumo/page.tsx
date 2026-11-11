@@ -164,7 +164,7 @@ export default async function ConsumoPage() {
       <Tarjeta titulo={ta('consumo.por_agente_gasto_medido')} estado={consumo ? 'ok' : 'error'} mensaje={ta('consumo.la_medicion_por_agente_2')} reintentar>
         {consumo ? (
           <TablaBase
-            etiqueta={ta('consumo.consumo_por_agente_en')} idFila={(a) => a.agente} tarjetaMovil densa
+            etiqueta={ta('consumo.consumo_por_agente_en')} idFila={(a) => a.agente} tarjetaMovil
             vacio={{ titulo: ta('consumo.sin_agentes_con_registro'), texto: ta('consumo.aparecen_cuando_un_agente') }}
             filas={consumo.agentes}
             columnas={[
@@ -181,7 +181,7 @@ export default async function ConsumoPage() {
       <Tarjeta titulo={ta('consumo.por_flota_costo_de')} estado={!r ? 'error' : r.flotas.length === 0 ? 'vacio' : 'ok'} mensaje={r ? ta('consumo.sin_flotas_dadas_de') : ta('consumo.no_se_pudo_leer_3')} detalle={ta('consumo.cada_flota_aparece_aqui')} reintentar>
         {r ? (
           <TablaBase
-            etiqueta={ta('consumo.costo_de_ia_por')} idFila={(f) => f.id} tarjetaMovil densa
+            etiqueta={ta('consumo.costo_de_ia_por')} idFila={(f) => f.id} tarjetaMovil
             filas={[...r.flotas].sort((a, b) => b.costoIaUsd - a.costoIaUsd)}
             columnas={[
               { id: 'flota', titulo: ta('consumo.flota'), principal: true, celda: (f) => f.nombre },
@@ -200,7 +200,7 @@ export default async function ConsumoPage() {
               El trabajo de fondo (lectura de lote y agentes) solo llega a {usd(proposito.topeTenantDiaUsd - proposito.reservaInteractivoUsd)}.
             </p>
             <TablaBase
-              etiqueta={ta('consumo.gasto_de_hoy_por')} idFila={(f: GastoProposito) => `${f.tenantId}-${f.proposito}`} tarjetaMovil densa
+              etiqueta={ta('consumo.gasto_de_hoy_por')} idFila={(f: GastoProposito) => `${f.tenantId}-${f.proposito}`} tarjetaMovil
               filas={proposito.filas}
               columnas={[
                 { id: 'flota', titulo: ta('consumo.flota'), principal: true, celda: (f: GastoProposito) => f.tenantNombre },
@@ -283,7 +283,7 @@ function AvisosDeTope({ avisos, encendidos, ta }: { avisos: FilaAlertaTope[] | n
   return (
     <Tarjeta titulo={titulo} acciones={<BotonEnlace href="/admin/techo-ia" variante="ghost" tamano="sm">Ver techos</BotonEnlace>}>
       <TablaBase
-        etiqueta={ta('consumo.avisos_de_tope_de')} idFila={(a) => `${a.tenantId}-${a.dia}-${a.nivel}`} densa tarjetaMovil
+        etiqueta={ta('consumo.avisos_de_tope_de')} idFila={(a) => `${a.tenantId}-${a.dia}-${a.nivel}`} tarjetaMovil
         filas={avisos}
         columnas={[
           { id: 'flota', titulo: ta('consumo.flota'), principal: true, celda: (a) => a.tenantNombre },

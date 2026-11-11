@@ -11,10 +11,8 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, type FilaTechoIa } from '@/lib/admin/techo_ia';
 import { usd } from '@/lib/formato';
 import { Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
-import type { PropsCifra } from '../../ui-v2/graficas';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, hrefConParams, type ColumnaTabla } from '../../ui-v2/datos';
-import { uniformes } from '../cifras-uniformes';
 import { accionCrearFlota } from './acciones';
 import { AltaFlota } from './alta';
 import '../dinero.css';
@@ -25,10 +23,9 @@ import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /** El marco de la pantalla, UNO solo (también para el error de lectura): encabezado y acción de alta no cambian entre estados. */
-function PantallaClientes({ children, cifras, filtros, pie, vistaRapida, t }: { children: ReactNode; cifras?: PropsCifra[]; filtros?: ReactNode; pie?: ReactNode; vistaRapida?: ReactNode; t: TrDe<'admin_flotas'> }) {
+function PantallaClientes({ children, filtros, pie, vistaRapida, t }: { children: ReactNode; filtros?: ReactNode; pie?: ReactNode; vistaRapida?: ReactNode; t: TrDe<'admin_flotas'> }) {
   return (
     <EsqueletoTablaMaestra
-      cifras={cifras} etiquetaCifras={t('flotas.resumen_de_clientes')}
       area="Negocio" titulo={t('flotas.clientes')}
       apoyo={t('flotas.flotas_dadas_de_alta')}
       avisos={<Aviso tono="info">{t('flotas.aviso_admin')}</Aviso>}
@@ -84,8 +81,6 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
     })),
     techo: techos?.filas.find((x) => x.tenantId === f.id) ?? null,
   }));
-  const medidas = filas.filter((f) => f.arranque !== null);
-  const completas = medidas.filter((f) => f.arranque!.hechas === f.arranque!.total).length;
 
   const textoQ = (typeof sp.q === 'string' ? sp.q : '').trim().slice(0, 80);
   const filtroArranque = typeof sp.arranque === 'string' ? sp.arranque : '';
@@ -105,10 +100,13 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
     { id: 'flota', titulo: t('flotas.flota'), principal: true, valor: (f) => f.nombre.toLowerCase(), celda: (f) => <Link href={`/admin/flotas/${f.id}`}>{f.nombre}</Link> },
     { id: 'plan', titulo: t('flotas.plan'), valor: (f) => f.plan, celda: (f) => <span>{f.plan}</span> },
     {
-      id: 'arranque', titulo: t('flotas.arranque'), valor: (f) => f.arranque?.hechas ?? -1,
+      // La salud de la flota (Rovaq P2: píldora de salud): el arranque dicho con palabras y su cuenta, nunca solo «2 de 6».
+      id: 'arranque', titulo: t('flotas.salud'), valor: (f) => f.arranque?.hechas ?? -1,
       celda: (f) => f.arranque === null
         ? <StatusChip tono="muted">{t('flotas.sin_dato')}</StatusChip>
-        : <StatusChip tono={f.arranque.hechas === f.arranque.total ? 'ok' : 'warn'}>{f.arranque.hechas} de {f.arranque.total}</StatusChip>,
+        : f.arranque.hechas === f.arranque.total
+          ? <StatusChip tono="ok">{t('flotas.salud_completa')}</StatusChip>
+          : <StatusChip tono="warn">{t('flotas.salud_pendiente', { hechas: f.arranque.hechas, total: f.arranque.total })}</StatusChip>,
     },
     { id: 'gasto', titulo: t('flotas.gasto_ia_hoy'), valor: (f) => f.techo?.usadoHoyUsd ?? -1, celda: (f) => <GastoIa f={f} t={t} /> },
     { id: 'viajes', titulo: t('flotas.viajes'), alinear: 'der', valor: (f) => f.viajes, celda: (f) => numero(f.viajes) },
@@ -124,18 +122,9 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
     },
   ];
 
-  const cifras: PropsCifra[] = uniformes([
-    { etiqueta: t('flotas.flotas_dadas_de_alta_2'), valor: r.tenants, formato: 'entero' },
-    {
-      etiqueta: t('flotas.con_el_arranque_completo'), valor: medidas.length === 0 && filas.length > 0 ? null : completas, formato: 'entero',
-      nota: medidas.length < filas.length ? t('flotas.se_midieron_de_flotas', { length: medidas.length, length2: filas.length }) : t('flotas.las_seis_casillas_cumplidas'),
-    },
-    { etiqueta: t('flotas.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero', nota: t('flotas.de_todas_las_flotas') },
-  ]);
-
   return (
     <PantallaClientes
-      t={t} cifras={cifras}
+      t={t}
       filtros={(
         <BarraFiltros accion="/admin/flotas" enLinea buscar etiqueta={t('flotas.filtrar_flotas')} nActivos={nFiltros} limpiarHref="/admin/flotas">
           <FiltroBusqueda nombre="q" valor={textoQ} placeholder={t('flotas.buscar_flota')} etiqueta={t('flotas.buscar_flota')} />
@@ -170,6 +159,8 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
         titulo={t('flotas.flotas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={t('flotas.sin_flotas_dadas_de')}
         detalle={t('flotas.da_de_alta_la')}
       >
+        {/* Eyebrow del panel (Rovaq P2: «4 DE 4»): cuántas se ven de cuántas hay. */}
+        <p className="adm-eyebrow">{t('flotas.n_de_n', { n: numero(visibles.length), total: numero(filas.length) })}</p>
         {visibles.length === 0 ? <p className="adm-din-nota" role="status">{t('flotas.sin_resultados')}</p> : (
           <TablaLista
             etiqueta={t('flotas.flotas_dadas_de_alta_2')} columnas={columnas} filas={visibles} idFila={(f) => f.id}

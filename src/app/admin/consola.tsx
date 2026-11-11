@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { ShieldCheck } from 'lucide-react';
 import { EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { Columnas, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import { uniformes } from './cifras-uniformes';
@@ -33,7 +34,7 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>}
       avisos={(
         <>
-          <Aviso tono="info">{t('consola.acceso_admin')}</Aviso>
+          <p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={2} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>
           <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
         </>
       )}
@@ -165,19 +166,20 @@ async function BloqueFlotas() {
   const { t } = await getT('admin_inicio');
   const r = await resumenNegocio();
   return (
-    <section aria-labelledby="res-flotas" id="flotas">
-      <h2 id="res-flotas" className="rv-recuadro-tit__texto">Flotas</h2>
-      <TablaBase
-        etiqueta={t('consola.flotas_con_plan_viajes')}
-        columnas={columnasFlotas(t)}
-        filas={r ? r.flotas : []}
-        idFila={(f) => f.id}
-        estado={r === null ? 'error' : 'ok'}
-        mensajeError="No disponible ahora. No es cero."
-        vacio={{ titulo: t('consola.sin_flotas_dadas_de'), texto: t('consola.aparecen_aqui_cuando_se'), accion: <BotonEnlace tamano="sm" variante="secondary" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace> }}
-        densa tarjetaMovil
-      />
-      <StatusChip tono="muted">{t('consola.plan_uso_contra_limite')}</StatusChip>
+    <section id="flotas" aria-label={t('consola.flotas')}>
+      <Tarjeta titulo={t('consola.flotas')} elevar entra="tarjeta" acciones={<BotonEnlace tamano="sm" variante="ghost" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace>}>
+        <TablaBase
+          etiqueta={t('consola.flotas_con_plan_viajes')}
+          columnas={columnasFlotas(t)}
+          filas={r ? r.flotas : []}
+          idFila={(f) => f.id}
+          estado={r === null ? 'error' : 'ok'}
+          mensajeError="No disponible ahora. No es cero."
+          vacio={{ titulo: t('consola.sin_flotas_dadas_de'), texto: t('consola.aparecen_aqui_cuando_se'), accion: <BotonEnlace tamano="sm" variante="secondary" href="/admin/flotas">{t('consola.ir_a_clientes')}</BotonEnlace> }}
+          tarjetaMovil
+        />
+        <StatusChip tono="muted">{t('consola.plan_uso_contra_limite')}</StatusChip>
+      </Tarjeta>
     </section>
   );
 }

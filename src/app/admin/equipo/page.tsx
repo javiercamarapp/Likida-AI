@@ -5,16 +5,19 @@ import { getPersonas, ordenarPorJerarquia, type Persona } from '@/lib/admin/pers
 import { bajaPersonalLikidaHabilitada } from '@/lib/auth/baja_acceso';
 import { nombreDeRol, ROTULOS_ROL } from '@/lib/auth/roles';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
-import type { PropsCifra } from '../../ui-v2/graficas';
-import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
-import { uniformes } from '../cifras-uniformes';
+import { BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroOpciones, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import { EsqueletoConfiguracion, FilaConfig } from '../../ui-v2/esqueletos';
+import { getResumenNegocio } from '@/lib/admin/negocio';
+import { FormaNuevoAcceso } from '../usuarios/nuevo/forma-nuevo-acceso';
+import { CambiarRol } from './cambiar-rol';
+import { Revocar } from './revocar';
 import { TablaLista, hrefConParams, type ColumnaTabla } from '../../ui-v2/datos';
 import {
   accionCambiarRolUsuario, accionDarDeBajaUsuario, accionReactivarUsuario, accionReenviarAccesoUsuario, accionCerrarSesionesUsuario,
   accionDarDeBajaPersonalLikida, accionReactivarPersonalLikida,
 } from '../usuarios/acciones';
 import { GestionPersona } from './gestion-persona';
+import '../resumen.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { getT } from '@/lib/i18n/servidor';
@@ -50,19 +53,16 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
   const flotaId = uno(sp.flota);
   const abrir = uno(sp.abrir);
 
-  const marco = (hijos: React.ReactNode, extra: Partial<React.ComponentProps<typeof EsqueletoTablaMaestra>> = {}) => (
-    <EsqueletoTablaMaestra
-      area="Control" titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')}
-      /* «Nuevo acceso» vive como pestaña del grupo (Personas · Nuevo acceso): repetirlo como primario ponía dos entradas a lo mismo. */
-      {...extra}
-    >{hijos}</EsqueletoTablaMaestra>
+  // Equipo es CONFIGURACIÓN (Rovaq CF «Equipo»): sin eyebrow, secciones de ≤780 px con filas rótulo-control, y la tabla de integrantes al final.
+  const marco = (secciones: React.ComponentProps<typeof EsqueletoConfiguracion>['secciones'], extra: { avisos?: React.ReactNode } = {}) => (
+    <EsqueletoConfiguracion titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')} secciones={secciones} {...extra} />
   );
 
   let lectura: Awaited<ReturnType<typeof getPersonas>>;
   try {
     lectura = await getPersonas();
   } catch {
-    return marco(<EstadoError reintentar>{t('equipo.no_se_pudo_leer')}</EstadoError>);
+    return marco([{ id: 'integrantes', titulo: t('equipo.personas', { flotaId: '' }), contenido: <EstadoError reintentar>{t('equipo.no_se_pudo_leer')}</EstadoError> }]);
   }
   const todas = ordenarPorJerarquia(lectura.personas);
   const nombreFlota = flotaId ? todas.find((p) => p.tenantId === flotaId)?.tenantNombre ?? null : null;
@@ -78,89 +78,108 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
   const columnas: ColumnaTabla<Persona>[] = [
     {
       id: 'persona', titulo: t('equipo.persona'), principal: true, valor: (p) => (p.nombre ?? p.email).toLowerCase(),
-      celda: (p) => <span>{p.nombre ?? '(sin nombre)'}<br /><small>{p.email}</small></span>,
+      celda: (p) => (
+        <span className="adm-persona">
+          <span className="adm-persona__nombre">{p.nombre ?? '(sin nombre)'}</span>
+          <span className="adm-persona__correo">{p.email}</span>
+          <span className="adm-persona__meta">
+            {p.tenantNombre ?? (p.esLikida ? 'Likida' : '—')}{' · '}
+            {!lectura.accesoLegible ? t('equipo.sin_dato') : p.sinCuentaAuth ? '—' : p.nuncaEntro ? t('equipo.nunca_entro') : p.ultimoAcceso ? fechaHoraMx(p.ultimoAcceso) : '—'}
+          </span>
+        </span>
+      ),
     },
-    { id: 'rol', titulo: t('equipo.rol'), valor: (p) => p.rol, celda: (p) => nombreDeRol(p.rol) },
-    { id: 'flota', titulo: t('equipo.flota'), valor: (p) => p.tenantNombre ?? '', celda: (p) => p.tenantNombre ?? (p.esLikida ? 'Likida' : '—') },
+    {
+      id: 'rol', titulo: t('equipo.rol'), valor: (p) => p.rol,
+      // Select de rol de 28 px en la fila: solo para quien tiene cuenta activa de una flota (el personal de Likida no cambia de rol aquí).
+      celda: (p) => p.activa && !p.esLikida && p.estado !== 'sin_acceso'
+        ? <CambiarRol id={p.id} rol={p.rol} accion={accionCambiarRolUsuario} etiqueta={`${t('equipo_gestion_persona.rol_nuevo')}: ${p.nombre ?? p.email}`} />
+        : nombreDeRol(p.rol),
+    },
     { id: 'estado', titulo: t('equipo.estado'), valor: (p) => p.estado, celda: (p) => <StatusChip tono={TONO_ESTADO[p.estado]}>{rotuloEstado(t)[p.estado]}</StatusChip> },
     {
-      id: 'acceso', titulo: t('equipo.ultimo_acceso'), corta: true, valor: (p) => p.ultimoAcceso ?? '',
-      celda: (p) => !lectura.accesoLegible ? t('equipo.sin_dato') : p.sinCuentaAuth ? '—' : p.nuncaEntro ? t('equipo.nunca_entro') : p.ultimoAcceso ? fechaHoraMx(p.ultimoAcceso) : '—',
-    },
-    {
       id: 'acciones', titulo: t('equipo.acciones'), tituloOculto: true, alinear: 'der',
-      celda: (p) => <BotonEnlace href={quitar({ abrir: p.id })} tamano="sm" variante="secondary">Gestionar</BotonEnlace>,
+      celda: (p) => (
+        <span className="adm-acciones-fila">
+          <BotonEnlace href={quitar({ abrir: p.id })} tamano="sm" variante="ghost">{t('equipo.gestionar')}</BotonEnlace>
+          {p.activa && !p.esLikida && p.estado !== 'sin_acceso' && p.id !== sesion.userId ? (
+            <Revocar id={p.id} nombre={p.nombre ?? p.email} accion={accionDarDeBajaUsuario} etiqueta={t('equipo.revocar')}
+              titulo={t('equipo_gestion_persona.dar_de_baja_a', { nombre: p.nombre ?? p.email })} descripcion={t('equipo_gestion_persona.pierde_el_acceso_al')}
+              confirmar={t('equipo_gestion_persona.si_dar_de_baja')} />
+          ) : null}
+        </span>
+      ),
     },
   ];
 
-  const cifras: PropsCifra[] = uniformes([
-    { etiqueta: t('equipo.personas_con_cuenta'), valor: todas.length, formato: 'entero' },
-    { etiqueta: t('equipo.activas'), valor: conteo('activa'), formato: 'entero' },
-    { etiqueta: t('equipo.de_baja'), valor: conteo('baja'), formato: 'entero' },
-    {
-      etiqueta: t('equipo.nunca_han_entrado'), valor: lectura.accesoLegible ? nuncaEntraron : null, formato: 'entero',
-      estado: lectura.accesoLegible ? 'ok' : 'error', mensaje: t('equipo.no_se_pudo_leer_2'),
-      nota: lectura.accesoLegible ? t('equipo.se_les_dio_de') : undefined, tono: lectura.accesoLegible && nuncaEntraron > 0 ? 'warn' : undefined,
-    },
-  ]);
+  const resumenEquipo = [
+    `${numero(todas.length)} ${t('equipo.personas_con_cuenta').toLowerCase()}`,
+    `${numero(conteo('activa'))} ${t('equipo.activas').toLowerCase()}`,
+    `${numero(conteo('baja'))} ${t('equipo.de_baja').toLowerCase()}`,
+    lectura.accesoLegible ? `${numero(nuncaEntraron)} ${t('equipo.nunca_han_entrado').toLowerCase()}` : t('equipo.no_se_pudo_leer_2'),
+  ].join(' · ');
   const nActivos = (q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0);
+  const { flotas }: { flotas: ReadonlyArray<{ id: string; nombre: string }> } = await getResumenNegocio().catch(() => ({ flotas: [] }));
 
-  return marco(
-    <>
-      {seleccionada && (
-        <GestionPersona
-          t={t}
-          p={seleccionada} yo={sesion.userId} bajaLikidaHabilitada={bajaPersonalLikidaHabilitada()}
-          acciones={{
-            cambiarRol: accionCambiarRolUsuario, darDeBaja: accionDarDeBajaUsuario, reactivar: accionReactivarUsuario,
-            reenviarAcceso: accionReenviarAccesoUsuario, cerrarSesiones: accionCerrarSesionesUsuario,
-            darDeBajaLikida: accionDarDeBajaPersonalLikida, reactivarLikida: accionReactivarPersonalLikida,
-          }}
-        />
-      )}
+  const gestion = seleccionada ? (
+    <GestionPersona
+      t={t}
+      p={seleccionada} yo={sesion.userId} bajaLikidaHabilitada={bajaPersonalLikidaHabilitada()}
+      acciones={{
+        cambiarRol: accionCambiarRolUsuario, darDeBaja: accionDarDeBajaUsuario, reactivar: accionReactivarUsuario,
+        reenviarAcceso: accionReenviarAccesoUsuario, cerrarSesiones: accionCerrarSesionesUsuario,
+        darDeBajaLikida: accionDarDeBajaPersonalLikida, reactivarLikida: accionReactivarPersonalLikida,
+      }}
+    />
+  ) : abrir ? <Tarjeta titulo={t('equipo.persona_no_encontrada')} estado="vacio" mensaje={t('equipo.esa_cuenta_ya_no')} detalle={t('equipo.vuelve_a_la_lista')} /> : null;
 
-      {abrir && !seleccionada && <Tarjeta titulo={t('equipo.persona_no_encontrada')} estado="vacio" mensaje={t('equipo.esa_cuenta_ya_no')} detalle={t('equipo.vuelve_a_la_lista')} />}
+  const roles = Object.entries(ROTULOS_ROL).filter(([rol]) => rol !== 'operador');
 
-      <Tarjeta
-        titulo={t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' })}
-        estado={todas.length === 0 ? 'vacio' : 'ok'} mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')}
-      >
-        <TablaLista
-          etiqueta={t('equipo.personas_con_acceso')} columnas={columnas} filas={filas} idFila={(p) => p.id}
-          base="/admin/equipo" params={sp} orden="local" paginacion={{ tamano: 25 }}
-          vacio={{ titulo: t('equipo.ninguna_persona_coincide'), texto: t('equipo.cambia_o_quita_los') }}
-        />
-        {!lectura.accesoLegible && <p>{t('equipo.no_se_pudo_leer_3')}</p>}
-        <p>{numero(filas.length)} de {numero(todas.length)} personas.</p>
-      </Tarjeta>
-
-      <Disclosure titulo={t('equipo.que_puede_hacer_cada')} resumen="Catálogo de roles">
-        <ul>
-          {Object.entries(ROTULOS_ROL).filter(([rol]) => rol !== 'operador').map(([rol, r]) => (
-            <li key={rol}><strong>{r.nombre}.</strong> {r.detalle}</li>
-          ))}
-        </ul>
-        <p>
-          
-          {t('equipo.el_chofer_no_tiene')}
-        </p>
-      </Disclosure>
-    </>,
+  return marco([
+    ...(gestion ? [{ id: 'gestion', titulo: t('equipo_gestion_persona.gestionar_a', { nombre: seleccionada?.nombre ?? seleccionada?.email ?? '' }), contenido: gestion }] : []),
     {
-      cifras, etiquetaCifras: t('equipo.resumen_del_equipo'),
-      filtros: (
-        <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={nActivos}
-          limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
-          <FiltroOpciones etiqueta={t('equipo.estado')} valor={estado} porDefecto="todas"
-            opciones={estados(t).map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
-          <FiltroBusqueda nombre="q" valor={q} placeholder={t('equipo.nombre_correo_rol_o')} etiqueta={t('equipo.buscar_persona')} />
-        </BarraFiltros>
-      ),
-      avisos: flotaId ? (
-        <p>{t('equipo.solo_la_flota')} {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>{t('equipo.ver_todas')}</Link></p>
-      ) : null,
+      id: 'invitar', titulo: t('equipo.invitar_integrante'),
+      descripcion: t('equipo.invitar_ayuda'),
+      contenido: <FormaNuevoAcceso flotas={flotas} preseleccion={flotas.some((f) => f.id === flotaId) ? flotaId : ''} t={t} />,
     },
-  );
+    {
+      id: 'roles', titulo: t('equipo.que_puede_hacer_cada'),
+      contenido: (
+        <>
+          {roles.map(([rol, r]) => <FilaConfig key={rol} rotulo={r.nombre} ayuda={r.detalle} />)}
+          <p className="rv-esq__fila-ayuda">{t('equipo.el_chofer_no_tiene')}</p>
+        </>
+      ),
+    },
+    {
+      id: 'integrantes',
+      titulo: t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' }),
+      descripcion: resumenEquipo,
+      contenido: todas.length === 0 ? (
+        <Tarjeta titulo={t('equipo.sin_personas_con_cuenta')} estado="vacio" mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')} />
+      ) : (
+        <>
+          <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={nActivos}
+            limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
+            <FiltroOpciones etiqueta={t('equipo.estado')} valor={estado} porDefecto="todas"
+              opciones={estados(t).map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
+            <FiltroBusqueda nombre="q" valor={q} placeholder={t('equipo.nombre_correo_rol_o')} etiqueta={t('equipo.buscar_persona')} />
+          </BarraFiltros>
+          <TablaLista
+            etiqueta={t('equipo.personas_con_acceso')} columnas={columnas} filas={filas} idFila={(p) => p.id}
+            base="/admin/equipo" params={sp} orden="local" paginacion={{ tamano: 25 }}
+            vacio={{ titulo: t('equipo.ninguna_persona_coincide'), texto: t('equipo.cambia_o_quita_los') }}
+          />
+          {!lectura.accesoLegible && <p className="rv-esq__fila-ayuda">{t('equipo.no_se_pudo_leer_3')}</p>}
+          <p className="rv-esq__fila-ayuda">{numero(filas.length)} de {numero(todas.length)} personas.</p>
+        </>
+      ),
+    },
+  ], {
+    avisos: flotaId ? (
+      <p>{t('equipo.solo_la_flota')} {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>{t('equipo.ver_todas')}</Link></p>
+    ) : null,
+  });
 }
 
 export async function generateMetadata(): Promise<Metadata> {
