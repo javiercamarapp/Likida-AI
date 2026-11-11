@@ -21,7 +21,7 @@ const enlacesPermitidos = () => [...Object.keys(RUTAS_PERFIL_CINCO_AGENTES), ...
 
 const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
 const PROHIBIDAS = [
-  '/dashboard/chat', '/dashboard/facturacion', '/dashboard/clientes', '/dashboard/suscripcion',
+  '/dashboard/facturacion', '/dashboard/clientes', '/dashboard/suscripcion',
   '/dashboard/sesiones-mcp', '/dashboard/agentes/facturas', '/dashboard/agentes/cobranza',
   '/dashboard/agentes/proveedores', '/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/configuracion',
   '/dashboard/rentabilidad', '/dashboard/reglas', '/dashboard/convenios', '/dashboard/jornada',
@@ -43,7 +43,10 @@ describe('sidebar', () => {
     expect(hrefs.length).toBeGreaterThan(5);
     for (const h of hrefs) expect(enlacesPermitidos(), h).toContain(h);
     for (const p of PROHIBIDAS) expect(hrefs).not.toContain(p);
-    expect(html).not.toContain('Pregunta a tus datos');
+    // «Pregunta a tus datos» se abrió al perfil el 11-nov (D12) y va justo debajo de Resumen; el widget de uso de IA sigue sin pintarse.
+    expect(hrefs).toContain('/dashboard/chat');
+    const i = hrefs.indexOf('/dashboard');
+    expect(hrefs[i + 1]).toBe('/dashboard/chat');
     expect(html).not.toContain('Análisis con IA');
   });
 

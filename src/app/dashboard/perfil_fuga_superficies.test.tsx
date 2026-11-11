@@ -238,16 +238,16 @@ describe('(e) widget de uso de IA y enlaces de suscripción / admin', () => {
     expect(html).not.toContain('40%');
   });
 
-  it.each(['flota_admin', 'superadmin', 'encargado'])('CON perfil (%s) no hay un solo enlace a Suscripción, Plan, Admin, chat, llaves ni usuarios', (rol) => {
+  it.each(['flota_admin', 'superadmin', 'encargado'])('CON perfil (%s) no hay un solo enlace a Suscripción, Plan, Admin, llaves ni usuarios (el chat sí: se abrió el 11-nov)', (rol) => {
     const html = chrome(rol, 'cinco_agentes');
     const hrefs = hrefsDe(html);
     expect(hrefs.length).toBeGreaterThan(5);
     for (const h of hrefs) {
       if (h.startsWith('#') || h === '/cuenta' || h.startsWith('/cuenta?')) continue; // ancla de accesibilidad y cerrar sesión/cuenta
       expect(PERMITIDAS, h).toContain(h.split('?')[0]);
-      expect(h, h).not.toMatch(/^\/(?:dashboard\/)?(?:admin|suscripcion|chat|llaves-api|usuarios|sesiones-mcp)(?:\/|$|\?)/);
+      expect(h, h).not.toMatch(/^\/(?:dashboard\/)?(?:admin|suscripcion|llaves-api|usuarios|sesiones-mcp)(?:\/|$|\?)/);
     }
-    expect(texto(html)).not.toMatch(/Plan y facturaci|Suscripci|Pregunta a tus datos|Llaves de API|Sesiones MCP/);
+    expect(texto(html)).not.toMatch(/Plan y facturaci|Suscripci|Llaves de API|Sesiones MCP/);
   });
 
   it('SidebarAbajo con perfil no pinta «Plan y facturación» ni el widget aunque se le pase usoIa', () => {
