@@ -1929,4 +1929,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'e26b.rent_barra_costo': 'Verified cost',
   'e26b.rent_barra_contribucion': 'Contribution',
   'e26b.rent_barra_por_cobrar': 'Receivable',
+  'e26b.arco_por_responder_nota': 'open requests without an answer',
+  'e26b.arco_pronto_nota': 'about to run out of time',
+  'e26b.arco_vencidas_nota': 'the response deadline has already passed',
 };

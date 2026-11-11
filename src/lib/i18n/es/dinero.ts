@@ -1929,4 +1929,7 @@ export const dinero = {
   'e26b.rent_barra_costo': 'Costo comprobado',
   'e26b.rent_barra_contribucion': 'Contribución',
   'e26b.rent_barra_por_cobrar': 'Por cobrar',
+  'e26b.arco_por_responder_nota': 'solicitudes abiertas sin respuesta',
+  'e26b.arco_pronto_nota': 'a punto de agotar el plazo',
+  'e26b.arco_vencidas_nota': 'el plazo de respuesta ya se agotó',
 } as const;
