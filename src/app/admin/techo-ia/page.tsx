@@ -111,6 +111,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
           filas={datos.filas}
           idFila={(f) => f.tenantId}
           altoMaximo={false}
+          tarjetaMovil
           vacio={{ titulo: 'Sin flotas', texto: 'Todavía no hay flotas dadas de alta.' }}
         />
       </Tarjeta>

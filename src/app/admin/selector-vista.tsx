@@ -80,7 +80,8 @@ export function SelectorVista({ tenants }: {
   tenants: number | null;
 }) {
   return (
-    <Tarjeta titulo="Entrar a los otros paneles" acciones={<span className="text-xs font-normal text-muted">Con tu propia sesión — no hacen falta credenciales de nadie</span>}>
+    <Tarjeta titulo="Entrar a los otros paneles">
+      <p className="m-0 mb-3 text-xs text-muted">Con tu propia sesión — no hacen falta credenciales de nadie</p>
       <div id="vistas" className="scroll-mt-24">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {VISTAS.map(({ href, titulo, quien, que, Icono }) => (
