@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import './logo-v2.css';
 
 // El logo de Likida VECTORIZADO desde `public/images/logo.png` (el mismo archivo de siempre; no se redibujó nada): contorno
 // por interpolación sobre el canal alfa, suavizado de 1 px y simplificación a 0.3 px. Los mismos trazados viven como
@@ -14,19 +14,23 @@ export const PROPORCION_LOGO = { horizontal: 726 / 149, simbolo: 114 / 149 } as 
  * El logo de Likida en SVG. Se dimensiona por ALTURA (ESTILO-LIKIDA §4/§9: sidebar 30, riel 28, cabecera móvil 28, carga 40):
  * con 112 px de ancho el logo (4.9:1) mediría 23 px de alto y se vería tímido. `decorativo` lo saca del árbol de accesibilidad.
  */
-export default function LogoV2({ alto, variante = 'horizontal', decorativo = false, className, style }: {
-  alto: number; variante?: 'horizontal' | 'simbolo'; decorativo?: boolean; className?: string; style?: CSSProperties;
+export type TonoLogoV2 = 'positivo' | 'negativo' | 'marca' | 'bg' | 'ink';
+
+export default function LogoV2({ alto, variante = 'horizontal', decorativo = false, className, tono }: {
+  alto: number; variante?: 'horizontal' | 'simbolo'; decorativo?: boolean; className?: string;
+  /** Color fijo de la marca (positivo #0E0E10 / negativo #F4F4F5) o de un token del tema; por omisión hereda `currentColor`. */
+  tono?: TonoLogoV2;
 }) {
   const ancho = Math.round(alto * PROPORCION_LOGO[variante] * 100) / 100;
   const vb = variante === 'horizontal' ? '0 0 726 149' : '0 0 114 149';
   // El `role="img"` va en un contenedor (no en el <svg>): así lo ven igual los lectores de pantalla y el detector (c8/N5), y el
-  // <svg> interior es decorativo. `display:block` en línea: el CSS del shell solo alterna visibilidad con wrappers propios.
+  // <svg> interior es decorativo. El bloque y el color salen de `logo-v2.css` (sin estilos en línea).
   return (
     <span
-      className={className} style={{ display: 'block', flex: 'none', lineHeight: 0, ...style }}
+      className={className ? `rv-logo2 ${className}` : 'rv-logo2'} data-tono={tono}
       {...(decorativo ? { 'aria-hidden': true } : { role: 'img', 'aria-label': 'Likida' })}
     >
-      <svg xmlns="http://www.w3.org/2000/svg" viewBox={vb} width={ancho} height={alto} aria-hidden="true" focusable="false" style={{ display: 'block' }}>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox={vb} width={ancho} height={alto} aria-hidden="true" focusable="false" className="rv-logo2__svg">
         {/* Paleta negro/gris/blanco (31-oct): símbolo y nombre en la tinta del contenedor (`currentColor`). */}
       <path fill="currentColor" fillRule="evenodd" d={D_SIMBOLO} />
       {variante === 'horizontal' && <path fill="currentColor" fillRule="evenodd" d={D_TEXTO} />}
