@@ -1806,6 +1806,7 @@ export const dinero = {
   'suscripcion.page.noSePudieronLeer2': 'No se pudieron leer las facturas.',
   'suscripcion.page.noSePudoLeer': 'No se pudo leer tu suscripción ahora mismo. Esto no significa que no tengas una: vuelve a intentarlo antes de contratar un plan nuevo.',
   'suscripcion.page.operadoresActivos': 'Operadores activos',
+  'suscripcion.page.deLimiteDelPlan': 'de {limite} que incluye tu plan',
   'suscripcion.page.pagada': 'Pagada',
   'suscripcion.page.pagoPendiente': 'Pago pendiente',
   'suscripcion.page.pagosPorPeriodoY': 'Pagos por periodo y monto',

@@ -23,3 +23,6 @@
   [data-ui="v2"] .rv-esq--config:has(.rv-cfg-dos) .rv-esq__cfg { max-width: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   [data-ui="v2"] .rv-esq--config:has(.rv-cfg-dos) .rv-esq__cfg > .rv-tarjeta:has(.rv-cfg-ancha) { grid-column: 1 / -1; }
 }
+
+/* El botón de envío de `FormaConAviso` (compartido, con `style=` propio) lleva el borde de 1 px de tinta de todo primario .rv-btn. */
+[data-ui="v2"] form button[type="submit"].inline-flex.h-8 { border: var(--borde-w, 1px) solid var(--btn-borde, var(--ink)); }

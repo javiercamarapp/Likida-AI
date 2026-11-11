@@ -1806,6 +1806,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'suscripcion.page.noSePudieronLeer2': 'The invoices could not be read.',
   'suscripcion.page.noSePudoLeer': 'Your subscription could not be read right now. This does not mean you do not have one: try again before subscribing to a new plan.',
   'suscripcion.page.operadoresActivos': 'Active drivers',
+  'suscripcion.page.deLimiteDelPlan': 'of {limite} included in your plan',
   'suscripcion.page.pagada': 'Paid',
   'suscripcion.page.pagoPendiente': 'Payment pending',
   'suscripcion.page.pagosPorPeriodoY': 'Payments by period and amount',
