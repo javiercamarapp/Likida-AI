@@ -18,6 +18,7 @@ import {
 } from '@/app/ui-v2/componentes';
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import { KillSwitchAgente, ConfigurarAgente } from './acciones-agente';
+import { getT } from '@/lib/i18n/servidor';
 import { haceTiempo, resultadoCorrida } from './corrida-visual';
 import './agentes.css';
 
@@ -65,6 +66,7 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   accionAlta: AccionAlta; accionPalanca: AccionPalanca; accionConfig: AccionConfig;
 }) {
   const ahora = ahoraMs();
+  const { t: tr } = await getT('agentes');
   const [agentes, interruptores, exito, consumo, insumosPendientes, parados] = await Promise.all([
     listarAgentes(),
     safe(() => listarInterruptores()),
@@ -143,11 +145,11 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
             <>
               <span className="rv-agente-fecha">{fechaHoraMx(corrida.inicio)}</span>
               {(() => {
-                const r = resultadoCorrida(corrida.estado);
+                const r = resultadoCorrida(corrida.estado, tr);
                 return (
                   <span className="rv-agente-sub rv-agente-resultado">
                     {r.tono ? <StatusChip tono={r.tono}>{r.texto}</StatusChip> : r.texto}
-                    <span> · {haceTiempo(corrida.inicio, ahora)}</span>
+                    <span> · {haceTiempo(corrida.inicio, ahora, tr)}</span>
                   </span>
                 );
               })()}

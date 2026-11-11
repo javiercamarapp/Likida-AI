@@ -429,7 +429,7 @@ export function Tooltip({ texto, children, className, lado = 'arriba' }: {
       window.removeEventListener('resize', recolocar);
       window.removeEventListener('scroll', recolocar, true);
     };
-  }, [abierto]);
+  }, [abierto, lado]);
 
   const objetivo = isValidElement(children)
     ? cloneElement(children, { 'aria-describedby': [children.props['aria-describedby'], id].filter(Boolean).join(' ') })

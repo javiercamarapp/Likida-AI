@@ -912,4 +912,11 @@ export const agentes = {
   'vigia.vista.vigia': 'Vigía: {v0}',
   'vigia.vista.whatsapp': 'WhatsApp …{v0}',
   'vigia.vista.yo_me_encargo': 'Yo me encargo',
+  'catalogo.corrida.ok': 'Terminó bien',
+  'catalogo.corrida.parcial': 'Terminó parcial',
+  'catalogo.corrida.fallo': 'Terminó con fallo',
+  'catalogo.corrida.otro': 'Terminó: {estado}',
+  'catalogo.corrida.hace_menos_1h': 'hace menos de 1 h',
+  'catalogo.corrida.hace_horas': 'hace {n} h',
+  'catalogo.corrida.hace_dias': 'hace {n} días',
 } as const;

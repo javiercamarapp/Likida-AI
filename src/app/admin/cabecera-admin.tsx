@@ -81,7 +81,6 @@ function GuiaAdmin() {
  */
 export default function CabeceraAdmin() {
   const tr = useT('shell', shellEs);
-  const { t } = tr;
   const pathname = usePathname() ?? '';
   const entrada = pathname === '/admin' ? { nombre: 'Resumen', Icono: LayoutGrid } : entradaDeRuta(pathname);
   return (

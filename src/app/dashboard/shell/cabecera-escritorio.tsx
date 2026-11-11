@@ -19,7 +19,6 @@ import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
  */
 export default function CabeceraEscritorio({ rol, perfil }: { rol: string; perfil?: PerfilTenant | null }) {
   const tr = useT('shell', shellEs);
-  const { t } = tr;
   const { pathname, menu } = useMenuV2(rol, perfil);
   const href = hrefActivo(pathname, menu);
   // Solo una pantalla que el menú del rol conoce lleva título: nunca uno inventado.
