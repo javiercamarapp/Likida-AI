@@ -1,4 +1,4 @@
-import { Tarjeta } from '@/app/ui-v2/componentes';
+import { Tarjeta, Boton } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -43,7 +43,7 @@ export function SeccionCruceViajes({ datos, tr = TR_ES }: { datos: CruceViajesVi
           ) : (
             <form action={acciones.guardarCruceViajes} className="flex items-center gap-2 flex-wrap">
               <input type="hidden" name="activo" value={activo ? '0' : '1'} />
-              <button type="submit" className="rv-btn rv-btn--primary">{activo ? tx('rest.apagar_el_cruce') : tx('rest.encender_el_cruce')}</button>{ricoT(tx('rest.e0_aplica_a_los_archivos_que'), { e0: (c) => <span className="text-[11px] rv-pj-c-faint">{c}</span> })}</form>
+              <Boton type="submit" variante="primary" tamano="sm">{activo ? tx('rest.apagar_el_cruce') : tx('rest.encender_el_cruce')}</Boton>{ricoT(tx('rest.e0_aplica_a_los_archivos_que'), { e0: (c) => <span className="text-[11px] rv-pj-c-faint">{c}</span> })}</form>
           )}
         </div>
       )}

@@ -1,6 +1,6 @@
 import type { ConfigCorreoAvisos } from '@/lib/likida/peajes/aviso_correo';
 import { MAX_DESTINATARIOS_CORREO_AVISOS } from '@/lib/likida/peajes/aviso_correo';
-import { Tarjeta } from '@/app/ui-v2/componentes';
+import { Tarjeta, Boton } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -45,11 +45,11 @@ export function SeccionCorreoAvisos({ datos, tr = TR_ES }: { datos: CorreoAvisos
               <input type="checkbox" name="correo_activo" value="1" defaultChecked={config.activo} className="mt-0.5" />
               <span>{ricoT(tx('rest.e0_mandar_los_avisos_por_correo'), { e0: (c) => <span className="font-medium">{c}</span>, e1: (c) => <span className="block text-[11px] rv-pj-c-faint">{c}</span> })}</span>
             </label>
-            <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.guardar_avisos_por_correo')}</button>
+            <Boton type="submit" variante="primary" tamano="sm">{tx('rest.guardar_avisos_por_correo')}</Boton>
           </form>
 
           <form action={acciones.enviarPrueba} className="space-y-1" id="correo-avisos-prueba">
-            <button type="submit" className="rv-btn">{tx('rest.enviar_correo_de_prueba')}</button>
+            <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.enviar_correo_de_prueba')}</Boton>
             <p className="text-[11px] rv-pj-c-faint">{tx('rest.manda_un_correo_de_ejemplo_a')}{!servicioActivo && tx('rest.ahora_mismo_el_envio_de_correos')}
             </p>
           </form>

@@ -2,7 +2,7 @@ import { Upload, Trash2 } from 'lucide-react';
 import { numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { ReglaCasetaVista, TagBajaVista, ExcepcionUnidadVista } from '@/lib/likida/peajes/revision_cobros';
-import { Tarjeta, Icono } from '@/app/ui-v2/componentes';
+import { Tarjeta, Icono, Boton } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -63,7 +63,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
               </label>
               <label className="flex items-center gap-1.5">
                 <input type="checkbox" name="no_cruzar" value="1" defaultChecked={c.noCruzar} aria-label={`${c.nombre} no debe cruzarse`} />{ricoT(tx('rest.e0_no_debe_cruzarse_e0'), { e0: (c) => <span className="text-[11px]">{c}</span> })}</label>
-              <button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.guardar')}</button>
+              <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.guardar')}</Boton>
             </form>
           ))}
           {ordenadas.length > MAX_CASETAS_VISIBLES && <p className="text-[11px] rv-pj-c-faint">{tx('rest.se_muestran_de', { maxCasetasVisibles: MAX_CASETAS_VISIBLES, length: ordenadas.length })}</p>}
@@ -87,7 +87,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
                   <span className="font-medium cifra-mono">{e.unidad}</span>{ricoT(tx('rest.e0_puede_cruzar_e0', { v: nombrePorNorm.get(e.casetaNorm) ?? e.casetaNorm }), { e0: (c) => <span>{c}</span> })}{e.nota && <span className="rv-pj-c-muted">· {e.nota}</span>}
                   <form action={acciones.quitarExcepcionUnidad} className="ml-auto">
                     <input type="hidden" name="excepcion" value={e.id} />
-                    <button type="submit" aria-label={tx('rest.quitar_la_excepcion_de', { unidad: e.unidad })} className="rv-btn rv-btn--secondary"><Icono icono={Trash2} /></button>
+                    <Boton type="submit" aria-label={tx('rest.quitar_la_excepcion_de', { unidad: e.unidad })} variante="secondary" tamano="sm"><Icono icono={Trash2} /></Boton>
                   </form>
                 </div>
               ))}
@@ -102,7 +102,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
                 </select></label>
               <label className="block">{ricoT(tx('rest.e0_unidad_e0'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<input name="unidad" required maxLength={40} placeholder="TC9001" className="w-[120px] mt-0.5 rv-ctl" /></label>
               <label className="block">{ricoT(tx('rest.e0_nota_opc_e0'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<input name="nota" maxLength={300} placeholder={tx('rest.atiende_rescates')} className="w-[200px] mt-0.5 rv-ctl" /></label>
-              <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.exceptuar_unidad')}</button>
+              <Boton type="submit" variante="primary" tamano="sm">{tx('rest.exceptuar_unidad')}</Boton>
             </form>
           )}
         </div>
@@ -111,7 +111,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
       <form action={acciones.cargarCoordenadas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap mb-4">
         <input type="file" name="archivo" accept=".csv,.tsv" required aria-label={tx('rest.csv_de_coordenadas_de_casetas')}
           className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
-        <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Upload} />{' '}{tx('rest.cargar_coordenadas')}</button>
+        <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Upload} />{' '}{tx('rest.cargar_coordenadas')}</Boton>
         <span className="text-[11px] rv-pj-c-faint">{ricoT(tx('rest.opcional_csv_e0_nombre_lat_lng'), { e0: (c) => <span className="cifra-mono">{c}</span> })}</span>
       </form>
 
@@ -128,7 +128,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
               <span className="font-medium cifra-mono">{b.tagOriginal ?? b.tag}</span>{ricoT(tx('rest.e0_de_baja_desde_el_e0', { bajaEn: b.bajaEn }), { e0: (c) => <span>{c}</span> })}{b.motivo && <span className="rv-pj-c-muted">· {b.motivo}</span>}
               <form action={acciones.quitarBajaTag} className="ml-auto">
                 <input type="hidden" name="baja" value={b.id} />
-                <button type="submit" aria-label={tx('rest.quitar_la_baja_de', { v: b.tagOriginal ?? b.tag })} className="rv-btn rv-btn--secondary"><Icono icono={Trash2} /></button>
+                <Boton type="submit" aria-label={tx('rest.quitar_la_baja_de', { v: b.tagOriginal ?? b.tag })} variante="secondary" tamano="sm"><Icono icono={Trash2} /></Boton>
               </form>
             </div>
           ))}
@@ -139,7 +139,7 @@ export function SeccionReglasCobro({ datos, tr = TR_ES }: { datos: ReglasCobroVi
           <input name="tag" required maxLength={60} placeholder={tx('rest.imdm_12345678')} className="w-[160px] mt-0.5 rv-ctl" /></label>
         <label className="block">{ricoT(tx('rest.e0_ultimo_dia_vigente_e0'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<input type="date" name="baja_en" required className="mt-0.5 rv-ctl rv-ctl--fecha" /></label>
         <label className="block">{ricoT(tx('rest.e0_motivo_opc_e0'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<input name="motivo" maxLength={300} placeholder={tx('rest.unidad_siniestrada')} className="w-[200px] mt-0.5 rv-ctl" /></label>
-        <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.dar_de_baja')}</button>
+        <Boton type="submit" variante="primary" tamano="sm">{tx('rest.dar_de_baja')}</Boton>
       </form>
       <p className="text-[11px] mt-1.5 rv-pj-c-faint">{tx('rest.cualquier_cruce_posterior_a_esa_fecha')}</p>
     </Tarjeta>

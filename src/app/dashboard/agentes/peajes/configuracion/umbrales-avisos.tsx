@@ -3,7 +3,7 @@ import {
   PLAZO_MESES_MIN, PLAZO_MESES_MAX, PLAZO_MESES_DEFAULT, AVISO_DIAS_MAX, DIAS_GRACIA_MIN, DIAS_GRACIA_MAX,
 } from '@/lib/likida/peajes/config_avisos';
 import { MIN_CRUCES_MIN, MIN_CRUCES_MAX, VELOCIDAD_MIN_KMH, VELOCIDAD_MAX_KMH, VENTANA_HORAS_MAX } from '@/lib/likida/peajes/atipicos_config';
-import { Tarjeta } from '@/app/ui-v2/componentes';
+import { Tarjeta, Boton } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -92,7 +92,7 @@ export function SeccionUmbralesAvisos({ datos, tr = TR_ES }: { datos: UmbralesAv
                 <Numero nombre="velocidad_max" etiqueta={tx('rest.velocidad_max_km_h')} valor={config.umbrales.secuencia_imposible.velocidadMaxKmh} min={VELOCIDAD_MIN_KMH} max={VELOCIDAD_MAX_KMH} ancho="w-[140px]" />
               </div>
             </div>
-            <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.guardar_umbrales')}</button>
+            <Boton type="submit" variante="primary" tamano="sm">{tx('rest.guardar_umbrales')}</Boton>
           </form>
 
           <form action={acciones.guardarAvisos} className="space-y-3" id="plazo-avisos">
@@ -114,7 +114,7 @@ export function SeccionUmbralesAvisos({ datos, tr = TR_ES }: { datos: UmbralesAv
               <Interruptor nombre="recordatorio_archivo" etiqueta={tx('rest.recordar_que_falta_el_archivo_de')} activo={config.avisos.interruptores.recordatorio_archivo}
                 nota={tx('rest.un_solo_recordatorio_por_decena_pasados')} />
             </div>
-            <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.guardar_plazo_y_avisos')}</button>
+            <Boton type="submit" variante="primary" tamano="sm">{tx('rest.guardar_plazo_y_avisos')}</Boton>
           </form>
 
           <form action={acciones.guardarDestinatario} className="space-y-2" id="destinatario-avisos">
@@ -124,7 +124,7 @@ export function SeccionUmbralesAvisos({ datos, tr = TR_ES }: { datos: UmbralesAv
               <label className="block">{ricoT(tx('rest.e0_whatsapp_10_a_15_digitos'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<input name="telefono" defaultValue={config.telefono ?? ''} maxLength={30} placeholder={tx('rest.vacio_solo_en_pantalla')} inputMode="tel"
                   className="w-[220px] mt-0.5 rv-ctl" />
               </label>
-              <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.guardar_destinatario')}</button>
+              <Boton type="submit" variante="primary" tamano="sm">{tx('rest.guardar_destinatario')}</Boton>
             </div>
             <p className="text-[11px] rv-pj-c-faint">
               {config.telefono

@@ -49,7 +49,6 @@ function etiquetas(src: string, nombre: string): string[] {
 const HIJOS_SIN_CUBRIR: Record<string, number> = {
   'agentes/insights/panel-insights.tsx': 1,
   'agentes/insights/tarjeta-insight.tsx': 1,
-  'agentes/peajes/configuracion/entradas.tsx': 1,
   'carta-porte/borrador/[viajeId]/page.tsx': 6,
   'carta-porte/documentos/[id]/vista.tsx': 1,
   'inicio-cinco-agentes.tsx': 1,
