@@ -20,6 +20,7 @@
 [data-ui="v2"] .av-pila { display: flex; flex-direction: column; gap: 12px; }
 [data-ui="v2"] .av-cambio { display: flex; justify-content: flex-end; }
 /* Las casillas caen CENTRADAS bajo la cabecera de su columna (antes quedaban pegadas a la izquierda de la celda). */
+[data-ui="v2"] .av-matriz thead th:not(:first-child), [data-ui="v2"] .av-matriz td { text-align: center; }
 [data-ui="v2"] .av-matriz td .rv-marca { display: flex; justify-content: center; }
 [data-ui="v2"] .av-matriz td .rv-marca__fila { justify-content: center; gap: 0; }
 /* Teléfono: los filtros ocupan el ancho y se tocan con el pulgar (alto ≥ 40 px); la matriz no obliga a scrollear de lado. */
