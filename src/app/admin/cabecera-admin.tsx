@@ -12,6 +12,12 @@ import { entradaDeRuta } from './rutas';
 import { useRiel } from '../dashboard/shell/colapso';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 import type { RequiereAccion } from './requiere-accion';
+import { etiquetaNav } from '@/lib/i18n/nav';
+import { crearTraductor, type Traductor } from '@/lib/i18n/traducir';
+import type { DiccionarioDe } from '@/lib/i18n/catalogo';
+
+/** El traductor en español: lo que dicen `etiquetaCampana` y las etiquetas sin proveedor de idioma (y las pruebas). */
+const TRADUCTOR_ES: Traductor<DiccionarioDe<'shell'>> = crearTraductor<DiccionarioDe<'shell'>>('es', shellEs, shellEs);
 
 const ContextoRequiereAccion = createContext<RequiereAccion | undefined>(undefined);
 
@@ -21,12 +27,11 @@ export function ProveedorRequiereAccion({ valor, children }: { valor: RequiereAc
 }
 
 /** El texto de la campana para lectores de pantalla y el tooltip. `null` = lectura caída: «sin dato», nunca «0». */
-export function etiquetaCampana(r: RequiereAccion | undefined): string {
-  if (!r) return 'Notificaciones';
-  if (r.pendientes === null) return 'Notificaciones: sin dato';
-  if (r.pendientes === 0) return 'Notificaciones: nada pendiente';
-  const n = `${r.pendientes} ${r.pendientes === 1 ? 'pendiente' : 'pendientes'}`;
-  return `Notificaciones: ${n}${r.hayUrgente ? ', hay algo urgente' : ''}`;
+export function etiquetaCampana(r: RequiereAccion | undefined, tr: Traductor<DiccionarioDe<'shell'>> = TRADUCTOR_ES): string {
+  if (!r) return tr.t('cab.notificaciones');
+  if (r.pendientes === null) return tr.t('cab.notificaciones.sinDato');
+  if (r.pendientes === 0) return tr.t('cab.notificaciones.nada');
+  return tr.tp(r.hayUrgente ? 'cab.notificaciones.urgente' : 'cab.notificaciones.pendientes', r.pendientes);
 }
 
 /** Lo que «Avisos» del pie del sidebar lee del proveedor (el layout lo resuelve en el servidor). */
@@ -78,7 +83,8 @@ function GuiaAdmin() {
  */
 export default function CabeceraAdmin() {
   const { riel, alternar } = useRiel();
-  const { t } = useT('shell', shellEs);
+  const tr = useT('shell', shellEs);
+  const { t } = tr;
   const pathname = usePathname() ?? '';
   const entrada = pathname === '/admin' ? { nombre: 'Resumen', Icono: LayoutGrid } : entradaDeRuta(pathname);
   const etiqueta = riel ? t('cab.expandir') : t('cab.plegar');
@@ -93,7 +99,7 @@ export default function CabeceraAdmin() {
         {entrada && (
           <span className="rv-cab-esc__titulo" aria-hidden>
             <entrada.Icono width={15} height={15} strokeWidth={TRAZO_ICONO} aria-hidden />
-            <span>{entrada.nombre}</span>
+            <span>{etiquetaNav(tr, entrada.nombre)}</span>
           </span>
         )}
         <GuiaAdmin />

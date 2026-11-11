@@ -1,14 +1,12 @@
-import { LogOut } from 'lucide-react';
 import { CLASES_V2 } from '../marco-v2';
-import SidebarNav, { PieAdmin, MarcaAdmin, AsideAdmin } from './sidebar-nav';
+import { PieAdmin, MarcaAdmin, AsideAdmin, NavAdmin } from './sidebar-nav';
+import BotonSalirAdmin from './salir-admin';
 import CommandPalette from './command-palette';
 import CabeceraAdmin from './cabecera-admin';
 import NavegacionMovilAdmin, { CabeceraMovilAdmin } from './navegacion-movil-admin';
 import ProveedorMarcoAdmin from './pestanas-admin';
 import CapaCarga from '../dashboard/shell/capa-carga';
 import CopilotoPanel from './copiloto-panel';
-import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
-import { Tooltip } from '../ui-v2/componentes/overlay';
 
 /**
  * El marco de /admin sobre el MISMO sistema que el dashboard (7-nov-2026, ronda R8): `.rv-app`, `.rv-fila`, `.rv-sb`, `.rv-col` y
@@ -34,11 +32,7 @@ export default function AdminChrome({
   // El <form> de salir se arma AQUÍ (servidor) y baja como elemento: ninguna función cruza al cliente.
   const salir = cerrarSesion ? (
     <form action={cerrarSesion} className="rv-cuenta__salir">
-      <Tooltip texto="Cerrar sesión">
-        <button type="submit" aria-label="Cerrar sesión" className="rv-icono-boton">
-          <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        </button>
-      </Tooltip>
+      <BotonSalirAdmin />
     </form>
   ) : null;
   return (
@@ -51,9 +45,7 @@ export default function AdminChrome({
       <div className={`${CLASES_V2.fila} adm-fila`}>
         <AsideAdmin>
           <MarcaAdmin />
-          <nav aria-label="Navegación de la consola" className="rv-sb__nav">
-            <SidebarNav />
-          </nav>
+          <NavAdmin />
           <div className="rv-sb__pie">
             <PieAdmin nombre={nombre} avatarUrl={avatarUrl} flotas={flotas} flotaActual={flotaActual} salir={salir} />
           </div>
