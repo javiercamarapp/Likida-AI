@@ -1231,4 +1231,8 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26.llaves_vigentes': 'Active keys',
   'e26.llaves_sin_caducidad': 'No expiry',
   'e26.llaves_revocadas_vencidas': 'Revoked or expired',
+  'e26.usu_activos': 'Active members',
+  'e26.usu_baja': 'Deactivated',
+  'e26.usu_sin_wa': 'Active without WhatsApp',
+  'e26.usu_que_puede_cada_rol': 'What each role can do',
 };

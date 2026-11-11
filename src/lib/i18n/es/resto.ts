@@ -1229,4 +1229,8 @@ export const resto = {
   'e26.llaves_vigentes': 'Llaves vigentes',
   'e26.llaves_sin_caducidad': 'Sin caducidad',
   'e26.llaves_revocadas_vencidas': 'Revocadas o vencidas',
+  'e26.usu_activos': 'Integrantes activos',
+  'e26.usu_baja': 'Dados de baja',
+  'e26.usu_sin_wa': 'Activos sin WhatsApp',
+  'e26.usu_que_puede_cada_rol': 'Qué puede hacer cada rol',
 } as const;
