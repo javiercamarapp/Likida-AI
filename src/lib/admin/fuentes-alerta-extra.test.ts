@@ -58,3 +58,12 @@ describe('alertasExtra', () => {
     for (const x of a) expect(x).toMatchObject({ tipo: 'atencion', texto: expect.any(String), href: expect.stringMatching(/^\/admin\//) });
   });
 });
+
+describe('F14-C: la campana dice cuándo el diagnóstico se detuvo', () => {
+  const con = (estado: string) => ({ latidos: { guardia: { estado: 'ok' as const, haceMin: 1, ultimoEstado: 'ok' as const, detalle: { diagnostico: { estado } } } } });
+  it('tope y gasto ilegible suenan; ok no', () => {
+    expect(alertasExtra(con('tope')).map((a) => a.id)).toContain('diagnostico_tope');
+    expect(alertasExtra(con('gasto_ilegible')).map((a) => a.id)).toContain('diagnostico_sin_gasto');
+    expect(alertasExtra(con('ok')).map((a) => a.id)).not.toContain('diagnostico_tope');
+  });
+});
