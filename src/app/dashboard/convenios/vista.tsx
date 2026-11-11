@@ -5,12 +5,14 @@ import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
 import { textoParaSistemaDeLaFlota } from '@/lib/likida/convenios/importador';
 import type { ConvenioFila, ViajeConvenioFila } from '@/lib/likida/convenios/repo';
 import { FormaConvenio, FormaCorregirConvenio, FormaImportarConvenios, type AccionConvenio, type CatalogosFormaConvenio } from './formas';
-import { Aviso, AvisoCompacto, Boton, Disclosure, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, Boton, BotonEnlace, Disclosure, EstadoVacio, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import './convenios.css';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { FileText } from 'lucide-react';
+import { CajonAlta } from '../cajon-alta';
+import '../estados.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 import { rico } from '@/lib/i18n/rico';
 
@@ -85,6 +87,20 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       apoyo={p.verDinero
         ? t('op.por_cliente_puntos_a_a_b')
         : t('op.por_cliente_puntos_a_a_b_2')}
+      acciones={p.puedeEditar ? (
+        <>
+          <CajonAlta id="importar" titulo={t('op.importar_desde_csv_o_excel')} disparador={t('op.importar_un_archivo')} tamano="xl">
+            <p className="rv-cv__nota">{rico(t('op.strong_una_fila_por_instruccion_strong'), { strong: (c) => <strong>{c}</strong>, code: (c) => <code>{c}</code> })}{p.verDinero ? <>{rico(t('op.con_permiso_de_finanzas_tambien_code'), { code: (c) => <code>{c}</code> })}</> : ''}{t('op.el_cliente_tiene_que_existir_en')}{' '}{p.puedeExportar && <a href={descarga('plantilla')} className="rv-cv__enlace">{t('op.descargar_la_plantilla')}</a>}
+            </p>
+            <FormaImportarConvenios accion={p.accionImportar} />
+          </CajonAlta>
+          {edicionDisponible ? (
+            <CajonAlta id="alta" titulo={t('op.nuevo_convenio')} descripcion={t('op.da_de_alta_un_convenio_y')} disparador={t('op.capturar_un_convenio')} primario abiertoInicial={lista.length === 0 && p.estado === 'ok'}>
+              <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
+            </CajonAlta>
+          ) : null}
+        </>
+      ) : undefined}
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Convenios')}
       avisos={(
@@ -104,11 +120,14 @@ export function VistaConvenios(p: PropsVistaConvenios) {
       )}
     >
       {p.estado === 'ok' && (
-        <Tarjeta titulo={t('op.convenios_registrados')} info="convenios.registrados"
-          acciones={p.puedeExportar ? (
-            <span className="rv-cv__descargas">{rico(t('op.e0_descargar_instrucciones_csv_sin_dinero'), { e0: (c) => <a href={descarga('instrucciones')} className="rv-cv__enlace">{c}</a>, e1: (c) => <a href={descarga('texto')} className="rv-cv__enlace">{c}</a> })}{p.verDinero && <a href={descarga('completo')} className="rv-cv__enlace">{t('op.descargar_completo_con_tarifa')}</a>}
-            </span>
-          ) : undefined}>
+        <Tarjeta titulo={t('op.convenios_registrados')} info="convenios.registrados">
+          {p.puedeExportar ? (
+            <div className="rv-cv__descargas" role="group" aria-label={t('op.convenios_registrados')}>
+              <BotonEnlace variante="secondary" tamano="sm" href={descarga('instrucciones')}>{t('op.descargar_instrucciones_csv')}</BotonEnlace>
+              <BotonEnlace variante="secondary" tamano="sm" href={descarga('texto')}>{t('op.descargar_texto_para_tu_sistema')}</BotonEnlace>
+              {p.verDinero ? <BotonEnlace variante="secondary" tamano="sm" href={descarga('completo')}>{t('op.descargar_completo_con_tarifa')}</BotonEnlace> : null}
+            </div>
+          ) : null}
           {lista.length === 0 ? (
             <EstadoVacio contenido icono={FileText} titulo={t('op.todavia_no_hay_convenios')}>{t('op.importa_tu_archivo_mas_abajo_hasta')}</EstadoVacio>
           ) : (
@@ -203,28 +222,10 @@ export function VistaConvenios(p: PropsVistaConvenios) {
         </Tarjeta>
       )}
 
-      {puedeEditarEnPantalla && (edicionDisponible ? (
-        <Tarjeta titulo={t('op.nuevo_convenio')} info="convenios.nuevo">
-          <Disclosure variante="linea" titulo={t('op.capturar_un_convenio')} abierto={lista.length === 0}>
-            <p className="rv-cv__nota">{t('op.da_de_alta_un_convenio_y')}</p>
-            <FormaConvenio accion={p.accionGuardar!} catalogos={p.catalogos!} />
-          </Disclosure>
-        </Tarjeta>
-      ) : (
+      {puedeEditarEnPantalla && !edicionDisponible ? (
         <Aviso tono="warn">{t('op.la_edicion_de_convenios_en_pantalla')}</Aviso>
-      ))}
-
-      {p.puedeEditar ? (
-        <Tarjeta titulo={t('op.importar_desde_csv_o_excel')} info="convenios.importar">
-          <Disclosure variante="linea" titulo={t('op.importar_un_archivo')} abierto={lista.length === 0}>
-            <p className="rv-cv__nota">{rico(t('op.strong_una_fila_por_instruccion_strong'), { strong: (c) => <strong>{c}</strong>, code: (c) => <code>{c}</code> })}{p.verDinero ? <>{rico(t('op.con_permiso_de_finanzas_tambien_code'), { code: (c) => <code>{c}</code> })}</> : ''}{t('op.el_cliente_tiene_que_existir_en')}{' '}{p.puedeExportar && <a href={descarga('plantilla')} className="rv-cv__enlace">{t('op.descargar_la_plantilla')}</a>}
-            </p>
-            <FormaImportarConvenios accion={p.accionImportar} />
-          </Disclosure>
-        </Tarjeta>
-      ) : (
-        <p className="rv-cv__pie">{t('op.solo_el_dueno_de_la_flota')}</p>
-      )}
+      ) : null}
+      {!p.puedeEditar ? <p className="rv-cv__pie">{t('op.solo_el_dueno_de_la_flota')}</p> : null}
       <p className="rv-cv__pie">{rico(t('op.las_instrucciones_que_ya_se_le'), { e0: (c) => <Link href={`/dashboard/agentes/conductores/sitios${p.sufijo}`} className="rv-cv__enlace">{c}</Link> })}</p>
     </EsqueletoTablaMaestra>
   );

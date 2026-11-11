@@ -471,6 +471,8 @@ export const resto = {
   'op.los_convenios_todavia_no_estan_disponibles': 'Los convenios todavía no están disponibles en tu cuenta; avísale a Likida y los habilita. Mientras tanto los viajes se despachan como siempre, sin instrucciones.',
   'op.no_se_pudieron_leer_los_convenios': 'No se pudieron leer los convenios ahora mismo. Intenta de nuevo en un momento.',
   'op.convenios_registrados': 'Convenios registrados',
+  'op.descargar_instrucciones_csv': 'Descargar instrucciones (CSV, sin dinero)',
+  'op.descargar_texto_para_tu_sistema': 'Descargar texto para tu sistema',
   'op.e0_descargar_instrucciones_csv_sin_dinero': '<e0>Descargar instrucciones (CSV, sin dinero)</e0><e1>Descargar texto para tu sistema</e1>',
   'op.descargar_completo_con_tarifa': 'Descargar completo (con tarifa)',
   'op.todavia_no_hay_convenios': 'Todavía no hay convenios',

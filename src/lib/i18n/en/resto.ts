@@ -473,6 +473,8 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.los_convenios_todavia_no_estan_disponibles': 'Agreements are not available on your account yet; let Likida know and they will enable them. Meanwhile trips are dispatched as usual, without instructions.',
   'op.no_se_pudieron_leer_los_convenios': 'The agreements could not be read right now. Try again in a moment.',
   'op.convenios_registrados': 'Registered agreements',
+  'op.descargar_instrucciones_csv': 'Download instructions (CSV, no money)',
+  'op.descargar_texto_para_tu_sistema': 'Download text for your system',
   'op.e0_descargar_instrucciones_csv_sin_dinero': '<e0>Download instructions (CSV, no money)</e0><e1>Download text for your system</e1>',
   'op.descargar_completo_con_tarifa': 'Download full (with rate)',
   'op.todavia_no_hay_convenios': 'No agreements yet',
