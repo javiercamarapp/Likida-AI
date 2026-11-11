@@ -1845,10 +1845,8 @@ export const dinero = {
   'timbrado.viajeId.timbrar.usoCfdi': 'Uso CFDI',
   'timbrado.viajeId.timbrar.verifiqueEnElPanel': 'Verifiqué en el panel de mi PAC que NO existe un CFDI de este viaje.',
   'timbrado.viajeId.timbrar.viElAcuseO': 'Vi el acuse o el estatus «Cancelado» de este CFDI.',
-<<<<<<< HEAD
   'contador.estimuloPeaje.operacionGuardar': 'guardar la declaración',
   'contador.timbrado.operacionGuardar': 'guardar el perfil de timbrado',
-=======
   'facturacion.forma.cancelar': 'Cancelar',
   'facturacion.portal.conciliar': 'Conciliar',
   'facturacion.portal.conciliarMonto': 'Conciliar {monto}',
@@ -1870,5 +1868,4 @@ export const dinero = {
   'facturacion.estadias.guardarPactoDeFlota': 'Guardar pacto de flota',
   'facturacion.estadias.guardarPactoDelCliente': 'Guardar pacto del cliente',
   'facturacion.estadias.elige': 'Elige…',
->>>>>>> w18/b
 } as const;

@@ -1845,10 +1845,8 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'timbrado.viajeId.timbrar.usoCfdi': 'CFDI use',
   'timbrado.viajeId.timbrar.verifiqueEnElPanel': 'I verified in my PAC\'s panel that a CFDI for this trip does NOT exist.',
   'timbrado.viajeId.timbrar.viElAcuseO': 'I saw the acknowledgment or the “Canceled” status of this CFDI.',
-<<<<<<< HEAD
   'contador.estimuloPeaje.operacionGuardar': 'save the declaration',
   'contador.timbrado.operacionGuardar': 'save the stamping profile',
-=======
   'facturacion.forma.cancelar': 'Cancel',
   'facturacion.portal.conciliar': 'Reconcile',
   'facturacion.portal.conciliarMonto': 'Reconcile {monto}',
@@ -1870,5 +1868,4 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'facturacion.estadias.guardarPactoDeFlota': 'Save fleet agreement',
   'facturacion.estadias.guardarPactoDelCliente': 'Save customer agreement',
   'facturacion.estadias.elige': 'Choose…',
->>>>>>> w18/b
 };
