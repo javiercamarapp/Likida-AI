@@ -25,6 +25,7 @@ import {
   CampoFecha, CampoSelect, CampoTexto, Disclosure, EstadoVacio, FormaConAviso, StatusChip, Tarjeta, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import { AccionFila } from './accion-fila';
+import '../estados.css';
 import './emergencias.css';
 import { getT } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
@@ -240,12 +241,13 @@ export default async function PaginaEmergencias({
       )}
 
       {leyoOk && (
-        <>
+        <div className="rv-em__pila">
           {/* ── Póliza ──────────────────────────────────────────────────── */}
           <Tarjeta titulo={t('emg.poliza.titulo')} info="emergencias.poliza"
-            estado={poliza ? 'ok' : 'vacio'} contenida iconoVacio={ShieldCheck}
-            mensaje={t('emg.poliza.vacio')}
-            detalle={t('emg.poliza.vacio.nota')}>
+            contenida>
+            {!poliza && (
+              <EstadoVacio contenido icono={ShieldCheck} titulo={t('emg.poliza.vacio')}>{t('emg.poliza.vacio.nota')}</EstadoVacio>
+            )}
             {poliza && (
               <p className="rv-em__nota">
                 {t('emg.poliza.resumen', {
@@ -267,9 +269,10 @@ export default async function PaginaEmergencias({
 
           {/* ── Proveedores ─────────────────────────────────────────────── */}
           <Tarjeta titulo={t('emg.prov.titulo')} info="emergencias.proveedores"
-            estado={proveedores.length === 0 ? 'vacio' : 'ok'} contenida iconoVacio={PhoneCall}
-            mensaje={t('emg.prov.vacio')}
-            detalle={t('emg.prov.vacio.nota')}>
+            contenida>
+            {proveedores.length === 0 && (
+              <EstadoVacio contenido icono={PhoneCall} titulo={t('emg.prov.vacio')}>{t('emg.prov.vacio.nota')}</EstadoVacio>
+            )}
             {proveedores.length > 0 && (
               <ul className="rv-em__lista">
                 {proveedores.map((p) => (
@@ -316,9 +319,10 @@ export default async function PaginaEmergencias({
 
           {/* ── Contactos de emergencia ─────────────────────────────────── */}
           <Tarjeta titulo={t('emg.cont.titulo')} info="emergencias.contactos"
-            estado={contactos.length === 0 ? 'vacio' : 'ok'} contenida iconoVacio={HeartHandshake}
-            mensaje={t('emg.cont.vacio')}
-            detalle={t('emg.cont.vacio.nota')}>
+            contenida>
+            {contactos.length === 0 && (
+              <EstadoVacio contenido icono={HeartHandshake} titulo={t('emg.cont.vacio')}>{t('emg.cont.vacio.nota')}</EstadoVacio>
+            )}
             {contactos.length > 0 && (
               <ul className="rv-em__lista">
                 {contactos.map((c) => (
@@ -363,7 +367,7 @@ export default async function PaginaEmergencias({
               </Disclosure>
             )}
           </Tarjeta>
-        </>
+        </div>
       )}
     </EsqueletoTablaMaestra>
   );
