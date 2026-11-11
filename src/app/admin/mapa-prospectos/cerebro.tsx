@@ -22,7 +22,7 @@ import {
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
-  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, desempacar,
+  COLOR_EMBUDO, TAMANOS, desempacar,
   esProspectoTerminal, limitesRampa, pasoDeRampa,
   type DatosMapa, type Giro, type ProspectoMapa, type ResumenProspectos, type Tamano, type TextosProspecto,
 } from '@/lib/admin/prospectos-mapa-client';
