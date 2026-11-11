@@ -211,7 +211,7 @@ export function VistaRapidaViaje({ folio, filas, href, aviso }: {
             (ruta y cliente) son el subtítulo; el resto, la cuadrícula. «Sin dato» sigue siendo «sin dato», nunca 0. */}
         <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={folio} tamano="m"
           descripcion={filas.slice(0, 2).map((f) => f.valor).filter(Boolean).join(' · ') || undefined}
-          pie={<div className="rv-fact__vr-pie"><BotonEnlace href={href} variante="primary" icono={<ArrowRight size={14} aria-hidden />}>{tr('facturacion.vista.verLiquidacion')}</BotonEnlace></div>}>
+          pie={<div className="rv-fact__vr-pie"><BotonEnlace href={href} variante="primary" icono={<ArrowRight size={14} strokeWidth={1.75} aria-hidden />}>{tr('facturacion.vista.verLiquidacion')}</BotonEnlace></div>}>
           <div className="rv-fact__pila">
             <dl className="rv-fact__vr">
               {filas.slice(2).map((f) => (
