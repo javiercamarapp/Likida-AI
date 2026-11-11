@@ -102,12 +102,16 @@ function rankingDe(viajes: ViajeEnMapa[], eje: 'destino' | 'origen'): Array<{ no
     .sort((a, b) => b.cuenta - a.cuenta || a.nombre.localeCompare(b.nombre)).slice(0, 8);
 }
 
-export function MapaVivo({ viajes, pines = [], sinUbicar = 0 }: {
+export function MapaVivo({ viajes, pines = [], sinUbicar = 0, sinSeguimiento = 0, nota }: {
   viajes: ViajeEnMapa[];
   /** Viajes en curso que NO se pudieron dibujar (origen o destino fuera del catálogo): el rótulo del vacío tiene que decirlo, no afirmar «sin viajes». */
   sinUbicar?: number;
   /** Posiciones medidas por unidad. Vacío = la flota no tiene GPS todavía. */
   pines?: PinUnidad[];
+  /** Viajes en curso que existen en la base pero el tablero del conductor aún no sigue (En vivo): el vacío dice «sin seguimiento», no «sin viajes». */
+  sinSeguimiento?: number;
+  /** Nota de método o procedencia: va DENTRO de la tarjeta, bajo el mapa (Rovaq), no suelta sobre el lienzo. */
+  nota?: import('react').ReactNode;
 }) {
   const [fijo, setFijo] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
@@ -129,7 +133,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0 }: {
   const vy = Math.min(Math.max(cy - alto / 2, 0), VIEWBOX.h - alto);
 
   return (
-    <Tarjeta titulo={t('mapa.card.titulo')} info="mapa.en_el_mapa"
+    <Tarjeta titulo={t('mapa.card.titulo')} info="mapa.en_el_mapa" className="rv-mp__tarjeta"
       acciones={(
         <span className="rv-mp__cab">
           {viajes.length > 0 ? (
@@ -222,7 +226,9 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0 }: {
             <div className="rv-mp__vacio">
               <p>{sinUbicar > 0
                 ? t('mapa.vacio.sin_ubicar', { n: numero(sinUbicar) })
-                : 'Sin viajes en curso ahora mismo — el próximo que despaches se dibuja aquí.'}</p>
+                : sinSeguimiento > 0
+                  ? t('mapa.vacio.sin_seguimiento', { n: numero(sinSeguimiento) })
+                  : 'Sin viajes en curso ahora mismo — el próximo que despaches se dibuja aquí.'}</p>
             </div>
           )}
 
@@ -269,8 +275,10 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0 }: {
           <div className="rv-mp__cards">
           {viajes.length === 0 ? (
             sinUbicar > 0
-              ? <EstadoVacio titulo={t('mapa.panel.sin_ubicar', { n: numero(sinUbicar) })}>{t('mapa.panel.sin_ubicar.nota')}</EstadoVacio>
-              : <EstadoVacio titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>
+              ? <EstadoVacio contenido titulo={t('mapa.panel.sin_ubicar', { n: numero(sinUbicar) })}>{t('mapa.panel.sin_ubicar.nota')}</EstadoVacio>
+              : sinSeguimiento > 0
+                ? <EstadoVacio contenido titulo={t('mapa.panel.sin_seguimiento', { n: numero(sinSeguimiento) })}>{t('mapa.panel.sin_seguimiento.nota')}</EstadoVacio>
+                : <EstadoVacio contenido titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>
           ) : visibles.map((v) => {
             const esActivo = v.id === activoId;
             return (
@@ -298,6 +306,7 @@ export function MapaVivo({ viajes, pines = [], sinUbicar = 0 }: {
           <p className="rv-mp__nota">{t('mapa.panel.nota')}</p>
         </aside>
       </div>
+      {nota ? <p className="rv-mp__nota rv-mp__nota--pie">{nota}</p> : null}
       {viajes.length > 0 ? (
         <Disclosure variante="linea" titulo={t('mapa.tabla.eq')}>
           <TablaBase<ViajeEnMapa> etiqueta={t('mapa.tabla.eq')} densa altoMaximo={false} tarjetaMovil filas={viajes} idFila={(v) => v.id}
