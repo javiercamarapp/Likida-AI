@@ -76,7 +76,7 @@ export function ConectoresDetalle({ conectores }: { conectores: Conector[] }) {
             ))}
           </ul>
           <section className="rv-cx__panel" aria-live="polite" aria-label={actual.nombre}>
-            <h3 className="rv-cx__panel-titulo"><span className="rv-cx__marca"><Marca id={actual.id} /></span>{actual.nombre}<InfoTip clave="conexiones.conector" /></h3>
+            <p className="rv-cx__panel-titulo"><span className="rv-cx__marca"><Marca id={actual.id} /></span>{actual.nombre}<InfoTip clave="conexiones.conector" /></p>
             <dl className="rv-cx__pares">
               <div><dt>{t('cfg.det.estado')}</dt><dd><StatusChip tono={rotulos[actual.estado].tono}>{rotulos[actual.estado].rotulo}</StatusChip></dd></div>
               <div><dt>{t('cfg.det.detalle')}</dt><dd>{actual.detalle}</dd></div>
