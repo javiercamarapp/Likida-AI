@@ -10,15 +10,18 @@ import './unidades.css';
 // de cliente. Un import de VALOR arrastraría la llave de servicio al bundle
 // del navegador; los `import type` se borran al compilar.
 import type { UnidadCruda } from '@/lib/likida/operacion';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
 
 function BotonGuardar({ etiqueta }: { etiqueta: string }) {
+  const { t } = useT('operacion', operacionEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />} className="rv-un__guardar">
-      {pending ? 'Guardando…' : etiqueta}
+      {pending ? t('un.f.guardando') : etiqueta}
     </Boton>
   );
 }
@@ -67,6 +70,7 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
    *  bloqueado (el servidor lo vuelve a exigir). En el ALTA se crea en su patio. */
   patioFijo?: boolean;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `${idPrefijo}-${n}`;
 
@@ -75,61 +79,61 @@ export function FormaUnidad({ accion, id = '', inicial, idPrefijo, proveedoresGp
       <input type="hidden" name="id" value={id} />
 
       <div className="rv-forma__rejilla">
-        <CampoTexto id={campo('eco')} name="numeroEconomico" etiqueta="Número económico" obligatorio maxLength={40}
+        <CampoTexto id={campo('eco')} name="numeroEconomico" etiqueta={t('un.f.eco')} obligatorio maxLength={40}
           defaultValue={inicial.numeroEconomico} placeholder="47, T-102…"
-          ayuda="Como la flota la llama en la radio y en el papel. No se puede repetir." />
-        <CampoTexto id={campo('placas')} name="placas" etiqueta="Placas" maxLength={20} defaultValue={inicial.placas} placeholder="Opcional" />
-        <CampoTexto id={campo('marca')} name="marca" etiqueta="Marca" maxLength={60} defaultValue={inicial.marca} placeholder="Kenworth" />
-        <CampoTexto id={campo('modelo')} name="modelo" etiqueta="Modelo" maxLength={60} defaultValue={inicial.modelo} placeholder="T680" />
+          ayuda={t('un.f.eco.ayuda')} />
+        <CampoTexto id={campo('placas')} name="placas" etiqueta={t('un.f.placas')} maxLength={20} defaultValue={inicial.placas} placeholder={t('un.f.opcional')} />
+        <CampoTexto id={campo('marca')} name="marca" etiqueta={t('un.f.marca')} maxLength={60} defaultValue={inicial.marca} placeholder={t('un.f.marca.ph')} />
+        <CampoTexto id={campo('modelo')} name="modelo" etiqueta={t('un.f.modelo')} maxLength={60} defaultValue={inicial.modelo} placeholder="T680" />
 
         {patios.length > 0 && (
           <>
-            <CampoSelect id={campo('terminalId')} name="terminalId" etiqueta="Patio" defaultValue={terminalId} disabled={patioFijo}
-              ayuda={patioFijo ? 'Solo quien administra la flota mueve una unidad de patio.' : 'Con el patio, su jefe de tráfico la ve y la corrige.'}>
-              <option value="">Sin patio</option>
+            <CampoSelect id={campo('terminalId')} name="terminalId" etiqueta={t('un.f.patio')} defaultValue={terminalId} disabled={patioFijo}
+              ayuda={patioFijo ? t('un.f.patio.soloadmin') : t('un.f.patio.ayuda')}>
+              <option value="">{t('un.f.sinpatio')}</option>
               {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
             </CampoSelect>
             {patioFijo && <input type="hidden" name="terminalId" value={terminalId} />}
           </>
         )}
 
-        <CampoTexto id={campo('anio')} name="anio" tipo="number" etiqueta="Año" min={1950} step={1}
-          defaultValue={inicial.anio} placeholder="Déjalo vacío si no lo sabes" />
+        <CampoTexto id={campo('anio')} name="anio" tipo="number" etiqueta={t('un.f.anio')} min={1950} step={1}
+          defaultValue={inicial.anio} placeholder={t('un.f.anio.ayuda')} />
       </div>
 
       {/* LAS TRES VIGENCIAS DE LEY: de otra naturaleza que lo de arriba (identifica al camión; esto decide si HOY puede salir a
           carretera). Vacío = sin capturar, y la unidad sale como "sin papeles" — nunca como vigente, que sería inventar que está en regla. */}
-      <Fieldset leyenda="Vigencias · opcionales" ayuda="Con las fechas capturadas, Likida avisa cuál papel vence primero, antes de que lo haga un inspector.">
+      <Fieldset leyenda={t('un.f.vigencias')} ayuda={t('un.f.vigencias.ayuda')}>
         <div className="rv-un__tres">
-          <CampoFecha id={campo('poliza')} name="polizaVence" etiqueta="Póliza vence" defaultValue={inicial.polizaVence} />
-          <CampoFecha id={campo('sict')} name="permisoSictVence" etiqueta="Permiso SICT vence" defaultValue={inicial.permisoSictVence} />
-          <CampoFecha id={campo('verif')} name="verificacionVence" etiqueta="Verificación vence" defaultValue={inicial.verificacionVence} />
+          <CampoFecha id={campo('poliza')} name="polizaVence" etiqueta={t('un.f.poliza')} defaultValue={inicial.polizaVence} />
+          <CampoFecha id={campo('sict')} name="permisoSictVence" etiqueta={t('un.f.sict')} defaultValue={inicial.permisoSictVence} />
+          <CampoFecha id={campo('verif')} name="verificacionVence" etiqueta={t('un.f.verificacion')} defaultValue={inicial.verificacionVence} />
         </div>
       </Fieldset>
 
       {/* EL AMARRE CON EL GPS (columnas de la 0176): el poller busca la unidad por (flota, proveedor, dispositivo); sin estos dos
           campos las posiciones del proveedor se cuentan como HUÉRFANAS y se descartan. Van juntos o no van (`validarAmarreGps`). */}
-      <Fieldset leyenda="Rastreo GPS · opcional"
+      <Fieldset leyenda={t('un.f.gps')}
         ayuda={gpsVistoEn
           // Se dice cuándo, no «conectado»: la marca la pone el poller al asentar una lectura de verdad.
-          ? `El GPS está entrando: la última posición de esta unidad llegó el ${gpsVistoEn.slice(0, 10)}.`
-          : 'Todavía no ha llegado una sola posición de esta unidad. El rastreo se actualiza cada 5 minutos y solo trae lo de las unidades ligadas.'}>
+          ? t('un.f.gps.entra', { fecha: gpsVistoEn.slice(0, 10) })
+          : t('un.f.gps.nada')}>
         <div className="rv-forma__rejilla">
-          <CampoSelect id={campo('gpsprov')} name="gpsProveedor" etiqueta="Proveedor de rastreo" defaultValue={inicial.gpsProveedor}
-            ayuda="El mismo que capturaste en Conexiones. Si no está aquí, es que su credencial todavía no se guardó.">
-            <option value="">Sin GPS conectado</option>
+          <CampoSelect id={campo('gpsprov')} name="gpsProveedor" etiqueta={t('un.f.proveedor')} defaultValue={inicial.gpsProveedor}
+            ayuda={t('un.f.proveedor.ayuda')}>
+            <option value="">{t('un.f.singps')}</option>
             {proveedoresGps.map((p) => (
               <option key={p.id} value={p.id}>{p.nombre}</option>
             ))}
           </CampoSelect>
-          <CampoTexto id={campo('gpsdev')} name="gpsDeviceId" etiqueta="Número de dispositivo" maxLength={200}
-            defaultValue={inicial.gpsDeviceId} placeholder="El id que le da tu proveedor"
-            ayuda="Es el id del vehículo en el sistema de tu proveedor, no las placas. Un dispositivo solo puede estar en un camión." />
+          <CampoTexto id={campo('gpsdev')} name="gpsDeviceId" etiqueta={t('un.f.dispositivo')} maxLength={200}
+            defaultValue={inicial.gpsDeviceId} placeholder={t('un.f.dispositivo.ph')}
+            ayuda={t('un.f.dispositivo.ayuda')} />
         </div>
       </Fieldset>
 
       <Aviso estado={estado} />
-      <BotonGuardar etiqueta={id ? 'Guardar cambios' : 'Dar de alta'} />
+      <BotonGuardar etiqueta={id ? t('un.f.guardar') : t('un.f.alta')} />
     </form>
   );
 }
