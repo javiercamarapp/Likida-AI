@@ -359,4 +359,9 @@ export const admin_dinero = {
   'techo_ia.k_cerca': 'Al 80 % o más hoy',
   'techo_ia.k_piso': 'Piso global',
   'techo_ia.k_piso_nota': 'Techo diario cuando la flota no declara ni tiene plan.',
+  'marketing.k_hooks': 'Hooks guardados',
+  'marketing.k_referencias': 'Personajes y lugares',
+  'marketing.k_pendientes': 'Piezas pendientes',
+  'marketing.k_publicadas': 'Piezas publicadas',
+  'marketing.k_etiqueta': 'Estudio de marketing',
 } as const;

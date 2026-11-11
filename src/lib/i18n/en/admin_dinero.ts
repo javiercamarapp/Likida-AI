@@ -361,4 +361,9 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'techo_ia.k_cerca': 'At 80% or more today',
   'techo_ia.k_piso': 'Global floor',
   'techo_ia.k_piso_nota': 'Daily cap when the fleet has neither a declared cap nor a plan.',
+  'marketing.k_hooks': 'Saved hooks',
+  'marketing.k_referencias': 'Characters and places',
+  'marketing.k_pendientes': 'Pending pieces',
+  'marketing.k_publicadas': 'Published pieces',
+  'marketing.k_etiqueta': 'Marketing studio',
 };
