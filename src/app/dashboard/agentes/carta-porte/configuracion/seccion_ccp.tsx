@@ -16,7 +16,7 @@ import '../carta-porte.css';
 import { CampoTexto, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 export interface AccionesCcp { fijar: AccionDoc; confirmar: AccionDoc }

@@ -16,7 +16,7 @@ import { guardarPrimerMes } from '@/lib/likida/carta_porte_docs/primer_mes';
 import { revisoresDeTexto } from '@/lib/likida/carta_porte_docs/primer_mes_texto';
 import { entradaDeTexto, esProbable, type CamposTexto } from './formato';
 import { getT } from '@/lib/i18n/servidor';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONFIGURACIÓN DE LA SALIDA AL SISTEMA DEL CLIENTE (T-A3-32).

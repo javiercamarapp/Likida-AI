@@ -3,7 +3,7 @@ import { CircleCheck, CircleAlert } from 'lucide-react';
 import '../conductores.css';
 import { AvisoCompacto, Icono, Tarjeta } from '@/app/ui-v2/componentes';
 import type { ResultadoPreflight } from '@/lib/likida/conductor/preflight_piloto';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════

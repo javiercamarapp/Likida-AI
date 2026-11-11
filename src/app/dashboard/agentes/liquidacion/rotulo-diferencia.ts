@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import type { TipoDiferencia } from '@/types/likida';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 export const rotuloDiferenciaTr = (tx: TAgentes = TR_ES.t): Record<TipoDiferencia, string> => ({
   sobre_politica: tx('rest.sobre_politica'),

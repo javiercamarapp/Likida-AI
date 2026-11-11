@@ -6,7 +6,7 @@ import type { ClienteRef, Tablero } from '@/lib/likida/carta_porte_docs/referenc
 import { REFERENCIA_MAX } from '@/lib/likida/carta_porte_docs/referencia_cliente';
 import { BotonEnvio, FormaAccion, type AccionDoc } from '../../../carta-porte/documentos/forma_accion';
 import { Aviso, BotonEnlace, CampoTexto, EstadoError, EstadoVacio, Icono, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 export interface VerComo { tenant?: string; rol?: string; vista?: string; /** La flota pintada, firmada (MX-002). */ flota?: string }
 

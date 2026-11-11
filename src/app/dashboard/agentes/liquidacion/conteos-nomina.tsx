@@ -3,7 +3,7 @@ import { contarParaNomina, type ConteosNomina } from '@/lib/likida/liquidacion_e
 import { Tarjeta } from '@/app/ui-v2/componentes';
 import './liquidacion.css';
 import { Ficha, VistaDesgloses } from './desgloses';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA VISTA DEL ROL `nomina` (0949) — Liquidaciones, SOLO CONTEOS.

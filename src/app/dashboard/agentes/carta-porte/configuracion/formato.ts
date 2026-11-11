@@ -4,7 +4,7 @@
 // coincidan.
 
 import type { ConfigSalida } from '@/lib/likida/carta_porte_docs/salida_config';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 export const rotuloArranque = (tx: TAgentes = TR_ES.t) => (tx('rest.no_definidos_por_el_cliente_valores'));
 export const ROTULO_ARRANQUE = rotuloArranque();

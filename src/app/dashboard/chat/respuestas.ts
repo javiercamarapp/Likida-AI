@@ -1,6 +1,6 @@
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
-import { ETIQUETA_TOOL_ADMIN, etiquetaToolAdmin } from './etiquetas-copiloto';
+import { etiquetaToolAdmin } from './etiquetas-copiloto';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // Lógica PURA del chat «Pregunta a tus datos» (L5: separada de la interfaz sin cambiar una coma de lo que responde). Aquí viven el

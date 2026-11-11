@@ -13,7 +13,7 @@ import {
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ════════════════════════════════════════════════════════════════════════════

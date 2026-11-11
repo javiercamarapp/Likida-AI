@@ -8,7 +8,7 @@ import {
   type ResultadoOp,
 } from '@/lib/likida/autofactura/control_emision_repo';
 import { getT } from '@/lib/i18n/servidor';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // Server actions del control de la emisión real (0542). A NIVEL DE MÓDULO: cada una vuelve a resolver sesión, rol
 // y flota desde la cookie y NUNCA acepta un tenant_id del cliente. La base vuelve a comprobar el rol (dueño /

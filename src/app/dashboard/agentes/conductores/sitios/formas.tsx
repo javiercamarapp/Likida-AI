@@ -8,7 +8,7 @@ import { Aviso as AvisoV2, Boton, CampoArchivo, CampoSelect, CampoTexto, CampoTe
 import { TIPOS_SITIO } from '@/lib/likida/conductor/sitios';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL EDITOR MÍNIMO DE SITIOS Y EL IMPORTADOR CSV (0385).

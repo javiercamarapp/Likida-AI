@@ -7,7 +7,7 @@ import './conductores.css';
 import { Boton, Campo, CampoSelect, CampoTexto, Disclosure, Icono } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DEL JEFE SOBRE UN HITO (0385) — capturar a mano, validar, marcar atendido.

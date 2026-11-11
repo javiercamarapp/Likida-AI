@@ -8,7 +8,7 @@ import '../conductores.css';
 import { Boton } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MANTENIMIENTO DE RUTAS (T-A5-50): las rutas autorizadas que llevan tiempo sin revisarse, de la más descuidada a la menos,

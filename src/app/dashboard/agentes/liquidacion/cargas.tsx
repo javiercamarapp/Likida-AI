@@ -1,7 +1,7 @@
 import { FileUp, Users } from 'lucide-react';
 import { AvisoCompacto, Boton, CampoArchivo, CampoTexto, Icono, Tarjeta } from '@/app/ui-v2/componentes';
 import './liquidacion.css';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════

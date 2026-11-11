@@ -11,7 +11,7 @@ import { confirmarYResponder } from '@/lib/likida/carta_porte_docs/ccp_respuesta
 import { depsCcp, fijarRespuestaActiva, leerPorId } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import type { ResultadoAccion } from '@/app/dashboard/carta-porte/documentos/forma_accion';
 import { getT } from '@/lib/i18n/servidor';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // A37-A3-01 · RESPONDER AL CLIENTE CON EL CCP TIMBRADO. Server actions a nivel de módulo: sesión, rol y flota se resuelven de
 // la cookie; JAMÁS se acepta un tenant_id del formulario. Ruta del área `administracion` (dueño/administrador): mandar un correo

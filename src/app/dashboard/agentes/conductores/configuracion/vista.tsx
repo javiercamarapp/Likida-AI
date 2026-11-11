@@ -10,7 +10,7 @@ import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 import '../conductores.css';
 import { MarcoPagina, AvisoCompacto, BotonEnlace, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
-import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento, tr = TR_ES }: {
   sufijo: string;
