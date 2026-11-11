@@ -1868,4 +1868,10 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'facturacion.estadias.guardarPactoDeFlota': 'Save fleet agreement',
   'facturacion.estadias.guardarPactoDelCliente': 'Save customer agreement',
   'facturacion.estadias.elige': 'Choose…',
+  'e26.timb_viaje': 'Trip',
+  'e26.timb_ruta': 'Route',
+  'e26.timb_timbre': 'Stamp',
+  'e26.timb_estado': 'Status',
+  'e26.timb_mercancias': 'Goods: {n}',
+  'e26.timb_unidad': 'Unit {u}',
 };

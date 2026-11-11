@@ -1868,4 +1868,10 @@ export const dinero = {
   'facturacion.estadias.guardarPactoDeFlota': 'Guardar pacto de flota',
   'facturacion.estadias.guardarPactoDelCliente': 'Guardar pacto del cliente',
   'facturacion.estadias.elige': 'Elige…',
+  'e26.timb_viaje': 'Viaje',
+  'e26.timb_ruta': 'Ruta',
+  'e26.timb_timbre': 'Timbre',
+  'e26.timb_estado': 'Estado',
+  'e26.timb_mercancias': 'Mercancías: {n}',
+  'e26.timb_unidad': 'Unidad {u}',
 } as const;
