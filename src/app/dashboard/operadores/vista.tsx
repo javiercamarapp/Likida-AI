@@ -261,7 +261,7 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
         <EstadoError reintentar>{t('op.error')}</EstadoError>
       ) : pag.filtrados === 0 && !hayFiltro ? (
         <EstadoVacio pantalla contenido icono={UserPlus} titulo={t('op.vacio.titulo')}
-          accion={puedeEditar ? { href: urlRegistro('/dashboard/operadores', sufijo, { abrir: 'alta' }), texto: t('op.vacio.alta') } : undefined}>
+          accion={puedeEditar ? <BotonEnlace tamano="sm" href={urlRegistro('/dashboard/operadores', sufijo, { abrir: 'alta' })}>{t('op.vacio.alta')}</BotonEnlace> : undefined}>
           {puedeEditar
             ? t('op.vacio.admin')
             : t('op.vacio.otro')}
