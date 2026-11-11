@@ -36,7 +36,7 @@ export function SeccionClasesCobro({ datos, tr = TR_ES }: { datos: ClasesCobroVi
           <label className="block">{ricoT(tx('rest.e0_clases_validas_del_utilitario_e0'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<input name="clases_utilitario" defaultValue={reglas.clasesUtilitario.join(', ')} maxLength={60} placeholder={tx('rest.vacio_no_se_evalua')}
               aria-label={tx('rest.clases_de_cobro_validas_para_unidades')}
               className="w-[220px] mt-0.5 rv-ctl" />
-            <span className="block text-[11px] mt-1 rv-pj-c-faint">{ricoT(tx('rest.por_ejemplo_e0_1_2_e0'), { e0: (c) => <span className="cifra-mono">{c}</span> })}</span>
+            <span className="block text-[11px] mt-1 rv-pj-c-faint">{ricoT(tx('rest.por_ejemplo_e0_1_2_e0'), { e0: (c) => <span className="rv-ag-num">{c}</span> })}</span>
           </label>
           <fieldset className="space-y-1.5">
             <legend className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{tx('rest.clase_1_2')}</legend>

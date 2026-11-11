@@ -371,7 +371,7 @@ export function ChatEntrevista({
         className="rv-ob__campo" data-anillo="envolvente"
       />
       <div className="rv-ob__barra">
-        <Boton variante="primary" tamano="sm" icono={<Icono icono={Search} tam={14} />} onClick={() => setRecomendar((v) => !v)}>{t('op.consulta')}</Boton>
+        <Boton variante="secondary" tamano="sm" aria-expanded={recomendar} icono={<Icono icono={Search} tam={14} />} onClick={() => setRecomendar((v) => !v)}>{t('op.consulta')}</Boton>
 
         <div className="rv-ob__herramientas">
           <input ref={inputCamara} type="file" accept="image/*" capture="environment" className="rv-ob__archivo"

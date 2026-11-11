@@ -1,5 +1,6 @@
 /* Notificaciones · mis reglas · solo lo que las piezas del sistema no traen. */
-.rv-reglas__forma { display: grid; gap: 12px; }
+.rv-reglas__forma { display: grid; gap: 12px; justify-items: start; }
+.rv-reglas__forma > .rv-campo { justify-self: stretch; width: 100%; }
 .rv-reglas__ejemplos { display: flex; flex-wrap: wrap; gap: 6px; }
 .rv-reglas__avisos { display: grid; gap: 8px; }
 .rv-reglas__puedo { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface); }

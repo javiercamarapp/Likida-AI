@@ -10,7 +10,7 @@ import { envHealth, faltantes } from '@/lib/env';
 import { Disclosure, EstadoError, Tarjeta } from '../../ui-v2/componentes';
 import { TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
-import { TarjetaRenglon, type RenglonSistema } from '../renglon-sistema';
+import { TablaRenglones, type RenglonSistema } from '../renglon-sistema';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -89,12 +89,13 @@ export default async function IntegracionesPage() {
       apoyo={t('integraciones.los_servicios_reales_de_los_que')}
       cifras={[{ etiqueta: t('integraciones.conectores'), valor: conectores.length, formato: 'entero', tono: conectores.some((c) => c.tono === 'bad') ? 'bad' : conectores.some((c) => c.tono === 'warn') ? 'warn' : 'ok' }]}
     >
-      <section className="adm-sis-bloque" aria-labelledby="conectores">
-        <h2 className="adm-sis-titulo" id="conectores">{t('integraciones.conectores')}</h2>
-        <div className="adm-sis-rejilla">
-          {conectores.map((c) => <TarjetaRenglon key={c.titulo} r={c} />)}
-        </div>
-      </section>
+      <Tarjeta titulo={t('integraciones.conectores')}>
+        <TablaRenglones
+          renglones={conectores} etiqueta={t('integraciones.conectores')}
+          columnas={{ servicio: t('salud_sistema.col_servicio'), estado: t('salud_sistema.estado'), significa: t('salud_sistema.col_significa'), enlace: t('salud_sistema.col_enlace') }}
+          rotuloArreglo={(n) => t('salud_sistema.como_arreglar_n', { n })}
+        />
+      </Tarjeta>
 
       {r === null ? (
         <EstadoError reintentar>{t('integraciones.no_se_pudo_leer_el_gasto')}</EstadoError>

@@ -42,7 +42,7 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
 
   return (
     <div className="rv-pj-control">
-      <form action={accion} className="rv-pj-forma">
+      <form action={accion} className="rv-pj-forma rv-pj-forma--rejilla">
         <CampoArchivo etiqueta={tx('rest.desglose_del_proveedor_de_peaje_excel')} name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)} />
         <CampoTexto etiqueta={tx('rest.proveedor_del_desglose_opcional')} name="proveedor" placeholder={tx('rest.proveedor_iave_pase_televia')} />
@@ -55,9 +55,9 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
       {estado?.aviso && <p className="rv-pj-sub" role="status">{estado.aviso}</p>}
       {r && (
         <div className="rv-pj-acuse" role="status">
-          <p className="rv-pj-sub">{tx('rest.desglose_importado')}<span className="cifra-mono">{r.totalLineas}</span>{' '}{tx('rest.lineas_y_cruzado')}{' '}<strong className="cifra-mono">{r.cuadra}</strong> cuadran
-            {r.noCuadra > 0 && <> · <span className="cifra-mono">{r.noCuadra}</span>{' '}{tx('rest.con_discrepancia_2')}</>}
-            {r.sinContraparte > 0 && <> · <span className="cifra-mono">{r.sinContraparte}</span>{' '}{tx('rest.sin_contraparte')}</>}.
+          <p className="rv-pj-sub">{tx('rest.desglose_importado')}<span className="rv-ag-num">{r.totalLineas}</span>{' '}{tx('rest.lineas_y_cruzado')}{' '}<strong className="rv-ag-num">{r.cuadra}</strong> cuadran
+            {r.noCuadra > 0 && <> · <span className="rv-ag-num">{r.noCuadra}</span>{' '}{tx('rest.con_discrepancia_2')}</>}
+            {r.sinContraparte > 0 && <> · <span className="rv-ag-num">{r.sinContraparte}</span>{' '}{tx('rest.sin_contraparte')}</>}.
           </p>
           {r.avisos.map((a) => (
             <p key={a} className="rv-pj-nota">{a}</p>
@@ -72,7 +72,7 @@ function BotonImportar() {
   const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={FileSpreadsheet} />}>
+    <Boton type="submit" variante="primary" tamano="sm" loading={pending} icono={<Icono icono={FileSpreadsheet} tam={14} />}>
       {pending ? 'Cruzando…' : tx('rest.importar_y_cruzar')}
     </Boton>
   );

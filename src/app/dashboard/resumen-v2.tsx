@@ -10,6 +10,10 @@ import { ATAJOS_RESUMEN, coberturaDe, filasAtencion, leerDatosResumen, type Rang
 import { FiltrosResumen, ListaAtencion, SiguienteAccion } from './resumen-cliente';
 import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo } from './resumen-tarjetas';
 import { getT } from '@/lib/i18n/servidor';
+import { PERIODO_RANGO } from './resumen-modelo';
+import { cifrasUniformes } from './formato';
+import './estados.css';
+import './resumen.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RESUMEN v2 DEL DUEÑO, página CANÓNICA del contrato visual (MarcoPagina + FilaTarjetas + TiraCifras; 0 style=, 0 .card):
@@ -63,7 +67,15 @@ export async function ResumenV2({
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
       titulo={t('op.resumen')}
       apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? t('op.tus_cinco_agentes_de_un_vistazo_3') : t('op.tu_flota_de_un_vistazo')}`}
-      acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
+      acciones={<Chip className="rv-res__fecha">{fechaMx(diaMx, idioma)}</Chip>}
+      etiquetaProcedencia={t('op.res.corte', { fecha: fechaMx(diaMx, idioma) })}
+      procedencia={(
+        <>
+          <li>{t('op.res.corte', { fecha: fechaMx(diaMx, idioma) })}</li>
+          <li>{t('op.res.periodo', { periodo: PERIODO_RANGO[rango] })}</li>
+          {cob.ok < cob.total ? <li>{t('op.res.sin_lectura', { n: cob.total - cob.ok, total: cob.total })}</li> : null}
+        </>
+      )}
       filtros={<FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
       avisos={(
         <>
@@ -73,22 +85,22 @@ export async function ResumenV2({
           )}
         </>
       )}
-      cifras={itemsKpi(d, sufijo, puede, t)}
+      cifras={cifrasUniformes(itemsKpi(d, sufijo, puede, t))}
       etiquetaCifras={t('op.tu_flota_en_likida')}
     >
-      <FilaTarjetas variante="8-4">
-        <TarjetaCierres t={t} d={d} />
+      <FilaTarjetas variante="4-4-4">
         <Tarjeta titulo={t('op.requiere_tu_atencion')} info="resumen.requiere_atencion">
           <ListaAtencion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
         </Tarjeta>
-      </FilaTarjetas>
-
-      <FilaTarjetas variante="4-4-4" llena>
         <TarjetaDiferencias t={t} d={d} />
-        <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
         <Tarjeta titulo={t('op.siguiente_mejor_accion')} info="resumen.siguiente_mejor_accion">
           <SiguienteAccion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} atajos={atajos} />
         </Tarjeta>
+      </FilaTarjetas>
+
+      <FilaTarjetas variante="6-6" llena>
+        <TarjetaCierres t={t} d={d} />
+        <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
       </FilaTarjetas>
     </EsqueletoPortada>
   );

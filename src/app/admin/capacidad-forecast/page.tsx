@@ -7,7 +7,8 @@ import { numero } from '@/lib/formato';
 import { usd } from '@/lib/utils';
 import { proyectarCosto } from './proyeccion';
 import { EstadoVacio, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
-import { AreaMini } from '../../ui-v2/graficas';
+import { AreaMini, type PropsCifra } from '../../ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -34,10 +35,24 @@ export default async function CapacidadForecastPage() {
   let unidades: Awaited<ReturnType<typeof getUnidadesMedidas>> | null = null;
   try { unidades = await getUnidadesMedidas(ahoraMs()); } catch { unidades = null; }
 
-  const cifras = proyeccion === null ? undefined : [
-    { etiqueta: tp('capacidad_forecast.costo_diario_promedio', proyeccion.diasVentana), valor: usd(proyeccion.promedioDiario) },
-    { etiqueta: t('capacidad_forecast.proyeccion_a_30_dias'), valor: usd(proyeccion.proyeccionMensual) },
-  ];
+  // La tira se pinta siempre con cuatro celdas (Rovaq): lo que no tiene base dice «sin dato» y por qué, nunca 0.
+  const sinProy = { valor: null, estado: 'vacio' as const, mensaje: enVentana === null ? t('capacidad_forecast.sin_lectura') : t('capacidad_forecast.sin_datos') };
+  const cifras: PropsCifra[] = uniformes([
+    proyeccion === null
+      ? { etiqueta: t('capacidad_forecast.costo_diario_promedio_corto'), ...sinProy }
+      : { etiqueta: tp('capacidad_forecast.costo_diario_promedio', proyeccion.diasVentana), valor: usd(proyeccion.promedioDiario) },
+    proyeccion === null
+      ? { etiqueta: t('capacidad_forecast.proyeccion_a_30_dias'), ...sinProy }
+      : { etiqueta: t('capacidad_forecast.proyeccion_a_30_dias'), valor: usd(proyeccion.proyeccionMensual) },
+    unidades === null
+      ? { etiqueta: t('capacidad_forecast.costo_ia_por_viaje'), valor: null, estado: 'error' as const, mensaje: t('capacidad_forecast.no_se_pudieron_leer_las_unidades') }
+      : unidades.costoIaPorViaje === null
+        ? { etiqueta: t('capacidad_forecast.costo_ia_por_viaje'), valor: null, estado: 'vacio' as const, mensaje: t('capacidad_forecast.sin_base_medida') }
+        : { etiqueta: t('capacidad_forecast.costo_ia_por_viaje'), valor: usd(unidades.costoIaPorViaje) },
+    unidades === null
+      ? { etiqueta: t('capacidad_forecast.viajes_en_la_muestra'), valor: null, estado: 'error' as const, mensaje: t('capacidad_forecast.no_se_pudieron_leer_las_unidades') }
+      : { etiqueta: t('capacidad_forecast.viajes_en_la_muestra'), valor: unidades.muestraViajes, formato: 'entero' as const },
+  ]);
 
   return (
     <EsqueletoPanelCifras

@@ -2,7 +2,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Fuel, Route as RouteIcon, Receipt, Copy, FileStack, CircleCheck } from 'lucide-react';
+import { Fuel, Route as RouteIcon, Receipt, Copy, FileStack } from 'lucide-react';
 import {
   getGastoPorConcepto, getAcreditables, detectarAnomalias, getDocumentos, getConciliacionConsolidado,
   getLineasPorConciliar,
@@ -12,7 +12,7 @@ import {
 import { resolverLineaAMano, type ResolucionLineaManual } from '@/lib/likida/intake/consolidado';
 import { etiquetaConcepto } from '@/lib/likida/cuadre/engine';
 import { mxn } from '@/lib/utils';
-import { numero, hoyMx } from '@/lib/formato';
+import { numero, hoyMx, fechaCorta } from '@/lib/formato';
 import { ventanaLitrosElegibles } from '@/lib/likida/fiscal';
 import { ahoraMs } from '@/lib/saludo';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -22,9 +22,9 @@ import { sufijoTenant, querystringCompleto } from '../sufijo';
 import { LineasPorConciliar, NINGUNO_VALOR } from './vista-consolidado';
 import { calcularSinCfdi } from './sin-cfdi';
 import type { Metadata } from 'next';
-import { Disclosure, EstadoError, Icono, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { EstadoError, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
-import { BarList, Cifra, DonaMini, TiraCifras } from '@/app/ui-v2/graficas';
+import { BarList, Columnas, DonaMini, type ColumnaDato, type PropsCifra } from '@/app/ui-v2/graficas';
 import './combustible.css';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 export async function generateMetadata(): Promise<Metadata> {
@@ -192,6 +192,18 @@ export default async function CombustibleCasetasPage({
   const sinCfdiEstado = calcularSinCfdi(docs);
   const anomaliasCombustible = anomalias?.filter((a) => /diesel|caseta/i.test(a.detalle)) ?? [];
 
+  // Los últimos comprobantes de combustible y casetas (la ventana de `getDocumentos`, declarada en el título): sirven para las barras por mes y la tabla.
+  const cargas = (docs ?? []).filter((d) => d.concepto === 'diesel' || d.concepto === 'caseta');
+  const porMes = new Map<string, number>();
+  for (const d of cargas) if (d.fecha) porMes.set(d.fecha.slice(0, 7), (porMes.get(d.fecha.slice(0, 7)) ?? 0) + d.monto);
+  const meses: ColumnaDato[] = [...porMes.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([ym, valor]) => ({ etiqueta: fechaCorta(`${ym}-01`), valor }));
+  const colCargas: ColumnaBase<DocumentoRow>[] = [
+    { id: 'fecha', titulo: tr('combustibleCasetas.panel.colFecha'), celda: (d) => (d.fecha ? fechaCorta(d.fecha) : '—') },
+    { id: 'concepto', titulo: tr('combustibleCasetas.panel.colConcepto'), principal: true, celda: (d) => etiquetaConcepto(d.concepto) },
+    { id: 'folio', titulo: tr('combustibleCasetas.panel.colFolio'), celda: (d) => d.folio ?? '—' },
+    { id: 'cfdi', titulo: tr('combustibleCasetas.panel.colCfdi'), celda: (d) => (d.cfdiUuid ? <StatusChip tono="ok">{tr('combustibleCasetas.panel.conCfdi')}</StatusChip> : <StatusChip tono="warn">{tr('combustibleCasetas.panel.sinCfdi')}</StatusChip>) },
+    { id: 'monto', titulo: tr('combustibleCasetas.panel.colMonto'), alinear: 'der', celda: (d) => mxn(d.monto) },
+  ];
   const itemsConcepto = (porConcepto ?? []).map((c) => ({ clave: c.concepto, etiqueta: etiquetaConcepto(c.concepto), valor: c.total }));
 
   return (
@@ -208,7 +220,7 @@ export default async function CombustibleCasetasPage({
       </>}
       etiquetaCifras={tr('combustibleCasetas.page.gastosDeLaFlota')}
       selloCifras={selloHoy(tr('combustibleCasetas.page.gastosDeLaFlota'))}
-      cifras={porConcepto === null ? undefined : [
+      cifras={porConcepto === null ? undefined : ([
         {
           icono: <Icono icono={Fuel} />,
           // FE-9: `getGastoPorConcepto` no tiene ventana (histórico completo) — junto al tile vecino, que sí declara la suya ("últimos 100 comprobantes"), esto se leía como "del mes".
@@ -238,24 +250,37 @@ export default async function CombustibleCasetasPage({
               : {}),
           nota: sinCfdiEstado.estado === 'ok' ? tr('combustibleCasetas.page.deSinFacturaEntre', { sinCfdi: sinCfdiEstado.sinCfdi, total: sinCfdiEstado.total, v: numero(VENTANA_DOCUMENTOS) }) : undefined,
         },
-      ]}
+      ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }))}
+      variante="8-4"
       graficas={porConcepto === null ? undefined : porConcepto.length > 1 ? [
-        <Tarjeta key="b" titulo={tr('combustibleCasetas.page.gastoPorConcepto')}>
-          <BarList etiqueta={tr('combustibleCasetas.page.gastoPorConcepto')} items={itemsConcepto} formato={mxn} />
-        </Tarjeta>,
+        meses.length > 1 ? (
+          <Tarjeta key="b" titulo={tr('combustibleCasetas.panel.gastoPorMes')} info="combustible_casetas.gastado_combustible">
+            <Columnas etiqueta={tr('combustibleCasetas.panel.gastoPorMes')} datos={meses} formato="mxn" matiz={2} variacion={false} />
+            <p className="rv-comb__nota">{tr('combustibleCasetas.panel.ventanaNota', { n: numero(VENTANA_DOCUMENTOS) })}</p>
+          </Tarjeta>
+        ) : (
+          <Tarjeta key="b" titulo={tr('combustibleCasetas.page.gastoPorConcepto')}>
+            <BarList etiqueta={tr('combustibleCasetas.page.gastoPorConcepto')} items={itemsConcepto} formato={mxn} />
+          </Tarjeta>
+        ),
         <Tarjeta key="d" titulo={tr('combustibleCasetas.page.repartoDelGasto')}>
           <DonaMini etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
         </Tarjeta>,
       ] : [
         <Tarjeta key="v" titulo={tr('combustibleCasetas.page.gastoPorConcepto')} estado="vacio" mensaje={tr('combustibleCasetas.page.faltaMasDeUn')} detalle={tr('combustibleCasetas.page.haceFaltaMasDe')} iconoVacio={Fuel} contenida />,
       ]}
+      saberes={{
+        seSabe: { titulo: tr('combustibleCasetas.panel.saberSiTitulo'), items: [tr('combustibleCasetas.panel.saberSi1'), tr('combustibleCasetas.panel.saberSi2'), tr('combustibleCasetas.panel.saberSi3')] },
+        noSeSabe: { titulo: tr('combustibleCasetas.page.queNoMideEsta'), items: [tr('combustibleCasetas.page.elRendimientoEnKm'), tr('combustibleCasetas.page.elCruceDelEstado')] },
+      }}
     >
       {porConcepto === null && <EstadoError reintentar>{tr('combustibleCasetas.page.noSePudoCargar')}</EstadoError>}
 
+      <FilaTarjetas variante="6-6">
       <Tarjeta titulo={tr('combustibleCasetas.page.posibleCargaRepetida')} info="combustible_casetas.carga_repetida"
         estado={anomalias === null ? 'error' : anomaliasCombustible.length === 0 ? 'vacio' : 'ok'}
         mensaje={anomalias === null ? tr('combustibleCasetas.page.noSePudoRevisar') : tr('combustibleCasetas.page.sinCargasRepetidas')}
-        detalle={tr('combustibleCasetas.page.ningunComprobanteDeCombustib')} iconoVacio={Copy} contenida>
+        detalle={tr('combustibleCasetas.page.ningunComprobanteDeCombustib')} iconoVacio={Copy}>
         <ul className="rv-comb__lista">
           {anomaliasCombustible.map((a, i) => (
             <li key={i} className="rv-comb__anomalia">
@@ -275,47 +300,45 @@ export default async function CombustibleCasetasPage({
       {!conciliacion.ok ? (
         <Tarjeta titulo={tr('combustibleCasetas.page.cfdiConsolidadoMonederoY')} info="combustible_casetas.cfdi_consolidado" estado="error" mensaje={tr('combustibleCasetas.page.noSePudoCargar2')} />
       ) : conciliacion.datos === null ? (
-        <Tarjeta titulo={tr('combustibleCasetas.page.cfdiConsolidadoMonederoY')} info="combustible_casetas.cfdi_consolidado" estado="vacio" mensaje={tr('combustibleCasetas.page.sinCfdiConsolidadoTodavia')} iconoVacio={FileStack} contenida
+        <Tarjeta titulo={tr('combustibleCasetas.page.cfdiConsolidadoMonederoY')} info="combustible_casetas.cfdi_consolidado" estado="vacio" mensaje={tr('combustibleCasetas.page.sinCfdiConsolidadoTodavia')} iconoVacio={FileStack}
           detalle={tr('combustibleCasetas.page.todaviaNoLlegaNingun')} />
       ) : (
-        <>
-          <TiraCifras sello={selloHoy(tr('combustibleCasetas.page.gastosDeLaFlota'))}>
-            <Cifra icono={<Icono icono={FileStack} />}
-              etiqueta={tr('combustibleCasetas.page.lineasLigadasAutomaticamente')} info="combustible_casetas.lineas_ligadas" valor={conciliacion.datos.conciliadas} formato="numero"
-              nota={tr(conciliacion.datos.cfdis === 1 ? 'combustibleCasetas.page.cfdiRecibidoUno' : 'combustibleCasetas.page.cfdiRecibidosVarios', { n: conciliacion.datos.cfdis })} />
-            <Cifra icono={<Icono icono={Receipt} />}
-              etiqueta={tr('combustibleCasetas.page.porRevisarAMano')} info="combustible_casetas.por_revisar" valor={conciliacion.datos.porConciliar} formato="numero"
-              nota={conciliacion.datos.porConciliar === 0 ? tr('combustibleCasetas.page.todoLoQueLlego') : tr('combustibleCasetas.page.eligeElCandidatoCorrecto')} />
-            <Cifra icono={<Icono icono={CircleCheck} />}
-              etiqueta={tr('combustibleCasetas.page.revisadasSinGastoQue')} info="combustible_casetas.sin_gasto" valor={conciliacion.datos.sinMatch} formato="numero"
-              nota={tr('combustibleCasetas.page.unHumanoYaLas')} />
-          </TiraCifras>
+        <Tarjeta titulo={tr('combustibleCasetas.page.cfdiConsolidadoMonederoY')} info="combustible_casetas.cfdi_consolidado">
+          <dl className="rv-comb__datos">
+            <div><dt>{tr('combustibleCasetas.page.lineasLigadasAutomaticamente')}</dt><dd>{numero(conciliacion.datos.conciliadas)}</dd>
+              <dd className="rv-comb__tenue">{tr(conciliacion.datos.cfdis === 1 ? 'combustibleCasetas.page.cfdiRecibidoUno' : 'combustibleCasetas.page.cfdiRecibidosVarios', { n: conciliacion.datos.cfdis })}</dd></div>
+            <div><dt>{tr('combustibleCasetas.page.porRevisarAMano')}</dt><dd>{numero(conciliacion.datos.porConciliar)}</dd>
+              <dd className="rv-comb__tenue">{conciliacion.datos.porConciliar === 0 ? tr('combustibleCasetas.page.todoLoQueLlego') : tr('combustibleCasetas.page.eligeElCandidatoCorrecto')}</dd></div>
+            <div><dt>{tr('combustibleCasetas.page.revisadasSinGastoQue')}</dt><dd>{numero(conciliacion.datos.sinMatch)}</dd>
+              <dd className="rv-comb__tenue">{tr('combustibleCasetas.page.unHumanoYaLas')}</dd></div>
+          </dl>
+        </Tarjeta>
+      )}
+      </FilaTarjetas>
 
-          {conciliacion.datos.porConciliar > 0 && (
-            lineasPendientes === null ? (
-              <EstadoError reintentar>
-                {tr('combustibleCasetas.page.noSePudoCargar3')}
-              </EstadoError>
-            ) : (
-              <Tarjeta titulo={tr('combustibleCasetas.page.lineasPorResolverA')} info="combustible_casetas.por_revisar">
-                <p className="rv-comb__nota">
-                  {tr('combustibleCasetas.page.unaLineaQuedaAqui')}
-                </p>
-                <LineasPorConciliar tr={tr} lineas={lineasPendientes} accion={accionResolverLinea} />
-              </Tarjeta>
-            )
-          )}
-        </>
+      {conciliacion.ok && conciliacion.datos !== null && conciliacion.datos.porConciliar > 0 && (
+        lineasPendientes === null ? (
+          <EstadoError reintentar>
+            {tr('combustibleCasetas.page.noSePudoCargar3')}
+          </EstadoError>
+        ) : (
+          <Tarjeta titulo={tr('combustibleCasetas.page.lineasPorResolverA')} info="combustible_casetas.por_revisar">
+            <p className="rv-comb__nota">
+              {tr('combustibleCasetas.page.unaLineaQuedaAqui')}
+            </p>
+            <LineasPorConciliar tr={tr} lineas={lineasPendientes} accion={accionResolverLinea} />
+          </Tarjeta>
+        )
       )}
 
-      <Disclosure titulo={tr('combustibleCasetas.page.queNoMideEsta')} variante="tarjeta">
-        <p className="rv-comb__nota">
-          {tr('combustibleCasetas.page.elRendimientoEnKm')}
-        </p>
-        <p className="rv-comb__nota">
-          {tr('combustibleCasetas.page.elCruceDelEstado')}
-        </p>
-      </Disclosure>
+      {/* Cargas y casetas: los últimos comprobantes leídos (la ventana se declara en el título), con su CFDI. */}
+      <Tarjeta titulo={tr('combustibleCasetas.panel.tablaCargas', { n: numero(VENTANA_DOCUMENTOS) })}
+        estado={docs === null ? 'error' : cargas.length === 0 ? 'vacio' : 'ok'}
+        mensaje={docs === null ? tr('combustibleCasetas.page.noSePudoLeer2') : tr('combustibleCasetas.page.sinComprobantesDeEstos')} reintentar>
+        <TablaBase<DocumentoRow> etiqueta={tr('combustibleCasetas.panel.tablaCargas', { n: numero(VENTANA_DOCUMENTOS) })} columnas={colCargas}
+          filas={cargas.slice(0, 15)} idFila={(d) => d.id} tarjetaMovil />
+        {cargas.length > 15 && <p className="rv-comb__nota">{tr('combustibleCasetas.panel.pie', { a: '15', b: numero(cargas.length) })}</p>}
+      </Tarjeta>
     </EsqueletoPanelCifras>
   );
 }

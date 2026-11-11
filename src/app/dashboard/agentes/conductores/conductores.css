@@ -69,3 +69,24 @@
 .rv-cd__fin[data-tono="warn"] { color: var(--warn); }
 .rv-cd__icono-linea .rv-cd__sin-color { color: var(--ink); }
 .rv-cd__romper { overflow-wrap: anywhere; }
+
+/* «¿Está lista la flota?» como tarjetas de paso (Rovaq `.setup-paso`): radio 12, padding 14/16, chip de contorno «Para revisar / Hecho». */
+.rv-cd__pasos { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.rv-cd__paso { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.rv-cd__paso[data-estado="falta"] { border-color: var(--line-strong, var(--line)); }
+.rv-cd__paso-cab { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.rv-cd__paso-titulo { margin: 0; font-size: var(--t-card, 14px); font-weight: 600; color: var(--ink); line-height: 1.3; }
+.rv-cd__paso-datos { display: grid; gap: 4px; margin: 0; font-size: var(--t-small, 12px); }
+.rv-cd__paso-datos > div { display: grid; grid-template-columns: 9.5rem minmax(0, 1fr); gap: 8px; }
+.rv-cd__paso-datos dt { color: var(--muted); font-weight: 500; }
+.rv-cd__paso-datos dd { margin: 0; color: var(--ink); }
+@media (max-width: 599.98px) { .rv-cd__paso-datos > div { grid-template-columns: minmax(0, 1fr); gap: 0; } }
+
+/* Cifras de tabla y de texto: numerales tabulares en la tipografía de la interfaz (Rovaq usa monoespaciada solo en los rótulos del menú). */
+.rv-ag-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+
+/* Rovaq: los bloques de una tabla maestra se apilan a 12 px (el contenedor no los separaba y las tarjetas quedaban pegadas) y el vacío de una tarjeta
+   es la caja punteada de `ac-vacio` (1 px, radio 8, padding 20/14), no un hueco alto sin borde. Se repite en el CSS de cada agente para que lo
+   cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
+[data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
+[data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }

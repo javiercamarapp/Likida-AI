@@ -557,3 +557,26 @@ describe('ayudaExcepcion: operador sin alta según su motivo (CT-A12-09)', () =>
     expect(ayudaExcepcion('sin_poliza')).toContain('No se enviará hasta tener póliza');
   });
 });
+
+describe('decisión 3: la póliza provisional se ve y exige revisión humana', () => {
+  it('la fila retenida por póliza provisional lleva su marca bajo la bitácora y el estado de cada destinatario', async () => {
+    const prov = fila({ destinos: destinosDe([], 'póliza provisional: pendiente de revisión') });
+    const html = await pintar(ok([prov]));
+    expect(html).toContain('rv-liq-marca');
+    expect(html).toContain('Póliza provisional');
+    expect(html).toContain('Retenido: póliza provisional');
+    // Una fila normal no lleva la marca.
+    expect(await pintar(ok([fila()]))).not.toContain('rv-liq-marca');
+  });
+
+  it('la tira cuenta cuántos retenidos son póliza provisional; sin ese conteo no inventa el número', async () => {
+    const con = await pintar(ok([fila()], { fichas: { ...FICHAS, retenidos: 3, polizaProvisional: 2 } }));
+    expect(con).toContain('2 con póliza provisional: revisión humana antes de enviar');
+    const sin = await pintar(ok([fila()], { fichas: { ...FICHAS, retenidos: 3, polizaProvisional: null } }));
+    expect(sin).not.toContain('con póliza provisional: revisión humana');
+  });
+
+  it('la regla se dice siempre en la tarjeta: nada sale sin revisión humana', async () => {
+    expect(await pintar(ok([]))).toContain('nada sale sin revisión humana');
+  });
+});

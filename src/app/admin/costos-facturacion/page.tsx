@@ -8,18 +8,20 @@ import { mensajeParaPantalla } from '@/lib/likida/administracion';
 import { getPlanes, guardarPriceDePlan, listarSuscripcionesVivas, type Plan, type Suscripcion } from '@/lib/saas/suscripcion';
 import { stripeConfigurado, modoStripe, webhookConfigurado } from '@/lib/saas/stripe';
 import {
-  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, tenantDeFacturaSaas, type FacturaPorCobrar,
+  datosBancarios, emitirMensualidad, conciliar, timbrarFactura, getPorCobrarTodas, tenantDeFacturaSaas, listarFacturasSaas, type FacturaPorCobrar, type FacturaSaasFila,
 } from '@/lib/saas/transferencia';
 import { etiquetaIva } from '@/lib/saas/iva';
 import { facturapiConfigurado, modoFacturapi } from '@/lib/saas/facturapi';
 import { logger } from '@/lib/logger';
 import { Aviso, BarraFiltros, CampoSelect, CampoTexto, Disclosure, EstadoError, FilaTarjetas, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { Columnas, DonaMini, type PropsCifra } from '@/app/ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { accionGestionarPlan } from '../flotas/acciones-plan';
 import { FormaEmitirMensualidad } from './forma-emitir';
 import '../dinero.css';
+import '../resumen.css';
 
 import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
@@ -220,6 +222,10 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   let totalPorCobrar = 0;
   try { const lectura = await getPorCobrarTodas(); porCobrar = lectura.facturas; totalPorCobrar = lectura.total; } catch (e) { logger.error('admin.por_cobrar', { err: e instanceof Error ? e.message : String(e) }); }
   const recortada = porCobrar !== null && totalPorCobrar > porCobrar.length;
+  // Historia de lo facturado (barras por mes y dona por estado). `null` = no se pudo leer, y la gráfica lo dice; una lista recortada
+  // por el tope no se dibuja como completa.
+  let historial: { filas: FacturaSaasFila[]; truncado: boolean } | null = null;
+  try { const h = await listarFacturasSaas({ limite: 500 }); historial = { filas: h.filas, truncado: h.truncado }; } catch (e) { logger.error('admin.facturas_historial', { err: e instanceof Error ? e.message : String(e) }); }
 
   const porTenant = new Map((suscripciones ?? []).map((s) => [s.tenantId, s]));
   const filasFlota = (flotas ?? []).map((f) => ({ ...f, suscripcion: porTenant.get(f.id) ?? null }))
@@ -228,7 +234,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
   const contables = planes ? planes.filter((p) => p.stripePriceId && p.precioIvaIncluido !== null).length : null;
   const sumaPorCobrar = porCobrar && !recortada ? porCobrar.reduce((s, f) => s + f.monto, 0) : null;
 
-  const cifras: PropsCifra[] = [
+  const cifras: PropsCifra[] = uniformes([
     porCobrar === null
       ? { etiqueta: t('costos_facturacion.por_cobrar'), valor: null, estado: 'error', mensaje: t('costos_facturacion.no_se_pudo_leer'), reintentar: true }
       : recortada
@@ -248,12 +254,40 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
       nota: facturapiConfigurado() ? t('costos_facturacion.se_timbra_al_marcar') : t('costos_facturacion.el_pago_queda_valido'),
       tono: facturapiConfigurado() && modoFacturapi() === 'produccion' ? 'ok' : 'warn',
     },
+  ]);
+
+  // Graficas del panel (8-4): facturado por mes (sin canceladas) y facturas por estado.
+  const porMes = new Map<string, number>();
+  for (const f of historial?.filas ?? []) if (f.estado !== 'cancelada') porMes.set(f.periodoInicio.slice(0, 7), (porMes.get(f.periodoInicio.slice(0, 7)) ?? 0) + f.monto);
+  const mesesOrden = [...porMes.keys()].sort().slice(-12);
+  const porEstado = new Map<string, number>();
+  for (const f of historial?.filas ?? []) porEstado.set(String(f.estado), (porEstado.get(String(f.estado)) ?? 0) + 1);
+  const graficas = [
+    historial === null
+      ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} estado="error" mensaje={t('costos_facturacion.no_se_pudo_leer_3')} reintentar />
+      : mesesOrden.length === 0
+        ? <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
+        : (
+          <Tarjeta key="barras" titulo={t('costos_facturacion.facturado_por_mes')} elevar entra="tarjeta">
+            <Columnas datos={mesesOrden.map((m) => ({ etiqueta: m, valor: porMes.get(m)! }))} etiqueta={t('costos_facturacion.facturado_por_mes')} formato="mxn" matiz={8} />
+            {historial.truncado ? <p className="adm-din-nota">{t('costos_facturacion.historial_recortado')}</p> : null}
+          </Tarjeta>
+        ),
+    historial === null
+      ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="error" mensaje={t('costos_facturacion.no_se_pudo_leer_3')} reintentar />
+      : porEstado.size === 0
+        ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
+        : (
+          <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} elevar entra="tarjeta">
+            <DonaMini gajos={[...porEstado.entries()].map(([etiqueta, valor]) => ({ etiqueta, valor }))} etiqueta={t('costos_facturacion.facturas_por_estado')} formato="numero" matiz={8} />
+          </Tarjeta>
+        ),
   ];
 
   return (
     <EsqueletoPanelCifras
       titulo={t('costos_facturacion.facturacion')} apoyo={t('costos_facturacion.lo_que_likida_cobra')}
-      etiquetaCifras={t('costos_facturacion.cobro_de_la_mensualidad')} cifras={cifras}
+      etiquetaCifras={t('costos_facturacion.cobro_de_la_mensualidad')} cifras={cifras} graficas={graficas} variante="8-4"
       avisos={(
         <>
           {!banco ? (
@@ -273,6 +307,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
         </>
       )}
     >
+      <div className="adm-pila adm-forma-fina">
       <FilaTarjetas variante="8-4">
         <Tarjeta titulo={t('costos_facturacion.por_cobrar')} estado={porCobrar === null ? 'error' : porCobrar.length === 0 ? 'vacio' : 'ok'} contenida={porCobrar !== null && porCobrar.length === 0} mensaje={porCobrar === null ? t('costos_facturacion.no_se_pudo_leer_3') : t('costos_facturacion.nada_pendiente_de_cobro')}
           detalle={porCobrar === null ? t('costos_facturacion.esto_no_quiere_decir') : t('costos_facturacion.aparece_aqui_en_cuanto')} reintentar>
@@ -450,6 +485,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
         </p>
       </Disclosure>
       {r === null ? <EstadoError reintentar>{t('costos_facturacion.no_se_pudo_leer_6')}</EstadoError> : null}
+      </div>
     </EsqueletoPanelCifras>
   );
 }

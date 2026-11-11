@@ -448,6 +448,8 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
   let sinMigrar = false;
   let avisos: AvisoBandeja[] = [];
   let filas = new Map<string, FilaActual>();
+  // La cuenta exacta de lo que espera a una persona (los mismos estados que «Solo pendientes»). Si no se pudo contar: null, nunca un cero.
+  const pPendientes: Promise<number | null> = Promise.resolve().then(() => crearRepoBandeja().contarPendientes(tenantId)).then((n) => (typeof n === 'number' ? n : null)).catch(() => null);
   try {
     const desde = new Date(ahoraMs() - DIAS_BANDEJA * 86_400_000).toISOString();
     const [cfg, lista] = await Promise.all([crearRepoAviso().leerConfig(tenantId), crearRepoBandeja().listar(tenantId, desde, soloPendientes)]);
@@ -487,6 +489,7 @@ export default async function PaginaAvisosVigia({ searchParams }: { searchParams
       grupos={agruparPorDia(tarjetas)}
       total={tarjetas.length}
       hayMas={avisos.length >= TOPE_AVISOS_BANDEJA}
+      pendientes={await pPendientes}
       soloPendientes={soloPendientes}
       puedeDecidir={puedeDecidir}
       avisoEncendido={avisoEncendido}

@@ -48,7 +48,7 @@ export function ConNegritas({ texto }: { texto: string }) {
  * art. 29.
  */
 export function FaltaDato({ children }: { children: React.ReactNode }) {
-  // Aviso ÁMBAR (Rovaq: #fff7e5 con borde rgba(134,88,13,.22)), nunca un emoji de color: las faltas se marcan con el aviso, no con 🔴.
+  // Aviso ÁMBAR (Rovaq: #fff7e5 con borde rgba(134,88,13,.22)), nunca un emoji de color: las faltas se marcan con el aviso, no con un círculo rojo.
   return (
     <p className="rv-pub__aviso-falta" data-ambar="">{children}</p>
   );

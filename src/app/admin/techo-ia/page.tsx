@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ComponentProps, ReactNode } from 'react';
 import { Aviso, Boton, CampoTexto, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
@@ -102,7 +103,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   return (
     <PantallaTecho
       etiquetaCifras={t('techo_ia.flotas')}
-      cifras={cifras}
+      cifras={uniformes(cifras)}
       avisos={(
         <>
           {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}

@@ -65,3 +65,10 @@
 .rv-liq__corregir { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
 .rv-liq__corregir .rv-ctl { min-width: 140px; }
 .rv-liq__confirma { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Columna izquierda de la ficha (datos + acreditable): apila sus tarjetas a su alto natural, sin estirarse a la línea de tiempo vecina. */
+.rv-liq__col { display: grid; gap: var(--sp-gap, 12px); align-content: start; align-self: start; min-width: 0; }
+.rv-liq__col + .rv-tarjeta { align-self: start; }
+/* Fieldset plano: la semántica de grupo se conserva, el marco con muesca del navegador no. */
+[data-ui="v2"] .rv-fieldset.rv-liq__plano { padding: 0; gap: 6px; border: 0; border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-fieldset.rv-liq__plano > .rv-fieldset__leyenda { padding: 0; }

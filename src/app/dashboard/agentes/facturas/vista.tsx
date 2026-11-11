@@ -116,12 +116,12 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
   // rindió A PROPÓSITO (captcha, emisión sin confirmar) y dejó el porqué.
   const bloqueados = teToca.filter((x) => (x.r as Extract<Ruta, { via: 'mensaje' }>).motivo === 'bloqueado');
 
-  const cifras: PropsCifra[] = [
+  const cifras: PropsCifra[] = ([
     { info: 'facturas.por_facturar', etiqueta: tx('facturas.vista.por_facturar'), valor: numero(ordenados.length), nota: tx('facturas.vista.tickets_sin_cfdi_hoy') },
     { info: 'facturas.monto_sin_factura', etiqueta: tx('facturas.vista.monto_sin_factura'), valor: mxn(montoSinFactura, tr.idioma) },
     { info: 'facturas.urgentes', etiqueta: tx('facturas.vista.urgentes_2_dias'), valor: numero(urgentes.length), tono: urgentes.length > 0 ? 'warn' : undefined },
     { info: 'facturas.vencidos', etiqueta: tx('facturas.vista.vencidos'), valor: numero(vencidos.length), tono: vencidos.length > 0 ? 'bad' : undefined },
-  ];
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
 
   return (
     <EsqueletoTablaMaestra

@@ -1,0 +1,26 @@
+/* Puesta en marcha como el flujo /setup de Rovaq: una sola columna de ≤780 px alineada a la izquierda (sin el relleno propio de la pantalla: el marco ya lo
+   pone), barra fina de avance en lugar de la dona, los pasos como tarjetas de borde de 1 px y el paso actual de borde de tinta. */
+[data-ui="v2"] .rv-pem.rv-pem { max-width: none; margin: 0; padding: 0; gap: 12px; }
+[data-ui="v2"] .rv-pem .rv-pem__cuerpo { display: flex; flex-direction: column; gap: 12px; max-width: 780px; }
+[data-ui="v2"] .rv-pem .rv-pem__lateral { display: contents; }
+[data-ui="v2"] .rv-pem .rv-pem__avance { order: 1; padding: 0; border: 0; background: transparent; gap: 12px; align-items: center; }
+[data-ui="v2"] .rv-pem .rv-pem__avance-num { font-size: 14px; font-weight: 600; letter-spacing: 0; }
+[data-ui="v2"] .rv-pem .rv-pem__avance-txt { margin: 0; font-size: 12px; }
+[data-ui="v2"] .rv-pem .rv-pem__avance > div { display: flex; align-items: baseline; gap: 8px; }
+.rv-pem__barra { flex: none; width: 140px; height: 6px; appearance: none; border: 0; border-radius: 999px; background: var(--line); overflow: hidden; }
+.rv-pem__barra::-webkit-progress-bar { background: var(--line); border-radius: 999px; }
+.rv-pem__barra::-webkit-progress-value { background: var(--ink); border-radius: 999px; }
+.rv-pem__barra::-moz-progress-bar { background: var(--ink); border-radius: 999px; }
+[data-ui="v2"] .rv-pem .rv-pem__lista:not(.rv-pem__despues .rv-pem__lista) { order: 2; padding: 0; border: 0; background: transparent; gap: 8px; }
+[data-ui="v2"] .rv-pem .rv-pem__lista > li > .rv-pem__item { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); padding: 10px 12px; }
+[data-ui="v2"] .rv-pem .rv-pem__lista > li > .rv-pem__item[data-activo] { border-color: var(--ink); }
+[data-ui="v2"] .rv-pem .rv-pem__item[data-activo]::before { display: none; }
+[data-ui="v2"] .rv-pem .rv-pem__detalle { order: 3; }
+[data-ui="v2"] .rv-pem .rv-pem__paso { padding: 16px; gap: 12px; border-color: var(--ink); }
+[data-ui="v2"] .rv-pem .rv-pem__paso-titulo { font-size: 16px; }
+[data-ui="v2"] .rv-pem .rv-pem__paso-resumen { font-size: 13px; }
+[data-ui="v2"] .rv-pem .rv-pem__despues { order: 4; }
+/* «Sin comprobar» y el rótulo del paso con la tipografía de la interfaz, no monoespaciada. */
+[data-ui="v2"] .rv-pem .rv-pem__evidencia-sello, [data-ui="v2"] .rv-pem .rv-pem__paso-rotulo { font-family: inherit; text-transform: none; letter-spacing: 0; }
+@media (prefers-reduced-motion: no-preference) { .rv-pem__barra::-webkit-progress-value { transition: width 300ms cubic-bezier(.22, 1, .36, 1); } }
+[data-ui="v2"] .rv-pem.rv-pem--listo { max-width: 780px; }

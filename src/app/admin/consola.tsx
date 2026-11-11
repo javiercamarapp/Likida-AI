@@ -1,12 +1,13 @@
 import { Suspense } from 'react';
 import { EsqCifrasV2, EsqTarjetaV2, FilaTarjetas, StatusChip, Tarjeta, TablaBase, Aviso, BotonEnlace, EsqTablaV2, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { Columnas, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
+import { uniformes } from './cifras-uniformes';
 import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { saludoTr } from '@/lib/i18n/operacion_tr';
 import { fechaCorta, numero, usd } from '@/lib/formato';
 import { BloqueCaja, BloqueCalidad, BloquePlataforma, BloqueSemaforo, BloqueTuTurno } from './resumen-mando';
-import { conteosPlataforma, mrr as leerMrr, panorama, resumenNegocio, VENTANA_FACTURAS_DIAS } from './resumen-lecturas';
+import { conteosPlataforma, costoIaMes, mrr as leerMrr, panorama, resumenNegocio, VENTANA_FACTURAS_DIAS } from './resumen-lecturas';
 import type { ResumenNegocio } from '@/lib/admin/negocio';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 
@@ -26,17 +27,24 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
   const [{ t }, tr] = await Promise.all([getT('admin_inicio'), getT('operacion')]);
   return (
     <EsqueletoPortada
+      area={t('consola.eyebrow')}
       titulo={t('consola.resumen')}
       apoyo={t('consola.apoyo', { saludo: saludoTr(tr), nombre: nombre ?? 'Javier' })}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>}
+      avisos={(
+        <>
+          <Aviso tono="info">{t('consola.acceso_admin')}</Aviso>
+          <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
+        </>
+      )}
     >
-      <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
+      {/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas, luego los paneles con filas-tarjeta. */}
+      <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
 
-      <FilaTarjetas variante="8-4">
+      <FilaTarjetas variante="6-6">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueCaja /></Suspense>
       </FilaTarjetas>
-
-      <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
 
       <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueSeries /></Suspense>
 
@@ -54,7 +62,7 @@ const ERROR_CIFRA = { estado: 'error' as const, reintentar: true };
 /** 3. El número norte: MRR contra la meta, % sin humano, flotas, viajes y facturas procesadas (total histórico). */
 async function BloqueNorte() {
   const { t } = await getT('admin_inicio');
-  const [r, conteos, mrr, pan] = await Promise.all([resumenNegocio(), conteosPlataforma(), leerMrr(), panorama()]);
+  const [r, conteos, mrr, pan, mes] = await Promise.all([resumenNegocio(), conteosPlataforma(), leerMrr(), panorama(), costoIaMes()]);
 
   // "Solo el demo" es una afirmación verificable: se comprueba contra el id real del tenant demo, no se asume que el único tenant
   // que hay siempre es el demo. (`tenants_reales.test.ts` evalúa la expresión de la etiqueta con 0.)
@@ -89,6 +97,9 @@ async function BloqueNorte() {
     r === null
       ? { etiqueta: t('consola.facturas_procesadas_historico'), valor: null, ...ERROR_CIFRA }
       : { etiqueta: t('consola.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero' },
+    mes === null
+      ? { etiqueta: t('consola.gasto_ia_mes'), valor: null, ...ERROR_CIFRA }
+      : { etiqueta: t('consola.gasto_ia_mes_de', { etiquetaMes: mes.etiquetaMes }), valor: mes.mesUsd, formato: 'usd', href: '/admin/consumo' },
   ];
   return (
     <>
@@ -96,7 +107,9 @@ async function BloqueNorte() {
       {esSoloDemo && (
         <Aviso tono="info">{t('consola.cifras_reales_no_de')}</Aviso>
       )}
-      <TiraCifras items={cifras} etiqueta={t('consola.numero_norte')} elevar entra="tarjeta" />
+      <div className="rv-esq__cifras-sueltas adm-res-tiles" role="group" aria-label={t('consola.numero_norte')}>
+        {uniformes(cifras).map((c) => <TiraCifras key={c.etiqueta} items={[c]} etiqueta={c.etiqueta} elevar entra="tarjeta" />)}
+      </div>
     </>
   );
 }

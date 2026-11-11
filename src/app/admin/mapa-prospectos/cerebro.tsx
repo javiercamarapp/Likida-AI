@@ -35,6 +35,7 @@ import {
   Boton, Campo, CampoSelect, EsqTarjetaV2, Fieldset, Disclosure, Drawer, FilaTarjetas, FiltroChip, Icono, SegmentedControl, Tarjeta, Tooltip, clasesBoton, cx,
 } from '../../ui-v2/componentes';
 import { BarList, TiraCifras } from '../../ui-v2/graficas';
+import { uniformes } from '../cifras-uniformes';
 import { idsSinTextos } from './csv_prospectos';
 import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 import { arrancarLatido, visibilidadDelNavegador } from './latido';
@@ -685,7 +686,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
 
   return (
     <div className="cer-raiz">
-      <TiraCifras etiqueta={tx('mapa_prospectos_cerebro.cartera_filtrada')} items={[
+      <TiraCifras etiqueta={tx('mapa_prospectos_cerebro.cartera_filtrada')} items={uniformes([
         cifra(tx('mapa_prospectos_cerebro.prospectos'), totalCifra),
         cifra(tx('mapa_prospectos_cerebro.con_telefono'), conTelefono),
         cifra(tx('mapa_prospectos_cerebro.con_decisor'), conDecisor),
@@ -695,7 +696,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
             ? { valor: calientes, conteo: true as const }
             : { valor: null, estado: 'vacio' as const, mensaje: errorCarga ? tr.t('mapa.errorCarga') : tr.t('mapa.cargando') }),
         },
-      ]} />
+      ])} />
 
       {/* ── Herramientas del mapa ───────────────────────────────────────── */}
       <div className="cer-barra">
@@ -783,18 +784,6 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
                 />
               );
             })}
-            {/* Rótulos: el código del estado y su cifra EXACTA (el color nunca es la única señal); solo donde caben al zoom actual. */}
-            {ESTADOS_GEO.map((e) => {
-              const nEstado = nPorEstado.get(e.nombre) ?? 0;
-              if (nEstado === 0 || seleccion !== null || e.bw * camK < 30 || e.bh * camK < 20) return null;
-              const tam = 11 / camK;
-              return (
-                <text key={e.id} className="cer-rotulo" data-paso={pasoDeRampa(nEstado, maxEstado)} x={e.cx} y={e.cy} fontSize={tam} textAnchor="middle" aria-hidden="true">
-                  <tspan x={e.cx}>{e.id.slice(3)}</tspan>
-                  {e.bh * camK >= 36 && <tspan x={e.cx} dy={tam * 1.2}>{numero(nEstado, idioma)}</tspan>}
-                </text>
-              );
-            })}
             {/* Las luces: cada prospecto con coordenadas reales */}
             {pines.map(({ p, xy }) => (
               <circle key={p.id} className="cer-pin" data-etapa={p.estado in COLOR_EMBUDO ? p.estado : 'nuevo'}
@@ -802,6 +791,18 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
                 cx={xy.x} cy={xy.y} r={Math.max(0.5, Math.min(2.4, 2.4 / camK))}
                 strokeWidth={Math.max(0.1, 0.4 / camK)} />
             ))}
+            {/* Rótulos: el código del estado y su cifra EXACTA (el color nunca es la única señal); solo donde caben al zoom actual. Van DESPUÉS de las luces y con halo, para que ningún punto se encime al texto. */}
+            {ESTADOS_GEO.map((e) => {
+              const nEstado = nPorEstado.get(e.nombre) ?? 0;
+              if (nEstado === 0 || seleccion !== null || e.bw * camK < 44 || e.bh * camK < 28) return null;
+              const tam = 11 / camK;
+              return (
+                <text key={e.id} className="cer-rotulo" data-paso={pasoDeRampa(nEstado, maxEstado)} x={e.cx} y={e.cy} fontSize={tam} textAnchor="middle" strokeWidth={2.5 / camK} aria-hidden="true">
+                  <tspan x={e.cx}>{e.id.slice(3)}</tspan>
+                  {e.bh * camK >= 44 && <tspan x={e.cx} dy={tam * 1.2}>{numero(nEstado, idioma)}</tspan>}
+                </text>
+              );
+            })}
           </g>
         </svg>
 
