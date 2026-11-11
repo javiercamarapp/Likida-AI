@@ -60,7 +60,7 @@ const MIGRADOS = [
   'src/app/admin/flotas/[id]/page.tsx',
   'src/app/admin/flotas/alta.tsx',
   'src/app/admin/flotas/page.tsx',
-  'src/app/admin/notificaciones/lista.tsx',
+  'src/app/admin/notificaciones/page.tsx',
   'src/app/admin/resumen-mando.tsx',
   'src/app/admin/tu-turno/vista.tsx',
   // P8-P10 (w13/err): páginas públicas y rutas de API visibles ya traducidas por completo.
