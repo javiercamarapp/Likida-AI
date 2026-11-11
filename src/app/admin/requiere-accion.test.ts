@@ -106,6 +106,6 @@ describe('panorama: el estado de la bandeja de aprobación viaja con la misma le
   });
   it('si la bandeja entera falla: todo «sin dato»', async () => {
     const p = await obtenerPanoramaAccion(8, vi.fn().mockRejectedValue(new Error('x')), SIN_EXTRAS, async () => COLA);
-    expect(p).toEqual({ resumen: SIN_DATO, bandeja: null, cola: null });
+    expect(p).toEqual({ resumen: SIN_DATO, bandeja: null, cola: null, extras: null });
   });
 });

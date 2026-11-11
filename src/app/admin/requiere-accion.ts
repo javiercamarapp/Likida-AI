@@ -53,7 +53,11 @@ type LectorExtras = () => Promise<ReadonlyArray<AlertaExtra>>;
 const leerExtras: LectorExtras = async () => alertasExtra(await leerEntradaAlertasExtra());
 type LectorCola = (ahoraMs: number) => Promise<ResumenBandejaCola | null>;
 /** `cola` = el estado de la bandeja de aprobación (`null` = no se pudo leer: «sin dato», nunca 0). Alimenta los números de las pestañas Tu turno y Aprobaciones. */
-export interface PanoramaAccion { resumen: RequiereAccion; bandeja: BandejaEscalaciones | null; cola: ResumenBandejaCola | null }
+export interface PanoramaAccion {
+  resumen: RequiereAccion; bandeja: BandejaEscalaciones | null; cola: ResumenBandejaCola | null;
+  /** Las alertas extra leídas en la misma pasada (las usa la lista de avisos). `null` = no se pudieron leer (≠ `[]`). */
+  extras: ReadonlyArray<AlertaExtra> | null;
+}
 let cache: { valor: PanoramaAccion; vence: number } | null = null;
 
 /** Solo para pruebas. */
@@ -74,14 +78,14 @@ export async function obtenerPanoramaAccion(
   try {
     const [bandeja, extras, cola] = await Promise.all([
       leer(ahoraMs),
-      leerAlertasExtra().catch((): ReadonlyArray<AlertaExtra> => []),
+      leerAlertasExtra().catch((): ReadonlyArray<AlertaExtra> | null => null),
       leerCola(ahoraMs).catch((): ResumenBandejaCola | null => null),
     ]);
-    const valor = { resumen: resumirRequiereAccion(bandeja, extras), bandeja, cola };
+    const valor = { resumen: resumirRequiereAccion(bandeja, extras ?? []), bandeja, cola, extras };
     cache = { valor, vence: ahoraMs + TTL_REQUIERE_ACCION_MS };
     return valor;
   } catch {
-    return { resumen: SIN_DATO, bandeja: null, cola: null };
+    return { resumen: SIN_DATO, bandeja: null, cola: null, extras: null };
   }
 }
 
