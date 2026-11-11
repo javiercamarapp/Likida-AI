@@ -60,6 +60,9 @@ const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|re
 const ACCIONES_RUTA_EXPLICITA = {
   'src/app/dashboard/inicio-contenido.tsx': '/dashboard',                    // el Resumen de siempre; bajo el perfil no se monta
   'src/app/dashboard/agentes/seccion-notificaciones.tsx': '/dashboard/notificaciones', // el aviso por agente gatea con la ruta de su agente
+  // Avisos (marcar leído, preferencias, silencio) vive en ui-v2 porque la comparten /admin y /dashboard: el panel de flota resuelve la
+  // flota con `resolverTenantEfectivo('/dashboard/notificaciones')` (misma ruta y mismo veredicto que la pantalla) y el panel admin exige requireSuperadmin.
+  'src/app/ui-v2/avisos/acciones.ts': '/dashboard/notificaciones',
 };
 
 /** Páginas que no son una ruta del perfil (no hay llave propia ni padre) y gatean con una ruta SIEMPRE permitida: se acepta solo si su fuente lo demuestra. */
@@ -253,7 +256,7 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
             : { veredicto: NO_CLASIFICADO, nota: 'sin perfilRestringido' };
           break;
         }
-        if (e.archivo.startsWith('src/app/dashboard/')) {
+        if (e.archivo.startsWith('src/app/dashboard/') || ACCIONES_RUTA_EXPLICITA[e.archivo]) {
           // A37-S04-06: clasificar por la carpeta no prueba nada si el archivo no llama a la puerta. Se exige, al menos a
           // nivel de archivo, una llamada a la puerta de sesión/flota (la comprobación por acción exportada requiere un
           // parser; ver «pendientes» del PR).
