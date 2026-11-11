@@ -7,6 +7,8 @@ import {
   type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_agentes as admin_agentesEs } from '@/lib/i18n/es/admin_agentes';
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DE UNA FILA DEL CATÁLOGO: kill switch y configuración.
 //
@@ -33,6 +35,7 @@ export function KillSwitchAgente({ palanca, nombre, apagado, accion }: {
   apagado: boolean;
   accion: AccionFila;
 }) {
+  const { t } = useT('admin_agentes', admin_agentesEs);
   const [abiertoEn, setAbiertoEn] = useState<{ base: ResultadoAccion } | null>(null);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   const idForma = useId();
@@ -54,17 +57,17 @@ export function KillSwitchAgente({ palanca, nombre, apagado, accion }: {
         alerta
         titulo={`${apagado ? 'Encender' : 'Apagar'} ${nombre}`}
         descripcion={apagado
-          ? 'Su próxima corrida deja de salir como saltada y vuelve a actuar sobre las flotas. Queda en la bitácora con tu motivo.'
-          : 'Corta su próxima corrida en TODAS las flotas. Queda en la bitácora con tu motivo y se puede encender de nuevo desde aquí.'}
+          ? t('agentes_acciones_agente.su_proxima_corrida_deja')
+          : t('agentes_acciones_agente.corta_su_proxima_corrida')}
         pie={<>
           <Boton variante="ghost" onClick={() => setAbierto(false)}>Cancelar</Boton>
-          <Boton type="submit" form={idForma} variante={apagado ? 'primary' : 'danger'} loading={pendiente}>{apagado ? 'Encender agente' : 'Apagar agente'}</Boton>
+          <Boton type="submit" form={idForma} variante={apagado ? 'primary' : 'danger'} loading={pendiente}>{apagado ? t('agentes_acciones_agente.encender_agente') : t('agentes_acciones_agente.apagar_agente')}</Boton>
         </>}
       >
         <form id={idForma} action={enviar} className="rv-agente-forma">
           <input type="hidden" name="id" value={palanca} />
           <input type="hidden" name="operacion" value={operacion} />
-          <CampoTextarea etiqueta="Motivo" name="motivo" required obligatorio rows={2} placeholder={apagado ? 'Por qué se enciende' : 'Por qué se apaga'} />
+          <CampoTextarea etiqueta={t('agentes_acciones_agente.motivo')} name="motivo" required obligatorio rows={2} placeholder={apagado ? t('agentes_acciones_agente.por_que_se_enciende') : t('agentes_acciones_agente.por_que_se_apaga')} />
           <AvisoResultado estado={estado} />
         </form>
       </Modal>
@@ -79,6 +82,7 @@ export function ConfigurarAgente({ id, nombre, actual, accion, estados }: {
   accion: AccionFila;
   estados: ReadonlyArray<{ valor: string; rotulo: string }>;
 }) {
+  const { t } = useT('admin_agentes', admin_agentesEs);
   const [abiertoEn, setAbiertoEn] = useState<{ base: ResultadoAccion } | null>(null);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   const idForma = useId();
@@ -89,39 +93,39 @@ export function ConfigurarAgente({ id, nombre, actual, accion, estados }: {
 
   return (
     <>
-      <Boton tamano="sm" variante="ghost" icono={<Icono icono={Settings2} />} onClick={() => setAbierto(true)} aria-label={`Configurar ${nombre}`}>Configurar</Boton>
+      <Boton tamano="sm" variante="ghost" icono={<Icono icono={Settings2} />} onClick={() => setAbierto(true)} aria-label={t('agentes_acciones_agente.configurar', { nombre })}>Configurar</Boton>
       <Drawer
         abierto={abierto}
         onCerrar={() => setAbierto(false)}
         cierraConFondo={false}
-        titulo={`Configurar ${nombre}`}
-        descripcion="Solo se guarda lo que cambies. Cada cambio queda en la bitácora con el antes, el después y tu motivo."
+        titulo={t('agentes_acciones_agente.configurar', { nombre })}
+        descripcion={t('agentes_acciones_agente.solo_se_guarda_lo')}
         pie={<>
           <Boton variante="ghost" onClick={() => setAbierto(false)}>Cancelar</Boton>
-          <Boton type="submit" form={idForma} variante="primary" loading={pendiente}>Guardar cambios</Boton>
+          <Boton type="submit" form={idForma} variante="primary" loading={pendiente}>{t('agentes_acciones_agente.guardar_cambios')}</Boton>
         </>}
       >
         <form id={idForma} action={enviar} className="rv-agente-forma">
           <input type="hidden" name="id" value={id} />
-          <CampoSelect etiqueta="Estado" name="estado" defaultValue="" ayuda={`Hoy: ${actual.estado}.`}>
-            <option value="">Sin cambio</option>
+          <CampoSelect etiqueta={t('agentes_acciones_agente.estado')} name="estado" defaultValue="" ayuda={t('agentes_acciones_agente.hoy', { estado: actual.estado })}>
+            <option value="">{t('agentes_acciones_agente.sin_cambio')}</option>
             {estados.map((e) => <option key={e.valor} value={e.valor}>{e.rotulo}</option>)}
           </CampoSelect>
-          <CampoSelect etiqueta="Runner" name="runnerHabilitado" defaultValue="" ayuda={`Hoy: ${actual.runnerHabilitado ? 'habilitado' : 'no habilitado'}. Sin presupuesto el runner no lo despacha.`}>
-            <option value="">Sin cambio</option>
+          <CampoSelect etiqueta={t('agentes_acciones_agente.runner')} name="runnerHabilitado" defaultValue="" ayuda={t('agentes_acciones_agente.hoy_sin_presupuesto_el', { runnerHabilitado: actual.runnerHabilitado ? 'habilitado' : 'no habilitado' })}>
+            <option value="">{t('agentes_acciones_agente.sin_cambio')}</option>
             <option value="si">Habilitar</option>
             <option value="no">Deshabilitar</option>
           </CampoSelect>
           <CampoTexto
-            etiqueta="Presupuesto por día (USD)" name="presupuestoDiaUsd" tipo="text" inputMode="decimal" autoComplete="off"
-            placeholder="Sin cambio"
-            ayuda={`Hoy: ${actual.presupuestoDiaUsd === null ? 'sin tope declarado' : `${actual.presupuestoDiaUsd} USD`}. Escribe sin_tope para quitarlo.`}
+            etiqueta={t('agentes_acciones_agente.presupuesto_por_dia_usd')} name="presupuestoDiaUsd" tipo="text" inputMode="decimal" autoComplete="off"
+            placeholder={t('agentes_acciones_agente.sin_cambio')}
+            ayuda={t('agentes_acciones_agente.hoy_escribe_sin_tope', { presupuestoDiaUsd: actual.presupuestoDiaUsd === null ? 'sin tope declarado' : `${actual.presupuestoDiaUsd} USD` })}
           />
           <CampoTexto
-            etiqueta="Rol de modelo" name="modeloRol" autoComplete="off" placeholder="Sin cambio"
-            ayuda={`Hoy: ${actual.modeloRol ?? 'sin declarar'}. Escribe sin_declarar para quitarlo.`}
+            etiqueta={t('agentes_acciones_agente.rol_de_modelo')} name="modeloRol" autoComplete="off" placeholder={t('agentes_acciones_agente.sin_cambio')}
+            ayuda={t('agentes_acciones_agente.hoy_escribe_sin_declarar', { modeloRol: actual.modeloRol ?? 'sin declarar' })}
           />
-          <CampoTextarea etiqueta="Motivo" name="motivo" required obligatorio rows={2} placeholder="Por qué se hace este cambio" />
+          <CampoTextarea etiqueta={t('agentes_acciones_agente.motivo')} name="motivo" required obligatorio rows={2} placeholder={t('agentes_acciones_agente.por_que_se_hace')} />
           <AvisoResultado estado={estado} />
         </form>
       </Drawer>

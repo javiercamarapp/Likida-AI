@@ -55,6 +55,7 @@ const TOPE_COLA = 50;
  */
 export default async function EscalacionesPage() {
   await requireSuperadmin();
+  const { t } = await getT('admin_inicio');
   const ahora = ahoraMs();
   // Nunca lanzan: los fallos de lectura vienen por valor (bandeja) o como null (parados, cola).
   const [bandeja, parados, cola]: [BandejaEscalaciones, Awaited<ReturnType<typeof getAgentesParados>>, Awaited<ReturnType<typeof leerResumenBandeja>>] =
@@ -69,23 +70,23 @@ export default async function EscalacionesPage() {
   const { t: tMon } = await getT('monitoreo');
   const columnas: ColumnaBase<ItemEscalacion>[] = [
     {
-      id: 'que', titulo: 'Qué espera', principal: true,
+      id: 'que', titulo: t('escalaciones.que_espera'), principal: true,
       celda: (it) => <>{it.titulo}{it.detalle ? <span className="bj-nota"> {it.detalle}</span> : null}</>,
     },
     {
-      id: 'fuente', titulo: 'Fuente',
+      id: 'fuente', titulo: t('escalaciones.fuente'),
       celda: (it) => { const Icono = ICONO_FUENTE[it.fuente]; return <span className="bj-fuente"><Icono width={13} height={13} strokeWidth={1.75} aria-hidden="true" />{NOMBRE_FUENTE[it.fuente]}</span>; },
     },
-    { id: 'flota', titulo: 'Flota', celda: (it) => it.tenantNombre },
-    { id: 'desde', titulo: 'Desde', celda: (it) => `${fechaHoraMx(it.desde)} · ${edadDe(it.desde, ahora)}` },
+    { id: 'flota', titulo: t('escalaciones.flota'), celda: (it) => it.tenantNombre },
+    { id: 'desde', titulo: t('escalaciones.desde'), celda: (it) => `${fechaHoraMx(it.desde)} · ${edadDe(it.desde, ahora)}` },
     {
-      id: 'vence', titulo: 'Vence',
+      id: 'vence', titulo: t('escalaciones.vence'),
       celda: (it) => (it.vence
         ? <StatusChip tono={new Date(it.vence).getTime() < ahora ? 'bad' : 'neutral'}>{fechaMx(it.vence)}</StatusChip>
         : '—'),
     },
     {
-      id: 'resolver', titulo: 'Se resuelve en', alinear: 'der',
+      id: 'resolver', titulo: t('escalaciones.se_resuelve_en'), alinear: 'der',
       // Sin pantalla a la cual llevar, se dice — un link que rebota es peor que ninguno.
       celda: (it) => (it.href
         ? <BotonEnlace href={it.href} variante="secondary" tamano="sm">Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
@@ -95,9 +96,9 @@ export default async function EscalacionesPage() {
   ];
 
   return (
-    <MarcoPagina titulo="Escalaciones" apoyo="Todo lo que espera a un humano, lo más vencido primero.">
+    <MarcoPagina titulo={t('escalaciones.escalaciones')} apoyo={t('escalaciones.todo_lo_que_espera')}>
       <TiraCifras
-        etiqueta="Escalaciones por fuente"
+        etiqueta={t('escalaciones.escalaciones_por_fuente')}
         items={legibles.map((f) => {
           const Icono = ICONO_FUENTE[f];
           return { etiqueta: NOMBRE_FUENTE[f], valor: conteoDeFuente(f, bandeja.conteos), formato: 'entero' as const, icono: <Icono width={15} height={15} strokeWidth={1.75} /> };
@@ -106,50 +107,50 @@ export default async function EscalacionesPage() {
 
       {/* Fuentes que NO se pudieron leer — dicho, nunca un 0. */}
       {ilegibles.map((f) => (
-        <Aviso key={f} tono="error" titulo={`${NOMBRE_FUENTE[f]}: no se pudo leer.`}>
-          No es que haya 0 — la consulta falló y ahí puede haber pendientes que esta cola no está viendo. {bandeja.fuentes[f].error}
+        <Aviso key={f} tono="error" titulo={t('escalaciones.no_se_pudo_leer', { NOMBRE_FUENTE: NOMBRE_FUENTE[f] })}>
+          
+          {t('escalaciones.no_es_que_haya')} {bandeja.fuentes[f].error}
         </Aviso>
       ))}
 
       {bandeja.cola.length === 0 ? (
         legibles.length > 0 && (
-          <EstadoVacio titulo={ilegibles.length === 0 ? 'La cola está vacía de verdad' : 'Sin pendientes en lo que se leyó'}>
+          <EstadoVacio titulo={ilegibles.length === 0 ? t('escalaciones.la_cola_esta_vacia') : t('escalaciones.sin_pendientes_en_lo')}>
             {ilegibles.length === 0 ? (
               <>
-                Las seis fuentes se leyeron completas y ninguna tiene nada esperando a un humano:
-                ni solicitudes ARCO sin responder, ni corridas en fallo, ni talachas por autorizar,
-                ni facturas de proveedor pendientes, ni tickets abiertos, ni liquidaciones en revisión.
+                
+                {t('escalaciones.las_seis_fuentes_se')}
               </>
             ) : (
               <>
-                Las fuentes que sí se pudieron leer no tienen nada esperando — pero{' '}
-                {ilegibles.length === 1 ? 'una fuente quedó' : `${ilegibles.length} fuentes quedaron`} sin
-                leer (arriba), así que esto NO afirma que no haya pendientes en total.
+                {ilegibles.length === 1 ? t('escalaciones.sin_leer_una') : t('escalaciones.sin_leer_varias', { n: ilegibles.length })}
               </>
             )}
           </EstadoVacio>
         )
       ) : (
         <section className="bj-bloque" aria-labelledby="cola-escalaciones">
-          <h2 className="bj-titulo" id="cola-escalaciones">La cola — lo más vencido o más viejo primero</h2>
+          <h2 className="bj-titulo" id="cola-escalaciones">{t('escalaciones.la_cola_lo_mas')}</h2>
           <TablaBase
-            etiqueta="Cola de escalaciones" columnas={columnas} filas={cola50}
+            etiqueta={t('escalaciones.cola_de_escalaciones')} columnas={columnas} filas={cola50}
             idFila={(it) => `${it.fuente}-${it.desde}-${it.titulo}`} tarjetaMovil
           />
           <p className="bj-nota">
             {recortada
-              ? `Se listan las ${numero(TOPE_COLA)} más urgentes de ${numero(bandeja.cola.length)} en la cola.`
-              : `${numero(bandeja.cola.length)} ${bandeja.cola.length === 1 ? 'pendiente' : 'pendientes'} en la cola.`}
-            {' '}El orden: lo que tiene plazo (ARCO, tickets con SLA) va por su plazo — vencido primero — y lo que
-            no lo tiene, por cuánto lleva esperando. La campana de la consola suma exactamente estas fuentes.
-            {recortada && ' Los conteos de arriba SÍ son de toda la cola: lo acotado es la tabla.'}
+              ? t('escalaciones.se_listan_las_mas', { TOPE_COLA: numero(TOPE_COLA), length: numero(bandeja.cola.length) })
+              : t(bandeja.cola.length === 1 ? 'escalaciones.pendiente_en_cola.uno' : 'escalaciones.pendiente_en_cola.otros', { n: numero(bandeja.cola.length) })}
+            {' '}{t('escalaciones.orden_explicacion')}
+            {recortada && t('escalaciones.los_conteos_de_arriba')}
           </p>
         </section>
       )}
 
-      <BloqueAgentesParados datos={parados} cola={cola} />
+      <BloqueAgentesParados datos={parados} cola={cola} t={t} />
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Escalaciones' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_inicio');
+  return { title: t('escalaciones.escalaciones') };
+}

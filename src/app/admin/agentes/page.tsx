@@ -8,9 +8,11 @@ import { actualizarAgente } from '@/lib/likida/agentes/config-agente';
 import { type ResultadoAccion } from '@/app/ui-v2/componentes';
 import { PanelAgentesContenido } from './contenido';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 async function accionAlta(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t } = await getT('admin_agentes');
   'use server';
   const s = await requireSuperadmin();
   try {
@@ -25,9 +27,9 @@ async function accionAlta(_previo: ResultadoAccion, fd: FormData): Promise<Resul
     });
     await darDeAltaAgente(v, s.userId);
     revalidatePath('/admin/agentes');
-    return { ok: `"${v.nombre}" quedó en el catálogo como DISEÑADO. Se ejecuta cuando se habilita.` };
+    return { ok: t('agentes.quedo_en_el_catalogo', { nombre: v.nombre }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'dar de alta el agente') };
+    return { error: mensajeParaPantalla(e, t('agentes.dar_de_alta_el')) };
   }
 }
 
@@ -41,6 +43,7 @@ async function accionAlta(_previo: ResultadoAccion, fd: FormData): Promise<Resul
  * único que cambia es desde dónde se alcanza.
  */
 async function accionPalanca(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t } = await getT('admin_agentes');
   'use server';
   // RE-GATEO: el action es un endpoint público en la práctica — el layout
   // solo protegió el render (patrón de administracion.ts).
@@ -53,19 +56,19 @@ async function accionPalanca(_previo: ResultadoAccion, fd: FormData): Promise<Re
       await apagar(id, motivo, userId);
     } else if (operacion === 'encender') {
       // Simétrico a apagar: encender también exige motivo y lo firma la bitácora.
-      if (!motivo.trim()) return { error: 'Encender exige un motivo: sin nota, en tres semanas nadie sabe por qué se soltó.' };
+      if (!motivo.trim()) return { error: t('agentes.encender_exige_un_motivo') };
       await encender(id, userId, motivo);
     } else {
-      return { error: `Operación desconocida: "${operacion}".` };
+      return { error: t('agentes.operacion_desconocida', { operacion }) };
     }
     revalidatePath('/admin/agentes');
     // También la de Observabilidad: es la MISMA palanca vista desde otra
     // pantalla, y dejarla con el valor viejo en caché haría dudar de cuál de
     // las dos dice la verdad.
     revalidatePath('/admin/observabilidad');
-    return { ok: operacion === 'apagar' ? `"${id}" quedó APAGADO.` : `"${id}" quedó encendido.` };
+    return { ok: operacion === 'apagar' ? t('agentes.quedo_apagado', { id }) : t('agentes.quedo_encendido', { id }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'mover la palanca del agente') };
+    return { error: mensajeParaPantalla(e, t('agentes.mover_la_palanca_del')) };
   }
 }
 
@@ -97,4 +100,7 @@ export default async function PaginaAgentes() {
   return <PanelAgentesContenido accionAlta={accionAlta} accionPalanca={accionPalanca} accionConfig={accionConfig} />;
 }
 
-export const metadata: Metadata = { title: 'Agentes' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_agentes');
+  return { title: t('agentes.agentes') };
+}
