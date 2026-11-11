@@ -85,3 +85,6 @@
 [data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) { background: var(--ink); color: var(--surface); }
 [data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) :is(.adm-res-fila__titulo, .adm-flota-id, svg, th) { color: inherit; }
 [data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]):hover { background: var(--ink); }
+
+/* Mismo vacío uniforme que dinero.css (pedido_compartido: unificar `.rv-vacio` en componentes.css). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }

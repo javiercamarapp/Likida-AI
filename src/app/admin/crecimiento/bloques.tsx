@@ -109,7 +109,7 @@ export async function BloqueCostoYCampanas() {
       <FilaTarjetas variante="6-6">
         <Tarjeta titulo={ta('crecimiento_bloques.costo_por_lead_por')} estado={adquisicion.porFuente.length === 0 ? 'vacio' : 'ok'} mensaje={ta('crecimiento_bloques.sin_leads_capturados')} detalle={ta('crecimiento_bloques.aparece_en_cuanto_entra')}>
           <TablaBase
-            etiqueta={ta('crecimiento_bloques.costo_por_lead_por')} idFila={(f) => f.fuente} tarjetaMovil densa filas={adquisicion.porFuente}
+            etiqueta={ta('crecimiento_bloques.costo_por_lead_por')} idFila={(f) => f.fuente} tarjetaMovil filas={adquisicion.porFuente}
             columnas={[
               { id: 'fuente', titulo: ta('crecimiento_bloques.fuente'), principal: true, celda: (f) => f.fuente },
               { id: 'leads', titulo: ta('crecimiento_bloques.leads'), alinear: 'der', celda: (f) => numero(f.leads) },
@@ -200,7 +200,7 @@ export async function BloqueCohortes() {
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.retencion_por_cohortes_uso')} estado={cohortes.filas.length === 0 ? 'vacio' : 'ok'} mensaje={ta('crecimiento_bloques.sin_flotas_dadas_de_2')} detalle={ta('crecimiento_bloques.no_hay_cohorte_que')}>
       <TablaBase
-        etiqueta={ta('crecimiento_bloques.cohortes_por_mes_de')} idFila={(f) => f.cohorte} tarjetaMovil densa filas={cohortes.filas}
+        etiqueta={ta('crecimiento_bloques.cohortes_por_mes_de')} idFila={(f) => f.cohorte} tarjetaMovil filas={cohortes.filas}
         columnas={[
           { id: 'cohorte', titulo: ta('crecimiento_bloques.cohorte_mes_de_alta'), principal: true, celda: (f) => f.cohorte },
           { id: 'flotas', titulo: ta('crecimiento_bloques.flotas'), alinear: 'der', celda: (f) => numero(f.flotas) },

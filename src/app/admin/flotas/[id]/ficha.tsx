@@ -85,7 +85,7 @@ export function Ficha360({
       <Tarjeta titulo={t('flotas_ficha.ultimas_corridas_de_agentes')} estado={f.corridas === null ? 'error' : f.corridas.length === 0 ? 'vacio' : 'ok'}
         mensaje={f.corridas === null ? t('flotas_ficha.no_se_pudieron_leer_2') : t('flotas_ficha.sin_corridas_de_agentes')}>
         <TablaBase
-          etiqueta={t('flotas_ficha.corridas_de_agentes_de')} densa filas={f.corridas ?? []} idFila={(c) => `${c.agente}-${c.fin}`}
+          etiqueta={t('flotas_ficha.corridas_de_agentes_de')} filas={f.corridas ?? []} idFila={(c) => `${c.agente}-${c.fin}`}
           columnas={[
             { id: 'agente', titulo: t('flotas_ficha.agente'), principal: true, celda: (c) => c.agente },
             { id: 'estado', titulo: t('flotas_ficha.estado'), celda: (c) => <StatusChip tono={TONO_CORRIDA[c.estado] ?? 'neutral'}>{c.estado}</StatusChip> },
@@ -103,7 +103,7 @@ export function Ficha360({
       <Tarjeta titulo={t('flotas_ficha.soporte')} estado={f.tickets === null ? 'error' : f.tickets.length === 0 ? 'vacio' : 'ok'} mensaje={f.tickets === null ? t('flotas_ficha.no_se_pudieron_leer') : t('flotas_ficha.sin_tickets_de_esta')}
         acciones={<BotonEnlace href="/admin/soporte" variante="ghost" tamano="sm">{t('flotas_ficha.ver_soporte')}</BotonEnlace>}>
         <TablaBase
-          etiqueta={t('flotas_ficha.tickets_de_la_flota')} densa filas={(f.tickets ?? []).slice(0, 5)} idFila={(t) => t.id}
+          etiqueta={t('flotas_ficha.tickets_de_la_flota')} filas={(f.tickets ?? []).slice(0, 5)} idFila={(t) => t.id}
           columnas={[
             { id: 'asunto', titulo: t('flotas_ficha.asunto'), principal: true, celda: (t) => t.asunto },
             { id: 'estado', titulo: t('flotas_ficha.estado'), alinear: 'der', celda: (t) => (
@@ -162,7 +162,7 @@ export function Ficha360({
         mensaje={f.facturasSaas === null ? t('flotas_ficha.no_se_pudieron_leer_3') : t('flotas_ficha.sin_facturas_emitidas')}
         acciones={<BotonEnlace href="/admin/costos-facturacion" variante="ghost" tamano="sm">{t('flotas_ficha.costos_y_facturacion')}</BotonEnlace>}>
         <TablaBase
-          etiqueta={t('flotas_ficha.facturas_saas_de_la')} densa filas={f.facturasSaas ?? []} idFila={(x) => x.id}
+          etiqueta={t('flotas_ficha.facturas_saas_de_la')} filas={f.facturasSaas ?? []} idFila={(x) => x.id}
           columnas={[
             { id: 'periodo', titulo: t('flotas_ficha.periodo'), principal: true, celda: (x) => `${fechaCorta(x.periodoInicio)} a ${fechaCorta(x.periodoFin)}` },
             { id: 'monto', titulo: t('flotas_ficha.monto'), alinear: 'der', celda: (x) => mxn(x.monto) },
@@ -178,7 +178,7 @@ export function Ficha360({
     <>
       <Tarjeta titulo={t('flotas_ficha.arranque_de_la_flota')} estado={arranque === null ? 'error' : 'ok'} mensaje={t('flotas_ficha.no_se_pudo_leer_3')}>
         <TablaBase
-          etiqueta={t('flotas_ficha.casillas_de_arranque')} densa filas={casillas} idFila={(c) => c.clave}
+          etiqueta={t('flotas_ficha.casillas_de_arranque')} filas={casillas} idFila={(c) => c.clave}
           columnas={[
             { id: 'casilla', titulo: t('flotas_ficha.casilla'), principal: true, celda: (c) => c.texto },
             { id: 'estado', titulo: t('flotas_ficha.estado'), celda: (c) => <StatusChip tono={TONO_CASILLA[c.estado]}>{rotuloCasilla(t)[c.estado]}</StatusChip> },
