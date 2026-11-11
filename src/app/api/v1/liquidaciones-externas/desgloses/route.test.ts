@@ -49,6 +49,8 @@ const DESGLOSE = (bitacora = 'B-0001', extra: Record<string, unknown> = {}) => (
 const postear = (cuerpo: unknown) =>
   POST(new Request(URL_BASE, { method: 'POST', headers: { 'content-type': 'application/json' }, body: typeof cuerpo === 'string' ? cuerpo : JSON.stringify(cuerpo) }));
 const json = async (r: Response) => (await r.json()) as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+/** Compatibilidad hacia atrás: los campos de siempre, sin el `resultados` que se SUMÓ (piloto 11-nov-2026). */
+const sinResultados = (d: Record<string, unknown>) => { const { resultados: _r, simulada: _s, ...resto } = d; return resto; };
 
 beforeEach(() => {
   abrir.mockReset(); abrir.mockResolvedValue({ ok: true, tenantId: 't-1', rol: 'llave:administracion' });
@@ -140,21 +142,21 @@ describe('el resultado', () => {
   it('un desglose válido → 201 con el conteo', async () => {
     const r = await postear({ desgloses: [DESGLOSE()] });
     expect(r.status).toBe(201);
-    expect((await json(r)).datos).toEqual({ recibidas: 1, idempotentes: 0, retenidas: 0, excepciones: [] });
+    expect(sinResultados((await json(r)).datos)).toEqual({ recibidas: 1, idempotentes: 0, retenidas: 0, excepciones: [] });
   });
 
   it('repetido → 200 idempotente, sin excepciones', async () => {
     recibir.mockResolvedValueOnce({ estado: 'idempotente', liquidacionId: 'id-1', claveExterna: 'BIT-T1-B-0001' });
     const r = await postear({ desgloses: [DESGLOSE()] });
     expect(r.status).toBe(200);
-    expect((await json(r)).datos).toEqual({ recibidas: 0, idempotentes: 1, retenidas: 0, excepciones: [] });
+    expect(sinResultados((await json(r)).datos)).toEqual({ recibidas: 0, idempotentes: 1, retenidas: 0, excepciones: [] });
   });
 
   it('huella distinta → excepción `correccion_pendiente` (200, nada nuevo se guardó)', async () => {
     recibir.mockResolvedValueOnce({ estado: 'correccion_pendiente', liquidacionId: 'id-1', claveExterna: 'BIT-T1-B-0001' });
     const r = await postear({ desgloses: [DESGLOSE()] });
     expect(r.status).toBe(200);
-    expect((await json(r)).datos).toEqual({
+    expect(sinResultados((await json(r)).datos)).toEqual({
       recibidas: 0, idempotentes: 0, retenidas: 0, excepciones: [{ clave: 'BIT-T1-B-0001', motivo: 'correccion_pendiente' }],
     });
   });
@@ -170,7 +172,7 @@ describe('el resultado', () => {
     recibir.mockResolvedValueOnce(creada('BIT-T1-B-0001', { entregas: 0, retenida: true, motivos: ['sin_poliza'], excepciones: ['sin_poliza'] }));
     const r = await postear({ desgloses: [DESGLOSE('B-0001', { poliza: null })] });
     expect(r.status).toBe(201);
-    expect((await json(r)).datos).toEqual({
+    expect(sinResultados((await json(r)).datos)).toEqual({
       recibidas: 0, idempotentes: 0, retenidas: 1, excepciones: [{ clave: 'BIT-T1-B-0001', motivo: 'sin_poliza' }],
     });
   });
@@ -183,11 +185,39 @@ describe('el resultado', () => {
       .mockResolvedValueOnce({ estado: 'correccion_pendiente', liquidacionId: 'id-4', claveExterna: 'BIT-T1-B-4' });
     const r = await postear({ desgloses: ['B-1', 'B-2', 'B-3', 'B-4'].map((b) => DESGLOSE(b)) });
     expect(r.status).toBe(201);
-    expect((await json(r)).datos).toEqual({
+    expect(sinResultados((await json(r)).datos)).toEqual({
       recibidas: 2, idempotentes: 1, retenidas: 0,
       excepciones: [{ clave: 'BIT-T1-B-3', motivo: 'operador_sin_correo' }, { clave: 'BIT-T1-B-4', motivo: 'correccion_pendiente' }],
     });
     expect(recibir.mock.calls.map((c) => c[1].bitacora)).toEqual(['B-1', 'B-2', 'B-3', 'B-4']);
+  });
+
+  it('`resultados`: una entrada por bitácora, en orden, con su estado explícito y sus motivos (P0-4)', async () => {
+    recibir
+      .mockResolvedValueOnce(creada('BIT-T1-B-1'))
+      .mockResolvedValueOnce({ estado: 'idempotente', liquidacionId: 'id-2', claveExterna: 'BIT-T1-B-2' })
+      .mockResolvedValueOnce(creada('BIT-T1-B-3', { excepciones: ['operador_sin_correo'] }))
+      .mockResolvedValueOnce({ estado: 'correccion_pendiente', liquidacionId: 'id-4', claveExterna: 'BIT-T1-B-4' })
+      .mockResolvedValueOnce(creada('BIT-T1-B-5', { entregas: 0, retenida: true, motivos: ['tipo_sin_regla'], excepciones: ['tipo_sin_regla'] }))
+      .mockResolvedValueOnce({ estado: 'operador_no_encontrado', claveExterna: 'BIT-T1-B-6' })
+      .mockResolvedValueOnce({ estado: 'sin_poliza', claveExterna: 'BIT-T1-B-7' });
+    const r = await postear({ desgloses: ['B-1', 'B-2', 'B-3', 'B-4', 'B-5', 'B-6', 'B-7'].map((b) => DESGLOSE(b)) });
+    expect((await json(r)).datos.resultados).toEqual([
+      { indice: 0, bitacora: 'B-1', estado: 'recibida' },
+      { indice: 1, bitacora: 'B-2', estado: 'idempotente' },
+      { indice: 2, bitacora: 'B-3', estado: 'recibida', motivos: [{ codigo: 'operador_sin_correo' }] },
+      { indice: 3, bitacora: 'B-4', estado: 'correccion_pendiente', motivos: [{ codigo: 'correccion_pendiente' }] },
+      { indice: 4, bitacora: 'B-5', estado: 'retenida', motivos: [{ codigo: 'tipo_sin_regla' }] },
+      { indice: 5, bitacora: 'B-6', estado: 'no_guardada', motivos: [{ codigo: 'operador_no_encontrado' }] },
+      { indice: 6, bitacora: 'B-7', estado: 'no_guardada', motivos: [{ codigo: 'sin_poliza' }] },
+    ]);
+  });
+
+  it('un conflicto de índice único es `no_guardada` con `bitacora_duplicada` y no tumba a las demás', async () => {
+    const { DesgloseEnConflicto } = await import('@/lib/likida/liquidacion_externa/repo_correo');
+    recibir.mockResolvedValueOnce(creada('BIT-T1-B-1')).mockRejectedValueOnce(new DesgloseEnConflicto('x')).mockResolvedValueOnce(creada('BIT-T1-B-3'));
+    const r = await postear({ desgloses: ['B-1', 'B-2', 'B-3'].map((b) => DESGLOSE(b)) });
+    expect((await json(r)).datos.resultados.map((x: { estado: string }) => x.estado)).toEqual(['recibida', 'no_guardada', 'recibida']);
   });
 
   it('no entrega: el servicio se llama sin dependencias de envío y el origen queda marcado', async () => {
