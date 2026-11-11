@@ -380,13 +380,13 @@ export function ChatEntrevista({
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
           <input ref={inputArchivo} type="file" accept="image/*,.pdf,.xlsx,.xls,.csv,.tsv,.ods,.xml,.txt,.json,.md" className="rv-ob__archivo"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) void leerArchivo(f); }} />
-          <Tooltip texto={t('op.adjuntar_comprobante')}>
+          <span className="rv-ob__clip"><Tooltip texto={t('op.adjuntar_comprobante')}>
             <Boton ref={botonClip} variante="ghost" className="rv-btn--icono" aria-label={t('op.adjuntar_comprobante')}
               onClick={() => setMenuAdjuntar((v) => !v)} disabled={ocupado} icono={<Icono icono={Paperclip} />}>{null}</Boton>
-          </Tooltip>
-          <Tooltip texto={t('op.enviar')}>
+          </Tooltip></span>
+          <span className="rv-ob__enviar"><Tooltip texto={t('op.enviar')}>
             <Boton type="submit" variante="primary" className="rv-btn--icono" aria-label={t('op.enviar')} disabled={!puedeEnviar} icono={<Icono icono={ArrowUp} />}>{null}</Boton>
-          </Tooltip>
+          </Tooltip></span>
         </div>
       </div>
     </form>
@@ -411,7 +411,7 @@ export function ChatEntrevista({
   const chipsRow = chips.length > 0 && (
     <div className="rv-ob__chips" data-portada={vacio || undefined}>
       {chips.map((c) => (
-        <Boton key={c.valor} variante="suave" tamano="sm" onClick={() => preguntar(c.valor, c.etiqueta)}>
+        <Boton key={c.valor} variante="secondary" tamano="sm" className="rv-ob__chip" onClick={() => preguntar(c.valor, c.etiqueta)}>
           {c.etiqueta}
         </Boton>
       ))}
