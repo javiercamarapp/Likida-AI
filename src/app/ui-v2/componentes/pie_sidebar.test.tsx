@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Settings } from 'lucide-react';
 
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(), usePathname: () => '/dashboard' }));
-const { default: PieSidebar, TarjetaUsuario, etiquetaAvisos, inicialesDe, ConmutadorIdioma } = await import('./pie-sidebar');
+const { default: PieSidebar, TarjetaUsuario, etiquetaAvisos, inicialesDe, ConmutadorIdioma, organizacionVigente } = await import('./pie-sidebar');
 const { IdiomaProvider } = await import('@/lib/i18n/proveedor');
 const { IDIOMA_EN_DISPONIBLE, idiomaElegible } = await import('@/lib/i18n/idioma');
 const { shell: shellEn } = await import('@/lib/i18n/en/shell');
@@ -48,6 +48,25 @@ describe('PieSidebar: estados', () => {
     expect(h).toContain('rv-ps-tema__riel');
     expect(h).toMatch(/aria-label="Tema claro\. Cambiar a: Seguir al sistema"/);
     expect(h).toContain('title="Avisos: 2 pendientes"');
+  });
+});
+
+describe('PieSidebar: la organización sigue a la prop', () => {
+  const dos = [{ valor: 'a', nombre: 'Flota A' }, { valor: 'b', nombre: 'Flota B' }];
+  it('al cambiar `actual` el nombre y el destino de «Ir» cambian con ella (no se queda con la flota inicial)', () => {
+    const a = pintar({ organizacion: org(dos, 'a'), avisos: { href: '/av' }, tarjeta });
+    const b = pintar({ organizacion: org(dos, 'b'), avisos: { href: '/av' }, tarjeta });
+    expect(a).toContain('href="/ir/a"');
+    expect(b).toContain('href="/ir/b"');
+    expect(b).not.toContain('href="/ir/a"');
+  });
+  it('una elección del usuario vale solo contra la `actual` con que se hizo', () => {
+    expect(organizacionVigente({ de: 'a', valor: 'b' }, 'a')).toBe('b');
+    expect(organizacionVigente({ de: 'a', valor: 'b' }, 'c')).toBe('c');
+    expect(organizacionVigente(null, 'c')).toBe('c');
+  });
+  it('flota única que cambia: muestra la nueva', () => {
+    expect(pintar({ organizacion: org([{ valor: 'b', nombre: 'Flota B' }], 'b'), avisos: { href: '/av' }, tarjeta })).toContain('Flota B');
   });
 });
 

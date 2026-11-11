@@ -62,11 +62,19 @@ export function inicialesDe(nombre: string | null): string {
   return r.toLocaleUpperCase('es');
 }
 
+/** La elección del usuario en el selector vale solo contra la `actual` con que se hizo; si `actual` cambió, manda la prop. */
+export function organizacionVigente(eleccion: { de: string | null; valor: string } | null, actual: string | null): string | null {
+  return eleccion && eleccion.de === actual ? eleccion.valor : actual;
+}
+
 function Organizacion({ org, alNavegar }: { org: OrganizacionPie; alNavegar?: () => void }) {
   const { t } = useT('shell', shellEs);
   const id = useId();
   const opciones = org.opciones ?? [];
-  const [elegida, setElegida] = useState<string | null>(org.actual);
+  // La elección del usuario vale solo mientras `actual` no cambie: el layout persiste entre navegaciones (otra flota, «Ver como»,
+  // cambio de perfil) y el valor mostrado tiene que seguir a la prop, no quedarse con la flota inicial.
+  const [eleccion, setEleccion] = useState<{ de: string | null; valor: string } | null>(null);
+  const elegida = organizacionVigente(eleccion, org.actual);
   const valor = opciones.some((o) => o.valor === elegida) ? elegida : (opciones[0]?.valor ?? null);
   const nombre = opciones.find((o) => o.valor === valor)?.nombre ?? null;
   const destino = valor ? org.hrefIr(valor) : org.hrefSinOpcion ?? null;
@@ -79,7 +87,7 @@ function Organizacion({ org, alNavegar }: { org: OrganizacionPie; alNavegar?: ()
           <span className="rv-ps-campo" data-sin-dato>{t('pie.org.sinDato')}</span>
         ) : opciones.length > 1 ? (
           <span className="rv-ps-select">
-            <select aria-label={t('pie.org.titulo')} value={valor ?? ''} onChange={(e) => setElegida(e.target.value)}>
+            <select aria-label={t('pie.org.titulo')} value={valor ?? ''} onChange={(e) => setEleccion({ de: org.actual, valor: e.target.value })}>
               {opciones.map((o) => <option key={o.valor} value={o.valor}>{o.nombre}</option>)}
             </select>
             <ChevronDown className="rv-ps-select__chev" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
