@@ -146,7 +146,7 @@ export function Calculadora() {
                   <p className="mt-3 text-sm">
                     {rico(t('cal.dsl.cuota', { pesos: r.diesel.cuota.pesosPorLitro, fecha: r.diesel.cuota.registradaEl }), {
                       strong: (c) => <strong style={{ color: 'var(--ink)' }}>{c}</strong>,
-                      enlace: (c) => <a href={r.diesel.cuota.fuenteUrl} className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">{c}</a>,
+                      enlace: (c) => <a href={(r.diesel as Extract<typeof r.diesel, { cuota: unknown }>).cuota.fuenteUrl} className="underline underline-offset-2" target="_blank" rel="noopener noreferrer">{c}</a>,
                     })}
                     <br />{rico(t('cal.dsl.estimacion', { monto: mxn(r.diesel.estimacionMesMxn) }), { strong: (c) => <strong style={{ color: 'var(--ink)' }}>{c}</strong> })}
                   </p>

@@ -113,7 +113,7 @@ export interface DatosCorridaFallida {
  */
 export function avisoCorridaFallida(d: DatosCorridaFallida, idioma?: unknown): Correo {
   const tr = trCorreo(idioma);
-  const { t, tp } = tr;
+  const { t } = tr;
   const repetido = d.seguidas > 1;
 
   // EL FALLO ES DE LIKIDA Y EL CORREO LO DICE (B8). La variante de siempre
@@ -242,7 +242,7 @@ export interface DatosEscalacionAsistente {
  */
 export function avisoEscalacionAsistente(d: DatosEscalacionAsistente, idioma?: unknown): Correo {
   const tr = trCorreo(idioma);
-  const { t, tp } = tr;
+  const { t } = tr;
   return {
     asunto: d.folio ? t('ea.asunto.folio', { motivo: d.motivo, folio: d.folio }) : t('ea.asunto', { motivo: d.motivo }),
     avance: t('ea.avance'),
@@ -327,7 +327,7 @@ export interface DatosInvitacion {
  */
 export function avisoInvitacion(d: DatosInvitacion, idioma?: unknown): Correo {
   const tr = trCorreo(idioma);
-  const { t, tp } = tr;
+  const { t } = tr;
   const quien = d.invitaNombre?.trim();
   const flota = d.flota ?? t('inv.flota_por_omision');
   const v = { flota, rol: d.rol };
@@ -376,7 +376,7 @@ export interface DatosPrueba {
  */
 export function avisoDePrueba(d: DatosPrueba, idioma?: unknown): Correo {
   const tr = trCorreo(idioma);
-  const { t, tp } = tr;
+  const { t } = tr;
   return {
     asunto: t('pr.asunto', { agente: d.agente }),
     avance: t('pr.avance'),
