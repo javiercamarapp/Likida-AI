@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { numero } from '@/lib/formato';
 import { AccionesEnlace } from './acciones';
 import type { NumeroWhatsApp } from '@/lib/likida/arranque_whatsapp';
-import { Aviso, EstadoError, MarcaIntegracion, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoConfiguracion, type SeccionConfig } from '@/app/ui-v2/esqueletos';
+import { Aviso, EstadoError, MarcaIntegracion } from '@/app/ui-v2/componentes';
 import './whatsapp.css';
 import type { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
@@ -53,80 +54,89 @@ export function VistaArranqueWhatsApp({ tr = TR_OPERACION_ES, datos, hrefOperado
 }) {
   const { t } = tr;
   const n = datos.numero;
-  return (
-    <MarcoPagina titulo={t('wa.titulo')} apoyo={t('wa.apoyo')}>
-      {n.estado === 'sin_configurar' && (
-        <div role="alert">
-          <Aviso tono="warn" titulo={t('wa.sinconfig.titulo')}>
-            {t('wa.sinconfig.pre')} <Link href={hrefAyuda} className="rv-wa__enlace">{t('wa.sinconfig.ayuda')}</Link>{t('wa.sinconfig.post')}
-          </Aviso>
-        </div>
-      )}
-
-      {n.estado === 'invalido' && (
-        <EstadoError>{t('wa.invalido', { motivo: n.motivo })}</EstadoError>
-      )}
-
-      {n.estado === 'configurado' && datos.enlace && (
-        // El cartel imprimible es el ÚNICO bloque que sale al imprimir (whatsapp.css).
+  const secciones: SeccionConfig[] = [];
+  if (n.estado === 'configurado' && datos.enlace) {
+    secciones.push({
+      id: 'cartel', titulo: t('wa.cartel.titulo'),
+      // El cartel imprimible es el ÚNICO bloque que sale al imprimir (whatsapp.css).
+      contenido: (
         <div id="cartel-whatsapp">
-          <Tarjeta titulo={t('wa.cartel.titulo')} info="whatsapp.cartel">
-            {/* A36-R15-06: la leyenda va DENTRO del cartel; el CSS de impresión oculta todo lo de fuera, y un cartel de prueba sin marca se pegaba en los patios. */}
-            {n.esPrueba && <p className="rv-wa__prueba">{t('wa.cartel.prueba')}</p>}
-            <div className="rv-wa__cartel">
-              {datos.qrSvg && (
-                // El SVG lo arma `lib/qr.ts` en el servidor desde un texto que SALE de nuestra configuración (número + nombre de la
-                // flota, ya codificados): no es HTML de un usuario.
-                <div className="rv-wa__qr" dangerouslySetInnerHTML={{ __html: datos.qrSvg }} />
-              )}
-              <div className="rv-wa__texto">
-                <p className="rv-wa__numero"><MarcaIntegracion id="whatsapp" /> {n.visible}</p>
-                <p className="rv-wa__nota">
-                  {t('wa.cartel.escanea.pre')} {datos.nombreFlota}{t('wa.cartel.escanea.post')}
-                </p>
-                <p className="rv-wa__enlace-largo">
-                  <a href={datos.enlace} className="rv-wa__enlace" rel="noopener noreferrer">{datos.enlace}</a>
-                </p>
-              </div>
+          {/* A36-R15-06: la leyenda va DENTRO del cartel; el CSS de impresión oculta todo lo de fuera, y un cartel de prueba sin marca se pegaba en los patios. */}
+          {n.esPrueba && <p className="rv-wa__prueba">{t('wa.cartel.prueba')}</p>}
+          <div className="rv-wa__cartel">
+            {datos.qrSvg && (
+              // El SVG lo arma `lib/qr.ts` en el servidor desde un texto que SALE de nuestra configuración (número + nombre de la
+              // flota, ya codificados): no es HTML de un usuario.
+              <div className="rv-wa__qr" dangerouslySetInnerHTML={{ __html: datos.qrSvg }} />
+            )}
+            <div className="rv-wa__texto">
+              <p className="rv-wa__numero"><MarcaIntegracion id="whatsapp" /> {n.visible}</p>
+              <p className="rv-wa__nota">
+                {t('wa.cartel.escanea.pre')} {datos.nombreFlota}{t('wa.cartel.escanea.post')}
+              </p>
+              <p className="rv-wa__enlace-largo">
+                <a href={datos.enlace} className="rv-wa__enlace" rel="noopener noreferrer">{datos.enlace}</a>
+              </p>
             </div>
-            <div className="rv-wa__acciones"><AccionesEnlace enlace={datos.enlace} esPrueba={n.esPrueba} /></div>
-          </Tarjeta>
+          </div>
+          <div className="rv-wa__acciones"><AccionesEnlace enlace={datos.enlace} esPrueba={n.esPrueba} /></div>
         </div>
+      ),
+    });
+  }
+  secciones.push({
+    id: 'flujo', titulo: t('wa.flujo.titulo'),
+    contenido: (
+      <ol className="rv-wa__pasos">
+        {((datos.perfil === 'cinco_agentes' ? PASOS_CHOFER_CINCO_AGENTES : PASOS_CHOFER) as ReadonlyArray<Paso>).map(([titulo, detalle]) => (
+          <li key={titulo}>
+            <p className="rv-wa__paso">{t(titulo)}</p>
+            <p className="rv-wa__nota">{t(detalle)}</p>
+          </li>
+        ))}
+      </ol>
+    ),
+  }, {
+    id: 'avance', titulo: t('wa.avance.titulo'),
+    contenido: datos.operadores === null ? (
+      <p className="rv-wa__nota">{t('wa.avance.nocuenta')}</p>
+    ) : datos.operadores.activos === 0 ? (
+      <p className="rv-wa__nota">
+        {t('wa.avance.ninguno')} <Link href={hrefOperadores} className="rv-wa__enlace">{t('wa.avance.alta')}</Link>{t('wa.avance.alta.post')}
+      </p>
+    ) : (
+      <p className="rv-wa__nota">
+        {t('wa.avance.tienes')} <strong>{numero(datos.operadores.activos)}</strong> {t('wa.avance.activos')}
+        {datos.operadores.pendientesDeInvitar > 0
+          ? <> {t('comun.y')} <strong>{numero(datos.operadores.pendientesDeInvitar)}</strong> {t('wa.avance.pendientes')} <Link href={hrefOperadores} className="rv-wa__enlace">{t('wa.avance.invita')}</Link>{t('wa.avance.invita.post')}</>
+          : t('wa.avance.todos')}
+      </p>
+    ),
+  });
+  return (
+    <EsqueletoConfiguracion
+      titulo={t('wa.titulo')}
+      apoyo={t('wa.apoyo')}
+      avisos={(
+        <>
+          {n.estado === 'sin_configurar' && (
+            <div role="alert">
+              <Aviso tono="warn" titulo={t('wa.sinconfig.titulo')}>
+                {t('wa.sinconfig.pre')} <Link href={hrefAyuda} className="rv-wa__enlace">{t('wa.sinconfig.ayuda')}</Link>{t('wa.sinconfig.post')}
+              </Aviso>
+            </div>
+          )}
+          {n.estado === 'invalido' && (
+            <EstadoError>{t('wa.invalido', { motivo: n.motivo })}</EstadoError>
+          )}
+          {n.estado === 'configurado' && n.esPrueba && (
+            <Aviso tono="warn">
+              {t('wa.prueba.aviso')}
+            </Aviso>
+          )}
+        </>
       )}
-
-      {n.estado === 'configurado' && n.esPrueba && (
-        <Aviso tono="warn">
-          {t('wa.prueba.aviso')}
-        </Aviso>
-      )}
-
-      <Tarjeta titulo={t('wa.flujo.titulo')} info="whatsapp.flujo">
-        <ol className="rv-wa__pasos">
-          {((datos.perfil === 'cinco_agentes' ? PASOS_CHOFER_CINCO_AGENTES : PASOS_CHOFER) as ReadonlyArray<Paso>).map(([titulo, detalle]) => (
-            <li key={titulo}>
-              <p className="rv-wa__paso">{t(titulo)}</p>
-              <p className="rv-wa__nota">{t(detalle)}</p>
-            </li>
-          ))}
-        </ol>
-      </Tarjeta>
-
-      <Tarjeta titulo={t('wa.avance.titulo')} info="whatsapp.avance">
-        {datos.operadores === null ? (
-          <p className="rv-wa__nota">{t('wa.avance.nocuenta')}</p>
-        ) : datos.operadores.activos === 0 ? (
-          <p className="rv-wa__nota">
-            {t('wa.avance.ninguno')} <Link href={hrefOperadores} className="rv-wa__enlace">{t('wa.avance.alta')}</Link>{t('wa.avance.alta.post')}
-          </p>
-        ) : (
-          <p className="rv-wa__nota">
-            {t('wa.avance.tienes')} <strong>{numero(datos.operadores.activos)}</strong> {t('wa.avance.activos')}
-            {datos.operadores.pendientesDeInvitar > 0
-              ? <> {t('comun.y')} <strong>{numero(datos.operadores.pendientesDeInvitar)}</strong> {t('wa.avance.pendientes')} <Link href={hrefOperadores} className="rv-wa__enlace">{t('wa.avance.invita')}</Link>{t('wa.avance.invita.post')}</>
-              : t('wa.avance.todos')}
-          </p>
-        )}
-      </Tarjeta>
-    </MarcoPagina>
+      secciones={secciones}
+    />
   );
 }

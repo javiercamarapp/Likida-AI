@@ -21,7 +21,10 @@ import {
 } from './forma';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { AvisoCompacto, Chip, MarcoPagina, StatusChip, TablaBase, TituloRecuadro, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Chip, StatusChip, TablaBase, TabsLinea, TituloRecuadro, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import './facturacion.css';
+import type { ReactNode } from 'react';
 
 // Tonos del sistema como clases (sin `style=`): el color sale de los tokens, no de un literal.
 const APAGADO = 'text-[color:var(--muted)]';
@@ -65,12 +68,21 @@ export interface CapturaFacturacion {
  *
  * Pura props a propósito, para poder mirarla con fixtures sin sesión.
  */
-export function VistaFacturacion({ datos, captura = null, auditoria = null, tr = trEs }: {
+export type SeccionFacturacion = 'cartera' | 'mesa' | 'auditor' | 'cobro';
+export const SECCIONES_FACTURACION: readonly SeccionFacturacion[] = ['cartera', 'mesa', 'auditor', 'cobro'];
+
+export function VistaFacturacion({ datos, captura = null, auditoria = null, tr = trEs, seccion = 'cartera', hrefSeccion, extras }: {
   datos: FacturacionClientes | null;
   captura?: CapturaFacturacion | null;
   /** El cruce pactado/entregado/facturado/cobrado (auditor_cobranza.ts).
    *  `null` = su lectura falló; la sección pinta el error dicho, no un cero. */
   auditoria?: AuditoriaCobranza | null; tr?: Tr;
+  /** La pestaña vigente (Rovaq: hub con pestañas subrayadas). */
+  seccion?: SeccionFacturacion;
+  /** Enlace de cada pestaña; sin él no se pintan pestañas (fixtures sin sesión). */
+  hrefSeccion?: (s: SeccionFacturacion) => string;
+  /** Estadías y portal de pago: bloques independientes (sus lecturas y su fallo no tocan la cartera ni el auditor) que viven en su pestaña. */
+  extras?: ReactNode;
 }) {
   // «Registrar factura» es la acción de la pantalla: vive en el encabezado y abre un cajón del sistema (nunca un `<details>` con
   // formulario dentro de la tabla ni de una tarjeta).
@@ -78,35 +90,59 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null, tr =
     <FormaFactura accion={captura.factura} clientes={captura.clientes}
       viajesSinFacturar={datos.enLaMesa.viajes} hoy={captura.hoy} />
   ) : undefined;
+  const vacioTotal = datos !== null && datos.cartera.facturas.length === 0 && datos.viajesLiquidados === 0;
+  // Pestañas con su contador real: solo cuando hay datos que contar (un contador en 0 inventado no se pinta).
+  const pestanas = hrefSeccion && datos !== null && !vacioTotal ? (
+    <TabsLinea
+      etiqueta={tr('facturacion.vista.secciones')}
+      actual={seccion}
+      pestanas={[
+        { clave: 'cartera', etiqueta: tr('facturacion.vista.tab.cartera'), href: hrefSeccion('cartera'), conteo: datos.cartera.facturasTotal },
+        { clave: 'mesa', etiqueta: tr('facturacion.vista.tab.mesa'), href: hrefSeccion('mesa'), conteo: datos.enLaMesa.total, atencion: datos.enLaMesa.total > 0 },
+        { clave: 'auditor', etiqueta: tr('facturacion.vista.tab.auditor'), href: hrefSeccion('auditor'), conteo: auditoria === null ? null : auditoria.cola.length, atencion: (auditoria?.cola.length ?? 0) > 0 },
+        ...(extras ? [{ clave: 'cobro', etiqueta: tr('facturacion.vista.tab.cobro'), href: hrefSeccion('cobro') }] : []),
+      ]}
+    />
+  ) : undefined;
+  // Sin enlaces de pestaña (fixtures sin sesión) se pintan TODAS las secciones, como antes; con ellos, una por pestaña.
+  const todo = !hrefSeccion;
+  const conTitulo = todo;
   return (
-    <MarcoPagina titulo={tr('facturacion.vista.facturacionAClientes')} apoyo={tr('facturacion.vista.facturasEmitidasSusPagos')} acciones={alta}>
+    <EsqueletoTablaMaestra
+      titulo={tr('facturacion.vista.facturacionAClientes')}
+      apoyo={tr('facturacion.vista.facturasEmitidasSusPagos')}
+      acciones={alta}
+      filtros={pestanas}
+    >
       {datos === null ? (
         <EstadoError mensaje={tr('facturacion.vista.noPudeLeerTus')} />
-      ) : datos.cartera.facturas.length === 0 && datos.viajesLiquidados === 0 ? (
+      ) : vacioTotal ? (
         // El estado en el que abre una flota nueva: las tablas de la 0049
         // existen y están vacías. Se dice qué las llena, no se pintan
         // ceros — y desde el hallazgo A1 (auditoría 4), la captura que las
         // llena vive AQUÍ MISMO, no en una promesa.
-        <>
+        <div className="rv-fact__bloques">
           <EstadoVacio>
             {rico(tr('facturacion.vista.estaPantallaTrabajaCon'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
           </EstadoVacio>
           {/* Una flota sin facturas puede tener hallazgos IGUAL: el
               entregado-sin-facturar existe justamente antes de la primera
               factura. Si el auditor encontró algo, se enseña aquí también. */}
-          {auditoria !== null && auditoria.cola.length > 0 && <BloqueAuditor tr={tr} auditoria={auditoria} />}
-        </>
+          {auditoria !== null && auditoria.cola.length > 0 && <BloqueAuditor tr={tr} auditoria={auditoria} conTitulo />}
+          {extras}
+        </div>
       ) : (
-        <>
-          <BloqueCartera tr={tr} datos={datos} captura={captura} />
-          <BloqueEnLaMesa tr={tr} datos={datos} />
-          <BloqueAuditor tr={tr} auditoria={auditoria} />
+        <div className="rv-fact__bloques">
+          {(todo || seccion === 'cartera') && <BloqueCartera tr={tr} datos={datos} captura={captura} conTitulo={conTitulo} />}
+          {(todo || seccion === 'mesa') && <BloqueEnLaMesa tr={tr} datos={datos} conTitulo={conTitulo} />}
+          {(todo || seccion === 'auditor') && <BloqueAuditor tr={tr} auditoria={auditoria} conTitulo={conTitulo} />}
+          {(todo || seccion === 'cobro') && extras}
           <p className={`text-[11px] ${TENUE}`}>
             {rico(tr('facturacion.vista.todoLoDeEsta', { v: fechaMx(datos.hoy) }), { strong: (c) => <strong>{c}</strong> })}
           </p>
-        </>
+        </div>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
@@ -124,12 +160,12 @@ function MontoCubeta({ monto, atrasado = false }: { monto: number; atrasado?: bo
 
 // ── La cartera ─────────────────────────────────────────────────────────────
 
-function BloqueCartera({ datos, captura, tr = trEs }: { datos: FacturacionClientes; captura: CapturaFacturacion | null; tr?: Tr }) {
+function BloqueCartera({ datos, captura, conTitulo = true, tr = trEs }: { datos: FacturacionClientes; captura: CapturaFacturacion | null; conTitulo?: boolean; tr?: Tr }) {
   const c = datos.cartera;
 
   return (
     <section className="flex flex-col gap-3">
-      <TituloRecuadro info="facturacion.cartera">{tr('facturacion.vista.loQueFacturasteY')}</TituloRecuadro>
+      {conTitulo && <TituloRecuadro info="facturacion.cartera">{tr('facturacion.vista.loQueFacturasteY')}</TituloRecuadro>}
 
       {c.facturas.length === 0 ? (
         <EstadoVacio>
@@ -345,7 +381,7 @@ function TablaFacturas({ facturas, captura, tr = trEs }: { facturas: RenglonCart
 
 // ── El dinero en la mesa ───────────────────────────────────────────────────
 
-function BloqueEnLaMesa({ datos, tr = trEs }: { datos: FacturacionClientes; tr?: Tr }) {
+function BloqueEnLaMesa({ datos, conTitulo = true, tr = trEs }: { datos: FacturacionClientes; conTitulo?: boolean; tr?: Tr }) {
   const m = datos.enLaMesa;
   const columnas: ColumnaBase<RenglonSinFacturar>[] = [
     {
@@ -389,7 +425,7 @@ function BloqueEnLaMesa({ datos, tr = trEs }: { datos: FacturacionClientes; tr?:
 
   return (
     <section className="flex flex-col gap-3">
-      <TituloRecuadro info="facturacion.en_la_mesa">{tr('facturacion.vista.viajesLiquidadosQueNadie')}</TituloRecuadro>
+      {conTitulo && <TituloRecuadro info="facturacion.en_la_mesa">{tr('facturacion.vista.viajesLiquidadosQueNadie')}</TituloRecuadro>}
 
       {datos.viajesLiquidados === 0 ? (
         <EstadoVacio>
@@ -474,7 +510,7 @@ const ROTULO_CUBETA: Record<CubetaAuditor, { rotulo: string; ayuda: string }> = 
   CUBETAS_AUDITOR.map((c) => [c.clave, { rotulo: c.rotulo, ayuda: c.ayuda }]),
 ) as Record<CubetaAuditor, { rotulo: string; ayuda: string }>;
 
-function BloqueAuditor({ auditoria, tr = trEs }: { auditoria: AuditoriaCobranza | null; tr?: Tr }) {
+function BloqueAuditor({ auditoria, conTitulo = true, tr = trEs }: { auditoria: AuditoriaCobranza | null; conTitulo?: boolean; tr?: Tr }) {
   type Hallazgo = AuditoriaCobranza['cola'][number];
   const columnas: ColumnaBase<Hallazgo>[] = [
     {
@@ -497,7 +533,7 @@ function BloqueAuditor({ auditoria, tr = trEs }: { auditoria: AuditoriaCobranza 
   ];
   return (
     <section className="flex flex-col gap-3">
-      <TituloRecuadro info="facturacion.auditor">{tr('facturacion.vista.auditorDeCobranzaLo')}</TituloRecuadro>
+      {conTitulo && <TituloRecuadro info="facturacion.auditor">{tr('facturacion.vista.auditorDeCobranzaLo')}</TituloRecuadro>}
 
       {auditoria === null ? (
         <EstadoError mensaje={tr('facturacion.vista.noPudeCruzarLos')} />

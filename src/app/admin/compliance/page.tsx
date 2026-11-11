@@ -10,8 +10,8 @@ import { logger } from '@/lib/logger';
 import { getSolicitudesArcoPendientes } from '@/lib/admin/escalaciones';
 import { agregarDiasHabiles } from '@/lib/admin/dias-habiles';
 import { mensajeParaPantalla } from '@/lib/likida/administracion';
-import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, MarcoPagina, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { BotonEnlace, CampoTextarea, Disclosure, EstadoError, StatusChip, Tarjeta, type TonoEstado } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import '../sistema.css';
@@ -103,15 +103,19 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
   ];
 
   return (
-    <MarcoPagina titulo={t('compliance.seguridad_y_datos')} apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}>
-      {/* Sin una sola solicitud, dos ceros no son dos mediciones: el único estado vacío (abajo) lo dice una vez. */}
-      {lectura !== null && solicitudes.length === 0 ? null : <TiraCifras etiqueta={t('compliance.solicitudes_arco')} items={lectura === null ? [
+    <EsqueletoTablaMaestra
+      titulo={t('compliance.seguridad_y_datos')}
+      apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}
+      etiquetaCifras={t('compliance.solicitudes_arco')}
+      /* Sin una sola solicitud, dos ceros no son dos mediciones: el único estado vacío (abajo) lo dice una vez. */
+      cifras={lectura !== null && solicitudes.length === 0 ? undefined : lectura === null ? [
         { etiqueta: t('compliance.por_responder'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
         { etiqueta: t('compliance.vencen_pronto'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
       ] : [
         { etiqueta: t('compliance.por_responder'), valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: t('compliance.recibidas_o_en_proceso_de_todas') },
         { etiqueta: t('compliance.vencen_pronto'), valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: t('compliance.plazo_en_5_dias_habiles_o') },
-      ]} />}
+      ]}
+    >
 
       {lectura === null ? (
         <EstadoError reintentar>{t('compliance.no_se_pudieron_leer_las_solicitudes_2')}</EstadoError>
@@ -173,7 +177,7 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
       <Disclosure titulo={t('compliance.lo_que_aun_no_existe_aqui')} resumen={t('compliance.retencion_de_comprobantes_y_avisos_por')}>
         <p className="adm-sis-nota">{t('compliance.la_retencion_de_comprobantes_cff_art')}</p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

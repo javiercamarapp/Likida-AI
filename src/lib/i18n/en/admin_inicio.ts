@@ -338,4 +338,7 @@ export const admin_inicio: Record<keyof typeof admin_inicioEs, string> = {
   'selector_vista.no_hay_ninguna_flota': 'No fleet is registered, so the three views open EMPTY and say so on screen — they are for looking at the frontend, not for reading a figure.',
   'selector_vista.dar_de_alta_una': 'Register a fleet',
   'selector_vista.cambian_lo_que_se': 'They change what you are SHOWN, not what you can do: your session is still the superadmin one and each view carries a ribbon that says so, with the way back to this console.',
+  'ficha_conv.eyebrow': 'Conversation record',
+  'ficha_conv.mensajes': 'Messages',
+  'ficha_conv.ultima': 'Last activity',
 };

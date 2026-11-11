@@ -4,8 +4,11 @@ import {
   FormaNuevoPatio, FormaEditarPatio, FormaJefe, FormaSinPatio, type AccionForma,
 } from './formas';
 import {
-  AvisoCompacto, Disclosure, EstadoError, EstadoVacio, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase,
+  AvisoCompacto, EstadoError, EstadoVacio, TablaBase, Tarjeta, type ColumnaBase,
 } from '@/app/ui-v2/componentes';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { CajonAlta } from '../cajon-alta';
 import './patios.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -72,45 +75,56 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
     { id: 'unidades', titulo: t('patios.col.unidades'), alinear: 'der', celda: (p) => numero(p.unidades) },
     { id: 'jefes', titulo: t('patios.col.jefes'), alinear: 'der', celda: (p) => numero(p.jefes) },
   ];
+  // La edición de cada patio vive en su cajón (Rovaq: alta y edición en cajón lateral), abierto desde la fila. Solo quien administra.
+  if (puedeAdministrar) {
+    columnas.push({
+      id: 'acciones', titulo: t('patios.col.acciones'), alinear: 'der', tituloOculto: true,
+      celda: (p) => (
+        <CajonAlta id={`editar-${p.id}`} titulo={t('patios.editar.titulo', { nombre: p.nombre })} disparador={t('op.editar')} variante="ghost">
+          <FormaEditarPatio accionEditar={editar} accionEliminar={eliminar} patio={p} />
+        </CajonAlta>
+      ),
+    });
+  }
+  // Cifras sobre los patios que SÍ se leyeron; si la lista no se pudo leer no hay tira (nunca ceros de relleno).
+  const cifras: PropsCifra[] | undefined = ilegible ? undefined : [
+    { etiqueta: t('patios.titulo'), valor: lista.length },
+    { etiqueta: t('patios.col.operadores'), valor: lista.reduce((n, p) => n + p.operadores, 0) },
+    { etiqueta: t('patios.col.unidades'), valor: lista.reduce((n, p) => n + p.unidades, 0) },
+    { etiqueta: t('patios.col.jefes'), valor: lista.reduce((n, p) => n + p.jefes, 0) },
+  ];
   return (
-    <MarcoPagina titulo={t('patios.titulo')} apoyo={t('patios.apoyo')}>
-      <AvisoCompacto tono="info"
-        resumen={<>{t('patios.aviso')}
-          {patioDelJefe && <> {t('patios.aviso.jefe.pre')} <strong>{patioDelJefe}</strong>{t('patios.aviso.jefe.post')}</>}</>}
-        mas="Las plantillas de carga masiva también saben a dónde va cada camión. Un jefe con patio solo corrige operadores, unidades y jornadas de ese patio." />
-
-      <Tarjeta titulo={t('patios.tarjeta')} info="patios.lista">
-        {ilegible ? (
-          <EstadoError reintentar>{t('patios.error.lista')}</EstadoError>
-        ) : lista.length === 0 ? (
-          <EstadoVacio titulo={t('patios.vacio.titulo')}>
-            {puedeAdministrar
-              ? t('patios.vacio.admin')
-              : t('patios.vacio.otro')}
-          </EstadoVacio>
-        ) : (
-          <TablaBase<FilaPatio> etiqueta={t('patios.tabla.etiqueta')} columnas={columnas} filas={lista}
-            idFila={(p) => p.id} tarjetaMovil />
-        )}
-        {puedeAdministrar && lista.length > 0 && (
-          <div className="rv-pt__bloque">
-            {lista.map((p) => (
-              <Disclosure key={p.id} variante="linea" titulo={t('patios.editar.titulo', { nombre: p.nombre })}>
-                <FormaEditarPatio accionEditar={editar} accionEliminar={eliminar} patio={p} />
-              </Disclosure>
-            ))}
-          </div>
-        )}
-        <p className="rv-pt__nota">
-          {t('patios.nota.pre')} <Link href={hrefOperadores} className="rv-pt__enlace">{t('patios.nota.operadores')}</Link> {t('comun.y')} <Link href={hrefUnidades} className="rv-pt__enlace">{t('patios.nota.unidades')}</Link>{t('patios.nota.post')}
-        </p>
-      </Tarjeta>
-
-      {puedeAdministrar && (
-        <Disclosure variante="tarjeta" titulo={t('patios.crear.titulo')} abierto={!ilegible && lista.length === 0}>
+    <EsqueletoTablaMaestra
+      titulo={t('patios.titulo')}
+      apoyo={t('patios.apoyo')}
+      acciones={puedeAdministrar ? (
+        <CajonAlta id="crear" titulo={t('patios.crear.titulo')} disparador={t('patios.crear.titulo')} primario>
           <FormaNuevoPatio accion={crear} />
-        </Disclosure>
+        </CajonAlta>
+      ) : undefined}
+      cifras={cifras}
+      avisos={(
+        <AvisoCompacto tono="info"
+          resumen={<>{t('patios.aviso')}
+            {patioDelJefe && <> {t('patios.aviso.jefe.pre')} <strong>{patioDelJefe}</strong>{t('patios.aviso.jefe.post')}</>}</>}
+          mas="Las plantillas de carga masiva también saben a dónde va cada camión. Un jefe con patio solo corrige operadores, unidades y jornadas de ese patio." />
       )}
+    >
+      {ilegible ? (
+        <EstadoError reintentar>{t('patios.error.lista')}</EstadoError>
+      ) : lista.length === 0 ? (
+        <EstadoVacio titulo={t('patios.vacio.titulo')}>
+          {puedeAdministrar
+            ? t('patios.vacio.admin')
+            : t('patios.vacio.otro')}
+        </EstadoVacio>
+      ) : (
+        <TablaBase<FilaPatio> etiqueta={t('patios.tabla.etiqueta')} columnas={columnas} filas={lista}
+          idFila={(p) => p.id} tarjetaMovil />
+      )}
+      <p className="rv-pt__nota">
+        {t('patios.nota.pre')} <Link href={hrefOperadores} className="rv-pt__enlace">{t('patios.nota.operadores')}</Link> {t('comun.y')} <Link href={hrefUnidades} className="rv-pt__enlace">{t('patios.nota.unidades')}</Link>{t('patios.nota.post')}
+      </p>
 
       {puedeAdministrar && lista.length > 0 && (
         <Tarjeta titulo={t('patios.jefes.titulo')} info="patios.jefes">
@@ -142,6 +156,6 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
           <FormaSinPatio accion={asignarSinPatio} tabla="unidad" cuantos={sinPatio.unidades} patios={opciones} />
         </Tarjeta>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

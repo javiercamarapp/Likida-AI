@@ -1,7 +1,7 @@
 import { saludo, ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
-import { Aviso, BotonEnlace, Chip, FilaTarjetas, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, BotonEnlace, Chip, FilaTarjetas, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { leerSenalesAsistente } from '@/lib/likida/asistente/senales';
 import type { AgenteInsight, Insight } from '@/lib/likida/insights/tipos';
 import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
@@ -59,22 +59,23 @@ export async function ResumenV2({
   const ambito = `${tenantId}:${userId}`;
 
   return (
-    <MarcoPagina
+    <EsqueletoPortada
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
       titulo={t('op.resumen')}
       apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? t('op.tus_cinco_agentes_de_un_vistazo_3') : t('op.tu_flota_de_un_vistazo')}`}
       acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
-    >
-      {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
-
-      {avisoFiscalPospuesto && (
-        <Aviso tono="warn" acciones={puede('/dashboard/onboarding') ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/onboarding${sufijo}`}>{t('op.declararlo_ahora')}</BotonEnlace> : undefined}>{t('op.tu_perfil_fiscal_sigue_sin_declararse')}</Aviso>
+      filtros={<FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
+      avisos={(
+        <>
+          {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
+          {avisoFiscalPospuesto && (
+            <Aviso tono="warn" acciones={puede('/dashboard/onboarding') ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/onboarding${sufijo}`}>{t('op.declararlo_ahora')}</BotonEnlace> : undefined}>{t('op.tu_perfil_fiscal_sigue_sin_declararse')}</Aviso>
+          )}
+        </>
       )}
-
-      <FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />
-
-      <TiraCifras items={itemsKpi(d, sufijo, puede, t)} etiqueta={t('op.tu_flota_en_likida')} />
-
+      cifras={itemsKpi(d, sufijo, puede, t)}
+      etiquetaCifras={t('op.tu_flota_en_likida')}
+    >
       <FilaTarjetas variante="8-4">
         <TarjetaCierres t={t} d={d} />
         <Tarjeta titulo={t('op.requiere_tu_atencion')} info="resumen.requiere_atencion">
@@ -89,6 +90,6 @@ export async function ResumenV2({
           <SiguienteAccion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} atajos={atajos} />
         </Tarjeta>
       </FilaTarjetas>
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }

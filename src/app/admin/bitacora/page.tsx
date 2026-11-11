@@ -7,12 +7,13 @@ import {
 } from '@/lib/admin/bitacora';
 import { fechaHoraMx } from '@/lib/formato';
 import {
-  Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroFecha, FiltroOpciones, MarcoPagina, StatusChip, hrefConParams,
+  Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroBusqueda, FiltroFecha, FiltroOpciones, StatusChip, hrefConParams,
   type OpcionFiltro,
 } from '@/app/ui-v2/componentes';
 import { SelloDato, TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { PiePaginas } from '../pie-paginas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { quienDe } from './quien';
 import { etiquetaAccion, etiquetaEntidad, rotuloTipoAcceso } from './etiquetas';
 import '../sistema.css';
@@ -95,7 +96,10 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
   const lecturaActual = vista === 'acciones' ? lectura : accesos;
 
   return (
-    <MarcoPagina titulo={t('bitacora.bitacora')} apoyo={t('bitacora.lo_que_se_hizo')}>
+    <EsqueletoTablaMaestra
+      titulo={t('bitacora.bitacora')}
+      apoyo={t('bitacora.lo_que_se_hizo')}
+      filtros={<>
       {hayAccesos ? (
         <div className="adm-sis-acciones" role="group" aria-label={t('bitacora.que_registro_ver')}>
           <BotonEnlace href={hrefConParams('/admin/bitacora', params, { vista: null, p: null })} variante={vista === 'acciones' ? 'primary' : 'secondary'} tamano="sm" aria-current={vista === 'acciones' ? 'true' : undefined}>Acciones</BotonEnlace>
@@ -111,7 +115,8 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
         <FiltroFecha nombre="desde" etiqueta={t('bitacora.desde')} valor={filtro.desde} />
         <FiltroFecha nombre="hasta" etiqueta={t('bitacora.hasta')} valor={filtro.hasta} />
       </BarraFiltros>
-
+      </>}
+      avisos={(opciones.flotas === null || opciones.personas === null || alReves || (vista === 'accesos' && accesos !== null && !accesos.existe)) ? <>
       {opciones.flotas === null || opciones.personas === null ? (
         <Aviso tono="warn" titulo={t('bitacora.falta_una_lista_de')}>
           
@@ -122,7 +127,8 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
       {vista === 'accesos' && accesos !== null && !accesos.existe ? (
         <Aviso tono="info" titulo={t('bitacora.este_registro_todavia_no')}>{t('bitacora.los_accesos_del_equipo')}</Aviso>
       ) : null}
-
+      </> : null}
+    >
       {alReves ? null : lecturaActual === null ? (
         <EstadoError reintentar>{t('bitacora.no_se_pudo_leer_2')}</EstadoError>
       ) : vista === 'acciones' && lectura ? (
@@ -152,7 +158,7 @@ export default async function BitacoraPage({ searchParams }: { searchParams: Pro
       <div>
         <SelloDato tipo="observado" fuente="Bitácora de auditoría" leidoEn={ahoraMs()} edad={false} />
       </div>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

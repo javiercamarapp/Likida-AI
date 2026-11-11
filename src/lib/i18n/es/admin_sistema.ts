@@ -799,6 +799,7 @@ export const admin_sistema = {
   'agente_whatsapp.entrega_y_ventana_de_24_horas': 'Entrega y ventana de 24 horas',
   'agente_whatsapp.enviados_entregados_y_leidos_la_ventana': 'Enviados, entregados y leídos, la ventana de 24 horas y los opt-ins requiere integrar la Meta WhatsApp Business API más a fondo de lo que Likida usa hoy.',
   'agentes_insumos.insumos_del_agente': 'Insumos del agente',
+  'agentes_insumos.volver_a_agentes': 'Volver a Agentes',
   'agentes_insumos.quedo_guardado_se_procesa_en_la': '"{titulo}" quedó guardado — se procesa en la siguiente corrida de este agente.',
   'agentes_insumos.quedo_guardado_este_agente_aun_no': '"{titulo}" quedó guardado. Este agente aún no lee insumos, así que ninguna corrida lo usa todavía.',
   'agentes_insumos.id': '{rotuloDepartamento} · id',
@@ -1345,4 +1346,8 @@ export const admin_sistema = {
   'rotulos.estado_prospecto.pilot': 'Piloto',
   'rotulos.estado_prospecto.won': 'Ganado',
   'rotulos.estado_prospecto.lost': 'Perdido',
+  'mapa_prospectos_detalle.eyebrow': 'Ficha de prospecto',
+  'mapa_prospectos_detalle.etiqueta_chips': 'Etapa y contexto',
+  'mapa_prospectos_detalle.etiqueta_resumen': 'Resumen del prospecto',
+  'mapa_prospectos_detalle.etiqueta_cifras': 'Puntajes del prospecto',
 } as const;

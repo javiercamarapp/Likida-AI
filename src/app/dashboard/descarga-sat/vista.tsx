@@ -17,10 +17,11 @@ import { VENTANA_MAX_DIAS } from '@/lib/likida/sat_descarga/ciclo';
 import { DIAS_AVISO_DEFECTO } from '@/lib/likida/sat_descarga/peaje_cierre';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import { sufijoTenant } from '../sufijo';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  AvisoCompacto, BotonEnlace, CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FormaConAviso, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  AvisoCompacto, BotonEnlace, CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FilaTarjetas, FormaConAviso, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import './descarga-sat.css';
@@ -168,51 +169,35 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
   ];
   const sufijoBandeja = sufijoTenant(searchParams) ? `&${sufijoTenant(searchParams).slice(1)}` : '';
 
-  return (
-    <MarcoPagina titulo="SAT" apoyo={tr('descargaSat.vista.losCfdiQueTus')}>
-      {/* ── 1. QUÉ FALTA Y QUIÉN LO DESTRABA. Antes que ninguna cifra. */}
-      <Tarjeta titulo={tr('descargaSat.vista.losComprobantesQueEl')} info="descarga_sat.intro">
-        <div className="rv-sat__bloque">
-          <p className="rv-sat__texto">
-            {tr('descargaSat.vista.todoCfdiQueUn')}
-          </p>
-          {/* La pregunta que un contador hace antes de subir nada. */}
-          <p className="rv-sat__texto">
-            {rico(tr('descargaSat.vista.strongTuEFirma'), { strong: (c) => <strong>{c}</strong> })}
-          </p>
-          {!proveedor.configurado && <AvisoCompacto tono="warn" resumen={proveedor.motivo} />}
-          {proveedor.configurado && (
-            <p className="rv-sat__texto">
-              {tr('descargaSat.vista.proveedorConectadoNoHay', { v: proveedor.proveedor?.toUpperCase() ?? '' })}
-            </p>
-          )}
-        </div>
-      </Tarjeta>
+  const cifrasBase: PropsCifra[] = [
+    { etiqueta: tr('descargaSat.vista.cfdiBajadosDelBuzon'), info: 'descarga_sat.bajados', icono: <Icono icono={CloudDownload} />, valor: c?.descargados ?? null, formato: 'entero', nota: tr('descargaSat.vista.foliosFiscalesUnicosEl') },
+    { etiqueta: tr('descargaSat.vista.casaronSolosConUn'), info: 'descarga_sat.casados', icono: <Icono icono={Link2} />, valor: c?.casados ?? null, formato: 'entero', nota: tr('descargaSat.vista.quedaronFacturadosSinQue') },
+    { etiqueta: tr('descargaSat.vista.esperanQueTuDecidas'), info: 'descarga_sat.ambiguos', icono: <Icono icono={FileQuestion} />, valor: c?.ambiguos ?? null, formato: 'entero', nota: tr('descargaSat.vista.variosGastosEmpatanLikida') },
+    { etiqueta: tr('descargaSat.vista.sinGastoQueLes'), info: 'descarga_sat.disponibles', icono: <Icono icono={FileCheck2} />, valor: c?.disponibles ?? null, formato: 'entero', nota: tr('descargaSat.vista.puedeSerUnGasto') },
+    { etiqueta: tr('descargaSat.vista.archivadosAProposito'), info: 'descarga_sat.ignorados', icono: <Icono icono={Archive} />, valor: c?.ignorados ?? null, formato: 'entero', nota: tr('descargaSat.vista.consolidadosQueYaEntraron') },
+  ];
+  const cifras: PropsCifra[] = cifrasBase.map((x) => (x.valor === null ? { ...x, estado: 'vacio' as const, mensaje: tr('descargaSat.vista.noSePudoLeer') } : x));
 
+  // Los avisos de arriba (a lo sumo dos, Rovaq): el proveedor sin configurar y la lectura incompleta. El texto largo de «qué es esto» va en la tarjeta de conexión.
+  const avisos = (
+    <>
+      {!proveedor.configurado && <AvisoCompacto tono="warn" resumen={proveedor.motivo} />}
       {datos.incompleta && (
         <AvisoCompacto tono="warn" resumen={tr('descargaSat.vista.faltanDatosPorCargar')}
           mas={tr('descargaSat.vista.unaOMasLecturas')} />
       )}
+    </>
+  );
 
-      {/* CINCO cubos, no cuatro: `descargados` se reparte ENTERO entre los otros cuatro (casado + ambiguo + disponible + ignorado son el dominio completo del CHECK de la 0231). Con cuatro tarjetas las cifras no sumaban el total de la primera. null ≠ 0: si la consulta se cayó, la tarjeta lo dice. */}
-      <TiraCifras sello={selloHoy(tr('descargaSat.vista.buzonDelSat'))}>
-        <Cifra icono={<Icono icono={CloudDownload} />}
-          etiqueta={tr('descargaSat.vista.cfdiBajadosDelBuzon')} info="descarga_sat.bajados" valor={c?.descargados ?? null}
-          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.foliosFiscalesUnicosEl')} />
-        <Cifra icono={<Icono icono={Link2} />}
-          etiqueta={tr('descargaSat.vista.casaronSolosConUn')} info="descarga_sat.casados" valor={c?.casados ?? null}
-          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.quedaronFacturadosSinQue')} />
-        <Cifra icono={<Icono icono={FileQuestion} />}
-          etiqueta={tr('descargaSat.vista.esperanQueTuDecidas')} info="descarga_sat.ambiguos" valor={c?.ambiguos ?? null}
-          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.variosGastosEmpatanLikida')} />
-        <Cifra icono={<Icono icono={FileCheck2} />}
-          etiqueta={tr('descargaSat.vista.sinGastoQueLes')} info="descarga_sat.disponibles" valor={c?.disponibles ?? null}
-          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.puedeSerUnGasto')} />
-        <Cifra icono={<Icono icono={Archive} />}
-          etiqueta={tr('descargaSat.vista.archivadosAProposito')} info="descarga_sat.ignorados" valor={c?.ignorados ?? null}
-          mensaje={tr('descargaSat.vista.noSePudoLeer')} nota={tr('descargaSat.vista.consolidadosQueYaEntraron')} />
-      </TiraCifras>
-
+  return (
+    <EsqueletoPanelCifras
+      titulo="SAT"
+      apoyo={tr('descargaSat.vista.losCfdiQueTus')}
+      avisos={avisos}
+      cifras={cifras}
+      etiquetaCifras={tr('descargaSat.vista.buzonDelSat')}
+      selloCifras={selloHoy(tr('descargaSat.vista.buzonDelSat'))}
+    >
       {/* ── LA PUERTA A LAS FILAS (0243): los cuatro cubos que SÍ son colas de trabajo llevan a su lista, filtrada — el conteo deja de ser una cifra huérfana. */}
       <div className="rv-sat__filas">
         <span className="rv-sat__tenue">{tr('descargaSat.vista.verLasFilas')}</span>
@@ -228,6 +213,25 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           </BotonEnlace>
         ))}
       </div>
+
+      <FilaTarjetas variante="6-6">
+      {/* ── 1. QUÉ FALTA Y QUIÉN LO DESTRABA. Antes que ninguna cifra. */}
+      <Tarjeta titulo={tr('descargaSat.vista.losComprobantesQueEl')} info="descarga_sat.intro">
+        <div className="rv-sat__bloque">
+          <p className="rv-sat__texto">
+            {tr('descargaSat.vista.todoCfdiQueUn')}
+          </p>
+          {/* La pregunta que un contador hace antes de subir nada. */}
+          <p className="rv-sat__texto">
+            {rico(tr('descargaSat.vista.strongTuEFirma'), { strong: (c) => <strong>{c}</strong> })}
+          </p>
+          {proveedor.configurado && (
+            <p className="rv-sat__texto">
+              {tr('descargaSat.vista.proveedorConectadoNoHay', { v: proveedor.proveedor?.toUpperCase() ?? '' })}
+            </p>
+          )}
+        </div>
+      </Tarjeta>
 
       {/* ── 2. EL ESTADO ─────────────────────────────────────────── */}
       <Tarjeta titulo={tr('descargaSat.vista.tuConexion')}>
@@ -260,6 +264,8 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         )}
       </Tarjeta>
 
+      </FilaTarjetas>
+      <FilaTarjetas variante="6-6">
       {/* ── 3. DECLARAR LA CONEXIÓN ───────────────────────────────── */}
       <Tarjeta titulo={tr('descargaSat.vista.declaraTuBuzon')}>
         <p className="rv-sat__texto">
@@ -296,6 +302,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         </FormaConAviso>
       </Tarjeta>
 
+      </FilaTarjetas>
       {/* ── 5. LAS SOLICITUDES ────────────────────────────────────── */}
       {datos.solicitudes.length > 0 && (
         // FE-34: "Tus solicitudes" es siempre "las 12 más recientes" (`TOPE_SOLICITUDES`), nunca el historial completo.
@@ -322,6 +329,6 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           ))}
         </ol>
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }

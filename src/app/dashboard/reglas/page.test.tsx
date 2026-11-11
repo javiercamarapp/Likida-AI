@@ -42,7 +42,7 @@ vi.mock('@/lib/likida/reglas/repo', async (importar) => ({
 }));
 
 import { FormaEscribirRegla, FormaElegirAMano, type AccionForma } from './forma';
-import { ListaReglas } from './vista';
+import { BotonDeRegla, BorrarRegla, FormaFrecuencia } from './forma';
 import PaginaReglas from './page';
 
 function buscar(nodo: ReactNode, componente: unknown, salida: Elemento[] = []): Elemento[] {
@@ -50,7 +50,30 @@ function buscar(nodo: ReactNode, componente: unknown, salida: Elemento[] = []): 
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === componente) salida.push(nodo);
   buscar(nodo.props.children as ReactNode, componente, salida);
+  // F26: las reglas viven en `secciones` del esqueleto de configuración (contenido y pie son nodos).
+  const secciones = nodo.props.secciones as ReadonlyArray<{ contenido?: ReactNode; pie?: ReactNode }> | undefined;
+  for (const sec of secciones ?? []) { buscar(sec.contenido, componente, salida); buscar(sec.pie, componente, salida); }
   return salida;
+}
+
+const regla = (id: string, estado: string) => ({
+  id, estado, frase: 'f', textoOriginal: 'o', titulo: 't', canal: 'dinero', ultimasEvidencias: [], ultimosAvisos: [],
+  ultimaCorridaEn: null, maxAvisosDia: 3, minHorasEntreAvisos: 1,
+});
+/** Las acciones de las reglas, tomadas de los botones reales que pinta la página (una regla en cada estado). */
+async function accionesDeReglas() {
+  dobles.listarReglas.mockResolvedValue([regla('r-1', 'pendiente'), regla('r-2', 'activa'), regla('r-3', 'pausada')]);
+  const pagina = await PaginaReglas({ searchParams: SP });
+  const botones = buscar(pagina, BotonDeRegla);
+  const por = (etq: string) => botones.find((b) => b.props.etiqueta === etq)!.props.accion as AccionForma;
+  return {
+    pagina,
+    acciones: {
+      confirmar: por('Sí, vigílalo'), pausar: por('Pausar'), reanudar: por('Reanudar'),
+      borrar: buscar(pagina, BorrarRegla)[0].props.accion as AccionForma,
+      frecuencia: buscar(pagina, FormaFrecuencia)[0].props.accion as AccionForma,
+    },
+  };
 }
 
 const SP = Promise.resolve({});
@@ -110,8 +133,7 @@ it('confirmar/pausar/reanudar/borrar: manda tenant/usuario de la SESIÓN, id por
   dobles.confirmarRegla.mockResolvedValue({ ok: true });
   dobles.alternarPausa.mockResolvedValue({ ok: true });
   dobles.borrarRegla.mockResolvedValue({ ok: true });
-  const pagina = await PaginaReglas({ searchParams: SP });
-  const { confirmar, pausar, reanudar, borrar } = buscar(pagina, ListaReglas)[0].props.acciones as Record<string, AccionForma>;
+  const { acciones: { confirmar, pausar, reanudar, borrar } } = await accionesDeReglas();
 
   await confirmar(null, fd({ id: 'r-1', tenantId: 'OTRO' }));
   expect(dobles.confirmarRegla).toHaveBeenCalledWith('t-1', 'r-1', { id: 'u-1' });
@@ -128,8 +150,7 @@ it('confirmar/pausar/reanudar/borrar: manda tenant/usuario de la SESIÓN, id por
 
 it('frecuencia: el tenant y el usuario salen de la SESIÓN, los límites del formulario, y un error se pinta', async () => {
   dobles.actualizarFrecuencia.mockResolvedValue({ ok: true, valor: { maxAvisosDia: 2, minHorasEntreAvisos: 6 } });
-  const pagina = await PaginaReglas({ searchParams: SP });
-  const { frecuencia } = buscar(pagina, ListaReglas)[0].props.acciones as Record<string, AccionForma>;
+  const { acciones: { frecuencia } } = await accionesDeReglas();
   const ok = await frecuencia(null, fd({ id: 'r-1', maxAvisosDia: '2', minHorasEntreAvisos: '6', tenantId: 'OTRO' }));
   expect(dobles.actualizarFrecuencia).toHaveBeenCalledWith('t-1', 'r-1', { maxAvisosDia: '2', minHorasEntreAvisos: '6' }, { id: 'u-1' });
   expect(ok).toEqual({ ok: true, mensaje: 'Límite guardado.' });
@@ -141,19 +162,16 @@ it('frecuencia: el tenant y el usuario salen de la SESIÓN, los límites del for
 });
 
 it('frecuencia: un encargado o vendedor que la invoque directo es rechazado sin tocar la base', async () => {
-  const pagina = await PaginaReglas({ searchParams: SP });
-  const { frecuencia } = buscar(pagina, ListaReglas)[0].props.acciones as Record<string, AccionForma>;
+  const { acciones: { frecuencia } } = await accionesDeReglas();
   sesion = { tenantId: 't-1', rol: 'encargado', userId: 'u-1' };
   expect(await frecuencia(null, fd({ id: 'r-1', maxAvisosDia: '2', minHorasEntreAvisos: '1' }))).toEqual(NEGADO);
   expect(dobles.actualizarFrecuencia).not.toHaveBeenCalled();
 });
 
 it.each(['encargado', 'vendedor'])('las seis acciones rechazan a %s aunque se invoquen directo (sesión re-resuelta en el momento)', async (rol) => {
-  dobles.listarReglas.mockResolvedValue([{ id: 'r-1', estado: 'pendiente' }]);
-  const pagina = await PaginaReglas({ searchParams: SP });
+  const { pagina, acciones: { confirmar, pausar, reanudar, borrar } } = await accionesDeReglas();
   const interpretarAccion = buscar(pagina, FormaEscribirRegla)[0].props.accion as AccionForma;
   const aManoAccion = buscar(pagina, FormaElegirAMano)[0].props.accion as AccionForma;
-  const { confirmar, pausar, reanudar, borrar } = buscar(pagina, ListaReglas)[0].props.acciones as Record<string, AccionForma>;
 
   sesion = { tenantId: 't-1', rol, userId: 'u-1' };
 
@@ -172,5 +190,5 @@ it.each(['encargado', 'vendedor'])('las seis acciones rechazan a %s aunque se in
 it('una lectura de reglas caída se pinta como error, no como "sin reglas" — invitaría a duplicar', async () => {
   dobles.listarReglas.mockRejectedValueOnce(new Error('caída'));
   const pagina = await PaginaReglas({ searchParams: SP });
-  expect(buscar(pagina, ListaReglas)).toHaveLength(0);
+  expect(buscar(pagina, BotonDeRegla)).toHaveLength(0);
 });

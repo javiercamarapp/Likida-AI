@@ -10,11 +10,11 @@ import type { ResumenBandejaCola } from '@/lib/admin/cola-aprobacion';
 import type { PiezaEnCola } from '@/lib/likida/agentes/cola';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, Boton, BotonEnlace, CampoTextarea, Disclosure, EstadoVacio, FilaTarjetas, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  Aviso, Boton, BotonEnlace, CampoTextarea, Disclosure, EstadoVacio, FilaTarjetas, StatusChip, TablaBase, Tarjeta,
   clasesBoton, type ColumnaBase,
 } from '../../ui-v2/componentes';
 import { BotonConfirmar } from '../../ui-v2/componentes/confirmar';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { EsqueletoPortada } from '../../ui-v2/esqueletos';
 import { contarPorCausa, etiquetaCausa } from '../escalaciones/agentes-parados';
 import { BotonEnvio } from './boton_envio';
 import '../bandeja.css';
@@ -148,17 +148,21 @@ export function VistaTuTurno({
   ];
 
   return (
-    <MarcoPagina titulo={t('tu_turno_vista.tu_turno')} apoyo={t('tu_turno_vista.todo_lo_que_espera')}>
-      {aviso && <Aviso tono="ok">{aviso}</Aviso>}
-      {error && <Aviso tono="error">{error}</Aviso>}
-      {bus.errores.length > 0 && (
-        <Aviso tono="warn" titulo={t('tu_turno_vista.fuentes_que_no_se')}>{bus.errores.join(' · ')}</Aviso>
-      )}
-
-      {/* Cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */}
-      <TiraCifras
-        etiqueta={t('tu_turno_vista.lo_que_espera_tu')}
-        items={[
+    <EsqueletoPortada
+      titulo={t('tu_turno_vista.tu_turno')}
+      apoyo={t('tu_turno_vista.todo_lo_que_espera')}
+      avisos={(aviso || error || bus.errores.length > 0) ? (
+        <>
+          {aviso && <Aviso tono="ok">{aviso}</Aviso>}
+          {error && <Aviso tono="error">{error}</Aviso>}
+          {bus.errores.length > 0 && (
+            <Aviso tono="warn" titulo={t('tu_turno_vista.fuentes_que_no_se')}>{bus.errores.join(' · ')}</Aviso>
+          )}
+        </>
+      ) : null}
+      /* Cifras REALES de lo que espera a un humano. Una fuente que no se pudo leer es «—», no un cero. */
+      etiquetaCifras={t('tu_turno_vista.lo_que_espera_tu')}
+      cifras={[
           {
             etiqueta: t('tu_turno_vista.piezas_para_tu_tap'), icono: <ImageIcon {...ICONO} />, formato: 'entero',
             valor: piezasSinDato ? null : bus.piezasPendientes.length,
@@ -174,8 +178,8 @@ export function VistaTuTurno({
             etiqueta: t('tu_turno_vista.escalaciones'), icono: <Inbox {...ICONO} />, valor: totalEscalaciones, formato: 'entero',
             nota: totalEscalaciones === null ? t('tu_turno_vista.no_se_pudo_leer_3') : undefined,
           },
-        ]}
-      />
+      ]}
+    >
 
       {/* ── 1 · Piezas de las rutinas — el tap de publicar ────────────────── */}
       <section className="bj-bloque" aria-labelledby="tt-piezas">
@@ -373,6 +377,6 @@ export function VistaTuTurno({
       <p className="bj-nota">
         {t('turno.sesion_pie', { sesionNombre })}
       </p>
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }

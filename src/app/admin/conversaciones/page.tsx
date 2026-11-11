@@ -8,8 +8,9 @@ import {
   type ConversacionActiva,
 } from '@/lib/admin/negocio';
 import { MessageCircle, Search } from 'lucide-react';
-import { Boton, BotonEnlace, EstadoVacio, MarcoPagina, Tarjeta } from '../../ui-v2/componentes';
-import { BarList, Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { Boton, BotonEnlace, EstadoVacio, Tarjeta } from '../../ui-v2/componentes';
+import { BarList, type PropsCifra } from '../../ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { FilaConversacion } from './hilo';
 
 export const dynamic = 'force-dynamic';
@@ -44,8 +45,7 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   if (q) {
     const resultado = await buscarConversaciones({ q, pagina });
     return (
-      <PantallaConversaciones>
-        <CajaBusqueda q={q} />
+      <PantallaConversaciones filtros={<CajaBusqueda q={q} />}>
         <Tarjeta titulo={`"${q}" — ${resultado.total} conversación${resultado.total === 1 ? '' : 'es'}, página ${resultado.pagina} de ${resultado.paginas}`}>
           {resultado.filas.length === 0 ? (
             <EstadoVacio titulo="Sin coincidencias" icono={Search} contenido>
@@ -71,18 +71,18 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   const recortado = total !== null && total > conversaciones.length;
 
   return (
-    <PantallaConversaciones>
-      <CajaBusqueda q="" />
-
-      <TiraCifras etiqueta="Conversaciones de WhatsApp">
-        <Cifra
-          etiqueta="Conversaciones activas" valor={total} formato="entero"
-          estado={total === null ? 'vacio' : 'ok'}
-          mensaje="No se pudo contar — esto no significa que no haya ninguna."
-        />
-        <Cifra etiqueta={`Mensajes en las ${conversaciones.length} que se listan`} valor={totalMensajes} formato="entero" />
-      </TiraCifras>
-
+    <PantallaConversaciones
+      filtros={<CajaBusqueda q="" />}
+      etiquetaCifras="Conversaciones de WhatsApp"
+      cifras={[
+        {
+          etiqueta: 'Conversaciones activas', valor: total, formato: 'entero',
+          estado: total === null ? 'vacio' : 'ok',
+          mensaje: 'No se pudo contar — esto no significa que no haya ninguna.',
+        },
+        { etiqueta: `Mensajes en las ${conversaciones.length} que se listan`, valor: totalMensajes, formato: 'entero' },
+      ]}
+    >
       {/* Mensajes por conversación (c.turns.length) es un conteo real que ya se calcula para el resumen de arriba, así que un
           ranking con HBars entre conversaciones es genuino — no una serie inventada. Solo con 2+ conversaciones: con 1 sola, un
           "ranking" de una barra no compara nada. */}
@@ -111,8 +111,8 @@ export default async function ConversacionesPage({ searchParams }: { searchParam
   );
 }
 
-function PantallaConversaciones({ children }: { children: ReactNode }) {
-  return <MarcoPagina titulo="Conversaciones de WhatsApp">{children}</MarcoPagina>;
+function PantallaConversaciones({ filtros, cifras, etiquetaCifras, children }: { filtros: ReactNode; cifras?: PropsCifra[]; etiquetaCifras?: string; children: ReactNode }) {
+  return <EsqueletoTablaMaestra titulo="Conversaciones de WhatsApp" filtros={filtros} cifras={cifras} etiquetaCifras={etiquetaCifras}>{children}</EsqueletoTablaMaestra>;
 }
 
 /**

@@ -11,9 +11,10 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
 import {
   AvisoCompacto, BarraFiltros, EsqCifrasV2, EsqTablaV2, EsqTarjetaV2, EstadoVacio, FilaTarjetas, FiltroBusqueda, FiltroOpciones, Icono,
-  MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
+  StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado,
 } from '../../ui-v2/componentes';
 import { Embudo, TiraCifras } from '../../ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { estadoProspectoTr } from '@/lib/i18n/rotulos_tr';
 import { embudoDeVentas } from './embudo-ventas';
@@ -57,7 +58,7 @@ const cargarCorridas = cache(() => safe<CorridaRegistrada[]>(() => ultimasCorrid
  */
 export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string | null; sp: { vendedor?: string; q?: string }; tx?: TSistema }) {
   return (
-    <MarcoPagina titulo={tx('mapa_prospectos.ventas')} apoyo={tx('vendedores_consola_vendedores.el_pipeline_del_censo_el_equipo')}>
+    <EsqueletoTablaMaestra titulo={tx('mapa_prospectos.ventas')} apoyo={tx('vendedores_consola_vendedores.el_pipeline_del_censo_el_equipo')}>
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis sp={sp} /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo sp={sp} /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
@@ -73,7 +74,7 @@ export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string |
       </FilaTarjetas>
       <Suspense fallback={<EsqTablaV2 filas={4} />}><BloqueDesempeno /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueAltas /></Suspense>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

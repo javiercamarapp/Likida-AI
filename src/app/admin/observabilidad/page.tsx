@@ -7,12 +7,13 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { corridasRecientes, type CorridaCruzada } from '@/lib/admin/corridas-cruzadas';
 import { getLatencias, type LatenciasMedidas, type FilaLatencia, type FilaLatenciaIa } from '@/lib/admin/slo';
 import { fechaHoraMx, numero } from '@/lib/formato';
-import { BotonEnlace, EstadoError, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { BotonEnlace, EstadoError, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { SeccionInterruptores, type InterruptorParaUi } from './interruptores-ui';
 import { etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
 import { nombreReloj as nombreRelojTr } from '../crons/estado-relojes';
 import { CRONS, type CronId } from '@/lib/admin/salud';
 import type { ResultadoAccion } from '../ui/forma';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import '../sistema.css';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -122,7 +123,14 @@ export default async function ObservabilidadPage() {
   const dias = latencias?.ventanaDias ?? 7;
 
   return (
-    <MarcoPagina titulo={t('observabilidad.observabilidad')} apoyo={t('observabilidad.apagar_un_agente_en_segundos_ver')}>
+    <EsqueletoPanelCifras
+      titulo={t('observabilidad.observabilidad')}
+      apoyo={t('observabilidad.apagar_un_agente_en_segundos_ver')}
+      cifras={[
+        { etiqueta: t('observabilidad.interruptores'), valor: interruptores === null ? null : interruptores.length, formato: 'entero', estado: interruptores === null ? 'error' : 'ok' },
+        { etiqueta: t('observabilidad.corridas_recientes'), valor: corridas === null ? null : corridas.length, formato: 'entero', estado: corridas === null ? 'error' : 'ok' },
+      ]}
+    >
       <Tarjeta titulo={t('observabilidad.interruptores')}
         estado={interruptores === null ? 'error' : 'ok'} reintentar
         mensaje={t('observabilidad.no_se_pudieron_leer_los_interruptores')}
@@ -170,7 +178,7 @@ export default async function ObservabilidadPage() {
         <BotonEnlace href="/admin/salud-sistema" variante="secondary" tamano="sm">{t('observabilidad.estado_del_sistema')}</BotonEnlace>
         <BotonEnlace href="/admin/consumo" variante="secondary" tamano="sm">{t('observabilidad.gasto_de_ia_por_dia')}</BotonEnlace>
       </div>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 
