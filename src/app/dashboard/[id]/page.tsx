@@ -405,6 +405,7 @@ export default async function Detalle({
       tr={tr}
       d={d}
       sufijo={sufijo}
+      volverA={puedeVerArea(rol, 'operacion') ? 'viajes' : 'contador'}
       estatus={{ label: e.label, estado: estadoDeColor(e.color) }}
       etiqueta={(g) => etiquetaGasto(g, tr)}
       // BE-A1/FE-M2: una liquidación RECHAZADA no tiene PDF vigente aunque
