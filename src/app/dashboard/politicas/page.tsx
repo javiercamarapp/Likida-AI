@@ -199,7 +199,7 @@ export default async function PoliticasPage({
               <>
                 <FormaConAviso accion={accionGuardar} boton={tr('politicas.page.guardarPolitica')} columnas="md:grid-cols-1">
                   <TablaBase<(typeof CONCEPTOS)[number]> etiqueta={tr('politicas.page.topesPorComprobanteMxn')} columnas={columnasEditor} filas={CONCEPTOS}
-                    idFila={(c) => c} altoMaximo={false} />
+                    idFila={(c) => c} altoMaximo={false} tarjetaMovil />
                 </FormaConAviso>
                 <p className="rv-pol__nota">
                   {rico(tr('politicas.page.vacioEsNota'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
@@ -214,7 +214,7 @@ export default async function PoliticasPage({
               </EstadoVacio>
             ) : (
               <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.topesPorComprobantePor')} columnas={columnasLectura} filas={politica}
-                idFila={(p) => `${p.concepto}-${p.ruta ?? ''}`} altoMaximo={false} />
+                idFila={(p) => `${p.concepto}-${p.ruta ?? ''}`} altoMaximo={false} tarjetaMovil />
             )}
             </>
           ),
@@ -225,7 +225,7 @@ export default async function PoliticasPage({
             <>
               {/* H39 (auditoría 24): con nombres de ruta largos en un celular la fila se cortaba sin forma de deslizar; la región de TablaBase desliza y se alcanza con teclado. */}
               <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.reglasPorRuta')} columnas={columnasRuta} filas={porRuta}
-                idFila={(p) => `${p.concepto}-${p.ruta}`} altoMaximo={false} />
+                idFila={(p) => `${p.concepto}-${p.ruta}`} altoMaximo={false} tarjetaMovil />
               <p className="rv-pol__nota">
                 {tr('politicas.page.deSoloLecturaEl')}
               </p>

@@ -1,5 +1,10 @@
 /* Topes de gasto · solo lo que las piezas del sistema no traen. */
-.rv-pol__tope { width: 160px; }
+.rv-pol__tope { width: 160px; max-width: 100%; }
+@media (max-width: 820px) {
+  /* Tarjeta-fila (Rovaq `table[data-mv]`): el campo ocupa la fila y se toca con el pulgar. */
+  .rv-pol__tope { width: 100%; }
+  .rv-pol__tope .rv-ctl, .rv-pol__tope input { min-height: 36px; }
+}
 .rv-pol__sin { color: var(--muted); }
 .rv-pol__nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
 .rv-pol__nota strong { color: var(--ink); font-weight: 600; }

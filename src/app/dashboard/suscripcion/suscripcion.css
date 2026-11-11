@@ -2,7 +2,13 @@
 .rv-sus__tenue { font-size: var(--t-small); color: var(--muted); margin: 0; font-weight: 400; }
 .rv-sus__nota { margin: 8px 0 0; font-size: var(--t-small); color: var(--muted); }
 .rv-sus__mono { font-variant-numeric: tabular-nums; letter-spacing: .04em; word-break: break-all; }
-.rv-sus__uso { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.rv-sus__uso { display: grid; gap: 6px; min-width: 0; }
+/* Las cifras de uso viven EN la tarjeta, separadas por un filete: sin subtarjetas con borde dentro de otra tarjeta. */
+.rv-sus__usos { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.rv-sus__usos > .rv-sus__uso + .rv-sus__uso { padding-left: 16px; border-left: 1px solid var(--line); }
+@media (max-width: 560px) { .rv-sus__usos > .rv-sus__uso + .rv-sus__uso { padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--line); } }
+.rv-sus__vacio { margin: 0; padding: 12px 14px; border: 1px dashed var(--ui-border, var(--line)); border-radius: 8px; font-size: var(--t-body, 13px); color: var(--muted); }
+.rv-sus__vacio strong { color: var(--ink); font-weight: 600; }
 .rv-sus__uso-cifra { font-size: var(--t-kpi); font-weight: 600; font-variant-numeric: tabular-nums; }
 .rv-sus__uso-cifra .rv-sus__tenue { font-size: var(--t-body); }
 .rv-sus__rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }

@@ -1568,7 +1568,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'politicas.page.lisrArt27Iii': 'LISR Art. 27-III. Above this it requires another form of payment.',
   'politicas.page.lisrArt28V': 'LISR Art. 28-V. Whatever exceeds it is flagged as non-deductible.',
   'politicas.page.losTopesContraLos': 'The limits the engine reconciles each of your fleet\'s trips against.',
-  'politicas.page.losTopesFiscalesDe': 'The tax limits above are NOT edited from here: the law sets them, not the fleet.',
+  'politicas.page.losTopesFiscalesDe': 'The tax limits further below are NOT edited from here: the law sets them, not the fleet.',
   'politicas.page.losViaticosPorRuta': 'Per diem by route/day and the advance verification deadline are not in the schema as configurable rules either.',
   'politicas.page.masPorRutaQue': ', plus {length} per-route ones that were kept',
   'politicas.page.no': 'No',

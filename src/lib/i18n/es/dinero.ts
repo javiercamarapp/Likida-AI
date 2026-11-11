@@ -1568,7 +1568,7 @@ export const dinero = {
   'politicas.page.lisrArt27Iii': 'LISR Art. 27-III. Arriba de esto exige otra forma de pago.',
   'politicas.page.lisrArt28V': 'LISR Art. 28-V. Lo que exceda sale marcado como no deducible.',
   'politicas.page.losTopesContraLos': 'Los topes contra los que el motor cuadra cada viaje de tu flota.',
-  'politicas.page.losTopesFiscalesDe': 'Los topes fiscales de arriba NO se editan desde aquí: los fija la ley, no la flota.',
+  'politicas.page.losTopesFiscalesDe': 'Los topes fiscales de más abajo NO se editan desde aquí: los fija la ley, no la flota.',
   'politicas.page.losViaticosPorRuta': 'Los viáticos por ruta/día y el plazo de comprobación del anticipo tampoco están en el esquema como reglas configurables.',
   'politicas.page.masPorRutaQue': ', más {length} por ruta que se conservaron',
   'politicas.page.no': 'No',

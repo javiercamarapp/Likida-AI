@@ -5,8 +5,8 @@
 .rv-cfg__nota { margin: 4px 0 0; font-size: var(--t-small); color: var(--muted); }
 .rv-cfg__apoyo { margin: 0 0 12px; font-size: var(--t-small); color: var(--muted); }
 .rv-cfg__tenue { color: var(--muted); }
-.rv-cfg__split { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-@media (max-width: 1023px) { .rv-cfg__split { grid-template-columns: minmax(0, 1fr); } }
+/* Plantilla CF (Rovaq): UNA columna de ≤760 px, igual que Topes de gasto (misma familia de pestañas: el contenido no salta de ancho). */
+.rv-cfg__split { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; }
 .rv-cfg__forma { display: grid; gap: 12px; }
 .rv-cfg__lateral { display: grid; gap: 12px; }
 .rv-cfg__lineas { display: grid; gap: 6px; margin-top: 10px; }

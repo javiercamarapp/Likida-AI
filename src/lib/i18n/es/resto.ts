@@ -1251,4 +1251,5 @@ export const resto = {
   'e26.con_pie': '{n} de {total} fichas',
   'e26.perfil_mfa_activo': 'Activo',
   'e26.perfil_mfa_inactivo': 'Sin activar',
+  'e26b.usu_activo': 'Activo',
 } as const;
