@@ -11,7 +11,7 @@ import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('resto');
-  return { title: t('cfg.arranque.titulo') };
+  return { title: t('cfg.puesta_en_marcha') };
 }
 
 export const dynamic = 'force-dynamic';
