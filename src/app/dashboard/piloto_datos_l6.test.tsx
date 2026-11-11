@@ -38,9 +38,14 @@ describe('Viajes · misma función, tabla accesible', () => {
     expect(c.join('|')).toContain('Sin asignar');
   });
   it('el vínculo «Ver» conserva el sufijo del tenant y un viaje sin liquidación no tiene vínculo', () => {
+    // «Ver» abre el cajón de vista rápida (F26) conservando el tenant; el vínculo a la liquidación vive en el pie del cajón.
     const h = pintarViajes();
-    expect(h).toContain('href="/dashboard/liq-1?tenant=T1"');
+    expect(h).toContain('href="/dashboard/viajes?tenant=T1&amp;ver=via-1"');
     expect(h).not.toContain('liq-2');
+    const abierto = pintarViajes({ ver: 'via-1' });
+    expect(abierto).toContain('href="/dashboard/liq-1?tenant=T1"');
+    expect(abierto).not.toContain('liq-2');
+    expect(pintarViajes({ ver: 'via-2' })).not.toContain('href="/dashboard/liq-');
   });
   it('PERMISO: sin dinero no existe ni la cabecera ni un solo peso (el jefe de tráfico)', () => {
     const h = pintarViajes({ verDinero: false, filas: [v(1, { anticipo: null, comprobado: null, diferencia: null })] });
@@ -263,9 +268,9 @@ describe('Ajustes del verificador (L6)', () => {
     const vacio = chipsDeCola(pagina([fila(1, { operadorNombre: null, unidadEco: null })]), f, TERMS, []);
     expect(vacio.map((c) => c.valor)).toEqual(['elegido', 'elegida']);
   });
-  it('la tira de Viajes no repite el sello en cada cifra: uno por tira y uno por tabla', () => {
+  it('Viajes no repite el sello en cada cifra: uno solo, al pie de la tabla', () => {
     const h = pintarViajes();
-    expect(h.match(/Registro de viajes · leído/g)?.length).toBe(2);
+    expect(h.match(/Registro de viajes · leído/g)?.length).toBe(1);
   });
   it('la tarjeta-fila conserva roles ARIA de tabla', () => {
     const h = pintarViajes();

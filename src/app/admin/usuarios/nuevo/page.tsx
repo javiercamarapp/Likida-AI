@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { CampoSelect, CampoTexto } from '../../../ui-v2/componentes/campos';
-import { MarcoPagina, Tarjeta } from '../../../ui-v2/componentes';
+import { EsqueletoConfiguracion } from '../../../ui-v2/esqueletos';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import type { RolAppUser } from '@/lib/auth/provisionar';
 import { ROTULOS_ROL } from '@/lib/auth/roles';
@@ -28,32 +28,36 @@ export default async function NuevoUsuario({ searchParams }: { searchParams?: Pr
   const preseleccion = flotas.some((f) => f.id === sp?.flota) ? sp?.flota : '';
 
   return (
-    <MarcoPagina
-      area="Control" titulo="Equipo" ancho="lectura"
+    <EsqueletoConfiguracion
+      area="Control" titulo="Equipo"
       apoyo="Da de alta a una persona de una flota y le mandamos el correo de acceso."
-    >
-      <Tarjeta titulo="Nuevo acceso">
-        <FormaConAviso accion={accionNuevoAcceso} boton="Crear usuario" columnas="md:grid-cols-2">
-          <CampoSelect etiqueta="Flota" name="tenantId" required defaultValue={preseleccion}>
-            <option value="" disabled>Elige una flota</option>
-            {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
-          </CampoSelect>
-          <CampoSelect etiqueta="Rol" name="rol" required defaultValue="flota_admin">
-            {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
-          </CampoSelect>
-          <CampoTexto etiqueta="Correo" name="email" tipo="email" required placeholder="persona@flota.com" />
-          <CampoTexto etiqueta="Nombre (opcional)" name="nombre" />
-          {/* D5 (auditoría 4): sin WhatsApp la persona no podía escribirle al bot sin un UPDATE a mano. */}
-          <CampoTexto etiqueta="WhatsApp (opcional)" name="telefono" placeholder="10 dígitos"
-            ayuda="Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat)." />
-        </FormaConAviso>
-        <p>
-          Crea la cuenta de acceso y la persona en el panel, deja el asiento en la bitácora y le manda el correo de acceso. El primer ingreso
-          (enlace por correo) confirma la cuenta. Si el canal de correo no está configurado, la pantalla lo dice y la cuenta queda creada:
-          usa «Reenviar acceso» desde Personas. Los vendedores se dan de alta en Ventas.
-        </p>
-      </Tarjeta>
-    </MarcoPagina>
+      secciones={[{
+        id: 'nuevo-acceso', titulo: 'Nuevo acceso',
+        contenido: (
+          <>
+            <FormaConAviso accion={accionNuevoAcceso} boton="Crear usuario" columnas="md:grid-cols-2">
+              <CampoSelect etiqueta="Flota" name="tenantId" required defaultValue={preseleccion}>
+                <option value="" disabled>Elige una flota</option>
+                {flotas.map((f) => <option key={f.id} value={f.id}>{f.nombre}</option>)}
+              </CampoSelect>
+              <CampoSelect etiqueta="Rol" name="rol" required defaultValue="flota_admin">
+                {ROLES.map((r) => <option key={r.valor} value={r.valor}>{r.etiqueta}</option>)}
+              </CampoSelect>
+              <CampoTexto etiqueta="Correo" name="email" tipo="email" required placeholder="persona@flota.com" />
+              <CampoTexto etiqueta="Nombre (opcional)" name="nombre" />
+              {/* D5 (auditoría 4): sin WhatsApp la persona no podía escribirle al bot sin un UPDATE a mano. */}
+              <CampoTexto etiqueta="WhatsApp (opcional)" name="telefono" placeholder="10 dígitos"
+                ayuda="Con él, el bot reconoce a esta persona cuando escribe (avisos contestables, despacho por chat)." />
+            </FormaConAviso>
+            <p>
+              Crea la cuenta de acceso y la persona en el panel, deja el asiento en la bitácora y le manda el correo de acceso. El primer ingreso
+              (enlace por correo) confirma la cuenta. Si el canal de correo no está configurado, la pantalla lo dice y la cuenta queda creada:
+              usa «Reenviar acceso» desde Personas. Los vendedores se dan de alta en Ventas.
+            </p>
+          </>
+        ),
+      }]}
+    />
   );
 }
 

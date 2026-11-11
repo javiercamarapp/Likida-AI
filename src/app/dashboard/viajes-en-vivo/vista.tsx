@@ -1,4 +1,4 @@
-import { Aviso, BarraFiltros, Boton, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, Icono, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { Aviso, BarraFiltros, Boton, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { MapPin, MapPinOff, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -6,7 +6,8 @@ import { textoAntiguedad, type FilaViaje, type TableroViajes, type TipoExcepcion
 import type { NivelFrescura } from '@/lib/likida/orquestador/enganche_gps';
 import { ActualizarSolo } from './actualizar_solo';
 import { PillSemaforo } from '../viajes/pills';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import './en-vivo.css';
 import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
@@ -182,8 +183,14 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
   notificaciones?: ReactNodeLike; t?: TResto;
 }) {
   const c = tablero.conteos;
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('op.viajes_en_curso'), valor: numero(c.viajes), nota: tablero.hayMas ? t('op.hay_mas_viajes_activos_que_los') : undefined, info: 'viajes_en_vivo.en_curso' },
+    { etiqueta: t('op.con_excepcion'), valor: numero(c.conExcepcion), tono: c.conExcepcion > 0 ? 'warn' : undefined, info: 'viajes_en_vivo.con_excepcion' },
+    { etiqueta: t('op.sin_senal_de_vida'), valor: numero(c.sinSenal), nota: t('op.chofer_y_tractor_callados'), tono: c.sinSenal > 0 ? 'bad' : undefined, info: 'viajes_en_vivo.sin_senal' },
+    { etiqueta: t('op.llegadas_sin_confirmar'), valor: numero(c.llegadaSinConfirmar), nota: t('op.escalados_a_trafico', { numero: numero(c.escaladosATrafico) }), info: 'viajes_en_vivo.llegadas_sin_confirmar' },
+  ];
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       titulo={t('op.viajes_en_vivo')}
       apoyo={t('op.viajes_en_curso_con_su_ultimo', { fechaHoraMx: fechaHoraMx(tablero.generadoEn) })}
       acciones={(
@@ -192,21 +199,11 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
           <BotonEnlace tamano="sm" href={hrefMapa}>{t('op.ver_el_mapa')}</BotonEnlace>
         </>
       )}
+      filtros={<Filtros t={t} f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />}
+      avisos={!tablero.gpsDisponible ? <Aviso tono="warn">{t('op.no_se_pudieron_leer_las_posiciones')}</Aviso> : undefined}
+      cifras={cifras}
+      selloCifras={selloHoy('Viajes en curso')}
     >
-
-      {!tablero.gpsDisponible && (
-        <Aviso tono="warn">{t('op.no_se_pudieron_leer_las_posiciones')}</Aviso>
-      )}
-
-      <TiraCifras sello={selloHoy('Viajes en curso')}>
-        <Cifra etiqueta={t('op.viajes_en_curso')} valor={numero(c.viajes)} nota={tablero.hayMas ? t('op.hay_mas_viajes_activos_que_los') : undefined} info="viajes_en_vivo.en_curso" />
-        <Cifra etiqueta={t('op.con_excepcion')} valor={numero(c.conExcepcion)} tono={c.conExcepcion > 0 ? 'warn' : undefined} info="viajes_en_vivo.con_excepcion" />
-        <Cifra etiqueta={t('op.sin_senal_de_vida')} valor={numero(c.sinSenal)} nota={t('op.chofer_y_tractor_callados')} tono={c.sinSenal > 0 ? 'bad' : undefined} info="viajes_en_vivo.sin_senal" />
-        <Cifra etiqueta={t('op.llegadas_sin_confirmar')} valor={numero(c.llegadaSinConfirmar)} nota={t('op.escalados_a_trafico', { numero: numero(c.escaladosATrafico) })} info="viajes_en_vivo.llegadas_sin_confirmar" />
-      </TiraCifras>
-
-      <Filtros t={t} f={filtros} c={catalogo} accionUrl={accionUrl} ocultos={ocultos} />
-
       <TablaBase<FilaViaje>
         etiqueta={t('op.viajes_en_vivo_y_su_estado')}
         columnas={columnas(tablero.gpsDisponible, t)}
@@ -221,7 +218,7 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       {tareas}
       {pregunta ? <Disclosure variante="linea" titulo={t('op.preguntale_al_asistente')}>{pregunta}</Disclosure> : null}
       {notificaciones ? <Disclosure variante="linea" titulo={t('op.notificaciones_de_los_avisos')}>{notificaciones}</Disclosure> : null}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

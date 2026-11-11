@@ -11,9 +11,10 @@ import type { PrimerMesFila } from '@/lib/likida/carta_porte_docs/repo';
 import type { CcpRecibidoVista } from '@/lib/likida/carta_porte_docs/ccp_respuesta_repo';
 import { ROTULO_ARRANQUE, erroresEnLinea, frasePrevia, nombreDestinatario, textoDeConfig, type CamposTexto } from './formato';
 import '../carta-porte.css';
-import { Aviso, AvisoCompacto, BotonEnlace, CampoSelect, CampoTexto, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, AvisoCompacto, BotonEnlace, CampoSelect, CampoTexto, Icono, Tarjeta } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
 
 /**
  * LA PANTALLA «CONFIGURACIÓN DE LA SALIDA» (T-A3-32): cómo sale la plantilla hacia el sistema del cliente, cuántas veces se
@@ -117,7 +118,7 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
 }) {
   const { t: tx } = useT('agentes', agentesEs);
   return (
-    <MarcoPagina titulo={tx('rest.configuracion_de_la_salida')} apoyo={tx('rest.como_sale_la_plantilla_hacia_el')} acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.agente_de_carta_porte')}</BotonEnlace>}>
+    <MarcoConfigAgente titulo={tx('rest.configuracion_de_la_salida')} apoyo={tx('rest.como_sale_la_plantilla_hacia_el')} acciones={<BotonEnlace tamano="sm" href={`/dashboard/agentes/carta-porte${sufijo}`} icono={<Icono icono={ArrowLeft} tam={14} />}>{tx('rest.agente_de_carta_porte')}</BotonEnlace>}>
       {esArranque && <Aviso tono="warn">{ROTULO_ARRANQUE}{tx('rest.ajustalos_cuando_el_cliente_los_defina')}</Aviso>}
 
       <FormaAccion accion={acciones.guardar} className="rv-cp__pila">
@@ -138,6 +139,6 @@ export function VistaConfiguracionSalida({ config, esArranque, personas, conecto
         <Aviso tono="warn">{tx('rest.no_se_pudieron_leer_los_ccp')}</Aviso>
       )}
       {accionesCcp && ccp && <SeccionCcp activa={ccp.activa} filas={ccp.filas} ver={ver} acciones={accionesCcp} />}
-    </MarcoPagina>
+    </MarcoConfigAgente>
   );
 }

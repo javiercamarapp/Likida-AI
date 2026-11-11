@@ -22,7 +22,7 @@ const dobles = vi.hoisted(() => ({
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' };
 
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
-vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); } }));
+vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); }, useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('next/cache', () => ({ revalidatePath: dobles.revalidatePath }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/likida/mesa_control', async (importar) => ({
@@ -43,6 +43,8 @@ function formularios(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === 'form') salida.push(nodo);
   formularios(nodo.props.children as ReactNode, salida);
+  // F26: el expediente y sus botones viven en el cajón de vista rápida (`?ver=`), que el esqueleto recibe por prop.
+  formularios(nodo.props.vistaRapida as ReactNode, salida);
   return salida;
 }
 function formasConAviso(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
@@ -50,6 +52,8 @@ function formasConAviso(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === FormaConAviso) salida.push(nodo);
   formasConAviso(nodo.props.children as ReactNode, salida);
+  // F26: el expediente y sus botones viven en el cajón de vista rápida (`?ver=`), que el esqueleto recibe por prop.
+  formasConAviso(nodo.props.vistaRapida as ReactNode, salida);
   return salida;
 }
 
@@ -58,11 +62,14 @@ function botonesMesa(nodo: ReactNode, salida: Elemento[] = []): Elemento[] {
   if (!isValidElement<Record<string, unknown>>(nodo)) return salida;
   if (nodo.type === BotonAccionMesa) salida.push(nodo);
   botonesMesa(nodo.props.children as ReactNode, salida);
+  // F26: el expediente y sus botones viven en el cajón de vista rápida (`?ver=`), que el esqueleto recibe por prop.
+  botonesMesa(nodo.props.vistaRapida as ReactNode, salida);
   return salida;
 }
 type Accion = (previo: unknown, fd: FormData) => Promise<{ ok?: string; error?: string } | null>;
 
-const SP = Promise.resolve({});
+// F26: la mesa lista en tabla y abre el expediente en el cajón de `?ver=`; las pruebas miran el expediente de `i-1`.
+const SP = Promise.resolve({ ver: 'i-1' });
 const fd = (campos: Record<string, string>) => { const f = new FormData(); for (const [k, v] of Object.entries(campos)) f.set(k, v); return f; };
 const INC = {
   id: 'i-1', tipo: 'accidente', prioridad: 'critica', nivelEscalado: 1, operadorNombre: 'Juan',
@@ -192,4 +199,13 @@ it('sin emoji ni claves del sistema a la vista: la clase, la prioridad y los eve
   expect(html).not.toContain('emergencia_medica');
   expect(html).not.toContain('evento_nuevo_sin_rotulo');
   expect(html).not.toMatch(/prioridad critica/);
+});
+
+it('F26: la mesa lista las incidencias en tabla; el expediente (botones, cierre) solo sale con `?ver=` de una incidencia del tenant', async () => {
+  dobles.listarMesaAsistencia.mockResolvedValue([INC]);
+  const sinVer = await PaginaMesaControl({ searchParams: Promise.resolve({}) });
+  expect(botonesMesa(sinVer)).toHaveLength(0);
+  expect(renderToStaticMarkup(sinVer as ReactElement)).toContain('Vista rápida');
+  const ajeno = await PaginaMesaControl({ searchParams: Promise.resolve({ ver: 'i-de-otra-flota' }) });
+  expect(botonesMesa(ajeno)).toHaveLength(0);
 });

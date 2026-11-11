@@ -1,7 +1,7 @@
 'use client';
 
 import '../vigia.css';
-import { AvisoResultado, Aviso as AvisoV2, Boton, CampoArchivo, CampoTexto, Icono, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { AvisoResultado, Aviso as AvisoV2, Boton, CampoArchivo, CampoTexto, Icono, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import Link from 'next/link';
 import { useActionState, useState } from 'react';
 import { useFormStatus } from 'react-dom';
@@ -11,6 +11,7 @@ import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
+import { MarcoConfigAgente } from '@/app/dashboard/agentes/marco-config';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PANTALLA DE CARGA DEL PROGRAMA DE DESPACHO (Agente 4, T-A4-07).
@@ -222,7 +223,7 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
 }) {
   const { t: tx } = useT('agentes', agentesEs);
   return (
-    <MarcoPagina titulo={tx('rest.programa_de_despacho')} apoyo={tx('rest.sube_el_archivo_del_programa_de')}>
+    <MarcoConfigAgente titulo={tx('rest.programa_de_despacho')} apoyo={tx('rest.sube_el_archivo_del_programa_de')}>
       <nav aria-label={tx('rest.volver')}>{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}</nav>
 
       {vigiaEncendido === false ? (
@@ -242,6 +243,6 @@ export function VistaProgramaVigia({ sufijo, puedeEscribir, vigiaEncendido, acci
           </div>
         )}
       </Tarjeta>
-    </MarcoPagina>
+    </MarcoConfigAgente>
   );
 }

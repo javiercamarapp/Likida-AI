@@ -6,8 +6,9 @@ import { leerUltimasLecturas } from '@/lib/admin/qa-storage';
 import { agregar, agregarPorCampo, type Agregado, type AgregadoPorCampo } from '@/lib/admin/qa-verdad';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { numero } from '@/lib/formato';
-import { MarcoPagina, FilaTarjetas, Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
-import { TiraCifras, Columnas } from '@/app/ui-v2/graficas';
+import { Tarjeta, Aviso, BotonEnlace } from '@/app/ui-v2/componentes';
+import { Columnas } from '@/app/ui-v2/graficas';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { TarjetaFase } from '../tarjeta-fase';
 
 import { getT } from '@/lib/i18n/servidor';
@@ -39,24 +40,22 @@ export default async function AgenteOcrPage() {
   const desgloseSeparable = modelosOcr.length > 0;
 
   return (
-    <MarcoPagina
+    <EsqueletoPanelCifras
       area="Agentes"
       titulo={t('agente_ocr.agentes')}
       apoyo={t('agente_ocr.ocr_la_lectura_de')}
       acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.medir_en_calidad')}</BotonEnlace>}
-    >
-      <TiraCifras
-        etiqueta="OCR"
-        items={[
+      etiquetaCifras="OCR"
+      avisos={!desgloseSeparable ? <Aviso tono="info">{t('agente_ocr.el_costo_por_modelo')}</Aviso> : null}
+      variante="8-4"
+      cifras={[
           { etiqueta: t('agente_ocr.gastado_en_ocr'), valor: ocr ? ocr.costoUsd : 0, formato: 'usd', nota: t('agente_ocr.costo_medido_en_llm') },
           { etiqueta: t('agente_ocr.llamadas_de_ocr'), valor: ocr ? ocr.n : 0, formato: 'entero' },
           { etiqueta: t('agente_ocr.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero' },
           { etiqueta: t('agente_ocr.exactitud_global'), valor: precision === null ? null : precision.global.exactitud === null ? null : Math.round(precision.global.exactitud * 100), formato: 'porcentaje', estado: precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok', mensaje: precision === null ? undefined : t('agente_ocr.sin_medir_todavia'), nota: t('agente_ocr.contra_el_banco_de') },
-        ]}
-      />
-
-      <FilaTarjetas variante="8-4">
-        <Tarjeta titulo={t('agente_ocr.que_tan_bien_lee')} estado={precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok'}
+      ]}
+      graficas={[
+        <Tarjeta key="lee" titulo={t('agente_ocr.que_tan_bien_lee')} estado={precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok'}
           mensaje={precision === null ? t('agente_ocr.no_se_pudo_leer') : t('agente_ocr.el_ocr_todavia_no')}
           detalle={t('agente_ocr.sin_campos_medidos_no')}
           accionVacio={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace>}
@@ -78,21 +77,20 @@ export default async function AgenteOcrPage() {
               <p>El detalle por foto y el botón para volver a medir viven en <Link href="/admin/qa">Calidad › Pruebas reales</Link>.</p>
             </>
           ) : null}
-        </Tarjeta>
+        </Tarjeta>,
         <TarjetaFase
+          key="fase"
           titulo={desgloseSeparable ? t('agente_ocr.costo_por_modelo_ocr') : t('agente_ocr.costo_por_modelo_todas')}
           queHace="Lee la foto de un comprobante y extrae monto, folio y CFDI."
           datos={ocr}
           modelos={desgloseSeparable ? modelosOcr : r.porModelo}
-        />
-      </FilaTarjetas>
-
+        />,
+      ]}
+    >
       <Tarjeta titulo={t('agente_ocr.facturas_procesadas_ultimos_7')} estado={r.facturasPorDia.some((d) => d.n > 0) ? 'ok' : 'vacio'} mensaje={t('agente_ocr.sin_facturas_en_7')} detalle={t('agente_ocr.aparecen_cuando_una_flota')}>
         <Columnas etiqueta={t('agente_ocr.facturas_procesadas_por_dia')} datos={r.facturasPorDia.map((d) => ({ etiqueta: d.dia, valor: d.n }))} formato="numero" />
       </Tarjeta>
-
-      {!desgloseSeparable ? <Aviso tono="info">{t('agente_ocr.el_costo_por_modelo')}</Aviso> : null}
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

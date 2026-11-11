@@ -33,7 +33,9 @@ function accionDe(nodo: ReactNode): Accion | null {
   if (!nodo || typeof nodo !== 'object') return null;
   const el = nodo as ReactElement<{ accion?: Accion; children?: ReactNode }>;
   if (typeof el.props?.accion === 'function') return el.props.accion;
-  return accionDe(el.props?.children);
+  // F26: las secciones de `EsqueletoConfiguracion` viajan en `props.secciones[].contenido`.
+  const secs = (el.props as { secciones?: Array<{ contenido?: ReactNode }> } | undefined)?.secciones;
+  return accionDe(el.props?.children) ?? (secs ? accionDe(secs.map((s) => s.contenido)) : null);
 }
 
 beforeEach(() => { vi.clearAllMocks(); m.porRuta = [{ concepto: 'diesel', topeMonto: 300, requiereCfdi: false, ruta: 'RUTA-A' }]; });

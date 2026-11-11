@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { notFound } from 'next/navigation';
-import { ArrowLeft } from 'lucide-react';
 import { getConversacion, type ConversacionActiva } from '@/lib/admin/negocio';
-import { fechaHoraMx } from '@/lib/formato';
-import { BotonEnlace, EstadoError, MarcoPagina, Tarjeta } from '../../../../ui-v2/componentes';
+import { fechaHoraMx, numero } from '@/lib/formato';
+import { Chip, EstadoError, Tarjeta } from '../../../../ui-v2/componentes';
+import { EsqueletoFicha } from '../../../../ui-v2/esqueletos';
+import { getT } from '@/lib/i18n/servidor';
 import { HiloMensajes } from '../../hilo';
 
 export const dynamic = 'force-dynamic';
@@ -45,30 +46,31 @@ export default async function ConversacionPage({
   }
   if (conversacion === null) notFound();
 
+  const { t } = await getT('admin_inicio');
   return (
-    <MarcoPagina
+    <EsqueletoFicha
+      area={t('ficha_conv.eyebrow')}
       titulo={conversacion === undefined ? 'Conversación' : `Conversación — ${conversacion.telefono}`}
-      acciones={<BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm" icono={<ArrowLeft width={13} height={13} strokeWidth={1.75} />}>Volver</BotonEnlace>}
+      volver={{ href: '/admin/conversaciones', etiqueta: 'Volver' }}
+      chips={conversacion ? <li><Chip>{conversacion.tenantNombre}</Chip></li> : undefined}
+      etiquetaChips={conversacion ? conversacion.tenantNombre : undefined}
+      cifras={conversacion ? [
+        { etiqueta: t('ficha_conv.mensajes'), valor: numero(conversacion.turns.length) },
+        { etiqueta: t('ficha_conv.ultima'), valor: fechaHoraMx(conversacion.actualizadaEn) },
+      ] : undefined}
     >
       {conversacion === undefined ? (
         <EstadoError>No se pudo leer la conversación. La consulta falló — no es que no exista, es que no se pudo mirar.</EstadoError>
       ) : (
-        <>
-          <Tarjeta titulo={conversacion.tenantNombre}>
-            <p className="m-0 text-xs text-muted">
-              Última actividad: {fechaHoraMx(conversacion.actualizadaEn)} · {conversacion.turns.length} mensaje{conversacion.turns.length === 1 ? '' : 's'}
-            </p>
-          </Tarjeta>
-          <Tarjeta titulo="Historial completo">
-            {conversacion.turns.length === 0 ? (
-              <p className="m-0 text-sm text-muted">Sin mensajes en la ventana rodante.</p>
-            ) : (
-              <HiloMensajes turnos={conversacion.turns} />
-            )}
-          </Tarjeta>
-        </>
+        <Tarjeta titulo="Historial completo">
+          {conversacion.turns.length === 0 ? (
+            <p className="m-0 text-sm text-muted">Sin mensajes en la ventana rodante.</p>
+          ) : (
+            <HiloMensajes turnos={conversacion.turns} />
+          )}
+        </Tarjeta>
       )}
-    </MarcoPagina>
+    </EsqueletoFicha>
   );
 }
 

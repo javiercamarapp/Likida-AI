@@ -1,9 +1,9 @@
 import { getT } from '@/lib/i18n/servidor';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Aviso, BotonEnlace, EstadoError, EstadoVacio, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Aviso, BotonEnlace, EstadoError, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './timbrado.css';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -55,70 +55,57 @@ export default async function PaginaTimbrado({
     logger.warn('timbrado.cola_no_leida', { tenantId, err: e instanceof Error ? e.message : String(e) });
   }
 
+  const detalleTimbre = (f: RenglonTimbrado): string => (f.timbre === null
+    ? tr('timbrado.page.sinTimbre2')
+    : f.timbre.estado === 'pendiente'
+      ? f.timbre.uuidFiscal !== null
+        ? tr('timbrado.page.timbreAMedioRegistrar', { uuidFiscal: f.timbre.uuidFiscal })
+        : tr('timbrado.page.intentoDeTimbradoEn')
+      : tr('timbrado.page.timbradoFolio', { v: f.timbre.modo === 'sandbox' ? ' ' + tr('timbrado.page.dePruebaNoAmpara') : '', v2: f.timbre.uuidFiscal ?? '—' }));
+
+  const columnas: ColumnaBase<RenglonTimbrado>[] = [
+    { id: 'viaje', titulo: tr('e26.timb_viaje'), principal: true, celda: (f) => <Link href={`${RUTA}/${f.viajeId}${sufijo}`} className="rv-timb__enlace">{f.folio ?? f.viajeId.slice(0, 8)}</Link> },
+    { id: 'ruta', titulo: tr('e26.timb_ruta'), celda: (f) => <span className="rv-timb__texto">{f.origen && f.destino ? `${f.origen} → ${f.destino}` : tr('timbrado.page.rutaSinCapturar')}</span> },
+    { id: 'timbre', titulo: tr('e26.timb_timbre'), celda: (f) => <span className="rv-timb__tenue">{detalleTimbre(f)}</span> },
+    {
+      id: 'estado', titulo: tr('e26.timb_estado'),
+      celda: (f) => (
+        <StatusChip tono={f.timbre === null ? 'muted' : f.timbre.estado === 'pendiente' ? 'bad' : f.timbre.modo === 'sandbox' ? 'warn' : 'ok'}>
+          {f.timbre === null ? tr('timbrado.page.sinTimbre') : f.timbre.estado === 'pendiente' ? tr('timbrado.page.bloqueado') : tr('timbrado.page.timbrado')}
+        </StatusChip>
+      ),
+    },
+  ];
+
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       titulo={tr('timbrado.page.cartaPorte')}
-      ancho="lectura"
       apoyo={pac.configurado
         ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? tr('timbrado.page.dePruebasLosTimbres') : tr('timbrado.page.deProduccion')}.`
         : tr('timbrado.page.sinPacConfiguradoEl')}
+      avisos={!puedeTimbrar(rol) ? <Aviso tono="warn">{tr('timbrado.page.puedesVerEstaCola')}</Aviso> : undefined}
+      cifras={filas && filas.length > 0 ? [
+        { etiqueta: tr('timbrado.page.enLaCola'), info: 'timbrado.en_cola', valor: filas.length },
+        { etiqueta: tr('timbrado.page.sinTimbre'), info: 'timbrado.sin_timbre', valor: filas.filter((f) => f.timbre === null).length },
+        { etiqueta: tr('timbrado.page.timbrados'), info: 'timbrado.timbrados', valor: filas.filter((f) => f.timbre?.estado === 'vigente').length },
+        { etiqueta: tr('timbrado.page.bloqueados'), info: 'timbrado.bloqueados', valor: filas.filter((f) => f.timbre?.estado === 'pendiente').length, tono: filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined },
+      ] : undefined}
+      etiquetaCifras={tr('timbrado.page.viajesEnLaCola')} selloCifras={selloHoy(tr('timbrado.page.selloCola'))}
+      pie={<>{filas && filas.length > 0 ? <>{tr('timbrado.page.primeroLoQuePide')}<br /></> : null}{tr('timbrado.page.estaColaListaLos')}</>}
     >
-      {!puedeTimbrar(rol) && (
-        <Aviso tono="warn">{tr('timbrado.page.puedesVerEstaCola')}</Aviso>
-      )}
-
       {filas === null ? (
         <EstadoError>{tr('timbrado.page.noSePudoLeer')}</EstadoError>
-      ) : filas.length === 0 ? (
-        <EstadoVacio
-          titulo={tr('timbrado.page.nadaEnLaCola')}
-          accion={puedeVerRuta(rol, '/dashboard/carta-porte')
-            ? <BotonEnlace href={`/dashboard/carta-porte${sufijo}`} variante="secondary" tamano="sm">{tr('timbrado.page.irACartaPorte')}</BotonEnlace>
-            : undefined}
-        >
-          {tr('timbrado.page.aquiAparecenLosViajes')}
-        </EstadoVacio>
       ) : (
-        <>
-          <TiraCifras sello={selloHoy(tr('timbrado.page.selloCola'))}>
-            <Cifra etiqueta={tr('timbrado.page.enLaCola')} info="timbrado.en_cola" valor={filas.length} matiz={1} />
-            <Cifra etiqueta={tr('timbrado.page.sinTimbre')} info="timbrado.sin_timbre" valor={filas.filter((f) => f.timbre === null).length} matiz={2} />
-            <Cifra etiqueta={tr('timbrado.page.timbrados')} info="timbrado.timbrados" valor={filas.filter((f) => f.timbre?.estado === 'vigente').length} matiz={3} />
-            <Cifra etiqueta={tr('timbrado.page.bloqueados')} info="timbrado.bloqueados" valor={filas.filter((f) => f.timbre?.estado === 'pendiente').length} matiz={4} tono={filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined} />
-          </TiraCifras>
-          <Tarjeta titulo={tr('timbrado.page.viajesEnLaCola')}>
-            <p className="rv-timb__tenue">{tr('timbrado.page.primeroLoQuePide')}</p>
-            <ul className="rv-timb__lista">
-              {filas.map((f) => (
-                <li key={f.viajeId} className="rv-timb__fila">
-                  <div>
-                    <Link href={`${RUTA}/${f.viajeId}${sufijo}`}>{f.folio ?? f.viajeId.slice(0, 8)}</Link>
-                    <span className="rv-timb__texto">
-                      {f.origen && f.destino ? ` · ${f.origen} → ${f.destino}` : ' ' + tr('timbrado.page.rutaSinCapturar')}
-                    </span>
-                    <p className="rv-timb__tenue">
-                      {f.timbre === null
-                        ? tr('timbrado.page.sinTimbre2')
-                        : f.timbre.estado === 'pendiente'
-                          ? f.timbre.uuidFiscal !== null
-                            ? tr('timbrado.page.timbreAMedioRegistrar', { uuidFiscal: f.timbre.uuidFiscal })
-                            : tr('timbrado.page.intentoDeTimbradoEn')
-                          : tr('timbrado.page.timbradoFolio', { v: f.timbre.modo === 'sandbox' ? ' ' + tr('timbrado.page.dePruebaNoAmpara') : '', v2: f.timbre.uuidFiscal ?? '—' })}
-                    </p>
-                  </div>
-                  <StatusChip tono={f.timbre === null ? 'muted' : f.timbre.estado === 'pendiente' ? 'bad' : f.timbre.modo === 'sandbox' ? 'warn' : 'ok'}>
-                    {f.timbre === null ? tr('timbrado.page.sinTimbre') : f.timbre.estado === 'pendiente' ? tr('timbrado.page.bloqueado') : tr('timbrado.page.timbrado')}
-                  </StatusChip>
-                </li>
-              ))}
-            </ul>
-          </Tarjeta>
-        </>
+        <TablaBase
+          etiqueta={tr('timbrado.page.viajesEnLaCola')} columnas={columnas} filas={filas} idFila={(f) => f.viajeId} densa altoMaximo={false} tarjetaMovil
+          vacio={{
+            titulo: tr('timbrado.page.nadaEnLaCola'), texto: tr('timbrado.page.aquiAparecenLosViajes'),
+            accion: puedeVerRuta(rol, '/dashboard/carta-porte')
+              ? <BotonEnlace href={`/dashboard/carta-porte${sufijo}`} variante="secondary" tamano="sm">{tr('timbrado.page.irACartaPorte')}</BotonEnlace>
+              : undefined,
+          }}
+        />
       )}
-
-      <p className="rv-timb__tenue">
-        {tr('timbrado.page.estaColaListaLos')}
-      </p>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

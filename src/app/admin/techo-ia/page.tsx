@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
-import { Aviso, Boton, CampoTexto, EstadoError, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import type { ComponentProps, ReactNode } from 'react';
+import { Aviso, Boton, CampoTexto, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
 import { usd } from '@/lib/utils';
@@ -15,6 +17,8 @@ export const dynamic = 'force-dynamic';
 // (`requireSuperadmin`) y otra vez la de la acción. Cada fila dice DE DÓNDE sale el techo que de verdad
 // se aplica (declarado por el superadmin, derivado del plan o el piso global) y cuánto lleva hoy.
 // ═══════════════════════════════════════════════════════════════════════════
+
+const TITULO = 'Techo diario de IA — por flota';
 
 const ORIGEN: Record<FilaTechoIa['origen'], { tono: TonoEstado; rotulo: string }> = {
   tenant: { tono: 'ok', rotulo: 'Declarado' },
@@ -84,11 +88,28 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
     },
   ];
 
-  return (
-    <PantallaTecho>
-      {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}
-      {sp.error && MENSAJE_ERROR[sp.error] && <Aviso tono="error">{MENSAJE_ERROR[sp.error]}</Aviso>}
+  const cercaDelTecho = datos.filas.filter((f) => (f.pctUsado ?? 0) >= 80).length;
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('techo_ia.flotas'), valor: datos.filas.length, formato: 'entero' as const },
+    { etiqueta: t('techo_ia.k_declarado'), valor: datos.filas.filter((f) => f.origen === 'tenant').length, formato: 'entero' as const },
+    // Sin la lectura del gasto de hoy no se afirma cuántas van cerca del techo: «—», nunca 0.
+    datos.gastoIlegible
+      ? { etiqueta: t('techo_ia.k_cerca'), valor: null, estado: 'vacio' as const, mensaje: t('techo_ia.el_gasto_de_hoy') }
+      : { etiqueta: t('techo_ia.k_cerca'), valor: cercaDelTecho, formato: 'entero' as const, tono: cercaDelTecho > 0 ? 'warn' as const : undefined },
+    { etiqueta: t('techo_ia.k_piso'), valor: usd(datos.pisoUsd), nota: t('techo_ia.k_piso_nota') },
+  ];
 
+  return (
+    <PantallaTecho
+      etiquetaCifras={t('techo_ia.flotas')}
+      cifras={cifras}
+      avisos={(
+        <>
+          {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}
+          {sp.error && MENSAJE_ERROR[sp.error] && <Aviso tono="error">{MENSAJE_ERROR[sp.error]}</Aviso>}
+        </>
+      )}
+    >
       <Tarjeta titulo={t('techo_ia.como_se_decide_el')}>
         <p className="rv-techo-nota">
           1) el que declares aquí; 2) si no hay, el que le toca por el tamaño de su plan; 3) si tampoco, el piso global de{' '}
@@ -119,8 +140,8 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   );
 }
 
-function PantallaTecho({ children }: { children: ReactNode }) {
-  return <MarcoPagina titulo="Techo diario de IA — por flota">{children}</MarcoPagina>;
+function PantallaTecho({ children, ...resto }: { children: ReactNode } & Omit<ComponentProps<typeof EsqueletoTablaMaestra>, 'titulo' | 'children'>) {
+  return <EsqueletoTablaMaestra titulo={TITULO} {...resto}>{children}</EsqueletoTablaMaestra>;
 }
 
 export async function generateMetadata(): Promise<Metadata> {

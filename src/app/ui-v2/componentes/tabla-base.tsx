@@ -22,6 +22,8 @@ export interface ColumnaBase<T> {
   principal?: boolean;
   /** Rótulo de la celda en la tarjeta-fila de móvil. Por omisión, el título. */
   etiquetaMovil?: string;
+  /** Columna de acciones: el título se lee pero no se ve (mismo contrato que TablaLista). */
+  tituloOculto?: boolean;
 }
 
 export function TablaBase<T>({ etiqueta, columnas, filas, idFila, estado = 'ok', mensajeError, vacio, densa, altoMaximo = true, tarjetaMovil, className }: {
@@ -53,14 +55,14 @@ export function TablaBase<T>({ etiqueta, columnas, filas, idFila, estado = 'ok',
         <table data-densa={densa || undefined} data-tarjeta={tarjetaMovil || undefined}>
           <caption id={idLeyenda} className="rv-sr">{etiqueta}</caption>
           <thead>
-            <tr>{columnas.map((c) => <th key={c.id} scope="col" className={c.alinear === 'der' ? 'num' : undefined}>{c.titulo}</th>)}</tr>
+            <tr>{columnas.map((c) => <th key={c.id} scope="col" className={c.alinear === 'der' ? 'num' : undefined}>{c.tituloOculto ? <span className="rv-sr">{c.titulo}</span> : c.titulo}</th>)}</tr>
           </thead>
           <tbody>
             {filas.map((f) => (
               <tr key={idFila(f)}>
                 {columnas.map((c) => c.principal
                   ? <th key={c.id} scope="row" data-label={c.etiquetaMovil ?? c.titulo}>{c.celda(f)}</th>
-                  : <td key={c.id} className={c.alinear === 'der' ? 'num' : undefined} data-label={c.etiquetaMovil ?? c.titulo}>{c.celda(f)}</td>)}
+                  : <td key={c.id} className={c.alinear === 'der' ? 'num' : undefined} data-label={c.tituloOculto ? '' : (c.etiquetaMovil ?? c.titulo)}>{c.celda(f)}</td>)}
               </tr>
             ))}
           </tbody>

@@ -6,8 +6,9 @@ import { ahoraMs } from '@/lib/saludo';
 import { numero } from '@/lib/formato';
 import { usd } from '@/lib/utils';
 import { proyectarCosto } from './proyeccion';
-import { EstadoVacio, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
-import { AreaMini, Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { EstadoVacio, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { AreaMini } from '../../ui-v2/graficas';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import type { Idioma } from '@/lib/i18n/idioma';
@@ -33,33 +34,33 @@ export default async function CapacidadForecastPage() {
   let unidades: Awaited<ReturnType<typeof getUnidadesMedidas>> | null = null;
   try { unidades = await getUnidadesMedidas(ahoraMs()); } catch { unidades = null; }
 
+  const cifras = proyeccion === null ? undefined : [
+    { etiqueta: tp('capacidad_forecast.costo_diario_promedio', proyeccion.diasVentana), valor: usd(proyeccion.promedioDiario) },
+    { etiqueta: t('capacidad_forecast.proyeccion_a_30_dias'), valor: usd(proyeccion.proyeccionMensual) },
+  ];
+
   return (
-    <MarcoPagina titulo={t('capacidad_forecast.capacidad_forecast')}>
+    <EsqueletoPanelCifras
+      titulo={t('capacidad_forecast.capacidad_forecast')}
+      cifras={cifras}
+      variante="12"
+      graficas={proyeccion === null ? undefined : [
+        <Tarjeta key="costo" titulo={t('capacidad_forecast.costo_de_ia_por_dia')}>
+          {r.porDia.length > 1 ? (
+            <AreaMini valores={r.porDia.map((d) => d.costoUsd)} etiquetas={r.porDia.map((d) => d.dia)} formato="usd" etiqueta={t('capacidad_forecast.costo_de_ia_por_dia_usd')} />
+          ) : (
+            <EstadoVacio titulo={t('capacidad_forecast.sin_datos')} contenido>{t('capacidad_forecast.sin_historial_suficiente_todavia_para_una')}</EstadoVacio>
+          )}
+          <p className="m-0 mt-3 text-xs text-muted">{t('capacidad_forecast.proyeccion_simple_costo_diario_promedio_30')}{proyeccion.diasVentana < 7 && t('capacidad_forecast.con_tan_poca_historia_esta_cifra')}
+          </p>
+        </Tarjeta>,
+      ]}
+    >
       {enVentana === null ? (
         <EstadoVacio titulo={t('capacidad_forecast.sin_lectura')}>{t('capacidad_forecast.no_se_pudo_leer_el_costo')}</EstadoVacio>
       ) : proyeccion === null ? (
         <EstadoVacio titulo={t('capacidad_forecast.sin_datos')}>{t('capacidad_forecast.sin_datos_de_costo_de_ia')}</EstadoVacio>
-      ) : (
-        <>
-          <TiraCifras>
-            <Cifra
-              etiqueta={tp('capacidad_forecast.costo_diario_promedio', proyeccion.diasVentana)}
-              valor={usd(proyeccion.promedioDiario)}
-            />
-            <Cifra etiqueta={t('capacidad_forecast.proyeccion_a_30_dias')} valor={usd(proyeccion.proyeccionMensual)} />
-          </TiraCifras>
-
-          <Tarjeta titulo={t('capacidad_forecast.costo_de_ia_por_dia')}>
-            {r.porDia.length > 1 ? (
-              <AreaMini valores={r.porDia.map((d) => d.costoUsd)} etiquetas={r.porDia.map((d) => d.dia)} formato="usd" etiqueta={t('capacidad_forecast.costo_de_ia_por_dia_usd')} />
-            ) : (
-              <EstadoVacio titulo={t('capacidad_forecast.sin_datos')} contenido>{t('capacidad_forecast.sin_historial_suficiente_todavia_para_una')}</EstadoVacio>
-            )}
-            <p className="m-0 mt-3 text-xs text-muted">{t('capacidad_forecast.proyeccion_simple_costo_diario_promedio_30')}{proyeccion.diasVentana < 7 && t('capacidad_forecast.con_tan_poca_historia_esta_cifra')}
-            </p>
-          </Tarjeta>
-        </>
-      )}
+      ) : null}
 
       {/* ── EL MODELO DE CAPACIDAD (fase 7): escenarios con supuestos A LA VISTA. Las unidades salen de lo medido cuando hay
             muestra; los límites de proveedor son nominales y se dice. ── */}
@@ -90,7 +91,7 @@ export default async function CapacidadForecastPage() {
           </>
         )}
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

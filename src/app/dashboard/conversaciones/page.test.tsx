@@ -18,7 +18,7 @@ const dobles = vi.hoisted(() => ({
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' };
 
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
-vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); }, useRouter: () => ({ refresh: () => {} }) }));
+vi.mock('next/navigation', () => ({ redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); }, useRouter: () => ({ refresh: () => {}, replace: () => {} }) }));
 vi.mock('@/lib/likida/conversaciones', async (importar) => ({
   ...(await importar<typeof import('@/lib/likida/conversaciones')>()),
   getHilosDeFlota: dobles.getHilosDeFlota,
@@ -29,7 +29,7 @@ import { TOPE_HILOS } from '@/lib/likida/conversaciones';
 import ConversacionesFlotaPage from './page';
 
 const SP = Promise.resolve({});
-async function renderizar() { return renderToStaticMarkup(await ConversacionesFlotaPage({ searchParams: SP })); }
+async function renderizar(sp: Promise<Record<string, string>> = SP) { return renderToStaticMarkup(await ConversacionesFlotaPage({ searchParams: sp })); }
 const HILO = { telefono: '5219991234567', operadorNombre: 'Juan', viajeFolio: 'VJ-1', actualizadaEn: '2026-01-01T00:00:00Z', turns: [{ role: 'user', content: '¿Ya está liquidado?' }, { role: 'assistant', content: 'Sí, VJ-1 se cerró ayer.' }] };
 
 beforeEach(() => {
@@ -93,7 +93,10 @@ it('sin recorte, dice "Todos tus hilos"', async () => {
 it('un hilo con turnos declara la ventana rodante — no promete el historial completo', async () => {
   dobles.getHilosDeFlota.mockResolvedValue([HILO]);
   dobles.contarHilosDeFlota.mockResolvedValue(1);
-  const html = await renderizar();
+  // F26: el hilo se lee en el cajón de vista rápida (`?ver=<teléfono>`); sin `ver` solo hay la tabla.
+  expect(await renderizar()).not.toContain('¿Ya está liquidado?');
+  expect(await renderizar(Promise.resolve({ ver: 'otro-numero' }))).not.toContain('¿Ya está liquidado?');
+  const html = await renderizar(Promise.resolve({ ver: HILO.telefono }));
   expect(html).toContain('¿Ya está liquidado?');
   expect(html).toContain('VJ-1 se cerró ayer');
   expect(html).toContain('no el historial completo desde el primer día');

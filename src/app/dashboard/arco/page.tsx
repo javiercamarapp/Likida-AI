@@ -1,6 +1,5 @@
 import { getT } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
-import { Clock, CircleAlert, Inbox } from 'lucide-react';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
@@ -15,11 +14,11 @@ import { fechaMx, hoyMx } from '@/lib/formato';
 import { venceDentroDe, yaVencio, DIAS_VENCE_PRONTO } from './vencimiento';
 import type { Metadata } from 'next';
 import {
-  CampoTexto, EstadoError, EstadoVacio, FormaConAviso, Icono, MarcoPagina, StatusChip, Tarjeta,
+  CampoTexto, EstadoError, EstadoVacio, FormaConAviso, StatusChip, Tarjeta,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import './arco.css';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 export async function generateMetadata(): Promise<Metadata> {
   const { t: tr } = await getT('dinero');
@@ -199,14 +198,16 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   const vencidas = pendientes.filter((s) => yaVencio(s.venceEn, hoy));
 
   return (
-    <MarcoPagina titulo={tr('arco.page.solicitudesArco')} apoyo={tr('arco.page.solicitudesDeTusOperadores2')}>
-      {/* H7 (auditoría 24): las tres cifras salían de `solicitudes`, que es `[]` TANTO si de verdad no hay solicitudes COMO si la lectura de arriba falló (`errorCarga`). Con la base caída, "0 vencidas sin responder" es la mentira que un responsable obligado por el art. 31 no se puede permitir. `null` es NO MEDIBLE ("—", no "0"); el aviso de abajo explica por qué. */}
-      <TiraCifras sello={selloHoy(tr('arco.page.selloArco'))}>
-        <Cifra icono={<Icono icono={Inbox} />} etiqueta={tr('arco.page.porResponder')} info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
-        <Cifra icono={<Icono icono={Clock} />} etiqueta={tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO })} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
-        <Cifra icono={<Icono icono={CircleAlert} />} etiqueta={tr('arco.page.vencidasSinResponder')} info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
-      </TiraCifras>
-
+    <EsqueletoPortada
+      titulo={tr('arco.page.solicitudesArco')} apoyo={tr('arco.page.solicitudesDeTusOperadores2')}
+      etiquetaCifras={tr('arco.page.solicitudesArco')} selloCifras={selloHoy(tr('arco.page.selloArco'))}
+      /* H7 (auditoría 24): `null` es NO MEDIBLE («—», no «0») cuando la lectura falló: «0 vencidas sin responder» con la base caída es la mentira que un responsable obligado por el art. 31 no se puede permitir. */
+      cifras={[
+        { etiqueta: tr('arco.page.porResponder'), info: 'arco.por_responder', valor: errorCarga ? null : pendientes.length },
+        { etiqueta: tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO }), info: 'arco.vencen_pronto', valor: errorCarga ? null : vencenPronto.length },
+        { etiqueta: tr('arco.page.vencidasSinResponder'), info: 'arco.vencidas', valor: errorCarga ? null : vencidas.length, tono: !errorCarga && vencidas.length > 0 ? 'bad' : undefined },
+      ]}
+    >
       <Tarjeta titulo={tr('arco.page.solicitudesDeTusOperadores')} info="arco.solicitudes">
         {errorCarga ? (
           <EstadoError reintentar>
@@ -277,6 +278,6 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
           </ul>
         )}
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoPortada>
   );
 }

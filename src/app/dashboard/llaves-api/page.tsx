@@ -8,12 +8,14 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { fechaMx } from '@/lib/formato';
 import {
-  crearLlaveApi, revocarLlaveApi, listarLlavesApi, AREAS_DE_LLAVE, VIGENCIAS_DE_LLAVE,
+  crearLlaveApi, revocarLlaveApi, listarLlavesApi, llaveVencida, AREAS_DE_LLAVE, VIGENCIAS_DE_LLAVE,
   VIGENCIA_DEFAULT, type LlaveListada,
 } from '@/lib/auth/llave-api-escritura';
 import { FormaEmision, type ResultadoForma } from './forma';
 import { ListaLlaves } from './vista';
-import { MarcoPagina, AvisoCompacto, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, EstadoError } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { CajonEmitirLlave } from './cajon-emitir';
 import type { Metadata } from 'next';
 import { getT } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
@@ -48,7 +50,7 @@ const RUTA = '/dashboard/llaves-api';
 export default async function PaginaLlavesApi({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; abrir?: string }>;
 }) {
   const { t, idioma } = await getT('resto');
   const sp = await searchParams;
@@ -117,24 +119,32 @@ export default async function PaginaLlavesApi({
     }
   }
 
-  return (
-    <MarcoPagina titulo={t('llaves.llaves_de_api')} apoyo={t('llaves.con_una_llave_un_sistema_tuyo')}>
-      <AvisoCompacto tono="info"
-        resumen={t('llaves.con_una_llave_un_sistema_tuyo_2')}
-        mas={<p>{rico(t('llaves.la_llave_se_manda_como_e0'), { e0: (c) => <code className="cifra-mono">{c}</code>, e1: (c) => <code className="cifra-mono">{c}</code> })}</p>} />
+  // Cifras de las mismas filas que la tabla; con la lectura caída no hay cifras (nunca «0 llaves»).
+  const cifras = llaves === null ? undefined : [
+    { etiqueta: t('e26.llaves_vigentes'), valor: llaves.filter((l) => l.revocadaEn === null && !llaveVencida(l.expiraEn)).length },
+    { etiqueta: t('e26.llaves_sin_caducidad'), valor: llaves.filter((l) => l.revocadaEn === null && l.expiraEn === null).length },
+    { etiqueta: t('e26.llaves_revocadas_vencidas'), valor: llaves.filter((l) => l.revocadaEn !== null || llaveVencida(l.expiraEn)).length },
+  ];
 
+  return (
+    <EsqueletoTablaMaestra
+      titulo={t('llaves.llaves_de_api')} apoyo={t('llaves.con_una_llave_un_sistema_tuyo')}
+      avisos={<AvisoCompacto tono="info"
+        resumen={t('llaves.con_una_llave_un_sistema_tuyo_2')}
+        mas={<p>{rico(t('llaves.la_llave_se_manda_como_e0'), { e0: (c) => <code className="cifra-mono">{c}</code>, e1: (c) => <code className="cifra-mono">{c}</code> })}</p>} />}
+      cifras={cifras} etiquetaCifras={t('llaves.llaves_de_api')}
+    >
       {llaves === null ? (
         <EstadoError reintentar>{t('llaves.no_pude_leer_las_llaves_de')}</EstadoError>
       ) : (
         <>
-          <ListaLlaves t={t} llaves={llaves} revocarLlave={revocarLlave} />
-
-          <Tarjeta titulo={t('llaves.emitir_una_llave')} info="llaves_api.emitir">
+          <CajonEmitirLlave titulo={t('llaves.emitir_una_llave')} disparador={t('llaves.emitir_llave')} abiertoInicial={sp.abrir === 'emitir-llave'}>
             <FormaEmision accion={emitirLlave} areas={AREAS_DE_LLAVE}
               vigencias={VIGENCIAS_DE_LLAVE} vigenciaDefault={VIGENCIA_DEFAULT} />
-          </Tarjeta>
+          </CajonEmitirLlave>
+          <ListaLlaves t={t} llaves={llaves} revocarLlave={revocarLlave} />
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

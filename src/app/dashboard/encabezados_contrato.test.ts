@@ -21,11 +21,11 @@ function textoDeClave(clave: string): string | null {
   const m = new RegExp(`'${clave.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}':\\s*'((?:[^'\\\\]|\\\\.)*)'`).exec(DICCIONARIO_ES);
   return m ? m[1].replace(/\\'/g, "'") : null;
 }
-/** El `titulo` de `<MarcoPagina>`: literal, o `{t('clave')}` resuelto contra el diccionario en español; `null` si es calculado. */
+/** El `titulo` de `<MarcoPagina>` o de un esqueleto F26 (que lo pasa al mismo marco): literal, o `{t('clave')}` resuelto contra el diccionario en español; `null` si es calculado. */
 function tituloDeMarco(src: string): string | null {
-  const lit = /<MarcoPagina\b[^>]*?\btitulo="([^"]*)"/s.exec(src);
+  const lit = /<(?:MarcoPagina|Esqueleto\w+)\b[^>]*?\btitulo="([^"]*)"/s.exec(src);
   if (lit) return lit[1];
-  const dic = /<MarcoPagina\b[^>]*?\btitulo=\{\s*\w+\('([^']+)'\)\s*\}/s.exec(src);
+  const dic = /<(?:MarcoPagina|Esqueleto\w+)\b[^>]*?\btitulo=\{\s*\w+\('([^']+)'\)\s*\}/s.exec(src);
   return dic ? textoDeClave(dic[1]) : null;
 }
 
@@ -52,7 +52,7 @@ describe('las pantallas migradas usan el encabezado único', () => {
   for (const rel of MIGRADAS) {
     it(`${rel}: MarcoPagina (o EncabezadoPagina), sin BarraPagina, HeroSaludo ni h1 propio`, () => {
       const f = sinComentarios(fuente(rel));
-      expect(f, 'debe pintar el encabezado único').toMatch(/<MarcoPagina\b|<EncabezadoPagina\b/);
+      expect(f, 'debe pintar el encabezado único').toMatch(/<MarcoPagina\b|<EncabezadoPagina\b|<MarcoConfigAgente\b|<Esqueleto(?:Portada|TablaMaestra|PanelCifras|Ficha|Configuracion)\b/);
       expect(f, 'la miga/barra superior ya no existe').not.toMatch(/<BarraPagina\b|<HeroSaludo\b/);
       expect(f, 'el h1 lo pone el encabezado único').not.toMatch(/<h1\b/);
     });
