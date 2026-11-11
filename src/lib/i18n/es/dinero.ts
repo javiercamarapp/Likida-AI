@@ -1632,7 +1632,6 @@ export const dinero = {
   'politicas.page.aPartirDeAqui': 'A partir de aquí el motor levanta la mano.',
   'politicas.page.concepto': 'Concepto',
   'politicas.page.configuracion': 'Configuración',
-  'politicas.page.topesDeGasto': 'Topes de gasto',
   'politicas.page.deSoloLecturaEl': 'De solo lectura: el editor de arriba trabaja por concepto y no tiene dónde poner la ruta. Se conservan intactas al guardar; no se editan desde aquí todavía.',
   'politicas.page.desviacionDeConsumo': 'Desviación de consumo',
   'politicas.page.estaFlotaNoTiene': 'Esta flota no tiene topes configurados: el motor no marcará nada por política.',

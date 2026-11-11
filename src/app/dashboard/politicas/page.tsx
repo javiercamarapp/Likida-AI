@@ -198,7 +198,7 @@ export default async function PoliticasPage({
 
   return (
     <EsqueletoConfiguracion
-      titulo={tr('politicas.page.topesDeGasto')} apoyo={tr('politicas.page.losTopesContraLos')}
+      titulo={tr('politicas.page.configuracion')} apoyo={tr('politicas.page.losTopesContraLos')}
       avisos={config === null ? <EstadoError reintentar>{tr('politicas.page.noSePudoLeer')}</EstadoError> : undefined}
       secciones={config === null ? [] : [
         {
