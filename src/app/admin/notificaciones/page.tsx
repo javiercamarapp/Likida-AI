@@ -1,7 +1,9 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { leerAvisosAdmin } from '@/app/ui-v2/avisos/fuente-admin';
-import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
+import { BloqueCifras } from '@/app/ui-v2/esqueletos/comunes';
+import { observadas } from '../sello-observado';
 import { clienteAvisos } from '@/lib/avisos/cliente';
 import { resolverBandeja } from '@/lib/avisos/bandeja';
 import { uniformes } from '../cifras-uniformes';
@@ -28,20 +30,26 @@ export default async function NotificacionesPage({ searchParams }: { searchParam
   // lectura no se pudo leer, SIN LEER dice «No disponible», nunca 0.
   const bandeja = seccion === 'avisos' ? await resolverBandeja(clienteAvisos(), { tipo: 'admin' }, s.userId, fuente).catch(() => null) : null;
   const cifras = seccion === 'avisos' && bandeja
-    ? uniformes([
+    ? observadas(uniformes([
       bandeja.errorLeidas !== null
         ? { etiqueta: t('notif.sin_leer'), valor: null, estado: 'error' as const }
         : { etiqueta: t('notif.sin_leer'), valor: bandeja.noLeidos, formato: 'entero' as const, tono: bandeja.noLeidos === 0 ? 'ok' as const : bandeja.hayCritico ? 'bad' as const : 'warn' as const },
       { etiqueta: t('notif.cargados'), valor: bandeja.avisos.length, formato: 'entero' as const },
-    ])
+    ]), t('a1r4.observado'))
     : undefined;
+  // BA de Rovaq: cabecera con «Configurar avisos» → cifras → bandeja. Sin la segunda fila de pestañas (la configuración es una acción de la cabecera).
+  const href = seccion === 'configuracion' ? '/admin/notificaciones' : '/admin/notificaciones?seccion=configuracion';
   return (
-    <EsqueletoTablaMaestra area="Sistema" titulo={t('notif.titulo')} apoyo={t('notif.apoyo')} cifras={cifras} etiquetaCifras={t('notif.resumen')}>
+    <MarcoPagina
+      className="rv-esq rv-esq--tabla adm-notif" area="Sistema" titulo={t('notif.titulo')} apoyo={t('notif.apoyo')}
+      acciones={<BotonEnlace href={href} variante="secondary">{seccion === 'configuracion' ? t('notif.seccion.avisos') : t('notif.seccion.config')}</BotonEnlace>}
+    >
+      <BloqueCifras cifras={cifras} etiqueta={t('notif.resumen')} />
       <PaginaAvisos
         destino={{ panel: 'admin' }} ambito={{ tipo: 'admin' }} userId={s.userId} fuente={fuente}
-        base="/admin/notificaciones" params={{}} sufijo="" seccion={seccion}
+        base="/admin/notificaciones" params={{}} sufijo="" seccion={seccion} conPestanas={false}
       />
-    </EsqueletoTablaMaestra>
+    </MarcoPagina>
   );
 }
 

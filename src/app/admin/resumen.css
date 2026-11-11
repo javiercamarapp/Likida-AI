@@ -117,3 +117,5 @@
 /* Descripción de una tarjeta de formulario: separada del primer campo (antes se pegaba a la fila «Flota»). */
 [data-ui="v2"] .adm-tarjeta-desc { margin: 0 0 12px; font-size: var(--t-small, 12px); line-height: 1.5; color: var(--muted); }
 /* Select de rol y Revocar de la tabla de integrantes: 28 px, Revocar en peligro (Rovaq). */
+/* Notificaciones: la configuración es una acción de la cabecera; el botón duplicado de la bandeja compartida no se pinta aquí. */
+[data-ui="v2"] .adm-notif .av-cambio { display: none; }
