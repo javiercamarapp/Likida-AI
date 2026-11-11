@@ -316,7 +316,7 @@
 }
 [data-ui="v2"] .card table { border-collapse: separate; border-spacing: 0; width: 100%; font-variant-numeric: tabular-nums; }
 [data-ui="v2"] .card table thead th {
-  position: sticky; top: 0; height: 36px; padding: 0 12px; text-align: left; white-space: nowrap;
+  position: sticky; top: 0; height: 36px; padding: 0 12px 0 14px; text-align: left; white-space: nowrap;
   font: 600 12px/1.2 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0;
   color: var(--tabla-cab-ink); background: var(--tabla-cab-bg); border-bottom: 1px solid var(--line);
 }

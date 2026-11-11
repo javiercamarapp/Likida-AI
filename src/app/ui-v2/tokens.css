@@ -168,10 +168,12 @@
   --ui-tip-ink: var(--tip-ink);
   /* ÚNICO color de la capa de carga (= el fondo de la app) */
   --carga-fondo: #ffffff;
-  /* Cabecera de tabla: tinte NEUTRO sólido (gris muy suave en claro; el oscuro se redefine abajo) con texto tinta. Antes petróleo (#eef6f9). */
+  /* Cabecera de tabla como Rovaq (`.workspace-content thead th`: petróleo al 7 % sobre la superficie + tinta --ink-info #145966; medido en vivo: fondo
+     #EEF6F9, texto #145966). Vuelve el tinte que el 31-oct se había apagado a gris: el dueño (10-nov) ordenó seguir a Rovaq en todo salvo el primario negro.
+     --tint-info NO cambia (sigue neutro: es el fondo de los avisos informativos, no de la tabla). */
   --tint-info: #f4f4f5;
-  --tabla-cab-bg: var(--ui-soft);
-  --tabla-cab-ink: var(--muted);
+  --tabla-cab-bg: #eef6f9;
+  --tabla-cab-ink: #145966;
   /* Líneas de aviso = tono al 24–26 % (R01 de Vexa) */
   --aviso-linea-info: color-mix(in srgb, var(--info) 24%, transparent);
   --aviso-linea-warn: color-mix(in srgb, var(--warn) 26%, transparent);
@@ -393,7 +395,8 @@
   --ui-sunken: #0e0e10;
   --carga-fondo: #0e0e10;
   --tint-info: #1b1b1f;
-  --tabla-cab-bg: var(--ui-soft);
+  --tabla-cab-bg: #162126;
+  --tabla-cab-ink: #5bbdd3;
 
   --n-950: #0e0e10;
   --n-900: #17171a;
