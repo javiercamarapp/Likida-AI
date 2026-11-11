@@ -15,7 +15,7 @@ import {
   resolverPeriodo, getGastosFiscales, getGastosFiscalesSeries, resumirPerdidas, opcionesFiscalesConPerfil,
   type GastoFiscal, type ResumenPerdidas, type GastosFiscalesSeries, type Periodo,
 } from '@/lib/likida/fiscal';
-import { saludo, ahoraMs } from '@/lib/saludo';
+import { ahoraMs } from '@/lib/saludo';
 import { mxn, pctCambio, hoyMx } from '@/lib/formato';
 import { AvisoCompacto, BotonEnlace, MarcoPagina } from '@/app/ui-v2/componentes';
 import { selloHoy } from './sello-hoy';
@@ -107,7 +107,7 @@ export async function InicioContenido({
   sufijo?: string;
 }) {
   const tr = await getT('operacion');
-  const { t, idioma } = tr;
+  const { t } = tr;
   // AUDITORÍA DE DISEÑO, 8-AGO-2026 — sin filtro operativo global 7d/30d:
   //   - `getKpis` sin ventana: "por revisar" y "comprobantes duplicados"
   //     nunca esconden un pendiente real solo por ser viejo.

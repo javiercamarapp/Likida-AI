@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Send, UserCog, CircleSlash, Plus, Users, History } from 'lucide-react';
-import { saludo, ahoraMs } from '@/lib/saludo';
+import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, hoyMx } from '@/lib/formato';
 import {
   getViajes, getOperadoresDetalle, getSerieComparativa,
