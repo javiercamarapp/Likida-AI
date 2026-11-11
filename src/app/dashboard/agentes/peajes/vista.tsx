@@ -279,7 +279,7 @@ export function VistaAgentePeajes({
               <div className="rv-pj-desglose__detalle">
                 <TituloRecuadro nivel="h3" info="peajes.desgloses_importados">{desgloseSeleccionado.proveedor ?? desgloseSeleccionado.archivoNombre ?? tx('peajes.vista.desglose')}</TituloRecuadro>
                 <div className="rv-pj-acciones">
-                  <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
+                  <BotonEnlace variante="secondary" tamano="sm" href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
                     icono={<Icono icono={FileDown} tam={14} />}>
                     {tx('peajes.vista.reporte_de_reclamacion')}
                   </BotonEnlace>

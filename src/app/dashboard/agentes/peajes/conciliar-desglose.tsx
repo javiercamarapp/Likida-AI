@@ -52,10 +52,10 @@ export function BotonConciliar({ conciliar, desgloseId }: {
       {confirmando ? (
         <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-pj-confirmar">
           <input type="hidden" name="desglose" value={desgloseId} />{ricoT(tx('rest.e0_re_cruzar_el_desglose_completo'), { e0: (c) => <span className="rv-pj-sub">{c}</span> })}<BotonConfirmar />
-          <Boton onClick={() => setConfirmando(false)}>{tx('cobranza.controles.cancelar')}</Boton>
+          <Boton variante="ghost" tamano="sm" onClick={() => setConfirmando(false)}>{tx('cobranza.controles.cancelar')}</Boton>
         </form>
       ) : (
-        <Tooltip texto={tx('rest.volver_a_cruzar_todas_las_lineas')}><Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}>{tx('rest.conciliar')}</Boton></Tooltip>
+        <Tooltip texto={tx('rest.volver_a_cruzar_todas_las_lineas')}><Boton variante="secondary" tamano="sm" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} tam={14} />}>{tx('rest.conciliar')}</Boton></Tooltip>
       )}
 
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
@@ -77,7 +77,7 @@ function BotonConfirmar() {
   const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={RefreshCw} />}>
+    <Boton type="submit" variante="primary" tamano="sm" loading={pending} icono={<Icono icono={RefreshCw} tam={14} />}>
       {pending ? 'Cruzando…' : tx('rest.si_cruzar')}
     </Boton>
   );
