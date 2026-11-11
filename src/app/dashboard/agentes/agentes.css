@@ -57,3 +57,5 @@
 
 /* Pila de bloques de una página de agente: el contenedor de la tabla maestra no separa a sus hijos y las tarjetas quedaban a 3 px. */
 .rv-ag-pila { display: grid; gap: var(--sp-gap, 12px); min-width: 0; }
+
+.rv-ag-tabla-vacia { display: grid; gap: 8px; min-width: 0; }

@@ -12,3 +12,21 @@ export function VacioAgente({ titulo, children, accion, icono }: { titulo: strin
     </div>
   );
 }
+
+/** Tabla sin filas con SU cabecera (Rovaq: la tabla vacía conserva los rótulos de columna) y el vacío punteado debajo. Mismas clases que `TablaBase`,
+ *  así la cabecera de 36 px con texto en tinta es la misma que la de la tabla con datos. */
+export function TablaVacia({ etiqueta, titulos, titulo, icono, children }: { etiqueta: string; titulos: readonly string[]; titulo: string; icono?: LucideIcon; children?: ReactNode }) {
+  return (
+    <div className="rv-ag-tabla-vacia">
+      <div className="card rv-tb">
+        <div className="rv-tb__region" role="region" aria-label={etiqueta}>
+          <table data-densa="">
+            <caption className="rv-sr">{etiqueta}</caption>
+            <thead><tr>{titulos.map((t) => <th key={t} scope="col">{t}</th>)}</tr></thead>
+          </table>
+        </div>
+      </div>
+      <VacioAgente titulo={titulo} icono={icono}>{children}</VacioAgente>
+    </div>
+  );
+}
