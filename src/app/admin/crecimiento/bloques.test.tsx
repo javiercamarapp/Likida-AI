@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 // /admin/crecimiento — cada bloque lee lo suyo y cae por su lado. Lo que se vigila: una lectura caída NUNCA se pinta como «no hay nada»,
 // ningún cero tiene cara de medición, un solo <h1> (el del marco), y las comisiones de los vendedores se declaran «falta» (no hay base).
 const dobles = vi.hoisted(() => ({
-  getResumenNegocio: vi.fn(), getAdquisicion: vi.fn(), listarCampanasConTotal: vi.fn(), contarProspectosPorEstado: vi.fn(),
+  getResumenNegocio: vi.fn(), getAdquisicion: vi.fn(), listarCampanasConTotal: vi.fn(), getResumenProspectos: vi.fn(),
   getEmbudoActivacion: vi.fn(), getCohortesUso: vi.fn(), requireSuperadmin: vi.fn(),
 }));
 vi.mock('@/lib/auth/guard', () => ({ requireSuperadmin: dobles.requireSuperadmin }));
@@ -15,7 +15,8 @@ vi.mock('@/lib/admin/campanas', () => ({
   estadoIntegracionAds: () => ({ metaConfigurada: false, googleConfigurada: false, nota: '' }),
   pausarCampana: vi.fn(), refrescarGastoMeta: vi.fn(),
 }));
-vi.mock('@/lib/likida/vendedores', async (importar) => ({ ...(await importar<typeof import('@/lib/likida/vendedores')>()), contarProspectosPorEstado: dobles.contarProspectosPorEstado }));
+// w15/perf: el embudo lee el RESUMEN compartido (una sola lectura de la cartera viva), no 15 conteos aparte.
+vi.mock('@/lib/admin/prospectos-mapa', async (importar) => ({ ...(await importar<typeof import('@/lib/admin/prospectos-mapa')>()), getResumenProspectos: dobles.getResumenProspectos }));
 vi.mock('@/lib/admin/instrumentacion', () => ({ getEmbudoActivacion: dobles.getEmbudoActivacion, getCohortesUso: dobles.getCohortesUso }));
 vi.mock('./acciones', () => ({ accionPausarCampana: vi.fn(), accionRefrescarGasto: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
@@ -26,6 +27,7 @@ import { ControlCampanas } from './campanas';
 import CrecimientoPage from './page';
 
 const ESTADOS = Object.fromEntries(['nuevo', 'contactado', 'appointment', 'rescheduled', 'cancelled', 'no-show', 'demo', 'proposal', 'pilot', 'won', 'lost'].map((e) => [e, 0])) as Record<string, number>;
+const resumen = (total: number, porEtapa: Record<string, number>) => ({ generadoEn: 'x', total, porEtapa, conTelefono: 0, conDecisor: 0, sinPlaza: 0, porEntidad: {} });
 const html = async (bloque: () => Promise<React.ReactElement> | React.ReactElement) => renderToStaticMarkup(await bloque());
 const CAMPANA = { id: 'c-1', canal: 'meta' as const, idExterno: 'x', nombre: 'Campaña A', presupuestoAprobadoUsd: 100, cplObjetivoUsd: 5, estado: 'activa' as const, aprobadoPorEmail: null, aprobadoEn: null, gastoRealUsd: null, gastoMedidoEn: null };
 
@@ -33,7 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   dobles.requireSuperadmin.mockResolvedValue({ rol: 'superadmin' });
   dobles.getResumenNegocio.mockResolvedValue({ tenants: 1, flotas: [{ id: 't-1' }], porDia: [{ dia: '2026-11-01', costoUsd: 1, tokens: 10 }, { dia: '2026-11-02', costoUsd: 2, tokens: 20 }], viajesProcesados: 4, tokensIn: 5, tokensOut: 5, tendenciaTokens: null });
-  dobles.contarProspectosPorEstado.mockResolvedValue({ total: 10, porEstado: { ...ESTADOS, nuevo: 10 } });
+  dobles.getResumenProspectos.mockResolvedValue(resumen(10, { nuevo: 10 }));
   dobles.getAdquisicion.mockResolvedValue({ porFuente: [], alertas: [], sinFuenteDeDatos: [] });
   dobles.listarCampanasConTotal.mockResolvedValue({ campanas: [], total: 0 });
   dobles.getEmbudoActivacion.mockResolvedValue({ altas: 4, activadas: 1, dePago: 0 });
@@ -54,7 +56,7 @@ describe('BloqueIntro', () => {
 
 describe('embudo de adquisición', () => {
   it('lectura caída: lo dice y no afirma que no haya prospectos', async () => {
-    dobles.contarProspectosPorEstado.mockResolvedValue(null);
+    dobles.getResumenProspectos.mockRejectedValue(new Error('caída'));
     const h = await html(BloqueEmbudoAdquisicion);
     expect(h).toContain('No se pudo leer el pipeline');
     expect(h).toContain('NO significa que no haya prospectos');
@@ -64,8 +66,30 @@ describe('embudo de adquisición', () => {
     expect(h).toContain('Sin cierres todavía');
     expect(h).not.toMatch(/Conversión a cierre: 0/);
   });
+  it('(16) barras SOLO para las etapas con gente, proporcionales y de color; las que valen 0 se dicen en una línea', async () => {
+    dobles.getResumenProspectos.mockResolvedValue(resumen(130, { nuevo: 100, contactado: 25, negociacion: 5 }));
+    const h = await html(BloqueEmbudoAdquisicion);
+    expect(h).toContain('130 prospectos del censo');
+    // Tres etapas con gente = tres barras; 'negociacion' (alias histórico) suma en «Propuesta».
+    expect(h.match(/crc-embudo__fila/g)).toHaveLength(3);
+    expect(h).toContain('data-etapa="proposal"');
+    expect(h).toContain('width="100.00%"');
+    expect(h).toContain('width="25.00%"');
+    expect(h).toContain('width="5.00%"');
+    // Las siete etapas en cero NO son siete filas: van en una frase.
+    expect(h).toContain('Sin prospectos todavía en: Cita agendada, Cita reprogramada');
+    expect(h.match(/<svg/g)).toHaveLength(3);
+  });
+  it('(6) el total del título y la fila «Nuevo» son LA misma cifra (una sola lectura)', async () => {
+    dobles.getResumenProspectos.mockResolvedValue(resumen(33_148, { nuevo: 33_148 }));
+    const h = await html(BloqueEmbudoAdquisicion);
+    expect(h).toContain('33,148 prospectos del censo');
+    expect((h.match(/33,148/g) ?? []).length).toBe(2);
+    expect(h).not.toContain('33,153');
+    expect(h).not.toContain('33,676');
+  });
   it('sin prospectos dice qué falta', async () => {
-    dobles.contarProspectosPorEstado.mockResolvedValue({ total: 0, porEstado: ESTADOS });
+    dobles.getResumenProspectos.mockResolvedValue(resumen(0, {}));
     expect(await html(BloqueEmbudoAdquisicion)).toContain('Sin prospectos en el censo');
   });
 });

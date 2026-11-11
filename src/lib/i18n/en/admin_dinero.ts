@@ -271,6 +271,7 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'crecimiento_bloques.aparecen_cuando_el_cerebro': 'They appear when the sales Brain delivers the first ones.',
   'crecimiento_bloques.embudo_de_adquisicion_prospectos': 'Acquisition funnel, {total} prospects from the census',
   'crecimiento_bloques.prospectos_por_estado': 'Prospects by status',
+  'crecimiento_bloques.sin_prospectos_todavia_en': 'No prospects yet in: {etapas}.',
   'crecimiento_bloques.conversion_a_cierre_de': 'Conversion to close: {won} of {total}.',
   'crecimiento_bloques.sin_cierres_todavia_la': 'No closes yet: conversion is not invented with zero closed.',
   'crecimiento_bloques.costo_por_lead_y': 'Cost per lead and acquisition alerts',

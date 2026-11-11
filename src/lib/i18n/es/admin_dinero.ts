@@ -269,6 +269,7 @@ export const admin_dinero = {
   'crecimiento_bloques.aparecen_cuando_el_cerebro': 'Aparecen cuando el Cerebro de ventas entrega los primeros.',
   'crecimiento_bloques.embudo_de_adquisicion_prospectos': 'Embudo de adquisición, {total} prospectos del censo',
   'crecimiento_bloques.prospectos_por_estado': 'Prospectos por estado',
+  'crecimiento_bloques.sin_prospectos_todavia_en': 'Sin prospectos todavía en: {etapas}.',
   'crecimiento_bloques.conversion_a_cierre_de': 'Conversión a cierre: {won} de {total}.',
   'crecimiento_bloques.sin_cierres_todavia_la': 'Sin cierres todavía: la conversión no se inventa con cero cerrados.',
   'crecimiento_bloques.costo_por_lead_y': 'Costo por lead y alertas de adquisición',

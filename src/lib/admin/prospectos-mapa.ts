@@ -20,15 +20,18 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { conteo, exigir, traerTodoEnParalelo, traerTodoPorLlave, traerPorIds, PAGINA, LecturaIncompleta } from '@/lib/likida/pg';
 import { logger } from '@/lib/logger';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { normalizarEstadoProspecto } from '@/lib/likida/vendedores';
+import {
+  ESTADOS_PROSPECTO, conteosVacios, esEstadoVivo, filtrarProspectosTexto, normalizarEstadoProspecto, normalizarConteosProspecto,
+  type EstadoProspecto,
+} from '@/lib/likida/vendedores';
 import {
   type DatosMapa, type DetalleProspecto, type FilaCompacta, type Giro,
-  type ProspectoMapa, type Tamano, type TextosProspecto,
+  type ProspectoMapa, type ResumenEntidad, type ResumenProspectos, type Tamano, type TextosProspecto,
 } from './prospectos-mapa-client';
 export { COLOR_EMBUDO, CRITERIO_SCORES, NOMBRE_GIRO, TAMANOS, desempacar } from './prospectos-mapa-client';
 export type {
   DatosMapa, DetalleProspecto, FilaCompacta, Giro, PersonaProspecto,
-  ProspectoMapa, Tamano, TextosProspecto,
+  ProspectoMapa, ResumenProspectos, Tamano, TextosProspecto,
 } from './prospectos-mapa-client';
 
 // ── El embudo → color. UNA fuente para pines SVG, marcadores de calle,
@@ -595,6 +598,207 @@ export async function getDatosMapa(
     // `traerTodoEnParalelo` ya demostró que llegó entera): no se paga un
     // viaje extra para preguntar lo que se acaba de leer.
     total: desde ? await contarMapa() : vivas.length,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL ÍNDICE LIGERO Y EL RESUMEN (w15/perf, auditoría en vivo 10-nov, puntos 4, 5 y 6)
+//
+// /admin/mapa-prospectos tardaba 25 s y mandaba 2.3 MB de HTML porque serializaba la cartera ENTERA (33 mil filas con notas, toques y
+// personas) para pintar cuatro cifras y un mapa. /admin/crecimiento (11-16 s) y /admin/vendedores (15 s) bajaban la misma tabla ancha
+// (`listarProspectos`, con `notas`) para contar y para pintar 30 tarjetas por columna.
+//
+// Las tres pantallas necesitan lo mismo: UNA fila diminuta por prospecto vivo (id, empresa, vacante, ciudad, estado, fuente, vendedor,
+// alta, y si hay teléfono/decisor). De ahí salen el total, el embudo, las plazas y las fuentes. Lo pesado (notas, scores, mensajes) se pide
+// SOLO para lo que se pinta, o por el latido del Cerebro cuando alguien lo necesita.
+//
+// UNA CIFRA, UNA LECTURA. El 10-nov el mismo número se leyó 33,148 en Ventas, 33,153 en el título del embudo y 33,676 en su fila «Nuevo»:
+// tres consultas con tres definiciones de «vivo». Aquí «vivo» es UNA sola: `duplicado_de is null` y sin la marca `DUPLICADO:` en
+// `notas` (la misma exclusión que el mapa siempre aplicó). El total, el embudo, las fuentes y las plazas salen de las MISMAS filas.
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface FilaIndice {
+  id: string;
+  empresa: string;
+  vacante: string | null;
+  ciudad: string | null;
+  estado: string;
+  fuente: string;
+  vendedorId: string | null;
+  createdAt: string;
+  conTelefono: boolean;
+  conDecisor: boolean;
+}
+
+export interface IndiceProspectos {
+  /** Orden del listado: más nuevo primero, desempate por id (nunca un orden no único). */
+  filas: FilaIndice[];
+  generadoEn: string;
+}
+
+interface FilaCruda {
+  id: string; empresa: string; vacante: string | null; ciudad: string | null; estado: string; fuente: string | null;
+  vendedor_id: string | null; created_at: string; telefono: string | null; contacto_nombre: string | null;
+}
+
+/** UNA sola entrada a la tabla para las tres lecturas ligeras de abajo (índice, marcas de duplicado y notas del tablero). */
+const tablaProspecto = () => supabaseAdmin().from('prospecto');
+
+const COLUMNAS_INDICE = 'id, empresa, vacante, ciudad, estado, fuente, vendedor_id, created_at, telefono, contacto_nombre';
+
+/** Cuánto vive una lectura del índice. Corto a propósito: el Cerebro es un tablero de venta, no un monitor de tiempo real. */
+export const VIDA_INDICE_MS = 30_000;
+
+let memoIndice: { en: number; lectura: Promise<IndiceProspectos> } | null = null;
+
+/** Para las pruebas (y para quien acaba de escribir y necesita ver su propio cambio). */
+export function reiniciarIndiceProspectos(): void {
+  memoIndice = null;
+}
+
+async function leerIndice(): Promise<IndiceProspectos> {
+  // Las dos lecturas son livianas y salen en paralelo: el índice (≈100 bytes por fila, sin `notas`) y los pocos vivos que el
+  // deduplicador marcó SOLO en `notas` (0139). `notas` se lee únicamente de estos últimos.
+  const [crudas, marcadas] = await Promise.all([
+    traerTodoEnParalelo<FilaCruda>(
+      (d, h) => tablaProspecto().select(COLUMNAS_INDICE, conteo(d))
+        .is('duplicado_de', null).order('id', { ascending: true }).range(d, h),
+      'prospecto (indice)',
+    ),
+    traerTodoEnParalelo<{ id: string; notas: string | null }>(
+      (d, h) => tablaProspecto().select('id, notas', conteo(d))
+        .is('duplicado_de', null).ilike('notas', '%DUPLICADO:%').order('id', { ascending: true }).range(d, h),
+      'prospecto (indice, marcas de duplicado)',
+    ),
+  ]);
+  const duplicados = new Set(marcadas.filter((f) => esDuplicado({ notas: f.notas })).map((f) => f.id));
+  const filas = crudas
+    .filter((f) => !duplicados.has(f.id))
+    .map((f): FilaIndice => ({
+      id: f.id, empresa: f.empresa, vacante: f.vacante, ciudad: f.ciudad, estado: f.estado, fuente: f.fuente ?? 'censo',
+      vendedorId: f.vendedor_id, createdAt: f.created_at, conTelefono: Boolean(f.telefono), conDecisor: Boolean(f.contacto_nombre),
+    }))
+    .sort((a, b) => (a.createdAt === b.createdAt ? (a.id < b.id ? -1 : 1) : (a.createdAt < b.createdAt ? 1 : -1)));
+  return { filas, generadoEn: new Date().toISOString() };
+}
+
+/**
+ * El índice de la cartera viva, compartido: dos lecturas casi simultáneas (los bloques de Crecimiento, o Crecimiento y Ventas con
+ * segundos de diferencia) reusan la misma. LANZA si no se pudo leer (una cartera vacía por avería no puede parecer un país sin
+ * prospectos); una lectura fallida no se queda en el memo.
+ *
+ * `fresco: true` salta el memo: /admin/vendedores lo pide porque ahí se ESCRIBE (mover, asignar) y quien acaba de mover un prospecto
+ * tiene que verlo en su columna en la recarga, no 30 s después.
+ */
+export function indiceProspectos(opciones?: { fresco?: boolean; ahoraMs?: number }): Promise<IndiceProspectos> {
+  const ahora = opciones?.ahoraMs ?? Date.now();
+  if (!opciones?.fresco && memoIndice && ahora - memoIndice.en < VIDA_INDICE_MS) return memoIndice.lectura;
+  const lectura = leerIndice();
+  const entrada = { en: ahora, lectura };
+  memoIndice = entrada;
+  // Si falla, no se queda: el siguiente intento vuelve a leer en vez de repetir el error durante 30 s.
+  lectura.catch(() => { if (memoIndice === entrada) memoIndice = null; });
+  return lectura;
+}
+
+/** Las filas del índice → el resumen. PURA: la prueba fija el contrato de «una cifra» sobre ella. */
+export function resumirIndice(indice: IndiceProspectos): ResumenProspectos {
+  const porEtapa: Record<string, number> = {};
+  const porEntidad: Record<string, ResumenEntidad> = {};
+  let conTelefono = 0, conDecisor = 0, sinPlaza = 0;
+  for (const f of indice.filas) {
+    porEtapa[f.estado] = (porEtapa[f.estado] ?? 0) + 1;
+    if (f.conTelefono) conTelefono++;
+    if (f.conDecisor) conDecisor++;
+    const { entidad } = plazaDe(f.ciudad);
+    if (!entidad) { sinPlaza++; continue; }
+    const e = porEntidad[entidad] ?? (porEntidad[entidad] = { n: 0, conTelefono: 0, conDecisor: 0, porEtapa: {} });
+    e.n++;
+    if (f.conTelefono) e.conTelefono++;
+    if (f.conDecisor) e.conDecisor++;
+    e.porEtapa[f.estado] = (e.porEtapa[f.estado] ?? 0) + 1;
+  }
+  return { generadoEn: indice.generadoEn, total: indice.filas.length, porEtapa, conTelefono, conDecisor, sinPlaza, porEntidad };
+}
+
+/** LA cifra de prospectos para Ventas, Crecimiento y Adquisición: una sola lectura compartida. LANZA si no se pudo leer. */
+export async function getResumenProspectos(opciones?: { fresco?: boolean }): Promise<ResumenProspectos> {
+  return resumirIndice(await indiceProspectos(opciones));
+}
+
+/** El conteo del embudo por etapa canónica (los alias históricos suman en su etapa) sobre el MISMO resumen. */
+export function embudoCanonico(resumen: Pick<ResumenProspectos, 'porEtapa'>): Record<EstadoProspecto, number> {
+  return normalizarConteosProspecto(Object.entries(resumen.porEtapa).map(([estado, n]) => ({ estado, n })));
+}
+
+// ── El pipeline de /admin/vendedores: totales del índice, tarjetas solo de lo que se pinta ──
+
+export interface TarjetaPipelineFila {
+  id: string; empresa: string; vacante: string | null; ciudad: string | null; notas: string | null;
+  estado: string; vendedorId: string | null;
+}
+
+export interface PipelineVendedores {
+  /** Cartera completa por etapa canónica (sin filtros): lo que cuentan los KPI y el embudo. */
+  totales: Record<EstadoProspecto, number>;
+  vivosSinVendedor: number;
+  totalProspectos: number;
+  columnas: Array<{ estado: EstadoProspecto; rotulo: string; total: number; tarjetas: TarjetaPipelineFila[] }>;
+}
+
+/**
+ * Antes: `listarProspectos()` bajaba las 33 mil filas con `notas` para contar y para quedarse con 30 por columna (15 s). Ahora los
+ * totales y los filtros salen del índice ligero y `notas` se pide SOLO de las tarjetas que se pintan (como mucho `tope` por etapa).
+ * El recorte sigue siendo de la columna y se dice: `total` es la cifra real con los filtros aplicados.
+ */
+export async function getPipelineVendedores(
+  filtro: { vendedor?: string; q?: string },
+  tope: number,
+): Promise<PipelineVendedores> {
+  const { filas } = await indiceProspectos({ fresco: true });
+  const totales = conteosVacios();
+  let vivosSinVendedor = 0;
+  for (const f of filas) {
+    const estado = normalizarEstadoProspecto(f.estado);
+    if (estado !== null) totales[estado]++;
+    if (f.vendedorId === null && esEstadoVivo(f.estado)) vivosSinVendedor++;
+  }
+  const porTexto = filtrarProspectosTexto(filas, filtro.q);
+  const filtradas = filtro.vendedor === 'sin'
+    ? porTexto.filter((f) => f.vendedorId === null)
+    : filtro.vendedor ? porTexto.filter((f) => f.vendedorId === filtro.vendedor) : porTexto;
+
+  const porColumna = new Map<EstadoProspecto, FilaIndice[]>(ESTADOS_PROSPECTO.map((e) => [e.valor, []]));
+  for (const f of filtradas) {
+    const estado = normalizarEstadoProspecto(f.estado);
+    if (estado !== null) porColumna.get(estado)!.push(f);
+  }
+  const visibles = ESTADOS_PROSPECTO.flatMap((e) => porColumna.get(e.valor)!.slice(0, tope));
+  const detalle = new Map<string, string | null>();
+  if (visibles.length > 0) {
+    const notas = await traerPorIds<{ id: string; notas: string | null }>(
+      visibles.map((f) => f.id),
+      (tanda) => tablaProspecto().select('id, notas').in('id', tanda),
+      'prospecto (notas del tablero)',
+    );
+    for (const n of notas) detalle.set(n.id, n.notas);
+  }
+  return {
+    totales,
+    vivosSinVendedor,
+    totalProspectos: filas.length,
+    columnas: ESTADOS_PROSPECTO.map((e) => {
+      const en = porColumna.get(e.valor)!;
+      return {
+        estado: e.valor,
+        rotulo: e.rotulo,
+        total: en.length,
+        tarjetas: en.slice(0, tope).map((f) => ({
+          id: f.id, empresa: f.empresa, vacante: f.vacante, ciudad: f.ciudad, notas: detalle.get(f.id) ?? null,
+          estado: normalizarEstadoProspecto(f.estado) ?? f.estado, vendedorId: f.vendedorId,
+        })),
+      };
+    }),
   };
 }
 
