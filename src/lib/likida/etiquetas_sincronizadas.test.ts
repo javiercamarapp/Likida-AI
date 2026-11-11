@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { dinero as dineroEs } from '@/lib/i18n/es/dinero';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS MISMOS CONCEPTOS, ESCRITOS EN TRES SITIOS, YA SE DESINCRONIZARON DOS VECES.
@@ -19,6 +20,11 @@ import { join, relative } from 'node:path';
 // un import que no siempre es posible.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/** Un valor que es una CLAVE del diccionario (el panel traduce sus rótulos) se compara por el texto en español que dice, no por la clave. */
+function textoDe(valor: string): string {
+  return (dineroEs as Record<string, string>)[valor] ?? valor;
+}
+
 /** Saca los pares `clave: 'Etiqueta'` de un mapa literal del fuente. */
 function etiquetas(ruta: string, ancla: string): Record<string, string> {
   const src = readFileSync(new URL(ruta, import.meta.url), 'utf8');
@@ -26,7 +32,7 @@ function etiquetas(ruta: string, ancla: string): Record<string, string> {
   expect(i, `no se encontró el ancla "${ancla}" en ${ruta}`).toBeGreaterThanOrEqual(0);
   const bloque = src.slice(i, src.indexOf('}', i));
   const out: Record<string, string> = {};
-  for (const m of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) out[m[1]] = m[2];
+  for (const m of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) out[m[1]] = textoDe(m[2]);
   return out;
 }
 
@@ -60,7 +66,7 @@ function mapasDeConcepto(): Array<{ ruta: string; mapa: Record<string, string> }
     if (!m) continue;
     const bloque = src.slice(m.index, src.indexOf('}', m.index));
     const mapa: Record<string, string> = {};
-    for (const k of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) mapa[k[1]] = k[2];
+    for (const k of bloque.matchAll(/(\w+):\s*'([^']*)'/g)) mapa[k[1]] = textoDe(k[2]);
     out.push({ ruta: relative(RAIZ_SRC, f), mapa });
   }
   return out;
