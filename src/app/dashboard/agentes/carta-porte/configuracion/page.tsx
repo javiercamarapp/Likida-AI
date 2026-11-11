@@ -14,7 +14,11 @@ import { confirmarRespuestaCcp, fijarRespuestaCcp } from './ccp_actions';
 import { esProbable } from './formato';
 import { VistaConfiguracionSalida } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Configuración de la salida' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.configuracion_de_la_salida') };
+}
 
 export const dynamic = 'force-dynamic';
 

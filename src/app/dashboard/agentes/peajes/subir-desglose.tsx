@@ -8,6 +8,8 @@ import { FileSpreadsheet } from 'lucide-react';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
 import { Boton, CampoArchivo, CampoFecha, CampoTexto, Icono } from '@/app/ui-v2/componentes';
 import './peajes.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 export type ResumenImportado = {
   totalLineas: number;
@@ -28,6 +30,7 @@ export type AccionImportar = (prev: EstadoImportar, fd: FormData) => Promise<Est
  * página completa se refresca para que la lista y el detalle cuenten lo nuevo.
  */
 export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(importar, null);
   const router = useRouter();
 
@@ -40,26 +43,21 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
   return (
     <div className="rv-pj-control">
       <form action={accion} className="rv-pj-forma">
-        <CampoArchivo etiqueta="Desglose del proveedor de peaje (Excel, CSV o PDF)" name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
+        <CampoArchivo etiqueta={tx('rest.desglose_del_proveedor_de_peaje_excel')} name="archivo" accept=".xlsx,.xls,.csv,.tsv,.ods,.pdf" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)} />
-        <CampoTexto etiqueta="Proveedor del desglose (opcional)" name="proveedor" placeholder="Proveedor (IAVE, PASE, TeleVía…)" />
-        <CampoFecha etiqueta="Inicio del periodo del archivo (opcional)" name="periodo_desde" />
-        <CampoFecha etiqueta="Fin del periodo del archivo (opcional)" name="periodo_hasta" />
+        <CampoTexto etiqueta={tx('rest.proveedor_del_desglose_opcional')} name="proveedor" placeholder={tx('rest.proveedor_iave_pase_televia')} />
+        <CampoFecha etiqueta={tx('rest.inicio_del_periodo_del_archivo_opcional')} name="periodo_desde" />
+        <CampoFecha etiqueta={tx('rest.fin_del_periodo_del_archivo_opcional')} name="periodo_hasta" />
         <BotonImportar />
       </form>
-      <p className="rv-pj-nota">
-        Máximo 4 MB por archivo (un corte decenal real pesa ~1 MB). Sube el Excel del proveedor tal cual: se lee solo su hoja principal.
-        El periodo decide qué cobro es extemporáneo: si no lo declaras, se toma del nombre del archivo («01 A 10 DE SEPT»); si tampoco lo dice, esa revisión no se aplica y se avisa.
-      </p>
+      <p className="rv-pj-nota">{tx('rest.maximo_4_mb_por_archivo_un')}</p>
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
       {estado?.aviso && <p className="rv-pj-sub" role="status">{estado.aviso}</p>}
       {r && (
         <div className="rv-pj-acuse" role="status">
-          <p className="rv-pj-sub">
-            Desglose importado (<span className="cifra-mono">{r.totalLineas}</span> líneas) y cruzado:{' '}
-            <strong className="cifra-mono">{r.cuadra}</strong> cuadran
-            {r.noCuadra > 0 && <> · <span className="cifra-mono">{r.noCuadra}</span> con discrepancia</>}
-            {r.sinContraparte > 0 && <> · <span className="cifra-mono">{r.sinContraparte}</span> sin contraparte</>}.
+          <p className="rv-pj-sub">{tx('rest.desglose_importado')}<span className="cifra-mono">{r.totalLineas}</span>{' '}{tx('rest.lineas_y_cruzado')}{' '}<strong className="cifra-mono">{r.cuadra}</strong> cuadran
+            {r.noCuadra > 0 && <> · <span className="cifra-mono">{r.noCuadra}</span>{' '}{tx('rest.con_discrepancia_2')}</>}
+            {r.sinContraparte > 0 && <> · <span className="cifra-mono">{r.sinContraparte}</span>{' '}{tx('rest.sin_contraparte')}</>}.
           </p>
           {r.avisos.map((a) => (
             <p key={a} className="rv-pj-nota">{a}</p>
@@ -71,10 +69,11 @@ export function SubirDesgloseProveedor({ importar }: { importar: AccionImportar 
 }
 
 function BotonImportar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={FileSpreadsheet} />}>
-      {pending ? 'Cruzando…' : 'Importar y cruzar'}
+      {pending ? 'Cruzando…' : tx('rest.importar_y_cruzar')}
     </Boton>
   );
 }

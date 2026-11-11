@@ -8,15 +8,18 @@ import { AvisoResultado, Boton, CampoTexto, CampoTextarea, Casilla, Disclosure, 
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import type { ConfigGuardadaSinAtender } from '@/lib/likida/vigia/sin_atender_aviso/motor';
 import type { ResultadoGuardadoUI } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 export type AccionGuardarConfig = (previo: ResultadoGuardadoUI | null, fd: FormData) => Promise<ResultadoGuardadoUI>;
 
 const DIAS = [['1', 'Lun'], ['2', 'Mar'], ['3', 'Mié'], ['4', 'Jue'], ['5', 'Vie'], ['6', 'Sáb'], ['0', 'Dom']] as const;
 
 function BotonGuardar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} tam={14} />}>{pending ? 'Un momento…' : 'Guardar configuración'}</Boton>
+    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} tam={14} />}>{pending ? 'Un momento…' : tx('conductores.forma.guardar_configuracion')}</Boton>
   );
 }
 
@@ -27,46 +30,43 @@ function BotonGuardar() {
 export function FormaConfiguracion({ guardar, flota, guardada, configLeida }: {
   guardar: AccionGuardarConfig; flota?: string; guardada: ConfigGuardadaSinAtender; configLeida: boolean;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [resultado, despachar] = useActionState(guardar, null);
   const h = guardada.horarioAtencion;
   return (
     <form action={despachar} className="rv-vg__pila" aria-describedby="sin-atender-config-ayuda">
       {flota && <input type="hidden" name={CAMPO_FLOTA_PINTADA} value={flota} />}
-      <p id="sin-atender-config-ayuda" className="rv-vg__nota">
-        Lo que guardes aquí se usa en cada revisión de tu flota, también al subir un chat. Los campos vacíos usan los valores de arranque.
-      </p>
+      <p id="sin-atender-config-ayuda" className="rv-vg__nota">{tx('rest.lo_que_guardes_aqui_se_usa')}</p>
       {!configLeida && (
-        <p className="rv-vg__nota" role="note" data-tono="warn">
-          No se pudo leer la configuración guardada: lo que ves abajo son los valores de arranque y no la que tenías. Recarga la página antes de guardar.
-        </p>
+        <p className="rv-vg__nota" role="note" data-tono="warn">{tx('rest.no_se_pudo_leer_la_configuracion_7')}</p>
       )}
-      <Disclosure titulo="Horario de atención" resumen={h !== null ? 'Activo' : 'Sin horario'} abierto>
+      <Disclosure titulo={tx('rest.horario_de_atencion')} resumen={h !== null ? tx('vigia.vista.activo') : tx('rest.sin_horario')} abierto>
         <div className="rv-vg__pila">
-          <Casilla name="horarioActivo" defaultChecked={h !== null} etiqueta="Mi equipo atiende solo en este horario: la espera fuera de él no cuenta" />
+          <Casilla name="horarioActivo" defaultChecked={h !== null} etiqueta={tx('rest.mi_equipo_atiende_solo_en_este')} />
           <div className="rv-vg__cuad">
-            <CampoTexto etiqueta="Abre a las (hora, 0 a 23)" name="desdeHora" inputMode="numeric" defaultValue={h?.desdeHora ?? ''} />
-            <CampoTexto etiqueta="Cierra a las (hora, 1 a 24)" name="hastaHora" inputMode="numeric" defaultValue={h?.hastaHora ?? ''} />
+            <CampoTexto etiqueta={tx('rest.abre_a_las_hora_0_a')} name="desdeHora" inputMode="numeric" defaultValue={h?.desdeHora ?? ''} />
+            <CampoTexto etiqueta={tx('rest.cierra_a_las_hora_1_a')} name="hastaHora" inputMode="numeric" defaultValue={h?.hastaHora ?? ''} />
           </div>
-          <div role="group" aria-label="Días hábiles" className="rv-vg__linea">
+          <div role="group" aria-label={tx('rest.dias_habiles')} className="rv-vg__linea">
             {DIAS.map(([v, n]) => (
               <Casilla key={v} name="diaHabil" value={v} defaultChecked={h?.diasHabiles?.includes(Number(v)) ?? false} etiqueta={n} />
             ))}
           </div>
-          <p className="rv-vg__nota">Si no marcas ningún día, cuentan todos. Los festivos que ya registraste en el tablero del Vigía tampoco cuentan.</p>
+          <p className="rv-vg__nota">{tx('rest.si_no_marcas_ningun_dia_cuentan')}</p>
         </div>
       </Disclosure>
-      <Disclosure titulo="Urgencia e insistencia">
+      <Disclosure titulo={tx('rest.urgencia_e_insistencia')}>
         <div className="rv-vg__cuad">
-          <CampoTexto etiqueta="Mensajes seguidos que cuentan como insistencia" ayuda="0 la apaga." name="insistenciaMin" inputMode="numeric" defaultValue={guardada.insistenciaMin} />
-          <CampoTexto etiqueta="Plazo de lo urgente (min)" name="umbralUrgenteMin" inputMode="numeric" defaultValue={guardada.umbralUrgenteMin} />
-          <CampoTexto etiqueta="Palabras que marcan urgencia" ayuda="Separadas por coma." name="palabrasUrgentes" defaultValue={guardada.palabrasUrgentes.join(', ')} />
-          <CampoTexto etiqueta="Palabras de temas importantes" ayuda="Separadas por coma; si las dejas vacías se usan «embarque» y «embarques»." name="palabrasClave" defaultValue={guardada.palabrasClave.join(', ')} placeholder="embarque" />
+          <CampoTexto etiqueta={tx('rest.mensajes_seguidos_que_cuentan_como_insistencia')} ayuda={tx('rest.0_la_apaga')} name="insistenciaMin" inputMode="numeric" defaultValue={guardada.insistenciaMin} />
+          <CampoTexto etiqueta={tx('rest.plazo_de_lo_urgente_min')} name="umbralUrgenteMin" inputMode="numeric" defaultValue={guardada.umbralUrgenteMin} />
+          <CampoTexto etiqueta={tx('rest.palabras_que_marcan_urgencia')} ayuda={tx('rest.separadas_por_coma')} name="palabrasUrgentes" defaultValue={guardada.palabrasUrgentes.join(', ')} />
+          <CampoTexto etiqueta={tx('rest.palabras_de_temas_importantes')} ayuda={tx('rest.separadas_por_coma_si_las_dejas')} name="palabrasClave" defaultValue={guardada.palabrasClave.join(', ')} placeholder="embarque" />
         </div>
       </Disclosure>
-      <Disclosure titulo="Equipo y resumen por correo">
+      <Disclosure titulo={tx('rest.equipo_y_resumen_por_correo')}>
         <div className="rv-vg__pila">
-          <CampoTextarea etiqueta="Nombres de tu equipo, como salen en el chat" ayuda="Separados por coma. Se guardan tal como los escribes, para no teclearlos en cada revisión. Quien no esté en la lista se cuenta como cliente." name="equipo" rows={2} defaultValue={guardada.equipoNombres.join(', ')} />
-          <Casilla name="resumenCorreo" defaultChecked={guardada.resumenCorreoHabilitado} etiqueta="Permitir que se mande el resumen por correo desde esta pantalla (sigue saliendo solo por clic)" />
+          <CampoTextarea etiqueta={tx('rest.nombres_de_tu_equipo_como_salen')} ayuda={tx('rest.separados_por_coma_se_guardan_tal')} name="equipo" rows={2} defaultValue={guardada.equipoNombres.join(', ')} />
+          <Casilla name="resumenCorreo" defaultChecked={guardada.resumenCorreoHabilitado} etiqueta={tx('rest.permitir_que_se_mande_el_resumen')} />
         </div>
       </Disclosure>
       <div><BotonGuardar /></div>

@@ -44,6 +44,7 @@ export default async function PaginaAgenteFacturas({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol, userId } = await resolverTenantEfectivo('/dashboard/agentes/facturas', sp);
@@ -137,15 +138,15 @@ export default async function PaginaAgenteFacturas({
     const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/facturas', sp, tenantId);
     if (!sesion) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerArea(sesion.rol, 'dinero')) {
-      return { error: 'Tu rol no puede capturar facturas.' };
+      return { error: tx('rest.tu_rol_no_puede_capturar_facturas') };
     }
 
     const crudoId = fd.get('gastoId');
     const gastoId = typeof crudoId === 'string' ? crudoId.trim().slice(0, 64) : '';
     const uuid = validarUuidCfdi(fd.get('uuid'));
-    if (!gastoId) return { error: 'Falta el ticket.' };
+    if (!gastoId) return { error: tx('rest.falta_el_ticket') };
     if (!uuid) {
-      return { error: 'Ese folio no tiene la forma del UUID que imprime el portal (36 caracteres con guiones).' };
+      return { error: tx('rest.ese_folio_no_tiene_la_forma') };
     }
 
     // Anclado a tenant Y a cfdi_uuid nulo: no se pisa una factura ya
@@ -160,13 +161,13 @@ export default async function PaginaAgenteFacturas({
     if (error) {
       // El índice único (tenant, uuid, orden) atrapa el folio repetido.
       if (error.code === '23505') {
-        return { error: 'Ese folio fiscal ya está amarrado a otro ticket de la flota — revisa el CFDI.' };
+        return { error: tx('rest.ese_folio_fiscal_ya_esta_amarrado') };
       }
       logger.error('facturas.marcar.fallo', { gastoId, err: error.message });
-      return { error: 'No se pudo guardar. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_guardar_intentalo_de') };
     }
     if (!data || data.length === 0) {
-      return { error: 'Ese ticket ya no está en la cola (¿ya tenía factura?). Recarga la página.' };
+      return { error: tx('rest.ese_ticket_ya_no_esta_en') };
     }
     logger.info('facturas.marcada_a_mano', { tenantId, gastoId });
     // A37-S13-01: el UUID se TECLEÓ a mano y solo se validó su forma (no hay cfdi_xml, RFC ni total que lo respalden). Queda
@@ -210,10 +211,10 @@ export default async function PaginaAgenteFacturas({
       });
     } catch (e) {
       logger.error('relogin.autorizar.fallo', { tenantId, comercio: guardia.comercio, err: e instanceof Error ? e.message : 'error' });
-      return { error: 'No se pudo guardar el permiso. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_guardar_el_permiso') };
     }
     revalidatePath('/dashboard/agentes/facturas');
-    return { ok: 'Listo: Likida va a reconectar sola cuando el portal cierre tu sesión.' };
+    return { ok: tx('rest.listo_likida_va_a_reconectar_sola') };
   }
 
   /** Y la de deshacerlo, que BORRA la contraseña guardada. Mismas guardas. */
@@ -236,15 +237,15 @@ export default async function PaginaAgenteFacturas({
       }));
     } catch (e) {
       logger.error('relogin.revocar.fallo', { tenantId, comercio: guardia.comercio, err: e instanceof Error ? e.message : 'error' });
-      return { error: 'No se pudo revocar el permiso. Inténtalo de nuevo — y si vuelve a fallar, avísanos: la contraseña sigue guardada.' };
+      return { error: tx('rest.no_se_pudo_revocar_el_permiso') };
     }
     revalidatePath('/dashboard/agentes/facturas');
     // Se dice LO QUE PASÓ, no lo que se esperaba: si no había contraseña que
     // borrar, afirmar que se borró sería una tranquilidad falsa.
     return {
       ok: borrada
-        ? 'Borrada. Cuando el portal cierre tu sesión, vuelves a entrar tú.'
-        : 'Permiso quitado. No había ninguna contraseña guardada de este portal.',
+        ? tx('rest.borrada_cuando_el_portal_cierre_tu')
+        : tx('rest.permiso_quitado_no_habia_ninguna_contrasena'),
     };
   }
 
@@ -256,13 +257,13 @@ export default async function PaginaAgenteFacturas({
     const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/facturas', sp, tenantId);
     if (!sesion) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerArea(sesion.rol, 'dinero')) {
-      return { error: 'Tu rol no puede decidir sobre los accesos de la flota.' };
+      return { error: tx('rest.tu_rol_no_puede_decidir_sobre_2') };
     }
 
     const crudo = fd.get('comercio');
     const clave = typeof crudo === 'string' ? crudo.trim().slice(0, 64) : '';
     if (!clave || !COMERCIOS.some((c) => c.clave === clave)) {
-      return { error: 'Ese portal no está en el catálogo.' };
+      return { error: tx('rest.ese_portal_no_esta_en_el') };
     }
     return { comercio: clave, userId: sesion.userId, firma: sesion.nombre };
   }

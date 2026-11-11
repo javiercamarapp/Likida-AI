@@ -17,6 +17,9 @@ import { cartaAutorizacion, solicitudParaTi } from '@/lib/likida/asistente/texto
 import { nombreCookieAvance, valorCookieAvance } from './progreso';
 import { useDeclaraciones } from './usar-declaraciones';
 import { enviarPruebaCorreo, type ResultadoPruebaCorreo } from './acciones';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // PUESTA EN MARCHA — la pantalla del asistente (PLAN-MAESTRO §2.5).
@@ -65,6 +68,7 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
   pasoInicial?: IdPaso;
   responsables?: Responsables;
 }) {
+  const { t } = useT('resto', restoEs);
   const { declaraciones, cambiar } = useDeclaraciones(ambito, soloLectura);
 
   const r = useMemo(() => armarPasosCincoAgentes(senales, declaraciones, responsables), [senales, declaraciones, responsables]);
@@ -83,24 +87,24 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
   return (
     <div className="rv-pem">
       <EncabezadoPagina
-        titulo="Puesta en marcha"
+        titulo={t('cfg.puesta_en_marcha')}
         idTitulo="puesta-titulo"
-        apoyo="Deja lista tu operación: seis pasos para que tus agentes trabajen con tus datos reales. Aquí ves qué falta y de quién es."
-        acciones={<SoloV2><TourLanzador recorridoId="dueno.completo" etiqueta="Ver recorrido" /></SoloV2>}
+        apoyo={t('op.deja_lista_tu_operacion_seis_pasos')}
+        acciones={<SoloV2><TourLanzador recorridoId="dueno.completo" etiqueta={t('op.ver_recorrido')} /></SoloV2>}
       />
 
       {soloLectura && (
-        <Aviso tono="info" className="rv-pem__aviso">Estás viendo esta cuenta como superadmin: puedes revisar todo, pero tus confirmaciones no se guardan.</Aviso>
+        <Aviso tono="info" className="rv-pem__aviso">{t('op.estas_viendo_esta_cuenta_como_superadmin')}</Aviso>
       )}
 
       <div className="rv-pem__cuerpo">
-        <aside className="rv-pem__lateral" aria-label="Tus pasos">
+        <aside className="rv-pem__lateral" aria-label={t('op.tus_pasos')}>
           <section className="rv-pem__avance" {...anclaTour('asistente.avance')}>
-            <ProgresoAnillo valor={r.avance} tamano={76} grosor={7} etiqueta="Avance de la puesta en marcha" />
+            <ProgresoAnillo valor={r.avance} tamano={76} grosor={7} etiqueta={t('cfg.avance_de_la_puesta_en_marcha')} />
             <div>
               <p className="rv-pem__avance-num">{r.listos} de {r.total}</p>
               <p className="rv-pem__avance-txt">
-                {etiquetaGlobal(r) ?? (r.listos === 0 ? 'Aún no hay pasos terminados.' : 'pasos terminados')}
+                {etiquetaGlobal(r) ?? (r.listos === 0 ? t('op.aun_no_hay_pasos_terminados') : 'pasos terminados')}
               </p>
             </div>
           </section>
@@ -128,10 +132,8 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
 
           <details className="rv-pem__despues">
             <summary>
-              <ChevronDown width={14} height={14} aria-hidden="true" />
-              Después <span>({r.despues.length})</span>
-            </summary>
-            <p className="rv-pem__despues-nota">No hacen falta para empezar y no cuentan en el avance.</p>
+              <ChevronDown width={14} height={14} aria-hidden="true" />{rico(t('op.despues_e0_e0', { length: r.despues.length }), { e0: (c) => <span>{c}</span> })}</summary>
+            <p className="rv-pem__despues-nota">{t('op.no_hacen_falta_para_empezar_y')}</p>
             <ul className="rv-pem__lista">
               {r.despues.map((p) => (
                 <li key={p.id}>
@@ -163,6 +165,7 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
   paso: PasoAsistente; sufijo: string; soloLectura: boolean; declaraciones: Declaraciones;
   onCambiar: (d: Declaraciones) => void; responsables: Responsables;
 }) {
+  const { t } = useT('resto', restoEs);
   const [drawer, setDrawer] = useState(false);
   const [omitiendo, setOmitiendo] = useState(false);
   const [motivo, setMotivo] = useState('');
@@ -178,7 +181,7 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
   return (
     <article className="rv-pem__paso">
       <header className="rv-pem__paso-cab">
-        <p className="rv-pem__paso-rotulo etiqueta-mono">{paso.numero ? `Paso ${paso.numero}` : 'Después'}</p>
+        <p className="rv-pem__paso-rotulo etiqueta-mono">{paso.numero ? `Paso ${paso.numero}` : t('op.despues')}</p>
         <h2 className="rv-pem__paso-titulo font-display">{paso.titulo}</h2>
         <p className="rv-pem__paso-resumen">{paso.resumen}</p>
         <div className="rv-pem__paso-estado">
@@ -187,10 +190,10 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
         </div>
       </header>
 
-      {paso.causa && <Aviso tono="warn" titulo="Qué pasó">{paso.causa}</Aviso>}
+      {paso.causa && <Aviso tono="warn" titulo={t('op.que_paso')}>{paso.causa}</Aviso>}
 
       <p className="rv-pem__evidencia" data-tipo={paso.evidencia.tipo}>
-        <span className="rv-pem__evidencia-sello">{paso.evidencia.tipo === 'medido' ? 'Lo vimos nosotros' : paso.evidencia.tipo === 'declarado' ? 'Lo dijiste tú' : 'Sin comprobar'}</span>
+        <span className="rv-pem__evidencia-sello">{paso.evidencia.tipo === 'medido' ? 'Lo vimos nosotros' : paso.evidencia.tipo === 'declarado' ? t('op.lo_dijiste_tu') : 'Sin comprobar'}</span>
         {paso.evidencia.texto}
       </p>
 
@@ -209,8 +212,8 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
       )}
 
       {prueba && (prueba.ok
-        ? <Aviso tono="ok" titulo="Prueba enviada">Te mandamos un correo a {prueba.destino}. Revisa tu bandeja y, si no, la carpeta de spam.</Aviso>
-        : <Aviso tono="error" titulo="No salió la prueba">{prueba.error}</Aviso>)}
+        ? <Aviso tono="ok" titulo={t('op.prueba_enviada')}>{t('op.te_mandamos_un_correo_a_revisa', { destino: prueba.destino })}</Aviso>
+        : <Aviso tono="error" titulo={t('op.no_salio_la_prueba')}>{prueba.error}</Aviso>)}
 
       <div className="rv-pem__acciones">
         {paso.accion && !declaraciones.omitidos?.[paso.id] && (
@@ -219,24 +222,24 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
           </BotonEnlace>
         )}
         {paso.id === 'tms' && (
-          <Boton variante="secondary" onClick={() => setDrawer(true)} {...anclaTour('asistente.como-conseguirlo')}>Cómo conseguirlo</Boton>
+          <Boton variante="secondary" onClick={() => setDrawer(true)} {...anclaTour('asistente.como-conseguirlo')}>{t('op.como_conseguirlo')}</Boton>
         )}
         {paso.id === 'correo' && paso.estado !== 'en_espera' && (
           <Boton
             variante="secondary" icono={<Mail />} loading={enviando}
             onClick={() => iniciar(async () => { setPrueba(await enviarPruebaCorreo()); })}
-          >Mandarme una prueba</Boton>
+          >{t('op.mandarme_una_prueba')}</Boton>
         )}
         {paso.declara && !soloLectura && (
           <Boton variante="secondary" onClick={() => onCambiar({ ...declaraciones, [paso.declara!]: true })}>
-            {paso.declara === 'correoRecibido' ? 'Sí, me llegó' : paso.declara === 'simulacroVisto' ? 'Ya lo hice y funcionó' : 'Ya invité a mi equipo'}
+            {paso.declara === 'correoRecibido' ? t('op.si_me_llego') : paso.declara === 'simulacroVisto' ? t('op.ya_lo_hice_y_funciono') : t('op.ya_invite_a_mi_equipo')}
           </Boton>
         )}
       </div>
 
       {!soloLectura && paso.numero !== null && paso.estado !== 'listo' && (
         declaraciones.omitidos?.[paso.id] ? (
-          <p className="rv-pem__omitir">Omitido por ti: «{declaraciones.omitidos[paso.id]}». <button type="button" className="rv-pem__enlace" onClick={quitarOmitido}>Quitar</button></p>
+          <p className="rv-pem__omitir">{t('op.omitido_por_ti', { v: declaraciones.omitidos[paso.id] ?? '' })}{' '}<button type="button" className="rv-pem__enlace" onClick={quitarOmitido}>{t('op.quitar')}</button></p>
         ) : omitiendo ? (
           <form className="rv-pem__omitir-form" onSubmit={(e) => {
             e.preventDefault();
@@ -245,14 +248,14 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
             onCambiar({ ...declaraciones, omitidos: { ...declaraciones.omitidos, [paso.id]: m } });
             setOmitiendo(false); setMotivo('');
           }}>
-            <label htmlFor="pem-motivo">¿Por qué lo omites?</label>
-            <input id="pem-motivo" value={motivo} maxLength={140} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. lo resuelve otra área" aria-describedby="pem-motivo-ayuda" />
-            <p id="pem-motivo-ayuda" className="rv-pem__omitir-ayuda">Cuéntalo en al menos {MOTIVO_MINIMO} letras. Un paso omitido no cuenta como terminado.</p>
-            <Boton type="submit" tamano="sm" variante="secondary" disabled={motivo.trim().length < MOTIVO_MINIMO}>Omitir</Boton>
-            <Boton tamano="sm" variante="ghost" onClick={() => setOmitiendo(false)}>Cancelar</Boton>
+            <label htmlFor="pem-motivo">{t('op.por_que_lo_omites')}</label>
+            <input id="pem-motivo" value={motivo} maxLength={140} onChange={(e) => setMotivo(e.target.value)} placeholder={t('op.ej_lo_resuelve_otra_area')} aria-describedby="pem-motivo-ayuda" />
+            <p id="pem-motivo-ayuda" className="rv-pem__omitir-ayuda">{t('op.cuentalo_en_al_menos_letras_un', { motivoMinimo: MOTIVO_MINIMO })}</p>
+            <Boton type="submit" tamano="sm" variante="secondary" disabled={motivo.trim().length < MOTIVO_MINIMO}>{t('op.omitir')}</Boton>
+            <Boton tamano="sm" variante="ghost" onClick={() => setOmitiendo(false)}>{t('op.cancelar')}</Boton>
           </form>
         ) : (
-          <button type="button" className="rv-pem__enlace" onClick={() => setOmitiendo(true)}>Omitir este paso</button>
+          <button type="button" className="rv-pem__enlace" onClick={() => setOmitiendo(true)}>{t('op.omitir_este_paso')}</button>
         )
       )}
 
@@ -264,6 +267,7 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
 }
 
 function DrawerSolicitud({ abierto, onCerrar, responsables }: { abierto: boolean; onCerrar: () => void; responsables: Responsables }) {
+  const { t } = useT('resto', restoEs);
   const nombres = { paraTi: responsables.ti_tms, gerencia: responsables.gerencia, flota: 'nuestra flota' };
   const solicitud = solicitudParaTi(nombres);
   const carta = cartaAutorizacion(nombres);
@@ -275,20 +279,20 @@ function DrawerSolicitud({ abierto, onCerrar, responsables }: { abierto: boolean
   };
 
   return (
-    <Drawer abierto={abierto} onCerrar={onCerrar} titulo="Cómo conseguirlo" tamano="l"
-      descripcion="Dos textos listos para mandar. La contraseña nunca va por correo ni por chat.">
+    <Drawer abierto={abierto} onCerrar={onCerrar} titulo={t('op.como_conseguirlo')} tamano="l"
+      descripcion={t('op.dos_textos_listos_para_mandar_la')}>
       <div className="rv-pem__texto-bloque">
-        <h3>Para el área de sistemas</h3>
-        <textarea readOnly rows={11} value={solicitud} aria-label="Solicitud para el área de sistemas" />
+        <h3>{t('op.para_el_area_de_sistemas')}</h3>
+        <textarea readOnly rows={11} value={solicitud} aria-label={t('op.solicitud_para_el_area_de_sistemas')} />
         <Boton variante="primary" icono={<Copy />} onClick={() => copiar('solicitud', solicitud)}>
           {copiado === 'solicitud' ? 'Copiado' : `Copiar solicitud para ${responsables.ti_tms}`}
         </Boton>
       </div>
       <div className="rv-pem__texto-bloque">
-        <h3>Para gerencia</h3>
-        <textarea readOnly rows={10} value={carta} aria-label="Carta de autorización para gerencia" />
+        <h3>{t('op.para_gerencia')}</h3>
+        <textarea readOnly rows={10} value={carta} aria-label={t('op.carta_de_autorizacion_para_gerencia')} />
         <Boton variante="secondary" icono={<Copy />} onClick={() => copiar('carta', carta)}>
-          {copiado === 'carta' ? 'Copiado' : 'Copiar carta de autorización'}
+          {copiado === 'carta' ? 'Copiado' : t('op.copiar_carta_de_autorizacion')}
         </Boton>
       </div>
     </Drawer>

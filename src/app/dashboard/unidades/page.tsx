@@ -71,6 +71,7 @@ export default async function PaginaUnidades({
    *  sanea `paginarRegistro`; un link viejo se lee como primera página. */
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; p?: string; editar?: string }>;
 }) {
+  const { t: tx } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -224,7 +225,7 @@ export default async function PaginaUnidades({
       if (e instanceof Error && e.message.includes('uq_unidad_gps')) {
         return { ok: false, error: t('un.a.gps.dup') };
       }
-      return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : 'dar de alta la unidad') };
+      return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar la unidad' : tx('op.dar_de_alta_la_unidad')) };
     }
   }
 
@@ -273,7 +274,7 @@ export default async function PaginaUnidades({
           : `Unidad en «${ESTADOS_UNIDAD[estado] ?? estado}».`,
       };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'cambiar el estado de la unidad') };
+      return { ok: false, error: mensajeParaPantalla(e, tx('op.cambiar_el_estado_de_la_unidad')) };
     }
   }
 

@@ -11,7 +11,11 @@ import { sufijoTenant } from '../../../sufijo';
 import { urlCsvEstadias } from './csv_url';
 import { VistaEstadias } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Estadías en andén' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.estadias_en_anden') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -27,6 +31,7 @@ const FECHA = /^\d{4}-\d{2}-\d{2}$/;
 export default async function PaginaEstadias({ searchParams }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desde?: string; hasta?: string; terminal?: string; cliente?: string; chofer?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -43,7 +48,7 @@ export default async function PaginaEstadias({ searchParams }: {
   const catalogos = await leerCatalogosFiltro(tenantId).catch(() => null);
   let filas: ReturnType<typeof armarFilasEstadias> | null = null;
   let error: string | null = null;
-  if (zonaLeida === null) error = 'No se pudo leer la zona horaria de la flota ahora mismo. Intenta de nuevo en un momento.';
+  if (zonaLeida === null) error = tx('rest.no_se_pudo_leer_la_zona');
   else if ('error' in rango) error = rango.error;
   else {
     try {
@@ -54,7 +59,7 @@ export default async function PaginaEstadias({ searchParams }: {
       filas = armarFilasEstadias(datos, new Date(), { flota: null, porCliente: new Map() });
     } catch (e) {
       logger.error('estadias.pantalla_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
-      error = 'No se pudieron leer las estadías ahora mismo. Intenta de nuevo en un momento.';
+      error = tx('rest.no_se_pudieron_leer_las_estadias');
     }
   }
 

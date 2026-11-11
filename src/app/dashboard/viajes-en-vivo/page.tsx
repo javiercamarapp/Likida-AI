@@ -40,6 +40,7 @@ const RUTA = '/dashboard/viajes-en-vivo';
 export default async function PaginaViajesEnVivo({ searchParams }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; terminal?: string; cliente?: string; atencion?: string }>;
 }) {
+  const { t: tx } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -91,7 +92,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
 
   return (
     <main className="p-4 md:p-6">
-      <VistaViajesEnVivo
+      <VistaViajesEnVivo t={tx}
         tablero={tablero}
         filtros={{ terminalId, clienteId, soloExcepciones }}
         catalogo={{ terminales: entrada.terminales, clientes: entrada.clientes }}
@@ -99,10 +100,10 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
         ocultos={ocultos}
         hrefMapa="/dashboard/mapa"
         pregunta={conChat ? <PreguntaAlAsistente tenantParam={sp.tenant ?? null} /> : null}
-        tareas={<TareasAbiertas tareas={tareas} errorLectura={tareasConError} aviso={sp.atencion ?? null} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
+        tareas={<TareasAbiertas t={tx} tareas={tareas} errorLectura={tareasConError} aviso={sp.atencion ?? null} accion={puedeAtender ? atender : null} ocultos={ocultos} />}
         // A quién le llega el aviso de una tarea nueva (apagado por defecto): solo el dueño decide quién recibe los correos de la flota.
         notificaciones={puedeAdministrar(rol) ? (
-          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+          <Bloque mensaje={tx('op.no_se_pudo_leer_la_configuracion')} esqueleto={<EsqTabla filas={4} />}>
             <SeccionNotificaciones tenantId={tenantId} agenteId="orquestador" />
           </Bloque>
         ) : null}

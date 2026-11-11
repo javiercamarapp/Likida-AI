@@ -1,4 +1,5 @@
 import { estaApagado } from '@/lib/likida/interruptores';
+import { getT } from '@/lib/i18n/servidor';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL KILL SWITCH DEL AGENTE DE PEAJES (0110) — Fase 1 del blueprint.
@@ -21,9 +22,10 @@ import { estaApagado } from '@/lib/likida/interruptores';
  *  trabajar. Los archivos ya guardados no se pierden: conciliar es anotación
  *  recalculable (ver desglose_peaje.ts) y se re-corre al encender. */
 export async function avisoAgentePeajesApagado(): Promise<string | null> {
+  const { t: tx } = await getT('agentes');
   if (await estaApagado('agente:peajes')) {
-    return 'El agente de Peajes está apagado desde la consola de Likida. '
-      + 'Ninguna conciliación corre hasta que lo enciendan; lo ya guardado no se pierde y el cruce se puede re-correr después.';
+    return tx('rest.el_agente_de_peajes_esta_apagado')
+      + tx('rest.ninguna_conciliacion_corre_hasta_que_lo');
   }
   return null;
 }

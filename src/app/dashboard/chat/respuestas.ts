@@ -1,6 +1,7 @@
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import { mxn, litros, numero } from '@/lib/formato';
-import { ETIQUETA_TOOL_ADMIN } from './etiquetas-copiloto';
+import { etiquetaToolAdmin } from './etiquetas-copiloto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // Lógica PURA del chat «Pregunta a tus datos» (L5: separada de la interfaz sin cambiar una coma de lo que responde). Aquí viven el
 // respondedor local de reserva, el catálogo de Consulta, la traducción de los bloques del analista y los rótulos de la traza.
@@ -53,45 +54,47 @@ export interface Respuesta {
 /** Cómo se lee cada tool del analista en la secuencia de pensamiento
  *  (13-ago: pasos narrados en vivo). Pasos REALES
  *  del ciclo — el servidor los transmite cuando de verdad ocurren. */
-export const ETIQUETA_TOOL: Record<string, string> = {
-  kpis_flota: 'Leyendo los KPIs de la flota',
-  acreditables_periodo: 'Sumando IVA y peaje del periodo',
-  motor_fiscal: 'Consultando el motor fiscal',
-  viajes_flota: 'Leyendo tus viajes',
-  liquidaciones_flota: 'Leyendo tus liquidaciones',
-  serie_gasto: 'Trazando el gasto por semana',
-  serie_liquidado: 'Trazando lo liquidado por semana',
-  top_rutas: 'Rankeando tus rutas por gasto',
-  duplicados_detectados: 'Buscando tickets duplicados',
-  proyectar_serie: 'Proyectando la serie',
-  consultar_carta_porte: 'Revisando la Carta Porte',
-  tablero_viajes: 'Leyendo el tablero de viajes en vivo',
-  detalle_viaje: 'Revisando el viaje',
-  estado_vigia: 'Consultando al Vigía',
-  estado_buzon: 'Revisando el buzón de facturas',
-  estado_cobranza: 'Revisando la cobranza',
-  estado_autofactura: 'Revisando la autofactura',
-  salud_agentes: 'Revisando la salud de los agentes',
-  convenio_viaje: 'Revisando el convenio del viaje',
-  estado_liquidacion_externa: 'Revisando la entrega de liquidaciones',
-  reclamacion_peajes: 'Revisando los cobros de peajes',
-  estado_jornada: 'Revisando el registro de jornada',
-  escalar_a_persona: 'Dejando la tarea para la persona que decide',
-  entregar_respuesta: 'Armando la respuesta',
-};
+export const etiquetaTool = (t: TResto = T_RESTO_ES): Record<string, string> => ({
+  kpis_flota: t('ch.leyendo_los_kpis_de_la_flota'),
+  acreditables_periodo: t('ch.sumando_iva_y_peaje_del_periodo'),
+  motor_fiscal: t('ch.consultando_el_motor_fiscal'),
+  viajes_flota: t('ch.leyendo_tus_viajes'),
+  liquidaciones_flota: t('ch.leyendo_tus_liquidaciones'),
+  serie_gasto: t('ch.trazando_el_gasto_por_semana'),
+  serie_liquidado: t('ch.trazando_lo_liquidado_por_semana'),
+  top_rutas: t('ch.rankeando_tus_rutas_por_gasto'),
+  duplicados_detectados: t('ch.buscando_tickets_duplicados'),
+  proyectar_serie: t('ch.proyectando_la_serie'),
+  consultar_carta_porte: t('ch.revisando_la_carta_porte'),
+  tablero_viajes: t('ch.leyendo_el_tablero_de_viajes_en'),
+  detalle_viaje: t('ch.revisando_el_viaje'),
+  estado_vigia: t('ch.consultando_al_vigia'),
+  estado_buzon: t('ch.revisando_el_buzon_de_facturas'),
+  estado_cobranza: t('ch.revisando_la_cobranza'),
+  estado_autofactura: t('ch.revisando_la_autofactura'),
+  salud_agentes: t('ch.revisando_la_salud_de_los_agentes'),
+  convenio_viaje: t('ch.revisando_el_convenio_del_viaje'),
+  estado_liquidacion_externa: t('ch.revisando_la_entrega_de_liquidaciones'),
+  reclamacion_peajes: t('ch.revisando_los_cobros_de_peajes'),
+  estado_jornada: t('ch.revisando_el_registro_de_jornada'),
+  escalar_a_persona: t('ch.dejando_la_tarea_para_la_persona'),
+  entregar_respuesta: t('op.armando_la_respuesta'),
+});
+export const ETIQUETA_TOOL = etiquetaTool();
 /** Los nombres de tool de los dos agentes son disjuntos, así que un solo buscador sirve a ambos modos sin inventar rótulos. */
-export const rotuloTool = (t: string) => ETIQUETA_TOOL[t] ?? ETIQUETA_TOOL_ADMIN[t] ?? t.replaceAll('_', ' ');
+export const rotuloTool = (nombre: string, t: TResto = T_RESTO_ES) => etiquetaTool(t)[nombre] ?? etiquetaToolAdmin(t)[nombre] ?? nombre.replaceAll('_', ' ');
 
 /** Las fases del "pensando" (pedido del 12-ago: como Claude). Son honestas
  *  por construcción: solo se AVANZA de fase si de verdad sigue trabajando —
  *  un saludo se resuelve en la primera y nunca dice "leyendo tu operación". */
-export const FASES_PENSANDO: Array<[number, string]> = [
+export const fasesPensando = (t: TResto = T_RESTO_ES): Array<[number, string]> => ([
   [0, 'Pensando…'],
-  [3000, 'Leyendo tu operación…'],
+  [3000, t('ch.leyendo_tu_operacion')],
   [9000, 'Cruzando cifras…'],
   [17000, 'Armando la respuesta…'],
-  [30000, 'Esto está tardando más de lo normal…'],
-];
+  [30000, t('op.esto_esta_tardando_mas_de_lo')],
+]);
+export const FASES_PENSANDO = fasesPensando();
 
 /** Los bloques del agente analista (/api/dashboard/chat) → la Respuesta que
  *  esta interfaz ya sabe pintar. El agente manda números crudos; aquí se
@@ -126,47 +129,48 @@ export function respuestaDeBloques(bloques: Array<Record<string, unknown>>): Res
  *  Cada frase conserva una palabra clave que `responder` entiende —
  *  verificadas contra sus ramas una por una
  *  en `chat_respondedor_catalogo.test.ts` (A37-S16-09). */
-export const CATALOGO_CONSULTA: Array<{ categoria: string; preguntas: string[] }> = [
+export const catalogoConsulta = (t: TResto = T_RESTO_ES): Array<{ categoria: string; preguntas: string[] }> => ([
   {
-    categoria: 'Cuadre y liquidaciones',
+    categoria: t('ch.cuadre_y_liquidaciones'),
     preguntas: [
-      'Muéstrame el desglose de lo comprobado a la fecha',
-      'Estado de las liquidaciones con diferencia o por revisar',
-      '¿Cuántos viajes están por revisar?',
-      'Monto observado por el motor en las liquidaciones',
+      t('ch.muestrame_el_desglose_de_lo_comprobado'),
+      t('ch.estado_de_las_liquidaciones_con_diferencia'),
+      t('ch.cuantos_viajes_estan_por_revisar'),
+      t('ch.monto_observado_por_el_motor_en'),
     ],
   },
   {
-    categoria: 'Salud del cuadre',
+    categoria: t('ch.salud_del_cuadre'),
     preguntas: [
-      'Tasa de cuadre del periodo',
-      '¿Cuántas liquidaciones cerraron sin diferencias?',
-      '¿Cuánto llevo comprobado?',
+      t('ch.tasa_de_cuadre_del_periodo'),
+      t('ch.cuantas_liquidaciones_cerraron_sin_diferencias'),
+      t('ch.cuanto_llevo_comprobado'),
     ],
   },
   {
-    categoria: 'Fiscal y acreditables',
+    categoria: t('ch.fiscal_y_acreditables'),
     preguntas: [
-      'Desglose de acreditables del periodo',
+      t('ch.desglose_de_acreditables_del_periodo'),
       'IVA acreditable del periodo',
       'Peaje acreditable del periodo',
-      'Litros de diésel elegibles para el estímulo',
+      t('ch.litros_de_diesel_elegibles_para_el'),
     ],
   },
-];
+]);
+export const CATALOGO_CONSULTA = catalogoConsulta();
 
-export function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null): Respuesta {
+export function responder(pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null, t: TResto = T_RESTO_ES): Respuesta {
   const q = pregunta.toLowerCase();
-  const sinLiq = { texto: 'Todavía no hay liquidaciones para calcular esto.' };
+  const sinLiq = { texto: t('ch.todavia_no_hay_liquidaciones_para_calcular') };
   // A37-S16-09: «observado» es el monto que el motor detectó fuera de regla o duplicado, NO lo comprobado (antes caía en la rama «monto»).
   if (q.includes('observad')) {
     if (!kpis) return sinLiq;
     return {
-      texto: `El motor observa ${mxn(kpis.diferenciaDetectada)} fuera de regla o duplicados en ${kpis.viajesLiquidados} viaje${kpis.viajesLiquidados === 1 ? '' : 's'} liquidado${kpis.viajesLiquidados === 1 ? '' : 's'}.`,
+      texto: t(kpis.viajesLiquidados === 1 ? 'ch.el_motor_observa_uno' : 'ch.el_motor_observa_otros', { monto: mxn(kpis.diferenciaDetectada), n: kpis.viajesLiquidados }),
       visual: {
         tipo: 'tabla',
         filas: [
-          ['Fuera de regla o duplicado', mxn(kpis.diferenciaDetectada)],
+          [t('ch.fuera_de_regla_o_duplicado'), mxn(kpis.diferenciaDetectada)],
           ['Con diferencias', numero(kpis.conDiferencias)],
           ['Por revisar', numero(kpis.porRevisar)],
         ],
@@ -177,7 +181,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
   if (q.includes('sin diferencia')) {
     if (!kpis) return sinLiq;
     const limpias = Math.max(0, kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar);
-    return { texto: `${limpias} de ${kpis.viajesLiquidados} liquidaciones cerraron sin diferencias.` };
+    return { texto: t('ch.de_liquidaciones_cerraron_sin_diferencias', { limpias, viajesLiquidados: kpis.viajesLiquidados }) };
   }
   if (q.includes('comprobad') || /\bmonto/.test(q)) {
     if (!kpis) return sinLiq;
@@ -190,7 +194,7 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
           ['Viajes liquidados', numero(kpis.viajesLiquidados)],
           ['Con diferencias', numero(kpis.conDiferencias)],
           ['Por revisar', numero(kpis.porRevisar)],
-          ['Fuera de regla o duplicado', mxn(kpis.diferenciaDetectada)],
+          [t('ch.fuera_de_regla_o_duplicado'), mxn(kpis.diferenciaDetectada)],
         ],
       },
     };
@@ -199,55 +203,55 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
     if (!kpis) return sinLiq;
     const limpias = Math.max(0, kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar);
     return {
-      texto: `${kpis.conDiferencias + kpis.porRevisar} liquidaciones tienen diferencia o están por revisar, de ${kpis.viajesLiquidados} en total.`,
+      texto: t('ch.liquidaciones_tienen_diferencia_o_estan_por', { v: kpis.conDiferencias + kpis.porRevisar, viajesLiquidados: kpis.viajesLiquidados }),
       visual: kpis.viajesLiquidados > 0
         ? { tipo: 'dona', segmentos: [
-            { etiqueta: 'Sin diferencias', valor: limpias },
-            { etiqueta: 'Con diferencias', valor: kpis.conDiferencias },
-            { etiqueta: 'Por revisar', valor: kpis.porRevisar },
+            { etiqueta: t('ch.sin_diferencias'), valor: limpias },
+            { etiqueta: t('op.con_diferencias'), valor: kpis.conDiferencias },
+            { etiqueta: t('op.por_revisar_2'), valor: kpis.porRevisar },
           ] }
         : undefined,
     };
   }
   if (q.includes('diesel') || q.includes('diésel') || q.includes('litro')) {
-    if (!acred) return { texto: 'Todavía no hay datos de diésel este periodo.' };
+    if (!acred) return { texto: t('ch.todavia_no_hay_datos_de_diesel') };
     return {
-      texto: `${litros(acred.litrosDiesel)} elegibles para el estímulo este periodo.`,
-      visual: { tipo: 'cifra', valor: litros(acred.litrosDiesel), nota: 'LIF 2026, Art. 20-A — el estímulo en pesos lo fija la cuota DOF de cada semana.' },
+      texto: t('ch.elegibles_para_el_estimulo_este_periodo', { litros: litros(acred.litrosDiesel) }),
+      visual: { tipo: 'cifra', valor: litros(acred.litrosDiesel), nota: t('ch.lif_2026_art_20_a_el') },
     };
   }
   if (q.includes('tasa') || q.includes('cuadre') || q.includes('cuadra')) {
     if (!kpis) return sinLiq;
     const limpias = Math.max(0, kpis.viajesLiquidados - kpis.conDiferencias - kpis.porRevisar);
     return {
-      texto: `Tu tasa de cuadre es ${kpis.tasaCuadre}% — liquidaciones sin diferencias sobre el total.`,
+      texto: t('ch.tu_tasa_de_cuadre_es_liquidaciones', { tasaCuadre: kpis.tasaCuadre }),
       visual: kpis.viajesLiquidados > 0
         ? { tipo: 'dona', segmentos: [
-            { etiqueta: 'Sin diferencias', valor: limpias },
-            { etiqueta: 'Con diferencias o por revisar', valor: kpis.conDiferencias + kpis.porRevisar },
+            { etiqueta: t('ch.sin_diferencias'), valor: limpias },
+            { etiqueta: t('ch.con_diferencias_o_por_revisar'), valor: kpis.conDiferencias + kpis.porRevisar },
           ] }
         : undefined,
     };
   }
   if (/\biva\b/.test(q) || q.includes('peaje') || q.includes('caseta') || q.includes('acreditable')) {
-    if (!acred) return { texto: 'Todavía no hay datos de acreditables este periodo.' };
+    if (!acred) return { texto: t('ch.todavia_no_hay_datos_de_acreditables') };
     return {
       texto: /\biva\b/.test(q)
-        ? `${mxn(acred.iva)} de IVA acreditable este periodo (LIVA, Art. 5).`
+        ? t('ch.de_iva_acreditable_este_periodo_liva', { mxn: mxn(acred.iva) })
         : q.includes('peaje') || q.includes('caseta')
-          ? `${mxn(acred.peaje)} de peaje acreditable (50%) este periodo — sujeto a elegibilidad.`
-          : 'Esto es lo que llevas de acreditables este periodo:',
+          ? t('ch.de_peaje_acreditable_50_este_periodo', { mxn: mxn(acred.peaje) })
+          : t('ch.esto_es_lo_que_llevas_de'),
       visual: {
         tipo: 'tabla',
         filas: [
           ['IVA acreditable', mxn(acred.iva)],
           ['Peaje acreditable (50%)', mxn(acred.peaje)],
-          ['Diésel elegible', litros(acred.litrosDiesel)],
+          [t('ch.diesel_elegible'), litros(acred.litrosDiesel)],
         ],
       },
     };
   }
-  return { texto: 'Todavía no sé responder eso — pregúntame sobre lo comprobado, diferencias, diésel, IVA, peaje o tu tasa de cuadre.' };
+  return { texto: t('ch.todavia_no_se_responder_eso_preguntame') };
 }
 
 /**
@@ -261,13 +265,13 @@ export function responder(pregunta: string, kpis: DashboardKpis | null, acred: A
  * el respondedor local tampoco entiende no necesita este aviso).
  */
 export function respuestaLocal(
-  pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null, motivo: string | null,
+  pregunta: string, kpis: DashboardKpis | null, acred: Acreditables | null, motivo: string | null, t: TResto = T_RESTO_ES,
 ): Respuesta {
-  const base = responder(pregunta, kpis, acred);
+  const base = responder(pregunta, kpis, acred, t);
   if (!motivo) return base;
   const aviso = motivo.charAt(0).toUpperCase() + motivo.slice(1);
   return {
     ...base,
-    texto: `${aviso.endsWith('.') ? aviso : `${aviso}.`} Esto es lo que puedo contestarte con lo último que ya tenía cargado, no una lectura nueva de tu operación:\n\n${base.texto}`,
+    texto: t('ch.esto_es_lo_que_puedo_contestarte', { v: aviso.endsWith('.') ? aviso : `${aviso}.`, texto: base.texto }),
   };
 }

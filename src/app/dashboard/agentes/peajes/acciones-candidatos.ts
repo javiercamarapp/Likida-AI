@@ -11,6 +11,8 @@ import {
   ACCIONES_CANDIDATO, aplicaAccion, filasDeCandidatos, filasFiltradas, normalizarFiltros, validarMotivoAccion,
   claveFila, type AccionCandidato, type FilaCandidato, type MotivoNoAplica,
 } from '@/lib/likida/peajes/candidatos_tabla';
+import { getT } from '@/lib/i18n/servidor';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES SOBRE LA TABLA DE CANDIDATOS (T-A2-28b): reclamar / descartar / justificar,
@@ -47,10 +49,10 @@ export type ResultadoAccion =
   | { ok: true; aplicadas: number; omitidas: number; reclamos: number; mensaje: string }
   | { ok: false; error: string };
 
-const TEXTO_OMITIDA: Record<MotivoNoAplica | 'sin_tarifa', string> = {
-  sin_tarifa: 'son de «clase distinta de 3 y 5» sin tarifa confirmada con exceso (sin ella no hay monto defendible que reclamar: confirma la tarifa de la caseta)',
-  ya_decidido: 'ya tenían decisión', no_reclamable: 'son avisos atípicos o asuntos internos de la flota, no cobros del proveedor (no se reclaman)', sin_fecha: 'no traen fecha (no se puede contar el plazo)',
-};
+const textoOmitida = (tx: TAgentes = TR_ES.t): Record<MotivoNoAplica | 'sin_tarifa', string> => ({
+  sin_tarifa: tx('rest.son_de_clase_distinta_de_3'),
+  ya_decidido: tx('rest.ya_tenian_decision'), no_reclamable: tx('rest.son_avisos_atipicos_o_asuntos_internos'), sin_fecha: tx('rest.no_traen_fecha_no_se_puede'),
+});
 const VERBO: Record<AccionCandidato, { hecho: string; nada: string }> = {
   reclamado: { hecho: 'marcado como reclamado', nada: 'reclamar' },
   descartado: { hecho: 'descartado', nada: 'descartar' },
@@ -69,40 +71,41 @@ export function aplicablesDelFiltro(filas: readonly FilaCandidato[], filtros: Re
 }
 
 export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion): Promise<ResultadoAccion> {
-  if (!UUID.test(e.desgloseId)) return { ok: false, error: 'Falta el desglose.' };
-  if (!(ACCIONES_CANDIDATO as readonly string[]).includes(e.accion)) return { ok: false, error: 'Acción no válida.' };
+  const { t: tx } = await getT('agentes');
+  if (!UUID.test(e.desgloseId)) return { ok: false, error: tx('rest.falta_el_desglose') };
+  if (!(ACCIONES_CANDIDATO as readonly string[]).includes(e.accion)) return { ok: false, error: tx('rest.accion_no_valida') };
   const m = validarMotivoAccion(e.accion, e.motivo);
   if (!m.ok) return { ok: false, error: m.error };
   const enviado = e.enviadoEn?.trim() || null;
-  if (e.accion === 'reclamado' && enviado && !FECHA.test(enviado)) return { ok: false, error: 'La fecha de envío debe ser AAAA-MM-DD.' };
-  if (e.accion !== 'reclamado' && enviado) return { ok: false, error: 'La fecha de envío solo aplica a reclamar.' };
-  if (!e.fila && !e.filtro) return { ok: false, error: 'No se indicó qué candidatos decidir.' };
-  if (e.filtro && !e.filtro.confirmar) return { ok: false, error: 'Marca la confirmación para aplicar a todo lo que cumple el filtro.' };
+  if (e.accion === 'reclamado' && enviado && !FECHA.test(enviado)) return { ok: false, error: tx('rest.la_fecha_de_envio_debe_ser') };
+  if (e.accion !== 'reclamado' && enviado) return { ok: false, error: tx('rest.la_fecha_de_envio_solo_aplica') };
+  if (!e.fila && !e.filtro) return { ok: false, error: tx('rest.no_se_indico_que_candidatos_decidir') };
+  if (e.filtro && !e.filtro.confirmar) return { ok: false, error: tx('rest.marca_la_confirmacion_para_aplicar_a') };
 
   const desgloseId = e.desgloseId.toLowerCase();
   let reporte;
   let decisiones;
   try {
     reporte = await revisionDeDesglose(tenantId, desgloseId);
-    if (!reporte) return { ok: false, error: 'Ese desglose no existe en tu flota (o fue anulado).' };
+    if (!reporte) return { ok: false, error: tx('rest.ese_desglose_no_existe_en_tu') };
     decisiones = await listarDecisionesCandidatos(tenantId, desgloseId);
   } catch (err) {
     logger.error('peajes.candidatos_accion_lectura', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
-    return { ok: false, error: 'No se pudo leer la revisión ahora mismo. No se aplicó nada: inténtalo de nuevo.' };
+    return { ok: false, error: tx('rest.no_se_pudo_leer_la_revision') };
   }
   const filas = filasDeCandidatos(reporte.revision.candidatos, reporte.atipicos.atipicos, decisiones);
 
   let objetivo: FilaCandidato[];
   if (e.fila) {
     const una = filas.find((f) => f.clave === claveFila(e.fila!.indice, e.fila!.categoria));
-    if (!una) return { ok: false, error: 'Ese candidato ya no aparece en la revisión: no hay nada que decidir.' };
+    if (!una) return { ok: false, error: tx('rest.ese_candidato_ya_no_aparece_en') };
     objetivo = [una];
   } else {
     const filtros = normalizarFiltros(e.filtro!.entrada);
     objetivo = filasFiltradas(filas, filtros);
     const cuantas = objetivo.filter((f) => aplicaAccion(f, e.accion).ok).length;
     if (cuantas !== e.filtro!.esperado) {
-      return { ok: false, error: `La lista cambió: ahora serían ${cuantas} cruces y confirmaste ${e.filtro!.esperado}. Revisa la tabla y confirma otra vez.` };
+      return { ok: false, error: tx('rest.la_lista_cambio_ahora_serian_cruces', { cuantas, esperado: e.filtro!.esperado }) };
     }
   }
 
@@ -121,7 +124,7 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
       montos = await montosReclamablesDeClase(tenantId, desgloseId);
     } catch (err) {
       logger.error('peajes.candidatos_accion_tarifas', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
-      return { ok: false, error: 'No se pudo leer el tarifario para calcular el monto reclamable. No se aplicó nada: inténtalo de nuevo.' };
+      return { ok: false, error: tx('rest.no_se_pudo_leer_el_tarifario') };
     }
     for (let i = aplicables.length - 1; i >= 0; i--) {
       const f = aplicables[i]!;
@@ -133,12 +136,12 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
       } else montoReclamo.set(f.clave, exceso);
     }
   }
-  const textoOmitidas = [...omitidasPor].map(([k, n]) => `${n} ${TEXTO_OMITIDA[k]}`).join('; ');
+  const textoOmitidas = [...omitidasPor].map(([k, n]) => `${n} ${textoOmitida(tx)[k]}`).join('; ');
   if (aplicables.length === 0) {
     // Una sola fila que no aplica es un error que se dice; un lote sin nada nuevo es un doble clic inocuo.
     return e.fila
-      ? { ok: false, error: `No se puede ${VERBO[e.accion].nada} ese candidato: ${textoOmitidas || 'ya tenía decisión'}.` }
-      : { ok: true, aplicadas: 0, omitidas: objetivo.length, reclamos: 0, mensaje: `No había nada nuevo que ${VERBO[e.accion].nada}${textoOmitidas ? ` (${textoOmitidas})` : ''}.` };
+      ? { ok: false, error: tx('rest.no_se_puede_ese_candidato', { nada: VERBO[e.accion].nada, v: textoOmitidas || 'ya tenía decisión' }) }
+      : { ok: true, aplicadas: 0, omitidas: objetivo.length, reclamos: 0, mensaje: tx('rest.no_habia_nada_nuevo_que', { nada: VERBO[e.accion].nada, v: textoOmitidas ? ` (${textoOmitidas})` : '' }) };
   }
 
   try {
@@ -180,9 +183,9 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
           logger.error('peajes.candidatos_reclamo_fallo', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
           if (err instanceof ReclamoDeCategoriaAbierto) {
             // A39-S14-01: un reclamo de TODA la categoría ya cubre esos cruces: reclamarlos por candidatos los duplicaría.
-            return { ok: false, error: `Ya registraste un reclamo de toda la categoría «${categoria}» en este desglose: esos cruces ya van en él. No se marcó nada de ese grupo ni de los que faltaban.` };
+            return { ok: false, error: tx('rest.ya_registraste_un_reclamo_de_toda', { categoria }) };
           }
-          return { ok: false, error: `No se pudo registrar el reclamo de «${categoria}»${reclamos > 0 ? ` (los ${reclamos} anteriores sí quedaron)` : ''}. No se marcó nada de ese grupo ni de los que faltaban: inténtalo de nuevo.` };
+          return { ok: false, error: tx('rest.no_se_pudo_registrar_el_reclamo', { categoria, v: reclamos > 0 ? ` (los ${reclamos} anteriores sí quedaron)` : '' }) };
         }
       }
     }
@@ -210,7 +213,7 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
     return { ok: true, aplicadas: efectivas.length, omitidas, reclamos, mensaje: omitidas > 0 && textoOmitidas ? `${base} Se omitieron: ${textoOmitidas}.` : base };
   } catch (err) {
     logger.error('peajes.candidatos_accion_fallo', { tenant: tenantId, err: err instanceof Error ? err.message : String(err) });
-    return { ok: false, error: 'No se pudo guardar la decisión. Inténtalo de nuevo.' };
+    return { ok: false, error: tx('rest.no_se_pudo_guardar_la_decision') };
   }
 }
 
@@ -219,9 +222,10 @@ export async function aplicarAccionCandidatos(tenantId: string, e: EntradaAccion
  * campos y llama al núcleo. Devuelve el resultado; la página decide a dónde volver.
  */
 export async function ejecutarAccionDeFormulario(tenantId: string, fd: FormData): Promise<ResultadoAccion> {
+  const { t: tx } = await getT('agentes');
   const sesion = await requireSessionTenant(RUTA_CANDIDATOS);
-  if (!puedeVerArea(sesion.rol, 'dinero')) return { ok: false, error: 'Tu rol no puede operar reclamos de peaje.' };
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { ok: false, error: 'Esta flota no es la tuya.' };
+  if (!puedeVerArea(sesion.rol, 'dinero')) return { ok: false, error: tx('rest.tu_rol_no_puede_operar_reclamos') };
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { ok: false, error: tx('rest.esta_flota_no_es_la_tuya') };
 
   const campo = (k: string) => String(fd.get(k) ?? '').trim();
   const accion = campo('accion') as AccionCandidato;
@@ -235,6 +239,6 @@ export async function ejecutarAccionDeFormulario(tenantId: string, fd: FormData)
     });
   }
   const indice = Number.parseInt(campo('indice'), 10);
-  if (!Number.isInteger(indice) || indice < 0 || !campo('categoria')) return { ok: false, error: 'Falta el candidato.' };
+  if (!Number.isInteger(indice) || indice < 0 || !campo('categoria')) return { ok: false, error: tx('rest.falta_el_candidato') };
   return aplicarAccionCandidatos(tenantId, { ...base, fila: { indice, categoria: campo('categoria') } });
 }

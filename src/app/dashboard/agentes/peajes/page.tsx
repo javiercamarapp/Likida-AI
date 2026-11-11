@@ -71,6 +71,7 @@ export default async function PaginaAgentePeajes({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   // Querystring REAL (`?desglose=`): si la sesión expira a media navegación,
@@ -141,8 +142,8 @@ export default async function PaginaAgentePeajes({
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
-    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede subir estados de cuenta.' };
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_subir_estados') };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
     // El kill switch (0110), después de la puerta y antes de trabajar — el
     // punto único vive en ./apagado.ts, las cuatro actions lo consultan.
     // Stand-by (CFDI consolidado): una flota con perfil no lo ejecuta ni por POST directo.
@@ -151,14 +152,14 @@ export default async function PaginaAgentePeajes({
     if (apagado) return { error: apagado };
 
     const archivo = fd.get('archivo');
-    if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el archivo XML del estado de cuenta.' };
-    if (archivo.size > MAX_XML_BYTES) return { error: 'Ese archivo pesa demasiado para ser un CFDI — revisa que sea el XML del estado de cuenta.' };
+    if (!(archivo instanceof File) || archivo.size === 0) return { error: tx('rest.elige_el_archivo_xml_del_estado') };
+    if (archivo.size > MAX_XML_BYTES) return { error: tx('rest.ese_archivo_pesa_demasiado_para_ser_3') };
 
     const texto = await archivo.text();
     const xml = parseCfdiXml(texto);
-    if (!xml?.uuid) return { error: 'No pude leerlo como CFDI (XML). El desglose en Excel/PDF todavía no entra por aquí — solo el XML del consolidado.' };
+    if (!xml?.uuid) return { error: tx('rest.no_pude_leerlo_como_cfdi_xml_2') };
     if (!esConsolidado(xml)) {
-      return { error: 'Ese CFDI trae un solo concepto — los tickets individuales entran por WhatsApp con su foto. Aquí va el CONSOLIDADO del TAG o monedero.' };
+      return { error: tx('rest.ese_cfdi_trae_un_solo_concepto') };
     }
 
     try {
@@ -167,7 +168,7 @@ export default async function PaginaAgentePeajes({
       return { resumen: { totalLineas: r.totalLineas, conciliadas: r.conciliadas, porConciliar: r.porConciliar } };
     } catch (e) {
       logger.error('peajes.desglose_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { error: 'No se pudo procesar el estado de cuenta. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_procesar_el_estado') };
     }
   }
 
@@ -182,13 +183,13 @@ export default async function PaginaAgentePeajes({
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
-    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede subir desgloses.' };
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_subir_desgloses') };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
     const apagado = await avisoAgentePeajesApagado();
     if (apagado) return { error: apagado };
 
     const archivo = fd.get('archivo');
-    if (!(archivo instanceof File) || archivo.size === 0) return { error: 'Elige el archivo del desglose (Excel, CSV o PDF).' };
+    if (!(archivo instanceof File) || archivo.size === 0) return { error: tx('rest.elige_el_archivo_del_desglose_excel') };
     if (archivo.size > MAX_DESGLOSE_BYTES) return { error: MENSAJE_ARCHIVO_GRANDE };
     const proveedor = String(fd.get('proveedor') ?? '').trim();
     // El periodo del archivo (opcional): decide qué cobro es extemporáneo. Las dos fechas o ninguna.
@@ -214,7 +215,7 @@ export default async function PaginaAgentePeajes({
       };
     } catch (e) {
       logger.error('peajes.desglose_proveedor_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { error: 'No se pudo procesar el desglose. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_procesar_el_desglose') };
     }
   }
 
@@ -225,18 +226,18 @@ export default async function PaginaAgentePeajes({
   async function declararPeriodoAhora(_prev: EstadoPeriodo, fd: FormData): Promise<EstadoPeriodo> {
     'use server';
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
-    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede declarar el periodo de un desglose.' };
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_declarar_el') };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
     const apagado = await avisoAgentePeajesApagado();
     if (apagado) return { error: apagado };
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(desgloseId)) return { error: 'Falta el desglose.' };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(desgloseId)) return { error: tx('rest.falta_el_desglose') };
     try {
       const r = await declararPeriodoDesglose(tenantId, desgloseId, String(fd.get('periodo_desde') ?? '').trim(), String(fd.get('periodo_hasta') ?? '').trim());
-      return r.ok ? { ok: 'Periodo guardado: la revisión de extemporáneos y el cierre mensual ya lo usan.' } : { error: r.motivo };
+      return r.ok ? { ok: tx('rest.periodo_guardado_la_revision_de_extemporaneos') } : { error: r.motivo };
     } catch (e) {
       logger.error('peajes.declarar_periodo_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { error: 'No se pudo guardar el periodo. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_guardar_el_periodo') };
     }
   }
 
@@ -250,13 +251,13 @@ export default async function PaginaAgentePeajes({
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
-    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_operar_este') };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
     const apagado = await avisoAgentePeajesApagado();
     if (apagado) return { error: apagado };
 
     const desgloseId = String(fd.get('desglose') ?? '').trim();
-    if (!desgloseId) return { error: 'Falta el desglose a conciliar.' };
+    if (!desgloseId) return { error: tx('rest.falta_el_desglose_a_conciliar') };
 
     try {
       // `conciliarDesglose` acota al tenant de la SESIÓN: un id ajeno en el
@@ -265,7 +266,7 @@ export default async function PaginaAgentePeajes({
       return { resumen: { total: r.total, cuadra: r.cuadra, noCuadra: r.noCuadra, sinContraparte: r.sinContraparte, noEscritas: r.noEscritas, gpsConfirma: r.gpsConfirma, gpsNoCoincide: r.gpsNoCoincide, gpsSinDatos: r.gpsSinDatos } };
     } catch (e) {
       logger.error('peajes.conciliar_desglose_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { error: 'No se pudo correr el cruce. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_correr_el_cruce') };
     }
   }
 
@@ -277,21 +278,21 @@ export default async function PaginaAgentePeajes({
   async function anularDesgloseAhora(_prev: EstadoAnular, fd: FormData): Promise<EstadoAnular> {
     'use server';
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
-    if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo quien administra la flota puede anular un desglose.' };
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    if (!puedeVerArea(sesion.rol, 'administracion')) return { error: tx('rest.solo_quien_administra_la_flota_puede_3') };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
     const desgloseId = String(fd.get('desglose') ?? '').trim();
     const motivo = String(fd.get('motivo') ?? '').trim();
-    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(desgloseId)) return { error: 'Falta el desglose a anular.' };
-    if (!motivo) return { error: 'Escribe el motivo: una anulación sin porqué no se puede defender después.' };
-    if (motivo.length > 500) return { error: 'El motivo pasa de 500 caracteres.' };
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(desgloseId)) return { error: tx('rest.falta_el_desglose_a_anular') };
+    if (!motivo) return { error: tx('rest.escribe_el_motivo_una_anulacion_sin') };
+    if (motivo.length > 500) return { error: tx('rest.el_motivo_pasa_de_500_caracteres') };
     try {
       const r = await anularDesgloseDb(tenantId, desgloseId.toLowerCase(), motivo, actorDePanel(sesion));
-      if (r === 'no_encontrado') return { error: 'No encontré ese desglose en tu flota.' };
+      if (r === 'no_encontrado') return { error: tx('rest.no_encontre_ese_desglose_en_tu') };
       logger.info('peajes.desglose_anulado', { tenantId, desglose: desgloseId, resultado: r });
-      return { ok: r === 'ya_anulado' ? 'Ese desglose ya estaba anulado.' : 'Desglose anulado: ya no cuenta. El archivo correcto puede volver a mandarse.' };
+      return { ok: r === 'ya_anulado' ? 'Ese desglose ya estaba anulado.' : tx('rest.desglose_anulado_ya_no_cuenta_el') };
     } catch (e) {
       logger.error('peajes.anular_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { error: 'No se pudo anular el desglose. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_anular_el_desglose') };
     }
   }
 
@@ -309,8 +310,8 @@ export default async function PaginaAgentePeajes({
     'use server';
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): POST directo posible.
     const sesion = await resolverTenantAtadoOLanza('/dashboard/agentes/peajes', sp, tenantId);
-    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: 'Tu rol no puede operar este agente.' };
-    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Este agente no es de tu flota.' };
+    if (!puedeVerArea(sesion.rol, 'dinero')) return { error: tx('rest.tu_rol_no_puede_operar_este') };
+    if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.este_agente_no_es_de_tu') };
     // Stand-by (barrido de la cola de tickets de caseta): igual, cortado en servidor.
     if (!(await superficiePeajesDeTenant(tenantId)).cfdiYTickets) return { error: MOTIVO_STAND_BY_PERFIL };
     const apagado = await avisoAgentePeajesApagado();
@@ -350,9 +351,9 @@ export default async function PaginaAgentePeajes({
         fin: new Date(),
         estado: 'fallo',
         disparo: 'manual',
-        error: 'El barrido no se pudo completar. El detalle quedó en los registros del sistema.',
+        error: tx('rest.el_barrido_no_se_pudo_completar'),
       });
-      return { error: 'No se pudo correr el barrido. Inténtalo de nuevo.' };
+      return { error: tx('rest.no_se_pudo_correr_el_barrido') };
     }
   }
 

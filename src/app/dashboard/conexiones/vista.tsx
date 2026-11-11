@@ -2,17 +2,18 @@ import { Mail, FileText, ShieldCheck, Globe, MapPin, Stamp, type LucideIcon } fr
 import type { Conector } from '@/lib/likida/conexiones';
 import { Icono, InfoTip, MarcoPagina, MarcaIntegracion, StatusChip, Tarjeta, type TonoEstado } from '@/app/ui-v2/componentes';
 import './conexiones.css';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // El estado se dice con una pastilla a la derecha (texto + punto, nunca solo color). «No se pudo medir» tiene rótulo y tono PROPIOS
 // (c7-28): pintarlo con el gris de «Sin conectar» decía sobre la flota lo que solo se sabía de la consulta, y mandaba a recapturar
 // credenciales que ya existían. Aquí no falta nada, falta la lectura.
-const ESTADO: Record<Conector['estado'], { rotulo: string; tono: TonoEstado }> = {
-  listo: { rotulo: 'Listo', tono: 'ok' },
-  incompleto: { rotulo: 'Incompleto', tono: 'warn' },
-  sin_configurar: { rotulo: 'Sin conectar', tono: 'muted' },
-  no_medible: { rotulo: 'No se pudo medir', tono: 'warn' },
-  ensayo: { rotulo: 'En ensayo', tono: 'info' },
-};
+const estadoConector = (t: TResto = T_RESTO_ES): Record<Conector['estado'], { rotulo: string; tono: TonoEstado }> => ({
+  listo: { rotulo: t('cfg.listo'), tono: 'ok' },
+  incompleto: { rotulo: t('cfg.incompleto'), tono: 'warn' },
+  sin_configurar: { rotulo: t('cfg.sin_conectar'), tono: 'muted' },
+  no_medible: { rotulo: t('cfg.no_se_pudo_medir'), tono: 'warn' },
+  ensayo: { rotulo: t('cfg.en_ensayo'), tono: 'info' },
+});
 
 /** Logo de marca SOLO donde hay trazado verificable (WhatsApp); el resto lleva un icono sobrio del tema de la conexión. Nunca un logo inventado. */
 const ICONO: Record<Conector['id'], { marca: 'whatsapp' } | { icono: LucideIcon }> = {
@@ -38,7 +39,7 @@ function Marca({ id }: { id: Conector['id'] }) {
  * en palabras de persona; las decisiones de negocio (el candado del
  * timbrado) se declaran como decisiones, no como fallas.
  */
-export function VistaConexiones({ conectores, estado, credenciales, integraciones, gps }: {
+export function VistaConexiones({ conectores, estado, credenciales, integraciones, gps, t = T_RESTO_ES }: {
   conectores: Conector[];
   /** La sección «Estado» por fuente de datos (F19, `SeccionEstado`), ya armada en el servidor. Va primero: lo que está atrasado se ve antes que el catálogo. */
   estado?: React.ReactNode;
@@ -52,17 +53,17 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
    *  de ReactNode que la de credenciales. */
   integraciones?: React.ReactNode;
   /** La sección «GPS»: salud por integración, push propio, huérfanos y mapeo (W3). */
-  gps?: React.ReactNode;
+  gps?: React.ReactNode; t?: TResto;
 }) {
   return (
-    <MarcoPagina titulo="Conexiones" apoyo="Lo que tu flota tiene conectado y lo que le falta; cada estado sale de una medición, no de un semáforo de adorno.">
+    <MarcoPagina titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')}>
       {estado}
 
       <div data-tour="conexiones.estado">
-        <Tarjeta titulo="Estado de las conexiones">
+        <Tarjeta titulo={t('cfg.estado_de_las_conexiones')}>
           <ul className="rv-cx__lista">
             {conectores.map((c) => {
-              const e = ESTADO[c.estado];
+              const e = estadoConector(t)[c.estado];
               return (
                 <li key={c.id} className="rv-cx__fila">
                   <span className="rv-cx__marca"><Marca id={c.id} /></span>

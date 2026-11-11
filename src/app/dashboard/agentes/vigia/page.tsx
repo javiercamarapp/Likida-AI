@@ -67,6 +67,7 @@ export default async function PaginaAgenteVigia({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -82,9 +83,9 @@ export default async function PaginaAgenteVigia({
   async function decidir(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, tenantId, 'decide');
-    if (!a) return { ok: false, error: 'Solo el dueño o el encargado de la flota decide por los clientes.' };
+    if (!a) return { ok: false, error: tx('rest.solo_el_dueno_o_el_encargado_5') };
     const id = texto(fd, 'id');
-    if (!UUID.test(id)) return { ok: false, error: 'Mensaje no válido.' };
+    if (!UUID.test(id)) return { ok: false, error: tx('rest.mensaje_no_valido') };
     const que = texto(fd, 'accion');
     try {
       const deps = crearDepsVigia();
@@ -96,8 +97,8 @@ export default async function PaginaAgenteVigia({
       else if (que === 'tomar') {
         // El id es de un mensaje de la cola; resuelve a su hilo DENTRO de la flota de la sesión.
         const m = await deps.repo.mensaje(a.tenantId, id);
-        r = m ? await tomarConversacion(a, m.conversacionId, deps) : { ok: false, motivo: 'no_encontrado', mensaje: 'No encuentro ese mensaje en tu flota.' };
-      } else return { ok: false, error: 'Acción no válida.' };
+        r = m ? await tomarConversacion(a, m.conversacionId, deps) : { ok: false, motivo: 'no_encontrado', mensaje: tx('rest.no_encuentro_ese_mensaje_en_tu') };
+      } else return { ok: false, error: tx('rest.accion_no_valida') };
       revalidatePath(RUTA);
       return aResultado(r);
     } catch (e) {
@@ -109,9 +110,9 @@ export default async function PaginaAgenteVigia({
   async function conversacion(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, tenantId, 'decide');
-    if (!a) return { ok: false, error: 'Solo el dueño o el encargado de la flota decide por los clientes.' };
+    if (!a) return { ok: false, error: tx('rest.solo_el_dueno_o_el_encargado_5') };
     const id = texto(fd, 'id');
-    if (!UUID.test(id)) return { ok: false, error: 'Conversación no válida.' };
+    if (!UUID.test(id)) return { ok: false, error: tx('rest.conversacion_no_valida') };
     const que = texto(fd, 'accion');
     try {
       const deps = crearDepsVigia();
@@ -120,7 +121,7 @@ export default async function PaginaAgenteVigia({
       else if (que === 'devolver') r = await devolverConversacion(a, id, deps);
       else if (que === 'cerrar') r = await cerrarConversacion(a, id, deps);
       else if (que === 'responder') r = await responderComoHumano(a, id, texto(fd, 'texto'), deps);
-      else return { ok: false, error: 'Acción no válida.' };
+      else return { ok: false, error: tx('rest.accion_no_valida') };
       revalidatePath(RUTA);
       return aResultado(r);
     } catch (e) {
@@ -132,7 +133,7 @@ export default async function PaginaAgenteVigia({
   async function config(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, tenantId, 'administra');
-    if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia la configuración del Vigía.' };
+    if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_15') };
     const v = validarConfig({
       habilitado: fd.get('habilitado') === 'on', modoAprobacion: texto(fd, 'modoAprobacion'),
       autoenviarMinAprobaciones: texto(fd, 'autoenviarMinAprobaciones'), slaRespuestaMin: texto(fd, 'slaRespuestaMin'),
@@ -141,31 +142,31 @@ export default async function PaginaAgenteVigia({
     });
     if (!v.ok) return { ok: false, error: v.error };
     // El perfil se relee en el servidor: un formulario armado a mano no puede encender el autoenvío (stand-by).
-    if (v.valor.modoAprobacion !== 'siempre' && (await perfilDeTenant(a.tenantId)) === 'cinco_agentes') return { ok: false, error: 'El autoenvío no está disponible en tu plan.' };
+    if (v.valor.modoAprobacion !== 'siempre' && (await perfilDeTenant(a.tenantId)) === 'cinco_agentes') return { ok: false, error: tx('rest.el_autoenvio_no_esta_disponible_en') };
     try {
       await guardarConfigVigia(a.tenantId, a.userId, v.valor);
       revalidatePath(RUTA);
-      return { ok: true, mensaje: v.valor.habilitado ? 'Guardado. El Vigía está encendido.' : 'Guardado. El Vigía está apagado: ningún cliente recibe respuesta.' };
+      return { ok: true, mensaje: v.valor.habilitado ? tx('rest.guardado_el_vigia_esta_encendido') : tx('rest.guardado_el_vigia_esta_apagado_ningun') };
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar la configuración') };
+      return { ok: false, error: mensajeParaPantalla(e, tx('rest.guardar_la_configuracion')) };
     }
   }
 
   async function director(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, tenantId, 'administra');
-    if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia a quién avisa el Vigía.' };
+    if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_16') };
     const id = texto(fd, 'id');
-    if (id && !UUID.test(id)) return { ok: false, error: 'Persona no válida.' };
+    if (id && !UUID.test(id)) return { ok: false, error: tx('rest.persona_no_valida') };
     const que = texto(fd, 'accion');
     try {
       if (que === 'quitar') {
-        if (!id) return { ok: false, error: 'Elige a quién quitar.' };
+        if (!id) return { ok: false, error: tx('rest.elige_a_quien_quitar') };
         const ok = await quitarDirectorVigia(a.tenantId, id);
         revalidatePath(RUTA);
-        return ok ? { ok: true, mensaje: 'Quitado de la lista.' } : { ok: false, error: 'No encontré a esa persona en tu flota.' };
+        return ok ? { ok: true, mensaje: tx('rest.quitado_de_la_lista') } : { ok: false, error: tx('rest.no_encontre_a_esa_persona_en') };
       }
-      if (que !== 'guardar') return { ok: false, error: 'Acción no válida.' };
+      if (que !== 'guardar') return { ok: false, error: tx('rest.accion_no_valida') };
       const v = validarDirector({ nivel: texto(fd, 'nivel'), nombre: texto(fd, 'nombre'), telefono: texto(fd, 'telefono'), correo: texto(fd, 'correo') });
       if (!v.ok) return { ok: false, error: v.error };
       const r = await guardarDirectorVigia(a.tenantId, a.userId, id || null, v.valor);
@@ -174,25 +175,25 @@ export default async function PaginaAgenteVigia({
       return { ok: true, mensaje: id ? 'Cambios guardados.' : 'Agregado a la lista.' };
     } catch (e) {
       logger.error('vigia.accion_director_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar la lista de avisos') };
+      return { ok: false, error: mensajeParaPantalla(e, tx('rest.guardar_la_lista_de_avisos')) };
     }
   }
 
   async function servicio(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, tenantId, 'administra');
-    if (!a) return { ok: false, error: 'Solo el dueño de la flota cambia a quién avisa el Vigía.' };
+    if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_16') };
     const id = texto(fd, 'id');
-    if (id && !UUID.test(id)) return { ok: false, error: 'Persona no válida.' };
+    if (id && !UUID.test(id)) return { ok: false, error: tx('rest.persona_no_valida') };
     const que = texto(fd, 'accion');
     try {
       if (que === 'quitar') {
-        if (!id) return { ok: false, error: 'Elige a quién quitar.' };
+        if (!id) return { ok: false, error: tx('rest.elige_a_quien_quitar') };
         const ok = await quitarServicioVigia(a.tenantId, id);
         revalidatePath(RUTA);
-        return ok ? { ok: true, mensaje: 'Quitado de servicio al cliente.' } : { ok: false, error: 'No encontré a esa persona en tu flota.' };
+        return ok ? { ok: true, mensaje: tx('rest.quitado_de_servicio_al_cliente') } : { ok: false, error: tx('rest.no_encontre_a_esa_persona_en') };
       }
-      if (que !== 'guardar') return { ok: false, error: 'Acción no válida.' };
+      if (que !== 'guardar') return { ok: false, error: tx('rest.accion_no_valida') };
       const v = validarServicio({
         clienteId: texto(fd, 'clienteId'), nombre: texto(fd, 'nombre'), telefono: texto(fd, 'telefono'), correo: texto(fd, 'correo'), activo: fd.get('activo') === 'on',
       });
@@ -203,17 +204,17 @@ export default async function PaginaAgenteVigia({
       return { ok: true, mensaje: id ? 'Cambios guardados.' : 'Agregado a servicio al cliente.' };
     } catch (e) {
       logger.error('vigia.accion_servicio_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
-      return { ok: false, error: mensajeParaPantalla(e, 'guardar la lista de servicio al cliente') };
+      return { ok: false, error: mensajeParaPantalla(e, tx('rest.guardar_la_lista_de_servicio_al')) };
     }
   }
 
   async function alta(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, tenantId, 'administra');
-    if (!a) return { ok: false, error: 'Solo el dueño de la flota autoriza clientes.' };
+    if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_17') };
     const clienteId = texto(fd, 'clienteId');
     const gerente = texto(fd, 'gerenteUserId');
-    if (!UUID.test(clienteId) || (gerente && !UUID.test(gerente))) return { ok: false, error: 'Elige un cliente de la lista.' };
+    if (!UUID.test(clienteId) || (gerente && !UUID.test(gerente))) return { ok: false, error: tx('rest.elige_un_cliente_de_la_lista') };
     try {
       const r = await altaContactoVigia(a.tenantId, a.userId, {
         clienteId, telefono: texto(fd, 'telefono'), nombre: texto(fd, 'nombre') || null,
@@ -221,7 +222,7 @@ export default async function PaginaAgenteVigia({
       });
       if (!r.ok) return { ok: false, error: r.error };
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Contacto autorizado. A partir de ahora el Vigía atiende sus mensajes (si está encendido).' };
+      return { ok: true, mensaje: tx('rest.contacto_autorizado_a_partir_de_ahora') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'autorizar al contacto') };
     }
@@ -230,25 +231,25 @@ export default async function PaginaAgenteVigia({
   async function contacto(_p: ResultadoVigia, fd: FormData): Promise<ResultadoVigia> {
     'use server';
     const a = await actor(sp, tenantId, 'administra');
-    if (!a) return { ok: false, error: 'Solo el dueño de la flota administra a los contactos.' };
+    if (!a) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_18') };
     const id = texto(fd, 'id');
-    if (!UUID.test(id)) return { ok: false, error: 'Contacto no válido.' };
+    if (!UUID.test(id)) return { ok: false, error: tx('rest.contacto_no_valido') };
     const que = texto(fd, 'accion');
     try {
       if (que === 'baja') {
         const ok = await bajaManualContacto(a.tenantId, a.userId, id);
         revalidatePath(RUTA);
-        return ok ? { ok: true, mensaje: 'Contacto dado de baja: ya no recibe mensajes.' } : { ok: false, error: 'No encontré a ese contacto activo en tu flota.' };
+        return ok ? { ok: true, mensaje: tx('rest.contacto_dado_de_baja_ya_no') } : { ok: false, error: tx('rest.no_encontre_a_ese_contacto_activo') };
       }
       if (que === 'suprimir') {
-        if (fd.get('confirmo') !== 'on') return { ok: false, error: 'Marca la casilla para confirmar que se borrarán sus chats.' };
+        if (fd.get('confirmo') !== 'on') return { ok: false, error: tx('rest.marca_la_casilla_para_confirmar_que') };
         const r = await suprimirContactoVigia(a.tenantId, id);
         revalidatePath(RUTA);
         return r
-          ? { ok: true, mensaje: `Suprimido: se borraron ${r.mensajes} mensaje(s) y ${r.conversaciones} conversación(es). Su teléfono ya no se conserva.` }
-          : { ok: false, error: 'No encontré a ese contacto en tu flota.' };
+          ? { ok: true, mensaje: tx('rest.suprimido_se_borraron_mensaje_s_y', { mensajes: r.mensajes, conversaciones: r.conversaciones }) }
+          : { ok: false, error: tx('rest.no_encontre_a_ese_contacto_en') };
       }
-      return { ok: false, error: 'Acción no válida.' };
+      return { ok: false, error: tx('rest.accion_no_valida') };
     } catch (e) {
       logger.error('vigia.accion_contacto_fallo', { tenant: a.tenantId, err: e instanceof Error ? e.message : String(e) });
       return { ok: false, error: mensajeParaPantalla(e, 'actualizar al contacto') };

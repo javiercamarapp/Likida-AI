@@ -5,14 +5,18 @@ import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
 import { AvisoResultado, Boton, CampoArchivo, CampoSelect, CampoTexto, Fieldset, Icono, type AccionDeForma, type ResultadoAccion } from '@/app/ui-v2/componentes';
 import './entrevista.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 export type Opcion = { valor: string; texto: string };
 
 function BotonGuardar() {
+  const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Save} />}>
-      {pending ? 'Guardando…' : 'Guardar perfil de la flota'}
+      {pending ? 'Guardando…' : t('op.guardar_perfil_de_la_flota')}
     </Boton>
   );
 }
@@ -28,11 +32,11 @@ function Selector({ nombre, etiqueta, opciones, valorInicial, requerido, ayuda }
   );
 }
 
-const SI_NO: Opcion[] = [
-  { valor: '', texto: 'Elige una' },
-  { valor: 'si', texto: 'Sí' },
+const siNo = (t: TResto = T_RESTO_ES): Opcion[] => ([
+  { valor: '', texto: t('op.elige_una') },
+  { valor: 'si', texto: t('op.si') },
   { valor: 'no', texto: 'No' },
-];
+]);
 
 // AUDITORÍA 28 (FIS-C1, mitad quirúrgica): antes esto era un selector sí/no
 // que el dueño podía marcar "sí" de buena fe sin saber si su régimen
@@ -40,15 +44,15 @@ const SI_NO: Opcion[] = [
 // cerró en entrevista.ts (parseRegimenSat + el cálculo de elegible ahí
 // mismo). Aquí se pide la clave SAT real y `regimenElegible` se deriva de
 // ella, nunca de lo que el dueño crea que aplica.
-const REGIMEN_SAT: Opcion[] = [
-  { valor: '', texto: 'Elige una' },
-  { valor: '601', texto: '601 — General de Ley Personas Morales' },
-  { valor: '603', texto: '603 — Personas Morales con Fines no Lucrativos' },
-  { valor: '612', texto: '612 — Personas Físicas con Actividades Empresariales y Profesionales' },
-  { valor: '621', texto: '621 — Incorporación Fiscal' },
-  { valor: '624', texto: '624 — Coordinados' },
-  { valor: '626', texto: '626 — RESICO' },
-];
+const regimenSatTr = (t: TResto = T_RESTO_ES): Opcion[] => ([
+  { valor: '', texto: t('op.elige_una') },
+  { valor: '601', texto: t('op.601_general_de_ley_personas_morales') },
+  { valor: '603', texto: t('op.603_personas_morales_con_fines_no') },
+  { valor: '612', texto: t('op.612_personas_fisicas_con_actividades_empresariales') },
+  { valor: '621', texto: t('op.621_incorporacion_fiscal') },
+  { valor: '624', texto: t('op.624_coordinados') },
+  { valor: '626', texto: t('op.626_resico') },
+]);
 
 export function FormaOnboarding({
   accion, gps, erp, tag, monedero, inicial,
@@ -73,23 +77,24 @@ export function FormaOnboarding({
     tanquePropio: string;
   };
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, enviar] = useActionState(accion, null as ResultadoAccion);
 
   return (
     <form action={enviar} encType="multipart/form-data" className="rv-ob__forma">
-      <Fieldset leyenda="Fiscal — lo que ningún comprobante revela"
-        ayuda="Estas dos son las únicas obligatorias. Sin ellas el estímulo de peaje queda en $0 hasta que las contestes — el motor nunca lo acredita sin esta declaración. El resto se puede dejar en blanco y completarlo después.">
+      <Fieldset leyenda={t('op.fiscal_lo_que_ningun_comprobante_revela')}
+        ayuda={t('op.estas_dos_son_las_unicas_obligatorias')}>
         <div className="rv-forma__rejilla">
-          <Selector nombre="ingresos" etiqueta="Ingresos anuales del último ejercicio" requerido
+          <Selector nombre="ingresos" etiqueta={t('op.ingresos_anuales_del_ultimo_ejercicio')} requerido
             valorInicial={inicial.ingresos}
             opciones={[
-              { valor: '', texto: 'Elige una' },
-              { valor: 'menor', texto: 'Menores a $300 millones' },
-              { valor: 'mayor', texto: '$300 millones o más' },
+              { valor: '', texto: t('op.elige_una') },
+              { valor: 'menor', texto: t('op.menores_a_300_millones') },
+              { valor: 'mayor', texto: t('op.300_millones_o_mas') },
             ]}
-            ayuda="LIF 2026 art. 20-A. $300 millones exactos ya no califican." />
-          <Selector nombre="parte" etiqueta="¿Es parte relacionada de otra empresa? (LISR art. 179)" requerido
-            valorInicial={inicial.parte} opciones={SI_NO} />
+            ayuda={t('op.lif_2026_art_20_a_300')} />
+          <Selector nombre="parte" etiqueta={t('op.es_parte_relacionada_de_otra_empresa')} requerido
+            valorInicial={inicial.parte} opciones={siNo(t)} />
           {/* AUDITORÍA 19 (fiscal F3): la RFA 2026 regla 2.9 exige carga
               FEDERAL específicamente — no cualquier carga (local/municipal
               no califica). Este formulario decía solo "carga", mientras la
@@ -106,45 +111,45 @@ export function FormaOnboarding({
               3.12, que NO tiene ficha en este repo. Se quita "pasaje /
               turismo" fail-closed: una flota de pasaje/turismo deja de abrir
               la 2.9 hasta que exista ficha 3.12. */}
-          <Selector nombre="dedicacion" etiqueta="¿Dedicación exclusiva al autotransporte terrestre de carga federal?"
-            valorInicial={inicial.dedicacion} opciones={SI_NO} ayuda="RFA 2026 regla 2.9: exige carga FEDERAL específicamente — la carga local/municipal no califica. Válvula del 15% de combustible en efectivo y del estímulo de peaje." />
-          <Selector nombre="regimenSat" etiqueta="Régimen fiscal (clave SAT c_RegimenFiscal)"
-            valorInicial={inicial.regimenSat} opciones={REGIMEN_SAT} ayuda="La facilidad del 15% en efectivo solo abre con 612 o 624 — se calcula de la clave, no de si crees que calificas. Si no estás seguro, déjalo en blanco." />
-          <Selector nombre="dedicado" etiqueta="¿Hacen transporte dedicado?"
-            valorInicial={inicial.dedicado} opciones={SI_NO} ayuda="La RMF 2.7.7.1.3 invierte los roles del complemento Carta Porte." />
-          <Selector nombre="hombreCamion" etiqueta="¿Hay hombre-camión (el dueño maneja)?"
-            valorInicial={inicial.hombreCamion} opciones={SI_NO} ayuda="Con hombre-camión los viáticos son práctica fiscal indebida. Nos protege a los dos." />
+          <Selector nombre="dedicacion" etiqueta={t('op.dedicacion_exclusiva_al_autotransporte_terrestre_de')}
+            valorInicial={inicial.dedicacion} opciones={siNo(t)} ayuda={t('op.rfa_2026_regla_2_9_exige')} />
+          <Selector nombre="regimenSat" etiqueta={t('op.regimen_fiscal_clave_sat_c_regimenfiscal')}
+            valorInicial={inicial.regimenSat} opciones={regimenSatTr(t)} ayuda={t('op.la_facilidad_del_15_en_efectivo')} />
+          <Selector nombre="dedicado" etiqueta={t('op.hacen_transporte_dedicado')}
+            valorInicial={inicial.dedicado} opciones={siNo(t)} ayuda={t('op.la_rmf_2_7_7_1')} />
+          <Selector nombre="hombreCamion" etiqueta={t('op.hay_hombre_camion_el_dueno_maneja')}
+            valorInicial={inicial.hombreCamion} opciones={siNo(t)} ayuda={t('op.con_hombre_camion_los_viaticos_son')} />
         </div>
       </Fieldset>
 
-      <Fieldset leyenda="Stack — con qué trabajan hoy"
-        ayuda="Solo lo que el catálogo de Likida sabe conectar. No se inventa un sistema que no esté aquí: si usas otro, márcalo como «Otro» y escríbelo.">
+      <Fieldset leyenda={t('op.stack_con_que_trabajan_hoy')}
+        ayuda={t('op.solo_lo_que_el_catalogo_de')}>
         <div className="rv-forma__rejilla">
-          <Selector nombre="gps" etiqueta="GPS / rastreo" valorInicial={inicial.gps} opciones={gps} />
-          <Selector nombre="erp" etiqueta="ERP / contabilidad" valorInicial={inicial.erp} opciones={erp} />
-          <Selector nombre="tag" etiqueta="TAG de peaje" valorInicial={inicial.tag} opciones={tag} />
-          <Selector nombre="monedero" etiqueta="Monedero de diésel" valorInicial={inicial.monedero} opciones={monedero} />
-          <CampoTexto etiqueta="Si marcaste «Otro», ¿cuál?" id="stackOtro" name="stackOtro" placeholder="Nombre del sistema" />
+          <Selector nombre="gps" etiqueta={t('op.gps_rastreo')} valorInicial={inicial.gps} opciones={gps} />
+          <Selector nombre="erp" etiqueta={t('op.erp_contabilidad')} valorInicial={inicial.erp} opciones={erp} />
+          <Selector nombre="tag" etiqueta={t('op.tag_de_peaje')} valorInicial={inicial.tag} opciones={tag} />
+          <Selector nombre="monedero" etiqueta={t('op.monedero_de_diesel')} valorInicial={inicial.monedero} opciones={monedero} />
+          <CampoTexto etiqueta={t('op.si_marcaste_otro_cual')} id="stackOtro" name="stackOtro" placeholder={t('op.nombre_del_sistema')} />
         </div>
       </Fieldset>
 
-      <Fieldset leyenda="Operación">
+      <Fieldset leyenda={t('op.operacion')}>
         <div className="rv-forma__rejilla">
-          <Selector nombre="pagoOperador" etiqueta="¿Cómo le pagan al operador?"
+          <Selector nombre="pagoOperador" etiqueta={t('op.como_le_pagan_al_operador')}
             valorInicial={inicial.pagoOperador}
             opciones={[
-              { valor: '', texto: 'Elige una' },
-              { valor: 'viaje', texto: 'Por viaje' },
-              { valor: 'km', texto: 'Por kilómetro' },
-              { valor: 'sueldo', texto: 'Sueldo' },
+              { valor: '', texto: t('op.elige_una') },
+              { valor: 'viaje', texto: t('op.por_viaje') },
+              { valor: 'km', texto: t('op.por_kilometro') },
+              { valor: 'sueldo', texto: t('op.sueldo') },
             ]} />
-          <Selector nombre="tanquePropio" valorInicial={inicial.tanquePropio} etiqueta="¿Tienen tanque propio?" opciones={SI_NO} />
+          <Selector nombre="tanquePropio" valorInicial={inicial.tanquePropio} etiqueta={t('op.tienen_tanque_propio')} opciones={siNo(t)} />
         </div>
       </Fieldset>
 
-      <Fieldset leyenda="Políticas de gasto"
-        ayuda="Los topes que el motor aplica se capturan en Políticas (montos por concepto). Aquí puedes subir además el papel que ya usan (PDF o foto), para que quede en la memoria de la flota.">
-        <CampoArchivo etiqueta="Documento (PDF, JPEG o PNG, máximo 8 MB)" id="politica" name="politica"
+      <Fieldset leyenda={t('op.politicas_de_gasto')}
+        ayuda={t('op.los_topes_que_el_motor_aplica')}>
+        <CampoArchivo etiqueta={t('op.documento_pdf_jpeg_o_png_maximo')} id="politica" name="politica"
           accept="application/pdf,image/jpeg,image/png,image/webp" />
       </Fieldset>
 

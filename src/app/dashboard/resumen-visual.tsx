@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { resolverFormato } from '../admin/ui/formato-preset';
 import { StatusPill, type Estado } from '../admin/ui/kit';
 import { mxn, fechaMx } from '@/lib/formato';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 /**
  * Piezas visuales del Resumen de FLOTA — dirección v3 del 12-ago-2026
@@ -100,11 +101,12 @@ export interface FilaViaje {
  *  Exportado porque `tablero-operacion.tsx` (la tabla de viajes SIN pesos del
  *  encargado) pinta el mismo estatus: dos mapas se separan al primer estatus
  *  nuevo, que es exactamente como se rompió `CONCEPTO` dos veces. */
-export const PILL_ESTATUS: Record<string, { estado: Estado; etiqueta: string }> = {
-  liquidado: { estado: 'ok', etiqueta: 'Liquidado' },
-  en_cuadre: { estado: 'warn', etiqueta: 'En cuadre' },
-  abierto: { estado: 'neutral', etiqueta: 'Abierto' },
-};
+export const pillEstatus = (t: TResto = T_RESTO_ES): Record<string, { estado: Estado; etiqueta: string }> => ({
+  liquidado: { estado: 'ok', etiqueta: t('op.liquidado') },
+  en_cuadre: { estado: 'warn', etiqueta: t('op.en_cuadre') },
+  abierto: { estado: 'neutral', etiqueta: t('cfg.abierto') },
+});
+export const PILL_ESTATUS = pillEstatus();
 
 /**
  * La tabla de viajes
@@ -115,33 +117,31 @@ export const PILL_ESTATUS: Record<string, { estado: Estado; etiqueta: string }> 
  * "Ver todo": la página de Viajes se rehará a su tiempo, y un link muerto
  * anuncia una página que no existe.
  */
-export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufijo?: string }) {
+export function TablaViajes({ viajes, sufijo = '', t = T_RESTO_ES }: { viajes: FilaViaje[]; sufijo?: string; t?: TResto }) {
   if (viajes.length === 0) {
     return (
       <div className="min-h-[72px] w-full flex items-center justify-center">
-        <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>
-          Aún no hay viajes registrados. En cuanto la flota abra su primer viaje, aparece aquí.
-        </p>
+        <p className="text-sm text-center" style={{ color: 'var(--muted)' }}>{t('op.aun_no_hay_viajes_registrados_en')}</p>
       </div>
     );
   }
   const TH = 'etiqueta-mono text-left text-[11px] font-medium uppercase px-3 py-1.5';
   return (
     <div className="overflow-x-auto">
-      <table aria-label="Viajes recientes con su operador" className="w-full border-collapse">
+      <table aria-label={t('op.viajes_recientes_con_su_operador')} className="w-full border-collapse">
         <thead>
           <tr className="sticky top-0 z-10" style={{ background: 'var(--canvas)' }}>
-            <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>Viaje</th>
-            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Operador</th>
-            <th scope="col" className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>Anticipo</th>
-            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Estatus</th>
-            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>Inicio</th>
-            <th scope="col" className={`${TH} rounded-r-lg text-right`} style={{ color: 'var(--muted)' }}>Acción</th>
+            <th scope="col" className={`${TH} rounded-l-lg`} style={{ color: 'var(--muted)' }}>{t('op.viaje')}</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>{t('op.operador')}</th>
+            <th scope="col" className={`${TH} text-right`} style={{ color: 'var(--muted)' }}>{t('op.anticipo')}</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>{t('op.estatus')}</th>
+            <th scope="col" className={TH} style={{ color: 'var(--muted)' }}>{t('op.inicio')}</th>
+            <th scope="col" className={`${TH} rounded-r-lg text-right`} style={{ color: 'var(--muted)' }}>{t('op.accion')}</th>
           </tr>
         </thead>
         <tbody>
           {viajes.map((v) => {
-            const pill = PILL_ESTATUS[v.estatus] ?? { estado: 'neutral' as Estado, etiqueta: v.estatus };
+            const pill = pillEstatus(t)[v.estatus] ?? { estado: 'neutral' as Estado, etiqueta: v.estatus };
             const ruta = v.origen && v.destino ? `${v.origen} → ${v.destino}` : v.origen ?? v.destino;
             return (
               <tr key={v.id} className="border-b transition-colors hover:bg-[var(--canvas)]" style={{ borderColor: 'var(--line2)' }}>
@@ -151,7 +151,7 @@ export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufi
                       un guion dice "falta el dato", no "viaje sin ruta". */}
                   <div className="text-xs mt-0.5 truncate max-w-[260px]" style={{ color: 'var(--muted)' }}>{ruta ?? '—'}</div>
                 </td>
-                <td className="px-3 py-2 text-sm whitespace-nowrap">{v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>Sin asignar</span>}</td>
+                <td className="px-3 py-2 text-sm whitespace-nowrap">{v.operadorNombre ?? <span style={{ color: 'var(--faint)' }}>{t('op.sin_asignar_2')}</span>}</td>
                 <td className="cifra-mono px-3 py-2 text-[13px] text-right whitespace-nowrap">{mxn(v.anticipo)}</td>
                 <td className="px-3 py-2"><StatusPill estado={pill.estado}>{pill.etiqueta}</StatusPill></td>
                 <td className="px-3 py-2 text-[13px] whitespace-nowrap" style={{ color: 'var(--muted)' }}>{fechaMx(v.fechaInicio)}</td>
@@ -186,16 +186,16 @@ export function TablaViajes({ viajes, sufijo = '' }: { viajes: FilaViaje[]; sufi
  *  estímulo es cuota vigente (la publica el DOF cada semana) × litros, y
  *  esa cuota no vive en este componente. */
 export function MotorFiscal({
-  resumen,
+  resumen, t = T_RESTO_ES,
 }: {
   resumen: {
     montoPerdido: number; montoEnRiesgo: number; montoRecuperable: number;
     porCausa: Array<{ titulo: string; n: number; monto: number }>;
-  } | null;
+  } | null; t?: TResto;
 }) {
   const fmt = resolverFormato('mxn');
   if (!resumen) {
-    return <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo leer el motor fiscal en este momento.</p>;
+    return <p className="text-sm" style={{ color: 'var(--muted)' }}>{t('op.no_se_pudo_leer_el_motor')}</p>;
   }
   const top = resumen.porCausa.slice(0, 3);
   // "En riesgo/perdido" y "Recuperable pidiendo factura" subieron al nivel
@@ -207,7 +207,7 @@ export function MotorFiscal({
     <div className="space-y-1.5">
       {top.map((c, i) => (
         <div key={i} className="flex items-center justify-between gap-3 text-sm">
-          <span className="truncate min-w-0">{c.titulo} · {c.n} comprobante{c.n === 1 ? '' : 's'}</span>
+          <span className="truncate min-w-0">{t(c.n === 1 ? 'op.titulo_n_comprobante.uno' : 'op.titulo_n_comprobante.otros', { titulo: c.titulo, n: c.n })}</span>
           <span className="tabular shrink-0" style={{ color: 'var(--muted)' }}>{fmt(c.monto)}</span>
         </div>
       ))}

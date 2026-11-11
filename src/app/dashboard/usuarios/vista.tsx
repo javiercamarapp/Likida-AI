@@ -7,6 +7,7 @@ import {
 } from './forma';
 import { BotonEnlace, Disclosure, clasesBoton, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import './usuarios.css';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 export interface UsuarioRow {
   id: string;
@@ -46,7 +47,7 @@ export interface AccionesEquipo {
  * una fila vieja con esos roles se describe en vez de quedar como «rol sin
  * descripción».
  */
-export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvitar, acciones }: {
+export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvitar, acciones, t = T_RESTO_ES }: {
   usuarios: UsuarioRow[] | null;
   /** El de la sesión, para marcar "(tú)" en la lista y no ofrecerle baja. */
   userId: string;
@@ -55,73 +56,63 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
   roles: ReadonlyArray<OpcionRol>;
   /** Los roles que ofrece SOLO el formulario de invitar (con `nomina` si aplica). Sin él, los mismos de `roles`. */
   rolesInvitar?: ReadonlyArray<OpcionRol>;
-  acciones: AccionesEquipo;
+  acciones: AccionesEquipo; t?: TResto;
 }) {
   const columnas: ColumnaBase<UsuarioRow>[] = [
     {
-      id: 'nombre', titulo: 'Nombre', principal: true,
+      id: 'nombre', titulo: t('llaves.nombre'), principal: true,
       celda: (u) => (
         <span className="rv-usu__nombre" data-baja={u.activo ? undefined : true}>
           {/* Sin nombre cae al correo, no a "—": una persona recién invitada sin nombre sería un renglón que no se puede distinguir de otro. */}
           {u.nombre ?? <span className="cifra-mono">{u.email}</span>}
-          {u.id === userId && <span className="rv-usu__yo">(tú)</span>}
+          {u.id === userId && <span className="rv-usu__yo">{t('cfg.tu')}</span>}
           {u.nombre && <span className="rv-usu__correo cifra-mono">{u.email}</span>}
           {!u.activo && (
             <span className="rv-usu__correo">
-              <StatusChip tono="bad">dada de baja{u.desactivadoEn ? ` el ${fechaMx(u.desactivadoEn)}` : ''}</StatusChip>
+              <StatusChip tono="bad">{t('cfg.dada_de_baja')}{u.desactivadoEn ? ` el ${fechaMx(u.desactivadoEn)}` : ''}</StatusChip>
             </span>
           )}
         </span>
       ),
     },
     { id: 'rol', titulo: 'Rol', celda: (u) => <StatusChip tono={u.activo && u.rol === 'flota_admin' ? 'ok' : 'neutral'}>{nombreDeRol(u.rol)}</StatusChip> },
-    { id: 'que', titulo: 'Qué puede hacer', celda: (u) => <span className="rv-usu__tenue">{detalleDeRol(u.rol)}</span> },
+    { id: 'que', titulo: t('cfg.que_puede_hacer'), celda: (u) => <span className="rv-usu__tenue">{detalleDeRol(u.rol)}</span> },
     {
       id: 'wa', titulo: 'WhatsApp',
       celda: (u) => (u.telefono
         ? <span className="cifra-mono rv-usu__nombre" data-baja={u.activo ? undefined : true}>{u.telefono}</span>
-        : <span className="rv-usu__sin">sin WhatsApp — el bot no lo reconoce</span>),
+        : <span className="rv-usu__sin">{t('cfg.sin_whatsapp_el_bot_no_lo')}</span>),
     },
     ...(puedeInvitar ? [{
-      id: 'acciones', titulo: 'Acciones',
-      celda: (u: UsuarioRow) => <Acciones u={u} esYo={u.id === userId} roles={roles} acciones={acciones} />,
+      id: 'acciones', titulo: t('cfg.acciones'),
+      celda: (u: UsuarioRow) => <Acciones t={t} u={u} esYo={u.id === userId} roles={roles} acciones={acciones} />,
     }] : []),
   ];
 
   return (
-    <MarcoPagina titulo="Usuarios del equipo" apoyo="Quién entra a este panel y qué puede ver.">
+    <MarcoPagina titulo={t('cfg.usuarios_del_equipo')} apoyo={t('cfg.quien_entra_a_este_panel_y')}>
       {usuarios === null ? (
-        <EstadoError accion={<BotonEnlace href="" tamano="sm">Reintentar</BotonEnlace>}>No se pudo cargar el equipo. No es que no haya cuentas: la consulta no respondió.</EstadoError>
+        <EstadoError accion={<BotonEnlace href="" tamano="sm">{t('cfg.reintentar')}</BotonEnlace>}>{t('cfg.no_se_pudo_cargar_el_equipo')}</EstadoError>
       ) : (
         <>
-          <Tarjeta titulo="Tu equipo" info="usuarios.equipo">
+          <Tarjeta titulo={t('cfg.tu_equipo')} info="usuarios.equipo">
             {usuarios.length === 0 ? (
-              <EstadoVacio icono={Users} titulo="No hay cuentas dadas de alta" contenido>
-                Cuando invites a alguien de tu equipo, aparece aquí con su rol.
-              </EstadoVacio>
+              <EstadoVacio icono={Users} titulo={t('cfg.no_hay_cuentas_dadas_de_alta')} contenido>{t('cfg.cuando_invites_a_alguien_de_tu')}</EstadoVacio>
             ) : (
-              <TablaBase etiqueta="Usuarios y su rol" columnas={columnas} filas={usuarios} idFila={(u) => u.id} altoMaximo={false} tarjetaMovil />
+              <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} altoMaximo={false} tarjetaMovil />
             )}
           </Tarjeta>
 
           {puedeInvitar ? (
-            <Disclosure titulo="+ Invitar a alguien de tu equipo">
+            <Disclosure titulo={t('cfg.invitar_a_alguien_de_tu_equipo')}>
               <FormaInvitar accion={acciones.invitar} roles={rolesInvitar ?? roles} />
             </Disclosure>
           ) : (
-            <p className="rv-usu__pie">
-              Tu rol ve el equipo pero no lo administra: dar acceso al panel, cambiar
-              un rol o dar de baja es una decisión del dueño de la flota.
-            </p>
+            <p className="rv-usu__pie">{t('cfg.tu_rol_ve_el_equipo_pero')}</p>
           )}
 
-          <Tarjeta titulo="El aislamiento no depende de esconder botones">
-            <p className="rv-usu__aislamiento">
-              Cada consulta de este panel va filtrada por tu flota, y la base separa los datos de cada flota por su cuenta: aunque
-              alguien pidiera datos de otra flota a mano, la base no se los devuelve. Una cuenta dada de baja
-              deja de entrar en su siguiente clic y su sesión se revoca; cada cambio de rol, baja y reactivación
-              queda en la bitácora de auditoría con quién lo hizo.
-            </p>
+          <Tarjeta titulo={t('cfg.el_aislamiento_no_depende_de_esconder')}>
+            <p className="rv-usu__aislamiento">{t('cfg.cada_consulta_de_este_panel_va')}</p>
           </Tarjeta>
         </>
       )}
@@ -129,20 +120,20 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
   );
 }
 
-function Acciones({ u, esYo, roles, acciones }: {
-  u: UsuarioRow; esYo: boolean; roles: ReadonlyArray<OpcionRol>; acciones: AccionesEquipo;
+function Acciones({ u, esYo, roles, acciones, t = T_RESTO_ES }: {
+  u: UsuarioRow; esYo: boolean; roles: ReadonlyArray<OpcionRol>; acciones: AccionesEquipo; t?: TResto;
 }) {
   // Un superadmin en la lista es personal de Likida: no se administra aquí
   // (el motor lo rechaza igual — esto solo evita ofrecer un botón que rebota).
   const administrable = !esYo && u.rol !== 'superadmin';
   if (!administrable) {
-    return <span className="rv-usu__sin">{esYo ? 'Tu propia cuenta la administra otro dueño.' : 'Cuenta de Likida.'}</span>;
+    return <span className="rv-usu__sin">{esYo ? t('cfg.tu_propia_cuenta_la_administra_otro') : 'Cuenta de Likida.'}</span>;
   }
   if (!u.activo) return <FormaReactivar accion={acciones.reactivar} id={u.id} />;
   return (
     // UN solo control por renglón: «Acciones» abre el grupo (cada forma conserva su server action, su aviso y su diálogo de confirmación).
     <details className="rv-usu__menu">
-      <summary className={clasesBoton('secondary', 'sm', 'rv-usu__menu-gatillo')} aria-label={`Acciones de ${u.nombre ?? u.email}`}>Acciones</summary>
+      <summary className={clasesBoton('secondary', 'sm', 'rv-usu__menu-gatillo')} aria-label={`Acciones de ${u.nombre ?? u.email}`}>{t('cfg.acciones')}</summary>
       <div className="rv-usu__acciones">
         <FormaCambiarRol accion={acciones.cambiarRol} id={u.id} rolActual={u.rol} roles={roles} />
         <FormaReenviarAcceso accion={acciones.reenviarAcceso} id={u.id} />

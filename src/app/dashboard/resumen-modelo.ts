@@ -1,6 +1,7 @@
 import type { DashboardKpis, DineroObservadoTipo, HechoSolo, GastoSemanalPorCategoria } from '@/lib/likida/analytics';
 import type { EstadoCartaPorte } from '@/lib/likida/carta_porte_datos';
 import type { AgenteInsight, Insight } from '@/lib/likida/insights/tipos';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MODELO DEL RESUMEN v2 (rediseño): tipos y funciones PURAS, sin importar nada de servidor (lo importan también los componentes de
@@ -12,9 +13,11 @@ import type { AgenteInsight, Insight } from '@/lib/likida/insights/tipos';
 export type RangoResumen = '7' | '30' | 'todo';
 export const RANGO_POR_OMISION: RangoResumen = '30';
 export const RANGOS: readonly RangoResumen[] = ['7', '30', 'todo'];
-export const ROTULO_RANGO: Record<RangoResumen, string> = { '7': '7 días', '30': '30 días', todo: 'Todo' };
+export const rotuloRango = (t: TResto = T_RESTO_ES): Record<RangoResumen, string> => ({ '7': t('op.7_dias'), '30': t('op.30_dias'), todo: t('op.todo') });
+export const ROTULO_RANGO = rotuloRango();
 /** Cómo se dice el periodo en un sello de procedencia. */
-export const PERIODO_RANGO: Record<RangoResumen, string> = { '7': 'últimos 7 días', '30': 'últimos 30 días', todo: 'todo el historial' };
+export const periodoRango = (t: TResto = T_RESTO_ES): Record<RangoResumen, string> => ({ '7': t('op.ultimos_7_dias'), '30': t('op.ultimos_30_dias'), todo: 'todo el historial' });
+export const PERIODO_RANGO = periodoRango();
 
 /** Cualquier valor raro de la URL cae al periodo por omisión (nunca rompe la página). */
 export function leerRango(v: string | null | undefined): RangoResumen {
@@ -140,11 +143,10 @@ const RUTA_AGENTE: Record<Insight['agente'], string> = {
   liquidacion: RUTA_LIQUIDACION, peajes: '/dashboard/agentes/peajes', 'carta-porte': '/dashboard/agentes/carta-porte',
   vigia: '/dashboard/agentes/vigia', conductores: '/dashboard/agentes/conductores',
 };
-const NOMBRE_AGENTE: Record<Insight['agente'], string> = {
-  liquidacion: 'Liquidación', peajes: 'Peajes', 'carta-porte': 'Carta Porte', vigia: 'Servicio al cliente', conductores: 'Operadores',
-};
+const nombreAgente = (t: TResto = T_RESTO_ES): Record<Insight['agente'], string> => ({
+  liquidacion: t('op.liquidacion'), peajes: t('op.peajes'), 'carta-porte': t('op.carta_porte'), vigia: t('op.servicio_al_cliente'), conductores: t('op.operadores'),
+});
 
-const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
 
 /** Une al sufijo de tenant/vista (`?tenant=…`) una ruta que ya puede traer su propio `?filtro=`. */
 export function conSufijo(ruta: string, sufijo: string): string {
@@ -175,7 +177,7 @@ export function filasAtencion(
   principales: readonly Insight[],
   sufijo: string,
   minimo = 3,
-  opciones: OpcionesFilas = {},
+  opciones: OpcionesFilas = {}, t: TResto = T_RESTO_ES,
 ): FilaAtencion[] {
   const puede = opciones.puede ?? (() => true);
   /** El enlace de una fila solo existe si este rol (y este perfil) abre esa pantalla: jamás una fila que rebota. */
@@ -184,18 +186,18 @@ export function filasAtencion(
   for (const i of principales) {
     filas.push({
       id: `insight-${i.agente}`, severidad: SEVERIDAD_INSIGHT[i.severidad],
-      titulo: `${NOMBRE_AGENTE[i.agente]}: ${i.quePaso}`, detalle: i.queSignifica,
+      titulo: `${nombreAgente(t)[i.agente]}: ${i.quePaso}`, detalle: i.queSignifica,
       href: enlace(RUTA_AGENTE[i.agente]), queSignifica: i.queSignifica, queHacer: i.queHacer,
-      fuente: `${i.fuente.periodo} · ${i.fuente.n} ${plural(i.fuente.n, 'registro', 'registros')}`, textoAccion: `Abrir ${NOMBRE_AGENTE[i.agente]}`,
+      fuente: t(i.fuente.n === 1 ? 'op.fuente_n_registro.uno' : 'op.fuente_n_registro.otros', { periodo: i.fuente.periodo, n: i.fuente.n }), textoAccion: `Abrir ${nombreAgente(t)[i.agente]}`,
     });
   }
   // Un agente cuyo lector FALLÓ no se omite en silencio (eso se leería como «sin pendientes»): se confiesa como fila.
   for (const a of opciones.fallidos ?? []) {
     filas.push({
-      id: `insight-sin-lectura-${a}`, severidad: 'atencion', titulo: `${NOMBRE_AGENTE[a]}: no se pudo leer`,
-      detalle: 'Su interpretación no cargó ahora. No es «sin pendientes».', href: enlace(RUTA_AGENTE[a]),
-      queSignifica: 'La lectura de este agente falló, así que no sabemos si tiene algo pendiente. Es distinto de que no haya nada.',
-      queHacer: 'Vuelve a cargar en un momento. Si sigue igual, abre el agente y revisa ahí.', fuente: 'Lectura del agente, ahora', textoAccion: `Abrir ${NOMBRE_AGENTE[a]}`,
+      id: `insight-sin-lectura-${a}`, severidad: 'atencion', titulo: t('op.no_se_pudo_leer_2', { nombreAgente: nombreAgente(t)[a] }),
+      detalle: t('op.su_interpretacion_no_cargo_ahora_no'), href: enlace(RUTA_AGENTE[a]),
+      queSignifica: t('op.la_lectura_de_este_agente_fallo'),
+      queHacer: t('op.vuelve_a_cargar_en_un_momento'), fuente: 'Lectura del agente, ahora', textoAccion: `Abrir ${nombreAgente(t)[a]}`,
     });
   }
   filas.push(...(opciones.extra ?? []));
@@ -203,22 +205,22 @@ export function filasAtencion(
   if (porRevisar !== null && porRevisar > 0) {
     filas.push({
       id: 'por-revisar', severidad: 'accion',
-      titulo: `${porRevisar} ${plural(porRevisar, 'liquidación por revisar', 'liquidaciones por revisar')}`,
-      detalle: 'El agente las dejó con estatus «revisar».',
+      titulo: t(porRevisar === 1 ? 'op.n_liquidacion_por_revisar.uno' : 'op.n_liquidacion_por_revisar.otros', { n: porRevisar }),
+      detalle: t('op.el_agente_las_dejo_con_estatus'),
       href: enlace(RUTA_LIQUIDACION),
-      queSignifica: 'Son liquidaciones del periodo que el agente no pudo dar por cuadradas y esperan que alguien las revise.',
-      queHacer: 'Abre la cola de revisión del agente de Liquidación y decide cada una.', fuente: 'Liquidaciones de tu flota, periodo elegido', textoAccion: 'Revisar liquidaciones',
+      queSignifica: t('op.son_liquidaciones_del_periodo_que_el'),
+      queHacer: t('op.abre_la_cola_de_revision_del'), fuente: t('op.liquidaciones_de_tu_flota_periodo_elegido'), textoAccion: t('op.revisar_liquidaciones'),
     });
   }
   const escalados = d.escalados;
   if (escalados !== null && escalados > 0) {
     filas.push({
       id: 'escalados', severidad: 'atencion',
-      titulo: `${escalados} ${plural(escalados, 'viaje escalado', 'viajes escalados')}`,
-      detalle: 'Se escalaron por falta de respuesta o de comprobantes.',
+      titulo: t(escalados === 1 ? 'op.n_viaje_escalado.uno' : 'op.n_viaje_escalado.otros', { n: escalados }),
+      detalle: t('op.se_escalaron_por_falta_de_respuesta'),
       href: enlace(RUTA_VIAJES_ESCALADOS),
-      queSignifica: 'El agente ya intentó avisar al operador y escaló el viaje para que alguien de la oficina lo atienda.',
-      queHacer: 'Abre los viajes escalados y da seguimiento.', fuente: 'Viajes con sello de escalado', textoAccion: 'Ver viajes escalados',
+      queSignifica: t('op.el_agente_ya_intento_avisar_al'),
+      queHacer: t('op.abre_los_viajes_escalados_y_da'), fuente: t('op.viajes_con_sello_de_escalado'), textoAccion: t('op.ver_viajes_escalados'),
     });
   }
   filas.sort((a, b) => PESO[a.severidad] - PESO[b.severidad]);
@@ -226,7 +228,7 @@ export function filasAtencion(
   // Relleno honesto: lo que se revisó y salió limpio (o no se pudo leer; jamás un «limpio» inventado).
   // Cada «sin pendientes» dice SU corte: las liquidaciones por revisar se leen con la ventana del periodo elegido; los
   // viajes escalados son un conteo de ahora (sin ventana), y no se les cuelga un periodo que no tienen.
-  const periodo = PERIODO_RANGO[d.rango ?? RANGO_POR_OMISION];
+  const periodo = periodoRango(t)[d.rango ?? RANGO_POR_OMISION];
   const revisadas: Array<[string, string, number | null, boolean, string]> = [
     ['por-revisar', 'Liquidaciones por revisar', porRevisar, filas.some((f) => f.id === 'por-revisar'), `Sin pendientes · ${periodo}.`],
     ['escalados', 'Viajes escalados', escalados, filas.some((f) => f.id === 'escalados'), 'Sin pendientes · ahora.'],
@@ -234,7 +236,7 @@ export function filasAtencion(
   for (const [id, rotulo, n, yaEsta, limpio] of revisadas) {
     if (filas.length >= minimo || yaEsta) continue;
     filas.push(n === null
-      ? { id: `${id}-sin-lectura`, severidad: 'atencion', titulo: rotulo, detalle: 'No se pudo leer ahora. No es cero.', href: null, sinPendiente: true }
+      ? { id: `${id}-sin-lectura`, severidad: 'atencion', titulo: rotulo, detalle: t('op.no_se_pudo_leer_ahora_no'), href: null, sinPendiente: true }
       : { id: `${id}-limpio`, severidad: 'info', titulo: rotulo, detalle: limpio, href: null, sinPendiente: true });
   }
   return filas;

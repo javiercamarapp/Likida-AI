@@ -11,7 +11,11 @@ import { ListaSesionesMcp } from './vista';
 import './sesiones-mcp.css';
 import { MarcoPagina, AvisoCompacto, EstadoError } from '@/app/ui-v2/componentes';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Sesiones MCP' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('cfg.sesiones_mcp') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +59,7 @@ export default async function PaginaSesionesMcp({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -73,7 +78,7 @@ export default async function PaginaSesionesMcp({
     'use server';
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
-      return { ok: false, error: 'Solo el dueño de la flota corta los accesos MCP de otro usuario.' };
+      return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_8') };
     }
 
     try {
@@ -91,22 +96,18 @@ export default async function PaginaSesionesMcp({
   }
 
   return (
-    <MarcoPagina titulo="Sesiones MCP" apoyo="Quién de tu equipo tiene Claude o ChatGPT conectado a Likida, con qué rol y desde cuándo. Solo lectura.">
+    <MarcoPagina titulo={t('cfg.sesiones_mcp')} apoyo={t('cfg.quien_de_tu_equipo_tiene_claude')}>
       <AvisoCompacto tono="info"
-        resumen="Quien conecta Claude o ChatGPT a Likida deja ese cliente leyendo, nunca cambiando, lo que ve su rol. Tus propias conexiones las cortas en Mi perfil."
-        mas={<p>Cuando alguien de tu equipo conecta Claude o ChatGPT a Likida, ese cliente queda leyendo lo que ve el rol con el que autorizó, sin navegador y sin volver a iniciar sesión. Aquí está quién tiene qué conectado y desde cuándo.</p>} />
+        resumen={t('cfg.quien_conecta_claude_o_chatgpt_a')}
+        mas={<p>{t('cfg.cuando_alguien_de_tu_equipo_conecta')}</p>} />
 
       {sesiones === null ? (
-        <EstadoError reintentar>No pude leer las sesiones MCP de la flota. No se enseña una lista a medias: media lista se vería igual que la lista entera, y sobre accesos eso hace creer que ya no queda nada conectado.</EstadoError>
+        <EstadoError reintentar>{t('cfg.no_pude_leer_las_sesiones_mcp')}</EstadoError>
       ) : (
-        <ListaSesionesMcp sesiones={sesiones} cortarSesiones={cortarSesiones} />
+        <ListaSesionesMcp t={t} sesiones={sesiones} cortarSesiones={cortarSesiones} />
       )}
 
-      <p className="rv-mcp__pie">
-        El nombre del cliente lo declaró quien lo registró, no Likida. Cortar el
-        acceso tumba todos los tokens vivos de esa persona de un tiro y no tiene
-        deshacer: para volver a conectar hay que autorizar otra vez desde el cliente.
-      </p>
+      <p className="rv-mcp__pie">{t('cfg.el_nombre_del_cliente_lo_declaro')}</p>
     </MarcoPagina>
   );
 }

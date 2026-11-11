@@ -115,8 +115,9 @@ export default async function PaginaConvenios({ searchParams }: { searchParams: 
     revalidatePath(RUTA);
   }
 
+  const { t: tx } = await getT('resto');
   return (
-    <VistaConvenios
+    <VistaConvenios t={tx}
       sufijo={sufijoTenant(sp)} convenios={convenios} estado={estado} puedeEditar={puedeAsignar(rol)} verDinero={verDinero}
       puedeExportar={puedeExportar(rol)} accionImportar={accionImportar} accionEstado={accionEstado}
       viajes={viajes} accionCorregir={accionCorregir} catalogos={catalogos} accionGuardar={accionGuardar}

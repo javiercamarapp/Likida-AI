@@ -11,6 +11,8 @@ import { AvisoCompacto, EstadoVacio, StatusChip, TablaBase, Tarjeta } from '@/ap
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import './peajes.css';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // T-A2-27 — LA REVISIÓN DE COBROS EN LA PANTALLA DEL AGENTE DE PEAJES
@@ -189,41 +191,41 @@ function Franja({ id, titulo, children }: { id: string; titulo: string; children
   );
 }
 
-export function RevisionCobros({ estado }: { estado: EstadoRevisionCobros }) {
+export function RevisionCobros({ estado, tr = TR_ES }: { estado: EstadoRevisionCobros; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
-    <div role="region" aria-label="Revisión de cobros">
-      <Tarjeta titulo="Revisión de cobros">
-        <p className="rv-pj-nota">{ROTULO_CANDIDATO}. Lo que el sistema marca son candidatos a reclamo, no acusaciones.</p>
+    <div role="region" aria-label={tx('rest.revision_de_cobros')}>
+      <Tarjeta titulo={tx('rest.revision_de_cobros')}>
+        <p className="rv-pj-nota">{ROTULO_CANDIDATO}{tx('rest.lo_que_el_sistema_marca_son')}</p>
 
         {estado.tipo === 'sin_archivo' && (
-          <EstadoVacio titulo="Aún nada que revisar">
-            Aún no hay nada que revisar: sube el archivo del proveedor y aquí aparecen los cobros dudosos.
-          </EstadoVacio>
+          <EstadoVacio titulo={tx('rest.aun_nada_que_revisar')}>{tx('rest.aun_no_hay_nada_que_revisar')}</EstadoVacio>
         )}
 
         {estado.tipo === 'error' && (
-          <AvisoCompacto tono="warn" resumen="No se pudo calcular la revisión de cobros ahora mismo. Puedes seguir subiendo, conciliando y anulando archivos; vuelve a abrir esta pantalla en un momento." />
+          <AvisoCompacto tono="warn" resumen={tx('rest.no_se_pudo_calcular_la_revision')} />
         )}
 
-        {estado.tipo === 'ok' && <CuerpoRevision estado={estado} />}
+        {estado.tipo === 'ok' && <CuerpoRevision tr={tr} estado={estado} />}
       </Tarjeta>
     </div>
   );
 }
 
-function CuerpoRevision({ estado }: { estado: Extract<EstadoRevisionCobros, { tipo: 'ok' }> }) {
+function CuerpoRevision({ estado, tr = TR_ES }: { estado: Extract<EstadoRevisionCobros, { tipo: 'ok' }>; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   const { insights: r, estadoReclamo } = estado;
   const k = r.kpis;
   return (
     <>
       {(estado.sinTarifa || estado.sinViajes) && (
         <ul className="rv-pj-notas">
-          {estado.sinTarifa && <li>Sin tarifa configurada: las diferencias de importe quedan como candidatos y no se evalúan hasta que cargues el tarifario.</li>}
-          {estado.sinViajes && <li>El cruce con viajes no está disponible para este archivo: los cruces no se pueden ligar a un viaje todavía (cruce con viajes no disponible).</li>}
+          {estado.sinTarifa && <li>{tx('rest.sin_tarifa_configurada_las_diferencias_de')}</li>}
+          {estado.sinViajes && <li>{tx('rest.el_cruce_con_viajes_no_esta')}</li>}
         </ul>
       )}
 
-      <Franja id="cobros-que-paso" titulo="Qué pasó">
+      <Franja id="cobros-que-paso" titulo={tx('conductores.vista.que_paso')}>
         <div className="rv-pj-tarjetas">
           {r.tarjetas.map((t) => (
             <article key={t.id} className="rv-pj-caja" aria-labelledby={`cobro-${t.id}`}>
@@ -231,62 +233,61 @@ function CuerpoRevision({ estado }: { estado: Extract<EstadoRevisionCobros, { ti
               <div className="cifra-mono rv-pj-caja__monto">{mxn(t.monto)}</div>
               <div className="rv-pj-nota">{numero(t.n)} {t.n === 1 ? 'cruce' : 'cruces'}</div>
               {t.id !== 'sin_candidatos' && (
-                <div className="rv-pj-nota">Reclamo: {estadoReclamo[t.id] ?? SIN_RECLAMAR}</div>
+                <div className="rv-pj-nota">{tx('rest.reclamo')}{' '}{estadoReclamo[t.id] ?? SIN_RECLAMAR}</div>
               )}
               <p className="rv-pj-texto">{t.quePaso}</p>
-              <p className="rv-pj-nota"><strong>Qué significa:</strong> {t.queSignifica}</p>
-              <p className="rv-pj-nota"><strong>Qué hacer:</strong> {t.queHacer}</p>
-              <p className="rv-pj-nota">Fuente: {t.fuente}</p>
+              <p className="rv-pj-nota">{ricoT(tx('rest.strong_que_significa_strong'), { strong: (c) => <strong>{c}</strong> })}{' '}{t.queSignifica}</p>
+              <p className="rv-pj-nota">{ricoT(tx('rest.strong_que_hacer_strong'), { strong: (c) => <strong>{c}</strong> })}{' '}{t.queHacer}</p>
+              <p className="rv-pj-nota">{tx('rest.fuente')}{' '}{t.fuente}</p>
             </article>
           ))}
         </div>
-        {r.tarjetas.some((t) => t.id !== 'sin_candidatos') && <TablaCategorias r={r} estadoReclamo={estadoReclamo} />}
+        {r.tarjetas.some((t) => t.id !== 'sin_candidatos') && <TablaCategorias tr={tr} r={r} estadoReclamo={estadoReclamo} />}
       </Franja>
 
-      <Franja id="cobros-plazo" titulo="Plazo">
-        <TiraCifras etiqueta="Plazo para reclamar">
+      <Franja id="cobros-plazo" titulo={tx('rest.plazo')}>
+        <TiraCifras etiqueta={tx('rest.plazo_para_reclamar')}>
           <CifraKpi k={k.porVencer} monto={k.porVencer.monto} tono={(k.porVencer.valor ?? 0) > 0 ? 'warn' : undefined} />
         </TiraCifras>
       </Franja>
 
-      <Franja id="cobros-recuperado" titulo="Recuperado vs reclamado">
-        <TiraCifras etiqueta="Recuperado contra reclamado">
+      <Franja id="cobros-recuperado" titulo={tx('rest.recuperado_vs_reclamado')}>
+        <TiraCifras etiqueta={tx('rest.recuperado_contra_reclamado')}>
           <CifraKpi k={k.reclamado} />
           <CifraKpi k={k.acreditado} />
           <CifraKpi k={k.pendiente} tono={(k.pendiente.valor ?? 0) > 0 ? 'warn' : undefined} />
         </TiraCifras>
       </Franja>
 
-      <Franja id="cobros-revisado" titulo="% revisado">
-        <TiraCifras etiqueta="Qué tanto se ha revisado">
+      <Franja id="cobros-revisado" titulo={tx('rest.revisado')}>
+        <TiraCifras etiqueta={tx('rest.que_tanto_se_ha_revisado')}>
           <CifraKpi k={k.pctRevisado} />
           <CifraKpi k={k.crucesEvaluados} />
           <CifraKpi k={k.atipicosNuevos} />
           <CifraKpi k={k.sinViaje} />
         </TiraCifras>
-        <p className="rv-pj-nota">
-          Lo revisado por una persona y lo evaluado por el sistema son medidas distintas y no se suman. {r.ahorroDeTiempo.motivo}
-        </p>
+        <p className="rv-pj-nota">{tx('rest.lo_revisado_por_una_persona_y', { motivo: r.ahorroDeTiempo.motivo })}</p>
       </Franja>
     </>
   );
 }
 
-function TablaCategorias({ r, estadoReclamo }: { r: ResultadoInsights; estadoReclamo: Record<string, string> }) {
+function TablaCategorias({ r, estadoReclamo, tr = TR_ES }: { r: ResultadoInsights; estadoReclamo: Record<string, string>; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   const filas = r.tarjetas.filter((t) => t.id !== 'sin_candidatos');
   return (
     <TablaBase<(typeof filas)[number]>
-      etiqueta="Candidatos de cobro por categoría, con su dinero y el estado del reclamo"
+      etiqueta={tx('rest.candidatos_de_cobro_por_categoria_con')}
       filas={filas}
       idFila={(t) => t.id}
       densa
       altoMaximo={false}
       tarjetaMovil
       columnas={[
-        { id: 'categoria', titulo: 'Categoría', principal: true, celda: (t) => ETIQUETA_CATEGORIA_INSIGHT[t.id as CategoriaInsight] ?? t.titulo },
-        { id: 'cruces', titulo: 'Cruces', alinear: 'der', celda: (t) => <span className="cifra-mono">{numero(t.n)}</span> },
-        { id: 'monto', titulo: 'Monto', alinear: 'der', celda: (t) => <span className="cifra-mono">{mxn(t.monto)}</span> },
-        { id: 'estado', titulo: 'Estado del reclamo', celda: (t) => <StatusChip tono={(estadoReclamo[t.id] ?? SIN_RECLAMAR) === SIN_RECLAMAR ? 'muted' : 'info'}>{estadoReclamo[t.id] ?? SIN_RECLAMAR}</StatusChip> },
+        { id: 'categoria', titulo: tx('rest.categoria_2'), principal: true, celda: (t) => ETIQUETA_CATEGORIA_INSIGHT[t.id as CategoriaInsight] ?? t.titulo },
+        { id: 'cruces', titulo: tx('rest.cruces_3'), alinear: 'der', celda: (t) => <span className="cifra-mono">{numero(t.n)}</span> },
+        { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (t) => <span className="cifra-mono">{mxn(t.monto)}</span> },
+        { id: 'estado', titulo: tx('rest.estado_del_reclamo'), celda: (t) => <StatusChip tono={(estadoReclamo[t.id] ?? SIN_RECLAMAR) === SIN_RECLAMAR ? 'muted' : 'info'}>{estadoReclamo[t.id] ?? SIN_RECLAMAR}</StatusChip> },
       ]}
     />
   );

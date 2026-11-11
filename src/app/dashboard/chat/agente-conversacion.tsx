@@ -10,11 +10,13 @@ import PanelHistorial, { BotonHistorial } from './historial';
 import { BurbujaUsuario, RespuestaVista } from './mensajes';
 import { comportamientoScroll, useMovimientoReducido } from './movimiento';
 import type { Motor, ModoAgente } from './motor';
-import { PERFILES, type TemaAgente, type TextosAgente } from './perfiles';
+import { perfiles, type TemaAgente, type TextosAgente } from './perfiles';
 import TemasRapidos from './sugerencias';
 import BriefingDecideHoy from './briefing-decide-hoy';
 import { useAnalista } from './use-analista';
 import { useCopiloto } from './use-copiloto';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 // ¿Bajo `lg` (1024 px)? Ahí el historial es un Drawer (hoja inferior en <820, cajón en 820–1023); sobre `lg`, una columna.
 const CONSULTA_LG = '(max-width: 1023.98px)';
@@ -78,7 +80,8 @@ function ConMotorSuperadmin(p: PropsAgente) {
 }
 
 function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca = 'horizontal', acciones, adjuntos, cabecera, motor: a }: PropsAgente & { motor: Motor }) {
-  const perfil = PERFILES[modo];
+  const { t: tl } = useT('resto', restoEs);
+  const perfil = perfiles(tl)[modo];
   const tx: TextosAgente = { ...perfil.textos, ...textos };
   const listaTemas = temas ?? perfil.temas;
   const conAcciones = acciones ?? perfil.acciones;
@@ -196,7 +199,7 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
           {hay && <Titulo className="rv-sr">{tx.titulo}</Titulo>}
           {hay && (
             <div className="rv-chat__hilo-caja">
-              <div ref={hilo} className="rv-chat__hilo" role="log" aria-live="polite" tabIndex={0} aria-label="Conversación" onScroll={medirFondo}>
+              <div ref={hilo} className="rv-chat__hilo" role="log" aria-live="polite" tabIndex={0} aria-label={tl('cfg.conversacion')} onScroll={medirFondo}>
                 <div ref={hiloIn} className="rv-chat__hilo-in">
                   {a.historial.map((t, i) => (
                     <div key={t.id} data-turno-id={t.id} className="rv-chat__turno">
@@ -209,7 +212,7 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
                 </div>
               </div>
               {lejosDelFondo && (
-                <button type="button" className="rv-btn rv-btn--secondary rv-chat__redondo rv-chat__bajar" aria-label="Ir al final de la conversación" onClick={bajar}>
+                <button type="button" className="rv-btn rv-btn--secondary rv-chat__redondo rv-chat__bajar" aria-label={tl('ch.ir_al_final_de_la_conversacion')} onClick={bajar}>
                   <ArrowDown aria-hidden="true" />
                 </button>
               )}

@@ -5,6 +5,9 @@ import { useFormStatus } from 'react-dom';
 import { Vault, PlugZap } from 'lucide-react';
 import { Aviso, AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, Icono, clasesBoton } from '@/app/ui-v2/componentes';
 import './conexiones.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA CAPTURA DE CREDENCIALES (C2, auditoría 4) — la mitad CLIENTE.
@@ -64,10 +67,11 @@ function AvisoError({ error }: { error: string }) {
 }
 
 function BotonGuardar() {
+  const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={Vault} />}>
-      {pending ? 'Guardando…' : 'Guardar en el cofre'}
+      {pending ? 'Guardando…' : t('cfg.guardar_en_el_cofre')}
     </Boton>
   );
 }
@@ -80,6 +84,7 @@ export function FormaCredenciales({ grupos, guardar }: {
   grupos: GrupoCaptura[];
   guardar: AccionCredencial;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(guardar, null);
   const [elegido, setElegido] = useState('');
   const conector = grupos.flatMap((g) => g.conectores).find((c) => c.id === elegido) ?? null;
@@ -101,9 +106,9 @@ export function FormaCredenciales({ grupos, guardar }: {
           esto, el password de SAP sobreviviría en el input al cambiar a Odoo
           y viajaría al conector equivocado. */}
       <form action={despachar} className="rv-cx__form" key={elegido}>
-        <CampoSelect etiqueta="Sistema" id="cred-conector" name="conector" value={elegido} required
+        <CampoSelect etiqueta={t('cfg.sistema')} id="cred-conector" name="conector" value={elegido} required
           onChange={(e) => setElegido(e.target.value)} className="rv-cx__selector">
-          <option value="">Elige el sistema…</option>
+          <option value="">{t('cfg.elige_el_sistema')}</option>
           {grupos.map((g) => (
             <optgroup key={g.categoria} label={g.categoria}>
               {g.conectores.map((c) => (
@@ -166,12 +171,13 @@ export function FormaProbar({ conectorId, probar }: {
 }
 
 function BotonProbar() {
+  const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
   return (
     <Boton type="submit" loading={pending} icono={<Icono icono={PlugZap} />}>
       {/* «Probando…» y no «Conectando…»: probar no deja nada conectado, y la
           espera puede ser de hasta 15 s (TIMEOUT_PRUEBA_MS). */}
-      {pending ? 'Probando contra el proveedor…' : 'Probar conexión'}
+      {pending ? 'Probando contra el proveedor…' : t('cfg.probar_conexion')}
     </Boton>
   );
 }
@@ -181,8 +187,8 @@ function BotonProbar() {
  * que lo guardado no se borra y que para volver a usarlo se captura de nuevo.
  */
 /** A37-S17-06: lo que la confirmación promete debe ser lo que hace `desactivarCredencial` (destruye el secreto). */
-export function descripcionDesactivar(nombre: string): string {
-  return `El acceso a ${nombre} deja de estar disponible para conectar. El secreto se destruye al desactivar; queda solo el registro (fecha y últimos 4). Para volver a usarlo, captúralo de nuevo.`;
+export function descripcionDesactivar(nombre: string, t: TResto = T_RESTO_ES): string {
+  return t('cfg.el_acceso_a_deja_de_estar', { nombre });
 }
 
 export function FormaDesactivar({ conectorId, nombre, desactivar }: {
@@ -190,14 +196,15 @@ export function FormaDesactivar({ conectorId, nombre, desactivar }: {
   nombre: string;
   desactivar: AccionCredencial;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(desactivar, null);
   return (
     <form action={despachar} className="rv-cx__form-linea">
       <input type="hidden" name="conector" value={conectorId} />
       <BotonConfirmar
-        etiqueta="Desactivar" tono="peligro" etiquetaConfirmar="Sí, desactivar este acceso"
+        etiqueta={t('cfg.desactivar')} tono="peligro" etiquetaConfirmar={t('cfg.si_desactivar_este_acceso')}
         titulo={`Desactivar el acceso a ${nombre}`}
-        descripcion={descripcionDesactivar(nombre)}
+        descripcion={descripcionDesactivar(nombre, t)}
         className={clasesBoton('danger', 'sm')}
       />
       {estado && !estado.ok && <AvisoError error={estado.error} />}

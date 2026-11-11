@@ -9,6 +9,8 @@ import { FormaRevision, type AccionEnviar, type AccionRevisar } from './formas';
 import { FormaConfiguracion, type AccionGuardarConfig } from './configuracion';
 import { textoHorario } from './texto_horario';
 import { TablaSinAtender, duracion } from './tabla';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 function Seccion({ titulo, info, children }: { id?: string; titulo: string; info: InfoClave; children: React.ReactNode }) {
   return (
@@ -18,9 +20,9 @@ function Seccion({ titulo, info, children }: { id?: string; titulo: string; info
   );
 }
 
-const ORIGEN = { servicio: 'Servicio al cliente', nivel1: 'Nivel 1', nivel2: 'Nivel 2 (solo si hay una alerta alta en un grupo crítico)' } as const;
+const origenTr = (tx: TAgentes = TR_ES.t) => ({ servicio: tx('vigia.vista.servicio_al_cliente'), nivel1: 'Nivel 1', nivel2: tx('rest.nivel_2_solo_si_hay_una') } as const);
 
-export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gruposOmitidos, destinatarios, correoEncendido, puedeEnviar, flota, guardada, configLeida, acciones }: {
+export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gruposOmitidos, destinatarios, correoEncendido, puedeEnviar, flota, guardada, configLeida, acciones, tr = TR_ES }: {
   sufijo: string;
   /** Si no se pudo leer, el motivo en palabras llanas: no se enseña un vacío que parezca «todo atendido». */
   error: string | null;
@@ -35,75 +37,64 @@ export function VistaSinAtender({ sufijo, error, resultado, gruposRevisados, gru
   guardada: ConfigGuardadaSinAtender;
   /** false = no se pudo leer lo guardado. */
   configLeida: boolean;
-  acciones: { revisar: AccionRevisar; enviar: AccionEnviar; guardar: AccionGuardarConfig };
+  acciones: { revisar: AccionRevisar; enviar: AccionEnviar; guardar: AccionGuardarConfig }; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const r = resultado?.resumen;
   const horario = textoHorario(guardada.horarioAtencion);
   return (
     <MarcoPagina
-      titulo="Conversaciones sin atender"
-      apoyo="Vigía por exportación de chats: sin conexión en tiempo real con WhatsApp."
-      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>Volver al tablero</BotonEnlace>}
+      titulo={tx('rest.conversaciones_sin_atender')}
+      apoyo={tx('rest.vigia_por_exportacion_de_chats_sin')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/vigia${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}
     >
-      <Aviso tono="info">
-        Esta lista sale de los chats exportados que subiste. Likida no lee tus grupos de WhatsApp al instante: cada tiempo se mide contra la hora de la última exportación, no contra este momento. Para ver lo más reciente, sube un chat nuevo en{' '}
-        <a className="rv-vg__enlace" href={`/dashboard/agentes/vigia/historial${sufijo}`}>Grupos de clientes e histórico</a>.
-      </Aviso>
+      <Aviso tono="info">{ricoT(tx('rest.esta_lista_sale_de_los_chats'), { e0: (c) => <a className="rv-vg__enlace" href={`/dashboard/agentes/vigia/historial${sufijo}`}>{c}</a> })}</Aviso>
 
       {error !== null ? (
         <Aviso tono="error">{error}</Aviso>
       ) : (
         <>
-          <Seccion id="sin-atender-lista" titulo="Sin atender" info="vigia_sin_atender.lista">
+          <Seccion id="sin-atender-lista" titulo={tx('rest.sin_atender')} info="vigia_sin_atender.lista">
             {r && (
-              <p className="rv-vg__nota">
-                {numero(gruposRevisados)} grupos revisados · {numero(r.alertas)} conversaciones sin atender ({numero(r.altas)} de prioridad alta)
-                {r.masAntiguaMin !== null ? ` · la más antigua lleva ${duracion(r.masAntiguaMin)}` : ''}. Revisión de {fechaHoraMx(resultado?.ahoraEn)}.
-                {gruposOmitidos > 0 ? ` Quedaron fuera ${numero(gruposOmitidos)} grupos por el tope de revisión.` : ''}
+              <p className="rv-vg__nota">{tx('rest.grupos_revisados_conversaciones_sin_atender_de', { numero: numero(gruposRevisados), numero2: numero(r.alertas), numero3: numero(r.altas) })}{r.masAntiguaMin !== null ? tx('rest.la_mas_antigua_lleva', { duracion: duracion(r.masAntiguaMin) }) : ''}{tx('rest.revision_de', { fechaHoraMx: fechaHoraMx(resultado?.ahoraEn) })}{gruposOmitidos > 0 ? tx('rest.quedaron_fuera_grupos_por_el_tope', { numero: numero(gruposOmitidos) }) : ''}
               </p>
             )}
             {(r?.chatsSinEquipo ?? 0) > 0 && (
               <p className="rv-vg__nota" role="note">
-                {numero(r?.chatsSinEquipo ?? 0)} {r?.chatsSinEquipo === 1 ? 'grupo no tiene' : 'grupos no tienen'} a nadie de tu equipo identificado: revisa que los nombres del equipo estén escritos igual que en el chat, porque si no, no se puede saber qué quedó sin atender.
-              </p>
+                {numero(r?.chatsSinEquipo ?? 0)} {r?.chatsSinEquipo === 1 ? tx('rest.grupo_no_tiene') : tx('rest.grupos_no_tienen')}{' '}{tx('rest.a_nadie_de_tu_equipo_identificado')}</p>
             )}
             <p className="rv-vg__nota">
               {horario !== null
-                ? `Horario de atención activo ${horario}: la espera fuera de ese horario no cuenta para el tiempo sin respuesta.`
-                : 'Sin horario de atención guardado: el tiempo sin respuesta cuenta minutos corridos, también de noche y en fin de semana.'}
+                ? tx('rest.horario_de_atencion_activo_la_espera', { horario })
+                : tx('rest.sin_horario_de_atencion_guardado_el')}
             </p>
-            <p className="rv-vg__nota">
-              Los mensajes que solo traen una foto, un audio o un archivo, sin texto, no se cuentan como pendientes.
-            </p>
-            <FormaRevision revisar={acciones.revisar} enviar={acciones.enviar} flota={flota} puedeEnviar={puedeEnviar} inicial={<TablaSinAtender alertas={resultado?.alertas ?? []} />} />
+            <p className="rv-vg__nota">{tx('rest.los_mensajes_que_solo_traen_una')}</p>
+            <FormaRevision revisar={acciones.revisar} enviar={acciones.enviar} flota={flota} puedeEnviar={puedeEnviar} inicial={<TablaSinAtender tr={tr} alertas={resultado?.alertas ?? []} />} />
           </Seccion>
 
           {puedeEnviar && (
-            <Seccion id="sin-atender-config" titulo="Configuración de tu flota" info="vigia_sin_atender.config">
+            <Seccion id="sin-atender-config" titulo={tx('rest.configuracion_de_tu_flota')} info="vigia_sin_atender.config">
               <FormaConfiguracion guardar={acciones.guardar} flota={flota} guardada={guardada} configLeida={configLeida} />
             </Seccion>
           )}
 
-          <Seccion id="sin-atender-correo" titulo="Resumen por correo" info="vigia_sin_atender.correo">
+          <Seccion id="sin-atender-correo" titulo={tx('rest.resumen_por_correo')} info="vigia_sin_atender.correo">
             <p className="rv-vg__nota">
               {!correoEncendido
-                ? 'El envío por correo está apagado: puedes revisar la lista, pero no se manda nada. Pídele a Likida que lo encienda.'
+                ? tx('rest.el_envio_por_correo_esta_apagado')
                 : guardada.resumenCorreoHabilitado
-                  ? 'El envío por correo está encendido para tu flota. Se manda solo cuando alguien lo pide con el botón; no sale nada automático.'
-                  : 'El resumen por correo está apagado para tu flota: quien administra puede encenderlo en «Configuración de tu flota». Mientras tanto no se manda nada.'}
+                  ? tx('rest.el_envio_por_correo_esta_encendido')
+                  : tx('rest.el_resumen_por_correo_esta_apagado')}
             </p>
             {destinatarios.length === 0 ? (
-              <p className="rv-vg__nota">
-                Hoy nadie recibiría el resumen: agrega correos en servicio al cliente o en la lista de directores del{' '}
-                <a className="rv-vg__enlace" href={`/dashboard/agentes/vigia${sufijo}`}>tablero del Vigía</a>. Ahí también eliges quién recibe de noche, en festivos y fines de semana.
-              </p>
+              <p className="rv-vg__nota">{ricoT(tx('rest.hoy_nadie_recibiria_el_resumen_agrega'), { e0: (c) => <a className="rv-vg__enlace" href={`/dashboard/agentes/vigia${sufijo}`}>{c}</a> })}</p>
             ) : (
-              <ul className="rv-vg__bullets" aria-label="Quién recibiría el resumen ahora">
-                {destinatarios.map((d) => <li key={d.correo}>{d.nombre} · {ORIGEN[d.origen]}</li>)}
+              <ul className="rv-vg__bullets" aria-label={tx('rest.quien_recibiria_el_resumen_ahora')}>
+                {destinatarios.map((d) => <li key={d.correo}>{d.nombre} · {origenTr(tx)[d.origen]}</li>)}
               </ul>
             )}
-            <p className="rv-vg__micro" data-tono="muted">El correo lleva el grupo, la prioridad, el tiempo sin respuesta y el motivo; no incluye el texto de los mensajes.</p>
-            {!puedeEnviar && <p className="rv-vg__micro" data-tono="muted">Solo quien administra la flota puede mandar el resumen.</p>}
+            <p className="rv-vg__micro" data-tono="muted">{tx('rest.el_correo_lleva_el_grupo_la')}</p>
+            {!puedeEnviar && <p className="rv-vg__micro" data-tono="muted">{tx('rest.solo_quien_administra_la_flota_puede_4')}</p>}
           </Seccion>
         </>
       )}

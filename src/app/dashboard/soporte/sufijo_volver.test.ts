@@ -1,3 +1,4 @@
+import { resto } from '@/lib/i18n/es/resto';
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -24,6 +25,8 @@ import path from 'node:path';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const fuente = readFileSync(path.join(__dirname, 'page.tsx'), 'utf8');
+// El texto vive en el diccionario es: se busca la clave cuyo valor es el rótulo del link.
+const CLAVE_VOLVER = Object.entries(resto).find(([, v]) => v === 'Volver a mis tickets')?.[0] ?? '';
 
 describe('soporte/page.tsx — "Volver a mis tickets" conserva la previsualización', () => {
   it('declara enlaceVolver a partir del mismo `sufijo` que enlaceHilo', () => {
@@ -34,7 +37,7 @@ describe('soporte/page.tsx — "Volver a mis tickets" conserva la previsualizaci
     // Ancla el JSX real (el hijo de texto del <BotonEnlace>), no la prosa del
     // comentario de arriba que también nombra "Volver a mis tickets" entre
     // comillas.
-    const idx = fuente.indexOf('Volver a mis tickets</BotonEnlace>');
+    const idx = fuente.indexOf(`t('${CLAVE_VOLVER}')}</BotonEnlace>`);
     expect(idx, 'debe existir el JSX del link').toBeGreaterThan(-1);
     const antes = fuente.slice(Math.max(0, idx - 200), idx);
     expect(antes).toMatch(/href=\{enlaceVolver\}/);

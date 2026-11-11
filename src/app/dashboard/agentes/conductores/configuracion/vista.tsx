@@ -10,8 +10,9 @@ import type { AccionSitio } from '../sitios/formas';
 import { FormaConfigConductor, SeccionVoluntarios, type AccionConfig, type AccionVoluntario, type DatosVoluntarios } from './forma';
 import '../conductores.css';
 import { MarcoPagina, AvisoCompacto, BotonEnlace, EstadoError, Tarjeta } from '@/app/ui-v2/componentes';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
-export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento }: {
+export function VistaConfigConductor({ sufijo, config, valores, contactos, patios, puedeEditar, accionGuardar, voluntarios, accionAlta, accionBaja, preflight, puedeForzarPreflight, accionImportarRutas, rutasPendientes, totalRutas = 0, diasRevisionRutas = 90, accionRutaRevisada, documentosCliente, clientes, accionAltaDocumento, accionBajaDocumento, tr = TR_ES }: {
   sufijo: string;
   /** `null` = no se pudo leer: se dice, no se enseña un formulario con los defaults como si fueran lo guardado. */
   config: ConfigConductor | null;
@@ -40,37 +41,34 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   /** Clientes activos de la flota (para elegir de cuál es el documento). */
   clientes?: Array<{ id: string; nombre: string }>;
   accionAltaDocumento?: AccionSitio;
-  accionBajaDocumento?: AccionSitio;
+  accionBajaDocumento?: AccionSitio; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const legible = config !== null && valores !== null && contactos !== null;
   return (
-    <MarcoPagina titulo="Configuración del agente Conductor" apoyo="Cuándo y cuánto insiste el agente con tus choferes, en qué horario y a quién avisa cuando nadie contesta." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>Volver al tablero</BotonEnlace>}>
-      <AvisoCompacto tono="info" resumen="Lo que guardes aplica desde la próxima corrida (cada 5 minutos)." />
-      {preflight !== undefined && <PanelPreflight preflight={preflight} />}
+    <MarcoPagina titulo={tx('conductores.forma.configuracion_del_agente_conductor')} apoyo={tx('rest.cuando_y_cuanto_insiste_el_agente')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
+      <AvisoCompacto tono="info" resumen={tx('rest.lo_que_guardes_aplica_desde_la')} />
+      {preflight !== undefined && <PanelPreflight tr={tr} preflight={preflight} />}
       {legible ? (
         <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} puedeForzarPreflight={puedeForzarPreflight} />
       ) : (
-        <EstadoError compacto>No se pudo leer la configuración ahora mismo. No se muestra un formulario con valores por omisión para no confundirlos con lo guardado; intenta de nuevo en un momento.</EstadoError>
+        <EstadoError compacto>{tx('rest.no_se_pudo_leer_la_configuracion_4')}</EstadoError>
       )}
       {voluntarios === null && (
-        <EstadoError compacto>No se pudo leer la lista de operadores del piloto ahora mismo; intenta de nuevo en un momento. Si se repite, avísale a Likida.</EstadoError>
+        <EstadoError compacto>{tx('rest.no_se_pudo_leer_la_lista')}</EstadoError>
       )}
       {voluntarios && accionAlta && accionBaja && (
         <SeccionVoluntarios datos={voluntarios} puedeEditar={puedeEditar} accionAlta={accionAlta} accionBaja={accionBaja}
           parametros={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries()].filter(([k]) => k !== 'q')} />
       )}
       {accionImportarRutas && (
-        <Tarjeta titulo="Rutas autorizadas de Google Maps" info="conductores_config.rutas">
+        <Tarjeta titulo={tx('rest.rutas_autorizadas_de_google_maps')} info="conductores_config.rutas">
           <div className="rv-cd__pila">
-            <p className="rv-cd__nota">
-              La base de rutas hechas con anticipación, por corredor (y, si quieres, por sitio de origen y de destino). El agente nunca arma ni
-              corrige un link: solo se aceptan links de maps.app.goo.gl o google.com/maps, y una ruta vencida se trata como si no existiera.
-              Cada fila se aprueba o se rechaza sola; volver a subir el mismo archivo no cambia nada.
-            </p>
+            <p className="rv-cd__nota">{tx('rest.la_base_de_rutas_hechas_con')}</p>
             <FormaImportarRutas accion={accionImportarRutas} />
             {rutasPendientes && (
               <div className="rv-cd__pila">
-                <p className="rv-cd__rotulo">Rutas por revisar</p>
+                <p className="rv-cd__rotulo">{tx('rest.rutas_por_revisar')}</p>
                 <PendientesRutas pendientes={rutasPendientes} totalRutas={totalRutas} dias={diasRevisionRutas} accionRevisada={accionRutaRevisada} />
               </div>
             )}
@@ -78,13 +76,9 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
         </Tarjeta>
       )}
       {documentosCliente !== undefined && (
-        <Tarjeta titulo="Documentos que pide cada cliente" info="conductores_config.documentos_cliente">
+        <Tarjeta titulo={tx('rest.documentos_que_pide_cada_cliente')} info="conductores_config.documentos_cliente">
           <div className="rv-cd__pila">
-            <p className="rv-cd__nota">
-              Cada cliente pide papeles distintos al cerrar el viaje: unos solo la carta porte firmada y sellada, otros además pedimento, DODA,
-              fitosanitario o tickets de báscula. Aquí dices cuáles son y cuáles son indispensables. Un cliente sin documentos propios sigue como hoy:
-              solo se le pide el comprobante de entrega.
-            </p>
+            <p className="rv-cd__nota">{tx('rest.cada_cliente_pide_papeles_distintos_al')}</p>
             <DocumentosCliente clientes={clientes ?? []} documentos={documentosCliente} accionAlta={accionAltaDocumento} accionBaja={accionBajaDocumento} />
           </div>
         </Tarjeta>

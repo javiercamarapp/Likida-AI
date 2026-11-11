@@ -11,6 +11,9 @@ import {
   TablaBase, Tarjeta, type TonoEstado,
 } from '@/app/ui-v2/componentes';
 import { EnlacePagina, NavPaginas } from '../../paginador';
+import { getT } from '@/lib/i18n/servidor';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «DESGLOSES» — el tablero del desglose de pago por correo.
@@ -182,45 +185,46 @@ const DE_ROL: Record<RolVisible, string> = { operador: 'del operador', coordinad
 
 type Tono = Extract<TonoEstado, 'ok' | 'warn' | 'bad' | 'muted'>;
 
-export function rotuloDestino(d: DestinoVista): { rotulo: string; tono: Tono } {
+export function rotuloDestino(d: DestinoVista, tx: TAgentes = TR_ES.t): { rotulo: string; tono: Tono } {
   switch (d.estado) {
-    case 'entregado': return { rotulo: 'Entregado', tono: 'ok' };
-    case 'enviado': return { rotulo: 'Enviado', tono: 'ok' };
-    case 'pendiente': return { rotulo: 'Por enviar', tono: 'warn' };
-    case 'no_entregado': return { rotulo: 'No se pudo entregar', tono: 'bad' };
-    case 'omitido': return { rotulo: 'No se envió', tono: 'muted' };
-    case 'sin_correo': return { rotulo: 'Sin correo', tono: 'bad' };
-    case 'retenido': return { rotulo: d.retenidoPor === 'neto' ? 'Retenido: neto negativo' : d.retenidoPor === 'poliza_provisional' ? 'Retenido: póliza provisional' : 'Retenido: pide revisión', tono: 'warn' };
+    case 'entregado': return { rotulo: tx('rest.entregado'), tono: 'ok' };
+    case 'enviado': return { rotulo: tx('vigia.vista.est_enviado'), tono: 'ok' };
+    case 'pendiente': return { rotulo: tx('rest.por_enviar'), tono: 'warn' };
+    case 'no_entregado': return { rotulo: tx('rest.no_se_pudo_entregar'), tono: 'bad' };
+    case 'omitido': return { rotulo: tx('rest.no_se_envio'), tono: 'muted' };
+    case 'sin_correo': return { rotulo: tx('rest.sin_correo'), tono: 'bad' };
+    case 'retenido': return { rotulo: d.retenidoPor === 'neto' ? 'Retenido: neto negativo' : d.retenidoPor === 'poliza_provisional' ? tx('rest.retenido_poliza_provisional') : tx('rest.retenido_pide_revision'), tono: 'warn' };
     default: return { rotulo: '—', tono: 'muted' };
   }
 }
 
 /** La instrucción llana de lo que sigue, o null si no pide nada. */
-export function ayudaDestino(rol: RolVisible, d: DestinoVista): string | null {
+export function ayudaDestino(rol: RolVisible, d: DestinoVista, tx: TAgentes = TR_ES.t): string | null {
   switch (d.estado) {
     case 'no_entregado':
       return rol === 'rh'
-        ? 'El correo de RH no llegó: corrígelo en la configuración.'
-        : `El correo ${DE_ROL[rol]} rebotó: corrígelo y reenvía.`;
-    case 'sin_correo': return 'Este operador no tiene correo registrado: agrégalo y reenvía.';
-    case 'retenido': return d.retenidoPor === 'neto' ? 'El neto salió negativo: revísalo antes de liberar el envío.' : d.retenidoPor === 'poliza_provisional' ? 'Póliza provisional: una persona debe revisarlo antes de enviarlo.' : 'Una regla pidió revisar este desglose antes de enviarlo.';
+        ? tx('rest.el_correo_de_rh_no_llego')
+        : tx('rest.el_correo_reboto_corrigelo_y_reenvia', { deRol: DE_ROL[rol] });
+    case 'sin_correo': return tx('rest.este_operador_no_tiene_correo_registrado');
+    case 'retenido': return d.retenidoPor === 'neto' ? tx('rest.el_neto_salio_negativo_revisalo_antes') : d.retenidoPor === 'poliza_provisional' ? tx('rest.poliza_provisional_una_persona_debe_revisarlo') : tx('rest.una_regla_pidio_revisar_este_desglose');
     default: return null;
   }
 }
 
-const ROTULO_FILTRO: Record<FiltroDesglose, string> = {
-  enviado: 'Enviados', entregado: 'Entregados', rebotado: 'No se pudieron entregar', retenido: 'Retenidos', sin_poliza: 'Sin póliza',
-};
+const rotuloFiltro = (tx: TAgentes = TR_ES.t): Record<FiltroDesglose, string> => ({
+  enviado: tx('rest.enviados'), entregado: tx('rest.entregados'), rebotado: tx('rest.no_se_pudieron_entregar'), retenido: tx('rest.retenidos'), sin_poliza: tx('rest.sin_poliza'),
+});
 
 // ── La sección ─────────────────────────────────────────────────────────────
 
-const AYUDA_VENTANA = ' Al abrirla, la lista se limita a esos 30 días.';
+const ayudaVentana = (tx: TAgentes = TR_ES.t) => (tx('rest.al_abrirla_la_lista_se_limita'));
 
 function query(contexto: Array<[string, string]>, extra: Array<[string, string]> = []): string {
   return `?${new URLSearchParams([...contexto, ...extra]).toString()}`;
 }
 
 export async function SeccionDesgloses(p: DesglosesProps) {
+  const { t: tx } = await getT('agentes');
   const lectura = await p.lectura;
   const params: Array<[string, string]> = [
     ...(p.filtro ? [['des_estado', p.filtro] as [string, string]] : []),
@@ -232,10 +236,8 @@ export async function SeccionDesgloses(p: DesglosesProps) {
     // Primaria: una lista que no se pudo leer enseña su error, jamás «ningún desglose».
     return (
       <div id="desgloses">
-        <Tarjeta titulo="Desgloses de pago" info="desgloses.lista">
-          <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto, params)}#desgloses`} tamano="sm">Reintentar</BotonEnlace>}>
-            No se pudieron leer los desgloses. No es que no haya: no pudimos consultarlos ahora.
-          </EstadoError>
+        <Tarjeta titulo={tx('rest.desgloses_de_pago')} info="desgloses.lista">
+          <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto, params)}#desgloses`} tamano="sm">{tx('rest.reintentar')}</BotonEnlace>}>{tx('rest.no_se_pudieron_leer_los_desgloses')}</EstadoError>
         </Tarjeta>
       </div>
     );
@@ -251,99 +253,93 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 
   return (
     <div id="desgloses">
-    <Tarjeta titulo="Desgloses de pago" info="desgloses.lista" acciones={p.filtro ? <span className="rv-liq-sub">Filtro: {ROTULO_FILTRO[p.filtro]}</span> : undefined}>
-      <p className="rv-liq-sub">
-        El desglose lo calcula el sistema de tu empresa. Likida lo manda por correo, en Excel, al operador, a su coordinador y a RH, y aquí ves
-        el estado de cada envío.
-      </p>
+    <Tarjeta titulo={tx('rest.desgloses_de_pago')} info="desgloses.lista" acciones={p.filtro ? <span className="rv-liq-sub">{tx('rest.filtro')}{' '}{rotuloFiltro(tx)[p.filtro]}</span> : undefined}>
+      <p className="rv-liq-sub">{tx('rest.el_desglose_lo_calcula_el_sistema')}</p>
 
       <div className="rv-liq-fichas">
-        <Ficha etiqueta="Recibidos hoy" valor={fichas.recibidosHoy} ayuda="Desgloses que llegaron hoy del sistema de tu empresa." href={query(p.contexto)} />
-        <Ficha etiqueta="Enviados · 30 días" valor={fichas.enviados} ayuda={`Correos que salieron en los últimos 30 días y esperan confirmación de entrega. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+        <Ficha etiqueta={tx('rest.recibidos_hoy')} valor={fichas.recibidosHoy} ayuda={tx('rest.desgloses_que_llegaron_hoy_del_sistema')} href={query(p.contexto)} />
+        <Ficha etiqueta={tx('rest.enviados_30_dias')} valor={fichas.enviados} ayuda={tx('rest.correos_que_salieron_en_los_ultimos_2', { ayudaVentana: ayudaVentana(tx) })}
           href={query(p.contexto, [['des_estado', 'enviado'], ['des_desde', desde30]])} />
-        <Ficha etiqueta="Entregados · 30 días" valor={fichas.entregados} ayuda={`Correos de los últimos 30 días que el buzón de destino ya recibió. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+        <Ficha etiqueta={tx('rest.entregados_30_dias')} valor={fichas.entregados} ayuda={tx('rest.correos_de_los_ultimos_30_dias_3', { ayudaVentana: ayudaVentana(tx) })}
           href={query(p.contexto, [['des_estado', 'entregado'], ['des_desde', desde30]])} />
-        <Ficha etiqueta="Rebotados · 30 días" valor={fichas.rebotados} tono="bad" ayuda={`Correos de los últimos 30 días que no llegaron. Corrige la dirección y reenvía. Se cuenta un correo por destinatario; la lista de abajo cuenta desgloses.${AYUDA_VENTANA}`}
+        <Ficha etiqueta={tx('rest.rebotados_30_dias')} valor={fichas.rebotados} tono="bad" ayuda={tx('rest.correos_de_los_ultimos_30_dias_4', { ayudaVentana: ayudaVentana(tx) })}
           href={query(p.contexto, [['des_estado', 'rebotado'], ['des_desde', desde30]])} />
-        <Ficha etiqueta="Retenidos" valor={fichas.retenidos} tono="bad" ayuda="Desgloses detenidos antes de enviarse (por ejemplo, neto negativo)."
+        <Ficha etiqueta={tx('rest.retenidos')} valor={fichas.retenidos} tono="bad" ayuda={tx('rest.desgloses_detenidos_antes_de_enviarse_por')}
           href={query(p.contexto, [['des_estado', 'retenido']])} />
-        <Ficha etiqueta="Sin póliza" valor={fichas.sinPoliza} tono="bad" ayuda="Bitácoras que esperan su póliza para poder enviarse."
+        <Ficha etiqueta={tx('rest.sin_poliza')} valor={fichas.sinPoliza} tono="bad" ayuda={tx('rest.bitacoras_que_esperan_su_poliza_para')}
           href={query(p.contexto, [['des_estado', 'sin_poliza']])} />
       </div>
 
       <BloqueInsights insights={lectura.insights ?? calcularInsightsA1(entradaDesdeFichas(fichas))} />
 
-      <BarraPeriodo etiqueta="Periodo y filtros de desgloses"
+      <BarraPeriodo etiqueta={tx('rest.periodo_y_filtros_de_desgloses')}
         chips={[
           ...(p.desde || p.hasta ? [{ id: 'rango', etiqueta: `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}`, hrefQuitar: hrefConParams('', baseDes, { des_desde: null, des_hasta: null }) }] : []),
-          ...(p.filtro ? [{ id: 'estado', etiqueta: `Estado: ${ROTULO_FILTRO[p.filtro]}`, hrefQuitar: hrefConParams('', baseDes, { des_estado: null }) }] : []),
+          ...(p.filtro ? [{ id: 'estado', etiqueta: `Estado: ${rotuloFiltro(tx)[p.filtro]}`, hrefQuitar: hrefConParams('', baseDes, { des_estado: null }) }] : []),
         ]}
         cajon={{
           accion: '?', ocultos: p.contexto, limpiarHref: query(p.contexto), nActivos: (p.filtro ? 1 : 0) + (p.desde || p.hasta ? 1 : 0),
-          resumen: [p.filtro ? ROTULO_FILTRO[p.filtro] : null, p.desde || p.hasta ? `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}` : null].filter(Boolean).join(' · ') || undefined,
+          resumen: [p.filtro ? rotuloFiltro(tx)[p.filtro] : null, p.desde || p.hasta ? `${p.desde ? fechaMx(p.desde) : 'Inicio'} – ${p.hasta ? fechaMx(p.hasta) : 'hoy'}` : null].filter(Boolean).join(' · ') || undefined,
           periodo: { desde: p.desde ?? null, hasta: p.hasta ?? null, nombreDesde: 'des_desde', nombreHasta: 'des_hasta', max: hoy },
-          campos: { items: [{ tipo: 'select', nombre: 'des_estado', etiqueta: 'Estado', valor: p.filtro ?? '', opciones: [{ valor: '', rotulo: 'Todos' }, ...FILTROS.map((f) => ({ valor: f, rotulo: ROTULO_FILTRO[f] }))] }] },
+          campos: { items: [{ tipo: 'select', nombre: 'des_estado', etiqueta: tx('proveedores.vista.estado'), valor: p.filtro ?? '', opciones: [{ valor: '', rotulo: tx('rest.todos') }, ...FILTROS.map((f) => ({ valor: f, rotulo: rotuloFiltro(tx)[f] }))] }] },
         }} />
 
       {verSinPoliza ? (
         sinPoliza.length === 0 ? (
-          <EstadoVacio icono={Mail} titulo="Ninguna espera póliza">
-            Ninguna bitácora está esperando póliza.
-          </EstadoVacio>
+          <EstadoVacio icono={Mail} titulo={tx('rest.ninguna_espera_poliza')}>{tx('rest.ninguna_bitacora_esta_esperando_poliza')}</EstadoVacio>
         ) : (
           <>
             <TablaBase<FilaSinPoliza>
-              etiqueta="Bitácoras esperando póliza"
+              etiqueta={tx('rest.bitacoras_esperando_poliza')}
               filas={sinPoliza}
               idFila={(s) => s.bitacora}
               tarjetaMovil
               columnas={[
-                { id: 'bitacora', titulo: 'Bitácora', principal: true, celda: (s) => <strong>{s.bitacora}</strong> },
-                { id: 'desde', titulo: 'Esperando desde', celda: (s) => <span className="rv-liq-apagado">{fechaHoraMx(s.desde)}</span> },
-                { id: 'ultima', titulo: 'Última revisión', celda: (s) => <span className="rv-liq-apagado">{fechaHoraMx(s.ultimaVez)}</span> },
+                { id: 'bitacora', titulo: tx('vigia.vista.bitacora'), principal: true, celda: (s) => <strong>{s.bitacora}</strong> },
+                { id: 'desde', titulo: tx('rest.esperando_desde'), celda: (s) => <span className="rv-liq-apagado">{fechaHoraMx(s.desde)}</span> },
+                { id: 'ultima', titulo: tx('rest.ultima_revision'), celda: (s) => <span className="rv-liq-apagado">{fechaHoraMx(s.ultimaVez)}</span> },
               ]}
             />
             {sinPolizaTruncada && (
-              <AvisoCompacto tono="warn" resumen={`Se muestran las ${sinPoliza.length} más recientes: hay más bitácoras sin póliza que no caben en esta lista.`} />
+              <AvisoCompacto tono="warn" resumen={tx('rest.se_muestran_las_mas_recientes_hay', { length: sinPoliza.length })} />
             )}
-            <p className="rv-liq-sub">Estas bitácoras no se enviarán hasta tener póliza: revísalas en el sistema de tu empresa.</p>
+            <p className="rv-liq-sub">{tx('rest.estas_bitacoras_no_se_enviaran_hasta')}</p>
           </>
         )
       ) : filas.length === 0 ? (
-        <EstadoVacio icono={Route} titulo={filtrando ? 'Ningún desglose con ese filtro' : 'Aún sin desgloses'}>
+        <EstadoVacio icono={Route} titulo={filtrando ? tx('rest.ningun_desglose_con_ese_filtro') : tx('rest.aun_sin_desgloses')}>
           {filtrando
-            ? 'Ningún desglose cae en ese filtro. Prueba con otro estado o con más fechas.'
-            : 'Aún no hay desgloses. Llegan cuando está conectado el sistema de transporte (TMS), los operadores tienen correo y la bitácora trae póliza.'}
+            ? tx('rest.ningun_desglose_cae_en_ese_filtro')
+            : tx('rest.aun_no_hay_desgloses_llegan_cuando')}
         </EstadoVacio>
       ) : (
         <>
           <TablaBase<FilaDesglose>
-            etiqueta="Desgloses de liquidación"
+            etiqueta={tx('rest.desgloses_de_liquidacion')}
             filas={filas}
             idFila={(f) => f.liquidacionId}
             altoMaximo={false}
             tarjetaMovil
             columnas={[
               {
-                id: 'bitacora', titulo: 'Bitácora', principal: true,
+                id: 'bitacora', titulo: tx('vigia.vista.bitacora'), principal: true,
                 celda: (f) => (
                   <>
                     <strong>{f.bitacora}</strong>
                     {f.terminal && <span className="rv-liq-nota">{f.terminal}</span>}
                     {f.numeroLiquidacion && (
-                      <span className="rv-liq-nota">
-                        Liquidación {f.numeroLiquidacion}{f.numeroPago ? ` · pago ${f.numeroPago}` : ''}
+                      <span className="rv-liq-nota">{tx('rest.liquidacion_2')}{' '}{f.numeroLiquidacion}{f.numeroPago ? ` · pago ${f.numeroPago}` : ''}
                       </span>
                     )}
                   </>
                 ),
               },
-              { id: 'operador', titulo: 'Operador', celda: (f) => <span className="rv-liq-apagado">{f.operador ?? '—'}</span> },
+              { id: 'operador', titulo: tx('conductores.forma.operador'), celda: (f) => <span className="rv-liq-apagado">{f.operador ?? '—'}</span> },
               {
-                id: 'periodo', titulo: 'Periodo',
+                id: 'periodo', titulo: tx('rest.periodo'),
                 celda: (f) => <span className="rv-liq-apagado">{f.periodoDesde && f.periodoHasta ? `${fechaCorta(f.periodoDesde)} – ${fechaCorta(f.periodoHasta)}` : '—'}</span>,
               },
-              { id: 'neto', titulo: 'Neto (de tu sistema)', alinear: 'der', celda: (f) => <span className="cifra-mono">{f.neto === null ? '—' : dinero(f.neto, f.moneda)}</span> },
+              { id: 'neto', titulo: tx('rest.neto_de_tu_sistema'), alinear: 'der', celda: (f) => <span className="cifra-mono">{f.neto === null ? '—' : dinero(f.neto, f.moneda)}</span> },
               ...ROLES_VISIBLES.map((rol) => ({
                 id: rol, titulo: ROTULO_ROL[rol],
                 celda: (f: FilaDesglose) => {
@@ -362,13 +358,13 @@ export async function SeccionDesgloses(p: DesglosesProps) {
                 },
               })),
               {
-                id: 'detalle', titulo: 'Detalle',
-                celda: (f) => <Link href={`${query(p.contexto, [...params, ['des_det', f.liquidacionId]])}#detalle-desglose`} className="rv-liq-enlace">Ver detalle</Link>,
+                id: 'detalle', titulo: tx('rest.detalle'),
+                celda: (f) => <Link href={`${query(p.contexto, [...params, ['des_det', f.liquidacionId]])}#detalle-desglose`} className="rv-liq-enlace">{tx('rest.ver_detalle')}</Link>,
               },
             ]}
           />
           <div className="rv-liq-pagina">
-            <p className="rv-liq-sub">De la más nueva a la más vieja.</p>
+            <p className="rv-liq-sub">{tx('rest.de_la_mas_nueva_a_la')}</p>
             {siguiente && (
               <NavPaginas>
                 <EnlacePagina href={`${query(p.contexto, [...params, ['des_cursor', siguiente]])}#desgloses`} direccion="siguiente" />
@@ -383,18 +379,19 @@ export async function SeccionDesgloses(p: DesglosesProps) {
 }
 
 /** «Qué pasó · qué significa · qué hacer»: frases calculadas por reglas (sin IA), cada una con la fuente de su cifra. */
-export function BloqueInsights({ insights }: { insights: InsightA1[] }) {
+export function BloqueInsights({ insights, tr = TR_ES }: { insights: InsightA1[]; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   if (insights.length === 0) return null;
   return (
-    <div className="rv-liq-insights" id="insights-desgloses" aria-label="Lectura de los desgloses">
-      <p className="rv-liq-rotulo">Qué pasó · qué significa · qué hacer</p>
+    <div className="rv-liq-insights" id="insights-desgloses" aria-label={tx('rest.lectura_de_los_desgloses')}>
+      <p className="rv-liq-rotulo">{tx('rest.que_paso_que_significa_que_hacer')}</p>
       <ul className="rv-liq-insights__lista">
         {insights.map((i) => (
           <li key={i.id} data-insight={i.id} data-tono={i.tono} className="rv-liq-insight">
             <p className="rv-liq-insight__titulo">{i.quePaso}</p>
             <p className="rv-liq-sub">{i.queSignifica}</p>
             <p className="rv-liq-insight__hacer">{i.queHacer}</p>
-            <p className="rv-liq-nota">Fuente: {i.fuente}</p>
+            <p className="rv-liq-nota">{tx('rest.fuente')}{' '}{i.fuente}</p>
           </li>
         ))}
       </ul>
@@ -403,14 +400,15 @@ export function BloqueInsights({ insights }: { insights: InsightA1[] }) {
 }
 
 /** `href` ausente = la ficha NO es un enlace (la vista de conteos de `nomina` no lleva a ninguna lista). */
-export function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string; valor: number | null; ayuda: string; href?: string; tono?: 'bad' }) {
+export function Ficha({ etiqueta, valor, ayuda, href, tono, tr = TR_ES }: { etiqueta: string; valor: number | null; ayuda: string; href?: string; tono?: 'bad'; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   // `null` = no se pudo contar: «—», jamás un cero que nadie midió.
   const alerta = tono === 'bad' && valor !== null && valor > 0;
   const contenido = (
     <>
       <span className="rv-liq-ficha__rotulo">{etiqueta}</span>
       <span className="rv-liq-ficha__valor cifra-mono">{valor === null ? '—' : numero(valor)}</span>
-      {valor === null && <span className="rv-liq-nota">no se pudo contar</span>}
+      {valor === null && <span className="rv-liq-nota">{tx('conductores.vista.no_se_pudo_contar')}</span>}
     </>
   );
   if (href === undefined) return <div title={ayuda} className="rv-liq-ficha" data-alerta={alerta || undefined}>{contenido}</div>;
@@ -425,60 +423,62 @@ export function Ficha({ etiqueta, valor, ayuda, href, tono }: { etiqueta: string
 
 export interface MensajeDesglose { texto: string; tono: 'ok' | 'bad' }
 
-const MENSAJES: Record<string, MensajeDesglose> = {
-  reenvio_ok: { texto: 'Listo: el desglose quedó en la cola y sale en unos minutos.', tono: 'ok' },
-  liberado_ok: { texto: 'Listo: el envío se liberó y los correos salen en unos minutos.', tono: 'ok' },
-  r_entrada: { texto: 'No entendí qué desglose reenviar. Vuelve a elegirlo.', tono: 'bad' },
-  r_error: { texto: 'No se pudo completar. Vuelve a intentarlo en unos minutos: repetirlo es seguro.', tono: 'bad' },
-  r_sin_permiso: { texto: 'Solo quien administra la flota puede hacer esto.', tono: 'bad' },
-  r_no_encontrada: { texto: 'No encontré ese desglose en tu flota.', tono: 'bad' },
-  r_correo_invalido: { texto: 'El correo nuevo no parece un correo. Revísalo (por ejemplo, que tenga @ y un dominio).', tono: 'bad' },
-  r_correo_nuevo_no_aplica: { texto: 'El correo nuevo es del operador: usa la acción «Corregir correo y reenviar».', tono: 'bad' },
-  r_en_curso: { texto: 'La entrega anterior todavía se está enviando. Espera a que termine antes de reenviar.', tono: 'bad' },
-  r_limite_diario: { texto: 'Ya se reenvió este desglose el máximo de veces hoy. Intenta mañana o revisa por qué no llega.', tono: 'bad' },
-  r_sin_destinatarios: { texto: 'No hay a quién enviarlo: falta el correo de ese destinatario.', tono: 'bad' },
-  r_sin_archivo: { texto: 'Este desglose no tiene archivo para reenviar.', tono: 'bad' },
-  r_no_disponible: { texto: 'No pude leer el estado de este desglose. Intenta de nuevo en unos minutos.', tono: 'bad' },
-  r_no_retenida: { texto: 'Este desglose ya no está retenido: no hay nada que liberar.', tono: 'bad' },
-  r_omitido_por_corte: { texto: 'Este desglose es anterior a la fecha de corte (o el sistema de origen ya lo envió): no se libera desde aquí.', tono: 'bad' },
-  r_reemplazado: { texto: 'Este desglose ya fue reemplazado por una corrección: libera la corrección, no el original.', tono: 'bad' },
-  r_no_liberable: { texto: 'Este desglose trae un concepto que la empresa prohibió enviar: corrígelo en su sistema; no se libera desde aquí.', tono: 'bad' },
-};
+const mensajes = (tx: TAgentes = TR_ES.t): Record<string, MensajeDesglose> => ({
+  reenvio_ok: { texto: tx('rest.listo_el_desglose_quedo_en_la'), tono: 'ok' },
+  liberado_ok: { texto: tx('rest.listo_el_envio_se_libero_y'), tono: 'ok' },
+  r_entrada: { texto: tx('rest.no_entendi_que_desglose_reenviar_vuelve'), tono: 'bad' },
+  r_error: { texto: tx('rest.no_se_pudo_completar_vuelve_a'), tono: 'bad' },
+  r_sin_permiso: { texto: tx('rest.solo_quien_administra_la_flota_puede'), tono: 'bad' },
+  r_no_encontrada: { texto: tx('rest.no_encontre_ese_desglose_en_tu'), tono: 'bad' },
+  r_correo_invalido: { texto: tx('rest.el_correo_nuevo_no_parece_un'), tono: 'bad' },
+  r_correo_nuevo_no_aplica: { texto: tx('rest.el_correo_nuevo_es_del_operador'), tono: 'bad' },
+  r_en_curso: { texto: tx('rest.la_entrega_anterior_todavia_se_esta'), tono: 'bad' },
+  r_limite_diario: { texto: tx('rest.ya_se_reenvio_este_desglose_el'), tono: 'bad' },
+  r_sin_destinatarios: { texto: tx('rest.no_hay_a_quien_enviarlo_falta'), tono: 'bad' },
+  r_sin_archivo: { texto: tx('rest.este_desglose_no_tiene_archivo_para'), tono: 'bad' },
+  r_no_disponible: { texto: tx('rest.no_pude_leer_el_estado_de'), tono: 'bad' },
+  r_no_retenida: { texto: tx('rest.este_desglose_ya_no_esta_retenido'), tono: 'bad' },
+  r_omitido_por_corte: { texto: tx('rest.este_desglose_es_anterior_a_la'), tono: 'bad' },
+  r_reemplazado: { texto: tx('rest.este_desglose_ya_fue_reemplazado_por'), tono: 'bad' },
+  r_no_liberable: { texto: tx('rest.este_desglose_trae_un_concepto_que'), tono: 'bad' },
+});
 
 /** Solo los códigos conocidos: un texto inventado en la URL no se pinta. */
-export function leerMensajeDesglose(v: string | undefined): MensajeDesglose | null {
-  return v && Object.prototype.hasOwnProperty.call(MENSAJES, v) ? MENSAJES[v]! : null;
+export function leerMensajeDesglose(v: string | undefined, tx: TAgentes = TR_ES.t): MensajeDesglose | null {
+  const m = mensajes(tx);
+  return v && Object.prototype.hasOwnProperty.call(m, v) ? m[v]! : null;
 }
 
 // ── El detalle de una bitácora ─────────────────────────────────────────────
 
 const ROTULO_ROL_DETALLE: Record<RolDetalle, string> = { operador: 'Operador', coordinador: 'Coordinador', rh: 'RH', archivo: 'Archivo', revisor: 'Revisor (primer mes)' };
-const ORIGEN_GENERACION = { auto: 'Envío automático', reclamo: 'Reclamo del operador', manual: 'Envío manual' } as const;
+const origenGeneracion = (tx: TAgentes = TR_ES.t) => ({ auto: tx('rest.envio_automatico'), reclamo: tx('rest.reclamo_del_operador'), manual: tx('rest.envio_manual') } as const);
 
-const EXCEPCION: Record<TipoExcepcion, { titulo: string; ayuda: string }> = {
-  sin_poliza: { titulo: 'Sin póliza', ayuda: 'No se enviará hasta tener póliza: revísala en el sistema de tu empresa.' },
-  operador_no_encontrado: { titulo: 'Operador sin alta', ayuda: 'Este operador no está dado de alta en Likida: dalo de alta y el desglose se procesa en la siguiente lectura.' },
-  operador_sin_correo: { titulo: 'Operador sin correo', ayuda: 'El operador no recibió su desglose porque no tiene correo (o el que tenía rebotó): corrígelo y reenvía.' },
-  coordinador_sin_correo: { titulo: 'Coordinador sin correo', ayuda: 'Este operador no tiene coordinador con correo: asígnalo para que también le llegue.' },
-  total_no_cuadra: { titulo: 'El total no cuadra', ayuda: 'La suma de los renglones no coincide con el neto: revísalo en el sistema de tu empresa.' },
-  concepto_prohibido: { titulo: 'Concepto prohibido', ayuda: 'Trae un concepto que la empresa no quiere enviar: corrígelo en su sistema.' },
-  neto_negativo: { titulo: 'Retenido: neto negativo', ayuda: 'El neto salió negativo. Revísalo y, si está bien, libera el envío.' },
-  tipo_sin_regla: { titulo: 'Retenido: tipo de operador sin regla', ayuda: 'No hay regla para este tipo de operador. Revísalo y, si está bien, libera el envío.' },
-  correccion_pendiente: { titulo: 'Corrección pendiente', ayuda: 'Llegó una versión distinta de este desglose y no se envió: una persona decide si se manda la corrección.' },
-  mapeo_invalido: { titulo: 'Datos inválidos', ayuda: 'El sistema de tu empresa mandó datos que no se pudieron leer: avísale a quien lo administra.' },
-  unidades_mezcladas: { titulo: 'Unidades mezcladas', ayuda: 'La liquidación es por unidad y este desglose trajo bitácoras de unidades distintas, así que no se guardó: tu sistema tiene que mandar un desglose por unidad.' },
-};
+const excepcion = (tx: TAgentes = TR_ES.t): Record<TipoExcepcion, { titulo: string; ayuda: string }> => ({
+  sin_poliza: { titulo: tx('rest.sin_poliza'), ayuda: tx('rest.no_se_enviara_hasta_tener_poliza') },
+  operador_no_encontrado: { titulo: tx('rest.operador_sin_alta'), ayuda: tx('rest.este_operador_no_esta_dado_de') },
+  operador_sin_correo: { titulo: tx('rest.operador_sin_correo'), ayuda: tx('rest.el_operador_no_recibio_su_desglose') },
+  coordinador_sin_correo: { titulo: tx('rest.coordinador_sin_correo'), ayuda: tx('rest.este_operador_no_tiene_coordinador_con') },
+  total_no_cuadra: { titulo: tx('rest.el_total_no_cuadra'), ayuda: tx('rest.la_suma_de_los_renglones_no') },
+  concepto_prohibido: { titulo: tx('rest.concepto_prohibido'), ayuda: tx('rest.trae_un_concepto_que_la_empresa') },
+  neto_negativo: { titulo: tx('rest.retenido_neto_negativo'), ayuda: tx('rest.el_neto_salio_negativo_revisalo_y') },
+  tipo_sin_regla: { titulo: tx('rest.retenido_tipo_de_operador_sin_regla'), ayuda: tx('rest.no_hay_regla_para_este_tipo') },
+  correccion_pendiente: { titulo: tx('rest.correccion_pendiente'), ayuda: tx('rest.llego_una_version_distinta_de_este') },
+  mapeo_invalido: { titulo: tx('rest.datos_invalidos'), ayuda: tx('rest.el_sistema_de_tu_empresa_mando') },
+  unidades_mezcladas: { titulo: tx('rest.unidades_mezcladas'), ayuda: tx('rest.la_liquidacion_es_por_unidad_y') },
+});
 
 function Mensaje({ m }: { m: MensajeDesglose }) {
   return <AvisoCompacto tono={m.tono === 'ok' ? 'ok' : 'error'} resumen={m.texto} />;
 }
 
-function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglones: Array<{ descripcion: string; monto: number }>; moneda: 'MXN' | 'USD' }) {
+function TablaRenglones({ titulo, renglones, moneda, tr = TR_ES }: { titulo: string; renglones: Array<{ descripcion: string; monto: number }>; moneda: 'MXN' | 'USD'; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
     <div className="rv-liq-renglones">
       <h4 className="rv-liq-rotulo">{titulo}</h4>
       {renglones.length === 0 ? (
-        <p className="rv-liq-sub">Sin renglones.</p>
+        <p className="rv-liq-sub">{tx('rest.sin_renglones')}</p>
       ) : (
         <TablaBase<{ descripcion: string; monto: number }>
           etiqueta={titulo}
@@ -487,8 +487,8 @@ function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglon
           densa
           altoMaximo={false}
           columnas={[
-            { id: 'concepto', titulo: 'Concepto', principal: true, celda: (r) => r.descripcion },
-            { id: 'monto', titulo: 'Monto', alinear: 'der', celda: (r) => <span className="cifra-mono">{dinero(r.monto, moneda)}</span> },
+            { id: 'concepto', titulo: tx('proveedores.vista.concepto'), principal: true, celda: (r) => r.descripcion },
+            { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (r) => <span className="cifra-mono">{dinero(r.monto, moneda)}</span> },
           ]}
         />
       )}
@@ -497,17 +497,18 @@ function TablaRenglones({ titulo, renglones, moneda }: { titulo: string; renglon
 }
 
 
-function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['reenviar'] }) {
+function Reenviar({ d, accion, tr = TR_ES }: { d: DetalleDesglose; accion: AccionesDetalle['reenviar']; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   const sinArchivo = d.retenido !== null;
   const opciones: Array<{ a: 'operador' | 'coordinador' | 'todos'; etiqueta: string; que: string; curso: boolean }> = [
-    { a: 'operador', etiqueta: 'Reenviar al operador', que: 'al operador', curso: d.enCurso.operador },
-    { a: 'coordinador', etiqueta: 'Reenviar al coordinador', que: 'a su coordinador', curso: d.enCurso.coordinador },
-    { a: 'todos', etiqueta: 'Reenviar a todos', que: 'al operador, a su coordinador y a RH', curso: d.enCurso.operador || d.enCurso.coordinador || d.enCurso.rh },
+    { a: 'operador', etiqueta: tx('rest.reenviar_al_operador'), que: 'al operador', curso: d.enCurso.operador },
+    { a: 'coordinador', etiqueta: tx('rest.reenviar_al_coordinador'), que: 'a su coordinador', curso: d.enCurso.coordinador },
+    { a: 'todos', etiqueta: tx('rest.reenviar_a_todos'), que: tx('rest.al_operador_a_su_coordinador_y'), curso: d.enCurso.operador || d.enCurso.coordinador || d.enCurso.rh },
   ];
   const hayCurso = opciones.some((o) => o.curso);
   return (
     <div>
-      <h4 className="rv-liq-rotulo">Reenviar</h4>
+      <h4 className="rv-liq-rotulo">{tx('rest.reenviar')}</h4>
       <div className="rv-liq-acciones">
         {opciones.map((o) => (
           <form key={o.a} action={accion}>
@@ -515,24 +516,24 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
             <input type="hidden" name="a" value={o.a} />
             <input type="hidden" name="motivo" value="reclamo" />
             <BotonConfirmar
-              etiqueta={o.etiqueta} titulo="Reenviar el desglose" etiquetaConfirmar="Sí, reenviar" tono="normal"
-              descripcion={`Se volverá a mandar el desglose de la bitácora ${d.bitacora} ${o.que}. Queda registrado quién lo pidió.`}
+              etiqueta={o.etiqueta} titulo={tx('rest.reenviar_el_desglose')} etiquetaConfirmar={tx('rest.si_reenviar')} tono="normal"
+              descripcion={tx('rest.se_volvera_a_mandar_el_desglose', { bitacora: d.bitacora, que: o.que })}
               deshabilitado={o.curso || sinArchivo} className="rv-btn rv-btn--secondary"
             />
           </form>
         ))}
       </div>
-      {hayCurso && <p className="rv-liq-nota">Hay un envío en curso: espera a que termine para reenviar.</p>}
-      {sinArchivo && <p className="rv-liq-nota">Este desglose está retenido: primero libera el envío.</p>}
+      {hayCurso && <p className="rv-liq-nota">{tx('rest.hay_un_envio_en_curso_espera')}</p>}
+      {sinArchivo && <p className="rv-liq-nota">{tx('rest.este_desglose_esta_retenido_primero_libera')}</p>}
 
       <form action={accion} className="rv-liq-acciones rv-liq-acciones--forma">
         <input type="hidden" name="id" value={d.liquidacionId} />
         <input type="hidden" name="a" value="operador" />
         <input type="hidden" name="motivo" value="correccion_de_correo" />
-        <CampoTexto tipo="email" etiqueta="Correo nuevo del operador" name="correo_nuevo" required maxLength={254} autoComplete="off" placeholder="Correo del operador" />
+        <CampoTexto tipo="email" etiqueta={tx('rest.correo_nuevo_del_operador')} name="correo_nuevo" required maxLength={254} autoComplete="off" placeholder={tx('rest.correo_del_operador')} />
         <BotonConfirmar
-          etiqueta="Corregir correo del operador y reenviar" titulo="Corregir el correo y reenviar" etiquetaConfirmar="Sí, corregir y reenviar" tono="normal"
-          descripcion="Se guarda el correo nuevo en la ficha del operador y se le vuelve a mandar este desglose. Los próximos también irán a ese correo."
+          etiqueta={tx('rest.corregir_correo_del_operador_y_reenviar')} titulo={tx('rest.corregir_el_correo_y_reenviar')} etiquetaConfirmar={tx('rest.si_corregir_y_reenviar')} tono="normal"
+          descripcion={tx('rest.se_guarda_el_correo_nuevo_en')}
           deshabilitado={d.enCurso.operador || sinArchivo} className="rv-btn rv-btn--secondary"
         />
       </form>
@@ -540,37 +541,37 @@ function Reenviar({ d, accion }: { d: DetalleDesglose; accion: AccionesDetalle['
   );
 }
 
-function EstadoCabecera({ d }: { d: DetalleDesglose }) {
+function EstadoCabecera({ d, tr = TR_ES }: { d: DetalleDesglose; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
     <dl className="rv-liq-cabecera">
-      <div><dt className="rv-liq-rotulo">Operador</dt><dd>{d.operador ?? '—'}</dd></div>
-      <div><dt className="rv-liq-rotulo">Periodo</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
-      <div><dt className="rv-liq-rotulo">Terminal</dt><dd>{d.terminal ?? '—'}</dd></div>
-      <div><dt className="rv-liq-rotulo">{d.totalOrigen === 'calculado' ? 'Neto calculado de los renglones' : 'Neto (de tu sistema)'}</dt><dd className="cifra-mono rv-liq-neto">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="rv-liq-nota">Tu sistema no mandó su propio neto: no hay con qué compararlo.</dd>}</div>
+      <div><dt className="rv-liq-rotulo">{tx('conductores.forma.operador')}</dt><dd>{d.operador ?? '—'}</dd></div>
+      <div><dt className="rv-liq-rotulo">{tx('rest.periodo')}</dt><dd>{`${fechaCorta(d.periodoDesde)} – ${fechaCorta(d.periodoHasta)}`}</dd></div>
+      <div><dt className="rv-liq-rotulo">{tx('rest.terminal')}</dt><dd>{d.terminal ?? '—'}</dd></div>
+      <div><dt className="rv-liq-rotulo">{d.totalOrigen === 'calculado' ? tx('rest.neto_calculado_de_los_renglones') : tx('rest.neto_de_tu_sistema')}</dt><dd className="cifra-mono rv-liq-neto">{dinero(d.neto, d.moneda)}</dd>{d.totalOrigen === 'calculado' && <dd className="rv-liq-nota">{tx('rest.tu_sistema_no_mando_su_propio')}</dd>}</div>
     </dl>
   );
 }
 
 /** CT-A12-09: «operador sin alta» tiene tres causas distintas y cada una se arregla distinto; la ayuda sigue a `detalle.motivo`. */
-export function ayudaExcepcion(tipo: TipoExcepcion, detalle: Record<string, unknown> = {}): string {
+export function ayudaExcepcion(tipo: TipoExcepcion, detalle: Record<string, unknown> = {}, tx: TAgentes = TR_ES.t): string {
   if (tipo === 'operador_no_encontrado') {
-    if (detalle.motivo === 'baja') return 'Este operador está dado de baja en Likida: reactívalo (o corrige su número de empleado) y el desglose se procesa en la siguiente lectura.';
+    if (detalle.motivo === 'baja') return tx('rest.este_operador_esta_dado_de_baja');
     // Formato por nombre (supuesto hasta la especificación oficial): el sistema de tu empresa manda al operador solo por nombre.
-    if (detalle.motivo === 'nombre_ambiguo') return 'El sistema de tu empresa manda al operador solo por nombre y hay más de un operador con ese nombre en Likida: no se sabe a quién corresponde, así que no se recibió. Distingue los nombres en Operadores y vuelve a mandar la bitácora.';
-    if (detalle.motivo === 'nombre_sin_alta') return 'El sistema de tu empresa manda al operador solo por nombre y ninguno de Operadores coincide (o al que coincide le falta el número de empleado): no se recibió. Revisa que esté escrito igual y con su número de empleado, y vuelve a mandar la bitácora.';
-    if (detalle.motivo === 'ambiguo') return 'El número de empleado, el teléfono o el id apuntan a más de un operador, o a operadores distintos: no se sabe a quién entregárselo. Corrige el duplicado en Operadores; no lo des de alta otra vez.';
+    if (detalle.motivo === 'nombre_ambiguo') return tx('rest.el_sistema_de_tu_empresa_manda');
+    if (detalle.motivo === 'nombre_sin_alta') return tx('rest.el_sistema_de_tu_empresa_manda_2');
+    if (detalle.motivo === 'ambiguo') return tx('rest.el_numero_de_empleado_el_telefono');
   }
-  return EXCEPCION[tipo]?.ayuda ?? '';
+  return excepcion(tx)[tipo]?.ayuda ?? '';
 }
 
-function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde: string; detalle?: Record<string, unknown> }> }) {
+function ListaExcepciones({ items, tr = TR_ES }: { items: Array<{ tipo: TipoExcepcion; desde: string; detalle?: Record<string, unknown> }>; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
     <ul className="rv-liq-excepciones">
       {items.map((x, i) => (
         <li key={`${x.tipo}-${i}`}>
-          <strong>{EXCEPCION[x.tipo].titulo}</strong>
-          <span className="rv-liq-apagado"> · desde {fechaHoraMx(x.desde)}</span>
-          <span className="rv-liq-nota">{ayudaExcepcion(x.tipo, x.detalle)}</span>
+          <strong>{excepcion(tx)[x.tipo].titulo}</strong>{ricoT(tx('rest.e0_desde_e0', { fechaHoraMx: fechaHoraMx(x.desde) }), { e0: (c) => <span className="rv-liq-apagado">{c}</span> })}<span className="rv-liq-nota">{ayudaExcepcion(x.tipo, x.detalle)}</span>
         </li>
       ))}
     </ul>
@@ -578,11 +579,12 @@ function ListaExcepciones({ items }: { items: Array<{ tipo: TipoExcepcion; desde
 }
 
 export async function PanelDetalleDesglose(p: PanelDetalleProps) {
+  const { t: tx } = await getT('agentes');
   const lectura = await p.lectura;
   const cerrar = `${query(p.contexto, p.params)}#desgloses`;
   const marco = (cuerpo: React.ReactNode, titulo = 'Detalle del desglose') => (
     <div id="detalle-desglose">
-      <Tarjeta titulo={titulo} info="desgloses.detalle" acciones={<Link href={cerrar} className="rv-liq-enlace">Cerrar</Link>}>
+      <Tarjeta titulo={titulo} info="desgloses.detalle" acciones={<Link href={cerrar} className="rv-liq-enlace">{tx('vigia.vista.cerrar')}</Link>}>
         {p.mensaje && <Mensaje m={p.mensaje} />}
         {cuerpo}
       </Tarjeta>
@@ -591,34 +593,30 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
 
   if (lectura.estado === 'error') {
     return marco(
-      <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto, p.params)}#detalle-desglose`} tamano="sm">Reintentar</BotonEnlace>}>
-        No se pudo leer este desglose. No es que no exista: no pudimos consultarlo ahora.
-      </EstadoError>,
+      <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto, p.params)}#detalle-desglose`} tamano="sm">{tx('rest.reintentar')}</BotonEnlace>}>{tx('rest.no_se_pudo_leer_este_desglose')}</EstadoError>,
     );
   }
-  if (lectura.estado === 'no_encontrado') return marco(<p className="rv-liq-sub">No encontré ese desglose en tu flota.</p>);
+  if (lectura.estado === 'no_encontrado') return marco(<p className="rv-liq-sub">{tx('rest.no_encontre_ese_desglose_en_tu')}</p>);
 
   const d = lectura.detalle;
   return marco(
     <div className="rv-liq-detalle">
-      <p className="rv-liq-detalle__bitacora">Bitácora {d.bitacora}</p>
+      <p className="rv-liq-detalle__bitacora">{tx('vigia.vista.bitacora')}{' '}{d.bitacora}</p>
       <EstadoCabecera d={d} />
 
       {d.retenido && (
         <div className="rv-liq-retenido">
           <p className="rv-liq-retenido__titulo">
-            {d.retenido.por === 'neto' ? 'Retenido: neto negativo' : d.retenido.por === 'poliza_provisional' ? 'Retenido: póliza provisional' : 'Retenido: pide revisión'}
+            {d.retenido.por === 'neto' ? 'Retenido: neto negativo' : d.retenido.por === 'poliza_provisional' ? tx('rest.retenido_poliza_provisional') : tx('rest.retenido_pide_revision')}
           </p>
-          <p className="rv-liq-sub">
-            Este desglose no se ha enviado a nadie.{' '}
-            {d.retenido.liberable ? 'Si el monto está bien, puedes liberar el envío.' : 'Corrígelo en el sistema de tu empresa: no se libera desde aquí.'}
+          <p className="rv-liq-sub">{tx('rest.este_desglose_no_se_ha_enviado')}{' '}{d.retenido.liberable ? tx('rest.si_el_monto_esta_bien_puedes') : tx('rest.corrigelo_en_el_sistema_de_tu')}
           </p>
           {d.retenido.liberable && (
             <form action={p.acciones.liberar}>
               <input type="hidden" name="id" value={d.liquidacionId} />
               <BotonConfirmar
-                etiqueta="Liberar envío" titulo="Liberar el envío" etiquetaConfirmar="Sí, liberar y enviar" tono="normal"
-                descripcion={`Se enviará el desglose de la bitácora ${d.bitacora} al operador, a su coordinador y a RH. Queda registrado quién lo liberó.`}
+                etiqueta={tx('rest.liberar_envio')} titulo={tx('rest.liberar_el_envio')} etiquetaConfirmar={tx('rest.si_liberar_y_enviar')} tono="normal"
+                descripcion={tx('rest.se_enviara_el_desglose_de_la', { bitacora: d.bitacora })}
                 className="rv-btn rv-btn--secondary"
               />
             </form>
@@ -627,29 +625,29 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
       )}
 
       <div className="rv-liq-renglones__fila">
-        <TablaRenglones titulo="Percepciones" renglones={d.percepciones} moneda={d.moneda} />
-        <TablaRenglones titulo="Deducciones" renglones={d.deducciones} moneda={d.moneda} />
+        <TablaRenglones titulo={tx('rest.percepciones')} renglones={d.percepciones} moneda={d.moneda} />
+        <TablaRenglones titulo={tx('rest.deducciones')} renglones={d.deducciones} moneda={d.moneda} />
       </div>
 
       <div>
-        <h4 className="rv-liq-rotulo">Destinatarios</h4>
+        <h4 className="rv-liq-rotulo">{tx('rest.destinatarios')}</h4>
         {d.destinatarios.length === 0 ? (
           <p className="rv-liq-sub">
-            {d.retenido ? 'Aún no se manda a nadie: el desglose está retenido.' : 'Este desglose no tiene correos programados.'}
+            {d.retenido ? tx('rest.aun_no_se_manda_a_nadie') : tx('rest.este_desglose_no_tiene_correos_programados')}
           </p>
         ) : (
           <TablaBase<DetalleDesglose['destinatarios'][number]>
-            etiqueta="Destinatarios del desglose"
+            etiqueta={tx('rest.destinatarios_del_desglose')}
             filas={d.destinatarios}
             idFila={(x) => `${x.rol}-${x.correo}`}
             densa
             altoMaximo={false}
             tarjetaMovil
             columnas={[
-              { id: 'quien', titulo: 'Quién', principal: true, celda: (x) => ROTULO_ROL_DETALLE[x.rol] },
-              { id: 'correo', titulo: 'Correo', celda: (x) => <span className="cifra-mono rv-liq-apagado">{x.correo}</span> },
-              { id: 'estado', titulo: 'Estado', celda: (x) => { const r = rotuloDestino(x.destino); return <StatusChip tono={r.tono}>{r.rotulo}</StatusChip>; } },
-              { id: 'cuando', titulo: 'Cuándo', celda: (x) => <span className="rv-liq-apagado">{x.en ? fechaHoraMx(x.en) : '—'}</span> },
+              { id: 'quien', titulo: tx('rest.quien'), principal: true, celda: (x) => ROTULO_ROL_DETALLE[x.rol] },
+              { id: 'correo', titulo: tx('vigia.vista.correo'), celda: (x) => <span className="cifra-mono rv-liq-apagado">{x.correo}</span> },
+              { id: 'estado', titulo: tx('proveedores.vista.estado'), celda: (x) => { const r = rotuloDestino(x.destino); return <StatusChip tono={r.tono}>{r.rotulo}</StatusChip>; } },
+              { id: 'cuando', titulo: tx('rest.cuando'), celda: (x) => <span className="rv-liq-apagado">{x.en ? fechaHoraMx(x.en) : '—'}</span> },
             ]}
           />
         )}
@@ -657,12 +655,10 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
 
       {d.generaciones.length > 0 && (
         <div>
-          <h4 className="rv-liq-rotulo">Historial de envíos</h4>
+          <h4 className="rv-liq-rotulo">{tx('rest.historial_de_envios')}</h4>
           <ul className="rv-liq-excepciones">
             {d.generaciones.map((g) => (
-              <li key={g.generacion}>
-                <strong>Envío {g.generacion}</strong>
-                <span className="rv-liq-apagado"> · {ORIGEN_GENERACION[g.origen]} · {fechaHoraMx(g.creadaEn)} · {g.entregas === 1 ? '1 correo' : `${g.entregas} correos`}</span>
+              <li key={g.generacion}>{ricoT(tx('rest.strong_envio_strong', { generacion: g.generacion }), { strong: (c) => <strong>{c}</strong> })}<span className="rv-liq-apagado"> · {origenGeneracion(tx)[g.origen]} · {fechaHoraMx(g.creadaEn)} · {g.entregas === 1 ? '1 correo' : `${g.entregas} correos`}</span>
               </li>
             ))}
           </ul>
@@ -670,23 +666,20 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
       )}
 
       <div>
-        <h4 className="rv-liq-rotulo">Archivo</h4>
+        <h4 className="rv-liq-rotulo">{tx('rest.archivo')}</h4>
         {d.descargaUrl ? (
-          <div className="rv-liq-acciones">
-            <a href={d.descargaUrl} download={d.descargaNombre} className="rv-btn rv-btn--secondary">Descargar el Excel</a>
-            <span className="rv-liq-nota">{d.descargaNombre} · el enlace vale 24 horas</span>
-          </div>
+          <div className="rv-liq-acciones">{ricoT(tx('rest.e0_descargar_el_excel_e0_e1', { descargaNombre: d.descargaNombre ?? '' }), { e0: (c) => <a href={d.descargaUrl ?? undefined} download={d.descargaNombre ?? undefined} className="rv-btn rv-btn--secondary">{c}</a>, e1: (c) => <span className="rv-liq-nota">{c}</span> })}</div>
         ) : (
-          <p className="rv-liq-sub">No se pudo preparar la descarga ahora. Recarga la página para intentarlo de nuevo.</p>
+          <p className="rv-liq-sub">{tx('rest.no_se_pudo_preparar_la_descarga')}</p>
         )}
       </div>
 
       <Reenviar d={d} accion={p.acciones.reenviar} />
 
       <div>
-        <h4 className="rv-liq-rotulo">Excepciones</h4>
+        <h4 className="rv-liq-rotulo">{tx('vigia.vista.excepciones')}</h4>
         {d.excepciones.length === 0
-          ? <p className="rv-liq-sub">Sin excepciones abiertas para esta bitácora.</p>
+          ? <p className="rv-liq-sub">{tx('rest.sin_excepciones_abiertas_para_esta_bitacora')}</p>
           : <ListaExcepciones items={d.excepciones} />}
       </div>
     </div>,
@@ -695,40 +688,36 @@ export async function PanelDetalleDesglose(p: PanelDetalleProps) {
 
 /** Lo que pide a una persona, de toda la flota: sin póliza, operador sin alta o sin correo, retenidos y correcciones pendientes. */
 export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
+  const { t: tx } = await getT('agentes');
   const todas = await p.excepciones;
   const lista = todas === null ? null : todas.slice(0, TOPE_EXCEPCIONES);
   const hayMas = todas !== null && todas.length > TOPE_EXCEPCIONES;
   if (lista === null) {
     return (
       <div id="excepciones">
-        <Tarjeta titulo="Excepciones" info="desgloses.excepciones">
-          <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto)}#excepciones`} tamano="sm">Reintentar</BotonEnlace>}>
-            No se pudieron leer las excepciones. No es que no haya: no pudimos consultarlas ahora.
-          </EstadoError>
+        <Tarjeta titulo={tx('vigia.vista.excepciones')} info="desgloses.excepciones">
+          <EstadoError compacto accion={<BotonEnlace href={`${query(p.contexto)}#excepciones`} tamano="sm">{tx('rest.reintentar')}</BotonEnlace>}>{tx('rest.no_se_pudieron_leer_las_excepciones')}</EstadoError>
         </Tarjeta>
       </div>
     );
   }
   return (
     <div id="excepciones">
-      <Tarjeta titulo="Excepciones" info="desgloses.excepciones">
-        <p className="rv-liq-sub">Lo que necesita a una persona antes de que el desglose llegue completo.</p>
+      <Tarjeta titulo={tx('vigia.vista.excepciones')} info="desgloses.excepciones">
+        <p className="rv-liq-sub">{tx('rest.lo_que_necesita_a_una_persona')}</p>
         {lista.length === 0 ? (
-          <EstadoVacio icono={Mail} titulo="Todo al corriente">Sin excepciones abiertas.</EstadoVacio>
+          <EstadoVacio icono={Mail} titulo={tx('rest.todo_al_corriente')}>{tx('rest.sin_excepciones_abiertas')}</EstadoVacio>
         ) : (
           <>
             {hayMas && (
-              <AvisoCompacto tono="warn" resumen={`Se muestran las ${TOPE_EXCEPCIONES} más recientes: hay más excepciones abiertas que no caben en esta lista. Resuelve las visibles para ver el resto.`} />
+              <AvisoCompacto tono="warn" resumen={tx('rest.se_muestran_las_mas_recientes_hay_2', { topeExcepciones: TOPE_EXCEPCIONES })} />
             )}
             <ul className="rv-liq-excepciones">
               {lista.map((x) => {
                 const bitacora = typeof x.detalle.bitacora === 'string' ? x.detalle.bitacora : x.claveExterna;
                 return (
                   <li key={x.id}>
-                    <strong>{EXCEPCION[x.tipo]?.titulo ?? x.tipo}</strong>
-                    <span className="rv-liq-apagado"> · bitácora {bitacora}</span>
-                    <span className="rv-liq-apagado"> · desde {fechaHoraMx(x.primeraVez)}</span>
-                    <span className="rv-liq-nota">{ayudaExcepcion(x.tipo, x.detalle)}</span>
+                    <strong>{excepcion(tx)[x.tipo]?.titulo ?? x.tipo}</strong>{ricoT(tx('rest.e0_bitacora_e0_e1_desde_e1', { bitacora, fechaHoraMx: fechaHoraMx(x.primeraVez) }), { e0: (c) => <span className="rv-liq-apagado">{c}</span>, e1: (c) => <span className="rv-liq-apagado">{c}</span> })}<span className="rv-liq-nota">{ayudaExcepcion(x.tipo, x.detalle)}</span>
                   </li>
                 );
               })}
@@ -741,13 +730,14 @@ export async function SeccionExcepciones(p: SeccionExcepcionesProps) {
 }
 
 /** El marco de la pantalla de un tenant que recibe el desglose por correo: la sección y los avisos, sin los KPIs, la cola ni la estrategia del flujo de fotos. */
-export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones, cargas }: {
+export function VistaDesgloses({ desgloses, detalle, excepciones, notificaciones, cargas, tr = TR_ES }: {
   desgloses: React.ReactNode; detalle?: React.ReactNode; excepciones?: React.ReactNode; notificaciones?: React.ReactNode;
   /** Ola 1 · A1: la subida de archivos (desgloses y correos de operadores) mientras el sistema del cliente no manda los datos solo. */
-  cargas?: React.ReactNode;
+  cargas?: React.ReactNode; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   return (
-    <MarcoPagina titulo="Liquidación automática" apoyo="Los desgloses de liquidación que llegan por correo, sus excepciones y las notificaciones de entrega.">
+    <MarcoPagina titulo={tx('liquidacion.vista.liquidacion_automatica')} apoyo={tx('rest.los_desgloses_de_liquidacion_que_llegan')}>
       {desgloses}
       {cargas}
       {detalle}

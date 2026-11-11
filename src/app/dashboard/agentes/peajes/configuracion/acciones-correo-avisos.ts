@@ -2,6 +2,8 @@ import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { guardarCorreoAvisos, leerCorreoAvisos } from '@/lib/likida/peajes/datos';
 import { enviarPruebaCorreoAvisos, type DepsPruebaCorreo } from '@/lib/likida/peajes/aviso_correo_prueba';
 import type { ConfigCorreoAvisos } from '@/lib/likida/peajes/aviso_correo';
+import { getT } from '@/lib/i18n/servidor';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DEL CORREO DE AVISOS DE PEAJES (pantalla de configuración). NO es un archivo de acciones de servidor: la página
@@ -17,9 +19,9 @@ export type ResultadoAccionCorreo = { ok: true; mensaje: string } | { ok: false;
 export interface SesionCorreo { rol: string; tenantId: string | null }
 
 /** `null` = puede; si no, el motivo en llano. */
-export function permisoCorreoAvisos(sesion: SesionCorreo, tenantId: string): string | null {
-  if (!puedeVerArea(sesion.rol, 'administracion')) return 'Solo quien administra la flota puede cambiar los avisos por correo.';
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return 'Esta configuración no es de tu flota.';
+export function permisoCorreoAvisos(sesion: SesionCorreo, tenantId: string, tx: TAgentes = TR_ES.t): string | null {
+  if (!puedeVerArea(sesion.rol, 'administracion')) return tx('rest.solo_quien_administra_la_flota_puede_2');
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return tx('rest.esta_configuracion_no_es_de_tu');
   return null;
 }
 
@@ -29,10 +31,11 @@ export function destinatariosDeTexto(texto: string): string[] {
 }
 
 export async function guardarCorreoAvisosDeFormulario(sesion: SesionCorreo, tenantId: string, fd: FormData): Promise<ResultadoAccionCorreo> {
+  const { t: tx } = await getT('agentes');
   const no = permisoCorreoAvisos(sesion, tenantId);
   if (no) return { ok: false, error: no };
   let previa: ConfigCorreoAvisos;
-  try { previa = await leerCorreoAvisos(tenantId); } catch { return { ok: false, error: 'No se pudo leer la configuración ahora mismo. Inténtalo de nuevo.' }; }
+  try { previa = await leerCorreoAvisos(tenantId); } catch { return { ok: false, error: tx('rest.no_se_pudo_leer_la_configuracion_5') }; }
   const activo = String(fd.get('correo_activo') ?? '') === '1';
   const r = await guardarCorreoAvisos(tenantId, {
     activo,
@@ -41,7 +44,7 @@ export async function guardarCorreoAvisosDeFormulario(sesion: SesionCorreo, tena
     asunto: previa.asunto,
   });
   if (!r.ok) return { ok: false, error: r.motivo };
-  return { ok: true, mensaje: r.valor.activo ? 'Avisos por correo guardados y ENCENDIDOS.' : 'Avisos por correo guardados. Siguen apagados: no se manda ningún correo hasta que los enciendas.' };
+  return { ok: true, mensaje: r.valor.activo ? tx('rest.avisos_por_correo_guardados_y_encendidos') : tx('rest.avisos_por_correo_guardados_siguen_apagados') };
 }
 
 export async function enviarPruebaDeFormulario(

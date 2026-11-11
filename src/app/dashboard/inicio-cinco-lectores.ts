@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import { leerCifrasPesosCincoAgentes } from './cinco-agentes-cifras';
 import { cifrasSinDato, type CifrasPesosCincoAgentes } from './cinco-agentes-cifras-modelo';
 import { FICHAS_CINCO_AGENTES } from './inicio-cinco-fichas';
+import { getT } from '@/lib/i18n/servidor';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LECTORES DEL INICIO v2 DE `cinco_agentes` (solo servidor). Reutilizan lectores que ya existen; ninguno consulta dinero de las
@@ -50,6 +51,7 @@ const leerPesosConCache = conCache();
  * dentro del lector de #777. Nunca lanza: un fallo es «Sin dato» con `reintentar`.
  */
 export async function leerPesosInicio(tenantId: string, rol: string): Promise<PesosLeidos | null> {
+  const { t } = await getT('resto');
   if (!puedeVerArea(rol, 'dinero')) return null;
   try {
     return await leerPesosConCache(tenantId);
@@ -57,7 +59,7 @@ export async function leerPesosInicio(tenantId: string, rol: string): Promise<Pe
     // Cada cifra conserva SU resultado: si solo una falló, la buena se muestra y «Sin dato» queda en la que falló.
     if (e instanceof LecturaSinCache) return { cifras: e.cifras, leidoEn: new Date().toISOString() };
     logger.warn('inicio_cinco.pesos', { tenant: tenantId, err: e instanceof Error ? e.name : 'desconocido' });
-    return { cifras: cifrasSinDato('No se pudo leer el estado de cuenta.', true), leidoEn: new Date().toISOString() };
+    return { cifras: cifrasSinDato(t('op.no_se_pudo_leer_el_estado'), true), leidoEn: new Date().toISOString() };
   }
 }
 

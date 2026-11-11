@@ -5,6 +5,7 @@ import { fechaCorta } from '@/lib/formato';
 import type { EstadoVinculo } from '@/lib/likida/facturacion/vinculo_portal';
 import { ControlesRelogin, type AccionRelogin, type EstadoRelogin } from './relogin-controles';
 import { VincularAsistida } from './vincular-asistida';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ════════════════════════════════════════════════════════════════════════════
 // EL ESTADO DEL VÍNCULO, POR PORTAL — la pantalla que faltaba.
@@ -28,11 +29,11 @@ import { VincularAsistida } from './vincular-asistida';
 //     una vinculación remota que hoy no existe.
 // ════════════════════════════════════════════════════════════════════════════
 
-const PILDORA: Record<EstadoVinculo, { rotulo: string; tono: TonoEstado }> = {
-  vinculado: { rotulo: 'Vinculado', tono: 'ok' },
-  caducada: { rotulo: 'Sesión caducada', tono: 'warn' },
-  sin_vincular: { rotulo: 'Sin vincular', tono: 'muted' },
-};
+const pildora = (tx: TAgentes = TR_ES.t): Record<EstadoVinculo, { rotulo: string; tono: TonoEstado }> => ({
+  vinculado: { rotulo: tx('rest.vinculado'), tono: 'ok' },
+  caducada: { rotulo: tx('rest.sesion_caducada'), tono: 'warn' },
+  sin_vincular: { rotulo: tx('rest.sin_vincular'), tono: 'muted' },
+});
 
 export interface FilaPortal {
   clave: string;
@@ -53,7 +54,7 @@ export interface FilaPortal {
   relogin: EstadoRelogin | null;
 }
 
-export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelogin, flota = null }: {
+export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelogin, flota = null, tr = TR_ES }: {
   filas: FilaPortal[];
   /** `false` = la lectura del estado falló. NO es «ninguno vinculado». */
   vinculos: boolean;
@@ -61,28 +62,26 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
   autorizarRelogin: AccionRelogin;
   revocarRelogin: AccionRelogin;
   /** MX-002: la flota pintada, firmada; viaja en los formularios de vincular. */
-  flota?: string | null;
+  flota?: string | null; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const caducados = filas.filter((f) => f.estado === 'caducada');
 
   return (
-    <Tarjeta titulo="Tus portales" estado={!vinculos ? 'error' : filas.length === 0 ? 'vacio' : 'ok'}
-      mensaje={!vinculos ? 'No se pudo leer el estado de tus portales ahora mismo. No es que no tengas ninguno vinculado: es que esta pantalla está ciega. Recarga en un momento.' : 'Ningún portal por vincular'}
-      detalle="Ninguno de los comercios de tus tickets pide cuenta de portal — no hay nada que vincular.">
+    <Tarjeta titulo={tx('rest.tus_portales')} estado={!vinculos ? 'error' : filas.length === 0 ? 'vacio' : 'ok'}
+      mensaje={!vinculos ? tx('rest.no_se_pudo_leer_el_estado') : tx('rest.ningun_portal_por_vincular')}
+      detalle={tx('rest.ninguno_de_los_comercios_de_tus')}>
       <div className="rv-fact__pila">
-        <p className="rv-fact__nota">
-          Portales que piden tu cuenta. Entras UNA vez y el agente factura solo hasta que el portal
-          cierre la sesión — Likida nunca guarda ni teclea tu contraseña, solo la sesión que dejas abierta.
-        </p>
+        <p className="rv-fact__nota">{tx('rest.portales_que_piden_tu_cuenta_entras')}</p>
         {caducados.length > 0 && (
           <AvisoCompacto tono="warn" resumen={caducados.length === 1
-            ? `Se cayó la sesión de ${caducados[0].nombre}: sus tickets están esperando a que entres una vez.`
-            : `Se cayeron ${caducados.length} sesiones: sus tickets están esperando a que entres una vez en cada portal.`} />
+            ? tx('rest.se_cayo_la_sesion_de_sus', { nombre: caducados[0].nombre })
+            : tx('rest.se_cayeron_sesiones_sus_tickets_estan', { length: caducados.length })} />
         )}
 
         <ul className="rv-fact__reglones">
           {filas.map((f) => {
-            const p = PILDORA[f.estado];
+            const p = pildora(tx)[f.estado];
             return (
               <li key={f.clave} className="rv-fact__portal">
                 <div className="rv-fact__reglon">
@@ -94,8 +93,7 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
                   <div className="rv-fact__linea">
                     <StatusChip tono={p.tono}>{p.rotulo}</StatusChip>
                     {f.estado !== 'vinculado' && (
-                      <a href={f.portal} target="_blank" rel="noopener noreferrer" className="rv-fact__enlace">
-                        Abrir el portal <Icono icono={ExternalLink} tam={14} />
+                      <a href={f.portal} target="_blank" rel="noopener noreferrer" className="rv-fact__enlace">{tx('rest.abrir_el_portal')}{' '}<Icono icono={ExternalLink} tam={14} />
                       </a>
                     )}
                   </div>
@@ -120,25 +118,20 @@ export function SeccionPortales({ filas, vinculos, autorizarRelogin, revocarRelo
         {/* LO QUE NO SE PROMETE. Un servidor no tiene pantalla donde enseñarte un navegador:
             «Vincular con código» te da un código de un solo uso y el comando que corres en TU
             computadora; ahí entras tú. Likida no resuelve ni rodea CAPTCHAs ni guarda tu contraseña. */}
-        <p className="rv-fact__nota" data-tono="faint">
-          «Vincular con código» te da un código de un solo uso (caduca en 15 minutos) y el comando
-          que corres en tu computadora: se abre el portal, entras tú y resuelves el CAPTCHA o el
-          código de dos pasos, y a Likida solo llegan las cookies de ese portal, cifradas — nunca tu
-          contraseña. Si la sesión se cae, el portal aparece como «Sesión caducada» y vuelves a vincular.
-        </p>
+        <p className="rv-fact__nota" data-tono="faint">{tx('rest.vincular_con_codigo_te_da_un')}</p>
       </div>
     </Tarjeta>
   );
 }
 
 /** La línea de fecha. Nunca afirma una fecha que no exista. */
-function leyenda(f: FilaPortal): string {
+function leyenda(f: FilaPortal, tx: TAgentes = TR_ES.t): string {
   if (f.estado === 'vinculado') {
     return f.vinculadaEn ? `Vinculado desde el ${fechaCorta(f.vinculadaEn)}` : 'Vinculado';
   }
   if (f.estado === 'caducada') {
-    const cayo = f.caducadaEn ? `Se cayó el ${fechaCorta(f.caducadaEn)}` : 'Se cayó';
-    return f.vinculadaEn ? `${cayo} · lo habías vinculado el ${fechaCorta(f.vinculadaEn)}` : cayo;
+    const cayo = f.caducadaEn ? tx('rest.se_cayo_el', { fechaCorta: fechaCorta(f.caducadaEn) }) : tx('rest.se_cayo');
+    return f.vinculadaEn ? tx('rest.lo_habias_vinculado_el', { cayo, fechaCorta: fechaCorta(f.vinculadaEn) }) : cayo;
   }
-  return 'Nadie ha entrado todavía — sus tickets van contigo';
+  return tx('rest.nadie_ha_entrado_todavia_sus_tickets');
 }
