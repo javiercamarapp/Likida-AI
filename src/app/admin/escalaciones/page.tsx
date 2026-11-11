@@ -1,3 +1,5 @@
+import { getT } from '@/lib/i18n/servidor';
+import { urlCasoExamen } from '@/lib/admin/casos-regresion';
 import type { Metadata } from 'next';
 import {
   Inbox, ShieldCheck, Bot, Wrench, ReceiptText, LifeBuoy, ClipboardCheck, ArrowRight,
@@ -64,6 +66,7 @@ export default async function EscalacionesPage() {
   const ilegibles = FUENTES.filter((f) => bandeja.fuentes[f].error !== null);
   const legibles = FUENTES.filter((f) => bandeja.fuentes[f].error === null);
 
+  const { t: tMon } = await getT('monitoreo');
   const columnas: ColumnaBase<ItemEscalacion>[] = [
     {
       id: 'que', titulo: 'Qué espera', principal: true,
@@ -88,6 +91,7 @@ export default async function EscalacionesPage() {
         ? <BotonEnlace href={it.href} variante="secondary" tamano="sm">Resolver <ArrowRight width={11} height={11} strokeWidth={1.75} aria-hidden="true" /></BotonEnlace>
         : 'sin ficha'),
     },
+    { id: 'caso', titulo: '', alinear: 'der', celda: (it) => <BotonEnlace href={urlCasoExamen(it)} variante="ghost" tamano="sm">{tMon('caso.boton')}</BotonEnlace> },
   ];
 
   return (

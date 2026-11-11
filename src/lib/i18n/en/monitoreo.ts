@@ -11,5 +11,6 @@ export const monitoreo: Record<keyof typeof es, string> = {
   'quema.agotado': 'Budget exhausted: no autonomy promotions and no prompt or model changes until the golden exam passes.',
   'quema.objetivo': 'Target {pct} %',
   'quema.error': 'Not available now. This is not zero.',
+  'caso.boton': 'Turn into an exam case',
   'quema.runbook': 'Runbook',
 };

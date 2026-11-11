@@ -10,5 +10,6 @@ export const monitoreo = {
   'quema.agotado': 'Presupuesto agotado: no se promueve autonomía ni se publican cambios de prompt o modelo hasta pasar el examen dorado.',
   'quema.objetivo': 'Objetivo {pct} %',
   'quema.error': 'No disponible ahora. No es cero.',
+  'caso.boton': 'Convertir en caso de examen',
   'quema.runbook': 'Runbook',
 } as const;
