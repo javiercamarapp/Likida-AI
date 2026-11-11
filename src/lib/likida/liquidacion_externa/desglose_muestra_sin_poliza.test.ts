@@ -50,9 +50,18 @@ describe('muestra-tms sin póliza: no se inventa nada', () => {
     expect(JSON.stringify(b.excepciones[0].detalle)).not.toMatch(/Ficticio|4000|500\.5/);
   });
 
-  it('una muestra con póliza presente en el cuerpo NO la usa: el campo no existe en el contrato y se ignora', () => {
-    const p = prepararMuestraTms({ formato: 'muestra-tms', version: 1, bitacoras: [{ ...BITACORA_MUESTRA, Poliza: 'P-INVENTADA' }] }, PADRON_MUESTRA);
+  it('una muestra con `Poliza` en el cuerpo SÍ la usa (piloto 11-nov): sustituye a la póliza nula', () => {
+    const p = prepararMuestraTms({ formato: 'muestra-tms', version: 1, bitacoras: [{ ...BITACORA_MUESTRA, Poliza: 'P-SINTETICA-1' }] }, PADRON_MUESTRA);
     if (!p.ok) throw new Error(p.mensaje);
-    expect(p.desgloses[0].poliza).toBeNull();
+    expect(p.revisiones).toEqual([]);
+    expect(p.desgloses[0].poliza).toBe('P-SINTETICA-1');
+  });
+
+  it('`Poliza: null` o vacía sigue siendo «sin póliza» (nada se inventa)', () => {
+    for (const v of [null, '', '   ']) {
+      const p = prepararMuestraTms({ formato: 'muestra-tms', version: 1, bitacoras: [{ ...BITACORA_MUESTRA, Poliza: v }] }, PADRON_MUESTRA);
+      if (!p.ok) throw new Error(p.mensaje);
+      expect(p.desgloses[0].poliza).toBeNull();
+    }
   });
 });
