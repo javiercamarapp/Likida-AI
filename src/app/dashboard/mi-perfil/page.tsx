@@ -333,7 +333,6 @@ export default async function MiPerfilFlota({
   return (
     <EsqueletoConfiguracion
       titulo={t('cfg.mi_perfil')} apoyo={t('cfg.tu_foto_nombre_y_correo_y')}
-      contexto={<div className="rv-cfg-dos" hidden />}
       avisos={(
         <>
           {sp.ok && OK[sp.ok] && <Aviso tono="ok">{OK[sp.ok]}</Aviso>}

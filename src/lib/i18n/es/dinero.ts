@@ -2056,4 +2056,5 @@ export const dinero = {
   'r4.rent_p_12m': '12 meses',
   'r4.rent_metodo': 'El periodo mide los viajes de ese lapso (margen, ingreso y costo). La cartera por cobrar es el saldo vigente de todas las facturas, no cambia con el periodo.',
   'r4.timb_ir_hacerlo': 'Ir a hacerlo',
+  'r4.pol_titulo': 'Políticas de gasto',
 } as const;

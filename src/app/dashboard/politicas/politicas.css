@@ -20,3 +20,8 @@
   [data-ui="v2"] .rv-pol__tabla table[data-tarjeta] tbody tr { padding: 10px 14px; border: 0; border-top: 1px solid var(--line); border-radius: 0; }
   [data-ui="v2"] .rv-pol__tabla table[data-tarjeta] tbody tr:first-child { border-top: 0; }
 }
+/* Móvil 412: nada de la tabla-tarjeta se pasa de la tarjeta (TR/TH medían 415 px por los márgenes negativos de sangre). */
+.rv-pol__tabla { max-width: none; overflow-x: clip; }
+@media (max-width: 819px) {
+  [data-ui="v2"] .rv-pol__tabla table[data-tarjeta] :is(tbody, tr, th, td) { box-sizing: border-box; max-width: 100%; min-width: 0; }
+}
