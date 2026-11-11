@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToReadableStream } from 'react-dom/server';
 import type { CifrasPesosCincoAgentes } from './cinco-agentes-cifras-modelo';
-import { cifrasSinDato } from './cinco-agentes-cifras-modelo';
 import type { DatosResumen } from './resumen-modelo';
 
 // Datos 100 % sintéticos: «flota con perfil cinco_agentes», cifras inventadas para la prueba.
@@ -54,7 +53,6 @@ async function html(rol: string, extra: Record<string, unknown> = {}): Promise<s
   return new Response(flujo).text();
 }
 const texto = (h: string) => h.replace(/<script[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&#x27;/g, "'").replace(/\s+/g, ' ').replace(/\( /g, '(').replace(/ ([.,:)])/g, '$1');
-const hrefs = (h: string) => [...h.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
 
 beforeEach(() => {
   dobles.pesos.mockReset().mockImplementation(async (_t: string, rol: string) => (rol === 'flota_admin' || rol === 'contador' ? { cifras: PESOS, leidoEn: '2026-10-31T17:58:00Z' } : null));

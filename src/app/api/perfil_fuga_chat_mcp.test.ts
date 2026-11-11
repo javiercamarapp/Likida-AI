@@ -103,13 +103,6 @@ const preguntar = async (texto: string) => {
   })) as Promise<Response>;
 };
 
-const sinGastoNiDatos = () => {
-  expect(ejecutarAnalista).not.toHaveBeenCalled();
-  expect(registrarCosto).not.toHaveBeenCalled();
-  expect(guardarIntercambio).not.toHaveBeenCalled();
-  // lo único leído es el perfil: ningún dato de módulo (facturas, cobranza, viajes…)
-  expect(tablasLeidas.filter((t) => t !== 'tenant_perfil')).toEqual([]);
-};
 
 describe('chat «Pregunta a tus datos» bajo el perfil (abierto el 11-nov, D12, con herramientas recortadas)', () => {
   it.each(['flota_admin', 'contador', 'superadmin'])('el rol %s con perfil llega al analista (que recorta las herramientas) y responde por stream', async (r) => {
