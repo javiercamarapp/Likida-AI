@@ -202,11 +202,11 @@ export default async function PaginaCotizaciones({
   // Con cotizaciones, las cuatro cifras medidas; sin ninguna, las mismas cuatro en «—» (nunca un 0 que parezca medición).
   const sinCot = (etiqueta: string): PropsCifra => ({ etiqueta, valor: null, estado: 'vacio', mensaje: tr('cotizaciones.page.k.sindato'), matiz: 8 });
   const cifras: PropsCifra[] | undefined = panel ? (cot.length > 0 ? [
-    { etiqueta: tr('cotizaciones.page.k.total'), valor: cot.length, formato: 'entero', nota: tr('cotizaciones.page.k.total.nota') },
+    { etiqueta: tr('cotizaciones.page.k.total'), valor: cot.length, formato: 'entero' as const, nota: tr('cotizaciones.page.k.total.nota') },
     { etiqueta: tr('cotizaciones.page.k.vivas'), valor: cot.filter((q) => q.estado === 'borrador' || q.estado === 'enviada').length, formato: 'entero', nota: tr('cotizaciones.page.k.vivas.nota') },
     { etiqueta: tr('cotizaciones.page.k.dejan'), valor: dejan, formato: 'entero', nota: sinCalcular > 0 ? tr('cotizaciones.page.k.sincalcular', { n: numero(sinCalcular) }) : tr('cotizaciones.page.k.dejan.nota') },
     { etiqueta: tr('cotizaciones.page.k.pierden'), valor: pierden, formato: 'entero', nota: tr('cotizaciones.page.k.pierden.nota'), ...(pierden > 0 ? { tono: 'bad' as const } : {}) },
-  ].map((c): PropsCifra => ({ ...c, matiz: 8 })) : [
+  ].map((c): PropsCifra => ({ ...c, formato: 'entero', matiz: 8 })) : [
     sinCot(tr('cotizaciones.page.k.total')), sinCot(tr('cotizaciones.page.k.vivas')), sinCot(tr('cotizaciones.page.k.dejan')), sinCot(tr('cotizaciones.page.k.pierden')),
   ]) : undefined;
 
@@ -231,6 +231,7 @@ export default async function PaginaCotizaciones({
         return (
           <>
             {mxn(g.pesos)}
+            {g.margenPct !== null && <span className="rv-cot__tenue"> {tr('cotizaciones.page.delPrecio', { v: porcentaje(g.margenPct) })}</span>}
             <StatusChip tono={g.pesos < 0 ? 'bad' : 'ok'}>{g.pesos < 0 ? tr('cotizaciones.page.pierdeDinero') : tr('cotizaciones.page.dejaGanancia')}</StatusChip>
           </>
         );

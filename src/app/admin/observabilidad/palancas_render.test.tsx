@@ -17,22 +17,20 @@ describe('SeccionInterruptores (kill switch)', () => {
       base('facturas'),
     ]} />,
   );
-  it('pinta una fila con su propio formulario por interruptor', () => {
-    expect((html.match(/<form/g) ?? []).length).toBe(3);
-    expect(html).toContain('value="global"');
-    expect(html).toContain('value="cobranza"');
+  it('hay UNA sola acción de peligro (Apagar un interruptor) y no un formulario de apagar por fila', () => {
+    expect((html.match(/>Apagar un interruptor</g) ?? []).length).toBe(1);
+    expect(html).not.toContain('value="apagar"');
+    expect(html).not.toContain('>Apagar<');
   });
   it('lo apagado va primero y se ve APAGADO con motivo y firma', () => {
-    expect(html.indexOf('value="global"')).toBeLessThan(html.indexOf('value="cobranza"'));
+    expect(html.indexOf('value="global"')).toBeLessThan(html.indexOf('value="cobranza"') === -1 ? Infinity : html.indexOf('value="cobranza"'));
     expect(html).toContain('APAGADO');
     expect(html).toContain('Motivo: incidente de prueba');
     expect(html).toContain('Apagado por Ana');
   });
-  it('un apagado ofrece Encender con la operación correcta; un encendido ofrece Apagar', () => {
+  it('un apagado ofrece Encender con la operación correcta', () => {
     expect(html).toContain('value="encender"');
-    expect(html).toContain('value="apagar"');
     expect(html).toContain('>Encender<');
-    expect(html).toContain('>Apagar<');
   });
   it('un interruptor nunca tocado lo dice (encendido por omisión)', () => {
     expect(html).toContain('Nunca se ha tocado');

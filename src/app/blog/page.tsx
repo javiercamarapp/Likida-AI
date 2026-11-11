@@ -19,6 +19,7 @@ import { ARTICULOS } from '@/lib/likida/marketing/articulos';
 import { fechaMx } from '@/lib/formato';
 import { PulsoSitio } from '../calculadora/pulso';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import '../legal/publico-r2.css';
 import { trPublico } from '@/lib/i18n/publico_tr';
 import { rico } from '@/lib/i18n/rico';
 
@@ -36,9 +37,9 @@ export default async function Blog() {
       apoyo={t('blog.apoyo')}
     >
       <PulsoSitio pagina="blog" />
-      <ul className="rv-pub__lista rv-pub__sec">
+      <ul className="rv-blog__lista">
         {ARTICULOS.map((a) => (
-          <li key={a.slug}>
+          <li key={a.slug} className="rv-blog__tarjeta">
             <p className="rv-pub__nota">{fechaMx(a.fecha, idioma)}</p>
             <h2 className="rv-pub__item-titulo">
               <Link href={`/blog/${a.slug}`}>{a.titulo}</Link>

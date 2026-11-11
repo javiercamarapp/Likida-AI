@@ -144,7 +144,7 @@ export async function InicioContador({
   // El estímulo de peaje sin declarar deja el 50 % en $0 (el motor falla cerrado): se dice en un aviso ANTES de las cifras y la
   // pregunta se contesta en la configuración fiscal (cajón). `null` = no se pudo leer; entonces no se afirma nada.
   const pPeajePendiente = tenantExiste
-    ? safe<boolean>(async () => preguntaPendienteEstimuloPeaje(await getPerfilCrudo(tenantId)))
+    ? safe<boolean>(async () => preguntaPendienteEstimuloPeaje(await getPerfilCrudo(tenantId)) !== null)
     : Promise.resolve<boolean | null>(null);
 
   const [acred, resumenPerdidas, series, resumenFiscal] = await Promise.all([
@@ -239,7 +239,7 @@ export async function InicioContador({
       }}
       metodo={LEYENDA_CORTA}
     >
-      <Bloque mensaje={tr('contador.inicioContador.noSePudoCargar')} esqueleto={<EsqTarjetaV2 alto={200} />}>
+      <Bloque mensaje={tr('contador.inicioContador.noSePudoCargar')} esqueleto={<EsqTarjetaV2 alto={240} />}>
         <BloqueTablas pAcred={pAcred} pResumenPerdidas={pResumenPerdidas} sufijo={sufijo} hoy={hoy} />
       </Bloque>
     </EsqueletoPanelCifras>

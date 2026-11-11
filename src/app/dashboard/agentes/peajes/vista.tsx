@@ -17,10 +17,11 @@ import { DeclararPeriodo, type AccionPeriodo } from './declarar-periodo';
 import { RevisionCobros, type EstadoRevisionCobros } from './revision-cobros';
 // SOLO tipo y constante pura: el módulo importa el perfil (servidor) y no debe entrar al bundle de la vista.
 import type { SuperficiePeajes } from '@/lib/likida/peajes/superficie_perfil';
-import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { Cifra, TiraCifras, type PropsCifra } from '@/app/ui-v2/graficas';
 import {
-  BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, StatusChip, Tarjeta, TituloRecuadro,
+  BotonEnlace, EstadoError, EstadoVacio, FilaTarjetas, Icono, StatusChip, TablaBase, Tarjeta, TituloRecuadro,
 } from '@/app/ui-v2/componentes';
+import { VacioAgente } from '../vacio-agente';
 import './peajes.css';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { TR_ES, rico, type TrAgentes, selloHoyTr, type TAgentes } from '../i18n-agentes';
@@ -115,14 +116,12 @@ export function VistaAgentePeajes({
           nota: tx('peajes.vista.revisadas_y_documentadas') },
         { etiqueta: tx('peajes.vista.estados_de_cuenta'), info: 'peajes.estados_cuenta', valor: conciliacion ? numero(conciliacion.cfdis) : null,
           nota: tx('peajes.vista.cfdi_consolidados_recibidos') },
-      ] : undefined}
+      ] : cifrasDesglose(desglosesProveedor, tx)}
       etiquetaCifras={tx('peajes.vista.conciliacion_de_peajes')}
       selloCifras={selloHoyTr(tr, tx('peajes.vista.estados_de_cuenta_de_peaje'))}
     >
 
-      {/* ── T-A2-27: la revisión de cobros, arriba del detalle ── */}
-      <RevisionCobros tr={tr} estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
-
+      <div className="rv-ag-pila">
       {/* ── La ingesta: el ritual del PoC (CFDI consolidado: stand-by con perfil) ── */}
       {superficie.cfdiYTickets && (<>
       <Tarjeta titulo={tx('peajes.vista.subir_estado_de_cuenta')} info="peajes.subir_estado_cuenta">
@@ -164,7 +163,7 @@ export function VistaAgentePeajes({
                 <li key={l.id} className="rv-pj-lista__fila">
                   <span className="rv-pj-apagado rv-pj-fijo">{l.fecha ? fechaCorta(l.fecha, tr.idioma) : 'sin fecha'}</span>
                   <span className="rv-pj-corto" title={l.descripcion ?? undefined}>{l.descripcion ?? tx('peajes.vista.sin_descripcion')}</span>
-                  <span className="rv-pj-der rv-pj-fijo cifra-mono">{mxn(l.monto, tr.idioma)}</span>
+                  <span className="rv-pj-der rv-pj-fijo rv-ag-num">{mxn(l.monto, tr.idioma)}</span>
                   <span className="rv-pj-fijo rv-pj-nota">
                     {l.candidatos.length === 0 ? 'sin candidatos' : `${numero(l.candidatos.length)} candidato${l.candidatos.length === 1 ? '' : 's'}`}
                   </span>
@@ -190,7 +189,7 @@ export function VistaAgentePeajes({
             <ul className="rv-pj-lista">
               {desgloses.map((d) => (
                 <li key={d.cfdiXmlId} className="rv-pj-lista__fila">
-                  <span className="cifra-mono rv-pj-nota rv-pj-fijo">{d.uuidCorto}</span>
+                  <span className="rv-ag-num rv-pj-nota rv-pj-fijo">{d.uuidCorto}</span>
                   <span className="rv-pj-apagado rv-pj-fijo">{d.recibido ? fechaCorta(d.recibido, tr.idioma) : '—'}</span>
                   {d.parcial && (
                     <span className="rv-pj-der rv-pj-fijo"
@@ -198,7 +197,7 @@ export function VistaAgentePeajes({
                       <StatusChip tono="warn">{tx('peajes.vista.parcial')}</StatusChip>
                     </span>
                   )}
-                  <span className={`${d.parcial ? '' : 'rv-pj-der '}rv-pj-fijo cifra-mono`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto, tr.idioma)}</span>
+                  <span className={`${d.parcial ? '' : 'rv-pj-der '}rv-pj-fijo rv-ag-num`}>{d.parcial ? '≥ ' : ''}{mxn(d.monto, tr.idioma)}</span>
                   <span className="rv-pj-fijo rv-pj-conteo" data-tono="ok">
                     <Icono icono={CircleCheck} tam={14} /> {numero(d.conciliadas)}
                   </span>
@@ -225,7 +224,7 @@ export function VistaAgentePeajes({
       <Tarjeta
         titulo={tx('peajes.vista.desglose_del_proveedor_de_peaje')} info="peajes.desglose_proveedor"
         acciones={(
-          <BotonEnlace href={`/dashboard/agentes/peajes/configuracion${sufijo}`} tamano="sm" icono={<Icono icono={Settings2} />}>
+          <BotonEnlace href={`/dashboard/agentes/peajes/configuracion${sufijo}`} tamano="sm" icono={<Icono icono={Settings2} tam={14} />}>
             {tx('peajes.vista.configuracion_tags_casetas_mapeo_de', { v0: superficie.gps ? 'geocercas, ' : '' })}
           </BotonEnlace>
         )}
@@ -238,52 +237,63 @@ export function VistaAgentePeajes({
         {desglosesProveedor === null ? (
           <EstadoError compacto>{tx('peajes.vista.no_se_pudo_leer_la_3')}</EstadoError>
         ) : desglosesProveedor.length === 0 ? (
-          <EstadoVacio icono={FileSpreadsheet} titulo={tx('peajes.vista.aun_sin_desgloses_del_proveedor')}>
+          <VacioAgente icono={FileSpreadsheet} titulo={tx('peajes.vista.aun_sin_desgloses_del_proveedor')}>
             {tx('peajes.vista.subelo_arriba_y_el_cruce')}
-          </EstadoVacio>
+          </VacioAgente>
         ) : (
           <div className="rv-pj-desglose">
-            {/* La lista, cada uno con su % MEDIDO */}
-            <div className="rv-pj-desglose__lista">
-              <TituloRecuadro nivel="h3" info="peajes.desgloses_importados">{tx('peajes.vista.desgloses_importados')}</TituloRecuadro>
-              <ul className="rv-pj-lista">
-                {desglosesProveedor.map((d) => {
-                  const activo = d.desgloseId === desgloseSeleccionado?.desgloseId;
-                  return (
-                    <li key={d.desgloseId}>
-                      <Link
-                        href={`/dashboard/agentes/peajes${sufijo}${sufijo ? '&' : '?'}desglose=${d.desgloseId}`}
-                        className="rv-pj-item" data-activo={activo || undefined} aria-current={activo ? 'true' : undefined}>
-                        <span className="rv-pj-item__cab">
-                          <span className="rv-pj-corto" title={d.archivoNombre ?? undefined}>
-                            {d.proveedor ?? d.archivoNombre ?? tx('peajes.vista.desglose')}
-                          </span>
-                          <span className="rv-pj-der cifra-mono" data-tono={d.pctCuadra !== null && d.pctCuadra >= 100 ? 'ok' : undefined}>
-                            {d.pctCuadra === null ? '—' : `${numero(d.pctCuadra)}%`}
-                          </span>
-                        </span>
-                        <span className="rv-pj-nota">
-                          {tx('peajes.vista.lineas', { v0: d.periodoDesde && d.periodoHasta
-                            ? `${fechaCorta(d.periodoDesde, tr.idioma)} – ${fechaCorta(d.periodoHasta, tr.idioma)}`
-                            : tx('peajes.vista.periodo_sin_medir_lineas_sin'), v1: ' · ', total: numero(d.total) })}
-                        </span>
+            {/* La tabla de desgloses, cada uno con su % MEDIDO; la fila abierta lleva aria-current en su enlace */}
+            <TablaBase<ResumenDesglose>
+              etiqueta={tx('peajes.vista.desgloses_importados')}
+              filas={desglosesProveedor}
+              idFila={(d) => d.desgloseId}
+              densa
+              altoMaximo={false}
+              tarjetaMovil
+              columnas={[
+                {
+                  id: 'desglose', titulo: tx('peajes.vista.desglose'), principal: true,
+                  celda: (d) => {
+                    const activo = d.desgloseId === desgloseSeleccionado?.desgloseId;
+                    return (
+                      <Link href={`/dashboard/agentes/peajes${sufijo}${sufijo ? '&' : '?'}desglose=${d.desgloseId}`} className="rv-pj-enlace" aria-current={activo ? 'true' : undefined} title={d.archivoNombre ?? undefined}>
+                        {d.proveedor ?? d.archivoNombre ?? tx('peajes.vista.desglose')}
                       </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+                    );
+                  },
+                },
+                {
+                  id: 'periodo', titulo: tx('rest.periodo'),
+                  celda: (d) => <span className="rv-pj-apagado">{d.periodoDesde && d.periodoHasta ? `${fechaCorta(d.periodoDesde, tr.idioma)} – ${fechaCorta(d.periodoHasta, tr.idioma)}` : tx('peajes.vista.periodo_sin_medir_lineas_sin')}</span>,
+                },
+                { id: 'total', titulo: tx('f26d2.peajes.col_lineas'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.total)}</span> },
+                { id: 'cuadra', titulo: tx('peajes.vista.cuadran'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.cuadra)}</span> },
+                { id: 'pct', titulo: tx('f26d2.peajes.col_pct'), alinear: 'der', celda: (d) => <span className="rv-ag-num" data-tono={d.pctCuadra !== null && d.pctCuadra >= 100 ? 'ok' : undefined}>{d.pctCuadra === null ? '—' : `${numero(d.pctCuadra)}%`}</span> },
+                { id: 'no', titulo: tx('peajes.vista.no_cuadran'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.noCuadra)}</span> },
+                { id: 'sin', titulo: tx('peajes.vista.sin_contraparte'), alinear: 'der', celda: (d) => <span className="rv-ag-num">{numero(d.sinContraparte)}</span> },
+              ]}
+            />
 
             {/* El detalle del seleccionado: las tres cubetas */}
             {desgloseSeleccionado && (
               <div className="rv-pj-desglose__detalle">
+                <TituloRecuadro nivel="h3" info="peajes.desgloses_importados">{desgloseSeleccionado.proveedor ?? desgloseSeleccionado.archivoNombre ?? tx('peajes.vista.desglose')}</TituloRecuadro>
                 <div className="rv-pj-acciones">
+                  <BotonEnlace variante="secondary" tamano="sm" href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
+                    icono={<Icono icono={FileDown} tam={14} />}>
+                    {tx('peajes.vista.reporte_de_reclamacion')}
+                  </BotonEnlace>
+                  <BotonEnlace tamano="sm" href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}#revision-cobros`}>
+                    {tx('peajes.vista.revision_de_cobros_candidatos')}
+                  </BotonEnlace>
                   <BotonConciliar conciliar={conciliarDesglose} desgloseId={desgloseSeleccionado.desgloseId} />
                   {puedeAnular && anularDesglose && <BotonAnular anular={anularDesglose} desgloseId={desgloseSeleccionado.desgloseId} />}
+                </div>
+                <div className="rv-pj-acciones">
                   {superficie.bitacoraEstimulo && (<>
                   {desgloseSeleccionado.cuadra > 0 ? (
-                    <BotonEnlace href={`/api/export/bitacora-peaje?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
-                      icono={<Icono icono={FileDown} />}>
+                    <BotonEnlace tamano="sm" href={`/api/export/bitacora-peaje?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                      icono={<Icono icono={FileDown} tam={14} />}>
                       {tx('peajes.vista.bitacora_rmf_9_1_8')}
                     </BotonEnlace>
                   ) : (
@@ -291,21 +301,14 @@ export function VistaAgentePeajes({
                       {tx('peajes.vista.la_bitacora_rmf_9_1')}
                     </span>
                   )}
-                  <BotonEnlace href={`/api/export/bitacora-conciliada?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
-                    icono={<Icono icono={FileDown} />}>
+                  <BotonEnlace tamano="sm" href={`/api/export/bitacora-conciliada?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                    icono={<Icono icono={FileDown} tam={14} />}>
                     {tx('peajes.vista.bitacora_conciliada_csv')}
                   </BotonEnlace>
                   </>)}
-                  <BotonEnlace href={`/api/export/peajes-vinculos?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
-                    icono={<Icono icono={FileDown} />}>
+                  <BotonEnlace tamano="sm" href={`/api/export/peajes-vinculos?desglose=${desgloseSeleccionado.desgloseId}${sufijo ? `&${sufijo.slice(1)}` : ''}`}
+                    icono={<Icono icono={FileDown} tam={14} />}>
                     {tx('peajes.vista.casetas_ligadas_a_viaje_excel')}
-                  </BotonEnlace>
-                  <BotonEnlace variante="primary" href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}`}
-                    icono={<Icono icono={FileDown} />}>
-                    {tx('peajes.vista.reporte_de_reclamacion')}
-                  </BotonEnlace>
-                  <BotonEnlace href={`/dashboard/agentes/peajes/reclamacion${sufijo}${sufijo ? '&' : '?'}desglose=${desgloseSeleccionado.desgloseId}#revision-cobros`}>
-                    {tx('peajes.vista.revision_de_cobros_candidatos')}
                   </BotonEnlace>
                 </div>
                 {declararPeriodo && (
@@ -349,6 +352,9 @@ export function VistaAgentePeajes({
         )}
       </Tarjeta>
 
+      {/* ── T-A2-27: la revisión de cobros del archivo abierto, justo debajo de su detalle ── */}
+      <RevisionCobros tr={tr} estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
+
       {/* ── El estímulo de peaje: cada renglón dice lo que su ficha sostiene ── */}
       {superficie.estimulo && (
       <Tarjeta titulo={tx('peajes.vista.el_estimulo_de_peaje_hasta')} info="peajes.estimulo">
@@ -367,7 +373,7 @@ export function VistaAgentePeajes({
         </div>
         {peajeAcreditable !== null && (
           <p className="rv-pj-pie">
-            {rico(tx('peajes.vista.peaje_con_el_factor_ya'), { v0: ' ', strong: <strong className="cifra-mono">{mxn(peajeAcreditable, tr.idioma)}</strong>, v2: ' ' })}
+            {rico(tx('peajes.vista.peaje_con_el_factor_ya'), { v0: ' ', strong: <strong className="rv-ag-num">{mxn(peajeAcreditable, tr.idioma)}</strong>, v2: ' ' })}
           </p>
         )}
         <p className="rv-pj-nota">{LEYENDA_CORTA}</p>
@@ -375,8 +381,36 @@ export function VistaAgentePeajes({
       )}
 
       {notificaciones}
+      </div>
     </EsqueletoTablaMaestra>
   );
+}
+
+/** La tira de la ventana cuando el perfil no pinta el estado de cuenta consolidado (cinco_agentes): sale SOLO de los desgloses importados,
+ *  sumando lo que cada uno midió. Sin lectura es «no disponible» (jamás cero); sin archivos, «—» y no un cero que parezca medición. */
+function cifrasDesglose(dp: ResumenDesglose[] | null, tx: TAgentes): PropsCifra[] {
+  const e = (etiqueta: string): PropsCifra => dp === null
+    ? { etiqueta, valor: null, estado: 'error', reintentar: true }
+    : { etiqueta, valor: null, estado: 'vacio', mensaje: tx('f26d2.peajes.sin_archivo') };
+  if (dp === null || dp.length === 0) {
+    return [
+      dp === null ? e(tx('peajes.vista.desgloses_importados')) : { etiqueta: tx('peajes.vista.desgloses_importados'), valor: 0, nota: tx('f26d2.peajes.sube_el_primero') },
+      e(tx('peajes.vista.cuadran')), e(tx('peajes.vista.no_cuadran')), e(tx('peajes.vista.sin_contraparte')),
+    ];
+  }
+  const suma = (f: (d: ResumenDesglose) => number) => dp.reduce((s, d) => s + f(d), 0);
+  const total = suma((d) => d.total);
+  const cuadra = suma((d) => d.cuadra);
+  const no = suma((d) => d.noCuadra);
+  const sin = suma((d) => d.sinContraparte);
+  const pct = total > 0 ? Math.round((cuadra / total) * 100) : null;
+  return [
+    { etiqueta: tx('peajes.vista.desgloses_importados'), valor: numero(dp.length), nota: tx('f26d2.peajes.lineas_en_total', { n: numero(total) }) },
+    { etiqueta: tx('peajes.vista.cuadran'), valor: numero(cuadra), nota: pct !== null ? tx('f26d2.peajes.pct_de_las_lineas', { pct: numero(pct) }) : undefined,
+      segmentos: total > 0 ? [{ etiqueta: tx('peajes.vista.cuadran'), valor: cuadra }, { etiqueta: tx('peajes.vista.no_cuadran'), valor: no }, { etiqueta: tx('peajes.vista.sin_contraparte'), valor: sin }] : undefined },
+    { etiqueta: tx('peajes.vista.no_cuadran'), valor: numero(no), nota: tx('f26d2.peajes.discrepancia'), tono: no > 0 ? 'warn' : undefined },
+    { etiqueta: tx('peajes.vista.sin_contraparte'), valor: numero(sin), nota: tx('f26d2.peajes.ningun_gasto'), tono: sin > 0 ? 'warn' : undefined },
+  ];
 }
 
 /** El motivo de `detalle` dicho para una persona — nada de claves crudas. */
@@ -469,7 +503,7 @@ function EvidenciaGpsResumen({ resumen, tr = TR_ES }: { resumen: ResumenEvidenci
     <div className="rv-pj-caja">
       <div className="rv-pj-caja__cab">
         <strong>{tx('peajes.vista.evidencia_gps_del_periodo')}</strong>
-        <span className="cifra-mono rv-pj-der">
+        <span className="rv-ag-num rv-pj-der">
           {tx('peajes.vista.de_cruces_con_posiciones_de', { conEvidencia: numero(resumen.conEvidencia), total: numero(resumen.total) })}
         </span>
       </div>
@@ -511,7 +545,7 @@ function CubetaDesglose({ titulo, total, nota, tono, lineas, evidencia, tr = TR_
     <div className="rv-pj-caja">
       <div className="rv-pj-caja__cab">
         <strong>{titulo}</strong>
-        <span className="cifra-mono rv-pj-der rv-pj-caja__total" data-tono={tono}>{numero(total)}</span>
+        <span className="rv-ag-num rv-pj-der rv-pj-caja__total" data-tono={tono}>{numero(total)}</span>
       </div>
       <p className="rv-pj-nota">{nota}</p>
       {lineas.length === 0 ? (
@@ -523,7 +557,7 @@ function CubetaDesglose({ titulo, total, nota, tono, lineas, evidencia, tr = TR_
               <div className="rv-pj-lista__fila">
                 <span className="rv-pj-apagado rv-pj-fijo">{l.fecha ? fechaCorta(l.fecha, tr.idioma) : 'sin fecha'}</span>
                 <span className="rv-pj-corto" title={l.caseta ?? undefined}>{l.caseta ?? tx('peajes.vista.sin_caseta')}</span>
-                <span className="rv-pj-der rv-pj-fijo cifra-mono">{mxn(l.monto, tr.idioma)}</span>
+                <span className="rv-pj-der rv-pj-fijo rv-ag-num">{mxn(l.monto, tr.idioma)}</span>
               </div>
               <MetaLinea tr={tr} linea={l} evidencia={evidencia?.[l.id]} />
             </li>

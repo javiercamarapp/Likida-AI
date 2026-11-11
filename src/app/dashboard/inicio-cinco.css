@@ -1,0 +1,13 @@
+/* Portada del perfil de cinco agentes (Rovaq «Hoy»): solo DISPOSICIÓN que las reglas compartidas de `.rv-ic__*` no dan. Tokens del sistema; sin hex. */
+
+/* Los cinco agentes: tarjetas de la MISMA altura y el enlace «Abrir» siempre al pie, a la misma altura en todas (antes cada una medía lo suyo). */
+.rv-ic__agentes > .rv-ic__agente { display: flex; flex-direction: column; }
+.rv-ic__agentes > .rv-ic__agente > .rv-tarjeta__cuerpo { display: flex; flex: 1 1 auto; flex-direction: column; }
+.rv-ic__agentes .rv-ic__agente-cuerpo { flex: 1 1 auto; }
+
+/* Botones de ancho de contenido dentro de las tarjetas de la portada: un primario de 538 px es un botón tosco, no un botón de Rovaq. */
+.rv-ic__marcha .rv-tarjeta__cuerpo > .rv-btn,
+.rv-ic__hoy .rv-tarjeta__cuerpo > .rv-btn { align-self: flex-start; width: auto; }
+
+/* Las filas de tarjetas de la portada se estiran a la altura de la más alta: sin tarjetas bajas junto a una alta. */
+.rv-ic__fila > .rv-tarjeta { height: 100%; }

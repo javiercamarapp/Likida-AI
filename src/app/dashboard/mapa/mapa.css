@@ -42,3 +42,12 @@
   @keyframes rv-mp-flujo { to { stroke-dashoffset: -44; } }
   @keyframes rv-mp-pulso { 0%, 100% { transform: scale(1); opacity: .35; } 50% { transform: scale(2.1); opacity: 0; } }
 }
+
+/* Contenedor del mapa como Rovaq: borde, radio 12 y relleno de 8; controles +/−/⤢ de 32 px con borde punteado en la esquina. */
+.rv-mp__lienzo { padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--canvas); }
+.rv-mp__zoom { position: absolute; top: 16px; right: 16px; z-index: 1; display: grid; gap: 4px; }
+.rv-mp__zbtn { width: 32px; height: 32px; display: grid; place-items: center; font: 500 16px/1 var(--font-sans-ui, inherit); color: var(--ink); background: var(--surface); border: 1px dashed var(--line2); border-radius: 8px; cursor: pointer; }
+.rv-mp__zbtn:hover:not(:disabled) { background: var(--canvas); border-style: solid; }
+.rv-mp__zbtn:disabled { opacity: .45; cursor: default; }
+.rv-mp__zbtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.rv-mp__svg { transition: none; }

@@ -18,7 +18,7 @@ import { pillTicket } from './estatus';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { Metadata } from 'next';
 import {
-  TablaBase, StatusChip, BotonEnlace, FormaConAviso, FormaEnCajon, TabsLinea, CampoTexto, CampoTextarea, CampoSelect, EstadoError,
+  TablaBase, Tarjeta, StatusChip, BotonEnlace, FormaConAviso, FormaEnCajon, TabsLinea, CampoTexto, CampoTextarea, CampoSelect, EstadoError,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
@@ -234,17 +234,20 @@ export default async function SoportePage({
             { clave: 'abiertos', etiqueta: t('cfg.abiertos'), href: hrefPestana(false), conteo: abiertos.length, atencion: vencidos.length > 0 },
             { clave: 'cerrados', etiqueta: t('e26.sop_cerrados'), href: hrefPestana(true), conteo: cerradosLista.length },
           ]} />
-          <FormaEnCajon id="abrir-ticket" titulo={t('cfg.abrir_un_ticket')} accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')} disparador={t('cfg.abrir_ticket')} abiertoInicial={false}>
-            <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
-            <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
-              {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
-            </CampoSelect>
-            <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
-              {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
-            </CampoSelect>
-            <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
-          </FormaEnCajon>
         </div>
+      ) : undefined}
+      // La acción principal vive en la cabecera de la página, junto al h1 (Rovaq), no en una fila propia entre la tira y la tabla.
+      acciones={tickets ? (
+        <FormaEnCajon id="abrir-ticket" titulo={t('cfg.abrir_un_ticket')} accion={accionAbrirTicket} boton={t('cfg.abrir_ticket')} disparador={t('cfg.abrir_ticket')} abiertoInicial={false}>
+          <CampoTexto etiqueta={t('cfg.asunto')} name="asunto" required placeholder={t('cfg.que_paso_en_una_linea')} />
+          <CampoSelect etiqueta={t('cfg.categoria')} name="categoria" defaultValue="otro">
+              {CATEGORIAS_TICKET.map((c) => <option key={c} value={c}>{c}</option>)}
+          </CampoSelect>
+          <CampoSelect etiqueta={t('cfg.prioridad')} name="prioridad" defaultValue="media">
+              {PRIORIDADES_TICKET.map((p) => <option key={p} value={p}>{p}</option>)}
+          </CampoSelect>
+          <CampoTexto etiqueta={t('cfg.detalle')} name="descripcion" placeholder={t('cfg.opcional_folios_pantalla_que_esperabas')} />
+        </FormaEnCajon>
       ) : undefined}
       cifras={tickets ? [
         { etiqueta: t('cfg.abiertos'), info: 'soporte.abiertos', valor: abiertos.length },
@@ -302,10 +305,14 @@ export default async function SoportePage({
       {!tickets ? (
         <EstadoError reintentar>{t('cfg.no_se_pudo_leer_la_cola')}</EstadoError>
       ) : (
-        <TablaBase
-          etiqueta={t('cfg.solicitudes_de_soporte')} columnas={columnas} filas={visibles} idFila={(x) => x.id} densa altoMaximo={false} tarjetaMovil
-          vacio={{ titulo: verCerrados ? t('e26.sop_sin_cerrados') : t('cfg.no_hay_tickets_abiertos'), texto: verCerrados ? undefined : t('cfg.la_cola_registra_prioridad_categoria_y') }}
-        />
+        visibles.length === 0 ? (
+          // El vacío vive DENTRO de su tarjeta (Rovaq `.pc-card`), nunca suelto sobre el lienzo.
+          <Tarjeta titulo={t('cfg.solicitudes_de_soporte')} estado="vacio" mensaje={verCerrados ? t('e26.sop_sin_cerrados') : t('cfg.no_hay_tickets_abiertos')} detalle={verCerrados ? undefined : t('cfg.la_cola_registra_prioridad_categoria_y')} contenida />
+        ) : (
+          <TablaBase
+            etiqueta={t('cfg.solicitudes_de_soporte')} columnas={columnas} filas={visibles} idFila={(x) => x.id} densa altoMaximo={false} tarjetaMovil
+          />
+        )
       )}
     </EsqueletoTablaMaestra>
   );

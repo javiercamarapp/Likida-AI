@@ -244,7 +244,8 @@ export function filasAtencion(
 
 // ── «Siguiente mejor acción» ──────────────────────────────────────────────
 
-export interface AccionSugerida { id: string; titulo: string; porQue: string; textoBoton: string; href: string }
+/** `href` null = hay un pendiente real pero este rol no abre la pantalla que lo resuelve: se dice QUÉ pasa, sin botón que rebote. */
+export interface AccionSugerida { id: string; titulo: string; porQue: string; textoBoton: string; href: string | null }
 
 /** Regla fija (no un modelo): 1) el siguiente paso de la Puesta en marcha, 2) una alerta urgente de un agente,
  *  3) viajes escalados, 4) liquidaciones por revisar. Devuelve la lista ordenada; la primera es «la» acción. Pura. */
@@ -258,6 +259,12 @@ export function elegirAcciones(e: {
   const urgente = e.filas.find((f) => f.id.startsWith('insight-') && f.severidad === 'accion' && f.href);
   for (const f of [urgente, por('escalados'), por('por-revisar')]) {
     if (f?.href && f.textoAccion) out.push({ id: f.id, titulo: f.titulo, porQue: f.queSignifica ?? f.detalle, textoBoton: f.textoAccion, href: f.href });
+  }
+  // La tarjeta sale de lo MISMO que «Requiere tu atención»: un pendiente real sin enlace (el rol no abre esa pantalla) sigue siendo un
+  // pendiente. Se enumera sin botón, nunca como «nada urgente» al lado de una fila que pide atención.
+  for (const f of e.filas) {
+    if (f.sinPendiente || f.severidad === 'info' || out.some((a) => a.id === f.id)) continue;
+    out.push({ id: f.id, titulo: f.titulo, porQue: f.queSignifica ?? f.detalle, textoBoton: '', href: null });
   }
   return out;
 }

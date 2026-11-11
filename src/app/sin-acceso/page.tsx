@@ -3,6 +3,7 @@ import { supabaseServer } from '@/lib/supabase/server';
 import { envPuesta } from '@/lib/env';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
+import '../legal/publico-r2.css';
 
 export const metadata = { title: 'Sin acceso — Likida' };
 
@@ -48,6 +49,7 @@ export default function SinAcceso() {
         </>
       }
     >
+      <div className="rv-flujo" aria-hidden="true" />
       <div className="rv-pub__prosa rv-pub__sec">
         <h2>Qué sabemos y qué puedes hacer</h2>
         <p>

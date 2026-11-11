@@ -49,7 +49,7 @@ export function VistaConfigConductor({ sufijo, config, valores, contactos, patio
   return (
     <MarcoConfigAgente titulo={tx('conductores.forma.configuracion_del_agente_conductor')} apoyo={tx('rest.cuando_y_cuanto_insiste_el_agente')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/conductores${sufijo}`}>{tx('rest.volver_al_tablero')}</BotonEnlace>}>
       <AvisoCompacto tono="info" resumen={tx('rest.lo_que_guardes_aplica_desde_la')} />
-      {preflight !== undefined && <PanelPreflight tr={tr} preflight={preflight} />}
+      {preflight !== undefined && <PanelPreflight tr={tr} preflight={preflight} sufijo={sufijo} />}
       {legible ? (
         <FormaConfigConductor accion={accionGuardar} config={config} valores={valores} contactos={contactos} patios={patios} puedeEditar={puedeEditar} puedeForzarPreflight={puedeForzarPreflight} />
       ) : (

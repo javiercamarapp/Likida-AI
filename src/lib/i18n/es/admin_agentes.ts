@@ -132,4 +132,11 @@ export const admin_agentes = {
   'agente_ocr.aparecen_cuando_una_flota': 'Aparecen cuando una flota manda comprobantes por WhatsApp.',
   'agente_ocr.facturas_procesadas_por_dia': 'Facturas procesadas por día',
   'agente_ocr.el_costo_por_modelo': 'El costo por modelo de arriba cubre todas las fases: con los datos de hoy no se puede aislar solo el de OCR.',
+  'agentes_contenido.dar_de_alta': 'Dar de alta',
+  'agentes_contenido.vista_rapida': 'Vista rápida',
+  'agentes_contenido.vr_subtitulo': 'Agente {n} de {total}',
+  'agentes_contenido.vr_exito': 'Éxito (30 días)',
+  'agentes_contenido.vr_abrir': 'Abrir insumos',
+  'agentes_contenido.vr_sin_descripcion': 'Sin descripción declarada.',
+  'agentes_contenido.vr_modelo_sin_declarar': 'Modelo sin declarar',
 } as const;

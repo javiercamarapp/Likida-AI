@@ -204,8 +204,8 @@ function columnasCola(sufijo: string, tx: TAgentes = TR_ES.t): ColumnaTabla<Fila
     // Sin nombre no se inventa uno: la ficha del chofer puede estar incompleta y «—» es la verdad.
     { id: 'operador', titulo: tx('conductores.forma.operador'), celda: (l) => <span className="rv-tl__apagado">{l.operadorNombre ?? '—'}</span> },
     { id: 'unidad', titulo: tx('rest.unidad'), corta: true, celda: (l) => <span className="rv-tl__apagado">{l.unidadEco ?? '—'}</span> },
-    { id: 'comprobado', titulo: tx('liquidacion.vista.comprobado'), alinear: 'der', celda: (l) => <span className="cifra-mono">{mxn(l.comprobado)}</span> },
-    { id: 'diferencia', titulo: tx('liquidacion.vista.diferencia'), alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'cifra-mono rv-tl__bad' : 'cifra-mono'}>{mxn(l.diferencia)}</span> },
+    { id: 'comprobado', titulo: tx('liquidacion.vista.comprobado'), alinear: 'der', celda: (l) => <span className="rv-ag-num">{mxn(l.comprobado)}</span> },
+    { id: 'diferencia', titulo: tx('liquidacion.vista.diferencia'), alinear: 'der', celda: (l) => <span className={l.diferencia !== 0 ? 'rv-ag-num rv-tl__bad' : 'rv-ag-num'}>{mxn(l.diferencia)}</span> },
     {
       id: 'cuadre', titulo: tx('rest.cuadre'), corta: true,
       celda: (l) => {

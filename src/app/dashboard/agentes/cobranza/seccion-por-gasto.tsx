@@ -47,6 +47,7 @@ export function SeccionPorGasto({ config, plan, tablero, tr = TR_ES }: {
 
   return (
     <>
+      {/* sin-info: rótulo de sección de la página, no un recuadro con cifra */}
       <h2 className="rv-cob__seccion">{t('cobranza.gasto.cobranza_por_gasto')}</h2>
       <p className="rv-ag-notif__nota">
         {t('cobranza.gasto.que_comprobante_falta_de_que', { estado: config.porGasto
@@ -146,6 +147,7 @@ export function ConfigPorGasto({ config, plan, firma, instrucciones, guardar, tr
   const ejemplo: ItemCobro[] = plan.paraContactar[0]?.items.slice(0, 2) ?? [];
   return (
     <section aria-label={t('cobranza.gasto.configuracion_de_la_cobranza_por')}>
+      {/* sin-info: rótulo de sección de configuración, no un recuadro con cifra */}
       <h3>{t('cobranza.gasto.configuracion_de_la_cobranza_por')}</h3>
       <p className="rv-ag-notif__nota">{config.porGasto ? t('cobranza.gasto.encendida') : t('cobranza.gasto.apagada')}</p>
       <FormaPorGasto config={config} ejemplo={ejemplo} firma={firma} instrucciones={instrucciones} guardar={guardar} />

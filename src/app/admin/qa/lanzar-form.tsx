@@ -285,7 +285,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
 
         {/* ── Lanzar ─────────────────────────────────────────────────────────── */}
         <div className="rv-qa-acciones">
-          <Boton variante="primary" onClick={() => void lanzar()} disabled={Boolean(motivoBloqueo)} loading={lanzando}
+          <Boton variante="primary" tamano="sm" onClick={() => void lanzar()} disabled={Boolean(motivoBloqueo)} loading={lanzando}
             icono={lanzando ? undefined : <Icono icono={Play} tam={14} />}>
             {lanzando ? t('qa_lanzar_form.lanzando') : t('qa_lanzar_form.lanzar_corrida')}
           </Boton>

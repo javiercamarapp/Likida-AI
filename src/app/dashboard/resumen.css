@@ -1,0 +1,2 @@
+/* Resumen del dueño. La fecha ya vive en la cabecera móvil: no se repite como píldora bajo la descripción (Rovaq no la repite). */
+@media (max-width: 767px) { [data-ui="v2"] .rv-res__fecha { display: none; } }

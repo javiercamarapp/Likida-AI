@@ -5,6 +5,7 @@ import { fechaMx, mxn, numero } from '@/lib/formato';
 import { listarFacturasSaas, type FacturaSaasFila } from '@/lib/saas/transferencia';
 import { Aviso, BarraFiltros, BotonEnlace, Disclosure, EstadoError, FiltroFecha, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { BotonExportarFacturas } from './boton-exportar';
 import { leerFiltros, rangoAlReves } from './filtros';
@@ -111,7 +112,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
         </>
       )}
       etiquetaCifras={t('facturas.facturas_de_la_mensualidad')}
-      cifras={cifras}
+      cifras={uniformes(cifras)}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.tenantNombre} subtitulo={t('facturas.vr_subtitulo', { n: posicion + 1, total: filas.length })} hrefCerrar={hrefCerrar}

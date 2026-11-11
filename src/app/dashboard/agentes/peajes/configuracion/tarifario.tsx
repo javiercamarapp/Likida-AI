@@ -45,7 +45,7 @@ export function SeccionTarifario({ datos, tr = TR_ES }: { datos: TarifarioVista;
   return (
     <div id="tarifario">
     <Tarjeta titulo={tx('rest.tarifario')}>
-      <p className="text-[11px] mb-3 rv-pj-c-faint">{ricoT(tx('rest.cuanto_cuesta_cruzar_cada_caseta_con'), { b: (c) => <b>{c}</b>, e2: (c) => <span className="cifra-mono">{c}</span> })}</p>
+      <p className="text-[11px] mb-3 rv-pj-c-faint">{ricoT(tx('rest.cuanto_cuesta_cruzar_cada_caseta_con'), { b: (c) => <b>{c}</b>, e2: (c) => <span className="rv-ag-num">{c}</span> })}</p>
 
       <form action={acciones.importarTarifas} encType="multipart/form-data" className="flex items-center gap-2 flex-wrap">
         <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label={tx('rest.archivo_de_tarifas')}
@@ -68,8 +68,8 @@ export function SeccionTarifario({ datos, tr = TR_ES }: { datos: TarifarioVista;
           {tarifas.slice(0, MAX_TARIFAS_VISIBLES).map((t) => (
             <div key={t.id} className="hairline rounded-lg px-2.5 py-1.5 flex items-center gap-2 flex-wrap text-[12px]">
               <span className="font-medium">{t.casetaNorm}</span>
-              <span className="cifra-mono text-[11px] rv-pj-c-muted">clase {t.clase}</span>
-              <span className="cifra-mono">{mxn(t.importe)}</span>
+              <span className="rv-ag-num text-[11px] rv-pj-c-muted">clase {t.clase}</span>
+              <span className="rv-ag-num">{mxn(t.importe)}</span>
               <span className="text-[11px] rv-pj-c-faint">
                 desde {t.vigenteDesde}{t.vigenteHasta ? ` hasta ${t.vigenteHasta}` : ' sin fin'} · {etiquetaOrigen(tx)[t.origen] ?? t.origen}
               </span>

@@ -203,9 +203,9 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
       etiquetaCifras={tr('arco.page.solicitudesArco')} selloCifras={selloHoy(tr('arco.page.selloArco'))}
       /* H7 (auditoría 24): `null` es NO MEDIBLE («—», no «0») cuando la lectura falló: «0 vencidas sin responder» con la base caída es la mentira que un responsable obligado por el art. 31 no se puede permitir. */
       cifras={[
-        { etiqueta: tr('arco.page.porResponder'), info: 'arco.por_responder', valor: errorCarga ? null : pendientes.length },
-        { etiqueta: tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO }), info: 'arco.vencen_pronto', valor: errorCarga ? null : vencenPronto.length },
-        { etiqueta: tr('arco.page.vencidasSinResponder'), info: 'arco.vencidas', valor: errorCarga ? null : vencidas.length, tono: !errorCarga && vencidas.length > 0 ? 'bad' : undefined },
+        { etiqueta: tr('arco.page.porResponder'), info: 'arco.por_responder', valor: errorCarga ? null : pendientes.length, nota: tr('e26b.arco_por_responder_nota') },
+        { etiqueta: tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO }), info: 'arco.vencen_pronto', valor: errorCarga ? null : vencenPronto.length, nota: tr('e26b.arco_pronto_nota') },
+        { etiqueta: tr('arco.page.vencidasSinResponder'), info: 'arco.vencidas', valor: errorCarga ? null : vencidas.length, nota: tr('e26b.arco_vencidas_nota'), tono: !errorCarga && vencidas.length > 0 ? 'bad' : undefined },
       ]}
     >
       <Tarjeta titulo={tr('arco.page.solicitudesDeTusOperadores')} info="arco.solicitudes">

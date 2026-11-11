@@ -41,7 +41,7 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
           nota={tx('rest.el_proveedor_o_tu_manda_el')}>
         <div className="space-y-3 text-[12px]">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="cifra-mono rv-pj-pill" data-tono={config?.correoActivo ? 'ok' : undefined}>
+            <span className="rv-ag-num rv-pj-pill" data-tono={config?.correoActivo ? 'ok' : undefined}>
               {config?.correoActivo ? 'activo' : 'apagado'}
             </span>
             {puedeAdministrar ? (
@@ -58,14 +58,14 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
           {config?.correoActivo && (
             entradas.direccionCorreo
               ? (
-                <label className="block">{ricoT(tx('rest.e0_direccion_de_tu_flota_quien'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<input readOnly value={entradas.direccionCorreo} className="w-full cifra-mono mt-0.5 rv-ctl" />
+                <label className="block">{ricoT(tx('rest.e0_direccion_de_tu_flota_quien'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<input readOnly value={entradas.direccionCorreo} className="w-full rv-ag-num mt-0.5 rv-ctl" />
                 </label>
               )
               : <p className="rv-pj-c-warn">{tx('rest.falta_configurar_el_dominio_de_correo')}</p>
           )}
           {puedeAdministrar && config?.correoActivo && (
             <form action={acciones.guardarRemitentes} className="space-y-1.5">
-              <label className="block">{ricoT(tx('rest.e0_remitentes_permitidos_correo_o_dominio'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<textarea name="remitentes" rows={3} defaultValue={config.remitentes.join('\n')} maxLength={2500} className="w-full cifra-mono mt-0.5 rv-ctl" />
+              <label className="block">{ricoT(tx('rest.e0_remitentes_permitidos_correo_o_dominio'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<textarea name="remitentes" rows={3} defaultValue={config.remitentes.join('\n')} maxLength={2500} className="w-full rv-ag-num mt-0.5 rv-ctl" />
               </label>
               <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.guardar_remitentes')}</Boton>
               <p className="text-[11px] rv-pj-c-faint">{tx('rest.un_correo_de_otro_remitente_se')}</p>
@@ -81,7 +81,7 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
         ) : (
           <div className="space-y-3 text-[12px]">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="cifra-mono rv-pj-pill" data-tono={config.pullActivo ? 'ok' : undefined}>{config.pullActivo ? 'activo' : 'apagado'}</span>
+              <span className="rv-ag-num rv-pj-pill" data-tono={config.pullActivo ? 'ok' : undefined}>{config.pullActivo ? 'activo' : 'apagado'}</span>
               {config.pullActivo && <span className="rv-pj-c-muted">cada {minutos(config.pullIntervaloMin)}</span>}
               {config.pullUltimoEn && <span className="text-[11px] rv-pj-c-faint">{tx('rest.ultima_consulta_buena_utc', { config: config.pullUltimoEn.slice(0, 16).replace('T', ' ') })}</span>}
               {puedeAdministrar && config.pullActivo && (

@@ -1,7 +1,7 @@
 import { getT } from '@/lib/i18n/servidor';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { Aviso, BotonEnlace, EstadoError, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Aviso, BarraFiltros, BotonEnlace, EstadoError, FiltroChip, StatusChip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import './timbrado.css';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
@@ -36,7 +36,7 @@ const RUTA = '/dashboard/timbrado';
 export default async function PaginaTimbrado({
   searchParams,
 }: {
-  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
+  searchParams: Promise<{ tenant?: string; rol?: string; vista?: string; estado?: string }>;
 }) {
   const { t: tr } = await getT('dinero');
   const sp = await searchParams;
@@ -54,6 +54,21 @@ export default async function PaginaTimbrado({
   } catch (e) {
     logger.warn('timbrado.cola_no_leida', { tenantId, err: e instanceof Error ? e.message : String(e) });
   }
+
+  // Filtro de la cola (Rovaq «Tabla maestra»): vive en la URL y mueve la tabla entera.
+  const FILTROS = ['todos', 'sin_timbre', 'bloqueados', 'timbrados'] as const;
+  type Filtro = typeof FILTROS[number];
+  const filtro: Filtro = (FILTROS as readonly string[]).includes(sp.estado ?? '') ? (sp.estado as Filtro) : 'todos';
+  const coincide = (f: RenglonTimbrado, x: Filtro) => x === 'todos' || (x === 'sin_timbre' ? f.timbre === null : x === 'bloqueados' ? f.timbre?.estado === 'pendiente' : f.timbre?.estado === 'vigente');
+  const visibles = filas ? filas.filter((f) => coincide(f, filtro)) : [];
+  const hrefFiltro = (x: Filtro) => {
+    const q = new URLSearchParams();
+    for (const k of ['tenant', 'vista', 'rol'] as const) { const v = sp[k]; if (v) q.set(k, v); }
+    if (x !== 'todos') q.set('estado', x);
+    const qs = q.toString();
+    return qs ? `${RUTA}?${qs}` : RUTA;
+  };
+  const rotuloFiltro: Record<Filtro, string> = { todos: tr('e26b.timb_todos'), sin_timbre: tr('timbrado.page.sinTimbre'), bloqueados: tr('timbrado.page.bloqueados'), timbrados: tr('timbrado.page.timbrados') };
 
   const detalleTimbre = (f: RenglonTimbrado): string => (f.timbre === null
     ? tr('timbrado.page.sinTimbre2')
@@ -80,6 +95,11 @@ export default async function PaginaTimbrado({
   return (
     <EsqueletoTablaMaestra
       titulo={tr('timbrado.page.cartaPorte')}
+      filtros={filas ? (
+        <BarraFiltros etiqueta={tr('e26b.timb_filtros')} nActivos={filtro === 'todos' ? 0 : 1} limpiarHref={RUTA + (sufijo ? sufijo : '')}>
+          {FILTROS.map((x) => <FiltroChip key={x} activo={filtro === x} href={hrefFiltro(x)}>{rotuloFiltro[x]}</FiltroChip>)}
+        </BarraFiltros>
+      ) : undefined}
       apoyo={pac.configurado
         ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? tr('timbrado.page.dePruebasLosTimbres') : tr('timbrado.page.deProduccion')}.`
         : tr('timbrado.page.sinPacConfiguradoEl')}
@@ -91,19 +111,22 @@ export default async function PaginaTimbrado({
         { etiqueta: tr('timbrado.page.bloqueados'), info: 'timbrado.bloqueados', valor: filas.filter((f) => f.timbre?.estado === 'pendiente').length, tono: filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined },
       ] : undefined}
       etiquetaCifras={tr('timbrado.page.viajesEnLaCola')} selloCifras={selloHoy(tr('timbrado.page.selloCola'))}
-      pie={<>{filas && filas.length > 0 ? <>{tr('timbrado.page.primeroLoQuePide')}<br /></> : null}{tr('timbrado.page.estaColaListaLos')}</>}
+      pie={<>{visibles.length > 0 ? <>{tr('timbrado.page.primeroLoQuePide')}<br /></> : null}{tr('timbrado.page.estaColaListaLos')}</>}
     >
       {filas === null ? (
         <EstadoError>{tr('timbrado.page.noSePudoLeer')}</EstadoError>
+      ) : visibles.length === 0 ? (
+        <Tarjeta
+          titulo={tr('timbrado.page.viajesEnLaCola')} estado="vacio"
+          mensaje={filas.length === 0 ? tr('timbrado.page.nadaEnLaCola') : tr('e26b.timb_nada_con_filtro')}
+          detalle={filas.length === 0 ? tr('timbrado.page.aquiAparecenLosViajes') : undefined}
+          accionVacio={filas.length === 0 && puedeVerRuta(rol, '/dashboard/carta-porte')
+            ? <BotonEnlace href={`/dashboard/carta-porte${sufijo}`} variante="secondary" tamano="sm">{tr('timbrado.page.irACartaPorte')}</BotonEnlace>
+            : undefined}
+        />
       ) : (
         <TablaBase
-          etiqueta={tr('timbrado.page.viajesEnLaCola')} columnas={columnas} filas={filas} idFila={(f) => f.viajeId} densa altoMaximo={false} tarjetaMovil
-          vacio={{
-            titulo: tr('timbrado.page.nadaEnLaCola'), texto: tr('timbrado.page.aquiAparecenLosViajes'),
-            accion: puedeVerRuta(rol, '/dashboard/carta-porte')
-              ? <BotonEnlace href={`/dashboard/carta-porte${sufijo}`} variante="secondary" tamano="sm">{tr('timbrado.page.irACartaPorte')}</BotonEnlace>
-              : undefined,
-          }}
+          etiqueta={tr('timbrado.page.viajesEnLaCola')} columnas={columnas} filas={visibles} idFila={(f) => f.viajeId} densa altoMaximo={false} tarjetaMovil
         />
       )}
     </EsqueletoTablaMaestra>

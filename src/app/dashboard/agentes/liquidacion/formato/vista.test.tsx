@@ -22,6 +22,13 @@ describe('la pantalla del formato de las liquidaciones', () => {
     expect(html).not.toContain('Columnas de la tabla');
   });
 
+  it('«Subir muestra» espera a que haya un archivo: sin él es punteado y deshabilitado; el vacío vive en la misma tarjeta', () => {
+    const html = pintar({ config: null });
+    expect(html).toMatch(/<button[^>]*rv-ag-no-disponible[^>]*disabled|<button[^>]*disabled[^>]*rv-ag-no-disponible/);
+    expect(html).toContain('rv-ag-vacio');
+    expect((html.match(/<h2 class="rv-tarjeta__titulo">/g) ?? []).length).toBeLessThanOrEqual(2);
+  });
+
   it('con formato muestra título, columnas con su campo de origen, datos de arriba y los teléfonos', () => {
     const html = pintar();
     expect(html).toContain('LIQUIDACIÓN SEMANAL');

@@ -1,18 +1,19 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Activity, Wallet, Receipt, Cpu } from 'lucide-react';
 import { mxn, numero, fechaCorta, fechaHoraMx } from '@/lib/formato';
 import type { FichaCliente } from '@/lib/admin/ficha-cliente';
 import type { InterruptorPipelineTenant } from '@/lib/admin/negocio';
 import type { CasillaArranque } from '@/lib/admin/arranque';
 import type { Persona } from '@/lib/admin/personas';
 import { nombreDeRol } from '@/lib/auth/roles';
-import { BotonEnlace, Icono, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '../../../ui-v2/componentes';
+import { BotonEnlace, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '../../../ui-v2/componentes';
 import type { PropsCifra } from '../../../ui-v2/graficas';
 import { FormaConAviso, type AccionDeForma } from '../../ui/forma';
 import { CampoTexto } from '../../../ui-v2/componentes/campos';
 import { SeccionInterruptores } from '../../observabilidad/interruptores-ui';
+import { uniformes } from '../../cifras-uniformes';
 import { SeccionesFicha } from './secciones';
+import '../../resumen.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
 import { trAdminFlotasEs } from '@/lib/i18n/tr_admin';
@@ -59,6 +60,7 @@ export function Ficha360({
 
   const resumen = (
     <div className="rv-pila">
+      <FilaTarjetas variante="6-6">
       <Tarjeta titulo={t('flotas_ficha.origen')}>
         {!f.origenLegible ? <p>{t('flotas_ficha.origen_ilegible_ahora_mismo')}</p>
           : f.origen ? <p>{t('flotas_ficha.nacio_del_pipeline')} {f.origen.empresa} ({f.origen.fuente}{f.origen.cerradoEn ? `, cerrado ${fechaCorta(f.origen.cerradoEn)}` : ''}).</p>
@@ -76,6 +78,7 @@ export function Ficha360({
           ]}
         />
       </Tarjeta>
+      </FilaTarjetas>
       <Tarjeta titulo={t('flotas_ficha.ultimas_corridas_de_agentes')} estado={f.corridas === null ? 'error' : f.corridas.length === 0 ? 'vacio' : 'ok'}
         mensaje={f.corridas === null ? t('flotas_ficha.no_se_pudieron_leer_2') : t('flotas_ficha.sin_corridas_de_agentes')}>
         <TablaBase
@@ -253,17 +256,33 @@ export function Ficha360({
   );
 }
 
-/** Las cuatro cifras de la ficha (Rovaq «Ficha 360»: los tiles van ANTES de las secciones, bajo el encabezado). `null` = la lectura falló: «No disponible ahora», nunca 0. */
-export function cifrasFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdminFlotasEs): PropsCifra[] {
-  return [
-    { etiqueta: t('flotas_ficha.viajes_liquidados'), valor: f.operacion?.viajesLiquidados ?? null, formato: 'entero', estado: f.operacion ? 'ok' : 'error', icono: <Icono icono={Activity} /> },
-    { etiqueta: t('flotas_ficha.monto_comprobado'), valor: f.operacion?.montoComprobado ?? null, formato: 'mxn', estado: f.operacion ? 'ok' : 'error', icono: <Icono icono={Wallet} /> },
-    { etiqueta: t('flotas_ficha.liquidaciones_por_revisar'), valor: f.operacion?.porRevisar ?? null, formato: 'entero', estado: f.operacion ? 'ok' : 'error', icono: <Icono icono={Receipt} /> },
+/** Las cifras de la ficha (Rovaq «Ficha 360»: los tiles van ANTES de las secciones, bajo el encabezado). Las cuatro de operación y costo, y
+ *  con `ctx` dos más: las personas activas y el avance del arranque. `null` = la lectura falló: «No disponible ahora», nunca 0. Sin icono
+ *  (el rótulo lleva el punto de procedencia y los dos juntos se encimaban en móvil) y con el mismo filete en todas las celdas. */
+export function cifrasFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdminFlotasEs, ctx?: { personas?: Persona[] | null; casillas?: CasillaArranque[] | null }): PropsCifra[] {
+  const base: PropsCifra[] = [
+    { etiqueta: t('flotas_ficha.viajes_liquidados'), valor: f.operacion?.viajesLiquidados ?? null, formato: 'entero', estado: f.operacion ? 'ok' : 'error' },
+    { etiqueta: t('flotas_ficha.monto_comprobado'), valor: f.operacion?.montoComprobado ?? null, formato: 'mxn', estado: f.operacion ? 'ok' : 'error' },
+    { etiqueta: t('flotas_ficha.liquidaciones_por_revisar'), valor: f.operacion?.porRevisar ?? null, formato: 'entero', estado: f.operacion ? 'ok' : 'error' },
     {
       etiqueta: t('flotas_ficha.costo_de_ia_30'), valor: f.consumoIa?.d30Usd ?? null, formato: 'usd', estado: f.consumoIa ? 'ok' : 'error',
-      nota: f.consumoIa ? t('flotas_ficha.usd_historico', { historicoUsd: numero(f.consumoIa.historicoUsd) }) : undefined, icono: <Icono icono={Cpu} />,
+      nota: f.consumoIa ? t('flotas_ficha.usd_historico', { historicoUsd: numero(f.consumoIa.historicoUsd) }) : undefined,
     },
   ];
+  if (!ctx) return uniformes(base);
+  const personas = ctx.personas;
+  const casillas = ctx.casillas;
+  const hechas = casillas ? casillas.filter((c) => c.estado === 'ok').length : null;
+  const medido = casillas ? casillas.every((c) => c.estado !== 'sin_medir') : false;
+  return uniformes([
+    ...base,
+    personas == null
+      ? { etiqueta: t('flotas_ficha.personas_activas'), valor: null, estado: 'error' as const }
+      : { etiqueta: t('flotas_ficha.personas_activas'), valor: personas.filter((p) => p.activa).length, formato: 'entero' as const, nota: t('flotas_ficha.de_personas', { total: numero(personas.length) }) },
+    casillas == null || !medido
+      ? { etiqueta: t('flotas_ficha.arranque_de_la_flota'), valor: null, estado: 'error' as const }
+      : { etiqueta: t('flotas_ficha.arranque_de_la_flota'), valor: `${hechas} de ${casillas.length}` },
+  ]);
 }
 
 /** Los chips de la ficha: el plan y el estado de la suscripción, solo si se pudieron leer. */
@@ -282,6 +301,12 @@ export function encabezadoFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdm
     titulo: f.tenant.nombre,
     apoyo: t('flotas_ficha.plan', { plan: f.tenant.plan, creadoEn: f.tenant.creadoEn ? t('ficha.alta_fecha', { fecha: fechaCorta(f.tenant.creadoEn) }) : '' }),
     volver: { href: '/admin/flotas', etiqueta: t('flotas_ficha.volver_a_clientes') },
-    acciones: <BotonEnlace href={`/dashboard?tenant=${f.tenant.id}&rol=flota_admin`} variante="secondary" tamano="sm">{t('flotas_ficha.ver_su_panel')}</BotonEnlace>,
+    // Rovaq P2b: «Abrir organización» (primario) + «Gestionar equipo»; «Todas las organizaciones» lo pone el esqueleto como «Volver».
+    acciones: (
+      <>
+        <BotonEnlace href={`/dashboard?tenant=${f.tenant.id}&rol=flota_admin`} variante="primary" tamano="sm">{t('flotas_ficha.ver_su_panel')}</BotonEnlace>
+        <BotonEnlace href={`/admin/equipo?flota=${f.tenant.id}`} variante="secondary" tamano="sm">{t('flotas_ficha.gestionar_en_equipo')}</BotonEnlace>
+      </>
+    ),
   };
 }

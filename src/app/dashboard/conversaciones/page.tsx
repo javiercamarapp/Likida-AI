@@ -1,3 +1,4 @@
+import { cifrasUniformes } from '../formato';
 import { redirect } from 'next/navigation';
 import { MessageCircle, MessagesSquare } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -8,7 +9,8 @@ import { logger } from '@/lib/logger';
 import type { Metadata } from 'next';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-import { BotonEnlace, EstadoError, EstadoVacio, Icono } from '@/app/ui-v2/componentes';
+import { BarraFiltros, BotonEnlace, EstadoError, EstadoVacio, FiltroBusqueda, Icono } from '@/app/ui-v2/componentes';
+import { TarjetaTabla } from '../bloque';
 import { TablaLista, type ColumnaTabla } from '@/app/ui-v2/datos';
 import { CajonVistaRapida, EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { sufijoTenant } from '../sufijo';
@@ -46,7 +48,7 @@ const RUTA = '/dashboard/conversaciones';
  * hay — se dice, no se insinúa lo contrario.
  */
 export default async function ConversacionesFlotaPage({ searchParams }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; ver?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; ver?: string; q?: string }>;
 }) {
   const { t, idioma } = await getT('operacion');
   const sp = await searchParams;
@@ -65,6 +67,11 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
     logger.error('conversaciones.lectura_fallo', { tenantId, err: e instanceof Error ? e.message : String(e) });
     errorCarga = 'lectura';
   }
+  // Búsqueda en memoria sobre los hilos que la lectura del tenant YA trajo (nunca una consulta más amplia): chofer, teléfono o folio.
+  const q = (sp.q ?? '').trim().slice(0, 80);
+  const norm = (x: string | null | undefined) => (x ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const todosLosHilos = hilos;
+  if (q) hilos = hilos.filter((h) => [h.operadorNombre, h.telefono, h.viajeFolio].some((x) => norm(x).includes(norm(q))));
   const mensajes = hilos.reduce((s, h) => s + h.turns.length, 0);
   const recortado = total !== null && total > hilos.length;
 
@@ -96,7 +103,13 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
     <EsqueletoTablaMaestra
       titulo={t('conv.titulo')}
       apoyo={t('conv.apoyo')}
-      cifras={cifras}
+      filtros={errorCarga === null && todosLosHilos.length > 0 ? (
+        <BarraFiltros accion={RUTA} buscar etiqueta={t('conv.filtros')} nActivos={q ? 1 : 0} limpiarHref={`${RUTA}${sufijoTenant(sp)}`}
+          ocultos={[...new URLSearchParams(sufijoTenant(sp).replace(/^\?/, '')).entries()]}>
+          <FiltroBusqueda nombre="q" valor={q} placeholder={t('conv.buscar.ph')} etiqueta={t('conv.buscar.aria')} />
+        </BarraFiltros>
+      ) : undefined}
+      cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy(t('conv.sello'))}
       pie={errorCarga === null && hilos.length > 0 ? (recortado ? t('conv.tarjeta.recientes', { tope: TOPE_HILOS, total: total ?? 0 }) : t('conv.tarjeta.todos')) : undefined}
       vistaRapida={sel ? (
@@ -126,17 +139,19 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
         </CajonVistaRapida>
       ) : null}
     >
-      {errorCarga !== null ? (
-        <EstadoError reintentar>
-          {t('conv.error')}
-        </EstadoError>
-      ) : hilos.length === 0 ? (
-        <EstadoVacio icono={MessageCircle} contenido titulo={t('conv.vacio.titulo')}>
-          {t('conv.vacio')}
-        </EstadoVacio>
-      ) : (
-        <TablaLista<Hilo> etiqueta={t('conv.tabla')} columnas={columnas} filas={hilos} idFila={(h) => h.telefono} base={RUTA} params={{}} />
-      )}
+      <TarjetaTabla titulo={t('conv.tabla')} contador={errorCarga === null && hilos.length > 0 ? numero(hilos.length, idioma) : undefined}>
+        {errorCarga !== null ? (
+          <EstadoError reintentar>
+            {t('conv.error')}
+          </EstadoError>
+        ) : hilos.length === 0 ? (
+          <EstadoVacio icono={MessageCircle} contenido titulo={q ? t('conv.sincoincidencias') : t('conv.vacio.titulo')}>
+            {t('conv.vacio')}
+          </EstadoVacio>
+        ) : (
+          <TablaLista<Hilo> etiqueta={t('conv.tabla')} columnas={columnas} filas={hilos} idFila={(h) => h.telefono} base={RUTA} params={{}} />
+        )}
+      </TarjetaTabla>
     </EsqueletoTablaMaestra>
   );
 }
