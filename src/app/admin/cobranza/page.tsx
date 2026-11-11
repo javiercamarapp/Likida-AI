@@ -8,8 +8,8 @@ import { getPiezasDunningPlataforma, getUltimaCorridaDunningPlataforma, type Cor
 import { armarEstadoDunning, type SelloToque } from '@/lib/likida/cobranza_estado';
 import { toquesDeHoy, tituloToque } from '@/lib/likida/agentes/exito';
 import type { FacturaPorCobrar } from '@/lib/saas/transferencia';
-import { Aviso, AvisoCompacto, Disclosure, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, AvisoCompacto, Disclosure, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import '../dinero.css';
 
 import { getT } from '@/lib/i18n/servidor';
@@ -73,46 +73,48 @@ export default async function CobranzaPage() {
   const sinBase = !!estado && totalBase === 0 && estado.facturas.length === 0 && estado.propuestasPendientes === 0 && estado.propuestasEnviadas === 0;
   const hayError = facturas.error || piezas.error || corrida.error;
 
+  const cifras = estado && !sinBase ? [
+    { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
+    { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
+    {
+      etiqueta: t('cobranza.toques_sin_propuesta'), valor: String(estado.toquesSinPropuesta),
+      nota: estado.toquesSinPropuesta > 0 ? t('cobranza.el_agente_no_ha') : undefined,
+      tono: estado.toquesSinPropuesta > 0 && !piezas.error ? 'warn' as const : undefined,
+    },
+    { etiqueta: t('cobranza.propuestas_pendientes_enviadas_por'), valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
+  ] : undefined;
+
   return (
-    <MarcoPagina titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}>
-      {hayError ? (
-        <Aviso tono="error" titulo={t('cobranza.no_se_pudo_leer')}>
-          {facturas.error && t('cobranza.las_facturas_por_cobrar')}
-          {piezas.error && t('cobranza.las_propuestas_de_recordatorio')}
-          {corrida.error && t('cobranza.la_ultima_corrida_del')}
-          
-          {t('cobranza.recarga_la_pagina_si')}
-        </Aviso>
-      ) : null}
-
-      <AvisoCompacto
-        tono="info"
-        resumen="El dunning de las mensualidades de Likida ya corre: prepara recordatorios en cinco toques, como propuestas a la bandeja de aprobación, no envíos."
-        mas={(
-          <>
-            El agente de cobranza recorre las facturas pendientes o fallidas y, para cada una, prepara un recordatorio —3 días antes del corte, el día, y +3, +7 y +15—.
-            Son <strong>propuestas a la bandeja de aprobación, no envíos</strong>: no hay canal de correo al cliente aprobado y nada sale solo. En{' '}
-            <Link href="/admin/aprobaciones">Aprobaciones</Link> el dueño solo aprueba o rechaza la propuesta; el envío al cliente lo hace por su cuenta y el sistema no lo registra,
-            así que «enviadas» seguirá en 0 hasta que exista ese canal. Emitir la mensualidad, conciliar el pago contra el banco y timbrar el CFDI se hace en{' '}
-            <Link href="/admin/costos-facturacion">Planes y cobro</Link>. El vencimiento se toma como el inicio del periodo (la mensualidad se cobra por adelantado).
-          </>
-        )}
-      />
-
-      {estado && !sinBase ? (
-        /* Sin una sola factura ni propuesta no hay base que medir: no se pintan cuatro celdas vacías; el estado vacío de «Facturas por cobrar» (abajo) lo dice una vez. */
-        <TiraCifras etiqueta={t('cobranza.cobranza_de_las_mensualidades')} items={[
-            { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
-            { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
-            {
-              etiqueta: t('cobranza.toques_sin_propuesta'), valor: String(estado.toquesSinPropuesta),
-              nota: estado.toquesSinPropuesta > 0 ? t('cobranza.el_agente_no_ha') : undefined,
-              tono: estado.toquesSinPropuesta > 0 && !piezas.error ? 'warn' as const : undefined,
-            },
-            { etiqueta: t('cobranza.propuestas_pendientes_enviadas_por'), valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
-          ]} />
-      ) : null}
-
+    <EsqueletoTablaMaestra
+      titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}
+      etiquetaCifras={t('cobranza.cobranza_de_las_mensualidades')}
+      cifras={cifras}
+      avisos={(
+        <>
+          {hayError ? (
+            <Aviso tono="error" titulo={t('cobranza.no_se_pudo_leer')}>
+              {facturas.error && t('cobranza.las_facturas_por_cobrar')}
+              {piezas.error && t('cobranza.las_propuestas_de_recordatorio')}
+              {corrida.error && t('cobranza.la_ultima_corrida_del')}
+              {t('cobranza.recarga_la_pagina_si')}
+            </Aviso>
+          ) : null}
+          <AvisoCompacto
+            tono="info"
+            resumen="El dunning de las mensualidades de Likida ya corre: prepara recordatorios en cinco toques, como propuestas a la bandeja de aprobación, no envíos."
+            mas={(
+              <>
+                El agente de cobranza recorre las facturas pendientes o fallidas y, para cada una, prepara un recordatorio —3 días antes del corte, el día, y +3, +7 y +15—.
+                Son <strong>propuestas a la bandeja de aprobación, no envíos</strong>: no hay canal de correo al cliente aprobado y nada sale solo. En{' '}
+                <Link href="/admin/aprobaciones">Aprobaciones</Link> el dueño solo aprueba o rechaza la propuesta; el envío al cliente lo hace por su cuenta y el sistema no lo registra,
+                así que «enviadas» seguirá en 0 hasta que exista ese canal. Emitir la mensualidad, conciliar el pago contra el banco y timbrar el CFDI se hace en{' '}
+                <Link href="/admin/costos-facturacion">Planes y cobro</Link>. El vencimiento se toma como el inicio del periodo (la mensualidad se cobra por adelantado).
+              </>
+            )}
+          />
+        </>
+      )}
+    >
       <Tarjeta titulo={t('cobranza.ultima_corrida_del_agente')} estado={corrida.error ? 'error' : 'ok'} mensaje={t('cobranza.no_se_pudo_leer_2')} reintentar>
         {corrida.dato === null ? (
           <p className="adm-din-nota">
@@ -179,7 +181,7 @@ export default async function CobranzaPage() {
           {t('cobranza.pendiente_de_construir_los')}
         </p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
