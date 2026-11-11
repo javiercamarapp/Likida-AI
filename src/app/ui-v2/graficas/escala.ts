@@ -17,6 +17,34 @@ export function compactEs(n: number | null | undefined): string {
   return `${signo}${decimalBreve.format(a / 1e9)} mil M`;
 }
 
+/** Marcas del eje Y SIN repetidos: con tope < 1 (US$ 0.8 → 0, 0.4, 0.8) `compactEs` redondeaba la mitad a «0» o «1» y el eje decía «0, 1, 1».
+ *  Se usan los decimales mínimos con los que las tres marcas se leen distintas. Desde 1 000 se compacta («1.5 mil», «2.1 M»), como Rovaq. */
+export function marcasEje(ticks: readonly number[]): string[] {
+  const unicas = (xs: string[]) => new Set(xs).size === xs.length;
+  const tope = Math.max(0, ...ticks.map((t) => Math.abs(t)));
+  if (tope >= 1000) {
+    const compactas = ticks.map((t) => (t === 0 ? '0' : compactEs(t)));
+    if (unicas(compactas)) return compactas;
+  }
+  for (let d = 0; d <= 4; d++) {
+    const f = new Intl.NumberFormat('es-MX', { minimumFractionDigits: d, maximumFractionDigits: d });
+    const fuera = ticks.map((t) => (t === 0 ? '0' : f.format(t)));
+    // Únicas Y fieles: «0, 0.0, 0.1» para [0, 0.04, 0.08] es unívoco pero miente.
+    if (unicas(fuera) && ticks.every((t, i) => Math.abs(Number(fuera[i].replace(/,/g, '')) - t) < 1e-9)) return fuera;
+  }
+  return ticks.map((t) => (t === 0 ? '0' : String(t)));
+}
+
+/** Unidad corta del eje que se deduce del id de formato («usd» → «US$»). Solo ids (serializables); una función de formato no revela su unidad. */
+export function unidadDeFormato(f: unknown): string | undefined {
+  switch (f) {
+    case 'usd': return 'US$';
+    case 'mxn': case 'mxnEntero': case 'mxnCompacto': return 'MXN';
+    case 'litros': return 'L';
+    default: return undefined;
+  }
+}
+
 /** Pasos «agradables»: el máximo del eje es uno de estos × 10^k y su mitad también es redonda. */
 const PASOS = [1, 1.2, 1.6, 2, 3, 4, 5, 6, 8, 10];
 

@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { TooltipGrafica } from '../componentes/overlay';
 import type { Matiz } from '../metricas';
-import { cadaCuantas, compactEs, esConteoPequeno, geometriaColumnas, indicesEtiquetados, niceScale, ranuraEn, variacionVsAnterior } from './escala';
+import { cadaCuantas, compactEs, esConteoPequeno, geometriaColumnas, indicesEtiquetados, marcasEje, niceScale, ranuraEn, unidadDeFormato, variacionVsAnterior } from './escala';
 import type { TipoDato } from './kind-badge';
 import { CintaLectura, LecturaPunto, LeyendaFina, TablaGrafica, TEXTO_SIN_DATO, useAncho } from './partes';
 import { resolverFormato, type FormatoGrafica } from './formatos';
@@ -69,7 +69,8 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vac
   }
 
   const eje = niceScale(max, { entero: esConteoPequeno(valores) });
-  const marcas = eje.ticks.map((t) => (t === 0 ? '0' : compactEs(t)));
+  const marcas = marcasEje(eje.ticks);
+  const unidadEje = unidad ?? unidadDeFormato(formatoProp);
   const padL = Math.max(30, Math.max(...marcas.map((t) => t.length)) * 6.4 + 14);
   const anchoPlano = W - padL - PAD_R;
   const altoPlano = alto - PAD_T - PAD_B;
@@ -122,6 +123,7 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vac
               <text className="rv-gr__marca" x={padL - 8} y={Y(t) + 4} textAnchor="end">{marcas[i]}</text>
             </g>
           ))}
+          {unidadEje ? <text className="rv-gr__unidad" x="0" y="8" textAnchor="start">{unidadEje}</text> : null}
           {datos.map((d, i) => {
             const cx = padL + ranura * i + ranura / 2;
             const x0 = padL + ranura * i + desfase;

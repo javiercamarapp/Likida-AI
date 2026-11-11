@@ -12,7 +12,8 @@ import { join } from 'node:path';
 // de 8 matices (`--chart-N`, `--soft-N`, `--ink-N`, `--on-N`, `--region-*` del mapa), las gráficas y el logotipo de Google (obligatorio por su marca).
 //
 // EXCEPCIÓN ACOTADA (decisión del dueño, 7-nov-2026: «igualar a Rovaq y adoptar su azul»): el azul de Rovaq vive SOLO en las variables
-// `--seg-activo-*` (estado activo de segmentados, chips y filtros) y `--accion-cajon-*` (acción primaria de cajón), declaradas en
+// `--seg-activo-*` (estado activo de segmentados, chips y filtros), `--accion-cajon-*` (acción primaria de cajón) y, desde el 10-nov,
+// `--tabla-cab-*` (cabecera de tabla con el tinte petróleo de Rovaq; el dueño: «seguir a Rovaq en todo salvo el primario negro»), declaradas en
 // `ui-v2/tokens.css`. Cualquier otro uso de azul en el cromo sigue prohibido; el burdeos `--senal` sigue siendo la única señal «requiere acción».
 //
 // El ALCANCE ES DERIVADO (recorrido del árbol), no una lista a mano: una página pública nueva entra sola.
@@ -58,9 +59,11 @@ function valores(l: string, css: boolean): string[] {
 // Línea de la serie de datos (permitida): `--chart-1: …`, `--soft-3: …`, `--ink-5: …`, `--on-2: …`.
 const SERIE_DATOS = /--(?:chart|soft|ink|on)-\d\s*:|--region-[a-z]+\s*:/;
 /** Declaración permitida del azul de Rovaq: SOLO en tokens.css y SOLO estas dos familias de variables. */
-const AZUL_ROVAQ = /--(?:seg-activo|accion-cajon)-(?:bg|borde|fg|hover)\s*:/;
+const AZUL_ROVAQ = /--(?:seg-activo|accion-cajon)-(?:bg|borde|fg|hover)\s*:|--tabla-cab-(?:bg|ink)\s*:/;
 /** Valores exactos que la excepción admite (claro y oscuro); un tono nuevo obliga a tocar esta lista a propósito. */
-export const AZULES_ROVAQ_PERMITIDOS = new Set(['#e6edfa', '#1f4fb0', '#d8e3f8', '#2f6bd8', '#1d2433', '#a9c1f2', '#26314a']);
+export const AZULES_ROVAQ_PERMITIDOS = new Set(['#e6edfa', '#1f4fb0', '#d8e3f8', '#2f6bd8', '#1d2433', '#a9c1f2', '#26314a',
+  // Cabecera de tabla (`--tabla-cab-*`), medida en vivo en Rovaq el 10-nov: fondo #EEF6F9 y texto #145966; en oscuro, petróleo al 7 % y su tinta clara.
+  '#eef6f9', '#145966', '#162126', '#5bbdd3']);
 // Marca de terceros que no se puede recolorear (logotipo de Google).
 const MARCA_TERCEROS = /#4285F4/;
 

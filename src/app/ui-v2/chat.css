@@ -110,12 +110,13 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 .rv-chat__tema[data-tema="8"] {
   --cat: var(--chart-8, var(--muted));
 }
-.rv-chat__tema[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); background: var(--canvas); }
+.rv-chat__tema[aria-pressed="true"] { color: var(--ink); border-color: var(--chart-1, var(--ink)); background: color-mix(in srgb, var(--chart-1, var(--ink)) 10%, var(--surface)); }
+/* Tema activo AZUL como Rovaq (`.ctl` activo, medido en vivo 10-nov: fondo #EAF0FB, borde 1 px #2F6BD8). Son --chart-1 (#2f6bd8) y su 10 % sobre la superficie (= #EAF0FB en claro); en oscuro siguen el --chart-1 oscuro. Revierte el gris + borde negro de la identidad neutra: el dueño ordenó seguir a Rovaq en todo salvo el primario negro. */
 .rv-chat__q { justify-content: flex-start; padding: 7px 12px; font-weight: 500; text-align: left; line-height: 16px; white-space: normal; }
 /* Zona táctil de 44 px por un ::after invisible. */
 .rv-chat__tema::after, .rv-chat__q::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
 .rv-chat__tema:hover, .rv-chat__q:hover:not(:disabled) { background: var(--canvas); border-color: var(--input); color: var(--ink); }
-.rv-chat__tema[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--cat) 14%, var(--surface)); border-color: var(--cat, var(--ink)); }
+.rv-chat__tema[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--chart-1, var(--ink)) 14%, var(--surface)); border-color: var(--chart-1, var(--ink)); }
 .rv-chat__tema:focus-visible, .rv-chat__q:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
 .rv-chat__q:disabled { opacity: .5; cursor: not-allowed; }
 
@@ -252,6 +253,8 @@ summary.rv-chat__resumen::marker { content: ""; }
 
 /* ── Historial: columna en flujo sobre `lg`; bajo `lg` lo pinta el Drawer del motor único ── */
 .rv-chat__hist-boton[data-oculto] { visibility: hidden; }
+/* Botón «Historial» de 32 px como el `.ctl` de Rovaq (medido en vivo: 122×32; el nuestro medía 123×34 porque el contador de 20 px + padding 6 + borde lo estiraba). */
+[data-ui="v2"] .rv-chat .rv-btn.rv-chat__hist-boton { box-sizing: border-box; height: 32px; padding-block: 0; }
 .rv-chat__hist-cuenta { display: inline-block; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: var(--canvas); font: 600 12px/20px var(--font-sans-ui, inherit); text-align: center; color: var(--ink); }
 .rv-chat__hist { display: none; }
 @media (min-width: 1024px) {
