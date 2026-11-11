@@ -1041,6 +1041,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'descargaSat.vista.variosGastosEmpatanLikida': 'Several expenses tie: Likida does not guess which one it is',
   'descargaSat.vista.venceEl': ', expires on {v}',
   'descargaSat.vista.verLasFilas': 'View the rows:',
+  'descargaSat.panel.proveedorPendiente': 'Automatic download is not active for your account yet. Likida enables it on the service side; you do not need to do anything in your fleet.',
   'descargaSat.vista.verificarMiEFirma': 'Verify my e.firma with the provider',
   'descargaSat.vista.webService200000': 'Web service — 200,000 CFDI, up to 6 days',
   'descargaSat.vista.webService2000002': 'web service (200,000 CFDI per request, the SAT takes up to 6 days)',

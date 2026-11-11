@@ -1041,6 +1041,7 @@ export const dinero = {
   'descargaSat.vista.variosGastosEmpatanLikida': 'Varios gastos empatan: Likida no adivina cuál es',
   'descargaSat.vista.venceEl': ', vence el {v}',
   'descargaSat.vista.verLasFilas': 'Ver las filas:',
+  'descargaSat.panel.proveedorPendiente': 'La descarga automática aún no está activa para tu cuenta. Likida la habilita del lado del servicio; no tienes que hacer nada en tu flota.',
   'descargaSat.vista.verificarMiEFirma': 'Verificar mi e.firma con el proveedor',
   'descargaSat.vista.webService200000': 'Web service — 200,000 CFDI, hasta 6 días',
   'descargaSat.vista.webService2000002': 'web service (200,000 CFDI por petición, el SAT tarda hasta 6 días)',

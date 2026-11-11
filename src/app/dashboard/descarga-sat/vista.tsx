@@ -2,6 +2,7 @@ import { getT } from '@/lib/i18n/servidor';
 import { type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
+import Link from 'next/link';
 import { Archive, CloudDownload, FileCheck2, FileQuestion, Link2, Scale3d } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
@@ -21,7 +22,7 @@ import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  AvisoCompacto, BotonEnlace, CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FilaTarjetas, FormaConAviso, Icono, StatusChip, TablaBase, Tarjeta,
+  AvisoCompacto, CampoFecha, CampoSelect, CampoTexto, EstadoVacio, FilaTarjetas, FormaConAviso, Icono, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import './descarga-sat.css';
@@ -176,12 +177,13 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
     { etiqueta: tr('descargaSat.vista.sinGastoQueLes'), info: 'descarga_sat.disponibles', icono: <Icono icono={FileCheck2} />, valor: c?.disponibles ?? null, formato: 'entero', nota: tr('descargaSat.vista.puedeSerUnGasto') },
     { etiqueta: tr('descargaSat.vista.archivadosAProposito'), info: 'descarga_sat.ignorados', icono: <Icono icono={Archive} />, valor: c?.ignorados ?? null, formato: 'entero', nota: tr('descargaSat.vista.consolidadosQueYaEntraron') },
   ];
-  const cifras: PropsCifra[] = cifrasBase.map((x) => (x.valor === null ? { ...x, estado: 'vacio' as const, mensaje: tr('descargaSat.vista.noSePudoLeer') } : x));
+  const cifras: PropsCifra[] = cifrasBase.map((x) => ({ ...x, matiz: 8 as const, ...(x.valor === null ? { estado: 'vacio' as const, mensaje: tr('descargaSat.vista.noSePudoLeer') } : {}) }));
 
   // Los avisos de arriba (a lo sumo dos, Rovaq): el proveedor sin configurar y la lectura incompleta. El texto largo de «qué es esto» va en la tarjeta de conexión.
   const avisos = (
     <>
-      {!proveedor.configurado && <AvisoCompacto tono="warn" resumen={proveedor.motivo} />}
+      {/* El motivo técnico (variables de entorno, quién lo destraba) es del equipo de Likida: el contador solo ve el estado. */}
+      {!proveedor.configurado && <AvisoCompacto tono="warn" resumen={tr('descargaSat.panel.proveedorPendiente')} />}
       {datos.incompleta && (
         <AvisoCompacto tono="warn" resumen={tr('descargaSat.vista.faltanDatosPorCargar')}
           mas={tr('descargaSat.vista.unaOMasLecturas')} />
@@ -207,10 +209,9 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
           ['casado', tr('descargaSat.vista.losQueYaCuadraron')],
           ['ignorado', tr('descargaSat.vista.losArchivados')],
         ] as const).map(([e, texto]) => (
-          <BotonEnlace key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}${sufijoBandeja}`} variante="secondary" tamano="sm"
-            icono={<Icono icono={Scale3d} />}>
-            {texto}
-          </BotonEnlace>
+          <Link key={e} href={`/dashboard/descarga-sat/bandeja?estatus=${e}${sufijoBandeja}`} className="rv-sat__chip">
+            <Icono icono={Scale3d} tam={14} />{texto}
+          </Link>
         ))}
       </div>
 
@@ -271,7 +272,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         <p className="rv-sat__texto">
           {tr('descargaSat.vista.elRfcDelQue')}
         </p>
-        <FormaConAviso accion={guardar} boton="Guardar" columnas="md:grid-cols-4">
+        <FormaConAviso accion={guardar} boton="Guardar" columnas="md:grid-cols-1">
           <CampoTexto id="rfc" name="rfc" etiqueta={tr('descargaSat.vista.rfcDelBuzon')} defaultValue={cfg?.rfc ?? ''} placeholder="EKU9003173C9" obligatorio />
           <CampoSelect id="modo" name="modo" etiqueta={tr('descargaSat.vista.servicioDelSat')} defaultValue={cfg?.modo ?? 'webservice'}>
             <option value="webservice">{tr('descargaSat.vista.webService200000')}</option>
@@ -292,7 +293,7 @@ export async function VistaDescargaSat({ searchParams, tenantExiste = true }: {
         <p className="rv-sat__texto">
           {tr('descargaSat.vista.paraUnPeriodoViejo', { VENTANA_MAX_DIAS })}
         </p>
-        <FormaConAviso accion={pedir} boton="Pedir al SAT" columnas="md:grid-cols-3">
+        <FormaConAviso accion={pedir} boton="Pedir al SAT" columnas="md:grid-cols-2">
           <CampoFecha id="desde" name="desde" etiqueta={tr('descargaSat.vista.desde')} defaultValue={`${hoy.slice(0, 8)}01`} obligatorio />
           <CampoFecha id="hasta" name="hasta" etiqueta={tr('descargaSat.vista.hasta')} defaultValue={hoy} obligatorio />
           <CampoSelect id="tipo" name="tipo" etiqueta={tr('descargaSat.vista.queBuzon')} defaultValue="recibidos">
