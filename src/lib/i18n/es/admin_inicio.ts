@@ -389,4 +389,10 @@ export const admin_inicio = {
   'aprobaciones.kpi_frena': 'Frena a los agentes',
   'aprobaciones.kpi_libre': 'No frena',
   'parados.ver_todos_en_escalaciones': 'Ver el detalle en Escalaciones',
+  'a1r4.observado': 'Observado',
+  'a1r4.ver_todas': 'Ver todas',
+  'a1r4.ver_detalle': 'Ver detalle',
+  'a1r4.eb_atencion': 'Atención',
+  'a1r4.eb_dinero': 'Dinero',
+  'a1r4.eb_calidad': 'Calidad',
 } as const;
