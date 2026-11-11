@@ -47,3 +47,7 @@
 
 /* Pie de acción del cajón «Nuevo viaje»: pegado al fondo del cuerpo desplazable, con el borde y el respiro del pie de cualquier overlay. */
 .rv-fv__pie { position: sticky; bottom: -16px; z-index: 1; display: flex; justify-content: flex-end; gap: 8px; margin: 8px -16px -16px; padding: 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+
+/* Ronda 5: el pie con «Crear viaje» va pegado al fondo del cajón aunque el formulario sea corto (Rovaq `overlay-foot`), sin dejar el hueco antes de la marca. */
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-fv__pie) { display: flex; flex-direction: column; min-height: calc(100% + 0px); }
+[data-ui="v2"] .rv-ov__cuerpo > .rv-forma:has(.rv-fv__pie) > .rv-fv__pie { margin-top: auto; }

@@ -1,4 +1,5 @@
 import { cifrasUniformes } from '../formato';
+import { DescargaNoDisponible } from '../bloque';
 import Link from 'next/link';
 import { fechaMx, mxn, numero } from '@/lib/formato';
 import { ETIQUETA_CATEGORIA } from '@/lib/likida/convenios/tipos';
@@ -121,7 +122,11 @@ export function VistaConvenios(p: PropsVistaConvenios) {
     >
       {p.estado === 'ok' && (
         <Tarjeta titulo={t('op.convenios_registrados')} info="convenios.registrados">
-          {p.puedeExportar ? (
+          {p.puedeExportar && lista.length === 0 ? (
+            <div className="rv-cv__descargas" role="group" aria-label={t('op.convenios_registrados')}>
+              <DescargaNoDisponible rotulo={t('op.descargar_instrucciones_csv')} motivo={t('op.sin_convenios_para_descargar')} />
+            </div>
+          ) : p.puedeExportar ? (
             <div className="rv-cv__descargas" role="group" aria-label={t('op.convenios_registrados')}>
               <BotonEnlace variante="secondary" tamano="sm" href={descarga('instrucciones')}>{t('op.descargar_instrucciones_csv')}</BotonEnlace>
               <BotonEnlace variante="secondary" tamano="sm" href={descarga('texto')}>{t('op.descargar_texto_para_tu_sistema')}</BotonEnlace>

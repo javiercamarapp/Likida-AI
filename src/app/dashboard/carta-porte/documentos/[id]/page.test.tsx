@@ -1,7 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest';
 
 // La revisión: UNA acción atiende todos los botones por `intencion`; re-resuelve sesión y área; usa el tenant de la SESIÓN;
-// no deja aprobar con lo que la validación no deja; y un documento de otra flota es 404, no la ficha ajena.
+// no deja aprobar con lo que la validación no deja; y un documento de otra flota dice que no existe dentro del marco, no la ficha ajena.
 let sesion: { tenantId: string; rol: string; userId: string } = { tenantId: 't-1', rol: 'flota_admin', userId: 'u-1' };
 const { revalidatePath } = vi.hoisted(() => ({ revalidatePath: vi.fn() }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
@@ -51,14 +51,14 @@ const montar = async () => (await PaginaRevision({ params: Promise.resolve({ id:
 
 beforeEach(() => { vi.clearAllMocks(); reset(); extrasEnvio.clear(); fijarGuardiaPerfil(); sembrarFlotas(); sesion = { tenantId: A, rol: 'flota_admin', userId: 'u-1' }; });
 
-it('un rol sin el área rebota; un id que no es uuid o de otra flota es 404', async () => {
+it('un rol sin el área rebota; un id que no es uuid o de otra flota dice que no existe dentro del marco', async () => {
   sembrarDoc();
   sesion = { ...sesion, rol: 'vendedor' };
   await expect(montar()).rejects.toThrow('REDIRECT:/dashboard');
   sesion = { ...sesion, rol: 'flota_admin', tenantId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' };
-  await expect(montar()).rejects.toThrow('NOT_FOUND');
+  expect(JSON.stringify(await PaginaRevision({ params: Promise.resolve({ id: ID }), searchParams: SP }))).toContain('doc-no-encontrado');
   sesion = { ...sesion, tenantId: A };
-  await expect(PaginaRevision({ params: Promise.resolve({ id: 'no-es-uuid' }), searchParams: SP })).rejects.toThrow('NOT_FOUND');
+  expect(JSON.stringify(await PaginaRevision({ params: Promise.resolve({ id: 'no-es-uuid' }), searchParams: SP }))).toContain('doc-no-encontrado');
 });
 
 it('abrir la pantalla marca la primera apertura (inicio del tiempo medido) una sola vez', async () => {

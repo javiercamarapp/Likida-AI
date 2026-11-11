@@ -11,6 +11,7 @@ import { PreferenciasCuenta } from './preferencias';
 import { getT } from '@/lib/i18n/servidor';
 import '../ui-v2/piezas.css';
 import '../legal/publico-r2.css';
+import '../legal/flujo-publico.css';
 import './cuenta.css';
 import { nombreDeRol } from '@/lib/auth/roles';
 
@@ -43,7 +44,6 @@ export default async function Cuenta({
       rotulo={t('cta.rotulo')}
       titulo={t('cta.titulo')}
       ancho="estrecho"
-      centrado
     >
       <div className="rv-flujo" aria-hidden="true" />
       {/* Orden de Rovaq: tarjeta de cuenta (monograma de 28, nombre, rol y flota) → filas rótulo-control (idioma, tema) → Cerrar sesión al final. */}

@@ -12,6 +12,7 @@ import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 import { getT } from '@/lib/i18n/servidor';
 import type { TrPublico } from '@/lib/i18n/publico_tr';
 import '../../legal/publico-r2.css';
+import '../../legal/flujo-publico.css';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // /pago/<token> — LO QUE VE EL CLIENTE DE LA FLOTA. Sin sesión, sin cuenta.
@@ -63,7 +64,7 @@ export async function generateMetadata() {
  *  modo oscuro, igual que el aviso de privacidad. */
 function Aviso({ titulo, texto, rotulo }: { titulo: string; texto: string; rotulo: string }) {
   return (
-    <MarcoPublico rotulo={rotulo} titulo={titulo} apoyo={texto} ancho="estrecho" centrado>
+    <MarcoPublico rotulo={rotulo} titulo={titulo} apoyo={texto} ancho="estrecho">
       <div className="rv-flujo" aria-hidden="true" />
     </MarcoPublico>
   );

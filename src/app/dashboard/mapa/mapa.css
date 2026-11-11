@@ -54,7 +54,7 @@
 
 /* Ronda 3 — panel lateral como Rovaq: borde y radio 12, ranking 1-8 con barras, desglose de viajes debajo y leyenda bajo el mapa. */
 .rv-mp__cab { display: inline-flex; align-items: center; gap: 8px; }
-.rv-mp__rejilla { grid-template-columns: minmax(0, 1fr) 320px; align-items: start; }
+.rv-mp__rejilla { grid-template-columns: minmax(0, 1fr) 320px; align-items: stretch; }
 @media (max-width: 1023.98px) { .rv-mp__rejilla { grid-template-columns: minmax(0, 1fr); } }
 .rv-mp__panel { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .rv-mp__eyebrow { margin: 0; font-size: var(--t-micro); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
@@ -73,3 +73,9 @@
 .rv-mp__leyenda { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--t-micro); color: var(--muted); }
 .rv-mp__leyenda li { display: inline-flex; align-items: center; gap: 6px; }
 .rv-mp__leyenda svg { flex: none; }
+
+/* Ronda 5: el panel lateral ocupa la altura del mapa (Rovaq 09). Las tarjetas de viaje se reparten el alto que sobra y la nota de privacidad queda abajo. */
+@media (min-width: 1024px) {
+  .rv-mp__panel .rv-mp__cards { flex: 1 1 auto; min-height: 0; max-height: 520px; align-content: start; }
+  .rv-mp__panel > .rv-mp__nota { margin-top: auto; }
+}

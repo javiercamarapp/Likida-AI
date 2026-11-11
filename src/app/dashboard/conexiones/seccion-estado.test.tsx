@@ -36,9 +36,9 @@ describe('Conexiones · sección «Estado» por fuente', () => {
     expect(fila('peajes')).toContain('Sin conectar');
     expect(fila('peajes')).not.toContain('Caída');
   });
-  it('el resumen sale de las evaluaciones: «1 de 6 al día» y «Arranque: 4 de 6 conectadas»', async () => {
+  it('el resumen sale de las evaluaciones: «1 de 6 fuentes de datos al día» y «Arranque: 4 de 6 conectadas»', async () => {
     const h = await html();
-    expect(h).toContain('1 de 6 al día');
+    expect(h).toContain('1 de 6 fuentes de datos al día');
     expect(h).toContain('Arranque: 4 de 6 conectadas');
   });
   it('muestra la cadencia esperada de cada fuente', async () => {

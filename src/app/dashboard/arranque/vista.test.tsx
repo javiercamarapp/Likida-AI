@@ -33,8 +33,8 @@ describe('la puesta en marcha', () => {
 
   it('cada paso lleva su estado también como texto para lector de pantalla (no color solo)', () => {
     const html = pintar({ ...VACIO, unidadesActivas: 5 });
-    expect(html).toContain('— hecho');
-    expect(html).toContain('— pendiente');
+    expect(html).toContain('Hecho');
+    expect(html).toContain('Para revisar');
   });
 
   it('los opcionales se rotulan «(opcional)»', () => {

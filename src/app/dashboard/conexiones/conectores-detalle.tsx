@@ -76,7 +76,7 @@ export function ConectoresDetalle({ conectores }: { conectores: Conector[] }) {
               <div><dt>{t('cfg.det.estado')}</dt><dd><StatusChip tono={rotulos[actual.estado].tono}>{rotulos[actual.estado].rotulo}</StatusChip></dd></div>
               <div><dt>{t('cfg.det.detalle')}</dt><dd>{actual.detalle}</dd></div>
               <div><dt>{t('cfg.det.falta')}</dt>
-                <dd>{actual.falta.length === 0 ? t('cfg.det.nada') : (
+                <dd>{actual.falta.length === 0 ? (actual.estado === 'listo' ? t('cfg.det.nada') : t('cfg.det.sin_faltantes_medidos')) : (
                   <ul className="rv-cx__faltas">{actual.falta.map((f) => <li key={f} className="rv-cx__falta">{f}</li>)}</ul>
                 )}</dd></div>
             </dl>

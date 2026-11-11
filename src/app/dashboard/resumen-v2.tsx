@@ -8,7 +8,8 @@ import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 import { AvisoSinFlota } from './sin-flota';
 import { ATAJOS_RESUMEN, coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
 import { FiltrosResumen, ListaAtencion, SiguienteAccion } from './resumen-cliente';
-import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo } from './resumen-tarjetas';
+import { PildorasMetodo } from './resumen-metodo';
+import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo, TarjetaTopTipos } from './resumen-tarjetas';
 import { getT } from '@/lib/i18n/servidor';
 import { PERIODO_RANGO } from './resumen-modelo';
 import { cifrasUniformes } from './formato';
@@ -85,6 +86,8 @@ export async function ResumenV2({
           )}
         </>
       )}
+      metodo={<PildorasMetodo etiquetaComo={t('op.res.como_se_calculo')} comoTexto={t('op.res.como_texto', { periodo: PERIODO_RANGO[rango] })}
+        etiquetaFuentes={t('op.res.fuentes_publicaciones')} fuentesTexto={t('op.res.fuentes_texto', { ok: cob.ok, total: cob.total, fecha: fechaMx(diaMx, idioma) })} />}
       cifras={cifrasUniformes(itemsKpi(d, sufijo, puede, t))}
       etiquetaCifras={t('op.tu_flota_en_likida')}
     >
@@ -98,8 +101,14 @@ export async function ResumenV2({
         </Tarjeta>
       </FilaTarjetas>
 
-      <FilaTarjetas variante="6-6">
+      {/* Las columnas semanales ocupan todo el ancho (Rovaq: serie a lo largo, no apretada junto a una tabla). */}
+      <FilaTarjetas variante="12">
         <TarjetaCierres t={t} d={d} />
+      </FilaTarjetas>
+
+      {/* Con dinero: «Top» por tipo de diferencia + lo que hizo solo, parejos. Sin dinero no hay «Top» que mostrar y lo que hizo solo no se estira. */}
+      <FilaTarjetas variante={d.veDinero ? '6-6' : '12'}>
+        {d.veDinero ? <TarjetaTopTipos t={t} d={d} /> : null}
         <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
       </FilaTarjetas>
     </EsqueletoPortada>

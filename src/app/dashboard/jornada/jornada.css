@@ -29,3 +29,8 @@
 .rv-jn__pie > button { width: auto; flex: none; }
 .rv-jn__bloque + .rv-jn__sub, .rv-jn__bloque > .rv-jn__sub { margin-top: 4px; }
 .rv-jn__sep { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+/* «No disponible ahora»: botón punteado (precondición sin cumplir). */
+.rv-nd { display: inline-flex; flex-direction: column; gap: 0; justify-content: center; min-height: 28px; padding: 3px 12px; border: 1px dashed var(--input); border-radius: 8px; color: var(--muted); font-size: var(--t-small); line-height: 1.25; cursor: not-allowed; }
+.rv-nd__rotulo { font-weight: 500; }
+.rv-nd__motivo { font-size: var(--t-micro); color: var(--faint); }
