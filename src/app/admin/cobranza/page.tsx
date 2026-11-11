@@ -99,11 +99,9 @@ export default async function CobranzaPage() {
         )}
       />
 
-      {estado ? (
-        /* Sin una sola factura ni propuesta no hay base que medir: cuatro «0 · $0.00» se leerían como medición. Se marcan «—» y lo dicen. */
-        <TiraCifras etiqueta={t('cobranza.cobranza_de_las_mensualidades')} items={sinBase
-          ? [t('cobranza.por_cobrar'), 'Vencidas', t('cobranza.toques_sin_propuesta'), t('cobranza.propuestas_pendientes_enviadas_por')].map((e) => ({ etiqueta: e, valor: null, estado: 'vacio' as const, mensaje: t('cobranza.sin_facturas_que_medir') }))
-          : [
+      {estado && !sinBase ? (
+        /* Sin una sola factura ni propuesta no hay base que medir: no se pintan cuatro celdas vacías; el estado vacío de «Facturas por cobrar» (abajo) lo dice una vez. */
+        <TiraCifras etiqueta={t('cobranza.cobranza_de_las_mensualidades')} items={[
             { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
             { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
             {

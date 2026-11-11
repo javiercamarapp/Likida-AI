@@ -202,3 +202,9 @@ it('F7: la pantalla no imprime nombres internos (tablas, plantillas ni variables
   const html = (await import('react-dom/server')).renderToStaticMarkup(await CompliancePage({ searchParams: Promise.resolve({}) }));
   expect(html).not.toMatch(/respuesta_arco|solicitud_arco|LIKIDA_/);
 });
+
+it('D11/D12 (auditoría 11-nov): sin solicitudes NO hay tira de dos ceros y el vacío vive DENTRO de una tarjeta', async () => {
+  const html = (await import('react-dom/server')).renderToStaticMarkup(await CompliancePage({ searchParams: Promise.resolve({}) }));
+  expect(html).not.toContain('Vencen pronto');
+  expect(html).toMatch(/rv-tarjeta[\s\S]*Ninguna solicitud ARCO registrada/);
+});
