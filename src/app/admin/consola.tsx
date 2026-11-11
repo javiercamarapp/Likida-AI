@@ -34,12 +34,12 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       avisos={(
         <>
           <Aviso tono="info">{t('consola.acceso_admin')}</Aviso>
-          <Suspense fallback={<EsqTarjetaV2 alto={48} />}><BloqueSemaforo /></Suspense>
+          <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
         </>
       )}
     >
       {/* Consola de plataforma (Rovaq P1): seis tarjetas de cifra en 3 columnas, luego los paneles con filas-tarjeta. */}
-      <Suspense fallback={<EsqCifrasV2 n={6} />}><BloqueNorte /></Suspense>
+      <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueNorte /></Suspense>
 
       <FilaTarjetas variante="6-6">
         <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueTuTurno /></Suspense>

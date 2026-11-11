@@ -279,7 +279,7 @@ export default async function CostosFacturacionPage({ searchParams }: { searchPa
         ? <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} estado="vacio" mensaje={t('costos_facturacion.sin_facturas_emitidas')} detalle={t('costos_facturacion.aparece_aqui_en_cuanto')} />
         : (
           <Tarjeta key="dona" titulo={t('costos_facturacion.facturas_por_estado')} elevar entra="tarjeta">
-            <DonaMini gajos={[...porEstado.entries()].map(([etiqueta, valor]) => ({ etiqueta, valor }))} etiqueta={t('costos_facturacion.facturas_por_estado')} formato="entero" matiz={8} />
+            <DonaMini gajos={[...porEstado.entries()].map(([etiqueta, valor]) => ({ etiqueta, valor }))} etiqueta={t('costos_facturacion.facturas_por_estado')} formato="numero" matiz={8} />
           </Tarjeta>
         ),
   ];

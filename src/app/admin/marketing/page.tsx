@@ -12,6 +12,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { fechaHoraMx, hoyMx } from '@/lib/formato';
 import { Aviso, AvisoCompacto, Disclosure, EstadoError, Tarjeta } from '../../ui-v2/componentes';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
+import { uniformes } from '../cifras-uniformes';
 import '../dinero.css';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { SubirHook, type ResultadoFirmaHook, type ResultadoGuardar } from './subir-hook';
@@ -169,7 +170,7 @@ export default async function EstudioMarketingPage() {
   return (
     <EsqueletoPanelCifras
       titulo={t('marketing.crecimiento')} apoyo={t('marketing.estudio_de_marketing_los')}
-      etiquetaCifras={t('marketing.k_etiqueta')} cifras={cifras}
+      etiquetaCifras={t('marketing.k_etiqueta')} cifras={uniformes(cifras)}
       avisos={(
         <>
           {diasSinPiezas !== null && diasSinPiezas >= DIAS_ESTANCADA ? (
