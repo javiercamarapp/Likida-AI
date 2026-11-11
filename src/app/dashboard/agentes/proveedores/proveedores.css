@@ -42,3 +42,7 @@
 [data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__titulo { margin: 0; font-size: 13px; font-weight: 600; }
 [data-ui="v2"] .rv-ag-compacto .rv-vacio:not([data-pantalla]) .rv-vacio__texto { margin: 0; font-size: 12px; }
 [data-ui="v2"] .rv-ag-compacto .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo { flex: 0 0 auto; }
+
+/* «Subir factura» | «Buzón»: cada tarjeta a su alto natural; la corta no se estira a la altura de la larga ni deja un hueco en blanco. */
+.rv-fila-tarjetas.rv-prov__fila { align-items: start; }
+.rv-fila-tarjetas.rv-prov__fila > .rv-tarjeta { height: auto; }
