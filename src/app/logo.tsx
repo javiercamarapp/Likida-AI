@@ -32,11 +32,12 @@ const COLOR_TONO: Record<TonoLogo, string> = {
 /** Traduce el `alto` que ya se pasaba (`h-7`, `h-[42px]`, `h-px`…) o un número a píxeles. `null` = no se reconoce. */
 export function altoEnPx(alto: string | number): number | null {
   if (typeof alto === 'number') return Number.isFinite(alto) && alto > 0 ? alto : null;
-  const arbitrario = /^h-\[(\d+(?:\.\d+)?)px\]$/.exec(alto.trim());
-  if (arbitrario) return Number(arbitrario[1]);
-  const escala = /^h-(\d+(?:\.\d+)?)$/.exec(alto.trim());
-  if (escala) return Number(escala[1]) * 4;
-  return null;
+  const clase = alto.trim();
+  let valor = Number.NaN;
+  let factor = 1;
+  if (clase.startsWith('h-[') && clase.endsWith('px]')) valor = Number(clase.slice(3, -3));
+  else if (clase.startsWith('h-')) { valor = Number(clase.slice(2)); factor = 4; }
+  return Number.isFinite(valor) && valor > 0 ? valor * factor : null;
 }
 
 /** El alto final: el pedido, subido al mínimo de la variante si la marca quedaría más chica que el mínimo de ancho. */
