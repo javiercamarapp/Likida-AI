@@ -1,3 +1,4 @@
+import { getT } from '@/lib/i18n/servidor';
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { Aviso, BotonEnlace, EstadoError, EstadoVacio, MarcoPagina, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
@@ -12,7 +13,10 @@ import { listarTimbrado, type RenglonTimbrado } from '@/lib/likida/carta_porte_t
 import { logger } from '@/lib/logger';
 import { sufijoTenant } from '../sufijo';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Timbrado (Carta Porte)' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.timbrado') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -34,6 +38,7 @@ export default async function PaginaTimbrado({
 }: {
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -52,58 +57,57 @@ export default async function PaginaTimbrado({
 
   return (
     <MarcoPagina
-      titulo="Carta Porte"
+      titulo={tr('timbrado.page.cartaPorte')}
       ancho="lectura"
       apoyo={pac.configurado
-        ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? 'de PRUEBAS (los timbres no amparan nada)' : 'de PRODUCCIÓN'}.`
-        : 'Sin PAC configurado: el timbrado directo está apagado hasta que Likida lo configure. Likida jamás simula un timbre.'}
+        ? `PAC ${pac.proveedor?.toUpperCase()} conectado — ambiente ${pac.pareceSandbox ? tr('timbrado.page.dePruebasLosTimbres') : tr('timbrado.page.deProduccion')}.`
+        : tr('timbrado.page.sinPacConfiguradoEl')}
     >
       {!puedeTimbrar(rol) && (
-        <Aviso tono="warn">Puedes ver esta cola, pero emitir el CFDI es del dueño de la flota o del contador.</Aviso>
+        <Aviso tono="warn">{tr('timbrado.page.puedesVerEstaCola')}</Aviso>
       )}
 
       {filas === null ? (
-        <EstadoError>No se pudo leer la cola de timbrado. No es «no hay nada»: es que no se pudo mirar.</EstadoError>
+        <EstadoError>{tr('timbrado.page.noSePudoLeer')}</EstadoError>
       ) : filas.length === 0 ? (
         <EstadoVacio
-          titulo="Nada en la cola todavía"
+          titulo={tr('timbrado.page.nadaEnLaCola')}
           accion={puedeVerRuta(rol, '/dashboard/carta-porte')
-            ? <BotonEnlace href={`/dashboard/carta-porte${sufijo}`} variante="secondary" tamano="sm">Ir a Carta Porte</BotonEnlace>
+            ? <BotonEnlace href={`/dashboard/carta-porte${sufijo}`} variante="secondary" tamano="sm">{tr('timbrado.page.irACartaPorte')}</BotonEnlace>
             : undefined}
         >
-          Aquí aparecen los viajes cuyo borrador de Carta Porte ya se trabajó y los que ya tienen timbre o un intento vivo.
-          El borrador se arma en Carta Porte, con el jefe de tráfico.
+          {tr('timbrado.page.aquiAparecenLosViajes')}
         </EstadoVacio>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Cola de timbrado')}>
-            <Cifra etiqueta="En la cola" info="timbrado.en_cola" valor={filas.length} matiz={1} />
-            <Cifra etiqueta="Sin timbre" info="timbrado.sin_timbre" valor={filas.filter((f) => f.timbre === null).length} matiz={2} />
-            <Cifra etiqueta="Timbrados" info="timbrado.timbrados" valor={filas.filter((f) => f.timbre?.estado === 'vigente').length} matiz={3} />
-            <Cifra etiqueta="Bloqueados" info="timbrado.bloqueados" valor={filas.filter((f) => f.timbre?.estado === 'pendiente').length} matiz={4} tono={filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined} />
+          <TiraCifras sello={selloHoy(tr('timbrado.page.selloCola'))}>
+            <Cifra etiqueta={tr('timbrado.page.enLaCola')} info="timbrado.en_cola" valor={filas.length} matiz={1} />
+            <Cifra etiqueta={tr('timbrado.page.sinTimbre')} info="timbrado.sin_timbre" valor={filas.filter((f) => f.timbre === null).length} matiz={2} />
+            <Cifra etiqueta={tr('timbrado.page.timbrados')} info="timbrado.timbrados" valor={filas.filter((f) => f.timbre?.estado === 'vigente').length} matiz={3} />
+            <Cifra etiqueta={tr('timbrado.page.bloqueados')} info="timbrado.bloqueados" valor={filas.filter((f) => f.timbre?.estado === 'pendiente').length} matiz={4} tono={filas.some((f) => f.timbre?.estado === 'pendiente') ? 'bad' : undefined} />
           </TiraCifras>
-          <Tarjeta titulo="Viajes en la cola">
-            <p className="rv-timb__tenue">Primero lo que pide acción.</p>
+          <Tarjeta titulo={tr('timbrado.page.viajesEnLaCola')}>
+            <p className="rv-timb__tenue">{tr('timbrado.page.primeroLoQuePide')}</p>
             <ul className="rv-timb__lista">
               {filas.map((f) => (
                 <li key={f.viajeId} className="rv-timb__fila">
                   <div>
                     <Link href={`${RUTA}/${f.viajeId}${sufijo}`}>{f.folio ?? f.viajeId.slice(0, 8)}</Link>
                     <span className="rv-timb__texto">
-                      {f.origen && f.destino ? ` · ${f.origen} → ${f.destino}` : ' · ruta sin capturar'}
+                      {f.origen && f.destino ? ` · ${f.origen} → ${f.destino}` : ' ' + tr('timbrado.page.rutaSinCapturar')}
                     </span>
                     <p className="rv-timb__tenue">
                       {f.timbre === null
-                        ? 'Sin timbre.'
+                        ? tr('timbrado.page.sinTimbre2')
                         : f.timbre.estado === 'pendiente'
                           ? f.timbre.uuidFiscal !== null
-                            ? `TIMBRE A MEDIO REGISTRAR — folio ${f.timbre.uuidFiscal}. No lo vuelvas a timbrar; avisa a soporte.`
-                            : 'Intento de timbrado en curso o sin respuesta del PAC — bloqueado a propósito.'
-                          : `Timbrado${f.timbre.modo === 'sandbox' ? ' DE PRUEBA (no ampara nada)' : ''} · folio ${f.timbre.uuidFiscal ?? '—'}`}
+                            ? tr('timbrado.page.timbreAMedioRegistrar', { uuidFiscal: f.timbre.uuidFiscal })
+                            : tr('timbrado.page.intentoDeTimbradoEn')
+                          : tr('timbrado.page.timbradoFolio', { v: f.timbre.modo === 'sandbox' ? ' ' + tr('timbrado.page.dePruebaNoAmpara') : '', v2: f.timbre.uuidFiscal ?? '—' })}
                     </p>
                   </div>
                   <StatusChip tono={f.timbre === null ? 'muted' : f.timbre.estado === 'pendiente' ? 'bad' : f.timbre.modo === 'sandbox' ? 'warn' : 'ok'}>
-                    {f.timbre === null ? 'Sin timbre' : f.timbre.estado === 'pendiente' ? 'Bloqueado' : 'Timbrado'}
+                    {f.timbre === null ? tr('timbrado.page.sinTimbre') : f.timbre.estado === 'pendiente' ? tr('timbrado.page.bloqueado') : tr('timbrado.page.timbrado')}
                   </StatusChip>
                 </li>
               ))}
@@ -113,9 +117,7 @@ export default async function PaginaTimbrado({
       )}
 
       <p className="rv-timb__tenue">
-        Esta cola lista los viajes cuyo XML de Carta Porte ya se generó alguna vez y los que ya
-        tienen timbre o reserva. NO es «todos los viajes que necesitan complemento»: eso lo decide
-        el borrador viaje por viaje, y afirmarlo aquí sería inventar una lista que nadie midió.
+        {tr('timbrado.page.estaColaListaLos')}
       </p>
     </MarcoPagina>
   );

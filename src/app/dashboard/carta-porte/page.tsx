@@ -1,3 +1,6 @@
+import { getT } from '@/lib/i18n/servidor';
+import { datosParaProveedor } from '@/lib/i18n/servidor';
+import { IdiomaProvider } from '@/lib/i18n/proveedor';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -14,7 +17,10 @@ import { VistaCartaPorte } from './vista';
 import { sufijoTenant } from '../sufijo';
 import type { ResultadoForma } from './forma';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Carta Porte' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.cartaPorte') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -31,6 +37,7 @@ export default async function PaginaCartaPorte({
 }: {
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -47,8 +54,9 @@ export default async function PaginaCartaPorte({
 
   async function declarar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede declarar rutas.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('cartaPorte.page.tuRolNoPuede') };
     try {
       const d = validarDeclaracion({
         pisaFederal: String(fd.get('pisaFederal') ?? ''),
@@ -56,7 +64,7 @@ export default async function PaginaCartaPorte({
       });
       await declararCcp(s.tenantId, String(fd.get('viajeId') ?? ''), d, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Declaración guardada. El semáforo de arriba ya la refleja.' };
+      return { ok: true, mensaje: tr('cartaPorte.page.declaracionGuardadaElSemafor') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar la declaración') };
     }
@@ -64,8 +72,9 @@ export default async function PaginaCartaPorte({
 
   async function agregarMercancia(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede capturar mercancía.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('cartaPorte.page.tuRolNoPuede2') };
     try {
       const m = validarMercancia({
         descripcion: String(fd.get('descripcion') ?? ''),
@@ -77,7 +86,7 @@ export default async function PaginaCartaPorte({
       });
       await guardarMercancia(s.tenantId, String(fd.get('viajeId') ?? ''), m, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Mercancía agregada. El checklist y el borrador ya la cuentan.' };
+      return { ok: true, mensaje: tr('cartaPorte.page.mercanciaAgregadaElChecklist') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'agregar la mercancía') };
     }
@@ -85,12 +94,13 @@ export default async function PaginaCartaPorte({
 
   async function quitarMercancia(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede capturar mercancía.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('cartaPorte.page.tuRolNoPuede2') };
     try {
       await borrarMercancia(s.tenantId, String(fd.get('mercanciaId') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Renglón quitado.' };
+      return { ok: true, mensaje: tr('cartaPorte.page.renglonQuitado') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'quitar la mercancía') };
     }
@@ -98,8 +108,9 @@ export default async function PaginaCartaPorte({
 
   async function datosCliente(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: 'Tu rol no puede capturar estos datos.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tr('cartaPorte.page.tuRolNoPuede3') };
     try {
       const d = validarDatosCliente({
         origenCp: String(fd.get('origenCp') ?? ''),
@@ -111,14 +122,16 @@ export default async function PaginaCartaPorte({
       });
       await guardarDatosCliente(s.tenantId, String(fd.get('viajeId') ?? ''), d, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: true, mensaje: 'Datos del cliente guardados. El checklist ya los refleja.' };
+      return { ok: true, mensaje: tr('cartaPorte.page.datosDelClienteGuardados') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'guardar los datos del cliente') };
     }
   }
 
+  const idiomaDatos = await datosParaProveedor(['shell', 'dinero']);
   return (
-    <VistaCartaPorte
+    <IdiomaProvider idioma={idiomaDatos.idioma} diccionarios={idiomaDatos.diccionarios}>
+    <VistaCartaPorte tr={tr}
       datos={datos}
       declarar={declarar}
       agregarMercancia={agregarMercancia}
@@ -126,5 +139,6 @@ export default async function PaginaCartaPorte({
       guardarDatosCliente={datosCliente}
       sufijo={sufijoTenant(sp)}
     />
+    </IdiomaProvider>
   );
 }

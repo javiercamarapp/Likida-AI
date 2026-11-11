@@ -1,5 +1,7 @@
 'use client';
 
+import { useT } from '@/lib/i18n/proveedor';
+import { dinero } from '@/lib/i18n/es/dinero';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save } from 'lucide-react';
@@ -32,6 +34,7 @@ export function FormaDeclaracion({ accion, viajeId, inicial }: {
   viajeId: string;
   inicial: { pisaFederal: boolean | null; radioKm: number | null };
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `ccp-${viajeId}-${n}`;
 
@@ -39,19 +42,19 @@ export function FormaDeclaracion({ accion, viajeId, inicial }: {
     <form action={despachar} className="rv-forma">
       <input type="hidden" name="viajeId" value={viajeId} />
       <div className="rv-ccp__rejilla">
-        <CampoSelect id={campo('federal')} name="pisaFederal" etiqueta="¿La ruta pisa carretera federal?"
+        <CampoSelect id={campo('federal')} name="pisaFederal" etiqueta={tr('cartaPorte.forma.laRutaPisaCarretera')}
           defaultValue={inicial.pisaFederal === null ? '' : inicial.pisaFederal ? 'si' : 'no'}
-          ayuda="«No» exige plena certeza: si por cualquier causa se pisa federal, la obligación revive completa (regla 2.7.7.2.1). La declaración queda registrada con quién la hizo.">
-          <option value="">Sin declarar</option>
-          <option value="si">Sí, pisa tramo federal</option>
-          <option value="no">No — plena certeza de ruta local</option>
+          ayuda={tr('cartaPorte.forma.noExigePlenaCerteza')}>
+          <option value="">{tr('cartaPorte.forma.sinDeclarar')}</option>
+          <option value="si">{tr('cartaPorte.forma.siPisaTramoFederal')}</option>
+          <option value="no">{tr('cartaPorte.forma.noPlenaCertezaDe')}</option>
         </CampoSelect>
-        <CampoTexto id={campo('radio')} name="radioKm" etiqueta="Radio del tramo federal (km)" inputMode="decimal"
-          defaultValue={inicial.radioKm ?? ''} placeholder="Solo si pisa federal y la unidad es hasta C2"
-          ayuda="Es un RADIO entre origen inicial y destino final (con puntos intermedios), no kilómetros de odómetro. Con unidad hasta C2 y radio ≤ 30 km, el viaje se considera sin tramo federal (regla 2.7.7.2.8)." />
+        <CampoTexto id={campo('radio')} name="radioKm" etiqueta={tr('cartaPorte.forma.radioDelTramoFederal')} inputMode="decimal"
+          defaultValue={inicial.radioKm ?? ''} placeholder={tr('cartaPorte.forma.soloSiPisaFederal')}
+          ayuda={tr('cartaPorte.forma.esUnRadioEntre')} />
       </div>
       <Aviso estado={estado} />
-      <BotonGuardar rotulo="Guardar declaración" pendiente="Guardando…" />
+      <BotonGuardar rotulo={tr('cartaPorte.forma.guardarDeclaracion')} pendiente="Guardando…" />
     </form>
   );
 }
@@ -71,6 +74,7 @@ export function FormaDatosCliente({ accion, viajeId, inicial }: {
     rfcDestinatario: string | null; transpInternac: boolean | null;
   };
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `ccpdc-${viajeId}-${n}`;
 
@@ -78,29 +82,28 @@ export function FormaDatosCliente({ accion, viajeId, inicial }: {
     <form action={despachar} className="rv-forma">
       <input type="hidden" name="viajeId" value={viajeId} />
       <div className="rv-ccp__rejilla">
-        <CampoTexto id={campo('ocp')} name="origenCp" etiqueta="CP de origen" inputMode="numeric" maxLength={5}
-          defaultValue={inicial.origenCp ?? ''} placeholder="5 dígitos" />
-        <CampoTexto id={campo('oedo')} name="origenEstado" etiqueta="Estado de origen" maxLength={60}
-          defaultValue={inicial.origenEstado ?? ''} placeholder="p. ej. Nuevo León" />
-        <CampoSelect id={campo('internac')} name="transpInternac" etiqueta="¿Transporte internacional?"
+        <CampoTexto id={campo('ocp')} name="origenCp" etiqueta={tr('cartaPorte.forma.cpDeOrigen')} inputMode="numeric" maxLength={5}
+          defaultValue={inicial.origenCp ?? ''} placeholder={tr('cartaPorte.forma.5Digitos')} />
+        <CampoTexto id={campo('oedo')} name="origenEstado" etiqueta={tr('cartaPorte.forma.estadoDeOrigen')} maxLength={60}
+          defaultValue={inicial.origenEstado ?? ''} placeholder={tr('cartaPorte.forma.pEjNuevoLeon')} />
+        <CampoSelect id={campo('internac')} name="transpInternac" etiqueta={tr('cartaPorte.forma.transporteInternacional')}
           defaultValue={inicial.transpInternac === null ? '' : inicial.transpInternac ? 'si' : 'no'}>
-          <option value="">Sin declarar</option>
-          <option value="no">No — nacional</option>
-          <option value="si">Sí — cruza frontera</option>
+          <option value="">{tr('cartaPorte.forma.sinDeclarar')}</option>
+          <option value="no">{tr('cartaPorte.forma.noNacional')}</option>
+          <option value="si">{tr('cartaPorte.forma.siCruzaFrontera')}</option>
         </CampoSelect>
-        <CampoTexto id={campo('dcp')} name="destinoCp" etiqueta="CP de destino" inputMode="numeric" maxLength={5}
-          defaultValue={inicial.destinoCp ?? ''} placeholder="5 dígitos" />
-        <CampoTexto id={campo('dedo')} name="destinoEstado" etiqueta="Estado de destino" maxLength={60}
-          defaultValue={inicial.destinoEstado ?? ''} placeholder="p. ej. Jalisco" />
-        <CampoTexto id={campo('rfc')} name="rfcDestinatario" etiqueta="RFC del destinatario" maxLength={13}
-          defaultValue={inicial.rfcDestinatario ?? ''} placeholder="12-13 caracteres" />
+        <CampoTexto id={campo('dcp')} name="destinoCp" etiqueta={tr('cartaPorte.forma.cpDeDestino')} inputMode="numeric" maxLength={5}
+          defaultValue={inicial.destinoCp ?? ''} placeholder={tr('cartaPorte.forma.5Digitos')} />
+        <CampoTexto id={campo('dedo')} name="destinoEstado" etiqueta={tr('cartaPorte.forma.estadoDeDestino')} maxLength={60}
+          defaultValue={inicial.destinoEstado ?? ''} placeholder={tr('cartaPorte.forma.pEjJalisco')} />
+        <CampoTexto id={campo('rfc')} name="rfcDestinatario" etiqueta={tr('cartaPorte.forma.rfcDelDestinatario')} maxLength={13}
+          defaultValue={inicial.rfcDestinatario ?? ''} placeholder={tr('cartaPorte.forma.1213Caracteres')} />
       </div>
       <p className="rv-ccp__tenue">
-        El país no se captura: se llena MEX-MEX solo cuando declaras «No — nacional». Un dato que tu
-        cliente no ha dado se queda vacío — ante el SAT, sus datos son responsabilidad suya (2.7.7.1.1).
+        {tr('cartaPorte.forma.elPaisNoSe')}
       </p>
       <Aviso estado={estado} />
-      <BotonGuardar rotulo="Guardar datos del cliente" pendiente="Guardando…" />
+      <BotonGuardar rotulo={tr('cartaPorte.forma.guardarDatosDelCliente')} pendiente="Guardando…" />
     </form>
   );
 }
@@ -111,6 +114,7 @@ export function FormaDatosCliente({ accion, viajeId, inicial }: {
  * clave la confirma tu cliente — Likida no propone claves de memoria.
  */
 export function FormaMercancia({ accion, viajeId }: { accion: AccionForma; viajeId: string }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `ccpm-${viajeId}-${n}`;
 
@@ -118,26 +122,24 @@ export function FormaMercancia({ accion, viajeId }: { accion: AccionForma; viaje
     <form action={despachar} className="rv-forma">
       <input type="hidden" name="viajeId" value={viajeId} />
       <div className="rv-ccp__rejilla">
-        <CampoTexto id={campo('desc')} name="descripcion" etiqueta="Descripción de la mercancía" maxLength={500}
-          placeholder="p. ej. Cajas de aguacate hass calibre 48" />
-        <CampoTexto id={campo('clave')} name="bienesTransp" etiqueta="Clave SAT (c_ClaveProdServCP)" inputMode="numeric" maxLength={8}
-          placeholder="8 dígitos — la da tu cliente" />
-        <CampoTexto id={campo('cant')} name="cantidad" etiqueta="Cantidad" inputMode="decimal" placeholder="p. ej. 120" />
-        <CampoTexto id={campo('unidad')} name="claveUnidad" etiqueta="Clave de unidad" maxLength={3} placeholder="KGM, H87, XBX…" />
-        <CampoTexto id={campo('peso')} name="pesoKg" etiqueta="Peso en kg (del renglón)" inputMode="decimal" placeholder="p. ej. 1200" />
-        <CampoSelect id={campo('peligroso')} name="materialPeligroso" etiqueta="¿Material peligroso?" defaultValue="">
-          <option value="">Sin declarar</option>
-          <option value="no">No</option>
-          <option value="si">Sí</option>
+        <CampoTexto id={campo('desc')} name="descripcion" etiqueta={tr('cartaPorte.forma.descripcionDeLaMercancia')} maxLength={500}
+          placeholder={tr('cartaPorte.forma.pEjCajasDe')} />
+        <CampoTexto id={campo('clave')} name="bienesTransp" etiqueta={tr('cartaPorte.forma.claveSatCClaveprodservcp')} inputMode="numeric" maxLength={8}
+          placeholder={tr('cartaPorte.forma.8DigitosLaDa')} />
+        <CampoTexto id={campo('cant')} name="cantidad" etiqueta={tr('cartaPorte.forma.cantidad')} inputMode="decimal" placeholder="p. ej. 120" />
+        <CampoTexto id={campo('unidad')} name="claveUnidad" etiqueta={tr('cartaPorte.forma.claveDeUnidad')} maxLength={3} placeholder={tr('cartaPorte.forma.kgmH87Xbx')} />
+        <CampoTexto id={campo('peso')} name="pesoKg" etiqueta={tr('cartaPorte.forma.pesoEnKgDel')} inputMode="decimal" placeholder="p. ej. 1200" />
+        <CampoSelect id={campo('peligroso')} name="materialPeligroso" etiqueta={tr('cartaPorte.forma.materialPeligroso')} defaultValue="">
+          <option value="">{tr('cartaPorte.forma.sinDeclarar')}</option>
+          <option value="no">{tr('cartaPorte.forma.no')}</option>
+          <option value="si">{tr('cartaPorte.forma.si')}</option>
         </CampoSelect>
       </div>
       <p className="rv-ccp__tenue">
-        La clave de 8 dígitos sale del catálogo c_ClaveProdServCP del SAT y te la confirma tu cliente
-        — si no la tienes, deja el campo vacío: el borrador dirá que falta, nunca la inventa. Material
-        peligroso sin declarar tampoco se supone «no»: decide quién conoce la carga.
+        {tr('cartaPorte.forma.laClaveDe8')}
       </p>
       <Aviso estado={estado} />
-      <BotonGuardar rotulo="Agregar mercancía" pendiente="Agregando…" />
+      <BotonGuardar rotulo={tr('cartaPorte.forma.agregarMercancia')} pendiente="Agregando…" />
     </form>
   );
 }

@@ -1,3 +1,6 @@
+import { getT } from '@/lib/i18n/servidor';
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import { revalidatePath } from 'next/cache';
 import { Link2 } from 'lucide-react';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -46,6 +49,7 @@ export async function BloquePortalPago({
 }: {
   sp: { tenant?: string; rol?: string; vista?: string };
 }) {
+  const { t: tr } = await getT('dinero');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) return null;
 
@@ -60,18 +64,19 @@ export async function BloquePortalPago({
 
   async function generar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede generar enlaces de pago.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.portal.tuRolNoPuede') };
     const facturaId = String(fd.get('facturaId') ?? '');
-    if (!facturaId) return { error: 'Elige la factura del enlace.' };
+    if (!facturaId) return { error: tr('facturacion.portal.eligeLaFacturaDel') };
     try {
       const liga = await crearLigaPago(s.tenantId, facturaId, { id: s.userId });
       revalidatePath(RUTA);
       // EL ÚNICO MOMENTO en que el link completo existe. Se dice que es el
       // único, para que nadie cierre la pantalla creyendo que puede volver.
       return {
-        ok: `Enlace generado — CÓPIALO AHORA, no se vuelve a mostrar: ${liga.url} · vence el ${fechaMx(liga.expiraEn)}. Si lo pierdes, revócalo y genera otro.`,
+        ok: tr('facturacion.portal.enlaceGeneradoCopialoAhora', { url: liga.url, v: fechaMx(liga.expiraEn) }),
       };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'generar el enlace de pago') };
@@ -80,13 +85,14 @@ export async function BloquePortalPago({
 
   async function revocar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede revocar enlaces de pago.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.portal.tuRolNoPuede2') };
     try {
       await revocarLigaPago(s.tenantId, String(fd.get('ligaId') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: 'Enlace revocado. Quien lo tenga verá que ya no está disponible.' };
+      return { ok: tr('facturacion.portal.enlaceRevocadoQuienLo') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'revocar el enlace') };
     }
@@ -94,13 +100,14 @@ export async function BloquePortalPago({
 
   async function conciliar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede conciliar pagos.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.portal.tuRolNoPuede3') };
     try {
       const r = await conciliarPropuesta(s.tenantId, String(fd.get('propuestaId') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: `Conciliado: ${mxn(r.monto)} entraron a la factura como abono real. Ya se refleja en la cartera de arriba.` };
+      return { ok: tr('facturacion.portal.conciliadoEntraronALa', { v: mxn(r.monto) }) };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'conciliar el pago') };
     }
@@ -108,9 +115,10 @@ export async function BloquePortalPago({
 
   async function descartar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede descartar pagos.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.portal.tuRolNoPuede4') };
     try {
       await descartarPropuesta(
         s.tenantId,
@@ -119,7 +127,7 @@ export async function BloquePortalPago({
         { id: s.userId },
       );
       revalidatePath(RUTA);
-      return { ok: 'Descartado, con tu motivo anotado. Tu cliente lo ve en su enlace.' };
+      return { ok: tr('facturacion.portal.descartadoConTuMotivo') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'descartar el registro') };
     }
@@ -127,9 +135,10 @@ export async function BloquePortalPago({
 
   async function anotarRep(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-    if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede registrar complementos de pago.' };
+    if (!puedeVerRuta(s.rol, RUTA)) return { error: tr('facturacion.portal.tuRolNoPuede5') };
     try {
       await registrarRepEmitido(s.tenantId, {
         facturaId: String(fd.get('facturaId') ?? ''),
@@ -141,7 +150,7 @@ export async function BloquePortalPago({
         xml: String(fd.get('xml') ?? ''),
       }, { id: s.userId });
       revalidatePath(RUTA);
-      return { ok: 'Complemento registrado. Tu cliente ya lo ve en su enlace, y queda el sello de cuándo lo abrió.' };
+      return { ok: tr('facturacion.portal.complementoRegistradoTuClien') };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'registrar el complemento de pago') };
     }
@@ -152,25 +161,22 @@ export async function BloquePortalPago({
       <div className="flex items-start gap-2.5">
         <Link2 width={16} height={16} strokeWidth={1.75} className="mt-0.5 shrink-0" style={{ color: 'var(--muted)' }} />
         <div className="min-w-0">
-          <p className="text-sm font-medium">Portal de pago del cliente</p>
+          <p className="text-sm font-medium">{tr('facturacion.portal.portalDePagoDel')}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>
-            Un enlace por factura para que tu cliente vea su saldo y te diga con qué
-            referencia pagó. <strong>No cobra nada</strong> — no hay pasarela ni cargo. Lo que
-            registre entra aquí como propuesta y <strong>no mueve tu cartera</strong> hasta que tú
-            lo concilies. Los enlaces vencen a los {diasDeVigencia()} días y se pueden revocar.
+            {rico(tr('facturacion.portal.unEnlacePorFactura', { v: diasDeVigencia() }), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
           </p>
         </div>
       </div>
 
       {panel === null ? (
         <p className="text-xs" style={{ color: 'var(--bad)' }}>
-          No pude leer el portal — recarga. Sin lectura no se afirma que nadie haya registrado un pago.
+          {tr('facturacion.portal.noPudeLeerEl')}
         </p>
       ) : (
         <>
-          <Bandeja panel={panel} conciliar={conciliar} descartar={descartar} />
-          <Enlaces panel={panel} generar={generar} revocar={revocar} />
-          <Complemento panel={panel} anotarRep={anotarRep} />
+          <Bandeja tr={tr} panel={panel} conciliar={conciliar} descartar={descartar} />
+          <Enlaces tr={tr} panel={panel} generar={generar} revocar={revocar} />
+          <Complemento tr={tr} panel={panel} anotarRep={anotarRep} />
         </>
       )}
     </section>
@@ -179,44 +185,43 @@ export async function BloquePortalPago({
 
 // ── La bandeja: lo que tus clientes dicen que pagaron ──────────────────────
 
-function Bandeja({ panel, conciliar, descartar }: {
+function Bandeja({ panel, conciliar, descartar, tr = trEs }: {
   panel: PanelPortal;
   conciliar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
-  descartar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+  descartar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>; tr?: Tr;
 }) {
   if (panel.pendientes.length === 0) {
     return (
       <p className="text-xs" style={{ color: 'var(--muted)' }}>
-        Ningún cliente ha registrado un pago pendiente de conciliar.
+        {tr('facturacion.portal.ningunClienteHaRegistrado')}
       </p>
     );
   }
   return (
     <div className="flex flex-col gap-1.5">
       <p className="text-xs font-medium">
-        {panel.pendientes.length} pago(s) por conciliar — dichos de tu cliente, todavía fuera de la cartera
+        {tr('facturacion.portal.pagoSPorConciliar', { length: panel.pendientes.length })}
       </p>
       {panel.pendientesTruncados && (
         <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          Hay más pagos pendientes de los que caben aquí: se muestran los {panel.pendientes.length} más antiguos.
-          Concilia o descarta estos para ver los siguientes.
+          {tr('facturacion.portal.hayMasPagosPendientes', { length: panel.pendientes.length })}
         </p>
       )}
       {panel.pendientes.map((p) => (
         <details key={p.id} className="rounded-xl hairline px-3.5 py-2.5">
           <summary className="cursor-pointer flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <span className="font-medium">{p.cliente}</span>
-            <span style={{ color: 'var(--muted)' }}>factura {p.factura}</span>
-            <span style={{ color: 'var(--muted)' }}>ref. {p.referencia}</span>
+            <span style={{ color: 'var(--muted)' }}>{tr('facturacion.portal.factura', { factura: p.factura })}</span>
+            <span style={{ color: 'var(--muted)' }}>{tr('facturacion.portal.ref', { ref: p.referencia })}</span>
             <span className="ml-auto font-medium">{mxn(p.monto)}</span>
           </summary>
           <div className="mt-2.5 flex flex-col gap-3 text-xs" style={{ color: 'var(--muted)' }}>
             <span>
-              Dice haber pagado el {fechaMx(p.fecha)}
-              {p.metodo && ` por ${p.metodo}`}. Lo registró el {fechaHoraMx(p.registradaEn)}.
-              {' '}Saldo de la factura ahora mismo:{' '}
-              <strong>{p.saldo === null ? 'sin dato' : mxn(p.saldo)}</strong>
-              {p.saldo === null && ' — no se pudo leer; no es cero.'}
+              {tr('facturacion.portal.diceHaberPagadoEl')} {fechaMx(p.fecha)}
+              {p.metodo && ' ' + tr('facturacion.portal.porMetodo', { metodo: p.metodo })}. {tr('facturacion.portal.loRegistroEl', { cuando: fechaHoraMx(p.registradaEn) })}
+              {' '}{tr('facturacion.portal.saldoDeLaFactura')}{' '}
+              <strong>{p.saldo === null ? tr('facturacion.portal.sinDato') : mxn(p.saldo)}</strong>
+              {p.saldo === null && ' ' + tr('facturacion.portal.noSePudoLeer')}
             </span>
             {/* La factura que no se pudo resolver NO se concilia (`c7-23`): sin
                 saber sobre qué papel es, "Conciliar" sería mover dinero a
@@ -224,21 +229,15 @@ function Bandeja({ panel, conciliar, descartar }: {
                 dice antes de apretar, no después. */}
             {!p.identificada ? (
               <span style={{ color: 'var(--bad)' }}>
-                No pude identificar la factura de este registro (id {p.facturaId}). No se
-                puede conciliar a ciegas: revísala en la cartera de arriba antes de decidir.
-                Descartarlo sí se puede, con tu motivo escrito.
+                {tr('facturacion.portal.noPudeIdentificarLa', { facturaId: p.facturaId })}
               </span>
             ) : p.estatus === 'cancelada' ? (
               <span style={{ color: 'var(--bad)' }}>
-                Esa factura está CANCELADA: un abono contra ella se rechaza, y este registro
-                no se puede conciliar. Aclara con tu cliente a qué factura entra ese depósito
-                y descarta este registro con el motivo.
+                {tr('facturacion.portal.esaFacturaEstaCancelada')}
               </span>
             ) : null}
             <span>
-              Cruza la referencia contra tu estado de cuenta ANTES de conciliar. Conciliar
-              crea el abono de verdad sobre la factura, con las mismas reglas que un pago
-              tecleado a mano (rechaza el sobrepago y sella la factura como pagada si la salda).
+              {tr('facturacion.portal.cruzaLaReferenciaContra')}
             </span>
             <div className="flex flex-col gap-3">
               {p.identificada && p.estatus !== 'cancelada' && (
@@ -250,9 +249,9 @@ function Bandeja({ panel, conciliar, descartar }: {
                 <input type="hidden" name="propuestaId" value={p.id} />
                 <Campo
                   nombre="motivo"
-                  etiqueta="¿Por qué lo descartas?"
+                  etiqueta={tr('facturacion.portal.porQueLoDescartas')}
                   requerido
-                  ayuda="Tu cliente puede preguntar. «El depósito no aparece en el estado de cuenta del día», «la referencia es de otra factura»…"
+                  ayuda={tr('facturacion.portal.tuClientePuedePreguntar')}
                 />
               </FormaConAviso>
             </div>
@@ -265,33 +264,30 @@ function Bandeja({ panel, conciliar, descartar }: {
 
 // ── Los enlaces vivos y el alta de uno nuevo ───────────────────────────────
 
-function Enlaces({ panel, generar, revocar }: {
+function Enlaces({ panel, generar, revocar, tr = trEs }: {
   panel: PanelPortal;
   generar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
-  revocar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+  revocar: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>; tr?: Tr;
 }) {
   return (
     <details className="rounded-xl hairline px-4 py-3">
       <summary className="text-xs font-medium cursor-pointer">
-        Enlaces de pago ({panel.ligasVivas.length} vivo(s))
+        {tr('facturacion.portal.enlacesDePagoVivo', { length: panel.ligasVivas.length })}
       </summary>
       <div className="mt-3 flex flex-col gap-4">
         <div>
           <p className="text-xs mb-2" style={{ color: 'var(--muted)' }}>
-            Genera el enlace de una factura emitida con saldo. Se muestra UNA sola vez:
-            Likida guarda solo su huella, no el enlace, para que un volcado de la base no
-            abra las facturas de nadie.
+            {tr('facturacion.portal.generaElEnlaceDe')}
           </p>
           {panel.facturasSinLiga.length === 0 ? (
             <p className="text-xs" style={{ color: 'var(--muted)' }}>
-              No hay facturas emitidas con saldo y sin enlace vivo. Un borrador no puede tener
-              enlace: todavía no le cobra a nadie.
+              {tr('facturacion.portal.noHayFacturasEmitidas')}
             </p>
           ) : (
             <FormaConAviso accion={generar} boton="Generar enlace" columnas="md:grid-cols-1">
               <Selector
                 nombre="facturaId"
-                etiqueta="Factura"
+                etiqueta={tr('facturacion.portal.factura2')}
                 requerido
                 opciones={[
                   { valor: '', texto: 'Elige…' },
@@ -305,7 +301,7 @@ function Enlaces({ panel, generar, revocar }: {
           )}
           {panel.facturasTruncadas && (
             <p className="mt-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-              La lista está recortada: solo se revisan las facturas más recientes. Si no ves una factura con saldo, genera su enlace desde su detalle.
+              {tr('facturacion.portal.laListaEstaRecortada')}
             </p>
           )}
         </div>
@@ -318,13 +314,12 @@ function Enlaces({ panel, generar, revocar }: {
                   <span className="font-medium">{l.factura}</span>
                   <span style={{ color: 'var(--muted)' }}>{l.cliente}</span>
                   <span className="ml-auto text-xs" style={{ color: 'var(--muted)' }}>
-                    {l.ultimoAccesoEn ? `abierto ${fechaHoraMx(l.ultimoAccesoEn)}` : 'nunca se ha abierto'}
+                    {l.ultimoAccesoEn ? `abierto ${fechaHoraMx(l.ultimoAccesoEn)}` : tr('facturacion.portal.nuncaSeHaAbierto')}
                   </span>
                 </summary>
                 <div className="mt-2.5 flex flex-col gap-3 text-xs" style={{ color: 'var(--muted)' }}>
                   <span>
-                    Huella <code>{l.prefijo}…</code> · vence el {fechaMx(l.expiraEn)}.
-                    {!l.ultimoAccesoEn && ' Nadie lo ha abierto todavía: puede que el correo no haya llegado.'}
+                    {rico(tr('facturacion.portal.huellaCodeCodeVence', { prefijo: l.prefijo, v: fechaMx(l.expiraEn), v2: !l.ultimoAccesoEn ? ' ' + tr('facturacion.portal.nadieLoHaAbierto') : '' }), { code: (c) => <code>{c}</code> })}
                   </span>
                   <FormaConAviso accion={revocar} boton="Revocar este enlace" columnas="md:grid-cols-1">
                     <input type="hidden" name="ligaId" value={l.id} />
@@ -341,32 +336,28 @@ function Enlaces({ panel, generar, revocar }: {
 
 // ── El REP que la flota emite a su cliente ─────────────────────────────────
 
-function Complemento({ panel, anotarRep }: {
+function Complemento({ panel, anotarRep, tr = trEs }: {
   panel: PanelPortal;
-  anotarRep: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
+  anotarRep: (p: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>; tr?: Tr;
 }) {
   return (
     <details className="rounded-xl hairline px-4 py-3">
       <summary className="text-xs font-medium cursor-pointer">
-        Complemento de pago (REP) — entregarlo por el enlace
+        {tr('facturacion.portal.complementoDePagoRep')}
       </summary>
       <div className="mt-3 flex flex-col gap-3">
         <p className="text-xs" style={{ color: 'var(--muted)' }}>
-          Likida <strong>no timbra</strong>: el REP lo emite tu PAC, igual que la factura. Aquí
-          se registra el que ya timbraste, y el enlace de tu cliente se lo entrega solo —
-          con el sello de cuándo lo abrió. El XML es opcional: sin él, tu cliente ve el
-          folio fiscal citable y la página le dice que el archivo te lo tiene que pedir a ti
-          (nunca un botón de descarga que no baje nada).
+          {rico(tr('facturacion.portal.likidaStrongNoTimbra'), { strong: (c) => <strong>{c}</strong> })}
         </p>
         {panel.ligasVivas.length === 0 ? (
           <p className="text-xs" style={{ color: 'var(--muted)' }}>
-            Genera primero el enlace de la factura: sin él no hay a dónde entregarlo.
+            {tr('facturacion.portal.generaPrimeroElEnlace')}
           </p>
         ) : (
           <FormaConAviso accion={anotarRep} boton="Registrar el complemento" columnas="md:grid-cols-2">
             <Selector
               nombre="facturaId"
-              etiqueta="Factura del complemento"
+              etiqueta={tr('facturacion.portal.facturaDelComplemento')}
               requerido
               opciones={[
                 { valor: '', texto: 'Elige…' },
@@ -375,23 +366,23 @@ function Complemento({ panel, anotarRep }: {
             />
             <Campo
               nombre="pagoId"
-              etiqueta="Id del abono que ampara"
+              etiqueta={tr('facturacion.portal.idDelAbonoQue')}
               requerido
-              ayuda="El que quedó al conciliar. Aparece en la bitácora de la flota, en el renglón «pago.registrado»."
+              ayuda={tr('facturacion.portal.elQueQuedoAl')}
             />
-            <Campo nombre="cfdiUuid" etiqueta="Folio fiscal (UUID) del REP" requerido
-              ayuda="Cópialo tal cual del acuse de tu PAC." />
-            <Campo nombre="fechaPago" etiqueta="Fecha del pago" tipo="date" requerido />
-            <Campo nombre="impPagado" etiqueta="Importe pagado" requerido
-              ayuda="El que trae el complemento, no el de la factura." />
-            <Campo nombre="formaPago" etiqueta="Forma de pago del SAT (2 dígitos)"
-              ayuda="03 transferencia, 01 efectivo, 02 cheque… Déjalo vacío si no lo tienes." />
-            <Campo nombre="xml" etiqueta="XML del complemento (opcional)"
-              ayuda="Pégalo si lo tienes a la mano: se comprueba que sea ESTE complemento (tipo P, mismo folio, fecha e importe). Vacío = tu cliente verá el folio citable, no una descarga vacía." />
+            <Campo nombre="cfdiUuid" etiqueta={tr('facturacion.portal.folioFiscalUuidDel')} requerido
+              ayuda={tr('facturacion.portal.copialoTalCualDel')} />
+            <Campo nombre="fechaPago" etiqueta={tr('facturacion.portal.fechaDelPago')} tipo="date" requerido />
+            <Campo nombre="impPagado" etiqueta={tr('facturacion.portal.importePagado')} requerido
+              ayuda={tr('facturacion.portal.elQueTraeEl')} />
+            <Campo nombre="formaPago" etiqueta={tr('facturacion.portal.formaDePagoDel')}
+              ayuda={tr('facturacion.portal.03Transferencia01Efectivo')} />
+            <Campo nombre="xml" etiqueta={tr('facturacion.portal.xmlDelComplementoOpcional')}
+              ayuda={tr('facturacion.portal.pegaloSiLoTienes')} />
           </FormaConAviso>
         )}
 
-        <ListaReps reps={panel.reps} truncados={panel.repsTruncados} />
+        <ListaReps tr={tr} reps={panel.reps} truncados={panel.repsTruncados} />
       </div>
     </details>
   );
@@ -405,7 +396,7 @@ function Complemento({ panel, anotarRep }: {
  * componente REAL, en vez de una copia de su markup. Una copia verifica la
  * copia.
  */
-export function ListaReps({ reps, truncados }: { reps: PanelPortal['reps']; truncados: boolean }) {
+export function ListaReps({ reps, truncados, tr = trEs }: { reps: PanelPortal['reps']; truncados: boolean; tr?: Tr }) {
   // LO QUE YA SE REGISTRÓ. El bloque del complemento era sólo un formulario de
   // alta: se registraba y no se volvía a ver nunca — ni siquiera para
   // contestar «¿ya le mandamos el de esta factura?» antes de emitir otro. Y el
@@ -413,12 +404,10 @@ export function ListaReps({ reps, truncados }: { reps: PanelPortal['reps']; trun
   // sello (`entregado_en`) que no se pintaba en ninguna parte.
   return (
       <div className="mt-1">
-        <TituloSeccion>Complementos ya registrados</TituloSeccion>
+        <TituloSeccion>{tr('facturacion.portal.complementosYaRegistrados')}</TituloSeccion>
         {reps.length === 0 ? (
           <EstadoVacio>
-            Todavía no has registrado ningún complemento. El primero aparecerá aquí en
-            cuanto lo captures arriba — con el folio fiscal y el sello de cuándo lo abrió
-            tu cliente.
+            {tr('facturacion.portal.todaviaNoHasRegistrado')}
           </EstadoVacio>
         ) : (
           <>
@@ -434,29 +423,27 @@ export function ListaReps({ reps, truncados }: { reps: PanelPortal['reps']; trun
                       {/* null ≠ 0: un importe que no se pudo leer no es un
                           complemento por cero pesos. */}
                       {r.impPagado === null
-                        ? <span style={{ color: 'var(--muted)' }}>importe sin dato</span>
+                        ? <span style={{ color: 'var(--muted)' }}>{tr('facturacion.portal.importeSinDato')}</span>
                         : mxn(r.impPagado)}
                       {r.formaPago !== null && (
-                        <span style={{ color: 'var(--muted)' }}> · forma {r.formaPago}</span>
+                        <span style={{ color: 'var(--muted)' }}> {tr('facturacion.portal.forma', { formaPago: r.formaPago })}</span>
                       )}
                     </span>
                   </div>
                   <div className="mt-0.5" style={{ color: 'var(--muted)' }}>
-                    Folio fiscal <code className="cifra-mono">{r.cfdiUuid}</code>
-                    {' · '}pagado el {fechaMx(r.fechaPago)}
-                    {' · '}registrado el {fechaHoraMx(r.registradoEn)}
+                    {rico(tr('facturacion.portal.folioFiscalCodeCode', { cfdiUuid: r.cfdiUuid, v: ' · ', v2: fechaMx(r.fechaPago), v3: ' · ', v4: fechaHoraMx(r.registradoEn) }), { code: (c) => <code className="cifra-mono">{c}</code> })}
                   </div>
                   <div className="mt-0.5">
                     {r.entregadoEn === null
-                      ? <span style={{ color: 'var(--muted)' }}>Tu cliente todavía no lo ha abierto.</span>
-                      : <span style={{ color: 'var(--color-ok)' }}>Tu cliente lo abrió el {fechaHoraMx(r.entregadoEn)}.</span>}
+                      ? <span style={{ color: 'var(--muted)' }}>{tr('facturacion.portal.tuClienteTodaviaNo')}</span>
+                      : <span style={{ color: 'var(--color-ok)' }}>{tr('facturacion.portal.tuClienteLoAbrio', { v: fechaHoraMx(r.entregadoEn) })}</span>}
                   </div>
                 </li>
               ))}
             </ul>
             {truncados && (
               <p className="mt-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-                Se muestran los {TOPE_REPS_PANEL} más recientes; hay más.
+                {tr('facturacion.portal.seMuestranLosMas', { TOPE_REPS_PANEL })}
               </p>
             )}
           </>

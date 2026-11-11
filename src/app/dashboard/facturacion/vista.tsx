@@ -1,3 +1,5 @@
+import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
+import { rico } from '@/lib/i18n/rico';
 import {
   FileText, Banknote, Wallet, CalendarClock, HandCoins, TriangleAlert, Truck, ClipboardCheck,
 } from 'lucide-react';
@@ -56,17 +58,17 @@ export interface CapturaFacturacion {
  *
  * Pura props a propósito, para poder mirarla con fixtures sin sesión.
  */
-export function VistaFacturacion({ datos, captura = null, auditoria = null }: {
+export function VistaFacturacion({ datos, captura = null, auditoria = null, tr = trEs }: {
   datos: FacturacionClientes | null;
   captura?: CapturaFacturacion | null;
   /** El cruce pactado/entregado/facturado/cobrado (auditor_cobranza.ts).
    *  `null` = su lectura falló; la sección pinta el error dicho, no un cero. */
-  auditoria?: AuditoriaCobranza | null;
+  auditoria?: AuditoriaCobranza | null; tr?: Tr;
 }) {
   return (
-    <MarcoPagina titulo="Facturación a clientes" apoyo="Facturas emitidas, sus pagos y los viajes liquidados por facturar. Si falta un dato, se dice; nunca se pinta un cero.">
+    <MarcoPagina titulo={tr('facturacion.vista.facturacionAClientes')} apoyo={tr('facturacion.vista.facturasEmitidasSusPagos')}>
       {datos === null ? (
-        <EstadoError mensaje="No pude leer tus facturas emitidas, sus pagos ni tus viajes liquidados. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera, solo que más barata." />
+        <EstadoError mensaje={tr('facturacion.vista.noPudeLeerTus')} />
       ) : datos.cartera.facturas.length === 0 && datos.viajesLiquidados === 0 ? (
         // El estado en el que abre una flota nueva: las tablas de la 0049
         // existen y están vacías. Se dice qué las llena, no se pintan
@@ -74,13 +76,7 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null }: {
         // llena vive AQUÍ MISMO, no en una promesa.
         <>
           <EstadoVacio icono={<FileText width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-            Esta pantalla trabaja con dos cosas que tu cuenta todavía no tiene: las{' '}
-            <strong>facturas que le emites a tus clientes</strong> (con sus pagos) y{' '}
-            <strong>viajes ya liquidados</strong>. En cuanto exista lo primero, aquí sale cuánto te
-            deben y desde hace cuánto — corriente, 1 a 30, 31 a 60 y más de 60 días — y qué está
-            vencido de verdad. En cuanto exista lo segundo, sale la lista de viajes cerrados que
-            nadie facturó, que es el dinero que se queda en la mesa. Nada de esto se estima: si el
-            dato no está, se dice. La primera factura se registra aquí abajo.
+            {rico(tr('facturacion.vista.estaPantallaTrabajaCon'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
           </EstadoVacio>
           {captura && (
             <div className="card p-4">
@@ -93,17 +89,15 @@ export function VistaFacturacion({ datos, captura = null, auditoria = null }: {
           {/* Una flota sin facturas puede tener hallazgos IGUAL: el
               entregado-sin-facturar existe justamente antes de la primera
               factura. Si el auditor encontró algo, se enseña aquí también. */}
-          {auditoria !== null && auditoria.cola.length > 0 && <BloqueAuditor auditoria={auditoria} />}
+          {auditoria !== null && auditoria.cola.length > 0 && <BloqueAuditor tr={tr} auditoria={auditoria} />}
         </>
       ) : (
         <>
-          <BloqueCartera datos={datos} captura={captura} />
-          <BloqueEnLaMesa datos={datos} />
-          <BloqueAuditor auditoria={auditoria} />
+          <BloqueCartera tr={tr} datos={datos} captura={captura} />
+          <BloqueEnLaMesa tr={tr} datos={datos} />
+          <BloqueAuditor tr={tr} auditoria={auditoria} />
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-            Todo lo de esta pantalla se fechó contra un solo día: <strong>{fechaMx(datos.hoy)}</strong>,
-            en hora de México. Es lo que impide que una factura salga marcada como vencida y con
-            cero días vencida en el mismo renglón.
+            {rico(tr('facturacion.vista.todoLoDeEsta', { v: fechaMx(datos.hoy) }), { strong: (c) => <strong>{c}</strong> })}
           </p>
         </>
       )}
@@ -119,12 +113,12 @@ function plural(n: number, uno: string, varios: string): string {
 
 // ── La cartera ─────────────────────────────────────────────────────────────
 
-function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura: CapturaFacturacion | null }) {
+function BloqueCartera({ datos, captura, tr = trEs }: { datos: FacturacionClientes; captura: CapturaFacturacion | null; tr?: Tr }) {
   const c = datos.cartera;
 
   return (
     <section className="space-y-3">
-      <TituloRecuadro info="facturacion.cartera">Lo que facturaste y lo que te deben</TituloRecuadro>
+      <TituloRecuadro info="facturacion.cartera">{tr('facturacion.vista.loQueFacturasteY')}</TituloRecuadro>
 
       {captura && (
         <div className="card p-4">
@@ -137,50 +131,47 @@ function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura
 
       {c.facturas.length === 0 ? (
         <EstadoVacio icono={<Banknote width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          Todavía no hay una sola factura emitida registrada. Al registrar la primera, aquí aparece
-          cuánto te deben, desde hace cuánto y qué cliente concentra el atraso. Ojo: Likida guarda la
-          factura que tú EXPIDES; los CFDI que recibes de tus proveedores son lo contrario y viven en
-          los comprobantes de cada viaje.
+          {tr('facturacion.vista.todaviaNoHayUna')}
         </EstadoVacio>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Facturas emitidas')}>
+          <TiraCifras sello={selloHoy(tr('facturacion.vista.selloFacturasEmitidas'))}>
             <Cifra
               icono={<FileText width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Facturado a clientes" info="facturacion.facturado" valor={c.facturado} formato="mxn"
-              nota={`De ${plural(c.vivas, 'factura emitida', 'facturas emitidas')}`}
+              etiqueta={tr('facturacion.vista.facturadoAClientes')} info="facturacion.facturado" valor={c.facturado} formato="mxn"
+              nota={`De ${plural(c.vivas, tr('facturacion.vista.facturaEmitida'), tr('facturacion.vista.facturasEmitidas'))}`}
             />
             <Cifra
               icono={<HandCoins width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Cobrado" info="facturacion.cobrado" valor={c.cobrado} formato="mxn"
-              nota="Suma de los pagos registrados contra esas facturas"
+              etiqueta={tr('facturacion.vista.cobrado')} info="facturacion.cobrado" valor={c.cobrado} formato="mxn"
+              nota={tr('facturacion.vista.sumaDeLosPagos')}
             />
             <Cifra
               icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Por cobrar" info="facturacion.por_cobrar" valor={c.porCobrar} formato="mxn"
-              nota="Saldo vivo: no incluye borradores ni canceladas"
+              etiqueta={tr('facturacion.vista.porCobrar')} info="facturacion.por_cobrar" valor={c.porCobrar} formato="mxn"
+              nota={tr('facturacion.vista.saldoVivoNoIncluye')}
             />
             <Cifra
               icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Vencido" info="facturacion.vencido" valor={c.vencido} formato="mxn"
+              etiqueta={tr('facturacion.vista.vencido')} info="facturacion.vencido" valor={c.vencido} formato="mxn"
               nota={c.vencido > 0
-                ? 'Saldo que ya pasó su fecha pactada'
-                : 'Nada ha pasado de su fecha pactada'}
+                ? tr('facturacion.vista.saldoQueYaPaso')
+                : tr('facturacion.vista.nadaHaPasadoDe')}
             />
           </TiraCifras>
 
-          <TablaCubetas datos={datos} />
+          <TablaCubetas tr={tr} datos={datos} />
 
           {c.sinCondiciones > 0 && (
             <AvisoCompacto tono="warn"
               resumen={c.sinCondiciones === 1
-                ? '1 factura con saldo no tiene fecha de vencimiento porque su cliente no tiene días de crédito registrados.'
-                : `${numero(c.sinCondiciones)} facturas con saldo no tienen fecha de vencimiento porque su cliente no tiene días de crédito registrados.`}
-              mas="No entran a lo vencido. Suponerles 30 días pintaría de rojo un plazo que nadie pactó; captúrale los días de crédito al cliente y entran solas." />
+                ? tr('facturacion.vista.1FacturaConSaldo')
+                : tr('facturacion.vista.facturasConSaldoNo', { v: numero(c.sinCondiciones) })}
+              mas={tr('facturacion.vista.noEntranALo')} />
           )}
 
-          <TablaClientes clientes={c.clientes} />
-          <TablaFacturas facturas={c.facturas} captura={captura} />
+          <TablaClientes tr={tr} clientes={c.clientes} />
+          <TablaFacturas tr={tr} facturas={c.facturas} captura={captura} />
 
           {/* RECORTAR LA LISTA ESTÁ BIEN; RECORTAR LA CIFRA SIN DECIRLO, NO.
               Desde la 0152 la tabla trae a lo más 100 renglones —las más
@@ -190,15 +181,14 @@ function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura
               y descartaría la tabla entera. */}
           {c.facturasTotal > c.facturas.length && (
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-              Se listan las {numero(c.facturas.length)} más atrasadas de {numero(c.facturasTotal)} facturas.
-              Las cubetas, el total por cobrar y el corte por cliente son de todas, no de esta lista.
+              {tr('facturacion.vista.seListanLasMas', { v: numero(c.facturas.length), v2: numero(c.facturasTotal) })}
             </p>
           )}
 
           {(c.borradores > 0 || c.canceladas > 0) && (
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-              {c.borradores > 0 && `${plural(c.borradores, 'factura está en borrador', 'facturas están en borrador')} y no suma al por cobrar: Likida no timbra, así que mientras no llegue su UUID del CFDI no le cobra a nadie. `}
-              {c.canceladas > 0 && `${plural(c.canceladas, 'factura cancelada no es', 'facturas canceladas no son')} dinero que alguien deba; su viaje vuelve a la lista de sin facturar.`}
+              {c.borradores > 0 && tr('facturacion.vista.yNoSumaAl', { v: plural(c.borradores, tr('facturacion.vista.facturaEstaEnBorrador'), tr('facturacion.vista.facturasEstanEnBorrador')) }) + ' '}
+              {c.canceladas > 0 && tr('facturacion.vista.dineroQueAlguienDeba', { v: plural(c.canceladas, tr('facturacion.vista.facturaCanceladaNoEs'), tr('facturacion.vista.facturasCanceladasNoSon')) })}
             </p>
           )}
         </>
@@ -210,19 +200,19 @@ function BloqueCartera({ datos, captura }: { datos: FacturacionClientes; captura
 /** La antigüedad de saldos. El renglón de total existe para que el contralor
  *  pueda comprobar de un vistazo que las cubetas cuadran con el por cobrar —
  *  es la única prueba que le puede hacer a esta tabla sin abrir nada. */
-function TablaCubetas({ datos }: { datos: FacturacionClientes }) {
+function TablaCubetas({ datos, tr = trEs }: { datos: FacturacionClientes; tr?: Tr }) {
   const c = datos.cartera;
   return (
     <div className="card overflow-x-auto">
       <table className="w-full text-[12px]">
         <caption className="text-left px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-          Antigüedad de saldos
+          {tr('facturacion.vista.antiguedadDeSaldos')}
         </caption>
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th scope="col" className="px-3 py-2 font-medium">Cubeta</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Facturas</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Saldo</th>
+            <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.cubeta')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.facturas')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.saldo')}</th>
           </tr>
         </thead>
         <tbody>
@@ -243,7 +233,7 @@ function TablaCubetas({ datos }: { datos: FacturacionClientes }) {
             </tr>
           ))}
           <tr className="border-t" style={{ borderColor: 'var(--line)' }}>
-            <td className="px-3 py-2 font-medium">Total por cobrar</td>
+            <td className="px-3 py-2 font-medium">{tr('facturacion.vista.totalPorCobrar')}</td>
             <td className="px-3 py-2" />
             <td className="px-3 py-2 text-right tabular font-semibold">{mxn(c.porCobrar)}</td>
           </tr>
@@ -253,26 +243,26 @@ function TablaCubetas({ datos }: { datos: FacturacionClientes }) {
   );
 }
 
-function TablaClientes({ clientes }: { clientes: ClienteCartera[] }) {
+function TablaClientes({ clientes, tr = trEs }: { clientes: ClienteCartera[]; tr?: Tr }) {
   if (clientes.length === 0) return null;
 
   return (
     <div className="card overflow-x-auto">
       <table className="w-full text-[12px]">
         <caption className="text-left px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-          Por cliente — a quién hay que hablarle
+          {tr('facturacion.vista.porClienteAQuien')}
         </caption>
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Facturado</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Cobrado</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Por cobrar</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Corriente</th>
+            <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.cliente')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.facturado')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.cobrado')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.porCobrar')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.corriente')}</th>
             <th scope="col" className="px-3 py-2 font-medium text-right">1-30</th>
             <th scope="col" className="px-3 py-2 font-medium text-right">31-60</th>
             <th scope="col" className="px-3 py-2 font-medium text-right">+60</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Sin fecha</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.sinFecha')}</th>
           </tr>
         </thead>
         <tbody>
@@ -282,8 +272,8 @@ function TablaClientes({ clientes }: { clientes: ClienteCartera[] }) {
                 <span className="font-medium">{c.cliente}</span>
                 <span className="block text-[11px]" style={{ color: c.diasMasVencido === null ? 'var(--faint)' : 'var(--bad)' }}>
                   {c.diasMasVencido === null
-                    ? `${plural(c.facturas, 'factura', 'facturas')}, nada vencido`
-                    : `${plural(c.facturas, 'factura', 'facturas')} · lo más atrasado, ${numero(c.diasMasVencido)} días`}
+                    ? tr('facturacion.vista.nadaVencido', { v: plural(c.facturas, 'factura', 'facturas') })
+                    : tr('facturacion.vista.loMasAtrasadoDias', { v: plural(c.facturas, 'factura', 'facturas'), v2: numero(c.diasMasVencido) })}
                 </span>
               </td>
               <td className="px-3 py-2 text-right tabular">{mxn(c.facturado)}</td>
@@ -314,33 +304,32 @@ function Celda({ monto, atrasado = false }: { monto: number; atrasado?: boolean 
   );
 }
 
-const PILL_ESTATUS: Record<string, { rotulo: string; fg: string; bg: string }> = {
-  borrador: { rotulo: 'borrador', fg: 'var(--muted)', bg: 'var(--canvas)' },
-  cancelada: { rotulo: 'cancelada', fg: 'var(--muted)', bg: 'var(--canvas)' },
-};
-
-function TablaFacturas({ facturas, captura }: { facturas: RenglonCartera[]; captura: CapturaFacturacion | null }) {
+const pillEstatus = (tr: Tr): Record<string, { rotulo: string; fg: string; bg: string }> => ({
+  borrador: { rotulo: tr('facturacion.vista.borrador'), fg: 'var(--muted)', bg: 'var(--canvas)' },
+  cancelada: { rotulo: tr('facturacion.vista.cancelada'), fg: 'var(--muted)', bg: 'var(--canvas)' },
+});
+function TablaFacturas({ facturas, captura, tr = trEs }: { facturas: RenglonCartera[]; captura: CapturaFacturacion | null; tr?: Tr }) {
   return (
     <div className="card overflow-x-auto">
       <table className="w-full text-[12px]">
         <caption className="text-left px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--muted)' }}>
-          Facturas emitidas
+          {tr('facturacion.vista.facturasEmitidas2')}
         </caption>
         <thead>
           <tr className="text-left" style={{ color: 'var(--muted)' }}>
-            <th scope="col" className="px-3 py-2 font-medium">Folio</th>
-            <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
-            <th scope="col" className="px-3 py-2 font-medium">Fecha</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Total</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Pagado</th>
-            <th scope="col" className="px-3 py-2 font-medium text-right">Saldo</th>
-            <th scope="col" className="px-3 py-2 font-medium">Vence</th>
-            <th scope="col" className="px-3 py-2 font-medium">Antigüedad</th>
-            {captura && <th scope="col" className="px-3 py-2 font-medium">Acciones</th>}
+            <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.folio')}</th>
+            <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.cliente')}</th>
+            <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.fecha')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.total')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.pagado')}</th>
+            <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.saldo')}</th>
+            <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.vence')}</th>
+            <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.antiguedad')}</th>
+            {captura && <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.acciones')}</th>}
           </tr>
         </thead>
         <tbody>
-          {facturas.map((f) => <RenglonFactura key={f.id} f={f} captura={captura} />)}
+          {facturas.map((f) => <RenglonFactura tr={tr} key={f.id} f={f} captura={captura} />)}
         </tbody>
       </table>
     </div>
@@ -381,8 +370,8 @@ function CeldaAcciones({ f, captura }: { f: RenglonCartera; captura: CapturaFact
   );
 }
 
-function RenglonFactura({ f, captura }: { f: RenglonCartera; captura: CapturaFacturacion | null }) {
-  const pill = PILL_ESTATUS[f.estatus];
+function RenglonFactura({ f, captura, tr = trEs }: { f: RenglonCartera; captura: CapturaFacturacion | null; tr?: Tr }) {
+  const pill = pillEstatus(tr)[f.estatus];
   // El color sale del MISMO criterio que el rótulo de la derecha, y por eso
   // exige las tres condiciones: viva, con saldo y vencida. Se vio mirando el
   // render — con solo `diasVencida !== null`, una factura PAGADA en mayo salía
@@ -410,13 +399,13 @@ function RenglonFactura({ f, captura }: { f: RenglonCartera; captura: CapturaFac
         {mxn(f.saldo)}
       </td>
       <td className="px-3 py-2 whitespace-nowrap" style={{ color: f.venceEn === null ? 'var(--faint)' : 'var(--muted)' }}>
-        {f.venceEn === null ? 'sin condiciones' : fechaMx(f.venceEn)}
+        {f.venceEn === null ? tr('facturacion.vista.sinCondiciones') : fechaMx(f.venceEn)}
       </td>
       <td className="px-3 py-2 whitespace-nowrap">
         {!f.viva ? (
-          <span style={{ color: 'var(--faint)' }}>no entra a la cartera</span>
+          <span style={{ color: 'var(--faint)' }}>{tr('facturacion.vista.noEntraALa')}</span>
         ) : !f.conSaldo ? (
-          <span style={{ color: 'var(--ok)' }}>saldada</span>
+          <span style={{ color: 'var(--ok)' }}>{tr('facturacion.vista.saldada')}</span>
         ) : (
           <span style={{ color: rojo ? 'var(--bad)' : f.antiguedad.cubeta === 'sin_fecha' ? 'var(--warn)' : 'var(--muted)' }}>
             {f.antiguedad.rotulo}
@@ -430,99 +419,94 @@ function RenglonFactura({ f, captura }: { f: RenglonCartera; captura: CapturaFac
 
 // ── El dinero en la mesa ───────────────────────────────────────────────────
 
-function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
+function BloqueEnLaMesa({ datos, tr = trEs }: { datos: FacturacionClientes; tr?: Tr }) {
   const m = datos.enLaMesa;
 
   return (
     <section className="space-y-3">
-      <TituloRecuadro info="facturacion.en_la_mesa">Viajes liquidados que nadie facturó</TituloRecuadro>
+      <TituloRecuadro info="facturacion.en_la_mesa">{tr('facturacion.vista.viajesLiquidadosQueNadie')}</TituloRecuadro>
 
       {datos.viajesLiquidados === 0 ? (
         <EstadoVacio icono={<Truck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          Todavía no hay un solo viaje liquidado. En cuanto se cierre el primero, aquí sale si se
-          quedó sin facturar y cuántos días lleva así — es el hueco entre operar y cobrar, y es el
-          único de esta pantalla que no depende de que captures nada nuevo.
+          {tr('facturacion.vista.todaviaNoHayUn')}
         </EstadoVacio>
       ) : m.total === 0 ? (
         // No es un cero disfrazado: se comprobaron los N liquidados y todos
         // tienen factura viva. Se dice el denominador para que se pueda creer.
         <p className="text-[12px]" style={{ color: 'var(--ok)' }}>
           {datos.viajesLiquidados === 1
-            ? 'El único viaje liquidado ya tiene factura emitida.'
-            : `Los ${numero(datos.viajesLiquidados)} viajes liquidados ya tienen factura emitida.`}
-          {' '}No hay dinero esperando en la mesa.
+            ? tr('facturacion.vista.elUnicoViajeLiquidado')
+            : tr('facturacion.vista.losViajesLiquidadosYa', { v: numero(datos.viajesLiquidados) })}
+          {' '}{tr('facturacion.vista.noHayDineroEsperando')}
         </p>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Viajes liquidados sin factura')}>
+          <TiraCifras sello={selloHoy(tr('facturacion.vista.selloLiquidadosSinFactura'))}>
             <Cifra
               icono={<Truck width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Viajes liquidados sin factura" info="facturacion.sin_factura" valor={m.total} formato="numero"
-              nota={`De ${plural(datos.viajesLiquidados, 'viaje liquidado', 'viajes liquidados')} en total`}
+              etiqueta={tr('facturacion.vista.viajesLiquidadosSinFactura')} info="facturacion.sin_factura" valor={m.total} formato="numero"
+              nota={tr('facturacion.vista.deEnTotal', { v: plural(datos.viajesLiquidados, tr('facturacion.vista.viajeLiquidado'), tr('facturacion.vista.viajesLiquidados')) })}
             />
             <Cifra
               icono={<Banknote width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Ingreso capturado sin facturar" info="facturacion.ingreso_sin_facturar" valor={m.ingresoCapturado} formato="mxn"
+              etiqueta={tr('facturacion.vista.ingresoCapturadoSinFacturar')} info="facturacion.ingreso_sin_facturar" valor={m.ingresoCapturado} formato="mxn"
               nota={m.sinIngreso === 0
-                ? 'Todos traen su ingreso de flete capturado'
+                ? tr('facturacion.vista.todosTraenSuIngreso')
                 : m.sinIngreso === 1
-                  ? '1 viaje no trae ingreso capturado y NO entra a esta suma'
-                  : `${numero(m.sinIngreso)} viajes no traen ingreso capturado y NO entran a esta suma`}
+                  ? tr('facturacion.vista.1ViajeNoTrae')
+                  : tr('facturacion.vista.viajesNoTraenIngreso', { v: numero(m.sinIngreso) })}
             />
             {/* Sin una sola fecha de cierre NO se pinta un "0" grande con la aclaración abajo: la cifra es lo que se lee, y ese 0
                 diría "se liquidaron hoy". La cifra queda sin dato y lo explica. */}
             {m.diasMasViejo === null ? (
               <Cifra
                 icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-                etiqueta="El más viejo, sin facturar" info="facturacion.mas_viejo" valor={null}
-                mensaje="Ninguno de estos viajes tiene fecha de cierre de su liquidación, así que no hay días que contar. No es cero días: es que no se puede fechar."
+                etiqueta={tr('facturacion.vista.elMasViejoSin')} info="facturacion.mas_viejo" valor={null}
+                mensaje={tr('facturacion.vista.ningunoDeEstosViajes')}
               />
             ) : (
               <Cifra
                 icono={<CalendarClock width={14} height={14} strokeWidth={1.75} />}
-                etiqueta="El más viejo, sin facturar" info="facturacion.mas_viejo"
+                etiqueta={tr('facturacion.vista.elMasViejoSin')} info="facturacion.mas_viejo"
                 valor={m.diasMasViejo} formato="numero"
-                nota="días desde que se cerró su liquidación"
+                nota={tr('facturacion.vista.diasDesdeQueSe')}
               />
             )}
           </TiraCifras>
 
           {m.sinIngreso > 0 && (
             <AvisoCompacto tono="warn"
-              resumen={<>La cifra de arriba es el piso de lo que dejaste de facturar, no el total: {plural(m.sinIngreso, 'viaje no tiene', 'viajes no tienen')} el ingreso del flete capturado.</>}
-              mas="Un viaje sin ese dato no vale $0: no se sabe cuánto vale. El anticipo no sirve para rellenarlo, porque es lo que le adelantas al operador, no lo que te paga tu cliente." />
+              resumen={<>{tr('facturacion.vista.laCifraDeArriba', { v: plural(m.sinIngreso, tr('facturacion.vista.viajeNoTiene'), tr('facturacion.vista.viajesNoTienen')) })}</>}
+              mas={tr('facturacion.vista.unViajeSinEse')} />
           )}
 
           <div className="card overflow-x-auto">
-            <table aria-label="Viajes por facturar" className="w-full text-[12px]">
+            <table aria-label={tr('facturacion.vista.viajesPorFacturar')} className="w-full text-[12px]">
               <thead>
                 <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                  <th scope="col" className="px-3 py-2 font-medium">Viaje</th>
-                  <th scope="col" className="px-3 py-2 font-medium">Ruta</th>
-                  <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
-                  <th scope="col" className="px-3 py-2 font-medium">Liquidado</th>
-                  <th scope="col" className="px-3 py-2 font-medium text-right">Sin facturar</th>
-                  <th scope="col" className="px-3 py-2 font-medium text-right">Ingreso</th>
+                  <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.viaje')}</th>
+                  <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.ruta')}</th>
+                  <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.cliente')}</th>
+                  <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.liquidado')}</th>
+                  <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.sinFacturar')}</th>
+                  <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.ingreso')}</th>
                 </tr>
               </thead>
               <tbody>
-                {m.viajes.map((v) => <RenglonMesa key={v.viajeId} v={v} />)}
+                {m.viajes.map((v) => <RenglonMesa tr={tr} key={v.viajeId} v={v} />)}
               </tbody>
             </table>
           </div>
 
           {m.viajes.length < m.total && (
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Se listan los {numero(m.viajes.length)} más antiguos de {numero(m.total)}. Las cifras de
-              arriba sí son de los {numero(m.total)}: la lista se recorta, la suma no.
+              {tr('facturacion.vista.seListanLosMas', { v: numero(m.viajes.length), v2: numero(m.total), v3: numero(m.total) })}
             </p>
           )}
 
           {m.conBorrador > 0 && (
             <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-              {plural(m.conBorrador, 'de estos viajes ya tiene', 'de estos viajes ya tienen')} una factura en
-              borrador: alguien la empezó y no llegó su UUID del CFDI. Cuentan como sin facturar
-              porque un borrador no le cobra a nadie, pero ahí ya hay trabajo hecho.
+              {tr('facturacion.vista.unaFacturaEnBorrador', { v: plural(m.conBorrador, tr('facturacion.vista.deEstosViajesYa'), tr('facturacion.vista.deEstosViajesYa2')) })}
             </p>
           )}
         </>
@@ -531,7 +515,7 @@ function BloqueEnLaMesa({ datos }: { datos: FacturacionClientes }) {
   );
 }
 
-function RenglonMesa({ v }: { v: RenglonSinFacturar }) {
+function RenglonMesa({ v, tr = trEs }: { v: RenglonSinFacturar; tr?: Tr }) {
   return (
     <tr className="border-t" style={{ borderColor: 'var(--line2)' }}>
       <td className="px-3 py-2">
@@ -539,19 +523,19 @@ function RenglonMesa({ v }: { v: RenglonSinFacturar }) {
         {v.soloBorrador && (
           <span className="flex items-center gap-1 text-[11px] mt-0.5" style={{ color: 'var(--warn)' }}>
             <TriangleAlert width={11} height={11} strokeWidth={1.75} className="shrink-0" />
-            tiene factura en borrador
+            {tr('facturacion.vista.tieneFacturaEnBorrador')}
           </span>
         )}
       </td>
       <td className="px-3 py-2">
-        {v.ruta ?? <span style={{ color: 'var(--faint)' }}>sin ruta capturada</span>}
+        {v.ruta ?? <span style={{ color: 'var(--faint)' }}>{tr('facturacion.vista.sinRutaCapturada')}</span>}
       </td>
       <td className="px-3 py-2">
-        {v.cliente ?? <span style={{ color: 'var(--warn)' }}>sin asignar</span>}
+        {v.cliente ?? <span style={{ color: 'var(--warn)' }}>{tr('facturacion.vista.sinAsignar')}</span>}
       </td>
       <td className="px-3 py-2 whitespace-nowrap" style={{ color: 'var(--muted)' }}>
         {v.liquidadoEn === null
-          ? <span style={{ color: 'var(--faint)' }}>sin fecha de cierre</span>
+          ? <span style={{ color: 'var(--faint)' }}>{tr('facturacion.vista.sinFechaDeCierre')}</span>
           : fechaMx(v.liquidadoEn)}
       </td>
       <td className="px-3 py-2 text-right tabular">
@@ -561,12 +545,12 @@ function RenglonMesa({ v }: { v: RenglonSinFacturar }) {
         {v.diasSinFacturar === null
           ? <span style={{ color: 'var(--faint)' }}>—</span>
           : <span style={{ color: v.diasSinFacturar > 30 ? 'var(--bad)' : undefined }}>
-            {numero(v.diasSinFacturar)} días
+            {tr('facturacion.vista.dias', { v: numero(v.diasSinFacturar) })}
           </span>}
       </td>
       <td className="px-3 py-2 text-right tabular font-medium">
         {v.ingreso === null
-          ? <span className="text-[11px] font-normal" style={{ color: 'var(--warn)' }}>sin capturar</span>
+          ? <span className="text-[11px] font-normal" style={{ color: 'var(--warn)' }}>{tr('facturacion.vista.sinCapturar')}</span>
           : mxn(v.ingreso)}
       </td>
     </tr>
@@ -583,55 +567,49 @@ const ROTULO_CUBETA: Record<CubetaAuditor, { rotulo: string; ayuda: string }> = 
   CUBETAS_AUDITOR.map((c) => [c.clave, { rotulo: c.rotulo, ayuda: c.ayuda }]),
 ) as Record<CubetaAuditor, { rotulo: string; ayuda: string }>;
 
-function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
+function BloqueAuditor({ auditoria, tr = trEs }: { auditoria: AuditoriaCobranza | null; tr?: Tr }) {
   return (
     <section className="space-y-3">
-      <TituloRecuadro info="facturacion.auditor">Auditor de cobranza — lo pactado contra lo entregado, lo facturado y lo cobrado</TituloRecuadro>
+      <TituloRecuadro info="facturacion.auditor">{tr('facturacion.vista.auditorDeCobranzaLo')}</TituloRecuadro>
 
       {auditoria === null ? (
-        <EstadoError mensaje="No pude cruzar los viajes contra sus tarifas, PODs, facturas y pagos. No se enseña una auditoría a medias: un cruce incompleto diría que no hay discrepancias en viajes que sí las tienen." />
+        <EstadoError mensaje={tr('facturacion.vista.noPudeCruzarLos')} />
       ) : auditoria.resumen.viajesAuditados === 0 ? (
         <EstadoVacio icono={<ClipboardCheck width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />}>
-          No hubo viajes iniciados entre el {fechaMx(auditoria.desde)} y el {fechaMx(auditoria.hasta)},
-          que es la ventana que este auditor revisa. En cuanto los haya, aquí sale el cruce de cada uno:
-          lo pactado con el cliente (tarifa o ingreso capturado), lo entregado (POD e hitos), lo
-          facturado y lo cobrado — con cada discrepancia dicha y cifrada.
+          {tr('facturacion.vista.noHuboViajesVentana', { desde: fechaMx(auditoria.desde), hasta: fechaMx(auditoria.hasta) })}
           {auditoria.viajesSinFecha > 0 && (
-            <> Ojo: {auditoria.viajesSinFecha === 1
-              ? 'hay 1 viaje sin fecha de inicio que queda'
-              : `hay ${numero(auditoria.viajesSinFecha)} viajes sin fecha de inicio que quedan`} fuera
-            de cualquier ventana.</>
+            <>{' '}{auditoria.viajesSinFecha === 1
+              ? tr('facturacion.vista.ojoSinFechaUno')
+              : tr('facturacion.vista.ojoSinFechaVarios', { n: numero(auditoria.viajesSinFecha) })}</>
           )}
         </EstadoVacio>
       ) : (
         <>
-          <TiraCifras sello={selloHoy('Auditoría de facturación')}>
+          <TiraCifras sello={selloHoy(tr('facturacion.vista.auditoriaDeFacturacion'))}>
             <Cifra
               icono={<Truck width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Dinero dormido" info="facturacion.dinero_dormido" valor={auditoria.resumen.dineroDormido} formato="mxn"
+              etiqueta={tr('facturacion.vista.dineroDormido')} info="facturacion.dinero_dormido" valor={auditoria.resumen.dineroDormido} formato="mxn"
               nota={auditoria.resumen.dormidosSinMonto > 0
-                ? `Entregado y sin facturar. Es el piso: ${plural(auditoria.resumen.dormidosSinMonto, 'entrega más no tiene', 'entregas más no tienen')} monto resoluble`
-                : 'Viajes con entrega probada y ninguna factura viva'}
+                ? tr('facturacion.vista.entregadoYSinFacturar', { v: plural(auditoria.resumen.dormidosSinMonto, tr('facturacion.vista.entregaMasNoTiene'), tr('facturacion.vista.entregasMasNoTienen')) })
+                : tr('facturacion.vista.viajesConEntregaProbada')}
             />
             <Cifra
               icono={<TriangleAlert width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Facturado de menos" info="facturacion.facturado_de_menos" valor={auditoria.resumen.brechaFacturadoDeMenos} formato="mxn"
-              nota="La brecha entre lo pactado y lo que suman las facturas"
+              etiqueta={tr('facturacion.vista.facturadoDeMenos')} info="facturacion.facturado_de_menos" valor={auditoria.resumen.brechaFacturadoDeMenos} formato="mxn"
+              nota={tr('facturacion.vista.laBrechaEntreLo')}
             />
             <Cifra
               icono={<Wallet width={14} height={14} strokeWidth={1.75} />}
-              etiqueta="Margen real medido" info="facturacion.margen_medido" valor={auditoria.resumen.margen.margen} formato="mxn"
+              etiqueta={tr('facturacion.vista.margenRealMedido')} info="facturacion.margen_medido" valor={auditoria.resumen.margen.margen} formato="mxn"
               nota={auditoria.resumen.margen.viajesMedidos > 0
-                ? `${auditoria.resumen.margen.margenPct === null ? '' : `${numero(auditoria.resumen.margen.margenPct)}% · `}pactado menos gastos liquidados, en ${plural(auditoria.resumen.margen.viajesMedidos, 'viaje medido', 'viajes medidos')}; ${numero(auditoria.resumen.margen.viajesSinDato)} sin las dos mitades`
-                : 'Ningún viaje de la ventana tiene pactado Y liquidación: no se mide'}
+                ? tr('facturacion.vista.pactadoMenosGastosLiquidados', { v: auditoria.resumen.margen.margenPct === null ? '' : `${numero(auditoria.resumen.margen.margenPct)}% · `, v2: plural(auditoria.resumen.margen.viajesMedidos, tr('facturacion.vista.viajeMedido'), tr('facturacion.vista.viajesMedidos')), v3: numero(auditoria.resumen.margen.viajesSinDato) })
+                : tr('facturacion.vista.ningunViajeDeLa')}
             />
           </TiraCifras>
 
           {auditoria.cola.length === 0 ? (
             <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-              Los {numero(auditoria.resumen.viajesAuditados)} viajes de la ventana salieron sin
-              discrepancias: lo facturado cuadra con lo pactado, lo entregado está facturado y no hay
-              cobros a medias ni PODs faltantes con factura viva.
+              {tr('facturacion.vista.losViajesDeLa', { v: numero(auditoria.resumen.viajesAuditados) })}
             </p>
           ) : (
             <>
@@ -646,14 +624,14 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
               </div>
 
               <div className="card overflow-x-auto">
-                <table aria-label="Viajes facturados por cliente" className="w-full text-[12px]">
+                <table aria-label={tr('facturacion.vista.viajesFacturadosPorCliente')} className="w-full text-[12px]">
                   <thead>
                     <tr className="text-left text-[11px]" style={{ color: 'var(--faint)' }}>
-                      <th scope="col" className="px-3 py-2 font-medium">Viaje</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Cliente</th>
-                      <th scope="col" className="px-3 py-2 font-medium">Hallazgo</th>
-                      <th scope="col" className="px-3 py-2 font-medium text-right">En juego</th>
-                      <th scope="col" className="px-3 py-2 font-medium">La nota, citable</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.viaje')}</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.cliente')}</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.hallazgo')}</th>
+                      <th scope="col" className="px-3 py-2 font-medium text-right">{tr('facturacion.vista.enJuego')}</th>
+                      <th scope="col" className="px-3 py-2 font-medium">{tr('facturacion.vista.laNotaCitable')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -664,7 +642,7 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
                           {h.ruta && <div className="text-[11px]" style={{ color: 'var(--faint)' }}>{h.ruta}</div>}
                         </td>
                         <td className="px-3 py-2">
-                          {h.cliente ?? <span style={{ color: 'var(--warn)' }}>sin asignar</span>}
+                          {h.cliente ?? <span style={{ color: 'var(--warn)' }}>{tr('facturacion.vista.sinAsignar')}</span>}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">{ROTULO_CUBETA[h.cubeta].rotulo}</td>
                         <td className="px-3 py-2 text-right tabular font-medium">
@@ -680,24 +658,20 @@ function BloqueAuditor({ auditoria }: { auditoria: AuditoriaCobranza | null }) {
 
               {auditoria.cola.length > LIMITE_COLA_AUDITOR && (
                 <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-                  Se listan los {numero(LIMITE_COLA_AUDITOR)} hallazgos con más dinero enfrente
-                  de {numero(auditoria.cola.length)}. Las tarjetas y los conteos de arriba son de todos.
+                  {tr('facturacion.vista.seListanLosHallazgos', { v: numero(LIMITE_COLA_AUDITOR), v2: numero(auditoria.cola.length) })}
                 </p>
               )}
             </>
           )}
 
           <p className="text-[11px]" style={{ color: 'var(--faint)' }}>
-            Ventana auditada: viajes iniciados del <strong>{fechaMx(auditoria.desde)}</strong> al{' '}
-            <strong>{fechaMx(auditoria.hasta)}</strong>, juzgados contra el {fechaMx(auditoria.hoy)}.
+            {rico(tr('facturacion.vista.ventanaAuditada', { desde: fechaMx(auditoria.desde), hasta: fechaMx(auditoria.hasta), hoy: fechaMx(auditoria.hoy) }), { strong: (c) => <strong>{c}</strong> })}
             {auditoria.viajesSinFecha > 0 && (
-              <> {auditoria.viajesSinFecha === 1
-                ? '1 viaje sin fecha de inicio queda'
-                : `${numero(auditoria.viajesSinFecha)} viajes sin fecha de inicio quedan`} fuera de
-              cualquier ventana; captúrales la fecha y entran solos.</>
+              <>{' '}{auditoria.viajesSinFecha === 1
+                ? tr('facturacion.vista.sinFechaUno')
+                : tr('facturacion.vista.sinFechaVarios', { n: numero(auditoria.viajesSinFecha) })}</>
             )}
-            {' '}Este auditor propone: la refacturación la firma el humano — no emite ni cancela CFDI,
-            ni toca la tarifa.
+            {' '}{tr('facturacion.vista.esteAuditorProponeLa')}
           </p>
         </>
       )}

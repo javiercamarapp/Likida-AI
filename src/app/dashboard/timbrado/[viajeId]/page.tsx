@@ -1,3 +1,4 @@
+import { getT } from '@/lib/i18n/servidor';
 import type { Metadata } from 'next';
 import { redirect, notFound } from 'next/navigation';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -39,6 +40,7 @@ export default async function PaginaTimbradoViaje({
   params: Promise<{ viajeId: string }>;
   searchParams: Promise<{ tenant?: string; rol?: string; vista?: string }>;
 }) {
+  const { t: tr } = await getT('dinero');
   const [{ viajeId }, sp] = await Promise.all([params, searchParams]);
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -53,22 +55,20 @@ export default async function PaginaTimbradoViaje({
   return (
     <MarcoPagina
       area="Carta Porte"
-      titulo={`Timbrado — viaje ${rotulo}`}
+      titulo={tr('timbrado.viajeId.page.tituloViaje', { rotulo })}
       ancho="lectura"
-      apoyo={`${v.origen && v.destino ? `${v.origen} → ${v.destino}` : 'Ruta sin capturar'}${v.unidadEconomico ? ` · Unidad ${v.unidadEconomico}` : ''} · ${numero(v.mercancias.length)} mercancía(s)`}
+      apoyo={tr('timbrado.viajeId.page.mercanciaS', { v: v.origen && v.destino ? `${v.origen} → ${v.destino}` : tr('timbrado.viajeId.page.rutaSinCapturar'), v2: v.unidadEconomico ? ' ' + tr('timbrado.viajeId.page.unidadEco', { unidadEconomico: v.unidadEconomico }) : '', v3: numero(v.mercancias.length) })}
       acciones={(
         <>
-          <BotonEnlace href={`${RUTA}${sufijoTenant(sp)}`} variante="ghost" tamano="sm">Volver a Timbrado</BotonEnlace>
+          <BotonEnlace href={`${RUTA}${sufijoTenant(sp)}`} variante="ghost" tamano="sm">{tr('timbrado.viajeId.page.volverATimbrado')}</BotonEnlace>
           <BotonEnlace href={`/dashboard/carta-porte/borrador/${v.viajeId}${sufijoTenant(sp)}`} variante="secondary" tamano="sm">
-            Ver el borrador completo
+            {tr('timbrado.viajeId.page.verElBorradorCompleto')}
           </BotonEnlace>
         </>
       )}
     >
       <Aviso tono="warn">
-        Timbrar EMITE un CFDI real ante el SAT a nombre de tu flota. Cancelarlo después tiene
-        ventana, motivo y, a veces, la aceptación del receptor: se aprieta una vez y con los datos
-        revisados.
+        {tr('timbrado.viajeId.page.timbrarEmiteUnCfdi')}
       </Aviso>
 
       <SeccionTimbrado v={v} searchParams={sp} />
@@ -76,4 +76,7 @@ export default async function PaginaTimbradoViaje({
   );
 }
 
-export const metadata: Metadata = { title: 'Timbrar viaje' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.timbrado.viajeId') };
+}

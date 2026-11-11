@@ -1,3 +1,5 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type Tr } from '@/lib/i18n/dinero_tr';
 import { Clock, CircleAlert, Inbox } from 'lucide-react';
 import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
@@ -19,21 +21,22 @@ import {
 import './arco.css';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
-export const metadata: Metadata = { title: 'Solicitudes ARCO' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: tr } = await getT('dinero');
+  return { title: tr('meta.arco') };
+}
 
 export const dynamic = 'force-dynamic';
 
-const ETIQUETA_TIPO: Record<string, string> = {
-  acceso: 'Acceso', rectificacion: 'Rectificación', cancelacion: 'Cancelación', oposicion: 'Oposición',
-};
-
-const ESTADO_ARCO: Record<string, { rotulo: string; tono: TonoEstado }> = {
-  resuelta: { rotulo: 'Resuelta', tono: 'ok' },
-  improcedente: { rotulo: 'Improcedente', tono: 'neutral' },
-  en_proceso: { rotulo: 'En proceso', tono: 'warn' },
-  recibida: { rotulo: 'Recibida', tono: 'warn' },
-};
-
+const etiquetaTipo = (tr: Tr): Record<string, string> => ({
+  acceso: 'Acceso', rectificacion: tr('arco.page.rectificacion'), cancelacion: tr('arco.page.cancelacion'), oposicion: tr('arco.page.oposicion'),
+});
+const estadoArco = (tr: Tr): Record<string, { rotulo: string; tono: TonoEstado }> => ({
+  resuelta: { rotulo: tr('arco.page.resuelta'), tono: 'ok' },
+  improcedente: { rotulo: tr('arco.page.improcedente'), tono: 'neutral' },
+  en_proceso: { rotulo: tr('arco.page.enProceso'), tono: 'warn' },
+  recibida: { rotulo: tr('arco.page.recibida'), tono: 'warn' },
+});
 type Params = { tenant?: string; vista?: string; rol?: string };
 const RUTA = '/dashboard/arco';
 // AUDITORÍA 28, LEG-A6 [ALTO]: la lista era CERRADA y le faltaban tres
@@ -44,7 +47,7 @@ const RUTA = '/dashboard/arco';
 // contacto de emergencia (un TERCERO, no el titular) ya NO sobrevive — la
 // cancelación lo borra, no requiere revisión aparte. Se mantiene
 // sincronizada con el texto de repo.ts.
-const ALCANCE_CANCELACION = 'Se sustituyeron el nombre y el teléfono del registro operativo, se eliminaron sus conversaciones y el contacto de emergencia registrado sobre su persona. Se conservan el identificador del operador, el correo de la cuenta, la referencia del titular en la solicitud, la documentación fiscal, y los eventos de cámara, telemetría (180 días, o 365 si fueron graves) y jornada laboral ligados a su persona. Esas categorías requieren revisión con el responsable de privacidad: la ejecución automática no las alcanza.';
+const alcanceCancelacion = (tr: Tr): string => tr('arco.page.seSustituyeronElNombre');
 
 /**
  * AUDITORÍA 24 — las tres acciones de esta pantalla se gateaban con
@@ -56,7 +59,7 @@ const ALCANCE_CANCELACION = 'Se sustituyeron el nombre y el teléfono del regist
  * POST a mano. Contestarle a un titular en nombre del responsable obligado
  * (LFPDPPP art. 31) es CONTROL de la cuenta: `puedeAdministrar`.
  */
-const NO_AUTORIZADO = 'Tu rol no puede responder solicitudes ARCO: es una respuesta legal que firma el dueño de la flota.';
+const noAutorizado = (tr: Tr): string => tr('arco.page.tuRolNoPuede');
 function puedeResponderArco(rol: string): boolean {
   return puedeVerRuta(rol, RUTA) && puedeAdministrar(rol);
 }
@@ -67,6 +70,7 @@ function puedeResponderArco(rol: string): boolean {
  * (superadmin), y la flota no tenía dónde ver sus solicitudes ni responderlas.
  */
 export default async function ArcoPage({ searchParams }: { searchParams: Promise<Params> }) {
+  const { t: tr } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId } = await resolverTenantEfectivo(RUTA, sp);
   // AUDITORÍA 16, ALTO (arquitectura): `Date.now()` en el render rompe la
@@ -81,10 +85,11 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
 
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     // AUDITORÍA 16, MEDIO: el superadmin que previsualiza una flota real
     // (?tenant=t-otra) no podía resolver — el action usaba el tenant de sesión.
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
+    if (!puedeResponderArco(s.rol)) return { error: noAutorizado(tr) };
     let tenantEfectivo = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
       const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
@@ -92,14 +97,14 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
     }
     const resolucion = String(fd.get('resolucion') ?? '').trim();
     const solicitudId = String(fd.get('solicitudId') ?? '');
-    if (!solicitudId) return { error: 'Falta la solicitud.' };
-    if (resolucion.length < 5) return { error: 'Escribe la respuesta que se entrega al titular (qué se resolvió y cómo).' };
+    if (!solicitudId) return { error: tr('arco.page.faltaLaSolicitud') };
+    if (resolucion.length < 5) return { error: tr('arco.page.escribeLaRespuestaQue') };
     try {
       const r = await resolverSolicitudArco(tenantEfectivo, solicitudId, resolucion);
       revalidatePath(RUTA);
       return r.enviada
-        ? { ok: 'Solicitud resuelta y la respuesta se envió al titular por WhatsApp.' }
-        : { ok: `Solicitud resuelta. La respuesta NO se pudo enviar por WhatsApp${r.error ? ` (${r.error})` : ''} — entrégala al titular por otro canal.` };
+        ? { ok: tr('arco.page.solicitudResueltaYLa') }
+        : { ok: tr('arco.page.solicitudResueltaLaRespuesta', { v: r.error ? ` (${r.error})` : '' }) };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
     }
@@ -113,30 +118,31 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   // humano firma (aprieta el botón); el sistema ejecuta — en ese orden.
   async function accionEjecutarCancelacion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
+    if (!puedeResponderArco(s.rol)) return { error: noAutorizado(tr) };
     let tenantEfectivo = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
       const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
       tenantEfectivo = await resolverTenantPedido(supabaseAdmin(), tenantEfectivo, sp.tenant);
     }
     const solicitudId = String(fd.get('solicitudId') ?? '');
-    if (!solicitudId) return { error: 'Falta la solicitud.' };
+    if (!solicitudId) return { error: tr('arco.page.faltaLaSolicitud') };
     try {
       const r = await ejecutarCancelacionArco(tenantEfectivo, solicitudId);
       revalidatePath(RUTA);
-      if (!r.ok) return { error: `No se ejecutó la cancelación: ${r.motivo}` };
+      if (!r.ok) return { error: tr('arco.page.noSeEjecutoLa', { motivo: r.motivo ?? '' }) };
       // 0442: titular que es cuenta de oficina — si el login de Auth no se pudo
       // borrar, se DICE (quedó baneado), no se afirma un borrado que no ocurrió.
       if (r.errorAuth) {
-        return { error: `La cuenta quedó anonimizada y dada de baja, pero el acceso de inicio de sesión NO se pudo borrar (${r.errorAuth}); quedó bloqueado (ban permanente). Pide a soporte que lo borre de Auth.` };
+        return { error: tr('arco.page.laCuentaQuedoAnonimizada', { errorAuth: r.errorAuth }) };
       }
       // A36-R03-03: si no se pudieron omitir las entregas de liquidación por
       // correo pendientes del operador, se DICE (podrían salir a su correo).
-      const aviso = r.errorEntregas ? ` ATENCIÓN: no se pudieron cancelar las entregas de liquidación por correo pendientes de este operador (${r.errorEntregas}); revísalas en Liquidaciones.` : '';
+      const aviso = r.errorEntregas ? ' ' + tr('arco.page.atencionNoSePudieron', { errorEntregas: r.errorEntregas }) : '';
       return r.avisada
-        ? { ok: `${ALCANCE_CANCELACION} Se confirmó por WhatsApp.${aviso}` }
-        : { ok: `${ALCANCE_CANCELACION} La confirmación NO salió por WhatsApp${r.errorAviso ? ` (${r.errorAviso})` : ''} — entrégasela por otro canal.${aviso}` };
+        ? { ok: tr('arco.page.seConfirmoPorWhatsapp', { ALCANCE_CANCELACION: alcanceCancelacion(tr), aviso }) }
+        : { ok: tr('arco.page.laConfirmacionNoSalio', { ALCANCE_CANCELACION: alcanceCancelacion(tr), v: r.errorAviso ? ` (${r.errorAviso})` : '', aviso }) };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'ejecutar la cancelación') };
     }
@@ -153,22 +159,22 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   // Primero se registra la constancia, después la persona contesta al titular.
   async function accionRegistrarOposicion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-    if (!puedeResponderArco(s.rol)) return { error: NO_AUTORIZADO };
+    if (!puedeResponderArco(s.rol)) return { error: noAutorizado(tr) };
     let tenantEfectivo = s.tenantId;
     if (s.rol === 'superadmin' && sp?.tenant) {
       const { resolverTenantPedido } = await import('@/lib/auth/tenant-api');
       tenantEfectivo = await resolverTenantPedido(supabaseAdmin(), tenantEfectivo, sp.tenant);
     }
     const solicitudId = String(fd.get('solicitudId') ?? '');
-    if (!solicitudId) return { error: 'Falta la solicitud.' };
+    if (!solicitudId) return { error: tr('arco.page.faltaLaSolicitud') };
     try {
       const r = await ejecutarOposicionArco(tenantEfectivo, solicitudId);
       revalidatePath(RUTA);
-      if (!r.ok) return { error: `No se registró la oposición: ${r.motivo}` };
+      if (!r.ok) return { error: tr('arco.page.noSeRegistroLa', { motivo: r.motivo ?? '' }) };
       return {
-        ok: 'Oposición registrada en el expediente: queda en proceso, con la constancia de que la '
-          + 'oposición del titular está vigente. Falta que revises el caso y le contestes con el botón de Responder.',
+        ok: tr('arco.page.oposicionRegistrada'),
       };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'registrar la oposición') };
@@ -193,41 +199,39 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
   const vencidas = pendientes.filter((s) => yaVencio(s.venceEn, hoy));
 
   return (
-    <MarcoPagina titulo="Solicitudes ARCO" apoyo="Solicitudes de tus operadores y cómo responderlas a tiempo (LFPDPPP art. 31: 20 días hábiles).">
+    <MarcoPagina titulo={tr('arco.page.solicitudesArco')} apoyo={tr('arco.page.solicitudesDeTusOperadores2')}>
       {/* H7 (auditoría 24): las tres cifras salían de `solicitudes`, que es `[]` TANTO si de verdad no hay solicitudes COMO si la lectura de arriba falló (`errorCarga`). Con la base caída, "0 vencidas sin responder" es la mentira que un responsable obligado por el art. 31 no se puede permitir. `null` es NO MEDIBLE ("—", no "0"); el aviso de abajo explica por qué. */}
-      <TiraCifras sello={selloHoy('Solicitudes ARCO')}>
-        <Cifra icono={<Icono icono={Inbox} />} etiqueta="Por responder" info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
-        <Cifra icono={<Icono icono={Clock} />} etiqueta={`Vencen pronto (≤ ${DIAS_VENCE_PRONTO} días)`} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
-        <Cifra icono={<Icono icono={CircleAlert} />} etiqueta="Vencidas sin responder" info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
+      <TiraCifras sello={selloHoy(tr('arco.page.selloArco'))}>
+        <Cifra icono={<Icono icono={Inbox} />} etiqueta={tr('arco.page.porResponder')} info="arco.por_responder" valor={errorCarga ? null : pendientes.length} />
+        <Cifra icono={<Icono icono={Clock} />} etiqueta={tr('arco.page.vencenProntoDias', { DIAS_VENCE_PRONTO })} info="arco.vencen_pronto" valor={errorCarga ? null : vencenPronto.length} />
+        <Cifra icono={<Icono icono={CircleAlert} />} etiqueta={tr('arco.page.vencidasSinResponder')} info="arco.vencidas" valor={errorCarga ? null : vencidas.length} />
       </TiraCifras>
 
-      <Tarjeta titulo="Solicitudes de tus operadores" info="arco.solicitudes">
+      <Tarjeta titulo={tr('arco.page.solicitudesDeTusOperadores')} info="arco.solicitudes">
         {errorCarga ? (
           <EstadoError reintentar>
-            No se pudieron leer las solicitudes ahora mismo ({errorCarga.slice(0, 120)}). Recarga en un momento: no hay
-            forma de saber si hay solicitudes pendientes hasta que la base responda.
+            {tr('arco.page.noSePudieronLeer', { v: errorCarga.slice(0, 120) })}
           </EstadoError>
         ) : solicitudes.length === 0 ? (
-          <EstadoVacio titulo="Sin solicitudes ARCO" contenido>
-            Cuando un operador escribe *PRIVACIDAD* por WhatsApp, la solicitud
-            queda registrada aquí y tú, la responsable, tienes 20 días hábiles para responder.
+          <EstadoVacio titulo={tr('arco.page.sinSolicitudesArco')} contenido>
+            {tr('arco.page.cuandoUnOperadorEscribe')}
           </EstadoVacio>
         ) : (
-          <ul className="rv-arco__lista" aria-label="Solicitudes de derechos ARCO">
+          <ul className="rv-arco__lista" aria-label={tr('arco.page.solicitudesDeDerechosArco')}>
             {solicitudes.map((s) => {
-              const e = ESTADO_ARCO[s.estado] ?? ESTADO_ARCO.recibida;
+              const e = estadoArco(tr)[s.estado] ?? estadoArco(tr).recibida;
               const cerrada = s.estado === 'resuelta' || s.estado === 'improcedente';
               return (
                 <li key={s.id} className="rv-arco__item">
                   <div className="rv-arco__cabeza">
-                    <strong>{ETIQUETA_TIPO[s.tipo] ?? s.tipo}</strong>
+                    <strong>{etiquetaTipo(tr)[s.tipo] ?? s.tipo}</strong>
                     <StatusChip tono={e.tono}>{e.rotulo}</StatusChip>
-                    {!cerrada && yaVencio(s.venceEn, hoy) && <StatusChip tono="bad">vencida</StatusChip>}
+                    {!cerrada && yaVencio(s.venceEn, hoy) && <StatusChip tono="bad">{tr('arco.page.vencida')}</StatusChip>}
                   </div>
                   <dl className="rv-arco__datos">
-                    <div><dt>Recibida</dt><dd>{fechaMx(s.recibidaEn)}</dd></div>
-                    <div><dt>Vence</dt><dd>{fechaMx(s.venceEn)}</dd></div>
-                    <div><dt>Titular</dt><dd>{s.operadorNombre ?? '—'}<span className="rv-arco__ref">{s.titularRef}</span></dd></div>
+                    <div><dt>{tr('arco.page.recibida')}</dt><dd>{fechaMx(s.recibidaEn)}</dd></div>
+                    <div><dt>{tr('arco.page.vence')}</dt><dd>{fechaMx(s.venceEn)}</dd></div>
+                    <div><dt>{tr('arco.page.titular')}</dt><dd>{s.operadorNombre ?? '—'}<span className="rv-arco__ref">{s.titularRef}</span></dd></div>
                   </dl>
                   {cerrada ? (
                     <p className="rv-arco__nota">{s.resolucion ?? '—'}</p>
@@ -235,25 +239,17 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                     <div className="rv-arco__acciones">
                       {/* La cancelación NO se resuelve con prosa: se EJECUTA sobre datos concretos. El botón dice lo que hace antes de que alguien lo apriete. */}
                       <FormaConAviso
-                        accion={accionEjecutarCancelacion} boton="Ejecutar cancelación" columnas="auto"
+                        accion={accionEjecutarCancelacion} boton={tr('arco.page.ejecutarCancelacion')} columnas="auto"
                         confirmar={{
-                          titulo: 'Ejecutar la cancelación',
-                          descripcion: `Se sustituyen nombre y teléfono de ${s.operadorNombre ?? 'este titular'} (${s.titularRef}) y se eliminan sus conversaciones. Si es una cuenta de oficina, también se da de baja y se borra su acceso. No se puede deshacer.`,
-                          etiquetaConfirmar: 'Sí, ejecutar cancelación',
+                          titulo: tr('arco.page.ejecutarLaCancelacion'),
+                          descripcion: tr('arco.page.seSustituyenNombreY', { v: s.operadorNombre ?? tr('arco.page.esteTitular'), titularRef: s.titularRef }),
+                          etiquetaConfirmar: tr('arco.page.siEjecutarCancelacion'),
                         }}
                       >
                         <input type="hidden" name="solicitudId" value={s.id} />
                       </FormaConAviso>
                       <p className="rv-arco__nota">
-                        Sustituye nombre y teléfono del registro operativo y elimina conversaciones. Se conservan
-                        el identificador del operador, el correo de la cuenta, la referencia del titular en la solicitud,
-                        la documentación fiscal, los eventos de cámara y telemetría ligados a su persona (180 días, o 365
-                        si fueron graves), su contacto de emergencia y su registro de jornada laboral; esas categorías
-                        requieren revisión con el responsable de privacidad. No se puede deshacer la eliminación de conversaciones.
-                        Si el titular es una cuenta de oficina (dueño, contador, encargado), se sustituyen su nombre y
-                        su correo, se da de baja y se borra su acceso, sus conversaciones de WhatsApp, del analista y del
-                        copiloto; se conserva la bitácora de auditoría. No se ejecuta si es el único dueño activo de la
-                        flota: nombra a otro dueño primero.
+                        {tr('arco.page.sustituyeNombreYTelefono')}
                       </p>
                     </div>
                   ) : (
@@ -261,19 +257,17 @@ export default async function ArcoPage({ searchParams }: { searchParams: Promise
                       {/* La oposición SÍ tiene un acto que dejar asentado antes de la prosa: la constancia de que está vigente. Se ofrece arriba de Responder porque ése es el orden: primero la evidencia, después la contestación. */}
                       {s.tipo === 'oposicion' && (
                         <>
-                          <FormaConAviso accion={accionRegistrarOposicion} boton="Registrar la oposición" columnas="auto">
+                          <FormaConAviso accion={accionRegistrarOposicion} boton={tr('arco.page.registrarLaOposicion')} columnas="auto">
                             <input type="hidden" name="solicitudId" value={s.id} />
                           </FormaConAviso>
                           <p className="rv-arco__nota">
-                            Deja constancia en el expediente de que la oposición del titular está vigente
-                            (queda «en proceso»). No cancela ni borra ningún dato y no cierra la solicitud:
-                            eso lo haces tú al responder.
+                            {tr('arco.page.dejaConstanciaEnEl')}
                           </p>
                         </>
                       )}
                       <FormaConAviso accion={accionResponder} boton="Responder" columnas="md:grid-cols-1">
                         <input type="hidden" name="solicitudId" value={s.id} />
-                        <CampoTexto name="resolucion" etiqueta="Respuesta al titular" etiquetaOculta placeholder="Qué se resolvió y cómo se entrega al titular" />
+                        <CampoTexto name="resolucion" etiqueta={tr('arco.page.respuestaAlTitular')} etiquetaOculta placeholder={tr('arco.page.queSeResolvioY')} />
                       </FormaConAviso>
                     </div>
                   )}

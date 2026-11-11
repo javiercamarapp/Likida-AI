@@ -1,5 +1,7 @@
 'use client';
 
+import { useT } from '@/lib/i18n/proveedor';
+import { dinero } from '@/lib/i18n/es/dinero';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Save, Ban } from 'lucide-react';
@@ -16,6 +18,7 @@ const ETIQUETA = 'block text-[11px] font-medium mb-1.5';
 const AYUDA = 'text-[11px] mt-1';
 
 function Boton({ etiqueta, tono = 'marca' }: { etiqueta: string; tono?: 'marca' | 'peligro' }) {
+  const { t: tr } = useT('dinero', dinero);
   const { pending } = useFormStatus();
   return (
     <button type="submit" disabled={pending}
@@ -26,7 +29,7 @@ function Boton({ etiqueta, tono = 'marca' }: { etiqueta: string; tono?: 'marca' 
       {tono === 'marca'
         ? <Save width={14} height={14} strokeWidth={1.75} />
         : <Ban width={14} height={14} strokeWidth={1.75} />}
-      {pending ? 'Guardando…' : etiqueta}
+      {pending ? tr('facturacion.forma.guardando') : etiqueta}
     </button>
   );
 }
@@ -81,66 +84,61 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
    *  default no dependa del reloj del navegador. */
   hoy: string;
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
 
   return (
     <form action={despachar} className="space-y-3">
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="sm:col-span-2">
-          <label htmlFor="ff-cliente" className={ETIQUETA}>Cliente</label>
+          <label htmlFor="ff-cliente" className={ETIQUETA}>{tr('facturacion.forma.cliente')}</label>
           {clientes === null ? (
             <p className="text-[12px]" style={{ color: 'var(--bad)' }}>
-              Tu catálogo de clientes no se pudo leer en este momento — la lista existe, el
-              sistema no la alcanzó. Vuelve a cargar la pantalla en unos minutos; no registres
-              la factura a ciegas.
+              {tr('facturacion.forma.tuCatalogoDeClientes')}
             </p>
           ) : clientes.length === 0 ? (
             <p className="text-[12px]" style={{ color: 'var(--warn)' }}>
-              No tienes clientes dados de alta. Una factura siempre es A ALGUIEN: dalos de alta
-              primero en la pantalla de Clientes.
+              {tr('facturacion.forma.noTienesClientesDados')}
             </p>
           ) : (
             <select id="ff-cliente" name="clienteId" required
               className="w-full" style={{ background: 'var(--surface)' }}>
-              <option value="">Elige al cliente…</option>
+              <option value="">{tr('facturacion.forma.eligeAlCliente')}</option>
               {clientes.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.nombre}{c.diasCredito === null ? ' — sin días de crédito registrados' : ` — ${c.diasCredito} días de crédito`}
+                  {c.nombre}{c.diasCredito === null ? ' ' + tr('facturacion.forma.sinDiasDeCredito') : ' ' + tr('facturacion.forma.diasDeCredito', { diasCredito: c.diasCredito })}
                 </option>
               ))}
             </select>
           )}
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            El vencimiento sale de sus días de crédito. Sin días registrados, la factura nace sin
-            fecha de vencimiento y la cartera lo dice — no se le inventan 30 días.
+            {tr('facturacion.forma.elVencimientoSaleDe')}
           </p>
         </div>
 
         <div>
-          <label htmlFor="ff-fecha" className={ETIQUETA}>Fecha de la factura</label>
+          <label htmlFor="ff-fecha" className={ETIQUETA}>{tr('facturacion.forma.fechaDeLaFactura')}</label>
           <input id="ff-fecha" name="fecha" type="date" required defaultValue={hoy}
             className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
-          <label htmlFor="ff-serie" className={ETIQUETA}>Serie</label>
-          <input id="ff-serie" name="serie" type="text" maxLength={25} placeholder="A (opcional)"
+          <label htmlFor="ff-serie" className={ETIQUETA}>{tr('facturacion.forma.serie')}</label>
+          <input id="ff-serie" name="serie" type="text" maxLength={25} placeholder={tr('facturacion.forma.aOpcional')}
             className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            La del CFDI. Déjala vacía si tu flota no usa series. Con ella, el folio 1 de la serie A
-            y el folio 1 de la serie B son dos facturas distintas — y el folio se puede reiniciar
-            cada año sin que la captura se trabe.
+            {tr('facturacion.forma.laDelCfdiDejala')}
           </p>
         </div>
 
         <div>
-          <label htmlFor="ff-folio" className={ETIQUETA}>Folio</label>
-          <input id="ff-folio" name="folio" type="text" maxLength={40} placeholder="1024 (opcional)"
+          <label htmlFor="ff-folio" className={ETIQUETA}>{tr('facturacion.forma.folio')}</label>
+          <input id="ff-folio" name="folio" type="text" maxLength={40} placeholder={tr('facturacion.forma.1024Opcional')}
             className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
 
         <div>
-          <label htmlFor="ff-subtotal" className={ETIQUETA}>Subtotal (MXN)</label>
+          <label htmlFor="ff-subtotal" className={ETIQUETA}>{tr('facturacion.forma.subtotalMxn')}</label>
           <input id="ff-subtotal" name="subtotal" type="text" inputMode="decimal" required
             placeholder="10,000.00" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
@@ -150,57 +148,52 @@ export function FormaFactura({ accion, clientes, viajesSinFacturar, hoy }: {
           <input id="ff-iva" name="iva" type="text" inputMode="decimal" required
             placeholder="1,600.00" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Tal como quedó en el CFDI. El total lo calculamos nosotros: subtotal + IVA − retención,
-            sin oportunidad de descuadre. Si la factura es tasa 0% o exenta, teclea 0.
+            {tr('facturacion.forma.talComoQuedoEn')}
           </p>
         </div>
 
         <div>
-          <label htmlFor="ff-retencion" className={ETIQUETA}>Retención de IVA (MXN, opcional)</label>
+          <label htmlFor="ff-retencion" className={ETIQUETA}>{tr('facturacion.forma.retencionDeIvaMxn')}</label>
           <input id="ff-retencion" name="retencion" type="text" inputMode="decimal"
-            placeholder="400.00 — vacío si no hay" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
+            placeholder={tr('facturacion.forma.40000VacioSi')} className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Si facturas a una persona moral (fletes: retención del 4 %), el CFDI trae una retención
-            de IVA y el cliente te paga el total MENOS ella. Captúrala tal como está en el CFDI; si la
-            omites, el total queda inflado y la factura nunca se salda.
+            {tr('facturacion.forma.siFacturasAUna')}
           </p>
         </div>
 
         <div className="sm:col-span-2">
-          <label htmlFor="ff-uuid" className={ETIQUETA}>Folio fiscal del CFDI (UUID)</label>
+          <label htmlFor="ff-uuid" className={ETIQUETA}>{tr('facturacion.forma.folioFiscalDelCfdi')}</label>
           <input id="ff-uuid" name="cfdiUuid" type="text" maxLength={36}
-            placeholder="ad662d33-6934-459c-a128-bdf0393f0f44 — vacío si aún no timbras"
+            placeholder={tr('facturacion.forma.ad662d336934459cA128')}
             className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Likida no timbra: el UUID lo da tu PAC y se copia del XML o del PDF. Con UUID la factura
-            queda EMITIDA y entra a la cartera; sin UUID queda en BORRADOR, que no le cobra a nadie.
+            {tr('facturacion.forma.likidaNoTimbraEl')}
           </p>
         </div>
 
         {viajesSinFacturar.length > 0 && (
           <fieldset className="sm:col-span-2 hairline rounded-lg p-3">
-            <legend className="text-[11px] font-medium px-1">Viajes que ampara esta factura</legend>
+            <legend className="text-[11px] font-medium px-1">{tr('facturacion.forma.viajesQueAmparaEsta')}</legend>
             <div className="space-y-1.5">
               {viajesSinFacturar.map((v) => (
                 <label key={v.viajeId} className="flex items-center gap-2 text-[12px] cursor-pointer">
                   <input type="checkbox" name="viajeIds" value={v.viajeId} />
                   <span className="cifra-mono">{v.folio}</span>
                   <span style={{ color: 'var(--muted)' }}>
-                    {v.ruta ?? 'sin ruta'} · {v.cliente ?? 'sin cliente asignado'}
+                    {v.ruta ?? tr('facturacion.forma.sinRuta')} · {v.cliente ?? tr('facturacion.forma.sinClienteAsignado')}
                   </span>
                 </label>
               ))}
             </div>
             <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-              Marcar viajes es lo que saca cada uno de la lista de «liquidados sin facturar». Una
-              factura puede amparar varios viajes, o ninguno (renta, estadía).
+              {tr('facturacion.forma.marcarViajesEsLo')}
             </p>
           </fieldset>
         )}
       </div>
 
       <Aviso estado={estado} />
-      <Boton etiqueta="Registrar factura" />
+      <Boton etiqueta={tr('facturacion.forma.registrarFactura')} />
     </form>
   );
 }
@@ -212,6 +205,7 @@ export function FormaPago({ accion, facturaId, hoy }: {
   facturaId: string;
   hoy: string;
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `fp-${facturaId}-${n}`;
 
@@ -222,32 +216,32 @@ export function FormaPago({ accion, facturaId, hoy }: {
       <input type="hidden" name="facturaId" value={facturaId} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <label htmlFor={campo('fecha')} className={ETIQUETA}>Fecha del pago</label>
+          <label htmlFor={campo('fecha')} className={ETIQUETA}>{tr('facturacion.forma.fechaDelPago')}</label>
           <input id={campo('fecha')} name="fecha" type="date" required defaultValue={hoy}
             className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
-          <label htmlFor={campo('monto')} className={ETIQUETA}>Monto (MXN)</label>
+          <label htmlFor={campo('monto')} className={ETIQUETA}>{tr('facturacion.forma.montoMxn')}</label>
           <input id={campo('monto')} name="monto" type="text" inputMode="decimal" required
             placeholder="5,000.00" className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
           <p className={AYUDA} style={{ color: 'var(--faint)' }}>
-            Los pagos parciales son la norma. Uno que rebase el saldo se rechaza con el saldo exacto.
+            {tr('facturacion.forma.losPagosParcialesSon')}
           </p>
         </div>
         <div>
-          <label htmlFor={campo('metodo')} className={ETIQUETA}>Método</label>
+          <label htmlFor={campo('metodo')} className={ETIQUETA}>{tr('facturacion.forma.metodo')}</label>
           <input id={campo('metodo')} name="metodo" type="text" maxLength={40}
-            placeholder="transferencia (opcional)" className="w-full" style={{ background: 'var(--surface)' }} />
+            placeholder={tr('facturacion.forma.transferenciaOpcional')} className="w-full" style={{ background: 'var(--surface)' }} />
         </div>
         <div className="sm:col-span-3">
-          <label htmlFor={campo('ref')} className={ETIQUETA}>Referencia</label>
+          <label htmlFor={campo('ref')} className={ETIQUETA}>{tr('facturacion.forma.referencia')}</label>
           <input id={campo('ref')} name="referencia" type="text" maxLength={80}
-            placeholder="Clave de rastreo o folio del banco (opcional)"
+            placeholder={tr('facturacion.forma.claveDeRastreoO')}
             className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <Aviso estado={estado} />
-      <Boton etiqueta="Registrar pago" />
+      <Boton etiqueta={tr('facturacion.forma.registrarPago')} />
     </form>
   );
 }
@@ -259,6 +253,7 @@ export function FormaEmitir({ accion, facturaId, folioActual }: {
   facturaId: string;
   folioActual: string | null;
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   const campo = (n: string) => `fe-${facturaId}-${n}`;
 
@@ -267,20 +262,20 @@ export function FormaEmitir({ accion, facturaId, folioActual }: {
       <input type="hidden" name="facturaId" value={facturaId} />
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label htmlFor={campo('folio')} className={ETIQUETA}>Folio</label>
+          <label htmlFor={campo('folio')} className={ETIQUETA}>{tr('facturacion.forma.folio')}</label>
           <input id={campo('folio')} name="folio" type="text" maxLength={40}
-            defaultValue={folioActual ?? ''} placeholder="El del CFDI timbrado"
+            defaultValue={folioActual ?? ''} placeholder={tr('facturacion.forma.elDelCfdiTimbrado')}
             className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
         <div>
-          <label htmlFor={campo('uuid')} className={ETIQUETA}>Folio fiscal (UUID)</label>
+          <label htmlFor={campo('uuid')} className={ETIQUETA}>{tr('facturacion.forma.folioFiscalUuid')}</label>
           <input id={campo('uuid')} name="cfdiUuid" type="text" maxLength={36} required
-            placeholder="Del XML o del PDF del CFDI"
+            placeholder={tr('facturacion.forma.delXmlODel')}
             className="w-full cifra-mono" style={{ background: 'var(--surface)' }} />
         </div>
       </div>
       <Aviso estado={estado} />
-      <Boton etiqueta="Marcar como emitida" />
+      <Boton etiqueta={tr('facturacion.forma.marcarComoEmitida')} />
     </form>
   );
 }
@@ -293,17 +288,16 @@ export function FormaEmitir({ accion, facturaId, folioActual }: {
  * verificaciones de render).
  */
 export function FormaCancelar({ accion, facturaId }: { accion: AccionForma; facturaId: string }) {
+  const { t: tr } = useT('dinero', dinero);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="space-y-3">
       <input type="hidden" name="facturaId" value={facturaId} />
       <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-        Cancelarla aquí registra la cancelación en Likida; la cancelación ante el SAT se hace con tu
-        PAC. Sus viajes vuelven a la lista de «liquidados sin facturar». Una factura con pagos
-        registrados no se puede cancelar hasta aclarar ese dinero.
+        {tr('facturacion.forma.cancelarlaAquiRegistraLa')}
       </p>
       <Aviso estado={estado} />
-      <Boton etiqueta="Cancelar esta factura" tono="peligro" />
+      <Boton etiqueta={tr('facturacion.forma.cancelarEstaFactura')} tono="peligro" />
     </form>
   );
 }

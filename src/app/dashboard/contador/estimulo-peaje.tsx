@@ -1,3 +1,4 @@
+import { getT } from '@/lib/i18n/servidor';
 import { revalidatePath } from 'next/cache';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { resolverTenantAtadoAccion, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/tenant-atado';
@@ -31,6 +32,7 @@ export async function EstimuloPeaje({
   searchParams: { vista?: string; tenant?: string; rol?: string };
   tenantExiste: boolean;
 }) {
+  const { t: tr } = await getT('dinero');
   if (!tenantExiste) return null;
 
   const { tenantId } = await resolverTenantEfectivo('/dashboard/contador', searchParams);
@@ -57,18 +59,19 @@ export async function EstimuloPeaje({
 
   async function accion(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t: tr } = await getT('dinero');
     const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
-      return { error: 'Tu rol no puede declarar la elegibilidad del estímulo de peaje.' };
+      return { error: tr('contador.estimuloPeaje.tuRolNoPuede') };
     }
     const ingresos = String(fd.get('ingresos') ?? '');
     const parte = String(fd.get('parte') ?? '');
     if (ingresos !== 'menor' && ingresos !== 'mayor') {
-      return { error: 'Falta decir si los ingresos del último ejercicio fueron menores a $300 millones.' };
+      return { error: tr('contador.estimuloPeaje.faltaDecirSiLos') };
     }
     if (parte !== 'si' && parte !== 'no') {
-      return { error: 'Falta decir si la flota es parte relacionada (LISR art. 179).' };
+      return { error: tr('contador.estimuloPeaje.faltaDecirSiLa') };
     }
     try {
       await guardarDeclaracionEstimuloPeaje(
@@ -84,38 +87,38 @@ export async function EstimuloPeaje({
     const califica = ingresos === 'menor' && parte === 'no';
     return {
       ok: califica
-        ? 'Declaración guardada. El 50% de peaje se acreditará en el próximo cuadre SI además se cumplen dedicación exclusiva y Red Nacional (Likida no las verifica).'
-        : 'Declaración guardada. Esta flota no califica: el estímulo de peaje queda en $0 a partir del próximo cuadre.',
+        ? tr('contador.estimuloPeaje.declaracionGuardadaEl50')
+        : tr('contador.estimuloPeaje.declaracionGuardadaEstaFlota'),
     };
   }
 
   return (
-    <Tarjeta titulo="Estímulo de peaje (LIF 2026 art. 20-A)">
+    <Tarjeta titulo={tr('contador.estimuloPeaje.estimuloDePeajeLif')}>
       <div className="rv-cont__lista">
         <p className="rv-cont__linea">
           {!leyoOk
-            ? 'No pude leer si esta flota ya declaró — esto NO significa que no haya declaración. Recarga la página; si sigue igual, avísanos antes de volver a contestar.'
+            ? tr('contador.estimuloPeaje.noPudeLeerSi')
             : pendiente
-              ? 'Sin esta declaración el estímulo queda en $0. Contéstalo antes del primer cierre; una flota grande o una parte relacionada no puede acreditarlo.'
+              ? tr('contador.estimuloPeaje.sinEstaDeclaracionEl')
               : elegible
-                ? 'Declarado: ingresos menores a $300M y no parte relacionada. El motor acredita el 50% en casetas de pago electrónico. Dedicación exclusiva y Red Nacional siguen siendo responsabilidad de la flota.'
-                : 'Declarado: esta flota no califica (ingresos de $300M o más, o parte relacionada). El estímulo de peaje queda en $0.'}
+                ? tr('contador.estimuloPeaje.declaradoIngresosMenoresA')
+                : tr('contador.estimuloPeaje.declaradoEstaFlotaNo')}
         </p>
         {/* No se ofrece el formulario si no se pudo leer el estado real: dejar contestar aquí es exactamente lo que reescribiría una declaración real existente como "$0" por confusión del usuario. */}
         {leyoOk && (
-          <FormaConAviso accion={accion} boton={pendiente ? 'Declarar' : 'Corregir declaración'} columnas="md:grid-cols-2">
-            <CampoSelect id="ingresos" name="ingresos" etiqueta="Ingresos totales anuales del último ejercicio" obligatorio
+          <FormaConAviso accion={accion} boton={pendiente ? 'Declarar' : tr('contador.estimuloPeaje.corregirDeclaracion')} columnas="md:grid-cols-2">
+            <CampoSelect id="ingresos" name="ingresos" etiqueta={tr('contador.estimuloPeaje.ingresosTotalesAnualesDel')} obligatorio
               defaultValue={umbralInicial}
-              ayuda="El umbral legal es estricto: $300 millones exactos ya no califican.">
-              <option value="">Elige una</option>
-              <option value="menor">Menores a $300 millones</option>
-              <option value="mayor">$300 millones o más</option>
+              ayuda={tr('contador.estimuloPeaje.elUmbralLegalEs')}>
+              <option value="">{tr('contador.estimuloPeaje.eligeUna')}</option>
+              <option value="menor">{tr('contador.estimuloPeaje.menoresA300Millones')}</option>
+              <option value="mayor">{tr('contador.estimuloPeaje.300MillonesOMas')}</option>
             </CampoSelect>
-            <CampoSelect id="parte" name="parte" etiqueta="¿Es parte relacionada de otra empresa? (LISR art. 179)" obligatorio
+            <CampoSelect id="parte" name="parte" etiqueta={tr('contador.estimuloPeaje.esParteRelacionadaDe')} obligatorio
               defaultValue={parteInicial}>
-              <option value="">Elige una</option>
-              <option value="no">No</option>
-              <option value="si">Sí</option>
+              <option value="">{tr('contador.estimuloPeaje.eligeUna')}</option>
+              <option value="no">{tr('contador.estimuloPeaje.no')}</option>
+              <option value="si">{tr('contador.estimuloPeaje.si')}</option>
             </CampoSelect>
           </FormaConAviso>
         )}
