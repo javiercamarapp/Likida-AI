@@ -240,7 +240,7 @@ export default async function PaginaConexiones({
 
   // F19: estado por fuente. Cada fuente se lee por su lado y nunca lanza: lo que no se pudo leer sale como «sin dato».
   const ahora = ahoraMs();
-  const [fuentes, silencio] = await Promise.all([leerFuentesDeFlota(tenantId, ahora), leerSilencioWebhook(ahora)]);
+  const [fuentes, silencio] = await Promise.all([leerFuentesDeFlota(tenantId, ahora), leerSilencioWebhook(ahora, tenantId)]);
 
   return (
     <VistaConexiones

@@ -36,6 +36,7 @@ async function leerWhatsapp(tenantId: string, ahoraMs: number): Promise<EntradaF
   try {
     const desde = new Date(ahoraMs - 30 * DIA_MS).toISOString();
     const [ultimo, cuenta] = await Promise.all([
+      // orden-no-importa: solo se lee el instante del último gasto de la flota; un empate devuelve el mismo instante.
       acotada(supabaseAdmin().from('gasto').select('created_at').eq('tenant_id', tenantId).order('created_at', { ascending: false }).limit(1), 'fuentes.wa.ultimo'),
       acotada(supabaseAdmin().from('gasto').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('created_at', desde), 'fuentes.wa.cuenta'),
     ]);
@@ -70,6 +71,7 @@ async function leerGps(tenantId: string): Promise<EntradaFuente> {
     const [creds, push, vista] = await Promise.all([
       contarCredencialesGps(tenantId),
       estadoPush(tenantId),
+      // orden-no-importa: solo se lee la última lectura GPS de la flota; un empate devuelve el mismo instante.
       acotada(supabaseAdmin().from('unidad').select('gps_visto_en').eq('tenant_id', tenantId).not('gps_visto_en', 'is', null).order('gps_visto_en', { ascending: false }).limit(1), 'fuentes.gps.unidad'),
     ]);
     if (creds === null) throw new Error('credenciales GPS sin leer');
@@ -84,7 +86,7 @@ async function leerGps(tenantId: string): Promise<EntradaFuente> {
 async function leerPeajes(tenantId: string): Promise<EntradaFuente> {
   try {
     const { data, error } = await acotada(
-      supabaseAdmin().from('peaje_ingesta_archivo').select('estado, procesada_en, recibida_en, ultimo_error').eq('tenant_id', tenantId).order('recibida_en', { ascending: false }).limit(20),
+      supabaseAdmin().from('peaje_ingesta_archivo').select('estado, procesada_en, recibida_en, ultimo_error').eq('tenant_id', tenantId).order('recibida_en', { ascending: false }).order('id').limit(20),
       'fuentes.peajes',
     );
     if (error) throw new Error(error.message);
@@ -101,6 +103,7 @@ async function leerCorreo(tenantId: string, ahoraMs: number): Promise<EntradaFue
     const desde = new Date(ahoraMs - 30 * DIA_MS).toISOString();
     const [buzon, ultimo, cuenta] = await Promise.all([
       acotada(supabaseAdmin().from('tenant').select('buzon_token').eq('id', tenantId).maybeSingle(), 'fuentes.correo.buzon'),
+      // orden-no-importa: solo se lee el instante del último correo; un empate devuelve el mismo instante.
       acotada(supabaseAdmin().from('buzon_recepcion').select('recibido_en').eq('tenant_id', tenantId).order('recibido_en', { ascending: false }).limit(1), 'fuentes.correo.ultimo'),
       acotada(supabaseAdmin().from('buzon_recepcion').select('id', { count: 'exact', head: true }).eq('tenant_id', tenantId).gte('recibido_en', desde), 'fuentes.correo.cuenta'),
     ]);
@@ -118,7 +121,7 @@ async function leerSat(tenantId: string): Promise<EntradaFuente> {
   try {
     const [config, solicitudes] = await Promise.all([
       acotada(supabaseAdmin().from('sat_descarga_config').select('tenant_id').eq('tenant_id', tenantId).maybeSingle(), 'fuentes.sat.config'),
-      acotada(supabaseAdmin().from('sat_descarga_solicitud').select('estado, descargada_en, proveedor_mensaje, solicitada_en').eq('tenant_id', tenantId).order('solicitada_en', { ascending: false }).limit(10), 'fuentes.sat.solicitudes'),
+      acotada(supabaseAdmin().from('sat_descarga_solicitud').select('estado, descargada_en, proveedor_mensaje, solicitada_en').eq('tenant_id', tenantId).order('solicitada_en', { ascending: false }).order('id').limit(10), 'fuentes.sat.solicitudes'),
     ]);
     if (config.error) throw new Error(config.error.message);
     if (solicitudes.error) throw new Error(solicitudes.error.message);
@@ -142,11 +145,12 @@ export async function leerFuentesDeFlota(tenantId: string, ahoraMs: number = Dat
 /**
  * La regla de silencio, leída. El webhook es UNO para todas las flotas (un solo número de Likida), así que el silencio se mide del
  * sistema: viajes abiertos en cualquier flota vs. el último evento del webhook —entrante (`wa_ventana_contacto`) o de estado
- * (`wa_meta_receipt`)—. Cada lectura que falle da «sin dato», nunca una alerta ni un «todo bien». Nunca lanza.
+ * (`wa_meta_receipt`)—. Con `tenantId` los viajes abiertos son solo los de esa flota (el panel del cliente no ve conteos ajenos). Cada lectura que falle da «sin dato», nunca una alerta ni un «todo bien». Nunca lanza.
  */
-export async function leerSilencioWebhook(ahoraMs: number = Date.now()): Promise<ResultadoSilencio> {
+export async function leerSilencioWebhook(ahoraMs: number = Date.now(), tenantId?: string): Promise<ResultadoSilencio> {
   const leerUltimo = async (tabla: 'wa_ventana_contacto' | 'wa_meta_receipt', col: 'ultimo_entrante_en' | 'recibido_en'): Promise<number | null | 'caida'> => {
     try {
+      // orden-no-importa: solo se lee el instante más reciente de la tabla; un empate devuelve el mismo instante.
       const { data, error } = await acotada(supabaseAdmin().from(tabla).select(col).order(col, { ascending: false }).limit(1), `fuentes.silencio.${tabla}`);
       if (error) return 'caida';
       const fila = (data?.[0] ?? null) as Record<string, unknown> | null;
@@ -155,7 +159,11 @@ export async function leerSilencioWebhook(ahoraMs: number = Date.now()): Promise
   };
   let viajesAbiertos: number | null = null;
   try {
-    const { count, error } = await acotada(supabaseAdmin().from('viaje').select('id', { count: 'exact', head: true }).eq('estatus', 'abierto'), 'fuentes.silencio.viajes');
+    // Sin `tenantId` (pantalla de /admin, superadmin) cuenta los de todas las flotas; el panel de UNA flota pasa su `tenantId` y
+    // solo ve los suyos: nunca se le muestra un conteo de otras flotas.
+    let consulta = supabaseAdmin().from('viaje').select('id', { count: 'exact', head: true }).eq('estatus', 'abierto');
+    if (tenantId) consulta = consulta.eq('tenant_id', tenantId);
+    const { count, error } = await acotada(consulta, 'fuentes.silencio.viajes');
     viajesAbiertos = error ? null : count ?? 0;
   } catch { viajesAbiertos = null; }
   const [entrante, estado] = await Promise.all([leerUltimo('wa_ventana_contacto', 'ultimo_entrante_en'), leerUltimo('wa_meta_receipt', 'recibido_en')]);
