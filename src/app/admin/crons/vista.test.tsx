@@ -158,3 +158,16 @@ describe('resumenDetalle del Vigía (T-A4-42)', () => {
     expect(t).toBe('revisadas: 3 · avisos de viaje esperando confirmación más de 2 h: 2');
   });
 });
+
+describe('F26 ronda 3: la tira de relojes lleva varias cifras, no una sola estirada', () => {
+  it('con lectura sana pinta 5 celdas (total, a tiempo, sin latir, con fallo, parciales) y ninguna inventada', () => {
+    const html = renderToStaticMarkup(<VistaCrons latidos={todos({ [CRONS[0]]: { ultimoEstado: 'fallo' } })} />);
+    expect((html.match(/class="rv-kpi"/g) ?? []).length).toBe(5);
+    expect(html).toContain('Relojes a tiempo');
+    expect(html).toContain('Con fallo');
+  });
+  it('sin lectura no pinta la tira (no un cero)', () => {
+    const html = renderToStaticMarkup(<VistaCrons latidos={null} />);
+    expect(html).not.toContain('class="rv-kpi"');
+  });
+});
