@@ -164,4 +164,11 @@ export const admin_agentes: Record<keyof typeof admin_agentesEs, string> = {
   'agente_ocr.no_sin_medir': 'Accuracy: no fields measured in the bank yet (this is not 0%).',
   'agente_ocr.no_modelo': 'OCR cost by model: today\'s data cannot isolate it from the other phases.',
   'agente_ocr.sin_modelos_tabla': 'No OCR calls by model',
+  'agentes_contenido.bf_filtros': 'Filter agents',
+  'agentes_contenido.bf_estado': 'Status',
+  'agentes_contenido.bf_depto': 'Department',
+  'agentes_contenido.bf_todos': 'All',
+  'agentes_contenido.bf_todos_d': 'All departments',
+  'agentes_contenido.bf_ninguno': 'No agents match those filters',
+  'agentes_contenido.bf_quita': 'Remove a filter to see more agents.',
 };

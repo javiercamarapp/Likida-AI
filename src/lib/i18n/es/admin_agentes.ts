@@ -162,4 +162,11 @@ export const admin_agentes = {
   'agente_ocr.no_sin_medir': 'La exactitud: todavía no hay campos medidos en el banco (esto no es 0 %).',
   'agente_ocr.no_modelo': 'El costo del OCR por modelo: con los datos de hoy no se puede aislar de las demás fases.',
   'agente_ocr.sin_modelos_tabla': 'Sin llamadas de OCR por modelo',
+  'agentes_contenido.bf_filtros': 'Filtrar los agentes',
+  'agentes_contenido.bf_estado': 'Estado',
+  'agentes_contenido.bf_depto': 'Departamento',
+  'agentes_contenido.bf_todos': 'Todos',
+  'agentes_contenido.bf_todos_d': 'Todos los departamentos',
+  'agentes_contenido.bf_ninguno': 'Ningún agente con esos filtros',
+  'agentes_contenido.bf_quita': 'Quita un filtro para ver más agentes.',
 } as const;
