@@ -135,7 +135,6 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
           />
         </BarraFiltros>
       )}
-      pie={filas.length === 0 ? undefined : t('flotas.n_de_n', { n: numero(visibles.length), total: numero(filas.length) })}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.nombre} subtitulo={t('flotas.vr_subtitulo', { n: posicion + 1, total: visibles.length })} hrefCerrar={hrefConParams('/admin/flotas', sp, { ver: null })}
