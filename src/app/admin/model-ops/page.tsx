@@ -40,7 +40,7 @@ export default async function ModelOpsPage() {
       acciones={<BotonEnlace href="/admin/agentes" variante="secondary" tamano="sm">{t('model_ops.rol_de_modelo_por_agente')}</BotonEnlace>}
       etiquetaCifras={t('model_ops.agentes')}
       cifras={[
-        { etiqueta: t('model_ops.kpi_gasto'), valor: r.costoUsd, formato: 'usd' },
+        { etiqueta: t('model_ops.kpi_gasto'), valor: r.costoIaUsd, formato: 'usd' },
         { etiqueta: t('model_ops.kpi_llamadas'), valor: r.porFase.reduce((s, f) => s + f.n, 0), formato: 'entero' },
         { etiqueta: t('model_ops.kpi_fases'), valor: r.porFase.length, formato: 'entero' },
         { etiqueta: t('model_ops.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' },

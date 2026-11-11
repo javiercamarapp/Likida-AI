@@ -11,6 +11,7 @@ import { Calculadora } from './calc';
 import { PulsoSitio } from './pulso';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { trPublico } from '@/lib/i18n/publico_tr';
+import '../legal/publico-r2.css';
 
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await trPublico();

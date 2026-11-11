@@ -62,7 +62,7 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
       celda: (n) => { const v = PUEDE_AFIRMARSE[n.estado_verificacion]; return <StatusChip tono={v?.puede ? 'ok' : 'warn'}>{v?.rotulo ?? n.estado_verificacion}</StatusChip>; },
     },
     { id: 'rev', titulo: t('cfg.revisada_el'), celda: (n) => <span className="rv-conocimiento__nota">{n.verificado_el ? fechaMx(n.verificado_el) : t('e26.con_sin_fecha')}</span> },
-    { id: 'ver', titulo: '', alinear: 'der', celda: (n) => <Boton variante="ghost" tamano="sm" className="rv-conocimiento__ver" onClick={() => setAbierta(n.id)} aria-label={`${t('e26.con_ver')}: ${n.titulo ?? n.instrumento}`}>{t('e26.con_ver')}</Boton> },
+    { id: 'ver', titulo: t('e27.con_detalle'), alinear: 'der', celda: (n) => <Boton variante="ghost" tamano="sm" className="rv-conocimiento__ver" onClick={() => setAbierta(n.id)} aria-label={`${t('e26.con_ver')}: ${n.titulo ?? n.instrumento}`}>{t('e26.con_ver')}</Boton> },
   ];
   const elegida = abierta ? normas.find((n) => n.id === abierta) ?? null : null;
   const vElegida = elegida ? PUEDE_AFIRMARSE[elegida.estado_verificacion] : undefined;
@@ -95,9 +95,9 @@ export function VistaConocimiento({ normas }: { normas: readonly Norma[] }) {
         </div>
       )}
       cifras={[
-        { etiqueta: t('cfg.fichas'), info: 'conocimiento.ficha', valor: normas.length },
-        { etiqueta: t('cfg.se_puede_afirmar'), valor: conteo('afirmables') },
-        { etiqueta: t('cfg.sin_verificar'), valor: conteo('sin_verificar'), tono: conteo('sin_verificar') > 0 ? 'warn' : undefined },
+        { etiqueta: t('cfg.fichas'), matiz: 1, info: 'conocimiento.ficha', valor: normas.length },
+        { etiqueta: t('cfg.se_puede_afirmar'), matiz: 1, valor: conteo('afirmables') },
+        { etiqueta: t('cfg.sin_verificar'), matiz: 1, valor: conteo('sin_verificar'), tono: conteo('sin_verificar') > 0 ? 'warn' : undefined },
       ]}
       etiquetaCifras={t('cfg.fichas')}
       pie={t('e26.con_pie', { n: lista.length, total: normas.length })}

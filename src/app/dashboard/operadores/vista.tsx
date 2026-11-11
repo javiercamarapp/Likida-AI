@@ -228,10 +228,9 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
             { etiqueta: t('op.col.licencia'), valor: editado.licenciaVence ? fechaCorta(editado.licenciaVence, idioma) : t('op.lic.sinregistrar') },
             { etiqueta: t('op.col.estado'), valor: editado.activo ? t('op.activo') : t('op.inactivo') },
           ]}
-        >
-          {puedeEditar && editado.editable ? (
-            <div className="rv-eq__editor">
-              <p className="rv-eq__texto">{t('op.corregir', { nombre: editado.nombre })}</p>
+          // La vista rápida es de LECTURA (2x2 y pie). Editar es otro cajón que se abre desde el pie: la forma completa no se mezcla con el resumen.
+          pie={puedeEditar && editado.editable ? (
+            <CajonAlta id={`editar-${editado.operadorId}`} titulo={t('op.editar')} descripcion={t('op.corregir', { nombre: editado.nombre })} disparador={t('op.editar')} primario tamano="xl">
               <FormaOperador
                 accion={guardarOperador}
                 operadorId={editado.operadorId}
@@ -252,9 +251,9 @@ export function VistaOperadores({ tr = TR_OPERACION_ES,
                 patios={patios}
                 patioFijo={patioDelJefe !== null}
               />
-            </div>
-          ) : null}
-        </CajonVistaRapida>
+            </CajonAlta>
+          ) : undefined}
+        />
       ) : null}
     >
       {ilegible ? (

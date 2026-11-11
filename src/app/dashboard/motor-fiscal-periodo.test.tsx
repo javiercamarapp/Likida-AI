@@ -50,6 +50,18 @@ describe('MotorFiscalPeriodo', () => {
     expect(html).toContain('$1,200.00');
   });
 
+  it('en cero no hay semáforo: ni «Crítico» sobre $0.00 ni «Recuperable» en verde sin monto', () => {
+    const CERO = { montoPerdido: 0, montoEnRiesgo: 0, montoRecuperable: 0 };
+    const html = renderToStaticMarkup(<MotorFiscalPeriodo series={{ semanal: CERO, mensual: CERO, historico: CERO }} />);
+    expect(html).not.toMatch(/Crítico/);
+    expect(html).not.toMatch(/data-tono="(bad|ok)"/);
+  });
+
+  it('con monto en riesgo sí marca el semáforo rojo', () => {
+    const html = renderToStaticMarkup(<MotorFiscalPeriodo series={SERIE} />);
+    expect(html).toMatch(/Crítico|data-tono="bad"/);
+  });
+
   it('sin causas no pinta la lista (ni una barra en cero)', () => {
     const html = renderToStaticMarkup(<MotorFiscalPeriodo series={SERIE} />);
     expect(html).not.toContain('rv-barlist');

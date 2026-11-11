@@ -25,7 +25,7 @@ export function FiltroFechaIso({ nombre, etiqueta, valor, plantilla }: { nombre:
       <span className="rv-fl__etq">{etiqueta}</span>
       <input
         type="text" inputMode="numeric" name={nombre} defaultValue={valor ?? ''} placeholder={plantilla} maxLength={10} autoComplete="off"
-        pattern="\d{4}-\d{2}-\d{2}" className="border-0 bg-transparent" style={{ width: '7.6rem' }}
+        pattern="\d{4}-\d{2}-\d{2}" className="border-0 bg-transparent" data-anillo="envolvente" style={{ width: '7.6rem' }}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); enviar(e.currentTarget); } }}
         onBlur={(e) => enviar(e.currentTarget)}
       />

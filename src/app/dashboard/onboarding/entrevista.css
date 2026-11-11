@@ -59,3 +59,17 @@
 
 /* Compositor como `agente-composer` de Rovaq: caja de ≤650 px (radio 12, sombra suave) con UN solo botón primario (el envío circular); «Consulta» pasa a secundario. */
 .rv-ob__caja { max-width: 650px; min-height: 58px; margin-inline: auto; box-shadow: 0 1px 3px rgba(14, 14, 16, .08); }
+
+/* Ronda 3 — compositor de UNA sola fila (Rovaq 650x58): [Consulta] [clip] [campo de 15 px] [enviar], sin segunda barra ni doble borde.
+   El adjunto, si lo hay, ocupa su propio renglón arriba. */
+.rv-ob__caja { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; }
+.rv-ob__caja > .rv-ob__adjunto { flex: 0 0 auto; margin-bottom: 0; order: -1; }
+.rv-ob__caja .rv-ob__barra, .rv-ob__caja .rv-ob__herramientas { display: contents; }
+.rv-ob__caja .rv-ob__barra > .rv-btn { order: 1; }
+.rv-ob__caja .rv-ob__clip { order: 2; }
+.rv-ob__caja .rv-ob__campo { order: 3; flex: 1 1 0; min-width: 120px; width: auto; height: 40px; font-size: 15px; }
+.rv-ob__caja .rv-ob__enviar { order: 4; }
+@media (max-width: 480px) { .rv-ob__caja .rv-ob__barra > .rv-btn { order: 5; flex: 1 1 100%; } }
+/* Preguntas sugeridas: blancas con borde neutro (ctl-q), nunca el aspecto de seleccionado. */
+.rv-ob__chip { min-height: 32px; background: var(--surface); border: 1px solid var(--line2); font-weight: 400; }
+.rv-ob__chip:hover:not(:disabled) { background: var(--canvas); }

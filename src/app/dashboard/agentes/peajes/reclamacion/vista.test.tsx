@@ -84,4 +84,15 @@ describe('la pantalla del reporte de reclamación', () => {
     expect(pintar('no_existe', null)).toContain('no existe en tu flota');
     expect(pintar('sin_desglose', null)).toContain('Elige un desglose');
   });
+
+  it('R3: sin desglose el vacío vive en una tarjeta, la tira va con guiones (no ceros) y hay cuatro tarjetas de paso con el actual marcado', () => {
+    const html = renderToStaticMarkup(<VistaReclamacionPeajes sufijo="" desglose={null} estado="sin_desglose" reporte={null} />);
+    expect(html).toContain('rv-pj-pasos');
+    expect((html.match(/<li class="rv-pj-paso"/g) ?? []).length).toBe(4);
+    expect((html.match(/aria-current="step"/g) ?? []).length).toBe(1);
+    expect(html).toContain('aria-current="step"');
+    expect(html).toContain('rv-tarjeta');
+    expect(html).toContain('Elige un desglose');
+    expect(html).toContain('—');
+  });
 });

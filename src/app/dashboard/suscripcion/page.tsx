@@ -22,13 +22,15 @@ import {
 } from '@/lib/saas/fiscal';
 import { mxn } from '@/lib/utils';
 import { fechaMx } from '../formato';
-import { Uso, TarjetaPlan, InstruccionesTransferencia } from './vista';
+import { TarjetaPlan, InstruccionesTransferencia } from './vista';
 import type { Metadata } from 'next';
 import {
   Aviso, CampoSelect, CampoTexto, EstadoError, EstadoVacio, FormaConAviso, StatusChip, TablaBase, Tarjeta,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoPortada } from '@/app/ui-v2/esqueletos';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
+import '../filas-ctl.css';
 import './suscripcion.css';
 export async function generateMetadata(): Promise<Metadata> {
   const { t: tr } = await getT('dinero');
@@ -290,15 +292,29 @@ export default async function SuscripcionPage({
     },
   ];
 
+  // La tira: plan, mensualidad, uso contra el límite y próximo corte. Cada cifra sale de su lectura; sin lectura no hay celda (nunca un 0 inventado).
+  const cifrasPlan: PropsCifra[] = [];
+  if (!suscripcionCaida && suscripcion !== null) {
+    cifrasPlan.push(
+      { etiqueta: 'Plan', matiz: 1, valor: suscripcion.planNombre, nota: `Desde ${fechaMx(suscripcion.inicio)}` },
+      { etiqueta: tr('suscripcion.page.mensualidad'), matiz: 1, valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
+    );
+  }
+  if (uso) {
+    cifrasPlan.push(
+      { etiqueta: tr('suscripcion.page.viajesCreadosEsteMes'), matiz: 1, valor: uso.viajesMes, nota: uso.limiteViajesMes === null ? tr('suscripcion.vista.sinLimiteEnEste') : tr('suscripcion.page.deLimiteDelPlan', { limite: uso.limiteViajesMes }) },
+      { etiqueta: tr('suscripcion.page.operadoresActivos'), matiz: 1, valor: uso.operadores, nota: uso.limiteOperadores === null ? tr('suscripcion.vista.sinLimiteEnEste') : tr('suscripcion.page.deLimiteDelPlan', { limite: uso.limiteOperadores }) },
+    );
+  }
+  if (!suscripcionCaida && suscripcion !== null) {
+    cifrasPlan.push({ etiqueta: tr('suscripcion.page.proximoCorte'), matiz: 1, valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : tr('suscripcion.page.sinFechaDeCorte') });
+  }
+
   return (
     <EsqueletoPortada titulo={tr('suscripcion.page.planYFacturacion')} apoyo={tr('suscripcion.page.tuPlanDeLikida')}
       etiquetaCifras={tr('suscripcion.page.tuPlan')}
-      cifras={suscripcionCaida || suscripcion === null ? undefined : [
-        { etiqueta: 'Plan', valor: suscripcion.planNombre },
-        { etiqueta: tr('suscripcion.page.mensualidad'), valor: planActual?.precioMensual === null || planActual === null || planActual === undefined ? tr('suscripcion.page.sinPrecioConfigurado') : mxn(planActual.precioMensual) },
-        { etiqueta: 'Desde', valor: fechaMx(suscripcion.inicio) },
-        { etiqueta: tr('suscripcion.page.proximoCorte'), valor: suscripcion.periodoFin ? fechaMx(suscripcion.periodoFin) : tr('suscripcion.page.sinFechaDeCorte') },
-      ]}
+      cifras={cifrasPlan.length > 0 ? cifrasPlan : undefined}
+      metodo={uso ? tr('suscripcion.page.pasarseDelLimiteNo') : undefined}
       acciones={<>
         {/* H8 (auditoría 24): aquí decía "Pago recibido" solo porque la URL traía `?ok=contratado` — un query string lo escribe cualquiera, no una lectura del cobro. El estado real se pinta con `pill` (lee `suscripcion.estado` de la base). */}
         {/* La fecha de corte ya pasó (DAT-40): una prueba con corte vencido se leía como cliente al corriente y nadie le cobraba nunca. Se DICE, no se apaga nada — el mismo criterio que el límite del plan. */}
@@ -341,25 +357,11 @@ export default async function SuscripcionPage({
       {suscripcionCaida ? (
         <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="error" mensaje={tr('suscripcion.page.noSePudoLeer')} reintentar />
       ) : suscripcion === null ? (
-        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan">
-          {/* Vacío de una línea (Rovaq `.empty dotted`, 12x14): sin icono ni 200 px de aire. */}
-          <p className="rv-sus__vacio" role="status"><strong>{tr('suscripcion.page.sinSuscripcionTodavia')}</strong> {tr('suscripcion.page.estaFlotaTodaviaNo2')}</p>
-        </Tarjeta>
+        // El vacío es de la propia tarjeta (caja punteada de Rovaq), no una caja dentro de ella.
+        <Tarjeta titulo={tr('suscripcion.page.tuPlan')} info="suscripcion.plan" estado="vacio" mensaje={tr('suscripcion.page.sinSuscripcionTodavia')} detalle={tr('suscripcion.page.estaFlotaTodaviaNo2')} contenida />
       ) : null}
 
-      {/* ── Uso ── */}
-      {uso && (
-        <Tarjeta titulo={tr('suscripcion.page.loQueLlevasEste')} info="suscripcion.uso">
-          <div className="rv-sus__usos">
-            <Uso tr={tr} etiqueta={tr('suscripcion.page.viajesCreadosEsteMes')} usado={uso.viajesMes} limite={uso.limiteViajesMes} />
-            <Uso tr={tr} etiqueta={tr('suscripcion.page.operadoresActivos')} usado={uso.operadores} limite={uso.limiteOperadores} />
-          </div>
-          <p className="rv-sus__nota">
-            {tr('suscripcion.page.pasarseDelLimiteNo')}
-          </p>
-        </Tarjeta>
-      )}
-
+      <div className="rv-sus__dos">
       {/* ── Datos fiscales ── */}
       <Tarjeta titulo={tr('suscripcion.page.datosParaTuFactura')} info="suscripcion.datos_factura"
         acciones={puedeFacturar ? <StatusChip tono="ok">{tr('suscripcion.page.completos')}</StatusChip> : <StatusChip tono="warn">{tr('suscripcion.page.faltan')}</StatusChip>}>
@@ -372,32 +374,34 @@ export default async function SuscripcionPage({
             {!puedeFacturar ? tr('suscripcion.page.todaviaFaltanAsiQue') : tr('suscripcion.page.losDatosYaEstan')}
           </EstadoVacio>
         ) : (
-          <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales">
-            <CampoTexto id="rfc" name="rfc" etiqueta="RFC" obligatorio defaultValue={fiscales?.rfc ?? ''}
+          <div className="rv-sus__fiscales">
+          <FormaConAviso accion={accionFiscales} boton="Guardar datos fiscales" columnas="md:grid-cols-1">
+            <CampoTexto className="rv-fila-c" id="rfc" name="rfc" etiqueta="RFC" obligatorio defaultValue={fiscales?.rfc ?? ''}
               placeholder="TIN010101AB1" ayuda={tr('suscripcion.page.seValidaElDigito')} />
-            <CampoTexto id="razonSocial" name="razonSocial" etiqueta={tr('suscripcion.page.razonSocial')} obligatorio
+            <CampoTexto className="rv-fila-c" id="razonSocial" name="razonSocial" etiqueta={tr('suscripcion.page.razonSocial')} obligatorio
               defaultValue={fiscales?.razonSocial ?? ''} placeholder={tr('suscripcion.page.miFlotaSaDe')}
               ayuda={tr('suscripcion.page.exactaComoEnTu')} />
-            <CampoTexto id="codigoPostal" name="codigoPostal" etiqueta={tr('suscripcion.page.codigoPostalFiscal')} obligatorio
+            <CampoTexto className="rv-fila-c" id="codigoPostal" name="codigoPostal" etiqueta={tr('suscripcion.page.codigoPostalFiscal')} obligatorio
               defaultValue={fiscales?.codigoPostal ?? ''} placeholder="97000" />
-            <CampoSelect id="regimenFiscal" name="regimenFiscal" etiqueta={tr('suscripcion.page.regimenFiscal')} obligatorio
+            <CampoSelect className="rv-fila-c" id="regimenFiscal" name="regimenFiscal" etiqueta={tr('suscripcion.page.regimenFiscal')} obligatorio
               defaultValue={fiscales?.regimenFiscal ?? '601'}>
               {REGIMENES.map((r) => <option key={r.clave} value={r.clave}>{`${r.clave} — ${r.nombre}`}</option>)}
             </CampoSelect>
-            <CampoSelect id="usoCfdi" name="usoCfdi" etiqueta={tr('suscripcion.page.usoDelCfdi')} obligatorio
+            <CampoSelect className="rv-fila-c" id="usoCfdi" name="usoCfdi" etiqueta={tr('suscripcion.page.usoDelCfdi')} obligatorio
               defaultValue={fiscales?.usoCfdi ?? 'G03'}
               ayuda={tr('suscripcion.page.g03EsComoSe')}>
               {USOS_CFDI.map((u) => <option key={u.clave} value={u.clave}>{`${u.clave} — ${u.nombre}`}</option>)}
             </CampoSelect>
-            <CampoTexto id="emailFacturacion" name="emailFacturacion" etiqueta={tr('suscripcion.page.correoParaTuFactura')}
+            <CampoTexto className="rv-fila-c" id="emailFacturacion" name="emailFacturacion" etiqueta={tr('suscripcion.page.correoParaTuFactura')}
               defaultValue={fiscales?.email ?? ''} placeholder="contabilidad@miflota.com"
               ayuda={tr('suscripcion.page.ahiTeLlegaEl')} />
             {/* AUDITORÍA 19, CRÍTICO (legal C3 / C.16): la columna existía desde la 0018 y ninguna pantalla la llenaba, así que el aviso de privacidad de TODA flota real respondía 404. Este es el lugar: los mismos datos de la constancia, capturados juntos. */}
-            <CampoTexto id="domicilioFiscal" name="domicilioFiscal" etiqueta={tr('suscripcion.page.domicilioFiscal')}
+            <CampoTexto className="rv-fila-c" id="domicilioFiscal" name="domicilioFiscal" etiqueta={tr('suscripcion.page.domicilioFiscal')}
               defaultValue={fiscales?.domicilioFiscal ?? ''}
               placeholder={tr('suscripcion.page.calle60123Col')}
               ayuda={tr('suscripcion.page.completoComoEnTu')} />
           </FormaConAviso>
+          </div>
         )}
       </Tarjeta>
 
@@ -438,6 +442,8 @@ export default async function SuscripcionPage({
           </FormaConAviso>
         )}
       </Tarjeta>
+
+      </div>
 
       {/* ── Facturas ── */}
       <Tarjeta titulo={tr('suscripcion.page.tusFacturasDeLikida')} info="suscripcion.facturas">

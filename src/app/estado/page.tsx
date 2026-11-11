@@ -127,8 +127,9 @@ export default async function PaginaEstado() {
                       {nombre}
                       <span className="rv-estado__nota">{t(`est.c.${r.componente}.mide`)}</span>
                     </th>
-                    <td><Etiqueta estado={actual} t={t} /></td>
+                    <td><span className="rv-estado__etq" aria-hidden="true">{t('est.col.estado')}</span><Etiqueta estado={actual} t={t} /></td>
                     <td>
+                      <span className="rv-estado__etq" aria-hidden="true">{t('est.col.dias')}</span>
                       {/* 30 celdas, de la más antigua a hoy. Cada una dice su día y su estado en texto, no solo en color. */}
                       <ul className="rv-estado__pista" aria-label={t('est.dias.aria', { nombre })}>
                         {r.dias.map((d) => (
@@ -143,6 +144,7 @@ export default async function PaginaEstado() {
                       </ul>
                     </td>
                     <td className="rv-estado__disp">
+                      <span className="rv-estado__etq" aria-hidden="true">{t('est.col.disponibilidad')}</span>
                       {estado.historialIlegible
                         ? t('est.hist.ilegible')
                         : r.disponibilidadPct === null

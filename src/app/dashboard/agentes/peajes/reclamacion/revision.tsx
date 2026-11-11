@@ -240,7 +240,7 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
       <p className="rv-pj-sub">{tx('rest.junta_las_tres_decenas_de_un')}</p>
       <BarraFiltros accion="?" etiqueta={tx('rest.periodo_del_cierre_mensual')} ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ...(desglose ? [['desglose', desglose] as const] : [])]}>
         {lista.length > 0 ? (
-          <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto="" opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
+          <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto={lista[0]} opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
         ) : (
           <FiltroCampo etiqueta="Mes"><input className="border-0 bg-transparent" name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required data-anillo="envolvente" /></FiltroCampo>
         )}

@@ -184,3 +184,13 @@ describe('nomina en la forma de invitar, no en la de cambiar rol', () => {
     expect(html.split('value="nomina"').length - 1).toBe(1);
   });
 });
+
+describe('el selector de rol de cada renglón refleja el rol REAL', () => {
+  it('una cuenta de nómina (fuera del catálogo invitable) no se pinta como «Contador» ni se queda sin su opción', () => {
+    const nomina: UsuarioRow = { id: 'u-7', nombre: 'Nómina Perfil', email: 'nomina@flota.mx', rol: 'nomina', telefono: null, activo: true, desactivadoEn: null };
+    const html = pintar({ usuarios: [nomina], puedeInvitar: true });
+    const selectFila = html.match(/<select name="rol"[^>]*aria-label[^>]*>[\s\S]*?<\/select>/)?.[0] ?? '';
+    expect(selectFila).toContain('<option value="nomina" selected="">');
+    expect(selectFila).not.toContain('<option value="contador" selected="">');
+  });
+});

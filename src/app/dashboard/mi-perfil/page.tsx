@@ -15,7 +15,8 @@ import { sufijoTenant } from '../sufijo';
 import { TablaClientesMcp } from '../sesiones-mcp/vista';
 import type { Metadata } from 'next';
 import { Aviso, Boton, BotonEnlace, CampoTexto } from '@/app/ui-v2/componentes';
-import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
+import { EsqueletoConfiguracion, FilaConfig } from '@/app/ui-v2/esqueletos';
+import '../filas-ctl.css';
 import './mi-perfil.css';
 import { getT } from '@/lib/i18n/servidor';
 import { rico } from '@/lib/i18n/rico';
@@ -332,6 +333,7 @@ export default async function MiPerfilFlota({
   return (
     <EsqueletoConfiguracion
       titulo={t('cfg.mi_perfil')} apoyo={t('cfg.tu_foto_nombre_y_correo_y')}
+      contexto={<div className="rv-cfg-dos" hidden />}
       avisos={(
         <>
           {sp.ok && OK[sp.ok] && <Aviso tono="ok">{OK[sp.ok]}</Aviso>}
@@ -347,22 +349,21 @@ export default async function MiPerfilFlota({
             <div className="rv-mp__pila">
               <AvatarUploader nombre={s.nombre ?? 'Tú'} avatarUrl={s.avatarUrl} accion={subirAvatar} />
 
-              <form action={actualizarNombre} className="rv-mp__pila rv-mp__separador">
-                <CampoTexto etiqueta={t('llaves.nombre')} id="perfil-nombre" name="nombre" defaultValue={s.nombre ?? ''} required maxLength={80}
+              {/* Filas rótulo-control (Rovaq CF): rótulo y ayuda a la izquierda, el campo a la derecha, y la acción de la sección en su pie. */}
+              <form action={actualizarNombre} className="rv-mp__forma">
+                <CampoTexto className="rv-fila-c" etiqueta={t('llaves.nombre')} id="perfil-nombre" name="nombre" defaultValue={s.nombre ?? ''} required maxLength={80}
                   ayuda={t('cfg.es_el_nombre_con_el_que')} />
-                <div><Boton type="submit" variante="primary" tamano="sm">{t('cfg.guardar_nombre')}</Boton></div>
+                <div className="rv-fila-pie"><Boton type="submit" variante="primary" tamano="sm">{t('cfg.guardar_nombre')}</Boton></div>
               </form>
 
-              <dl className="rv-mp__datos rv-mp__separador">
-                <div>
-                  <dt>{t('cfg.correo')}</dt>
-                  <dd>{correoFalloLectura ? t('cfg.no_se_pudo_leer') : (fila?.email as string) ?? '—'}</dd>
-                </div>
-                <div>
-                  <dt>Rol</dt>
-                  <dd>{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</dd>
-                </div>
-              </dl>
+              <div className="rv-mp__datos">
+                <FilaConfig rotulo={t('cfg.correo')}>
+                  <span className="rv-mp__valor">{correoFalloLectura ? t('cfg.no_se_pudo_leer') : (fila?.email as string) ?? '—'}</span>
+                </FilaConfig>
+                <FilaConfig rotulo="Rol">
+                  <span className="rv-mp__valor">{ROL_LABEL[s.rol as RolAppUser] ?? s.rol}</span>
+                </FilaConfig>
+              </div>
               <p className="rv-mp__nota">{t('cfg.correo_y_rol_no_se_editan')}</p>
             </div>
           ),
@@ -427,7 +428,7 @@ export default async function MiPerfilFlota({
           ) : mcp.length === 0 ? (
             <p className="rv-mp__texto">{t('cfg.no_tienes_ningun_cliente_mcp_conectado')}</p>
           ) : (
-            <div className="rv-mp__pila">
+            <div className="rv-mp__pila rv-cfg-ancha">
               <p className="rv-mp__texto">{rico(t('cfg.estos_clientes_strong_leen_strong_nunca'), { strong: (c) => <strong>{c}</strong> })}</p>
               <TablaClientesMcp t={t} clientes={mcp} />
               <form action={cortarMisSesionesMcp}>

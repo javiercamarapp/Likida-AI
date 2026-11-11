@@ -17,7 +17,7 @@
 .rv-chat-pagina { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; height: 100%; }
 .rv-chat-pagina__aviso { flex: none; margin-bottom: 8px; }
 .rv-chat {
-  --col-chat: 46rem;
+  --col-chat: 650px;
   position: relative; display: flex; flex: 1 1 auto; min-height: 0; width: 100%; font-family: var(--font-sans-ui, inherit); }
 
 /* ── Caparazón de UNA página: nada de scroll de documento; el alto lo da 100dvh menos cabecera, barra inferior, áreas seguras y teclado ── */
@@ -84,7 +84,7 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
   border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--surface); color: var(--ink);
   font: 600 13px/1 var(--font-sans-ui, inherit); letter-spacing: 0; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-[data-ui="v2"] .rv-btn.rv-chat__tema { gap: 8px; padding: 0 12px; color: var(--muted); }
+[data-ui="v2"] .rv-btn.rv-chat__tema { gap: 8px; padding: 0 12px; white-space: nowrap; color: var(--muted); }
 [data-ui="v2"] .rv-btn.rv-chat__tema i { flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--cat, var(--muted)); }
 [data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="1"] {
   --cat: var(--chart-3, var(--muted));

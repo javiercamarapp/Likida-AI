@@ -1,5 +1,5 @@
-import { Building2, FlaskConical, Search } from 'lucide-react';
-import { AvisoCompacto, Boton, BotonEnlace, EstadoError, Icono, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
+import { Building2, FlaskConical } from 'lucide-react';
+import { AvisoCompacto, BarraFiltros, Boton, BotonEnlace, EstadoError, FiltroBusqueda, Icono, StatusChip, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import '../resumen.css';
 
@@ -50,7 +50,7 @@ export function ElegirFlotaContenido({
     {
       id: 'flota', titulo: 'Flota', principal: true,
       celda: (f) => (
-        <span className="adm-res-fila">
+        <span className="adm-res-fila" data-activa={seleccionActual === f.id ? '' : undefined}>
           <Icono icono={f.esDemo ? FlaskConical : Building2} />
           <span className="adm-res-fila__texto">
             <span className="adm-res-fila__titulo">{f.nombre}</span>
@@ -81,12 +81,11 @@ export function ElegirFlotaContenido({
       apoyo="El panel del cliente apunta a UNA flota elegida; la selección dura una jornada y queda en la bitácora."
       acciones={<BotonEnlace variante="ghost" href="/admin">Volver al Resumen</BotonEnlace>}
       filtros={(
-        <form className="flex items-center gap-2" method="GET" role="search">
-          <input type="hidden" name="next" value={next} />
-          <Search width={15} height={15} strokeWidth={1.75} className="shrink-0 text-muted" aria-hidden="true" />
-          <input type="text" name="q" defaultValue={consulta} placeholder="Buscar flota…" aria-label="Buscar flota" className="rv-ctl min-w-0 flex-1" />
-          {consulta && <BotonEnlace href={`/admin/elegir-flota?next=${encodeURIComponent(next)}`} variante="ghost" tamano="sm">Limpiar</BotonEnlace>}
-        </form>
+        // Buscador de 32 px con la lupa DENTRO del campo (Rovaq): la barra de filtros GET conserva `next` y limpia con un enlace.
+        <BarraFiltros accion="/admin/elegir-flota" enLinea buscar etiqueta="Buscar flota" ocultos={{ next }} nActivos={consulta ? 1 : 0}
+          limpiarHref={`/admin/elegir-flota?next=${encodeURIComponent(next)}`}>
+          <FiltroBusqueda nombre="q" valor={consulta} placeholder="Buscar flota…" etiqueta="Buscar flota" />
+        </BarraFiltros>
       )}
       avisos={error ? (
         <AvisoCompacto tono="error" resumen={error === 'firma'

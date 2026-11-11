@@ -65,7 +65,7 @@ export function contarFiltrosActivos(f: Filtros): number {
 export function filtrarProspectos(prospectos: readonly ProspectoMapa[], f: Filtros, ahora: number): ProspectoMapa[] {
   return prospectos.filter((p) =>
     (!f.giros || f.giros.has(p.giro))
-    && (!f.etapas || f.etapas.has(p.estado))
+    && (!f.etapas || f.etapas.has(p.estado) || (p.estado === 'lost' && f.etapas.has('perdido')))
     && (!f.fuentes || f.fuentes.has(p.fuente))
     && p.urgencia >= f.minUrgencia
     && (!f.soloTel || p.telefono !== null)

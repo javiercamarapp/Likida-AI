@@ -33,3 +33,8 @@
 
 /* La tarjeta de una fila de gráficas llena su celda: dos tarjetas de la misma fila miden lo mismo (Rovaq), sin hueco bajo la más baja. */
 [data-ui="v2"] .rv-fila-tarjetas > .rv-tarjeta { height: 100%; }
+
+/* Vacío uniforme de la sección de dinero (Rovaq `ac-vacio`): 1 px punteado #e6e6e8, radio 8, relleno 20×14, SIEMPRE dentro de su tarjeta. Hoy la pieza
+   compartida lo pinta con borde solo en la variante `contenido`; mientras no se unifique allí (pedido_compartido: componentes.css `.rv-vacio`),
+   esta regla evita los dos vacíos distintos en la misma página (p. ej. «Facturado por mes» sin borde y «Por cobrar» punteado). */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
