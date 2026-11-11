@@ -29,6 +29,8 @@ import { HiloTicket } from './hilo';
 import { pillTicket } from '../../dashboard/soporte/estatus';
 import '../sistema.css';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /** "hace 3 h" / "hace 2 d" — la edad del ticket contra el reloj del SERVIDOR (`ahoraMs()`), el mismo contra el que se resta el SLA: dos
@@ -42,23 +44,23 @@ function edadDe(abiertoEn: string, ahora: number): string {
 
 /** El reloj de SLA de la fila — mismas tres verdades que /dashboard/soporte: sin SLA no hay reloj, vencido se dice con cuánto, y lo
  *  demás es lo que falta. */
-function slaDe(t: TicketCruzado): { texto: string; vencido: boolean } {
-  if (t.horasRestantes == null) return { texto: 'Sin SLA pactado', vencido: false };
-  if (t.horasRestantes < 0) return { texto: `Vencido hace ${numero(Math.abs(Math.round(t.horasRestantes)))} h`, vencido: true };
-  return { texto: `Faltan ${numero(Math.round(t.horasRestantes))} h`, vencido: false };
+function slaDe(t: TicketCruzado, ta: TrDe<'admin_flotas'>): { texto: string; vencido: boolean } {
+  if (t.horasRestantes == null) return { texto: ta('soporte.sin_sla_pactado'), vencido: false };
+  if (t.horasRestantes < 0) return { texto: ta('soporte.vencido_hace_h', { Math: numero(Math.abs(Math.round(t.horasRestantes))) }), vencido: true };
+  return { texto: ta('soporte.faltan_h', { Math: numero(Math.round(t.horasRestantes)) }), vencido: false };
 }
 
 const capital = (t: string): string => (t ? t.charAt(0).toUpperCase() + t.slice(1).replace(/_/g, ' ') : '—');
 const tonoDe = (estado: string): TonoEstado => pillTicket(estado).estado as TonoEstado;
 
 /** La consecuencia de un SLA vencido, a la vista: o consta que se avisó al operador (y cuándo), o consta que no. `null` = no se pudo leer. */
-function ConsecuenciaSla({ t, avisos }: { t: TicketCruzado; avisos: Map<string, string> | null }) {
-  if (!slaDe(t).vencido || ESTADOS_TICKET_CERRADO.has(t.estado)) return null;
-  if (avisos === null) return <span className="adm-sis-sub">Aviso al operador: sin dato</span>;
+function ConsecuenciaSla({ t, avisos, ta }: { t: TicketCruzado; avisos: Map<string, string> | null; ta: TrDe<'admin_flotas'> }) {
+  if (!slaDe(t, ta).vencido || ESTADOS_TICKET_CERRADO.has(t.estado)) return null;
+  if (avisos === null) return <span className="adm-sis-sub">{ta('soporte.aviso_al_operador_sin')}</span>;
   const cuando = avisos.get(t.id);
   return cuando
-    ? <span className="adm-sis-sub">Se avisó al operador · {fechaHoraMx(cuando)}</span>
-    : <span className="adm-sis-sub">Aún sin aviso al operador</span>;
+    ? <span className="adm-sis-sub">{ta('soporte.se_aviso_al_operador')} {fechaHoraMx(cuando)}</span>
+    : <span className="adm-sis-sub">{ta('soporte.aun_sin_aviso_al')}</span>;
 }
 
 /**
@@ -73,8 +75,9 @@ function ConsecuenciaSla({ t, avisos }: { t: TicketCruzado; avisos: Map<string, 
  * medias, que sería escribir en el hilo de quien tocara.
  */
 async function flotaDelTicket(fd: FormData): Promise<{ id: string; tenantId: string }> {
+  const { t: ta } = await getT('admin_flotas');
   const t = await resolverTicketCruzado(String(fd.get('ticket') ?? ''));
-  if (!t) throw new Error('Ese ticket ya no existe.');
+  if (!t) throw new Error(ta('soporte.ese_ticket_ya_no'));
   return { id: t.id, tenantId: t.tenantId };
 }
 
@@ -114,6 +117,7 @@ export default async function SoportePage({
 }: {
   searchParams: Promise<{ ticket?: string }>;
 }) {
+  const { t: ta } = await getT('admin_flotas');
   await requireSuperadmin();
   const sp = await searchParams;
   const ahora = ahoraMs();
@@ -124,6 +128,7 @@ export default async function SoportePage({
   // renderizar no dice nada de quién manda el POST.
 
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t: ta } = await getT('admin_flotas');
     'use server';
     const s = await requireSuperadmin();
     try {
@@ -135,12 +140,12 @@ export default async function SoportePage({
       });
       revalidatePath('/admin/soporte');
       if (interna) {
-        return { ok: 'Nota interna guardada. El cliente NO la ve, y no cuenta como respuesta: la alarma de «sin respuesta» sigue encendida.' };
+        return { ok: ta('soporte.nota_interna_guardada_el') };
       }
       return {
         ok: r.movioAEnProceso
-          ? 'Respuesta enviada. El ticket pasó de «abierto» a «en proceso», y la alarma de «sin respuesta» ya se puede apagar.'
-          : 'Respuesta enviada — el cliente la ve en su panel de Soporte.',
+          ? ta('soporte.respuesta_enviada_el_ticket')
+          : ta('soporte.respuesta_enviada_el_cliente'),
       };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'responder el ticket') };
@@ -148,19 +153,21 @@ export default async function SoportePage({
   }
 
   async function accionTomar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t: ta } = await getT('admin_flotas');
     'use server';
     const s = await requireSuperadmin();
     try {
       const { id, tenantId } = await flotaDelTicket(fd);
       const r = await tomarTicket(id, tenantId, { tipo: 'likida', userId: s.userId });
       revalidatePath('/admin/soporte');
-      return { ok: `Tomado. Queda a tu nombre y en «${r.estado}» — la cola ya no lo enseña como sin dueño.` };
+      return { ok: ta('soporte.tomado_queda_a_tu', { estado: r.estado }) };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'tomar el ticket') };
     }
   }
 
   async function accionEstado(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t: ta } = await getT('admin_flotas');
     'use server';
     const s = await requireSuperadmin();
     try {
@@ -172,8 +179,8 @@ export default async function SoportePage({
       // anotarla), así que la pantalla LEE su resultado en vez de afirmarlo.
       return {
         ok: r.anotado
-          ? `De «${r.estadoPrevio}» a «${r.estado}». Quedó en la bitácora.`
-          : `De «${r.estadoPrevio}» a «${r.estado}». El cambio SÍ se guardó; lo que no se pudo escribir fue la entrada de bitácora (quedó en el log del servidor).`,
+          ? ta('soporte.de_a_quedo_en', { estadoPrevio: r.estadoPrevio, estado: r.estado })
+          : ta('soporte.de_a_el_cambio', { estadoPrevio: r.estadoPrevio, estado: r.estado }),
       };
     } catch (e) {
       return { error: mensajeParaPantalla(e, 'cambiar el estado del ticket') };
@@ -225,12 +232,12 @@ export default async function SoportePage({
     }
   }
 
-  const abiertoVencidos = (tickets ?? []).filter((t) => slaDe(t).vencido && !ESTADOS_TICKET_CERRADO.has(t.estado)).map((t) => t.id);
+  const abiertoVencidos = (tickets ?? []).filter((t) => slaDe(t, ta).vencido && !ESTADOS_TICKET_CERRADO.has(t.estado)).map((t) => t.id);
   const avisos = tickets === null ? null : await avisosDeSlaPorTicket(abiertoVencidos);
 
   const columnas: ColumnaTabla<TicketCruzado>[] = [
     {
-      id: 'asunto', titulo: 'Asunto', principal: true,
+      id: 'asunto', titulo: ta('soporte.asunto'), principal: true,
       celda: (t) => (
         <>
           <Link href={`/admin/soporte?ticket=${encodeURIComponent(t.id)}`}>{t.asunto}</Link>
@@ -238,26 +245,26 @@ export default async function SoportePage({
         </>
       ),
     },
-    { id: 'flota', titulo: 'Flota', celda: (t) => t.tenantNombre },
-    { id: 'prioridad', titulo: 'Prioridad', celda: (t) => capital(t.prioridad) },
+    { id: 'flota', titulo: ta('soporte.flota'), celda: (t) => t.tenantNombre },
+    { id: 'prioridad', titulo: ta('soporte.prioridad'), celda: (t) => capital(t.prioridad) },
     {
-      id: 'estado', titulo: 'Estado',
+      id: 'estado', titulo: ta('soporte.estado'),
       celda: (t) => (
         <>
           <StatusChip tono={tonoDe(t.estado)}>{pillTicket(t.estado).etiqueta}</StatusChip>
-          <span className="adm-sis-sub">{t.asignadoA ? (t.asignadoNombre ?? 'Tomado') : 'Sin tomar'}</span>
+          <span className="adm-sis-sub">{t.asignadoA ? (t.asignadoNombre ?? 'Tomado') : ta('soporte.sin_tomar')}</span>
         </>
       ),
     },
-    { id: 'abierto', titulo: 'Abierto', corta: true, celda: (t) => <>{fechaMx(t.abiertoEn)}<span className="adm-sis-sub">{edadDe(t.abiertoEn, ahora)}</span></> },
+    { id: 'abierto', titulo: ta('soporte.abierto'), corta: true, celda: (t) => <>{fechaMx(t.abiertoEn)}<span className="adm-sis-sub">{edadDe(t.abiertoEn, ahora)}</span></> },
     {
       id: 'sla', titulo: 'SLA', alinear: 'der',
       celda: (t) => {
-        const sla = slaDe(t);
+        const sla = slaDe(t, ta);
         return (
           <>
             {sla.vencido && !ESTADOS_TICKET_CERRADO.has(t.estado) ? <StatusChip tono="bad">{sla.texto}</StatusChip> : sla.texto}
-            <ConsecuenciaSla t={t} avisos={avisos} />
+            <ConsecuenciaSla ta={ta} t={t} avisos={avisos} />
           </>
         );
       },
@@ -266,35 +273,36 @@ export default async function SoportePage({
   const terminal = detalle !== null && ESTADOS_TICKET_CERRADO.has(detalle.estado);
 
   return (
-    <MarcoPagina titulo="Soporte" apoyo="Los tickets de todas las flotas: lo más urgente primero, sin plazo al final.">
+    <MarcoPagina titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')}>
       {tickets === null ? (
-        <EstadoError reintentar>No se pudo leer la cola de tickets. La consulta falló: no es que no haya tickets, es que no se pudo mirar.</EstadoError>
+        <EstadoError reintentar>{ta('soporte.no_se_pudo_leer')}</EstadoError>
       ) : (
         <>
-          <TiraCifras etiqueta="Tickets de soporte" items={[
-            { etiqueta: 'Abiertos', valor: conteos.abiertos, formato: 'entero', nota: 'De todas las flotas.', ...(conteos.abiertos === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
-            { etiqueta: 'Con SLA vencido', valor: conteos.vencidos, formato: 'entero', tono: (conteos.vencidos ?? 0) > 0 ? 'bad' : undefined, nota: 'Pasó el plazo y siguen sin cerrarse.', ...(conteos.vencidos === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
-            { etiqueta: 'Sin SLA pactado', valor: conteos.sinSla, formato: 'entero', nota: 'No están vencidos: nadie les puso plazo.', ...(conteos.sinSla === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
-            { etiqueta: 'Resueltos o cerrados', valor: conteos.cerrados, formato: 'entero', nota: 'Histórico.', ...(conteos.cerrados === null ? { estado: 'error' as const, mensaje: 'No se pudo contar.' } : {}) },
+          <TiraCifras etiqueta={ta('soporte.tickets_de_soporte')} items={[
+            { etiqueta: ta('soporte.abiertos'), valor: conteos.abiertos, formato: 'entero', nota: ta('soporte.de_todas_las_flotas'), ...(conteos.abiertos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
+            { etiqueta: ta('soporte.con_sla_vencido'), valor: conteos.vencidos, formato: 'entero', tono: (conteos.vencidos ?? 0) > 0 ? 'bad' : undefined, nota: ta('soporte.paso_el_plazo_y'), ...(conteos.vencidos === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
+            { etiqueta: ta('soporte.sin_sla_pactado'), valor: conteos.sinSla, formato: 'entero', nota: ta('soporte.no_estan_vencidos_nadie'), ...(conteos.sinSla === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
+            { etiqueta: ta('soporte.resueltos_o_cerrados'), valor: conteos.cerrados, formato: 'entero', nota: ta('soporte.historico'), ...(conteos.cerrados === null ? { estado: 'error' as const, mensaje: ta('soporte.no_se_pudo_contar') } : {}) },
           ]} />
 
           {/* ── EL HILO Y LAS ACCIONES ───────────────────────────────────── */}
           {pedido !== '' && (
             hiloFallo ? (
-              <EstadoError reintentar>No se pudo leer ese hilo. No significa que esté vacío: contestar sin ver lo que ya se dijo es como se manda dos veces la misma respuesta.</EstadoError>
+              <EstadoError reintentar>{ta('soporte.no_se_pudo_leer_2')}</EstadoError>
             ) : detalle === null ? (
-              <EstadoVacio titulo="Ese ticket ya no existe" accion={<BotonEnlace href="/admin/soporte" variante="secondary" tamano="sm">Volver a la cola</BotonEnlace>}>
-                Puede que se haya borrado con la flota. La cola de abajo es lo que sí hay.
+              <EstadoVacio titulo={ta('soporte.ese_ticket_ya_no_2')} accion={<BotonEnlace href="/admin/soporte" variante="secondary" tamano="sm">{ta('soporte.volver_a_la_cola')}</BotonEnlace>}>
+                
+                {ta('soporte.puede_que_se_haya')}
               </EstadoVacio>
             ) : (
-              <Tarjeta titulo={detalle.asunto} acciones={<><StatusChip tono={tonoDe(detalle.estado)}>{pillTicket(detalle.estado).etiqueta}</StatusChip><BotonEnlace href="/admin/soporte" variante="ghost" tamano="sm">Volver a la cola</BotonEnlace></>}>
+              <Tarjeta titulo={detalle.asunto} acciones={<><StatusChip tono={tonoDe(detalle.estado)}>{pillTicket(detalle.estado).etiqueta}</StatusChip><BotonEnlace href="/admin/soporte" variante="ghost" tamano="sm">{ta('soporte.volver_a_la_cola')}</BotonEnlace></>}>
                 <ul className="adm-sis-lista">
                   <li><span>Flota</span><span>{flotaDelDetalle}</span></li>
-                  <li><span>Categoría y prioridad</span><span>{capital(detalle.categoria)} · {capital(detalle.prioridad)}</span></li>
+                  <li><span>{ta('soporte.categoria_y_prioridad')}</span><span>{capital(detalle.categoria)} · {capital(detalle.prioridad)}</span></li>
                   <li><span>Abierto</span><span>{fechaHoraMx(detalle.abiertoEn)}</span></li>
-                  <li><span>Plazo (SLA)</span><span>{detalle.venceEn ? fechaHoraMx(detalle.venceEn) : 'Sin SLA pactado'}</span></li>
+                  <li><span>{ta('soporte.plazo_sla')}</span><span>{detalle.venceEn ? fechaHoraMx(detalle.venceEn) : ta('soporte.sin_sla_pactado')}</span></li>
                   {/* SIN TOMAR no es "en proceso": son dos cosas distintas y se dicen distinto. */}
-                  <li><span>Tomado por</span><span>{detalle.asignadoA ? (detalle.asignadoNombre ?? 'Alguien del equipo') : 'Sin tomar'}</span></li>
+                  <li><span>{ta('soporte.tomado_por')}</span><span>{detalle.asignadoA ? (detalle.asignadoNombre ?? ta('soporte.alguien_del_equipo')) : ta('soporte.sin_tomar')}</span></li>
                 </ul>
                 {detalle.descripcion ? <p className="adm-sis-descripcion">{detalle.descripcion}</p> : null}
                 <HiloTicket
@@ -302,8 +310,9 @@ export default async function SoportePage({
                   vacio="Nadie ha escrito en este hilo todavía. Mientras no haya una respuesta pública, la alarma de «sin respuesta» del agente de Éxito sigue encendida, y con razón."
                 />
                 {terminal ? (
-                  <Aviso tono="info" titulo="Este ticket está cerrado">
-                    Para escribir en el hilo, una respuesta o una nota, primero hay que reabrirlo.
+                  <Aviso tono="info" titulo={ta('soporte.este_ticket_esta_cerrado')}>
+                    
+                    {ta('soporte.para_escribir_en_el')}
                   </Aviso>
                 ) : null}
                 <div className="adm-sis-rejilla">
@@ -313,7 +322,7 @@ export default async function SoportePage({
                       <FormaConAviso accion={accionEstado} boton="Reabrir el ticket" columnas="md:grid-cols-1">
                         <input type="hidden" name="ticket" value={detalle.id} />
                         <input type="hidden" name="estado" value="abierto" />
-                        <p className="adm-sis-nota">Vuelve a «abierto», borra la fecha de resolución y deja el cambio en la bitácora. La flota ve que se reabrió.</p>
+                        <p className="adm-sis-nota">{ta('soporte.vuelve_a_abierto_borra')}</p>
                       </FormaConAviso>
                     </div>
                   ) : (
@@ -321,22 +330,22 @@ export default async function SoportePage({
                       <h3 className="adm-sis-titulo">Responder</h3>
                       <FormaConAviso accion={accionResponder} boton="Enviar" columnas="md:grid-cols-1">
                         <input type="hidden" name="ticket" value={detalle.id} />
-                        <CampoTextarea etiqueta="Mensaje" name="cuerpo" obligatorio rows={4} maxLength={LARGO_MAX_MENSAJE} placeholder="Qué le vas a decir a la flota"
-                          ayuda="Un mensaje público apaga la alarma de «sin respuesta»; una nota interna, no." />
-                        <Casilla name="interna" value="1" etiqueta="Nota interna: el cliente NO la ve"
-                          ayuda="Va en el mismo hilo para que el orden sea uno solo, pero el panel del cliente la excluye." />
+                        <CampoTextarea etiqueta={ta('soporte.mensaje')} name="cuerpo" obligatorio rows={4} maxLength={LARGO_MAX_MENSAJE} placeholder={ta('soporte.que_le_vas_a')}
+                          ayuda={ta('soporte.un_mensaje_publico_apaga')} />
+                        <Casilla name="interna" value="1" etiqueta={ta('soporte.nota_interna_el_cliente')}
+                          ayuda={ta('soporte.va_en_el_mismo')} />
                       </FormaConAviso>
                     </div>
                   )}
                   <div className="adm-sis-bloque">
-                    <h3 className="adm-sis-titulo">Tomar y mover</h3>
+                    <h3 className="adm-sis-titulo">{ta('soporte.tomar_y_mover')}</h3>
                     <FormaConAviso accion={accionTomar} boton="Tomar el ticket" columnas="md:grid-cols-1">
                       <input type="hidden" name="ticket" value={detalle.id} />
                     </FormaConAviso>
                     <FormaConAviso accion={accionEstado} boton="Cambiar estado" columnas="md:grid-cols-1">
                       <input type="hidden" name="ticket" value={detalle.id} />
-                      <CampoSelect etiqueta="Estado" name="estado" defaultValue={detalle.estado}
-                        ayuda="Resuelto y cerrado escriben la fecha de resolución; salir de ellos la borra.">
+                      <CampoSelect etiqueta={ta('soporte.estado')} name="estado" defaultValue={detalle.estado}
+                        ayuda={ta('soporte.resuelto_y_cerrado_escriben')}>
                         {ESTADOS_TICKET.map((e) => <option key={e} value={e}>{pillTicket(e).etiqueta}</option>)}
                       </CampoSelect>
                     </FormaConAviso>
@@ -347,25 +356,26 @@ export default async function SoportePage({
           )}
 
           <section className="adm-sis-bloque" aria-labelledby="cola-soporte">
-            <h2 className="adm-sis-titulo" id="cola-soporte">La cola, lo más urgente primero</h2>
+            <h2 className="adm-sis-titulo" id="cola-soporte">{ta('soporte.la_cola_lo_mas')}</h2>
             <TablaLista<TicketCruzado>
-              etiqueta="Cola de soporte" columnas={columnas} filas={tickets} idFila={(t) => t.id} base="/admin/soporte" params={{ ticket: pedido || undefined }}
-              vacio={{ titulo: 'La cola está vacía', texto: 'Ninguna flota tiene nada pendiente con Likida. Los tickets entran desde el panel de cada cliente.' }}
+              etiqueta={ta('soporte.cola_de_soporte')} columnas={columnas} filas={tickets} idFila={(t) => t.id} base="/admin/soporte" params={{ ticket: pedido || undefined }}
+              vacio={{ titulo: ta('soporte.la_cola_esta_vacia'), texto: ta('soporte.ninguna_flota_tiene_nada') }}
               pie={(
                 <p className="adm-sis-nota">
                   {recortado
-                    ? `Se listan los ${numero(TOPE_TICKETS)} más urgentes de ${numero(total!)} tickets de todas las flotas. `
-                    : `${numero(tickets.length)} ${tickets.length === 1 ? 'ticket' : 'tickets'} de todas las flotas. `}
-                  El reloj cuenta contra el plazo pactado al abrir el ticket; uno sin plazo dice «sin SLA», nunca «vencido». El asunto abre el hilo.
+                    ? ta('soporte.se_listan_los_mas', { TOPE_TICKETS: numero(TOPE_TICKETS), total: numero(total!) })
+                    : ta('soporte.de_todas_las_flotas_2', { length: numero(tickets.length), length2: tickets.length === 1 ? 'ticket' : 'tickets' })}
+                  
+                  {ta('soporte.el_reloj_cuenta_contra')}
                 </p>
               )}
             />
           </section>
 
-          <Disclosure titulo="Qué pasa cuando vence un plazo" resumen="Aviso al operador, una sola vez">
+          <Disclosure titulo={ta('soporte.que_pasa_cuando_vence')} resumen="Aviso al operador, una sola vez">
             <p className="adm-sis-nota">
-              Un ticket abierto cuyo plazo ya pasó se avisa una vez al operador, por correo y por WhatsApp, siempre que esos canales estén configurados. La columna SLA dice
-              si consta ese aviso (y cuándo) o si todavía no hay; no se infiere un aviso que no quedó registrado. Un mensaje nuevo de la flota también avisa.
+              
+              {ta('soporte.un_ticket_abierto_cuyo')}
             </p>
           </Disclosure>
         </>
@@ -374,4 +384,7 @@ export default async function SoportePage({
   );
 }
 
-export const metadata: Metadata = { title: 'Soporte' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t: ta } = await getT('admin_flotas');
+  return { title: ta('soporte.soporte') };
+}

@@ -14,14 +14,16 @@ import {
 } from '../usuarios/acciones';
 import { GestionPersona } from './gestion-persona';
 
+import type { TrDe } from '@/lib/i18n/tr_tipos';
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 type Params = Record<string, string | string[] | undefined>;
 const uno = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? '';
-const ESTADOS = [
-  { valor: 'todas', rotulo: 'Todas' }, { valor: 'activa', rotulo: 'Activas' }, { valor: 'baja', rotulo: 'De baja' }, { valor: 'sin_acceso', rotulo: 'Sin cuenta de acceso' },
+const estados = (t: TrDe<'admin_flotas'>) => [
+  { valor: 'todas', rotulo: t('equipo.todas') }, { valor: 'activa', rotulo: t('equipo.activas') }, { valor: 'baja', rotulo: t('equipo.de_baja') }, { valor: 'sin_acceso', rotulo: t('equipo.sin_cuenta_de_acceso') },
 ] as const;
-const ROTULO_ESTADO = { activa: 'Activa', baja: 'De baja', sin_acceso: 'Sin cuenta de acceso' } as const;
+const rotuloEstado = (t: TrDe<'admin_flotas'>) => ({ activa: t('equipo.activa'), baja: t('equipo.de_baja'), sin_acceso: t('equipo.sin_cuenta_de_acceso') } as const);
 const TONO_ESTADO = { activa: 'ok', baja: 'muted', sin_acceso: 'bad' } as const;
 
 /** Búsqueda por nombre, correo, rol o flota (sin acentos ni mayúsculas). */
@@ -37,23 +39,24 @@ function coincide(p: Persona, q: string): boolean {
  * si no se pudo leer el acceso, el último acceso dice «sin dato» y nunca «nunca entró».
  */
 export default async function EquipoPage({ searchParams }: { searchParams?: Promise<Params> }) {
+  const { t } = await getT('admin_flotas');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   const sesion = await requireSuperadmin();
   const sp = (await searchParams) ?? {};
   const q = uno(sp.q).trim();
-  const estado = ESTADOS.some((e) => e.valor === uno(sp.estado)) ? uno(sp.estado) : 'todas';
+  const estado = estados(t).some((e) => e.valor === uno(sp.estado)) ? uno(sp.estado) : 'todas';
   const flotaId = uno(sp.flota);
   const abrir = uno(sp.abrir);
 
   const marco = (hijos: React.ReactNode) => (
-    <MarcoPagina area="Control" titulo="Equipo" apoyo="Quién puede entrar, con qué rol, desde cuándo y cuándo fue su último acceso.">{hijos}</MarcoPagina>
+    <MarcoPagina area="Control" titulo={t('equipo.equipo')} apoyo={t('equipo.quien_puede_entrar_con')}>{hijos}</MarcoPagina>
   );
 
   let lectura: Awaited<ReturnType<typeof getPersonas>>;
   try {
     lectura = await getPersonas();
   } catch {
-    return marco(<EstadoError reintentar>No se pudo leer el equipo.</EstadoError>);
+    return marco(<EstadoError reintentar>{t('equipo.no_se_pudo_leer')}</EstadoError>);
   }
   const todas = ordenarPorJerarquia(lectura.personas);
   const nombreFlota = flotaId ? todas.find((p) => p.tenantId === flotaId)?.tenantNombre ?? null : null;
@@ -68,37 +71,38 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
 
   const columnas: ColumnaTabla<Persona>[] = [
     {
-      id: 'persona', titulo: 'Persona', principal: true, valor: (p) => (p.nombre ?? p.email).toLowerCase(),
+      id: 'persona', titulo: t('equipo.persona'), principal: true, valor: (p) => (p.nombre ?? p.email).toLowerCase(),
       celda: (p) => <span>{p.nombre ?? '(sin nombre)'}<br /><small>{p.email}</small></span>,
     },
-    { id: 'rol', titulo: 'Rol', valor: (p) => p.rol, celda: (p) => nombreDeRol(p.rol) },
-    { id: 'flota', titulo: 'Flota', valor: (p) => p.tenantNombre ?? '', celda: (p) => p.tenantNombre ?? (p.esLikida ? 'Likida' : '—') },
-    { id: 'estado', titulo: 'Estado', valor: (p) => p.estado, celda: (p) => <StatusChip tono={TONO_ESTADO[p.estado]}>{ROTULO_ESTADO[p.estado]}</StatusChip> },
+    { id: 'rol', titulo: t('equipo.rol'), valor: (p) => p.rol, celda: (p) => nombreDeRol(p.rol) },
+    { id: 'flota', titulo: t('equipo.flota'), valor: (p) => p.tenantNombre ?? '', celda: (p) => p.tenantNombre ?? (p.esLikida ? 'Likida' : '—') },
+    { id: 'estado', titulo: t('equipo.estado'), valor: (p) => p.estado, celda: (p) => <StatusChip tono={TONO_ESTADO[p.estado]}>{rotuloEstado(t)[p.estado]}</StatusChip> },
     {
-      id: 'acceso', titulo: 'Último acceso', corta: true, valor: (p) => p.ultimoAcceso ?? '',
-      celda: (p) => !lectura.accesoLegible ? 'Sin dato' : p.sinCuentaAuth ? '—' : p.nuncaEntro ? 'Nunca entró' : p.ultimoAcceso ? fechaHoraMx(p.ultimoAcceso) : '—',
+      id: 'acceso', titulo: t('equipo.ultimo_acceso'), corta: true, valor: (p) => p.ultimoAcceso ?? '',
+      celda: (p) => !lectura.accesoLegible ? t('equipo.sin_dato') : p.sinCuentaAuth ? '—' : p.nuncaEntro ? t('equipo.nunca_entro') : p.ultimoAcceso ? fechaHoraMx(p.ultimoAcceso) : '—',
     },
     {
-      id: 'acciones', titulo: 'Acciones', tituloOculto: true, alinear: 'der',
+      id: 'acciones', titulo: t('equipo.acciones'), tituloOculto: true, alinear: 'der',
       celda: (p) => <BotonEnlace href={quitar({ abrir: p.id })} tamano="sm" variante="secondary">Gestionar</BotonEnlace>,
     },
   ];
 
   return marco(
     <>
-      <TiraCifras etiqueta="Resumen del equipo">
-        <Cifra etiqueta="Personas con cuenta" valor={todas.length} formato="entero" />
-        <Cifra etiqueta="Activas" valor={conteo('activa')} formato="entero" />
-        <Cifra etiqueta="De baja" valor={conteo('baja')} formato="entero" />
+      <TiraCifras etiqueta={t('equipo.resumen_del_equipo')}>
+        <Cifra etiqueta={t('equipo.personas_con_cuenta')} valor={todas.length} formato="entero" />
+        <Cifra etiqueta={t('equipo.activas')} valor={conteo('activa')} formato="entero" />
+        <Cifra etiqueta={t('equipo.de_baja')} valor={conteo('baja')} formato="entero" />
         <Cifra
-          etiqueta="Nunca han entrado" valor={lectura.accesoLegible ? nuncaEntraron : null} formato="entero"
-          estado={lectura.accesoLegible ? 'ok' : 'error'} mensaje="No se pudo leer el último acceso."
-          nota={lectura.accesoLegible ? 'Se les dio de alta, pero no han iniciado sesión' : undefined} tono={lectura.accesoLegible && nuncaEntraron > 0 ? 'warn' : undefined}
+          etiqueta={t('equipo.nunca_han_entrado')} valor={lectura.accesoLegible ? nuncaEntraron : null} formato="entero"
+          estado={lectura.accesoLegible ? 'ok' : 'error'} mensaje={t('equipo.no_se_pudo_leer_2')}
+          nota={lectura.accesoLegible ? t('equipo.se_les_dio_de') : undefined} tono={lectura.accesoLegible && nuncaEntraron > 0 ? 'warn' : undefined}
         />
       </TiraCifras>
 
       {seleccionada && (
         <GestionPersona
+          t={t}
           p={seleccionada} yo={sesion.userId} bajaLikidaHabilitada={bajaPersonalLikidaHabilitada()}
           acciones={{
             cambiarRol: accionCambiarRolUsuario, darDeBaja: accionDarDeBajaUsuario, reactivar: accionReactivarUsuario,
@@ -107,44 +111,47 @@ export default async function EquipoPage({ searchParams }: { searchParams?: Prom
           }}
         />
       )}
-      {abrir && !seleccionada && <Tarjeta titulo="Persona no encontrada" estado="vacio" mensaje="Esa cuenta ya no existe" detalle="Vuelve a la lista y elige otra." />}
+      {abrir && !seleccionada && <Tarjeta titulo={t('equipo.persona_no_encontrada')} estado="vacio" mensaje={t('equipo.esa_cuenta_ya_no')} detalle={t('equipo.vuelve_a_la_lista')} />}
 
       <Tarjeta
-        titulo={`Personas${flotaId && nombreFlota ? `: ${nombreFlota}` : ''}`}
-        acciones={<BotonEnlace href="/admin/usuarios/nuevo" variante="primary" tamano="sm">Nuevo acceso</BotonEnlace>}
-        estado={todas.length === 0 ? 'vacio' : 'ok'} mensaje="Sin personas con cuenta" detalle="Da de alta a la primera desde «Nuevo acceso»."
+        titulo={t('equipo.personas', { flotaId: flotaId && nombreFlota ? `: ${nombreFlota}` : '' })}
+        acciones={<BotonEnlace href="/admin/usuarios/nuevo" variante="primary" tamano="sm">{t('equipo.nuevo_acceso')}</BotonEnlace>}
+        estado={todas.length === 0 ? 'vacio' : 'ok'} mensaje={t('equipo.sin_personas_con_cuenta')} detalle={t('equipo.da_de_alta_a')}
       >
-        <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta="Filtros del equipo" nActivos={(q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0)}
+        <BarraFiltros accion="/admin/equipo" enLinea buscar etiqueta={t('equipo.filtros_del_equipo')} nActivos={(q ? 1 : 0) + (estado !== 'todas' ? 1 : 0) + (flotaId ? 1 : 0)}
           limpiarHref="/admin/equipo" ocultos={[...(estado !== 'todas' ? [['estado', estado] as [string, string]] : []), ...(flotaId ? [['flota', flotaId] as [string, string]] : [])]}>
-          <FiltroOpciones etiqueta="Estado" valor={estado} porDefecto="todas"
-            opciones={ESTADOS.map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
-          <FiltroBusqueda nombre="q" valor={q} placeholder="Nombre, correo, rol o flota" etiqueta="Buscar persona" />
+          <FiltroOpciones etiqueta={t('equipo.estado')} valor={estado} porDefecto="todas"
+            opciones={estados(t).map((e) => ({ valor: e.valor, rotulo: e.rotulo, href: quitar({ estado: e.valor === 'todas' ? null : e.valor, abrir: null }) }))} />
+          <FiltroBusqueda nombre="q" valor={q} placeholder={t('equipo.nombre_correo_rol_o')} etiqueta={t('equipo.buscar_persona')} />
         </BarraFiltros>
         {flotaId && (
-          <p>Solo la flota {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>Ver todas</Link></p>
+          <p>{t('equipo.solo_la_flota')} {nombreFlota ?? 'elegida'}. <Link href={quitar({ flota: null, abrir: null })}>{t('equipo.ver_todas')}</Link></p>
         )}
         <TablaLista
-          etiqueta="Personas con acceso" columnas={columnas} filas={filas} idFila={(p) => p.id}
+          etiqueta={t('equipo.personas_con_acceso')} columnas={columnas} filas={filas} idFila={(p) => p.id}
           base="/admin/equipo" params={sp} orden="local" paginacion={{ tamano: 25 }}
-          vacio={{ titulo: 'Ninguna persona coincide', texto: 'Cambia o quita los filtros.' }}
+          vacio={{ titulo: t('equipo.ninguna_persona_coincide'), texto: t('equipo.cambia_o_quita_los') }}
         />
-        {!lectura.accesoLegible && <p>No se pudo leer el último acceso de las cuentas: no se afirma quién nunca ha entrado.</p>}
+        {!lectura.accesoLegible && <p>{t('equipo.no_se_pudo_leer_3')}</p>}
         <p>{numero(filas.length)} de {numero(todas.length)} personas.</p>
       </Tarjeta>
 
-      <Disclosure titulo="Qué puede hacer cada rol" resumen="Catálogo de roles">
+      <Disclosure titulo={t('equipo.que_puede_hacer_cada')} resumen="Catálogo de roles">
         <ul>
           {Object.entries(ROTULOS_ROL).filter(([rol]) => rol !== 'operador').map(([rol, r]) => (
             <li key={rol}><strong>{r.nombre}.</strong> {r.detalle}</li>
           ))}
         </ul>
         <p>
-          El chofer no tiene cuenta: habla con el bot por WhatsApp. Cada alta, cambio de rol, baja, reactivación, reenvío de acceso y cierre
-          de sesiones queda asentado en la bitácora de auditoría con quién lo hizo.
+          
+          {t('equipo.el_chofer_no_tiene')}
         </p>
       </Disclosure>
     </>,
   );
 }
 
-export const metadata: Metadata = { title: 'Equipo' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_flotas');
+  return { title: t('equipo.equipo') };
+}
