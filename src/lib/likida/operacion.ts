@@ -20,7 +20,7 @@ import { enviarBriefingInicio } from './briefing_inicio_wa';
 import { logger } from '@/lib/logger';
 import { acotada } from './presupuesto';
 import { conteo, traerTodo } from './pg';
-import { DatoInvalido } from './errores';
+import { DatoInvalido, datoInvalido, etiqueta } from './errores';
 import { violaIndice } from './pg_errores';
 import { esNumero, esNumeroONulo, esObjeto, esTextoONulo, formaInesperada } from './comercial';
 import { CONECTORES_GPS } from './conectores/gps';
@@ -549,9 +549,7 @@ async function unidadTieneViajeAbierto(tenantId: string, unidadId: string, exclu
  *  viaje abierto — mismo texto para el chequeo explícito y para el 23505 del
  *  índice (`uq_viaje_abierto_por_unidad`, 0849) que lo respalda en la carrera. */
 function mensajeUnidadConViajeAbierto(): DatoInvalido {
-  return new DatoInvalido(
-    'Esa unidad ya está en OTRO viaje abierto. Cierra o desasigna ese viaje antes de volver a asignarla — una unidad no puede estar en dos viajes a la vez.',
-  );
+  return datoInvalido('operacion.esa_unidad_ya_esta_en');
 }
 
 /** El gemelo de `unidadDeBaja` para el chofer: un operador dado de baja no
@@ -631,7 +629,7 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
     // abierta antes de la baja— le asigna un viaje a alguien que el bot de
     // WhatsApp ya no reconoce, y ese viaje nace sin quien lo pueda reportar.
     if (await operadorDeBaja(tenantId, v.operadorId)) {
-      throw new DatoInvalido('Ese operador está dado de baja en tu flota. Vuelve a marcarlo como activo en Operadores, o asigna el viaje a otro chofer.');
+      throw datoInvalido('operacion.ese_operador_esta_dado_de');
     }
   }
 
@@ -642,7 +640,7 @@ export async function crearViaje(tenantId: string, v: NuevoViaje): Promise<strin
   // Y su gemelo de la auditoría 20 (H4): un camión vendido o siniestrado no
   // sale a un viaje NUEVO. Ver `unidadDeBaja`.
   if (v.unidadId && (await unidadDeBaja(tenantId, v.unidadId))) {
-    throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
+    throw datoInvalido('operacion.esa_unidad_esta_dada_de');
   }
   // HALLAZGO ALTO: la unidad tampoco puede YA estar en OTRO viaje abierto —
   // ver `unidadTieneViajeAbierto` y el índice `uq_viaje_abierto_por_unidad`
@@ -889,7 +887,7 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
   // Desasignar (`unidadId === null`) SÍ se permite siempre — es justo lo que
   // hay que poder hacer con el viaje del camión que se acaba de chocar.
   if (unidadId && (await unidadDeBaja(tenantId, unidadId))) {
-    throw new DatoInvalido('Esa unidad está dada de baja. Si volvió al parque, vuelve a ponerla disponible en Unidades antes de asignarla.');
+    throw datoInvalido('operacion.esa_unidad_esta_dada_de');
   }
   // HALLAZGO ALTO: la unidad tampoco puede YA estar en OTRO viaje abierto —
   // gemelo del candado de `crearViaje`. `excluirViajeId = viajeId`: si la
@@ -914,7 +912,7 @@ export async function asignarUnidad(tenantId: string, viajeId: string, unidadId:
     throw new Error(`asignarUnidad: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese viaje no existe en tu flota. Recarga la pantalla.');
+    throw datoInvalido('operacion.ese_viaje_no_existe_en');
   }
 }
 
@@ -968,9 +966,9 @@ export async function cambiarEstadoUnidad(
   estado: string,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!UUID_RE.test(unidadId)) throw new DatoInvalido('No se reconoce esa unidad. Vuelve a abrir la pantalla.');
+  if (!UUID_RE.test(unidadId)) throw datoInvalido('operacion.no_se_reconoce_esa_unidad');
   if (!Object.hasOwn(ESTADOS_UNIDAD, estado)) {
-    throw new DatoInvalido(`"${estado}" no es un estado de unidad. Los válidos son: ${Object.keys(ESTADOS_UNIDAD).join(', ')}.`);
+    throw datoInvalido('operacion.no_es_un_estado_de', { estado, v: Object.keys(ESTADOS_UNIDAD).join(', ') });
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('unidad')
@@ -978,7 +976,7 @@ export async function cambiarEstadoUnidad(
     .eq('id', unidadId).eq('tenant_id', tenantId).select('id'), 'cambiarEstadoUnidad');
   if (error) throw new Error(`cambiarEstadoUnidad: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró esa unidad en tu flota. Puede que alguien la haya borrado — recarga la pantalla.');
+    throw datoInvalido('operacion.no_se_encontro_esa_unidad');
   }
 
   // La bitácora es parte del acto, no un adorno: "quién dio de baja este
@@ -1041,7 +1039,7 @@ export interface UnidadCruda {
 function textoOpcional(crudo: string, campo: string, max: number): string | null {
   const t = crudo.trim();
   if (t === '') return null;
-  if (t.length > max) throw new DatoInvalido(`${campo} no puede pasar de ${max} caracteres.`);
+  if (t.length > max) throw datoInvalido('operacion.no_puede_pasar_de_caracteres', { campo, max });
   return t;
 }
 
@@ -1052,11 +1050,11 @@ const FECHA_UNIDAD_RE = /^\d{4}-\d{2}-\d{2}$/;
 function fechaOpcional(crudo: string, campo: string): string | null {
   const t = crudo.trim();
   if (t === '') return null;
-  if (!FECHA_UNIDAD_RE.test(t)) throw new DatoInvalido(`${campo} tiene que venir como AAAA-MM-DD.`);
+  if (!FECHA_UNIDAD_RE.test(t)) throw datoInvalido('operacion.tiene_que_venir_como_aaaa', { campo });
   const [a, m, d] = t.split('-').map(Number);
   const f = new Date(Date.UTC(a, m - 1, d));
   if (f.getUTCFullYear() !== a || f.getUTCMonth() !== m - 1 || f.getUTCDate() !== d) {
-    throw new DatoInvalido(`${campo} no es una fecha que exista.`);
+    throw datoInvalido('operacion.no_es_una_fecha_que', { campo });
   }
   return t;
 }
@@ -1091,16 +1089,16 @@ function validarAmarreGps(c: UnidadCruda): { gpsProveedor: string | null; gpsDev
   if (proveedor === '' && device === '') return { gpsProveedor: null, gpsDeviceId: null };
 
   if (proveedor === '') {
-    throw new DatoInvalido('Pusiste el número de dispositivo pero no el proveedor de GPS. Sin el proveedor la lectura no se puede casar con esta unidad — elige uno o deja los dos vacíos.');
+    throw datoInvalido('operacion.pusiste_el_numero_de_dispositivo');
   }
   if (!IDS_GPS_VALIDOS.includes(proveedor)) {
-    throw new DatoInvalido(`«${proveedor}» no es un proveedor de rastreo del catálogo. Los que hay: ${IDS_GPS_VALIDOS.join(', ')}.`);
+    throw datoInvalido('operacion.no_es_un_proveedor_de', { proveedor, v: IDS_GPS_VALIDOS.join(', ') });
   }
   if (device === '') {
-    throw new DatoInvalido('Falta el número de dispositivo que te da tu proveedor de GPS. Sin él las posiciones llegan y no se sabe de qué unidad son.');
+    throw datoInvalido('operacion.falta_el_numero_de_dispositivo');
   }
   if (device.length > TOPE_DEVICE_ID) {
-    throw new DatoInvalido(`El número de dispositivo no puede pasar de ${TOPE_DEVICE_ID} caracteres.`);
+    throw datoInvalido('operacion.el_numero_de_dispositivo_no', { TOPE_DEVICE_ID });
   }
   return { gpsProveedor: proveedor, gpsDeviceId: device };
 }
@@ -1114,10 +1112,10 @@ function validarAmarreGps(c: UnidadCruda): { gpsProveedor: string | null; gpsDev
 export function validarUnidad(c: UnidadCruda, hoy = new Date()): UnidadValida {
   const numeroEconomico = c.numeroEconomico.trim();
   if (numeroEconomico === '') {
-    throw new DatoInvalido('Falta el número económico: es como la flota llama a la unidad en la radio y en el papel.');
+    throw datoInvalido('operacion.falta_el_numero_economico_es');
   }
   if (numeroEconomico.length > 40) {
-    throw new DatoInvalido('El número económico no puede pasar de 40 caracteres.');
+    throw datoInvalido('operacion.el_numero_economico_no_puede');
   }
 
   let anio: number | null = null;
@@ -1125,22 +1123,22 @@ export function validarUnidad(c: UnidadCruda, hoy = new Date()): UnidadValida {
   const a = c.anio.trim();
   if (a !== '') {
     const n = Number(a);
-    if (!Number.isInteger(n)) throw new DatoInvalido('El año tiene que ser un número entero (2019, no 2019.5).');
+    if (!Number.isInteger(n)) throw datoInvalido('operacion.el_ano_tiene_que_ser');
     if (n < ANIO_MIN || n > anioMax) {
-      throw new DatoInvalido(`El año tiene que estar entre ${ANIO_MIN} y ${anioMax}. Déjalo vacío si no lo sabes.`);
+      throw datoInvalido('operacion.el_ano_tiene_que_estar', { ANIO_MIN, anioMax });
     }
     anio = n;
   }
 
   return {
     numeroEconomico,
-    placas: textoOpcional(c.placas, 'Las placas', 20),
-    marca: textoOpcional(c.marca, 'La marca', 60),
-    modelo: textoOpcional(c.modelo, 'El modelo', 60),
+    placas: textoOpcional(c.placas, etiqueta('etq.las_placas'), 20),
+    marca: textoOpcional(c.marca, etiqueta('etq.la_marca'), 60),
+    modelo: textoOpcional(c.modelo, etiqueta('etq.el_modelo'), 60),
     anio,
-    polizaVence: fechaOpcional(c.polizaVence, 'La fecha de la póliza'),
-    permisoSictVence: fechaOpcional(c.permisoSictVence, 'La fecha del permiso SICT'),
-    verificacionVence: fechaOpcional(c.verificacionVence, 'La fecha de la verificación'),
+    polizaVence: fechaOpcional(c.polizaVence, etiqueta('etq.la_fecha_de_la_poliza')),
+    permisoSictVence: fechaOpcional(c.permisoSictVence, etiqueta('etq.la_fecha_del_permiso_sict')),
+    verificacionVence: fechaOpcional(c.verificacionVence, etiqueta('etq.la_fecha_de_la_verificacion')),
     ...validarAmarreGps(c),
   };
 }
@@ -1229,7 +1227,7 @@ export async function editarUnidad(
   u: NuevaUnidad,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!UUID_RE.test(unidadId)) throw new DatoInvalido('No se reconoce esa unidad. Vuelve a abrir la pantalla.');
+  if (!UUID_RE.test(unidadId)) throw datoInvalido('operacion.no_se_reconoce_esa_unidad');
   const v = validarUnidad(aCruda(u));
   // Solo se toca el patio si la edición lo mandó (`undefined` = no se toca).
   const terminalId = u.terminalId === undefined ? undefined : await resolverTerminalDeFlota(tenantId, u.terminalId);
@@ -1254,19 +1252,19 @@ export async function editarUnidad(
     // Renombrar a un número económico que ya existe en la flota es el único
     // choque esperable, y es de captura: se dice en palabras de quien capturó.
     if (error.message.includes('unidad_economico_unico')) {
-      throw new DatoInvalido(`Ya tienes una unidad con el número económico "${v.numeroEconomico}". Si es otra, distínguela en el número.`);
+      throw datoInvalido('operacion.ya_tienes_una_unidad_con', { numeroEconomico: v.numeroEconomico });
     }
     // El segundo choque esperable desde la 0176: `uq_unidad_gps` es parcial
     // sobre (tenant_id, gps_proveedor, gps_device_id). Un dispositivo = una
     // unidad por flota; sin traducirlo, quien captura vería el nombre del
     // índice y no sabría que el número ya está en otro camión.
     if (error.message.includes('uq_unidad_gps')) {
-      throw new DatoInvalido(`El dispositivo "${v.gpsDeviceId}" ya está ligado a otra unidad de tu flota con ese mismo proveedor. Un dispositivo solo puede pertenecer a un camión: quítaselo al otro primero.`);
+      throw datoInvalido('operacion.el_dispositivo_ya_esta_ligado', { gpsDeviceId: String(v.gpsDeviceId) });
     }
     throw new Error(`editarUnidad: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró esa unidad en tu flota. Puede que alguien la haya borrado — recarga la pantalla.');
+    throw datoInvalido('operacion.no_se_encontro_esa_unidad');
   }
   if (actor) {
     await anotarBitacora({

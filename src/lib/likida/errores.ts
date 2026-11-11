@@ -24,14 +24,33 @@ export class DatoInvalido extends Error {
   }
 }
 
+/**
+ * Una ETIQUETA de campo («El subtotal», «el origen») para meterla como variable de un `DatoInvalido`: el texto se arma en español
+ * al lanzar el error (`mensaje` no cambia) y la etiqueta viaja como clave, así que al mostrarlo en otro idioma sale la etiqueta
+ * traducida y no el español pegado dentro de una frase en inglés. Es solo una marca; se resuelve en `resolverEtiquetas`.
+ */
+export function etiqueta(clave: ClaveMensaje): string {
+  return `\u2983${clave}\u2984`;
+}
+const MARCA_ETIQUETA = /\u2983([A-Za-z0-9_.]+)\u2984/g;
+function resolverEtiquetas(vars: Variables | undefined, idioma?: unknown): Variables | undefined {
+  if (!vars) return vars;
+  const tr = trMensajes(idioma);
+  const fuera: Record<string, string | number> = {};
+  for (const [k, v] of Object.entries(vars)) {
+    fuera[k] = typeof v === 'string' ? v.replace(MARCA_ETIQUETA, (_m, c: string) => tr.t(c as ClaveMensaje)) : v;
+  }
+  return fuera;
+}
+
 /** Un `DatoInvalido` hecho de una clave: el texto en español sale del diccionario y la clave viaja para traducirlo al mostrarlo. */
 export function datoInvalido(clave: ClaveMensaje, vars?: Variables): DatoInvalido {
-  return new DatoInvalido(trMensajes('es').t(clave, vars), clave, vars);
+  return new DatoInvalido(trMensajes('es').t(clave, resolverEtiquetas(vars, 'es')), clave, vars);
 }
 
 /** El texto de un `DatoInvalido` en el idioma pedido; sin clave (los miles de sitios aún por migrar) es su mensaje en español. */
 export function textoDeDato(e: DatoInvalido, idioma?: unknown): string {
-  return e.clave ? trMensajes(idioma).t(e.clave, e.vars) : e.message;
+  return e.clave ? trMensajes(idioma).t(e.clave, resolverEtiquetas(e.vars, idioma)) : e.message;
 }
 
 /** El operador existe pero está de baja (A37-A1-liquidaciones-12): distinto de «no existe» aunque se muestre igual al capturista. */

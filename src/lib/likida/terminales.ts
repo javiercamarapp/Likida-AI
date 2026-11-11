@@ -26,7 +26,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from './presupuesto';
 import { traerTodo, conteo } from './pg';
-import { DatoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 
 export interface Terminal {
@@ -61,8 +61,8 @@ export async function getTerminales(tenantId: string): Promise<Terminal[]> {
  *  Norte» y «patio norte» son el mismo patio y el segundo rebota. */
 export function normalizarNombreTerminal(crudo: string): string {
   const nombre = crudo.replace(/\s+/g, ' ').trim();
-  if (nombre.length < 2) throw new DatoInvalido('El nombre del patio necesita al menos 2 caracteres.');
-  if (nombre.length > 80) throw new DatoInvalido('El nombre del patio no puede pasar de 80 caracteres.');
+  if (nombre.length < 2) throw datoInvalido('terminales.el_nombre_del_patio_necesita');
+  if (nombre.length > 80) throw datoInvalido('terminales.el_nombre_del_patio_no');
   return nombre;
 }
 
@@ -79,7 +79,7 @@ export async function crearTerminal(
 ): Promise<string> {
   const nombre = normalizarNombreTerminal(t.nombre);
   const ciudad = t.ciudad?.replace(/\s+/g, ' ').trim() || null;
-  if (ciudad && ciudad.length > 80) throw new DatoInvalido('La ciudad no puede pasar de 80 caracteres.');
+  if (ciudad && ciudad.length > 80) throw datoInvalido('terminales.la_ciudad_no_puede_pasar');
 
   const admin = supabaseAdmin();
   const { count, error: errCuenta } = await acotada(
@@ -88,7 +88,7 @@ export async function crearTerminal(
   );
   if (errCuenta) throw new Error(`crearTerminal: no se pudo contar — ${errCuenta.message}`);
   if ((count ?? 0) >= MAX_TERMINALES) {
-    throw new DatoInvalido(`Tu flota ya tiene ${MAX_TERMINALES} patios, que es el máximo aquí. Háblanos y lo montamos bien.`);
+    throw datoInvalido('terminales.tu_flota_ya_tiene_patios', { MAX_TERMINALES });
   }
 
   const { data, error } = await acotada(
@@ -97,7 +97,7 @@ export async function crearTerminal(
   );
   if (error) {
     if (error.message.includes('uq_terminal_tenant_nombre')) {
-      throw new DatoInvalido(`Ya tienes un patio llamado «${nombre}». Elígelo en la lista en vez de darlo de alta otra vez.`);
+      throw datoInvalido('terminales.ya_tienes_un_patio_llamado', { nombre });
     }
     throw new Error(`crearTerminal: ${error.message}`);
   }
@@ -122,13 +122,13 @@ export async function crearTerminal(
 export async function resolverTerminalDeFlota(tenantId: string, terminalId: string | null | undefined): Promise<string | null> {
   const id = (terminalId ?? '').trim();
   if (id === '') return null;
-  if (!esUuidValido(id)) throw new DatoInvalido('No se reconoce ese patio. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(id)) throw datoInvalido('terminales.no_se_reconoce_ese_patio');
   const { data, error } = await acotada(
     supabaseAdmin().from('terminal').select('id').eq('id', id).eq('tenant_id', tenantId).maybeSingle(),
     'resolverTerminalDeFlota',
   );
   if (error) throw new Error(`resolverTerminalDeFlota: ${error.message}`);
-  if (!data) throw new DatoInvalido('Ese patio no existe en tu flota. Elige uno de la lista o déjalo vacío.');
+  if (!data) throw datoInvalido('terminales.ese_patio_no_existe_en');
   return id;
 }
 
@@ -143,7 +143,7 @@ export async function asignarTerminalUnidad(
   terminalId: string | null,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(unidadId)) throw new DatoInvalido('No se reconoce esa unidad. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(unidadId)) throw datoInvalido('operacion.no_se_reconoce_esa_unidad');
   const terminal = await resolverTerminalDeFlota(tenantId, terminalId);
   const { data, error } = await acotada(
     supabaseAdmin().from('unidad').update({ terminal_id: terminal })
@@ -152,7 +152,7 @@ export async function asignarTerminalUnidad(
   );
   if (error) throw new Error(`asignarTerminalUnidad: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró esa unidad en tu flota. Recarga la pantalla.');
+    throw datoInvalido('terminales.no_se_encontro_esa_unidad');
   }
   await anotarBitacora({
     tenantId, actor: actor ?? {}, accion: 'unidad.terminal', entidad: 'unidad', entidadId: unidadId,
@@ -201,10 +201,10 @@ export async function editarTerminal(
   t: { nombre: string; ciudad?: string | null },
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(terminalId)) throw new DatoInvalido('No se reconoce ese patio. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(terminalId)) throw datoInvalido('terminales.no_se_reconoce_ese_patio');
   const nombre = normalizarNombreTerminal(t.nombre);
   const ciudad = t.ciudad?.replace(/\s+/g, ' ').trim() || null;
-  if (ciudad && ciudad.length > 80) throw new DatoInvalido('La ciudad no puede pasar de 80 caracteres.');
+  if (ciudad && ciudad.length > 80) throw datoInvalido('terminales.la_ciudad_no_puede_pasar');
 
   const { data, error } = await acotada(
     supabaseAdmin().from('terminal').update({ nombre, ciudad })
@@ -213,12 +213,12 @@ export async function editarTerminal(
   );
   if (error) {
     if (error.message.includes('uq_terminal_tenant_nombre')) {
-      throw new DatoInvalido(`Ya tienes otro patio llamado «${nombre}». Usa un nombre distinto.`);
+      throw datoInvalido('terminales.ya_tienes_otro_patio_llamado', { nombre });
     }
     throw new Error(`editarTerminal: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró ese patio en tu flota. Recarga la pantalla.');
+    throw datoInvalido('terminales.no_se_encontro_ese_patio');
   }
   await anotarBitacora({
     tenantId, actor: actor ?? {}, accion: 'terminal.editada', entidad: 'terminal', entidadId: terminalId,
@@ -237,17 +237,14 @@ export async function eliminarTerminal(
   terminalId: string,
   actor?: { id?: string; email?: string },
 ): Promise<{ operadores: number; unidades: number; jefes: number }> {
-  if (!esUuidValido(terminalId)) throw new DatoInvalido('No se reconoce ese patio. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(terminalId)) throw datoInvalido('terminales.no_se_reconoce_ese_patio');
   const antes = (await getTerminalesConConteos(tenantId)).find((p) => p.id === terminalId);
-  if (!antes) throw new DatoInvalido('No se encontró ese patio en tu flota. Recarga la pantalla.');
+  if (!antes) throw datoInvalido('terminales.no_se_encontro_ese_patio');
   // Un jefe de tráfico SIN patio ve y corrige TODA la flota. Si se borra un patio
   // con jefes adentro, esos jefes ampliarían su alcance sin que nadie lo decidiera:
   // es el efecto de seguridad que esta comprobación impide.
   if (antes.jefes > 0) {
-    throw new DatoInvalido(
-      `El patio «${antes.nombre}» tiene ${antes.jefes} ${antes.jefes === 1 ? 'jefe de tráfico asignado' : 'jefes de tráfico asignados'}. ` +
-      'Asígnales otro patio (o «toda la flota») antes de borrarlo: si no, pasarían a ver y corregir toda la flota sin que nadie lo decidiera.',
-    );
+    throw datoInvalido(antes.jefes === 1 ? 'terminales.con_jefe_asignado' : 'terminales.con_jefes_asignados', { nombre: antes.nombre, n: antes.jefes });
   }
   // A37-S20-03: los jefes DADOS DE BAJA conservan su patio, y `terminales_conteos_tenant`
   // (0461) solo cuenta a los activos. Al borrar el patio su terminal_id pasa a NULL
@@ -261,11 +258,7 @@ export async function eliminarTerminal(
   if (errBajas) throw new Error(`eliminarTerminal: ${errBajas.message}`);
   const nBajas = (bajas ?? []).length;
   if (nBajas > 0) {
-    throw new DatoInvalido(
-      `El patio «${antes.nombre}» tiene ${nBajas} ${nBajas === 1 ? 'jefe de tráfico dado de baja' : 'jefes de tráfico dados de baja'} que lo conservan. ` +
-      'Si se borra, al reactivarlos pasarían a ver y corregir toda la flota sin que nadie lo decidiera. ' +
-      'Reactívalos y asígnales otro patio (o «toda la flota») antes de borrarlo.',
-    );
+    throw datoInvalido(nBajas === 1 ? 'terminales.con_jefe_de_baja' : 'terminales.con_jefes_de_baja', { nombre: antes.nombre, n: nBajas });
   }
 
   const { data, error } = await acotada(
@@ -274,7 +267,7 @@ export async function eliminarTerminal(
   );
   if (error) throw new Error(`eliminarTerminal: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró ese patio en tu flota. Recarga la pantalla.');
+    throw datoInvalido('terminales.no_se_encontro_ese_patio');
   }
   const soltados = { operadores: antes.operadores, unidades: antes.unidades, jefes: antes.jefes };
   await anotarBitacora({
@@ -349,7 +342,7 @@ export async function asignarTerminalOperador(
   terminalId: string | null,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(operadorId)) throw new DatoInvalido('No se reconoce ese operador. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(operadorId)) throw datoInvalido('terminales.no_se_reconoce_ese_operador');
   const terminal = await resolverTerminalDeFlota(tenantId, terminalId);
   const { data, error } = await acotada(
     supabaseAdmin().from('operador').update({ terminal_id: terminal })
@@ -358,7 +351,7 @@ export async function asignarTerminalOperador(
   );
   if (error) throw new Error(`asignarTerminalOperador: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró ese operador en tu flota. Recarga la pantalla.');
+    throw datoInvalido('terminales.no_se_encontro_ese_operador');
   }
   await anotarBitacora({
     tenantId, actor: actor ?? {}, accion: 'operador.terminal', entidad: 'operador', entidadId: operadorId,
@@ -400,7 +393,7 @@ export async function asignarTerminalJefe(
   terminalId: string | null,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(userId)) throw new DatoInvalido('No se reconoce a ese usuario. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(userId)) throw datoInvalido('terminales.no_se_reconoce_a_ese');
   const terminal = await resolverTerminalDeFlota(tenantId, terminalId);
   const { data, error } = await acotada(
     supabaseAdmin().from('app_user').update({ terminal_id: terminal })
@@ -409,7 +402,7 @@ export async function asignarTerminalJefe(
   );
   if (error) throw new Error(`asignarTerminalJefe: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('No se encontró a ese jefe de tráfico en tu flota. Solo los usuarios con rol «Encargado» llevan patio.');
+    throw datoInvalido('terminales.no_se_encontro_a_ese');
   }
   await anotarBitacora({
     tenantId, actor: actor ?? {}, accion: 'app_user.terminal', entidad: 'app_user', entidadId: userId,
@@ -446,7 +439,7 @@ export async function asignarSinPatio(
   actor?: { id?: string; email?: string },
 ): Promise<number> {
   const terminal = await resolverTerminalDeFlota(tenantId, terminalId);
-  if (!terminal) throw new DatoInvalido('Elige el patio al que quieres asignarlos.');
+  if (!terminal) throw datoInvalido('terminales.elige_el_patio_al_que');
   const { data, error } = await acotada(
     supabaseAdmin().from(tabla).update({ terminal_id: terminal })
       .eq('tenant_id', tenantId).eq('activo', true).is('terminal_id', null).select('id'),

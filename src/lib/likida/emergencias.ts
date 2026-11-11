@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from './presupuesto';
-import { DatoInvalido } from './errores';
+import { datoInvalido } from './errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL DIRECTORIO DE EMERGENCIA (0198, Fase 5 — paso 3 del plano).
@@ -107,27 +107,27 @@ export async function crearProveedorEmergencia(tenantId: string, p: {
   tipo: string; nombre: string; telefono: string; lat?: number | null; lng?: number | null; radioKm?: number | null; notas?: string | null;
 }): Promise<string> {
   if (!(TIPOS_PROVEEDOR as readonly string[]).includes(p.tipo)) {
-    throw new DatoInvalido('Ese tipo de proveedor no existe.');
+    throw datoInvalido('emergencias.ese_tipo_de_proveedor_no');
   }
   const nombre = p.nombre.trim();
-  if (!nombre || nombre.length > 120) throw new DatoInvalido('El nombre es obligatorio (máx. 120 caracteres).');
-  if (!telefonoValido(p.telefono)) throw new DatoInvalido('El teléfono no se ve completo — 10 dígitos mínimo, solo números.');
+  if (!nombre || nombre.length > 120) throw datoInvalido('emergencias.el_nombre_es_obligatorio_max');
+  if (!telefonoValido(p.telefono)) throw datoInvalido('emergencias.el_telefono_no_se_ve');
   // La posición viaja en pareja o no viaja: una lat sin lng no ubica nada, y
   // guardarla a medias haría que la cascada "midiera" contra media coordenada.
   // Lo capturado-pero-ilegible se RECHAZA, no se descarta en silencio.
   if ((p.lat != null && !Number.isFinite(p.lat)) || (p.lng != null && !Number.isFinite(p.lng))) {
-    throw new DatoInvalido('La posición no se ve como números — usa decimales, ej. 19.4326 y -99.1332.');
+    throw datoInvalido('emergencias.la_posicion_no_se_ve');
   }
   // A37-S18-09: un radio negativo/cero/NaN/enorme desordenaba la cascada de proveedores.
   if (p.radioKm != null && (!Number.isFinite(p.radioKm) || p.radioKm <= 0 || p.radioKm > 1000)) {
-    throw new DatoInvalido('El radio de cobertura debe ser mayor a 0 y de máximo 1,000 km.');
+    throw datoInvalido('emergencias.el_radio_de_cobertura_debe');
   }
-  if ((p.notas ?? '').trim().length > 500) throw new DatoInvalido('Las notas son muy largas (máx. 500 caracteres).');
+  if ((p.notas ?? '').trim().length > 500) throw datoInvalido('emergencias.las_notas_son_muy_largas');
   const conLat = p.lat != null;
   const conLng = p.lng != null;
-  if (conLat !== conLng) throw new DatoInvalido('La posición necesita latitud Y longitud (o ninguna de las dos).');
+  if (conLat !== conLng) throw datoInvalido('emergencias.la_posicion_necesita_latitud_y');
   if (conLat && (Math.abs(p.lat as number) > 90 || Math.abs(p.lng as number) > 180)) {
-    throw new DatoInvalido('Esa posición no existe en el mapa — revisa latitud y longitud.');
+    throw datoInvalido('emergencias.esa_posicion_no_existe_en');
   }
   const { data, error } = await acotada(supabaseAdmin().from('proveedor_emergencia').insert({
     tenant_id: tenantId,
@@ -193,10 +193,10 @@ export async function guardarPoliza(tenantId: string, p: {
 }): Promise<void> {
   const aseguradora = p.aseguradora.trim();
   const numero = p.numeroPoliza.trim();
-  if (!aseguradora || aseguradora.length > 120) throw new DatoInvalido('La aseguradora es obligatoria.');
-  if (!numero || numero.length > 80) throw new DatoInvalido('El número de póliza es obligatorio.');
+  if (!aseguradora || aseguradora.length > 120) throw datoInvalido('emergencias.la_aseguradora_es_obligatoria');
+  if (!numero || numero.length > 80) throw datoInvalido('emergencias.el_numero_de_poliza_es');
   if (!telefonoValido(p.telefonoSiniestros)) {
-    throw new DatoInvalido('El 800 de siniestros no se ve completo — es EL dato que se necesita en un siniestro, revísalo.');
+    throw datoInvalido('emergencias.el_800_de_siniestros_no');
   }
   // MX-005: una fecha que no es AAAA-MM-DD real llegaba al INSERT y Postgres respondia 'invalid input syntax for type date'
   // (la pantalla lo mostraba como falla del sistema). Se valida antes y se rechaza con un mensaje de captura.
@@ -205,7 +205,7 @@ export async function guardarPoliza(tenantId: string, p: {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(vigencia);
     const f = m ? new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))) : null;
     if (!m || !f || f.getUTCFullYear() !== Number(m[1]) || f.getUTCMonth() !== Number(m[2]) - 1 || f.getUTCDate() !== Number(m[3])) {
-      throw new DatoInvalido('La vigencia no se ve como fecha — usa el calendario (AAAA-MM-DD).');
+      throw datoInvalido('emergencias.la_vigencia_no_se_ve');
     }
   }
   const { error } = await acotada(supabaseAdmin().from('flota_poliza').insert({
@@ -272,11 +272,11 @@ export async function crearContactoEmergencia(tenantId: string, c: {
     .eq('id', c.operadorId).eq('tenant_id', tenantId)
     .maybeSingle(), 'emergencias.operadorPropio');
   if (errOp) throw new Error(`crearContactoEmergencia: ${errOp.message}`);
-  if (!op) throw new DatoInvalido('Ese operador no pertenece a esta flota.');
+  if (!op) throw datoInvalido('emergencias.ese_operador_no_pertenece_a');
 
   const nombre = c.nombre.trim();
-  if (!nombre || nombre.length > 120) throw new DatoInvalido('El nombre del contacto es obligatorio.');
-  if (!telefonoValido(c.telefono)) throw new DatoInvalido('El teléfono del contacto no se ve completo.');
+  if (!nombre || nombre.length > 120) throw datoInvalido('emergencias.el_nombre_del_contacto_es');
+  if (!telefonoValido(c.telefono)) throw datoInvalido('emergencias.el_telefono_del_contacto_no');
 
   const { data, error } = await acotada(supabaseAdmin().from('contacto_emergencia').insert({
     tenant_id: tenantId,

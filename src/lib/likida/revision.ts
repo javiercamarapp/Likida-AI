@@ -41,7 +41,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
 import { exigir } from '@/lib/likida/pg';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { sendText } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
 import { inicioDiaMx, finDiaMx } from '@/lib/formato';
@@ -402,13 +402,13 @@ export function textoRechazoChofer(folio: string, motivo: string): string {
 export function normalizarAjustes(crudos: Array<{ gastoId: string; montoNuevo: unknown }>): AjustePedido[] {
   const salida: AjustePedido[] = [];
   for (const a of crudos) {
-    if (!UUID.test(a.gastoId)) throw new DatoInvalido('Uno de los comprobantes a ajustar no se reconoce.');
+    if (!UUID.test(a.gastoId)) throw datoInvalido('revision.uno_de_los_comprobantes_a');
     const texto = String(a.montoNuevo ?? '').trim().replace(/[$,\s]/g, '');
     if (texto === '') continue;
     const n = Number(texto);
-    if (!Number.isFinite(n)) throw new DatoInvalido(`«${String(a.montoNuevo)}» no es un monto.`);
-    if (n <= 0) throw new DatoInvalido('El monto ajustado tiene que ser mayor a cero. Si el comprobante no vale, rechaza la liquidación.');
-    if (n > 1_000_000) throw new DatoInvalido('El monto ajustado no puede pasar de un millón de pesos: revisa el cero de más.');
+    if (!Number.isFinite(n)) throw datoInvalido('revision.no_es_un_monto', { v: String(a.montoNuevo) });
+    if (n <= 0) throw datoInvalido('revision.el_monto_ajustado_tiene_que');
+    if (n > 1_000_000) throw datoInvalido('revision.el_monto_ajustado_no_puede');
     salida.push({ gastoId: a.gastoId, montoNuevo: Math.round(n * 100) / 100 });
   }
   return salida;
@@ -433,16 +433,14 @@ async function viajeIdDeLiquidacion(tenantId: string, liquidacionId: string): Pr
 
 export async function revisarLiquidacion(p: PeticionRevision): Promise<ResultadoRevision> {
   if (!(ACCIONES_REVISION as readonly string[]).includes(p.accion)) {
-    throw new DatoInvalido('Acción desconocida.');
+    throw datoInvalido('revision.accion_desconocida');
   }
   const motivo = (p.motivo ?? '').trim();
   if ((p.accion === 'ajustar' || p.accion === 'rechazar') && motivo === '') {
-    throw new DatoInvalido(p.accion === 'rechazar'
-      ? 'Para rechazar hay que escribir el motivo: es lo que va a leer el chofer.'
-      : 'Para ajustar hay que escribir el motivo: queda en la bitácora junto al ajuste.');
+    throw datoInvalido(p.accion === 'rechazar' ? 'revision.motivo_rechazar' : 'revision.motivo_ajustar');
   }
   if (p.accion === 'ajustar' && (!p.ajustes || p.ajustes.length === 0)) {
-    throw new DatoInvalido('Para ajustar, captura el monto correcto de al menos un comprobante.');
+    throw datoInvalido('revision.para_ajustar_captura_el_monto');
   }
 
   // ── AUDITORÍA 25, BE-C1a/BE-C1b/DATOS-C1 (CRÍTICO) ──────────────────────
@@ -455,7 +453,7 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
   let cuadreRecalculado: Awaited<ReturnType<typeof recalcularParaAjuste>>['cuadre'] | undefined;
   if (p.accion === 'ajustar') {
     const previa = await viajeIdDeLiquidacion(p.tenantId, p.liquidacionId);
-    if (!previa) throw new DatoInvalido('Esa liquidación no existe en esta flota.');
+    if (!previa) throw datoInvalido('revision.esa_liquidacion_no_existe_en');
     const viajeId = previa.viajeId;
     try {
       const r = await recalcularParaAjuste(p.tenantId, viajeId, p.ajustes!, previa.cerradaEn);
@@ -484,11 +482,11 @@ export async function revisarLiquidacion(p: PeticionRevision): Promise<Resultado
   if (error) {
     const codigo = (error as { code?: string }).code ?? '';
     if (codigo === '23505') {
-      throw new DatoInvalido('No se puede rechazar: el operador ya trae otro viaje abierto y un operador solo puede tener uno. Cierra ese viaje primero; esta liquidación no se tocó.');
+      throw datoInvalido('revision.no_se_puede_rechazar_el');
     }
-    if (codigo === 'LR002') throw new DatoInvalido('Esa liquidación no existe en esta flota.');
+    if (codigo === 'LR002') throw datoInvalido('revision.esa_liquidacion_no_existe_en');
     // CU017 (0870, A37-P-02): el candado en base del monto con XML verificado; el mismo mensaje que el veto de TypeScript.
-    if (codigo === 'CU017') throw new DatoInvalido('Ese comprobante tiene CFDI verificado: su monto, IVA e IEPS salen del XML y no se pueden ajustar a mano. Rechaza la liquidación para que se corrija el comprobante, o ajusta otro.');
+    if (codigo === 'CU017') throw datoInvalido('revision.ese_comprobante_tiene_cfdi_verificado');
     if (CODIGOS_PARA_PANTALLA.has(codigo)) throw new DatoInvalido(error.message);
     throw new Error(`revisarLiquidacion: ${error.message}`);
   }

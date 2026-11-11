@@ -23,6 +23,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '@/lib/likida/presupuesto';
+import { trMensajes } from '@/lib/i18n/mensajes_tr';
 
 export function normalizarRfc(v: unknown): string {
   return typeof v === 'string' ? v.trim().toUpperCase() : '';
@@ -51,9 +52,8 @@ export async function rfcsFiscalesDeTenants(ids: string[]): Promise<Map<string, 
   return mapa;
 }
 
-export const MENSAJE_RFC_NO_VERIFICADO =
-  'Likida todavía no tiene verificado el RFC de tu flota para el buzón del SAT, así que no puede abrir tu buzón del SAT. Pídele a tu contacto de Likida que lo registre y vuelve a intentarlo.';
+export const MENSAJE_RFC_NO_VERIFICADO = trMensajes('es').t('sat.rfc_no_verificado');
 
 export function mensajeRfcAjeno(): string {
-  return 'El RFC del buzón tiene que ser el RFC fiscal verificado de tu flota. Con otro RFC —aunque sea de tu grupo— Likida no abre el buzón sin que antes lo verifique tu contacto de Likida.';
+  return trMensajes('es').t('sat.rfc_ajeno');
 }

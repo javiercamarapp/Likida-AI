@@ -16,7 +16,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { acotada } from '../presupuesto';
-import { DatoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 
 /** Lo que se guarda en `liquidacion_desglose.poliza` mientras no haya póliza real. Visible tal cual en pantalla. */
 export const POLIZA_PROVISIONAL = 'PROVISIONAL';
@@ -62,9 +62,9 @@ export async function guardarPolizaProvisional(tenantId: string, valor: boolean,
     .update({ poliza_provisional: valor }).eq('tenant_id', tenantId).select('tenant_id'), 'liqcorreo.poliza_provisional_guardar');
   const r = res as unknown as { data: unknown[] | null; error: ErrorPg };
   if (r.error) {
-    if (faltaColumna(r.error)) throw new DatoInvalido('Falta aplicar la migración 1001 (póliza provisional) en esta base.');
+    if (faltaColumna(r.error)) throw datoInvalido('poliza_provisi.falta_aplicar_la_migracion_1001');
     throw new Error(`liqcorreo.poliza_provisional_guardar: ${r.error.message ?? 'error'}`);
   }
-  if (!r.data || r.data.length === 0) throw new DatoInvalido('Esta flota aún no tiene configuración de correo: guárdala primero.');
+  if (!r.data || r.data.length === 0) throw datoInvalido('poliza_provisi.esta_flota_aun_no_tiene');
   logger.info('liqcorreo.poliza_provisional_cambio', { tenantId, valor, por });
 }

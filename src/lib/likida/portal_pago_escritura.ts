@@ -4,7 +4,7 @@ import { appUrl } from '@/lib/env';
 import { mxn, round2, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
 import { acotada } from '@/lib/likida/presupuesto';
 import { anotarBitacora, type EntidadBitacora } from './bitacora_escritura';
-import { DatoInvalido, AbonoYaRegistrado } from './errores';
+import { AbonoYaRegistrado, datoInvalido } from './errores';
 import { esUuidValido } from './intake/cfdi';
 import { parseCfdiXml, leerPagosRep } from './intake/cfdi_xml';
 import { parseRepXml } from './intake/rep';
@@ -83,21 +83,21 @@ export async function crearLigaPago(
   actor?: { id?: string; email?: string },
 ): Promise<LigaEmitida> {
   if (!esUuidValido(facturaId)) {
-    throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
+    throw datoInvalido('portal_pago_es.no_se_reconoce_esa_factura');
   }
 
   const { data: fac, error: errF } = await acotada(supabaseAdmin().from('factura_emitida')
     .select('id, estatus')
     .eq('id', facturaId).eq('tenant_id', tenantId).maybeSingle(), 'crearLigaPago.factura');
   if (errF) throw new Error(`crearLigaPago: ${errF.message}`);
-  if (!fac) throw new DatoInvalido('Esa factura no es de tu flota. Recarga la pantalla.');
+  if (!fac) throw datoInvalido('portal_pago_es.esa_factura_no_es_de');
 
   const estatus = String((fac as { estatus: unknown }).estatus);
   if (estatus === 'borrador') {
-    throw new DatoInvalido('Esa factura es un borrador: todavía no tiene UUID del CFDI y no le cobra a nadie. Márcala como emitida antes de mandarle el enlace a tu cliente.');
+    throw datoInvalido('portal_pago_es.esa_factura_es_un_borrador');
   }
   if (estatus === 'cancelada') {
-    throw new DatoInvalido('Esa factura está cancelada. No se puede abrir un enlace de pago sobre ella.');
+    throw datoInvalido('portal_pago_es.esa_factura_esta_cancelada_no');
   }
 
   // ── LA LIGA CADUCADA NO OCUPA EL LUGAR DE LA VIVA (`c7-26`) ──────────────
@@ -151,7 +151,7 @@ export async function crearLigaPago(
   let idInsertado = (data as { id?: unknown } | null)?.id;
   if (error) {
     if (error.code === CHOQUE_UNICO) {
-      throw new DatoInvalido('Esa factura ya tiene un enlace vigente. Revócalo antes de generar uno nuevo — así no quedan dos enlaces vivos y solo uno a la vista.');
+      throw datoInvalido('portal_pago_es.esa_factura_ya_tiene_un');
     }
     // A37-S54-07: un timeout (`acotada`) o un corte de red NO prueba que el insert no ocurrió. Si la liga existe con
     // NUESTRO hash, el insert sí se completó y el token en claro lo tenemos: se devuelve esa liga. Si no, o si la
@@ -201,7 +201,7 @@ export async function revocarLigaPago(
   actor?: { id?: string; email?: string },
 ): Promise<void> {
   if (!esUuidValido(ligaId)) {
-    throw new DatoInvalido('No se reconoce ese enlace. Recarga la pantalla.');
+    throw datoInvalido('portal_pago_es.no_se_reconoce_ese_enlace');
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('portal_pago_liga')
@@ -212,7 +212,7 @@ export async function revocarLigaPago(
 
   if (error) throw new Error(`revocarLigaPago: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese enlace no está vivo en tu flota. Puede que ya estuviera revocado — recarga la pantalla.');
+    throw datoInvalido('portal_pago_es.ese_enlace_no_esta_vivo');
   }
 
   await anotar(tenantId, 'portal_pago.liga_revocada', 'portal_pago_liga', ligaId, {}, actor);
@@ -260,18 +260,18 @@ export async function conciliarPropuesta(
   actor?: { id?: string; email?: string },
 ): Promise<{ pagoId: string; monto: number }> {
   if (!esUuidValido(propuestaId)) {
-    throw new DatoInvalido('No se reconoce ese registro. Recarga la pantalla.');
+    throw datoInvalido('portal_pago_es.no_se_reconoce_ese_registro');
   }
 
   const { data: p, error: errP } = await acotada(supabaseAdmin().from('portal_pago_propuesta')
     .select('id, factura_id, fecha, monto, referencia, metodo, estado')
     .eq('id', propuestaId).eq('tenant_id', tenantId).maybeSingle(), 'conciliarPropuesta.leer');
   if (errP) throw new Error(`conciliarPropuesta: ${errP.message}`);
-  if (!p) throw new DatoInvalido('Ese registro no es de tu flota. Recarga la pantalla.');
+  if (!p) throw datoInvalido('portal_pago_es.ese_registro_no_es_de');
 
   const fila = p as Record<string, unknown>;
   if (String(fila.estado) !== 'pendiente') {
-    throw new DatoInvalido('Ese registro ya estaba resuelto. Recarga la pantalla para ver en qué quedó.');
+    throw datoInvalido('portal_pago_es.ese_registro_ya_estaba_resuelto');
   }
 
   const monto = Number(fila.monto);
@@ -283,9 +283,7 @@ export async function conciliarPropuesta(
     facturaId, fecha: String(fila.fecha), monto, referencia: String(fila.referencia ?? ''),
   }, propuestaId);
   if (hermano !== null) {
-    throw new DatoInvalido(
-      'Esta factura ya tiene un abono con la misma fecha, el mismo monto y una referencia equivalente: conciliar este registro lo contaría dos veces. Si es el mismo depósito, descártalo; si de verdad son dos pagos distintos, corrige primero la referencia.',
-    );
+    throw datoInvalido('portal_pago_es.esta_factura_ya_tiene_un');
   }
 
   // El abono, con la propuesta como llave de idempotencia. Si otra sesión ya lo
@@ -358,7 +356,7 @@ export async function conciliarPropuesta(
       propuestaId, monto, estadoAhora: String(f2.estado ?? 'ilegible'), abonoYaExistia: yaExistia,
       nota: 'El abono está registrado pero la propuesta cambió de estado antes de sellarla (la descartaron, o no se pudo releer). Revisa a mano antes de tocar la cartera.',
     }, actor);
-    throw new DatoInvalido(`El abono de ${mxn(monto)} quedó registrado con el id ${pagoId}, pero este registro cambió de estado antes de poder sellarlo — puede que alguien lo haya descartado. Está anotado en la bitácora: revísalo antes de seguir.`);
+    throw datoInvalido('portal_pago_es.el_abono_de_quedo_registrado', { v: mxn(monto), pagoId });
   }
 
   await anotar(tenantId, 'portal_pago.propuesta_conciliada', 'portal_pago_propuesta', propuestaId, {
@@ -383,14 +381,14 @@ export async function descartarPropuesta(
   actor?: { id?: string; email?: string },
 ): Promise<void> {
   if (!esUuidValido(propuestaId)) {
-    throw new DatoInvalido('No se reconoce ese registro. Recarga la pantalla.');
+    throw datoInvalido('portal_pago_es.no_se_reconoce_ese_registro');
   }
   const nota = motivo.trim();
   if (nota.length < 5) {
-    throw new DatoInvalido('Escribe por qué lo descartas. Tu cliente puede preguntar, y "sin motivo" no es una respuesta.');
+    throw datoInvalido('portal_pago_es.escribe_por_que_lo_descartas');
   }
   if (nota.length > 500) {
-    throw new DatoInvalido('El motivo no puede pasar de 500 caracteres.');
+    throw datoInvalido('portal_pago_es.el_motivo_no_puede_pasar');
   }
 
   const { data, error } = await acotada(supabaseAdmin().from('portal_pago_propuesta')
@@ -405,7 +403,7 @@ export async function descartarPropuesta(
 
   if (error) throw new Error(`descartarPropuesta: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Ese registro ya estaba resuelto o no es de tu flota. Recarga la pantalla.');
+    throw datoInvalido('portal_pago_es.ese_registro_ya_estaba_resuelto_2');
   }
 
   await anotar(tenantId, 'portal_pago.propuesta_descartada', 'portal_pago_propuesta', propuestaId, { nota }, actor);
@@ -429,26 +427,25 @@ const XML_MAX = 500_000;
 
 /** ¿El XML pegado ES el complemento de pago que se está registrando? Lanza `DatoInvalido` con el motivo. PURA. */
 function verificarXmlDeRep(xml: string, cfdiUuid: string, fechaPago: string, imp: number): void {
-  const SIN_ARCHIVO = ' Corrígelo, o registra el complemento sin archivo y compártelo por tu canal de siempre.';
   const cfdi = parseCfdiXml(xml);
-  if (!cfdi) throw new DatoInvalido('Ese archivo no se lee como un CFDI (XML del SAT).' + SIN_ARCHIVO);
+  if (!cfdi) throw datoInvalido('portal_pago.xml_no_cfdi');
   if (cfdi.tipoComprobante !== 'P') {
-    throw new DatoInvalido(`Ese XML es un CFDI de tipo «${cfdi.tipoComprobante ?? 'desconocido'}», no un complemento de pago (tipo P).` + SIN_ARCHIVO);
+    throw datoInvalido('portal_pago.xml_tipo', { tipo: cfdi.tipoComprobante ?? 'desconocido' });
   }
-  if (!cfdi.uuid) throw new DatoInvalido('Ese XML no trae el timbre fiscal (UUID): no es un complemento ya timbrado.' + SIN_ARCHIVO);
+  if (!cfdi.uuid) throw datoInvalido('portal_pago.xml_sin_timbre');
   if (cfdi.uuid !== cfdiUuid) {
-    throw new DatoInvalido(`El folio fiscal del XML (${cfdi.uuid}) no es el que capturaste (${cfdiUuid}): parece el archivo de OTRO complemento.` + SIN_ARCHIVO);
+    throw datoInvalido('portal_pago.xml_otro_uuid', { uuid: cfdi.uuid, capturado: cfdiUuid });
   }
   const pagos = leerPagosRep(xml);
-  if (pagos.length === 0) throw new DatoInvalido('Ese XML no trae el complemento de pagos (Pagos): no se puede comprobar fecha ni importe.' + SIN_ARCHIVO);
+  if (pagos.length === 0) throw datoInvalido('portal_pago.xml_sin_pagos');
   const cuadra = (n: number | undefined) => n !== undefined && Math.abs(round2(n) - imp) <= TOLERANCIA_ABONO_MXN;
   const delDia = pagos.filter((p) => p.fechaPago === fechaPago);
   if (delDia.length === 0) {
-    throw new DatoInvalido(`El XML no trae ningún pago con fecha ${fechaPago}: la fecha del complemento no coincide con la que capturaste.` + SIN_ARCHIVO);
+    throw datoInvalido('portal_pago.xml_sin_fecha', { fechaPago });
   }
   const importeOk = delDia.some((p) => cuadra(p.monto) || p.impPagadoDoctos.some(cuadra) || cuadra(round2(p.impPagadoDoctos.reduce((a, b) => a + b, 0))));
   if (!importeOk) {
-    throw new DatoInvalido(`El importe del XML no coincide con el que capturaste (${mxn(imp)}): revisa que sea el complemento de ese pago.` + SIN_ARCHIVO);
+    throw datoInvalido('portal_pago.xml_otro_importe', { importe: mxn(imp) });
   }
 }
 
@@ -466,16 +463,16 @@ export async function registrarRepEmitido(
   c: RepCrudo,
   actor?: { id?: string; email?: string },
 ): Promise<string> {
-  if (!esUuidValido(c.facturaId)) throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
-  if (!esUuidValido(c.pagoId)) throw new DatoInvalido('No se reconoce ese pago. Recarga la pantalla.');
+  if (!esUuidValido(c.facturaId)) throw datoInvalido('portal_pago_es.no_se_reconoce_esa_factura');
+  if (!esUuidValido(c.pagoId)) throw datoInvalido('portal_pago_es.no_se_reconoce_ese_pago');
 
   const cfdiUuid = c.cfdiUuid.trim().toLowerCase();
   if (!RE_UUID.test(cfdiUuid)) {
-    throw new DatoInvalido('El folio fiscal (UUID) del complemento no tiene la forma que da el SAT. Cópialo tal cual del acuse de tu PAC.');
+    throw datoInvalido('portal_pago_es.el_folio_fiscal_uuid_del');
   }
   const fechaPago = c.fechaPago.trim();
   if (!RE_FECHA.test(fechaPago) || Number.isNaN(Date.parse(`${fechaPago}T00:00:00Z`))) {
-    throw new DatoInvalido('La fecha del pago del complemento no se entiende.');
+    throw datoInvalido('portal_pago_es.la_fecha_del_pago_del');
   }
   // El MISMO lector de montos que el formulario del cliente, y por la misma
   // razón (`c7-14`/`c7-33`): esto era `Math.round(Number(crudo.replace(...)))`
@@ -483,15 +480,15 @@ export async function registrarRepEmitido(
   // El portal se lo enseñaba al cliente junto a su complemento fiscal.
   const imp = montoTecleado(c.impPagado, 'el importe pagado del complemento');
   if (imp <= 0) {
-    throw new DatoInvalido('El importe pagado del complemento tiene que ser mayor que cero.');
+    throw datoInvalido('portal_pago_es.el_importe_pagado_del_complemento');
   }
   const forma = c.formaPago.trim();
   if (forma !== '' && !/^[0-9]{2}$/.test(forma)) {
-    throw new DatoInvalido('La forma de pago del SAT son dos dígitos (03 transferencia, 01 efectivo…). Déjala vacía si no la tienes.');
+    throw datoInvalido('portal_pago_es.la_forma_de_pago_del');
   }
   const xml = c.xml.trim();
   if (xml.length > XML_MAX) {
-    throw new DatoInvalido('Ese XML es demasiado grande. Registra el complemento sin archivo y compártelo por tu canal de siempre.');
+    throw datoInvalido('portal_pago_es.ese_xml_es_demasiado_grande');
   }
   // A37-S18-07: el XML que se guarda es el que el portal le ENTREGA al contador del cliente como «el complemento» con este
   // folio. Antes solo se medía su longitud: cualquier texto —o el XML de OTRO complemento— quedaba rotulado con el UUID
@@ -518,18 +515,18 @@ export async function registrarRepEmitido(
     .eq('id', c.pagoId).eq('tenant_id', tenantId).maybeSingle(), 'registrarRepEmitido.pago');
   if (errPago) throw new Error(`registrarRepEmitido: no se pudo leer el abono que ampara: ${errPago.message}`);
   if (!pago) {
-    throw new DatoInvalido('Ese abono no existe en tu flota. Copia el id del renglón «pago.registrado» de tu bitácora.');
+    throw datoInvalido('portal_pago_es.ese_abono_no_existe_en');
   }
   const filaPago = pago as { factura_id: unknown; monto: unknown };
   if (String(filaPago.factura_id) !== c.facturaId) {
-    throw new DatoInvalido('Ese abono es de OTRA factura. Un complemento de pago ampara el abono de la factura que dice amparar: revisa el id, o registra el complemento sobre la factura a la que de verdad entró ese dinero.');
+    throw datoInvalido('portal_pago_es.ese_abono_es_de_otra');
   }
   const montoPago = round2(Number(filaPago.monto));
   if (!Number.isFinite(montoPago)) {
     throw new Error('registrarRepEmitido: el abono no trae un monto legible; no se registra un complemento contra una cifra que no se pudo leer.');
   }
   if (Math.abs(montoPago - imp) > TOLERANCIA_ABONO_MXN) {
-    throw new DatoInvalido(`El importe del complemento (${mxn(imp)}) no cuadra con el abono que dice amparar (${mxn(montoPago)}). Si el complemento cubre varias parcialidades, regístralo contra el abono que le corresponde; si el que está mal es el abono, corrígelo primero.`);
+    throw datoInvalido('portal_pago_es.el_importe_del_complemento_no', { v: mxn(imp), v2: mxn(montoPago) });
   }
 
   // ── A37-S54-03: EL XML TIENE QUE SER DE ESTA FACTURA Y DE SU CLIENTE ─────────────────────────────────────────────────────
@@ -546,16 +543,16 @@ export async function registrarRepEmitido(
     const filaFac = fac as { cfdi_uuid?: unknown; cliente?: { rfc?: unknown } | Array<{ rfc?: unknown }> | null } | null;
     const uuidFactura = typeof filaFac?.cfdi_uuid === 'string' ? filaFac.cfdi_uuid.trim().toLowerCase() : '';
     if (uuidFactura === '') {
-      throw new DatoInvalido('La factura aún no tiene UUID registrado, así que no hay con qué cotejar el XML del complemento. Registra el complemento sin archivo, o captura primero el UUID de la factura.');
+      throw datoInvalido('portal_pago_es.la_factura_aun_no_tiene');
     }
     const amparaEsta = (rep?.pagos ?? []).flatMap((p) => p.doctos).filter((d) => d.idDocumento === uuidFactura);
     if (amparaEsta.length === 0) {
-      throw new DatoInvalido('Ese XML no ampara esta factura: ninguno de sus documentos relacionados trae el UUID de la factura. Es probable que sea el complemento de otro pago.');
+      throw datoInvalido('portal_pago_es.ese_xml_no_ampara_esta');
     }
     const cliente = Array.isArray(filaFac?.cliente) ? filaFac?.cliente[0] : filaFac?.cliente;
     const rfcCliente = typeof cliente?.rfc === 'string' ? cliente.rfc.trim().toUpperCase() : '';
     if (rep?.rfcReceptor && rfcCliente !== '' && rep.rfcReceptor !== rfcCliente) {
-      throw new DatoInvalido(`El receptor del XML (${rep.rfcReceptor}) no es el RFC del cliente de esta factura (${rfcCliente}). No se publica un complemento que es de otro cliente.`);
+      throw datoInvalido('portal_pago_es.el_receptor_del_xml_no', { rfcReceptor: rep.rfcReceptor, rfcCliente });
     }
   }
 
@@ -573,7 +570,7 @@ export async function registrarRepEmitido(
 
   if (error) {
     if (error.code === CHOQUE_UNICO) {
-      throw new DatoInvalido('Ese folio fiscal ya está registrado en tu flota. Un mismo complemento no se anota dos veces.');
+      throw datoInvalido('portal_pago_es.ese_folio_fiscal_ya_esta');
     }
     // Las FK compuestas de la 0228 son las que rechazan un pago o una factura
     // de OTRA flota. No se traducen a "revisa los datos": se dice qué pasó.

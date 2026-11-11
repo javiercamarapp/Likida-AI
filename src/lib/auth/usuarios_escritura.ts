@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '@/lib/likida/presupuesto';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { enviarCorreo } from '@/lib/correo/enviar';
 import { avisoInvitacion } from '@/lib/correo/avisos';
@@ -64,7 +64,7 @@ export interface UsuarioObjetivo {
 }
 
 function exigirUuid(usuarioId: string): void {
-  if (!esUuidValido(usuarioId)) throw new DatoInvalido('No se reconoce esa cuenta. Vuelve a abrir la pantalla.');
+  if (!esUuidValido(usuarioId)) throw datoInvalido('usuarios_escri.no_se_reconoce_esa_cuenta');
 }
 
 function esRolAsignable(v: string): v is RolInvitable {
@@ -83,9 +83,9 @@ async function leerObjetivo(tenantId: string, usuarioId: string): Promise<Usuari
     .eq('tenant_id', tenantId)
     .maybeSingle(), 'equipo.leerObjetivo');
   if (error) throw new Error(`equipo.leerObjetivo: ${error.message}`);
-  if (!data) throw new DatoInvalido('Esa cuenta no está en tu equipo. Recarga la pantalla.');
+  if (!data) throw datoInvalido('usuarios_escri.esa_cuenta_no_esta_en');
   if (data.rol === 'superadmin') {
-    throw new DatoInvalido('Esa cuenta es de Likida, no de tu flota: no se administra desde aquí.');
+    throw datoInvalido('usuarios_escri.esa_cuenta_es_de_likida');
   }
   return {
     id: String(data.id),
@@ -162,24 +162,24 @@ export async function cambiarRolUsuario(
 ): Promise<{ de: string; a: RolInvitable; llavesApiRevocadas?: string[]; llavesApiSinRevocar?: boolean }> {
   exigirUuid(usuarioId);
   if (!esRolAsignable(rolNuevo)) {
-    throw new DatoInvalido('Elige el rol de la lista: contador, encargado o dueño. Ningún otro se asigna desde el panel.');
+    throw datoInvalido('usuarios_escri.elige_el_rol_de_la');
   }
   if (usuarioId === actor.id) {
-    throw new DatoInvalido('No puedes cambiarte el rol a ti mismo: pídeselo a otro dueño de la flota.');
+    throw datoInvalido('usuarios_escri.no_puedes_cambiarte_el_rol');
   }
   const objetivo = await leerObjetivo(tenantId, usuarioId);
-  if (!objetivo.activo) throw new DatoInvalido('Esa cuenta está dada de baja. Reactívala primero si quieres cambiarle el rol.');
-  if (objetivo.rol === rolNuevo) throw new DatoInvalido(`Esa cuenta ya es ${nombreDeRol(rolNuevo)}.`);
+  if (!objetivo.activo) throw datoInvalido('usuarios_escri.esa_cuenta_esta_dada_de');
+  if (objetivo.rol === rolNuevo) throw datoInvalido('usuarios_escri.esa_cuenta_ya_es', { v: nombreDeRol(rolNuevo) });
 
   const { data: motivo, error } = await acotada(supabaseAdmin()
     .rpc('equipo_cambiar_rol', { p_tenant: tenantId, p_usuario: usuarioId, p_rol_actual: objetivo.rol, p_rol_nuevo: rolNuevo }),
     'equipo.cambiarRol');
   if (error) throw new Error(`equipo.cambiarRol: ${error.message}`);
   if (motivo === 'ultimo_dueno') {
-    throw new DatoInvalido('Es el único dueño activo de la flota: nombra a otro dueño antes de cambiarle el rol.');
+    throw datoInvalido('usuarios_escri.es_el_unico_dueno_activo');
   }
   if (motivo !== 'ok') {
-    throw new DatoInvalido('El rol de esa cuenta cambió mientras tanto. Recarga la pantalla y vuelve a intentarlo.');
+    throw datoInvalido('usuarios_escri.el_rol_de_esa_cuenta');
   }
 
   // CT-SEG-11: el cambio ya está hecho en la base; queda fila en evento_seguridad (alta si sube a dueño). Best-effort, no espera.
@@ -225,20 +225,20 @@ export async function desactivarUsuario(
 ): Promise<ResultadoBaja> {
   exigirUuid(usuarioId);
   if (usuarioId === actor.id) {
-    throw new DatoInvalido('No puedes darte de baja a ti mismo: pídeselo a otro dueño de la flota.');
+    throw datoInvalido('usuarios_escri.no_puedes_darte_de_baja');
   }
   const objetivo = await leerObjetivo(tenantId, usuarioId);
-  if (!objetivo.activo) throw new DatoInvalido('Esa cuenta ya está dada de baja.');
+  if (!objetivo.activo) throw datoInvalido('usuarios_escri.esa_cuenta_ya_esta_dada');
 
   const { data: motivo, error } = await acotada(supabaseAdmin()
     .rpc('equipo_desactivar_usuario', { p_tenant: tenantId, p_usuario: usuarioId, p_rol_actual: objetivo.rol, p_actor: actor.id }),
     'equipo.desactivar');
   if (error) throw new Error(`equipo.desactivar: ${error.message}`);
   if (motivo === 'ultimo_dueno') {
-    throw new DatoInvalido('Es el único dueño activo de la flota: nombra a otro dueño antes de darlo de baja.');
+    throw datoInvalido('usuarios_escri.es_el_unico_dueno_activo_2');
   }
   if (motivo !== 'ok') {
-    throw new DatoInvalido('Esa cuenta ya no estaba activa. Recarga la pantalla.');
+    throw datoInvalido('usuarios_escri.esa_cuenta_ya_no_estaba');
   }
 
   // La revocación REAL: sin el ban, la cookie sigue refrescándose cada hora
@@ -300,7 +300,7 @@ export async function reactivarUsuario(
 ): Promise<ResultadoReactivacion> {
   exigirUuid(usuarioId);
   const objetivo = await leerObjetivo(tenantId, usuarioId);
-  if (objetivo.activo) throw new DatoInvalido('Esa cuenta ya está activa.');
+  if (objetivo.activo) throw datoInvalido('usuarios_escri.esa_cuenta_ya_esta_activa');
 
   const { data, error } = await acotada(supabaseAdmin().from('app_user')
     .update({ activo: true, desactivado_en: null, desactivado_por: null })
@@ -310,7 +310,7 @@ export async function reactivarUsuario(
     .select('id'), 'equipo.reactivar');
   if (error) throw new Error(`equipo.reactivar: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Esa cuenta ya estaba activa. Recarga la pantalla.');
+    throw datoInvalido('usuarios_escri.esa_cuenta_ya_estaba_activa');
   }
 
   let accesoRestaurado = true;
@@ -426,7 +426,7 @@ export async function reenviarAcceso(
 ): Promise<ResultadoCorreoAcceso & { email: string }> {
   exigirUuid(usuarioId);
   const objetivo = await leerObjetivo(tenantId, usuarioId);
-  if (!objetivo.activo) throw new DatoInvalido('Esa cuenta está dada de baja: reactívala antes de reenviarle el acceso.');
+  if (!objetivo.activo) throw datoInvalido('usuarios_escri.esa_cuenta_esta_dada_de_2');
 
   const r = await enviarCorreoDeAcceso(objetivo.email, objetivo.rol, contexto);
   if (r.enviado) {

@@ -5,7 +5,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { normalizarTelefonoOperador } from '../administracion';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { validarFormato, FormatoInvalido, type FormatoFlota } from './formato_flota';
 
 export const MAX_TELEFONOS = 3;
@@ -24,7 +24,7 @@ export function leerTelefonos(crudo: string, que: string): string[] {
     if (!vistos.includes(t)) vistos.push(t);
   }
   if (vistos.length > MAX_TELEFONOS) {
-    throw new DatoInvalido(`${que}: hasta ${MAX_TELEFONOS} teléfonos (pusiste ${vistos.length}). Una copia a medio equipo ya no es una copia.`);
+    throw datoInvalido('formato_form.hasta_telefonos_pusiste_una_copia', { que, MAX_TELEFONOS, length: vistos.length });
   }
   return vistos;
 }

@@ -27,7 +27,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { codigoDeError } from '@/lib/observability/sentry';
 import { alertarOperador } from '@/lib/observability/alerta';
-import { DatoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { acotada } from './presupuesto';
 
 /** El catálogo completo: 'global' + los 7 agentes del dominio de
@@ -273,11 +273,11 @@ export async function estaApagado(nombre: NombreInterruptor): Promise<boolean> {
  */
 export async function apagar(nombre: string, motivo: string, userId: string): Promise<void> {
   if (!esNombreValido(nombre)) {
-    throw new DatoInvalido(`"${nombre}" no es un interruptor del catálogo.`);
+    throw datoInvalido('interruptores.no_es_un_interruptor_del', { nombre });
   }
   const m = motivo.trim();
   if (!m) {
-    throw new DatoInvalido('Apagar exige un motivo: sin nota, en tres semanas nadie sabe si ya se puede encender.');
+    throw datoInvalido('negocio.apagar_exige_un_motivo_sin');
   }
   const { error } = await acotada(supabaseAdmin()
     .from('interruptor')
@@ -297,7 +297,7 @@ export async function apagar(nombre: string, motivo: string, userId: string): Pr
  */
 export async function encender(nombre: string, userId: string, motivo?: string): Promise<void> {
   if (!esNombreValido(nombre)) {
-    throw new DatoInvalido(`"${nombre}" no es un interruptor del catálogo.`);
+    throw datoInvalido('interruptores.no_es_un_interruptor_del', { nombre });
   }
   const { error } = await acotada(supabaseAdmin()
     .from('interruptor')

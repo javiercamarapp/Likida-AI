@@ -17,7 +17,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { DatoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateResponse } from '@/lib/llm/openrouter';
 import { encolarPieza, verificarFormatoCampana } from './cola';
@@ -195,8 +195,8 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<{ costoUsd: number;
   const { data: pend, error: errPend } = await supabaseAdmin()
     .from('cola_aprobacion').select('id')
     .eq('prospecto_id', c.id).eq('estado', 'pendiente').limit(1);
-  if (errPend) throw new DatoInvalido('No se pudo verificar la cola — reintenta.');
-  if ((pend ?? []).length > 0) throw new DatoInvalido('Ya hay una pieza pendiente de este prospecto.');
+  if (errPend) throw datoInvalido('redactor.no_se_pudo_verificar_la');
+  if ((pend ?? []).length > 0) throw datoInvalido('sdr.ya_hay_una_pieza_pendiente');
 
   // A37-S28-03: una pieza `correo_seguimiento` de ESTE paso que ya existe en cualquier estado (aprobada pero aún
   // sin enviar por el tope/cadencia del Enviador, ya enviada, o RECHAZADA por un humano) bloquea una nueva: antes
@@ -208,10 +208,10 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<{ costoUsd: number;
     .in('estado', ['pendiente', 'aprobado', 'rechazado'])
     .order('id', { ascending: true })
     .limit(20);
-  if (errPrevias) throw new DatoInvalido('No se pudo verificar los seguimientos previos — reintenta.');
+  if (errPrevias) throw datoInvalido('sdr.no_se_pudo_verificar_los');
   const delPaso = ((previas ?? []) as Array<{ estado: string; fuentes: Record<string, unknown> | null }>)
     .find((f) => Number(f.fuentes?.seguimiento) === c.numeroSeguimiento);
-  if (delPaso) throw new DatoInvalido(`Ya existe un seguimiento ${c.numeroSeguimiento} de este prospecto (${delPaso.estado}) — no se fabrica otro.`);
+  if (delPaso) throw datoInvalido('sdr.ya_existe_un_seguimiento_de', { numeroSeguimiento: c.numeroSeguimiento, estado: delPaso.estado });
 
   const primerNombre = primerNombreDelContacto(c.contacto_nombre);
   const r = await generateResponse({
@@ -229,7 +229,7 @@ async function fabricarSeguimiento(c: CandidatoSdr): Promise<{ costoUsd: number;
   try {
     const asunto = r.text.match(/\*\*Asunto:\*\*\s*(.+)/i)?.[1]?.trim();
     const cuerpo = r.text.split(/\*\*Asunto:\*\*.*\n/i)[1]?.trim();
-    if (!asunto || !cuerpo) throw new DatoInvalido('El SDR devolvió una salida ilegible — no se encoló nada.');
+    if (!asunto || !cuerpo) throw datoInvalido('sdr.el_sdr_devolvio_una_salida');
     // c5-14: el verificador estructural corre sobre el TEXTO FINAL — asunto
     // incluido (el del SDR sale tal cual) y DESPUÉS de sustituir el nombre: la
     // verificación previa miraba solo el cuerpo crudo y un guion largo en el
@@ -261,7 +261,7 @@ export async function correrSdr(
 ): Promise<ResultadoSdr> {
   const inicio = new Date();
   if (await estaApagado('agente:sdr')) {
-    throw new DatoInvalido('El SDR está apagado — se enciende desde /admin/observabilidad o ⌘K.');
+    throw datoInvalido('sdr.el_sdr_esta_apagado_se');
   }
   const candidatos = await candidatosDeSeguimiento(limite, venceEn);
   // EL CORTE DE LA BÚSQUEDA NO PUEDE SER MUDO. Si el reloj se agotó DENTRO de

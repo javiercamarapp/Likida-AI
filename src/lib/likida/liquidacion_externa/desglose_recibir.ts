@@ -21,7 +21,7 @@
 
 import { createHash } from 'node:crypto';
 import { logger } from '@/lib/logger';
-import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja } from '../errores';
+import { DatoInvalido, OperadorAmbiguo, OperadorDeBaja, datoInvalido } from '../errores';
 import { huellaContenido, huellaDesglose } from './esquema';
 import type { LiquidacionExternaNormalizada } from './esquema';
 import {
@@ -329,7 +329,7 @@ export async function recibirDesglose(
       }
       reemplazadas.push({ id: previa.id, clave: claveR });
     }
-    if (n > MAX_CORRECCIONES) throw new DatoInvalido(`Esta bitácora ya tiene ${MAX_CORRECCIONES} correcciones: revisa la integración, algo la está reenviando distinta cada vez.`);
+    if (n > MAX_CORRECCIONES) throw datoInvalido('desglose_recib.esta_bitacora_ya_tiene_correcciones', { MAX_CORRECCIONES });
     correccionDe = base;
     correccionN = n;
     claveExterna = `${base}-R${n}`;

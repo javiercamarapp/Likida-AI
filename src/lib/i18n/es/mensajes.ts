@@ -1,3 +1,5 @@
+import { datosEs } from '../datos/es';
+
 // Namespace «mensajes»: los textos de error y de respuesta que llegan a pantalla desde la lógica (lib) y desde las rutas de API
 // que consume la interfaz: `DatoInvalido` por clave, el mensaje genérico de falla del sistema, el portal de pago, el formulario de
 // la calculadora y los endpoints del chat/archivo/OCR del panel. La baja de correo es de la prospección en frío (español).
@@ -61,4 +63,7 @@ export const mensajes = {
   'dash.onb.nada_pendiente': 'Esa declaración ya se guardó y no queda nada pendiente. No apliqué lo que acabas de escribir.',
   'dash.onb.no_guardo': 'no pude guardar esa declaración',
 
+
+  // ── DatoInvalido migrado desde src/lib (F15): ver datos/es.ts ───────────────
+  ...datosEs,
 } as const;

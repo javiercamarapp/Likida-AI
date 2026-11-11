@@ -18,7 +18,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { logger } from '@/lib/logger';
 import { enviarCorreo } from '@/lib/correo/enviar';
 import { urlBaja } from '@/lib/correo/baja';
@@ -65,14 +65,14 @@ export { TRACCION_PUBLICABLE };
  *  una variante guardada que lo viole tampoco sale. */
 export function verificarFormatoCampana(texto: string): void {
   if (/clientes?\s+reales/i.test(texto)) {
-    throw new DatoInvalido('El correo dice "clientes reales" — ninguna empresa ha firmado; la frase permitida es "en pláticas con transportistas como...". Pieza descartada.');
+    throw datoInvalido('cola.el_correo_dice_clientes_reales');
   }
   if (texto.includes('—')) {
-    throw new DatoInvalido('El correo trae guion largo (—) — el formato de campaña los prohíbe. Pieza descartada.');
+    throw datoInvalido('cola.el_correo_trae_guion_largo');
   }
   const nombreNoAutorizado = nombreTraccionNoAutorizado(texto);
   if (nombreNoAutorizado) {
-    throw new DatoInvalido(`El correo nombra a "${nombreNoAutorizado}" como tracción — nombre de tercero no autorizado (TRACCION_PUBLICABLE vacía por default). Pieza descartada.`);
+    throw datoInvalido('cola.el_correo_nombra_a_como', { nombreNoAutorizado });
   }
 }
 
@@ -137,12 +137,12 @@ const TIPO_RE = /^[a-z0-9_]{2,40}$/;
 /** Encola una pieza. LANZA con texto de pantalla en todo rechazo — el agente
  *  que no pudo encolar debe enterarse, no seguir como si hubiera entregado. */
 export async function encolarPieza(p: PiezaNueva): Promise<string> {
-  if (!TIPO_RE.test(p.tipo)) throw new DatoInvalido('El tipo de pieza va en minúsculas/números/guión bajo (2-40).');
-  if (p.prioridad !== 'normal' && p.prioridad !== 'urgente') throw new DatoInvalido('La prioridad es normal o urgente.');
+  if (!TIPO_RE.test(p.tipo)) throw datoInvalido('cola.el_tipo_de_pieza_va');
+  if (p.prioridad !== 'normal' && p.prioridad !== 'urgente') throw datoInvalido('cola.la_prioridad_es_normal_o');
   const titulo = p.titulo.trim();
   const cuerpo = p.cuerpo.trim();
-  if (!titulo || titulo.length > 200) throw new DatoInvalido('El título es obligatorio (máx. 200).');
-  if (!cuerpo) throw new DatoInvalido('El cuerpo de la pieza es obligatorio — una pieza vacía no tiene qué aprobar.');
+  if (!titulo || titulo.length > 200) throw datoInvalido('cola.el_titulo_es_obligatorio_max');
+  if (!cuerpo) throw datoInvalido('cola.el_cuerpo_de_la_pieza');
 
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion').insert({
     tipo: p.tipo, prioridad: p.prioridad, agente: p.agente,
@@ -151,7 +151,7 @@ export async function encolarPieza(p: PiezaNueva): Promise<string> {
   }).select('id').single(), 'encolarPieza');
   if (error) {
     // 23503 = el agente no está declarado: la FK es la trazabilidad mínima.
-    if (error.code === '23503') throw new DatoInvalido(`El agente "${p.agente}" no está en el catálogo — una pieza sin autor declarado no entra a la cola.`);
+    if (error.code === '23503') throw datoInvalido('cola.el_agente_no_esta_en', { agente: p.agente });
     throw new Error(`encolarPieza: ${error.message}`);
   }
   const id = (data as { id?: unknown } | null)?.id;
@@ -262,7 +262,7 @@ async function emailDeActor(actorId: string): Promise<string> {
     .from('app_user').select('email').eq('id', actorId).maybeSingle();
   if (error) throw new Error(`emailDeActor: ${error.message}`);
   const email = (data as { email?: string } | null)?.email;
-  if (!email) throw new DatoInvalido('No se pudo confirmar quién resuelve — recarga y vuelve a intentar.');
+  if (!email) throw datoInvalido('cola.no_se_pudo_confirmar_quien');
   return email;
 }
 
@@ -357,7 +357,7 @@ export async function aprobarPieza(id: string, actorId: string, cuerpoEditado?: 
     .select('id, cuerpo'), 'aprobarPieza');
   if (error) throw new Error(`aprobarPieza: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Esa pieza ya no está pendiente — alguien la resolvió antes. Recarga la bandeja.');
+    throw datoInvalido('cola.esa_pieza_ya_no_esta');
   }
   // Si la "edición" quedó idéntica al original, se limpia: no hubo edición.
   const original = String((data[0] as Record<string, unknown>).cuerpo ?? '');
@@ -372,7 +372,7 @@ export async function aprobarPieza(id: string, actorId: string, cuerpoEditado?: 
 /** Rechaza con motivo OBLIGATORIO (la base también lo exige — CHECK 0117). */
 export async function rechazarPieza(id: string, actorId: string, motivo: string): Promise<void> {
   const m = motivo.trim();
-  if (!m) throw new DatoInvalido('Rechazar exige un motivo: sin él, la misma pieza se vuelve a proponer igual la próxima vez.');
+  if (!m) throw datoInvalido('cola.rechazar_exige_un_motivo_sin');
   const actorEmail = await emailDeActor(actorId);
   const { data, error } = await acotada(supabaseAdmin().from('cola_aprobacion')
     .update({
@@ -384,7 +384,7 @@ export async function rechazarPieza(id: string, actorId: string, motivo: string)
     .select('id'), 'rechazarPieza');
   if (error) throw new Error(`rechazarPieza: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Esa pieza ya no está pendiente — alguien la resolvió antes. Recarga la bandeja.');
+    throw datoInvalido('cola.esa_pieza_ya_no_esta');
   }
   await anotar('cola.rechazado', id, actorId, { motivo: m.slice(0, 300) });
 }
@@ -402,7 +402,7 @@ export async function marcarEnviada(id: string, actorId: string | null, canal: '
     .select('id, prospecto_id, titulo, agente'), 'marcarEnviada');
   if (error) throw new Error(`marcarEnviada: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Solo una pieza APROBADA y aún no enviada se puede marcar como enviada.');
+    throw datoInvalido('cola.solo_una_pieza_aprobada_y');
   }
   const fila = data[0] as Record<string, unknown>;
   const prospectoId = (fila.prospecto_id as string) ?? null;
@@ -472,7 +472,7 @@ export async function enviarPiezaPorCorreo(
     .select('id, tipo, titulo, cuerpo, cuerpo_final, agente, prioridad, prospecto_id, prospecto:prospecto_id(empresa, correo, fuente, vacante)'), 'enviarPiezaPorCorreo.claim');
   if (error) throw new Error(`enviarPiezaPorCorreo: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Solo una pieza APROBADA y aún no enviada se puede enviar — puede que otro click le ganara a este. Recarga.');
+    throw datoInvalido('cola.solo_una_pieza_aprobada_y_2');
   }
   const fila = data[0] as Record<string, unknown>;
   const prospecto = fila.prospecto as { empresa?: string; correo?: string; fuente?: string; vacante?: string } | null;
@@ -497,12 +497,12 @@ export async function enviarPiezaPorCorreo(
   // prospecto solo porque alguien lo aprobó pensando "sí, buena ficha".
   if (!(TIPOS_ENVIABLES as readonly string[]).includes(String(fila.tipo))) {
     await revertir(`El tipo "${String(fila.tipo)}" no es enviable a terceros — es una pieza interna.`);
-    throw new DatoInvalido(`Esta pieza es de tipo "${String(fila.tipo)}" — un parte interno, no algo que se le mande al prospecto. No hay botón de envío para esto; si necesitas comunicarte con el prospecto, escríbele aparte.`);
+    throw datoInvalido('cola.esta_pieza_es_de_tipo', { v: String(fila.tipo) });
   }
 
   if (!destinatario) {
     await revertir('El prospecto no tiene correo capturado.');
-    throw new DatoInvalido('El prospecto de esta pieza no tiene correo capturado — captúralo en Vendedores y vuelve a enviar.');
+    throw datoInvalido('cola.el_prospecto_de_esta_pieza');
   }
 
   // ── EL FORMATO DE CAMPAÑA, EN LA PUERTA (c5-14) ──────────────────────────
@@ -535,7 +535,7 @@ export async function enviarPiezaPorCorreo(
     bajaHref = urlBaja(destinatario);
     if (!bajaHref) {
       await revertir('Falta LIKIDA_BAJA_SECRET — sin liga de baja funcional, la campaña no sale.');
-      throw new DatoInvalido('No se puede mandar campaña sin una liga de baja funcional (falta configurar LIKIDA_BAJA_SECRET) — el cumplimiento no es opcional. Configúrala y reintenta.');
+      throw datoInvalido('cola.no_se_puede_mandar_campana');
     }
   }
 
@@ -548,11 +548,11 @@ export async function enviarPiezaPorCorreo(
     vivos = await filtrarSuprimidos([destinatario, ...copias]);
   } catch {
     await revertir('No se pudo leer la lista de bajas.');
-    throw new DatoInvalido('No se pudo leer la lista de bajas — sin esa lectura no se manda (escribirle a quien pidió baja quema el dominio). Reintenta.');
+    throw datoInvalido('cola.no_se_pudo_leer_la');
   }
   if (!vivos.includes(destinatario.trim().toLowerCase())) {
     await revertir('El correo principal está en la lista de bajas.');
-    throw new DatoInvalido('El correo principal de este prospecto está en la lista de bajas — pidió que no se le escribiera (o rebotó). No se envía.');
+    throw datoInvalido('cola.el_correo_principal_de_este');
   }
 
   // ── EL TOPE DIARIO (Fase 2: "20–40 correos aprobados/día, máximo") ──
@@ -573,13 +573,13 @@ export async function enviarPiezaPorCorreo(
       .gte('enviado_en', inicioDia);
     if (errTope || typeof count !== 'number') {
       await revertir('No se pudo verificar el tope diario de envíos.');
-      throw new DatoInvalido('No se pudo verificar el tope diario de envíos — sin esa lectura no se manda. Reintenta.');
+      throw datoInvalido('cola.no_se_pudo_verificar_el');
     }
     // El claim de ESTA pieza ya estampó su enviado_en, así que ella misma
     // viene en `count`: el tope se compara contra los DEMÁS envíos de hoy.
     if (count - 1 >= tope) {
       await revertir(`Tope diario de correo frío alcanzado (${tope}).`);
-      throw new DatoInvalido(`Hoy ya salieron ${tope} correos fríos — el tope diario protege la reputación del dominio (ajustable: LIKIDA_TOPE_CORREO_FRIO_DIA). La pieza sigue aprobada; sale mañana.`);
+      throw datoInvalido('cola.hoy_ya_salieron_correos_frios', { tope });
     }
   }
 
@@ -603,11 +603,11 @@ export async function enviarPiezaPorCorreo(
       });
     if (errReserva) {
       await revertir('No se pudo reservar la cadencia del prospecto.');
-      throw new DatoInvalido('No se pudo verificar la cadencia del prospecto — sin esa reserva no se manda (¿migración 0124 aplicada?). Reintenta.');
+      throw datoInvalido('cola.no_se_pudo_verificar_la');
     }
     if (reserva === null) {
       await revertir('Contactado hace menos de 48 h — la cadencia lo protege.');
-      throw new DatoInvalido('A este prospecto ya se le escribió hace menos de 48 horas — la cadencia mínima lo protege. La pieza sigue aprobada; reintenta cuando pase la ventana.');
+      throw datoInvalido('cola.a_este_prospecto_ya_se');
     }
     reservaId = String(reserva);
   }
@@ -652,7 +652,7 @@ export async function enviarPiezaPorCorreo(
         .eq('id', id);
       if (errAmb) logger.error('cola.ambiguo_sin_anotar', { pieza: id, err: errAmb.message });
       logger.warn('cola.envio_ambiguo', { pieza: id, detalle });
-      throw new DatoInvalido(`${detalle} La pieza queda marcada como enviada-por-confirmar en el panel.`);
+      throw datoInvalido('cola.la_pieza_queda_marcada_como', { detalle });
     }
     const motivo = r.motivo === 'sin_configurar'
       ? 'El canal de correo no está configurado (RESEND_API_KEY/RESEND_EMAIL_DOMAIN).'
@@ -668,7 +668,7 @@ export async function enviarPiezaPorCorreo(
       if (errComp) logger.error('cola.reserva_sin_compensar', { pieza: id, reserva: reservaId, err: errComp.message });
     }
     await revertir(motivo);
-    throw new DatoInvalido(`${motivo} La pieza sigue aprobada y se puede reintentar.`);
+    throw datoInvalido('cola.la_pieza_sigue_aprobada_y', { motivo });
   }
 
   // 3) LA PRUEBA. El contacto del historial YA existe: es la reserva de la
@@ -731,7 +731,7 @@ export async function liberarEnvioAmbiguo(id: string, actorId: string | null): P
     .select('id, prospecto_id'), 'liberarEnvioAmbiguo');
   if (error) throw new Error(`liberarEnvioAmbiguo: ${error.message}`);
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Solo una pieza aprobada con envío ambiguo (timeout, sin id del proveedor) se puede liberar. Puede que ya se liberara o que sí tenga prueba de envío. Recarga.');
+    throw datoInvalido('cola.solo_una_pieza_aprobada_con');
   }
   logger.warn('cola.envio_ambiguo_liberado', { pieza: id, actor: actorId });
   // La reserva de cadencia (0124) de ESTA pieza: sin borrarla, su propio reintento choca con las 48 h.

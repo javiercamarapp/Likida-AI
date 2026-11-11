@@ -32,7 +32,7 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { validarUnidad, type UnidadValida } from '../operacion';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido, etiqueta } from '../errores';
 import { resolverTerminalDeFlota } from '../terminales';
 import { leerFechaImportada } from '../importar_viajes';
 import {
@@ -79,12 +79,12 @@ export function normalizarPlaca(cruda: string): string {
  */
 export function validarUnidadImportada(c: UnidadCrudaImportada, fila: number, hoy = new Date()): UnidadImportada {
   const placas = normalizarPlaca(c.placas ?? '');
-  if (placas === '') throw new DatoInvalido('sin placa — es obligatoria');
-  if (placas.length > 20) throw new DatoInvalido('la placa no puede pasar de 20 caracteres');
-  if (!/^[A-Z0-9-]+$/.test(placas)) throw new DatoInvalido(`la placa «${placas}» trae caracteres que no son letras, números ni guion`);
+  if (placas === '') throw datoInvalido('unidades.sin_placa_es_obligatoria');
+  if (placas.length > 20) throw datoInvalido('unidades.la_placa_no_puede_pasar');
+  if (!/^[A-Z0-9-]+$/.test(placas)) throw datoInvalido('unidades.la_placa_trae_caracteres_que', { placas });
 
   const numeroEconomico = (c.numeroEconomico ?? '').replace(/\s+/g, ' ').trim();
-  if (numeroEconomico === '') throw new DatoInvalido('sin número económico');
+  if (numeroEconomico === '') throw datoInvalido('unidades.sin_numero_economico');
 
   const v = validarUnidad({
     numeroEconomico,
@@ -160,7 +160,7 @@ export function interpretarFilasUnidades(matriz: unknown[][], hoy = new Date()):
       indice[k] === undefined ? '' : celdaTexto(fila[indice[k] as number], max);
     const fecha = (k: 'polizaVence' | 'permisoSictVence' | 'verificacionVence', nombre: string): string | null => {
       const v = leerFechaImportada(indice[k] === undefined ? null : fila[indice[k] as number]);
-      if (v === 'ilegible') throw new DatoInvalido(`la fecha de ${nombre} no se entiende (usa AAAA-MM-DD)`);
+      if (v === 'ilegible') throw datoInvalido('unidades.la_fecha_de_no_se', { nombre });
       return v;
     };
 
@@ -172,9 +172,9 @@ export function interpretarFilasUnidades(matriz: unknown[][], hoy = new Date()):
         marca: celda('marca'),
         modelo: celda('modelo'),
         anio: celda('anio', 10),
-        polizaVence: fecha('polizaVence', 'la póliza') ?? '',
-        permisoSictVence: fecha('permisoSictVence', 'el permiso SICT') ?? '',
-        verificacionVence: fecha('verificacionVence', 'la verificación') ?? '',
+        polizaVence: fecha('polizaVence', etiqueta('etq.la_poliza')) ?? '',
+        permisoSictVence: fecha('permisoSictVence', etiqueta('etq.el_permiso_sict')) ?? '',
+        verificacionVence: fecha('verificacionVence', etiqueta('etq.la_verificacion')) ?? '',
         patio: celda('patio', 80),
       }, numero, hoy);
 

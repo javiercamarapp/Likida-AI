@@ -29,7 +29,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { hostNoPublico } from '@/lib/http/destino_publico';
 import { httpsPublico } from '@/lib/http/https_publico';
 import { acotada } from '../presupuesto';
-import { DatoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateStructured } from '@/lib/llm/openrouter';
 import { clasificarFalloModelo } from '@/lib/llm/fallo_modelo';
@@ -337,7 +337,7 @@ export async function investigarProspecto(
 ): Promise<ResultadoInvestigacion> {
   const inicio = new Date();
   if (await estaApagado('agente:enriquecedor')) {
-    throw new DatoInvalido('El investigador está apagado — se enciende desde /admin/observabilidad o ⌘K.');
+    throw datoInvalido('investigador.el_investigador_esta_apagado_se');
   }
 
   const { data: p, error } = await acotada(supabaseAdmin()
@@ -346,7 +346,7 @@ export async function investigarProspecto(
     .is('duplicado_de', null)
     .eq('id', prospectoId).maybeSingle(), 'investigador.prospecto');
   if (error) throw new Error(`investigarProspecto: ${error.message}`);
-  if (!p) throw new DatoInvalido('Ese prospecto no existe.');
+  if (!p) throw datoInvalido('investigador.ese_prospecto_no_existe');
   const prospecto = p as { id: string; empresa: string; sitio_web: string | null; notas: string | null; correo: string | null; estado: string };
 
   // ── 1. Descargar el sitio real (si se conoce) ─────────────────────────
@@ -413,7 +413,7 @@ export async function investigarProspecto(
       logger.error('investigador.modelo_fallo', {
         prospecto: prospectoId, clase: fallo.clase, status: fallo.status, rol: 'back_office', err: fallo.mensaje,
       });
-      throw new DatoInvalido('El investigador no pudo extraer en este momento — reintenta.');
+      throw datoInvalido('investigador.el_investigador_no_pudo_extraer');
     }
   }
 

@@ -42,7 +42,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora, type EntidadBitacora } from '@/lib/likida/bitacora_escritura';
 import { logger } from '@/lib/logger';
 import { mxn, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
-import { DatoInvalido, AbonoYaRegistrado } from './errores';
+import { DatoInvalido, AbonoYaRegistrado, datoInvalido, etiqueta } from './errores';
+import { trMensajes, type ClaveMensaje, type Variables } from '@/lib/i18n/mensajes_tr';
 import { esUuidValido } from './intake/cfdi';
 import { acotada } from './presupuesto';
 
@@ -97,17 +98,17 @@ function fechaValida(t: string): boolean {
 function montoTecleado(crudo: string, campo: string, opciones: { obligatorio: boolean }): number | null {
   const t = crudo.trim();
   if (t === '') {
-    if (opciones.obligatorio) throw new DatoInvalido(`${campo} es obligatorio.`);
+    if (opciones.obligatorio) throw datoInvalido('adm.es_obligatorio', { campo });
     return null;
   }
   const limpio = t.replace(/[$\s]/g, '').replace(/(?<!\b0),(?=\d{3}\b)/g, '').replace(',', '.');
-  if (!/^\d+(\.\d+)?$/.test(limpio)) throw new DatoInvalido(`${campo} tiene que ser un número (sin letras ni signos).`);
+  if (!/^\d+(\.\d+)?$/.test(limpio)) throw datoInvalido('adm.tiene_que_ser_un_numero', { campo });
   const n = Number(limpio);
-  if (!Number.isFinite(n)) throw new DatoInvalido(`${campo} tiene que ser un número.`);
+  if (!Number.isFinite(n)) throw datoInvalido('adm.tiene_que_ser_un_numero_2', { campo });
   if (Math.abs(n * 100 - Math.round(n * 100)) > 1e-6) {
-    throw new DatoInvalido(`${campo} no puede traer más de dos decimales: la base guarda centavos y redondear en silencio descuadraría la factura.`);
+    throw datoInvalido('adm.no_puede_traer_mas_de', { campo });
   }
-  if (n > 999_999_999) throw new DatoInvalido(`${campo} no cabe en una factura: revisa si sobra un cero.`);
+  if (n > 999_999_999) throw datoInvalido('adm.no_cabe_en_una_factura', { campo });
   return n;
 }
 
@@ -131,53 +132,50 @@ function normalizarSerie(crudo: string): string | null {
   const s = crudo.trim();
   if (s === '') return null;
   if (s.length > SERIE_MAX) {
-    throw new DatoInvalido(`La serie no puede pasar de ${SERIE_MAX} caracteres: es el tope del atributo Serie del CFDI.`);
+    throw datoInvalido('adm.la_serie_no_puede_pasar', { SERIE_MAX });
   }
   // Un salto de línea o un tabulador PEGADOS DE UN EXCEL sobreviven al trim de
   // los extremos si van en medio, y no existen en ninguna serie del SAT.
   if (/\s/.test(s)) {
-    throw new DatoInvalido('La serie no lleva espacios: cópiala tal como aparece en el CFDI (por ejemplo «A» o «FAC»).');
+    throw datoInvalido('adm.la_serie_no_lleva_espacios');
   }
   return s;
 }
 
 export function validarFactura(c: FacturaCruda): FacturaValida {
   if (!esUuidValido(c.clienteId)) {
-    throw new DatoInvalido('Elige el cliente de la lista. Si no aparece, dalo de alta primero en Clientes.');
+    throw datoInvalido('adm.elige_el_cliente_de_la');
   }
   const fecha = c.fecha.trim();
-  if (!fechaValida(fecha)) throw new DatoInvalido('La fecha de la factura tiene que ser un día real (AAAA-MM-DD).');
+  if (!fechaValida(fecha)) throw datoInvalido('adm.la_fecha_de_la_factura');
 
-  const subtotal = montoTecleado(c.subtotal, 'El subtotal', { obligatorio: true }) as number;
+  const subtotal = montoTecleado(c.subtotal, etiqueta('etq.el_subtotal'), { obligatorio: true }) as number;
   // El IVA vacío NO se inventa: sin teclear no hay factura. Un CFDI real
   // siempre declara su IVA, aunque sea $0 (tasa 0% o exento) — y ese $0
   // tecleado es una medición, no un relleno.
-  const iva = montoTecleado(c.iva, 'El IVA', { obligatorio: true }) as number;
+  const iva = montoTecleado(c.iva, etiqueta('etq.el_iva'), { obligatorio: true }) as number;
   // FIS-M3 (mig. 0351): retención del 4% de IVA, opcional — sin ella (el
   // caso de hoy) el cálculo es idéntico al de siempre.
-  const retencion = montoTecleado(c.retencion ?? '', 'La retención', { obligatorio: false }) ?? 0;
+  const retencion = montoTecleado(c.retencion ?? '', etiqueta('etq.la_retencion'), { obligatorio: false }) ?? 0;
   // Una retención de IVA nunca excede el IVA trasladado (4 % del subtotal contra
   // 16 %; 2/3 del IVA en servicios de personal): si lo supera, se tecleó en el
   // campo equivocado, y un total menor al real no se adivina.
   if (retencion > iva) {
-    throw new DatoInvalido('La retención de IVA no puede ser mayor que el IVA de la factura. Revisa las cifras del CFDI.');
+    throw datoInvalido('adm.la_retencion_de_iva_no');
   }
   // Redondeo a centavos ANTES de sumar: 0.1 + 0.2 en binario no es 0.30, y el
   // constraint `factura_total_cuadra` tolera un centavo, no una cola binaria.
   const total = Math.round((subtotal + iva - retencion) * 100) / 100;
 
   const folio = c.folio.trim() === '' ? null : c.folio.trim();
-  if (folio !== null && folio.length > 40) throw new DatoInvalido('El folio no puede pasar de 40 caracteres.');
+  if (folio !== null && folio.length > 40) throw datoInvalido('adm.el_folio_no_puede_pasar');
   const serie = normalizarSerie(c.serie);
 
   let cfdiUuid: string | null = null;
   if (c.cfdiUuid.trim() !== '') {
     const u = c.cfdiUuid.trim().toLowerCase();
     if (!esUuidValido(u)) {
-      throw new DatoInvalido(
-        'El folio fiscal (UUID) no tiene la forma de un UUID del SAT (8-4-4-4-12 caracteres hexadecimales). ' +
-        'Cópialo del XML o del PDF del CFDI, o déjalo vacío para registrar la factura como borrador.',
-      );
+      throw datoInvalido('adm.el_folio_fiscal_uuid_no');
     }
     cfdiUuid = u;
   }
@@ -186,7 +184,7 @@ export function validarFactura(c: FacturaCruda): FacturaValida {
   for (const v of c.viajeIds) {
     const id = v.trim();
     if (id === '') continue;
-    if (!esUuidValido(id)) throw new DatoInvalido('Uno de los viajes marcados no se reconoce. Recarga la pantalla.');
+    if (!esUuidValido(id)) throw datoInvalido('adm.uno_de_los_viajes_marcados');
     if (!viajeIds.includes(id)) viajeIds.push(id);
   }
 
@@ -210,14 +208,14 @@ export interface PagoValido {
 }
 
 export function validarPago(c: PagoCrudo): PagoValido {
-  if (!esUuidValido(c.facturaId)) throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
+  if (!esUuidValido(c.facturaId)) throw datoInvalido('adm.no_se_reconoce_esa_factura');
   const fecha = c.fecha.trim();
-  if (!fechaValida(fecha)) throw new DatoInvalido('La fecha del pago tiene que ser un día real (AAAA-MM-DD).');
-  const monto = montoTecleado(c.monto, 'El monto del pago', { obligatorio: true }) as number;
-  if (monto <= 0) throw new DatoInvalido('Un pago tiene que ser mayor que cero. Para corregir una factura, cancélala y captúrala de nuevo.');
+  if (!fechaValida(fecha)) throw datoInvalido('adm.la_fecha_del_pago_tiene');
+  const monto = montoTecleado(c.monto, etiqueta('etq.el_monto_del_pago'), { obligatorio: true }) as number;
+  if (monto <= 0) throw datoInvalido('adm.un_pago_tiene_que_ser');
   const metodo = c.metodo.trim() === '' ? null : c.metodo.trim().slice(0, 40);
   const referencia = c.referencia.trim() === '' ? null : c.referencia.trim();
-  if (referencia !== null && referencia.length > 80) throw new DatoInvalido('La referencia no puede pasar de 80 caracteres.');
+  if (referencia !== null && referencia.length > 80) throw datoInvalido('adm.la_referencia_no_puede_pasar');
   return { facturaId: c.facturaId, fecha, monto, metodo, referencia };
 }
 
@@ -240,18 +238,21 @@ export type MotivoRechazoAbono = 'cancelada' | 'borrador' | 'pagada' | 'sobrepag
  * formateado en pesos.
  */
 export function mensajeRechazoAbono(motivo: MotivoRechazoAbono, saldo: number, monto: number): string {
+  const { clave, vars } = claveRechazoAbono(motivo, saldo, monto);
+  return trMensajes('es').t(clave, vars);
+}
+
+/** El mismo rechazo como clave del diccionario + variables, para que `DatoInvalido` lo diga en el idioma de quien lo lee. */
+export function claveRechazoAbono(motivo: MotivoRechazoAbono, saldo: number, monto: number): { clave: ClaveMensaje; vars?: Variables } {
   switch (motivo) {
     case 'cancelada':
-      return 'Esa factura está cancelada: no se le abonan pagos.';
+      return { clave: 'fac.abono_cancelada' };
     case 'borrador':
-      return 'Esa factura sigue en borrador. Márcala como emitida (con su UUID) antes de registrarle pagos: un cobro sin CFDI es lo que el contralor no puede cruzar.';
+      return { clave: 'fac.abono_borrador' };
     case 'pagada':
-      return 'Esa factura ya está saldada. Si el cliente pagó de más, eso se aclara con él, no capturándolo aquí.';
+      return { clave: 'fac.abono_pagada' };
     case 'sobrepago':
-      return (
-        `Ese pago (${mxn(monto)}) rebasa el saldo de la factura (${mxn(saldo)}). ` +
-        'Revisa el monto; si el cliente de verdad pagó de más, se aclara con una nota de crédito, no capturando de más aquí.'
-      );
+      return { clave: 'fac.abono_sobrepago', vars: { monto: mxn(monto), saldo: mxn(saldo) } };
   }
 }
 
@@ -312,25 +313,30 @@ export interface LlaveFolio {
  * quien capturó sepa dónde está la gemela en vez de adivinar.
  */
 export function mensajeFolioRepetido(k: LlaveFolio): string {
-  const ejercicio = k.fecha === null ? 'ese mismo ejercicio' : `el ejercicio ${k.fecha.slice(0, 4)}`;
-  const donde = k.serie === null ? 'sin serie' : `de la serie «${k.serie}»`;
-  return (
-    `Ya tienes registrada una factura con el folio «${k.folio ?? ''}» ${donde} en ${ejercicio}. ` +
-    'El folio se compara por flota, serie y año (sin distinguir mayúsculas), así que el mismo folio en OTRA serie o en OTRO ejercicio sí cabe: ' +
-    'revisa que la serie y la fecha sean las de este CFDI. Si la factura anterior está cancelada, su folio sigue ocupado — es un consecutivo fiscal, no una lista de pendientes.'
-  );
+  const { clave, vars } = claveFolioRepetido(k);
+  return trMensajes('es').t(clave, vars);
+}
+
+/** El folio repetido como clave + variables (cuatro frases: con o sin serie, con o sin año de la fecha). */
+export function claveFolioRepetido(k: LlaveFolio): { clave: ClaveMensaje; vars: Variables } {
+  const folio = k.folio ?? '';
+  const sufijo = `${k.serie === null ? 'sin' : 'serie'}_${k.fecha === null ? 'mismo' : 'anio'}`;
+  const vars: Record<string, string> = { folio };
+  if (k.serie !== null) vars.serie = k.serie;
+  if (k.fecha !== null) vars.anio = k.fecha.slice(0, 4);
+  return { clave: `fac.folio_repetido_${sufijo}` as ClaveMensaje, vars };
 }
 
 /** Los índices únicos de la 0049 y la 0166, dichos en palabras de quien capturó. */
 function traducirChoque(mensaje: string, llave: LlaveFolio): DatoInvalido | null {
   if (mensaje.includes('factura_cfdi_unico')) {
-    return new DatoInvalido('Ese folio fiscal (UUID) ya está registrado en otra factura tuya. El mismo CFDI no se registra dos veces: el saldo del cliente saldría al doble.');
+    return datoInvalido('adm.ese_folio_fiscal_uuid_ya');
   }
   if (mensaje.includes('factura_serie_btrim')) {
-    return new DatoInvalido('La serie no puede ir vacía ni con espacios: cópiala tal como aparece en el CFDI, o déjala en blanco si tu flota no usa series.');
+    return datoInvalido('adm.la_serie_no_puede_ir');
   }
   if (mensaje.includes('factura_folio_unico')) {
-    return new DatoInvalido(mensajeFolioRepetido(llave));
+    { const { clave, vars } = claveFolioRepetido(llave); return datoInvalido(clave, vars); }
   }
   return null;
 }
@@ -461,9 +467,6 @@ async function facturasQueAmparan(
 }
 
 /** Una factura VIVA (emitida o pagada) ampara el viaje: facturarlo otra vez duplica el ingreso. */
-const MENSAJE_VIAJE_YA_FACTURADO =
-  'Uno de los viajes marcados ya está amparado por otra factura emitida. Un viaje se factura una sola vez: cancela esa factura primero si hay que rehacerla.';
-
 export async function crearFactura(
   tenantId: string,
   f: FacturaValida,
@@ -476,7 +479,7 @@ export async function crearFactura(
     'crearFactura.cliente',
   );
   if (errCli) throw new Error(`crearFactura: no se pudo leer el cliente: ${errCli.message}`);
-  if (!cli) throw new DatoInvalido('Ese cliente no está en tu flota. Recarga la pantalla y vuelve a elegirlo.');
+  if (!cli) throw datoInvalido('adm.ese_cliente_no_esta_en');
   const diasCredito = (cli as { dias_credito: number | null }).dias_credito;
   const venceEn = diasCredito === null ? null : sumarDias(f.fecha, diasCredito);
 
@@ -489,7 +492,7 @@ export async function crearFactura(
     if (errV) throw new Error(`crearFactura: no se pudieron verificar los viajes: ${errV.message}`);
     const propios = new Set((viajes ?? []).map((v) => String((v as { id: unknown }).id)));
     if (propios.size !== new Set(f.viajeIds).size) {
-      throw new DatoInvalido('Uno de los viajes marcados ya no está en tu flota. Recarga la pantalla.');
+      throw datoInvalido('adm.uno_de_los_viajes_marcados_2');
     }
     // A37-S45-07: un viaje de OTRO cliente no se liga a esta factura. Un viaje
     // sin cliente asignado no prueba nada en contra y se deja pasar.
@@ -498,13 +501,13 @@ export async function crearFactura(
       return c != null && String(c) !== f.clienteId;
     });
     if (ajeno) {
-      throw new DatoInvalido('Uno de los viajes marcados es de otro cliente. Una factura solo ampara viajes de su cliente: revisa la selección.');
+      throw datoInvalido('adm.uno_de_los_viajes_marcados_3');
     }
 
     // A37-S45-07: ni un viaje que otra factura VIVA ya ampara, ni un doble clic.
     const previas = await facturasQueAmparan(tenantId, f.viajeIds, 'crearFactura.facturas_previas');
     if (previas.some((p) => p.estatus === 'emitida' || p.estatus === 'pagada')) {
-      throw new DatoInvalido(MENSAJE_VIAJE_YA_FACTURADO);
+      throw datoInvalido('fac.viaje_ya_facturado');
     }
     // IDEMPOTENCIA del borrador: el mismo borrador (cliente, fecha, importes,
     // serie/folio y EXACTAMENTE los mismos viajes) creado hace menos de un
@@ -591,13 +594,13 @@ export async function marcarEmitida(
   sello: { serie?: string; folio: string; cfdiUuid: string },
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(facturaId)) throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
+  if (!esUuidValido(facturaId)) throw datoInvalido('adm.no_se_reconoce_esa_factura');
   const uuid = sello.cfdiUuid.trim().toLowerCase();
   if (!esUuidValido(uuid)) {
-    throw new DatoInvalido('El folio fiscal (UUID) no tiene la forma de un UUID del SAT. Cópialo del XML o del PDF del CFDI.');
+    throw datoInvalido('adm.el_folio_fiscal_uuid_no_2');
   }
   const folio = sello.folio.trim() === '' ? undefined : sello.folio.trim();
-  if (folio !== undefined && folio.length > 40) throw new DatoInvalido('El folio no puede pasar de 40 caracteres.');
+  if (folio !== undefined && folio.length > 40) throw datoInvalido('adm.el_folio_no_puede_pasar');
 
   // RES-22 (0166) · LA SERIE VIAJA CON EL FOLIO O NO VIAJA.
   // El sello llega del CFDI ya timbrado, y ahí serie y folio son UNA sola
@@ -623,7 +626,7 @@ export async function marcarEmitida(
   if (suyos.length > 0) {
     const otras = await facturasQueAmparan(tenantId, suyos, 'marcarEmitida.facturas_previas');
     if (otras.some((o) => o.facturaId !== facturaId && (o.estatus === 'emitida' || o.estatus === 'pagada'))) {
-      throw new DatoInvalido(MENSAJE_VIAJE_YA_FACTURADO);
+      throw datoInvalido('fac.viaje_ya_facturado');
     }
   }
 
@@ -642,7 +645,7 @@ export async function marcarEmitida(
     throw new Error(`marcarEmitida: ${error.message}`);
   }
   if (!Array.isArray(data) || data.length === 0) {
-    throw new DatoInvalido('Esa factura no está en borrador en tu flota: puede que ya esté emitida o cancelada. Recarga la pantalla.');
+    throw datoInvalido('adm.esa_factura_no_esta_en');
   }
   await anotar(tenantId, 'factura.emitida', 'factura_emitida', facturaId, {
     cfdiUuid: uuid, folio: folio ?? null, ...(serie !== undefined ? { serie } : {}),
@@ -664,18 +667,17 @@ const CHOQUE_UNICO = '23505';
 /** El motivo y el saldo que manda la base, convertidos en el mensaje de siempre. */
 function traducirErrorDelPago(error: { code?: string; message?: string }, monto: number): Error {
   if (error.code === FACTURA_FUERA_DE_FLOTA) {
-    return new DatoInvalido('Esa factura no está en tu flota. Recarga la pantalla.');
+    return datoInvalido('adm.esa_factura_no_esta_en_2');
   }
   if (error.code === ABONO_RECHAZADO) {
     const leido = /motivo=([a-z]+)\s+saldo=(-?[\d.]+)/.exec(error.message ?? '');
     if (leido) {
-      return new DatoInvalido(
-        mensajeRechazoAbono(leido[1] as MotivoRechazoAbono, Number(leido[2]), monto),
-      );
+      const { clave, vars } = claveRechazoAbono(leido[1] as MotivoRechazoAbono, Number(leido[2]), monto);
+      return datoInvalido(clave, vars);
     }
     // Un CU011 que no se puede leer sigue siendo un rechazo de negocio: se
     // rechaza igual, sin inventar la cifra que no llegó.
-    return new DatoInvalido('Ese pago no se puede registrar contra esa factura. Revisa el estatus y el saldo antes de volver a intentarlo.');
+    return datoInvalido('adm.ese_pago_no_se_puede');
   }
   // Todo lo demás —incluido el RPC ausente y el tope de consulta de `acotada`—
   // es un error de verdad: nada de tragárselo como si la factura tuviera la
@@ -688,14 +690,14 @@ function traducirErrorDelPago(error: { code?: string; message?: string }, monto:
 const CANCELACION_RECHAZADA = 'CU016';
 function traducirErrorDeCancelacion(error: { code?: string; message?: string }): Error {
   if (error.code === FACTURA_FUERA_DE_FLOTA) {
-    return new DatoInvalido('Esa factura no está en tu flota. Recarga la pantalla.');
+    return datoInvalido('adm.esa_factura_no_esta_en_2');
   }
   if (error.code === CANCELACION_RECHAZADA) {
     const motivo = /motivo=([a-z_]+)/.exec(error.message ?? '')?.[1];
     if (motivo === 'con_pagos') {
-      return new DatoInvalido('Esa factura tiene pagos registrados. Primero aclara ese dinero (con el cliente y con el SAT); cancelarla de un clic dejaría cobros contra nada.');
+      return datoInvalido('adm.esa_factura_tiene_pagos_registrados');
     }
-    return new DatoInvalido('Esa factura no se pudo cancelar: puede que ya esté cancelada o pagada. Recarga la pantalla.');
+    return datoInvalido('adm.esa_factura_no_se_pudo');
   }
   // Base caída, RPC ausente, tope de `acotada`: un error de verdad, no un
   // rechazo de negocio — no se le dice al contralor que su factura tiene la culpa.
@@ -828,7 +830,7 @@ export async function cancelarFactura(
   facturaId: string,
   actor?: { id?: string; email?: string },
 ): Promise<void> {
-  if (!esUuidValido(facturaId)) throw new DatoInvalido('No se reconoce esa factura. Recarga la pantalla.');
+  if (!esUuidValido(facturaId)) throw datoInvalido('adm.no_se_reconoce_esa_factura');
 
   const { error } = await acotada(supabaseAdmin().rpc('cancelar_factura_tx', {
     p_tenant: tenantId,
