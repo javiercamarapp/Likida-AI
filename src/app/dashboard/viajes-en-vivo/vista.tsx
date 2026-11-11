@@ -1,5 +1,6 @@
 import { cifrasUniformes } from '../formato';
-import { Aviso, BarraFiltros, Boton, BotonEnlace, Disclosure, FiltroInterruptor, FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { TarjetaTabla } from '../bloque';
+import { Aviso, BarraFiltros, Boton, BotonEnlace, FiltroInterruptor, FiltroOpciones, Icono, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { MapPin, MapPinOff, ShieldAlert } from 'lucide-react';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { ETIQUETA_DESTINO, type TareaAbierta } from '@/lib/likida/orquestador/escalamiento';
@@ -205,20 +206,22 @@ export function VistaViajesEnVivo({ tablero, filtros, catalogo, accionUrl, ocult
       cifras={cifrasUniformes(cifras)}
       selloCifras={selloHoy('Viajes en curso')}
     >
-      <TablaBase<FilaViaje>
-        etiqueta={t('op.viajes_en_vivo_y_su_estado')}
-        columnas={columnas(tablero.gpsDisponible, t)}
-        filas={tablero.filas}
-        idFila={(f) => f.viajeId}
-        tarjetaMovil
-        vacio={{
-          titulo: t('op.sin_viajes_que_mostrar'),
-          texto: filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? t('op.ningun_viaje_cumple_los_filtros') : t('op.no_hay_viajes_en_curso'),
-        }}
-      />
+      <TarjetaTabla titulo={t('op.viajes_en_vivo_y_su_estado')} contador={tablero.hayMas ? undefined : numero(tablero.filas.length)}>
+        <TablaBase<FilaViaje>
+          etiqueta={t('op.viajes_en_vivo_y_su_estado')}
+          columnas={columnas(tablero.gpsDisponible, t)}
+          filas={tablero.filas}
+          idFila={(f) => f.viajeId}
+          tarjetaMovil
+          vacio={{
+            titulo: t('op.sin_viajes_que_mostrar'),
+            texto: filtros.terminalId || filtros.clienteId || filtros.soloExcepciones ? t('op.ningun_viaje_cumple_los_filtros') : t('op.no_hay_viajes_en_curso'),
+          }}
+        />
+      </TarjetaTabla>
       {tareas}
-      {pregunta ? <Disclosure variante="linea" titulo={t('op.preguntale_al_asistente')}>{pregunta}</Disclosure> : null}
-      {notificaciones ? <Disclosure variante="linea" titulo={t('op.notificaciones_de_los_avisos')}>{notificaciones}</Disclosure> : null}
+      {pregunta ? <Tarjeta titulo={t('op.preguntale_al_asistente')}>{pregunta}</Tarjeta> : null}
+      {notificaciones ? <Tarjeta titulo={t('op.notificaciones_de_los_avisos')}>{notificaciones}</Tarjeta> : null}
     </EsqueletoTablaMaestra>
   );
 }
