@@ -403,7 +403,7 @@ describe('VistaRevision · perfil restringido (envío al TMS, sin viaje)', () =>
 
   it('salida simulada: la tarjeta de envío lleva «Simulado» y dice «Subido al TMS (simulado)»; sin simulador dice solo «Enviado.»', () => {
     const sim = montar(aprobado(), true, { estado: 'enviado', simulado: true });
-    expect(sim).toMatch(/data-testid="rotulo-simulado"[^>]*>Simulado</);
+    expect(sim).toMatch(/data-testid="rotulo-simulado"[^>]*>(?:<[^>]+>)?Simulado</);
     expect(sim).toMatch(/Subido al TMS \(simulado\)/);
     const real = montar(aprobado(), true, { estado: 'enviado' });
     expect(real).not.toMatch(/Simulado|simulado/);

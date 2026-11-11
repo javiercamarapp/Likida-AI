@@ -3,14 +3,14 @@
 import { useActionState, useEffect, useMemo, useRef, useState, startTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Download, FileSpreadsheet, FileUp, MessageCircle, TriangleAlert } from 'lucide-react';
+import { Download, FileUp } from 'lucide-react';
 import { numero } from '@/lib/formato';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
 import type { ResultadoImportacionUI } from '@/lib/likida/importacion/resultado_ui';
 import { DialogoConfirmar } from '../admin/ui/confirmar';
 import { useNotificar } from '../admin/ui/notificaciones';
 import { AvisoResultado } from '../admin/ui/aviso-resultado';
-import { CampoArchivo, TituloRecuadro, InfoTip } from '@/app/ui-v2/componentes';
+import { Aviso, Boton, BotonEnlace, CampoArchivo, Casilla, Icono, InfoTip, TablaBase, Tarjeta, type ColumnaBase } from '@/app/ui-v2/componentes';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -141,191 +141,150 @@ export function ImportadorMasivo({
   const puedeConfirmar = revisado && !estado.excedeTope && estado.nuevas > 0;
   const nombreArchivoErrores = `errores-${entidad}.csv`;
 
+  const tituloCarga = esGps ? 'Ligar dispositivos GPS desde Excel o CSV' : `Cargar ${sustantivo} desde Excel o CSV`;
+  const rotuloMuestra = estado?.confirmado ? (esGps ? 'Las primeras que se ligaron' : 'Las primeras que se dieron de alta') : (esGps ? 'Así se ligarían las primeras' : 'Así entrarían las primeras');
+
   return (
-    <section id="importar" aria-labelledby="titulo-importar" className="card p-4">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-          <FileSpreadsheet aria-hidden width={17} height={17} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-        </div>
-        <div className="min-w-0 flex-1">
-          <TituloRecuadro id="titulo-importar" info="importador.carga">{esGps ? 'Ligar dispositivos GPS desde Excel o CSV' : `Cargar ${sustantivo} desde Excel o CSV`}</TituloRecuadro>
-          <p className="mt-0.5 text-[12px]" style={{ color: 'var(--muted)' }}>
-            {esGps ? 'Para ligar el GPS de toda tu flota de una vez a unidades que YA existen (no se dan de alta unidades).' : 'Para dar de alta tu flota completa de una vez.'} Primero se <strong>revisa</strong> el archivo —no se escribe nada—,
-            ves cuántas filas entran y cuáles traen un problema, y recién entonces confirmas.
-          </p>
+    <div id="importar">
+      <Tarjeta titulo={tituloCarga} info="importador.carga">
+        <p className="text-[12px] text-[var(--muted)]">
+          {esGps ? 'Para ligar el GPS de toda tu flota de una vez a unidades que YA existen (no se dan de alta unidades).' : 'Para dar de alta tu flota completa de una vez.'} Primero se <strong>revisa</strong> el archivo —no se escribe nada—,
+          ves cuántas filas entran y cuáles traen un problema, y recién entonces confirmas.
+        </p>
 
-          <ol className="mt-3 space-y-3 text-[13px]">
-            <li>
-              <p className="font-medium">1. Descarga la plantilla</p>
-              <p className="text-[12px]" style={{ color: 'var(--muted)' }}>{columnas}</p>
-              <a href={`data:text/csv;charset=utf-8,${encodeURIComponent(plantillaCsv)}`} download={archivoPlantilla}
-                className="hairline mt-1.5 inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]">
-                <Download aria-hidden width={13} height={13} strokeWidth={2} />
-                Descargar plantilla (.csv)
-              </a>
-            </li>
-            <li>
-              <p className="font-medium">2. Sube tu archivo y revísalo</p>
-              <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                <CampoArchivo
-                  entradaRef={entrada} id={`archivo-${entidad}`} accept=".csv,.xlsx,.xls"
-                  etiqueta={`Archivo CSV o Excel con los ${sustantivo}`} etiquetaOculta nombreArchivo={archivo?.name ?? ''}
-                  onChange={(e) => { validarArchivoElegido(e.currentTarget); setArchivo(e.currentTarget.files?.[0] ?? null); }}
-                  className="min-w-0 flex-1 basis-64"
-                />
-                <button type="button" onClick={() => enviar('previsualizar')} disabled={!archivo || pendiente}
-                  className="rv-btn rv-btn--secondary">
-                  <FileUp aria-hidden width={13} height={13} strokeWidth={2} className={pendiente ? 'animate-pulse' : ''} />
-                  {pendiente ? 'Revisando…' : 'Revisar archivo'}
-                </button>
-              </div>
-              <p className="mt-1.5 text-[11px]" style={{ color: 'var(--faint)' }}>
-                Máximo {MAX_MB} MB y {numero(tope)} filas por archivo. {esGps ? 'Un dispositivo es de una sola unidad y una unidad tiene un solo dispositivo.' : patioDelJefe
-                  ? <>Tu carga cae en tu patio, <strong>{patioDelJefe}</strong>.</>
-                  : <>La columna «patio» debe llevar el nombre de un patio que ya exista en <Link href={hrefPatios} className="underline">Patios</Link>.</>}
+        <ol className="mt-3 space-y-3 text-[13px]">
+          <li>
+            <p className="font-medium">1. Descarga la plantilla</p>
+            <p className="text-[12px] text-[var(--muted)]">{columnas}</p>
+            <BotonEnlace
+              href={`data:text/csv;charset=utf-8,${encodeURIComponent(plantillaCsv)}`} download={archivoPlantilla}
+              tamano="sm" className="mt-1.5" icono={<Icono icono={Download} tam={14} />}
+            >
+              Descargar plantilla (.csv)
+            </BotonEnlace>
+          </li>
+          <li>
+            <p className="font-medium">2. Sube tu archivo y revísalo</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-2">
+              <CampoArchivo
+                entradaRef={entrada} id={`archivo-${entidad}`} accept=".csv,.xlsx,.xls"
+                etiqueta={`Archivo CSV o Excel con los ${sustantivo}`} etiquetaOculta nombreArchivo={archivo?.name ?? ''}
+                onChange={(e) => { validarArchivoElegido(e.currentTarget); setArchivo(e.currentTarget.files?.[0] ?? null); }}
+                className="min-w-0 flex-1 basis-64"
+              />
+              <Boton
+                onClick={() => enviar('previsualizar')} disabled={!archivo} loading={pendiente}
+                icono={<Icono icono={FileUp} tam={14} />}
+              >
+                {pendiente ? 'Revisando…' : 'Revisar archivo'}
+              </Boton>
+            </div>
+            <p className="mt-1.5 text-[11px] text-[var(--faint)]">
+              Máximo {MAX_MB} MB y {numero(tope)} filas por archivo. {esGps ? 'Un dispositivo es de una sola unidad y una unidad tiene un solo dispositivo.' : patioDelJefe
+                ? <>Tu carga cae en tu patio, <strong>{patioDelJefe}</strong>.</>
+                : <>La columna «patio» debe llevar el nombre de un patio que ya exista en <Link href={hrefPatios} className="underline">Patios</Link>.</>}
+            </p>
+          </li>
+        </ol>
+
+        <div aria-live="polite" className="mt-3 space-y-3">
+          {estado?.error && <AvisoResultado estado={{ ok: false, error: estado.error }} />}
+
+          {estado && (!estado.error || estado.leidas > 0) && estado.huella !== '' && (
+            <div className="space-y-3">
+              <p className="text-[12px] text-[var(--muted)]">
+                Archivo <strong className="text-[var(--ink2)]">{estado.archivo}</strong> · {numero(estado.leidas)} filas con datos leídas
+                {estado.confirmado ? ' · CARGA CONFIRMADA' : revisado ? ' · solo revisado, todavía no se escribió nada' : ''}
               </p>
-            </li>
-          </ol>
 
-          <div aria-live="polite" className="mt-3 space-y-3">
-            {estado?.error && <AvisoResultado estado={{ ok: false, error: estado.error }} />}
-
-            {estado && (!estado.error || estado.leidas > 0) && estado.huella !== '' && (
-              <div className="space-y-3">
-                <p className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                  Archivo <strong style={{ color: 'var(--ink2)' }}>{estado.archivo}</strong> · {numero(estado.leidas)} filas con datos leídas
-                  {estado.confirmado ? ' · CARGA CONFIRMADA' : revisado ? ' · solo revisado, todavía no se escribió nada' : ''}
-                </p>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <Cifra info="importador.nuevas" titulo={estado.confirmado ? (esGps ? 'Se ligaron' : 'Se dieron de alta') : (esGps ? 'Se ligarían' : 'Se darían de alta')} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
-                  <Cifra info="importador.ya_estaban" titulo="Ya estaban" valor={estado.yaEstaban} nota="no se tocan" />
-                  <Cifra info="importador.con_problema" titulo="Con problema" valor={estado.conProblema} tono={estado.conProblema > 0 ? 'bad' : undefined} nota="no entran" />
-                </div>
-
-                {estado.excedeTope && (
-                  <p role="alert" className="flex items-start gap-2 rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
-                    <TriangleAlert aria-hidden width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-                    El archivo trae más de {numero(tope)} filas. Pártelo en archivos más chicos: no se importa a medias.
-                  </p>
-                )}
-
-                {estado.avisos.filter((a) => !/tope es/.test(a)).map((a) => (
-                  <p key={a} className="text-[12px]" style={{ color: 'var(--warn)' }}>{a}</p>
-                ))}
-
-                {estado.patiosDesconocidos.length > 0 && (
-                  <p className="rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
-                    El archivo menciona patios que no existen en tu flota: <strong>{estado.patiosDesconocidos.slice(0, 8).join(', ')}</strong>
-                    {estado.patiosDesconocidos.length > 8 ? ` y ${numero(estado.patiosDesconocidos.length - 8)} más` : ''}.{' '}
-                    <Link href={hrefPatios} className="underline">Créalos en Patios</Link> y vuelve a subir el archivo, o corrige el nombre.
-                  </p>
-                )}
-
-                {estado.muestra.length > 0 && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[12px]">
-                      <caption className="pb-1 text-left text-[11px] font-medium uppercase tracking-wide" style={{ color: 'var(--faint)' }}>
-                        {estado.confirmado ? (esGps ? 'Las primeras que se ligaron' : 'Las primeras que se dieron de alta') : (esGps ? 'Así se ligarían las primeras' : 'Así entrarían las primeras')}
-                      </caption>
-                      <tbody>
-                        {estado.muestra.map((m) => (
-                          <tr key={m.fila}>
-                            <th scope="row" className="w-16 py-1 pr-2 text-left font-normal tabular" style={{ color: 'var(--faint)' }}>fila {m.fila}</th>
-                            <td className="py-1 pr-3 font-medium">{m.titulo}</td>
-                            <td className="py-1" style={{ color: 'var(--muted)' }}>{m.detalle}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-
-                {estado.problemas.length > 0 && (
-                  <div>
-                    <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-[12px] font-medium" style={{ color: 'var(--bad)' }}>
-                        {numero(estado.conProblema)} {estado.conProblema === 1 ? 'fila no entra' : 'filas no entran'}
-                      </p>
-                      {hrefErrores && (
-                        <a href={hrefErrores} download={nombreArchivoErrores}
-                          className="hairline inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition-colors hover:bg-[var(--canvas)]">
-                          <Download aria-hidden width={12} height={12} strokeWidth={2} />
-                          Descargar errores (.csv)
-                        </a>
-                      )}
-                    </div>
-                    <div className="max-h-64 overflow-y-auto rounded-lg hairline">
-                      <table className="w-full text-[12px]">
-                        <caption className="sr-only">Filas del archivo que no entran, con su motivo</caption>
-                        <thead>
-                          <tr className="text-left" style={{ color: 'var(--faint)' }}>
-                            <th scope="col" className="etiqueta-mono w-16 px-3 py-1.5 text-[11px] font-normal uppercase">Fila</th>
-                            <th scope="col" className="etiqueta-mono px-3 py-1.5 text-[11px] font-normal uppercase">Motivo</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {estado.problemas.map((p) => (
-                            <tr key={`${p.fila}-${p.motivo}`}>
-                              <td className="px-3 py-1 tabular" style={{ color: 'var(--muted)' }}>{p.fila}</td>
-                              <td className="px-3 py-1">{p.motivo}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {estado.conProblema > estado.problemas.length && (
-                      <p className="mt-1 text-[11px]" style={{ color: 'var(--faint)' }}>
-                        Se muestran las primeras {numero(estado.problemas.length)} de {numero(estado.conProblema)}; corrige el archivo y vuelve a revisarlo para ver el resto.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {estado.confirmado && estado.invitacion && (
-                  <div className="rounded-lg px-3 py-2 text-[12px]" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-                    <p className="flex items-center gap-1.5 font-medium">
-                      <MessageCircle aria-hidden width={14} height={14} strokeWidth={1.75} style={{ color: 'var(--marca)' }} />
-                      Invitaciones por WhatsApp: {numero(estado.invitacion.enviadas)} enviadas
-                    </p>
-                    {estado.invitacion.error && <p style={{ color: 'var(--bad)' }}>{estado.invitacion.error}</p>}
-                    {estado.invitacion.fallidas.slice(0, 10).map((f) => (
-                      <p key={f.nombre + f.motivo} style={{ color: 'var(--warn)' }}>{f.nombre}: {f.motivo}</p>
-                    ))}
-                    {estado.invitacion.pendientesRestantes > 0 && (
-                      <p style={{ color: 'var(--muted)' }}>
-                        Quedan {numero(estado.invitacion.pendientesRestantes)} por invitar: usa «Enviar invitaciones pendientes» en el registro de abajo.
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {puedeConfirmar && (
-                  <div className="space-y-2 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
-                    {ofrecerInvitacion && (
-                      <label className="flex cursor-pointer items-start gap-2 text-[12px]">
-                        <input type="checkbox" checked={invitar} onChange={(e) => setInvitar(e.target.checked)} className="mt-0.5 h-4 w-4" />
-                        <span>
-                          <strong>Invitar por WhatsApp a los operadores nuevos.</strong>{' '}
-                          <span style={{ color: 'var(--muted)' }}>
-                            Cada invitación es un mensaje de WhatsApp (plantilla con costo de Meta). Marca esto solo si son tus
-                            choferes y aceptaron recibir mensajes de la empresa. Salen hasta 40 por vez; el resto queda pendiente.
-                          </span>
-                        </span>
-                      </label>
-                    )}
-                    <button type="button" onClick={() => setConfirmando(true)} disabled={pendiente}
-                      className="rv-btn rv-btn--primary"
-                      style={{ background: 'var(--marca)', color: 'var(--marca-fg)' }}>
-                      {pendiente ? (esGps ? 'Ligando…' : 'Importando…') : `${esGps ? 'Ligar' : 'Importar'} ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}`}
-                    </button>
-                  </div>
-                )}
+              <div className="grid grid-cols-3 gap-2">
+                <Cifra info="importador.nuevas" titulo={estado.confirmado ? (esGps ? 'Se ligaron' : 'Se dieron de alta') : (esGps ? 'Se ligarían' : 'Se darían de alta')} valor={estado.nuevas} tono={estado.nuevas > 0 ? 'ok' : undefined} />
+                <Cifra info="importador.ya_estaban" titulo="Ya estaban" valor={estado.yaEstaban} nota="no se tocan" />
+                <Cifra info="importador.con_problema" titulo="Con problema" valor={estado.conProblema} tono={estado.conProblema > 0 ? 'bad' : undefined} nota="no entran" />
               </div>
-            )}
-          </div>
+
+              {estado.excedeTope && (
+                <Aviso tono="warn">
+                  El archivo trae más de {numero(tope)} filas. Pártelo en archivos más chicos: no se importa a medias.
+                </Aviso>
+              )}
+
+              {estado.avisos.filter((a) => !/tope es/.test(a)).map((a) => (
+                <Aviso key={a} tono="warn">{a}</Aviso>
+              ))}
+
+              {estado.patiosDesconocidos.length > 0 && (
+                <Aviso tono="warn">
+                  El archivo menciona patios que no existen en tu flota: <strong>{estado.patiosDesconocidos.slice(0, 8).join(', ')}</strong>
+                  {estado.patiosDesconocidos.length > 8 ? ` y ${numero(estado.patiosDesconocidos.length - 8)} más` : ''}.{' '}
+                  <Link href={hrefPatios} className="underline">Créalos en Patios</Link> y vuelve a subir el archivo, o corrige el nombre.
+                </Aviso>
+              )}
+
+              {estado.muestra.length > 0 && (
+                <TablaBase
+                  etiqueta={rotuloMuestra} densa altoMaximo={false}
+                  columnas={COLUMNAS_MUESTRA} filas={estado.muestra} idFila={(m) => String(m.fila)}
+                />
+              )}
+
+              {estado.problemas.length > 0 && (
+                <div>
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-[12px] font-medium text-[var(--bad)]">
+                      {numero(estado.conProblema)} {estado.conProblema === 1 ? 'fila no entra' : 'filas no entran'}
+                    </p>
+                    {hrefErrores && (
+                      <BotonEnlace href={hrefErrores} download={nombreArchivoErrores} variante="ghost" tamano="sm" icono={<Icono icono={Download} tam={14} />}>
+                        Descargar errores (.csv)
+                      </BotonEnlace>
+                    )}
+                  </div>
+                  <TablaBase
+                    etiqueta="Filas del archivo que no entran, con su motivo" densa
+                    columnas={COLUMNAS_PROBLEMAS} filas={estado.problemas} idFila={(p) => `${p.fila}-${p.motivo}`}
+                  />
+                  {estado.conProblema > estado.problemas.length && (
+                    <p className="mt-1 text-[11px] text-[var(--faint)]">
+                      Se muestran las primeras {numero(estado.problemas.length)} de {numero(estado.conProblema)}; corrige el archivo y vuelve a revisarlo para ver el resto.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {estado.confirmado && estado.invitacion && (
+                <Aviso tono={estado.invitacion.error || estado.invitacion.fallidas.length > 0 ? 'warn' : 'ok'}>
+                  <strong>Invitaciones por WhatsApp: {numero(estado.invitacion.enviadas)} enviadas</strong>
+                  {estado.invitacion.error && <span className="block">{estado.invitacion.error}</span>}
+                  {estado.invitacion.fallidas.slice(0, 10).map((f) => (
+                    <span key={f.nombre + f.motivo} className="block">{f.nombre}: {f.motivo}</span>
+                  ))}
+                  {estado.invitacion.pendientesRestantes > 0 && (
+                    <span className="block">
+                      Quedan {numero(estado.invitacion.pendientesRestantes)} por invitar: usa «Enviar invitaciones pendientes» en el registro de abajo.
+                    </span>
+                  )}
+                </Aviso>
+              )}
+
+              {puedeConfirmar && (
+                <div className="space-y-2 border-t border-[var(--line)] pt-3">
+                  {ofrecerInvitacion && (
+                    <Casilla
+                      checked={invitar} onChange={(e) => setInvitar(e.target.checked)}
+                      etiqueta="Invitar por WhatsApp a los operadores nuevos."
+                      ayuda="Cada invitación es un mensaje de WhatsApp (plantilla con costo de Meta). Marca esto solo si son tus choferes y aceptaron recibir mensajes de la empresa. Salen hasta 40 por vez; el resto queda pendiente."
+                    />
+                  )}
+                  <Boton variante="primary" onClick={() => setConfirmando(true)} disabled={pendiente}>
+                    {pendiente ? (esGps ? 'Ligando…' : 'Importando…') : `${esGps ? 'Ligar' : 'Importar'} ${numero(estado.nuevas)} ${estado.nuevas === 1 ? singular : sustantivo}`}
+                  </Boton>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      </div>
+      </Tarjeta>
 
       <DialogoConfirmar
         abierto={confirmando} tono="normal" pendiente={pendiente}
@@ -342,17 +301,32 @@ export function ImportadorMasivo({
         onCancelar={() => setConfirmando(false)}
         onConfirmar={() => { setConfirmando(false); enviar('confirmar'); }}
       />
-    </section>
+    </div>
   );
 }
 
+type FilaMuestra = ResultadoImportacionUI['muestra'][number];
+type FilaProblema = ResultadoImportacionUI['problemas'][number];
+
+const COLUMNAS_MUESTRA: readonly ColumnaBase<FilaMuestra>[] = [
+  { id: 'fila', titulo: 'Fila', celda: (m) => <span className="tabular text-[var(--faint)]">fila {m.fila}</span> },
+  { id: 'titulo', titulo: 'Registro', principal: true, celda: (m) => <span className="font-medium">{m.titulo}</span> },
+  { id: 'detalle', titulo: 'Detalle', celda: (m) => <span className="text-[var(--muted)]">{m.detalle}</span> },
+];
+
+const COLUMNAS_PROBLEMAS: readonly ColumnaBase<FilaProblema>[] = [
+  { id: 'fila', titulo: 'Fila', celda: (p) => <span className="tabular text-[var(--muted)]">{p.fila}</span> },
+  { id: 'motivo', titulo: 'Motivo', celda: (p) => p.motivo },
+];
+
+const COLOR_CIFRA = { ok: 'text-[var(--ok)]', bad: 'text-[var(--bad)]' } as const;
+
 function Cifra({ titulo, valor, nota, tono, info }: { titulo: string; valor: number; nota?: string; tono?: 'ok' | 'bad'; info: InfoClave }) {
-  const color = tono === 'ok' ? 'var(--ok)' : tono === 'bad' ? 'var(--bad)' : 'var(--ink)';
   return (
-    <div className="rounded-lg px-3 py-2" style={{ background: 'var(--canvas)', border: '1px solid var(--line)' }}>
-      <p className="flex items-center gap-1 text-[11px]" style={{ color: 'var(--muted)' }}>{titulo}<InfoTip clave={info} /></p>
-      <p className="font-display text-[20px] font-semibold tabular" style={{ color }}>{numero(valor)}</p>
-      {nota && <p className="text-[11px]" style={{ color: 'var(--faint)' }}>{nota}</p>}
+    <div className="rounded-lg border border-[var(--line)] bg-[var(--canvas)] px-3 py-2">
+      <p className="flex items-center gap-1 text-[11px] text-[var(--muted)]">{titulo}<InfoTip clave={info} /></p>
+      <p className={`font-display text-[20px] font-semibold tabular ${tono ? COLOR_CIFRA[tono] : 'text-[var(--ink)]'}`}>{numero(valor)}</p>
+      {nota && <p className="text-[11px] text-[var(--faint)]">{nota}</p>}
     </div>
   );
 }
