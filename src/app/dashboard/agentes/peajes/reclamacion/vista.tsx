@@ -12,9 +12,10 @@ import { SeccionRevisionCobros, SeccionCierreMensual, SeccionSeguimiento, type A
 import { TablaCandidatosCobros, type AccionDecidir } from '../candidatos-tabla';
 import type { TablaCandidatos, AccionCandidato } from '@/lib/likida/peajes/candidatos_tabla';
 import {
-  AvisoCompacto, Boton, BotonEnlace, CampoTexto, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
+  AvisoCompacto, Boton, BotonEnlace, CampoTexto, EstadoVacio, Icono, StatusChip, TablaBase, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import '../peajes.css';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -64,15 +65,33 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
   // Sin nada evaluado (ni una línea confirmada ni un cruce) no hay con qué comparar: no se pinta como «todo bien».
   const faltanDatos = !!candidato && !!reporte && reporte.resumen.reclamables === 0 && reporte.resumen.confirmadas === 0;
   return (
-    <MarcoPagina titulo={tx('rest.reporte_de_reclamacion_de_peajes')} apoyo={tx('rest.los_cruces_candidatos_a_reclamo_de')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
+    <EsqueletoTablaMaestra
+      titulo={tx('rest.reporte_de_reclamacion_de_peajes')}
+      apoyo={tx('rest.los_cruces_candidatos_a_reclamo_de')}
+      acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}
+      avisos={(
+        <>
+          {estado === 'no_existe' && <AvisoCompacto tono="error" resumen={tx('rest.ese_desglose_no_existe_en_tu')} />}
+          {estado === 'error' && <AvisoCompacto tono="error" resumen={tx('rest.no_se_pudo_armar_el_reporte')} />}
+          {extras?.aviso && <AvisoCompacto tono="ok" resumen={extras.aviso} />}
+          {extras?.error && <AvisoCompacto tono="error" resumen={extras.error} />}
+          {estado === 'ok' && !reporte && extras?.errorGps && (
+            <AvisoCompacto tono="error" resumen={tx('rest.el_reporte_con_evidencia_de_gps')} />
+          )}
+        </>
+      )}
+      // Tira de cifras solo con reporte armado (nunca ceros sin lectura): los mismos números que el encabezado del reporte, a la vista primero.
+      cifras={estado === 'ok' && reporte ? [
+        { etiqueta: tx('f26d.reclamacion.cruces'), valor: numero(reporte.resumen.reclamables), tono: reporte.resumen.reclamables > 0 ? 'warn' : undefined },
+        { etiqueta: tx('f26d.reclamacion.monto'), valor: mxn(reporte.resumen.montoReclamable) },
+        { etiqueta: tx('f26d.reclamacion.confirmadas'), valor: numero(reporte.resumen.confirmadas) },
+        { etiqueta: tx('f26d.reclamacion.sin_datos'), valor: numero(reporte.resumen.sinDatos) },
+      ] : undefined}
+      etiquetaCifras={tx('rest.reporte_de_reclamacion_de_peajes')}
+    >
       {estado === 'sin_desglose' && (
         <EstadoVacio icono={ShieldAlert} titulo={tx('rest.elige_un_desglose')}>{tx('rest.elige_un_desglose_en_el_agente')}</EstadoVacio>
       )}
-      {estado === 'no_existe' && <AvisoCompacto tono="error" resumen={tx('rest.ese_desglose_no_existe_en_tu')} />}
-      {estado === 'error' && <AvisoCompacto tono="error" resumen={tx('rest.no_se_pudo_armar_el_reporte')} />}
-
-      {extras?.aviso && <AvisoCompacto tono="ok" resumen={extras.aviso} />}
-      {extras?.error && <AvisoCompacto tono="error" resumen={extras.error} />}
 
       {estado === 'ok' && extras?.revision && desglose && (
         <SeccionRevisionCobros tr={tr} revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
@@ -91,10 +110,6 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
             propuestaNota={extras.propuestaNota ?? null} sufijo={sufijo} mes={extras.mes} />
         </>
       )}
-      {estado === 'ok' && !reporte && extras?.errorGps && (
-        <AvisoCompacto tono="error" resumen={tx('rest.el_reporte_con_evidencia_de_gps')} />
-      )}
-
       {estado === 'ok' && reporte && desglose && (
         <>
           <Tarjeta
@@ -177,6 +192,6 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
           </Tarjeta>
         </>
       )}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
