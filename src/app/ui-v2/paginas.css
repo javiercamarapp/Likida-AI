@@ -39,7 +39,7 @@
 .rv-pem__item:hover { background: var(--canvas); }
 .rv-pem__item:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-pem__item[data-activo] { background: var(--canvas); }
-.rv-pem__item[data-activo]::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--senal, var(--ink)); }
+.rv-pem__item[data-activo]::before { content: ''; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 2px; background: var(--nav-activo-barra, var(--ink)); }
 .rv-pem__num {
   flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 8px;
   font: 600 12px/1 var(--font-sans-ui, inherit); font-variant-numeric: tabular-nums;
@@ -154,7 +154,7 @@ button.rv-at__fila:hover { background: var(--canvas); }
 button.rv-at__fila:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-at__punto { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .rv-at__punto[data-sev="accion"] { background: var(--senal); }
-.rv-at__punto[data-sev="atencion"] { background: var(--chart-4, var(--muted)); }
+.rv-at__punto[data-sev="atencion"] { background: var(--warn, var(--muted)); }
 .rv-at__punto[data-sev="ok"] { background: var(--ok); }
 .rv-at__texto { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .rv-at__titulo { font-size: 13px; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
