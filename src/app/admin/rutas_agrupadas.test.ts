@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { COPILOTO, AGENTES, NEGOCIO, CONTROL, SISTEMA, SECCIONES, FUERA_DEL_MENU, TODAS_LAS_RUTAS, entradaDeRuta, pestanaActiva, coincideBusqueda, planoBusqueda } from './rutas';
 import { REDIRECCIONES_308 } from './guardas/redirecciones_308';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 
 // El menú de /admin pasó de 43 a 16 entradas SIN perder pantallas: cada página sigue siendo una ruta propia, agrupada como pestaña.
 const ENTRADAS = [COPILOTO, ...AGENTES, ...NEGOCIO, ...CONTROL, ...SISTEMA];
@@ -152,10 +153,13 @@ describe('menú de /admin agrupado en pestañas', () => {
 describe('nombres unificados (pestaña del navegador = menú = h1)', () => {
   const fuente = (r: string) => readFileSync(join(__dirname, r, 'page.tsx'), 'utf8');
   it('Compliance, Cobranza, Ventas y Dev usan el nombre de su entrada del menú', () => {
-    expect(fuente('compliance')).toContain('titulo="Seguridad y datos"');
-    expect(fuente('compliance')).toContain("title: 'Seguridad y datos'");
+    // Los títulos salen del diccionario (admin_sistema): la clave dice «Seguridad y datos» en es y se comprueba abajo.
+    expect(fuente('compliance')).toContain("titulo={t('compliance.seguridad_y_datos')}");
+    expect(fuente('compliance')).toContain("title: t('compliance.seguridad_y_datos')");
+    expect(admin_sistemaEs['compliance.seguridad_y_datos']).toBe('Seguridad y datos');
     expect(fuente('cobranza')).toContain("title: t('cobranza.facturacion')");
-    expect(fuente('mapa-prospectos')).toContain("title: 'Ventas'");
+    expect(fuente('mapa-prospectos')).toContain("title: t('mapa_prospectos.ventas')");
+    expect(admin_sistemaEs['mapa_prospectos.ventas']).toBe('Ventas');
     expect(fuente('dev')).toContain('titulo="Desarrollo"');
   });
   it('Avisos: el menú, la miga y la pantalla se llaman igual y la pantalla lleva rótulo de área', () => {
