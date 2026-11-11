@@ -98,7 +98,7 @@ export const admin_dinero: Record<keyof typeof admin_dineroEs, string> = {
   'cobranza.cobranza_de_las_mensualidades': 'Monthly fee collections',
   'cobranza.por_cobrar': 'To collect',
   'cobranza.toques_sin_propuesta': 'Touches without a proposal',
-  'cobranza.propuestas_pendientes_enviadas_por': 'Proposals pending / sent by the system',
+  'cobranza.propuestas_pendientes_enviadas_por': 'Proposals pending / sent',
   'cobranza.sin_facturas_que_medir': 'No invoices to measure yet',
   'cobranza.incompleto_hay_mas_facturas': 'Incomplete: there are more invoices than were read.',
   'cobranza.vencidas': 'Overdue',
