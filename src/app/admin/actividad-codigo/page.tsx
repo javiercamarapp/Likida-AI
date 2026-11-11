@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
@@ -57,13 +58,14 @@ export default async function ActividadCodigoPage() {
   return (
     <EsqueletoPanelCifras
       titulo="Actividad de código — likida.ai"
+      apoyo={t('actividad_codigo.apoyo')}
       etiquetaCifras="Commits del repositorio"
-      cifras={[
+      cifras={uniformes([
         { etiqueta: ETQ_ANUAL, ...(ok ? { valor: a.totalAnual, formato: 'entero' as const } : { valor: null, ...sinLectura }) },
         { etiqueta: ETQ_SEMANA, ...(ok ? { valor: a.semanas[a.semanas.length - 1]?.total ?? 0, formato: 'entero' as const } : { valor: null, ...sinLectura }) },
         { etiqueta: ETQ_MEJOR, ...(ok ? { valor: mejor?.total ?? 0, formato: 'entero' as const, nota: mejor ? `semana del ${fechaCorta(new Date(mejor.semana * 1000).toISOString())}` : undefined } : { valor: null, ...sinLectura }) },
         { etiqueta: t('actividad_codigo.kpi_recientes'), ...(ok ? { valor: a.recientes.length, formato: 'entero' as const } : { valor: null, ...sinLectura }) },
-      ]}
+      ])}
       avisos={ok ? null : <>
         {a.estado === 'sin_token' && <AvisoGitHub causa="sin_token" />}
         {a.estado === 'calculando' && (

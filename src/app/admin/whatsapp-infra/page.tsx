@@ -1,3 +1,5 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
+import '../sistema.css';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getConversacionesActivas, contarConversacionesActivas, TOPE_CONVERSACIONES } from '@/lib/admin/negocio';
@@ -52,7 +54,7 @@ export default async function WhatsappInfraPage() {
     <EsqueletoPanelCifras
       titulo={t('whatsapp_infra.whatsapp_infra')}
       etiquetaCifras={t('whatsapp_infra.conversaciones_de_whatsapp')}
-      cifras={[
+      cifras={uniformes([
         {
           etiqueta: t('whatsapp_infra.conversaciones_activas'), valor: total, formato: 'entero',
           estado: total === null ? 'vacio' : 'ok',
@@ -62,7 +64,7 @@ export default async function WhatsappInfraPage() {
         { etiqueta: t('whatsapp_infra.kpi_mostradas'), valor: conversaciones.length, formato: 'entero' },
         { etiqueta: t('whatsapp_infra.kpi_numeros'), valor: 1, formato: 'entero', nota: t('whatsapp_infra.kpi_numeros_nota') },
         { etiqueta: t('whatsapp_infra.kpi_sin_integrar'), valor: fueraDeAlcance(t).length, formato: 'entero', tono: 'warn' },
-      ]}
+      ])}
     >
 
       <Tarjeta titulo={t('whatsapp_infra.numero_operativo')}>
@@ -79,7 +81,7 @@ export default async function WhatsappInfraPage() {
       <Tarjeta titulo={recortado ? t('whatsapp_infra.conversaciones_las_mas_recientes_de', { topeConversaciones: TOPE_CONVERSACIONES, total }) : t('whatsapp_infra.conversaciones')}>
         <div id="conversaciones" className="scroll-mt-24">
           {conversaciones.length === 0 ? (
-            <p className="m-0 text-sm text-muted">{t('whatsapp_infra.sin_conversaciones_activas')}</p>
+            <EstadoVacio titulo={t('whatsapp_infra.sin_conversaciones_activas').replace(/\.$/, '')} contenido />
           ) : (
             <div className="space-y-1.5">
               {conversaciones.map((c) => <FilaConversacion key={`${c.tenantId ?? 'sin-flota'}-${c.telefono}`} c={c} />)}
