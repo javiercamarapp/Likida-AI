@@ -1,3 +1,4 @@
+import { Plug } from 'lucide-react';
 import { fechaMx, fechaHoraMx } from '@/lib/formato';
 import type { ClienteMcpConectado, SesionMcpUsuario } from '@/lib/mcp/sesiones';
 import { ROL_LABEL, type RolAppUser } from '@/lib/auth/provisionar';
@@ -77,7 +78,7 @@ export function ListaSesionesMcp({ sesiones, cortarSesiones, t = T_RESTO_ES }: {
   ];
   // El vacío vive DENTRO de su tarjeta (Rovaq: nunca suelto sobre el lienzo).
   if (sesiones.length === 0) {
-    return <Tarjeta titulo={t('cfg.sesiones_mcp_conectadas')} estado="vacio" mensaje={t('cfg.nadie_tiene_un_cliente_conectado')} detalle={t('cfg.ni_claude_ni_chatgpt_estan_leyendo')} contenida />;
+    return <Tarjeta titulo={t('cfg.sesiones_mcp_conectadas')} estado="vacio" iconoVacio={Plug} mensaje={t('cfg.nadie_tiene_un_cliente_conectado')} detalle={t('cfg.ni_claude_ni_chatgpt_estan_leyendo')} contenida />;
   }
   return (
     <TablaBase

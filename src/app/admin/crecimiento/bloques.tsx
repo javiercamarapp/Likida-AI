@@ -9,11 +9,11 @@ import { tenantDemo } from '@/lib/auth/tenant-demo';
 import { ESTADOS_PROSPECTO, COMISION_PRIMER_MES, COMISION_RECURRENTE } from '@/lib/likida/vendedores';
 import { embudoCanonico, getResumenProspectos } from '@/lib/admin/prospectos-mapa';
 import { getEmbudoActivacion, getCohortesUso } from '@/lib/admin/instrumentacion';
-import { numero, fechaCorta, usd } from '@/lib/formato';
+import { numero, fechaCorta, porcentaje, usd } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { getT } from '@/lib/i18n/servidor';
 import { AvisoCompacto, Aviso, Disclosure, FilaTarjetas, StatusChip, Tarjeta, TablaBase } from '../../ui-v2/componentes';
-import { Columnas, Embudo, TiraCifras } from '../../ui-v2/graficas';
+import { BarList, Columnas, TiraCifras } from '../../ui-v2/graficas';
 import './embudo.css';
 
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -78,22 +78,10 @@ export async function BloqueEmbudoAdquisicion() {
   const etapas = ESTADOS_PROSPECTO.filter((e) => e.valor !== 'lost').map((e) => ({ clave: e.valor, etiqueta: e.rotulo, valor: porEstado[e.valor] }));
   const conGente = etapas.filter((e) => e.valor > 0);
   const vacias = etapas.filter((e) => e.valor === 0);
-  const tope = Math.max(1, ...conGente.map((e) => e.valor));
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.embudo_de_adquisicion_prospectos', { total: numero(prospectos.total) })}>
-      <ul className="crc-embudo" aria-label={ta('crecimiento_bloques.prospectos_por_estado')}>
-        {conGente.map((e) => (
-          <li key={e.clave} className="crc-embudo__fila" data-etapa={e.clave}>
-            <div className="crc-embudo__cab">
-              <span className="crc-embudo__etq"><i className="crc-embudo__punto" aria-hidden="true" />{e.etiqueta}</span>
-              <span className="crc-embudo__val">{numero(e.valor)}</span>
-            </div>
-            <svg className="crc-embudo__pista" width="100%" height="8" aria-hidden="true">
-              <rect className="crc-embudo__relleno" x="0" y="0" height="8" rx="4" width={`${Math.max(1, (e.valor / tope) * 100).toFixed(2)}%`} />
-            </svg>
-          </li>
-        ))}
-      </ul>
+      {/* Barra de 6 px, radio 999 y pista tenue (Rovaq `barlist`), con la cifra exacta a la derecha. */}
+      <BarList etiqueta={ta('crecimiento_bloques.prospectos_por_estado')} matiz={8} items={conGente.map((e) => ({ clave: e.clave, etiqueta: e.etiqueta, valor: e.valor, texto: numero(e.valor) }))} />
       {vacias.length > 0 && (
         <p className="adm-din-nota">{ta('crecimiento_bloques.sin_prospectos_todavia_en', { etapas: vacias.map((e) => e.etiqueta).join(', ') })}</p>
       )}
@@ -121,7 +109,7 @@ export async function BloqueCostoYCampanas() {
       <FilaTarjetas variante="6-6">
         <Tarjeta titulo={ta('crecimiento_bloques.costo_por_lead_por')} estado={adquisicion.porFuente.length === 0 ? 'vacio' : 'ok'} mensaje={ta('crecimiento_bloques.sin_leads_capturados')} detalle={ta('crecimiento_bloques.aparece_en_cuanto_entra')}>
           <TablaBase
-            etiqueta={ta('crecimiento_bloques.costo_por_lead_por')} idFila={(f) => f.fuente} tarjetaMovil densa filas={adquisicion.porFuente}
+            etiqueta={ta('crecimiento_bloques.costo_por_lead_por')} idFila={(f) => f.fuente} tarjetaMovil filas={adquisicion.porFuente}
             columnas={[
               { id: 'fuente', titulo: ta('crecimiento_bloques.fuente'), principal: true, celda: (f) => f.fuente },
               { id: 'leads', titulo: ta('crecimiento_bloques.leads'), alinear: 'der', celda: (f) => numero(f.leads) },
@@ -176,15 +164,22 @@ export async function BloqueActivacion() {
       {/* Con los tres conteos en cero el embudo se pinta «vacío»; aquí el cero es un dato real y se dice como tal. */}
       {embudoActivacion.altas + embudoActivacion.activadas + embudoActivacion.dePago === 0 ? (
         <p className="adm-din-nota">{t('crecimiento.activacion.ceros')}</p>
-      ) : <Embudo
-        etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')}
-        formato="numero"
-        etapas={[
-          { etiqueta: ta('crecimiento_bloques.flotas_dadas_de_alta'), valor: embudoActivacion.altas },
-          { etiqueta: ta('crecimiento_bloques.activadas_con_al_menos'), valor: embudoActivacion.activadas },
-          { etiqueta: ta('crecimiento_bloques.de_pago_suscripcion_activa'), valor: embudoActivacion.dePago },
-        ]}
-      />}
+      ) : (
+        <BarList
+          etiqueta={ta('crecimiento_bloques.flotas_por_etapa_de')} matiz={8}
+          items={[
+            { clave: 'altas', etiqueta: ta('crecimiento_bloques.flotas_dadas_de_alta'), valor: embudoActivacion.altas, texto: numero(embudoActivacion.altas) },
+            ...[
+              { clave: 'activadas', etiqueta: ta('crecimiento_bloques.activadas_con_al_menos'), valor: embudoActivacion.activadas, previo: embudoActivacion.altas },
+              { clave: 'pago', etiqueta: ta('crecimiento_bloques.de_pago_suscripcion_activa'), valor: embudoActivacion.dePago, previo: embudoActivacion.activadas },
+            ].map((x) => ({
+              clave: x.clave, etiqueta: x.etiqueta, valor: x.valor,
+              // La conversión contra la etapa anterior solo existe si esa etapa tiene base: sin base no se inventa una tasa.
+              texto: x.previo > 0 ? `${numero(x.valor)} · ${porcentaje((x.valor / x.previo) * 100, 0)}` : numero(x.valor),
+            })),
+          ]}
+        />
+      )}
       <p className="adm-din-nota">
         
         {ta('crecimiento_bloques.contado_en_la_base')}
@@ -205,7 +200,7 @@ export async function BloqueCohortes() {
   return (
     <Tarjeta titulo={ta('crecimiento_bloques.retencion_por_cohortes_uso')} estado={cohortes.filas.length === 0 ? 'vacio' : 'ok'} mensaje={ta('crecimiento_bloques.sin_flotas_dadas_de_2')} detalle={ta('crecimiento_bloques.no_hay_cohorte_que')}>
       <TablaBase
-        etiqueta={ta('crecimiento_bloques.cohortes_por_mes_de')} idFila={(f) => f.cohorte} tarjetaMovil densa filas={cohortes.filas}
+        etiqueta={ta('crecimiento_bloques.cohortes_por_mes_de')} idFila={(f) => f.cohorte} tarjetaMovil filas={cohortes.filas}
         columnas={[
           { id: 'cohorte', titulo: ta('crecimiento_bloques.cohorte_mes_de_alta'), principal: true, celda: (f) => f.cohorte },
           { id: 'flotas', titulo: ta('crecimiento_bloques.flotas'), alinear: 'der', celda: (f) => numero(f.flotas) },

@@ -4,11 +4,13 @@ import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { acotada } from '@/lib/likida/presupuesto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { resolverCiudad, type Ciudad } from '@/lib/likida/geo/ciudades';
+import { resolverCiudad } from '@/lib/likida/geo/ciudades';
 import { getEstadoRastreo, getUltimasPosiciones } from '@/lib/likida/comercial';
 import { huerfanosGps, unidadesConDispositivo } from '@/lib/likida/gps_push/datos';
 import { ahoraMs } from '@/lib/saludo';
 import { proyectar } from './mexico-geo';
+import { kmEntre } from './km';
+import { ESTATUS_EN_CURSO, contarViajesEnCurso } from '../viajes-en-curso';
 import { VistaMapa, type SinUbicar, type Rastreo } from './vista';
 import type { ViajeEnMapa, PinUnidad } from './mapa-vivo';
 import { getT } from '@/lib/i18n/servidor';
@@ -20,17 +22,7 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export const dynamic = 'force-dynamic';
 
-/** Km en línea recta (haversine) — se rotula "en línea recta" SIEMPRE: no es
- *  el kilometraje de carretera y no se presenta como tal. */
-function kmEntre(a: Ciudad, b: Ciudad): number {
-  const R = 6371, rad = Math.PI / 180;
-  const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
-  return Math.round(2 * R * Math.asin(Math.sqrt(s)));
-}
-
-/** Los dos estatus que cuentan como "en curso" (`viaje_estatus_dominio`). */
-const VIVOS = ['abierto', 'en_cuadre'];
+const VIVOS = ESTATUS_EN_CURSO;
 
 /** Cuántos viajes vivos se DIBUJAN. El mapa es un dibujo: pasado cierto
  *  número de trayectos deja de decir nada aunque los datos estén bien, y
@@ -82,21 +74,6 @@ async function viajesVivos(tenantId: string): Promise<FilaViva[]> {
     escaladoEn: (v.escalado_en as string) || null,
     aceptadoEn: (v.aceptado_en as string) || null,
   }));
-}
-
-/** Cuántos viajes vivos hay DE VERDAD (`count exact, head`). `null` = no se
- *  pudo contar, y entonces la pantalla no afirma ningún total. */
-async function contarVivos(tenantId: string): Promise<number | null> {
-  const { count, error } = await acotada(supabaseAdmin()
-    .from('viaje')
-    .select('id', { count: 'exact', head: true })
-    .eq('tenant_id', tenantId)
-    .in('estatus', VIVOS), 'mapa.contarVivos');
-  if (error) {
-    logger.warn('mapa.contarVivos', { tenantId, err: error.message });
-    return null;
-  }
-  return count ?? null;
 }
 
 /**
@@ -195,7 +172,7 @@ export default async function PaginaMapa({
 
   const ahora = ahoraMs();
   const [vivos, totalVivos, rastreo] = await Promise.all([
-    viajesVivos(tenantId), contarVivos(tenantId), rastreoDe(tenantId, ahora),
+    viajesVivos(tenantId), contarViajesEnCurso(tenantId, 'mapa.contarVivos'), rastreoDe(tenantId, ahora),
   ]);
 
   const ubicados: ViajeEnMapa[] = [];

@@ -3,10 +3,10 @@
 import { useState } from 'react';
 import { Mail, FileText, ShieldCheck, Globe, MapPin, Stamp, type LucideIcon } from 'lucide-react';
 import type { Conector } from '@/lib/likida/conexiones';
-import { EstadoVacio, Icono, InfoTip, MarcaIntegracion, SegmentedControl, StatusChip, type TonoEstado } from '@/app/ui-v2/componentes';
+import { EstadoVacio, Icono, InfoTip, MarcaIntegracion, SegmentedControl, StatusChip } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
-import { type TResto } from '@/lib/i18n/resto_tr';
+import { estadoConector } from './estado-conector';
 import '../estados.css';
 import './conexiones.css';
 
@@ -15,14 +15,6 @@ import './conexiones.css';
 // conexiones como tarjetas-pestaña de 60 px y a la derecha el detalle de la elegida con pares clave-valor. Cada dato es el medido por la
 // lectura del conector; nada se inventa y «no se pudo medir» conserva su rótulo propio (c7-28).
 // ═══════════════════════════════════════════════════════════════════════════
-
-export const estadoConector = (t: TResto): Record<Conector['estado'], { rotulo: string; tono: TonoEstado }> => ({
-  listo: { rotulo: t('cfg.listo'), tono: 'ok' },
-  incompleto: { rotulo: t('cfg.incompleto'), tono: 'warn' },
-  sin_configurar: { rotulo: t('cfg.sin_conectar'), tono: 'muted' },
-  no_medible: { rotulo: t('cfg.no_se_pudo_medir'), tono: 'warn' },
-  ensayo: { rotulo: t('cfg.en_ensayo'), tono: 'info' },
-});
 
 /** Logo de marca SOLO donde hay trazado verificable (WhatsApp); el resto lleva un icono sobrio del tema de la conexión. */
 const ICONO: Record<Conector['id'], { marca: 'whatsapp' } | { icono: LucideIcon }> = {

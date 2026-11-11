@@ -117,7 +117,7 @@ describe('VistaRentabilidad — la cartera paginada no se confunde con una carte
 });
 
 describe('VistaRentabilidad — sin ningún dato: estructura honesta, no un hueco flotante', () => {
-  it('muestra cinco cifras SIN DATO (—, nunca $0), un vacío contenido y UNA acción', () => {
+  it('no repite «Sin dato» en una tira de celdas vacías (los vacíos de las tarjetas lo dicen), nunca $0, un vacío contenido y UNA acción', () => {
     const html = renderToStaticMarkup(
       <VistaRentabilidad
         rentabilidad={{ ...RENTABILIDAD, ingreso: 0, costoComprobado: 0, contribucion: 0, margenPct: null, viajesConIngreso: 0 }}
@@ -125,7 +125,9 @@ describe('VistaRentabilidad — sin ningún dato: estructura honesta, no un huec
         sufijo="?vista=demo"
       />,
     );
-    for (const e of ['Ingreso de fletes liquidados', 'Costo comprobado', 'Contribución', 'Por cobrar', 'Vencido']) expect(html).toContain(e);
+    expect(html).not.toContain('rv-kpis');
+    expect(html).toContain('Sin datos todavía');
+    for (const e of ['Ingreso, costo y contribución', 'Cartera por cobrar y vencida']) expect(html).toContain(e);
     expect(html).toContain('data-contenido');
     expect(html).toContain('href="/dashboard/facturacion?vista=demo"');
     expect(html).not.toMatch(/\$0(\.00)?/);

@@ -14,7 +14,7 @@
 /* Cifras como tarjetas sueltas (Rovaq `.ui-kpi`): cuatro tarjetas con 12 px de separación, cada una con su filete. */
 .rv-esq__cifras-sueltas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--sp-gap, 12px); min-width: 0; }
 @media (max-width: 1023.98px) { .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 479.98px) { .rv-esq__cifras-sueltas { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 479.98px) { .rv-esq__cifras-sueltas { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* Contenedor de la tabla maestra: la tabla va dentro de una tarjeta sin padding (a sangre), con el pie «25 de N» pegado. */
 .rv-esq__tabla { display: grid; gap: 12px; min-width: 0; }

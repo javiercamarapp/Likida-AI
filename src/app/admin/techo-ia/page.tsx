@@ -1,7 +1,8 @@
 import type { Metadata } from 'next';
 import type { ComponentProps, ReactNode } from 'react';
-import { Aviso, Boton, CampoTexto, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { Aviso, Boton, BotonEnlace, CampoTexto, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import { CajonVistaRapida } from '../../ui-v2/esqueletos/cajon-vista-rapida';
 import { uniformes } from '../cifras-uniformes';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -42,7 +43,7 @@ const MENSAJE_ERROR: Record<string, string> = {
   guardar: 'No se pudo guardar el techo. Recarga e inténtalo de nuevo; si persiste, avisa a soporte.',
 };
 
-export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
+export default async function TechoIaPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string; ver?: string }> }) {
   const { t } = await getT('admin_dinero');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
@@ -71,20 +72,12 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       ),
     },
     {
-      id: 'declarar', titulo: t('techo_ia.declarar_techo'),
+      // La edición vive en el cajón (Rovaq P5: la tabla muestra el uso; editar es una Vista rápida), no en un campo por fila.
+      id: 'declarar', titulo: t('techo_ia.declarar_techo'), tituloOculto: true, alinear: 'der',
       celda: (f) => (
-        <form action={guardarTechoIa} className="rv-techo-forma">
-          <input type="hidden" name="tenantId" value={f.tenantId} />
-          <CampoTexto
-            id={`techo-${f.tenantId}`} name="techoUsd" inputMode="decimal" autoComplete="off"
-            etiqueta={`Techo diario en dólares para ${f.nombre}`} etiquetaOculta
-            defaultValue={f.declaradoUsd === null ? '' : String(f.declaradoUsd)}
-            placeholder="sin declarar"
-            claseControl="tabular"
-            title={f.declaradoUsd !== null ? t('techo_ia.dejalo_vacio_y_guarda') : undefined}
-          />
-          <Boton type="submit" variante="secondary" tamano="sm">{f.declaradoUsd === null ? 'Fijar' : 'Cambiar'}</Boton>
-        </form>
+        <BotonEnlace href={`/admin/techo-ia?ver=${f.tenantId}`} variante="ghost" tamano="sm" aria-label={`${f.declaradoUsd === null ? 'Fijar' : 'Cambiar'} · ${f.nombre}`}>
+          {f.declaradoUsd === null ? 'Fijar' : 'Cambiar'}
+        </BotonEnlace>
       ),
     },
   ];
@@ -100,10 +93,40 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
     { etiqueta: t('techo_ia.k_piso'), valor: usd(datos.pisoUsd), nota: t('techo_ia.k_piso_nota') },
   ];
 
+  const elegida = sp.ver ? datos.filas.find((f) => f.tenantId === sp.ver) : undefined;
+  const sinMedir = 'sin medir';
+  const cajon = elegida ? (
+    <CajonVistaRapida
+      titulo={elegida.nombre}
+      subtitulo={t('techo_ia.declarar_techo')}
+      hrefCerrar="/admin/techo-ia"
+      cifras={[
+        { etiqueta: t('techo_ia.techo_que_aplica'), valor: usd(elegida.topeUsd) },
+        { etiqueta: t('techo_ia.origen'), valor: ORIGEN[elegida.origen].rotulo },
+        { etiqueta: t('techo_ia.hoy'), valor: elegida.usadoHoyUsd === null ? sinMedir : usd(elegida.usadoHoyUsd) },
+        { etiqueta: '%', valor: elegida.pctUsado === null ? '—' : `${elegida.pctUsado}%` },
+      ]}
+      pie={<Boton type="submit" form="forma-techo" variante="primary" tamano="sm">{elegida.declaradoUsd === null ? 'Fijar' : 'Cambiar'}</Boton>}
+    >
+      <form id="forma-techo" action={guardarTechoIa} className="rv-techo-forma rv-techo-forma--cajon">
+        <input type="hidden" name="tenantId" value={elegida.tenantId} />
+        <CampoTexto
+          id={`techo-${elegida.tenantId}`} name="techoUsd" inputMode="decimal" autoComplete="off"
+          etiqueta={`Techo diario en dólares para ${elegida.nombre}`}
+          defaultValue={elegida.declaradoUsd === null ? '' : String(elegida.declaradoUsd)}
+          placeholder="sin declarar"
+          claseControl="tabular"
+          ayuda={t('techo_ia.dejalo_vacio_y_guarda')}
+        />
+      </form>
+    </CajonVistaRapida>
+  ) : null;
+
   return (
     <PantallaTecho
       etiquetaCifras={t('techo_ia.flotas')}
       cifras={uniformes(cifras)}
+      vistaRapida={cajon}
       avisos={(
         <>
           {sp.ok && MENSAJE_OK[sp.ok] && <Aviso tono="ok">{MENSAJE_OK[sp.ok]}</Aviso>}

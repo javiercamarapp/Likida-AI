@@ -5,7 +5,8 @@ import { getEstadoEvals } from '@/lib/admin/evals';
 import { getCalidadCorridas, getCalidadOcr } from '@/lib/admin/calidad';
 import { ahoraMs } from '@/lib/saludo';
 import { numero, porcentaje, fechaHoraMx } from '@/lib/formato';
-import { Aviso, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { Aviso, FilaTarjetas, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { BarList, BarraApilada } from '../../ui-v2/graficas';
 
 import { getT } from '@/lib/i18n/servidor';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
@@ -117,26 +118,76 @@ export default async function CalidadEvalsPage() {
     getCalidadOcr().catch(() => null),
   ]);
 
+  const tropiezos = corridas === null ? [] : corridas.porAgente
+    .filter((a) => a.fallo > 0 || a.parcial > 0)
+    .sort((a, b) => (b.fallo * 2 + b.parcial) - (a.fallo * 2 + a.parcial))
+    .slice(0, 6);
+  const casos = evals !== null && evalsContador !== null ? evals.casosActivos + evalsContador.casosActivos : null;
+
   return (
     <EsqueletoPanelCifras
       titulo={t('calidad_evals.calidad_evals')}
-      titular={t('calidad_evals.cuatro_fuentes_reales_el')}
+      titular={t('calidad_evals.titular_corto')}
+      etiquetaCifras={t('calidad_evals.calidad_evals')}
+      cifras={[
+        corridas === null
+          ? { etiqueta: t('calidad_evals.kpi_corridas'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') }
+          : { etiqueta: t('calidad_evals.kpi_corridas'), valor: corridas.total, formato: 'entero' as const },
+        corridas === null || corridas.total === 0
+          ? { etiqueta: t('calidad_evals.kpi_pct_ok'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.sin_corridas_ventana') }
+          : { etiqueta: t('calidad_evals.kpi_pct_ok'), valor: (corridas.ok / corridas.total) * 100, formato: 'porcentaje' as const },
+        corridas === null
+          ? { etiqueta: t('calidad_evals.kpi_fallos'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') }
+          : { etiqueta: t('calidad_evals.kpi_fallos'), valor: corridas.fallo, formato: 'entero' as const, tono: corridas.fallo > 0 ? 'bad' as const : undefined },
+        ocr === null || ocr.precisionPct === null
+          ? { etiqueta: t('calidad_evals.kpi_ocr'), valor: null, estado: 'vacio' as const, mensaje: ocr === null ? t('calidad_evals.no_leido') : tx('qa_medicion_corrida.sin_medir') }
+          : { etiqueta: t('calidad_evals.kpi_ocr'), valor: ocr.precisionPct, formato: 'porcentaje' as const },
+        casos === null
+          ? { etiqueta: t('calidad_evals.kpi_casos'), valor: null, estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') }
+          : { etiqueta: t('calidad_evals.kpi_casos'), valor: casos, formato: 'entero' as const, nota: t('calidad_evals.kpi_casos_nota') },
+      ]}
       graficas={[
-        /* ── 1 · El examen del analista (EVALOPS 0134) ── */
-        <TarjetaExamen key="analista" tx={tx} idioma={idioma}
+        <Tarjeta key="veredicto" titulo={t('calidad_evals.grafica_veredicto')} contenida
+          {...(corridas === null ? { estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') } : corridas.total === 0 ? { estado: 'vacio' as const, mensaje: t('calidad_evals.sin_corridas_ventana') } : { estado: 'ok' as const })}>
+          {corridas !== null && corridas.total > 0 ? (
+            <BarraApilada
+              etiqueta={t('calidad_evals.grafica_veredicto')}
+              formato={(v) => numero(v, idioma)}
+              tramos={[
+                { etiqueta: 'OK', valor: corridas.ok },
+                { etiqueta: tx('calidad_evals.parciales'), valor: corridas.parcial },
+                { etiqueta: tx('observabilidad.fallos'), valor: corridas.fallo },
+              ]}
+            />
+          ) : null}
+        </Tarjeta>,
+        <Tarjeta key="tropiezos" titulo={t('calidad_evals.grafica_tropiezos')} contenida
+          {...(corridas === null ? { estado: 'vacio' as const, mensaje: t('calidad_evals.no_leido') } : tropiezos.length === 0 ? { estado: 'vacio' as const, mensaje: t('calidad_evals.sin_tropiezos') } : { estado: 'ok' as const })}>
+          {tropiezos.length > 0 ? (
+            <BarList
+              etiqueta={t('calidad_evals.grafica_tropiezos')}
+              formato={(v) => numero(v, idioma)}
+              items={tropiezos.map((a) => ({ clave: a.agente, etiqueta: a.agente, valor: a.fallo + a.parcial, nota: `${numero(a.fallo, idioma)} / ${numero(a.parcial, idioma)}` }))}
+            />
+          ) : null}
+        </Tarjeta>,
+      ]}
+    >
+      <FilaTarjetas variante="6-6">
+        {/* ── 1 · El examen del analista (EVALOPS 0134) ── */}
+        <TarjetaExamen tx={tx} idioma={idioma}
           titulo={t('calidad_evals.el_examen_del_analista')}
           estado={evals}
           avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el')}
-        />,
-        /* ── 1b · El examen fiscal del contador (E.26, 0254) ── */
-        <TarjetaExamen key="contador" tx={tx} idioma={idioma}
+        />
+        {/* ── 1b · El examen fiscal del contador (E.26, 0254) ── */}
+        <TarjetaExamen tx={tx} idioma={idioma}
           titulo={t('calidad_evals.el_examen_del_contador')}
           estado={evalsContador}
           avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el_2')}
           conNotas
-        />,
-      ]}
-    >
+        />
+      </FilaTarjetas>
 
       {/* ── 2 · Los veredictos de las corridas de agentes (0102) ──────── */}
       <Tarjeta titulo={t('calidad_evals.corridas_de_agentes_ultimos', { DIAS_VENTANA })}>

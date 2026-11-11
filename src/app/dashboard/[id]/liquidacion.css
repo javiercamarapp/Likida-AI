@@ -72,3 +72,12 @@
 /* Fieldset plano: la semántica de grupo se conserva, el marco con muesca del navegador no. */
 [data-ui="v2"] .rv-fieldset.rv-liq__plano { padding: 0; gap: 6px; border: 0; border-radius: 0; background: transparent; }
 [data-ui="v2"] .rv-fieldset.rv-liq__plano > .rv-fieldset__leyenda { padding: 0; }
+
+/* Datos de la ficha SIN baldosas grises (Rovaq 06d: bloques narrativos de dos columnas, filete fino entre filas): etiqueta a la izquierda, valor a la derecha. */
+[data-ui="v2"] .rv-sis.rv-liq__datos { grid-template-columns: minmax(0, 1fr); gap: 0; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__campo { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; padding: 7px 0; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__campo:first-child { padding-top: 0; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__campo:last-child { border-bottom: 0; padding-bottom: 0; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__etq { flex: none; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__valor { min-width: 0; text-align: right; }
+[data-ui="v2"] .rv-liq__datos .rv-sis__nota { flex-basis: 100%; }

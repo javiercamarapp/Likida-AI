@@ -228,6 +228,7 @@ function PasosReclamacion({ tx, estado }: { tx: TrAgentes['t']; estado: EstadoRe
             <span className="rv-pj-paso__n" aria-hidden="true">{p.id}</span>
             <StatusChip tono={tono[p.estado]}>{tx(`f26d3.reclamacion.estado_${p.estado}`)}</StatusChip>
           </div>
+          {/* sin-info: nombre del paso en una tarjeta de progreso, no un recuadro de cifras */}
           <h3 className="rv-pj-paso__titulo">{tx(`f26d3.reclamacion.paso_${p.id}`)}</h3>
           <p className="rv-pj-paso__ayuda">{tx(`f26d3.reclamacion.paso_${p.id}_ayuda`)}</p>
         </li>

@@ -55,7 +55,7 @@ export function PreguntaAlAsistente({ tenantParam }: { tenantParam: string | nul
     <section aria-label={t('vv.preg.titulo')} className="rv-vv__preg">
       <div className="rv-vv__sugerencias">
         {PREGUNTAS_OPERACION.map((p) => (
-          <Boton key={p} variante="suave" tamano="sm" disabled={ocupado} onClick={() => void preguntar(p)}>{p}</Boton>
+          <Boton key={p} variante="secondary" tamano="sm" className="rv-vv__q" disabled={ocupado} onClick={() => void preguntar(p)}>{p}</Boton>
         ))}
       </div>
       <form onSubmit={(e) => { e.preventDefault(); void preguntar(texto); }} className="rv-vv__forma">

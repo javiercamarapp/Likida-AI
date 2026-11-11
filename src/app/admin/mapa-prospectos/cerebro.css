@@ -7,21 +7,24 @@
   --etapa: var(--muted);
 }
 
-/* ── El color de cada etapa del embudo (los mismos 14 estados que COLOR_EMBUDO; la prueba `cerebro_piel.test.ts` los cruza) ── */
-[data-etapa="nuevo"], .cer-e-nuevo { --etapa: var(--muted); }
-[data-etapa="contactado"], .cer-e-contactado { --etapa: var(--chart-4, var(--muted)); }
-[data-etapa="demo"], .cer-e-demo { --etapa: var(--chart-7, var(--muted)); }
-[data-etapa="negociacion"], .cer-e-negociacion { --etapa: var(--chart-2, var(--muted)); }
-[data-etapa="cerrado"], .cer-e-cerrado { --etapa: var(--chart-3, var(--muted)); }
-[data-etapa="perdido"], .cer-e-perdido { --etapa: var(--faint); }
-[data-etapa="appointment"], .cer-e-appointment { --etapa: var(--chart-1, var(--muted)); }
-[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: var(--chart-5, var(--muted)); }
-[data-etapa="cancelled"], .cer-e-cancelled { --etapa: var(--chart-6, var(--muted)); }
-[data-etapa="no-show"], .cer-e-no-show { --etapa: var(--chart-6, var(--muted)); }
-[data-etapa="proposal"], .cer-e-proposal { --etapa: var(--chart-7, var(--muted)); }
-[data-etapa="pilot"], .cer-e-pilot { --etapa: var(--chart-5, var(--muted)); }
-[data-etapa="won"], .cer-e-won { --etapa: var(--chart-3, var(--muted)); }
-[data-etapa="lost"], .cer-e-lost { --etapa: var(--faint); }
+/* Paleta monocroma (decisión 10): las etapas se distinguen por la TINTA, de la más avanzada (negro) a la recién llegada (gris claro), y «Perdido» va
+   hueco. El orden es el del embudo (ORDEN_EMBUDO); la etiqueta de texto siempre acompaña al punto. */
+[data-etapa="negociacion"], .cer-e-negociacion { --etapa: color-mix(in srgb, var(--ink) 100%, var(--surface)); }
+[data-etapa="proposal"], .cer-e-proposal { --etapa: color-mix(in srgb, var(--ink) 93%, var(--surface)); }
+[data-etapa="pilot"], .cer-e-pilot { --etapa: color-mix(in srgb, var(--ink) 86%, var(--surface)); }
+[data-etapa="demo"], .cer-e-demo { --etapa: color-mix(in srgb, var(--ink) 79%, var(--surface)); }
+[data-etapa="appointment"], .cer-e-appointment { --etapa: color-mix(in srgb, var(--ink) 72%, var(--surface)); }
+[data-etapa="rescheduled"], .cer-e-rescheduled { --etapa: color-mix(in srgb, var(--ink) 65%, var(--surface)); }
+[data-etapa="no-show"], .cer-e-no-show { --etapa: color-mix(in srgb, var(--ink) 58%, var(--surface)); }
+[data-etapa="cancelled"], .cer-e-cancelled { --etapa: color-mix(in srgb, var(--ink) 51%, var(--surface)); }
+[data-etapa="contactado"], .cer-e-contactado { --etapa: color-mix(in srgb, var(--ink) 44%, var(--surface)); }
+[data-etapa="nuevo"], .cer-e-nuevo { --etapa: color-mix(in srgb, var(--ink) 37%, var(--surface)); }
+[data-etapa="won"], .cer-e-won { --etapa: color-mix(in srgb, var(--ink) 30%, var(--surface)); }
+[data-etapa="cerrado"], .cer-e-cerrado { --etapa: color-mix(in srgb, var(--ink) 23%, var(--surface)); }
+[data-etapa="perdido"], .cer-e-perdido, [data-etapa="lost"], .cer-e-lost { --etapa: var(--surface); }
+.cer-punto[data-etapa="perdido"], .cer-punto[data-etapa="lost"] { box-shadow: inset 0 0 0 1.5px var(--muted); }
+.cer-pin[data-etapa="perdido"], .cer-pin[data-etapa="lost"] { stroke: var(--muted); stroke-width: 1.2px; }
+/* ── (historial) El color de cada etapa del embudo (los mismos 14 estados que COLOR_EMBUDO; la prueba `cerebro_piel.test.ts` los cruza) ── */
 
 .cer-raiz { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
 
@@ -86,6 +89,7 @@
 /* El ranking lateral */
 .cer-rank { display: flex; flex-direction: column; gap: var(--ui-rhythm); min-width: 0; }
 @media (min-width: 1100px) { .cer-rank { height: calc(100dvh - 17rem); min-height: 480px; overflow-y: auto; } }
+.cer-rank > .cer-rank__bloque:last-child { flex: 1 1 auto; align-content: flex-start; }
 .cer-rank__bloque { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
 .cer-rank__lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 [data-ui="v2"] .rv-btn.cer-rank__fila::after { content: none; }

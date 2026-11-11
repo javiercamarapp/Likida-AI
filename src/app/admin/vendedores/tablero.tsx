@@ -2,21 +2,22 @@
 
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
-import { Inbox } from 'lucide-react';
 import { numero } from '@/lib/formato';
-import { Boton, Drawer } from '../../ui-v2/componentes';
+import { Boton, Drawer, TablaBase, type ColumnaBase } from '../../ui-v2/componentes';
+import '../../ui-v2/esqueletos/esqueletos.css';
 import './tablero.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 import { estadoProspectoTr, nombreEtapaTr } from '@/lib/i18n/rotulos_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EL TABLERO KANBAN DEL PIPELINE — compartido entre /admin/vendedores (todo
+// EL TABLERO DEL PIPELINE (tabla maestra con Vista rápida, plantilla TM de Rovaq) — compartido entre /admin/vendedores (todo
 // el censo, con asignar) y /vendedor (solo SUS tarjetas, sin asignar).
 //
-// SIN drag&drop a propósito: una librería nueva es una dependencia que nadie
-// pidió, y los botones de mover llegan igual de rápido con teclado y con
-// dedo. Cada acción es un server action + revalidatePath; `useTransition`
+// Fue un kanban de nueve columnas que se cortaba a la derecha; ahora es UNA
+// tabla (empresa, etapa, ciudad, vendedor) con «Vista rápida» ghost por fila y
+// un cajón de 420 con el 2×2 de cifras y el pie con la acción primaria. Mismas
+// props que el kanban: /vendedor lo monta igual. SIN drag&drop a propósito. Cada acción es un server action + revalidatePath; `useTransition`
 // mantiene el tablero vivo mientras el servidor confirma, y el error se
 // enseña EN la tarjeta que falló — no en un toast que desaparece.
 //
@@ -59,30 +60,16 @@ export interface ColumnaTablero {
 
 export type ResultadoAccion = { ok: true; mensaje?: string } | { ok: false; error: string };
 
-type Tono = 'ok' | 'warn' | 'bad' | 'neutral';
+type Fila = TarjetaProspecto & { orden: number };
 
-/** El tinte del pill por etapa: color + texto siempre, nunca color solo. */
-const PILL_COLUMNA: Record<string, Tono> = {
-  nuevo: 'neutral',
-  contactado: 'neutral',
-  appointment: 'warn',
-  rescheduled: 'warn',
-  cancelled: 'bad',
-  'no-show': 'bad',
-  demo: 'warn',
-  proposal: 'warn',
-  pilot: 'warn',
-  won: 'ok',
-  lost: 'bad',
-  // Solo pueden llegar como estado de una tarjeta histórica; la columna ya
-  // usa su nombre canónico.
-  negociacion: 'warn',
-  cerrado: 'ok',
-  perdido: 'bad',
-};
+/** La etapa en la tabla: píldora MONOCROMA (decisión 10: las etapas son categorías, no semáforos). Ganado va en tinta llena; perdido, hueco. */
+function Etapa({ estado, etiqueta }: { estado: string; etiqueta: string }) {
+  const fin = estado === 'won' || estado === 'cerrado' ? 'ganado' : estado === 'lost' || estado === 'perdido' ? 'perdido' : undefined;
+  return <span className="ven-pill" data-fin={fin}>{etiqueta}</span>;
+}
 
-function Tarjeta({
-  t, orden, transiciones, rotulos, vendedores, mover, asignar, guardarNota, redactar, conVendedor,
+function Detalle({
+  t, orden, transiciones, rotulos, vendedores, mover, asignar, guardarNota, redactar, conVendedor, etapa, alMover,
 }: {
   t: TarjetaProspecto;
   orden: string[];
@@ -92,10 +79,11 @@ function Tarjeta({
   mover: (id: string, a: string) => Promise<ResultadoAccion>;
   asignar?: (id: string, vendedorId: string) => Promise<ResultadoAccion>;
   guardarNota?: (id: string, nota: string) => Promise<ResultadoAccion>;
-  /** El Redactor (C5, Fase 2): arma el primer correo y lo deja EN LA COLA de
-   *  aprobación — jamás lo envía. Solo /admin lo pasa. */
+  /** El Redactor (C5, Fase 2): arma el primer correo y lo deja EN LA COLA de aprobación — jamás lo envía. Solo /admin lo pasa. */
   redactar?: (id: string) => Promise<ResultadoAccion>;
   conVendedor: boolean;
+  etapa: string;
+  alMover: () => void;
 }) {
   const { t: tr } = useT('admin_sistema', admin_sistemaEs);
   const [pendiente, empezar] = useTransition();
@@ -103,68 +91,60 @@ function Tarjeta({
   const [hecho, setHecho] = useState<string | null>(null);
   const [nota, setNota] = useState(t.notas ?? '');
 
-  const correr = (accion: () => Promise<ResultadoAccion>) => {
+  const correr = (accion: () => Promise<ResultadoAccion>, movio = false) => {
     setError(null);
     setHecho(null);
     empezar(async () => {
       const r = await accion();
       if (!r.ok) setError(r.error);
-      else if (r.mensaje) setHecho(r.mensaje);
+      else {
+        if (r.mensaje) setHecho(r.mensaje);
+        if (movio) alMover();
+      }
     });
   };
 
   const destinos = transiciones[t.estado] ?? [];
   const idx = orden.indexOf(t.estado);
-  const [abierto, setAbierto] = useState(false);
+  const esPerdido = (a: string) => a === 'lost' || a === 'perdido';
+  const esGanado = (a: string) => a === 'won' || a === 'cerrado';
   const etiquetaDe = (a: string): string => {
-    if (a === 'lost' || a === 'perdido') return nombreEtapaTr('perdido', tr);
-    if (a === 'won' || a === 'cerrado') return nombreEtapaTr('won', tr);
+    if (esPerdido(a)) return nombreEtapaTr('perdido', tr);
+    if (esGanado(a)) return nombreEtapaTr('won', tr);
     const r = estadoProspectoTr(a, tr, rotulos[a]);
     return orden.indexOf(a) < idx ? `← ${r}` : `${r} →`;
   };
+  // La acción primaria del pie: ganar si se puede; si no, el siguiente paso hacia adelante.
+  const primaria = destinos.find(esGanado) ?? destinos.find((a) => !esPerdido(a) && orden.indexOf(a) > idx) ?? null;
+  const secundarias = destinos.filter((a) => a !== primaria);
+  const sinDato = tr('vendedores_tablero.sin_dato');
 
   return (
-    <div className="ven-tarjeta" data-pendiente={pendiente || undefined}>
-      {/* La tarjeta es un botón: el detalle (mover, asignar, nota, redactar) vive en el cajón, como en Rovaq. */}
-      <Boton variante="ghost" className="ven-tarjeta__abrir" onClick={() => setAbierto(true)} aria-haspopup="dialog">
-        <span className="ven-tarjeta__empresa">{t.empresa}</span>
-        {/* La vacante es LA señal del censo: si existe, se enseña siempre. */}
-        {t.vacante && <span className="ven-tarjeta__tenue">{tr('mapa_prospectos_cerebro.vacante')}{' '}{t.vacante}</span>}
-        {(t.ciudad || conVendedor) && (
-          <span className="ven-tarjeta__linea">
-            {t.ciudad && <span>{t.ciudad}</span>}
-            {t.ciudad && conVendedor && <span aria-hidden>·</span>}
-            {conVendedor && <span>{t.vendedorNombre ?? tr('vendedores_consola_vendedores.sin_asignar')}</span>}
-          </span>
+    <>
+      <div className="rv-esq__vr-cuerpo ven-detalle">
+        <dl className="rv-esq__vr">
+          <div><dt>{tr('vendedores_tablero.etapa')}</dt><dd>{etapa}</dd></div>
+          {/* En el tablero PROPIO del vendedor todas las tarjetas son suyas: no se le pinta «Sin asignar»; en su lugar, si la tarjeta ya lleva nota. */}
+          {conVendedor
+            ? <div><dt>{tr('vendedores_consola_vendedores.vendedor')}</dt><dd>{t.vendedorNombre ?? tr('vendedores_consola_vendedores.sin_asignar')}</dd></div>
+            : <div><dt>{tr('vendedores_tablero.nota')}</dt><dd>{t.notas ? tr('vendedores_tablero.con_nota') : tr('vendedores_tablero.sin_nota')}</dd></div>}
+          <div><dt>{tr('vendedores_tablero.ciudad')}</dt><dd>{t.ciudad ?? sinDato}</dd></div>
+          <div><dt>{tr('vendedores_tablero.vacante')}</dt><dd>{t.vacante ?? sinDato}</dd></div>
+        </dl>
+
+        {secundarias.length > 0 && (
+          <div className="ven-tarjeta__acciones">
+            {secundarias.map((a) => (
+              <Boton key={a} tamano="sm" disabled={pendiente} variante={esPerdido(a) ? 'danger-soft' : 'secondary'} onClick={() => correr(() => mover(t.id, a), true)}>
+                {etiquetaDe(a)}
+              </Boton>
+            ))}
+          </div>
         )}
-        {t.notas && <span className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t.notas}</span>}
-      </Boton>
 
-      <Drawer abierto={abierto} onCerrar={() => setAbierto(false)} titulo={t.empresa}
-        descripcion={[t.vacante ? `Vacante: ${t.vacante}` : null, t.ciudad].filter(Boolean).join(' · ') || undefined}>
-        <div className="ven-detalle">
-          {destinos.length > 0 && (
-            <div className="ven-tarjeta__acciones">
-              {destinos.map((a) => (
-                <Boton key={a} tamano="sm" disabled={pendiente}
-                  variante={a === 'lost' || a === 'perdido' ? 'danger-soft' : a === 'won' || a === 'cerrado' ? 'primary' : 'secondary'}
-                  onClick={() => correr(() => mover(t.id, a))}>
-                  {etiquetaDe(a)}
-                </Boton>
-              ))}
-            </div>
-          )}
-
-          {/* El Redactor solo para etapas vivas: el servidor lo re-valida (un botón escondido no es una regla, misma nota del encabezado). */}
-          {redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado) && (
-            <Boton tamano="sm" disabled={pendiente} className="ven-btn--ancho" onClick={() => correr(() => redactar(t.id))}>
-              {pendiente ? tr('mapa_prospectos_detalle.redactando') : tr('vendedores_tablero.redactar_correo_cola_de_aprobacion')}
-            </Boton>
-          )}
-
-          {hecho && <p className="ven-tarjeta__ok">{hecho}</p>}
-
-          {asignar && (
+        {asignar && (
+          <label className="ven-campo">
+            <span>{tr('vendedores_consola_vendedores.vendedor')}</span>
             <select aria-label={tr('vendedores_tablero.vendedor_de', { empresa: t.empresa })} value={t.vendedorId ?? ''} disabled={pendiente} className="ven-select"
               onChange={(e) => correr(() => asignar(t.id, e.target.value))}>
               <option value="">{tr('vendedores_consola_vendedores.sin_asignar')}</option>
@@ -172,19 +152,35 @@ function Tarjeta({
                 <option key={v.id} value={v.id}>{v.nombre}</option>
               ))}
             </select>
-          )}
+          </label>
+        )}
 
-          {guardarNota && (
-            <div className="ven-nota">
-              <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={4} maxLength={2000} aria-label={tr('vendedores_tablero.nota_de', { empresa: t.empresa })} />
-              <Boton tamano="sm" disabled={pendiente} onClick={() => correr(() => guardarNota(t.id, nota))}>{tr('vendedores_tablero.guardar_nota')}</Boton>
-            </div>
-          )}
+        {guardarNota && (
+          <div className="ven-nota">
+            <label className="ven-campo">
+              <span>{tr('vendedores_tablero.nota')}</span>
+              <textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={4} maxLength={2000} placeholder={tr('vendedores_tablero.nota_ayuda')} aria-label={tr('vendedores_tablero.nota_de', { empresa: t.empresa })} />
+            </label>
+            <Boton tamano="sm" disabled={pendiente} onClick={() => correr(() => guardarNota(t.id, nota))}>{tr('vendedores_tablero.guardar_nota')}</Boton>
+          </div>
+        )}
 
-          {error && <p className="ven-tarjeta__error" role="alert">{error}</p>}
+        {/* El servidor re-valida la etapa: un botón escondido no es una regla. */}
+        {redactar && !['won', 'lost', 'cerrado', 'perdido'].includes(t.estado) && (
+          <Boton tamano="sm" disabled={pendiente} className="ven-btn--ancho" onClick={() => correr(() => redactar(t.id))}>
+            {pendiente ? tr('mapa_prospectos_detalle.redactando') : tr('vendedores_tablero.redactar_correo_cola_de_aprobacion')}
+          </Boton>
+        )}
+
+        {hecho && <p className="ven-tarjeta__ok">{hecho}</p>}
+        {error && <p className="ven-tarjeta__error" role="alert">{error}</p>}
+      </div>
+      {primaria && (
+        <div className="rv-esq__vr-pie ven-detalle__pie">
+          <Boton variante="primary" tamano="sm" disabled={pendiente} onClick={() => correr(() => mover(t.id, primaria), true)}>{etiquetaDe(primaria)}</Boton>
         </div>
-      </Drawer>
-    </div>
+      )}
+    </>
   );
 }
 
@@ -204,16 +200,15 @@ export function TableroProspectos({
   guardarNota?: (id: string, nota: string) => Promise<ResultadoAccion>;
   /** El Redactor (C5) — ausente en /vendedor por ahora: aprobar es de /admin. */
   redactar?: (id: string) => Promise<ResultadoAccion>;
-  /** Con filtros activos, la columna vacía dice la verdad completa: vacía
-   *  BAJO ESTE FILTRO, no vacía en el negocio. */
+  /** Con filtros activos, la columna vacía dice la verdad completa: vacía BAJO ESTE FILTRO, no vacía en el negocio. */
   hayFiltro?: boolean;
-  /** `false` en el tablero PROPIO del vendedor: todas las tarjetas son
-   *  suyas, y pintarle "Sin asignar" (el `null` de un nombre que no viaja)
+  /** `false` en el tablero PROPIO del vendedor: todas las tarjetas son suyas, y pintarle «Sin asignar» (el `null` de un nombre que no viaja)
    *  sería mentirle sobre su propia cartera. */
   conVendedor?: boolean;
 }) {
   const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
-  // Todas las etapas vacías: UNA sola pista honesta en vez de once columnas repitiendo lo mismo.
+  const [abierto, setAbierto] = useState<string | null>(null);
+  // Todas las etapas vacías: UNA sola pista honesta en vez de una tabla sin filas.
   if (columnas.every((c) => c.tarjetas.length === 0 && c.total === 0)) {
     return (
       <p className="ven-vacio">
@@ -223,46 +218,56 @@ export function TableroProspectos({
       </p>
     );
   }
+  const etiquetaEtapa = (estado: string, rotulo?: string) => estadoProspectoTr(estado, t, rotulo ?? rotulos[estado]);
+  const filas: Fila[] = columnas.flatMap((col, i) => col.tarjetas.map((x) => ({ ...x, orden: i })));
+  const elegida = filas.find((f) => f.id === abierto) ?? null;
+
+  const cols: ColumnaBase<Fila>[] = [
+    { id: 'empresa', titulo: t('vendedores_tablero.empresa'), principal: true, celda: (f) => (
+      <span className="ven-celda">
+        <span className="ven-celda__nombre">{f.empresa}</span>
+        {f.vacante ? <span className="ven-celda__tenue">{t('mapa_prospectos_cerebro.vacante')} {f.vacante}</span> : null}
+      </span>
+    ) },
+    { id: 'etapa', titulo: t('vendedores_tablero.etapa'), celda: (f) => <Etapa estado={f.estado} etiqueta={etiquetaEtapa(f.estado)} /> },
+    { id: 'ciudad', titulo: t('vendedores_tablero.ciudad'), celda: (f) => f.ciudad ?? '—' },
+    ...(conVendedor ? [{ id: 'vendedor', titulo: t('vendedores_consola_vendedores.vendedor'), celda: (f: Fila) => f.vendedorNombre ?? t('vendedores_consola_vendedores.sin_asignar') }] : []),
+    { id: 'ver', titulo: t('vendedores_tablero.vista_rapida'), tituloOculto: true, alinear: 'der', celda: (f) => (
+      <Boton variante="ghost" tamano="sm" aria-haspopup="dialog" aria-label={t('vendedores_tablero.vista_rapida_de', { empresa: f.empresa })} onClick={() => setAbierto(f.id)}>{t('vendedores_tablero.vista_rapida')}</Boton>
+    ) },
+  ];
+  // El recorte por etapa se DICE (nunca se esconde): una línea por etapa que no se pintó entera.
+  const recortes = columnas.filter((c) => c.mas || c.menos || c.total > c.tarjetas.length);
+  const subtitulo = elegida ? [elegida.vacante ? `${t('mapa_prospectos_cerebro.vacante')} ${elegida.vacante}` : null, elegida.ciudad].filter(Boolean).join(' · ') || undefined : undefined;
+
   return (
-    // El tablero scrollea DENTRO de su contenedor (regla de wide content): seis columnas no caben en un portátil y la página no debe
-    // crecer a lo ancho por ellas.
     <div className="ven-tablero">
-      <div className="ven-tablero__fila">
-        {columnas.map((col) => (
-          <div key={col.estado} className="ven-col">
-            <div className="ven-col__cab">
-              <span className="ven-pill" data-tono={PILL_COLUMNA[col.estado] ?? 'neutral'}>{estadoProspectoTr(col.estado, t, col.rotulo)}</span>
-              <span className="ven-col__total">{numero(col.total, idioma)}</span>
-            </div>
-            <div className="ven-col__cuerpo">
-              {col.tarjetas.length === 0 ? (
-                // R9: una línea sobria por columna vacía (antes una tarjeta «Sin datos por ahora» repetida en cada etapa).
-                <p className="ven-col__vacia">
-                  <Inbox width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
-                  {hayFiltro
-                    ? t('vendedores_tablero.ninguno_en_esta_etapa_con_el')
-                    : t('vendedores_tablero.sin_prospectos_en_esta_etapa')}
-                </p>
-              ) : (
-                col.tarjetas.map((t) => (
-                  <Tarjeta key={t.id} t={t} orden={orden} transiciones={transiciones} rotulos={rotulos}
-                    vendedores={vendedores} mover={mover} asignar={asignar} guardarNota={guardarNota}
-                    redactar={redactar} conVendedor={conVendedor} />
-                ))
-              )}
-              {col.mas ? (
-                <Link href={col.mas.href} className="ven-col__mas">{col.mas.etiqueta}</Link>
-              ) : col.total > col.tarjetas.length ? (
-                <p className="ven-col__recorte">{t('vendedores_tablero.y_mas', { v: col.total - col.tarjetas.length })}{hayFiltro ? t('vendedores_tablero.acota_el_filtro_para_verlos') : ''}
-                </p>
-              ) : null}
-              {col.menos && (
-                <Link href={col.menos.href} className="ven-col__mas">{col.menos.etiqueta}</Link>
-              )}
-            </div>
-          </div>
-        ))}
-      </div>
+      <TablaBase
+        etiqueta={t('vendedores_tablero.prospectos_del_pipeline')}
+        columnas={cols} filas={filas} idFila={(f) => f.id} tarjetaMovil
+        vacio={{ titulo: hayFiltro ? t('vendedores_tablero.ninguno_en_esta_etapa_con_el') : t('vendedores_tablero.sin_prospectos_en_esta_etapa') }}
+      />
+      {recortes.length > 0 && (
+        <ul className="ven-recortes">
+          {recortes.map((col) => (
+            <li key={col.estado}>
+              <b>{etiquetaEtapa(col.estado, col.rotulo)}</b>{' '}
+              {col.total > col.tarjetas.length
+                ? <>{numero(col.tarjetas.length, idioma)} / {numero(col.total, idioma)}{hayFiltro ? t('vendedores_tablero.acota_el_filtro_para_verlos') : ''}</>
+                : null}
+              {col.mas ? <> <Link href={col.mas.href} className="ven-col__mas">{col.mas.etiqueta}</Link></> : null}
+              {col.menos ? <> <Link href={col.menos.href} className="ven-col__mas">{col.menos.etiqueta}</Link></> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      <Drawer abierto={elegida !== null} onCerrar={() => setAbierto(null)} titulo={elegida?.empresa ?? ''} descripcion={subtitulo} tamano="m">
+        {elegida && (
+          <Detalle key={elegida.id} t={elegida} orden={orden} transiciones={transiciones} rotulos={rotulos} vendedores={vendedores}
+            mover={mover} asignar={asignar} guardarNota={guardarNota} redactar={redactar} conVendedor={conVendedor}
+            etapa={etiquetaEtapa(elegida.estado)} alMover={() => setAbierto(null)} />
+        )}
+      </Drawer>
     </div>
   );
 }

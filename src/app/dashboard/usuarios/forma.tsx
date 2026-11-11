@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { UserPlus } from 'lucide-react';
 import { AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, Icono, clasesBoton } from '@/app/ui-v2/componentes';
+import '../filas-ctl.css';
 import './usuarios.css';
 // SOLO TIPOS: el catálogo `ROLES_INVITABLES` viaja como PROP desde la página
 // (mismo patrón que `MODOS_TARIFA` en /dashboard/clientes). `invitar.ts` hoy
@@ -12,6 +13,7 @@ import './usuarios.css';
 import type { OpcionRol } from '@/lib/auth/invitar';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { nombreDeRol } from '@/lib/auth/roles';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
@@ -46,27 +48,28 @@ export function FormaInvitar({ accion, roles }: {
 
   return (
     <form action={despachar} className="rv-usu__forma">
+      {/* Filas rótulo-control (Rovaq «Equipo»): rótulo 14/600 y ayuda 12 a la izquierda, control de ~200 px a la derecha, divisor entre filas. */}
       <div className="rv-usu__rejilla">
-        <CampoTexto etiqueta={t('cfg.correo')} id="inv-email" name="email" tipo="email" required maxLength={160}
+        <CampoTexto className="rv-fila-c" etiqueta={t('cfg.correo')} id="inv-email" name="email" tipo="email" required maxLength={160}
           placeholder="contralor@tuflota.mx"
           ayuda={t('cfg.es_su_llave_de_entrada_en')} />
 
-        <CampoTexto etiqueta={t('cfg.nombre_opcional')} id="inv-nombre" name="nombre" maxLength={120}
+        <CampoTexto className="rv-fila-c" etiqueta={t('cfg.nombre_opcional')} id="inv-nombre" name="nombre" maxLength={120}
           placeholder={t('cfg.como_quieres_verlo_en_la_lista')} />
 
-        <CampoSelect etiqueta="Rol" id="inv-rol" name="rol" required defaultValue="contador">
+        <CampoSelect className="rv-fila-c" etiqueta="Rol" id="inv-rol" name="rol" required defaultValue="contador">
           {roles.map((r) => (
             <option key={r.valor} value={r.valor}>{r.rotulo}</option>
           ))}
         </CampoSelect>
 
-        <CampoTexto etiqueta={t('cfg.whatsapp_opcional')} id="inv-telefono" name="telefono" maxLength={20}
+        <CampoTexto className="rv-fila-c" etiqueta={t('cfg.whatsapp_opcional')} id="inv-telefono" name="telefono" maxLength={20}
           placeholder={t('cfg.10_digitos')} inputMode="tel" claseControl="cifra-mono"
           ayuda={t('cfg.para_que_el_bot_la_reconozca')} />
       </div>
 
       <Aviso estado={estado} />
-      <div><BotonInvitar /></div>
+      <div className="rv-fila-pie"><BotonInvitar /></div>
     </form>
   );
 }
@@ -114,6 +117,8 @@ function SelectRol({ rolActual, roles, etiqueta }: { rolActual: string; roles: R
   return (
     <select name="rol" defaultValue={rolActual} aria-label={etiqueta} className="rv-ctl rv-usu__rol" disabled={pending}
       onChange={(e) => { if (e.currentTarget.value !== rolActual) e.currentTarget.form?.requestSubmit(); }}>
+      {/* El rol REAL siempre se ve: un rol fuera del catálogo invitable (p. ej. nómina) no se muestra como «Contador». */}
+      {roles.some((r) => r.valor === rolActual) ? null : <option value={rolActual}>{nombreDeRol(rolActual)}</option>}
       {roles.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
     </select>
   );
