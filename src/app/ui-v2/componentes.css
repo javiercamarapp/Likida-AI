@@ -66,7 +66,7 @@
 
 /* ── Estado vacío v2 ───────────────────────────────────────────────────── */
 .rv-vacio { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 32px 16px; border: 1px dashed var(--line2, var(--line)); border-radius: 12px; background: var(--surface); }
-.rv-vacio[data-compacto] { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; gap: 4px 12px; padding: 12px 14px; background: transparent; border-width: 1.5px; border-style: dotted; }
+.rv-vacio[data-compacto] { flex-direction: row; flex-wrap: wrap; justify-content: center; text-align: left; gap: 4px 12px; padding: 12px 14px; background: transparent; border-width: 1px; border-style: dashed; }
 .rv-vacio__arte { width: 160px; height: 96px; color: var(--ink2, var(--ink)); }
 .rv-vacio__titulo { margin: 0; font-size: 14px; font-weight: 600; color: var(--ink); }
 .rv-vacio__texto { margin: 0; max-width: 48ch; font-size: 13px; color: var(--muted); }
@@ -394,7 +394,7 @@
 [data-ui="v2"] .rv-recuadro-tit { display: flex; flex: 1 1 auto; min-width: 0; align-items: center; gap: 4px; min-height: 28px; }
 [data-ui="v2"] .rv-recuadro-tit > .rv-info { margin-left: auto; }
 [data-ui="v2"] .rv-recuadro-tit__texto { margin: 0; min-width: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
-[data-ui="v2"] .rv-tarjeta__cab { display: flex; align-items: center; gap: 4px; height: 32px; }
+[data-ui="v2"] .rv-tarjeta__cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-height: 32px; }
 [data-ui="v2"] .rv-tarjeta__titulo { margin: 0; min-width: 0; font: 600 var(--t-card)/1.3 var(--font-sans-ui, inherit); letter-spacing: -.01em; color: var(--ink); }
 [data-ui="v2"] .rv-tarjeta__acciones { display: flex; align-items: center; gap: 8px; margin-left: auto; padding-left: 8px; flex: none; }
 /* La ⓘ va SIEMPRE en la esquina derecha del encabezado (mismo sitio en toda tarjeta y celda de KPI). */
