@@ -34,7 +34,7 @@ export async function ConsolaAdmin({ nombre }: { nombre: string | null }) {
       acciones={<BotonEnlace tamano="sm" variante="secondary" href="/admin/copiloto">{t('consola.copiloto')}</BotonEnlace>}
       avisos={(
         <>
-          <p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={2} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>
+          <p className="adm-acceso" role="status"><ShieldCheck width={16} height={16} strokeWidth={1.75} aria-hidden="true" /><span>{t('consola.acceso_admin')}</span></p>
           <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueSemaforo /></Suspense>
         </>
       )}
