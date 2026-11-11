@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { clasificacionDeGuardia, decidirApp, decidirAvisos, decidirBaseCaida, estadoDeDetalle, estadoTrasAviso, lineasDeAviso, huellaDeClave, memoriaDeEstado, ESTADO_GUARDIA_INICIAL, SONDEOS_FALLIDOS_PARA_CAIDA, type EstadoGuardia } from '@/lib/admin/guardia';
 import { COMPONENTES_ESTADO, detalleLatidos, leerLatido, puertaCron, purgarObservabilidad, registrarEstado, registrarLatido, type EstadoLatido } from '@/lib/admin/salud';
 import { componentesDesdeHealth, componentesDesdeLatidos, esVentanaDeMantenimiento, medicionVacia, sondearHealth, sondeoCiego } from '@/lib/admin/estado';
+import { alertasIaDeDetalle, alertasIaEncendidas, correrAlertasIa } from '@/lib/admin/alertas-ia';
 import { leerInterruptor } from '@/lib/likida/interruptores';
 import { conRelojDuro } from '../_reloj_duro';
 import { appUrl } from '@/lib/env';
@@ -83,8 +84,10 @@ export async function GET(req: Request) {
     const enMemoria = memoriaDeEstado.leer();
     let previoIlegible = false;
     let previo: EstadoGuardia;
+    let detallePrevioCrudo: unknown = null;
     try {
-      previo = estadoDeDetalle((await leerLatido('guardia'))?.detalle);
+      detallePrevioCrudo = (await leerLatido('guardia'))?.detalle;
+      previo = estadoDeDetalle(detallePrevioCrudo);
       if (previo.baseCaidaDesde === null && enMemoria?.baseCaidaDesde) previo = { ...previo, baseCaidaDesde: enMemoria.baseCaidaDesde };
     } catch {
       previoIlegible = true;
@@ -255,10 +258,20 @@ export async function GET(req: Request) {
     }
     const gobiernoIaDetalle = gobiernoIa && gobiernoIa.estado !== 'apagado' && gobiernoIa.estado !== 'omitido' ? { gobiernoIa } : undefined;
 
-    const parcial = cortadoPorReloj || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal || gobiernoIa?.estado === 'error';
+
+    // ── 6. Alertas de IA (F16) ─────────────────────────────────────────────
+    // «IA sin registro» y «tasa de respaldo alta», cada 15 min, colgadas de esta misma guardia (sin cron nuevo). Apagado
+    // por omisión (ALERTAS_IA_GUARDIA=encendido). En las pasadas en que no toca se conserva lo último evaluado para que
+    // la campana no parpadee. No lanza.
+    const alertasIaPrevias = alertasIaDeDetalle(detallePrevioCrudo);
+    let alertasIa: Awaited<ReturnType<typeof correrAlertasIa>> = { estado: 'omitido' };
+    if (Date.now() < vence - 6_000) alertasIa = await correrAlertasIa(inicio, alertasIaPrevias);
+    const alertasIaVigente = alertasIa.estado === 'ok' ? alertasIa.detalle : alertasIa.estado === 'omitido' && alertasIaEncendidas() ? alertasIaPrevias : null;
+
+    const parcial = cortadoPorReloj || alertasIa.estado === 'error' || bandejaError !== null || sinEscribir > 0 || (mantenimiento !== undefined && 'error' in mantenimiento) || seguridadMal || gobiernoIa?.estado === 'error';
     const estado: EstadoLatido = parcial ? 'parcial' : 'ok';
     // `componentes` va en el latido: es lo que lee /estado para el estado ACTUAL (con la hora del propio latido).
-    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
+    const detalle = { ...estadoNuevo, ...detalleBandeja, componentes: medicion, ...(mantenimiento ? { mantenimiento } : {}), ...(seguridad ? { seguridad } : {}), ...(gobiernoIaDetalle ?? {}), ...(alertasIaVigente ? { alertasIa: alertasIaVigente } : {}), ...(cortadoPorReloj ? { cortadoPorReloj } : {}) };
     logger.info('cron.guardia.ok', { ...detalleBandeja, componentes: JSON.stringify(medicion), parcial });
     await registrarLatido('guardia', estado, detalle);
     return NextResponse.json({ corrio: true, parcial, ...detalleBandeja, componentes: medicion });

@@ -9,6 +9,7 @@ import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import MenuGuia from './menu-guia';
 import FechaHoy from './fecha-hoy';
+import { Tooltip } from '../../ui-v2/componentes/overlay';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
@@ -41,10 +42,12 @@ export function CabeceraMovilVista({ hrefCasa, hrefAvisos, etiquetaAvisos = 'Not
         <FechaHoy className="rv-cab-movil__fecha" />
         {children}
         {hrefAvisos && (
-          <Link href={hrefAvisos} className="rv-icono-boton" aria-label={etiquetaAvisos} title={etiquetaAvisos}>
-            <Bell width={18} height={18} strokeWidth={TRAZO_ICONO} aria-hidden />
-            {punto && <span className="rv-campana__punto" aria-hidden />}
-          </Link>
+          <Tooltip texto={etiquetaAvisos}>
+            <Link href={hrefAvisos} className="rv-icono-boton" aria-label={etiquetaAvisos}>
+              <Bell width={18} height={18} strokeWidth={TRAZO_ICONO} aria-hidden />
+              {punto && <span className="rv-campana__punto" aria-hidden />}
+            </Link>
+          </Tooltip>
         )}
       </div>
     </header>

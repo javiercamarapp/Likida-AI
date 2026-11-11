@@ -15,6 +15,9 @@ import {
   invitarVendedor,
   asignarPendientes,
 } from '@/lib/likida/vendedores';
+import {
+  anotarAccionVendedor, correoDeAccesoDisponible, enviarAccesoVendedor, MENSAJE_SIN_CORREO,
+} from '@/lib/likida/vendedores_registro';
 import { redactarCorreoFrio } from '@/lib/likida/agentes/redactor';
 import { descifrarErrorProvision } from '@/lib/auth/invitar';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
@@ -56,22 +59,25 @@ async function ejecutarComoSuperadmin<T extends ResultadoNoNulo>(
 }
 
 export async function accionMover(id: string, a: string): Promise<ResultadoAccion> {
-  return ejecutarComoSuperadmin(async () => {
+  return ejecutarComoSuperadmin(async (sesion) => {
     await cambiarEstadoProspecto(String(id), String(a));
+    await anotarAccionVendedor(sesion, 'prospecto.movido', String(id), { a: String(a) });
     return { ok: true };
   }, 'mover el prospecto');
 }
 
 export async function accionAsignar(id: string, vendedorId: string): Promise<ResultadoAccion> {
-  return ejecutarComoSuperadmin(async () => {
+  return ejecutarComoSuperadmin(async (sesion) => {
     await asignarProspecto(String(id), vendedorId === '' ? null : String(vendedorId));
+    await anotarAccionVendedor(sesion, 'prospecto.asignado', String(id), { vendedor: vendedorId === '' ? null : String(vendedorId) });
     return { ok: true };
   }, 'asignar el prospecto');
 }
 
 export async function accionNota(id: string, nota: string): Promise<ResultadoAccion> {
-  return ejecutarComoSuperadmin(async () => {
+  return ejecutarComoSuperadmin(async (sesion) => {
     await actualizarNotasProspecto(String(id), String(nota));
+    await anotarAccionVendedor(sesion, 'prospecto.nota', String(id), { largo: String(nota).length });
     return { ok: true };
   }, 'guardar la nota');
 }
@@ -120,18 +126,25 @@ export async function accionInvitar(
   _previo: ResultadoForma,
   fd: FormData,
 ): Promise<ResultadoForma> {
-  return ejecutarComoSuperadmin(async () => {
-    const { email } = await invitarVendedor(
+  return ejecutarComoSuperadmin(async (sesion) => {
+    // Falla CERRADA: sin correo saliente no se crea la cuenta (nadie le avisaría al vendedor ni le llegaría su enlace).
+    if (!correoDeAccesoDisponible()) return { ok: false, error: MENSAJE_SIN_CORREO };
+    const { userId, email } = await invitarVendedor(
       String(fd.get('email') ?? ''),
       String(fd.get('nombre') ?? ''),
     );
-    // La verdad del flujo, igual que en /dashboard/usuarios: no se emite
-    // correo de invitación todavía — prometer "le llegó" sería mentira.
-    const liga = appUrl();
+    await anotarAccionVendedor(sesion, 'vendedor.invitado', userId, {});
+    const envio = await enviarAccesoVendedor(email, sesion.nombre);
+    if (!envio.enviado) {
+      // La cuenta ya existe; el correo no salió. Se dice tal cual, sin verde.
+      return {
+        ok: false,
+        error: `${email} ya tiene cuenta, pero el correo de invitación no salió. Pásale tú la liga: ${appUrl()}/login`,
+      };
+    }
     return {
       ok: true,
-      mensaje: `${email} ya puede entrar con su correo (enlace mágico) y aterriza en /vendedor. `
-        + `No le llega invitación por correo todavía — pásale tú la liga: ${liga}/login`,
+      mensaje: `Le mandamos la invitación a ${email}. Entra con su correo (enlace mágico) y aterriza en /vendedor.`,
     };
   }, 'invitar al vendedor', 'Solo el superadmin invita vendedores.',
   (error) => descifrarErrorProvision(error) ?? error);

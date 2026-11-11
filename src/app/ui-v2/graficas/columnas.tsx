@@ -26,7 +26,7 @@ const PAD_T = 20, PAD_B = 22, PAD_R = 6;
  *  anterior, foco por columna con flechas, «Ver como tabla» y estados sin dato (s/d) / parcial (trama) / estimado (KindBadge).
  *  Un valor null NUNCA se dibuja como cero. Todo en cero o sin dato ⇒ plano vacío con UNA línea que dice qué falta.
  *  Crecen una vez al montar (CSS, 420 ms, escalón de 14 ms); con reduced-motion aparecen quietas. */
-export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vacio = 'Sin datos en el periodo', tipo = 'observado', alto = 168, variacion = true, unidad }: {
+export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vacio = 'Sin datos en el periodo', tipo = 'observado', alto = 168, variacion = true, unidad, tinta = 'matiz' }: {
   datos: readonly ColumnaDato[];
   matiz?: Matiz;
   etiqueta: string;
@@ -38,6 +38,8 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vac
   /** Mostrar la variación contra el periodo anterior (solo entre completos). */
   variacion?: boolean;
   unidad?: string;
+  /** `neutra` = identidad Rovaq (TOKENS #24): barras en tinta neutra y el último periodo / el activo en tinta fuerte. `matiz` (por omisión) conserva el color de la métrica. */
+  tinta?: 'matiz' | 'neutra';
 }) {
   const formato = resolverFormato(formatoProp);
   const [ref, ancho] = useAncho<HTMLDivElement>();
@@ -103,7 +105,7 @@ export function Columnas({ datos, matiz = 1, etiqueta, formato: formatoProp, vac
   };
 
   return (
-    <figure className="rv-gr rv-colum" data-matiz={matiz} data-tipo={tipo} aria-label={etiqueta} data-cero-fuente="">
+    <figure className="rv-gr rv-colum" data-matiz={matiz} data-tipo={tipo} data-tinta={tinta === 'neutra' ? 'neutra' : undefined} aria-label={etiqueta} data-cero-fuente="">
       <div className="rv-gr-plot" ref={ref}>
         <CintaLectura>{lectura}</CintaLectura>
         <svg ref={plano} className="rv-colum__svg" width={W} height={alto} viewBox={`0 0 ${W} ${alto}`} role="group" aria-label={etiqueta}

@@ -1,16 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
 import { type Item, SECCIONES, entradaDeRuta } from './rutas';
 import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
 import { useRequiereAccion } from './cabecera-admin';
 import LogoV2 from '../dashboard/shell/logo-v2';
 import { ALTO_LOGO_PX } from '../marco-v2';
 import { useRiel } from '../dashboard/shell/colapso';
+import { Tooltip } from '../ui-v2/componentes/overlay';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
+import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
 // El sidebar de /admin usa las clases del sistema (`.rv-sb`, `.rv-item`, `.rv-grupo` de ui-v2/shell.css), las MISMAS que el del
 // dashboard (7-nov-2026, R8): ancho, hover, activo, colapso a riel y animación de entrada vienen de ahí. Lo único distinto es el
@@ -51,7 +55,7 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
     <section className="rv-grupo" data-abierto={esta ? '' : undefined} aria-labelledby={id}>
       <h2 className="rv-grupo__h">
         <button type="button" id={id} className="rv-grupo__t rv-grupo__tog" onClick={() => onAbrir(titulo)}
-          aria-expanded={esta} aria-controls={`${id}-items`} title={titulo}>
+          aria-expanded={esta} aria-controls={`${id}-items`}>
           {(() => { const Ico = ICONO_SECCION[titulo]; return Ico ? <Ico className="rv-grupo__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden /> : null; })()}
           <span className="rv-grupo__tt">{titulo}</span>
           <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
@@ -75,15 +79,18 @@ export function AsideAdmin({ children }: { children: React.ReactNode }) {
 /** La marca del sidebar: logo (horizontal / símbolo en el riel) y el botón de plegar — las mismas piezas que `SidebarV2`. */
 export function MarcaAdmin() {
   const { riel, alternar } = useRiel();
+  const { t } = useT('shell', shellEs);
   return (
     <div className="rv-sb__marca">
       <Link href="/admin" className="rv-sb__logo" aria-label="Likida, ir al inicio">
         <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
         <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
       </Link>
-      <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label="Plegar el menú" title="Plegar el menú" aria-expanded={!riel}>
-        <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-      </button>
+      <Tooltip texto={t('cab.plegar')}>
+        <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={t('cab.plegar')} aria-expanded={!riel}>
+          <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+        </button>
+      </Tooltip>
     </div>
   );
 }
@@ -103,6 +110,19 @@ export default function SidebarNav() {
     return 'Agentes';
   });
   const alternar = (titulo: string) => setAbierta((a) => (a === titulo ? null : titulo));
+  const { t } = useT('shell', shellEs);
+  // «Página actual»: la pantalla abierta cuando su sección está cerrada (o hay otra abierta) no se vería en el árbol; el bloque la repite
+  // arriba y desaparece en cuanto se abre su sección. En el riel no se pinta (CSS): ahí todo está a la vista.
+  const activa = entradaDeRuta(pathname);
+  const seccionActiva = activa ? TITULOS_ADMIN.find(([, items]) => items.some((it) => it.href === activa.href))?.[0] ?? null : null;
+  const itemActual = activa && seccionActiva && abierta !== seccionActiva ? activa : null;
+  // El ítem activo se deja a la vista cuando el árbol scrollea; espera a que termine de abrirse la sección (180 ms) para medir.
+  useEffect(() => {
+    const id = window.setTimeout(() => {
+      dejarItemActivoALaVista();
+    }, 200);
+    return () => window.clearTimeout(id);
+  }, [pathname, abierta]);
   return (
     <>
       <ul className="rv-lista">
@@ -113,6 +133,12 @@ export default function SidebarNav() {
           </Link>
         </li>
       </ul>
+      {itemActual && (
+        <section aria-labelledby="rv-g-pagina-actual" className="rv-grupo rv-pagina-actual" data-estatico>
+          <p id="rv-g-pagina-actual" className="rv-grupo__t">{t('nav.paginaActual')}</p>
+          <ul className="rv-lista"><Fila item={itemActual} pathname={pathname} /></ul>
+        </section>
+      )}
       {TITULOS_ADMIN.map(([titulo, items]) => (
         <Seccion key={titulo} titulo={titulo} items={items} pathname={pathname}
           abierta={abierta} onAbrir={alternar} />
@@ -150,7 +176,15 @@ export function PieAdmin({ nombre, avatarUrl, flotas, flotaActual, salir, alNave
       }}
       avisos={{ href: '/admin/notificaciones', pendientes: r ? r.pendientes : undefined, urgente: r?.hayUrgente }}
       acceso={{ href: '/dashboard', texto: 'Panel del cliente', Icono: ArrowLeftRight }}
-      tarjeta={<TarjetaUsuario nombre={nombre} rolEtiqueta="Superadmin" iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} href="/admin/mi-perfil" salir={salir} />}
+      tarjeta={(
+        <TarjetaUsuario nombre={nombre} rolEtiqueta="Superadmin" iniciales={inicialesDe(n || 'J')} avatarUrl={avatarUrl} salir={salir} alElegir={alNavegar}
+          menu={(
+            <Link role="menuitem" tabIndex={-1} href="/admin/mi-perfil" className="rv-menu__item" onClick={() => alNavegar?.()}>
+              <span className="rv-menu__icono" aria-hidden><UserRound width={16} height={16} strokeWidth={TRAZO_ICONO} /></span>
+              <span>Mi perfil</span>
+            </Link>
+          )} />
+      )}
     />
   );
 }

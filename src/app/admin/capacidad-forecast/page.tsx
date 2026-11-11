@@ -6,10 +6,9 @@ import { ahoraMs } from '@/lib/saludo';
 import { numero } from '@/lib/formato';
 import { usd } from '@/lib/utils';
 import { proyectarCosto } from './proyeccion';
-import { Gauge, TrendingUp, DollarSign } from 'lucide-react';
 import { AreaChartSimple } from '../charts';
-import { StatCard, EstadoVacio } from '../ui/kit';
-import { BarraPagina, TituloSeccion } from '../../dashboard/resumen-visual';
+import { EstadoVacio, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { Cifra, TiraCifras } from '../../ui-v2/graficas';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,121 +30,98 @@ export default async function CapacidadForecastPage() {
   let unidades: Awaited<ReturnType<typeof getUnidadesMedidas>> | null = null;
   try { unidades = await getUnidadesMedidas(ahoraMs()); } catch { unidades = null; }
 
-  const ICONO = { width: 15, height: 15, strokeWidth: 1.75 } as const;
-
   return (
-    <main className="h-full">
-      <div className="rounded-2xl min-h-full hairline flex flex-col" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Gauge {...ICONO} style={{ color: 'var(--muted)' }} />}
-          titulo="Capacidad & Forecast"
-        />
+    <MarcoPagina titulo="Capacidad & Forecast">
+      {enVentana === null ? (
+        <EstadoVacio titulo="Sin lectura">
+          No se pudo leer el costo de la ventana de 30 días — esto NO significa que no haya gasto.
+        </EstadoVacio>
+      ) : proyeccion === null ? (
+        <EstadoVacio titulo="Sin datos">
+          Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
+        </EstadoVacio>
+      ) : (
+        <>
+          <TiraCifras>
+            <Cifra
+              etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
+              valor={usd(proyeccion.promedioDiario)}
+            />
+            <Cifra etiqueta="Proyección a 30 días" valor={usd(proyeccion.proyeccionMensual)} />
+          </TiraCifras>
 
-        <div className="px-5 py-5 flex-1 space-y-2.5">
-          {enVentana === null ? (
-            <EstadoVacio>
-              No se pudo leer el costo de la ventana de 30 días — esto NO significa que no haya gasto.
-            </EstadoVacio>
-          ) : proyeccion === null ? (
-            <EstadoVacio>
-              Sin datos de costo de IA registrados todavía — no hay base para proyectar nada.
-            </EstadoVacio>
-          ) : (
-            <>
-              <div className="kit-kpis">
-                <StatCard icono={<DollarSign {...ICONO} />}
-                  etiqueta={`Costo diario promedio, últimos ${proyeccion.diasVentana} día${proyeccion.diasVentana === 1 ? '' : 's'}`}
-                  valor={proyeccion.promedioDiario} formato="usd"
-                />
-                <StatCard icono={<TrendingUp {...ICONO} />}
-                  etiqueta="Proyección a 30 días"
-                  valor={proyeccion.proyeccionMensual} formato="usd"
-                />
-              </div>
-
-              <div className="card p-4">
-                <TituloSeccion>Costo de IA por día</TituloSeccion>
-                <div className="mt-3">
-                  {r.porDia.length > 1 ? (
-                    <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} etiquetaSerie="Costo de IA por día (USD)" />
-                  ) : (
-                    <div className="flex items-center text-sm" style={{ color: 'var(--muted)', height: 160 }}>
-                      Sin historial suficiente todavía para una serie — solo hay un día con datos.
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>
-                  Proyección simple: costo diario promedio × 30 — no es un modelo real de forecasting, solo una
-                  extrapolación honesta de la tendencia actual.
-                  {proyeccion.diasVentana < 7 && ' Con tan poca historia, esta cifra es apenas indicativa.'}
-                </p>
-              </div>
-            </>
-          )}
-
-          {/* ── EL MODELO DE CAPACIDAD (fase 7): escenarios con supuestos
-                A LA VISTA. Las unidades salen de lo medido cuando hay
-                muestra; los límites de proveedor son nominales y se dice. ── */}
-          <div className="card p-4">
-            <TituloSeccion>Modelo de capacidad — escenarios de escala</TituloSeccion>
-            {unidades === null ? (
-              <p className="text-[12.5px] mt-2" style={{ color: 'var(--muted)' }}>
-                No se pudieron leer las unidades medidas — sin base, no se pintan escenarios.
-              </p>
+          <Tarjeta titulo="Costo de IA por día">
+            {r.porDia.length > 1 ? (
+              <AreaChartSimple datos={r.porDia.map((d) => ({ dia: d.dia, valor: d.costoUsd }))} etiquetaValor={(v) => usd(v)} etiquetaSerie="Costo de IA por día (USD)" />
             ) : (
-              <>
-                <p className="text-[12px] mt-1.5" style={{ color: 'var(--muted)' }}>
-                  {unidades.costoIaPorViaje !== null
-                    ? <>Costo de IA MEDIDO: {usd(unidades.costoIaPorViaje)} por viaje liquidado (muestra: {numero(unidades.muestraViajes)} liquidaciones en 30d{unidades.muestraViajes < 30 ? ' — muestra chica, apenas indicativo' : ''}).</>
-                    : <>Sin liquidaciones en 30d — el costo por viaje no se puede medir y el escenario lo deja en blanco.</>}
-                </p>
-                <div className="overflow-x-auto mt-3">
-                  <table aria-label="Proyección de capacidad por escenario" className="w-full text-[12.5px]">
-                    <thead>
-                      <tr className="text-left" style={{ color: 'var(--muted)' }}>
-                        <th scope="col" className="py-1.5 pr-4 font-medium">Viajes/día</th>
-                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Mensajes WA/día</th>
-                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Pico msg/min</th>
-                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Llamadas LLM/día</th>
-                        <th scope="col" className="py-1.5 pr-4 font-medium text-right">Costo IA/día</th>
-                        <th scope="col" className="py-1.5 font-medium text-right">Storage/día</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {ESCENARIOS_VIAJES_DIA.map((v) => {
-                        const e = escenarioDe(v, unidades!.costoIaPorViaje);
-                        return (
-                          <tr key={v} className="border-t tabular" style={{ borderColor: 'var(--line2)' }}>
-                            <td className="py-1.5 pr-4 font-medium">{numero(v)}</td>
-                            <td className="py-1.5 pr-4 text-right">{numero(e.mensajesDia)}</td>
-                            <td className="py-1.5 pr-4 text-right">{numero(e.mensajesMinPico)}</td>
-                            <td className="py-1.5 pr-4 text-right">{numero(e.llamadasLlmDia)}</td>
-                            <td className="py-1.5 pr-4 text-right">{e.costoIaDiaUsd === null ? <span style={{ color: 'var(--faint)' }}>sin base medida</span> : usd(e.costoIaDiaUsd)}</td>
-                            <td className="py-1.5 text-right">{numero(e.storageDiaMb)} MB</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-[11px] mt-3" style={{ color: 'var(--faint)' }}>
-                  Supuestos declarados: {SUPUESTOS_CAPACIDAD.mensajesPorViaje} mensajes y {SUPUESTOS_CAPACIDAD.comprobantesPorViaje} comprobantes
-                  por viaje (~{Math.round(SUPUESTOS_CAPACIDAD.bytesPorComprobante / 1000)} KB c/u), {SUPUESTOS_CAPACIDAD.llamadasLlmPorViaje} llamadas
-                  LLM por viaje, jornada pico de {SUPUESTOS_CAPACIDAD.horasPicoDia} h. Es una estimación con supuestos a la vista, no una medición.
-                </p>
-                <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--line)' }}>
-                  <p className="etiqueta-mono text-[10px] uppercase mb-1" style={{ color: 'var(--muted)' }}>Límites nominales del proveedor (documentación, no medidos)</p>
-                  {LIMITES_NOMINALES.map((l) => (
-                    <p key={l.recurso} className="text-[12px]" style={{ color: 'var(--muted)' }}>· {l.recurso}: {l.limite} <span style={{ color: 'var(--faint)' }}>({l.fuente})</span></p>
-                  ))}
-                </div>
-              </>
+              <p className="m-0 flex h-40 items-center text-sm text-muted">
+                Sin historial suficiente todavía para una serie — solo hay un día con datos.
+              </p>
             )}
-          </div>
-        </div>
-      </div>
-    </main>
+            <p className="m-0 mt-3 text-xs text-muted">
+              Proyección simple: costo diario promedio × 30 — no es un modelo real de forecasting, solo una
+              extrapolación honesta de la tendencia actual.
+              {proyeccion.diasVentana < 7 && ' Con tan poca historia, esta cifra es apenas indicativa.'}
+            </p>
+          </Tarjeta>
+        </>
+      )}
+
+      {/* ── EL MODELO DE CAPACIDAD (fase 7): escenarios con supuestos A LA VISTA. Las unidades salen de lo medido cuando hay
+            muestra; los límites de proveedor son nominales y se dice. ── */}
+      <Tarjeta titulo="Modelo de capacidad — escenarios de escala">
+        {unidades === null ? (
+          <p className="m-0 text-[13px] text-muted">
+            No se pudieron leer las unidades medidas — sin base, no se pintan escenarios.
+          </p>
+        ) : (
+          <>
+            <p className="m-0 mb-3 text-[13px] text-muted">
+              {unidades.costoIaPorViaje !== null
+                ? <>Costo de IA MEDIDO: {usd(unidades.costoIaPorViaje)} por viaje liquidado (muestra: {numero(unidades.muestraViajes)} liquidaciones en 30d{unidades.muestraViajes < 30 ? ' — muestra chica, apenas indicativo' : ''}).</>
+                : <>Sin liquidaciones en 30d — el costo por viaje no se puede medir y el escenario lo deja en blanco.</>}
+            </p>
+            <TablaBase
+              etiqueta="Proyección de capacidad por escenario"
+              columnas={columnasEscenario(unidades.costoIaPorViaje)}
+              filas={ESCENARIOS_VIAJES_DIA}
+              idFila={(v) => String(v)}
+              altoMaximo={false}
+            />
+            <p className="m-0 mt-3 text-xs text-muted">
+              Supuestos declarados: {SUPUESTOS_CAPACIDAD.mensajesPorViaje} mensajes y {SUPUESTOS_CAPACIDAD.comprobantesPorViaje} comprobantes
+              por viaje (~{Math.round(SUPUESTOS_CAPACIDAD.bytesPorComprobante / 1000)} KB c/u), {SUPUESTOS_CAPACIDAD.llamadasLlmPorViaje} llamadas
+              LLM por viaje, jornada pico de {SUPUESTOS_CAPACIDAD.horasPicoDia} h. Es una estimación con supuestos a la vista, no una medición.
+            </p>
+            <div className="mt-3 border-t border-[var(--line)] pt-3">
+              <p className="etiqueta-mono m-0 mb-1 text-[11px] uppercase text-muted">Límites nominales del proveedor (documentación, no medidos)</p>
+              {LIMITES_NOMINALES.map((l) => (
+                <p key={l.recurso} className="m-0 text-[12px] text-muted">· {l.recurso}: {l.limite} <span>({l.fuente})</span></p>
+              ))}
+            </div>
+          </>
+        )}
+      </Tarjeta>
+    </MarcoPagina>
   );
+}
+
+/** Columnas de la tabla de escenarios: cada fila es un volumen de viajes/día y el resto sale de `escenarioDe`. */
+function columnasEscenario(costoIaPorViaje: number | null): ColumnaBase<number>[] {
+  return [
+    { id: 'viajes', titulo: 'Viajes/día', principal: true, celda: (v) => numero(v) },
+    { id: 'wa', titulo: 'Mensajes WA/día', alinear: 'der', celda: (v) => numero(escenarioDe(v, costoIaPorViaje).mensajesDia) },
+    { id: 'pico', titulo: 'Pico msg/min', alinear: 'der', celda: (v) => numero(escenarioDe(v, costoIaPorViaje).mensajesMinPico) },
+    { id: 'llm', titulo: 'Llamadas LLM/día', alinear: 'der', celda: (v) => numero(escenarioDe(v, costoIaPorViaje).llamadasLlmDia) },
+    {
+      id: 'costo', titulo: 'Costo IA/día', alinear: 'der',
+      celda: (v) => {
+        const c = escenarioDe(v, costoIaPorViaje).costoIaDiaUsd;
+        return c === null ? <span className="text-muted">sin base medida</span> : usd(c);
+      },
+    },
+    { id: 'storage', titulo: 'Storage/día', alinear: 'der', celda: (v) => `${numero(escenarioDe(v, costoIaPorViaje).storageDiaMb)} MB` },
+  ];
 }
 
 export const metadata: Metadata = { title: 'Capacidad & Forecast' };

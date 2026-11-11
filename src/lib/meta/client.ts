@@ -12,6 +12,7 @@ import {
 } from '@/lib/likida/wa_outbox';
 import { armarComponentesPlantilla, type ComponentePlantilla, type OpcionesPlantilla } from './plantilla_payload';
 import { esTelefonoDemo, esDestinatarioBloqueado, RECHAZO_TELEFONO_DEMO, RECHAZO_TELEFONO_NO_ENVIABLE } from './telefono_demo';
+import { veredictoSalidasHaciaTelefono } from '@/lib/saas/salidas_flota';
 
 const GRAPH = 'https://graph.facebook.com/v21.0';
 
@@ -196,6 +197,20 @@ function rechazarDemo(to: string, origen: string): typeof RECHAZO_TELEFONO_DEMO 
   return RECHAZO_TELEFONO_DEMO;
 }
 
+
+/**
+ * F20: la pausa (o cancelación) del plan de la flota frena TODA salida hacia sus operadores y usuarios.
+ * Falla cerrado si no se puede leer el plan. Devuelve el mismo `{ok:false}` de este archivo con `status: 503`,
+ * que `esReintentableMeta` lee como «vuelve más tarde»: un tier de cobranza o una escalación NO se consumen.
+ * No encola nada. Las respuestas ARCO (`enviarRespuestaArco`) son obligación legal y NO pasan por aquí.
+ */
+async function frenoPlanDeFlota(to: string, origen: string): Promise<{ ok: false; error: string; status: number } | null> {
+  const v = await veredictoSalidasHaciaTelefono(to);
+  if (v.salen) return null;
+  logger.warn('wa.salida_frenada_por_plan', { origen, estado: v.estado, para: destinatarioEnmascarado(to) });
+  return { ok: false, error: v.mensaje, status: 503 };
+}
+
 /**
  * El resultado de un envío, igual para las cuatro funciones de este archivo.
  * `codigo` es el de la Graph API — lo que distingue "el número no existe" de
@@ -340,6 +355,7 @@ export async function sondearTokenWhatsApp(ahora: number = Date.now()): Promise<
  */
 export async function enviarTexto(to: string, body: string): Promise<EnvioWhatsApp> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendText');
+  { const freno = await frenoPlanDeFlota(to, 'wa.sendText'); if (freno) return freno; }
   const payload = { messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'text', text: { body } };
   let res: Response;
   try {
@@ -527,6 +543,7 @@ export async function enviarBotones(
   to: string, cuerpo: string, botones: BotonAcuse[], documento?: DocumentoEncabezado,
 ): Promise<EnvioWhatsApp> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendButtons');
+  { const freno = await frenoPlanDeFlota(to, 'wa.sendButtons'); if (freno) return freno; }
   let payload: Record<string, unknown> | null = null;
   try {
     // La frontera es pública en tiempo de ejecución aunque TypeScript diga
@@ -595,6 +612,7 @@ const MAX_CUERPO_UBICACION = 1024;
  */
 export async function enviarSolicitudUbicacion(to: string, cuerpo: string): Promise<EnvioWhatsApp> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.solicitudUbicacion');
+  { const freno = await frenoPlanDeFlota(to, 'wa.solicitudUbicacion'); if (freno) return freno; }
   const texto = typeof cuerpo === 'string' ? cuerpo.trim() : '';
   if (!texto || texto.length > MAX_CUERPO_UBICACION) {
     logger.error('wa.solicitudUbicacion.invalida', { largo: texto.length, max: MAX_CUERPO_UBICACION });
@@ -702,6 +720,7 @@ export async function sendTemplate(
   opciones: { idioma?: string } & OpcionesPlantilla = {},
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number; status?: number }> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendTemplate');
+  { const freno = await frenoPlanDeFlota(to, 'wa.sendTemplate'); if (freno) return freno; }
   const { idioma = 'es_MX', ...resto } = opciones;
 
   // Encabezado (texto/documento/imagen), cuerpo y botones (respuesta rápida/URL):
@@ -804,6 +823,7 @@ export async function sendDocument(
   caption?: string,
 ): Promise<{ ok: true; id: string | null } | { ok: false; error: string; codigo?: number; status?: number }> {
   if (esDestinatarioBloqueado(to)) return rechazarDemo(to, 'wa.sendDocument');
+  { const freno = await frenoPlanDeFlota(to, 'wa.sendDocument'); if (freno) return freno; }
   const payload = {
     messaging_product: 'whatsapp', to: destinatarioWhatsApp(to), type: 'document',
     document: { link, filename, caption },

@@ -118,6 +118,7 @@ export async function avisarPropuestaAlContralor(
 
     const r = await enviarCorreo(para, correoDePropuesta(a), {
       idempotencyKey: `portal-pago-propuesta:${propuestaId}`,
+      tenantId,
     });
 
     if (r.ok) {

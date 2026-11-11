@@ -16,6 +16,7 @@ import { destinatarioWhatsApp } from '@/lib/meta/client';
 import { logger } from '@/lib/logger';
 import { digitosTelefono } from '@/lib/likida/telefono_variantes';
 import { esCorreoYaRegistrado } from './invitar';
+import { ROTULOS_ROL } from './roles';
 
 /** El dominio de `app_user_rol_dominio` menos `operador` (sin login desde el
  *  7-ago-2026). `vendedor` (0105) es rol de LIKIDA: siempre con tenantId
@@ -54,18 +55,22 @@ export type RolAppUser = 'superadmin' | 'flota_admin' | 'contador' | 'encargado'
  * falta un rol) es la forma correcta; las otras tres eran
  * `Record<string, string>` y caían a `?? s.rol` en silencio.
  */
+// Identidad Rovaq (10-nov-2026): los rótulos en frase salen de la tabla ÚNICA `ROTULOS_ROL` (`roles.ts`); antes el mismo rol se llamaba
+// distinto en el pie, en Mi perfil y en Equipo.
 export const ROL_LABEL: Record<RolAppUser, string> = {
-  superadmin: 'Superadmin',
-  flota_admin: 'Dueño / Admin de flota',
-  encargado: 'Encargado',
-  contador: 'Contador',
-  vendedor: 'Vendedor (Likida)',
-  nomina: 'Nómina y RH',
+  superadmin: ROTULOS_ROL.superadmin.nombre,
+  flota_admin: ROTULOS_ROL.flota_admin.nombre,
+  encargado: ROTULOS_ROL.encargado.nombre,
+  contador: ROTULOS_ROL.contador.nombre,
+  vendedor: ROTULOS_ROL.vendedor.nombre,
+  nomina: ROTULOS_ROL.nomina.nombre,
 };
 
 /**
- * LA ÚNICA forma corta —en mayúsculas, para el badge del sidebar— de
- * `RolAppUser`. Antes vivía como `ROL_BADGE` en `dashboard/chrome.tsx`.
+ * El rótulo del badge del sidebar y del menú de la cuenta. Desde la identidad Rovaq (10-nov-2026) es EL MISMO rótulo en frase que
+ * `ROL_LABEL` («Dueño de la flota», «Jefe de tráfico»…), no una segunda tabla en mayúsculas: antes el mismo rol salía en mayúsculas
+ * en el pie, «Dueño / Admin de flota» en Mi perfil y «Encargado» en Equipo. Se conserva el nombre `ROL_BADGE` para quien ya lo importa.
+ * (Texto histórico de la auditoría 28 a continuación.) Antes vivía como `ROL_BADGE` en `dashboard/chrome.tsx`.
  *
  * AUDITORÍA 28, ARQ-B5 (BAJO, reincidente 26/27). Era la QUINTA copia del
  * dominio de roles (después de las cuatro de `ROL_LABEL` arriba), y el
@@ -84,14 +89,8 @@ export const ROL_LABEL: Record<RolAppUser, string> = {
  * un `flota_admin`, un contador o un encargado, que no ven lo mismo. Un rol
  * nuevo cae al `??` de `chrome.tsx` y sale con su clave cruda, nunca vacío.
  */
-export const ROL_BADGE: Record<RolAppUser, string> = {
-  flota_admin: 'ADMIN FLOTA',
-  encargado: 'ENCARGADO',
-  contador: 'CONTADOR',
-  vendedor: 'VENDEDOR',
-  superadmin: 'SUPERADMIN',
-  nomina: 'NÓMINA',
-};
+export const ROL_BADGE: Record<RolAppUser, string> = ROL_LABEL;
+
 
 /**
  * Normaliza el teléfono de oficina EXACTAMENTE como el del operador

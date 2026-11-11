@@ -71,7 +71,7 @@ export default async function EscalacionesPage() {
     },
     {
       id: 'fuente', titulo: 'Fuente',
-      celda: (it) => { const Icono = ICONO_FUENTE[it.fuente]; return <><Icono width={13} height={13} strokeWidth={1.75} aria-hidden="true" /> {NOMBRE_FUENTE[it.fuente]}</>; },
+      celda: (it) => { const Icono = ICONO_FUENTE[it.fuente]; return <span className="bj-fuente"><Icono width={13} height={13} strokeWidth={1.75} aria-hidden="true" />{NOMBRE_FUENTE[it.fuente]}</span>; },
     },
     { id: 'flota', titulo: 'Flota', celda: (it) => it.tenantNombre },
     { id: 'desde', titulo: 'Desde', celda: (it) => `${fechaHoraMx(it.desde)} · ${edadDe(it.desde, ahora)}` },

@@ -33,12 +33,7 @@ export const BASE_TRAZO_MEZCLADO: Record<string, number> = {
 
 // Iconos de lucide SIN strokeWidth declarado (se dibujan a 2). Mismo trinquete: solo baja.
 export const BASE_SIN_TRAZO: Record<string, number> = {
-  'app/admin/actividad-codigo/page.tsx': 4,
-  'app/admin/capacidad-forecast/page.tsx': 3,
-  'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
-  'app/admin/conversaciones/page.tsx': 1,
   'app/admin/tu-turno/vista.tsx': 13,
-  'app/admin/whatsapp-infra/page.tsx': 2,
   'app/dashboard/chat/agente-conversacion.tsx': 1,
   'app/dashboard/chat/composer.tsx': 3,
   'app/dashboard/chat/historial.tsx': 3,
@@ -53,5 +48,4 @@ export const BASE_SIN_TRAZO: Record<string, number> = {
   'app/dashboard/sidebar-nav.tsx': 2,
   'app/ui-v2/movimiento/tour/globo.tsx': 1,
   'app/ui-v2/movimiento/tour/lanzador.tsx': 2,
-  'app/vendedor/panel-vendedor.tsx': 5,
 };

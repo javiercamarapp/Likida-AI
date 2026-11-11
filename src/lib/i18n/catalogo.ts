@@ -1,5 +1,8 @@
 import type { Idioma } from './idioma';
 import type { shell as shellEs } from './es/shell';
+import type { errores as erroresEs } from './es/errores';
+import type { graficas as graficasEs } from './es/graficas';
+import type { avisos as avisosEs } from './es/avisos';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGO DE NAMESPACES — el único lugar donde se registra un diccionario nuevo.
@@ -15,6 +18,9 @@ import type { shell as shellEs } from './es/shell';
 /** El tipo de cada namespace, según el diccionario en español (la fuente de verdad). */
 export interface Diccionarios {
   shell: typeof shellEs;
+  errores: typeof erroresEs;
+  graficas: typeof graficasEs;
+  avisos: typeof avisosEs;
 }
 export type Namespace = keyof Diccionarios;
 
@@ -22,13 +28,15 @@ export type Namespace = keyof Diccionarios;
 export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Diccionarios[N]]: string };
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
-export const NAMESPACES = ['shell'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
 export const CARGADORES: Cargadores = {
-  es: { shell: () => import('./es/shell').then((m) => m.shell) },
-  en: { shell: () => import('./en/shell').then((m) => m.shell) },
+  es: { shell: () => import('./es/shell').then((m) => m.shell), errores: () => import('./es/errores').then((m) => m.errores),
+    graficas: () => import('./es/graficas').then((m) => m.graficas), avisos: () => import('./es/avisos').then((m) => m.avisos) },
+  en: { shell: () => import('./en/shell').then((m) => m.shell), errores: () => import('./en/errores').then((m) => m.errores),
+    graficas: () => import('./en/graficas').then((m) => m.graficas), avisos: () => import('./en/avisos').then((m) => m.avisos) },
 };
 
 /** Carga SOLO los namespaces pedidos, y SOLO en el idioma pedido. */

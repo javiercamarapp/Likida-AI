@@ -1,5 +1,4 @@
-/* El tablero del pipeline (compartido entre /admin/vendedores y /vendedor). Solo tokens globales (--ink, --line, --ok…): /vendedor no monta
-   el CSS de ui-v2, así que nada de aquí depende de él. Cero hex, cero emojis, cero `style=` en el JSX. */
+/* El tablero del pipeline (compartido entre /admin/vendedores y /vendedor). Solo tokens globales (--ink, --line, --ok…). Cero hex, cero emojis, cero `style=` en el JSX. */
 .ven-tablero { overflow-x: auto; padding-bottom: 4px; }
 .ven-tablero__fila { display: flex; gap: 8px; align-items: flex-start; min-width: max-content; }
 .ven-vacio { margin: 0; padding: 12px 0; font-size: 13px; color: var(--muted); }
@@ -33,12 +32,12 @@
 .ven-btn:hover:not(:disabled) { background: var(--canvas); }
 .ven-btn:disabled { opacity: .5; cursor: not-allowed; }
 .ven-btn:focus-visible, .ven-select:focus-visible, .ven-nota textarea:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
-.ven-btn--ancho { width: 100%; }
+.ven-btn--ancho { width: 100%; height: auto; min-height: 28px; padding: 5px 8px; line-height: 1.25; white-space: normal; text-wrap: balance; }
 .ven-btn[data-sentido="perdido"] { color: var(--bad); }
 .ven-btn[data-sentido="ganado"] { color: var(--ok); }
 .ven-select { width: 100%; height: 28px; padding: 0 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; }
-.ven-nota { font-size: 11px; }
-.ven-nota summary { cursor: pointer; user-select: none; color: var(--muted); }
+.ven-nota { font-size: 12px; }
+.ven-nota { display: flex; flex-direction: column; gap: 8px; }
 .ven-nota textarea { width: 100%; margin-top: 4px; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); font: inherit; font-size: 11px; resize: vertical; }
 .ven-nota .ven-btn { margin-top: 4px; }
 
@@ -54,3 +53,13 @@
 .ven-corridas__error { color: var(--bad); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ven-regla { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; font-size: 13px; font-weight: 500; }
 .ven-regla p { margin: 0; }
+
+/* Desempeño por vendedor: 13 columnas. Relleno corto, cabeceras que envuelven y el nombre en una línea para que quepan en la tarjeta sin recortar «Conversión». */
+[data-ui="v2"] .card.ven-desempeno table thead th { padding: 6px 6px; height: auto; white-space: normal; line-height: 1.2; vertical-align: bottom; }
+[data-ui="v2"] .card.ven-desempeno table tbody td { padding: 0 6px; }
+[data-ui="v2"] .card.ven-desempeno table tbody th { padding: 0 8px; white-space: nowrap; }
+[data-ui="v2"] .card.ven-desempeno table thead th:first-child { padding-left: 8px; }
+/* La tarjeta abre el cajón de detalle; sus acciones viven allí. */
+.ven-tarjeta__abrir { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+.ven-tarjeta__abrir:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 4px; }
+.ven-detalle { display: flex; flex-direction: column; gap: 12px; }

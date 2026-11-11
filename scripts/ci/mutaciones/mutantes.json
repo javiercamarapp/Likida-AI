@@ -1,0 +1,29 @@
+{
+  "descripcion": "Mutantes semanticos con nombre del cuadre y la liquidacion (F16). Cada uno cambia UNA regla de dinero; la suite de las pruebas listadas debe ponerse ROJA. Sin datos reales: solo fragmentos de codigo fuente.",
+  "mutantes": [
+    {
+      "nombre": "doble_conteo_duplicados",
+      "regla": "Un comprobante duplicado (mismo UUID o concepto+folio+monto) NO suma al total comprobado.",
+      "archivo": "src/lib/likida/cuadre/engine.ts",
+      "viejo": "(s, g) => (duplicados.has(g.id) || !(g.monto > 0) ? s : s + g.monto),",
+      "nuevo": "(s, g) => (!(g.monto > 0) ? s : s + g.monto),",
+      "pruebas": ["src/lib/likida/cuadre/duplicados.test.ts", "src/lib/likida/cuadre/engine.test.ts"]
+    },
+    {
+      "nombre": "monto_ilegible_cuenta_como_cero_o_negativo",
+      "regla": "Un monto cero, negativo o ilegible (OCR erroneo, nota de credito) NO entra al total ni sesga la diferencia.",
+      "archivo": "src/lib/likida/cuadre/engine.ts",
+      "viejo": "(s, g) => (duplicados.has(g.id) || !(g.monto > 0) ? s : s + g.monto),",
+      "nuevo": "(s, g) => (duplicados.has(g.id) ? s : s + (Number.isFinite(g.monto) ? g.monto : 0)),",
+      "pruebas": ["src/lib/likida/cuadre/monto_y_moneda.test.ts", "src/lib/likida/cuadre/engine.test.ts"]
+    },
+    {
+      "nombre": "signo_de_la_diferencia",
+      "regla": "diferencia = anticipo - comprobado: positiva si sobro anticipo (a favor de la empresa), negativa si el operador puso de su bolsa.",
+      "archivo": "src/lib/likida/cuadre/engine.ts",
+      "viejo": "const diferencia = round2(input.anticipo - totalComprobado);",
+      "nuevo": "const diferencia = round2(totalComprobado - input.anticipo);",
+      "pruebas": ["src/lib/likida/cuadre/engine.test.ts", "src/lib/likida/cuadre/liquidacion_completa.test.ts"]
+    }
+  ]
+}

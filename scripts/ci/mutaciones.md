@@ -5,6 +5,11 @@ Lista de las 27 mutaciones dirigidas que la auditoría 24 aplicó a mano contra
 en un sandbox (copia de `src/`+`supabase/` con `node_modules` por symlink, tal
 como lo hizo el auditor — **nunca sobre el árbol real**).
 
+> **F16 (10-nov-2026): la sonda ya vive en el repo.** `scripts/ci/mutaciones/` trae el catalogo de mutantes con nombre
+> (`mutantes.json`: doble conteo, monto ilegible, signo de la diferencia) y su corredor (`correr.mjs`), que muta una COPIA
+> del arbol y exige que las pruebas se pongan rojas. `mutantes.test.ts` vigila que el catalogo siga aplicandose. Las 27 de
+> abajo siguen siendo historia de la auditoria 24; su `specs.py`/`run.py` viven FUERA del repo y no se pueden reproducir desde aqui.
+
 Fuente de las specs: `scratchpad/hallazgos/pruebas-work/specs.py` (nombre →
 archivo, texto viejo, texto nuevo, archivos de prueba). Reproducir:
 

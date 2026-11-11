@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronDown, Settings } from 'lucide-react';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 import { moduloProximamenteDeRuta, rutaProximamente, type PerfilTenant } from '@/lib/auth/visibilidad';
 import type { Item } from '../rutas';
 import { useSufijoYRol } from '../sidebar-nav';
@@ -25,6 +27,7 @@ import PieSidebar from '../../ui-v2/componentes/pie-sidebar';
 export { iniciales, anclaDe, avanceDe } from './nav-utiles';
 import { iniciales, anclaDe, avanceDe } from './nav-utiles';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
+import { dejarItemActivoALaVista } from '@/app/ui-v2/componentes/dejar-a-la-vista';
 
 type Insignias = Record<string, string> | undefined;
 
@@ -34,17 +37,21 @@ function Fila({ item, sufijo, activo, perfil, insignia, alNavegar, claseExtra }:
   // «Próximamente» (fase 1 del perfil): el módulo se ve pero su enlace va a la pantalla única de anuncio.
   const modulo = perfil ? moduloProximamenteDeRuta(perfil, item.href) : null;
   const destino = modulo ? rutaProximamente(modulo) : item.href;
+  const { t } = useT('shell', shellEs);
   const esActivo = activo && !modulo;
   // Contador de pendientes: solo si es un número > 0 («requiere acción tuya»); si no, ausente.
   const n = insignia && /^\d+$/.test(insignia) ? Number(insignia) : 0;
+  const rotulo = modulo ? t('nav.proximamente', { nombre: item.nombre }) : item.nombre;
   return (
     <li>
+      {/* `title` se queda en los ítems CON texto visible: solo se ve en el riel (72 px), donde el texto se oculta, y un Tooltip repetiría
+          el nombre accesible (aria-describedby) en cada fila. Los botones de SOLO icono sí usan `Tooltip`. */}
       <Link
         href={`${destino}${sufijo}`}
         className={claseExtra ? `rv-item ${claseExtra}` : 'rv-item'}
         aria-current={esActivo ? 'page' : undefined}
-        aria-label={modulo ? `${item.nombre}, próximamente` : undefined}
-        title={modulo ? `${item.nombre} (Próximamente)` : item.nombre}
+        aria-label={modulo ? rotulo : undefined}
+        title={rotulo}
         // Ancla ESTABLE para el recorrido guiado (`data-tour`): no depende de clases ni de textos.
         data-tour={`nav-${anclaDe(item.href)}`}
         onClick={alNavegar}
@@ -94,10 +101,32 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
   if (est.ref !== grupoDelActivo) setEst({ ref: grupoDelActivo, abierta: grupoDelActivo ?? est.abierta });
   const abierta = est.abierta;
   const setAbierta = (id: string | null) => setEst({ ref: est.ref, abierta: id });
+  const { t } = useT('shell', shellEs);
+  // «Página actual»: si el usuario cerró (o abrió otra) la categoría de la pantalla en que está, esa pantalla no se ve en el árbol y
+  // el sidebar parece no saber dónde estás. El bloque la repite arriba; en cuanto se abre su categoría, desaparece (nunca dos a la vez).
+  const itemActual = !plano && grupoDelActivo && abierta !== grupoDelActivo
+    ? menu.grupos.find((g) => g.id === grupoDelActivo)?.items.find((i) => i.href === activo) ?? null
+    : null;
+
+  // El ítem activo se deja a la vista cuando el árbol scrollea (p. ej. al llegar por ⌘K a una pantalla de abajo). Espera a que
+  // termine de abrirse la categoría (180 ms) para medir con el alto final.
+  useEffect(() => {
+    if (plano || !activo || typeof document === 'undefined') return;
+    const id = window.setTimeout(() => {
+      dejarItemActivoALaVista();
+    }, 200);
+    return () => window.clearTimeout(id);
+  }, [plano, activo, abierta]);
 
   return (
     <>
       {menu.resumen.length > 0 && <Lista items={menu.resumen} {...props} />}
+      {itemActual && (
+        <section aria-labelledby="rv-g-pagina-actual" className="rv-grupo rv-pagina-actual" data-estatico>
+          <p id="rv-g-pagina-actual" className="rv-grupo__t">{t('nav.paginaActual')}</p>
+          <Lista items={[itemActual]} {...props} />
+        </section>
+      )}
       {menu.grupos.map((g) => {
         const items = itemsVisibles(g, insignias);
         if (items.length === 0) return null;

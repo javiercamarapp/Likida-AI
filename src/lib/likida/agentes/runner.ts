@@ -27,6 +27,7 @@
 // `MARGEN_RELOJ_MS` más abajo): no decide si un agente puede correr, decide si
 // TODAVÍA CABE en la invocación. Lo que no cabe se dice; no se muere.
 // ═══════════════════════════════════════════════════════════════════════════
+import { veredictoSalidasDeFlota } from '@/lib/saas/salidas_flota';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
@@ -748,6 +749,23 @@ export async function correrRunner(
   if (await estaApagado('global')) {
     avance.apagadoGlobal = true;
     return { apagadoGlobal: true, agentes, saltadosPorReloj };
+  }
+
+  // F20: una vuelta que paga/actúa por una flota con plan pausado o cancelado NO despacha a nadie. Falla cerrado si no se
+  // puede leer el plan. (Las vueltas de PLATAFORMA, sin tenant, son de Likida y no dependen del plan de ninguna flota.)
+  if (budgetTenantId) {
+    const plan = await veredictoSalidasDeFlota(budgetTenantId);
+    if (!plan.salen) {
+      logger.warn('runner.frenado_por_plan', { estado: plan.estado });
+      const todos = await acotada(supabaseAdmin()
+        .from('agente_definicion').select('id').eq('estado', 'vivo').eq('runner_habilitado', true).eq('disparador', 'cron').order('id'), 'runner.agentes_frenados');
+      const ids = (todos.data ?? []) as Array<{ id: string }>;
+      for (const a of ids.filter((x) => !soloAgente || x.id === soloAgente)) {
+        agentes.push({ agente: a.id, resultado: 'saltado', motivo: `${plan.mensaje} — la flota no genera salidas automáticas` });
+      }
+      if (ids.length === 0) agentes.push({ agente: soloAgente ?? '*', resultado: 'saltado', motivo: plan.mensaje });
+      return { apagadoGlobal: false, agentes, saltadosPorReloj };
+    }
   }
 
   const { data, error } = await acotada(supabaseAdmin()

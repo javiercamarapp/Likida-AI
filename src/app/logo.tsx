@@ -1,107 +1,82 @@
-// El logo de Likida, en dos piezas: el ícono y el wordmark.
-// En las consolas (`tema-neutro`) --marca es tinta, no naranja. El glifo de
-// "pensando" (`LogoIcono`) usa --ink a propósito: negro/gris, nunca acento.
-//
-// Por qué no es una sola imagen: `public/images/logo.png` (726×149) trae ícono
-// y letras en un mismo PNG negro sobre transparente. Para teñirlo con la
-// paleta se usaba `mask-image` con `background: var(--marca)`, y una máscara
-// pinta TODO el recorte de un solo color — ícono y letras salían naranjas.
-//
-// Por qué el corte está en x=161: midiendo el canal alfa por columna, el ícono
-// ocupa 0–112 y la "L" arranca en 210. Ese hueco de 97px es el más ancho del
-// archivo (los huecos ENTRE letras no pasan de 50px), así que es el único
-// separador que no parte una letra a la mitad. Se corta en su centro (161),
-// y las dos piezas suman exactamente 726: `logo-icono.png` es 161×149 y
-// `logo-texto.png` 565×149. Como las proporciones 161/149 + 565/149 recomponen
-// el 726/149 original, el logo mide y espacia igual que antes.
-//
-// Las dos piezas van con máscara —ninguna es un <img> crudo— para que ambas
-// sigan su token si mañana cambia el color: el <img> se quedaría negro.
+import type { CSSProperties } from 'react';
+import LogoV2, { PROPORCION_LOGO } from './dashboard/shell/logo-v2';
 
-const MASCARA = {
-  WebkitMaskRepeat: 'no-repeat',
-  maskRepeat: 'no-repeat',
-  WebkitMaskSize: 'contain',
-  maskSize: 'contain',
-  WebkitMaskPosition: 'left center',
-  maskPosition: 'left center',
-} as const;
+// EL LOGO DE LIKIDA — UNA SOLA IMPLEMENTACIÓN (identidad H, 10-nov-2026).
+//
+// Antes había dos: el PNG negro cortado en dos piezas y pintado con `mask-image` (aquí) y el SVG vectorial del shell
+// (`dashboard/shell/logo-v2.tsx`). Las máscaras de PNG no se escalan limpio, necesitaban una regla `invert(1)` para el modo oscuro
+// y dejaban dos logos distintos en la misma pantalla. Ahora todo logo sale del vector de `LogoV2` (los mismos trazados de
+// `public/images/logo.png`, `currentColor`); este módulo solo ofrece el ACCESO con la forma que ya usaban las pantallas
+// (`alto` como clase de Tailwind) más las variantes que faltaban: símbolo, tono positivo/negativo y tamaño mínimo.
+//
+// VARIANTES (el kit en `public/brand/`):
+//   · horizontal (símbolo + nombre) o `simbolo` solo (riel colapsado, iconos, adornos);
+//   · tono `auto` (sigue la tinta del tema: claro y oscuro con un solo marcado), `positivo` (tinta #0E0E10, para fondos claros)
+//     y `negativo` (#F4F4F5, para fondos oscuros o de color), los mismos colores de los SVG `likida-*-positivo|negativo.svg`.
+//   · TAMAÑO MÍNIMO como Rovaq (100 px de ancho el horizontal, 16 px el símbolo): por debajo el nombre deja de leerse, así que
+//     una marca pedida más chica se sube al mínimo. El adorno decorativo (`LogoIcono`, `GlifoAdorno`) no es la marca y queda exento.
+//   · El logo de Likida es MONOCROMO: no lleva el punto rojo del logo de Rovaq (decisión de marca propia, DEC-11).
 
-export function Logo({ alto, className = '' }: { alto: string; className?: string }) {
+export type TonoLogo = 'auto' | 'positivo' | 'negativo';
+export type VarianteLogo = 'horizontal' | 'simbolo';
+
+/** Ancho mínimo de la marca, en px, por variante (igual que `RovaqLogo`). */
+export const ANCHO_MINIMO_LOGO: Record<VarianteLogo, number> = { horizontal: 100, simbolo: 16 };
+
+const COLOR_TONO: Record<TonoLogo, string> = {
+  auto: 'var(--ink)',
+  positivo: '#0E0E10',
+  negativo: '#F4F4F5',
+};
+
+/** Traduce el `alto` que ya se pasaba (`h-7`, `h-[42px]`, `h-px`…) o un número a píxeles. `null` = no se reconoce. */
+export function altoEnPx(alto: string | number): number | null {
+  if (typeof alto === 'number') return Number.isFinite(alto) && alto > 0 ? alto : null;
+  const clase = alto.trim();
+  let valor = Number.NaN;
+  let factor = 1;
+  if (clase.startsWith('h-[') && clase.endsWith('px]')) valor = Number(clase.slice(3, -3));
+  else if (clase.startsWith('h-')) { valor = Number(clase.slice(2)); factor = 4; }
+  return Number.isFinite(valor) && valor > 0 ? valor * factor : null;
+}
+
+/** El alto final: el pedido, subido al mínimo de la variante si la marca quedaría más chica que el mínimo de ancho. */
+export function altoDeMarca(alto: string | number, variante: VarianteLogo): number {
+  const pedido = altoEnPx(alto) ?? 28;
+  const minimo = Math.ceil((ANCHO_MINIMO_LOGO[variante] / PROPORCION_LOGO[variante]) * 10) / 10;
+  return Math.max(pedido, minimo);
+}
+
+/** La marca de Likida. `alto` acepta lo de siempre (`"h-7"`, `"h-[42px]"`) o píxeles. Es UNA marca para un lector de pantalla
+ *  (`role="img"`, «Likida»); con `decorativo` sale del árbol de accesibilidad. */
+export function Logo({ alto, variante = 'horizontal', tono = 'auto', decorativo = false, className }: {
+  alto: string | number;
+  variante?: VarianteLogo;
+  tono?: TonoLogo;
+  decorativo?: boolean;
+  className?: string;
+}) {
+  const style: CSSProperties = { color: COLOR_TONO[tono] };
+  return <LogoV2 alto={altoDeMarca(alto, variante)} variante={variante} decorativo={decorativo} className={className} style={style} />;
+}
+
+/** El símbolo solo como ADORNO (p. ej. el glifo que «piensa» en el chat): decorativo, sin tamaño mínimo y en la tinta del tema. */
+export function LogoIcono({ alto, className }: { alto: string | number; className?: string }) {
   return (
-    // `role="img"` + `aria-label` en el contenedor: para un lector de pantalla
-    // esto es UNA marca, no dos gráficos. Las piezas van `aria-hidden`.
-    <span role="img" aria-label="Likida" className={`inline-flex items-stretch ${alto} ${className}`}>
-      <span
-        aria-hidden
-        className="block h-full"
-        style={{
-          aspectRatio: '161 / 149',
-          background: 'var(--ink)',
-          WebkitMaskImage: 'url(/images/logo-icono.png)',
-          maskImage: 'url(/images/logo-icono.png)',
-          ...MASCARA,
-        }}
-      />
-      <span
-        aria-hidden
-        className="block h-full"
-        style={{
-          aspectRatio: '565 / 149',
-          background: 'var(--ink)',
-          WebkitMaskImage: 'url(/images/logo-texto.png)',
-          maskImage: 'url(/images/logo-texto.png)',
-          ...MASCARA,
-        }}
-      />
-    </span>
+    <LogoV2 alto={altoEnPx(alto) ?? 16} variante="simbolo" decorativo className={className} style={{ color: 'var(--ink)' }} />
   );
 }
 
-/** El ícono negro del producto (`logo-icono.png`), sin teñir.
- *  El PNG ya es negro sobre transparente. Una máscara con `--marca` lo
- *  volvía naranja fuera de `tema-neutro`. Aquí se usa el archivo tal cual. */
-export function LogoIcono({ alto, className = '' }: { alto: string; className?: string }) {
-  return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src="/images/logo-icono.png"
-      alt=""
-      aria-hidden
-      className={`block ${alto} w-auto logo-icono-negro ${className}`}
-      style={{ aspectRatio: '161 / 149' }}
-    />
-  );
-}
-
-/** El glifo como ADORNO — el que asoma dentro de una píldora al pasar el
- *  cursor (el gesto que la landing de likida.ai hace en sus CTAs).
- *
- *  Tres diferencias con `LogoIcono`, y las tres son a propósito:
- *  · `aria-hidden` y sin `role`: el botón ya se nombra solo con su texto. Un
- *    segundo "Likida" ahí dentro se lo lee el lector de pantalla en medio de
- *    la etiqueta de la acción.
- *  · El color se pasa: dentro de una píldora de tinta el glifo tiene que ser
- *    del color del TEXTO del botón (`--bg`), no de `--marca` — y sobre la
- *    píldora de borde, al revés.
- *  · Sin `alto` obligatorio: quien lo envuelve le fija la altura, porque el
- *    contenedor es el que anima el ancho de 0 a 18px.
- */
+/** El glifo como ADORNO — el que asoma dentro de una píldora al pasar el cursor (el gesto que la landing de likida.ai hace en sus
+ *  CTAs). `aria-hidden` y sin `role`: el botón ya se nombra solo con su texto. El color se pasa (del TEXTO del botón: `--bg` en la
+ *  píldora de tinta, `--ink` en la de borde). El contenedor que lo envuelve fija la altura (16-17 px) y anima el ancho de 0 a 18. */
 export function GlifoAdorno({ color = 'var(--marca)', className = '' }: {
   color?: string;
   className?: string;
 }) {
   return (
-    <span
-      aria-hidden
-      className={`block h-full ${className}`}
-      style={{
-        aspectRatio: '161 / 149',
-        background: color,
-        WebkitMaskImage: 'url(/images/logo-icono.png)',
-        maskImage: 'url(/images/logo-icono.png)',
-        ...MASCARA,
-      }}
-    />
+    <span aria-hidden className={`block h-full ${className}`} style={{ color }}>
+      <LogoV2 alto={16} variante="simbolo" decorativo />
+    </span>
   );
 }

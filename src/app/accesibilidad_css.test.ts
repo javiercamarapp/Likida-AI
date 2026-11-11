@@ -120,7 +120,9 @@ describe('regla de foco visible por intención (R4)', () => {
         if (c.ocultoVisual) { ocultos++; if (!c.foco) sinMarca.push(`${relative(process.cwd(), f)}:${c.linea} falta data-foco="etiqueta"`); }
       }
     }
-    expect(transparentes).toBeGreaterThanOrEqual(10);
+    // Eran 10 hasta que /admin/conversaciones (identidad J) pasó al hilo compartido del sistema (`conversaciones/hilo.tsx`), que ya no usa un
+    // campo transparente propio. El piso solo garantiza que el detector siga viendo casos; la regla de fondo es `sinMarca` vacío.
+    expect(transparentes).toBeGreaterThanOrEqual(9);
     // Eran 3 hasta que cobranza (estrategia.tsx, forma-por-gasto.tsx) pasó a <Casilla> de ui-v2 (`rv-marca__input`): una caja propia VISIBLE
     // que recibe el anillo de foco global, ya no un `<input class="sr-only">` con `data-foco`. Queda el radio de revision-panel.tsx; el piso
     // sigue exigiendo que el detector vea al menos uno (si no, estaría ciego).

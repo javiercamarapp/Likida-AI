@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { Inbox } from 'lucide-react';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarAgentes, DEPARTAMENTOS } from '@/lib/likida/agentes/definiciones';
 import {
@@ -12,8 +11,7 @@ import {
 import { AGENTES_FINANCIEROS } from '@/lib/likida/agentes/finanzas';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { BarraPagina, TituloSeccion } from '../../../../dashboard/resumen-visual';
-import { EstadoVacio } from '../../../ui/kit';
+import { Aviso, EstadoVacio, MarcoPagina, Tarjeta } from '../../../../ui-v2/componentes';
 import { type ResultadoAccion } from '../../../ui/forma';
 import { FormularioInsumo, ListaInsumos } from './zona-insumos';
 
@@ -95,49 +93,33 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
   }));
 
   return (
-    <main className="h-full">
-      <div className="rounded-2xl overflow-hidden min-h-full flex flex-col hairline" style={{ background: 'var(--g1)' }}>
-        <BarraPagina
-          icono={<Inbox width={15} height={15} strokeWidth={1.75} style={{ color: 'var(--muted)' }} />}
-          titulo={`${agente.nombre} — bandeja de contexto`}
+    <MarcoPagina titulo={`${agente.nombre} — bandeja de contexto`}>
+      <Aviso tono="info">
+        {rotuloDepartamento} · id <code className="cifra-mono">{agente.id}</code> — entre más le das, más entiende.{' '}
+        {LEE_INSUMOS
+          ? <>Todo lo que sueltes aquí se procesa en la SIGUIENTE corrida de este agente; sesión actual: {s.nombre ?? 'superadmin'}.</>
+          : <><strong>Este agente aún no lee insumos.</strong> Lo que subas se guarda, pero ninguna corrida lo usa todavía: hoy solo los leen los cuatro agentes financieros. Sesión actual: {s.nombre ?? 'superadmin'}.</>}
+      </Aviso>
+
+      <Tarjeta titulo="Soltar un insumo nuevo">
+        <p className="m-0 mb-3 text-xs text-muted">
+          Este agente acepta: {tiposAceptados.join(', ')}.
+        </p>
+        <FormularioInsumo
+          tiposAceptados={tiposAceptados}
+          accionArchivo={accionSubirArchivo}
+          accionTexto={accionSubirTexto}
         />
-        <div className="px-5 py-5 flex-1 space-y-4">
-          <EstadoVacio>
-            {rotuloDepartamento} · id <code className="cifra-mono">{agente.id}</code> — entre más le das, más entiende.
-            {LEE_INSUMOS
-              ? <>Todo lo que sueltes aquí se procesa en la SIGUIENTE corrida de este agente; sesión actual: {s.nombre ?? 'superadmin'}.</>
-              : <><strong>Este agente aún no lee insumos.</strong> Lo que subas se guarda, pero ninguna corrida lo usa todavía: hoy solo los leen los cuatro agentes financieros. Sesión actual: {s.nombre ?? 'superadmin'}.</>}
-          </EstadoVacio>
+      </Tarjeta>
 
-          <div className="card p-4">
-            <TituloSeccion>Soltar un insumo nuevo</TituloSeccion>
-            <p className="text-xs mt-1 mb-3" style={{ color: 'var(--muted)' }}>
-              Este agente acepta: {tiposAceptados.join(', ')}.
-            </p>
-            <FormularioInsumo
-              tiposAceptados={tiposAceptados}
-              accionArchivo={accionSubirArchivo}
-              accionTexto={accionSubirTexto}
-            />
-          </div>
-
-          <div className="card overflow-hidden">
-            <div className="px-4 pt-3 pb-1">
-              <TituloSeccion>
-                Qué le has dado — {totalInsumos > insumos.length ? `${insumos.length} de ${totalInsumos}` : insumos.length}
-              </TituloSeccion>
-            </div>
-            {insumos.length === 0 ? (
-              <div className="px-4 pt-2 pb-4">
-                <EstadoVacio>Sin insumos todavía — suelta el primero arriba.</EstadoVacio>
-              </div>
-            ) : (
-              <ListaInsumos insumos={insumosConUrl} />
-            )}
-          </div>
-        </div>
-      </div>
-    </main>
+      <Tarjeta titulo={`Qué le has dado — ${totalInsumos > insumos.length ? `${insumos.length} de ${totalInsumos}` : insumos.length}`}>
+        {insumos.length === 0 ? (
+          <EstadoVacio titulo="Sin insumos" contenido>Sin insumos todavía — suelta el primero arriba.</EstadoVacio>
+        ) : (
+          <ListaInsumos insumos={insumosConUrl} />
+        )}
+      </Tarjeta>
+    </MarcoPagina>
   );
 }
 

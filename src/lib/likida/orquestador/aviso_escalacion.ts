@@ -70,7 +70,7 @@ export interface DepsAvisoEscalacion {
   config(tenantId: string): Promise<{ ok: ConfigNotificaciones } | { error: string }>;
   usuarios(tenantId: string): ReturnType<typeof usuariosAvisables>;
   canalListo(): boolean;
-  enviar(destinatarios: string[], correo: ReturnType<typeof avisoEscalacionAsistente>): Promise<{ ok: true } | { ok: false; motivo: string }>;
+  enviar(destinatarios: string[], correo: ReturnType<typeof avisoEscalacionAsistente>, tenantId?: string): Promise<{ ok: true } | { ok: false; motivo: string }>;
   nombreFlota(tenantId: string): Promise<string | null>;
   /**
    * Cuántos avisos de ESTA flota quedaron `enviado` desde `desde` (la propia tabla: `aviso_estado = 'enviado' AND
@@ -149,7 +149,7 @@ export async function avisarEscalacion(tenantId: string, tareaId: string, deps: 
     if (!(await deps.reclamar(tenantId, t.id))) return 'ocupado';
 
     const correo = correoDeTarea(t, await deps.nombreFlota(tenantId));
-    const envio = await deps.enviar(reciben.map((u) => u.email), correo);
+    const envio = await deps.enviar(reciben.map((u) => u.email), correo, tenantId);
     if (envio.ok) {
       // R09-5: el correo YA salió. Si sellarlo falla (la base parpadeó), un fallo aquí dejaba la tarea pendiente y reclamable: a los
       // 10 min se reenviaba, hasta 3 veces. Se reintenta el sello y, si de verdad no se pudo, se dice SIN lanzar: el aviso salió.
@@ -221,8 +221,8 @@ export function depsDeCorreo(): Pick<DepsAvisoEscalacion, 'config' | 'usuarios' 
     },
     usuarios: usuariosAvisables,
     canalListo: correoConfigurado,
-    enviar: async (destinatarios, correo) => {
-      const r = await enviarCorreo(destinatarios, correo);
+    enviar: async (destinatarios, correo, tenantId) => {
+      const r = await enviarCorreo(destinatarios, correo, tenantId ? { tenantId } : {});
       return r.ok ? { ok: true } : { ok: false, motivo: r.motivo };
     },
     ahora: () => new Date(),

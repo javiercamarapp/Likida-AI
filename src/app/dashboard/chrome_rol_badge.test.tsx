@@ -45,17 +45,17 @@ describe('DashboardChrome — el badge de rol viene de la fuente única (provisi
         <div />
       </DashboardChrome>,
     );
-    expect(html).toContain('VENDEDOR');
+    expect(html).toContain('Vendedor');
   });
 
   it('cada uno de los seis roles vivos pinta su badge explícito', () => {
     const ESPERADO: Record<string, string> = {
-      superadmin: 'SUPERADMIN',
-      flota_admin: 'ADMIN FLOTA',
-      contador: 'CONTADOR',
-      encargado: 'ENCARGADO',
-      vendedor: 'VENDEDOR',
-      nomina: 'NÓMINA', // 0949
+      superadmin: 'Superadmin',
+      flota_admin: 'Dueño de la flota',
+      contador: 'Contador',
+      encargado: 'Jefe de tráfico',
+      vendedor: 'Vendedor',
+      nomina: 'Nómina y RH', // 0949
     };
     for (const [rol, badge] of Object.entries(ESPERADO)) {
       const html = renderToStaticMarkup(

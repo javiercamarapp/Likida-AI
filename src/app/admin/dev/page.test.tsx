@@ -103,7 +103,7 @@ it('eventos de seguridad: null (no se pudo leer) es distinto de [] (de verdad si
 
   dobles.getEventosSeguridad.mockResolvedValue([]);
   const htmlVacio = await renderizar();
-  expect(htmlVacio).toContain('el silencio aquí es bueno de verdad');
+  expect(htmlVacio).toContain('Eso NO prueba que no haya pasado nada');
 });
 
 it('un evento de seguridad real se pinta con su tipo y origen', async () => {

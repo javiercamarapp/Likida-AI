@@ -26,8 +26,10 @@ import type { Anfitrion, EventoControlador, LecturaSenal, Recorrido } from './ti
 //  · `principal` = la pista de la persona (`dueno`, `encargado`…): sus recorridos son `<principal>.corto` y `<principal>.completo`.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Lo que cuenta como «algo abierto encima»: diálogo nativo, menú/popover, avisos (alert y status de la región de avisos). */
-const SUPERPUESTO = 'dialog[open], .rv-pop, .pointer-events-none.fixed [role="alert"] > *, .pointer-events-none.fixed [role="status"] > *';
+/** Lo que cuenta como «algo abierto encima»: diálogo nativo, menú/popover, avisos (alert y status de la región de avisos).
+ *  Las burbujas de Tooltip (`.rv-pop--tip`) llevan `.rv-pop` SIEMPRE en el DOM (ocultas, para el aria-describedby) y se abren con solo enfocar o
+ *  pasar el puntero: no cuentan; si contaran, la invitación y las pistas quedarían suprimidas para siempre. */
+const SUPERPUESTO = 'dialog[open], .rv-pop:not(.rv-pop--tip), .pointer-events-none.fixed [role="alert"] > *, .pointer-events-none.fixed [role="status"] > *';
 
 /** Lo que el proveedor necesita de la respuesta de `guardarEstadoGuia` (las demás llaves se ignoran). */
 export interface RespuestaGuardarRemoto { ok: boolean; version?: number; actual?: { version: number } }

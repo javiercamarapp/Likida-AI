@@ -56,7 +56,7 @@ export function Ficha360({
   const id = f.tenant.id;
 
   const resumen = (
-    <>
+    <div className="rv-pila">
       <TiraCifras etiqueta={`Resumen de ${f.tenant.nombre}`}>
         <Cifra etiqueta="Viajes liquidados" valor={f.operacion?.viajesLiquidados ?? null} formato="entero" estado={f.operacion ? 'ok' : 'error'} icono={<Icono icono={Activity} />} />
         <Cifra etiqueta="Monto comprobado" valor={f.operacion?.montoComprobado ?? null} formato="mxn" estado={f.operacion ? 'ok' : 'error'} icono={<Icono icono={Wallet} />} />
@@ -94,7 +94,7 @@ export function Ficha360({
           ]}
         />
       </Tarjeta>
-    </>
+    </div>
   );
 
   const equipo = (

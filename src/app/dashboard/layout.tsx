@@ -32,6 +32,7 @@ import '../ui-v2/paginas.css';
 import '../ui-v2/paginas-dominio.css';
 import { PulsoProducto } from './pulso-producto';
 import { AvisoLegalPendiente } from './aviso-legal';
+import { AvisoPlanEnPausa } from './aviso-plan-en-pausa';
 import { TourProvider } from '../ui-v2/movimiento/tour';
 import { onboardingDeLaSesion } from './recorridos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -134,8 +135,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
           ruta. El servidor decide tenant (sesión) y pantalla (catálogo
           cerrado); el superadmin en preview se descarta allá. */}
       <PulsoProducto />
-      <AvisoLegalPendiente sesion={sesion} />
       {children}
+      {/* Después de la pantalla, no antes: el aviso no bloquea y no debe quedar por encima del título de cada página. */}
+      <AvisoLegalPendiente sesion={sesion} />
+      <AvisoPlanEnPausa tenantId={tenantDelMenu} />
     </>
   );
 

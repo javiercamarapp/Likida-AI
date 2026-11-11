@@ -5,37 +5,14 @@
 export const BASE_PESTANAS_PROPIAS: Record<string, number> = {};
 
 /** admin_encabezados_contrato: un MarcoPagina por pantalla, sin BarraPagina, sin h1 propio, apoyo <= 140. */
-export const BASE_BARRA_PAGINA: Record<string, number> = {
-  'app/admin/actividad-codigo/page.tsx': 1,
-  'app/admin/agentes/[id]/insumos/page.tsx': 1,
-  'app/admin/calidad-evals/page.tsx': 1,
-  'app/admin/capacidad-forecast/page.tsx': 1,
-  'app/admin/conversaciones/[tenant]/[telefono]/page.tsx': 1,
-  'app/admin/conversaciones/page.tsx': 2,
-  'app/admin/dev/page.tsx': 1,
-  'app/admin/techo-ia/page.tsx': 1,
-  'app/admin/trust-safety/page.tsx': 1,
-  'app/admin/whatsapp-infra/page.tsx': 1,
-};
+export const BASE_BARRA_PAGINA: Record<string, number> = {};
 export const BASE_H1_PROPIO: Record<string, number> = {
-  'app/admin/calidad-evals/page.tsx': 1,
-  'app/admin/error.tsx': 1,
 };
 export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};
 /** Pantallas (carpetas con page.tsx) que todavía no usan MarcoPagina. */
 export const BASE_SIN_MARCO: string[] = [
-  'app/admin/actividad-codigo',
-  'app/admin/agentes/[id]/insumos',
-  'app/admin/calidad-evals',
-  'app/admin/capacidad-forecast',
-  'app/admin/conversaciones',
-  'app/admin/conversaciones/[tenant]/[telefono]',
   'app/admin/copiloto',
-  'app/admin/dev',
-  'app/admin/techo-ia',
-  'app/admin/trust-safety',
-  'app/admin/whatsapp-infra',
 ];
 
 /** admin_paginas_en_menu: direcciones estáticas que ninguna entrada ni pestaña de rutas.ts cubre. */

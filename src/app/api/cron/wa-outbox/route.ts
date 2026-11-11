@@ -7,6 +7,7 @@ import { leerInterruptor } from '@/lib/likida/interruptores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { esReintentableMeta, esTokenMetaInvalido, sondearTokenWhatsApp, avisarTokenVencido } from '@/lib/meta/client';
+import { veredictoSalidasHaciaTelefono } from '@/lib/saas/salidas_flota';
 import { esTelefonoDemo, esDestinatarioBloqueado, ERROR_TELEFONO_DEMO, ERROR_TELEFONO_NO_ENVIABLE } from '@/lib/meta/telefono_demo';
 
 export const runtime = 'nodejs';
@@ -157,6 +158,7 @@ export async function GET(req: Request) {
     const salidas = await reclamarSalidasWhatsApp();
     let enviadas = 0;
     let fallidas = 0;
+    let frenadas = 0;
     await conPool(salidas, 4, async (s) => {
       // El tenant demo nunca escribe a nadie: una salida con la marca de demo (28999…) muere aquí, sin llamar a Meta.
       // (No cuenta como `fallidas`: no es un fallo del canal, y volvería el latido «parcial» por algo esperado.)
@@ -165,6 +167,16 @@ export async function GET(req: Request) {
         // A37-L-02: demo, anonimizado por ARCO o sin forma de teléfono: terminal.
         await finalizarYAvisarSiMurio(s, undefined, `terminal:${esTelefonoDemo(destino) ? ERROR_TELEFONO_DEMO : ERROR_TELEFONO_NO_ENVIABLE}`);
         return;
+      }
+      // F20: la pausa/cancelación del plan frena la salida. Pausa/cancelación = terminal (no sale nunca, ni al reanudar:
+      // instrucciones caducas). No leer el plan = reintentable con backoff. En ambos casos no se llama a Meta ni se alerta por fila.
+      if (typeof destino === 'string') {
+        const v = await veredictoSalidasHaciaTelefono(destino);
+        if (!v.salen) {
+          frenadas++;
+          await finalizarSalidaWhatsApp(s, undefined, `${v.estado === 'ilegible' ? 'retryable' : 'terminal'}:plan_${v.estado}`);
+          return;
+        }
       }
       try {
         const r = await fetch(`${GRAPH}/${phoneId}/messages`, {
@@ -220,10 +232,10 @@ export async function GET(req: Request) {
       }
     });
     const parcial = fallidas > 0 || fallosBackstop.length > 0;
-    const detalleLatido = { enviadas, fallidas, ...(fallosBackstop.length ? { fallosBackstop } : {}) };
+    const detalleLatido = { enviadas, fallidas, frenadas, ...(fallosBackstop.length ? { fallosBackstop } : {}) };
     await registrarLatido('wa-outbox', parcial ? 'parcial' : 'ok', detalleLatido);
     return NextResponse.json(
-      { corrio: true, tomadas: salidas.length, enviadas, fallidas, ...(fallosBackstop.length ? { fallosBackstop } : {}) },
+      { corrio: true, tomadas: salidas.length, enviadas, fallidas, frenadas, ...(fallosBackstop.length ? { fallosBackstop } : {}) },
       { status: parcial ? 500 : 200 },
     );
   } catch (e) {

@@ -22,15 +22,15 @@ vi.mock('@/lib/observability/alerta', () => ({
 
 // crearProspecto se dobla (escribe base); validarProspecto es el REAL — así
 // la ruta no puede divergir del pipeline de ventas.
-const creados: Array<{ p: unknown; fuente: string }> = [];
+const creados: Array<{ p: unknown; fuente: string; atribucion?: Record<string, string> | null }> = [];
 let fallaCrear = false;
 vi.mock('@/lib/likida/vendedores', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/likida/vendedores')>();
   return {
     ...real,
-    crearProspecto: async (p: unknown, fuente: string) => {
+    crearProspecto: async (p: unknown, fuente: string, atribucion?: Record<string, string> | null) => {
       if (fallaCrear) throw new Error('base caída');
-      creados.push({ p, fuente });
+      creados.push({ p, fuente, atribucion });
       return 'prospecto-1';
     },
   };
@@ -80,6 +80,30 @@ describe('POST /api/marketing/prospecto', () => {
     expect(eventos).toEqual([{ pagina: 'calculadora', evento: 'conversion' }]);
     expect(alertas).toHaveLength(1);
     expect(alertas[0][0]).toBe('prospecto.landing');
+  });
+
+  // F16: antes la fuente iba fija en 'landing' y un lead de anuncio contaba como orgánico.
+  it('guarda utm_* y el canal que sale de la atribución', async () => {
+    await POST(pedir({ ...VALIDO, atribucion: { utm_source: 'facebook', utm_medium: 'cpc', utm_campaign: 'nov', ruta: '/calculadora', raro: 'se descarta' } }));
+    expect(creados[0].fuente).toBe('ads-meta');
+    expect(creados[0].atribucion).toEqual({ utm_source: 'facebook', utm_medium: 'cpc', utm_campaign: 'nov', ruta: '/calculadora' });
+  });
+  it('un click id manda sobre el utm_source escrito a mano', async () => {
+    await POST(pedir({ ...VALIDO, atribucion: { utm_source: 'facebook', gclid: 'abc' } }));
+    expect(creados[0].fuente).toBe('ads-google');
+  });
+  it('utm sin plataforma conocida es campaña, y sin atribución sigue siendo landing', async () => {
+    await POST(pedir({ ...VALIDO, atribucion: { utm_source: 'boletin', utm_campaign: 'oct' } }));
+    expect(creados[0].fuente).toBe('campana');
+    creados.length = 0;
+    await POST(pedir(VALIDO));
+    expect(creados[0].fuente).toBe('landing');
+    expect(creados[0].atribucion).toBeNull();
+  });
+  it('una atribución con forma ajena se descarta sin romper la captura', async () => {
+    const res = await POST(pedir({ ...VALIDO, atribucion: ['utm_source=x'] }));
+    expect(res.status).toBe(200);
+    expect(creados[0].fuente).toBe('landing');
   });
 
   it('cifras ausentes van como "sin dato" en notas — jamás como 0', async () => {

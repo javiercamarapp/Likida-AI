@@ -31,18 +31,18 @@ const COMPONENTES: Record<ComponenteEstado, { nombre: string; mide: string }> = 
   correo: { nombre: 'Correo', mide: 'La tubería de envío de correo corre al día. No mide que el mensaje llegue al buzón del destinatario.' },
 };
 
-const ESTADO: Record<EstadoMedido | 'sin_medicion', { etiqueta: string; color: string; fondo: string }> = {
-  ok: { etiqueta: 'Operativo', color: 'var(--ok, #137a38)', fondo: 'var(--okbg, #e7f5ec)' },
-  degradado: { etiqueta: 'Degradado', color: 'var(--warn, #9a5c00)', fondo: 'var(--warnbg, #fbf3e0)' },
-  caido: { etiqueta: 'Interrupción', color: 'var(--bad, #b91c1c)', fondo: 'var(--badbg, #fbeaea)' },
-  sin_medicion: { etiqueta: 'Sin medición', color: 'var(--muted, #666)', fondo: 'var(--surface, #f3f3f3)' },
+const ESTADO: Record<EstadoMedido | 'sin_medicion', { etiqueta: string; clases: string; fondo: string; texto: string }> = {
+  ok: { etiqueta: 'Operativo', clases: 'bg-[var(--okbg)] text-[var(--ok)]', fondo: 'bg-[var(--okbg)]', texto: 'text-[var(--ok)]' },
+  degradado: { etiqueta: 'Degradado', clases: 'bg-[var(--warnbg)] text-[var(--warn)]', fondo: 'bg-[var(--warnbg)]', texto: 'text-[var(--warn)]' },
+  caido: { etiqueta: 'Interrupción', clases: 'bg-[var(--badbg)] text-[var(--bad)]', fondo: 'bg-[var(--badbg)]', texto: 'text-[var(--bad)]' },
+  sin_medicion: { etiqueta: 'Sin medición', clases: 'bg-[var(--surface)] text-muted', fondo: 'bg-[var(--surface)]', texto: 'text-muted' },
 };
 
-const CELDA: Record<CeldaDia, { color: string; texto: string }> = {
-  ok: { color: 'var(--ok, #137a38)', texto: 'sin interrupciones medidas' },
-  degradado: { color: 'var(--warn, #9a5c00)', texto: 'con degradación medida' },
-  caido: { color: 'var(--bad, #b91c1c)', texto: 'con al menos una interrupción medida' },
-  sin_medicion: { color: 'var(--line, #d4d4d4)', texto: 'sin medición' },
+const CELDA: Record<CeldaDia, { fondo: string; texto: string }> = {
+  ok: { fondo: 'bg-[var(--ok)]', texto: 'sin interrupciones medidas' },
+  degradado: { fondo: 'bg-[var(--warn)]', texto: 'con degradación medida' },
+  caido: { fondo: 'bg-[var(--bad)] ', texto: 'con al menos una interrupción medida' },
+  sin_medicion: { fondo: 'bg-[var(--line)] opacity-55', texto: 'sin medición' },
 };
 
 function resumenGeneral(e: EstadoPublico): { titulo: string; estado: EstadoMedido | 'sin_medicion' } {
@@ -56,7 +56,7 @@ function resumenGeneral(e: EstadoPublico): { titulo: string; estado: EstadoMedid
 function Etiqueta({ estado }: { estado: EstadoMedido | 'sin_medicion' }) {
   const e = ESTADO[estado];
   return (
-    <span className="rounded-full px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap" style={{ color: e.color, background: e.fondo }}>
+    <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap ${e.clases}`}>
       {e.etiqueta}
     </span>
   );
@@ -100,11 +100,11 @@ export default async function PaginaEstado() {
       titulo="Estado de Likida"
       apoyo="Medido por nuestra propia guardia cada 5 minutos, desde el servidor. Solo lectura: esta página no tiene controles ni datos de clientes. Lo que no se mide, se dice."
     >
-        <section aria-live="polite" className="mt-8 rounded-xl px-5 py-4 flex items-center justify-between gap-4" style={{ background: ESTADO[general.estado].fondo }}>
-          <h2 className="font-display text-[17px] font-semibold" style={{ color: ESTADO[general.estado].color }}>{general.titulo}</h2>
+        <section aria-live="polite" className={`mt-8 flex items-center justify-between gap-4 rounded-xl px-5 py-4 ${ESTADO[general.estado].fondo}`}>
+          <h2 className={`font-display text-[17px] font-semibold ${ESTADO[general.estado].texto}`}>{general.titulo}</h2>
           <Etiqueta estado={general.estado} />
         </section>
-        <p className="mt-2 text-[12px]" style={{ color: 'var(--muted, #666)' }}>
+        <p className="mt-2 text-[12px] text-muted">
           {estado.latidoIlegible
             ? 'No se pudo leer la última medición.'
             : estado.ultimaMedicion
@@ -122,20 +122,19 @@ export default async function PaginaEstado() {
                   <h2 id={`c-${r.componente}`} className="font-display text-[16px] font-semibold">{info.nombre}</h2>
                   <Etiqueta estado={actual} />
                 </div>
-                <p className="mt-1 text-[13px]" style={{ color: 'var(--muted, #555)' }}>{info.mide}</p>
+                <p className="mt-1 text-[13px] text-muted">{info.mide}</p>
                 {/* 30 celdas, de la más antigua a hoy. Cada una dice su día y su estado en texto, no solo en color. */}
                 <ul className="mt-3 flex gap-[3px]" aria-label={`Últimos 30 días de ${info.nombre}`}>
                   {r.dias.map((d) => (
                     <li
                       key={d.dia}
-                      className="h-7 flex-1 rounded-[3px]"
-                      style={{ background: CELDA[d.celda].color, opacity: d.celda === 'sin_medicion' ? 0.55 : 1 }}
+                      className={`h-7 flex-1 rounded-[3px] ${CELDA[d.celda].fondo}`}
                       title={`${d.dia}: ${CELDA[d.celda].texto}`}
                       aria-label={`${d.dia}: ${CELDA[d.celda].texto}`}
                     />
                   ))}
                 </ul>
-                <p className="mt-2 text-[12px]" style={{ color: 'var(--muted, #666)' }}>
+                <p className="mt-2 text-[12px] text-muted">
                   {estado.historialIlegible
                     ? 'No se pudo leer el historial.'
                     : r.disponibilidadPct === null
@@ -147,7 +146,7 @@ export default async function PaginaEstado() {
           })}
         </div>
 
-        <p className="mt-10 text-[12px] leading-relaxed" style={{ color: 'var(--muted, #666)' }}>
+        <p className="mt-10 text-[12px] leading-relaxed text-muted">
           Cómo leerlo: la disponibilidad es la proporción de mediciones sin interrupción; un día en gris no tiene
           mediciones (no cuenta como bueno ni como malo) y un día en rojo tuvo al menos una interrupción medida, aunque
           haya durado minutos. Si toda la plataforma cayera, esta página tampoco respondería. Más sobre cómo cuidamos

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Bell, Building2, ChevronDown, LogOut, SunMoon } from 'lucide-react';
 import { OPCIONES_TEMA, useTema } from '../../selector-tema';
 import { TRAZO_ICONO } from './icono';
-import { Popover, MenuList } from './overlay';
+import { Popover, MenuList, Tooltip } from './overlay';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { crearTraductor, type Traductor } from '@/lib/i18n/traducir';
 import type { DiccionarioDe } from '@/lib/i18n/catalogo';
@@ -244,9 +244,11 @@ export function TarjetaUsuario({ nombre, rolEtiqueta, iniciales, avatarUrl, href
       {salir}
       {!salir && cerrarSesion && (
         <form action={cerrarSesion} className="rv-cuenta__salir">
-          <button type="submit" title={t('pie.cuenta.salir')} aria-label={t('pie.cuenta.salir')} className="rv-icono-boton">
-            <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-          </button>
+          <Tooltip texto={t('pie.cuenta.salir')}>
+            <button type="submit" aria-label={t('pie.cuenta.salir')} className="rv-icono-boton">
+              <LogOut width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+            </button>
+          </Tooltip>
         </form>
       )}
       {menu && (

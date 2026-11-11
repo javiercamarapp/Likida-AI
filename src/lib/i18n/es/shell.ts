@@ -33,5 +33,32 @@ export const shell = {
   'pie.cuenta.fallback': 'Mi cuenta',
   'pie.cuenta.menu': 'Menú de la cuenta',
   'pie.cuenta.etiqueta': 'Cuenta',
+  // Mapa de prospectos (Cerebro de ventas)
+  'mapa.sinPunto.uno': '{n} prospecto sin coordenadas: cuenta en su estado pero no tiene punto en el mapa.',
+  'mapa.sinPunto.otros': '{n} prospectos sin coordenadas: cuentan en su estado pero no tienen punto en el mapa.',
   'pie.cuenta.salir': 'Cerrar sesión',
+  // Cabecera de /vendedor
+  'vendedor.rotulo': 'Vendedores',
+  'vendedor.soporte': 'Viendo como superadmin · todos los prospectos',
+  'vendedor.salir': 'Salir',
+  // Cabecera de escritorio y buscador (⌘K)
+  'cab.plegar': 'Plegar el menú',
+  'cab.expandir': 'Expandir el menú',
+  'cab.buscar': 'Buscar',
+  'cab.buscar.etiqueta': 'Buscar una pantalla ({atajo})',
+  'cab.guia': 'Guía',
+  'cab.guia.ayuda': 'Centro de ayuda',
+  'cab.guia.paneles': 'Ver los otros paneles',
+  'cab.guia.novedad': 'Guía, hay algo nuevo',
+  // Navegación: bloque que muestra la pantalla abierta cuando su grupo está cerrado
+  'nav.paginaActual': 'Página actual',
+  'nav.proximamente': '{nombre} (próximamente)',
+  // Buscador de pantallas (⌘K)
+  'paleta.titulo': 'Buscar una pantalla',
+  'paleta.subtitulo': 'Escribe el nombre de una pantalla o usa las flechas para recorrer la lista.',
+  'paleta.placeholder': 'Buscar una pantalla… (Viajes, Facturación, ARCO)',
+  'paleta.resultados': 'Resultados',
+  'paleta.recientes': 'Recientes',
+  'paleta.todas': 'Pantallas',
+  'paleta.sinResultados': 'Sin resultados.',
 } as const;

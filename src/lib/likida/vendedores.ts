@@ -598,7 +598,9 @@ export async function crearProspecto(
    *  (blueprint del lead magnet: la unión se amplía AQUÍ antes de escribir la
    *  primera fila — un valor fuera del dominio declarado rompe tableros sin
    *  avisar; el comentario de la columna lo amplía la migración 0223). */
-  fuente: 'manual' | 'censo' | 'landing' = 'manual',
+  fuente: 'manual' | 'censo' | 'landing' | 'ads-meta' | 'ads-google' | 'campana' = 'manual',
+  /** De dónde llegó el visitante (utm_*, click id, referrer): ver `lib/marketing/atribucion`. Solo la calculadora lo manda. */
+  atribucion: Record<string, string> | null = null,
 ): Promise<string> {
   if (p.vendedorId !== null && !(await esVendedor(p.vendedorId))) {
     throw new DatoInvalido('Esa cuenta no es un vendedor. Vuelve a elegirlo de la lista.');
@@ -620,6 +622,7 @@ export async function crearProspecto(
     notas: p.notas,
     vendedor_id: p.vendedorId,
     fuente,
+    ...(atribucion ? { atribucion } : {}),
     duplicado_de: original,
   }).select('id').single(), 'crearProspecto');
 
@@ -632,10 +635,10 @@ export async function crearProspecto(
 /**
  * Alta de un vendedor. REUSA el alta real del repo — `provisionarUsuario`
  * (Auth + app_user) con rol `vendedor` y tenant null — y la validación pura
- * de `invitar.ts`. Igual que el flujo D6: NO se manda correo de invitación
- * (esa plantilla existe y nadie la emite todavía) — el vendedor entra
- * tecleando su correo en /login y le llega el magic link de Supabase; la
- * pantalla lo dice tal cual en vez de prometer un correo que no sale.
+ * de `invitar.ts`. El correo de invitación NO sale de aquí: lo
+ * manda la acción (`vendedores_registro.ts`) después de comprobar que el
+ * canal está encendido; esta función solo da de alta la cuenta. El vendedor
+ * entra tecleando su correo en /login (magic link de Supabase).
  */
 export async function invitarVendedor(correo: string, nombre: string): Promise<{ userId: string; email: string }> {
   const v = validarInvitacionVendedor({ email: correo, nombre });

@@ -5,8 +5,12 @@
 .rv-usu__correo { display: block; font-size: var(--t-micro); font-weight: 400; color: var(--faint); }
 .rv-usu__tenue { color: var(--muted); }
 .rv-usu__sin { font-size: var(--t-small); color: var(--faint); }
-.rv-usu__acciones { display: grid; gap: 8px; }
-.rv-usu__fila { display: flex; align-items: flex-start; flex-wrap: wrap; gap: 8px 12px; }
+.rv-usu__acciones { display: grid; gap: 8px; margin-top: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+.rv-usu__menu > summary { list-style: none; cursor: pointer; width: max-content; }
+.rv-usu__menu > summary::-webkit-details-marker { display: none; }
+/* El chevron va en ::before (con `order` queda después del texto): ::after es el área táctil de 44 px de .rv-btn y no se toca. */
+.rv-usu__menu > summary::before { content: ""; order: 2; display: inline-block; flex: none; width: 6px; height: 6px; margin-left: 8px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: translateY(-2px) rotate(45deg); }
+.rv-usu__menu[open] > summary::before { transform: translateY(1px) rotate(-135deg); }
 .rv-usu__pie { margin: 0; font-size: var(--t-micro); color: var(--faint); }
 .rv-usu__aislamiento { margin: 0; font-size: var(--t-small); color: var(--muted); }
 .rv-usu__forma { display: grid; gap: 12px; }

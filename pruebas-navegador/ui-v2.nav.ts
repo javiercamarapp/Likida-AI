@@ -32,6 +32,9 @@ test.describe('con la UI v2 forzada', () => {
     const activo = page.locator('aside a[aria-current="page"]');
     await expect(activo).toHaveCount(1);
     await expect(activo).toHaveAttribute('href', /^\/dashboard\/despacho/);
+    // La capa de carga única (ui-v2/carga.css) deja el marco, incluido el enlace de salto, en visibility:hidden hasta soltarse: antes de ese
+    // momento el primer Tab cae en el sidebar. El teclado se prueba con el marco ya liberado.
+    await expect(page.locator('#rv-carga')).toHaveAttribute('data-estado', 'oculta');
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Saltar al contenido' })).toBeFocused();
     await expect(page.locator('#contenido-principal')).toBeVisible();

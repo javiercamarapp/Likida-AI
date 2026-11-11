@@ -65,3 +65,7 @@
   .bj-pieza__acciones { flex-wrap: wrap; }
   .bj-item--envio > form { margin-left: 0; }
 }
+
+/* Fuente de una escalación: el icono va a la IZQUIERDA del nombre (antes se apilaba encima cuando el nombre envolvía). */
+.bj-fuente { display: inline-flex; align-items: flex-start; gap: 6px; }
+.bj-fuente > svg { flex: none; margin-top: 3px; }

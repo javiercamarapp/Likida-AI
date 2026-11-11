@@ -7,7 +7,7 @@ vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams()
 const { default: MenuCuenta } = await import('./menu-cuenta');
 
 const pintarAbierto = () => renderToStaticMarkup(
-  <MenuCuenta nombre="Ana Pérez" rol="flota_admin" rolEtiqueta="ADMIN FLOTA" sufijo="" iniciales="AP" abiertoInicial
+  <MenuCuenta nombre="Ana Pérez" rol="flota_admin" rolEtiqueta="Dueño de la flota" sufijo="" iniciales="AP" abiertoInicial
     filas={[{ href: '/dashboard/mi-perfil', nombre: 'Mi perfil', Icono: LayoutGrid }]} />,
 );
 

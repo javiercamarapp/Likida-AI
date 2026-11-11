@@ -1,7 +1,9 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    /login — la entrada de Likida, idéntica en composición a la de Vexa AI (login.css + las reglas `.login-*` de su
    globals.css, medidas elemento por elemento). Adaptaciones decididas por Javier (31-oct-2026): logo oficial de
-   Likida, primario NEGRO y paleta negro/gris/blanco (sin azul ni naranja ni crema).
+   Likida, primario NEGRO (decisión del dueño, 10-nov-2026) y paleta negro/gris/blanco (sin azul ni naranja ni crema). Controles
+   iguales a los de Rovaq (paquete I): botón píldora de 999 px, alto 44 de escritorio (48 en móvil), peso 500; campo con radio de
+   tarjeta (12), relleno 10/16 y anillo de foco de 4 px. El borde del campo conserva el contraste 3:1 (WCAG 1.4.11).
 
    Solo viaja en la ruta /login. Sin `style=` ni `<style>` nuevos (CSP con nonce). Siempre clara, como Vexa
    (`color-scheme: light`): el tema oscuro es del panel.
@@ -17,6 +19,8 @@
   --login-soft: #f1f1f2;
   --login-input: #8a8a90;
   --login-foco: #0e0e10;
+  --login-hit: 44px;
+  --login-r-card: 12px;
   --login-sans: var(--font-instrument), 'Instrument Sans', Arial, sans-serif;
   --login-serif: var(--font-fraunces), Fraunces, Georgia, 'Times New Roman', serif;
   min-height: 100dvh; color-scheme: light; background: var(--login-bg); color: var(--login-ink);
@@ -35,8 +39,8 @@
 
 .login-editorial .login-btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 9px; width: 100%; max-width: 100%;
-  min-height: var(--ctl-h-lg, 40px); padding: 8px 16px; border-radius: 8px; border: 1px solid transparent;
-  font: 600 14px/1.4 var(--login-sans); letter-spacing: 0; cursor: pointer; text-decoration: none; white-space: normal; text-align: center;
+  min-height: var(--login-hit); padding: 10px 20px; border-radius: 999px; border: 1px solid transparent;
+  font: 500 14px/1.4 var(--login-sans); letter-spacing: 0; cursor: pointer; text-decoration: none; white-space: normal; text-align: center;
 }
 .login-editorial .login-btn-tinta { background: #0e0e10; color: #fff; }
 .login-editorial .login-btn-tinta:not(:disabled):hover { background: #26262b; box-shadow: none; }
@@ -46,11 +50,11 @@
 .login-editorial .login-btn:focus-visible, .login-editorial a:focus-visible, .login-editorial summary:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; }
 
 .login-editorial .login-campo {
-  width: 100%; min-width: 0; min-height: var(--ctl-h-lg, 40px); padding: 8px 12px; border: 1px solid var(--login-input); border-radius: 8px;
+  width: 100%; min-width: 0; min-height: var(--login-hit); padding: 10px 16px; border: 1px solid var(--login-input); border-radius: var(--login-r-card);
   background: var(--login-soft); color: var(--login-ink); font: 500 14px/1.4 var(--login-sans);
 }
 .login-editorial .login-campo::placeholder { color: var(--login-muted); }
-.login-editorial .login-campo:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; }
+.login-editorial .login-campo:focus-visible { outline: 2px solid var(--login-foco); outline-offset: 2px; box-shadow: 0 0 0 4px #0e0e1012; }
 .login-editorial .login-campo:disabled { background: var(--login-soft); color: var(--login-muted); cursor: not-allowed; }
 .login-editorial .login-email { display: grid; gap: 16px; }
 .login-editorial .login-email .login-btn { position: relative; gap: 8px; }
@@ -126,7 +130,7 @@
 @media (max-width: 1023px) {
   .login-editorial .login-copy { max-width: 470px; padding: 40px 0 24px; }
   .login-editorial .login-campo { font-size: 16px; }
-  .login-editorial .login-btn, .login-editorial .login-campo { min-height: 44px; }
+  .login-editorial .login-btn { min-height: 48px; }
   .login-editorial .login-email-status:empty { min-height: 20px; padding: 0; }
 }
 @media (max-width: 380px) {

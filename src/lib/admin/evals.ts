@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { getSystemPrompt } from '@/lib/agents/prompts';
 import { hashPromptContador } from '@/lib/agents/contador';
+import { hashPromptOcr } from '@/lib/evals/ocr-huella';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EVALOPS (0134) — el estado del examen y la REGLA DE RE-EXAMEN visible.
@@ -13,8 +14,8 @@ import { hashPromptContador } from '@/lib/agents/contador';
 // corrida, y el panel acusa el drift con todas sus letras.
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Los agentes con examen dorado. El contador entró con E.26 (fase 2). */
-export type AgenteExaminado = 'analista' | 'contador';
+/** Los agentes con examen dorado. El contador entró con E.26 (fase 2); el OCR con F17. */
+export type AgenteExaminado = 'analista' | 'contador' | 'ocr';
 
 /** El hash del prompt EXACTO que corre hoy — con un ctx fijo, para que el
  *  hash mida el TEXTO del prompt y no los datos del tenant.
@@ -25,6 +26,8 @@ export type AgenteExaminado = 'analista' | 'contador';
  *  como pide 22-evaluacion.md. */
 export function promptHashActual(agente: AgenteExaminado): string {
   if (agente === 'contador') return hashPromptContador();
+  // F17: el OCR (rol de dinero) tiene examen propio; ver src/lib/evals/ocr-*.ts.
+  if (agente === 'ocr') return hashPromptOcr();
   const texto = getSystemPrompt('analista_flota', {
     tenantId: '00000000-0000-0000-0000-000000000000',
     nombreFlota: 'HASH', agentName: 'HASH', timezone: TZ_MX,

@@ -73,7 +73,7 @@ export function FormaDePago({ token, saldo, metodos }: {
 
   if (envio === 'listo') {
     return (
-      <p className="mt-4 rounded-md p-3 text-[14px]" style={{ border: '1px solid var(--line)', color: 'var(--ink)' }}>
+      <p className="mt-4 rounded-md p-3 text-[14px]">
         {mensaje}
       </p>
     );
@@ -140,7 +140,7 @@ export function FormaDePago({ token, saldo, metodos }: {
       />
 
       {mensaje && envio === 'error' && (
-        <p className="text-[14px]" style={{ color: 'var(--warn, var(--ink))' }}>{mensaje}</p>
+        <p className="text-[14px]">{mensaje}</p>
       )}
 
       <Boton variante="primary" onClick={mandar} disabled={envio === 'mandando'} loading={envio === 'mandando'}>
@@ -153,7 +153,7 @@ export function FormaDePago({ token, saldo, metodos }: {
 function Campo({ etiqueta, children }: { etiqueta: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[13px] font-medium" style={{ color: 'var(--ink)' }}>{etiqueta}</span>
+      <span className="mb-1 block text-[13px] font-medium">{etiqueta}</span>
       {children}
     </label>
   );
