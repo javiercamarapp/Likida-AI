@@ -1,6 +1,8 @@
 'use client';
 
 import type { PerfilTenant } from '@/lib/auth/visibilidad';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 import { Drawer } from '../../ui-v2/componentes/overlay';
 import { ArbolMenu, PieMenu, useMenuV2 } from './navegacion-v2';
 import type { MenuV2 } from './menu-por-perfil';
@@ -30,11 +32,12 @@ export function HojaMasVista({ abierta, alCerrar, menu, sufijo, pathname, perfil
   abierta: boolean; alCerrar: () => void; menu: MenuV2; sufijo: string; pathname: string; perfil?: PerfilTenant | null;
   insignias?: Record<string, string>; pie: React.ReactNode;
 }) {
+  const { t } = useT('shell', shellEs);
   return (
-    <Drawer abierto={abierta} onCerrar={alCerrar} titulo="Menú completo" pie={abierta ? pie : undefined}>
+    <Drawer abierto={abierta} onCerrar={alCerrar} titulo={t('nav.completo')} pie={abierta ? pie : undefined}>
       {/* El árbol solo existe mientras la hoja está abierta: cerrada no duplica los enlaces del sidebar en el DOM. */}
       {abierta && (
-        <nav aria-label="Menú completo" className="rv-hoja__nav">
+        <nav aria-label={t('nav.completo')} className="rv-hoja__nav">
           <ArbolMenu menu={menu} sufijo={sufijo} pathname={pathname} perfil={perfil} insignias={insignias} alNavegar={alCerrar} plano />
         </nav>
       )}

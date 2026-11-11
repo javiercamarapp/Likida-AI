@@ -6,6 +6,9 @@ import type { PerfilTenant } from '@/lib/auth/visibilidad';
 import { hrefActivo } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import { destinosMovil, type DestinoMovil } from './barra-inferior-destinos';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
+import { etiquetaNav } from '@/lib/i18n/nav';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
 /**
@@ -27,10 +30,12 @@ export default function BarraInferior({ rol, perfil, masAbierta, alAbrirMas }: {
 export function BarraInferiorVista({ destinos, sufijo, activo, masAbierta, alAbrirMas }: {
   destinos: DestinoMovil[]; sufijo: string; activo: string | null; masAbierta: boolean; alAbrirMas: () => void;
 }) {
+  const tr = useT('shell', shellEs);
+  const { t } = tr;
   if (destinos.length === 0) return null;
   const activoEnBarra = destinos.some((d) => d.href === activo);
   return (
-    <nav className="rv-nav-inf" aria-label="Navegación móvil">
+    <nav className="rv-nav-inf" aria-label={t('nav.movil')}>
       <ul className="rv-nav-inf__lista">
         {destinos.map((d) => {
           const esActivo = d.href === activo;
@@ -38,16 +43,16 @@ export function BarraInferiorVista({ destinos, sufijo, activo, masAbierta, alAbr
             <li key={d.href}>
               <Link href={`${d.href}${sufijo}`} className="rv-nav-inf__item" aria-current={esActivo ? 'page' : undefined}>
                 <d.Icono className="rv-nav-inf__ico" width={22} height={22} strokeWidth={TRAZO_ICONO} aria-hidden />
-                <span className="rv-nav-inf__txt">{d.etiqueta}</span>
+                <span className="rv-nav-inf__txt">{etiquetaNav(tr, d.etiqueta)}</span>
               </Link>
             </li>
           );
         })}
         <li>
-          <button type="button" className="rv-nav-inf__item" aria-label="Más: abrir el menú completo" aria-haspopup="dialog" aria-expanded={masAbierta}
+          <button type="button" className="rv-nav-inf__item" aria-label={t('nav.mas.abrir')} aria-haspopup="dialog" aria-expanded={masAbierta}
             data-activo={!activoEnBarra && activo ? '' : undefined} data-tour="nav-mas" onClick={alAbrirMas}>
             <Ellipsis className="rv-nav-inf__ico" width={22} height={22} strokeWidth={TRAZO_ICONO} aria-hidden />
-            <span className="rv-nav-inf__txt">Más</span>
+            <span className="rv-nav-inf__txt">{t('nav.mas')}</span>
           </button>
         </li>
       </ul>

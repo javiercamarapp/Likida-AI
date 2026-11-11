@@ -1,4 +1,5 @@
 import { ENTRADAS_DASHBOARD, type Item } from '../rutas';
+import { etiquetaNav, type TraductorNav } from '@/lib/i18n/nav';
 import { puedeVerRuta, type PerfilTenant } from '@/lib/auth/visibilidad';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -27,15 +28,17 @@ export function normalizar(texto: string): string {
 }
 
 /** Todas las pantallas que el rol abre bajo el perfil, en el orden del menú. */
-export function paletaDelDashboard(rol: string, perfil?: PerfilTenant | null): DestinoPaleta[] {
+export function paletaDelDashboard(rol: string, perfil?: PerfilTenant | null, tr?: TraductorNav): DestinoPaleta[] {
+  // En otro idioma la etiqueta sale traducida y la búsqueda encuentra AMBOS nombres (el español sigue funcionando para quien lo teclea).
+  const nom = (n: string) => (tr ? etiquetaNav(tr, n) : n);
   const salida: DestinoPaleta[] = [];
   const vistos = new Set<string>();
   for (const e of ENTRADAS_DASHBOARD) {
     for (const t of e.pestanas) {
       if (vistos.has(t.href) || (t.soloConPerfil && !perfil) || !puedeVerRuta(rol, t.href, perfil)) continue;
       vistos.add(t.href);
-      const etiqueta = e.pestanas.length === 1 || t.nombre === e.nombre ? e.nombre : `${e.nombre} · ${t.nombre}`;
-      salida.push({ href: t.href, etiqueta, nombre: t.nombre, Icono: e.Icono, busca: normalizar([e.nombre, t.nombre, ...(e.alias ?? [])].join(' ')) });
+      const etiqueta = e.pestanas.length === 1 || t.nombre === e.nombre ? nom(e.nombre) : `${nom(e.nombre)} · ${nom(t.nombre)}`;
+      salida.push({ href: t.href, etiqueta, nombre: nom(t.nombre), Icono: e.Icono, busca: normalizar([e.nombre, t.nombre, nom(e.nombre), nom(t.nombre), ...(e.alias ?? [])].join(' ')) });
     }
   }
   return salida;

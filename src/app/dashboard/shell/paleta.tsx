@@ -37,7 +37,8 @@ function guardarReciente(href: string): void {
 export default function PaletaDashboard({ rol, perfil }: { rol: string; perfil?: PerfilTenant | null }) {
   const [abierto, setAbierto] = useState(false);
   const { sufijo, rolMenu } = useSufijoYRol(rol);
-  const lista = useMemo(() => paletaDelDashboard(rolMenu, perfil), [rolMenu, perfil]);
+  const tr = useT('shell', shellEs);
+  const lista = useMemo(() => paletaDelDashboard(rolMenu, perfil, tr), [rolMenu, perfil, tr]);
 
   useEffect(() => {
     function alTeclear(e: KeyboardEvent) {

@@ -9,6 +9,8 @@ import { hrefsDelMenu } from './menu-por-perfil';
 import { useMenuV2 } from './navegacion-v2';
 import MenuGuia from './menu-guia';
 import FechaHoy from './fecha-hoy';
+import { shell as shellEs } from '@/lib/i18n/es/shell';
+import { useT } from '@/lib/i18n/proveedor';
 import { Tooltip } from '../../ui-v2/componentes/overlay';
 import { TRAZO_ICONO } from '../../ui-v2/componentes/icono';
 
@@ -30,20 +32,22 @@ export default function CabeceraMovil({ rol, perfil }: { rol: string; perfil?: P
 }
 
 /** El dibujo de la cabecera móvil, sin saber de qué panel es: lo comparten /dashboard y /admin. `children` van entre la fecha y la campana. */
-export function CabeceraMovilVista({ hrefCasa, hrefAvisos, etiquetaAvisos = 'Notificaciones', punto = false, children }: {
+export function CabeceraMovilVista({ hrefCasa, hrefAvisos, etiquetaAvisos, punto = false, children }: {
   hrefCasa: string; hrefAvisos: string | null; etiquetaAvisos?: string; punto?: boolean; children?: React.ReactNode;
 }) {
+  const { t } = useT('shell', shellEs);
+  const etiqueta = etiquetaAvisos ?? t('cab.notificaciones');
   return (
     <header className="rv-cab-movil">
-      <Link href={hrefCasa} className="rv-cab-movil__logo" aria-label="Likida, ir al inicio">
+      <Link href={hrefCasa} className="rv-cab-movil__logo" aria-label={t('marca.irInicio')}>
         <LogoV2 alto={ALTO_LOGO_PX.movil} />
       </Link>
       <div className="rv-cab-movil__acciones">
         <FechaHoy className="rv-cab-movil__fecha" />
         {children}
         {hrefAvisos && (
-          <Tooltip texto={etiquetaAvisos}>
-            <Link href={hrefAvisos} className="rv-icono-boton" aria-label={etiquetaAvisos}>
+          <Tooltip texto={etiqueta}>
+            <Link href={hrefAvisos} className="rv-icono-boton" aria-label={etiqueta}>
               <Bell width={18} height={18} strokeWidth={TRAZO_ICONO} aria-hidden />
               {punto && <span className="rv-campana__punto" aria-hidden />}
             </Link>
