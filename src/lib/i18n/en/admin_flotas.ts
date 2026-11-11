@@ -311,4 +311,5 @@ export const admin_flotas: Record<keyof typeof admin_flotasEs, string> = {
   'soporte.cerrados': 'Closed',
   'soporte.vistas_de_la_cola': 'Support queue views',
   'soporte.nada_en_esta_vista': 'No tickets in this view',
+  'soporte.vista': 'View',
 };

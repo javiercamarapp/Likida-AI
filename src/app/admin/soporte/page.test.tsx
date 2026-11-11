@@ -221,9 +221,7 @@ it('la pantalla no imprime claves internas (tablas ni columnas)', async () => {
 it('ronda 2: una cola sin tickets conserva el esqueleto (pestañas con contador y tira en cero real) y dice que la cola está vacía', async () => {
   dobles.getTicketsCruzados.mockResolvedValue([]);
   const h = await html();
-  expect(h).toContain('Abiertos');
-  expect(h).toContain('Esperando');
-  expect(h).toContain('Cerrados');
+  expect(h).toContain('Vista');
   expect(h).toContain('Con SLA vencido');
   expect(h).toMatch(/rv-tarjeta[\s\S]*La cola está vacía/);
 });

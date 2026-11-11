@@ -18,7 +18,7 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { ahoraMs } from '@/lib/saludo';
 import { fechaMx, fechaHoraMx, numero } from '@/lib/formato';
 import {
-  Aviso, BotonEnlace, CampoSelect, TabsLinea, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, StatusChip, Tarjeta, type TonoEstado,
+  Aviso, BarraFiltros, BotonEnlace, CampoSelect, FiltroOpciones, CampoTextarea, Casilla, Disclosure, EstadoError, EstadoVacio, StatusChip, Tarjeta, type TonoEstado,
 } from '../../ui-v2/componentes';
 import type { PropsCifra } from '../../ui-v2/graficas';
 import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
@@ -54,6 +54,7 @@ function slaDe(t: TicketCruzado, ta: TrDe<'admin_flotas'>): { texto: string; ven
   return { texto: ta('soporte.faltan_h', { Math: numero(Math.round(t.horasRestantes)) }), vencido: false };
 }
 
+const conteoRotulo = (rotulo: string, n: number | null): string => (n === null ? rotulo : `${rotulo} (${numero(n)})`);
 const capital = (t: string): string => (t ? t.charAt(0).toUpperCase() + t.slice(1).replace(/_/g, ' ') : '—');
 const tonoDe = (estado: string): TonoEstado => pillTicket(estado).estado as TonoEstado;
 
@@ -299,14 +300,18 @@ export default async function SoportePage({
     <EsqueletoTablaMaestra
       titulo={ta('soporte.soporte')} apoyo={ta('soporte.los_tickets_de_todas')} etiquetaCifras={ta('soporte.tickets_de_soporte')} cifras={cifras}
       filtros={tickets === null ? undefined : (
-        <TabsLinea
-          etiqueta={ta('soporte.vistas_de_la_cola')} actual={vista}
-          pestanas={[
-            { clave: 'abiertos', etiqueta: ta('soporte.abiertos'), href: hrefVista('abiertos'), conteo: cuentaLista('abiertos'), atencion: (conteos.vencidos ?? 0) > 0 },
-            { clave: 'esperando', etiqueta: ta('soporte.esperando'), href: hrefVista('esperando'), conteo: cuentaLista('esperando') },
-            { clave: 'cerrados', etiqueta: ta('soporte.cerrados'), href: hrefVista('cerrados'), conteo: conteos.cerrados },
-          ]}
-        />
+        // La guarda `una_barra_de_pestanas` reserva las pestañas a la barra automática del grupo: la vista de la cola (Abiertos / Esperando /
+        // Cerrados, con su contador) es un filtro de enlace de la barra de filtros, no una segunda barra de pestañas.
+        <BarraFiltros enLinea etiqueta={ta('soporte.vistas_de_la_cola')}>
+          <FiltroOpciones
+            etiqueta={ta('soporte.vista')} valor={vista} porDefecto="abiertos"
+            opciones={[
+              { valor: 'abiertos', rotulo: conteoRotulo(ta('soporte.abiertos'), cuentaLista('abiertos')), href: hrefVista('abiertos') },
+              { valor: 'esperando', rotulo: conteoRotulo(ta('soporte.esperando'), cuentaLista('esperando')), href: hrefVista('esperando') },
+              { valor: 'cerrados', rotulo: conteoRotulo(ta('soporte.cerrados'), conteos.cerrados), href: hrefVista('cerrados') },
+            ]}
+          />
+        </BarraFiltros>
       )}
     >
       {tickets === null ? (

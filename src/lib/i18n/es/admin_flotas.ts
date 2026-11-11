@@ -309,4 +309,5 @@ export const admin_flotas = {
   'soporte.cerrados': 'Cerrados',
   'soporte.vistas_de_la_cola': 'Vistas de la cola de soporte',
   'soporte.nada_en_esta_vista': 'Ningún ticket en esta vista',
+  'soporte.vista': 'Vista',
 } as const;
