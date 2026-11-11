@@ -1,0 +1,24 @@
+/* Pantalla de avisos (admin y cliente). Solo tokens del sistema; todo bajo [data-ui="v2"]. */
+[data-ui="v2"] .av-barra { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; justify-content: space-between; margin-bottom: 12px; }
+[data-ui="v2"] .av-filtros { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+[data-ui="v2"] .av-filtros .rv-ctl { min-width: 160px; }
+[data-ui="v2"] .av-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+[data-ui="v2"] .av-fila { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+[data-ui="v2"] .av-fila:last-child { border-bottom: 0; }
+[data-ui="v2"] .av-fila[data-leido="si"] .av-titulo { color: var(--muted); font-weight: 400; }
+[data-ui="v2"] .av-punto { flex: none; width: 8px; height: 8px; border-radius: 50%; margin-top: 7px; background: var(--ink); }
+[data-ui="v2"] .av-fila[data-leido="si"] .av-punto { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+[data-ui="v2"] .av-cuerpo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+[data-ui="v2"] .av-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--muted); font-size: var(--t-small, 12px); }
+[data-ui="v2"] .av-titulo { font-size: var(--t-body); font-weight: 500; overflow-wrap: anywhere; }
+[data-ui="v2"] .av-detalle, [data-ui="v2"] .av-nota { color: var(--muted); font-size: var(--t-small, 12px); overflow-wrap: anywhere; }
+[data-ui="v2"] .av-acciones { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+[data-ui="v2"] .av-matriz { width: 100%; border-collapse: collapse; }
+[data-ui="v2"] .av-matriz th, [data-ui="v2"] .av-matriz td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; }
+[data-ui="v2"] .av-matriz th:first-child, [data-ui="v2"] .av-matriz td:first-child { text-align: left; }
+[data-ui="v2"] .av-matriz thead th { font-weight: 500; color: var(--muted); }
+[data-ui="v2"] .av-canales { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
+[data-ui="v2"] .av-canal { display: flex; flex-direction: column; gap: 6px; }
+[data-ui="v2"] .av-silencio { display: flex; flex-direction: column; gap: 12px; max-width: 520px; }
+[data-ui="v2"] .av-horas { display: flex; flex-wrap: wrap; gap: 12px; }
+[data-ui="v2"] .av-pila { display: flex; flex-direction: column; gap: 12px; }

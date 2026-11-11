@@ -37,7 +37,7 @@ const MIGRADAS = [
   'timbrado/page.tsx', 'reglas/page.tsx', 'descarga-sat/vista.tsx', 'descarga-sat/bandeja/vista.tsx', 'combustible-casetas/page.tsx',
   'conocimiento/vista.tsx', 'conexiones/vista.tsx', 'llaves-api/page.tsx', 'sesiones-mcp/page.tsx', 'usuarios/vista.tsx', 'politicas/page.tsx',
   'arco/page.tsx', 'legal/page.tsx', 'conversaciones/page.tsx', 'soporte/page.tsx', 'suscripcion/page.tsx', 'configuracion/page.tsx',
-  'emergencias/page.tsx', 'asistencia/page.tsx', 'notificaciones/lista.tsx', 'mi-perfil/page.tsx', 'arranque/vista.tsx',
+  'emergencias/page.tsx', 'asistencia/page.tsx', 'mi-perfil/page.tsx', 'arranque/vista.tsx',
   'agentes/liquidacion/vista.tsx', 'agentes/facturas/vista.tsx', 'agentes/cobranza/vista.tsx', 'agentes/conductores/vista.tsx',
   'agentes/vigia/vista.tsx', 'agentes/peajes/vista.tsx', 'agentes/carta-porte/vista.tsx', 'agentes/proveedores/vista.tsx',
   'agentes/conductores/configuracion/vista.tsx', 'agentes/conductores/estadias/vista.tsx', 'agentes/conductores/sitios/vista.tsx',

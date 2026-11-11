@@ -49,12 +49,13 @@ vi.mock('@/lib/likida/orquestador/tablero_viajes', () => ({
   armarTableroViajes: () => ({ conteos: { conExcepcion: 2, sinSenal: 1 } }),
 }));
 vi.mock('@/lib/saludo', async (orig) => ({ ...(await orig<Record<string, unknown>>()), ahoraMs: () => Date.parse('2026-10-02T18:00:00.000Z') }));
-vi.mock('./notificaciones/lista', () => ({ ListaAlertas: () => null }));
+vi.mock('@/app/ui-v2/avisos/pagina-avisos', () => ({ default: () => null }));
 
 const RAIZ = process.cwd();
 const { InicioCincoAgentes, FICHAS_CINCO_AGENTES } = await import('./inicio-cinco-agentes');
 const { default: PaginaNotificaciones } = await import('./notificaciones/page');
 const { calcularAlertasFlota } = await import('./calcular-alertas-flota');
+const { vaciarCacheAvisosFlota } = await import('@/lib/avisos/fuente-flota');
 const { default: DashboardChrome } = await import('./chrome');
 const { SidebarAbajo } = await import('./sidebar-nav');
 const { puedeVerRuta, RUTAS_PERFIL_CINCO_AGENTES, MODULOS_PROXIMAMENTE_PERFIL, moduloProximamenteDeRuta, rutaProximamente } = await import('@/lib/auth/visibilidad');
@@ -78,11 +79,12 @@ const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) 
  */
 const texto = (html: string) => html.replace(/<script[^>]*>[\s\S]*?<\/script\b[^>]*>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
 
-/** Lo que la página de Notificaciones le entrega al listado (el elemento devuelto lleva las alertas en sus props). */
+/** Lo que la página de Notificaciones le entrega a la pantalla de avisos (el elemento devuelto lleva la fuente de avisos en sus props). */
 async function alertasDeLaPagina(): Promise<Array<{ id: string; href: string }>> {
-  const el = (await PaginaNotificaciones({ searchParams: Promise.resolve({}) })) as { props: { alertas: Array<{ id: string; href: string }> } };
-  expect(Array.isArray(el.props.alertas)).toBe(true);
-  return el.props.alertas;
+  const el = (await PaginaNotificaciones({ searchParams: Promise.resolve({}) })) as { props: { children: { props: { fuente: { avisos: Array<{ clave: string; href: string | null }> } } } } };
+  const avisos = el.props.children.props.fuente.avisos;
+  expect(Array.isArray(avisos)).toBe(true);
+  return avisos.map((a) => ({ id: a.clave.replace(/^flota:/, ''), href: a.href ?? '' }));
 }
 
 /** Renderiza un componente async (el Resumen trae tarjetas `async` dentro de Suspense) hasta que todo esté listo. */
@@ -93,6 +95,7 @@ async function aHtml(el: React.ReactElement): Promise<string> {
 }
 
 beforeEach(() => {
+  vaciarCacheAvisosFlota();
   dobles.perfil = null;
   dobles.sesion = { tenantId: 't-1', rol: 'flota_admin' };
   dobles.ultimasCorridas.mockReset();
