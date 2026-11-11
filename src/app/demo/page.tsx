@@ -7,6 +7,7 @@ import { publico } from '@/lib/i18n/es/publico';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
 import { Chip } from '../ui-v2/componentes/chip';
+import '../legal/publico-r2.css';
 
 interface Comprobante { concepto: 'diesel' | 'caseta' | 'factura'; monto: number; folio?: string; cfdiUuid?: string; rfcReceptor?: string; clave: 'diesel1' | 'diesel2' | 'caseta' | 'factura' }
 interface Bubble { from: 'op' | 'likida'; text: string }
