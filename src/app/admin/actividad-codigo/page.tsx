@@ -5,6 +5,7 @@ import { numero, fechaCorta } from '@/lib/formato';
 import { Aviso, FilaTarjetas, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
 import { Columnas } from '../../ui-v2/graficas';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
+import { getT } from '@/lib/i18n/servidor';
 import { AvisoGitHub } from '../ui/aviso-github';
 
 export const dynamic = 'force-dynamic';
@@ -17,6 +18,7 @@ export const dynamic = 'force-dynamic';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const CELDA = 11, GAP = 3;
+const ETQ_ANUAL = 'Commits — últimas 52 semanas', ETQ_SEMANA = 'Esta semana', ETQ_MEJOR = 'La mejor semana';
 const DIAS_ROTULO = ['', 'lun', '', 'mié', '', 'vie', ''];
 
 function opacidad(commits: number, max: number): number {
@@ -36,12 +38,13 @@ const COLUMNAS_COMMITS: ColumnaBase<Commit>[] = [
 export default async function ActividadCodigoPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
+  const { t } = await getT('admin_sistema');
   const a = await getActividadCodigo();
   const ok = a.estado === 'ok';
   // F26: el esqueleto se dibuja SIEMPRE. Sin lectura, cada bloque dice «No disponible ahora. No es cero.» (con Reintentar) o que GitHub
   // sigue calculando; nunca un cero ni una página casi vacía.
   const calculando = a.estado === 'calculando';
-  const sinLectura = { estado: calculando ? 'vacio' as const : 'error' as const, mensaje: calculando ? 'GitHub sigue calculando' : undefined, reintentar: true };
+  const sinLectura = { estado: calculando ? 'vacio' as const : 'error' as const, mensaje: calculando ? t('actividad_codigo.calculando') : undefined, reintentar: true };
   const mejor = ok ? a.semanas.reduce((m, s) => (s.total > m.total ? s : m), a.semanas[0]) : undefined;
   const max = ok ? Math.max(...a.semanas.flatMap((s) => s.dias), 1) : 1;
   const ancho = ok ? a.semanas.length * (CELDA + GAP) + 28 : 0;
@@ -51,17 +54,11 @@ export default async function ActividadCodigoPage() {
     <EsqueletoPanelCifras
       titulo="Actividad de código — likida.ai"
       etiquetaCifras="Commits del repositorio"
-      cifras={ok ? [
-        { etiqueta: 'Commits — últimas 52 semanas', valor: a.totalAnual, formato: 'entero' },
-        { etiqueta: 'Esta semana', valor: a.semanas[a.semanas.length - 1]?.total ?? 0, formato: 'entero' },
-        { etiqueta: 'La mejor semana', valor: mejor?.total ?? 0, formato: 'entero',
-          nota: mejor ? `semana del ${fechaCorta(new Date(mejor.semana * 1000).toISOString())}` : undefined },
-        { etiqueta: 'Commits recientes listados', valor: a.recientes.length, formato: 'entero' },
-      ] : [
-        { etiqueta: 'Commits — últimas 52 semanas', valor: null, ...sinLectura },
-        { etiqueta: 'Esta semana', valor: null, ...sinLectura },
-        { etiqueta: 'La mejor semana', valor: null, ...sinLectura },
-        { etiqueta: 'Commits recientes listados', valor: null, ...sinLectura },
+      cifras={[
+        { etiqueta: ETQ_ANUAL, ...(ok ? { valor: a.totalAnual, formato: 'entero' as const } : { valor: null, ...sinLectura }) },
+        { etiqueta: ETQ_SEMANA, ...(ok ? { valor: a.semanas[a.semanas.length - 1]?.total ?? 0, formato: 'entero' as const } : { valor: null, ...sinLectura }) },
+        { etiqueta: ETQ_MEJOR, ...(ok ? { valor: mejor?.total ?? 0, formato: 'entero' as const, nota: mejor ? `semana del ${fechaCorta(new Date(mejor.semana * 1000).toISOString())}` : undefined } : { valor: null, ...sinLectura }) },
+        { etiqueta: t('actividad_codigo.kpi_recientes'), ...(ok ? { valor: a.recientes.length, formato: 'entero' as const } : { valor: null, ...sinLectura }) },
       ]}
       avisos={ok ? null : <>
         {a.estado === 'sin_token' && <AvisoGitHub causa="sin_token" />}
@@ -113,10 +110,10 @@ export default async function ActividadCodigoPage() {
       ]}
     >
       <FilaTarjetas variante="6-6">
-        <Tarjeta titulo="Commits por semana" {...(ok ? { estado: 'ok' as const } : sinLectura)} contenida>
+        <Tarjeta titulo={t('actividad_codigo.por_semana')} {...(ok ? { estado: 'ok' as const } : sinLectura)} contenida>
           {ok ? (
             <Columnas
-              etiqueta="Commits por semana"
+              etiqueta={t('actividad_codigo.por_semana')}
               formato="numero"
               datos={a.semanas.slice(-12).map((s) => ({ etiqueta: fechaCorta(new Date(s.semana * 1000).toISOString()), valor: s.total }))}
             />

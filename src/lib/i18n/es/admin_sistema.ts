@@ -1415,4 +1415,7 @@ export const admin_sistema = {
   'trust_safety.vista_rapida': 'Vista rápida',
   'trust_safety.vr_subtitulo': 'Evento {n} de {total}',
   'trust_safety.vr_veces': 'Veces visto',
+  'actividad_codigo.kpi_recientes': 'Commits recientes listados',
+  'actividad_codigo.calculando': 'GitHub sigue calculando',
+  'actividad_codigo.por_semana': 'Commits por semana',
 } as const;

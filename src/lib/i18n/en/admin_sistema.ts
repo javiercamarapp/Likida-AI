@@ -1417,4 +1417,7 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'trust_safety.vista_rapida': 'Quick view',
   'trust_safety.vr_subtitulo': 'Event {n} of {total}',
   'trust_safety.vr_veces': 'Times seen',
+  'actividad_codigo.kpi_recientes': 'Recent commits listed',
+  'actividad_codigo.calculando': 'GitHub is still calculating',
+  'actividad_codigo.por_semana': 'Commits per week',
 };
