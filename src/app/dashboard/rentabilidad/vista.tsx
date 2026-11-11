@@ -7,7 +7,7 @@ import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { BarList } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import {
-  BotonEnlace, EstadoError, StatusChip, TablaBase, Tarjeta, type ColumnaBase,
+  BotonEnlace, StatusChip, TablaBase, Tarjeta, type ColumnaBase,
 } from '@/app/ui-v2/componentes';
 import './rentabilidad.css';
 

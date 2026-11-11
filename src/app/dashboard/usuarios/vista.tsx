@@ -92,7 +92,7 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
     },
     ...(puedeInvitar ? [{
       id: 'acciones', titulo: t('cfg.acciones'),
-      celda: (u: UsuarioRow) => <Acciones t={t} u={u} esYo={u.id === userId} roles={roles} acciones={acciones} />,
+      celda: (u: UsuarioRow) => <Acciones t={t} u={u} esYo={u.id === userId} acciones={acciones} />,
     }] : []),
   ];
 
@@ -130,8 +130,8 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
   );
 }
 
-function Acciones({ u, esYo, roles, acciones, t = T_RESTO_ES }: {
-  u: UsuarioRow; esYo: boolean; roles: ReadonlyArray<OpcionRol>; acciones: AccionesEquipo; t?: TResto;
+function Acciones({ u, esYo, acciones, t = T_RESTO_ES }: {
+  u: UsuarioRow; esYo: boolean; acciones: AccionesEquipo; t?: TResto;
 }) {
   // Un superadmin en la lista es personal de Likida: no se administra aquí
   // (el motor lo rechaza igual — esto solo evita ofrecer un botón que rebota).
