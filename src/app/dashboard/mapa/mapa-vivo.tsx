@@ -102,8 +102,10 @@ function rankingDe(viajes: ViajeEnMapa[], eje: 'destino' | 'origen'): Array<{ no
     .sort((a, b) => b.cuenta - a.cuenta || a.nombre.localeCompare(b.nombre)).slice(0, 8);
 }
 
-export function MapaVivo({ viajes, pines = [] }: {
+export function MapaVivo({ viajes, pines = [], sinUbicar = 0 }: {
   viajes: ViajeEnMapa[];
+  /** Viajes en curso que NO se pudieron dibujar (origen o destino fuera del catálogo): el rótulo del vacío tiene que decirlo, no afirmar «sin viajes». */
+  sinUbicar?: number;
   /** Posiciones medidas por unidad. Vacío = la flota no tiene GPS todavía. */
   pines?: PinUnidad[];
 }) {
@@ -218,7 +220,9 @@ export function MapaVivo({ viajes, pines = [] }: {
 
           {viajes.length === 0 && pines.length === 0 && (
             <div className="rv-mp__vacio">
-              <p>Sin viajes en curso ahora mismo — el próximo que despaches se dibuja aquí.</p>
+              <p>{sinUbicar > 0
+                ? t('mapa.vacio.sin_ubicar', { n: numero(sinUbicar) })
+                : 'Sin viajes en curso ahora mismo — el próximo que despaches se dibuja aquí.'}</p>
             </div>
           )}
 
@@ -264,7 +268,9 @@ export function MapaVivo({ viajes, pines = [] }: {
           {ranking.length > 0 ? <p className="rv-mp__eyebrow">{lugar ? t('mapa.panel.viajes_en', { lugar }) : t('mapa.panel.viajes')}</p> : null}
           <div className="rv-mp__cards">
           {viajes.length === 0 ? (
-            <EstadoVacio titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>
+            sinUbicar > 0
+              ? <EstadoVacio titulo={t('mapa.panel.sin_ubicar', { n: numero(sinUbicar) })}>{t('mapa.panel.sin_ubicar.nota')}</EstadoVacio>
+              : <EstadoVacio titulo={t('mapa.panel.vacio')}>{t('mapa.panel.vacio.nota')}</EstadoVacio>
           ) : visibles.map((v) => {
             const esActivo = v.id === activoId;
             return (

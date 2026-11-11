@@ -407,7 +407,7 @@
 [data-ui="v2"] .rv-kpi__cab .rv-info { margin: -4px -6px -4px auto; }
 
 /* ═══ LF · Filtros de barra (como Vexa): UNA fila baja, controles de 32 px, radio 8, borde fino, 12 px / 500, activo = tinta (nunca azul) ═══ */
-[data-ui="v2"] .rv-filtros { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: var(--ctl-h, 32px); min-width: 0; padding: 2px; background: var(--bg); }
+[data-ui="v2"] .rv-filtros { position: sticky; top: 0; z-index: 5; display: flex; flex-wrap: nowrap; align-items: center; gap: 8px; min-height: var(--ctl-h, 32px); min-width: 0; padding: 2px; }
 [data-ui="v2"] :is(.card, .rv-tarjeta) .rv-filtros,
 [data-ui="v2"] .rv-filtros--en-linea { position: static; min-height: 32px; padding: 0; background: transparent; }
 [data-ui="v2"] .rv-filtros__chips { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; padding: 4px; margin: -4px; }
@@ -551,3 +551,4 @@
 /* Boton de solo icono (11-nov-2026): el mismo .rv-btn de 28 px, cuadrado; siempre con aria-label y Tooltip del sistema. */
 [data-ui="v2"] .rv-btn.rv-btn--icono { width: var(--ctl-h-sm, 28px); min-width: 0; padding: 0; justify-content: center; }
 @media (max-width: 820px) { [data-ui="v2"] .rv-btn.rv-btn--icono { width: 36px; } }
+[data-ui="v2"] .rv-aviso { padding: 10px 14px; }

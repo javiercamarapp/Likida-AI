@@ -7,3 +7,6 @@
 .rv-pt__bloque { display: grid; gap: 2px; }
 .rv-pt__lista { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
 .rv-pt__selector { min-width: 224px; }
+
+/* Cabecera y cifra de las columnas numéricas del registro van a la derecha las dos (tabular), no solo la cifra. */
+[data-ui="v2"] .rv-tb table th.num { text-align: right; }

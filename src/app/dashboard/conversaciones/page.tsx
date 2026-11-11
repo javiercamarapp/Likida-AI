@@ -70,7 +70,6 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
   // Búsqueda en memoria sobre los hilos que la lectura del tenant YA trajo (nunca una consulta más amplia): chofer, teléfono o folio.
   const q = (sp.q ?? '').trim().slice(0, 80);
   const norm = (x: string | null | undefined) => (x ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const todosLosHilos = hilos;
   if (q) hilos = hilos.filter((h) => [h.operadorNombre, h.telefono, h.viajeFolio].some((x) => norm(x).includes(norm(q))));
   const mensajes = hilos.reduce((s, h) => s + h.turns.length, 0);
   const recortado = total !== null && total > hilos.length;
@@ -103,7 +102,7 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
     <EsqueletoTablaMaestra
       titulo={t('conv.titulo')}
       apoyo={t('conv.apoyo')}
-      filtros={errorCarga === null && todosLosHilos.length > 0 ? (
+      filtros={errorCarga === null ? (
         <BarraFiltros enLinea accion={RUTA} buscar etiqueta={t('conv.filtros')} nActivos={q ? 1 : 0} limpiarHref={`${RUTA}${sufijoTenant(sp)}`}
           ocultos={[...new URLSearchParams(sufijoTenant(sp).replace(/^\?/, '')).entries()]}>
           <FiltroBusqueda nombre="q" valor={q} placeholder={t('conv.buscar.ph')} etiqueta={t('conv.buscar.aria')} />

@@ -94,7 +94,7 @@ export async function InicioCincoV2({
 
   return (
     <EsqueletoPortada
-      area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
+      area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : t('op.tu_flota_en_likida')}
       titulo={t('op.resumen')}
       apoyo={t('op.tus_cinco_agentes_de_un_vistazo_2', { saludo: saludo(), v: nombre ?? 'equipo' })}
       acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}

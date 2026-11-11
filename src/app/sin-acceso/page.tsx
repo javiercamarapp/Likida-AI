@@ -4,6 +4,7 @@ import { envPuesta } from '@/lib/env';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { Boton } from '../ui-v2/componentes/boton';
 import '../legal/publico-r2.css';
+import '../legal/flujo-publico.css';
 
 export const metadata = { title: 'Sin acceso — Likida' };
 
@@ -31,7 +32,6 @@ export default function SinAcceso() {
       rotulo="Error 403"
       titulo="Tu cuenta aún no tiene flota"
       ancho="estrecho"
-      centrado
       apoyo="Iniciaste sesión, pero esta cuenta no está vinculada a ninguna flota en Likida."
       acciones={
         <>

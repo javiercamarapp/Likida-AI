@@ -366,7 +366,7 @@ export function ChatEntrevista({
       <input
         value={texto}
         onChange={(e) => setTexto(e.target.value)}
-        placeholder={documento ? t('op.pregunta_sobre_o_tu_operacion', { nombre: documento.nombre }) : t('op.pregunta_sobre_tu_operacion')}
+        placeholder={documento ? t('op.pregunta_sobre_o_tu_operacion', { nombre: documento.nombre }) : t('op.escribe_tu_respuesta')}
         aria-label={t('op.pregunta_sobre_tu_operacion_2')}
         className="rv-ob__campo" data-anillo="envolvente"
       />

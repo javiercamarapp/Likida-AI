@@ -147,6 +147,7 @@ export default async function DevPage() {
             filas={slos}
             idFila={(s) => s.clave}
             altoMaximo={false}
+            tarjetaMovil
           />
         )}
       </Tarjeta>
@@ -168,6 +169,7 @@ export default async function DevPage() {
             idFila={(e) => String(e.id)}
             altoMaximo={false}
             densa
+            tarjetaMovil
           />
         )}
       </Tarjeta>

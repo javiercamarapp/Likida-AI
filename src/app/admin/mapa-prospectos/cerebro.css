@@ -121,8 +121,8 @@
 @media (min-width: 1900px) { .cer-tip { left: 332px; } }
 .cer-tip strong { display: block; font-size: var(--t-body); font-weight: 600; }
 .cer-tip span { font-size: var(--t-small); color: var(--muted); }
-.cer-nota-sin-punto { position: absolute; left: 16px; top: 16px; z-index: 10; max-width: min(92vw, 420px); margin: 0; padding: 6px 12px; border-radius: 12px; font-size: var(--t-micro); color: var(--muted); }
-@media (min-width: 1900px) { .cer-nota-sin-punto { left: 332px; } }
+.cer-nota-sin-punto { position: absolute; left: 56px; top: 12px; z-index: 10; max-width: min(calc(100% - 72px), 420px); margin: 0; padding: 6px 12px; border-radius: 12px; font-size: var(--t-micro); color: var(--muted); }
+@media (min-width: 1900px) { .cer-nota-sin-punto { left: 376px; } }
 .cer-nota-luces { position: absolute; right: 16px; bottom: 64px; z-index: 10; max-width: min(92vw, 420px); margin: 0; padding: 6px 12px; border-radius: 12px; font-size: var(--t-micro); color: var(--muted); }
 
 /* ── El panel de leads del estado (flota al lateral del país) ── */
@@ -285,3 +285,5 @@
 .cer-fila-baja { align-items: start; }
 .cer-fila-baja > .rv-tarjeta { height: auto; }
 .cer-tabla-estados .rv-tabla { max-height: 340px; }
+/* Vacío dentro de una tarjeta (Rovaq ac-vacio): borde punteado de 1 px, radio 8, relleno 20×14; nunca sin borde dentro de una tarjeta alta. */
+[data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }

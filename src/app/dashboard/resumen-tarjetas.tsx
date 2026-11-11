@@ -1,6 +1,6 @@
 import { Bell, Flag } from 'lucide-react';
 import { fechaCorta, mxnEntero, numero, porcentaje } from '@/lib/formato';
-import { BotonEnlace, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import { BotonEnlace, Tarjeta } from '@/app/ui-v2/componentes';
 import { BarList, Bullet, Columnas, KindBadge, type ItemKpi } from '@/app/ui-v2/graficas';
 import { rotuloDiferencia } from './agentes/liquidacion/rotulo-diferencia';
 import { PERIODO_RANGO, RUTA_LIQUIDACION, type DatosResumen } from './resumen-modelo';
@@ -73,8 +73,6 @@ function Dato({ etiqueta, children, sello }: { etiqueta: string; children: React
 
 export function TarjetaDiferencias({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TResto }) {
   const k = d.kpis;
-  const tipos = d.porTipo ? [...d.porTipo].filter((t) => t.monto > 0).sort((a, b) => b.monto - a.monto).slice(0, 3) : null;
-  const tope = tipos && tipos.length ? tipos[0].monto : 1;
   return (
     <Tarjeta titulo={d.veDinero ? t('op.diferencias_vs_recuperado') : t('op.diferencias_en_liquidaciones')} info="resumen.diferencias_recuperado" estado={k === null ? 'error' : 'ok'} reintentar>
       {k ? (
@@ -88,16 +86,22 @@ export function TarjetaDiferencias({ d, t = T_RESTO_ES }: { d: DatosResumen; t?:
           <div data-cero-fuente="">
             <Bullet valor={k.viajesLiquidados > 0 ? k.tasaCuadre : null} maximo={100} matiz={3} etiqueta={t('op.cuadre_sin_diferencias')} formato={(v) => porcentaje(v, 0)} />
           </div>
-          {d.veDinero ? (
-            <div className="rv-res__tipos">
-              <p className="rv-res__sub">{t('op.donde_mas_pesa_historial')}</p>
-              {tipos === null ? <EstadoVacio titulo={t('op.no_disponible_ahora_no_es_cero')} /> : tipos.length === 0 ? <EstadoVacio titulo={t('op.sin_diferencias_registradas')} /> : (
-                <BarList etiqueta={t('op.donde_mas_pesan_las_diferencias')} matiz={6} maximo={tope} formato={mxnEntero}
-                  items={tipos.map((t) => ({ clave: t.tipo, etiqueta: rotuloDiferencia(t.tipo), valor: t.monto }))} />
-              )}
-            </div>
-          ) : null}
         </>
+      ) : null}
+    </Tarjeta>
+  );
+}
+
+/** «Top»: dónde más pesan las diferencias del historial, por tipo. Solo con acceso al dinero; null = «No es cero», nunca una barra en cero. */
+export function TarjetaTopTipos({ d, t = T_RESTO_ES }: { d: DatosResumen; t?: TResto }) {
+  const tipos = d.porTipo ? [...d.porTipo].filter((x) => x.monto > 0).sort((a, b) => b.monto - a.monto).slice(0, 5) : null;
+  const tope = tipos && tipos.length ? tipos[0].monto : 1;
+  return (
+    <Tarjeta titulo={t('op.donde_mas_pesa_historial')} info="resumen.diferencias_recuperado" estado={tipos === null ? 'error' : tipos.length === 0 ? 'vacio' : 'ok'} reintentar
+      mensaje={tipos && tipos.length === 0 ? t('op.sin_diferencias_registradas') : undefined}>
+      {tipos && tipos.length > 0 ? (
+        <BarList etiqueta={t('op.donde_mas_pesan_las_diferencias')} matiz={6} maximo={tope} formato={mxnEntero}
+          items={tipos.map((x) => ({ clave: x.tipo, etiqueta: rotuloDiferencia(x.tipo), valor: x.monto }))} />
       ) : null}
     </Tarjeta>
   );

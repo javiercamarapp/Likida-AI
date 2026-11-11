@@ -1,8 +1,9 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { listarAgentes, DEPARTAMENTOS } from '@/lib/likida/agentes/definiciones';
+import { listarAgentes, DEPARTAMENTOS, ESTADOS_AGENTE } from '@/lib/likida/agentes/definiciones';
 import {
   tiposAceptadosPorAgente, listarInsumosDeAgente, contarInsumosDeAgente, urlsFirmadasInsumos,
   crearInsumoArchivo, crearInsumoTexto, subirArchivoInsumo,
@@ -11,8 +12,9 @@ import {
 import { AGENTES_FINANCIEROS } from '@/lib/likida/agentes/finanzas';
 import { DatoInvalido } from '@/lib/likida/errores';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
-import { Aviso, EstadoVacio, Tarjeta } from '../../../../ui-v2/componentes';
+import { Aviso, EstadoVacio, StatusChip, Tarjeta } from '../../../../ui-v2/componentes';
 import { EsqueletoFicha } from '../../../../ui-v2/esqueletos';
+import '../../agentes.css';
 import { type ResultadoAccion } from '../../../ui/forma';
 import { FormularioInsumo, ListaInsumos } from './zona-insumos';
 import { getT } from '@/lib/i18n/servidor';
@@ -96,9 +98,30 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
     ...i, url: i.storagePath ? firmas.get(i.storagePath) ?? null : null,
   }));
 
+  const procesados = insumos.filter((i) => i.procesadoEn).length;
+  // La lista puede venir recortada: procesados y pendientes solo se cuentan si se leyó TODO; si no, sin dato (nunca una cifra a medias).
+  const completa = totalInsumos <= insumos.length;
+  const tonoEstado = { vivo: 'ok', pausado: 'warn', retirado: 'neutral', disenado: 'neutral' } as const;
+  const rotuloEstado = ESTADOS_AGENTE.find((e) => e.valor === agente.estado)?.rotulo ?? agente.estado;
+
   return (
     <EsqueletoFicha
+      area={t('agentes_insumos.ficha_de_agente')}
       titulo={t('agentes_insumos.bandeja_de_contexto', { agente: agente.nombre })}
+      etiquetaChips={t('agentes_insumos.estado_del_agente')}
+      etiquetaResumen={t('agentes_insumos.resumen_del_agente')}
+      chips={<>
+        <li><StatusChip tono={tonoEstado[agente.estado]}>{rotuloEstado}</StatusChip></li>
+        <li><StatusChip tono="neutral">{rotuloDepartamento}</StatusChip></li>
+        <li><StatusChip tono={LEE_INSUMOS ? 'ok' : 'neutral'}>{LEE_INSUMOS ? t('agentes_insumos.lee_insumos') : t('agentes_insumos.no_lee_insumos')}</StatusChip></li>
+      </>}
+      etiquetaCifras={t('agentes_insumos.cifras_de_insumos')}
+      cifras={uniformes([
+        { etiqueta: t('agentes_insumos.kpi_insumos'), valor: totalInsumos, formato: 'entero' },
+        { etiqueta: t('agentes_insumos.kpi_procesados'), valor: completa ? procesados : null, formato: 'entero', mensaje: t('agentes_insumos.lista_recortada') },
+        { etiqueta: t('agentes_insumos.kpi_pendientes'), valor: completa ? insumos.length - procesados : null, formato: 'entero', mensaje: t('agentes_insumos.lista_recortada') },
+        { etiqueta: t('agentes_insumos.kpi_tipos'), valor: tiposAceptados.length, formato: 'entero' },
+      ])}
       volver={{ href: '/admin/agentes', etiqueta: t('agentes_insumos.volver_a_agentes') }}
       avisos={
       <Aviso tono="info">{t('agentes_insumos.id', { rotuloDepartamento })}{' '}<code className="cifra-mono">{agente.id}</code>{' '}{t('agentes_insumos.entre_mas_le_das_mas_entiende')}{' '}{LEE_INSUMOS

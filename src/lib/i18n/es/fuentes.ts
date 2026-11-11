@@ -41,7 +41,7 @@ export const fuentes = {
   // Pantallas
   'conexiones.titulo': 'Estado de tus fuentes de datos',
   'conexiones.apoyo': 'Cada fuente dice si está al día, atrasada, caída o sin conectar, según cuándo llegó su última señal real. Lo que no se pudo leer dice «sin dato»: nunca se pinta como al día.',
-  'conexiones.resumen': '{alDia} de {total} al día',
+  'conexiones.resumen': '{alDia} de {total} fuentes de datos al día',
   'conexiones.arranque': 'Arranque: {conectadas} de {total} conectadas',
   'conexiones.silencio': 'Ningún evento de WhatsApp en {horas} horas hábiles con {viajes} viajes abiertos. Revisa que el número siga activo y que los choferes estén escribiendo.',
   'conexiones.cadencia': 'Cadencia esperada: una señal {cada}.',

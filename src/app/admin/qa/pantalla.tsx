@@ -1,6 +1,7 @@
+import { usdCorto } from './usd-corto';
 import { uniformes } from '@/app/admin/cifras-uniformes';
 import Link from 'next/link';
-import { fechaHoraMx, numero, usd, usd4 } from '@/lib/formato';
+import { fechaHoraMx, numero, usd } from '@/lib/formato';
 import { Tarjeta, TablaBase, StatusChip, BotonEnlace, type ColumnaBase, type TonoEstado } from '@/app/ui-v2/componentes';
 import { EsqueletoTablaMaestra, CajonVistaRapida } from '@/app/ui-v2/esqueletos';
 import { BarraVistas, PanelesVistas, ProveedorVistas, type OpcionVista } from '../aprobaciones/vistas';
@@ -62,7 +63,7 @@ export function PantallaQa({
       id: 'veredicto', titulo: t('qa_banco_verdad.veredicto'), alinear: 'der',
       celda: (c) => { const res = resumenVeredicto(c.veredicto); return res ? t('qa_pantalla.veredicto_resumen', { ok: res.ok, sin: res.noVerificado, fallo: res.fallo }) : '—'; },
     },
-    { id: 'costo', titulo: t('qa_pantalla.costo_real'), alinear: 'der', celda: (c) => usd4(c.costoUsdTotal ?? 0) },
+    { id: 'costo', titulo: t('qa_pantalla.costo_real'), alinear: 'der', celda: (c) => usdCorto(c.costoUsdTotal ?? 0) },
   ];
 
   const opcionesVistas: readonly OpcionVista<VistaQa>[] = [
@@ -103,7 +104,7 @@ export function PantallaQa({
             ? { etiqueta: t('qa_pantalla.corridas_lanzadas'), valor: corridas.length, formato: 'entero' }
             : { etiqueta: t('qa_pantalla.corridas_lanzadas'), valor: null, estado: 'error', mensaje: t('qa_pantalla.no_se_pudo_leer_2', { historialError }) },
           gastoError === null && gastoHoy !== null
-            ? { etiqueta: t('qa_pantalla.gasto_real_de_hoy'), valor: usd4(gastoHoy), nota: t('qa_pantalla.de_de_tope_diario_suma_del', { usd: usd(topeDiaUsd) }) }
+            ? { etiqueta: t('qa_pantalla.gasto_real_de_hoy'), valor: usdCorto(gastoHoy), nota: t('qa_pantalla.de_de_tope_diario_suma_del', { usd: usd(topeDiaUsd) }) }
             : { etiqueta: t('qa_pantalla.gasto_de_hoy'), valor: null, estado: 'error', mensaje: t('qa_pantalla.no_se_pudo_leer_3', { v: gastoError ?? t('qa_pantalla.sin_dato') }) },
       ])}
       filtros={<BarraVistas<VistaQa> etiqueta={t('qa_pantalla.vistas')} opciones={opcionesVistas} />}
@@ -114,7 +115,7 @@ export function PantallaQa({
             { etiqueta: t('salud_sistema.estado'), valor: pillSel.etiqueta },
             { etiqueta: t('qa_pantalla.escenario'), valor: sel.escenario === 'demo_guion' ? t('qa_pantalla.guion_del_demo') : t('qa_pantalla.feliz') },
             { etiqueta: t('qa_banco_verdad.veredicto'), valor: resSel ? t('qa_pantalla.veredicto_resumen', { ok: resSel.ok, sin: resSel.noVerificado, fallo: resSel.fallo }) : '—' },
-            { etiqueta: t('qa_pantalla.costo_real'), valor: usd4(sel.costoUsdTotal ?? 0) },
+            { etiqueta: t('qa_pantalla.costo_real'), valor: usdCorto(sel.costoUsdTotal ?? 0) },
           ]}
           pie={<BotonEnlace variante="primary" href={`/admin/qa/${sel.id}`}>{t('qa_pantalla.vr_abrir')}</BotonEnlace>}
         >
