@@ -77,7 +77,7 @@ function BotonEnvio({ etiqueta, ocupado, tono = 'marca', icono }: {
 }) {
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante={tono === 'marca' ? 'primary' : tono === 'malo' ? 'danger' : 'secondary'} tamano="sm"
+    <Boton type="submit" variante={tono === 'marca' ? 'primary' : tono === 'malo' ? 'danger' : 'secondary'}
       loading={pending} icono={icono ? <Icono icono={icono} /> : undefined}>
       {pending ? ocupado : etiqueta}
     </Boton>
@@ -107,7 +107,7 @@ export function FormaEscribirRegla({ accion, ejemplos }: {
 
       <div className="rv-reglas__ejemplos">
         {ejemplos.map((e) => (
-          <Boton key={e} type="button" variante="secondary" tamano="sm" onClick={() => setTexto(e)}>
+          <Boton key={e} type="button" variante="secondary" onClick={() => setTexto(e)}>
             {e}
           </Boton>
         ))}

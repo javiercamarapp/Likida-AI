@@ -19,3 +19,7 @@
 /* F26: acciones en la fila de la tabla y detalle del cajón. */
 .rv-cot__acciones-fila { display: inline-flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
 .rv-cot__detalle { display: grid; gap: 10px; }
+
+/* Fieldset plano en el cajón: la semántica de grupo se conserva; el marco con muesca del navegador no. */
+[data-ui="v2"] .rv-fieldset.rv-cot__plano { padding: 0; gap: 8px; border: 0; border-radius: 0; background: transparent; }
+[data-ui="v2"] .rv-fieldset.rv-cot__plano > .rv-fieldset__leyenda { padding: 0; }

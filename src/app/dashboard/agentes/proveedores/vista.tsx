@@ -79,7 +79,7 @@ export function VistaAgenteProveedores({
   const sinExportar = aprobadas.filter((f) => f.exportadaEn === null).length;
   const exportadas = aprobadas.length - sinExportar;
 
-  const cifras: PropsCifra[] = [
+  const cifras: PropsCifra[] = ([
     { info: 'proveedores.esperan_decision', etiqueta: tx('proveedores.vista.esperan_tu_decision'), valor: numero(pendientes.length), tono: pendientes.length > 0 ? 'warn' : undefined },
     {
       info: 'proveedores.aprobadas', etiqueta: tx('proveedores.vista.aprobadas'), valor: numero(aprobadas.length),
@@ -87,7 +87,7 @@ export function VistaAgenteProveedores({
     },
     { info: 'proveedores.rechazadas', etiqueta: tx('proveedores.vista.rechazadas'), valor: numero(rechazadas.length) },
     { info: 'proveedores.receptor_ajeno', etiqueta: tx('proveedores.vista.con_receptor_ajeno'), valor: numero(receptorAjeno), nota: tx('proveedores.vista.el_cfdi_no_es_a'), tono: receptorAjeno > 0 ? 'bad' : undefined },
-  ];
+  ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
 
   return (
     <EsqueletoTablaMaestra

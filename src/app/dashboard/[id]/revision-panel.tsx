@@ -180,7 +180,8 @@ function Forma({ accion, gastos, folio, yaFirmadaPorElMotor }: {
     <form action={enviar} className="rv-liq__firma">
       {yaFirmadaPorElMotor && <p className="rv-liq__nota">{tr('liquidacion.revision.cuadroSolaCorregible')}</p>}
 
-      <Fieldset leyenda={tr('liquidacion.revision.queHacer')}>
+      {/* Mismo fieldset/legend accesible, pero sin el marco de navegador: rótulo 13/600 y opciones en fila (clase `rv-liq__plano`). */}
+      <Fieldset leyenda={tr('liquidacion.revision.queHacer')} className="rv-liq__plano">
         <div className="rv-liq__opciones">
           {OPCIONES.map((o) => (
             <Radio key={o.id} name="accion" value={o.id} checked={elegida === o.id} onChange={() => setElegida(o.id)} etiqueta={tr(`liquidacion.revision.${o.clave}`)} />
