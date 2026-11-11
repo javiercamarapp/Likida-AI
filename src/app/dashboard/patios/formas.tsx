@@ -5,6 +5,8 @@ import { useFormStatus } from 'react-dom';
 import { Plus, Save, Trash2 } from 'lucide-react';
 import { AvisoResultado, Boton, BotonConfirmar, CampoSelect, CampoTexto, Icono, clasesBoton, useNotificarResultado } from '@/app/ui-v2/componentes';
 import './patios.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, datos: FormData) => Promise<ResultadoForma>;
@@ -20,17 +22,18 @@ function Enviar({ etiqueta, enviando, icono }: { etiqueta: string; enviando: str
 
 /** Crear un patio: nombre y ciudad, nada más. */
 export function FormaNuevoPatio({ accion }: { accion: AccionForma }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-forma">
       <div className="rv-forma__rejilla">
-        <CampoTexto id="patio-nuevo-nombre" name="nombre" etiqueta="Nombre del patio" obligatorio minLength={2} maxLength={80}
-          placeholder="Patio Norte" autoComplete="off"
-          ayuda="Tal como lo escribirás en las plantillas de carga. «Patio Norte» y «patio norte» son el mismo patio." />
-        <CampoTexto id="patio-nuevo-ciudad" name="ciudad" etiqueta="Ciudad (opcional)" maxLength={80} placeholder="Monterrey, N.L." autoComplete="off" />
+        <CampoTexto id="patio-nuevo-nombre" name="nombre" etiqueta={t('patios.f.nombre')} obligatorio minLength={2} maxLength={80}
+          placeholder={t('patios.f.nombre.ph')} autoComplete="off"
+          ayuda={t('patios.f.nombre.ayuda')} />
+        <CampoTexto id="patio-nuevo-ciudad" name="ciudad" etiqueta={t('patios.f.ciudad')} maxLength={80} placeholder={t('patios.f.ciudad.ph')} autoComplete="off" />
       </div>
       <AvisoResultado estado={estado} />
-      <Enviar etiqueta="Crear patio" enviando="Creando…" icono={<Icono icono={Plus} />} />
+      <Enviar etiqueta={t('patios.f.crear')} enviando={t('patios.f.creando')} icono={<Icono icono={Plus} />} />
     </form>
   );
 }
@@ -41,6 +44,7 @@ export function FormaEditarPatio({ accionEditar, accionEliminar, patio }: {
   accionEliminar: AccionForma;
   patio: { id: string; nombre: string; ciudad: string | null; operadores: number; unidades: number; jefes: number };
 }) {
+  const { t, tp } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accionEditar, null);
   const [estadoBorrar, borrar] = useActionState(accionEliminar, null);
   // El borrado es una acción de fila: su resultado va a un toast (el error no se va solo).
@@ -51,24 +55,24 @@ export function FormaEditarPatio({ accionEditar, accionEliminar, patio }: {
       <form action={despachar} className="rv-forma">
         <input type="hidden" name="terminalId" value={patio.id} />
         <div className="rv-forma__rejilla">
-          <CampoTexto id={`${id}-nombre`} name="nombre" etiqueta="Nombre" obligatorio minLength={2} maxLength={80} defaultValue={patio.nombre} />
-          <CampoTexto id={`${id}-ciudad`} name="ciudad" etiqueta="Ciudad (opcional)" maxLength={80} defaultValue={patio.ciudad ?? ''} />
+          <CampoTexto id={`${id}-nombre`} name="nombre" etiqueta={t('patios.f.nombre.corto')} obligatorio minLength={2} maxLength={80} defaultValue={patio.nombre} />
+          <CampoTexto id={`${id}-ciudad`} name="ciudad" etiqueta={t('patios.f.ciudad')} maxLength={80} defaultValue={patio.ciudad ?? ''} />
         </div>
         <AvisoResultado estado={estado} />
-        <Enviar etiqueta="Guardar" enviando="Guardando…" icono={<Icono icono={Save} />} />
+        <Enviar etiqueta={t('patios.f.guardar')} enviando={t('patios.f.guardando')} icono={<Icono icono={Save} />} />
       </form>
 
       <form action={borrar}>
         <input type="hidden" name="terminalId" value={patio.id} />
         <BotonConfirmar
-          etiqueta="Borrar patio" tono="peligro" icono={<Icono icono={Trash2} />}
-          titulo={`Borrar «${patio.nombre}»`}
+          etiqueta={t('patios.f.borrar')} tono="peligro" icono={<Icono icono={Trash2} />}
+          titulo={t('patios.f.borrar.titulo', { nombre: patio.nombre })}
           descripcion={
             patio.jefes > 0
-              ? <>Este patio tiene {patio.jefes} {patio.jefes === 1 ? 'jefe de tráfico asignado' : 'jefes de tráfico asignados'}. Asígnales otro patio (o «toda la flota») antes de borrarlo: si no, pasarían a ver y corregir toda la flota sin que nadie lo decidiera.</>
-              : <>Los {patio.operadores} operadores y las {patio.unidades} unidades que tiene quedarán <strong>sin patio</strong>; no se borra ninguno. Los viajes conservan su historial.</>
+              ? tp('patios.f.borrar.conjefes', patio.jefes)
+              : t('patios.f.borrar.sinjefes', { operadores: patio.operadores, unidades: patio.unidades })
           }
-          etiquetaConfirmar="Sí, borrar el patio"
+          etiquetaConfirmar={t('patios.f.borrar.si')}
           className={clasesBoton('danger')}
         />
       </form>
@@ -82,6 +86,7 @@ export function FormaJefe({ accion, jefe, patios }: {
   jefe: { userId: string; etiqueta: string; terminalId: string };
   patios: Array<{ id: string; nombre: string }>;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   useNotificarResultado(estado);
   const id = `jefe-${jefe.userId}`;
@@ -89,10 +94,10 @@ export function FormaJefe({ accion, jefe, patios }: {
     <form action={despachar} className="rv-forma__fila">
       <input type="hidden" name="userId" value={jefe.userId} />
       <CampoSelect id={id} name="terminalId" etiqueta={jefe.etiqueta} defaultValue={jefe.terminalId} className="rv-pt__selector">
-        <option value="">Toda la flota (sin patio)</option>
+        <option value="">{t('patios.f.toda')}</option>
         {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
       </CampoSelect>
-      <Enviar etiqueta="Asignar" enviando="Guardando…" icono={<Icono icono={Save} />} />
+      <Enviar etiqueta={t('patios.f.asignar.corto')} enviando={t('patios.f.guardando')} icono={<Icono icono={Save} />} />
     </form>
   );
 }
@@ -104,23 +109,23 @@ export function FormaSinPatio({ accion, tabla, cuantos, patios }: {
   cuantos: number;
   patios: Array<{ id: string; nombre: string }>;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, despachar] = useActionState(accion, null);
   useNotificarResultado(estado);
-  const sustantivo = tabla === 'operador' ? 'operadores' : 'unidades';
   const id = `sinpatio-${tabla}`;
   if (cuantos === 0) return null;
   return (
     <form action={despachar} className="rv-forma__fila">
       <input type="hidden" name="tabla" value={tabla} />
-      <CampoSelect id={id} name="terminalId" obligatorio defaultValue="" etiqueta={`${cuantos} ${sustantivo} activos sin patio`} className="rv-pt__selector">
-        <option value="" disabled>Elige el patio…</option>
+      <CampoSelect id={id} name="terminalId" obligatorio defaultValue="" etiqueta={t(`patios.f.sinpatio.${tabla}`, { n: cuantos })} className="rv-pt__selector">
+        <option value="" disabled>{t('patios.f.elige')}</option>
         {patios.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
       </CampoSelect>
       <BotonConfirmar
-        etiqueta="Asignarlos a este patio" tono="normal"
-        titulo={`Asignar ${cuantos} ${sustantivo} a un patio`}
-        descripcion={<>Los {cuantos} {sustantivo} activos que hoy no tienen patio pasarán al patio que elegiste. Los que ya tienen patio no se tocan.</>}
-        etiquetaConfirmar="Sí, asignarlos"
+        etiqueta={t('patios.f.asignar')} tono="normal"
+        titulo={t(`patios.f.asignar.titulo.${tabla}`, { n: cuantos })}
+        descripcion={t(`patios.f.asignar.cuerpo.${tabla}`, { n: cuantos })}
+        etiquetaConfirmar={t('patios.f.asignar.si')}
         className={clasesBoton('secondary')}
       />
     </form>
