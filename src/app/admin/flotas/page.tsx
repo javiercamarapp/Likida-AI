@@ -9,8 +9,9 @@ import { telefonosJefe } from '@/lib/likida/contactos';
 import { getPlanes } from '@/lib/saas/suscripcion';
 import { numero } from '@/lib/formato';
 import { requireSuperadmin } from '@/lib/auth/guard';
-import { BotonEnlace, EstadoError, FormaEnCajon, Icono, MarcoPagina, StatusChip, Tarjeta } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { BotonEnlace, EstadoError, FormaEnCajon, Icono, StatusChip, Tarjeta } from '../../ui-v2/componentes';
+import type { PropsCifra } from '../../ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { accionCrearFlota } from './acciones';
 import { CamposAltaFlota } from './alta';
@@ -20,15 +21,16 @@ import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /** El marco de la pantalla, UNO solo (también para el error de lectura): encabezado y acción de alta no cambian entre estados. */
-function PantallaClientes({ children, alta, t }: { children: ReactNode; alta?: ReactNode; t: TrDe<'admin_flotas'> }) {
+function PantallaClientes({ children, alta, cifras, t }: { children: ReactNode; alta?: ReactNode; cifras?: PropsCifra[]; t: TrDe<'admin_flotas'> }) {
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
+      cifras={cifras} etiquetaCifras={t('flotas.resumen_de_clientes')}
       area="Negocio" titulo={t('flotas.clientes')}
       apoyo={t('flotas.flotas_dadas_de_alta')}
       acciones={alta ?? <BotonEnlace href="/admin/flotas?alta=1" variante="primary" icono={<Icono icono={Plus} />}>{t('flotas.nueva_flota')}</BotonEnlace>}
     >
       {children}
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
@@ -89,8 +91,17 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
     },
   ];
 
+  const cifras: PropsCifra[] = [
+    { etiqueta: t('flotas.flotas_dadas_de_alta_2'), valor: r.tenants, formato: 'entero' },
+    {
+      etiqueta: t('flotas.con_el_arranque_completo'), valor: medidas.length === 0 && filas.length > 0 ? null : completas, formato: 'entero',
+      nota: medidas.length < filas.length ? t('flotas.se_midieron_de_flotas', { length: medidas.length, length2: filas.length }) : t('flotas.las_seis_casillas_cumplidas'),
+    },
+    { etiqueta: t('flotas.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero', nota: t('flotas.de_todas_las_flotas') },
+  ];
+
   return (
-    <PantallaClientes t={t} alta={(
+    <PantallaClientes t={t} cifras={cifras} alta={(
       /* «Nueva flota» abre el alta en un cajón, sin salir de la lista. La acción es la MISMA (`accionCrearFlota`, con su puerta, su segundo
          factor y su bitácora); `?alta=1` (el enlace de antes) sigue abriéndolo. */
       <FormaEnCajon
@@ -101,15 +112,6 @@ export default async function FlotasPage({ searchParams }: { searchParams?: Prom
         <CamposAltaFlota planes={planes} t={t} />
       </FormaEnCajon>
     )}>
-      <TiraCifras etiqueta={t('flotas.resumen_de_clientes')}>
-        <Cifra etiqueta={t('flotas.flotas_dadas_de_alta_2')} valor={r.tenants} formato="entero" />
-        <Cifra
-          etiqueta={t('flotas.con_el_arranque_completo')} valor={medidas.length === 0 && filas.length > 0 ? null : completas} formato="entero"
-          nota={medidas.length < filas.length ? t('flotas.se_midieron_de_flotas', { length: medidas.length, length2: filas.length }) : t('flotas.las_seis_casillas_cumplidas')}
-        />
-        <Cifra etiqueta={t('flotas.viajes_procesados')} valor={r.viajesProcesados} formato="entero" nota={t('flotas.de_todas_las_flotas')} />
-      </TiraCifras>
-
       <Tarjeta
         titulo={t('flotas.flotas')} estado={filas.length === 0 ? 'vacio' : 'ok'} mensaje={t('flotas.sin_flotas_dadas_de')}
         detalle={t('flotas.da_de_alta_la')}
