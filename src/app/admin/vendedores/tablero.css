@@ -60,7 +60,7 @@
 [data-ui="v2"] .card.ven-desempeno table tbody th { padding: 0 8px; white-space: nowrap; }
 [data-ui="v2"] .card.ven-desempeno table thead th:first-child { padding-left: 8px; }
 /* La tarjeta abre el cajón de detalle; sus acciones viven allí. */
-[data-ui="v2"] .rv-btn.ven-tarjeta__abrir { justify-content: flex-start; align-items: stretch; min-height: 0; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
+[data-ui="v2"] .rv-btn.ven-tarjeta__abrir { justify-content: flex-start; align-items: stretch; min-height: 0; border-radius: 8px; box-shadow: none; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; font: inherit; color: inherit; text-align: left; cursor: pointer; min-width: 0; }
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir:hover { background: none; color: inherit; }
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir::after { content: none; }
 [data-ui="v2"] .rv-btn.ven-tarjeta__abrir:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; border-radius: 4px; }
