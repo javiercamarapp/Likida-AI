@@ -89,7 +89,8 @@
 [data-ui="v2"] .rv-grupo__cuerpo { display: grid; grid-template-rows: 0fr; visibility: hidden; }
 [data-ui="v2"] .rv-grupo[data-abierto] .rv-grupo__cuerpo { grid-template-rows: 1fr; visibility: visible; }
 [data-ui="v2"] .rv-grupo__int { min-height: 0; overflow: hidden; }
-[data-ui="v2"] .rv-grupo[data-abierto] .rv-grupo__chev { transform: rotate(180deg); }
+/* › cerrado, ⌄ abierto (como Rovaq): el chevron es ChevronRight y gira 90° */
+[data-ui="v2"] .rv-grupo[data-abierto] .rv-grupo__chev { transform: rotate(90deg); }
 [data-ui="v2"] .rv-grupo[data-estatico] .rv-grupo__cuerpo { display: block; }
 
 /* Ítem de navegación: alto 32, padding 6 10, gap 9, 13/500 (activo también 500), icono 16, radio 8; toque 44 por ::after */

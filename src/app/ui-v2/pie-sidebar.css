@@ -43,7 +43,8 @@
   border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 1; background: var(--ui-soft); color: var(--muted);
 }
 [data-ui="v2"] .rv-ps-avisos { border: 0; background: transparent; }
-[data-ui="v2"] .rv-ps-avisos .rv-contador[data-urgente="si"] { background: var(--senal); color: var(--surface); }
+/* Punto de no leídos: 8 px burdeos (--senal), al extremo derecho de la fila; en el riel se monta sobre la esquina del icono */
+[data-ui="v2"] .rv-ps-punto { margin-left: auto; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--senal); }
 
 /* Acceso cruzado: tarjeta de 36 con borde, icono y texto (como «Administración de Rovaq AI») */
 [data-ui="v2"] .rv-ps-acceso {
@@ -101,7 +102,7 @@
   [data-ui="v2"] .rv-sb[data-riel] .rv-ps-acceso { justify-content: center; margin: 0 8px; padding: 0; height: 40px; border-color: transparent; background: transparent; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-ps-acceso__txt { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   [data-ui="v2"] .rv-sb[data-riel] .rv-ps-sindato { display: none; }
-  [data-ui="v2"] .rv-sb[data-riel] .rv-ps-avisos .rv-contador { display: none; }
+  [data-ui="v2"] .rv-sb[data-riel] .rv-ps-avisos .rv-ps-punto { position: absolute; top: 8px; right: 18px; margin: 0; }
 }
 @media (min-width: 768px) and (max-width: 1023.98px) {
   [data-ui="v2"] .rv-sb .rv-ps-org > .rv-ps-cap,
@@ -113,7 +114,7 @@
   [data-ui="v2"] .rv-sb .rv-ps-acceso { justify-content: center; margin: 0 8px; padding: 0; height: 40px; border-color: transparent; background: transparent; }
   [data-ui="v2"] .rv-sb .rv-ps-acceso__txt { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   [data-ui="v2"] .rv-sb .rv-ps-sindato { display: none; }
-  [data-ui="v2"] .rv-sb .rv-ps-avisos .rv-contador { display: none; }
+  [data-ui="v2"] .rv-sb .rv-ps-avisos .rv-ps-punto { position: absolute; top: 8px; right: 18px; margin: 0; }
 }
 
 /* ── Cabecera de escritorio: botón «Guía» como el de Rovaq (píldora de 28, borde 1, fondo suave, texto atenuado) ── */

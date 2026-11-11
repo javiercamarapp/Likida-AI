@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
+import { LayoutGrid, ChevronRight, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
 import { type Item, COPILOTO, SECCIONES, entradaDeRuta } from './rutas';
 import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
 import { useRequiereAccion } from './cabecera-admin';
@@ -61,7 +61,7 @@ function Seccion({ titulo, items, pathname, abierta, onAbrir }: {
           aria-expanded={esta} aria-controls={`${id}-items`}>
           {(() => { const Ico = ICONO_SECCION[titulo]; return Ico ? <Ico className="rv-grupo__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden /> : null; })()}
           <span className="rv-grupo__tt">{etiquetaNav(tr, titulo)}</span>
-          <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
+          <ChevronRight className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
         </button>
       </h2>
       <div id={`${id}-items`} className="rv-grupo__cuerpo" role="region" aria-labelledby={id}>

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { ChevronDown, Settings } from 'lucide-react';
+import { ChevronRight, Settings } from 'lucide-react';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
 import { etiquetaNav, etiquetaRol } from '@/lib/i18n/nav';
@@ -150,7 +150,7 @@ export function ArbolMenu({ menu, sufijo, pathname, perfil, insignias, alNavegar
               <button type="button" id={idT} className="rv-grupo__t rv-grupo__tog" aria-expanded={esta} aria-controls={`${idT}-c`}
                 onClick={() => setAbierta(esta ? null : g.id)}>
                 {etiquetaNav(tr, g.titulo)}
-                <ChevronDown className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
+                <ChevronRight className="rv-grupo__chev" width={14} height={14} strokeWidth={TRAZO_ICONO} aria-hidden />
               </button>
             </h2>
             <div id={`${idT}-c`} className="rv-grupo__cuerpo" role="region" aria-labelledby={idT}>

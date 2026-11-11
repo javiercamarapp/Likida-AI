@@ -38,6 +38,18 @@ describe('PieSidebar: estados', () => {
     expect(sin).not.toContain('rv-ps-acceso');
     expect(con).toContain('Administración de Likida');
   });
+  it('Avisos: punto de no leídos solo si hay pendientes; sin dato es «?»; la cifra va en el aria-label, no pintada', () => {
+    const base = { organizacion: org([]), tarjeta };
+    const con = pintar({ ...base, avisos: { href: '/av', pendientes: 18 } });
+    expect(con).toContain('rv-ps-punto');
+    expect(con).not.toContain('rv-contador');
+    expect(con).toContain('aria-label="Avisos: 18 pendientes"');
+    expect(pintar({ ...base, avisos: { href: '/av', pendientes: 0 } })).not.toContain('rv-ps-punto');
+    expect(pintar({ ...base, avisos: { href: '/av' } })).not.toContain('rv-ps-punto');
+    const caida = pintar({ ...base, avisos: { href: '/av', pendientes: null } });
+    expect(caida).not.toContain('rv-ps-punto');
+    expect(caida).toContain('rv-ps-sindato');
+  });
   it('sin pantalla de avisos la fila no existe', () => {
     expect(pintar({ organizacion: org([]), avisos: null, tarjeta })).not.toContain('rv-ps-avisos');
   });
