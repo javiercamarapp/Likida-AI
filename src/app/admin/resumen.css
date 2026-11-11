@@ -80,3 +80,8 @@
 
 /* Eyebrow de un panel (Rovaq): 12/500, mayúsculas, tracking 1.2, sobre el contenido de la tarjeta. */
 [data-ui="v2"] .adm-eyebrow { margin: 0 0 8px; font: 500 12px/1.2 var(--font-sans-ui, inherit); letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+
+/* Elegir flota: la fila elegida va en tinta (negra con texto blanco), como la fila resaltada del selector de cliente de Rovaq. */
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) { background: var(--ink); color: var(--surface); }
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]) :is(.adm-res-fila__titulo, .adm-flota-id, svg, th) { color: inherit; }
+[data-ui="v2"] .rv-tb tbody tr:has(.adm-res-fila[data-activa]):hover { background: var(--ink); }
