@@ -1264,6 +1264,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'e26.con_articulo': 'Article or rule',
   'e26.con_cerrar': 'Close',
   'e26.con_ver': 'View',
+  'e27.con_detalle': 'Detail',
   'e26.con_pie': '{n} of {total} sheets',
   'e26.perfil_mfa_activo': 'On',
   'e26.perfil_mfa_inactivo': 'Off',

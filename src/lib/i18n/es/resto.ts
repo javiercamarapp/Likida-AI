@@ -1262,6 +1262,7 @@ export const resto = {
   'e26.con_articulo': 'Artículo o regla',
   'e26.con_cerrar': 'Cerrar',
   'e26.con_ver': 'Ver ficha',
+  'e27.con_detalle': 'Detalle',
   'e26.con_pie': '{n} de {total} fichas',
   'e26.perfil_mfa_activo': 'Activo',
   'e26.perfil_mfa_inactivo': 'Sin activar',
