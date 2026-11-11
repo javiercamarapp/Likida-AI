@@ -162,6 +162,7 @@ export default async function UsuariosPage({
 
   async function invitarUsuario(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -234,6 +235,7 @@ export default async function UsuariosPage({
 
   async function cambiarRol(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -253,6 +255,7 @@ export default async function UsuariosPage({
 
   async function darDeBaja(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -267,6 +270,7 @@ export default async function UsuariosPage({
 
   async function cerrarSesiones(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -282,6 +286,7 @@ export default async function UsuariosPage({
 
   async function reactivar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -301,6 +306,7 @@ export default async function UsuariosPage({
 
   async function reenviar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;

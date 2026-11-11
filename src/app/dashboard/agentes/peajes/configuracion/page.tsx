@@ -168,24 +168,28 @@ export default async function PaginaConfiguracionPeajes({
   // ── Buzón ──
   async function accionActivarBuzon() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await activarBuzon(tenantId)) ? tx('rest.buzon_activado_copia_la_llave_y') : tx('rest.error_no_se_pudo_activar_el'));
   }
   async function accionDesactivarBuzon() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await desactivarBuzon(tenantId)) ? tx('rest.buzon_desactivado_el_endpoint_rechaza_todo') : tx('rest.error_no_se_pudo_desactivar_intentalo'));
   }
   async function accionRotarLlave() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await rotarLlaveBuzon(tenantId)) ? tx('rest.llave_rotada_la_anterior_dejo_de') : tx('rest.error_no_se_pudo_rotar_la'));
   }
   async function accionReintentarArchivo(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const id = String(fd.get('archivo') ?? '');
@@ -195,24 +199,28 @@ export default async function PaginaConfiguracionPeajes({
   // ── Recepción por correo y pull (0563) ──
   async function accionActivarCorreo() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await activarCorreoPeajes(tenantId)) ? tx('rest.correo_activado_comparte_la_direccion_solo') : tx('rest.error_no_se_pudo_activar_el_2'));
   }
   async function accionDesactivarCorreo() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await desactivarCorreoPeajes(tenantId)) ? tx('rest.correo_apagado_lo_que_llegue_a') : tx('rest.error_no_se_pudo_apagar_el'));
   }
   async function accionRotarCorreo() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await rotarCorreoPeajes(tenantId)) ? tx('rest.direccion_cambiada_la_anterior_dejo_de') : tx('rest.error_no_se_pudo_cambiar_la'));
   }
   async function accionGuardarRemitentes(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarRemitentesPeajes(tenantId, String(fd.get('remitentes') ?? '').split(/[\n,;]+/));
@@ -220,6 +228,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionGuardarPull(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarPullPeajes(tenantId, {
@@ -229,12 +238,14 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionApagarPull() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await apagarPullPeajes(tenantId)) ? tx('rest.consulta_automatica_apagada') : tx('rest.error_no_se_pudo_apagar'));
   }
   async function accionBorrarCredencialPull() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await borrarCredencialPull(tenantId)) ? 'Token borrado.' : tx('rest.error_no_se_pudo_borrar_el'));
@@ -257,6 +268,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── TAGs ──
   async function accionAltaTag(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await altaTag(tenantId, {
@@ -266,6 +278,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionBajaTag(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await bajaTag(tenantId, String(fd.get('tag') ?? ''), { fecha: fd.get('fecha'), motivo: fd.get('motivo') });
@@ -294,6 +307,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionEstadoCaseta(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activa = String(fd.get('activa')) === 'true';
@@ -314,6 +328,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionEstadoGeocerca(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaStandBy(sp, tenantId, 'gps');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activa = String(fd.get('activa')) === 'true';
@@ -338,6 +353,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionEstadoCurso(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaStandBy(sp, tenantId, 'cursos');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activo = String(fd.get('activo')) === 'true';
@@ -347,6 +363,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Reglas de cobro (revisión de cobros) ──
   async function accionGuardarReglaCaseta(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const clases = parsearClases(String(fd.get('clases') ?? ''));
@@ -369,6 +386,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionAltaBajaTag(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await altaBajaDeTag(tenantId, { tag: String(fd.get('tag') ?? ''), bajaEn: String(fd.get('baja_en') ?? ''), motivo: String(fd.get('motivo') ?? '') || null });
@@ -376,12 +394,14 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionQuitarBajaTag(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await quitarBajaDeTag(tenantId, String(fd.get('baja') ?? ''))) ? 'Baja del TAG quitada.' : tx('rest.error_no_se_pudo_quitar_la'));
   }
   async function accionGuardarExcepcionUnidad(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarExcepcionUnidad(tenantId, { caseta: String(fd.get('caseta') ?? ''), unidad: String(fd.get('unidad') ?? ''), nota: String(fd.get('nota') ?? '') || null });
@@ -389,6 +409,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionQuitarExcepcionUnidad(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await quitarExcepcionUnidad(tenantId, String(fd.get('excepcion') ?? ''))) ? tx('rest.excepcion_quitada') : tx('rest.error_no_se_pudo_quitar_la_2'));
@@ -397,6 +418,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Tarifario ──
   async function accionImportarTarifas(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
@@ -413,6 +435,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionConfirmarTarifa(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
@@ -422,6 +445,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionSugerirPasada() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     let ultimo: Awaited<ReturnType<typeof listarDesgloses>>;
@@ -439,6 +463,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Umbrales, plazo y avisos ──
   async function accionGuardarUmbrales(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const n = (k: string) => parsearImporteMx(String(fd.get(k) ?? ''));
@@ -455,6 +480,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionGuardarAvisos(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const dias = parsearDiasAviso(String(fd.get('aviso_dias') ?? ''));
@@ -469,6 +495,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionGuardarDestinatario(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarDestinatarioAtipicos(tenantId, String(fd.get('telefono') ?? ''));
@@ -478,6 +505,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Cruce de cobros con viajes (T-A2-21): el interruptor por flota ──
   async function accionGuardarCruceViajes(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId, 'administracion');
     if (no) return volverConfig(sufijo, `error:${no}`);
     const activo = String(fd.get('activo') ?? '') === '1';
@@ -496,6 +524,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Unidades inmovilizadas (T-A2-36) ──
   async function accionCargarInmovilizadas(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const a = await archivoDeForm(fd);
@@ -505,6 +534,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionQuitarInmovilizada(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await quitarInmovilizada(tenantId, String(fd.get('ventana') ?? ''))) ? 'Ventana quitada.' : tx('rest.error_no_se_pudo_quitar_la_3'));
@@ -513,6 +543,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Clases del cobro por flota: utilitarios y clase 1 (0936) ──
   async function accionGuardarReglasFlota(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const r = await guardarReglasFlota(tenantId, { clasesUtilitario: String(fd.get('clases_utilitario') ?? ''), clase1: String(fd.get('clase_uno') ?? '') });
@@ -522,6 +553,7 @@ export default async function PaginaConfiguracionPeajes({
   // ── Mapeo de columnas ──
   async function accionGuardarMapeo(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     const campo = (k: string) => String(fd.get(k) ?? '').trim();
@@ -533,6 +565,7 @@ export default async function PaginaConfiguracionPeajes({
   }
   async function accionBorrarMapeo(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaConfig(sp, tenantId);
     if (no) return volverConfig(sufijo, `error:${no}`);
     return volverConfig(sufijo, (await borrarMapeo(tenantId, String(fd.get('mapeo') ?? ''))) ? 'Mapeo eliminado.' : tx('rest.error_no_se_pudo_eliminar_el'));

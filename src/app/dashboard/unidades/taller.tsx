@@ -84,6 +84,7 @@ export async function BloqueTaller({
 
   async function accionCrearRutina(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: t('op.tu_rol_no_puede_ver_las') };
     if (!puedeAdministrar(s.rol)) return { error: t('op.solo_el_dueno_de_la_flota_2') };
@@ -103,6 +104,7 @@ export async function BloqueTaller({
 
   async function accionAbrirOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return { error: t('op.abrir_ordenes_de_taller_es_del') };
     try {
@@ -129,6 +131,7 @@ export async function BloqueTaller({
 
   async function accionCerrarOrden(_p: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { error: t('op.tu_rol_no_puede_ver_las') };
     if (!puedeAsignar(s.rol)) return { error: t('op.cerrar_ordenes_de_taller_es_del') };

@@ -493,6 +493,7 @@ export default async function PaginaAgenteLiquidacion({
   /** Sube el CSV/Excel de liquidaciones que la oficina ya tiene: entra por el mismo camino que POST /v1/liquidaciones-externas. */
   async function subirLiquidacionesExternas(fd: FormData): Promise<void> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) throw new Error(MENSAJE_FLOTA_CAMBIO);
     if (!puedeOperarLiquidacion(s.rol) || !puedeVerArea(s.rol, 'administracion')) throw new Error('Solo el dueño de la flota sube liquidaciones.');
@@ -595,6 +596,7 @@ export default async function PaginaAgenteLiquidacion({
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtadoAccion('/dashboard/agentes/liquidacion', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeOperarLiquidacion(s.rol) || !puedeAdministrar(s.rol)) {

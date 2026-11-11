@@ -149,6 +149,7 @@ export default async function PaginaProgramaVigia({ searchParams }: { searchPara
 
   async function cargar(_p: ResultadoPrograma, fd: FormData): Promise<ResultadoPrograma> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const a = await actor(sp, tenantId);
     if (!a) return error(tx('rest.solo_el_dueno_o_el_encargado_6'));
     try {

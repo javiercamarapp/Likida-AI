@@ -76,6 +76,7 @@ export default async function PaginaSesionesMcp({
 
   async function cortarSesiones(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
       return { ok: false, error: t('cfg.solo_el_dueno_de_la_flota_8') };

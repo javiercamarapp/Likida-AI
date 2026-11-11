@@ -72,6 +72,7 @@ export default async function PaginaFormatoLiquidacion({
 
   async function accionSubirMuestra(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const a = fd.get('archivo');
@@ -104,6 +105,7 @@ export default async function PaginaFormatoLiquidacion({
 
   async function accionGuardarAjustes(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     let actual: ConfigFormatoFlota | null = null;
@@ -139,6 +141,7 @@ export default async function PaginaFormatoLiquidacion({
   /** Los teléfonos de la copia y del aviso de discrepancia SIN formato de Excel (flotas con el PDF genérico). */
   async function accionGuardarTelefonos(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try {
@@ -154,6 +157,7 @@ export default async function PaginaFormatoLiquidacion({
 
   async function accionQuitar() {
     'use server';
+    const { t: tx } = await getT('agentes');
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     try { await borrarFormatoFlota(tenantId); } catch (e) {

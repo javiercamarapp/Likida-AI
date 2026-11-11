@@ -79,6 +79,7 @@ export default async function PaginaReclamacionPeajes({
   // se captura por closure y Next no puede serializarla. Aquí solo se capturan cadenas (tenantId, sufijo).
   async function accionCrearReclamo(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
@@ -99,6 +100,7 @@ export default async function PaginaReclamacionPeajes({
   }
   async function accionRegistrarNota(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaReclamos(sp, tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
     const importe = importeDeNota(String(fd.get('monto') ?? ''));
@@ -111,6 +113,7 @@ export default async function PaginaReclamacionPeajes({
   }
   async function accionJustificarCruce(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     if (no) volverReclamos(sufijo, `error:${no}`, UUID.test(desgloseId) ? desgloseId : undefined);
@@ -133,6 +136,7 @@ export default async function PaginaReclamacionPeajes({
   // T-A2-24: el margen «lejos de la caseta» de la flota (el cliente fijará 200 o 500 m). Repite su puerta ADENTRO y valida antes de escribir.
   async function accionGuardarMargen(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaReclamos(sp, tenantId);
     const desgloseId = String(fd.get('desglose') ?? '').trim().toLowerCase();
     const volver = UUID.test(desgloseId) ? desgloseId : undefined;
@@ -143,6 +147,7 @@ export default async function PaginaReclamacionPeajes({
   }
   async function accionRechazar(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const no = await puertaReclamos(sp, tenantId);
     if (no) volverReclamos(sufijo, `error:${no}`);
     const res = await marcarReclamoRechazado(tenantId, String(fd.get('reclamo') ?? ''));

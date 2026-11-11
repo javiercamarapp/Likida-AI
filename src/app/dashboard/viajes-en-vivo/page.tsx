@@ -69,6 +69,7 @@ export default async function PaginaViajesEnVivo({ searchParams }: {
 
   async function atender(fd: FormData): Promise<void> {
     'use server';
+    const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     // Dos candados: la ruta y la acción (una acción de servidor es un endpoint, no un botón).
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAsignar(s.rol)) return;

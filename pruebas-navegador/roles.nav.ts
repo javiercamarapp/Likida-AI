@@ -81,17 +81,19 @@ test.describe('contador: dinero sin despacho ni administración', () => {
     await expect(page).toHaveURL(/\/dashboard\/facturacion$/);
     await expect(page.locator('body')).toContainText('Facturación');
     await page.waitForLoadState('networkidle');
-    await page.locator('summary').filter({ hasText: 'Pactos de detención' }).click();
-    await expect(page.getByRole('button', { name: 'Guardar pacto de flota', exact: true })).toBeVisible();
-    const pacto = page.locator('form').filter({ has: page.getByRole('button', { name: 'Guardar pacto de flota', exact: true }) });
-    await pacto.locator('input[name="horasLibres"]').fill('-1');
-    await pacto.evaluate((f) => { (f as HTMLFormElement).noValidate = true; });
+    // El pacto de flota vive en un cajón (FormaEnCajon): se abre con su disparador y «Guardar» está en el pie, ligado al formulario.
+    await page.getByRole('button', { name: 'Pacto de flota', exact: true }).click();
+    const cajon = page.getByRole('dialog', { name: 'Pacto de flota' });
+    const guardar = cajon.getByRole('button', { name: 'Guardar pacto de flota', exact: true });
+    await expect(guardar).toBeVisible();
+    await cajon.locator('input[name="horasLibres"]').fill('-1');
+    await cajon.locator('form').evaluate((f) => { (f as HTMLFormElement).noValidate = true; });
     const respuesta = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/dashboard/facturacion');
-    await pacto.getByRole('button', { name: 'Guardar pacto de flota', exact: true }).click();
+    await guardar.click();
     expect((await respuesta).status()).toBe(200);
-    await expect(pacto).toContainText('Las horas libres deben ser un número entre 0 y 240');
+    await expect(cajon).toContainText('Las horas libres deben ser un número entre 0 y 240');
     await expect(page.getByRole('heading', { name: 'No se pudo cargar el panel.' })).toHaveCount(0);
-    await expect(pacto.getByRole('button', { name: 'Guardar pacto de flota', exact: true })).toBeEnabled();
+    await expect(guardar).toBeEnabled();
     expect(errores, 'facturación debe hidratar completa, incluidas sus acciones').toEqual([]);
     await page.screenshot({ path: 'pruebas-navegador/.artefactos/contador-facturacion.png', fullPage: true });
   });

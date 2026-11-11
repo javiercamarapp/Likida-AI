@@ -51,6 +51,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionGuardar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_9') };
@@ -61,6 +62,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportar(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_10') };
@@ -78,6 +80,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionImportarEquivalencias(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_11') };
@@ -94,6 +97,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionCatalogo(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_12') };
@@ -112,6 +116,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionAsignarEquivalencia(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_13') };
@@ -122,6 +127,7 @@ export default async function PaginaSitios({ searchParams }: { searchParams: Pro
 
   async function accionEstado(_p: ResultadoSitio, fd: FormData): Promise<ResultadoSitio> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_9') };

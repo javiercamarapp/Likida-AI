@@ -126,6 +126,7 @@ export default async function PaginaAgenteCobranza({
 
   async function alternarPausa(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const { negado, userId } = await exigirPermisoConActor(sp, tenantId);
     if (negado) return { error: negado };
 

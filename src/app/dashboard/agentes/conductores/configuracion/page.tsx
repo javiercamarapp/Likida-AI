@@ -129,6 +129,7 @@ export default async function PaginaConfigConductor({ searchParams }: { searchPa
 
   async function accionGuardar(_previo: ResultadoConfig, fd: FormData): Promise<ResultadoConfig> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_configuracion') };

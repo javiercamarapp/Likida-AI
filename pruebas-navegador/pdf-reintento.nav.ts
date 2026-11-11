@@ -88,7 +88,7 @@ test.describe('PDF firmado: pendiente → reintento sin segunda firma', () => {
     await page.goto(`/dashboard/${liquidacion}`);
     await page.waitForLoadState('networkidle');
     // El input sr-only queda recortado; la persona activa su etiqueta visible.
-    await page.getByRole('radiogroup', { name: 'Qué hacer con esta liquidación' }).getByText('Ajustar montos', { exact: true }).click();
+    await page.getByRole('group', { name: 'Qué hacer con esta liquidación' }).getByText('Ajustar montos', { exact: true }).click();
     await page.getByRole('textbox', { name: /Monto correcto de/ }).fill('200');
     await page.getByRole('textbox', { name: /Motivo/ }).fill('Corrección sintética para verificar el reintento de PDF');
     await page.getByRole('button', { name: 'Ajustar montos', exact: true }).click();

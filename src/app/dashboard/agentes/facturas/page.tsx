@@ -130,6 +130,7 @@ export default async function PaginaAgenteFacturas({
 
   async function marcarFacturada(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     // EL CHEQUEO SE REPITE ADENTRO (patrón del repo): esta action es
     // alcanzable por POST directo y re-verifica sesión y permiso. El tenant
     // viaja por CLOSURE del render — el cliente no lo manda ni lo elige — y
@@ -198,6 +199,7 @@ export default async function PaginaAgenteFacturas({
     fd: FormData,
   ): Promise<{ error?: string; ok?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const guardia = await guardarPermiso(fd);
     if ('error' in guardia) return guardia;
 
@@ -223,6 +225,7 @@ export default async function PaginaAgenteFacturas({
     fd: FormData,
   ): Promise<{ error?: string; ok?: string } | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const guardia = await guardarPermiso(fd);
     if ('error' in guardia) return guardia;
 
@@ -254,6 +257,7 @@ export default async function PaginaAgenteFacturas({
     fd: FormData,
   ): Promise<{ error: string } | { comercio: string; userId: string; firma: string | null }> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const sesion = await resolverTenantAtadoAccion('/dashboard/agentes/facturas', sp, tenantId);
     if (!sesion) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerArea(sesion.rol, 'dinero')) {

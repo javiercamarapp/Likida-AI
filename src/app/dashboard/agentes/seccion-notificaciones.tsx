@@ -90,6 +90,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
 
   async function guardar(_prev: { error?: string } | null, fd: FormData): Promise<{ error?: string } | null> {
     'use server';
+    const { t } = await getT('resto');
     const objetivo = agentePorId(agenteId);
     if (!objetivo) return { error: 'Ese agente no existe.' };
 
@@ -144,6 +145,7 @@ export async function SeccionNotificaciones({ tenantId, agenteId, sp }: {
    */
   async function mandarPrueba(_prev: EstadoPrueba, _fd: FormData): Promise<EstadoPrueba> {
     'use server';
+    const { t } = await getT('resto');
     const objetivo = agentePorId(agenteId);
     if (!objetivo) return { error: 'Ese agente no existe.' };
 

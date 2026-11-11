@@ -260,6 +260,7 @@ export default async function PaginaAgenteConductores({
 
   async function accionOficina(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     // Dos candados: la ruta (¿puede ver esta pantalla?) y la acción (¿puede mover un hito?). El segundo también vive
@@ -277,6 +278,7 @@ export default async function PaginaAgenteConductores({
 
   async function accionSitios(_previo: ResultadoOficina, fd: FormData): Promise<ResultadoOficina> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores')) return { ok: false, error: tx('rest.solo_el_dueno_de_la_flota_8') };
@@ -287,6 +289,7 @@ export default async function PaginaAgenteConductores({
 
   async function guardarEstrategia(_previo: ResultadoEstrategia, fd: FormData): Promise<ResultadoEstrategia> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const s = await resolverTenantAtado('/dashboard/agentes/conductores', sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/agentes/conductores') || !puedeAdministrar(s.rol)) {

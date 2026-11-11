@@ -96,6 +96,7 @@ export default async function PaginaImportacionVigia({ searchParams }: { searchP
 
   async function calcularAccion(_p: ResultadoImportacion, fd: FormData): Promise<ResultadoImportacion> {
     'use server';
+    const { t: tx } = await getT('agentes');
     // La sesión se vuelve a resolver aquí: la acción no confía en lo que decidió el render.
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return error(tx('rest.no_tienes_permiso_para_ver_esta'));

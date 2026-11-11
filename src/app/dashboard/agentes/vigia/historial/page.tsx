@@ -70,6 +70,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
 
   async function alta(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     const r = await altaGrupoPanel(c, fd);
@@ -78,6 +79,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function critico(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     const r = await criticoGrupoPanel(c, fd);
@@ -86,6 +88,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function borrar(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     const r = await borrarGrupoPanel(c, fd);
@@ -94,6 +97,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function aprobarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: noDisponible(tx) };
@@ -103,6 +107,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function retirarRapida(_p: ResultadoGrupos, fd: FormData): Promise<ResultadoGrupos> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     if ((await perfilDeTenant(c.tenantId)) === 'cinco_agentes') return { ok: false, error: noDisponible(tx) };
@@ -112,6 +117,7 @@ export default async function PaginaHistorialVigia({ searchParams }: { searchPar
   }
   async function importar(_p: ResultadoLote | null, fd: FormData): Promise<ResultadoLote | null> {
     'use server';
+    const { t: tx } = await getT('agentes');
     const c = await contexto(sp, tenantId);
     if (!c) return { ok: false, error: tx('rest.no_tienes_acceso_a_esta_pantalla') };
     // Un campo vacío del navegador (sin archivo elegido) llega como File sin nombre ni bytes: no cuenta como archivo.

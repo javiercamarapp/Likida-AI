@@ -60,6 +60,7 @@ export default async function OnboardingFlotaPage({
 
   async function accion(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const ses = await resolverTenantAtadoOLanza('/dashboard/onboarding', sp, s.tenantId);
     if (!puedeVerRuta(ses.rol, '/dashboard/onboarding')) {
       return { error: t('op.tu_rol_no_puede_declarar_el') };

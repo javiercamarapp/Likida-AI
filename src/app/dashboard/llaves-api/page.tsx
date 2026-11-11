@@ -66,6 +66,7 @@ export default async function PaginaLlavesApi({
 
   async function emitirLlave(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
@@ -100,6 +101,7 @@ export default async function PaginaLlavesApi({
 
   async function revocarLlave(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const s = await resolverTenantAtadoAccion(RUTA, sp, tenantId);
     if (!s) return { ok: false, error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, RUTA) || !puedeAdministrar(s.rol)) {
