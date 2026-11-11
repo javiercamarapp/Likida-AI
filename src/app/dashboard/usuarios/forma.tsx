@@ -88,7 +88,7 @@ function BotonChico({ etiqueta, ocupado }: { etiqueta: string; ocupado: string }
   );
 }
 
-/** Cambiar el rol: un select con el catálogo invitable y un botón. */
+/** Cambiar el rol (Rovaq «Equipo»): un select de 28 px que envía AL ELEGIR; sin JavaScript queda el botón. La acción y su puerta no cambian. */
 export function FormaCambiarRol({ accion, id, rolActual, roles }: {
   accion: AccionForma;
   id: string;
@@ -101,13 +101,21 @@ export function FormaCambiarRol({ accion, id, rolActual, roles }: {
     <form action={despachar} className="rv-usu__fila-forma">
       <div className="rv-usu__cambiar">
         <input type="hidden" name="id" value={id} />
-        <select name="rol" defaultValue={rolActual} aria-label={t('cfg.nuevo_rol')} className="rv-ctl">
-          {roles.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
-        </select>
-        <BotonChico etiqueta={t('cfg.cambiar_rol')} ocupado={t('cfg.cambiando')} />
+        <SelectRol rolActual={rolActual} roles={roles} etiqueta={t('cfg.nuevo_rol')} />
+        <noscript><button type="submit" className={clasesBoton('secondary', 'sm')}>{t('cfg.cambiar_rol')}</button></noscript>
       </div>
       <Aviso estado={estado} />
     </form>
+  );
+}
+
+function SelectRol({ rolActual, roles, etiqueta }: { rolActual: string; roles: ReadonlyArray<OpcionRol>; etiqueta: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <select name="rol" defaultValue={rolActual} aria-label={etiqueta} className="rv-ctl rv-usu__rol" disabled={pending}
+      onChange={(e) => { if (e.currentTarget.value !== rolActual) e.currentTarget.form?.requestSubmit(); }}>
+      {roles.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
+    </select>
   );
 }
 

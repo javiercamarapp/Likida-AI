@@ -9,14 +9,14 @@ import { resolverTenantAtadoOLanza } from '@/lib/auth/tenant-atado';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
 import { puedeAdministrar } from '@/lib/auth/permisos';
-import { fechaHoraMx } from '@/lib/formato';
+import { fechaHoraMx, fechaMx } from '@/lib/formato';
 import {
   aceptacionesDeFlota, registrarAceptacion, revocarMandato, pendientesDeUsuario, mandatoDe,
   type AceptacionFila,
 } from '@/lib/legal/aceptacion';
 import { guardarDatosResponsable, leerDatosResponsable, type CamposResponsable } from '@/lib/legal/datos_responsable';
 import {
-  ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VERSION_TERMINOS, VERSION_AVISO_PRIVACIDAD,
+  ETIQUETA_DOCUMENTO, MANDATO_AUTOFACTURACION, VIGENTE_DESDE_TERMINOS, VIGENTE_DESDE_AVISO_PRIVACIDAD,
 } from '@/lib/legal/documentos';
 import type { Metadata } from 'next';
 import {
@@ -63,7 +63,7 @@ export default async function PaginaLegal({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
-  const { t: tr } = await getT('dinero');
+  const { t: tr, idioma } = await getT('dinero');
   const sp = await searchParams;
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -177,7 +177,7 @@ export default async function PaginaLegal({
           contenido: (
             <>
             <p className="rv-legal__nota">
-              {rico(tr('legal.page.linkLinkVersionY', { terminos: ETIQUETA_DOCUMENTO.terminos, VERSION_TERMINOS, aviso_privacidad: ETIQUETA_DOCUMENTO.aviso_privacidad, VERSION_AVISO_PRIVACIDAD }), { link: (c) => <Link href="/terminos" className="rv-legal__enlace">{c}</Link>, link2: (c) => <Link href="/privacidad" className="rv-legal__enlace">{c}</Link> })}
+              {rico(tr('legal.page.linkLinkVersionY', { terminos: ETIQUETA_DOCUMENTO.terminos, desdeTerminos: fechaMx(VIGENTE_DESDE_TERMINOS, idioma), aviso_privacidad: ETIQUETA_DOCUMENTO.aviso_privacidad, desdeAviso: fechaMx(VIGENTE_DESDE_AVISO_PRIVACIDAD, idioma) }), { link: (c) => <Link href="/terminos" className="rv-legal__enlace">{c}</Link>, link2: (c) => <Link href="/privacidad" className="rv-legal__enlace">{c}</Link> })}
             </p>
             {pendientes && pendientes.length === 0 ? (
               <p className="rv-legal__estado">{rico(tr('legal.page.statuschipAlDiaStatuschip'), { statuschip: (c) => <StatusChip tono="ok">{c}</StatusChip> })}</p>

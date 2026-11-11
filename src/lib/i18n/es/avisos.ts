@@ -111,4 +111,9 @@ export const avisos = {
   'notif.sin_leer': 'Sin leer',
   'notif.cargados': 'Cargados',
   'notif.resumen': 'Resumen de avisos',
+  'e26b.avisos_configurar': 'Configurar avisos',
+  'e26b.avisos_sin_leer': 'Sin leer',
+  'e26b.avisos_sin_leer_nota': 'avisos sin leer',
+  'e26b.avisos_cargados': 'Cargados',
+  'e26b.avisos_cargados_nota': 'avisos que entran a la lista',
 } as const;
