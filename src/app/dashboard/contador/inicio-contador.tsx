@@ -20,7 +20,7 @@ import { LEYENDA_CORTA } from '@/lib/likida/cuadre/leyendas';
 import { areaDeRuta } from '@/lib/auth/visibilidad';
 import { AUTOMATIZACIONES, DINERO_FISCAL, SISTEMA, type Item } from '../rutas';
 import {
-  Aviso, BotonEnlace, EsqCifrasV2, EsqTarjetaV2, EstadoVacio, Icono, MarcoPagina, Tarjeta, clasesBoton,
+  Aviso, BotonEnlace, EsqCifrasV2, EsqTarjetaV2, EstadoVacio, Icono, Tarjeta, clasesBoton,
 } from '@/app/ui-v2/componentes';
 import { MotorFiscalPeriodo } from '../motor-fiscal-periodo';
 import { AvisoSinFlota } from '../sin-flota';
@@ -30,6 +30,7 @@ import { EstimuloPeaje } from './estimulo-peaje';
 import { PerfilErp } from './perfil-erp';
 import { Timbrado } from './timbrado';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
@@ -151,7 +152,7 @@ export async function InicioContador({
     // El scroll vive DENTRO del panel (patrón FASE 1.5). Lienzo tenue
     // (`--g1`) con tarjetas blancas encima — la misma anatomía que el
     // Resumen del dueño, porque es la misma casa con otro contenido.
-    <MarcoPagina
+    <EsqueletoPanelCifras
       titulo={tr('contador.inicioContador.contador')}
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
       apoyo={tr('contador.inicioContador.elDineroComprobadoY', { v: saludo(), v2: nombre ?? 'contador' })}
@@ -193,19 +194,6 @@ export async function InicioContador({
             <div><AvisoSinFlota tenantId={tenantId} /></div>
           )}
 
-          {/* FASE 3: la pregunta del 50% de peaje va ANTES que las cifras.
-              Sin declaración el motor fail-open y pinta un estímulo que
-              quizá no toca — esa cifra no puede ser lo primero que se ve. */}
-          <EstimuloPeaje searchParams={searchParams} tenantExiste={tenantExiste} />
-
-          {/* PLAN MAESTRO 26-ago, sección B: la plantilla que desbloquea el
-              export a SAP B1/CONTPAQi. Sin ella el export responde 409 para
-              cualquier flota — el lector existía desde la 0178, el escritor
-              es este formulario. */}
-          <PerfilErp searchParams={searchParams} tenantExiste={tenantExiste} />
-
-          <Timbrado searchParams={searchParams} tenantExiste={tenantExiste} sufijo={sufijo} />
-
           {/* Condicional de verdad (solo si hay fuego): sin esqueleto, para no
               reservar un hueco que casi siempre queda vacío. */}
           <Bloque mensaje={tr('contador.inicioContador.noSePudieronLeer')} esqueleto={null}>
@@ -223,6 +211,11 @@ export async function InicioContador({
               pGastosFiscales={pGastosFiscales} pGastosFiscalesSeries={pGastosFiscalesSeries}
               pFacturacion={pFacturacion} />
           </Bloque>
+
+          {/* FASE 3: la pregunta del 50% de peaje va ANTES que las cifras.
+              Sin declaración el motor fail-open y pinta un estímulo que
+              quizá no toca — esa cifra no puede ser lo primero que se ve. */}
+          <EstimuloPeaje searchParams={searchParams} tenantExiste={tenantExiste} />
 
           {/* ── Lo acreditable que tus liquidaciones ya certificaron ──
               Sale de `liquidacion.*_acreditable` (getAcreditables): son
@@ -261,6 +254,15 @@ export async function InicioContador({
             </Bloque>
           </div>
 
+          {/* La configuración fiscal (plantilla del ERP y timbrado) va DESPUÉS de las cifras: se llena una vez, las cifras se leen cada día. */}
+          {/* PLAN MAESTRO 26-ago, sección B: la plantilla que desbloquea el
+              export a SAP B1/CONTPAQi. Sin ella el export responde 409 para
+              cualquier flota — el lector existía desde la 0178, el escritor
+              es este formulario. */}
+          <PerfilErp searchParams={searchParams} tenantExiste={tenantExiste} />
+
+          <Timbrado searchParams={searchParams} tenantExiste={tenantExiste} sufijo={sufijo} />
+
           {/* ── Sus pantallas: solo rutas de área `dinero`, del mismo
               mapa que las gatea. Todos los links cargan el sufijo. Cero
               consultas: entra con el primer flush. */}
@@ -276,7 +278,7 @@ export async function InicioContador({
           </Tarjeta>
 
           <p className="rv-cont__pie">{LEYENDA_CORTA}</p>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 
