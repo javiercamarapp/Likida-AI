@@ -27,20 +27,20 @@ export default async function CrecimientoPage() {
 
   return (
     <EsqueletoPanelCifras titulo={ta('crecimiento.crecimiento')} apoyo={ta('crecimiento.de_donde_vienen_los')}>
-      <Suspense fallback={<EsqTarjetaV2 alto={56} />}><BloqueIntro /></Suspense>
+      <Suspense fallback={<EsqTarjetaV2 alto={60} />}><BloqueIntro /></Suspense>
       <Suspense fallback={null}><BloqueAlertasAdquisicion /></Suspense>
       {/* Plantilla PC de Rovaq: cifras arriba → embudo y serie (6-6) → costo por lead y campañas (6-6) → activación y comisiones (6-6) → cohortes. */}
       <Suspense fallback={<EsqCifrasV2 n={4} />}><BloqueCifrasCrecimiento /></Suspense>
       <FilaTarjetas variante="6-6">
-        <Suspense fallback={<EsqTarjetaV2 alto={200} />}><BloqueEmbudoAdquisicion /></Suspense>
-        <Suspense fallback={<EsqTarjetaV2 alto={200} />}><BloqueUso /></Suspense>
+        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudoAdquisicion /></Suspense>
+        <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueUso /></Suspense>
       </FilaTarjetas>
       <FilaTarjetas variante="6-6">
         <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueCostoLead /></Suspense>
         <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueCampanas /></Suspense>
       </FilaTarjetas>
       <FilaTarjetas variante="6-6">
-        <Suspense fallback={<EsqTarjetaV2 alto={140} />}><BloqueActivacion /></Suspense>
+        <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueActivacion /></Suspense>
         <BloqueComisiones ta={ta} />
       </FilaTarjetas>
       <Suspense fallback={<EsqTarjetaV2 alto={120} />}><BloqueCohortes /></Suspense>
