@@ -40,3 +40,17 @@
 .rv-ag-mini__fila { display: flex; justify-content: space-between; gap: 12px; font-size: var(--t-small, 12px); }
 .rv-ag-mini__fila dd { margin: 0; }
 .rv-ag-mini__fila dd:last-child { color: var(--muted); }
+
+/* Vacío de Rovaq dentro de una tarjeta (`ac-vacio`): caja punteada de 1 px, radio 8, padding 20/14, texto centrado. El `EstadoVacio` del sistema
+   va sin borde; el envoltorio `.rv-ag-vacio` se lo da sin tocar la pieza compartida (pedido_compartido: llevarlo a ui-v2). */
+[data-ui="v2"] .rv-ag-vacio .rv-vacio,
+[data-ui="v2"] .rv-ag-vacio .rv-vacio[data-contenido] { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; background: transparent; max-height: none; }
+[data-ui="v2"] .rv-ag-vacio .rv-vacio__titulo { font-size: var(--t-body, 13px); }
+
+/* «No disponible ahora» (Rovaq): blanco, borde punteado, texto apagado. Sustituye al secundario gris que se leía como deshabilitado sin estarlo. */
+[data-ui="v2"] .rv-btn.rv-ag-no-disponible,
+[data-ui="v2"] .rv-btn.rv-ag-no-disponible:disabled { background: var(--surface); border: 1px dashed var(--line2, var(--line)); color: var(--muted); opacity: 1; cursor: not-allowed; box-shadow: none; }
+
+/* Una fila de acciones de una zona: ancho de contenido, nunca estiradas (un primario de 540 px es un botón tosco). */
+.rv-ag-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-ag-acciones > * { flex: 0 0 auto; width: auto; }

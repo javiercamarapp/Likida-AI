@@ -55,10 +55,10 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
               : tx(pendientes === 1 ? 'rest.barrer_la_linea_pendiente.uno' : 'rest.barrer_la_linea_pendiente.otros', { n: pendientes })}
           </span>
           <BotonConfirmar />
-          <Boton onClick={() => setConfirmando(false)}>{tx('cobranza.controles.cancelar')}</Boton>
+          <Boton variante="ghost" tamano="sm" onClick={() => setConfirmando(false)}>{tx('cobranza.controles.cancelar')}</Boton>
         </form>
       ) : (
-        <Tooltip texto={tx('rest.volver_a_cruzar_las_lineas_pendientes')}><Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}>{tx('cobranza.controles.ejecutar_ahora')}</Boton></Tooltip>
+        <Tooltip texto={tx('rest.volver_a_cruzar_las_lineas_pendientes')}><Boton variante="secondary" tamano="sm" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} tam={14} />}>{tx('cobranza.controles.ejecutar_ahora')}</Boton></Tooltip>
       )}
 
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}
@@ -94,7 +94,7 @@ function BotonConfirmar() {
   const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" variante="primary" loading={pending} icono={<Icono icono={RefreshCw} />}>
+    <Boton type="submit" variante="primary" tamano="sm" loading={pending} icono={<Icono icono={RefreshCw} tam={14} />}>
       {pending ? 'Barriendo…' : tx('rest.si_barrer')}
     </Boton>
   );
