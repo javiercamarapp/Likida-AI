@@ -5,7 +5,7 @@ import { useFormStatus } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { RefreshCw } from 'lucide-react';
 import type { ResumenBarrido } from '@/lib/likida/intake/consolidado';
-import { Boton, Icono } from '@/app/ui-v2/componentes';
+import { Boton, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import './peajes.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
@@ -58,8 +58,7 @@ export function BotonEjecutar({ ejecutarAhora, pendientes }: {
           <Boton onClick={() => setConfirmando(false)}>{tx('cobranza.controles.cancelar')}</Boton>
         </form>
       ) : (
-        <Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}
-          title={tx('rest.volver_a_cruzar_las_lineas_pendientes')}>{tx('cobranza.controles.ejecutar_ahora')}</Boton>
+        <Tooltip texto={tx('rest.volver_a_cruzar_las_lineas_pendientes')}><Boton variante="primary" onClick={() => setConfirmando(true)} icono={<Icono icono={RefreshCw} />}>{tx('cobranza.controles.ejecutar_ahora')}</Boton></Tooltip>
       )}
 
       {estado?.error && <p className="rv-pj-sub rv-pj-malo" role="alert">{estado.error}</p>}

@@ -3,7 +3,7 @@
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { Send } from 'lucide-react';
-import { AvisoCompacto, Boton, Icono } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import './agentes.css';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
@@ -55,11 +55,11 @@ export function BotonPrueba({ mandarPrueba, canalListo }: {
 function BotonMandar({ apagado }: { apagado: boolean }) {
   const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
-  return (
+  const boton = (
     <Boton type="submit" variante="secondary" loading={pending} disabled={pending || apagado}
-      title={apagado ? t('ch.el_correo_no_esta_configurado_en') : undefined}
       icono={<Icono icono={Send} tam={14} />}>
       {pending ? 'Mandando…' : t('ch.mandate_una_prueba')}
     </Boton>
   );
+  return apagado ? <Tooltip texto={t('ch.el_correo_no_esta_configurado_en')}>{boton}</Tooltip> : boton;
 }

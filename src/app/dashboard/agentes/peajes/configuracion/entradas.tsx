@@ -1,6 +1,7 @@
 import { Mail, Download, Trash2, KeyRound } from 'lucide-react';
 import type { ConfigEntradas } from '@/lib/likida/peajes/datos';
-import { Icono } from '@/app/ui-v2/componentes';
+import { Icono, Boton, Tooltip } from '@/app/ui-v2/componentes';
+import { SeccionConfig } from './seccion';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -22,15 +23,6 @@ export interface EntradasVista {
 }
 
 
-function Titulo({ t, nota }: { t: string; nota: React.ReactNode }) {
-  return (
-    <>
-      <h2 className="font-display text-[15px] font-semibold mb-1">{t}</h2>
-      <p className="text-[11px] mb-3 rv-pj-c-faint">{nota}</p>
-    </>
-  );
-}
-
 function SoloAdmin({ tr = TR_ES }: { tr?: TrAgentes }) {
   const { t: tx } = tr;
   return <p className="text-[11px] rv-pj-c-faint">{tx('rest.solo_quien_administra_la_flota_cambia_2')}</p>;
@@ -45,9 +37,8 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
   if (config === null && entradas.direccionCorreo === null && !puedeAdministrar) return null;
   return (
     <>
-      <section className="rv-tarjeta" id="correo">
-        <Titulo t={tx('rest.recepcion_por_correo')}
-          nota={tx('rest.el_proveedor_o_tu_manda_el')} />
+      <SeccionConfig id="correo" titulo={tx('rest.recepcion_por_correo')}
+          nota={tx('rest.el_proveedor_o_tu_manda_el')}>
         <div className="space-y-3 text-[12px]">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="cifra-mono rv-pj-pill" data-tono={config?.correoActivo ? 'ok' : undefined}>
@@ -56,11 +47,11 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
             {puedeAdministrar ? (
               config?.correoActivo ? (
                 <>
-                  <form action={acciones.rotarCorreo}><button type="submit" className="rv-btn rv-btn--secondary" title={tx('rest.la_direccion_anterior_deja_de_servir')}><Icono icono={KeyRound} />{tx('rest.cambiar_direccion')}</button></form>
-                  <form action={acciones.desactivarCorreo}><button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.apagar')}</button></form>
+                  <form action={acciones.rotarCorreo}><Tooltip texto={tx('rest.la_direccion_anterior_deja_de_servir')}><Boton type="submit" variante="secondary" tamano="sm"><Icono icono={KeyRound} />{tx('rest.cambiar_direccion')}</Boton></Tooltip></form>
+                  <form action={acciones.desactivarCorreo}><Boton type="submit" variante="secondary" tamano="sm">{tx('rest.apagar')}</Boton></form>
                 </>
               ) : (
-                <form action={acciones.activarCorreo}><button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Mail} />{' '}{tx('rest.activar_correo')}</button></form>
+                <form action={acciones.activarCorreo}><Boton type="submit" variante="primary" tamano="sm"><Icono icono={Mail} />{' '}{tx('rest.activar_correo')}</Boton></form>
               )
             ) : <SoloAdmin tr={tr} />}
           </div>
@@ -76,16 +67,15 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
             <form action={acciones.guardarRemitentes} className="space-y-1.5">
               <label className="block">{ricoT(tx('rest.e0_remitentes_permitidos_correo_o_dominio'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{c}</span> })}<textarea name="remitentes" rows={3} defaultValue={config.remitentes.join('\n')} maxLength={2500} className="w-full cifra-mono mt-0.5 rv-ctl" />
               </label>
-              <button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.guardar_remitentes')}</button>
+              <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.guardar_remitentes')}</Boton>
               <p className="text-[11px] rv-pj-c-faint">{tx('rest.un_correo_de_otro_remitente_se')}</p>
             </form>
           )}
         </div>
-      </section>
+      </SeccionConfig>
 
-      <section className="rv-tarjeta" id="pull">
-        <Titulo t={tx('rest.consulta_automatica_a_tu_sistema')}
-          nota={tx('rest.si_tu_tms_o_un_script')} />
+      <SeccionConfig id="pull" titulo={tx('rest.consulta_automatica_a_tu_sistema')}
+          nota={tx('rest.si_tu_tms_o_un_script')}>
         {config === null ? (
           <p className="text-[12px] rv-pj-c-muted">{tx('rest.no_se_pudo_leer_esta_configuracion')}</p>
         ) : (
@@ -95,7 +85,7 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
               {config.pullActivo && <span className="rv-pj-c-muted">cada {minutos(config.pullIntervaloMin)}</span>}
               {config.pullUltimoEn && <span className="text-[11px] rv-pj-c-faint">{tx('rest.ultima_consulta_buena_utc', { config: config.pullUltimoEn.slice(0, 16).replace('T', ' ') })}</span>}
               {puedeAdministrar && config.pullActivo && (
-                <form action={acciones.apagarPull}><button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.apagar')}</button></form>
+                <form action={acciones.apagarPull}><Boton type="submit" variante="secondary" tamano="sm">{tx('rest.apagar')}</Boton></form>
               )}
             </div>
             {config.pullUltimoError && <p role="alert" className="text-[12px] rv-pj-c-bad">{tx('rest.ultima_consulta_con_problema')}{' '}{config.pullUltimoError}</p>}
@@ -110,19 +100,19 @@ export function SeccionEntradas({ entradas, acciones, tr = TR_ES }: { entradas: 
                     <span className="etiqueta-mono text-[11px] uppercase rv-pj-c-faint">{tx('rest.token_bearer_opcional')}{config.pullConCredencial ? tx('rest.ya_hay_uno_guardado_dejalo_vacio') : ''}</span>
                     <input name="token" type="password" autoComplete="off" maxLength={500} disabled={!entradas.cofreConfigurado} className="w-full mt-0.5 rv-ctl" />
                   </label>
-                  <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Download} />{' '}{tx('rest.guardar_y_encender')}</button>
+                  <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Download} />{' '}{tx('rest.guardar_y_encender')}</Boton>
                 </div>
                 {!entradas.cofreConfigurado && <p className="text-[11px] rv-pj-c-warn">{tx('rest.falta_configurar_el_cofre_de_credenciales')}</p>}
               </form>
             ) : <SoloAdmin tr={tr} />}
             {puedeAdministrar && config.pullConCredencial && (
               <form action={acciones.borrarCredencialPull}>
-                <button type="submit" className="rv-btn rv-btn--secondary"><Icono icono={Trash2} />{tx('rest.borrar_el_token_guardado')}</button>
+                <Boton type="submit" variante="secondary" tamano="sm"><Icono icono={Trash2} />{tx('rest.borrar_el_token_guardado')}</Boton>
               </form>
             )}
           </div>
         )}
-      </section>
+      </SeccionConfig>
     </>
   );
 }

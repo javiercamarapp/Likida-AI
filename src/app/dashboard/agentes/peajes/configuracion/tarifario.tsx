@@ -2,7 +2,7 @@ import { Upload } from 'lucide-react';
 import { mxn, numero } from '@/lib/formato';
 // SOLO tipos: el módulo de datos importa supabaseAdmin y no debe entrar al bundle de la vista.
 import type { TarifaVista } from '@/lib/likida/peajes/datos';
-import { Tarjeta, Icono } from '@/app/ui-v2/componentes';
+import { Tarjeta, Icono, Boton } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -55,7 +55,7 @@ export function SeccionTarifario({ datos, tr = TR_ES }: { datos: TarifarioVista;
             <option value="proveedor">{tx('rest.el_tarifario_oficial_del_proveedor_queda')}</option>
           </select>
         </label>
-        <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Upload} />{' '}{tx('rest.cargar_tarifario')}</button>
+        <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Upload} />{' '}{tx('rest.cargar_tarifario')}</Boton>
       </form>
 
       {tarifas === null ? (
@@ -77,7 +77,7 @@ export function SeccionTarifario({ datos, tr = TR_ES }: { datos: TarifarioVista;
                 <span className="text-[11px] ml-auto rv-pj-c-ok">{tx('rest.confirmada')}{t.confirmadaPor ? ` por ${t.confirmadaPor}` : ''}</span>
               ) : (
                 <form action={acciones.confirmarTarifa} className="ml-auto flex items-center gap-2">{ricoT(tx('rest.e0_por_confirmar_e0'), { e0: (c) => <span className="text-[11px] rv-pj-c-warn">{c}</span> })}<input type="hidden" name="tarifa" value={t.id} />
-                  <button type="submit" className="rv-btn rv-btn--secondary" aria-label={tx('rest.confirmar_la_tarifa_de_clase', { casetaNorm: t.casetaNorm, clase: t.clase })}>{tx('rest.confirmar')}</button>
+                  <Boton type="submit" aria-label={tx('rest.confirmar_la_tarifa_de_clase', { casetaNorm: t.casetaNorm, clase: t.clase })} variante="secondary" tamano="sm">{tx('rest.confirmar')}</Boton>
                 </form>
               )}
             </div>
@@ -89,7 +89,7 @@ export function SeccionTarifario({ datos, tr = TR_ES }: { datos: TarifarioVista;
       {acciones.sugerirPasada && (
         <form action={acciones.sugerirPasada} className="mt-4">
           <p className="text-[11px] mb-1.5 rv-pj-c-faint">{tx('rest.hay_casetas_con_tarifa_por_pasada')}</p>
-          <button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.buscar_sugerencias_en_el_ultimo_desglose')}</button>
+          <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.buscar_sugerencias_en_el_ultimo_desglose')}</Boton>
         </form>
       )}
     </Tarjeta>

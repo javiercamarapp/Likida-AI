@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { AvisoCompacto, Boton, Casilla, Fieldset } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Casilla, Fieldset, Tooltip } from '@/app/ui-v2/componentes';
 import './agentes.css';
 // SOLO TIPOS, y no es una preferencia de estilo: `notificaciones.ts` importa
 // `supabaseAdmin` y, por `correo/enviar.ts`, el PNG del logo en base64. Un
@@ -259,12 +259,12 @@ export function FormaNotificaciones({ datos, guardar }: {
 function BotonGuardar({ apagado, sucio }: { apagado: boolean; sucio: boolean }) {
   const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
-  return (
-    <Boton type="submit" variante="primary" loading={pending} disabled={pending || apagado}
-      title={apagado ? t('ch.el_correo_no_esta_configurado_en') : undefined}>
+  const boton = (
+    <Boton type="submit" variante="primary" loading={pending} disabled={pending || apagado}>
       {pending ? 'Guardando…' : sucio ? t('op.guardar_cambios') : t('ch.guardar_notificaciones')}
     </Boton>
   );
+  return apagado ? <Tooltip texto={t('ch.el_correo_no_esta_configurado_en')}>{boton}</Tooltip> : boton;
 }
 
 function Nota({ children, tono }: { children: React.ReactNode; tono?: 'warn' }) {

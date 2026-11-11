@@ -56,7 +56,7 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
       <div className="rv-fact__cola">
         {filas.map((f) => (
           <div key={f.gastoId} className="rv-fact__item" data-abierta={abierta === f.gastoId || undefined}>
-            <button type="button" onClick={() => setAbierta((v) => (v === f.gastoId ? null : f.gastoId))} aria-expanded={abierta === f.gastoId}
+            <Boton type="button" variante="ghost" onClick={() => setAbierta((v) => (v === f.gastoId ? null : f.gastoId))} aria-expanded={abierta === f.gastoId}
               className="rv-fact__cab">
               <span className="rv-fact__tenue">{fechaCorta(f.fecha)}</span>
               <span className="rv-fact__dos">
@@ -78,7 +78,7 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
                 <StatusChip tono="warn" title={f.detalle}>{tx('rest.bloqueado')}</StatusChip>
               )}
               <Icono icono={abierta === f.gastoId ? ChevronUp : ChevronDown} tam={16} />
-            </button>
+            </Boton>
 
             {abierta === f.gastoId && <MesaDeTrabajo fila={f} marcarFacturada={marcarFacturada} />}
           </div>

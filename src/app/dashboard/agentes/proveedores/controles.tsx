@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { Upload, Check, X, Copy, Mail } from 'lucide-react';
 import './proveedores.css';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
-import { Boton, CampoArchivo, Disclosure, Icono } from '@/app/ui-v2/componentes';
+import { Boton, CampoArchivo, Disclosure, Icono, Tooltip } from '@/app/ui-v2/componentes';
 import { useT } from '@/lib/i18n/proveedor';
 import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -110,7 +110,7 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
             {estado?.confirmar && <input type="hidden" name="confirmar" value="1" />}
             <BotonMini texto={estado?.confirmar ? tx('rest.aprobar_de_todos_modos') : tx('rest.aprobar')} pendienteTexto={tx('cobranza.formagasto.guardando')} IconoOk />
           </form>
-          <Boton tamano="sm" onClick={() => setConfirmando(true)} title={tx('rest.rechazar_la_factura')} icono={<Icono icono={X} tam={14} />}>{tx('rest.rechazar')}</Boton>
+          <Tooltip texto={tx('rest.rechazar_la_factura')}><Boton tamano="sm" onClick={() => setConfirmando(true)} icono={<Icono icono={X} tam={14} />}>{tx('rest.rechazar')}</Boton></Tooltip>
         </div>
       )}
       {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}

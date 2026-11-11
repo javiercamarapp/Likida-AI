@@ -1,5 +1,5 @@
 import type { ReglasFlota } from '@/lib/likida/peajes/reglas_cobro_config';
-import { Tarjeta } from '@/app/ui-v2/componentes';
+import { Tarjeta, Boton } from '@/app/ui-v2/componentes';
 import '../peajes.css';
 import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
@@ -49,7 +49,7 @@ export function SeccionClasesCobro({ datos, tr = TR_ES }: { datos: ClasesCobroVi
               <span>{ricoT(tx('rest.e0_solo_en_las_casetas_declaradas'), { e0: (c) => <span className="font-medium">{c}</span> })}</span>
             </label>
           </fieldset>
-          <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.guardar_clases')}</button>
+          <Boton type="submit" variante="primary" tamano="sm">{tx('rest.guardar_clases')}</Boton>
         </form>
       )}
     </Tarjeta>

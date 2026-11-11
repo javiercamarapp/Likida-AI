@@ -40,3 +40,8 @@
 .rv-fact__titulo { margin: 0; font-size: var(--t-small, 12px); font-weight: 600; color: var(--ink); }
 .rv-fact__pasos { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: var(--t-small, 12px); color: var(--muted); }
 .rv-fact__codigo { padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-family: var(--font-mono, ui-monospace, monospace); font-size: var(--t-small, 12px); overflow-wrap: anywhere; }
+
+/* La cabecera de cada fila de la cola es un `Boton` (ghost) del sistema; esto devuelve su forma de fila: rejilla a todo el ancho, sin el
+   alto mínimo ni el color de hover del botón suelto. Mayor especificidad que `[data-ui="v2"] .rv-btn`. */
+[data-ui="v2"] .rv-btn.rv-fact__cab { display: grid; justify-content: stretch; min-height: 0; padding: 8px 10px; border-radius: 12px; font: inherit; font-size: var(--t-body, 13px); font-weight: 400; text-align: left; color: var(--ink); }
+[data-ui="v2"] .rv-btn.rv-fact__cab:hover { background: var(--canvas); color: var(--ink); }

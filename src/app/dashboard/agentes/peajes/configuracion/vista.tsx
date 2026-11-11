@@ -14,9 +14,9 @@ import { SeccionCorreoAvisos, type CorreoAvisosVista } from './correo-avisos';
 import { SeccionCruceViajes, type CruceViajesVista } from './cruce-viajes';
 import { SeccionInmovilizadas, type InmovilizadasConfigVista } from './inmovilizadas';
 import { SeccionClasesCobro, type ClasesCobroVista } from './clases-cobro';
-import { MarcoPagina, BotonEnlace, EstadoVacio, Icono, StatusChip, TituloRecuadro } from '@/app/ui-v2/componentes';
+import { MarcoPagina, BotonEnlace, EstadoVacio, Icono, StatusChip, TituloRecuadro, Boton, Disclosure, Tooltip } from '@/app/ui-v2/componentes';
+import { SeccionConfig } from './seccion';
 import '../peajes.css';
-import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 import { rico as ricoT } from '@/lib/i18n/rico';
 
@@ -107,15 +107,6 @@ export function VistaConfiguracionPeajes({
   );
 }
 
-function Titulo({ t, nota, info }: { t: string; nota: React.ReactNode; info: InfoClave }) {
-  return (
-    <>
-      <TituloRecuadro info={info} className="mb-1">{t}</TituloRecuadro>
-      <p className="text-[11px] mb-3 rv-pj-c-faint">{nota}</p>
-    </>
-  );
-}
-
 function NoSePudoLeer({ que, tr = TR_ES }: { que: string; tr?: TrAgentes }) {
   const { t: tx } = tr;
   return <p className="text-[12px] mt-3 rv-pj-c-muted">{tx('rest.no_se_pudo_leer_ahora_mismo', { que })}</p>;
@@ -127,9 +118,8 @@ const etiquetaEstado = (tx: TAgentes = TR_ES.t): Record<string, string> => ({ pe
 function SeccionBuzon({ buzon, archivos, acciones, sufijo, tr = TR_ES }: { buzon: BuzonVista; archivos: ArchivoIngestaVista[] | null; acciones: AccionesConfiguracion; sufijo: string; tr?: TrAgentes }) {
   const { t: tx } = tr;
   return (
-    <section className="rv-tarjeta" id="buzon">
-      <Titulo t={tx('rest.buzon_automatico_del_proveedor')} info="peajes_config.buzon"
-        nota={tx('rest.el_sistema_del_proveedor_o_un')} />
+    <SeccionConfig id="buzon" titulo={tx('rest.buzon_automatico_del_proveedor')} info="peajes_config.buzon"
+        nota={tx('rest.el_sistema_del_proveedor_o_un')}>
       {!buzon.secretoConfigurado && (
         <p className="text-[12px] mb-3 rv-pj-c-warn">{tx('rest.falta_configurar_la_llave_del_buzon')}</p>
       )}
@@ -137,7 +127,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo, tr = TR_ES }: { buzon
         <NoSePudoLeer tr={tr} que={tx('rest.el_estado_del_buzon')} />
       ) : buzon.estado === 'inactivo' ? (
         <div className="flex items-center gap-2 flex-wrap">{ricoT(tx('rest.e0_buzon_desactivado_e0'), { e0: (c) => <span className="text-[12px] rv-pj-c-muted">{c}</span> })}{buzon.puedeAdministrar
-            ? <form action={acciones.activarBuzon}><button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Inbox} />{' '}{tx('rest.activar_buzon')}</button></form>
+            ? <form action={acciones.activarBuzon}><Boton type="submit" variante="primary" tamano="sm"><Icono icono={Inbox} />{' '}{tx('rest.activar_buzon')}</Boton></form>
             : <span className="text-[11px] rv-pj-c-faint">{tx('rest.solo_quien_administra_la_flota_lo_2')}</span>}
         </div>
       ) : (
@@ -145,11 +135,11 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo, tr = TR_ES }: { buzon
           <div className="flex items-center gap-2 flex-wrap text-[12px]">{ricoT(tx('rest.e0_activo_e0_e1_llave_n', { rotacion: buzon.rotacion ?? '' }), { e0: (c) => <span className="cifra-mono rv-pj-pill" data-tono="ok">{c}</span>, e1: (c) => <span className="rv-pj-c-muted">{c}</span> })}{buzon.puedeAdministrar && (
               <>
                 <form action={acciones.rotarLlave}>
-                  <button type="submit" className="rv-btn rv-btn--secondary" title={tx('rest.la_llave_anterior_deja_de_servir')}>
-                    <Icono icono={KeyRound} />{tx('rest.rotar_llave')}</button>
+                  <Tooltip texto={tx('rest.la_llave_anterior_deja_de_servir')}><Boton type="submit" variante="secondary" tamano="sm">
+                    <Icono icono={KeyRound} />{tx('rest.rotar_llave')}</Boton></Tooltip>
                 </form>
                 <form action={acciones.desactivarBuzon}>
-                  <button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.desactivar')}</button>
+                  <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.desactivar')}</Boton>
                 </form>
               </>
             )}
@@ -161,11 +151,10 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo, tr = TR_ES }: { buzon
               ? <Campo etiqueta={tx('rest.llave_de_firma_secreto_no_la')} valor={buzon.llave} />
               : <p className="rv-pj-c-faint">{tx('rest.la_llave_de_firma_solo_la')}</p>}
           </div>
-          <details className="text-[12px]">
-            <summary className="cursor-pointer rv-pj-c-marca">{tx('rest.como_firmar_un_envio_ejemplo')}</summary>
+          <Disclosure variante="linea" titulo={tx('rest.como_firmar_un_envio_ejemplo')}>
             <pre className="rv-pj-codigo">{ejemploFirma(tx)}</pre>
             <p className="mt-1.5 rv-pj-c-faint">{tx('rest.respuestas_202_aceptado_200_ya_lo')}</p>
-          </details>
+          </Disclosure>
         </div>
       )}
 
@@ -193,8 +182,8 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo, tr = TR_ES }: { buzon
                       {!a.proveedor && (
                         <input name="proveedor" maxLength={60} placeholder={tx('rest.proveedor_p_ej_iave')} aria-label={tx('rest.proveedor_del_archivo')} className="hairline rounded px-1.5 py-0.5 text-[11px] w-36 mr-1" />
                       )}
-                      <button type="submit" className="rv-btn rv-btn--secondary">
-                        <Icono icono={RefreshCw} />{tx('rest.reintentar')}</button>
+                      <Boton type="submit" variante="secondary" tamano="sm">
+                        <Icono icono={RefreshCw} />{tx('rest.reintentar')}</Boton>
                     </form>
                   )}
                 </span>
@@ -204,7 +193,7 @@ function SeccionBuzon({ buzon, archivos, acciones, sufijo, tr = TR_ES }: { buzon
           ))}
         </div>
       )}
-    </section>
+    </SeccionConfig>
   );
 }
 
@@ -221,9 +210,8 @@ function Campo({ etiqueta, valor }: { etiqueta: string; valor: string }) {
 function SeccionMapeo({ mapeos, acciones, tr = TR_ES }: { mapeos: MapeoVista[] | null; acciones: AccionesConfiguracion; tr?: TrAgentes }) {
   const { t: tx } = tr;
   return (
-    <section className="rv-tarjeta" id="mapeo">
-      <Titulo t={tx('rest.mapeo_de_columnas_por_proveedor')} info="peajes_config.mapeo"
-        nota={<>{ricoT(tx('rest.el_lector_detecta_las_columnas_por'), { b: (c) => <b>{c}</b> })}</>} />
+    <SeccionConfig id="mapeo" titulo={tx('rest.mapeo_de_columnas_por_proveedor')} info="peajes_config.mapeo"
+        nota={<>{ricoT(tx('rest.el_lector_detecta_las_columnas_por'), { b: (c) => <b>{c}</b> })}</>}>
       {mapeos === null ? <NoSePudoLeer tr={tr} que="los mapeos" /> : mapeos.length === 0 ? (
         <p className="text-[12px] mb-3 rv-pj-c-muted">{tx('rest.ningun_proveedor_tiene_mapeo_todos_se')}</p>
       ) : (
@@ -235,7 +223,7 @@ function SeccionMapeo({ mapeos, acciones, tr = TR_ES }: { mapeos: MapeoVista[] |
               </span>
               <form action={acciones.borrarMapeo} className="ml-auto">
                 <input type="hidden" name="mapeo" value={m.id} />
-                <button type="submit" aria-label={tx('rest.eliminar_el_mapeo_de', { proveedor: m.proveedor })} className="rv-btn rv-btn--secondary"><Icono icono={Trash2} /></button>
+                <Boton type="submit" aria-label={tx('rest.eliminar_el_mapeo_de', { proveedor: m.proveedor })} variante="secondary" tamano="sm"><Icono icono={Trash2} /></Boton>
               </form>
             </div>
           ))}
@@ -250,10 +238,10 @@ function SeccionMapeo({ mapeos, acciones, tr = TR_ES }: { mapeos: MapeoVista[] |
         <Entrada nombre="tag" etiqueta={tx('rest.tag_opc')} ph={tx('rest.no_tag')} ancho="w-[110px]" />
         <Entrada nombre="unidad" etiqueta={tx('rest.unidad_opc')} ph={tx('rest.no_economico')} ancho="w-[120px]" />
         <Entrada nombre="clase" etiqueta={tx('rest.clase_opc')} ph="Clase" ancho="w-[90px]" />
-        <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.guardar_mapeo')}</button>
+        <Boton type="submit" variante="primary" tamano="sm">{tx('rest.guardar_mapeo')}</Boton>
       </form>
       <p className="text-[11px] mt-1.5 rv-pj-c-faint">{tx('rest.guardar_el_mismo_proveedor_de_nuevo')}</p>
-    </section>
+    </SeccionConfig>
   );
 }
 
@@ -273,7 +261,7 @@ function SubirCsv({ accion, etiqueta, extra, tr = TR_ES }: { accion: Accion; eti
       <input type="file" name="archivo" accept=".csv,.tsv,.xlsx,.xls,.ods" required aria-label={etiqueta}
         className="text-[12px] file:mr-3 file:px-3 file:py-1.5 file:rounded-lg file:border-0 file:text-[12px] file:font-medium file:cursor-pointer rv-pj-c-muted" />
       {extra}
-      <button type="submit" className="rv-btn rv-btn--primary"><Icono icono={Upload} />{' '}{tx('rest.cargar')}</button>
+      <Boton type="submit" variante="primary" tamano="sm"><Icono icono={Upload} />{' '}{tx('rest.cargar')}</Boton>
     </form>
   );
 }
@@ -282,9 +270,8 @@ function SubirCsv({ accion, etiqueta, extra, tr = TR_ES }: { accion: Accion; eti
 function SeccionTags({ tags, unidades, acciones, tr = TR_ES }: { tags: TagVista[] | null; unidades: Array<{ id: string; numeroEconomico: string; placas: string | null }> | null; acciones: AccionesConfiguracion; tr?: TrAgentes }) {
   const { t: tx } = tr;
   return (
-    <section className="rv-tarjeta" id="tags">
-      <Titulo t={tx('rest.tags_de_telepeaje_por_unidad')} info="peajes_config.tags"
-        nota={<>{ricoT(tx('rest.que_tag_es_de_que_camion'), { b: (c) => <b>{c}</b>, e1: (c) => <span className="cifra-mono">{c}</span> })}</>} />
+    <SeccionConfig id="tags" titulo={tx('rest.tags_de_telepeaje_por_unidad')} info="peajes_config.tags"
+        nota={<>{ricoT(tx('rest.que_tag_es_de_que_camion'), { b: (c) => <b>{c}</b>, e1: (c) => <span className="cifra-mono">{c}</span> })}</>}>
       <SubirCsv tr={tr} accion={acciones.importarTags} etiqueta={tx('rest.csv_de_tags')} />
       <form action={acciones.altaTag} className="flex items-end gap-2 flex-wrap mt-3">
         <Entrada nombre="tag" etiqueta="TAG" ph={tx('rest.imdm_12345678')} requerido />
@@ -294,7 +281,7 @@ function SeccionTags({ tags, unidades, acciones, tr = TR_ES }: { tags: TagVista[
           </select>
         </label>
         <Entrada nombre="proveedor" etiqueta={tx('rest.proveedor_opc')} ph="PASE" ancho="w-[110px]" />
-        <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.agregar_tag')}</button>
+        <Boton type="submit" variante="primary" tamano="sm">{tx('rest.agregar_tag')}</Boton>
       </form>
       {tags === null ? <NoSePudoLeer tr={tr} que="los TAGs" /> : tags.length === 0 ? (
         <p className="text-[12px] mt-3 rv-pj-c-muted">{tx('rest.aun_no_hay_tags_dados_de')}</p>
@@ -314,8 +301,8 @@ function SeccionTags({ tags, unidades, acciones, tr = TR_ES }: { tags: TagVista[
                   <label className="block">{ricoT(tx('rest.e0_ultimo_dia_en_uso_e0'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<input type="date" name="fecha" required className="mt-0.5 rv-ctl rv-ctl--fecha" />
                   </label>
                   <Entrada nombre="motivo" etiqueta={tx('rest.motivo')} ph={tx('rest.unidad_siniestrada')} ancho="w-[150px]" />
-                  <button type="submit" aria-label={tx('rest.eliminar_el_tag_del_uso_se', { tag: t.tag })} className="rv-btn rv-btn--secondary">
-                    <Icono icono={Trash2} />{' '}{tx('rest.dar_de_baja')}</button>
+                  <Boton type="submit" aria-label={tx('rest.eliminar_el_tag_del_uso_se', { tag: t.tag })} variante="secondary" tamano="sm">
+                    <Icono icono={Trash2} />{' '}{tx('rest.dar_de_baja')}</Boton>
                 </form>
               )}
             </div>
@@ -323,7 +310,7 @@ function SeccionTags({ tags, unidades, acciones, tr = TR_ES }: { tags: TagVista[
           {tags.length > 300 && <p className="text-[11px] rv-pj-c-faint">{tx('rest.se_muestran_los_primeros_300')}</p>}
         </div>
       )}
-    </section>
+    </SeccionConfig>
   );
 }
 
@@ -331,9 +318,8 @@ function SeccionTags({ tags, unidades, acciones, tr = TR_ES }: { tags: TagVista[
 function SeccionCasetas({ casetas, acciones, tr = TR_ES }: { casetas: CasetaVista[] | null; acciones: AccionesConfiguracion; tr?: TrAgentes }) {
   const { t: tx } = tr;
   return (
-    <section className="rv-tarjeta" id="casetas">
-      <Titulo t={tx('rest.catalogo_de_casetas')} info="peajes_config.casetas"
-        nota={<>{ricoT(tx('rest.las_casetas_por_nombre_lo_unico'), { b: (c) => <b>{c}</b>, e2: (c) => <span className="cifra-mono">{c}</span> })}</>} />
+    <SeccionConfig id="casetas" titulo={tx('rest.catalogo_de_casetas')} info="peajes_config.casetas"
+        nota={<>{ricoT(tx('rest.las_casetas_por_nombre_lo_unico'), { b: (c) => <b>{c}</b>, e2: (c) => <span className="cifra-mono">{c}</span> })}</>}>
       <SubirCsv tr={tr} accion={acciones.importarCasetas} etiqueta={tx('rest.csv_de_casetas')}
         extra={<input name="fuente" placeholder={tx('rest.fuente_de_las_coordenadas')} aria-label={tx('rest.fuente_de_las_coordenadas')} maxLength={200} className="w-[230px] rv-ctl" />} />
       {casetas === null ? <NoSePudoLeer tr={tr} que="las casetas" /> : casetas.length === 0 ? (
@@ -351,13 +337,13 @@ function SeccionCasetas({ casetas, acciones, tr = TR_ES }: { casetas: CasetaVist
               <form action={acciones.estadoCaseta} className="ml-auto">
                 <input type="hidden" name="caseta" value={c.id} />
                 <input type="hidden" name="activa" value={c.activa ? 'false' : 'true'} />
-                <button type="submit" className="rv-btn rv-btn--secondary">{c.activa ? tx('rest.desactivar') : tx('rest.activar')}</button>
+                <Boton type="submit" variante="secondary" tamano="sm">{c.activa ? tx('rest.desactivar') : tx('rest.activar')}</Boton>
               </form>
             </div>
           ))}
         </div>
       )}
-    </section>
+    </SeccionConfig>
   );
 }
 
@@ -365,9 +351,8 @@ function SeccionCasetas({ casetas, acciones, tr = TR_ES }: { casetas: CasetaVist
 function SeccionGeocercas({ geocercas, tipos, acciones, tr = TR_ES }: { geocercas: GeocercaVista[] | null; tipos: string[]; acciones: AccionesConfiguracion; tr?: TrAgentes }) {
   const { t: tx } = tr;
   return (
-    <section className="rv-tarjeta" id="geocercas">
-      <Titulo t="Geocercas" info="peajes_config.geocercas"
-        nota={tx('rest.circulos_centro_y_radio_para_patios')} />
+    <SeccionConfig id="geocercas" titulo="Geocercas" info="peajes_config.geocercas"
+        nota={tx('rest.circulos_centro_y_radio_para_patios')}>
       <form action={acciones.guardarGeocerca} className="flex items-end gap-2 flex-wrap">
         <Entrada nombre="nombre" etiqueta={tx('conductores.forma.nombre')} ph={tx('rest.patio_queretaro')} requerido />
         <label className="block">{ricoT(tx('rest.e0_tipo_e0'), { e0: (c) => <span className="etiqueta-mono text-[11px] uppercase block rv-pj-c-faint">{c}</span> })}<select name="tipo" className="w-[130px] mt-0.5 rv-ctl" defaultValue="punto_interes">
@@ -377,7 +362,7 @@ function SeccionGeocercas({ geocercas, tipos, acciones, tr = TR_ES }: { geocerca
         <Entrada nombre="lat" etiqueta={tx('rest.latitud')} ph="20.5888" requerido ancho="w-[100px]" />
         <Entrada nombre="lng" etiqueta={tx('rest.longitud')} ph="-100.3899" requerido ancho="w-[100px]" />
         <Entrada nombre="radio_m" etiqueta={tx('rest.radio_m')} ph="300" requerido ancho="w-[80px]" />
-        <button type="submit" className="rv-btn rv-btn--primary">{tx('rest.guardar_geocerca')}</button>
+        <Boton type="submit" variante="primary" tamano="sm">{tx('rest.guardar_geocerca')}</Boton>
       </form>
       {geocercas === null ? <NoSePudoLeer tr={tr} que="las geocercas" /> : geocercas.length === 0 ? (
         <p className="text-[12px] mt-3 rv-pj-c-muted">{tx('rest.aun_no_hay_geocercas')}</p>
@@ -391,13 +376,13 @@ function SeccionGeocercas({ geocercas, tipos, acciones, tr = TR_ES }: { geocerca
               <form action={acciones.estadoGeocerca} className="ml-auto">
                 <input type="hidden" name="geocerca" value={g.id} />
                 <input type="hidden" name="activa" value={g.activa ? 'false' : 'true'} />
-                <button type="submit" className="rv-btn rv-btn--secondary">{g.activa ? tx('rest.desactivar') : tx('rest.activar')}</button>
+                <Boton type="submit" variante="secondary" tamano="sm">{g.activa ? tx('rest.desactivar') : tx('rest.activar')}</Boton>
               </form>
             </div>
           ))}
         </div>
       )}
-    </section>
+    </SeccionConfig>
   );
 }
 
@@ -412,12 +397,11 @@ function SeccionCursos({ cursos, unidades, convenios, acciones, tr = TR_ES }: {
   const eco = new Map((unidades ?? []).map((u) => [u.id, u.numeroEconomico]));
   const conv = new Map((convenios ?? []).map((c) => [c.id, c.nombre]));
   return (
-    <section className="rv-tarjeta" id="cursos">
-      <Titulo t={tx('rest.cursos_rutas_autorizadas')} info="peajes_config.cursos"
-        nota={<>{ricoT(tx('rest.las_casetas_que_cada_unidad_o'), { b: (c) => <b>{c}</b>, e1: (c) => <span className="cifra-mono">{c}</span>, e2: (c) => <span className="cifra-mono">{c}</span>, e3: (c) => <span className="cifra-mono">{c}</span> })}</>} />
+    <SeccionConfig id="cursos" titulo={tx('rest.cursos_rutas_autorizadas')} info="peajes_config.cursos"
+        nota={<>{ricoT(tx('rest.las_casetas_que_cada_unidad_o'), { b: (c) => <b>{c}</b>, e1: (c) => <span className="cifra-mono">{c}</span>, e2: (c) => <span className="cifra-mono">{c}</span>, e3: (c) => <span className="cifra-mono">{c}</span> })}</>}>
       <SubirCsv tr={tr} accion={acciones.importarCursos} etiqueta={tx('rest.csv_de_cursos')} />
       <form action={acciones.importarCursosDeTabla} className="mt-2">
-        <button type="submit" className="rv-btn rv-btn--secondary">{tx('rest.leer_los_cursos_de_mi_tabla')}</button>
+        <Boton type="submit" variante="secondary" tamano="sm">{tx('rest.leer_los_cursos_de_mi_tabla')}</Boton>
       </form>
       {cursos === null ? <NoSePudoLeer tr={tr} que="los cursos" /> : cursos.length === 0 ? (
         <p className="text-[12px] mt-3 rv-pj-c-muted">{tx('rest.aun_no_hay_cursos_el_reporte')}</p>
@@ -438,12 +422,12 @@ function SeccionCursos({ cursos, unidades, convenios, acciones, tr = TR_ES }: {
               <form action={acciones.estadoCurso} className="ml-auto">
                 <input type="hidden" name="curso" value={c.id} />
                 <input type="hidden" name="activo" value={c.activo ? 'false' : 'true'} />
-                <button type="submit" className="rv-btn rv-btn--secondary">{c.activo ? tx('rest.desactivar') : tx('rest.activar')}</button>
+                <Boton type="submit" variante="secondary" tamano="sm">{c.activo ? tx('rest.desactivar') : tx('rest.activar')}</Boton>
               </form>
             </div>
           ))}
         </div>
       )}
-    </section>
+    </SeccionConfig>
   );
 }
