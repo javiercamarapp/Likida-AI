@@ -74,7 +74,7 @@
 [data-ui="v2"] .adm-perfil-valor { font-size: var(--t-body, 13px); color: var(--ink); overflow-wrap: anywhere; }
 
 /* «Qué no se sabe» (Rovaq): caja punteada dentro de su tarjeta, texto a la izquierda. */
-[data-ui="v2"] .adm-nosabe { border-style: dashed; background: transparent; }
+[data-ui="v2"] .adm-nosabe { border-style: dashed; background: var(--canvas2, var(--canvas)); }
 [data-ui="v2"] .adm-nosabe p { margin: 0 0 8px; font-size: var(--t-body, 13px); line-height: 1.5; color: var(--muted); text-align: left; }
 [data-ui="v2"] .adm-nosabe p:last-child { margin-bottom: 0; }
 
@@ -88,3 +88,34 @@
 
 /* Mismo vacío uniforme que dinero.css (pedido_compartido: unificar `.rv-vacio` en componentes.css). */
 [data-ui="v2"] .rv-tarjeta .rv-vacio:not([data-pantalla]) { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; }
+
+/* ── Ronda 4 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────── */
+/* Una cifra suelta es su propia tira de UNA celda: la regla móvil de `.rv-kpis` (2 columnas) la dejaba en media caja (66 px de texto,
+   palabras partidas). Una tira de una sola celda llena SIEMPRE su caja. (pedido_compartido: lo mismo en ui-v2/graficas.css.) */
+[data-ui="v2"] .rv-kpis:has(> .rv-kpi:only-child) { grid-template-columns: minmax(0, 1fr); }
+[data-ui="v2"] .rv-kpis:has(> .rv-kpi:only-child) .rv-kpi { overflow-wrap: normal; word-break: normal; }
+/* pf-tile: rótulo en altas y bajas 12/600 (no mayúsculas mono 11) con el sello «● Observado» debajo de la cifra. */
+[data-ui="v2"] .adm-res-tiles .rv-kpi__etq,
+[data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__etq { font: 600 12px/1.3 var(--font-sans-ui, inherit); text-transform: none; letter-spacing: 0; color: var(--ink2, var(--muted)); }
+[data-ui="v2"] .adm-res-tiles .rv-kpi__sello,
+[data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__sello { flex: 0 0 auto; }
+@media (max-width: 1099px) {
+  [data-ui="v2"] .adm-res-tiles .rv-kpi__sello,
+  [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi__sello { position: static; width: auto; height: auto; overflow: visible; clip-path: none; white-space: normal; }
+}
+/* Filas-tarjeta de los paneles (Rovaq): borde de 1 px, radio 10, píldora de estado y «Ver detalle ›». */
+[data-ui="v2"] .adm-res-lista--tarjetas { gap: 8px; }
+[data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; border-bottom-width: 1px; background: var(--surface); }
+[data-ui="v2"] .adm-res-lista--tarjetas .adm-res-fila:last-child { border-bottom: 1px solid var(--line); }
+[data-ui="v2"] .adm-res-fila__ver { flex: none; font-size: 13px; font-weight: 500; color: var(--ink); text-decoration: none; white-space: nowrap; }
+[data-ui="v2"] .adm-res-fila__ver:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* Una fila de dos paneles no estira al más bajo hasta el alto del más alto con un vacío dentro. */
+[data-ui="v2"] .adm-fila-alto-contenido { align-items: start; }
+/* Ficha 360 y consola: las tarjetas de cifra van SIN filete (Rovaq `pf-tile`); el color de dato no pinta un borde grueso. */
+[data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { border-top-width: 0; padding: 20px; }
+@media (max-width: 767px) { [data-ui="v2"] .rv-esq--ficha .rv-esq__cifras-sueltas .rv-kpi { padding: 12px; } }
+/* Descripción de una tarjeta de formulario: separada del primer campo (antes se pegaba a la fila «Flota»). */
+[data-ui="v2"] .adm-tarjeta-desc { margin: 0 0 12px; font-size: var(--t-small, 12px); line-height: 1.5; color: var(--muted); }
+/* Select de rol y Revocar de la tabla de integrantes: 28 px, Revocar en peligro (Rovaq). */
+/* Notificaciones: la configuración es una acción de la cabecera; el botón duplicado de la bandeja compartida no se pinta aquí. */
+[data-ui="v2"] .adm-notif .av-cambio { display: none; }

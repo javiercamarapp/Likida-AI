@@ -12,6 +12,7 @@ import { FormaConAviso, type AccionDeForma } from '../../ui/forma';
 import { CampoTexto } from '../../../ui-v2/componentes/campos';
 import { SeccionInterruptores } from '../../observabilidad/interruptores-ui';
 import { uniformes } from '../../cifras-uniformes';
+import { observadas } from '../../sello-observado';
 import { SeccionesFicha } from './secciones';
 import '../../resumen.css';
 
@@ -63,28 +64,29 @@ export function Ficha360({
       <FilaTarjetas variante="6-6">
       <Tarjeta titulo={t('flotas_ficha.senales_de_uso')} estado={f.pmf ? 'ok' : 'error'} mensaje={t('flotas_ficha.no_se_pudieron_leer_4')}>
         {f.pmf && (
-          <ul>
-            <li>
-              {f.pmf.descargas.medida
+          <ul className="adm-res-lista adm-res-lista--tarjetas">
+            {[
+              { clave: 'pdf', medida: f.pmf.descargas.medida, texto: f.pmf.descargas.medida
                 ? t('flotas_ficha.pdf_de_liquidaciones_descargadas', { porCliente: numero(f.pmf.descargas.porCliente), liquidaciones: numero(f.pmf.descargas.liquidaciones), soloDemo: f.pmf.descargas.soloDemo > 0 ? ` (${numero(f.pmf.descargas.soloDemo)} solo demo, no cuentan)` : '' })
-                : t('flotas_ficha.pdf_sin_liquidaciones_que')}
-            </li>
-            <li>
-              {f.pmf.comprobacionSola.medida
+                : t('flotas_ficha.pdf_sin_liquidaciones_que') },
+              { clave: 'sola', medida: f.pmf.comprobacionSola.medida, texto: f.pmf.comprobacionSola.medida
                 ? t('flotas_ficha.comprobacion_sola_de_viajes', { sinRecordatorio: numero(f.pmf.comprobacionSola.sinRecordatorio), liquidados: numero(f.pmf.comprobacionSola.liquidados) })
-                : t('flotas_ficha.comprobacion_sola_sin_viajes')}
-            </li>
-            <li>
-              {f.pmf.tickets.medida
+                : t('flotas_ficha.comprobacion_sola_sin_viajes') },
+              { clave: 'tickets', medida: f.pmf.tickets.medida, texto: f.pmf.tickets.medida
                 ? t('flotas_ficha.tickets_abiertos_por_la', { delCliente: numero(f.pmf.tickets.delCliente), deLikida: numero(f.pmf.tickets.deLikida) })
-                : t('flotas_ficha.tickets_ninguno_todavia_a')}
-            </li>
+                : t('flotas_ficha.tickets_ninguno_todavia_a') },
+            ].map((x) => (
+              <li key={x.clave} className="adm-res-fila">
+                <div className="adm-res-fila__texto"><span className="adm-res-fila__titulo">{x.texto}</span></div>
+                <StatusChip tono={x.medida ? 'neutral' : 'muted'}>{x.medida ? t('a1r4.observado') : t('flotas_ficha.sin_dato')}</StatusChip>
+              </li>
+            ))}
           </ul>
         )}
       </Tarjeta>
       <Tarjeta titulo={t('flotas_ficha.ultimas_corridas_de_agentes')} estado={f.corridas === null ? 'error' : f.corridas.length === 0 ? 'vacio' : 'ok'}
         mensaje={f.corridas === null ? t('flotas_ficha.no_se_pudieron_leer_2') : t('flotas_ficha.sin_corridas_de_agentes')}>
-        <TablaBase
+        <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.corridas_de_agentes_de')} filas={f.corridas ?? []} idFila={(c) => `${c.agente}-${c.fin}`}
           columnas={[
             { id: 'agente', titulo: t('flotas_ficha.agente'), principal: true, celda: (c) => c.agente },
@@ -101,8 +103,8 @@ export function Ficha360({
             : <p>{t('flotas_ficha.no_nacio_del_pipeline')}</p>}
       </Tarjeta>
       <Tarjeta titulo={t('flotas_ficha.soporte')} estado={f.tickets === null ? 'error' : f.tickets.length === 0 ? 'vacio' : 'ok'} mensaje={f.tickets === null ? t('flotas_ficha.no_se_pudieron_leer') : t('flotas_ficha.sin_tickets_de_esta')}
-        acciones={<BotonEnlace href="/admin/soporte" variante="ghost" tamano="sm">{t('flotas_ficha.ver_soporte')}</BotonEnlace>}>
-        <TablaBase
+        acciones={<BotonEnlace href="/admin/soporte" variante="secondary" tamano="sm">{t('flotas_ficha.ver_soporte')}</BotonEnlace>}>
+        <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.tickets_de_la_flota')} filas={(f.tickets ?? []).slice(0, 5)} idFila={(t) => t.id}
           columnas={[
             { id: 'asunto', titulo: t('flotas_ficha.asunto'), principal: true, celda: (t) => t.asunto },
@@ -129,7 +131,7 @@ export function Ficha360({
         </>
       )}
     >
-      <TablaBase
+      <TablaBase tarjetaMovil
         etiqueta={t('flotas_ficha.personas_de_la_flota')} filas={personas ?? []} idFila={(p) => p.id}
         columnas={[
           { id: 'persona', titulo: t('flotas_ficha.persona'), principal: true, celda: (p) => <span>{p.nombre ?? '(sin nombre)'} <small>{p.email}</small></span> },
@@ -161,7 +163,7 @@ export function Ficha360({
       <Tarjeta titulo={t('flotas_ficha.facturas_saas')} estado={f.facturasSaas === null ? 'error' : f.facturasSaas.length === 0 ? 'vacio' : 'ok'}
         mensaje={f.facturasSaas === null ? t('flotas_ficha.no_se_pudieron_leer_3') : t('flotas_ficha.sin_facturas_emitidas')}
         acciones={<BotonEnlace href="/admin/costos-facturacion" variante="ghost" tamano="sm">{t('flotas_ficha.costos_y_facturacion')}</BotonEnlace>}>
-        <TablaBase
+        <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.facturas_saas_de_la')} filas={f.facturasSaas ?? []} idFila={(x) => x.id}
           columnas={[
             { id: 'periodo', titulo: t('flotas_ficha.periodo'), principal: true, celda: (x) => `${fechaCorta(x.periodoInicio)} a ${fechaCorta(x.periodoFin)}` },
@@ -177,7 +179,7 @@ export function Ficha360({
   const arranqueSec = (
     <>
       <Tarjeta titulo={t('flotas_ficha.arranque_de_la_flota')} estado={arranque === null ? 'error' : 'ok'} mensaje={t('flotas_ficha.no_se_pudo_leer_3')}>
-        <TablaBase
+        <TablaBase tarjetaMovil
           etiqueta={t('flotas_ficha.casillas_de_arranque')} filas={casillas} idFila={(c) => c.clave}
           columnas={[
             { id: 'casilla', titulo: t('flotas_ficha.casilla'), principal: true, celda: (c) => c.texto },
@@ -277,12 +279,13 @@ export function cifrasFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdminFl
       nota: f.consumoIa ? t('flotas_ficha.usd_historico', { historicoUsd: numero(f.consumoIa.historicoUsd) }) : undefined,
     },
   ];
-  if (!ctx) return uniformes(base);
+  const rotulo = t('a1r4.observado');
+  if (!ctx) return observadas(uniformes(base), rotulo);
   const personas = ctx.personas;
   const casillas = ctx.casillas;
   const hechas = casillas ? casillas.filter((c) => c.estado === 'ok').length : null;
   const medido = casillas ? casillas.every((c) => c.estado !== 'sin_medir') : false;
-  return uniformes([
+  return observadas(uniformes([
     ...base,
     personas == null
       ? { etiqueta: t('flotas_ficha.personas_activas'), valor: null, estado: 'error' as const }
@@ -290,7 +293,7 @@ export function cifrasFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdminFl
     casillas == null || !medido
       ? { etiqueta: t('flotas_ficha.arranque_de_la_flota'), valor: null, estado: 'error' as const }
       : { etiqueta: t('flotas_ficha.arranque_de_la_flota'), valor: `${hechas} de ${casillas.length}` },
-  ]);
+  ]), rotulo);
 }
 
 /** Los chips de la ficha: el plan y el estado de la suscripción, solo si se pudieron leer. */
@@ -307,13 +310,13 @@ export function chipsFicha(f: FichaCliente): ReactNode {
 export function encabezadoFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdminFlotasEs) {
   return {
     titulo: f.tenant.nombre,
-    apoyo: t('flotas_ficha.plan', { plan: f.tenant.plan, creadoEn: f.tenant.creadoEn ? t('ficha.alta_fecha', { fecha: fechaCorta(f.tenant.creadoEn) }) : '' }),
+    apoyo: t('flotas_ficha.plan', { plan: f.tenant.plan, creadoEn: f.tenant.creadoEn ? t('ficha.alta_fecha', { fecha: fechaCorta(f.tenant.creadoEn) }) : '' }) + (f.suscripcion ? ` · ${f.suscripcion.estado}` : ''),
     volver: { href: '/admin/flotas', etiqueta: t('flotas_ficha.volver_a_clientes') },
     // Rovaq P2b: «Abrir organización» (primario) + «Gestionar equipo»; «Todas las organizaciones» lo pone el esqueleto como «Volver».
     acciones: (
       <>
-        <BotonEnlace href={`/dashboard?tenant=${f.tenant.id}&rol=flota_admin`} variante="primary" tamano="sm">{t('flotas_ficha.ver_su_panel')}</BotonEnlace>
-        <BotonEnlace href={`/admin/equipo?flota=${f.tenant.id}`} variante="secondary" tamano="sm">{t('flotas_ficha.gestionar_en_equipo')}</BotonEnlace>
+        <BotonEnlace href={`/dashboard?tenant=${f.tenant.id}&rol=flota_admin`} variante="primary">{t('flotas_ficha.ver_su_panel')}</BotonEnlace>
+        <BotonEnlace href={`/admin/equipo?flota=${f.tenant.id}`} variante="secondary">{t('flotas_ficha.gestionar_en_equipo')}</BotonEnlace>
       </>
     ),
   };

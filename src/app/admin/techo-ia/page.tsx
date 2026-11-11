@@ -4,6 +4,7 @@ import { Aviso, Boton, BotonEnlace, CampoTexto, EstadoError, StatusChip, TablaBa
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { CajonVistaRapida } from '../../ui-v2/esqueletos/cajon-vista-rapida';
 import { uniformes } from '../cifras-uniformes';
+import { observadas } from '../sello-observado';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
@@ -54,14 +55,14 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   } catch {
     datos = null;
   }
-  if (datos === null) return <PantallaTecho><EstadoError>{t('techo_ia.no_se_pudo_leer')}</EstadoError></PantallaTecho>;
+  if (datos === null) return <PantallaTecho apoyo={t('a1r4.techo_apoyo')}><EstadoError>{t('techo_ia.no_se_pudo_leer')}</EstadoError></PantallaTecho>;
 
   const columnas: ColumnaBase<FilaTechoIa>[] = [
     { id: 'flota', titulo: t('techo_ia.flota'), principal: true, celda: (f) => f.nombre },
     { id: 'techo', titulo: t('techo_ia.techo_que_aplica'), alinear: 'der', celda: (f) => <span className="tabular">{usd(f.topeUsd)}</span> },
     { id: 'origen', titulo: t('techo_ia.origen'), celda: (f) => <StatusChip tono={ORIGEN[f.origen].tono}>{ORIGEN[f.origen].rotulo}</StatusChip> },
     {
-      id: 'hoy', titulo: t('techo_ia.hoy'), alinear: 'der',
+      id: 'hoy', titulo: t('techo_ia.hoy'),
       celda: (f) => f.usadoHoyUsd === null ? (
         <span className="rv-techo-tenue">sin medir</span>
       ) : (
@@ -124,8 +125,9 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
 
   return (
     <PantallaTecho
+      apoyo={t('a1r4.techo_apoyo')}
       etiquetaCifras={t('techo_ia.flotas')}
-      cifras={uniformes(cifras)}
+      cifras={observadas(uniformes(cifras), t('a1r4.observado'))}
       vistaRapida={cajon}
       avisos={(
         <>

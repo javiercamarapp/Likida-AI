@@ -72,9 +72,7 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
   const { declaraciones, cambiar } = useDeclaraciones(ambito, soloLectura);
 
   const r = useMemo(() => armarPasosCincoAgentes(senales, declaraciones, responsables), [senales, declaraciones, responsables]);
-  const [elegido, setElegido] = useState<IdPaso | null>(pasoInicial ?? null);
-  const idActual: IdPaso = elegido ?? r.siguiente ?? r.rutaCritica[0].id;
-  const actual = [...r.rutaCritica, ...r.despues].find((p) => p.id === idActual)!;
+  const idActual: IdPaso = pasoInicial ?? r.siguiente ?? r.rutaCritica[0].id;
 
   // La insignia del menú sale de una cookie con solo «listos/total» (el layout la lee en el servidor). Nada de negocio.
   useEffect(() => {
@@ -91,65 +89,49 @@ export function VistaPuestaEnMarcha({ senales, ambito, tenantId, sufijo, soloLec
         <Aviso tono="info" className="rv-pem__aviso">{t('op.estas_viendo_esta_cuenta_como_superadmin')}</Aviso>
       )}
 
-      <div className="rv-pem__cuerpo">
-        <aside className="rv-pem__lateral" aria-label={t('op.tus_pasos')}>
-          <section className="rv-pem__avance" {...anclaTour('asistente.avance')}>
-            <progress className="rv-pem__barra" max={r.total || 1} value={r.listos} aria-label={t('cfg.avance_de_la_puesta_en_marcha')} />
-            <div>
-              <p className="rv-pem__avance-num">{r.listos} de {r.total}</p>
-              <p className="rv-pem__avance-txt">
-                {etiquetaGlobal(r) ?? (r.listos === 0 ? t('op.aun_no_hay_pasos_terminados') : 'pasos terminados')}
-              </p>
-            </div>
-          </section>
+      <div className="rv-pem__cuerpo" role="group" aria-label={t('op.tus_pasos')}>
+        <section className="rv-pem__avance" {...anclaTour('asistente.avance')}>
+          <progress className="rv-pem__barra" max={r.total || 1} value={r.listos} aria-label={t('cfg.avance_de_la_puesta_en_marcha')} />
+          <div>
+            <p className="rv-pem__avance-num">{r.listos} de {r.total}</p>
+            <p className="rv-pem__avance-txt">
+              {etiquetaGlobal(r) ?? (r.listos === 0 ? t('op.aun_no_hay_pasos_terminados') : 'pasos terminados')}
+            </p>
+          </div>
+        </section>
 
-          <ol className="rv-pem__lista" {...anclaTour('asistente.lista')}>
-            {r.rutaCritica.map((p) => (
-              <li key={p.id}>
-                <Boton
-                  variante="ghost" className="rv-pem__item !flex !h-auto !w-full !justify-start !whitespace-normal !text-left" data-activo={p.id === idActual || undefined}
-                  aria-current={p.id === idActual ? 'step' : undefined}
-                  onClick={() => setElegido(p.id)}
-                  {...anclaTour(`asistente.paso-${p.id.replace('_', '-')}`)}
-                >
-                  <span className="rv-pem__num" data-estado={p.estado}>
-                    {p.estado === 'listo' ? <Check width={13} height={13} strokeWidth={2.6} aria-hidden="true" /> : p.numero}
-                  </span>
-                  <span className="rv-pem__item-texto">
-                    <span className="rv-pem__item-titulo">{p.titulo}</span>
-                    <span className="rv-pem__item-sub">{p.faltaDe ?? ROTULO_ESTADO[p.estado]}</span>
-                  </span>
-                </Boton>
+        <ol className="rv-pem__pasos" {...anclaTour('asistente.lista')}>
+          {r.rutaCritica.map((p) => (
+            <li
+              key={p.id} className="rv-pem__tarjeta" data-activo={p.id === idActual || undefined}
+              aria-current={p.id === idActual ? 'step' : undefined}
+              {...anclaTour(`asistente.paso-${p.id.replace('_', '-')}`)}
+            >
+              <div aria-live={p.id === idActual ? 'polite' : undefined} {...(p.id === idActual ? anclaTour('asistente.detalle') : {})}>
+                <DetallePaso
+                  paso={p} sufijo={sufijo} soloLectura={soloLectura}
+                  declaraciones={declaraciones} onCambiar={cambiar} responsables={responsables}
+                />
+              </div>
+            </li>
+          ))}
+        </ol>
+
+        <details className="rv-pem__despues">
+          <summary>
+            <ChevronDown width={14} height={14} aria-hidden="true" />{rico(t('op.despues_e0_e0', { length: r.despues.length }), { e0: (c) => <span>{c}</span> })}</summary>
+          <p className="rv-pem__despues-nota">{t('op.no_hacen_falta_para_empezar_y')}</p>
+          <ul className="rv-pem__pasos">
+            {r.despues.map((p) => (
+              <li key={p.id} className="rv-pem__tarjeta" data-activo={p.id === idActual || undefined}>
+                <DetallePaso
+                  paso={p} sufijo={sufijo} soloLectura={soloLectura}
+                  declaraciones={declaraciones} onCambiar={cambiar} responsables={responsables}
+                />
               </li>
             ))}
-          </ol>
-
-          <details className="rv-pem__despues">
-            <summary>
-              <ChevronDown width={14} height={14} aria-hidden="true" />{rico(t('op.despues_e0_e0', { length: r.despues.length }), { e0: (c) => <span>{c}</span> })}</summary>
-            <p className="rv-pem__despues-nota">{t('op.no_hacen_falta_para_empezar_y')}</p>
-            <ul className="rv-pem__lista">
-              {r.despues.map((p) => (
-                <li key={p.id}>
-                  <Boton variante="ghost" className="rv-pem__item !flex !h-auto !w-full !justify-start !whitespace-normal !text-left" data-activo={p.id === idActual || undefined} aria-current={p.id === idActual ? 'step' : undefined} onClick={() => setElegido(p.id)}>
-                    <span className="rv-pem__num" data-estado={p.estado}><span aria-hidden="true">·</span></span>
-                    <span className="rv-pem__item-texto">
-                      <span className="rv-pem__item-titulo">{p.titulo}</span>
-                      <span className="rv-pem__item-sub">{p.faltaDe ?? ROTULO_ESTADO[p.estado]}</span>
-                    </span>
-                  </Boton>
-                </li>
-              ))}
-            </ul>
-          </details>
-        </aside>
-
-        <section className="rv-pem__detalle" aria-live="polite" {...anclaTour('asistente.detalle')}>
-          <DetallePaso
-            key={actual.id} paso={actual} sufijo={sufijo} soloLectura={soloLectura}
-            declaraciones={declaraciones} onCambiar={cambiar} responsables={responsables}
-          />
-        </section>
+          </ul>
+        </details>
       </div>
     </div>
   );
@@ -242,9 +224,9 @@ function DetallePaso({ paso, sufijo, soloLectura, declaraciones, onCambiar, resp
             onCambiar({ ...declaraciones, omitidos: { ...declaraciones.omitidos, [paso.id]: m } });
             setOmitiendo(false); setMotivo('');
           }}>
-            <label htmlFor="pem-motivo">{t('op.por_que_lo_omites')}</label>
-            <input id="pem-motivo" value={motivo} maxLength={140} onChange={(e) => setMotivo(e.target.value)} placeholder={t('op.ej_lo_resuelve_otra_area')} aria-describedby="pem-motivo-ayuda" />
-            <p id="pem-motivo-ayuda" className="rv-pem__omitir-ayuda">{t('op.cuentalo_en_al_menos_letras_un', { motivoMinimo: MOTIVO_MINIMO })}</p>
+            <label htmlFor={`pem-motivo-${paso.id}`}>{t('op.por_que_lo_omites')}</label>
+            <input id={`pem-motivo-${paso.id}`} value={motivo} maxLength={140} onChange={(e) => setMotivo(e.target.value)} placeholder={t('op.ej_lo_resuelve_otra_area')} aria-describedby={`pem-motivo-ayuda-${paso.id}`} />
+            <p id={`pem-motivo-ayuda-${paso.id}`} className="rv-pem__omitir-ayuda">{t('op.cuentalo_en_al_menos_letras_un', { motivoMinimo: MOTIVO_MINIMO })}</p>
             <Boton type="submit" tamano="sm" variante="secondary" disabled={motivo.trim().length < MOTIVO_MINIMO}>{t('op.omitir')}</Boton>
             <Boton tamano="sm" variante="ghost" onClick={() => setOmitiendo(false)}>{t('op.cancelar')}</Boton>
           </form>

@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { requireSuperadmin } from '@/lib/auth/guard';
@@ -117,7 +118,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
     <EsqueletoTablaMaestra
       titulo={tx('corridas.corridas')}
       apoyo={tx('corridas.las_corridas_de_los_agentes_en')}
-      cifras={resultado === null ? undefined : [
+      cifras={resultado === null ? undefined : uniformes([
         { etiqueta: tx('corridas.corridas'), valor: resultado.total, formato: 'entero' },
         { etiqueta: tx('corridas.kpi_ok'), valor: resultado.corridas.filter((c) => c.estado === 'ok').length, formato: 'entero', nota: tx('corridas.kpi_pagina_nota') },
         { etiqueta: tx('corridas.kpi_parciales'), valor: resultado.corridas.filter((c) => c.estado === 'parcial').length, formato: 'entero', tono: resultado.corridas.some((c) => c.estado === 'parcial') ? 'warn' : undefined },
@@ -125,7 +126,7 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
         parados === null
           ? { etiqueta: tx('corridas.kpi_parados'), valor: null, estado: 'vacio' as const }
           : { etiqueta: tx('corridas.kpi_parados'), valor: parados.parados.length, formato: 'entero' as const, tono: parados.parados.length > 0 ? 'warn' as const : undefined },
-      ]}
+      ])}
       filtros={
       <BarraFiltros accion="/admin/corridas" enLinea buscar etiqueta={tx('corridas.filtrar_corridas')} nActivos={[agente, estado, tenant].filter(Boolean).length} limpiarHref="/admin/corridas">
         <FiltroOpciones etiqueta={tx('observabilidad.agente')} nombre="agente" valor={agente} opciones={opcionesAgente(tx)} />
@@ -137,12 +138,14 @@ export default async function IndiceCorridas({ searchParams }: { searchParams: P
         <EstadoError reintentar>{tx('corridas.no_se_pudieron_leer_las_corridas')}</EstadoError>
       ) : (
         <>
+          <div className="adm-sis-caja">
           <TablaLista<CorridaCruzada>
             etiqueta={tx('corridas.corridas_de_agentes')} columnas={columnasTr(tx, idioma)} filas={resultado.corridas} idFila={(c) => c.id} base="/admin/corridas" params={params}
             vacio={hayFiltro
               ? { titulo: tx('corridas.ninguna_corrida_coincide'), texto: tx('corridas.ninguna_corrida_coincide_con_el_filtro') }
               : { titulo: tx('corridas.aun_no_hay_corridas'), texto: tx('corridas.cada_corrida_de_un_agente_deja') }}
           />
+          </div>
           {calor !== null && calor.contadas > 0 ? (
             <Tarjeta titulo={t('corridas.calor.titulo')} elevar entra="tarjeta">
               <MapaCalor etiqueta={t('corridas.calor.etiqueta')} columnas={BLOQUES_HORA} filas={calor.filas} mostrarValores />

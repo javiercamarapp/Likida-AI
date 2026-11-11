@@ -187,6 +187,7 @@ export async function PanelVendedor({
 
   return (
     <EsqueletoPortada
+      area={tv('r4.vend_area')} apoyo={tv('r4.vend_apoyo')}
       titulo={esVendedor ? 'Mis prospectos' : 'Prospectos (soporte)'}
       cifras={cifras} etiquetaCifras={esVendedor ? 'Mi cartera' : 'Cartera (todos)'}
     >

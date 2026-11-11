@@ -114,15 +114,16 @@ export function VistaUsuarios({ usuarios, userId, puedeInvitar, roles, rolesInvi
               <p className="rv-usu__pie">{t('cfg.tu_rol_ve_el_equipo_pero')}</p>
             )}
             <Tarjeta titulo={t('e26.usu_que_puede_cada_rol')} info="usuarios.equipo">
-              <div className="rv-usu__roles rv-usu__roles--lista">
-                {catalogoRoles.map((r) => <p key={r.valor}><strong>{r.rotulo}:</strong> {r.detalle}</p>)}
-              </div>
+              {/* Lista de Rovaq: punto negro, el rol en 13/600, la descripción en 12 px y un divisor entre ítems. */}
+              <ul className="rv-usu__roles-lista">
+                {catalogoRoles.map((r) => <li key={r.valor}><strong>{r.rotulo}</strong><span>{r.detalle}</span></li>)}
+              </ul>
               <p className="rv-usu__aislamiento"><strong>{t('cfg.el_aislamiento_no_depende_de_esconder')}</strong> {t('cfg.cada_consulta_de_este_panel_va')}</p>
             </Tarjeta>
           </FilaTarjetas>
 
           <Tarjeta titulo={t('cfg.tu_equipo')} estado={usuarios.length === 0 ? 'vacio' : 'ok'} mensaje={t('cfg.no_hay_cuentas_dadas_de_alta')} detalle={t('cfg.cuando_invites_a_alguien_de_tu')} contenida>
-            <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} densa altoMaximo={false} tarjetaMovil className="rv-usu__tabla" />
+            <TablaBase etiqueta={t('cfg.usuarios_y_su_rol')} columnas={columnas} filas={usuarios} idFila={(u) => u.id} altoMaximo={false} tarjetaMovil className="rv-usu__tabla" />
           </Tarjeta>
         </>
       )}

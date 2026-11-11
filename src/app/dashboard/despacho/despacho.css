@@ -33,7 +33,12 @@
 
 /* Ronda 3 — «En curso» a sangre (la tabla ya trae su borde: la tarjeta no pone un segundo marco con margen) y, en móvil, la tabla pasa a tarjeta-fila sin
    forzar anchos que la desbordan. Las notas y el pie conservan su respiro dentro de la tarjeta sin relleno. */
-.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__nota, .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__pie { padding: 8px 14px; }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__nota { padding: 6px 14px 8px; }
+.rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__pie { padding: 8px 14px; }
+/* La tabla va a sangre dentro de la tarjeta (Rovaq): sin su propio marco, radio ni sombra; la separa solo el filete de la nota y del pie. */
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-dsp__tabla { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tb.rv-dsp__tabla .rv-tb__region { border-top: 1px solid var(--line); }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-dsp__pie { border-top: 1px solid var(--line); }
 @media (max-width: 819.98px) {
   .rv-dsp__tabla table td:last-child { white-space: normal; width: auto; }
   .rv-dsp__nombre { min-width: 0; max-width: 100%; }

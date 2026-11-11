@@ -260,8 +260,9 @@ function BotonGuardar({ apagado, sucio }: { apagado: boolean; sucio: boolean }) 
   const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
   const boton = (
-    <Boton type="submit" variante="primary" loading={pending} disabled={pending || apagado}>
-      {pending ? 'Guardando…' : sucio ? t('op.guardar_cambios') : t('ch.guardar_notificaciones')}
+    <Boton type="submit" variante={apagado ? 'secondary' : 'primary'} loading={pending} disabled={pending || apagado}
+      className={apagado ? 'rv-ag-no-disponible' : undefined}>
+      {apagado ? t('f26d2.boton.no_disponible') : pending ? 'Guardando…' : sucio ? t('op.guardar_cambios') : t('ch.guardar_notificaciones')}
     </Boton>
   );
   return apagado ? <Tooltip texto={t('ch.el_correo_no_esta_configurado_en')}>{boton}</Tooltip> : boton;

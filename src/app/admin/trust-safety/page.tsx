@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ShieldAlert } from 'lucide-react';
@@ -71,7 +72,7 @@ const columnasEventos = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma, pag?: stri
     // El actor viene ya truncado a 120 y JAMÁS trae un secreto completo (contrato de registrarEventoSeguridad). Sin actor no se inventa.
     id: 'actor', titulo: t('trust_safety.actor'), celda: (e) => <span className="adm-sis-celda-texto" title={e.actor ?? undefined}>{e.actor ?? '—'}</span>,
   },
-  { id: 'flota', titulo: t('observabilidad.flota'), celda: (e) => <span className="cifra-mono text-xs text-muted">{e.tenantId ? e.tenantId.slice(0, 8) : t('trust_safety.sin_flota')}</span> },
+  { id: 'flota', titulo: t('observabilidad.flota'), celda: (e) => (e.tenantId ? <span className="cifra-mono text-xs text-muted">{e.tenantId.slice(0, 8)}</span> : <span className="text-xs text-muted">{t('trust_safety.sin_flota')}</span>) },
   {
     id: 'vr', titulo: t('trust_safety.vista_rapida'), tituloOculto: true, alinear: 'der',
     celda: (e) => <BotonEnlace href={`/admin/trust-safety?${new URLSearchParams({ ...(pag ? { pag } : {}), ver: String(e.id) })}`} variante="ghost" tamano="sm">{t('trust_safety.vista_rapida')}</BotonEnlace>,
@@ -132,12 +133,12 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
       /* ── Los conteos, medidos en la base ── */
       avisos={resumen === null ? <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_conteos')}</EstadoError> : null}
       etiquetaCifras={t('trust_safety.ultimos_30_dias_por_severidad')}
-      cifras={resumen === null ? undefined : [
+      cifras={resumen === null ? undefined : uniformes([
         { etiqueta: t('trust_safety.severidad_alta_30_dias'), valor: resumen.d30.alta, tono: resumen.d30.alta > 0 ? 'bad' : undefined },
         { etiqueta: t('trust_safety.severidad_media_30_dias'), valor: resumen.d30.media, tono: resumen.d30.media > 0 ? 'warn' : undefined },
         { etiqueta: t('trust_safety.informativos_30_dias'), valor: resumen.d30.info },
         { etiqueta: t('trust_safety.total_historico'), valor: resumen.total },
-      ]}
+      ])}
     >
 
       {/* ── La cobertura REAL, medida ── */}
@@ -190,7 +191,7 @@ export default async function TrustSafetyPage({ searchParams }: { searchParams: 
             </ul>
           </>
         )}
-        <p className="m-0 mt-2 text-xs text-muted">{rico(t('trust_safety.tampoco_hay_un_pipeline_dedicado_de'), { e0: (c) => <code className="font-mono">{c}</code>, e1: (c) => <code className="font-mono">{c}</code>, e2: (c) => <code className="font-mono">{c}</code> })}</p>
+        <p className="m-0 mt-2 text-xs text-muted">{rico(t('trust_safety.tampoco_hay_un_pipeline_dedicado_de'), { e2: (c) => <code className="font-mono">{c}</code> })}</p>
       </Tarjeta>
     </EsqueletoTablaMaestra>
   );

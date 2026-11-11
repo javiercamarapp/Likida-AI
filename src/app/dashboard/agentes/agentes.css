@@ -49,6 +49,8 @@
 
 /* «No disponible ahora» (Rovaq): blanco, borde punteado, texto apagado. Sustituye al secundario gris que se leía como deshabilitado sin estarlo. */
 [data-ui="v2"] .rv-btn.rv-ag-no-disponible,
+[data-ui="v2"] .rv-btn.rv-ag-no-disponible:disabled { border-color: var(--line2, var(--line)); color: var(--ink-2, var(--muted)); }
+[data-ui="v2"] .rv-btn.rv-ag-no-disponible,
 [data-ui="v2"] .rv-btn.rv-ag-no-disponible:disabled { background: var(--surface); border: 1px dashed var(--line2, var(--line)); color: var(--muted); opacity: 1; cursor: not-allowed; box-shadow: none; }
 
 /* Una fila de acciones de una zona: ancho de contenido, nunca estiradas (un primario de 540 px es un botón tosco). */
@@ -65,3 +67,11 @@
    cargue su ruta (pedido_compartido: llevarlo a esqueletos.css y a EstadoVacio). */
 [data-ui="v2"] .rv-esq--tabla > .rv-esq__tabla { display: grid; gap: var(--sp-gap, 12px); }
 [data-ui="v2"] .rv-tarjeta[data-estado="vacio"] > .rv-tarjeta__cuerpo > .rv-vacio { border: 1px dashed var(--line2, var(--line)); border-radius: 8px; padding: 20px 14px; max-height: none; }
+
+/* Zona de soltar (Rovaq `FL`): 1 px punteado #e6e6e8, radio 8, una sola línea de pista; se enciende al arrastrar encima. */
+.rv-ag-soltar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 14px; border: 1px dashed var(--line2, var(--line)); border-radius: 8px; background: transparent; transition: background-color .15s ease, border-color .15s ease; }
+.rv-ag-soltar[data-encima] { background: var(--ui-soft, var(--canvas)); border-color: var(--ink); }
+.rv-ag-soltar > :first-child { flex: 1 1 260px; min-width: 0; }
+.rv-ag-soltar__pista { font-size: var(--t-small, 12px); color: var(--muted); white-space: nowrap; }
+/* Los campos de un formulario de importación: rótulos de UNA línea (elipsis) y todos los controles en la escala de 32 px. */
+.rv-pj-forma--rejilla .rv-campo__etq { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
@@ -39,12 +40,12 @@ export default async function ModelOpsPage() {
       apoyo={t('model_ops.modelos_las_tres_fases_del_pipeline')}
       acciones={<BotonEnlace href="/admin/agentes" variante="secondary" tamano="sm">{t('model_ops.rol_de_modelo_por_agente')}</BotonEnlace>}
       etiquetaCifras={t('model_ops.agentes')}
-      cifras={[
+      cifras={uniformes([
         { etiqueta: t('model_ops.kpi_gasto'), valor: r.costoIaUsd, formato: 'usd' },
         { etiqueta: t('model_ops.kpi_llamadas'), valor: r.porFase.reduce((s, f) => s + f.n, 0), formato: 'entero' },
         { etiqueta: t('model_ops.kpi_fases'), valor: r.porFase.length, formato: 'entero' },
         { etiqueta: t('model_ops.kpi_modelos'), valor: r.porModelo.length, formato: 'entero' },
-      ]}
+      ])}
       variante="4-4-4"
       graficas={[
         ...fasesTr(t).map(({ fase, nombre, queHace }) => (

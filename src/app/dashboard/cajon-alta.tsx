@@ -27,7 +27,7 @@ export function CajonAlta({ id, titulo, descripcion, disparador, primario = fals
   const { abierto, abrir, cerrar } = useAbrirPorUrl({ id, abiertoInicial });
   return (
     <>
-      <Boton type="button" variante={variante ?? (primario ? 'primary' : 'secondary')} tamano="sm" aria-haspopup="dialog" onClick={abrir}>{disparador}</Boton>
+      <Boton type="button" variante={variante ?? (primario ? 'primary' : 'secondary')} aria-haspopup="dialog" onClick={abrir}>{disparador}</Boton>
       <Drawer abierto={abierto} onCerrar={cerrar} titulo={titulo} descripcion={descripcion} tamano={tamano} cierraConFondo={false}>
         {children}
       </Drawer>

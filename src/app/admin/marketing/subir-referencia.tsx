@@ -13,7 +13,7 @@ export function SubirReferencia({ accion }: { accion: (previo: ResultadoReferenc
   const [estado, enviar, pendiente] = useActionState<ResultadoReferencia, FormData>(accion, null);
 
   return (
-    <form action={enviar} className="adm-din-forma">
+    <form action={enviar} className="adm-din-forma adm-din-forma--ancha">
       <CampoSelect etiqueta="Qué es" name="tipo" defaultValue="personaje" disabled={pendiente}>
         <option value="personaje">Personaje</option>
         <option value="lugar">Lugar</option>

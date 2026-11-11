@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { notFound } from 'next/navigation';
@@ -95,14 +96,14 @@ export default async function TrazaCorridaPage({
       volver={volver}
       chips={chip ? <li><StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip></li> : null}
       etiquetaCifras={t('corridas_id.la_corrida_en_cifras')}
-      cifras={[
+      cifras={uniformes([
         // NULL ≠ 0: una corrida que no se mide en tareas dice «—», no 0/0.
         { etiqueta: t('observabilidad.tareas'), valor: c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : null, estado: c.tareasHechas !== null && c.tareasTotal !== null ? 'ok' : 'vacio', mensaje: t('corridas_id.esta_corrida_no_mide_tareas') },
         { etiqueta: t('observabilidad.duracion'), valor: c.fin === null ? null : duracion(c.duracionMs), estado: c.fin === null ? 'vacio' : 'ok', mensaje: t('corridas_id.sin_fin_registrado') },
         costo
           ? { etiqueta: t('corridas_id.costo_de_ia_en_la_ventana'), valor: usd(costo.costoUsd), nota: t('corridas_id.correlacion_por_tiempo_no_un_cruce') }
           : { etiqueta: t('corridas_id.costo_de_ia_en_la_ventana'), valor: null, estado: 'vacio', mensaje: t('corridas_id.no_se_puede_correlacionar') },
-      ]}
+      ])}
       /* El motivo YA redactado para una persona — nunca el stack. */
       avisos={c.error ? <Aviso tono="error" titulo={t('corridas_id.por_que_fallo')}>{c.error}</Aviso> : null}
       bloques={[

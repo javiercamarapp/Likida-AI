@@ -76,7 +76,7 @@ export async function ResumenV2({
           {cob.ok < cob.total ? <li>{t('op.res.sin_lectura', { n: cob.total - cob.ok, total: cob.total })}</li> : null}
         </>
       )}
-      filtros={<FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
+      filtros={<FiltrosResumen rango={rango} periodoTexto={PERIODO_RANGO[rango]} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />}
       avisos={(
         <>
           {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}

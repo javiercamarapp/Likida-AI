@@ -127,6 +127,7 @@ export const resto = {
   'cfg.conectadas': 'Conectadas',
   'cfg.pendientes': 'Pendientes',
   'cfg.filtrar_conexiones': 'Filtrar las conexiones',
+  'cfg.solo_lectura_estado_medido': 'Solo lectura: el estado sale de lo medido, no se edita aquí.',
   'cfg.sin_conexiones_en_el_grupo': 'Sin conexiones en este grupo',
   'cfg.cambia_el_filtro': 'Cambia el filtro para ver las demás.',
   'cfg.det.estado': 'Estado',
@@ -364,6 +365,7 @@ export const resto = {
   'cfg.cortar_los_n_accesos_no_hay': 'Cortar los {n} accesos (no hay deshacer)',
   'op.dar_de_alta_el_cliente': 'dar de alta el cliente',
   'op.clientes': 'Clientes',
+  'op.convenios_titulo': 'Convenios',
   'op.quien_paga_el_flete_y_cuanto': 'Quién paga el flete y cuánto debe, con las tarifas por cliente. No se muestra una cartera a medias.',
   'op.no_pude_leer_tus_clientes_tarifas': 'No pude leer tus clientes, tarifas y facturas. No se enseña una cartera a medias: media tabla sumada se ve igual que la tabla entera.',
   'op.tu_rol_ve_esta_pantalla_pero': 'Tu rol ve esta pantalla pero no da de alta clientes ni tarifas: el catálogo de precios es una decisión del dueño de la flota.',
@@ -1296,4 +1298,6 @@ export const resto = {
   'e26b.vend_vivos_nota': 'prospectos abiertos, sin ganar ni perder',
   'e26b.vend_ganados_nota': 'prospectos que ya son clientes',
   'e26b.vend_propuesta_nota': 'en la etapa de propuesta o de piloto',
+  'r4.vend_area': 'Ventas',
+  'r4.vend_apoyo': 'Tu cartera de prospectos por etapa, lo que cuenta de tu comisión y lo que sigue.',
 } as const;

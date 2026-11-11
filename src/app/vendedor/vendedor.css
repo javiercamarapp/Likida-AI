@@ -12,3 +12,6 @@
 [data-ui="v2"] .vnd-comision { display: flex; align-items: flex-start; gap: 12px; color: var(--muted); }
 [data-ui="v2"] .vnd-comision__regla { margin: 0 0 4px; font-size: 13px; font-weight: 500; color: var(--ink); }
 [data-ui="v2"] .vnd-comision__nota { margin: 0; font-size: 12px; color: var(--muted); }
+
+/* El caparazón completo (sidebar 232 + marco flotante): la fila ocupa el alto y el contenido no se pega a la cabecera móvil. */
+[data-ui="v2"] .vnd-fila { min-height: 0; }

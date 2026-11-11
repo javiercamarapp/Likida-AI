@@ -1,3 +1,4 @@
+import { uniformes } from '@/app/admin/cifras-uniformes';
 import type { Metadata } from 'next';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -193,11 +194,11 @@ export default async function Evals({
       apoyo={t('evals.examenes_el_estado_del_examen_de')}
       avisos={sp.error === 'marcar' ? <Aviso tono="error">{t('evals.no_se_pudo_registrar_el_veredicto')}</Aviso> : null}
       etiquetaCifras={t('evals.examenes')}
-      cifras={[
+      cifras={uniformes([
           { etiqueta: t('evals.agentes_examinados'), valor: agentesTr(t).length, estado: 'ok' },
           { etiqueta: t('evals.con_prompt_sin_re_examinar'), valor: sinLeer > 0 ? null : sinReexaminar, estado: sinLeer > 0 ? 'error' : 'ok', tono: sinReexaminar > 0 ? 'bad' : undefined, nota: t('evals.el_prompt_vivo_no_es_el') },
           { etiqueta: t('observabilidad.corridas_recientes'), valor: corridasError === null ? corridas.length : null, estado: corridasError === null ? 'ok' : 'error', nota: t('evals.las_ultimas_10_todos_los_agentes') },
-      ]}
+      ])}
     >
       {secciones.map(({ agente, titulo, estado, porCaso }) => (
         <Tarjeta key={agente} titulo={titulo} estado={estado === null ? 'error' : 'ok'} mensaje={t('evals.no_se_pudo_leer_el_estado', { agente })} reintentar>
