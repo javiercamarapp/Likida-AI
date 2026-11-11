@@ -9,6 +9,7 @@ import { Boton } from '../ui-v2/componentes/boton';
 import { Monograma } from '../ui-v2/componentes/monograma';
 import { PreferenciasCuenta } from './preferencias';
 import { getT } from '@/lib/i18n/servidor';
+import '../ui-v2/piezas.css';
 import '../legal/publico-r2.css';
 import './cuenta.css';
 import { nombreDeRol } from '@/lib/auth/roles';
