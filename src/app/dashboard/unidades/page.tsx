@@ -71,7 +71,6 @@ export default async function PaginaUnidades({
    *  sanea `paginarRegistro`; un link viejo se lee como primera página. */
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; p?: string; editar?: string }>;
 }) {
-  const { t: tx } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol, userId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');

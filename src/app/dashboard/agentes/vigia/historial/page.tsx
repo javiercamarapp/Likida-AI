@@ -46,7 +46,6 @@ async function contexto(sp: Busqueda, tenantId: string) {
  * dueño agrega, marca, sube y borra.
  */
 export default async function PaginaHistorialVigia({ searchParams }: { searchParams: Promise<Busqueda> }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');

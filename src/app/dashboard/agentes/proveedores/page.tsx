@@ -86,7 +86,6 @@ export default async function PaginaAgenteProveedores({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; orden?: string; dir?: string; pag?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/agentes/proveedores', sp);

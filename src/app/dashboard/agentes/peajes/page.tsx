@@ -71,7 +71,6 @@ export default async function PaginaAgentePeajes({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; desglose?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   // Querystring REAL (`?desglose=`): si la sesión expira a media navegación,

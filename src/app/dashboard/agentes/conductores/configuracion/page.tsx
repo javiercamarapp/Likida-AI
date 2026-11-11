@@ -105,7 +105,6 @@ async function ejecutarBajaDocumento(sp: ParametrosPagina, tenantRenderizado: st
  * El jefe de tráfico la ve; el dueño la guarda (misma validación que el PUT).
  */
 export default async function PaginaConfigConductor({ searchParams }: { searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string }> }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');

@@ -89,7 +89,6 @@ async function calcular(fd: FormData): Promise<ResultadoImportacion> {
  * día, rotulado como NO verificado contra Track & Trace. Cero pesos; solo lee el archivo, no guarda ni escribe afuera.
  */
 export default async function PaginaImportacionVigia({ searchParams }: { searchParams: Promise<Busqueda> }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { rol, tenantId } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');

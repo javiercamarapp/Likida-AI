@@ -128,7 +128,6 @@ export default async function PaginaConfiguracionPeajes({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');

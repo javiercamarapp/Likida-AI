@@ -29,7 +29,6 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * ellos se valida cada «ya llegué». Editor mínimo + importador CSV todo-o-nada. Cero pesos en pantalla.
  */
 export default async function PaginaSitios({ searchParams }: { searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; q?: string; editar?: string }> }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');

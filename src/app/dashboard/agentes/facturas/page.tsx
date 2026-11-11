@@ -44,7 +44,6 @@ export default async function PaginaAgenteFacturas({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
-  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol, userId } = await resolverTenantEfectivo('/dashboard/agentes/facturas', sp);
