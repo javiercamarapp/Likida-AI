@@ -10,6 +10,7 @@ import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { Disclosure, EstadoError, EstadoVacio, Icono, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import './conversaciones.css';
+import { getT } from '@/lib/i18n/servidor';
 export const metadata: Metadata = { title: 'Conversaciones de WhatsApp' };
 
 export const dynamic = 'force-dynamic';
@@ -41,6 +42,7 @@ const RUTA = '/dashboard/conversaciones';
 export default async function ConversacionesFlotaPage({ searchParams }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t, tp, idioma } = await getT('operacion');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -61,28 +63,27 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
   const recortado = total !== null && total > hilos.length;
 
   return (
-    <MarcoPagina titulo="Equipo" apoyo="Lo que tu bot habló con tus operadores, tal cual quedó guardado: sirve para verificar qué se le dijo a un chofer.">
-      <TiraCifras sello={selloHoy('Hilos de WhatsApp')}>
+    <MarcoPagina titulo={t('conv.titulo')} apoyo={t('conv.apoyo')}>
+      <TiraCifras sello={selloHoy(t('conv.sello'))}>
         <Cifra
           icono={<Icono icono={MessageCircle} />}
-          etiqueta="Hilos de tu flota" info="conversaciones.hilos" valor={total} formato="entero"
-          mensaje={total === null ? 'No se pudo contar — esto no significa que no haya ninguno.' : undefined}
+          etiqueta={t('conv.hilos')} info="conversaciones.hilos" valor={total} formato="entero"
+          mensaje={total === null ? t('conv.hilos.nocuenta') : undefined}
         />
         <Cifra
           icono={<Icono icono={MessagesSquare} />}
-          etiqueta={`Mensajes en los ${hilos.length} que se listan`} info="conversaciones.mensajes" valor={mensajes} formato="entero"
+          etiqueta={t('conv.mensajes.etiqueta', { n: hilos.length })} info="conversaciones.mensajes" valor={mensajes} formato="entero"
         />
       </TiraCifras>
 
-      <Tarjeta titulo={recortado ? `Los ${TOPE_HILOS} más recientes de ${total}` : 'Todos tus hilos'} info="conversaciones.hilos">
+      <Tarjeta titulo={recortado ? t('conv.tarjeta.recientes', { tope: TOPE_HILOS, total }) : t('conv.tarjeta.todos')} info="conversaciones.hilos">
         {errorCarga !== null ? (
           <EstadoError reintentar>
-            No se pudieron leer las conversaciones ahora mismo. Recarga en un momento: hasta que la base conteste no hay forma de saber si el bot habló con alguien.
+            {t('conv.error')}
           </EstadoError>
         ) : hilos.length === 0 ? (
-          <EstadoVacio icono={MessageCircle} contenido titulo="Sin conversaciones todavía">
-            El bot todavía no ha conversado con ningún número de tu flota. En cuanto un operador le
-            escriba por WhatsApp, el hilo aparece aquí.
+          <EstadoVacio icono={MessageCircle} contenido titulo={t('conv.vacio.titulo')}>
+            {t('conv.vacio')}
           </EstadoVacio>
         ) : (
           <div className="rv-cv__hilos">
@@ -93,22 +94,21 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
                     {h.operadorNombre ?? h.telefono}
                     <span className="rv-cv__sub">
                       {h.operadorNombre ? `${h.telefono} · ` : ''}
-                      {h.viajeFolio ? `viaje ${h.viajeFolio} · ` : ''}
-                      {fechaHoraMx(h.actualizadaEn)}
+                      {h.viajeFolio ? t('conv.viaje', { folio: h.viajeFolio }) : ''}
+                      {fechaHoraMx(h.actualizadaEn, idioma)}
                     </span>
                   </>
                 )}
-                resumen={h.turns.length > 0 ? `${h.turns.length} mensajes` : 'sin mensajes guardados'}>
+                resumen={h.turns.length > 0 ? tp('conv.mensajes', h.turns.length) : t('conv.sinmensajes')}>
                 {h.turns.length > 0 && (
                   <div className="rv-cv__turnos">
-                    {h.turns.map((t, i) => (
-                      <div key={i} className="rv-cv__turno" data-rol={t.role === 'user' ? 'chofer' : 'bot'}>
-                        <div className="rv-cv__burbuja">{t.content}</div>
+                    {h.turns.map((turno, i) => (
+                      <div key={i} className="rv-cv__turno" data-rol={turno.role === 'user' ? 'chofer' : 'bot'}>
+                        <div className="rv-cv__burbuja">{turno.content}</div>
                       </div>
                     ))}
                     <p className="rv-cv__nota">
-                      Ventana reciente de la conversación: Likida guarda los últimos turnos, no el
-                      historial completo desde el primer día.
+                      {t('conv.nota')}
                     </p>
                   </div>
                 )}
