@@ -8,6 +8,7 @@ import { Aviso, EstadoVacio, TablaBase, type ColumnaBase } from '@/app/ui-v2/com
 import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
 import '../caja-vacia.css';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import './huerfanos.css';
 import { TR_OPERACION_ES, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
@@ -86,6 +87,7 @@ export function VistaHuerfanos({ tr = TR_OPERACION_ES, pendientes, hayViajesVivo
       avisos={<Aviso tono="info">{t('hf.nota')}{hayMas && t('hf.nota.mas')}</Aviso>}
       cifras={cifras}
       etiquetaCifras={t('hf.k.etiqueta')}
+      selloCifras={selloHoy(t('hf.k.etiqueta'))}
       pie={pendientes.length > 0 ? (hayMas ? t('hf.de', { a: numero(pendientes.length, idioma), b: numero(totalPendientes!, idioma) }) : t('hf.pie', { n: numero(pendientes.length, idioma) })) : undefined}
     >
       {pendientes.length === 0 ? (
