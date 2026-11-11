@@ -2,11 +2,10 @@ import { Suspense, cache } from 'react';
 import { Building2, Activity, CheckCircle2, Inbox, Users } from 'lucide-react';
 import {
   ESTADOS_PROSPECTO, ESTADOS_VIVOS, TRANSICIONES_PROSPECTO,
-  conteosVacios, normalizarEstadoProspecto, esEstadoVivo,
-  filtrarProspectosTexto, reglaComision,
-  listarProspectos, listarVendedores,
-  type ProspectoRow, type VendedorRow,
+  reglaComision, listarVendedores,
+  type VendedorRow,
 } from '@/lib/likida/vendedores';
+import { getPipelineVendedores, type PipelineVendedores } from '@/lib/admin/prospectos-mapa';
 import { ultimasCorridasNegocio, duracionLegible, type CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import { resolverFormato } from '../ui/formato-preset';
@@ -39,7 +38,11 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | null> {
 /** R9c: las lecturas las pide cada bloque dentro de su <Suspense>; `cache()` las comparte entre bloques de una misma petición, así que no
  *  se lee nada dos veces ni se suma ninguna lectura nueva. */
 const cargarVendedores = cache(() => safe<VendedorRow[]>(() => listarVendedores()));
-const cargarProspectos = cache(() => safe<ProspectoRow[]>(() => listarProspectos()));
+/** w15/perf (punto 5): antes `listarProspectos()` bajaba las ~33 mil filas con `notas` (15 s) para contar y quedarse con 30 por columna. Ahora los
+ *  totales y los filtros salen del índice ligero y `notas` solo de las tarjetas que se pintan. Los tres bloques comparten UNA lectura
+ *  (los totales no dependen del filtro; solo las columnas). */
+const cargarPipeline = cache((vendedor: string | undefined, q: string | undefined) =>
+  safe<PipelineVendedores>(() => getPipelineVendedores({ vendedor, q }, TOPE_COLUMNA)));
 const cargarCorridas = cache(() => safe<CorridaRegistrada[]>(() => ultimasCorridasNegocio('ventas', 5)));
 
 /**
@@ -53,8 +56,8 @@ const cargarCorridas = cache(() => safe<CorridaRegistrada[]>(() => ultimasCorrid
 export function ConsolaVendedores({ sp }: { nombre?: string | null; sp: { vendedor?: string; q?: string } }) {
   return (
     <MarcoPagina titulo="Ventas" apoyo="El pipeline del censo, el equipo de vendedores y el asignador. Las comisiones se calculan solo con cobros reales.">
-      <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis /></Suspense>
-      <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo /></Suspense>
+      <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis sp={sp} /></Suspense>
+      <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo sp={sp} /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
       <FilaTarjetas variante="6-6">
         <Tarjeta titulo="Agente asignador">
@@ -94,54 +97,35 @@ function BloqueComisiones() {
 
 /** Los datos derivados del pipeline, una sola vez por bloque que los necesite (solo si las lecturas llegaron). */
 async function derivarPipeline(sp: { vendedor?: string; q?: string }) {
-  const [vendedores, prospectos] = await Promise.all([cargarVendedores(), cargarProspectos()]);
+  const [vendedores, pipeline] = await Promise.all([cargarVendedores(), cargarPipeline(sp.vendedor, sp.q)]);
   const nombresVendedor = new Map((vendedores ?? []).map((v) => [v.id, v.nombre ?? v.email]));
   const opcionesVendedor = (vendedores ?? []).map((v) => ({ id: v.id, nombre: v.nombre ?? v.email }));
   const hayFiltro = Boolean(sp.vendedor || sp.q);
-  let columnas: ColumnaTablero[] | null = null;
-  const totales = conteosVacios();
-  let vivosSinVendedor = 0;
-  if (prospectos !== null) {
-    for (const p of prospectos) {
-      const estado = normalizarEstadoProspecto(p.estado);
-      if (estado !== null) totales[estado]++;
-    }
-    vivosSinVendedor = prospectos.filter((p) => p.vendedorId === null && esEstadoVivo(p.estado)).length;
-
-    const porTexto = filtrarProspectosTexto(prospectos, sp.q);
-    const filtrados = sp.vendedor === 'sin'
-      ? porTexto.filter((p) => p.vendedorId === null)
-      : sp.vendedor
-        ? porTexto.filter((p) => p.vendedorId === sp.vendedor)
-        : porTexto;
-
-    columnas = ESTADOS_PROSPECTO.map((e) => {
-      // Las filas históricas se agrupan en su significado canónico; no desaparecen ni crean una segunda columna semánticamente idéntica.
-      const en = filtrados.filter((p) => normalizarEstadoProspecto(p.estado) === e.valor);
-      return {
-        estado: e.valor,
-        rotulo: e.rotulo,
-        total: en.length,
-        tarjetas: en.slice(0, TOPE_COLUMNA).map((p) => ({
-          id: p.id,
-          empresa: p.empresa,
-          vacante: p.vacante,
-          ciudad: p.ciudad,
-          notas: p.notas,
-          estado: normalizarEstadoProspecto(p.estado) ?? p.estado,
-          vendedorId: p.vendedorId,
-          vendedorNombre: p.vendedorId ? nombresVendedor.get(p.vendedorId) ?? null : null,
-        })),
-      };
-    });
-  }
-  const vivos = ESTADOS_VIVOS.reduce((s, e) => s + totales[e], 0);
-  const totalProspectos = (Object.values(totales) as number[]).reduce((s, n) => s + n, 0);
-  return { vendedores, prospectos, opcionesVendedor, hayFiltro, columnas, totales, vivos, vivosSinVendedor, totalProspectos };
+  const totales = pipeline?.totales ?? null;
+  const columnas: ColumnaTablero[] | null = pipeline === null ? null : pipeline.columnas.map((c) => ({
+    estado: c.estado,
+    rotulo: c.rotulo,
+    total: c.total,
+    tarjetas: c.tarjetas.map((p) => ({
+      id: p.id,
+      empresa: p.empresa,
+      vacante: p.vacante,
+      ciudad: p.ciudad,
+      notas: p.notas,
+      estado: p.estado,
+      vendedorId: p.vendedorId,
+      vendedorNombre: p.vendedorId ? nombresVendedor.get(p.vendedorId) ?? null : null,
+    })),
+  }));
+  const vivos = totales === null ? 0 : ESTADOS_VIVOS.reduce((s, e) => s + totales[e], 0);
+  return {
+    vendedores, prospectos: pipeline, opcionesVendedor, hayFiltro, columnas, totales: totales ?? undefined,
+    vivos, vivosSinVendedor: pipeline?.vivosSinVendedor ?? 0, totalProspectos: pipeline?.totalProspectos ?? 0,
+  };
 }
 
-async function BloqueKpis() {
-  const { vendedores, prospectos, totales, vivos, vivosSinVendedor, totalProspectos } = await derivarPipeline({});
+async function BloqueKpis({ sp }: { sp: { vendedor?: string; q?: string } }) {
+  const { vendedores, prospectos, totales, vivos, vivosSinVendedor, totalProspectos } = await derivarPipeline(sp);
   // Solo si el pipeline se pudo LEER: unos ceros sobre una base caída afirmarían «no hay prospectos» estando ciegos.
   if (prospectos === null) {
     return (
@@ -153,7 +137,7 @@ async function BloqueKpis() {
     <TiraCifras etiqueta="Pipeline de ventas" items={[
       { etiqueta: 'Prospectos en el pipeline', valor: totalProspectos, formato: 'entero', icono: <Icono icono={Building2} /> },
       { etiqueta: 'Con seguimiento', valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
-      { etiqueta: 'Ganados', valor: totales.won, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
+      { etiqueta: 'Ganados', valor: totales?.won ?? 0, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
       { etiqueta: 'Vivos sin vendedor', valor: vivosSinVendedor, formato: 'entero', icono: <Icono icono={Inbox} /> },
       vendedores !== null
         ? { etiqueta: 'Vendedores con cuenta', valor: vendedores.length, formato: 'entero', icono: <Icono icono={Users} /> }
@@ -163,10 +147,11 @@ async function BloqueKpis() {
 }
 
 /** El embudo de la ruta principal (ver `embudo-ventas.ts`: cada etapa cuenta a quien está en ella o más adelante). Sin la lectura: lo dice, no pinta ceros. */
-async function BloqueEmbudo() {
-  const [{ prospectos, totales }, { t }] = await Promise.all([derivarPipeline({}), getT('graficas')]);
+async function BloqueEmbudo({ sp }: { sp: { vendedor?: string; q?: string } }) {
+  const [{ prospectos, totales }, { t }] = await Promise.all([derivarPipeline(sp), getT('graficas')]);
   const titulo = t('ventas.embudo.titulo');
   if (prospectos === null) return <Tarjeta titulo={titulo} estado="error" mensaje={t('ventas.embudo.error')} reintentar elevar entra="tarjeta" />;
+  if (!totales) return <Tarjeta titulo={titulo} estado="error" mensaje={t('ventas.embudo.error')} reintentar elevar entra="tarjeta" />;
   const { etapas, fuera, enRuta } = embudoDeVentas(totales);
   if (enRuta === 0) return <Tarjeta titulo={titulo} estado="vacio" mensaje={t('ventas.embudo.vacio')} contenida elevar entra="tarjeta" />;
   return (

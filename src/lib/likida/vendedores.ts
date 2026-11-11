@@ -512,8 +512,10 @@ export async function listarVendedores(opciones: { soloActivos?: boolean } = {})
       'listarVendedores.cuentas',
     ),
     traerTodoEnParalelo<Record<string, unknown>>(
+      // w15/perf: solo los ASIGNADOS cuentan para el desempeño por vendedor (los sin asignar caen en `?? conteosVacios()`). Antes se
+      // bajaban las ~33 mil filas, casi todas sin vendedor, para tirarlas en `agruparConteos`.
       (d, h) => admin.from('prospecto').select('id, vendedor_id, estado', conteo(d))
-        .is('duplicado_de', null).order('id').range(d, h),
+        .is('duplicado_de', null).not('vendedor_id', 'is', null).order('id').range(d, h),
       'listarVendedores.prospectos',
     ),
   ]);
