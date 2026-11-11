@@ -15,6 +15,9 @@ const AHORA = Date.parse('2026-10-02T18:00:00.000Z');
 vi.mock('@/lib/saludo', () => ({ ahoraMs: () => AHORA }));
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => { throw new Error('sin base en pruebas'); } }));
+// Estas pruebas son de una flota SIN perfil (el recorte por perfil `cinco_agentes` lo prueba `agents/analista_perfil.test.ts`): sin este doble,
+// la lectura del perfil falla cerrado contra la base ausente y el analista ofrecería solo las herramientas de los cinco agentes.
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => null }));
 
 type Ofrecida = { function: { name: string } };
 type Exec = (name: string, args: Record<string, unknown>) => Promise<{ success: boolean; result: unknown; error?: string; durationMs: number }>;
