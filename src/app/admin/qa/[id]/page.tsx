@@ -6,6 +6,7 @@ import { leerCorrida, leerManifiesto, leerLecturasDeCorrida, firmarRutas, BUCKET
 import { resumenDeLecturas } from '@/lib/admin/qa-medicion';
 import type { ResumenPrecisionCorrida } from '@/lib/admin/qa-verdad';
 import { CorridaViva, type FotoFirmada, type PdfFirmado } from './corrida-viva';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +18,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * La puerta la puso el layout de /admin.
  */
 export default async function CorridaQaPage({ params }: { params: Promise<{ id: string }> }) {
+  const { t } = await getT('admin_sistema');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const { id } = await params;
@@ -54,7 +56,7 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
     const f = porId.get(fotoId);
     return {
       id: fotoId,
-      etiqueta: f?.etiqueta ?? '(ya no está en el banco)',
+      etiqueta: f?.etiqueta ?? t('qa_id.ya_no_esta_en_el_banco'),
       url: f ? urls.get(f.path) ?? null : null,
     };
   });
@@ -87,4 +89,7 @@ export default async function CorridaQaPage({ params }: { params: Promise<{ id: 
   );
 }
 
-export const metadata: Metadata = { title: 'Corrida de QA' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('qa_id.corrida_de_qa') };
+}

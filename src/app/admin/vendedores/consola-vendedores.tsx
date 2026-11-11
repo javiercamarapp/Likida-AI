@@ -16,6 +16,7 @@ import {
 } from '../../ui-v2/componentes';
 import { Embudo, TiraCifras } from '../../ui-v2/graficas';
 import { getT } from '@/lib/i18n/servidor';
+import { estadoProspectoTr } from '@/lib/i18n/rotulos_tr';
 import { embudoDeVentas } from './embudo-ventas';
 import { TableroProspectos, type ColumnaTablero } from './tablero';
 import { FormaProspecto, FormaInvitarVendedor, BotonRepartir } from './formas';
@@ -24,6 +25,7 @@ import {
   accionCrearProspecto, accionInvitar, accionRepartir,
 } from './acciones';
 import './tablero.css';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 
 const RUTA = '/admin/vendedores';
 
@@ -50,25 +52,21 @@ const cargarCorridas = cache(() => safe<CorridaRegistrada[]>(() => ultimasCorrid
  * La AUTORIZACIÓN no se relaja con la extracción: el gate de pantalla sigue en admin/layout.tsx + page.tsx, y cada server action de aquí
  * re-gatea superadmin por sesión y MFA en `acciones.ts`: montar el componente no regala ninguna escritura.
  */
-export function ConsolaVendedores({ sp }: { nombre?: string | null; sp: { vendedor?: string; q?: string } }) {
+export function ConsolaVendedores({ sp, tx = T_SISTEMA_ES }: { nombre?: string | null; sp: { vendedor?: string; q?: string }; tx?: TSistema }) {
   return (
-    <MarcoPagina titulo="Ventas" apoyo="El pipeline del censo, el equipo de vendedores y el asignador. Las comisiones se calculan solo con cobros reales.">
+    <MarcoPagina titulo={tx('mapa_prospectos.ventas')} apoyo={tx('vendedores_consola_vendedores.el_pipeline_del_censo_el_equipo')}>
       <Suspense fallback={<EsqCifrasV2 n={5} />}><BloqueKpis /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={240} />}><BloqueEmbudo /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={320} />}><BloqueTablero sp={sp} /></Suspense>
       <FilaTarjetas variante="6-6">
-        <Tarjeta titulo="Agente asignador">
-          <p className="ven-tarjeta__tenue">
-            Reparte los prospectos sin vendedor (en Nuevo) entre el equipo, equilibrando por carga viva. Cada corrida queda en la bitácora de agentes.
-          </p>
+        <Tarjeta titulo={tx('vendedores_consola_vendedores.agente_asignador')}>
+          <p className="ven-tarjeta__tenue">{tx('vendedores_consola_vendedores.reparte_los_prospectos_sin_vendedor_en')}</p>
           <BotonRepartir accion={accionRepartir} />
           <Suspense fallback={<EsqTarjetaV2 alto={60} plana />}><BloqueCorridas /></Suspense>
           {/* Lo que NO existe no se pinta como si existiera: los agentes que buscan leads y hacen el primer acercamiento son roadmap. */}
-          <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">
-            Próximamente: agentes que busquen leads nuevos y hagan el primer acercamiento. No existen todavía y esta pantalla no los va a fingir.
-          </p>
+          <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{tx('vendedores_consola_vendedores.proximamente_agentes_que_busquen_leads_nuevos')}</p>
         </Tarjeta>
-        <BloqueComisiones />
+        <BloqueComisiones tx={tx} />
       </FilaTarjetas>
       <Suspense fallback={<EsqTablaV2 filas={4} />}><BloqueDesempeno /></Suspense>
       <Suspense fallback={<EsqTarjetaV2 alto={160} />}><BloqueAltas /></Suspense>
@@ -80,11 +78,11 @@ export function ConsolaVendedores({ sp }: { nombre?: string | null; sp: { vended
 
 /** La regla pactada SÍ se enseña (es un dato del negocio); el MONTO no: no hay registro de comisiones ni liga de prospecto a flota y a
  *  factura pagada, así que calcular una cifra hoy sería inventarla. Cuando exista la base, esta tarjeta se sustituye por el cálculo. */
-function BloqueComisiones() {
+function BloqueComisiones({ tx = T_SISTEMA_ES }: { tx?: TSistema }) {
   const regla = reglaComision();
   return (
-    <Tarjeta titulo="Comisiones de vendedores" estado="vacio" mensaje="Falta: aún no hay base para calcularlas"
-      detalle="Hace falta ligar cada prospecto cerrado con su flota y con la factura pagada; sin eso no se muestra ninguna cifra de comisión.">
+    <Tarjeta titulo={tx('vendedores_consola_vendedores.comisiones_de_vendedores')} estado="vacio" mensaje={tx('vendedores_consola_vendedores.falta_aun_no_hay_base_para')}
+      detalle={tx('vendedores_consola_vendedores.hace_falta_ligar_cada_prospecto_cerrado')}>
       <p className="ven-regla"><span>{regla.primerMes}</span><span>{regla.recurrente}</span></p>
     </Tarjeta>
   );
@@ -141,30 +139,31 @@ async function derivarPipeline(sp: { vendedor?: string; q?: string }) {
 }
 
 async function BloqueKpis() {
+  const { t: tx } = await getT('admin_sistema');
   const { vendedores, prospectos, totales, vivos, vivosSinVendedor, totalProspectos } = await derivarPipeline({});
   // Solo si el pipeline se pudo LEER: unos ceros sobre una base caída afirmarían «no hay prospectos» estando ciegos.
   if (prospectos === null) {
     return (
       <AvisoCompacto tono="error"
-        resumen="No se pudo leer el pipeline en este momento. Recarga la página: esto NO significa que no haya prospectos, significa que no se pudo leer." />
+        resumen={tx('vendedores_consola_vendedores.no_se_pudo_leer_el_pipeline')} />
     );
   }
   return (
-    <TiraCifras etiqueta="Pipeline de ventas" items={[
-      { etiqueta: 'Prospectos en el pipeline', valor: totalProspectos, formato: 'entero', icono: <Icono icono={Building2} /> },
-      { etiqueta: 'Con seguimiento', valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
-      { etiqueta: 'Ganados', valor: totales.won, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
-      { etiqueta: 'Vivos sin vendedor', valor: vivosSinVendedor, formato: 'entero', icono: <Icono icono={Inbox} /> },
+    <TiraCifras etiqueta={tx('vendedores_consola_vendedores.pipeline_de_ventas')} items={[
+      { etiqueta: tx('vendedores_consola_vendedores.prospectos_en_el_pipeline'), valor: totalProspectos, formato: 'entero', icono: <Icono icono={Building2} /> },
+      { etiqueta: tx('vendedores_consola_vendedores.con_seguimiento'), valor: vivos, formato: 'entero', icono: <Icono icono={Activity} /> },
+      { etiqueta: tx('vendedores_consola_vendedores.ganados'), valor: totales.won, formato: 'entero', icono: <Icono icono={CheckCircle2} /> },
+      { etiqueta: tx('vendedores_consola_vendedores.vivos_sin_vendedor'), valor: vivosSinVendedor, formato: 'entero', icono: <Icono icono={Inbox} /> },
       vendedores !== null
-        ? { etiqueta: 'Vendedores con cuenta', valor: vendedores.length, formato: 'entero', icono: <Icono icono={Users} /> }
-        : { etiqueta: 'Vendedores con cuenta', valor: null, estado: 'error', mensaje: 'No se pudo leer el equipo de vendedores.', icono: <Icono icono={Users} /> },
+        ? { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: vendedores.length, formato: 'entero', icono: <Icono icono={Users} /> }
+        : { etiqueta: tx('vendedores_consola_vendedores.vendedores_con_cuenta'), valor: null, estado: 'error', mensaje: tx('vendedores_consola_vendedores.no_se_pudo_leer_el_equipo'), icono: <Icono icono={Users} /> },
     ]} />
   );
 }
 
 /** El embudo de la ruta principal (ver `embudo-ventas.ts`: cada etapa cuenta a quien está en ella o más adelante). Sin la lectura: lo dice, no pinta ceros. */
 async function BloqueEmbudo() {
-  const [{ prospectos, totales }, { t }] = await Promise.all([derivarPipeline({}), getT('graficas')]);
+  const [{ prospectos, totales }, { t, idioma }] = await Promise.all([derivarPipeline({}), getT('graficas')]);
   const titulo = t('ventas.embudo.titulo');
   if (prospectos === null) return <Tarjeta titulo={titulo} estado="error" mensaje={t('ventas.embudo.error')} reintentar elevar entra="tarjeta" />;
   const { etapas, fuera, enRuta } = embudoDeVentas(totales);
@@ -172,7 +171,7 @@ async function BloqueEmbudo() {
   return (
     <Tarjeta titulo={titulo} elevar entra="tarjeta">
       <Embudo etapas={etapas} etiqueta={t('ventas.embudo.etiqueta')} formato="numero" />
-      <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t('ventas.embudo.nota', { enRuta: numero(enRuta), fuera: numero(fuera) })}</p>
+      <p className="ven-tarjeta__tenue ven-tarjeta__tenue--fino">{t('ventas.embudo.nota', { enRuta: numero(enRuta, idioma), fuera: numero(fuera, idioma) })}</p>
     </Tarjeta>
   );
 }
@@ -180,20 +179,21 @@ async function BloqueEmbudo() {
 const TONO_CORRIDA: Record<string, TonoEstado> = { ok: 'ok', parcial: 'warn', fallo: 'bad' };
 
 async function BloqueCorridas() {
+  const { t: tx, idioma } = await getT('admin_sistema');
   const corridas = await cargarCorridas();
   return (
     <div>
-      <h3 className="ven-tarjeta__empresa">Últimas corridas</h3>
+      <h3 className="ven-tarjeta__empresa">{tx('vendedores_consola_vendedores.ultimas_corridas')}</h3>
       {corridas === null ? (
-        <p className="ven-tarjeta__tenue">No se pudo leer la bitácora del asignador.</p>
+        <p className="ven-tarjeta__tenue">{tx('vendedores_consola_vendedores.no_se_pudo_leer_la_bitacora')}</p>
       ) : corridas.length === 0 ? (
-        <p className="ven-tarjeta__tenue">El asignador aún no corre. Su primera corrida aparece aquí.</p>
+        <p className="ven-tarjeta__tenue">{tx('vendedores_consola_vendedores.el_asignador_aun_no_corre_su')}</p>
       ) : (
         <ul className="ven-corridas">
           {corridas.map((c) => (
             <li key={c.id}>
               <StatusChip tono={TONO_CORRIDA[c.estado] ?? 'neutral'}>{c.estado}</StatusChip>
-              <span className="ven-corridas__fecha">{fechaHoraMx(c.inicio)}</span>
+              <span className="ven-corridas__fecha">{fechaHoraMx(c.inicio, idioma)}</span>
               <span>{c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas}/${c.tareasTotal}` : '—'}</span>
               <span className="ven-corridas__dur">{duracionLegible(c.duracionMs) ?? ''}</span>
               {c.error && <span className="ven-corridas__error">{c.error}</span>}
@@ -206,23 +206,22 @@ async function BloqueCorridas() {
 }
 
 async function BloqueTablero({ sp }: { sp: { vendedor?: string; q?: string } }) {
+  const { t: tx } = await getT('admin_sistema');
   const { columnas, opcionesVendedor, hayFiltro, totalProspectos } = await derivarPipeline(sp);
   if (columnas === null) {
-    return <Tarjeta titulo="Pipeline de prospectos" estado="error" mensaje="No se pudo leer el pipeline" reintentar />;
+    return <Tarjeta titulo={tx('vendedores_consola_vendedores.pipeline_de_prospectos')} estado="error" mensaje={tx('vendedores_consola_vendedores.no_se_pudo_leer_el_pipeline_2')} reintentar />;
   }
   return (
-    <Tarjeta titulo="Pipeline de prospectos" acciones={(
+    <Tarjeta titulo={tx('vendedores_consola_vendedores.pipeline_de_prospectos')} acciones={(
       /* Filtro por GET: los searchParams SON el estado del filtro, así que el link se comparte y el refresh no lo pierde. */
-      <BarraFiltros accion={RUTA} enLinea buscar etiqueta="Filtrar el pipeline" limpiarHref={RUTA} nActivos={hayFiltro ? 1 : 0}>
-        <FiltroOpciones nombre="vendedor" etiqueta="Vendedor" valor={sp.vendedor ?? ''}
-          opciones={[{ valor: '', rotulo: 'Todos los vendedores' }, { valor: 'sin', rotulo: 'Sin asignar' }, ...opcionesVendedor.map((v) => ({ valor: v.id, rotulo: v.nombre }))]} />
-        <FiltroBusqueda nombre="q" valor={sp.q ?? ''} placeholder="Empresa, vacante o ciudad" etiqueta="Buscar prospecto" maxLength={120} />
+      <BarraFiltros accion={RUTA} enLinea buscar etiqueta={tx('vendedores_consola_vendedores.filtrar_el_pipeline')} limpiarHref={RUTA} nActivos={hayFiltro ? 1 : 0}>
+        <FiltroOpciones nombre="vendedor" etiqueta={tx('vendedores_consola_vendedores.vendedor')} valor={sp.vendedor ?? ''}
+          opciones={[{ valor: '', rotulo: tx('vendedores_consola_vendedores.todos_los_vendedores') }, { valor: 'sin', rotulo: tx('vendedores_consola_vendedores.sin_asignar') }, ...opcionesVendedor.map((v) => ({ valor: v.id, rotulo: v.nombre }))]} />
+        <FiltroBusqueda nombre="q" valor={sp.q ?? ''} placeholder={tx('vendedores_consola_vendedores.empresa_vacante_o_ciudad')} etiqueta={tx('vendedores_consola_vendedores.buscar_prospecto')} maxLength={120} />
       </BarraFiltros>
     )}>
       {totalProspectos === 0 ? (
-        <EstadoVacio titulo="Sin prospectos todavía" icono={Building2}>
-          Agrega el primero en «Agregar prospecto», más abajo, o importa el censo: para eso existe esta zona.
-        </EstadoVacio>
+        <EstadoVacio titulo={tx('vendedores_consola_vendedores.sin_prospectos_todavia')} icono={Building2}>{tx('vendedores_consola_vendedores.agrega_el_primero_en_agregar_prospecto')}</EstadoVacio>
       ) : (
         <TableroProspectos
           columnas={columnas}
@@ -242,42 +241,44 @@ async function BloqueTablero({ sp }: { sp: { vendedor?: string; q?: string } }) 
 }
 
 async function BloqueDesempeno() {
+  const { t: tx } = await getT('admin_sistema');
   const vendedores = await cargarVendedores();
   const pct = resolverFormato('porcentaje');
   if (vendedores === null) {
-    return <Tarjeta titulo="Desempeño por vendedor" estado="error" mensaje="No se pudo leer el equipo en este momento" reintentar />;
+    return <Tarjeta titulo={tx('vendedores_consola_vendedores.desempeno_por_vendedor')} estado="error" mensaje={tx('vendedores_consola_vendedores.no_se_pudo_leer_el_equipo_2')} reintentar />;
   }
   if (vendedores.length === 0) {
     return (
-      <Tarjeta titulo="Desempeño por vendedor" estado="vacio" mensaje="Sin vendedores todavía"
-        detalle="Invita al primero más abajo: entra con su correo y ve solo sus prospectos en /vendedor." />
+      <Tarjeta titulo={tx('vendedores_consola_vendedores.desempeno_por_vendedor')} estado="vacio" mensaje={tx('vendedores_consola_vendedores.sin_vendedores_todavia')}
+        detalle={tx('vendedores_consola_vendedores.invita_al_primero_mas_abajo_entra')} />
     );
   }
   const columnas: ColumnaBase<VendedorRow>[] = [
-    { id: 'vendedor', titulo: 'Vendedor', principal: true, celda: (v) => v.nombre ?? v.email },
-    { id: 'asignados', titulo: 'Asignados', alinear: 'der', celda: (v) => v.asignados },
-    ...ESTADOS_PROSPECTO.map((e): ColumnaBase<VendedorRow> => ({ id: e.valor, titulo: e.rotulo, alinear: 'der', celda: (v) => v.conteos[e.valor] })),
+    { id: 'vendedor', titulo: tx('vendedores_consola_vendedores.vendedor'), principal: true, celda: (v) => v.nombre ?? v.email },
+    { id: 'asignados', titulo: tx('vendedores_consola_vendedores.asignados'), alinear: 'der', celda: (v) => v.asignados },
+    ...ESTADOS_PROSPECTO.map((e): ColumnaBase<VendedorRow> => ({ id: e.valor, titulo: estadoProspectoTr(e.valor, tx, e.rotulo), alinear: 'der', celda: (v) => v.conteos[e.valor] })),
     // Sin cartera no hay tasa: un «0 %» pintado se leería como «lo intentó y no cerró».
-    { id: 'conversion', titulo: 'Conversión', alinear: 'der', celda: (v) => (v.tasaConversion === null ? 'sin actividad todavía' : pct(v.tasaConversion * 100)) },
+    { id: 'conversion', titulo: tx('vendedores_consola_vendedores.conversion'), alinear: 'der', celda: (v) => (v.tasaConversion === null ? tx('vendedores_consola_vendedores.sin_actividad_todavia') : pct(v.tasaConversion * 100)) },
   ];
   // Cifras REALES de la tabla prospecto.
   return (
-    <Tarjeta titulo="Desempeño por vendedor">
-      <TablaBase etiqueta="Prospectos por vendedor y estado" columnas={columnas} filas={vendedores} idFila={(v) => v.id} densa tarjetaMovil className="ven-desempeno" />
+    <Tarjeta titulo={tx('vendedores_consola_vendedores.desempeno_por_vendedor')}>
+      <TablaBase etiqueta={tx('vendedores_consola_vendedores.prospectos_por_vendedor_y_estado')} columnas={columnas} filas={vendedores} idFila={(v) => v.id} densa tarjetaMovil className="ven-desempeno" />
     </Tarjeta>
   );
 }
 
 async function BloqueAltas() {
+  const { t: tx } = await getT('admin_sistema');
   const vendedores = await cargarVendedores();
   const opcionesVendedor = (vendedores ?? []).map((v) => ({ id: v.id, nombre: v.nombre ?? v.email }));
   return (
     <FilaTarjetas variante="6-6">
-      <Tarjeta titulo="Agregar prospecto">
+      <Tarjeta titulo={tx('vendedores_consola_vendedores.agregar_prospecto')}>
         <FormaProspecto accion={accionCrearProspecto} vendedores={opcionesVendedor} />
       </Tarjeta>
-      <Tarjeta titulo="Invitar vendedor">
-        <p className="ven-tarjeta__tenue">Cuenta de Likida (sin flota): entra a /vendedor y ve únicamente sus prospectos.</p>
+      <Tarjeta titulo={tx('vendedores_consola_vendedores.invitar_vendedor')}>
+        <p className="ven-tarjeta__tenue">{tx('vendedores_consola_vendedores.cuenta_de_likida_sin_flota_entra')}</p>
         <FormaInvitarVendedor accion={accionInvitar} />
       </Tarjeta>
     </FilaTarjetas>

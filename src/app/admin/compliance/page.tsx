@@ -15,20 +15,23 @@ import { TiraCifras } from '../../ui-v2/graficas';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import '../sistema.css';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
 
 export const dynamic = 'force-dynamic';
 
-const ETIQUETA_TIPO: Record<string, string> = {
-  acceso: 'Acceso', rectificacion: 'Rectificación', cancelacion: 'Cancelación', oposicion: 'Oposición',
-};
+const etiquetaTipo = (t: TSistema = T_SISTEMA_ES): Record<string, string> => ({
+  acceso: t('compliance.acceso'), rectificacion: t('compliance.rectificacion'), cancelacion: t('compliance.cancelacion'), oposicion: t('compliance.oposicion'),
+});
 /** El estado de la solicitud como chip: resuelta en verde, pendiente en ámbar, improcedente en neutro. Un estado fuera del catálogo se
  *  pinta crudo en neutro: visible, no roto. */
-const CHIP_ARCO: Record<string, { tono: TonoEstado; etiqueta: string }> = {
-  recibida: { tono: 'warn', etiqueta: 'Recibida' },
-  en_proceso: { tono: 'warn', etiqueta: 'En proceso' },
-  resuelta: { tono: 'ok', etiqueta: 'Resuelta' },
-  improcedente: { tono: 'neutral', etiqueta: 'Improcedente' },
-};
+const chipArco = (t: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoEstado; etiqueta: string }> => ({
+  recibida: { tono: 'warn', etiqueta: t('compliance.recibida') },
+  en_proceso: { tono: 'warn', etiqueta: t('compliance.en_proceso') },
+  resuelta: { tono: 'ok', etiqueta: t('compliance.resuelta') },
+  improcedente: { tono: 'neutral', etiqueta: t('compliance.improcedente') },
+});
 
 /**
  * Compliance y datos — la flota ve sus solicitudes ARCO (registradas cuando un operador escribe PRIVACIDAD por WhatsApp) y responde la
@@ -40,6 +43,7 @@ const CHIP_ARCO: Record<string, { tono: TonoEstado; etiqueta: string }> = {
  * solicitudes».
  */
 export default async function CompliancePage({ searchParams }: { searchParams: Promise<{ pagina?: string }> }) {
+  const { t, idioma } = await getT('admin_sistema');
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   async function accionResolver(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
@@ -47,8 +51,8 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
     await requireSuperadmin();
     const solicitudId = String(fd.get('solicitudId') ?? '');
     const resolucion = String(fd.get('resolucion') ?? '').trim();
-    if (!solicitudId) return { error: 'Falta la solicitud.' };
-    if (resolucion.length < 5) return { error: 'Escribe la respuesta que se entrega al titular (qué se resolvió y cómo).' };
+    if (!solicitudId) return { error: t('compliance.falta_la_solicitud') };
+    if (resolucion.length < 5) return { error: t('compliance.escribe_la_respuesta_que_se_entrega') };
     // El tenant: la solicitud se resuelve bajo la flota responsable. Se busca
     // el tenant de la solicitud para no depender del orden del listado.
     //
@@ -58,20 +62,20 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
     // mintiendo sobre el porqué: quien lo lee busca la solicitud a mano y no
     // la encuentra porque la lectura ni siquiera corrió.
     const { data: sol, error: errSol } = await supabaseAdmin().from('solicitud_arco').select('tenant_id').eq('id', solicitudId).maybeSingle();
-    if (errSol) return { error: `No se pudo leer la solicitud — ${errSol.message}. Intenta de nuevo.` };
-    if (!sol?.tenant_id) return { error: 'La solicitud no existe.' };
+    if (errSol) return { error: t('compliance.no_se_pudo_leer_la_solicitud', { message: errSol.message }) };
+    if (!sol?.tenant_id) return { error: t('compliance.la_solicitud_no_existe') };
     let r: { enviada: boolean; error?: string };
     try {
       r = await resolverSolicitudArco(sol.tenant_id as string, solicitudId, resolucion);
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'resolver la solicitud') };
+      return { error: mensajeParaPantalla(e, 'resolver la solicitud', idioma) };
     }
     revalidatePath('/admin/compliance');
     // A37-S05-04: el resultado del envío NO se descarta — la pantalla no
     // afirma un WhatsApp que no salió (mismo texto que /dashboard/arco).
     return r.enviada
-      ? { ok: 'Solicitud resuelta y la respuesta se envió al titular por WhatsApp.' }
-      : { ok: `Solicitud resuelta. La respuesta NO se pudo enviar por WhatsApp${r.error ? ` (${r.error})` : ''} — entrégala al titular por otro canal.` };
+      ? { ok: t('compliance.solicitud_resuelta_y_la_respuesta_se') }
+      : { ok: t('compliance.solicitud_resuelta_la_respuesta_no_se', { v: r.error ? ` (${r.error})` : '' }) };
   }
 
   let lectura: { solicitudes: SolicitudArcoPanel[]; pendientesVencen: number } | null;
@@ -91,60 +95,58 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
   const pagina = Math.max(1, Number.parseInt((await searchParams)?.pagina ?? '1', 10) || 1);
 
   const columnas: ColumnaTabla<SolicitudArcoPanel>[] = [
-    { id: 'recibida', titulo: 'Recibida', corta: true, celda: (s) => fechaMx(s.recibidaEn) },
-    { id: 'flota', titulo: 'Flota', principal: true, celda: (s) => s.flotaNombre },
-    { id: 'derecho', titulo: 'Derecho', celda: (s) => ETIQUETA_TIPO[s.tipo] ?? s.tipo },
-    { id: 'estado', titulo: 'Estado', celda: (s) => { const c = CHIP_ARCO[s.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: s.estado }; return <StatusChip tono={c.tono}>{c.etiqueta}</StatusChip>; } },
-    { id: 'resolucion', titulo: 'Resolución', celda: (s) => s.resolucion ?? '—' },
+    { id: 'recibida', titulo: t('compliance.recibida'), corta: true, celda: (s) => fechaMx(s.recibidaEn, idioma) },
+    { id: 'flota', titulo: t('observabilidad.flota'), principal: true, celda: (s) => s.flotaNombre },
+    { id: 'derecho', titulo: t('compliance.derecho'), celda: (s) => etiquetaTipo(t)[s.tipo] ?? s.tipo },
+    { id: 'estado', titulo: t('salud_sistema.estado'), celda: (s) => { const c = chipArco(t)[s.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: s.estado }; return <StatusChip tono={c.tono}>{c.etiqueta}</StatusChip>; } },
+    { id: 'resolucion', titulo: t('compliance.resolucion'), celda: (s) => s.resolucion ?? '—' },
   ];
 
   return (
-    <MarcoPagina titulo="Compliance y datos" apoyo="Las solicitudes de derechos de los titulares (ARCO): quién pide qué y cuánto falta para contestar.">
-      <TiraCifras etiqueta="Solicitudes ARCO" items={lectura === null ? [
-        { etiqueta: 'Por responder', valor: null, estado: 'error', mensaje: 'No se pudieron leer las solicitudes.', reintentar: true },
-        { etiqueta: 'Vencen pronto', valor: null, estado: 'error', mensaje: 'No se pudieron leer las solicitudes.', reintentar: true },
+    <MarcoPagina titulo={t('compliance.compliance_y_datos')} apoyo={t('compliance.las_solicitudes_de_derechos_de_los')}>
+      <TiraCifras etiqueta={t('compliance.solicitudes_arco')} items={lectura === null ? [
+        { etiqueta: t('compliance.por_responder'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
+        { etiqueta: t('compliance.vencen_pronto'), valor: null, estado: 'error', mensaje: t('compliance.no_se_pudieron_leer_las_solicitudes'), reintentar: true },
       ] : [
-        { etiqueta: 'Por responder', valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: 'Recibidas o en proceso, de todas las flotas.' },
-        { etiqueta: 'Vencen pronto', valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: 'Plazo en 5 días hábiles o menos.' },
+        { etiqueta: t('compliance.por_responder'), valor: pendientes.length, formato: 'entero', tono: pendientes.length > 0 ? 'warn' : undefined, nota: t('compliance.recibidas_o_en_proceso_de_todas') },
+        { etiqueta: t('compliance.vencen_pronto'), valor: lectura.pendientesVencen, formato: 'entero', tono: lectura.pendientesVencen > 0 ? 'bad' : undefined, nota: t('compliance.plazo_en_5_dias_habiles_o') },
       ]} />
 
       {lectura === null ? (
-        <EstadoError reintentar>No se pudieron leer las solicitudes ARCO. Esto NO quiere decir que no haya ninguna: la responsable tiene 20 días hábiles para contestar y una pendiente puede estar corriendo sin verse.</EstadoError>
+        <EstadoError reintentar>{t('compliance.no_se_pudieron_leer_las_solicitudes_2')}</EstadoError>
       ) : solicitudes.length === 0 ? (
-        <EstadoVacio titulo="Ninguna solicitud ARCO registrada">
-          Cuando un operador escribe PRIVACIDAD por WhatsApp, la solicitud queda registrada aquí y la flota, que es la responsable, tiene 20 días hábiles para responder.
-        </EstadoVacio>
+        <EstadoVacio titulo={t('compliance.ninguna_solicitud_arco_registrada')}>{t('compliance.cuando_un_operador_escribe_privacidad_por')}</EstadoVacio>
       ) : (
         <>
           <section className="adm-sis-bloque" aria-labelledby="arco-pendientes">
-            <h2 className="adm-sis-titulo" id="arco-pendientes">Por responder</h2>
+            <h2 className="adm-sis-titulo" id="arco-pendientes">{t('compliance.por_responder')}</h2>
             {pendientes.length === 0 ? (
-              <EstadoVacio titulo="Nada por responder">Todas las solicitudes registradas ya tienen su respuesta.</EstadoVacio>
+              <EstadoVacio titulo={t('compliance.nada_por_responder')}>{t('compliance.todas_las_solicitudes_registradas_ya_tienen')}</EstadoVacio>
             ) : pendientes.map((s) => {
-              const chip = CHIP_ARCO[s.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: s.estado };
+              const chip = chipArco(t)[s.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: s.estado };
               const vencida = s.venceEn < hoy;
               return (
-                <Tarjeta key={s.id} titulo={`${ETIQUETA_TIPO[s.tipo] ?? s.tipo} · ${s.flotaNombre}`}
-                  acciones={<><StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip>{vencida ? <StatusChip tono="bad">Vencida</StatusChip> : null}</>}>
+                <Tarjeta key={s.id} titulo={`${etiquetaTipo(t)[s.tipo] ?? s.tipo} · ${s.flotaNombre}`}
+                  acciones={<><StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip>{vencida ? <StatusChip tono="bad">{t('compliance.vencida')}</StatusChip> : null}</>}>
                   <ul className="adm-sis-lista">
-                    <li><span>Recibida</span><span>{fechaMx(s.recibidaEn)}</span></li>
-                    <li><span>Vence</span><span>{fechaMx(s.venceEn)}</span></li>
-                    <li><span>Titular</span><span>{s.operadorNombre ?? '—'}<span className="adm-sis-sub">{s.titularRef}</span></span></li>
+                    <li>{rico(t('compliance.e0_recibida_e0'), { e0: (c) => <span>{c}</span> })}<span>{fechaMx(s.recibidaEn, idioma)}</span></li>
+                    <li>{rico(t('compliance.e0_vence_e0'), { e0: (c) => <span>{c}</span> })}<span>{fechaMx(s.venceEn, idioma)}</span></li>
+                    <li>{rico(t('compliance.e0_titular_e0'), { e0: (c) => <span>{c}</span> })}<span>{s.operadorNombre ?? '—'}<span className="adm-sis-sub">{s.titularRef}</span></span></li>
                   </ul>
                   {s.tipo === 'cancelacion' || s.tipo === 'oposicion' ? (
                     // A37-S05-04: una cancelación se EJECUTA (anonimiza al titular) y una oposición lleva su propio trámite; ninguna se
                     // cierra con texto. La ejecución real vive en /dashboard/arco.
                     <div className="adm-sis-acciones">
                       <BotonEnlace href={`/dashboard/arco?tenant=${encodeURIComponent(s.tenantId)}`} variante="secondary" tamano="sm">
-                        {s.tipo === 'cancelacion' ? 'Ejecutar cancelación en la bandeja ARCO' : 'Atender la oposición en la bandeja ARCO'}
+                        {s.tipo === 'cancelacion' ? t('compliance.ejecutar_cancelacion_en_la_bandeja_arco') : t('compliance.atender_la_oposicion_en_la_bandeja')}
                       </BotonEnlace>
                     </div>
                   ) : (
-                    <FormaConAviso accion={accionResolver} boton="Responder" columnas="md:grid-cols-1">
+                    <FormaConAviso accion={accionResolver} boton={t('compliance.responder')} columnas="md:grid-cols-1">
                       <input type="hidden" name="solicitudId" value={s.id} />
-                      <CampoTextarea etiqueta="Respuesta al titular" name="resolucion" obligatorio rows={3}
-                        placeholder="Qué se resolvió y cómo"
-                        ayuda="Se envía tal cual por WhatsApp al titular. Escribe lo que quieres que lea." />
+                      <CampoTextarea etiqueta={t('compliance.respuesta_al_titular')} name="resolucion" obligatorio rows={3}
+                        placeholder={t('compliance.que_se_resolvio_y_como')}
+                        ayuda={t('compliance.se_envia_tal_cual_por_whatsapp')} />
                     </FormaConAviso>
                   )}
                 </Tarjeta>
@@ -153,21 +155,18 @@ export default async function CompliancePage({ searchParams }: { searchParams: P
           </section>
 
           <section className="adm-sis-bloque" aria-labelledby="arco-resueltas">
-            <h2 className="adm-sis-titulo" id="arco-resueltas">Ya resueltas</h2>
+            <h2 className="adm-sis-titulo" id="arco-resueltas">{t('compliance.ya_resueltas')}</h2>
             <TablaLista<SolicitudArcoPanel>
-              etiqueta="Solicitudes de derechos de los titulares resueltas" columnas={columnas} filas={resueltas} idFila={(s) => s.id}
+              etiqueta={t('compliance.solicitudes_de_derechos_de_los_titulares')} columnas={columnas} filas={resueltas} idFila={(s) => s.id}
               base="/admin/compliance" params={{ pagina: pagina > 1 ? String(pagina) : undefined }} paginacion={{ tamano: 25 }}
-              vacio={{ titulo: 'Aún no hay resueltas', texto: 'Aparecen aquí en cuanto se contesta la primera.' }}
+              vacio={{ titulo: t('compliance.aun_no_hay_resueltas'), texto: t('compliance.aparecen_aqui_en_cuanto_se_contesta') }}
             />
           </section>
         </>
       )}
 
-      <Disclosure titulo="Lo que aún no existe aquí" resumen="Retención de comprobantes y avisos por versión">
-        <p className="adm-sis-nota">
-          La retención de comprobantes (CFF art. 30: conservar cinco años) y el catálogo de avisos de privacidad por versión siguen sin flujo construido; se dejan dichos en lugar de inventarlos.
-          Las solicitudes ARCO sí están operativas: las registra el webhook cuando un operador escribe PRIVACIDAD, se resuelven aquí y la respuesta se intenta enviar al titular por WhatsApp (la plantilla de respuesta está en revisión de Meta).
-        </p>
+      <Disclosure titulo={t('compliance.lo_que_aun_no_existe_aqui')} resumen={t('compliance.retencion_de_comprobantes_y_avisos_por')}>
+        <p className="adm-sis-nota">{t('compliance.la_retencion_de_comprobantes_cff_art')}</p>
       </Disclosure>
     </MarcoPagina>
   );
@@ -220,4 +219,7 @@ async function datosDeCompliance(): Promise<{ solicitudes: SolicitudArcoPanel[];
   return { solicitudes: mapeadas as SolicitudArcoPanel[], pendientesVencen: vence };
 }
 
-export const metadata: Metadata = { title: 'Compliance & Datos' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('compliance.compliance_datos') };
+}

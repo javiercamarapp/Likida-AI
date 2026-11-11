@@ -22,7 +22,7 @@ import {
 import { proyectar } from '../../dashboard/mapa/mexico-geo';
 import { ESTADOS_GEO, VIEWBOX_ESTADOS, type EstadoGeo } from './mexico-estados-geo';
 import {
-  COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, TAMANOS, desempacar,
+  COLOR_EMBUDO, TAMANOS, desempacar,
   esProspectoTerminal,
   type DatosMapa, type Giro, type ProspectoMapa, type Tamano, type TextosProspecto,
 } from '@/lib/admin/prospectos-mapa-client';
@@ -43,6 +43,10 @@ import {
   SIN_FILTROS, alternarEnSet, contarFiltrosActivos, csvDe, filtrarProspectos, ordenarProspectos, plazasDe, type Filtros,
 } from './filtros';
 import './cerebro.css';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
+import { criterioScoreTr, nombreEtapaTr, nombreGiroTr } from '@/lib/i18n/rotulos_tr';
 
 const Calles = dynamic(() => import('./calles'), { ssr: false });
 
@@ -51,19 +55,19 @@ const ORDEN_EMBUDO = [
   'no-show', 'cancelled', 'contactado', 'nuevo', 'won', 'cerrado', 'lost', 'perdido',
 ] as const;
 const GIROS: Giro[] = ['transportista', 'embotelladora', 'abarrotes_mayoreo', 'flota_propia', 'logistica', 'otro'];
-const FUENTES = [
-  { clave: 'censo', nombre: 'Censo (vacantes)' },
-  { clave: 'denue', nombre: 'Universo DENUE' },
-  { clave: 'canacar', nombre: 'Directorio CANACAR' },
-  { clave: 'bolsa', nombre: 'Bolsas (histórico)' },
-  { clave: 'aaag', nombre: 'Padrón AAAG' },
-  { clave: 'scribd-tampico', nombre: 'Directorio Tampico' },
-  { clave: 'manual', nombre: 'Cuentas a mano' },
-  { clave: 'landing', nombre: 'Landing orgánica' },
-  { clave: 'campana', nombre: 'Campaña directa' },
+const fuentesTr = (tx: TSistema = T_SISTEMA_ES) => ([
+  { clave: 'censo', nombre: tx('mapa_prospectos_cerebro.censo_vacantes') },
+  { clave: 'denue', nombre: tx('mapa_prospectos_cerebro.universo_denue') },
+  { clave: 'canacar', nombre: tx('mapa_prospectos_cerebro.directorio_canacar') },
+  { clave: 'bolsa', nombre: tx('mapa_prospectos_cerebro.bolsas_historico') },
+  { clave: 'aaag', nombre: tx('mapa_prospectos_cerebro.padron_aaag') },
+  { clave: 'scribd-tampico', nombre: tx('mapa_prospectos_cerebro.directorio_tampico') },
+  { clave: 'manual', nombre: tx('mapa_prospectos_cerebro.cuentas_a_mano') },
+  { clave: 'landing', nombre: tx('mapa_prospectos_cerebro.landing_organica') },
+  { clave: 'campana', nombre: tx('mapa_prospectos_cerebro.campana_directa') },
   { clave: 'ads-meta', nombre: 'Ads Meta' },
   { clave: 'ads-google', nombre: 'Ads Google' },
-] as const;
+] as const);
 
 /** Con más de este número de luces a nivel país, el DOM se arrastra: se enseñan las N más calientes y el pie lo DICE (nunca se recorta callado). */
 const TOPE_LUCES_PAIS = 2200;
@@ -130,10 +134,10 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
   /** Lo que el servidor dijo al pedir «Mensaje IA» (error o aviso de que no se guardó): se muestra, no se traga. */
   avisoIa?: { texto: string; error: boolean } | null;
 }) {
+  const { t: tx, idioma } = useT('admin_sistema', admin_sistemaEs);
   // El mensaje del agente experto MANDA sobre la plantilla: mientras no llegue, el botón no se abre. Abrirlo con la plantilla mandaría
   // el texto equivocado, firmado por Javier, y eso no se deshace.
   const esperando = esperandoTextos(p, t);
-  const c = COLOR_EMBUDO[p.estado] ?? COLOR_EMBUDO.nuevo;
   const BTN = clasesBoton('secondary', 'sm');
   return (
     <article className={cx('cer-prospecto', plana && 'cer-prospecto--plana')} data-nuevo={nuevo || undefined}>
@@ -142,10 +146,9 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
         <div className="min-w-0">
           <Link href={`/admin/mapa-prospectos/${p.id}`} className="cer-prospecto__nombre">{p.empresa}</Link>
           <p className="cer-prospecto__meta">
-            {c.nombre} · {NOMBRE_GIRO[p.giro]}
-            {p.numUnidades !== null ? ` · ${numero(p.numUnidades)} unidades` : p.tamano ? ` · ${p.tamano} pers.` : ''}
-            {p.ciudad ? ` · ${p.ciudad}` : ''} · datos {p.completitud}%
-          </p>
+            {nombreEtapaTr(p.estado in COLOR_EMBUDO ? p.estado : 'nuevo', tx)} · {nombreGiroTr(p.giro, tx)}
+            {p.numUnidades !== null ? ` · ${tx('mapa_prospectos_cerebro.n_unidades', { n: numero(p.numUnidades, idioma) })}` : p.tamano ? ` · ${tx('mapa_prospectos_cerebro.n_pers', { n: p.tamano })}` : ''}
+            {p.ciudad ? ` · ${p.ciudad}` : ''}{' '}{tx('mapa_prospectos_cerebro.datos', { completitud: p.completitud })}</p>
         </div>
       </div>
       {(p.contacto || p.telefono || p.correo) && (
@@ -155,40 +158,39 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
           {p.correo && <p><Icono icono={Mail} tam={14} /><a href={`mailto:${p.correo}`}>{p.correo}</a></p>}
         </div>
       )}
-      {p.vacante && <p className="cer-prospecto__tenue">Vacante: {p.vacante}</p>}
+      {p.vacante && <p className="cer-prospecto__tenue">{tx('mapa_prospectos_cerebro.vacante')}{' '}{p.vacante}</p>}
       {t?.notas && <p className="cer-prospecto__tenue cer-prospecto__notas" title={t.notas}>{t.notas}</p>}
-      <BarraPct etiqueta="Urgencia" pct={p.urgencia} serie="urgencia" />
-      <BarraPct etiqueta="Cierre" pct={p.cierre} serie="cierre" />
+      <BarraPct etiqueta={tx('mapa_prospectos_detalle.urgencia')} pct={p.urgencia} serie="urgencia" />
+      <BarraPct etiqueta={tx('mapa_prospectos_detalle.cierre')} pct={p.cierre} serie="cierre" />
       <BarraPct etiqueta="ICP" pct={p.similitudIcpPct} serie="icp" />
-      <BarraPct etiqueta="Necesid." pct={p.necesidadPct} serie="necesidad" />
+      <BarraPct etiqueta={tx('mapa_prospectos_detalle.necesid')} pct={p.necesidadPct} serie="necesidad" />
       {p.mensajesGeneradosEn && (
-        <p className="cer-prospecto__tenue">Con mensaje del agente experto listo</p>
+        <p className="cer-prospecto__tenue">{tx('mapa_prospectos_cerebro.con_mensaje_del_agente_experto_listo')}</p>
       )}
       {p.ultimoToque && (
-        <p className="cer-prospecto__tenue">Último toque: {fechaHoraMx(p.ultimoToque)}</p>
+        <p className="cer-prospecto__tenue">{tx('mapa_prospectos_cerebro.ultimo_toque')}{' '}{fechaHoraMx(p.ultimoToque, idioma)}</p>
       )}
       {(p.telefono || p.correo || p.lat !== null) && (
         <div className="cer-prospecto__acciones">
           {p.telefono && (esperando ? (
-            <span aria-disabled className={BTN} title="El mensaje que redactó el agente experto viene en camino">WhatsApp …</span>
+            <span aria-disabled className={BTN} title={tx('mapa_prospectos_cerebro.el_mensaje_que_redacto_el_agente')}>{tx('mapa_prospectos_cerebro.whatsapp')}</span>
           ) : (
-            <a href={hrefWa(p, t)!} target="_blank" rel="noreferrer" onClick={() => onToque?.(p.id, 'whatsapp')} className={BTN}>WhatsApp →</a>
+            <a href={hrefWa(p, t)!} target="_blank" rel="noreferrer" onClick={() => onToque?.(p.id, 'whatsapp')} className={BTN}>{tx('mapa_prospectos_cerebro.whatsapp_2')}</a>
           ))}
           {p.correo && (esperando ? (
-            <span aria-disabled className={BTN} title="El correo que redactó el agente experto viene en camino">Correo …</span>
+            <span aria-disabled className={BTN} title={tx('mapa_prospectos_cerebro.el_correo_que_redacto_el_agente')}>{tx('mapa_prospectos_cerebro.correo')}</span>
           ) : (
-            <a href={hrefCorreo(p, t)!} onClick={() => onToque?.(p.id, 'correo')} className={BTN}>Correo →</a>
+            <a href={hrefCorreo(p, t)!} onClick={() => onToque?.(p.id, 'correo')} className={BTN}>{tx('mapa_prospectos_cerebro.correo_2')}</a>
           ))}
           {p.lat !== null && (
             <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`} target="_blank" rel="noreferrer" className={BTN}>
-              <Icono icono={Navigation} tam={14} />Cómo llegar
-            </a>
+              <Icono icono={Navigation} tam={14} />{tx('mapa_prospectos_calles.como_llegar')}</a>
           )}
           {onAfinar && !esProspectoTerminal(p.estado) && (p.telefono || p.correo) && (
             <button type="button" onClick={() => onAfinar(p.id)} disabled={afinando}
-              title="El agente experto redacta el primer toque con toda la info de este prospecto" className={BTN}>
+              title={tx('mapa_prospectos_cerebro.el_agente_experto_redacta_el_primer')} className={BTN}>
               <Icono icono={p.mensajesGeneradosEn ? RefreshCw : Sparkles} tam={14} />
-              {afinando ? 'Redactando…' : p.mensajesGeneradosEn ? 'IA' : 'Mensaje IA'}
+              {afinando ? tx('mapa_prospectos_detalle.redactando') : p.mensajesGeneradosEn ? 'IA' : tx('mapa_prospectos_cerebro.mensaje_ia')}
             </button>
           )}
         </div>
@@ -201,6 +203,7 @@ export function TarjetaProspecto({ p, t, nuevo, afinando, onAfinar, onToque, pla
 }
 
 export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estadoInicial?: string }) {
+  const { t: tx, idioma } = useT('admin_sistema', admin_sistemaEs);
   const reducido = usePrefersReducedMotion();
   const tr = useT('shell', shellEs);
   // ── LA CARTERA, LIGERA (FE-16) ───────────────────────────────────────────
@@ -321,7 +324,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       // con la columna notas vacía: se aborta con aviso en vez de éxito falso.
       const faltan = idsSinTextos(ids, textosRef.current);
       if (faltan.length > 0) {
-        setErrorExport(`No se pudieron cargar las notas de ${faltan.length} prospectos; la exportación se canceló. Reintenta.`);
+        setErrorExport(tx('mapa_prospectos_cerebro.no_se_pudieron_cargar_las_notas', { length: faltan.length }));
         return;
       }
       const blob = new Blob([csvDe(lista, textosRef.current)], { type: 'text/csv;charset=utf-8' });
@@ -333,7 +336,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
       a.click();
       URL.revokeObjectURL(a.href);
     } catch {
-      setErrorExport('No se pudo registrar la exportación en la bitácora; la descarga se canceló. Reintenta (revisa tu sesión).');
+      setErrorExport(tx('mapa_prospectos_cerebro.no_se_pudo_registrar_la_exportacion'));
     } finally {
       setExportando(false);
     }
@@ -365,7 +368,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
-      }).then(leerRespuestaMensaje, () => ({ ok: false as const, error: 'No se pudo contactar al servidor. Revisa tu conexión.' }));
+      }).then(leerRespuestaMensaje, () => ({ ok: false as const, error: tx('mapa_prospectos_detalle.no_se_pudo_contactar_al_servidor') }));
       if (!r.ok) { ponerAviso(id, { texto: r.error, error: true }); return; } // el boton sigue con la plantilla
       if (r.aviso) ponerAviso(id, { texto: r.aviso, error: false });
       const m = r.datos;
@@ -596,10 +599,10 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
     return m;
   }, [filtrados]);
   const itemsEmbudo = useMemo(() => ORDEN_EMBUDO.map((e) => ({
-    clave: e, etiqueta: COLOR_EMBUDO[e].nombre, valor: porEtapa.get(e) ?? 0, texto: numero(porEtapa.get(e) ?? 0),
-  })), [porEtapa]);
+    clave: e, etiqueta: nombreEtapaTr(e, tx), valor: porEtapa.get(e) ?? 0, texto: numero(porEtapa.get(e) ?? 0, idioma),
+  })), [porEtapa, tx, idioma]);
   const itemsPlazas = useMemo(() => [...porEstado.entries()].sort((a, b) => b[1].length - a[1].length).slice(0, 8)
-    .map(([nombre, lista]) => ({ clave: nombre, etiqueta: nombre, valor: lista.length, texto: numero(lista.length) })), [porEstado]);
+    .map(([nombre, lista]) => ({ clave: nombre, etiqueta: nombre, valor: lista.length, texto: numero(lista.length, idioma) })), [porEstado, idioma]);
 
   const elegirEstado = (destino: EstadoGeo | null) => { setSeleccion(destino); volarA(destino); };
   const alPais = () => { setSeleccion(null); setCalles(false); volarA(null); };
@@ -607,58 +610,55 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
   return (
     <div className="cer-raiz">
-      <TiraCifras etiqueta="Cartera filtrada" items={[
-        { etiqueta: 'Prospectos', valor: filtrados.length, conteo: true },
-        { etiqueta: 'Con teléfono', valor: conTelefono, conteo: true },
-        { etiqueta: 'Con decisor', valor: conDecisor, conteo: true },
-        { etiqueta: 'Urgentes', valor: calientes, conteo: true, nota: 'Urgencia de 70 % o más' },
+      <TiraCifras etiqueta={tx('mapa_prospectos_cerebro.cartera_filtrada')} items={[
+        { etiqueta: tx('mapa_prospectos_cerebro.prospectos'), valor: filtrados.length, conteo: true },
+        { etiqueta: tx('mapa_prospectos_cerebro.con_telefono'), valor: conTelefono, conteo: true },
+        { etiqueta: tx('mapa_prospectos_cerebro.con_decisor'), valor: conDecisor, conteo: true },
+        { etiqueta: tx('mapa_prospectos_cerebro.urgentes'), valor: calientes, conteo: true, nota: tx('mapa_prospectos_cerebro.urgencia_de_70_o_mas') },
       ]} />
 
       {/* ── Herramientas del mapa ───────────────────────────────────────── */}
       <div className="cer-barra">
         <p className="cer-barra__resumen" aria-live="polite">
           {seleccion
-            ? `${seleccion.nombre}: ${numero(listaSeleccion.length)} prospectos`
-            : 'Rueda para acercar, arrastra para moverte, toca un estado para volar a él. Se actualiza solo.'}
+            ? tx('mapa_prospectos_cerebro.seleccion_prospectos', { nombre: seleccion.nombre, n: numero(listaSeleccion.length, idioma) })
+            : tx('mapa_prospectos_cerebro.rueda_para_acercar_arrastra_para_moverte')}
         </p>
         <div className="cer-barra__acciones">
           {(camK > 1.02 || seleccion) && (
-            <Boton tamano="sm" icono={<Icono icono={Undo2} />} onClick={alPais} title="Volver al país">País</Boton>
+            <Boton tamano="sm" icono={<Icono icono={Undo2} />} onClick={alPais} title={tx('mapa_prospectos_calles.volver_al_pais')}>{tx('mapa_prospectos_cerebro.pais')}</Boton>
           )}
           {/* Los dos atajos más pedidos: un clic, sin abrir el cajón. Mismo estado que los criterios de adentro. */}
           <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.soloDecisor} icono={<Icono icono={UserCheck} />}
-            onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>Con decisor</Boton>
+            onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>{tx('mapa_prospectos_cerebro.con_decisor')}</Boton>
           <Boton tamano="sm" className="cer-toggle" aria-pressed={filtros.minUrgencia === 70} icono={<Icono icono={Flame} />}
-            onClick={() => setFiltros((f) => ({ ...f, minUrgencia: f.minUrgencia === 70 ? 0 : 70 }))}>Urgentes</Boton>
-          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} onClick={() => setFiltrosAbiertos(true)}>
-            Filtros{filtrosActivos ? ` · ${filtrosActivos}` : ''}
+            onClick={() => setFiltros((f) => ({ ...f, minUrgencia: f.minUrgencia === 70 ? 0 : 70 }))}>{tx('mapa_prospectos_cerebro.urgentes')}</Boton>
+          <Boton tamano="sm" icono={<Icono icono={SlidersHorizontal} />} onClick={() => setFiltrosAbiertos(true)}>{tx('mapa_prospectos_cerebro.filtros')}{filtrosActivos ? ` · ${filtrosActivos}` : ''}
           </Boton>
-          <Boton tamano="sm" onClick={alternarPantalla} title="Pantalla completa" icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>
-            <span className="rv-sr">Pantalla completa</span>
-          </Boton>
+          <Boton tamano="sm" onClick={alternarPantalla} title={tx('mapa_prospectos_cerebro.pantalla_completa')} icono={<Icono icono={pantallaCompleta ? Minimize2 : Maximize2} />}>{rico(tx('mapa_prospectos_cerebro.e0_pantalla_completa_e0'), { e0: (c) => <span className="rv-sr">{c}</span> })}</Boton>
         </div>
       </div>
 
       {/* ── El mundo ─────────────────────────────────────────────────────── */}
-      <section ref={zonaRef} className="cer-zona" aria-label="Mapa de la cartera">
+      <section ref={zonaRef} className="cer-zona" aria-label={tx('mapa_prospectos_cerebro.mapa_de_la_cartera')}>
         {/* El ala izquierda: solo en pantallas anchas (1900 px o más); el embudo y los más cerrables VIVEN junto al país, sin taparlo. */}
-        <aside className="cer-ala" aria-label="Embudo y más cerrables">
+        <aside className="cer-ala" aria-label={tx('mapa_prospectos_cerebro.embudo_y_mas_cerrables')}>
           <div className="cer-ala__bloque">
-            <h3 className="cer-ala__titulo">El embudo</h3>
+            <h3 className="cer-ala__titulo">{tx('mapa_prospectos_cerebro.el_embudo')}</h3>
             {ORDEN_EMBUDO.map((e) => (
               <div key={e} className="cer-ala__fila">
                 <i className="cer-punto" data-etapa={e} aria-hidden="true" />
-                <span>{COLOR_EMBUDO[e].nombre}</span>
-                <b>{numero(porEtapa.get(e) ?? 0)}</b>
+                <span>{nombreEtapaTr(e, tx)}</span>
+                <b>{numero(porEtapa.get(e) ?? 0, idioma)}</b>
               </div>
             ))}
           </div>
           <div className="cer-ala__bloque cer-ala__bloque--lista">
-            <h3 className="cer-ala__titulo">Más cerrables</h3>
+            <h3 className="cer-ala__titulo">{tx('mapa_prospectos_cerebro.mas_cerrables')}</h3>
             {ordenados.slice(0, 7).map((p) => (
               <div key={p.id} className="cer-ala__cerrable">
                 <p>{p.empresa}</p>
-                <p>{p.entidad ?? 'sin plaza'} · cierre {p.cierre}% · urgencia {p.urgencia}%</p>
+                <p>{p.entidad ?? tx('mapa_prospectos_cerebro.sin_plaza')}{' '}{tx('mapa_prospectos_cerebro.cierre_urgencia', { cierre: p.cierre, urgencia: p.urgencia })}</p>
               </div>
             ))}
           </div>
@@ -668,7 +668,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         <svg ref={svgRef} viewBox={`0 0 ${VIEWBOX_ESTADOS.w} ${VIEWBOX_ESTADOS.h}`} className="cer-svg"
           onPointerDown={alBajarPuntero} onPointerMove={alMoverPuntero}
           onPointerUp={alSoltarPuntero} onPointerCancel={alSoltarPuntero}
-          role="img" aria-label="Mapa de México con la cartera de prospectos">
+          role="img" aria-label={tx('mapa_prospectos_cerebro.mapa_de_mexico_con_la_cartera')}>
           {/* El mar: clic fuera de un estado = volver al país (si no fue arrastre). */}
           <rect x={0} y={0} width={VIEWBOX_ESTADOS.w} height={VIEWBOX_ESTADOS.h} fill="transparent"
             onClick={() => { if (arrastro.current) return; alPais(); }} />
@@ -710,9 +710,7 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           const lista = porEstado.get(e.nombre) ?? [];
           return (
             <div className="cer-tip">
-              <strong>{e.nombre}</strong>
-              <span>{lista.length} prospectos · {lista.filter((p) => p.telefono).length} con teléfono · {lista.filter((p) => p.urgencia >= 70).length} urgentes</span>
-            </div>
+              <strong>{e.nombre}</strong>{rico(tx('mapa_prospectos_cerebro.e0_prospectos_con_telefono_urgentes_e0', { length: lista.length, length2: lista.filter((p) => p.telefono).length, length3: lista.filter((p) => p.urgencia >= 70).length }), { e0: (c) => <span>{c}</span> })}</div>
           );
         })()}
 
@@ -720,14 +718,12 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <p className="cer-nota-sin-punto" role="status">{tr.tp('mapa.sinPunto', filtrados.length - conCoords.length)}</p>
         )}
         {lucesRecortadas && (
-          <p className="cer-nota-luces">
-            Luces: las más calientes ({numero(pines.length)} de {numero(enSeleccion)}). Afina el filtro para verlas todas.
-          </p>
+          <p className="cer-nota-luces">{tx('mapa_prospectos_cerebro.luces_las_mas_calientes_de_afina', { numero: numero(pines.length, idioma), numero2: numero(enSeleccion, idioma) })}</p>
         )}
         {/* Leyenda del embudo */}
-        <div className="cer-leyenda" aria-label="Leyenda del embudo">
+        <div className="cer-leyenda" aria-label={tx('mapa_prospectos_cerebro.leyenda_del_embudo')}>
           {ORDEN_EMBUDO.map((e) => (
-            <span key={e}><i className="cer-punto" data-etapa={e} aria-hidden="true" />{COLOR_EMBUDO[e].nombre}</span>
+            <span key={e}><i className="cer-punto" data-etapa={e} aria-hidden="true" />{nombreEtapaTr(e, tx)}</span>
           ))}
         </div>
 
@@ -736,26 +732,22 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <div className="cer-panel">
             <div className="cer-cabeza-panel">
               <strong>{seleccion.nombre}</strong>
-              <span>{numero(listaSeleccion.length)}</span>
+              <span>{numero(listaSeleccion.length, idioma)}</span>
               {listaSeleccion.some((p) => p.lat !== null) && (
-                <Boton tamano="sm" variante="primary" onClick={() => setCalles(true)}>Calles →</Boton>
+                <Boton tamano="sm" variante="primary" onClick={() => setCalles(true)}>{tx('mapa_prospectos_cerebro.calles')}</Boton>
               )}
-              <Boton tamano="sm" variante="ghost" onClick={() => elegirEstado(null)} title="Cerrar" icono={<Icono icono={X} />}>
-                <span className="rv-sr">Cerrar el estado</span>
-              </Boton>
+              <Boton tamano="sm" variante="ghost" onClick={() => elegirEstado(null)} title={tx('mapa_prospectos_cerebro.cerrar')} icono={<Icono icono={X} />}>{rico(tx('mapa_prospectos_cerebro.e0_cerrar_el_estado_e0'), { e0: (c) => <span className="rv-sr">{c}</span> })}</Boton>
             </div>
             <div className="cer-lista">
               {listaSeleccion.length === 0 ? (
-                <p className="cer-aviso-lista">El censo todavía no encuentra a nadie aquí; cuando un agente lo haga, aparece solo.</p>
+                <p className="cer-aviso-lista">{tx('mapa_prospectos_cerebro.el_censo_todavia_no_encuentra_a')}</p>
               ) : (
                 <>
                   {listaSeleccion.slice(0, 60).map((p) => (
                     <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} avisoIa={avisosIa.get(p.id) ?? null} />
                   ))}
                   {listaSeleccion.length > 60 && (
-                    <p className="cer-aviso-lista">
-                      Se enseñan las 60 mejores de {numero(listaSeleccion.length)}. Afina el filtro o exporta el CSV completo.
-                    </p>
+                    <p className="cer-aviso-lista">{tx('mapa_prospectos_cerebro.se_ensenan_las_60_mejores_de', { numero: numero(listaSeleccion.length, idioma) })}</p>
                   )}
                 </>
               )}
@@ -773,16 +765,16 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
 
       {/* ── Lo que sigue del mapa ────────────────────────────────────────── */}
       <FilaTarjetas variante="6-6">
-        <Tarjeta titulo="El embudo, en luces">
-          <BarList etiqueta="Prospectos por etapa del embudo" items={itemsEmbudo} />
+        <Tarjeta titulo={tx('mapa_prospectos_cerebro.el_embudo_en_luces')}>
+          <BarList etiqueta={tx('mapa_prospectos_cerebro.prospectos_por_etapa_del_embudo')} items={itemsEmbudo} />
         </Tarjeta>
-        <Tarjeta titulo="Dónde vive la cartera">
-          <BarList etiqueta="Prospectos por estado" items={itemsPlazas} />
-          <p className="cer-prospecto__tenue">{numero(sinPlaza)} sin plaza conocida: se dice, no se les inventa estado.</p>
+        <Tarjeta titulo={tx('mapa_prospectos_cerebro.donde_vive_la_cartera')}>
+          <BarList etiqueta={tx('mapa_prospectos_cerebro.prospectos_por_estado')} items={itemsPlazas} />
+          <p className="cer-prospecto__tenue">{numero(sinPlaza, idioma)}{' '}{tx('mapa_prospectos_cerebro.sin_plaza_conocida_se_dice_no')}</p>
         </Tarjeta>
       </FilaTarjetas>
 
-      <Tarjeta titulo="Los 12 más cerrables del país" estado={ordenados.length === 0 ? 'vacio' : 'ok'} mensaje="Ningún prospecto pasa el filtro" detalle="Quita criterios del cajón de filtros para ver la cartera.">
+      <Tarjeta titulo={tx('mapa_prospectos_cerebro.los_12_mas_cerrables_del_pais')} estado={ordenados.length === 0 ? 'vacio' : 'ok'} mensaje={tx('mapa_prospectos_cerebro.ningun_prospecto_pasa_el_filtro')} detalle={tx('mapa_prospectos_cerebro.quita_criterios_del_cajon_de_filtros')}>
         <div className="cer-grid">
           {ordenados.slice(0, 12).map((p) => (
             <TarjetaProspecto key={p.id} p={p} t={textos.get(p.id)} plana nuevo={recientes.has(p.id)} afinando={afinando === p.id} onAfinar={afinar} onToque={tocar} avisoIa={avisosIa.get(p.id) ?? null} />
@@ -790,104 +782,104 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
         </div>
       </Tarjeta>
 
-      <Disclosure titulo="Cómo se calculan los porcentajes" resumen="Estimaciones deterministas, no mediciones">
+      <Disclosure titulo={tx('mapa_prospectos_cerebro.como_se_calculan_los_porcentajes')} resumen={tx('mapa_prospectos_cerebro.estimaciones_deterministas_no_mediciones')}>
         <div className="cer-criterios">
-          <p>{CRITERIO_SCORES.urgencia}</p>
-          <p>{CRITERIO_SCORES.cierre}</p>
-          <p>{CRITERIO_SCORES.datos}</p>
-          <p>{CRITERIO_SCORES.similitud}</p>
-          <p>{CRITERIO_SCORES.necesidad}</p>
-          <p suppressHydrationWarning>Puntos en el mapa: solo prospectos con dirección real (DENUE/INEGI). Actualizado {fechaHoraMx(generadoEn)}; se refresca cada 5 min y no mientras la pestaña está oculta.</p>
+          <p>{criterioScoreTr('urgencia', tx)}</p>
+          <p>{criterioScoreTr('cierre', tx)}</p>
+          <p>{criterioScoreTr('datos', tx)}</p>
+          <p>{criterioScoreTr('similitud', tx)}</p>
+          <p>{criterioScoreTr('necesidad', tx)}</p>
+          <p suppressHydrationWarning>{tx('mapa_prospectos_cerebro.puntos_en_el_mapa_solo_prospectos', { fechaHoraMx: fechaHoraMx(generadoEn, idioma) })}</p>
         </div>
       </Disclosure>
 
       {/* ── Filtros y orden (cajón) ─────────────────────────────────────── */}
-      <Drawer abierto={filtrosAbiertos} onCerrar={() => setFiltrosAbiertos(false)} titulo="Filtros del Cerebro"
-        descripcion={`${numero(filtrados.length)} de ${numero(prospectos.length)} prospectos pasan el filtro.`}
+      <Drawer abierto={filtrosAbiertos} onCerrar={() => setFiltrosAbiertos(false)} titulo={tx('mapa_prospectos_cerebro.filtros_del_cerebro')}
+        descripcion={tx('mapa_prospectos_cerebro.de_prospectos_pasan_el_filtro', { numero: numero(filtrados.length, idioma), numero2: numero(prospectos.length, idioma) })}
         pie={(
           <>
-            <Boton variante="ghost" onClick={() => setFiltros(SIN_FILTROS)}>Limpiar todo</Boton>
+            <Boton variante="ghost" onClick={() => setFiltros(SIN_FILTROS)}>{tx('mapa_prospectos_cerebro.limpiar_todo')}</Boton>
             <Boton variante="primary" icono={<Icono icono={Download} />} disabled={exportando} onClick={() => void exportarCsv()}>
-              {exportando ? 'Preparando…' : `Exportar CSV (${numero(filtrados.length)})`}
+              {exportando ? tx('mapa_prospectos_cerebro.preparando') : tx('mapa_prospectos_cerebro.exportar_csv', { n: numero(filtrados.length, idioma) })}
             </Boton>
           </>
         )}>
         <div className="cer-filtros">
-          <Fieldset leyenda="Categoría">
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.categoria')}>
             <div className="cer-chips">
               {GIROS.map((g) => (
                 <Opcion key={g} activo={filtros.giros?.has(g) ?? false} onClick={() => setFiltros((f) => ({ ...f, giros: alternarEnSet(f.giros, g) }))}>
-                  {NOMBRE_GIRO[g]} · {numero(prospectos.filter((p) => p.giro === g).length)}
+                  {nombreGiroTr(g, tx)} · {numero(prospectos.filter((p) => p.giro === g).length, idioma)}
                 </Opcion>
               ))}
             </div>
           </Fieldset>
-          <Fieldset leyenda="Etapa del embudo">
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.etapa_del_embudo')}>
             <div className="cer-chips">
               {ORDEN_EMBUDO.map((e) => (
                 <Opcion key={e} etapa={e} activo={filtros.etapas?.has(e) ?? false} onClick={() => setFiltros((f) => ({ ...f, etapas: alternarEnSet(f.etapas, e) }))}>
-                  {COLOR_EMBUDO[e].nombre}
+                  {nombreEtapaTr(e, tx)}
                 </Opcion>
               ))}
             </div>
           </Fieldset>
-          <Fieldset leyenda="Tamaño (personal DENUE)">
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.tamano_personal_denue')}>
             <div className="cer-chips">
               {TAMANOS_UI.map((t) => (
                 <Opcion key={t} activo={filtros.tamanos?.has(t) ?? false} onClick={() => setFiltros((f) => ({ ...f, tamanos: alternarEnSet(f.tamanos, t) }))}>
-                  {t === 'n/d' ? 'Sin dato' : t}
+                  {t === 'n/d' ? tx('mapa_prospectos_cerebro.sin_dato') : t}
                 </Opcion>
               ))}
             </div>
           </Fieldset>
-          <Fieldset leyenda="Fuente">
+          <Fieldset leyenda={tx('trust_safety.fuente')}>
             <div className="cer-chips">
-              {FUENTES.map((f) => (
+              {fuentesTr(tx).map((f) => (
                 <Opcion key={f.clave} activo={filtros.fuentes?.has(f.clave) ?? false} onClick={() => setFiltros((v) => ({ ...v, fuentes: alternarEnSet(v.fuentes, f.clave) }))}>
                   {f.nombre}
                 </Opcion>
               ))}
             </div>
           </Fieldset>
-          <Fieldset leyenda="Alcanzables">
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.alcanzables')}>
             <div className="cer-chips">
-              <Opcion activo={filtros.soloTel} onClick={() => setFiltros((f) => ({ ...f, soloTel: !f.soloTel }))}>Con teléfono</Opcion>
-              <Opcion activo={filtros.soloDecisor} onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>Con decisor</Opcion>
-              <Opcion activo={filtros.soloMensajeIA} onClick={() => setFiltros((f) => ({ ...f, soloMensajeIA: !f.soloMensajeIA }))}>Mensaje listo</Opcion>
-              <Opcion activo={filtros.soloVacante} onClick={() => setFiltros((f) => ({ ...f, soloVacante: !f.soloVacante }))}>Con vacante</Opcion>
+              <Opcion activo={filtros.soloTel} onClick={() => setFiltros((f) => ({ ...f, soloTel: !f.soloTel }))}>{tx('mapa_prospectos_cerebro.con_telefono')}</Opcion>
+              <Opcion activo={filtros.soloDecisor} onClick={() => setFiltros((f) => ({ ...f, soloDecisor: !f.soloDecisor }))}>{tx('mapa_prospectos_cerebro.con_decisor')}</Opcion>
+              <Opcion activo={filtros.soloMensajeIA} onClick={() => setFiltros((f) => ({ ...f, soloMensajeIA: !f.soloMensajeIA }))}>{tx('mapa_prospectos_cerebro.mensaje_listo')}</Opcion>
+              <Opcion activo={filtros.soloVacante} onClick={() => setFiltros((f) => ({ ...f, soloVacante: !f.soloVacante }))}>{tx('mapa_prospectos_cerebro.con_vacante')}</Opcion>
             </div>
           </Fieldset>
-          <Fieldset leyenda="Urgencia mínima">
-            <Elige etiqueta="Urgencia mínima" valor={filtros.minUrgencia} valores={[0, 50, 70] as const}
-              rotulo={(v) => (v === 0 ? 'Todas' : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minUrgencia: v }))} />
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.urgencia_minima')}>
+            <Elige etiqueta={tx('mapa_prospectos_cerebro.urgencia_minima')} valor={filtros.minUrgencia} valores={[0, 50, 70] as const}
+              rotulo={(v) => (v === 0 ? tx('mapa_prospectos_cerebro.todas') : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minUrgencia: v }))} />
           </Fieldset>
-          <Fieldset leyenda="Similitud ICP mínima" ayuda={CRITERIO_SCORES.similitud}>
-            <Elige etiqueta="Similitud ICP mínima" valor={filtros.minSimilitud} valores={[0, 40, 65, 85] as const}
-              rotulo={(v) => (v === 0 ? 'Todas' : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minSimilitud: v }))} />
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.similitud_icp_minima')} ayuda={criterioScoreTr('similitud', tx)}>
+            <Elige etiqueta={tx('mapa_prospectos_cerebro.similitud_icp_minima')} valor={filtros.minSimilitud} valores={[0, 40, 65, 85] as const}
+              rotulo={(v) => (v === 0 ? tx('mapa_prospectos_cerebro.todas') : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minSimilitud: v }))} />
           </Fieldset>
-          <Fieldset leyenda="Necesidad mínima" ayuda={CRITERIO_SCORES.necesidad}>
-            <Elige etiqueta="Necesidad mínima" valor={filtros.minNecesidad} valores={[0, 40, 65, 85] as const}
-              rotulo={(v) => (v === 0 ? 'Todas' : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minNecesidad: v }))} />
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.necesidad_minima')} ayuda={criterioScoreTr('necesidad', tx)}>
+            <Elige etiqueta={tx('mapa_prospectos_cerebro.necesidad_minima')} valor={filtros.minNecesidad} valores={[0, 40, 65, 85] as const}
+              rotulo={(v) => (v === 0 ? tx('mapa_prospectos_cerebro.todas') : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minNecesidad: v }))} />
           </Fieldset>
-          <Fieldset leyenda="Datos completos">
-            <Elige etiqueta="Datos completos" valor={filtros.minCompletitud} valores={[0, 50, 75] as const}
-              rotulo={(v) => (v === 0 ? 'Todos' : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minCompletitud: v }))} />
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.datos_completos')}>
+            <Elige etiqueta={tx('mapa_prospectos_cerebro.datos_completos')} valor={filtros.minCompletitud} valores={[0, 50, 75] as const}
+              rotulo={(v) => (v === 0 ? tx('mapa_prospectos_cerebro.todos') : `≥${v}%`)} onChange={(v) => setFiltros((f) => ({ ...f, minCompletitud: v }))} />
           </Fieldset>
-          <Fieldset leyenda="Sin toque en">
-            <Elige etiqueta="Sin toque en" valor={filtros.sinToqueDias} valores={[0, 7, 14, 30] as const}
-              rotulo={(v) => (v === 0 ? 'Todos' : `≥${v} días`)} onChange={(v) => setFiltros((f) => ({ ...f, sinToqueDias: v }))} />
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.sin_toque_en')}>
+            <Elige etiqueta={tx('mapa_prospectos_cerebro.sin_toque_en')} valor={filtros.sinToqueDias} valores={[0, 7, 14, 30] as const}
+              rotulo={(v) => (v === 0 ? tx('mapa_prospectos_cerebro.todos') : tx('mapa_prospectos_cerebro.dias', { v }))} onChange={(v) => setFiltros((f) => ({ ...f, sinToqueDias: v }))} />
           </Fieldset>
-          <CampoSelect etiqueta="Ordenar por" value={filtros.orden}
+          <CampoSelect etiqueta={tx('mapa_prospectos_cerebro.ordenar_por')} value={filtros.orden}
             onChange={(e) => setFiltros((f) => ({ ...f, orden: e.target.value as Filtros['orden'] }))}>
-            <option value="cierre">% cierre</option>
-            <option value="urgencia">% urgencia</option>
-            <option value="similitud">% similitud ICP</option>
-            <option value="necesidad">% necesidad</option>
-            <option value="completos">Datos completos</option>
-            <option value="recientes">Recientes</option>
+            <option value="cierre">{tx('mapa_prospectos_cerebro.cierre')}</option>
+            <option value="urgencia">{tx('mapa_prospectos_cerebro.urgencia')}</option>
+            <option value="similitud">{tx('mapa_prospectos_cerebro.similitud_icp')}</option>
+            <option value="necesidad">{tx('mapa_prospectos_cerebro.necesidad')}</option>
+            <option value="completos">{tx('mapa_prospectos_cerebro.datos_completos')}</option>
+            <option value="recientes">{tx('mapa_prospectos_cerebro.recientes')}</option>
           </CampoSelect>
-          <Campo etiqueta="Cerca de (plaza)" ayuda="Elige una ciudad de la lista; con radio activo solo pasan los prospectos con dirección real.">
-            <input className="rv-ctl" list="cerebro-plazas" placeholder="Escribe una ciudad…" defaultValue={filtros.centro?.nombre ?? ''}
+          <Campo etiqueta={tx('mapa_prospectos_cerebro.cerca_de_plaza')} ayuda={tx('mapa_prospectos_cerebro.elige_una_ciudad_de_la_lista')}>
+            <input className="rv-ctl" list="cerebro-plazas" placeholder={tx('mapa_prospectos_cerebro.escribe_una_ciudad')} defaultValue={filtros.centro?.nombre ?? ''}
               onChange={(e) => {
                 const plaza = plazas.find((x) => x.nombre === e.target.value);
                 setFiltros((f) => ({
@@ -900,12 +892,12 @@ export function Cerebro({ inicial, estadoInicial }: { inicial: DatosMapa; estado
           <datalist id="cerebro-plazas">
             {plazas.map((x) => <option key={x.nombre} value={x.nombre} />)}
           </datalist>
-          <Fieldset leyenda="Radio">
-            <Elige etiqueta="Radio desde la plaza" valor={filtros.centro ? filtros.radioKm : 0} valores={[0, 25, 50, 100, 200] as const}
-              rotulo={(v) => (v === 0 ? 'Sin radio' : `${v} km`)} onChange={(v) => setFiltros((f) => ({ ...f, radioKm: v }))} />
+          <Fieldset leyenda={tx('mapa_prospectos_cerebro.radio')}>
+            <Elige etiqueta={tx('mapa_prospectos_cerebro.radio_desde_la_plaza')} valor={filtros.centro ? filtros.radioKm : 0} valores={[0, 25, 50, 100, 200] as const}
+              rotulo={(v) => (v === 0 ? tx('mapa_prospectos_cerebro.sin_radio') : `${v} km`)} onChange={(v) => setFiltros((f) => ({ ...f, radioKm: v }))} />
           </Fieldset>
           {errorExport && <p role="alert" className="cer-prospecto__error">{errorExport}</p>}
-          <p className="cer-filtros__pie">{numero(filtrados.length)} de {numero(prospectos.length)} prospectos pasan el filtro.</p>
+          <p className="cer-filtros__pie">{numero(filtrados.length, idioma)}{' '}{tx('mapa_prospectos_cerebro.de_prospectos_pasan_el_filtro_2', { numero: numero(prospectos.length, idioma) })}</p>
         </div>
       </Drawer>
     </div>

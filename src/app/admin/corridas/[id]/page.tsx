@@ -9,21 +9,25 @@ import { Aviso, BotonEnlace, EstadoError, MarcoPagina, StatusChip, Tarjeta, type
 import { TiraCifras } from '../../../ui-v2/graficas';
 import { etiquetaContadorVigia, etiquetaInterruptor } from '../../observabilidad/etiquetas';
 import '../../sistema.css';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export const dynamic = 'force-dynamic';
 
-const CHIP: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+const chipTr = (t: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoEstado; etiqueta: string }> => ({
   ok: { tono: 'ok', etiqueta: 'OK' },
-  parcial: { tono: 'warn', etiqueta: 'Parcial' },
-  fallo: { tono: 'bad', etiqueta: 'Fallo' },
-};
+  parcial: { tono: 'warn', etiqueta: t('observabilidad.parcial') },
+  fallo: { tono: 'bad', etiqueta: t('observabilidad.fallo') },
+});
 
-const DISPARO: Record<string, string> = {
-  cron: 'Programado',
-  manual: 'Manual («Ejecutar ahora»)',
-  correo: 'Por correo entrante',
-  whatsapp: 'Confirmado por WhatsApp',
-};
+const disparo = (t: TSistema = T_SISTEMA_ES): Record<string, string> => ({
+  cron: t('corridas_id.programado'),
+  manual: t('corridas_id.manual_ejecutar_ahora'),
+  correo: t('corridas_id.por_correo_entrante'),
+  whatsapp: t('corridas_id.confirmado_por_whatsapp'),
+});
 
 function duracion(ms: number | null): string {
   if (ms === null) return '—';
@@ -50,6 +54,7 @@ export default async function TrazaCorridaPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
+  const { t, idioma } = await getT('admin_sistema');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const { id } = await params;
@@ -65,58 +70,58 @@ export default async function TrazaCorridaPage({
   }
   if (traza === null) notFound();
 
-  const volver = <BotonEnlace href="/admin/corridas" variante="ghost" tamano="sm">Volver a Corridas</BotonEnlace>;
+  const volver = <BotonEnlace href="/admin/corridas" variante="ghost" tamano="sm">{t('corridas_id.volver_a_corridas')}</BotonEnlace>;
   const c = traza?.corrida;
-  const chip = c ? (CHIP[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }) : null;
-  const flota = c ? (c.tenantNombre ?? (c.tenantId === null ? 'Likida (negocio)' : '—')) : '—';
+  const chip = c ? (chipTr(t)[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }) : null;
+  const flota = c ? (c.tenantNombre ?? (c.tenantId === null ? t('observabilidad.likida_negocio') : '—')) : '—';
 
   // UN solo marco para los dos casos (lectura caída o traza): cambian el título y el cuerpo, el marco no se duplica.
   return (
     <MarcoPagina
-      titulo={c ? `Traza: ${etiquetaInterruptor(`agente:${c.agente}`)}` : 'Traza de la corrida'}
-      apoyo={c ? `${flota} · ${fechaHoraMx(c.inicio)}` : undefined}
+      titulo={c ? t('corridas_id.traza', { agente: etiquetaInterruptor(`agente:${c.agente}`, t) }) : t('corridas_id.traza_de_la_corrida')}
+      apoyo={c ? `${flota} · ${fechaHoraMx(c.inicio, idioma)}` : undefined}
       acciones={<>{chip ? <StatusChip tono={chip.tono}>{chip.etiqueta}</StatusChip> : null}{volver}</>}
     >
       {traza === undefined ? (
-        <EstadoError reintentar>No se pudo leer la corrida. La consulta falló: no es que no exista, es que no se pudo mirar.</EstadoError>
+        <EstadoError reintentar>{t('corridas_id.no_se_pudo_leer_la_corrida')}</EstadoError>
       ) : (
-        <CuerpoTraza traza={traza as TrazaCorrida} flota={flota} />
+        <CuerpoTraza t={t} idioma={idioma} traza={traza as TrazaCorrida} flota={flota} />
       )}
     </MarcoPagina>
   );
 }
 
 /** Todo lo que se sabe de una corrida. */
-function CuerpoTraza({ traza, flota }: { traza: TrazaCorrida; flota: string }) {
+function CuerpoTraza({ traza, flota, t = T_SISTEMA_ES, idioma }: { traza: TrazaCorrida; flota: string; t?: TSistema; idioma?: Idioma }) {
   const { corrida: c, costo, costoNoDisponible } = traza;
-  const resumen = c.resumen ? Object.entries(c.resumen).map(([k, v]) => [etiquetaContadorVigia(k), valorLegible(v)] as const).filter((p): p is readonly [string, string] => p[1] !== null) : [];
+  const resumen = c.resumen ? Object.entries(c.resumen).map(([k, v]) => [etiquetaContadorVigia(k, t), valorLegible(v)] as const).filter((p): p is readonly [string, string] => p[1] !== null) : [];
   return (
     <>
-      <TiraCifras etiqueta="La corrida en cifras" items={[
+      <TiraCifras etiqueta={t('corridas_id.la_corrida_en_cifras')} items={[
         // NULL ≠ 0: una corrida que no se mide en tareas dice «—», no 0/0.
-        { etiqueta: 'Tareas', valor: c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : null, estado: c.tareasHechas !== null && c.tareasTotal !== null ? 'ok' : 'vacio', mensaje: 'Esta corrida no mide tareas.' },
-        { etiqueta: 'Duración', valor: c.fin === null ? null : duracion(c.duracionMs), estado: c.fin === null ? 'vacio' : 'ok', mensaje: 'Sin fin registrado.' },
+        { etiqueta: t('observabilidad.tareas'), valor: c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : null, estado: c.tareasHechas !== null && c.tareasTotal !== null ? 'ok' : 'vacio', mensaje: t('corridas_id.esta_corrida_no_mide_tareas') },
+        { etiqueta: t('observabilidad.duracion'), valor: c.fin === null ? null : duracion(c.duracionMs), estado: c.fin === null ? 'vacio' : 'ok', mensaje: t('corridas_id.sin_fin_registrado') },
         costo
-          ? { etiqueta: 'Costo de IA en la ventana', valor: usd(costo.costoUsd), nota: 'Correlación por tiempo, no un cruce exacto.' }
-          : { etiqueta: 'Costo de IA en la ventana', valor: null, estado: 'vacio', mensaje: 'No se puede correlacionar.' },
+          ? { etiqueta: t('corridas_id.costo_de_ia_en_la_ventana'), valor: usd(costo.costoUsd), nota: t('corridas_id.correlacion_por_tiempo_no_un_cruce') }
+          : { etiqueta: t('corridas_id.costo_de_ia_en_la_ventana'), valor: null, estado: 'vacio', mensaje: t('corridas_id.no_se_puede_correlacionar') },
       ]} />
 
       {c.error ? (
         // El motivo YA redactado para una persona — nunca el stack.
-        <Aviso tono="error" titulo="Por qué falló">{c.error}</Aviso>
+        <Aviso tono="error" titulo={t('corridas_id.por_que_fallo')}>{c.error}</Aviso>
       ) : null}
 
-      <Tarjeta titulo="La corrida">
+      <Tarjeta titulo={t('corridas_id.la_corrida')}>
         <ul className="adm-sis-lista">
-          <li><span>Agente</span><span>{etiquetaInterruptor(`agente:${c.agente}`)}</span></li>
-          <li><span>Flota</span><span>{flota}</span></li>
-          <li><span>Disparo</span><span>{DISPARO[c.disparo] ?? c.disparo}</span></li>
-          <li><span>Inicio</span><span>{fechaHoraMx(c.inicio)}</span></li>
-          <li><span>Fin</span><span>{c.fin ? fechaHoraMx(c.fin) : 'Sin fin registrado'}</span></li>
+          <li>{rico(t('corridas_id.e0_agente_e0'), { e0: (c) => <span>{c}</span> })}<span>{etiquetaInterruptor(`agente:${c.agente}`, t)}</span></li>
+          <li>{rico(t('corridas_id.e0_flota_e0'), { e0: (c) => <span>{c}</span> })}<span>{flota}</span></li>
+          <li>{rico(t('corridas_id.e0_disparo_e0'), { e0: (c) => <span>{c}</span> })}<span>{disparo(t)[c.disparo] ?? c.disparo}</span></li>
+          <li>{rico(t('corridas_id.e0_inicio_e0'), { e0: (c) => <span>{c}</span> })}<span>{fechaHoraMx(c.inicio, idioma)}</span></li>
+          <li><span>{t('corridas_id.fin')}</span><span>{c.fin ? fechaHoraMx(c.fin, idioma) : t('corridas_id.sin_fin_registrado_2')}</span></li>
         </ul>
         {resumen.length > 0 ? (
           <>
-            <h3 className="adm-sis-titulo">Resumen de la corrida</h3>
+            <h3 className="adm-sis-titulo">{t('corridas_id.resumen_de_la_corrida')}</h3>
             <ul className="adm-sis-lista">
               {resumen.map(([k, v]) => <li key={k}><span>{k}</span><span className="adm-sis-dato">{v}</span></li>)}
             </ul>
@@ -125,34 +130,34 @@ function CuerpoTraza({ traza, flota }: { traza: TrazaCorrida; flota: string }) {
       </Tarjeta>
 
       {/* ── El costo de IA, con su supuesto a la vista ─────────────────────── */}
-      <Tarjeta titulo="Costo de IA en la ventana de la corrida" estado={costo ? 'ok' : 'vacio'} mensaje="No se puede correlacionar" detalle={costoNoDisponible ?? 'El costo de esta corrida no se puede correlacionar.'}>
+      <Tarjeta titulo={t('corridas_id.costo_de_ia_en_la_ventana_2')} estado={costo ? 'ok' : 'vacio'} mensaje={t('corridas_id.no_se_puede_correlacionar_2')} detalle={costoNoDisponible ?? t('corridas_id.el_costo_de_esta_corrida_no')}>
         {costo ? (
           <>
             <ul className="adm-sis-lista">
-              <li><span>Llamadas al modelo</span><span>{numero(costo.llamadas)}</span></li>
-              <li><span>Tokens (entrada / salida)</span><span>{numero(costo.tokensIn)} / {numero(costo.tokensOut)}</span></li>
-              <li><span>Costo</span><span>{usd(costo.costoUsd)}</span></li>
+              <li>{rico(t('corridas_id.e0_llamadas_al_modelo_e0'), { e0: (c) => <span>{c}</span> })}<span>{numero(costo.llamadas, idioma)}</span></li>
+              <li>{rico(t('corridas_id.e0_tokens_entrada_salida_e0_e1', { numero: numero(costo.tokensIn, idioma), numero2: numero(costo.tokensOut, idioma) }), { e0: (c) => <span>{c}</span>, e1: (c) => <span>{c}</span> })}</li>
+              <li>{rico(t('corridas_id.e0_costo_e0'), { e0: (c) => <span>{c}</span> })}<span>{usd(costo.costoUsd)}</span></li>
             </ul>
-            <p className="adm-sis-nota">
-              Cifra honesta con su supuesto: son las llamadas de ESTA flota registradas dentro del inicio y el fin de esta corrida. Es una correlación por tiempo, no un cruce exacto,
-              porque el registro de costos no guarda a qué corrida pertenece cada llamada. Si otro proceso de la misma flota gastó IA en ese lapso (por ejemplo, un mensaje de WhatsApp), su costo cae en la ventana.
-            </p>
+            <p className="adm-sis-nota">{t('corridas_id.cifra_honesta_con_su_supuesto_son')}</p>
           </>
         ) : null}
       </Tarjeta>
 
       {/* ── A dónde seguir desde aquí ──────────────────────────────────────── */}
-      <Tarjeta titulo="Seguir la pista">
+      <Tarjeta titulo={t('corridas_id.seguir_la_pista')}>
         <div className="adm-sis-acciones">
           {c.tenantId !== null ? (
-            <BotonEnlace href={`/dashboard?tenant=${c.tenantId}&rol=flota_admin`} variante="secondary" tamano="sm">Abrir el panel de esta flota</BotonEnlace>
+            <BotonEnlace href={`/dashboard?tenant=${c.tenantId}&rol=flota_admin`} variante="secondary" tamano="sm">{t('corridas_id.abrir_el_panel_de_esta_flota')}</BotonEnlace>
           ) : null}
-          <BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm">Conversaciones de WhatsApp</BotonEnlace>
+          <BotonEnlace href="/admin/conversaciones" variante="secondary" tamano="sm">{t('whatsapp_infra.conversaciones_de_whatsapp')}</BotonEnlace>
         </div>
-        <p className="adm-sis-nota">Abrir el panel de una flota la muestra como la ve ella y deja el acceso firmado en la bitácora. Las conversaciones cruzan todas las flotas: la columna de flota dice cuáles son de {flota}.</p>
+        <p className="adm-sis-nota">{t('corridas_id.abrir_el_panel_de_una_flota', { flota })}</p>
       </Tarjeta>
     </>
   );
 }
 
-export const metadata: Metadata = { title: 'Corrida' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('qa_pantalla.corrida') };
+}

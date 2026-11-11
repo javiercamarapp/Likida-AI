@@ -2,10 +2,11 @@ import Link from 'next/link';
 import { Aviso, AvisoCompacto, BotonEnlace, Disclosure, StatusChip, Tarjeta, TablaBase, type ColumnaBase } from '@/app/ui-v2/componentes';
 import { fechaHoraMx, numero, porcentaje, usd } from '@/lib/formato';
 import {
-  armarTuTurno, filasCalidad, semaforoSalud, ROTULO_ESTADO_REAL, TONO_ESTADO_REAL, MAX_TU_TURNO, type FilaCalidad,
+  armarTuTurno, filasCalidad, semaforoSalud, TONO_ESTADO_REAL, MAX_TU_TURNO, type FilaCalidad,
 } from '@/lib/admin/centro-mando';
 import { agentePorId } from '@/lib/likida/agentes/notificaciones';
-import { NOMBRE_NIVEL } from '@/lib/likida/agentes/autonomia';
+import { nombreNivelTr, rotuloEstadoRealTr } from '@/lib/i18n/rotulos_tr';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { ahoraMs } from '@/lib/saludo';
 import { getT } from '@/lib/i18n/servidor';
 import type { TrDe } from '@/lib/i18n/tr_tipos';
@@ -112,10 +113,10 @@ export async function BloqueCaja() {
 const pctRevision = (v: number | null, ta: TrDe<'admin_inicio'>) => (v === null ? ta('resumen.sin_medir') : porcentaje(v * 100, 0));
 const msP95 = (v: number | null, ta: TrDe<'admin_inicio'>) => (v === null ? ta('resumen.sin_medir') : v >= 1000 ? `${numero(Math.round(v / 100) / 10)} s` : `${numero(v)} ms`);
 
-const columnasCalidad = (ta: TrDe<'admin_inicio'>): ColumnaBase<FilaCalidad>[] => [
+const columnasCalidad = (ta: TrDe<'admin_inicio'>, ts: TSistema = T_SISTEMA_ES): ColumnaBase<FilaCalidad>[] => [
   { id: 'agente', titulo: ta('resumen_mando.agente'), principal: true, celda: (f) => f.nombre },
-  { id: 'nivel', titulo: ta('resumen_mando.autonomia'), celda: (f) => <span title={NOMBRE_NIVEL[f.nivel]}>{f.nivel} · {NOMBRE_NIVEL[f.nivel]}</span> },
-  { id: 'estado', titulo: ta('resumen_mando.estado_real'), celda: (f) => <StatusChip tono={TONO_ESTADO_REAL[f.estado]}>{ROTULO_ESTADO_REAL[f.estado]}</StatusChip> },
+  { id: 'nivel', titulo: ta('resumen_mando.autonomia'), celda: (f) => <span title={nombreNivelTr(f.nivel, ts)}>{f.nivel} · {nombreNivelTr(f.nivel, ts)}</span> },
+  { id: 'estado', titulo: ta('resumen_mando.estado_real'), celda: (f) => <StatusChip tono={TONO_ESTADO_REAL[f.estado]}>{rotuloEstadoRealTr(f.estado, ts)}</StatusChip> },
   { id: 'revision', titulo: ta('resumen_mando.revision_humana'), alinear: 'der', celda: (f) => pctRevision(f.revisionHumana, ta) },
   { id: 'p95', titulo: 'p95 de corrida', alinear: 'der', celda: (f) => msP95(f.p95Ms, ta) },
   { id: 'corridas', titulo: ta('resumen_mando.corridas_30_d'), alinear: 'der', celda: (f) => (f.corridas === null ? ta('resumen.sin_dato') : numero(f.corridas)) },
@@ -124,6 +125,7 @@ const columnasCalidad = (ta: TrDe<'admin_inicio'>): ColumnaBase<FilaCalidad>[] =
 /** 5. ¿Quién trabaja bien? Una fila por agente; lo que no se mide dice «sin medir». */
 export async function BloqueCalidad() {
   const { t: ta } = await getT('admin_inicio');
+  const { t: tSis } = await getT('admin_sistema');
   const [cal, p] = await Promise.all([calidadAgentes(), parados()]);
   const filas = filasCalidad(cal ? cal.agentes : null, p ? p.parados : null, (id) => agentePorId(id)?.nombre ?? null);
   const ilegible = cal === null && p === null;
@@ -133,7 +135,7 @@ export async function BloqueCalidad() {
       {cal && cal.errores.length > 0 ? <AvisoCompacto tono="warn" resumen="Alguna fuente de calidad no se pudo leer: sus columnas dicen «sin dato», no cero." /> : null}
       <TablaBase
         etiqueta={ta('resumen_mando.calidad_de_los_agentes')}
-        columnas={columnasCalidad(ta)}
+        columnas={columnasCalidad(ta, tSis)}
         filas={filas}
         idFila={(f) => f.agente}
         estado={ilegible ? 'error' : 'ok'}

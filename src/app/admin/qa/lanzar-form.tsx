@@ -21,6 +21,9 @@ import {
   validarLanzar, carrilPara, MAX_FOTOS_CARRIL_RAPIDO, TECHO_PASADA_MS,
   type EscenarioId, type FotoBanco,
 } from '@/lib/admin/qa-tipos';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { rico } from '@/lib/i18n/rico';
 
 export type FotoConUrl = FotoBanco & { url: string | null };
 
@@ -45,6 +48,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
    *  y `process.cwd()` — importarlo aquí metería node al bundle del navegador. */
   topeCorridaUsd: number;
 }) {
+  const { t, tp } = useT('admin_sistema', admin_sistemaEs);
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const escenarioInicial = escenarioPorId('demo_guion')!;
@@ -94,7 +98,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       const res = await fetch('/api/admin/qa/fotos', { method: 'POST', body: form });
       const cuerpo = await res.json().catch(() => null) as { error?: string; resultados?: Array<{ nombre: string; id: string | null; duplicadoDe: string | null; error: string | null }>; fotos?: FotoConUrl[] } | null;
       if (!res.ok || !cuerpo?.fotos) {
-        setAvisosSubida([`la subida falló: ${cuerpo?.error ?? `HTTP ${res.status}`}`]);
+        setAvisosSubida([t('qa_lanzar_form.la_subida_fallo', { v: cuerpo?.error ?? `HTTP ${res.status}` })]);
         return;
       }
       setFotos(cuerpo.fotos);
@@ -102,14 +106,14 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       const nuevas: string[] = [];
       for (const r of cuerpo.resultados ?? []) {
         if (r.error) avisos.push(`${r.nombre}: ${r.error}`);
-        else if (r.duplicadoDe) avisos.push(`${r.nombre}: ya estaba en el banco: se reutiliza`);
+        else if (r.duplicadoDe) avisos.push(t('qa_lanzar_form.ya_estaba_en_el_banco_se', { nombre: r.nombre }));
         if (r.id) nuevas.push(r.id);
       }
       // Lo recién subido queda seleccionado solo: subir → lanzar sin dar 40 clics.
       if (nuevas.length) setSeleccion((prev) => new Set([...prev, ...nuevas]));
       setAvisosSubida(avisos);
     } catch (e) {
-      setAvisosSubida([`la subida falló: ${e instanceof Error ? e.message : String(e)}`]);
+      setAvisosSubida([t('qa_lanzar_form.la_subida_fallo', { v: e instanceof Error ? e.message : String(e) })]);
     } finally {
       setSubiendo(false);
       if (inputRef.current) inputRef.current.value = '';
@@ -139,9 +143,9 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
   };
   const validacion = validarLanzar(cuerpoLanzar);
   const motivoBloqueo =
-    gastoError !== null ? 'no se pudo leer el gasto del día — no se lanza a ciegas'
-    : gastoHoyUsd !== null && gastoHoyUsd >= topeDiaUsd ? `el gasto de hoy (${usd4(gastoHoyUsd)}) ya tocó el tope diario (${usd(topeDiaUsd)})`
-    : bancoError !== null ? 'el banco de fotos no se pudo leer'
+    gastoError !== null ? t('qa_lanzar_form.no_se_pudo_leer_el_gasto')
+    : gastoHoyUsd !== null && gastoHoyUsd >= topeDiaUsd ? t('qa_lanzar_form.el_gasto_de_hoy_ya_toco', { usd4: usd4(gastoHoyUsd), usd: usd(topeDiaUsd) })
+    : bancoError !== null ? t('qa_banco_verdad.el_banco_de_fotos_no_se')
     : !validacion.ok ? validacion.error
     : null;
 
@@ -157,7 +161,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       });
       const cuerpo = await res.json().catch(() => null) as { id?: string; error?: string } | null;
       if (!res.ok || !cuerpo?.id) {
-        setErrorLanzar(cuerpo?.error ?? `el lanzamiento falló (HTTP ${res.status})`);
+        setErrorLanzar(cuerpo?.error ?? t('qa_lanzar_form.el_lanzamiento_fallo_http', { status: res.status }));
         setLanzando(false);
         return;
       }
@@ -175,18 +179,18 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
 
   return (
     <div className="card p-4 space-y-4">
-      <TituloSeccion>Lanzar una corrida de prueba</TituloSeccion>
+      <TituloSeccion>{t('qa_lanzar_form.lanzar_una_corrida_de_prueba')}</TituloSeccion>
 
       {/* ── Escenario ──────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {ESCENARIOS_QA.map((e) => (
           <button key={e.id} type="button" onClick={() => elegirEscenario(e.id)}
             className="text-left hairline rounded-lg px-3 py-1.5 transition-colors rv-qa-fs rv-qa-escenario" data-activo={escenario === e.id}
-            title={`Reglas que verifica: ${e.invariantes.join(', ')}`}>
+            title={t('qa_lanzar_form.reglas_que_verifica', { v: e.invariantes.join(', ') })}>
             <div className="text-sm font-semibold">{e.nombre}</div>
             <div className={escenario === e.id ? 'text-xs mt-1' : 'text-xs mt-1 rv-qa-ink2'}>{e.descripcion}</div>
             {e.minFotos > 1 ? (
-              <div className={escenario === e.id ? 'text-[11px] mt-1.5' : 'text-[11px] mt-1.5 rv-qa-mut'}>Mínimo {e.minFotos} fotos</div>
+              <div className={escenario === e.id ? 'text-[11px] mt-1.5' : 'text-[11px] mt-1.5 rv-qa-mut'}>{t('qa_lanzar_form.minimo_fotos', { minFotos: e.minFotos })}</div>
             ) : null}
           </button>
         ))}
@@ -194,10 +198,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
       {/* Lo que falta se dice, con número: el catálogo del diseño tiene 11 y
           el selector no los ofrece todos. Callarlo haría creer que esto es
           toda la cobertura que existe. */}
-      <p className="text-[11px] m-0 rv-qa-mut">
-        {ESCENARIOS_QA.length} de los 11 escenarios del catálogo. Los {11 - ESCENARIOS_QA.length} restantes
-        —y el oráculo #4, que necesita saber cuánto dice cada ticket— siguen pendientes.
-      </p>
+      <p className="text-[11px] m-0 rv-qa-mut">{t('qa_lanzar_form.de_los_11_escenarios_del_catalogo', { length: ESCENARIOS_QA.length, v: 11 - ESCENARIOS_QA.length })}</p>
 
       {/* ── Fotos: arrastrar N de golpe + el banco ─────────────────────────── */}
       <div>
@@ -206,24 +207,14 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
             se va al carril completo, que no tiene tope de fotos. Lo que se
             dice aquí es lo que de verdad ocurre al darle a Lanzar — incluido
             lo que SÍ la puede parar, que es el reloj y el dinero. */}
-        <div className="text-xs font-medium mb-1.5 rv-qa-mut">
-          Fotos del viaje — {seleccion.size} seleccionada{seleccion.size === 1 ? '' : 's'}
-          {carril === 'completo' ? ' · CARRIL COMPLETO' : ' · carril rápido'}
+        <div className="text-xs font-medium mb-1.5 rv-qa-mut">{tp('qa_lanzar_form.fotos_del_viaje_seleccionadas', seleccion.size)}
+          {carril === 'completo' ? t('qa_lanzar_form.carril_completo') : t('qa_lanzar_form.carril_rapido')}
         </div>
         <p className="text-[11px] -mt-1 mb-1.5 m-0 rv-qa-mut">
           {carril === 'completo' ? (
-            <>
-              Sin tope de fotos. La corrida avanza en <strong>pasadas</strong> de hasta {Math.round(TECHO_PASADA_MS / 1000)} s
-              cada una y guarda el avance foto por foto: lo que no alcance en una pasada continúa en la siguiente
-              y no se repite ninguna. Lo que sí la para es el reloj —y entonces sigue— o el dinero: {usd(topeCorridaUsd)} por
-              corrida y {usd(topeDiaUsd)} al día, medidos contra lo que reportó el proveedor del modelo; ahí para de verdad
-              y lo dice con la cifra. Deja abierta la pantalla de la corrida: es la que empuja las pasadas.
-            </>
+            <>{rico(t('qa_lanzar_form.sin_tope_de_fotos_la_corrida', { Math: Math.round(TECHO_PASADA_MS / 1000), usd: usd(topeCorridaUsd), usd2: usd(topeDiaUsd) }), { strong: (c) => <strong>{c}</strong> })}</>
           ) : (
-            <>
-              Corre completa en un solo proceso. Hasta {MAX_FOTOS_CARRIL_RAPIDO} fotos;
-              con más, la corrida se va sola al carril completo (varias pasadas, sin tope de fotos).
-            </>
+            <>{t('qa_lanzar_form.corre_completa_en_un_solo_proceso', { maxFotosCarrilRapido: MAX_FOTOS_CARRIL_RAPIDO })}</>
           )}
         </p>
         <div
@@ -237,7 +228,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
             onChange={(ev) => { if (ev.target.files) void subirArchivos(ev.target.files); }} />
           <div className="inline-flex items-center gap-2 text-sm rv-qa-mut">
             {subiendo ? <Loader2 width={15} height={15} strokeWidth={1.75} className="animate-spin" /> : <Upload width={15} height={15} strokeWidth={1.75} />}
-            {subiendo ? 'Subiendo al banco…' : 'Suelta aquí todas las fotos que quieras (JPEG, PNG o WebP) o da clic; las repetidas se reutilizan'}
+            {subiendo ? t('qa_lanzar_form.subiendo_al_banco') : t('qa_lanzar_form.suelta_aqui_todas_las_fotos_que')}
           </div>
         </div>
         {avisosSubida.length > 0 && (
@@ -247,9 +238,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
         )}
 
         {bancoError !== null ? null : fotos.length === 0 ? (
-          <p className="text-xs mt-2 rv-qa-mut">
-            El banco está vacío de verdad (el manifiesto se leyó completo) — sube tus primeras fotos arriba.
-          </p>
+          <p className="text-xs mt-2 rv-qa-mut">{t('qa_lanzar_form.el_banco_esta_vacio_de_verdad')}</p>
         ) : (
           <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-8 gap-1.5 mt-2 max-h-64 overflow-y-auto pr-1">
             {fotos.map((f) => {
@@ -262,12 +251,10 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
                     // eslint-disable-next-line @next/next/no-img-element -- URL firmada de 60 s de un bucket privado: next/image no puede optimizarla (expira) y cachearla la rompería
                     <img src={f.url} alt={f.etiqueta} className="w-full h-16 object-cover" />
                   ) : (
-                    <div className="w-full h-16 flex items-center justify-center text-[11px] px-1 rv-qa-fc rv-qa-ink2">
-                      sin firma
-                    </div>
+                    <div className="w-full h-16 flex items-center justify-center text-[11px] px-1 rv-qa-fc rv-qa-ink2">{t('qa_corrida_viva.sin_firma')}</div>
                   )}
                   <div className="px-1 py-0.5 text-[11px] truncate rv-qa-fs rv-qa-ink2">
-                    {activa ? 'Elegida · ' : ''}{f.etiqueta}
+                    {activa ? t('qa_lanzar_form.elegida') : ''}{f.etiqueta}
                   </div>
                 </button>
               );
@@ -278,36 +265,26 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
 
       {/* ── Parámetros del viaje ───────────────────────────────────────────── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <label className="text-xs rv-qa-mut">
-          Anticipo (MXN)
-          <input className={`${inputCss} w-full`} inputMode="decimal" value={anticipo} onChange={(e) => setAnticipo(e.target.value)}
-            placeholder={escenario === 'feliz' ? 'lo que sumen tus fotos' : ''} />
+        <label className="text-xs rv-qa-mut">{t('qa_lanzar_form.anticipo_mxn')}<input className={`${inputCss} w-full`} inputMode="decimal" value={anticipo} onChange={(e) => setAnticipo(e.target.value)}
+            placeholder={escenario === 'feliz' ? t('qa_lanzar_form.lo_que_sumen_tus_fotos') : ''} />
         </label>
-        <label className="text-xs rv-qa-mut">
-          RFC de la empresa (opcional)
-          <input className={`${inputCss} w-full`} value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} />
+        <label className="text-xs rv-qa-mut">{t('qa_lanzar_form.rfc_de_la_empresa_opcional')}<input className={`${inputCss} w-full`} value={rfc} onChange={(e) => setRfc(e.target.value.toUpperCase())} />
         </label>
-        <label className="text-xs rv-qa-mut">
-          Origen
-          <input className={`${inputCss} w-full`} value={origen} onChange={(e) => setOrigen(e.target.value)} />
+        <label className="text-xs rv-qa-mut">{t('qa_lanzar_form.origen')}<input className={`${inputCss} w-full`} value={origen} onChange={(e) => setOrigen(e.target.value)} />
         </label>
-        <label className="text-xs rv-qa-mut">
-          Destino
-          <input className={`${inputCss} w-full`} value={destino} onChange={(e) => setDestino(e.target.value)} />
+        <label className="text-xs rv-qa-mut">{t('qa_lanzar_form.destino')}<input className={`${inputCss} w-full`} value={destino} onChange={(e) => setDestino(e.target.value)} />
         </label>
       </div>
 
       {/* ── Política de gasto ──────────────────────────────────────────────── */}
       <div>
-        <div className="text-xs font-medium mb-1.5 rv-qa-mut">
-          Política de gasto de la flota de prueba (concepto · tope · CFDI)
-        </div>
+        <div className="text-xs font-medium mb-1.5 rv-qa-mut">{t('qa_lanzar_form.politica_de_gasto_de_la_flota')}</div>
         <div className="space-y-1.5">
           {politica.map((p, i) => (
             <div key={i} className="flex items-center gap-2">
-              <input className={`${inputCss} flex-1 min-w-0`} value={p.concepto} placeholder="concepto"
+              <input className={`${inputCss} flex-1 min-w-0`} value={p.concepto} placeholder={t('qa_lanzar_form.concepto')}
                 onChange={(e) => setPolitica((prev) => prev.map((x, j) => j === i ? { ...x, concepto: e.target.value } : x))} />
-              <input className={`${inputCss} w-28`} inputMode="decimal" value={p.topeMonto} placeholder="sin tope"
+              <input className={`${inputCss} w-28`} inputMode="decimal" value={p.topeMonto} placeholder={t('qa_lanzar_form.sin_tope')}
                 onChange={(e) => setPolitica((prev) => prev.map((x, j) => j === i ? { ...x, topeMonto: e.target.value } : x))} />
               <label className="text-xs inline-flex items-center gap-1.5 whitespace-nowrap rv-qa-mut">
                 <input type="checkbox" checked={p.requiereCfdi}
@@ -315,7 +292,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
                 CFDI
               </label>
               <button type="button" onClick={() => setPolitica((prev) => prev.filter((_, j) => j !== i))}
-                className="p-1 rounded hover:opacity-70" aria-label={`quitar ${p.concepto || 'concepto'}`}>
+                className="p-1 rounded hover:opacity-70" aria-label={t('qa_lanzar_form.quitar', { v: p.concepto || t('qa_lanzar_form.concepto') })}>
                 <Trash2 width={13} height={13} strokeWidth={1.75} className="rv-qa-mut" />
               </button>
             </div>
@@ -323,8 +300,7 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
         </div>
         <button type="button" onClick={() => setPolitica((prev) => [...prev, { concepto: '', topeMonto: '', requiereCfdi: false }])}
           className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium hover:opacity-70">
-          <Plus width={12} height={12} strokeWidth={1.75} /> Agregar concepto
-        </button>
+          <Plus width={12} height={12} strokeWidth={1.75} />{' '}{t('qa_lanzar_form.agregar_concepto')}</button>
       </div>
 
       {/* ── Lanzar ─────────────────────────────────────────────────────────── */}
@@ -332,14 +308,12 @@ export function LanzarForm({ fotosIniciales, bancoError, gastoHoyUsd, gastoError
         <button type="button" onClick={() => void lanzar()} disabled={Boolean(motivoBloqueo) || lanzando}
           className="inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg transition-opacity disabled:opacity-40 rv-qa-marca">
           {lanzando ? <Loader2 width={14} height={14} strokeWidth={2} className="animate-spin" /> : <Play width={14} height={14} strokeWidth={2} />}
-          {lanzando ? 'Lanzando…' : 'Lanzar corrida'}
+          {lanzando ? t('qa_lanzar_form.lanzando') : t('qa_lanzar_form.lanzar_corrida')}
         </button>
         <label className="text-xs inline-flex items-center gap-1.5 rv-qa-mut">
-          <input type="checkbox" checked={conservar} onChange={(e) => setConservar(e.target.checked)} />
-          conservar la flota de prueba al terminar (para inspección)
-        </label>
+          <input type="checkbox" checked={conservar} onChange={(e) => setConservar(e.target.checked)} />{t('qa_lanzar_form.conservar_la_flota_de_prueba_al')}</label>
         {motivoBloqueo && (
-          <span className="text-xs rv-qa-mut">Bloqueado: {motivoBloqueo}</span>
+          <span className="text-xs rv-qa-mut">{t('qa_banco_verdad.bloqueado')}{' '}{motivoBloqueo}</span>
         )}
         {errorLanzar && (
           <span className="text-xs font-medium rv-qa-bad">{errorLanzar}</span>

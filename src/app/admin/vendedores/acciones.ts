@@ -23,9 +23,11 @@ import { descifrarErrorProvision } from '@/lib/auth/invitar';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import type { ResultadoAccion } from './tablero';
 import type { ResultadoForma } from './formas';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 
 const RUTA = '/admin/vendedores';
-const ERROR_ACCESO = 'Solo el superadmin administra la zona de vendedores.';
+const errorAccesoTr = (t: TSistema = T_SISTEMA_ES) => (t('vendedores_acciones.solo_el_superadmin_administra_la_zona'));
 
 type ResultadoNoNulo = ResultadoAccion | Exclude<ResultadoForma, null>;
 
@@ -37,11 +39,12 @@ type ResultadoNoNulo = ResultadoAccion | Exclude<ResultadoForma, null>;
 async function ejecutarComoSuperadmin<T extends ResultadoNoNulo>(
   hacer: (sesion: SessionTenant) => Promise<T>,
   operacion: string,
-  errorAcceso = ERROR_ACCESO,
+  errorAcceso?: string,
   traducirError?: (error: unknown) => unknown,
 ): Promise<T | { ok: false; error: string }> {
+  const { t, idioma } = await getT('admin_sistema');
   const sesion = await getSessionTenant();
-  if (sesion?.rol !== 'superadmin') return { ok: false, error: errorAcceso };
+  if (sesion?.rol !== 'superadmin') return { ok: false, error: errorAcceso ?? errorAccesoTr(t) };
 
   const veredicto = await veredictoMfaDeSesion(sesion);
   if (veredicto !== 'ok') return { ok: false, error: MSG_MFA_SUPERADMIN[veredicto] };
@@ -53,7 +56,7 @@ async function ejecutarComoSuperadmin<T extends ResultadoNoNulo>(
   } catch (error) {
     return {
       ok: false,
-      error: mensajeParaPantalla(traducirError ? traducirError(error) : error, operacion),
+      error: mensajeParaPantalla(traducirError ? traducirError(error) : error, operacion, idioma),
     };
   }
 }
@@ -83,6 +86,7 @@ export async function accionNota(id: string, nota: string): Promise<ResultadoAcc
 }
 
 export async function accionRedactar(id: string): Promise<ResultadoAccion> {
+  const { t } = await getT('admin_sistema');
   return ejecutarComoSuperadmin(async (sesion) => {
     // El superadmin de LIKIDA no tiene tenant: su gasto es de plataforma
     // (c5-10), con el techo del runner sobre el gasto medido del día.
@@ -94,7 +98,7 @@ export async function accionRedactar(id: string): Promise<ResultadoAccion> {
     );
     return {
       ok: true,
-      mensaje: `«${r.asunto}» quedó en la cola — apruébala en Aprobaciones.${r.aviso ? ` OJO: ${r.aviso}` : ''}`,
+      mensaje: t('vendedores_acciones.quedo_en_la_cola_apruebala_en', { asunto: r.asunto, v: r.aviso ? ` OJO: ${r.aviso}` : '' }),
     };
   }, 'redactar el correo');
 }
@@ -103,6 +107,7 @@ export async function accionCrearProspecto(
   _previo: ResultadoForma,
   fd: FormData,
 ): Promise<ResultadoForma> {
+  const { t } = await getT('admin_sistema');
   return ejecutarComoSuperadmin(async () => {
     const v = validarProspecto({
       empresa: String(fd.get('empresa') ?? ''),
@@ -117,15 +122,16 @@ export async function accionCrearProspecto(
     await crearProspecto(v, 'manual');
     return {
       ok: true,
-      mensaje: `${v.empresa} entró al tablero${v.vendedorId ? '' : ' sin vendedor — lo puede tomar el asignador'}.`,
+      mensaje: t('vendedores_acciones.entro_al_tablero', { empresa: v.empresa, v: v.vendedorId ? '' : t('vendedores_acciones.sin_vendedor_lo_puede_tomar') }),
     };
-  }, 'dar de alta el prospecto', 'Solo el superadmin da de alta prospectos.');
+  }, t('vendedores_acciones.dar_de_alta_el_prospecto'), t('vendedores_acciones.solo_el_superadmin_da_de_alta'));
 }
 
 export async function accionInvitar(
   _previo: ResultadoForma,
   fd: FormData,
 ): Promise<ResultadoForma> {
+  const { t } = await getT('admin_sistema');
   return ejecutarComoSuperadmin(async (sesion) => {
     // Falla CERRADA: sin correo saliente no se crea la cuenta (nadie le avisaría al vendedor ni le llegaría su enlace).
     if (!correoDeAccesoDisponible()) return { ok: false, error: MENSAJE_SIN_CORREO };
@@ -139,38 +145,39 @@ export async function accionInvitar(
       // La cuenta ya existe; el correo no salió. Se dice tal cual, sin verde.
       return {
         ok: false,
-        error: `${email} ya tiene cuenta, pero el correo de invitación no salió. Pásale tú la liga: ${appUrl()}/login`,
+        error: t('vendedores_acciones.ya_tiene_cuenta_pero_el_correo', { email, appUrl: appUrl() }),
       };
     }
     return {
       ok: true,
-      mensaje: `Le mandamos la invitación a ${email}. Entra con su correo (enlace mágico) y aterriza en /vendedor.`,
+      mensaje: t('vendedores_acciones.le_mandamos_la_invitacion_a_entra', { email }),
     };
-  }, 'invitar al vendedor', 'Solo el superadmin invita vendedores.',
+  }, 'invitar al vendedor', t('vendedores_acciones.solo_el_superadmin_invita_vendedores'),
   (error) => descifrarErrorProvision(error) ?? error);
 }
 
 // Sin parámetros a propósito: el botón no captura nada — una función de
 // menos parámetros es asignable a `AccionForma`.
 export async function accionRepartir(): Promise<ResultadoForma> {
+  const { t } = await getT('admin_sistema');
   return ejecutarComoSuperadmin(async () => {
     const r = await asignarPendientes();
     if (r.apagado) {
-      return { ok: false, error: 'El asignador (agente:ventas) está apagado desde Observabilidad. Enciéndelo para repartir.' };
+      return { ok: false, error: t('vendedores_acciones.el_asignador_agente_ventas_esta_apagado') };
     }
     if (r.sinVendedores) {
-      return { ok: false, error: 'No hay vendedores a quienes repartir. Invita al primero aquí abajo y vuelve a correr.' };
+      return { ok: false, error: t('vendedores_acciones.no_hay_vendedores_a_quienes_repartir') };
     }
     if (r.pendientes === 0) {
-      return { ok: true, mensaje: 'No había prospectos pendientes (sin vendedor y en Nuevo) que repartir.' };
+      return { ok: true, mensaje: t('vendedores_acciones.no_habia_prospectos_pendientes_sin_vendedor') };
     }
     if (r.repartidos === 0) {
-      return { ok: false, error: 'No se pudo repartir ninguno — revisa la bitácora del asignador aquí abajo.' };
+      return { ok: false, error: t('vendedores_acciones.no_se_pudo_repartir_ninguno_revisa') };
     }
     const detalle = r.porVendedor.map((v) => `${v.nombre} (${v.n})`).join(', ');
     return {
       ok: true,
-      mensaje: `Repartió ${r.repartidos} de ${r.pendientes}: ${detalle}. La corrida quedó en la bitácora.`,
+      mensaje: t('vendedores_acciones.repartio_de_la_corrida_quedo_en', { repartidos: r.repartidos, pendientes: r.pendientes, detalle }),
     };
-  }, 'repartir los pendientes', 'Solo el superadmin corre el asignador.');
+  }, 'repartir los pendientes', t('vendedores_acciones.solo_el_superadmin_corre_el_asignador'));
 }

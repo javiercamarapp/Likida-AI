@@ -1,3 +1,5 @@
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 // MX-004: lo que el servidor dice al pedir «Mensaje IA» (POST /api/admin/mapa-prospectos/mensaje).
 // Antes las dos pantallas hacian `if (!r.ok) return;` y no leian `aviso`/`guardado:false`: un 503 o un
 // «los textos NO se guardaron» no se le decia a nadie. Aqui se lee SIEMPRE y se devuelve texto para pintar.
@@ -13,9 +15,10 @@ export type ResultadoMensaje =
   | { ok: true; datos: TextosIaRespuesta; aviso: string | null }
   | { ok: false; error: string };
 
-const GENERICO = 'No se pudo redactar el mensaje con IA. Intenta de nuevo.';
+const genericoTr = (t: TSistema = T_SISTEMA_ES) => (t('mapa_prospectos_respuesta_mensaje.no_se_pudo_redactar_el_mensaje'));
 
 export async function leerRespuestaMensaje(r: Response): Promise<ResultadoMensaje> {
+  const { t } = await getT('admin_sistema');
   let cuerpo: Record<string, unknown> | null = null;
   try {
     const v: unknown = await r.json();
@@ -24,13 +27,13 @@ export async function leerRespuestaMensaje(r: Response): Promise<ResultadoMensaj
 
   if (!r.ok) {
     const texto = typeof cuerpo?.error === 'string' && cuerpo.error.trim() ? cuerpo.error : null;
-    return { ok: false, error: texto ?? `${GENERICO} (HTTP ${r.status})` };
+    return { ok: false, error: texto ?? `${genericoTr(t)} (HTTP ${r.status})` };
   }
-  if (!cuerpo || typeof cuerpo.mensajeWaIa !== 'string') return { ok: false, error: GENERICO };
+  if (!cuerpo || typeof cuerpo.mensajeWaIa !== 'string') return { ok: false, error: genericoTr(t) };
 
   const aviso = typeof cuerpo.aviso === 'string' && cuerpo.aviso.trim()
     ? cuerpo.aviso
-    : cuerpo.guardado === false ? 'Los textos se redactaron pero NO se guardaron en la ficha: copialos antes de salir.' : null;
+    : cuerpo.guardado === false ? t('mapa_prospectos_respuesta_mensaje.los_textos_se_redactaron_pero_no') : null;
   return {
     ok: true,
     aviso,

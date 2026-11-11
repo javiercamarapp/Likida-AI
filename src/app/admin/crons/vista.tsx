@@ -3,9 +3,12 @@ import { CRONS, type CronId, type LatidoDetallado } from '@/lib/admin/salud';
 import { Aviso, Disclosure, EstadoError, MarcoPagina, StatusChip, type TonoEstado } from '../../ui-v2/componentes';
 import { TablaLista, type ColumnaTabla } from '../../ui-v2/datos';
 import {
-  NOMBRE_RELOJ, OFICIO_RELOJ, cadaCuanto, desdeHace, guiaDeArreglo, porQueNoCorrio, resumenDetalle, resumenRelojes,
+  nombreReloj, oficioReloj, cadaCuanto, desdeHace, guiaDeArreglo, porQueNoCorrio, resumenDetalle, resumenRelojes,
 } from './estado-relojes';
 import '../sistema.css';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 // Las piezas puras viven en `estado-relojes.ts` (las usa también la portada de Salud); se re-exportan para quien ya las importaba de aquí.
 export { cadaCuanto, desdeHace, resumenDetalle, resumenRelojes };
@@ -24,81 +27,79 @@ export { cadaCuanto, desdeHace, resumenDetalle, resumenRelojes };
  * El veredicto de `juzgarLatido` como chip. `sin_latido` es ÁMBAR y no rojo a propósito: significa «nunca escribió», que tanto puede ser
  * un reloj recién nacido como uno que no PUEDE escribir. No es lo mismo que `vencido`, donde sí consta que latía y dejó de hacerlo.
  */
-const CHIP_SALUD: Record<LatidoDetallado['estado'], { tono: TonoEstado; etiqueta: string }> = {
-  ok: { tono: 'ok', etiqueta: 'Latiendo' },
-  vencido: { tono: 'bad', etiqueta: 'No late' },
-  sin_latido: { tono: 'warn', etiqueta: 'Nunca latió' },
-};
+const chipSalud = (t: TSistema = T_SISTEMA_ES): Record<LatidoDetallado['estado'], { tono: TonoEstado; etiqueta: string }> => ({
+  ok: { tono: 'ok', etiqueta: t('crons_vista.latiendo') },
+  vencido: { tono: 'bad', etiqueta: t('crons_vista.no_late') },
+  sin_latido: { tono: 'warn', etiqueta: t('crons_vista.nunca_latio') },
+});
 
 /** Lo que el propio reloj dijo de su última pasada. */
-const CHIP_ULTIMO: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+const chipUltimo = (t: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoEstado; etiqueta: string }> => ({
   ok: { tono: 'ok', etiqueta: 'OK' },
-  parcial: { tono: 'warn', etiqueta: 'Parcial' },
-  saltado: { tono: 'neutral', etiqueta: 'Saltado' },
-  fallo: { tono: 'bad', etiqueta: 'Fallo' },
-};
+  parcial: { tono: 'warn', etiqueta: t('observabilidad.parcial') },
+  saltado: { tono: 'neutral', etiqueta: t('crons_vista.saltado') },
+  fallo: { tono: 'bad', etiqueta: t('observabilidad.fallo') },
+});
 
 type Fila = { cron: CronId; l: LatidoDetallado };
 
-const COLUMNAS: ColumnaTabla<Fila>[] = [
+const columnasTr = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaTabla<Fila>[] => ([
   {
-    id: 'reloj', titulo: 'Reloj', principal: true,
-    celda: (x) => <>{NOMBRE_RELOJ[x.cron]}<span className="adm-sis-sub">{OFICIO_RELOJ[x.cron]}</span></>,
+    id: 'reloj', titulo: t('crons_vista.reloj'), principal: true,
+    celda: (x) => <>{nombreReloj(t)[x.cron]}<span className="adm-sis-sub">{oficioReloj(t)[x.cron]}</span></>,
   },
-  { id: 'cadencia', titulo: 'Cadencia', corta: true, celda: (x) => cadaCuanto(x.l.cadenciaMs) },
-  { id: 'pulso', titulo: 'Pulso', celda: (x) => <StatusChip tono={CHIP_SALUD[x.l.estado].tono}>{CHIP_SALUD[x.l.estado].etiqueta}</StatusChip> },
+  { id: 'cadencia', titulo: t('crons_vista.cadencia'), corta: true, celda: (x) => cadaCuanto(x.l.cadenciaMs, t) },
+  { id: 'pulso', titulo: t('crons_vista.pulso'), celda: (x) => <StatusChip tono={chipSalud(t)[x.l.estado].tono}>{chipSalud(t)[x.l.estado].etiqueta}</StatusChip> },
   {
-    id: 'ultimo', titulo: 'Último latido',
+    id: 'ultimo', titulo: t('crons_vista.ultimo_latido'),
     // La fecha exacta ARRIBA y el «hace» debajo: el «hace» se lee de un golpe, la fecha es la que se pega en un reporte.
-    celda: (x) => <>{x.l.ultimoLatido === null ? '—' : fechaHoraMx(x.l.ultimoLatido)}<span className="adm-sis-sub">{desdeHace(x.l.haceMin)}</span></>,
+    celda: (x) => <>{x.l.ultimoLatido === null ? '—' : fechaHoraMx(x.l.ultimoLatido, idioma)}<span className="adm-sis-sub">{desdeHace(x.l.haceMin, t)}</span></>,
   },
   {
-    id: 'resultado', titulo: 'Cómo le fue',
-    celda: (x) => (x.l.ultimoEstado === null ? '—' : <StatusChip tono={CHIP_ULTIMO[x.l.ultimoEstado]?.tono ?? 'neutral'}>{CHIP_ULTIMO[x.l.ultimoEstado]?.etiqueta ?? x.l.ultimoEstado}</StatusChip>),
+    id: 'resultado', titulo: t('crons_vista.como_le_fue'),
+    celda: (x) => (x.l.ultimoEstado === null ? '—' : <StatusChip tono={chipUltimo(t)[x.l.ultimoEstado]?.tono ?? 'neutral'}>{chipUltimo(t)[x.l.ultimoEstado]?.etiqueta ?? x.l.ultimoEstado}</StatusChip>),
   },
   {
-    id: 'porque', titulo: 'Por qué',
-    celda: (x) => { const p = porQueNoCorrio(x.l); return p.causa === 'ninguna' ? '—' : p.texto; },
+    id: 'porque', titulo: t('crons_vista.por_que'),
+    celda: (x) => { const p = porQueNoCorrio(x.l, t); return p.causa === 'ninguna' ? '—' : p.texto; },
   },
-];
+]);
 
-export function VistaCrons({ latidos }: { latidos: Record<CronId, LatidoDetallado> | null }) {
+export function VistaCrons({ latidos, t = T_SISTEMA_ES, idioma }: { latidos: Record<CronId, LatidoDetallado> | null; t?: TSistema; idioma?: Idioma }) {
   const lista: Fila[] = latidos === null ? [] : CRONS.map((c) => ({ cron: c, l: latidos[c] }));
   const { sinLatir, conFallo, parciales } = resumenRelojes(lista);
   const malos = [...sinLatir, ...conFallo];
-  const guias = lista.map((x) => guiaDeArreglo(x.cron, x.l)).filter((g) => g !== null);
-  const nombres = (ids: CronId[]) => ids.map((c) => NOMBRE_RELOJ[c]).join(', ');
+  const guias = lista.map((x) => guiaDeArreglo(x.cron, x.l, t)).filter((g) => g !== null);
+  const nombres = (ids: CronId[]) => ids.map((c) => nombreReloj(t)[c]).join(', ');
 
   return (
-    <MarcoPagina titulo="Relojes" apoyo="Los procesos programados del sistema: cuándo latieron por última vez y, si no corrieron, por qué.">
+    <MarcoPagina titulo={t('crons_vista.relojes')} apoyo={t('crons_vista.los_procesos_programados_del_sistema_cuando')}>
       {latidos === null ? (
-        <EstadoError reintentar>No se pudo leer el pulso de los relojes: la base no respondió. Esto NO significa que estén corriendo: significa que ahora mismo no se sabe.</EstadoError>
+        <EstadoError reintentar>{t('crons_vista.no_se_pudo_leer_el_pulso')}</EstadoError>
       ) : (
         <>
           {/* El rótulo cuenta lo MEDIDO, no una meta. `CRONS.length` sale de la misma constante que vercel.json cruza en `salud.test.ts`. */}
           {malos.length === 0 ? (
-            <Aviso tono={parciales.length > 0 ? 'warn' : 'ok'} titulo={`Los ${CRONS.length} relojes latieron dentro de su cadencia`}>
-              Ninguno reportó fallo en su última corrida.
-              {parciales.length > 0 ? ` ${nombres(parciales)} ${parciales.length === 1 ? 'reportó' : 'reportaron'} corrida parcial: el detalle está abajo.` : ''}
+            <Aviso tono={parciales.length > 0 ? 'warn' : 'ok'} titulo={t('crons_vista.los_relojes_latieron_dentro_de_su', { length: CRONS.length })}>{t('crons_vista.ninguno_reporto_fallo_en_su_ultima')}{parciales.length > 0 ? ` ${t(parciales.length === 1 ? 'crons_vista.reporto_corrida_parcial_uno' : 'crons_vista.reporto_corrida_parcial_varios', { nombres: nombres(parciales) })}` : ''}
             </Aviso>
           ) : (
-            <Aviso tono="error" titulo="Hay relojes que necesitan atención">
-              {sinLatir.length > 0 ? <><strong>{sinLatir.length}</strong> de {CRONS.length} relojes no están latiendo como deberían: {nombres(sinLatir)}. </> : null}
-              {conFallo.length > 0 ? <>{conFallo.length === 1 ? 'Un reloj late' : `${conFallo.length} relojes laten`} a tiempo pero su última corrida reportó <strong>fallo</strong>: {nombres(conFallo)}.</> : null}
+            <Aviso tono="error" titulo={t('crons_vista.hay_relojes_que_necesitan_atencion')}>
+              {sinLatir.length > 0 ? <><strong>{sinLatir.length}</strong>{' '}{t('crons_vista.de_relojes_no_estan_latiendo_como', { length: CRONS.length, nombres: nombres(sinLatir) })}</> : null}
+              {conFallo.length > 0 ? <>{conFallo.length === 1 ? t('crons_vista.un_reloj_late') : t('crons_vista.relojes_laten', { n: conFallo.length })}{' '}{rico(t('crons_vista.a_tiempo_pero_su_ultima_corrida', { nombres: nombres(conFallo) }), { strong: (c) => <strong>{c}</strong> })}</> : null}
             </Aviso>
           )}
 
           {guias.length > 0 ? (
             <section className="adm-sis-bloque" aria-labelledby="que-falta">
-              <h2 className="adm-sis-titulo" id="que-falta">Qué falta para que corran completos</h2>
+              <h2 className="adm-sis-titulo" id="que-falta">{t('crons_vista.que_falta_para_que_corran_completos')}</h2>
               {guias.map((g) => (
-                <Aviso key={g.cron} tono="warn" titulo={NOMBRE_RELOJ[g.cron]}>
+                <Aviso key={g.cron} tono="warn" titulo={nombreReloj(t)[g.cron]}>
                   {g.queFalta} {g.quien}
-                  <Disclosure titulo="Cómo arreglarlo" variante="linea">
+                  <Disclosure titulo={t('crons_vista.como_arreglarlo')} variante="linea">
                     <ol className="adm-sis-guia">
                       {g.pasos.map((p) => <li key={p}>{p}</li>)}
                     </ol>
-                    {g.dicho ? <p className="adm-sis-nota">Lo que el reloj dejó dicho: {g.dicho}</p> : null}
+                    {g.dicho ? <p className="adm-sis-nota">{t('crons_vista.lo_que_el_reloj_dejo_dicho')}{' '}{g.dicho}</p> : null}
                   </Disclosure>
                 </Aviso>
               ))}
@@ -106,14 +107,11 @@ export function VistaCrons({ latidos }: { latidos: Record<CronId, LatidoDetallad
           ) : null}
 
           <section className="adm-sis-bloque" aria-labelledby="relojes-uno-por-uno">
-            <h2 className="adm-sis-titulo" id="relojes-uno-por-uno">Uno por uno</h2>
+            <h2 className="adm-sis-titulo" id="relojes-uno-por-uno">{t('crons_vista.uno_por_uno')}</h2>
             <TablaLista<Fila>
-              etiqueta="Relojes del sistema, uno por uno" columnas={COLUMNAS} filas={lista} idFila={(x) => x.cron} base="/admin/crons" params={{}}
+              etiqueta={t('crons_vista.relojes_del_sistema_uno_por_uno')} columnas={columnasTr(t, idioma)} filas={lista} idFila={(x) => x.cron} base="/admin/crons" params={{}}
             />
-            <p className="adm-sis-nota">
-              El pulso lo escribe cada reloj al terminar. Aquí no se dispara ninguno a mano: el reloj de Vercel no se entera y varios reservan filas, así que dos pasadas a la vez se pisan.
-              Para apagar uno, su palanca está en Observabilidad.
-            </p>
+            <p className="adm-sis-nota">{t('crons_vista.el_pulso_lo_escribe_cada_reloj')}</p>
           </section>
         </>
       )}
