@@ -3,7 +3,8 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarClientesPendientes, type ClienteParaRevision } from '@/lib/mcp/oauth';
 import { logger } from '@/lib/logger';
 import { fechaHoraMx } from '@/lib/formato';
-import { EstadoError, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
+import { EstadoError, EstadoVacio, Tarjeta } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { FormaRechazarCliente } from './forma-rechazar';
 import { decidirYAnotar } from './decidir';
@@ -45,7 +46,7 @@ export default async function McpClientesPage() {
   }
 
   return (
-    <MarcoPagina titulo="Clientes MCP por aprobar" apoyo="Clientes que se registraron por su cuenta y esperan tu decisión antes de recibir acceso.">
+    <EsqueletoTablaMaestra titulo="Clientes MCP por aprobar" apoyo="Clientes que se registraron por su cuenta y esperan tu decisión antes de recibir acceso.">
       <div className="rv-mcp-lista">
         {pendientes === null ? (
           <EstadoError>No se pudo leer la cola. No significa que no haya clientes por aprobar: la consulta falló.</EstadoError>
@@ -80,7 +81,7 @@ export default async function McpClientesPage() {
           ))
         )}
       </div>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

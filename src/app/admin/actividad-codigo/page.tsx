@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getActividadCodigo } from '@/lib/admin/actividad-codigo';
 import { numero, fechaCorta } from '@/lib/formato';
-import { Aviso, MarcoPagina, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { Aviso, TablaBase, Tarjeta, type ColumnaBase } from '../../ui-v2/componentes';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { AvisoGitHub } from '../ui/aviso-github';
 
 export const dynamic = 'force-dynamic';
@@ -38,32 +38,37 @@ export default async function ActividadCodigoPage() {
   const a = await getActividadCodigo();
 
   return (
-    <MarcoPagina titulo="Actividad de código — likida.ai">
-      {a.estado === 'sin_token' && <AvisoGitHub causa="sin_token" />}
-      {a.estado === 'calculando' && (
-        <Aviso tono="info">GitHub todavía está calculando la estadística del repo (contestó 202) — recarga en unos segundos.</Aviso>
-      )}
-      {a.estado === 'error' && (
-        <>
-          <AvisoGitHub causa="error" />
-          <Aviso tono="warn">No se pudo leer la actividad: {a.detalle}. Esto NO significa que no haya commits.</Aviso>
-        </>
-      )}
-
+    <EsqueletoPanelCifras
+      titulo="Actividad de código — likida.ai"
+      etiquetaCifras="Commits del repositorio"
+      cifras={a.estado === 'ok' ? [
+        { etiqueta: 'Commits — últimas 52 semanas', valor: a.totalAnual, formato: 'entero' },
+        { etiqueta: 'Esta semana', valor: a.semanas[a.semanas.length - 1]?.total ?? 0, formato: 'entero' },
+        (() => {
+          const mejor = a.semanas.reduce((m, s) => (s.total > m.total ? s : m), a.semanas[0]);
+          return { etiqueta: 'La mejor semana', valor: mejor?.total ?? 0, formato: 'entero' as const,
+            nota: mejor ? `semana del ${fechaCorta(new Date(mejor.semana * 1000).toISOString())}` : undefined };
+        })(),
+      ] : undefined}
+      avisos={<>
+        {a.estado === 'sin_token' && <AvisoGitHub causa="sin_token" />}
+        {a.estado === 'calculando' && (
+          <Aviso tono="info">GitHub todavía está calculando la estadística del repo (contestó 202) — recarga en unos segundos.</Aviso>
+        )}
+        {a.estado === 'error' && (
+          <>
+            <AvisoGitHub causa="error" />
+            <Aviso tono="warn">No se pudo leer la actividad: {a.detalle}. Esto NO significa que no haya commits.</Aviso>
+          </>
+        )}
+      </>}
+    >
       {a.estado === 'ok' && (() => {
         const max = Math.max(...a.semanas.flatMap((s) => s.dias), 1);
-        const mejorSemana = a.semanas.reduce((m, s) => (s.total > m.total ? s : m), a.semanas[0]);
         const ancho = a.semanas.length * (CELDA + GAP) + 28;
         const alto = 7 * (CELDA + GAP) + 4;
         return (
           <>
-            <TiraCifras etiqueta="Commits del repositorio">
-              <Cifra etiqueta="Commits — últimas 52 semanas" valor={a.totalAnual} formato="entero" />
-              <Cifra etiqueta="Esta semana" valor={a.semanas[a.semanas.length - 1]?.total ?? 0} formato="entero" />
-              <Cifra etiqueta="La mejor semana" valor={mejorSemana?.total ?? 0} formato="entero"
-                nota={mejorSemana ? `semana del ${fechaCorta(new Date(mejorSemana.semana * 1000).toISOString())}` : undefined} />
-            </TiraCifras>
-
             <Tarjeta titulo="Los puntitos — commits por día">
               {/* Wide content scrollea DENTRO de su contenedor (regla). */}
               <div className="overflow-x-auto pb-1">
@@ -108,7 +113,7 @@ export default async function ActividadCodigoPage() {
           </>
         );
       })()}
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 
