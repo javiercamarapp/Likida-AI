@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
+import './pixeles.css';
 
 /**
  * La nube de píxeles del hero del chat (13-ago-2026: "el efecto animado de
@@ -152,7 +153,6 @@ export function CampoPixeles({ intensidad = 'suave', pausado = false }: { intens
     ? <canvas ref={ref} aria-hidden className="rv-chat__pixeles" />
     : (
       <canvas ref={ref} aria-hidden
-        className="absolute inset-0 h-full w-full pointer-events-none"
-        style={{ color: 'var(--g3)' }} />
+        className="absolute inset-0 h-full w-full pointer-events-none rv-pixeles--suave" />
     );
 }

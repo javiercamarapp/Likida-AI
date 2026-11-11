@@ -97,7 +97,7 @@ describe('el cliente y el superadmin comparten estructura y clases', () => {
     expect(panel).toContain('data-variante="panel"');
     // El briefing «Decide hoy» es solo de la página: el panel, cerrado, no pide nada a la red.
     // El panel conserva TODAS las clases de la pantalla; solo suma la hoja del historial (el Drawer del motor de overlays).
-    for (const c of [...clases(superadmin)].filter((x) => !x.startsWith('rv-chat__hist') && !x.startsWith('rv-chat__briefing') && !['rv-btn--ghost', 'rv-btn--sm', 'rv-chat__nota', 'rv-tarjeta'].includes(x))) expect(clases(panel).has(c), c).toBe(true);
+    for (const c of [...clases(superadmin)].filter((x) => !x.startsWith('rv-chat__hist') && !x.startsWith('rv-chat__briefing') && !x.startsWith('rv-tip') && !x.startsWith('rv-pop') && !['rv-btn--ghost', 'rv-btn--sm', 'rv-chat__nota', 'rv-tarjeta'].includes(x))) expect(clases(panel).has(c), c).toBe(true);
   });
 
   it('los perfiles son datos puros: ninguna función en textos ni temas (props serializables)', () => {

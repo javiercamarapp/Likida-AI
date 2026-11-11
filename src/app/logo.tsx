@@ -1,5 +1,4 @@
-import type { CSSProperties } from 'react';
-import LogoV2, { PROPORCION_LOGO } from './dashboard/shell/logo-v2';
+import LogoV2, { PROPORCION_LOGO, type TonoLogoV2 } from './dashboard/shell/logo-v2';
 
 // EL LOGO DE LIKIDA — UNA SOLA IMPLEMENTACIÓN (identidad H, 10-nov-2026).
 //
@@ -23,10 +22,11 @@ export type VarianteLogo = 'horizontal' | 'simbolo';
 /** Ancho mínimo de la marca, en px, por variante (igual que `RovaqLogo`). */
 export const ANCHO_MINIMO_LOGO: Record<VarianteLogo, number> = { horizontal: 100, simbolo: 16 };
 
-const COLOR_TONO: Record<TonoLogo, string> = {
-  auto: 'var(--ink)',
-  positivo: '#0E0E10',
-  negativo: '#F4F4F5',
+/** Tono de la marca → tono del logo vectorial. Los colores (#0E0E10 y #F4F4F5, los de los SVG `likida-*-positivo|negativo.svg`) viven en `logo-v2.css`. */
+const COLOR_TONO: Record<TonoLogo, TonoLogoV2> = {
+  auto: 'ink',
+  positivo: 'positivo',
+  negativo: 'negativo',
 };
 
 /** Traduce el `alto` que ya se pasaba (`h-7`, `h-[42px]`, `h-px`…) o un número a píxeles. `null` = no se reconoce. */
@@ -56,14 +56,13 @@ export function Logo({ alto, variante = 'horizontal', tono = 'auto', decorativo 
   decorativo?: boolean;
   className?: string;
 }) {
-  const style: CSSProperties = { color: COLOR_TONO[tono] };
-  return <LogoV2 alto={altoDeMarca(alto, variante)} variante={variante} decorativo={decorativo} className={className} style={style} />;
+  return <LogoV2 alto={altoDeMarca(alto, variante)} variante={variante} decorativo={decorativo} className={className} tono={COLOR_TONO[tono]} />;
 }
 
 /** El símbolo solo como ADORNO (p. ej. el glifo que «piensa» en el chat): decorativo, sin tamaño mínimo y en la tinta del tema. */
 export function LogoIcono({ alto, className }: { alto: string | number; className?: string }) {
   return (
-    <LogoV2 alto={altoEnPx(alto) ?? 16} variante="simbolo" decorativo className={className} style={{ color: 'var(--ink)' }} />
+    <LogoV2 alto={altoEnPx(alto) ?? 16} variante="simbolo" decorativo className={className} tono="ink" />
   );
 }
 
@@ -71,12 +70,13 @@ export function LogoIcono({ alto, className }: { alto: string | number; classNam
  *  CTAs). `aria-hidden` y sin `role`: el botón ya se nombra solo con su texto. El color se pasa (del TEXTO del botón: `--bg` en la
  *  píldora de tinta, `--ink` en la de borde). El contenedor que lo envuelve fija la altura (16-17 px) y anima el ancho de 0 a 18. */
 export function GlifoAdorno({ color = 'var(--marca)', className = '' }: {
-  color?: string;
+  /** Uno de los tres tokens que usa la marca: `var(--bg)`, `var(--ink)` o `var(--marca)` (por omisión). */
+  color?: 'var(--bg)' | 'var(--ink)' | 'var(--marca)';
   className?: string;
 }) {
   return (
-    <span aria-hidden className={`block h-full ${className}`} style={{ color }}>
-      <LogoV2 alto={16} variante="simbolo" decorativo />
+    <span aria-hidden className={`block h-full ${className}`}>
+      <LogoV2 alto={16} variante="simbolo" decorativo tono={color === 'var(--bg)' ? 'bg' : color === 'var(--ink)' ? 'ink' : 'marca'} />
     </span>
   );
 }

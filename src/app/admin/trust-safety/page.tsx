@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ShieldAlert } from 'lucide-react';
-import { EstadoError } from '../ui/kit';
-import { Disclosure, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { Cifra, TiraCifras } from '../../ui-v2/graficas';
 import {
   getEventosSeguridad, resumenEventosSeguridad,
@@ -115,7 +114,7 @@ export default async function TrustSafetyPage() {
     <MarcoPagina titulo={t('trust_safety.trust_safety')}>
       {/* ── Los conteos, medidos en la base ── */}
       {resumen === null ? (
-        <EstadoError mensaje={t('trust_safety.no_se_pudieron_leer_los_conteos')} />
+        <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_conteos')}</EstadoError>
       ) : (
         <TiraCifras etiqueta={t('trust_safety.ultimos_30_dias_por_severidad')}>
           <Cifra etiqueta={t('trust_safety.severidad_alta_30_dias')} valor={resumen.d30.alta} tono={resumen.d30.alta > 0 ? 'bad' : undefined} />

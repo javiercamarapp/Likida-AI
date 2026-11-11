@@ -3,6 +3,7 @@
 import { useActionState } from 'react';
 import { Aviso, type AccionDeForma } from '../ui/forma';
 import { BotonConfirmar } from '../ui/confirmar';
+import { clasesBoton } from '@/app/ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // «RECHAZAR» un cliente MCP pendiente — auditoría adversarial, DOS HALLAZGOS
@@ -52,8 +53,7 @@ export function FormaRechazarCliente({ accion, clientId, nombre, tokensVivos }: 
           etiqueta="Rechazar" tono="peligro" etiquetaConfirmar="Sí, rechazar y revocar"
           titulo={`Rechazar a ${nombre}`}
           descripcion={`${descripcionTokens(tokensVivos)} Es irreversible, y el efecto puede alcanzar a cualquier flota que ya le haya dado consentimiento.`}
-          className="text-sm font-medium rounded-lg px-4 py-2 w-full md:w-auto disabled:opacity-60 disabled:cursor-not-allowed"
-          style={{ background: 'var(--badbg)', color: 'var(--bad)', border: '1px solid var(--bad)' }}
+          className={clasesBoton('danger', 'sm')}
         />
       </div>
     </form>

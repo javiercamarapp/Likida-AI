@@ -4,6 +4,7 @@ import { ArrowDown } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
 import LogoV2 from '../shell/logo-v2';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { CampoPixeles } from '../pixeles';
 import Composer, { MAX_PREGUNTA } from './composer';
 import PanelHistorial, { BotonHistorial } from './historial';
@@ -89,7 +90,7 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
   const endpointAccion = endpoint ?? perfil.endpoint;
   const panel = variante === 'panel';
   /** El título de la portada: encabezado de nivel 1 en la página y de nivel 2 en el panel lateral (ver la nota donde se pinta). */
-  const Titulo = panel ? 'h2' : 'h1';
+  const Encabezado = panel ? 'h2' : 'h1';
   const [texto, setTexto] = useState('');
   const [histAbierto, setHistAbierto] = useState(false);
   const [lejosDelFondo, setLejosDelFondo] = useState(false);
@@ -192,11 +193,11 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
             <header className="rv-chat__hero" data-onboarding="pantalla.titulo">
               <LogoV2 variante={marca === 'simbolo' ? 'simbolo' : 'horizontal'} alto={28} className="rv-chat__logo" />
               {/* UN solo encabezado de nivel 1 por página: el panel lateral del Copiloto vive en el chrome de /admin junto al título de cada pantalla, así que ahí baja a nivel 2. */}
-              <Titulo>{tx.titulo}</Titulo>
+              <Encabezado>{tx.titulo}</Encabezado>
               <p className="rv-chat__sub">{tx.subtitulo}</p>
             </header>
           )}
-          {hay && <Titulo className="rv-sr">{tx.titulo}</Titulo>}
+          {hay && <Encabezado className="rv-sr">{tx.titulo}</Encabezado>}
           {hay && (
             <div className="rv-chat__hilo-caja">
               <div ref={hilo} className="rv-chat__hilo" role="log" aria-live="polite" tabIndex={0} aria-label={tl('cfg.conversacion')} onScroll={medirFondo}>
@@ -212,9 +213,9 @@ function VistaAgente({ modo, variante = 'pagina', endpoint, temas, textos, marca
                 </div>
               </div>
               {lejosDelFondo && (
-                <button type="button" className="rv-btn rv-btn--secondary rv-chat__redondo rv-chat__bajar" aria-label={tl('ch.ir_al_final_de_la_conversacion')} onClick={bajar}>
+                <Boton className="rv-chat__redondo rv-chat__bajar" aria-label={tl('ch.ir_al_final_de_la_conversacion')} onClick={bajar}>
                   <ArrowDown aria-hidden="true" />
-                </button>
+                </Boton>
               )}
             </div>
           )}

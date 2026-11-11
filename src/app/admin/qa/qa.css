@@ -1,29 +1,77 @@
-/* Calidad › Pruebas reales (F5): los estilos que antes iban en línea, ahora con las variables del sistema. */
+/* Calidad › Pruebas reales: solo lo que las piezas del sistema (Tarjeta, TablaBase, Disclosure, Campo, Boton) no traen.
+   Todo con las variables del sistema; sin colores sueltos. */
 .rv-qa-mut { color: var(--muted); }
-.rv-qa-faint { color: var(--faint); }
+.rv-qa-tenue { color: var(--faint); }
 .rv-qa-bad { color: var(--bad); }
 .rv-qa-warn { color: var(--warn); }
-.rv-qa-acento { color: var(--marca); }
-.rv-qa-ink2 { color: var(--ink2); }
-.rv-qa-bl2 { border-color: var(--line2); }
-.rv-qa-fs { background: var(--surface); }
-.rv-qa-fc { background: var(--canvas); }
-.rv-qa-g1 { background: var(--g1); }
-.rv-qa-fl2 { background: var(--line2); }
-.rv-qa-fbad { background: var(--badbg); }
-.rv-qa-marca { background: var(--marca); color: var(--marca-fg); }
-.rv-qa-malo { background: var(--badbg); color: var(--bad); }
-.rv-qa-caja { background: var(--canvas); border: 1px solid var(--line2); }
-.rv-qa-punteado { border-top: 1px dashed var(--line2); color: var(--muted); }
-.rv-qa-zona { border-color: var(--line); background: transparent; }
-.rv-qa-zona[data-arrastrando="true"] { border-color: var(--marca); background: var(--canvas); }
-.rv-qa-activa { outline: 2px solid var(--marca); outline-offset: -2px; }
-.rv-qa-escenario[data-activo="true"] { background: var(--ui-activo-bg); color: var(--ui-activo-ink); border-color: var(--ui-activo-barra); box-shadow: inset 3px 0 0 var(--ui-activo-barra); }
-.rv-qa-escenario[data-activo="true"] .rv-qa-ink2 { color: var(--ui-activo-ink); }
-.rv-qa-burbuja-user { background: var(--marca); color: var(--marca-fg); }
-.rv-qa-burbuja-bot { background: var(--surface); }
+.rv-qa-mono { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; overflow-wrap: anywhere; }
+.rv-qa-etq { margin-left: 6px; font-size: 11px; font-weight: 500; }
+.rv-qa-nota { margin: 0; font-size: 12px; line-height: 1.4; color: var(--muted); }
+.rv-qa-rotulo { margin-bottom: 4px; font-size: 12px; font-weight: 500; color: var(--muted); }
+.rv-qa-detalle { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+.rv-qa-sep { margin-top: 8px; }
+.rv-qa-lista { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 12px; }
+.rv-qa-lista--alta { max-height: 160px; overflow-y: auto; }
+.rv-qa-trunca { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
+.rv-qa-pila { display: grid; gap: 12px; min-width: 0; }
+.rv-qa-pila--corta { gap: 8px; }
+.rv-qa-acciones { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.rv-qa-params { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
+.rv-qa-dos { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; align-items: start; }
+.rv-qa-escenarios { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 4px 16px; }
+.rv-qa-politica { display: grid; grid-template-columns: minmax(0, 1fr) 120px auto auto; align-items: center; gap: 8px; }
+@media (max-width: 640px) { .rv-qa-politica { grid-template-columns: minmax(0, 1fr) 96px; } }
+
+/* Zona de arrastre: una etiqueta que contiene el input real (accesible por teclado) */
+.rv-qa-zona {
+  display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 8px 12px; cursor: pointer;
+  border: 1px dashed var(--line); border-radius: 12px; color: var(--muted); font-size: 13px; background: transparent;
+  transition: background-color 160ms ease, border-color 160ms ease;
+}
+.rv-qa-zona:hover, .rv-qa-zona[data-arrastrando="true"] { background: var(--canvas); border-color: var(--ui-focus); }
+.rv-qa-zona:has(:focus-visible) { outline: 2px solid var(--ui-focus); outline-offset: 2px; }
+@keyframes rv-qa-gira { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: no-preference) { .rv-qa-gira { animation: rv-qa-gira 900ms linear infinite; } }
+
+/* Rejilla de fotos del banco */
+.rv-qa-fotos { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; max-height: 256px; overflow-y: auto; padding-right: 4px; }
+.rv-qa-foto { position: relative; display: grid; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); cursor: pointer; }
+.rv-qa-foto[data-activa="true"] { outline: 2px solid var(--ui-focus); outline-offset: -2px; }
+.rv-qa-foto:has(:focus-visible) { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+.rv-qa-foto__img { width: 100%; height: 64px; object-fit: cover; display: block; }
+.rv-qa-foto__sin { display: flex; align-items: center; justify-content: center; padding: 0 4px; font-size: 11px; color: var(--ink2); background: var(--canvas); }
+.rv-qa-foto__pie { padding: 2px 6px; font-size: 11px; color: var(--ink2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Filas del banco / de la medición: casilla + miniatura + disclosure */
+.rv-qa-filas { display: grid; gap: 6px; max-height: 576px; overflow-y: auto; padding-right: 4px; }
+.rv-qa-fila { display: grid; grid-template-columns: auto 40px minmax(0, 1fr); align-items: start; gap: 8px; }
+.rv-qa-fila .rv-marca { padding-top: 8px; }
+.rv-qa-mini { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; }
+.rv-qa-mini--sin { display: flex; align-items: center; justify-content: center; background: var(--canvas); color: var(--faint); }
+.rv-qa-resumen { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 12px; font-size: 12px; color: var(--muted); }
+.rv-qa-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 12px; color: var(--muted); }
+
+/* Avance y evidencia */
+.rv-qa-avance { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; font-size: 12px; }
+.rv-qa-gran { font-size: 22px; font-weight: 600; line-height: 1.2; }
+.rv-qa-gran__sub { font-size: 14px; font-weight: 400; color: var(--muted); }
 .rv-qa-barra { display: block; width: 100%; height: 6px; border: 0; border-radius: 999px; appearance: none; background: var(--line2); overflow: hidden; }
 .rv-qa-barra::-webkit-progress-bar { background: var(--line2); }
-.rv-qa-barra::-webkit-progress-value { background: var(--marca); }
+.rv-qa-barra::-webkit-progress-value { background: var(--marca); transition: width 240ms ease; }
 .rv-qa-barra::-moz-progress-bar { background: var(--marca); }
+.rv-qa-evidencia { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.rv-qa-evidencia > li { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; font-size: 12px; }
+.rv-qa-evidencia__nombre { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--muted); }
+
+/* Conversación de solo lectura */
+.rv-qa-chat { display: grid; gap: 6px; max-height: 320px; overflow-y: auto; padding-right: 4px; }
+.rv-qa-fila-chat { display: flex; justify-content: flex-start; }
+.rv-qa-fila-chat--user { justify-content: flex-end; }
+.rv-qa-burbuja { max-width: 85%; padding: 6px 12px; border: 1px solid var(--line); border-radius: 12px; font-size: 12px; white-space: pre-wrap; }
+.rv-qa-burbuja__quien { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 500; opacity: .7; }
+.rv-qa-burbuja-user { background: var(--marca); color: var(--marca-fg); border-color: transparent; }
+.rv-qa-burbuja-bot { background: var(--surface); }
+
+/* Disclosure dentro de una fila del banco: sin la separación propia de la tarjeta */
+.rv-qa-disc { margin: 0; }

@@ -2,6 +2,7 @@
 
 import { useFormStatus } from 'react-dom';
 import type { ReactNode } from 'react';
+import { Boton } from '../ui-v2/componentes/boton';
 
 /**
  * Botón de envío de /login con estado en vuelo (`aria-busy`, deshabilitado, texto «Solicitando…» / «Abriendo
@@ -21,9 +22,8 @@ export function BotonEnvio({
 }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" className={className} aria-busy={pending} disabled={pending}>
-      {icono}
+    <Boton type="submit" className={className} loading={pending} icono={icono}>
       <span>{pending ? enVuelo : reposo}</span>
-    </button>
+    </Boton>
   );
 }

@@ -1,5 +1,6 @@
 import { veredictoSalidasDeFlota } from '@/lib/saas/salidas_flota';
 import { getT } from '@/lib/i18n/servidor';
+import './aviso-plan-en-pausa.css';
 
 /**
  * F20: la franja que dice la verdad cuando el plan de la flota frena las salidas. Se pinta en el dashboard de la flota y en su ficha
@@ -13,7 +14,7 @@ export async function AvisoPlanEnPausa({ tenantId }: { tenantId: string | null |
   if (v.salen) return null;
   const { t } = await getT('avisos');
   return (
-    <div role="status" data-aviso="plan-frena-salidas" className="mb-3 rounded-lg px-3 py-2 text-[12px]" style={{ border: '1px solid var(--line)', color: 'var(--muted)' }}>
+    <div role="status" data-aviso="plan-frena-salidas" className="rv-plan-pausa">
       <strong>{v.mensaje}.</strong>{' '}
       {v.estado === 'ilegible' ? t('planPausa.ilegible') : t('planPausa.frena')}
     </div>

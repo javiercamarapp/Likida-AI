@@ -2,6 +2,7 @@
 
 import { ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
+import { Boton } from '../../ui-v2/componentes/boton';
 import type { AccionPropuesta } from './respuestas';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
@@ -91,10 +92,10 @@ export default function TarjetaAccion({ a, endpoint, onEjecutada }: {
       )}
       {error && <p className="rv-chat__error-linea" role="alert">{error}</p>}
       <div className="rv-accion__botones">
-        <button type="button" className="rv-btn rv-btn--secondary rv-btn--sm" onClick={() => setEstado('cancelada')}>{t('op.cancelar')}</button>
-        <button type="button" className="rv-btn rv-btn--primary rv-btn--sm" disabled={estado === 'ejecutando'} onClick={() => void ejecutar()}>
+        <Boton tamano="sm" onClick={() => setEstado('cancelada')}>{t('op.cancelar')}</Boton>
+        <Boton variante="primary" tamano="sm" disabled={estado === 'ejecutando'} onClick={() => void ejecutar()}>
           {estado === 'ejecutando' ? (apagar ? 'Apagando…' : encender ? 'Encendiendo…' : 'Ejecutando…') : estado === 'armada' ? t('ch.confirmar_de_nuevo') : (apagar ? t('ch.apagar') : encender ? 'Encender' : 'Ejecutar')}
-        </button>
+        </Boton>
       </div>
     </section>
   );

@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Aviso, Boton, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { Aviso, Boton, CampoTexto, EstadoError, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { getTechosIa, TECHO_IA_MAX_USD, TECHO_IA_MIN_USD, type FilaTechoIa, type TechosIa } from '@/lib/admin/techo_ia';
 import { usd } from '@/lib/utils';
-import { EstadoError } from '../ui/kit';
 import { guardarTechoIa } from './acciones';
+import './techo-ia.css';
 
 import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
@@ -48,7 +48,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
   } catch {
     datos = null;
   }
-  if (datos === null) return <PantallaTecho><EstadoError mensaje={t('techo_ia.no_se_pudo_leer')} /></PantallaTecho>;
+  if (datos === null) return <PantallaTecho><EstadoError>{t('techo_ia.no_se_pudo_leer')}</EstadoError></PantallaTecho>;
 
   const columnas: ColumnaBase<FilaTechoIa>[] = [
     { id: 'flota', titulo: t('techo_ia.flota'), principal: true, celda: (f) => f.nombre },
@@ -57,12 +57,10 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
     {
       id: 'hoy', titulo: t('techo_ia.hoy'), alinear: 'der',
       celda: (f) => f.usadoHoyUsd === null ? (
-        <span className="text-muted">sin medir</span>
+        <span className="rv-techo-tenue">sin medir</span>
       ) : (
-        <span className="inline-flex items-center gap-2">
-          <span className="inline-block h-1 w-16 overflow-hidden rounded-full bg-[var(--line2)]" aria-hidden="true">
-            <span className={`block h-full rounded-full ${(f.pctUsado ?? 0) >= 80 ? 'bg-[var(--bad)]' : 'bg-[var(--marca)]'}`} style={{ width: `${f.pctUsado ?? 0}%` }} />
-          </span>
+        <span className="rv-techo-uso">
+          <progress className="rv-techo-barra" value={Math.min(f.pctUsado ?? 0, 100)} max={100} data-alto={(f.pctUsado ?? 0) >= 80 || undefined} aria-hidden="true" />
           <span className="tabular">{usd(f.usadoHoyUsd)} · {f.pctUsado ?? 0}%</span>
         </span>
       ),
@@ -70,14 +68,14 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
     {
       id: 'declarar', titulo: t('techo_ia.declarar_techo'),
       celda: (f) => (
-        <form action={guardarTechoIa} className="flex items-center gap-1.5">
+        <form action={guardarTechoIa} className="rv-techo-forma">
           <input type="hidden" name="tenantId" value={f.tenantId} />
-          <label className="sr-only" htmlFor={`techo-${f.tenantId}`}>Techo diario en dólares para {f.nombre}</label>
-          <input
+          <CampoTexto
             id={`techo-${f.tenantId}`} name="techoUsd" inputMode="decimal" autoComplete="off"
+            etiqueta={`Techo diario en dólares para ${f.nombre}`} etiquetaOculta
             defaultValue={f.declaradoUsd === null ? '' : String(f.declaradoUsd)}
             placeholder="sin declarar"
-            className="rv-ctl tabular w-28"
+            claseControl="tabular"
             title={f.declaradoUsd !== null ? t('techo_ia.dejalo_vacio_y_guarda') : undefined}
           />
           <Boton type="submit" variante="secondary" tamano="sm">{f.declaradoUsd === null ? 'Fijar' : 'Cambiar'}</Boton>
@@ -92,7 +90,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
       {sp.error && MENSAJE_ERROR[sp.error] && <Aviso tono="error">{MENSAJE_ERROR[sp.error]}</Aviso>}
 
       <Tarjeta titulo={t('techo_ia.como_se_decide_el')}>
-        <p className="m-0 text-[13px] text-muted">
+        <p className="rv-techo-nota">
           1) el que declares aquí; 2) si no hay, el que le toca por el tamaño de su plan; 3) si tampoco, el piso global de{' '}
           <span className="tabular">{usd(datos.pisoUsd)}</span> al día. Pasado el techo, la IA de esa flota se frena hasta el día siguiente
           (el camino del chofer conserva una reserva). Rango declarable: {usd(TECHO_IA_MIN_USD)} a {usd(TECHO_IA_MAX_USD)} por día;
@@ -102,7 +100,7 @@ export default async function TechoIaPage({ searchParams }: { searchParams: Prom
           <Aviso tono="warn">{t('techo_ia.el_gasto_de_hoy')}</Aviso>
         )}
         {datos.truncado && (
-          <p className="m-0 text-[13px] text-muted">{t('techo_ia.hay_mas_flotas_de')}</p>
+          <p className="rv-techo-nota">{t('techo_ia.hay_mas_flotas_de')}</p>
         )}
       </Tarjeta>
 

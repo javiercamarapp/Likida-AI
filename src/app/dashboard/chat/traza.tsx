@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import MarcaLikida from './marca';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { rotuloTool, type PasoTraza } from './respuestas';
 import { useT } from '@/lib/i18n/proveedor';
 import { resto as restoEs } from '@/lib/i18n/es/resto';
@@ -45,10 +46,10 @@ export function TrazaViva({ fase, pasos }: { fase: string; pasos: PasoTraza[] })
         <p className="rv-traza__fase">{fase}</p>
         {pasos.length > 0 && (
           <>
-            <button type="button" className="rv-traza__alternar" aria-expanded={abierta} aria-controls={id} onClick={() => setAbierta((v) => !v)}>
+            <Boton variante="ghost" className="rv-traza__alternar" aria-expanded={abierta} aria-controls={id} onClick={() => setAbierta((v) => !v)}>
               <ChevronRight width={12} height={12} aria-hidden="true" />
               {pasos.length === 1 ? '1 paso en vivo' : `${pasos.length} pasos en vivo`}
-            </button>
+            </Boton>
             {abierta && <div id={id}><ListaPasos pasos={pasos} /></div>}
           </>
         )}

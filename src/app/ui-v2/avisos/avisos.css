@@ -13,10 +13,6 @@
 [data-ui="v2"] .av-titulo { font-size: var(--t-body); font-weight: 500; overflow-wrap: anywhere; }
 [data-ui="v2"] .av-detalle, [data-ui="v2"] .av-nota { color: var(--muted); font-size: var(--t-small, 12px); overflow-wrap: anywhere; }
 [data-ui="v2"] .av-acciones { flex: none; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
-[data-ui="v2"] .av-matriz { width: 100%; border-collapse: collapse; }
-[data-ui="v2"] .av-matriz th, [data-ui="v2"] .av-matriz td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: center; vertical-align: middle; }
-[data-ui="v2"] .av-matriz th:first-child, [data-ui="v2"] .av-matriz td:first-child { text-align: left; }
-[data-ui="v2"] .av-matriz thead th { font-weight: 500; color: var(--muted); }
 [data-ui="v2"] .av-canales { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 12px; }
 [data-ui="v2"] .av-canal { display: flex; flex-direction: column; gap: 6px; }
 [data-ui="v2"] .av-silencio { display: flex; flex-direction: column; gap: 12px; max-width: 520px; }
