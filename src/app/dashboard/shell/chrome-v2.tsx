@@ -27,7 +27,7 @@ import SaltarAlContenido from './saltar-contenido';
  * hasta que el contenido está listo (ver `capa-carga.tsx` y `ui-v2/carga.css`). Sin `Fondo` (el shader): v2 es plano y el documento recibe el fondo por `html:root:has([data-ui="v2"])` (tokens.css).
  */
 export default function DashboardChromeV2({
-  nombre, rol, cerrarSesion, usoIa, perfil, insignias, organizacion, children,
+  nombre, rol, cerrarSesion, usoIa, perfil, insignias, organizacion, flotas, children,
 }: {
   nombre: string | null;
   rol: string;
@@ -41,6 +41,8 @@ export default function DashboardChromeV2({
   insignias?: Record<string, string>;
   /** La flota que se ve (nombre leído en el servidor; `null` = no se pudo leer; ausente = sin dato todavía). */
   organizacion?: { id: string; nombre: string } | null;
+  /** Solo el superadmin: las flotas (para resolver `?tenant=` en el pie). `null` = lectura caída; ausente = no aplica. */
+  flotas?: Array<{ id: string; nombre: string }> | null;
   children: React.ReactNode;
 }) {
   // `provisionar.ts` toca la base: la etiqueta del rol se resuelve AQUÍ (servidor) y baja como texto a los componentes cliente.
@@ -53,7 +55,7 @@ export default function DashboardChromeV2({
         <PaletaDashboard rol={rol} perfil={perfil} />
         <CabeceraMovil rol={rol} perfil={perfil} />
         <div className={CLASES_V2.fila}>
-          <SidebarV2 rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} />
+          <SidebarV2 rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} flotas={flotas} />
           <div className={CLASES_V2.columna}>
             <CabeceraEscritorio rol={rol} perfil={perfil} />
             {/* `tabIndex={-1}`: el enlace «Saltar al contenido» mueve el foco AQUÍ. */}
@@ -64,7 +66,7 @@ export default function DashboardChromeV2({
             </div>
           </div>
         </div>
-        <NavegacionMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} />
+        <NavegacionMovil rol={rol} rolEtiqueta={rolEtiqueta} nombre={nombre} perfil={perfil} usoIa={usoIa} cerrarSesion={cerrarSesion} insignias={insignias} organizacion={organizacion} flotas={flotas} />
       </div>
     </ProveedorNotificaciones>
   );

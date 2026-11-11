@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { SeccionInterruptores, type InterruptorParaUi } from './interruptores-ui';
-import { PalancaAgente } from '../agentes/palanca';
 
 // El kill switch se toca desde el teléfono en pleno incidente: esta prueba fija lo que SE VE al renderizar (estado, firma y la palanca
 // correcta por fila) para que un rediseño no lo rompa en silencio. La interacción (motivo obligatorio) la cubre la prueba del control.
@@ -40,21 +39,5 @@ describe('SeccionInterruptores (kill switch)', () => {
   });
   it('sin motivo en la fila de un encendido: el motivo solo aparece al pedir apagar', () => {
     expect(html).not.toContain('name="motivo"');
-  });
-});
-
-describe('PalancaAgente (/admin/agentes)', () => {
-  it('un agente encendido muestra Encendido, el id de la palanca y el botón Apagar', () => {
-    const html = renderToStaticMarkup(<PalancaAgente id="agente:ocr" apagado={false} accion={accion} />);
-    expect(html).toContain('Encendido');
-    expect(html).toContain('value="agente:ocr"');
-    expect(html).toContain('value="apagar"');
-    expect(html).toContain('>Apagar<');
-  });
-  it('un agente apagado muestra APAGADO y el botón Encender', () => {
-    const html = renderToStaticMarkup(<PalancaAgente id="agente:ocr" apagado accion={accion} />);
-    expect(html).toContain('APAGADO');
-    expect(html).toContain('value="encender"');
-    expect(html).toContain('>Encender<');
   });
 });

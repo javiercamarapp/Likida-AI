@@ -73,13 +73,6 @@ export function vigilar<T>(p: Promise<T>): Promise<T> {
   return p;
 }
 
-/** Shimmer suelto — el ladrillo con el que se arman los demás esqueletos. */
-export function Barra({ alto = 14, ancho = '100%', className = '' }: {
-  alto?: number | string; ancho?: number | string; className?: string;
-}) {
-  return <div className={`skeleton rounded-md ${className}`} style={{ height: alto, width: ancho }} aria-hidden />;
-}
-
 /**
  * Una tarjeta del alto que va a ocupar la real. `alto` es el alto del CONTENIDO; se redondea al escalón más cercano de los que el
  * CSS conoce (60/84/120/160/240/320), medidos contra las tarjetas definitivas para que no haya salto.
@@ -102,9 +95,4 @@ export function EsqCifras({ n = 3 }: { n?: number; rejilla?: string; alto?: numb
 /** Una tabla con su encabezado (36 px) y N filas parejas (40 px) — la forma de "Viajes recientes", "Esperan tu revisión" y "Últimos cierres". */
 export function EsqTabla({ filas = 6 }: { filas?: number; titulo?: boolean }) {
   return <EsqTablaV2 filas={filas} />;
-}
-
-/** El cuerpo de una gráfica dentro de su tarjeta — una sola mancha alta. */
-export function EsqGrafica({ alto = 200, className = '' }: { alto?: number; className?: string }) {
-  return <EsqTarjetaV2 alto={escalon(alto + 40)} className={className} />;
 }

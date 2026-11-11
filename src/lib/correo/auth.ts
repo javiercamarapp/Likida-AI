@@ -37,6 +37,7 @@
 //     redactar aquí no llegaría con la plantilla fea — no llegaría.
 // ═══════════════════════════════════════════════════════════════════════════
 import type { Correo } from './plantilla';
+import { trCorreo, marcoIdioma } from './tr';
 
 /**
  * Las acciones que Supabase Auth manda por correo (`email_action_type`).
@@ -100,11 +101,12 @@ export function minutosDeCaducidad(): number {
 
 /** "60 minutos", "1 hora", "24 horas" — el mismo dato, dicho como lo diría una
  *  persona. Un "caduca en 1440 minutos" se lee como error de programación. */
-export function caducidadEnPalabras(minutos: number): string {
-  if (minutos < 60) return `${minutos} minutos`;
+export function caducidadEnPalabras(minutos: number, idioma?: unknown): string {
+  const { t } = trCorreo(idioma);
+  if (minutos < 60) return t('au.minutos', { n: minutos });
   const horas = minutos / 60;
-  if (!Number.isInteger(horas)) return `${minutos} minutos`;
-  return horas === 1 ? '1 hora' : `${horas} horas`;
+  if (!Number.isInteger(horas)) return t('au.minutos', { n: minutos });
+  return horas === 1 ? t('au.hora') : t('au.horas', { n: horas });
 }
 
 /**
@@ -179,15 +181,12 @@ export interface DatosCorreoAuth {
   /** El correo NUEVO, en un cambio de dirección. Se muestra para que la
    *  persona vea a dónde se está mudando su cuenta antes de aprobarlo. */
   correoNuevo?: string;
+  /** El idioma del destinatario (`user_metadata.idioma`) si se conoce; si no, español. */
+  idioma?: unknown;
 }
-
-const PORQUE = 'Recibes este correo porque alguien pidió este acceso a Likida con esta dirección.';
 
 /** La línea que hace inofensivo un correo que no pediste. Va en TODOS: es la
  *  única defensa real contra el phishing que imita esta misma plantilla. */
-const NO_FUISTE_TU =
-  'Si no fuiste tú, ignora este correo: sin abrir el enlace nadie entra. Likida jamás te va a pedir este enlace ni un código por WhatsApp, por teléfono ni por correo.';
-
 /**
  * Redacta el correo de una acción de Auth.
  *
@@ -196,11 +195,15 @@ const NO_FUISTE_TU =
  * viviendo en un solo lugar.
  */
 export function correoDeAuth(d: DatosCorreoAuth): Correo {
-  const dura = caducidadEnPalabras(d.minutos);
-  const base: Pick<Correo, 'porQueLoRecibes' | 'nota' | 'enlaceLiteral'> = {
-    porQueLoRecibes: PORQUE,
-    nota: NO_FUISTE_TU,
+  const tr = trCorreo(d.idioma);
+  const { t } = tr;
+  const dura = caducidadEnPalabras(d.minutos, d.idioma);
+  const v = { dura };
+  const base: Pick<Correo, 'porQueLoRecibes' | 'nota' | 'enlaceLiteral' | 'idioma'> = {
+    porQueLoRecibes: t('au.porque'),
+    nota: t('au.nofuiste'),
     enlaceLiteral: true,
+    ...marcoIdioma(tr),
   };
 
   switch (d.accion) {
@@ -208,91 +211,72 @@ export function correoDeAuth(d: DatosCorreoAuth): Correo {
     case 'login':
       return {
         ...base,
-        asunto: 'Tu acceso a Likida',
-        avance: `Entra sin contraseña. El enlace sirve una vez y caduca en ${dura}.`,
-        titulo: 'Entra a Likida',
-        parrafos: [
-          'Likida no usa contraseña: este enlace es la llave. Ábrelo desde el mismo dispositivo donde quieres trabajar.',
-          `Sirve UNA sola vez y caduca en ${dura}. Si se te pasa, pide otro desde la pantalla de inicio de sesión.`,
-        ],
-        boton: { texto: 'Entrar a Likida', href: d.liga },
+        asunto: t('au.login.asunto'),
+        avance: t('au.login.avance', v),
+        titulo: t('au.login.titulo'),
+        parrafos: [t('au.login.p1'), t('au.login.p2', v)],
+        boton: { texto: t('au.login.boton'), href: d.liga },
       };
 
     case 'signup':
       return {
         ...base,
-        asunto: 'Confirma tu correo — Likida',
-        avance: `Un clic para confirmar tu dirección. Caduca en ${dura}.`,
-        titulo: 'Confirma tu correo',
-        parrafos: [
-          'Falta un paso para dejar lista tu cuenta: confirmar que esta dirección es tuya.',
-          `El enlace sirve una sola vez y caduca en ${dura}.`,
-        ],
-        boton: { texto: 'Confirmar mi correo', href: d.liga },
+        asunto: t('au.signup.asunto'),
+        avance: t('au.signup.avance', v),
+        titulo: t('au.signup.titulo'),
+        parrafos: [t('au.signup.p1'), t('au.signup.p2', v)],
+        boton: { texto: t('au.signup.boton'), href: d.liga },
       };
 
     case 'invite':
       return {
         ...base,
-        asunto: 'Te dieron acceso a Likida',
-        avance: `Tu cuenta ya existe. Entra con este enlace — caduca en ${dura}.`,
-        titulo: 'Ya tienes acceso a Likida',
-        parrafos: [
-          'Alguien de tu empresa te dio de alta en Likida, donde se liquidan los viajes de la flota. Tu cuenta ya existe: solo falta que entres la primera vez.',
-          `El enlace sirve una sola vez y caduca en ${dura}.`,
-        ],
-        boton: { texto: 'Entrar por primera vez', href: d.liga },
-        porQueLoRecibes: 'Recibes este correo porque te dieron de alta como usuario de Likida.',
+        asunto: t('au.invite.asunto'),
+        avance: t('au.invite.avance', v),
+        titulo: t('au.invite.titulo'),
+        parrafos: [t('au.invite.p1'), t('au.invite.p2', v)],
+        boton: { texto: t('au.invite.boton'), href: d.liga },
+        porQueLoRecibes: t('au.invite.porque'),
       };
 
     case 'recovery':
       return {
         ...base,
-        asunto: 'Recupera tu acceso a Likida',
-        avance: `Vuelve a entrar con este enlace. Caduca en ${dura}.`,
-        titulo: 'Recupera tu acceso',
-        parrafos: [
-          'Pediste volver a entrar a Likida. Este enlace abre tu sesión directo, sin contraseña.',
-          `Sirve una sola vez y caduca en ${dura}.`,
-        ],
-        boton: { texto: 'Recuperar mi acceso', href: d.liga },
+        asunto: t('au.recovery.asunto'),
+        avance: t('au.recovery.avance', v),
+        titulo: t('au.recovery.titulo'),
+        parrafos: [t('au.recovery.p1'), t('au.recovery.p2', v)],
+        boton: { texto: t('au.recovery.boton'), href: d.liga },
       };
 
     case 'email_change':
     case 'email_change_current':
     case 'email_change_new': {
-      const destino = d.correoNuevo
-        ? `Tu cuenta de Likida quedaría a nombre de ${d.correoNuevo}.`
-        : 'Tu cuenta de Likida quedaría a nombre de la dirección nueva.';
+      const destino = d.correoNuevo ? t('au.cambio.destino', { correo: d.correoNuevo }) : t('au.cambio.destino_nueva');
       return {
         ...base,
-        asunto: 'Confirma el cambio de tu correo — Likida',
-        avance: `Aprueba el cambio de dirección. Caduca en ${dura}.`,
-        titulo: 'Confirma el cambio de correo',
-        parrafos: [
-          `Se pidió cambiar la dirección de correo de tu cuenta. ${destino}`,
-          `Confirma solo si fuiste tú: a partir de ahí, los accesos y los avisos llegan a la dirección nueva. El enlace caduca en ${dura}.`,
-        ],
-        boton: { texto: 'Confirmar el cambio', href: d.liga },
+        asunto: t('au.cambio.asunto'),
+        avance: t('au.cambio.avance', v),
+        titulo: t('au.cambio.titulo'),
+        parrafos: [t('au.cambio.p1', { destino }), t('au.cambio.p2', v)],
+        boton: { texto: t('au.cambio.boton'), href: d.liga },
         tono: 'atencion',
-        nota: 'Si no pediste este cambio, NO abras el enlace y escríbenos: alguien con acceso a tu sesión está intentando mudar tu cuenta.',
+        nota: t('au.cambio.nota'),
       };
     }
 
     case 'reauthentication':
       return {
+        ...marcoIdioma(tr),
+        porQueLoRecibes: t('au.porque'),
         // Sin liga: Supabase no manda una para esta acción, y por eso es el
         // único correo donde el código ES el mecanismo y no un adorno.
-        asunto: 'Tu código de confirmación — Likida',
-        avance: 'Confirma que eres tú con este código de un solo uso.',
-        titulo: 'Confirma que eres tú',
-        parrafos: [
-          'Estás por hacer un cambio sensible en tu cuenta. Teclea este código en la pantalla que lo está pidiendo.',
-          `Sirve una sola vez y caduca en ${dura}.`,
-        ],
+        asunto: t('au.reauth.asunto'),
+        avance: t('au.reauth.avance'),
+        titulo: t('au.reauth.titulo'),
+        parrafos: [t('au.reauth.p1'), t('au.reauth.p2', v)],
         codigo: d.codigo,
-        nota: 'Si no estabas haciendo ningún cambio, no teclees el código en ningún lado y avísanos: alguien más está dentro de tu sesión.',
-        porQueLoRecibes: PORQUE,
+        nota: t('au.reauth.nota'),
       };
   }
 }
@@ -328,101 +312,96 @@ export type AvisoAuth =
   | 'identity_linked'
   | 'identity_unlinked';
 
-/** Qué hacer si el cambio no fue tuyo. Sin dirección de soporte inventada:
- *  Likida no tiene una hoy, y mandar a un buzón que nadie lee es peor que
- *  mandar a la persona que sí puede quitar el acceso. */
-const NO_FUISTE_TU_AVISO =
-  'Si no fuiste tú, alguien más está dentro de tu cuenta: entra a Likida, quítale el acceso a ese método y avísale de inmediato a quien administra la cuenta de tu empresa.';
-
-const PORQUE_AVISO =
-  'Recibes este correo porque cambió algo en el acceso a tu cuenta de Likida. Estos avisos no se pueden desactivar: son la única señal de que alguien tocó tu entrada.';
-
 /**
- * Redacta un aviso de seguridad de Auth.
+ * Redacta un aviso de seguridad de Auth. «Qué hacer si el cambio no fue tuyo» no lleva dirección de soporte inventada:
+ * Likida no tiene una hoy, y mandar a un buzón que nadie lee es peor que mandar a la persona que sí puede quitar el acceso.
  *
  * Los valores llevan las variables Go de Supabase tal cual (`{{ .Provider }}`)
  * porque estas plantillas las rellena SU motor, no el nuestro. Pasan intactas
  * por `esc()` —no traen `<`, `&` ni comillas—, así que no hace falta ningún
- * sentinela como en las plantillas con liga.
+ * sentinela como en las plantillas con liga. El idioma es el del destinatario si se conoce.
  */
-export function correoDeAvisoAuth(tipo: AvisoAuth): Correo {
-  const base = { porQueLoRecibes: PORQUE_AVISO, nota: NO_FUISTE_TU_AVISO };
+export function correoDeAvisoAuth(tipo: AvisoAuth, idioma?: unknown): Correo {
+  const tr = trCorreo(idioma);
+  const { t } = tr;
+  const base = { porQueLoRecibes: t('as.porque'), nota: t('as.nofuiste'), ...marcoIdioma(tr) };
+  const antes = t('as.dato.antes');
+  const ahora = t('as.dato.ahora');
+  const metodo = t('as.dato.metodo');
+  const cuenta = t('as.dato.cuenta');
 
   switch (tipo) {
     case 'email_changed':
       return {
         ...base,
-        asunto: 'Cambió el correo de tu cuenta — Likida',
-        avance: 'Los accesos y los avisos ahora llegan a la dirección nueva.',
-        titulo: 'Cambió el correo de tu cuenta',
-        parrafos: ['La dirección de tu cuenta de Likida se cambió. A partir de ahora, los enlaces de acceso y los avisos llegan a la nueva.'],
-        datos: [['Antes', '{{ .OldEmail }}'], ['Ahora', '{{ .Email }}']],
+        asunto: t('as.email.asunto'),
+        avance: t('as.email.avance'),
+        titulo: t('as.email.titulo'),
+        parrafos: [t('as.email.p1')],
+        datos: [[antes, '{{ .OldEmail }}'], [ahora, '{{ .Email }}']],
         tono: 'atencion',
       };
 
     case 'password_changed':
       return {
         ...base,
-        asunto: 'Se puso una contraseña en tu cuenta — Likida',
-        avance: 'Likida entra por enlace, sin contraseña. Esto no debería pasar.',
-        titulo: 'Se registró una contraseña en tu cuenta',
-        parrafos: [
-          'Likida no usa contraseña: se entra con el enlace de acceso que llega a tu correo.',
-          'Que este aviso exista significa que alguien le puso una contraseña a tu cuenta. Revísalo.',
-        ],
+        asunto: t('as.pwd.asunto'),
+        avance: t('as.pwd.avance'),
+        titulo: t('as.pwd.titulo'),
+        parrafos: [t('as.pwd.p1'), t('as.pwd.p2')],
         tono: 'urgente',
       };
 
     case 'phone_changed':
       return {
         ...base,
-        asunto: 'Cambió el teléfono de tu cuenta — Likida',
-        avance: 'El teléfono ligado a tu cuenta ya no es el mismo.',
-        titulo: 'Cambió el teléfono de tu cuenta',
-        parrafos: ['El número ligado a tu cuenta de Likida se cambió.'],
-        datos: [['Antes', '{{ .OldPhone }}'], ['Ahora', '{{ .Phone }}']],
+        asunto: t('as.tel.asunto'),
+        avance: t('as.tel.avance'),
+        titulo: t('as.tel.titulo'),
+        parrafos: [t('as.tel.p1')],
+        datos: [[antes, '{{ .OldPhone }}'], [ahora, '{{ .Phone }}']],
         tono: 'atencion',
       };
 
     case 'mfa_enrolled':
       return {
         ...base,
-        asunto: 'Agregaste un segundo factor — Likida',
-        avance: 'Tu cuenta ahora pide un paso más para entrar.',
-        titulo: 'Se agregó un segundo factor a tu cuenta',
-        parrafos: ['A partir de ahora, entrar a Likida pide este paso extra además del enlace de acceso.'],
-        datos: [['Método', '{{ .FactorType }}']],
+        asunto: t('as.mfa_alta.asunto'),
+        avance: t('as.mfa_alta.avance'),
+        titulo: t('as.mfa_alta.titulo'),
+        parrafos: [t('as.mfa_alta.p1')],
+        datos: [[metodo, '{{ .FactorType }}']],
       };
 
     case 'mfa_unenrolled':
       return {
         ...base,
-        asunto: 'Se quitó un segundo factor — Likida',
-        avance: 'Tu cuenta quedó con un candado menos.',
-        titulo: 'Se quitó un segundo factor de tu cuenta',
-        parrafos: ['Tu cuenta de Likida quedó con un candado menos: ya no pide este paso extra para entrar.'],
-        datos: [['Método', '{{ .FactorType }}']],
+        asunto: t('as.mfa_baja.asunto'),
+        avance: t('as.mfa_baja.avance'),
+        titulo: t('as.mfa_baja.titulo'),
+        parrafos: [t('as.mfa_baja.p1')],
+        datos: [[metodo, '{{ .FactorType }}']],
         tono: 'atencion',
       };
 
     case 'identity_linked':
       return {
         ...base,
-        asunto: 'Nueva forma de entrar a tu cuenta — Likida',
-        avance: 'Se ligó un método de acceso a tu cuenta.',
-        titulo: 'Se ligó una nueva forma de entrar',
-        parrafos: ['Ahora también se puede entrar a tu cuenta de Likida con este método.'],
-        datos: [['Método', '{{ .Provider }}'], ['Cuenta', '{{ .Email }}']],
+        asunto: t('as.id_alta.asunto'),
+        avance: t('as.id_alta.avance'),
+        titulo: t('as.id_alta.titulo'),
+        parrafos: [t('as.id_alta.p1')],
+        datos: [[metodo, '{{ .Provider }}'], [cuenta, '{{ .Email }}']],
       };
 
     case 'identity_unlinked':
       return {
         ...base,
-        asunto: 'Se quitó una forma de entrar — Likida',
-        avance: 'Ese método ya no sirve para entrar a tu cuenta.',
-        titulo: 'Se quitó una forma de entrar',
-        parrafos: ['Ese método ya no sirve para entrar a tu cuenta de Likida.'],
-        datos: [['Método', '{{ .Provider }}'], ['Cuenta', '{{ .Email }}']],
+        asunto: t('as.id_baja.asunto'),
+        avance: t('as.id_baja.avance'),
+        titulo: t('as.id_baja.titulo'),
+        parrafos: [t('as.id_baja.p1')],
+        datos: [[metodo, '{{ .Provider }}'], [cuenta, '{{ .Email }}']],
         tono: 'atencion',
       };
   }

@@ -1,8 +1,7 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ShieldAlert } from 'lucide-react';
-import { EstadoError } from '../ui/kit';
-import { Disclosure, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { Cifra, TiraCifras } from '../../ui-v2/graficas';
 import {
   getEventosSeguridad, resumenEventosSeguridad,
@@ -10,6 +9,10 @@ import {
 } from '@/lib/seguridad/eventos';
 import { coberturaEventosSeguridad, type CoberturaFuente } from '@/lib/seguridad/cobertura';
 import { fechaHoraMx, numero } from '@/lib/formato';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export const dynamic = 'force-dynamic';
 
@@ -34,23 +37,23 @@ export const dynamic = 'force-dynamic';
 
 const LIMITE_LISTA = 50;
 
-const PILL_SEVERIDAD: Record<string, { tono: TonoEstado; etiqueta: string }> = {
-  alta: { tono: 'bad', etiqueta: 'Alta' },
-  media: { tono: 'warn', etiqueta: 'Media' },
-  info: { tono: 'neutral', etiqueta: 'Info' },
-};
+const pillSeveridad = (t: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoEstado; etiqueta: string }> => ({
+  alta: { tono: 'bad', etiqueta: t('trust_safety.alta') },
+  media: { tono: 'warn', etiqueta: t('trust_safety.media') },
+  info: { tono: 'neutral', etiqueta: t('trust_safety.info') },
+});
 
-const COLUMNAS_EVENTOS: ColumnaBase<FilaSeguridad>[] = [
-  { id: 'cuando', titulo: 'Cuándo', celda: (e) => <span className="whitespace-nowrap">{fechaHoraMx(e.creadoEn)}</span> },
+const columnasEventos = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<FilaSeguridad>[] => ([
+  { id: 'cuando', titulo: t('trust_safety.cuando'), celda: (e) => <span className="whitespace-nowrap">{fechaHoraMx(e.creadoEn, idioma)}</span> },
   {
-    id: 'que', titulo: 'Qué y de dónde', principal: true,
+    id: 'que', titulo: t('trust_safety.que_y_de_donde'), principal: true,
     celda: (e) => (
       <>
         <span className="block font-medium">
           {e.tipo.replace(/_/g, ' ')}
           {/* 0681: una ráfaga de la misma señal es UNA fila con su conteo — el número es lo medido, no una estimación. */}
           {(e.repeticiones ?? 1) > 1 && (
-            <span className="ml-1.5 cifra-mono text-xs text-muted" title="Veces que se vio la misma señal en su ventana">×{e.repeticiones}</span>
+            <span className="ml-1.5 cifra-mono text-xs text-muted" title={t('trust_safety.veces_que_se_vio_la_misma')}>×{e.repeticiones}</span>
           )}
         </span>
         <span className="block text-xs text-muted">{e.origen}</span>
@@ -58,44 +61,45 @@ const COLUMNAS_EVENTOS: ColumnaBase<FilaSeguridad>[] = [
     ),
   },
   {
-    id: 'severidad', titulo: 'Severidad',
+    id: 'severidad', titulo: t('trust_safety.severidad'),
     celda: (e) => {
-      const pill = PILL_SEVERIDAD[e.severidad] ?? { tono: 'neutral' as TonoEstado, etiqueta: e.severidad };
+      const pill = pillSeveridad(t)[e.severidad] ?? { tono: 'neutral' as TonoEstado, etiqueta: e.severidad };
       return <StatusChip tono={pill.tono}>{pill.etiqueta}</StatusChip>;
     },
   },
   {
     // El actor viene ya truncado a 120 y JAMÁS trae un secreto completo (contrato de registrarEventoSeguridad). Sin actor no se inventa.
-    id: 'actor', titulo: 'Actor', celda: (e) => <span className="text-xs text-muted">{e.actor ?? '—'}</span>,
+    id: 'actor', titulo: t('trust_safety.actor'), celda: (e) => <span className="text-xs text-muted">{e.actor ?? '—'}</span>,
   },
-  { id: 'flota', titulo: 'Flota', celda: (e) => <span className="cifra-mono text-xs text-muted">{e.tenantId ? e.tenantId.slice(0, 8) : 'sin flota'}</span> },
-];
+  { id: 'flota', titulo: t('observabilidad.flota'), celda: (e) => <span className="cifra-mono text-xs text-muted">{e.tenantId ? e.tenantId.slice(0, 8) : t('trust_safety.sin_flota')}</span> },
+]);
 
-const COLUMNAS_COBERTURA: ColumnaBase<CoberturaFuente>[] = [
-  { id: 'fuente', titulo: 'Fuente', principal: true, celda: (f) => f.titulo },
-  { id: 'estado', titulo: 'Estado', celda: (f) => <StatusChip tono={f.emite ? 'ok' : 'warn'}>{f.emite ? 'Emite' : 'Pendiente'}</StatusChip> },
+const columnasCobertura = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<CoberturaFuente>[] => ([
+  { id: 'fuente', titulo: t('trust_safety.fuente'), principal: true, celda: (f) => f.titulo },
+  { id: 'estado', titulo: t('salud_sistema.estado'), celda: (f) => <StatusChip tono={f.emite ? 'ok' : 'warn'}>{f.emite ? t('trust_safety.emite') : t('trust_safety.pendiente')}</StatusChip> },
   {
-    id: 'filas', titulo: 'Filas · 30 días',
+    id: 'filas', titulo: t('trust_safety.filas_30_dias'),
     celda: (f) => {
-      const medida = f.filas30d === null ? 'sin evento' : f.emite && f.filas30d === 0 ? '0 en 30 días' : numero(f.filas30d);
+      const medida = f.filas30d === null ? t('trust_safety.sin_evento') : f.emite && f.filas30d === 0 ? t('trust_safety.0_en_30_dias') : numero(f.filas30d, idioma);
       return <span className={`tabular whitespace-nowrap ${f.emite && f.filas30d === 0 ? 'text-muted' : ''}`}>{medida}</span>;
     },
   },
   {
-    id: 'detalle', titulo: 'Detalle',
+    id: 'detalle', titulo: t('trust_safety.detalle'),
     celda: (f) => (
       <>
         {/* Las rutas de código no son para el superadmin: quedan plegadas. A la vista, solo lo accionable en español llano. */}
-        <span className="text-xs text-muted">{f.emite ? 'Registra eventos aquí.' : 'Todavía no escribe aquí.'}</span>
-        <Disclosure titulo="Detalle técnico" variante="linea">
+        <span className="text-xs text-muted">{f.emite ? t('trust_safety.registra_eventos_aqui') : t('trust_safety.todavia_no_escribe_aqui')}</span>
+        <Disclosure titulo={t('trust_safety.detalle_tecnico')} variante="linea">
           <p className="m-0 break-words text-xs text-muted">{f.donde}</p>
         </Disclosure>
       </>
     ),
   },
-];
+]);
 
 export default async function TrustSafetyPage() {
+  const { t, idioma } = await getT('admin_sistema');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   // Las dos lecturas caen POR SEPARADO: que los conteos fallen no debe
@@ -107,95 +111,71 @@ export default async function TrustSafetyPage() {
   ]);
 
   return (
-    <MarcoPagina titulo="Trust & Safety">
+    <MarcoPagina titulo={t('trust_safety.trust_safety')}>
       {/* ── Los conteos, medidos en la base ── */}
       {resumen === null ? (
-        <EstadoError mensaje="No se pudieron leer los conteos de eventos de seguridad — la base no contestó. Esto NO significa que haya cero eventos: significa que ahora mismo no se sabe." />
+        <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_conteos')}</EstadoError>
       ) : (
-        <TiraCifras etiqueta="Últimos 30 días, por severidad">
-          <Cifra etiqueta="Severidad alta · 30 días" valor={resumen.d30.alta} tono={resumen.d30.alta > 0 ? 'bad' : undefined} />
-          <Cifra etiqueta="Severidad media · 30 días" valor={resumen.d30.media} tono={resumen.d30.media > 0 ? 'warn' : undefined} />
-          <Cifra etiqueta="Informativos · 30 días" valor={resumen.d30.info} />
-          <Cifra etiqueta="Total histórico" valor={resumen.total} />
+        <TiraCifras etiqueta={t('trust_safety.ultimos_30_dias_por_severidad')}>
+          <Cifra etiqueta={t('trust_safety.severidad_alta_30_dias')} valor={resumen.d30.alta} tono={resumen.d30.alta > 0 ? 'bad' : undefined} />
+          <Cifra etiqueta={t('trust_safety.severidad_media_30_dias')} valor={resumen.d30.media} tono={resumen.d30.media > 0 ? 'warn' : undefined} />
+          <Cifra etiqueta={t('trust_safety.informativos_30_dias')} valor={resumen.d30.info} />
+          <Cifra etiqueta={t('trust_safety.total_historico')} valor={resumen.total} />
         </TiraCifras>
       )}
 
       {/* ── La cobertura REAL, medida ── */}
-      <Tarjeta titulo="Cobertura: qué fuentes escriben aquí y cuáles están pendientes">
+      <Tarjeta titulo={t('trust_safety.cobertura_que_fuentes_escriben_aqui_y')}>
         {cobertura === null ? (
-          <p className="m-0 text-sm text-muted">
-            No se pudo medir la cobertura — la base no contestó. Eso no significa que haya cobertura completa ni vacía: significa que ahora mismo no se sabe.
-          </p>
+          <p className="m-0 text-sm text-muted">{t('trust_safety.no_se_pudo_medir_la_cobertura')}</p>
         ) : (
           <>
-            <p className="m-0 mb-3 text-xs text-muted">
-              {cobertura.filter((f) => f.emite).length} de {cobertura.length} fuentes emiten. Las demás están pendientes: hoy no escriben nada aquí.
-              Las filas son señales ya agrupadas (una ráfaga de la misma señal es una fila con su conteo), no intentos. Los exportes de dinero se anotan al
-              autorizar la descarga, no al terminar. Una fuente que emite y marca «0 en 30 días» es silencio real o una
-              fuente rota: no se distingue.
-            </p>
-            <TablaBase etiqueta="Cobertura por fuente de seguridad" columnas={COLUMNAS_COBERTURA} filas={cobertura} idFila={(f) => f.id} altoMaximo={false} />
+            <p className="m-0 mb-3 text-xs text-muted">{t('trust_safety.de_fuentes_emiten_las_demas_estan', { length: cobertura.filter((f) => f.emite).length, length2: cobertura.length })}</p>
+            <TablaBase etiqueta={t('trust_safety.cobertura_por_fuente_de_seguridad')} columnas={columnasCobertura(t, idioma)} filas={cobertura} idFila={(f) => f.id} altoMaximo={false} />
           </>
         )}
       </Tarjeta>
 
       {/* ── La lista ── */}
-      <Tarjeta titulo="Eventos registrados">
+      <Tarjeta titulo={t('trust_safety.eventos_registrados')}>
         {eventos === null ? (
-          <p className="m-0 text-sm text-muted">
-            No se pudieron leer los eventos — que no es lo mismo que «no hay eventos».
-          </p>
+          <p className="m-0 text-sm text-muted">{t('trust_safety.no_se_pudieron_leer_los_eventos')}</p>
         ) : eventos.length === 0 ? (
-          <EstadoVacio titulo="Sin eventos" icono={ShieldAlert} contenido>
-            Ningún evento registrado. Eso NO prueba que no haya pasado nada: solo cubre lo que las
-            fuentes de la sección de cobertura emiten; las pendientes no escriben nada. Una fuente que emite y marca
-            cero puede ser silencio real o una fuente rota; este panel no las distingue.
-          </EstadoVacio>
+          <EstadoVacio titulo={t('trust_safety.sin_eventos')} icono={ShieldAlert} contenido>{t('trust_safety.ningun_evento_registrado_eso_no_prueba')}</EstadoVacio>
         ) : (
           <>
-            <TablaBase etiqueta="Eventos de seguridad registrados" columnas={COLUMNAS_EVENTOS} filas={eventos} idFila={(e) => String(e.id)} altoMaximo={false} />
+            <TablaBase etiqueta={t('trust_safety.eventos_de_seguridad_registrados')} columnas={columnasEventos(t, idioma)} filas={eventos} idFila={(e) => String(e.id)} altoMaximo={false} />
             <p className="m-0 mt-3 text-xs text-muted">
               {resumen === null
-                ? `Mostrando los últimos ${numero(eventos.length)} — el total histórico no se pudo contar ahora mismo.`
-                : `Mostrando ${numero(eventos.length)} de ${numero(resumen.total)} eventos históricos, del más reciente al más viejo.`}
+                ? t('trust_safety.mostrando_los_ultimos_el_total_historico', { numero: numero(eventos.length, idioma) })
+                : t('trust_safety.mostrando_de_eventos_historicos_del_mas', { numero: numero(eventos.length, idioma), numero2: numero(resumen.total, idioma) })}
             </p>
           </>
         )}
       </Tarjeta>
 
       {/* ── Lo que este panel NO afirma — la lista de pendientes sale de la MISMA cobertura medida, no de texto fijo ── */}
-      <Tarjeta titulo="Qué se registra y qué está pendiente">
-        <p className="m-0 text-xs text-muted">
-          «Emite» significa solo que existe código que escribe esa señal en <code className="font-mono">evento_seguridad</code>
-          (una prueba lo ata al árbol de código); no significa que la detección sea completa ni que haya sido probada
-          contra un ataque real. Este panel no es un sistema de detección de intrusiones y no afirma seguridad que no se midió.
-        </p>
+      <Tarjeta titulo={t('trust_safety.que_se_registra_y_que_esta')}>
+        <p className="m-0 text-xs text-muted">{rico(t('trust_safety.emite_significa_solo_que_existe_codigo'), { e0: (c) => <code className="font-mono">{c}</code> })}</p>
         {cobertura === null ? (
-          <p className="m-0 mt-2 text-xs text-muted">
-            Sin la medición de cobertura no se puede listar qué está pendiente ahora mismo.
-          </p>
+          <p className="m-0 mt-2 text-xs text-muted">{t('trust_safety.sin_la_medicion_de_cobertura_no')}</p>
         ) : cobertura.filter((f) => !f.emite).length === 0 ? (
-          <p className="m-0 mt-2 text-xs text-muted">
-            Todas las fuentes declaradas emiten. Eso no cubre lo que nadie ha declarado: lo no listado arriba no está medido.
-          </p>
+          <p className="m-0 mt-2 text-xs text-muted">{t('trust_safety.todas_las_fuentes_declaradas_emiten_eso')}</p>
         ) : (
           <>
-            <p className="m-0 mt-2 text-xs text-muted">Pendiente, hoy no se registra:</p>
+            <p className="m-0 mt-2 text-xs text-muted">{t('trust_safety.pendiente_hoy_no_se_registra')}</p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs text-muted">
               {cobertura.filter((f) => !f.emite).map((f) => <li key={f.id}>{f.titulo}</li>)}
             </ul>
           </>
         )}
-        <p className="m-0 mt-2 text-xs text-muted">
-          Tampoco hay un pipeline dedicado de detección de jailbreaks ni de fugas de datos personales. La mitigación
-          anti-inyección del Agente de Cuadre vive en su prompt (<code className="font-mono">src/lib/agents/prompts.ts</code>) y
-          en la guardia determinista de cifras (<code className="font-mono">src/lib/likida/cuadre/guardia.ts</code>): eso es
-          mitigación, no detección. Los avisos por correo de severidad alta se envían solo si está encendida la variable{' '}
-          <code className="font-mono">SEGURIDAD_AVISOS</code>; viene apagada por omisión y este panel no mide si lo está en producción.
-        </p>
+        <p className="m-0 mt-2 text-xs text-muted">{rico(t('trust_safety.tampoco_hay_un_pipeline_dedicado_de'), { e0: (c) => <code className="font-mono">{c}</code>, e1: (c) => <code className="font-mono">{c}</code>, e2: (c) => <code className="font-mono">{c}</code> })}</p>
       </Tarjeta>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Trust & Safety' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('trust_safety.trust_safety') };
+}

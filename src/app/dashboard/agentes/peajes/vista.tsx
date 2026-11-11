@@ -118,7 +118,7 @@ export function VistaAgentePeajes({
       )}
 
       {/* ── T-A2-27: la revisión de cobros, arriba del detalle ── */}
-      <RevisionCobros estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
+      <RevisionCobros tr={tr} estado={revisionCobros ?? { tipo: 'sin_archivo' }} />
 
       {/* ── La ingesta: el ritual del PoC (CFDI consolidado: stand-by con perfil) ── */}
       {superficie.cfdiYTickets && (<>

@@ -1,0 +1,14 @@
+/* Mapa de actividad (push por día): cuadros de 11 px con 5 niveles de intensidad, sin estilos en línea. */
+.rv-act__rejilla { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 4px; }
+.rv-act__semana { display: flex; flex-direction: column; gap: 3px; }
+.rv-act__dia { position: relative; width: 11px; height: 11px; border-radius: 3px; cursor: pointer; background: color-mix(in srgb, var(--muted) 14%, transparent); transition: transform 120ms ease; }
+.rv-act__dia[data-nivel="1"] { background: color-mix(in srgb, var(--marca) 30%, transparent); }
+.rv-act__dia[data-nivel="2"] { background: color-mix(in srgb, var(--marca) 52%, transparent); }
+.rv-act__dia[data-nivel="3"] { background: color-mix(in srgb, var(--marca) 76%, transparent); }
+.rv-act__dia[data-nivel="4"] { background: var(--marca); }
+.rv-act__dia:hover { transform: scale(1.25); }
+.rv-act__dia[data-activo] { outline: 1.5px solid var(--marca); outline-offset: 1px; }
+.rv-act__dia:has(:focus-visible) { outline: 2px solid var(--ui-focus); outline-offset: 1px; }
+.rv-act__lectura { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.rv-act__lectura b { color: var(--ink); }
+@media (prefers-reduced-motion: reduce) { .rv-act__dia { transition: none; } .rv-act__dia:hover { transform: none; } }

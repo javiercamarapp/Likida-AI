@@ -10,6 +10,8 @@ import './usuarios.css';
 // no importa `supabaseAdmin`, pero importa `errores.ts` → `logger`, y un
 // import de valor ataría este bundle a lo que ese árbol importe mañana.
 import type { OpcionRol } from '@/lib/auth/invitar';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 export type ResultadoForma = { ok: true; mensaje: string } | { ok: false; error: string } | null;
 export type AccionForma = (previo: ResultadoForma, fd: FormData) => Promise<ResultadoForma>;
@@ -39,17 +41,18 @@ export function FormaInvitar({ accion, roles }: {
   accion: AccionForma;
   roles: ReadonlyArray<OpcionRol>;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
 
   return (
     <form action={despachar} className="rv-usu__forma">
       <div className="rv-usu__rejilla">
-        <CampoTexto etiqueta="Correo" id="inv-email" name="email" tipo="email" required maxLength={160}
+        <CampoTexto etiqueta={t('cfg.correo')} id="inv-email" name="email" tipo="email" required maxLength={160}
           placeholder="contralor@tuflota.mx"
-          ayuda="Es su llave de entrada: en el panel teclea este correo y le llega un enlace mágico — no hay contraseña que inventarle." />
+          ayuda={t('cfg.es_su_llave_de_entrada_en')} />
 
-        <CampoTexto etiqueta="Nombre (opcional)" id="inv-nombre" name="nombre" maxLength={120}
-          placeholder="Como quieres verlo en la lista" />
+        <CampoTexto etiqueta={t('cfg.nombre_opcional')} id="inv-nombre" name="nombre" maxLength={120}
+          placeholder={t('cfg.como_quieres_verlo_en_la_lista')} />
 
         <div>
           {/* `contador` primero y por default: es el caso por el que existe
@@ -72,9 +75,9 @@ export function FormaInvitar({ accion, roles }: {
           </div>
         </div>
 
-        <CampoTexto etiqueta="WhatsApp (opcional)" id="inv-telefono" name="telefono" maxLength={20}
-          placeholder="10 dígitos" inputMode="tel" claseControl="cifra-mono"
-          ayuda="Para que el bot la reconozca cuando escriba por WhatsApp (avisos contestables, despacho por chat). Sin número, el bot no la reconoce." />
+        <CampoTexto etiqueta={t('cfg.whatsapp_opcional')} id="inv-telefono" name="telefono" maxLength={20}
+          placeholder={t('cfg.10_digitos')} inputMode="tel" claseControl="cifra-mono"
+          ayuda={t('cfg.para_que_el_bot_la_reconozca')} />
       </div>
 
       <Aviso estado={estado} />
@@ -107,15 +110,16 @@ export function FormaCambiarRol({ accion, id, rolActual, roles }: {
   rolActual: string;
   roles: ReadonlyArray<OpcionRol>;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-usu__fila-forma">
       <div className="rv-usu__cambiar">
         <input type="hidden" name="id" value={id} />
-        <select name="rol" defaultValue={rolActual} aria-label="Nuevo rol" className="rv-ctl">
+        <select name="rol" defaultValue={rolActual} aria-label={t('cfg.nuevo_rol')} className="rv-ctl">
           {roles.map((r) => <option key={r.valor} value={r.valor}>{r.rotulo}</option>)}
         </select>
-        <BotonChico etiqueta="Cambiar rol" ocupado="Cambiando…" />
+        <BotonChico etiqueta={t('cfg.cambiar_rol')} ocupado={t('cfg.cambiando')} />
       </div>
       <Aviso estado={estado} />
     </form>
@@ -131,14 +135,15 @@ export function FormaDarDeBaja({ accion, id, nombre }: {
   id: string;
   nombre: string;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
       <BotonConfirmar
-        etiqueta="Dar de baja" tono="peligro" etiquetaConfirmar="Sí, dar de baja"
+        etiqueta={t('cfg.dar_de_baja')} tono="peligro" etiquetaConfirmar={t('cfg.si_dar_de_baja')}
         titulo={`Dar de baja a ${nombre}`}
-        descripcion="Deja de entrar al panel en su siguiente clic y su sesión se revoca. No se borra nada: queda en la lista como dada de baja y se puede reactivar."
+        descripcion={t('cfg.deja_de_entrar_al_panel_en')}
         className={clasesBoton('danger', 'sm')}
       />
       <Aviso estado={estado} />
@@ -147,22 +152,24 @@ export function FormaDarDeBaja({ accion, id, nombre }: {
 }
 
 export function FormaReactivar({ accion, id }: { accion: AccionForma; id: string }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
-      <BotonChico etiqueta="Reactivar" ocupado="Reactivando…" />
+      <BotonChico etiqueta={t('cfg.reactivar')} ocupado={t('cfg.reactivando')} />
       <Aviso estado={estado} />
     </form>
   );
 }
 
 export function FormaReenviarAcceso({ accion, id }: { accion: AccionForma; id: string }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
-      <BotonChico etiqueta="Reenviar acceso" ocupado="Enviando…" />
+      <BotonChico etiqueta={t('cfg.reenviar_acceso')} ocupado={t('cfg.enviando')} />
       <Aviso estado={estado} />
     </form>
   );
@@ -176,11 +183,12 @@ export function FormaReenviarAcceso({ accion, id }: { accion: AccionForma; id: s
  * reversible por completo con solo volver a iniciar sesión.
  */
 export function FormaCerrarSesiones({ accion, id }: { accion: AccionForma; id: string }) {
+  const { t } = useT('resto', restoEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <form action={despachar} className="rv-usu__fila-forma">
       <input type="hidden" name="id" value={id} />
-      <BotonChico etiqueta="Cerrar sus sesiones" ocupado="Cerrando…" />
+      <BotonChico etiqueta={t('cfg.cerrar_sus_sesiones')} ocupado={t('cfg.cerrando')} />
       <Aviso estado={estado} />
     </form>
   );

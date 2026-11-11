@@ -242,11 +242,21 @@ export function Modal({ abierto, onCerrar, titulo, descripcion, children, pie, t
 
 /** Coloca un panel `position: fixed` bajo su ancla (o encima si abajo no cabe), dentro del viewport. `lado: 'arriba'` lo prefiere encima
  *  (tooltip) y `alineacion: 'centro'` lo centra sobre el ancla. Es el ÚNICO colocador de overlays anclados (Popover y Tooltip). */
-function colocarPanel(el: HTMLElement, ancla: Element | null, alineacion: 'inicio' | 'fin' | 'centro', lado: 'abajo' | 'arriba' | 'junto' = 'abajo') {
+function colocarPanel(el: HTMLElement, ancla: Element | null, alineacion: 'inicio' | 'fin' | 'centro', lado: 'abajo' | 'arriba' | 'junto' | 'derecha' = 'abajo') {
   const a = ancla?.getBoundingClientRect();
   if (!a) return;
   const p = el.getBoundingClientRect();
   const margen = 8;
+  if (lado === 'derecha') {
+    // Tooltip LATERAL (pie del sidebar): a la derecha del disparador, centrado en vertical, volteado a la izquierda si no cabe. Así no tapa las filas de arriba ni de abajo.
+    const vw = document.documentElement.clientWidth;
+    let x = a.right + 8;
+    if (x + p.width > vw - margen) x = Math.max(margen, a.left - 8 - p.width);
+    const y = Math.min(Math.max(margen, a.top + a.height / 2 - p.height / 2), Math.max(margen, window.innerHeight - p.height - margen));
+    el.style.top = `${Math.round(y * 10) / 10}px`;
+    el.style.left = `${Math.round(x * 10) / 10}px`;
+    return;
+  }
   if (lado === 'junto') {
     // Gráficas (Vexa): a la derecha de la ranura activa, volteado a la izquierda si no cabe, siempre dentro del viewport.
     const c = colocarLado({ ax: a.left + a.width / 2, ay: a.top + p.height / 2 + 2, w: p.width, h: p.height, vw: document.documentElement.clientWidth, vh: window.innerHeight, sep: a.width / 2 + 8, margen });
@@ -386,8 +396,10 @@ export function MenuItem({ children, icono, onSelect, href, peligro = false, des
 // (oculta) para que aria-describedby resuelva; no roba el foco.
 // ═══════════════════════════════════════════════════════════════════════════
 
-export function Tooltip({ texto, children, className }: {
+export function Tooltip({ texto, children, className, lado = 'arriba' }: {
   texto: ReactNode;
+  /** `arriba` (por omisión) o `derecha`: lateral, para filas apiladas donde la burbuja de arriba taparía a la vecina. */
+  lado?: 'arriba' | 'derecha';
   /** Un elemento enfocable (botón, enlace) recibe el aria-describedby; un texto suelto se envuelve en un span enfocable. */
   children: ReactElement<{ 'aria-describedby'?: string }> | string;
   className?: string;
@@ -401,14 +413,14 @@ export function Tooltip({ texto, children, className }: {
   useEffect(() => soltarTemporizador, []);
 
   useLayoutEffect(() => {
-    if (abierto && burbuja.current) colocarPanel(burbuja.current, raiz.current, 'centro', 'arriba');
-  }, [abierto]);
+    if (abierto && burbuja.current) colocarPanel(burbuja.current, raiz.current, 'centro', lado);
+  }, [abierto, lado]);
 
   useEffect(() => {
     if (!abierto) return;
     // Esc en captura: cierra solo la burbuja (un Drawer/Modal debajo se cierra con el siguiente Esc).
     const alTeclear = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setAbierto(false); } };
-    const recolocar = () => { if (burbuja.current) colocarPanel(burbuja.current, raiz.current, 'centro', 'arriba'); };
+    const recolocar = () => { if (burbuja.current) colocarPanel(burbuja.current, raiz.current, 'centro', lado); };
     document.addEventListener('keydown', alTeclear, true);
     window.addEventListener('resize', recolocar);
     window.addEventListener('scroll', recolocar, true);
@@ -417,7 +429,7 @@ export function Tooltip({ texto, children, className }: {
       window.removeEventListener('resize', recolocar);
       window.removeEventListener('scroll', recolocar, true);
     };
-  }, [abierto]);
+  }, [abierto, lado]);
 
   const objetivo = isValidElement(children)
     ? cloneElement(children, { 'aria-describedby': [children.props['aria-describedby'], id].filter(Boolean).join(' ') })

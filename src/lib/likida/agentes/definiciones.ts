@@ -18,7 +18,7 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { acotada } from '../presupuesto';
 import { traerTodo, conteo } from '../pg';
-import { DatoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 
 // ── Parte pura ─────────────────────────────────────────────────────────────
 
@@ -70,21 +70,21 @@ const ID_RE = /^[a-z0-9_]{2,40}$/;
 export function validarDefinicion(d: DefinicionCruda): DefinicionValida {
   const id = d.id.trim().toLowerCase();
   if (!ID_RE.test(id)) {
-    throw new DatoInvalido('El id del agente va en minúsculas, números y guiones bajos (2-40): así se nombra en corridas y bitácoras.');
+    throw datoInvalido('definiciones.el_id_del_agente_va');
   }
   const nombre = d.nombre.trim();
-  if (nombre === '' || nombre.length > 80) throw new DatoInvalido('El nombre del agente es obligatorio (máx. 80).');
+  if (nombre === '' || nombre.length > 80) throw datoInvalido('definiciones.el_nombre_del_agente_es');
   if (!DEPARTAMENTOS.some((x) => x.valor === d.departamento)) {
-    throw new DatoInvalido('Ese departamento no existe en el organigrama.');
+    throw datoInvalido('definiciones.ese_departamento_no_existe_en');
   }
   const disparador = DISPARADORES.includes(d.disparador as Disparador) ? d.disparador as Disparador : null;
-  if (!disparador) throw new DatoInvalido('Ese disparador no existe.');
+  if (!disparador) throw datoInvalido('definiciones.ese_disparador_no_existe');
 
   let presupuesto: number | null = null;
   if (d.presupuestoDiaUsd.trim() !== '') {
     const n = Number(d.presupuestoDiaUsd);
     if (!Number.isFinite(n) || n <= 0) {
-      throw new DatoInvalido('El presupuesto por día es un monto en USD mayor a cero — o vacío para "sin tope declarado".');
+      throw datoInvalido('definiciones.el_presupuesto_por_dia_es');
     }
     presupuesto = Math.round(n * 100) / 100;
   }
@@ -163,7 +163,7 @@ export async function darDeAltaAgente(v: DefinicionValida, actorId: string): Pro
     estado: 'disenado', presupuesto_dia_usd: v.presupuestoDiaUsd, prompt_ref: v.promptRef,
   });
   if (error) {
-    if (error.code === '23505') throw new DatoInvalido(`Ya existe un agente con el id "${v.id}".`);
+    if (error.code === '23505') throw datoInvalido('definiciones.ya_existe_un_agente_con', { id: v.id });
     throw new Error(`darDeAltaAgente: ${error.message}`);
   }
   // La bitácora (0053), best-effort con el criterio de interruptores.ts: el

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resto } from '@/lib/i18n/es/resto';
 
 /**
  * A36-R15-04 / A36-R01-03: tras un corte de conexión el servidor puede haber
@@ -12,8 +13,11 @@ import { describe, expect, it } from 'vitest';
 describe('chat.tsx — mensaje y plazo tras un corte de conexión', () => {
   const src = readFileSync(resolve(process.cwd(), 'src/app/dashboard/onboarding/chat.tsx'), 'utf8');
   it('no afirma «No guardé nada» y pide revisar antes de repetir', () => {
+    // El texto vive en el diccionario es (namespace resto), no en el fuente.
+    const textos = Object.values(resto);
+    expect(textos.some((x) => /No guardé nada/.test(x))).toBe(false);
     expect(src).not.toMatch(/No guardé nada/);
-    expect(src).toMatch(/No pude confirmar si se guardó/);
+    expect(textos.some((x) => /No pude confirmar si se guardó/.test(x))).toBe(true);
   });
   it('el plazo del cliente no es menor que el maxDuration de la ruta (120 s)', () => {
     const m = /AbortSignal\.timeout\(([\d_]+)\)/.exec(src.slice(src.indexOf('fetch(`/api/dashboard/onboarding-chat')));

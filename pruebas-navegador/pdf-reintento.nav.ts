@@ -88,7 +88,7 @@ test.describe('PDF firmado: pendiente → reintento sin segunda firma', () => {
     await page.goto(`/dashboard/${liquidacion}`);
     await page.waitForLoadState('networkidle');
     // El input sr-only queda recortado; la persona activa su etiqueta visible.
-    await page.getByRole('radiogroup', { name: 'Qué hacer con esta liquidación' }).getByText('Ajustar montos', { exact: true }).click();
+    await page.getByRole('group', { name: 'Qué hacer con esta liquidación' }).getByText('Ajustar montos', { exact: true }).click();
     await page.getByRole('textbox', { name: /Monto correcto de/ }).fill('200');
     await page.getByRole('textbox', { name: /Motivo/ }).fill('Corrección sintética para verificar el reintento de PDF');
     await page.getByRole('button', { name: 'Ajustar montos', exact: true }).click();
@@ -106,7 +106,7 @@ test.describe('PDF firmado: pendiente → reintento sin segunda firma', () => {
     expect(pendiente).toEqual({ ...firmado, pdf_url: null });
     await page.reload();
     await page.waitForLoadState('networkidle');
-    await expect(page.getByRole('region', { name: 'PDF pendiente' })).toContainText('El ajuste y la firma están guardados');
+    await expect(page.locator('section').filter({ has: page.getByText('PDF pendiente', { exact: true }) })).toContainText('El ajuste y la firma están guardados');
     await expect(page.getByRole('button', { name: 'Reintentar PDF', exact: true })).toBeVisible();
     await page.screenshot({ path: info.outputPath('pdf-pendiente.png'), fullPage: true });
     const encargado = await browser.newContext({ storageState: ESTADOS.encargado });

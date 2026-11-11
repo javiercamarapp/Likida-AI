@@ -1,5 +1,5 @@
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL TIMBRADO DEL CFDI — lo que convierte un cobro en una operación cerrada.
@@ -69,9 +69,7 @@ function llave(): string {
 function exigirLlaveCoherente(): void {
   const entorno = process.env.VERCEL_ENV ?? process.env.NODE_ENV;
   if (entorno === 'production' && modoFacturapi() === 'prueba') {
-    throw new DatoInvalido(
-      'La llave de Facturapi en producción es de PRUEBA (sk_test). Un CFDI de sandbox no existe para el SAT: se cobró bien, pero no se timbra hasta poner la llave sk_live.',
-    );
+    throw datoInvalido('facturapi.la_llave_de_facturapi_en');
   }
 }
 
@@ -136,7 +134,7 @@ async function pedir<T>(
     // y ese mensaje sí le sirve a quien capturó: se deja pasar tal cual dentro de
     // un DatoInvalido para que la pantalla lo enseñe.
     if (r.status === 400 || r.status === 422) {
-      throw new DatoInvalido(`El SAT o Facturapi rechazaron la factura: ${mensaje}`);
+      throw datoInvalido('facturapi.el_sat_o_facturapi_rechazaron', { mensaje });
     }
     // 5xx y 408: el PAC pudo haber creado el CFDI antes de fallar.
     if (r.status >= 500 || r.status === 408) {
@@ -206,10 +204,10 @@ export async function timbrarMensualidad(datos: {
   const { receptor, subtotal } = datos;
 
   if (!(subtotal > 0)) {
-    throw new DatoInvalido('No se puede timbrar una factura de $0.');
+    throw datoInvalido('facturapi.no_se_puede_timbrar_una');
   }
   if (!receptor.rfc || !receptor.razonSocial || !receptor.regimenFiscal || !receptor.codigoPostal) {
-    throw new DatoInvalido('Faltan datos fiscales del cliente: RFC, razón social, régimen y código postal.');
+    throw datoInvalido('facturapi.faltan_datos_fiscales_del_cliente');
   }
   exigirLlaveCoherente();
 

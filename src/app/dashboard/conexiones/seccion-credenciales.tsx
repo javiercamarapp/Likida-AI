@@ -9,6 +9,8 @@ import {
   FormaCredenciales, FormaDesactivar, FormaProbar,
   type GrupoCaptura, type AccionCredencial,
 } from './credenciales-controles';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // "CREDENCIALES DE TUS SISTEMAS" (C2, auditoría 4) — la sección que llena la
@@ -100,14 +102,14 @@ export function pistasConRotulo(conectorId: string, pistas: Record<string, strin
  * `marcarProbada` es quien mantiene esa invariante: una prueba fallida BORRA
  * la `probada_en` anterior, para que una conexión muerta no siga en verde.
  */
-export function estadoDePrueba(c: { activo: boolean; probadaEn: string | null; ultimoError: string | null }): {
+export function estadoDePrueba(c: { activo: boolean; probadaEn: string | null; ultimoError: string | null }, t: TResto = T_RESTO_ES): {
   texto: string;
   tono: 'ok' | 'bad' | 'warn' | 'faint';
 } {
   if (!c.activo) return { texto: 'desactivada', tono: 'faint' };
   if (c.probadaEn) return { texto: `probada el ${fechaCorta(c.probadaEn)}`, tono: 'ok' };
-  if (c.ultimoError) return { texto: 'la última prueba FALLÓ', tono: 'bad' };
-  return { texto: 'guardada — sin probar contra el sistema real', tono: 'warn' };
+  if (c.ultimoError) return { texto: t('cfg.la_ultima_prueba_fallo'), tono: 'bad' };
+  return { texto: t('cfg.guardada_sin_probar_contra_el_sistema'), tono: 'warn' };
 }
 
 export interface CredencialPantalla {
@@ -126,7 +128,7 @@ export interface CredencialPantalla {
 
 /** Exportada para poder probar su gateo por render (patrón
  *  `tablero-operacion.test.tsx`). */
-export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardadas, grupos, acciones, ipSalida }: {
+export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardadas, grupos, acciones, ipSalida, t = T_RESTO_ES }: {
   /** IP de salida estática del hosting, SOLO si está contratada y confirmada
    *  (T-TMS-14). Ausente = no se promete ninguna IP. */
   ipSalida?: string | null;
@@ -138,38 +140,28 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
   /** `null` = la lectura falló; se dice, no se pinta una lista vacía. */
   guardadas: CredencialPantalla[] | null;
   grupos: GrupoCaptura[];
-  acciones: { guardar: AccionCredencial; desactivar: AccionCredencial; probar: AccionCredencial };
+  acciones: { guardar: AccionCredencial; desactivar: AccionCredencial; probar: AccionCredencial }; t?: TResto;
 }) {
   return (
-    <Tarjeta titulo="Credenciales de tus sistemas">
-      <p className="rv-cx__apoyo">
-        Los accesos de tu ERP, tu GPS y tus monederos se guardan cifrados en el servidor — al
-        panel solo vuelven pistas (los últimos 4 de cada secreto). Guardar una credencial NO la
-        conecta todavía: hay que apretar <strong>Probar conexión</strong>, que llama de verdad al
-        sistema y sella aquí lo que contestó.
-      </p>
+    <Tarjeta titulo={t('cfg.credenciales_de_tus_sistemas')}>
+      <p className="rv-cx__apoyo">{rico(t('cfg.los_accesos_de_tu_erp_tu'), { strong: (c) => <strong>{c}</strong> })}</p>
       {ipSalida && (
-        <p className="rv-cx__apoyo">
-          Si tu área de sistemas usa firewall o lista de IP permitidas, pídeles que autoricen la
-          IP de salida de Likida: <span className="cifra-mono">{ipSalida}</span>.
+        <p className="rv-cx__apoyo">{t('cfg.si_tu_area_de_sistemas_usa')}{' '}<span className="cifra-mono">{ipSalida}</span>.
         </p>
       )}
 
       {guardadas === null ? (
         // Lectura caída ≠ "no tienes credenciales": pintarlo vacío invitaría a
         // capturar de nuevo encima de lo que sí existe.
-        <p className="rv-cx__texto" data-tono="bad">
-          No se pudieron leer las credenciales guardadas ahora mismo. Recarga la página; si se
-          repite, avísale a Likida.
-        </p>
+        <p className="rv-cx__texto" data-tono="bad">{t('cfg.no_se_pudieron_leer_las_credenciales')}</p>
       ) : (
         <div className="rv-cx__stack">
           {guardadas.length === 0 ? (
-            <p className="rv-cx__texto" data-tono="faint">Aún no hay credenciales guardadas.</p>
+            <p className="rv-cx__texto" data-tono="faint">{t('cfg.aun_no_hay_credenciales_guardadas')}</p>
           ) : (
             <ul className="rv-cx__lista rv-cx__stack">
               {guardadas.map((c) => {
-                const estado = estadoDePrueba(c);
+                const estado = estadoDePrueba(c, t);
                 return (
                   <li key={c.conectorId} className="rv-cx__cred">
                     <div className="rv-cx__cred-cab">
@@ -183,7 +175,7 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
                             {p.rotulo}: <span className="cifra-mono">{p.valor}</span>
                           </p>
                         ))}
-                        <p className="rv-cx__nota">Capturada el {fechaCorta(c.creadaEn)}</p>
+                        <p className="rv-cx__nota">{t('cfg.capturada_el')}{' '}{fechaCorta(c.creadaEn)}</p>
                         {c.ultimoError && (
                           <p className="rv-cx__error">
                             <Icono icono={TriangleAlert} tam={14} />
@@ -213,17 +205,11 @@ export function SeccionCredenciales({ cofreListo, puedeAdministrarCofre, guardad
             // secreto que va a tronar al guardar (y guardarlo en claro no es
             // una opción). Se dice qué falta, que es configuración del
             // sistema, no de la flota.
-            <p className="rv-cx__texto" data-tono="warn">
-              El cofre de credenciales no está configurado en este entorno
-              (lo configura el equipo de Likida): la captura está
-              deshabilitada hasta que exista. Es configuración del sistema, no de tu flota.
-            </p>
+            <p className="rv-cx__texto" data-tono="warn">{t('cfg.el_cofre_de_credenciales_no_esta_2')}</p>
           ) : puedeAdministrarCofre ? (
             <FormaCredenciales grupos={grupos} guardar={acciones.guardar} />
           ) : (
-            <p className="rv-cx__texto" data-tono="faint">
-              Capturar accesos es una acción del dueño de la flota — pídesela a tu administrador.
-            </p>
+            <p className="rv-cx__texto" data-tono="faint">{t('cfg.capturar_accesos_es_una_accion_del')}</p>
           )}
         </div>
       )}

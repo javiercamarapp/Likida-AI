@@ -3,11 +3,11 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { listarClientesPendientes, type ClienteParaRevision } from '@/lib/mcp/oauth';
 import { logger } from '@/lib/logger';
 import { fechaHoraMx } from '@/lib/formato';
-import { MarcoPagina } from '@/app/ui-v2/componentes';
-import { EstadoVacio, EstadoError } from '../ui/kit';
+import { EstadoError, EstadoVacio, MarcoPagina, Tarjeta } from '@/app/ui-v2/componentes';
 import { FormaConAviso, type ResultadoAccion } from '../ui/forma';
 import { FormaRechazarCliente } from './forma-rechazar';
 import { decidirYAnotar } from './decidir';
+import './mcp-clientes.css';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,38 +46,37 @@ export default async function McpClientesPage() {
 
   return (
     <MarcoPagina titulo="Clientes MCP por aprobar" apoyo="Clientes que se registraron por su cuenta y esperan tu decisión antes de recibir acceso.">
-      <div className="space-y-3">
+      <div className="rv-mcp-lista">
         {pendientes === null ? (
-          <EstadoError mensaje="No se pudo leer la cola. No significa que no haya clientes por aprobar: la consulta falló." />
+          <EstadoError>No se pudo leer la cola. No significa que no haya clientes por aprobar: la consulta falló.</EstadoError>
         ) : pendientes.length === 0 ? (
-          <EstadoVacio>
-            No hay clientes MCP pendientes. Los de hosts conocidos (Claude, ChatGPT) y loopback se aprueban solos.
+          <EstadoVacio titulo="Sin clientes MCP pendientes">
+            Los de hosts conocidos (Claude, ChatGPT) y loopback se aprueban solos.
           </EstadoVacio>
         ) : (
           pendientes.map((c) => (
-            <section key={c.clientId} className="card p-4 space-y-2">
-              <p className="text-sm">
-                <strong>{c.nombre ?? 'Sin nombre'}</strong> — registrado {fechaHoraMx(c.creadoEn)}
-              </p>
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>
-                El nombre lo declaró quien se registró. Devolvería el código a:{' '}
-                <strong>{c.anfitriones.join(', ') || 'dirección inválida'}</strong>
-              </p>
-              <ul className="text-xs list-disc pl-5 break-all" style={{ color: 'var(--muted)' }}>
-                {c.redirectUris.map((u) => <li key={u}>{u}</li>)}
-              </ul>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <FormaConAviso accion={accionAprobar} boton="Aprobar" columnas="md:grid-cols-1">
-                  <input type="hidden" name="cliente" value={c.clientId} />
-                </FormaConAviso>
-                <FormaRechazarCliente
-                  accion={accionRechazar}
-                  clientId={c.clientId}
-                  nombre={c.nombre ?? 'Sin nombre'}
-                  tokensVivos={c.tokensVivos}
-                />
+            <Tarjeta key={c.clientId} titulo={c.nombre ?? 'Sin nombre'}>
+              <div className="rv-mcp-cuerpo">
+                <p className="rv-mcp-nota">
+                  Registrado {fechaHoraMx(c.creadoEn)}. El nombre lo declaró quien se registró. Devolvería el código a:{' '}
+                  <strong>{c.anfitriones.join(', ') || 'dirección inválida'}</strong>
+                </p>
+                <ul className="rv-mcp-uris">
+                  {c.redirectUris.map((u) => <li key={u}>{u}</li>)}
+                </ul>
+                <div className="rv-mcp-acciones">
+                  <FormaConAviso accion={accionAprobar} boton="Aprobar" columnas="md:grid-cols-1">
+                    <input type="hidden" name="cliente" value={c.clientId} />
+                  </FormaConAviso>
+                  <FormaRechazarCliente
+                    accion={accionRechazar}
+                    clientId={c.clientId}
+                    nombre={c.nombre ?? 'Sin nombre'}
+                    tokensVivos={c.tokensVivos}
+                  />
+                </div>
               </div>
-            </section>
+            </Tarjeta>
           ))
         )}
       </div>

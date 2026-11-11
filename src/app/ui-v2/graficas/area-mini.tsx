@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { TooltipGrafica } from '../componentes/overlay';
 import type { Matiz } from '../metricas';
-import { cadaCuantas, compactEs, esConteoPequeno, indicesEtiquetados, niceScale, variacionVsAnterior } from './escala';
+import { cadaCuantas, compactEs, esConteoPequeno, indicesEtiquetados, marcasEje, niceScale, unidadDeFormato, variacionVsAnterior } from './escala';
 import type { TipoDato } from './kind-badge';
 import { CintaLectura, LecturaPunto, TablaGrafica, useAncho } from './partes';
 import { resolverFormato, type FormatoGrafica } from './formatos';
@@ -45,7 +45,8 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato: for
   const min = Math.min(0, ...ok), max = Math.max(...ok);
   const eje = min < 0 ? { max, ticks: [min, (min + max) / 2, max] as number[] } : niceScale(max, { entero: esConteoPequeno(valores) });
   const lo = min < 0 ? min : 0;
-  const marcas = eje.ticks.map((t) => (t === 0 ? '0' : compactEs(t)));
+  const marcas = marcasEje(eje.ticks);
+  const unidadEje = unidad ?? unidadDeFormato(formatoProp);
   const padL = Math.max(30, Math.max(...marcas.map((t) => t.length)) * 6.4 + 14);
   const W = Math.max(ancho || 480, 240);
   const anchoPlano = W - padL - PAD_R;
@@ -110,6 +111,7 @@ export function AreaMini({ valores, etiquetas, matiz = 1, etiqueta, formato: for
               <text className="rv-gr__marca" x={padL - 8} y={Y(t) + 4} textAnchor="end">{marcas[i]}</text>
             </g>
           ))}
+          {unidadEje ? <text className="rv-gr__unidad" x="0" y="8" textAnchor="start">{unidadEje}</text> : null}
           {conEtiquetas ? valores.map((_, i) => (i % cada === 0 ? <text key={i} className="rv-gr__marca rv-gr__marca-x" x={X(i)} y={alto - 6} textAnchor="middle">{etq(i)}</text> : null)) : null}
           {conDatos.filter((t) => t.length > 1).map((t) => (
             <path key={`a${t[0][0]}`} className="rv-area__relleno" d={`${lineaDe(t)}L${X(t[t.length - 1][0]).toFixed(1)},${baseY}L${X(t[0][0]).toFixed(1)},${baseY}Z`} fill={`url(#${idg})`} />

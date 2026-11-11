@@ -4,6 +4,7 @@ import { getResumenNegocio, getCostoPorFaseModelo } from '@/lib/admin/negocio';
 import { MarcoPagina, FilaTarjetas, Tarjeta } from '@/app/ui-v2/componentes';
 import { TiraCifras, Columnas } from '@/app/ui-v2/graficas';
 import { TarjetaFase } from '../tarjeta-fase';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +14,7 @@ export const dynamic = 'force-dynamic';
  * cero gasto real, no un relleno.
  */
 export default async function AgenteCuadrePage() {
+  const { t } = await getT('admin_sistema');
   await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo().catch(() => [])]);
   const cuadre = r.porFase.find((f) => f.fase === 'cuadre');
@@ -21,36 +23,39 @@ export default async function AgenteCuadrePage() {
   return (
     <MarcoPagina
       area="Agentes"
-      titulo="Agentes"
-      apoyo="Cuadre: concilia gastos comprobados contra anticipo y política. Costo real, histórico."
+      titulo={t('model_ops.agentes')}
+      apoyo={t('agente_cuadre.cuadre_concilia_gastos_comprobados_contra_anticipo')}
     >
       <TiraCifras
-        etiqueta="Cuadre"
+        etiqueta={t('model_ops.cuadre')}
         items={[
-          { etiqueta: 'Gastado en Cuadre', valor: cuadre ? cuadre.costoUsd : 0, formato: 'usd', nota: 'Costo medido en llm_costo' },
-          { etiqueta: 'Llamadas de Cuadre', valor: cuadre ? cuadre.n : 0, formato: 'entero' },
-          { etiqueta: 'Viajes procesados', valor: r.viajesProcesados, formato: 'entero' },
+          { etiqueta: t('agente_cuadre.gastado_en_cuadre'), valor: cuadre ? cuadre.costoUsd : 0, formato: 'usd', nota: t('agente_cuadre.costo_medido_en_llm_costo') },
+          { etiqueta: t('agente_cuadre.llamadas_de_cuadre'), valor: cuadre ? cuadre.n : 0, formato: 'entero' },
+          { etiqueta: t('agente_cuadre.viajes_procesados'), valor: r.viajesProcesados, formato: 'entero' },
         ]}
       />
       <FilaTarjetas variante="6-6">
         <TarjetaFase
-          titulo="Costo por modelo, Cuadre"
-          queHace="Compara los gastos ya capturados contra el anticipo y la política de la flota."
+          titulo={t('agente_cuadre.costo_por_modelo_cuadre')}
+          queHace={t('model_ops.compara_los_gastos_ya_capturados_contra')}
           datos={cuadre}
           modelos={modelos}
         />
         <Tarjeta
-          titulo="Conciliación automática contra manual"
+          titulo={t('agente_cuadre.conciliacion_automatica_contra_manual')}
           estado="vacio"
-          mensaje="Aún no se mide"
-          detalle={`Likida sabe cuántos viajes se procesaron (${r.viajesProcesados}) y cuánto costó Cuadre, pero no guarda todavía si un viaje se cerró solo o si alguien tuvo que intervenir. Medirlo exige registrar esa intervención humana.`}
+          mensaje={t('agente_cuadre.aun_no_se_mide')}
+          detalle={t('agente_cuadre.likida_sabe_cuantos_viajes_se_procesaron', { viajesProcesados: r.viajesProcesados })}
         />
       </FilaTarjetas>
-      <Tarjeta titulo="Costo de IA por día, todas las fases" estado={r.porDia.length > 0 ? 'ok' : 'vacio'} mensaje="Sin actividad de IA" detalle="El costo por día no se separa por fase con los datos de hoy; esta gráfica suma todas.">
-        <Columnas etiqueta="Costo de IA por día" datos={r.porDia.map((d) => ({ etiqueta: d.dia, valor: d.costoUsd }))} formato="usd" />
+      <Tarjeta titulo={t('agente_cuadre.costo_de_ia_por_dia_todas')} estado={r.porDia.length > 0 ? 'ok' : 'vacio'} mensaje={t('model_ops.sin_actividad_de_ia')} detalle={t('agente_cuadre.el_costo_por_dia_no_se')}>
+        <Columnas etiqueta={t('capacidad_forecast.costo_de_ia_por_dia')} datos={r.porDia.map((d) => ({ etiqueta: d.dia, valor: d.costoUsd }))} formato="usd" />
       </Tarjeta>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Cuadre' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('model_ops.cuadre') };
+}

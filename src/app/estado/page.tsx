@@ -1,17 +1,20 @@
 import type { Metadata } from 'next';
+import { rico } from '@/lib/i18n/rico';
+import { getT } from '@/lib/i18n/servidor';
+import type { TrPublico } from '@/lib/i18n/publico_tr';
 import { fechaHoraMx, numero } from '@/lib/formato';
 import Link from 'next/link';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
 import { headers } from 'next/headers';
 import { cargarEstadoPublico, estadoMemoizado, type EstadoPublico } from './datos';
 import { clientIp, rateLimit } from '@/lib/ratelimit';
-import type { ComponenteEstado, EstadoMedido } from '@/lib/admin/salud';
+import type { EstadoMedido } from '@/lib/admin/salud';
 import type { CeldaDia } from '@/lib/admin/estado';
 
-export const metadata: Metadata = {
-  title: 'Estado — Likida',
-  description: 'Estado medido de los componentes de Likida y su disponibilidad de los últimos 30 días.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('publico');
+  return { title: t('est.meta.titulo'), description: t('est.meta.descripcion') };
+}
 
 // Pública y dinámica a propósito: el layout raíz ya llama `connection()` (CSP con nonce por petición, Ola 9b), así que
 // esta página recibe el nonce igual que /seguridad. No lleva scripts propios ni estilos inyectados.
@@ -23,47 +26,39 @@ export const dynamic = 'force-dynamic';
  * No lleva datos de flotas ni nombres de crons, versiones ni motivos de fallo: solo cinco componentes y tres estados.
  */
 
-const COMPONENTES: Record<ComponenteEstado, { nombre: string; mide: string }> = {
-  app: { nombre: 'Aplicación', mide: 'La aplicación responde por su dirección pública (la guardia le pregunta cada 5 minutos desde el servidor).' },
-  base: { nombre: 'Base de datos', mide: 'Una consulta real a la base de datos de producción, desde la misma verificación.' },
-  crons: { nombre: 'Procesos programados', mide: 'Los procesos de fondo (cobranza, facturación, avisos) corren a su hora y terminan bien.' },
-  whatsapp: { nombre: 'WhatsApp', mide: 'Nuestra tubería de WhatsApp (recibir, procesar y enviar) está al día. No mide la red de Meta.' },
-  correo: { nombre: 'Correo', mide: 'La tubería de envío de correo corre al día. No mide que el mensaje llegue al buzón del destinatario.' },
+const ESTADO: Record<EstadoMedido | 'sin_medicion', { clases: string; fondo: string; texto: string }> = {
+  ok: { clases: 'bg-[var(--okbg)] text-[var(--ok)]', fondo: 'bg-[var(--okbg)]', texto: 'text-[var(--ok)]' },
+  degradado: { clases: 'bg-[var(--warnbg)] text-[var(--warn)]', fondo: 'bg-[var(--warnbg)]', texto: 'text-[var(--warn)]' },
+  caido: { clases: 'bg-[var(--badbg)] text-[var(--bad)]', fondo: 'bg-[var(--badbg)]', texto: 'text-[var(--bad)]' },
+  sin_medicion: { clases: 'bg-[var(--surface)] text-muted', fondo: 'bg-[var(--surface)]', texto: 'text-muted' },
 };
 
-const ESTADO: Record<EstadoMedido | 'sin_medicion', { etiqueta: string; clases: string; fondo: string; texto: string }> = {
-  ok: { etiqueta: 'Operativo', clases: 'bg-[var(--okbg)] text-[var(--ok)]', fondo: 'bg-[var(--okbg)]', texto: 'text-[var(--ok)]' },
-  degradado: { etiqueta: 'Degradado', clases: 'bg-[var(--warnbg)] text-[var(--warn)]', fondo: 'bg-[var(--warnbg)]', texto: 'text-[var(--warn)]' },
-  caido: { etiqueta: 'Interrupción', clases: 'bg-[var(--badbg)] text-[var(--bad)]', fondo: 'bg-[var(--badbg)]', texto: 'text-[var(--bad)]' },
-  sin_medicion: { etiqueta: 'Sin medición', clases: 'bg-[var(--surface)] text-muted', fondo: 'bg-[var(--surface)]', texto: 'text-muted' },
+const CELDA: Record<CeldaDia, { fondo: string }> = {
+  ok: { fondo: 'bg-[var(--ok)]' },
+  degradado: { fondo: 'bg-[var(--warn)]' },
+  caido: { fondo: 'bg-[var(--bad)] ' },
+  sin_medicion: { fondo: 'bg-[var(--line)] opacity-55' },
 };
 
-const CELDA: Record<CeldaDia, { fondo: string; texto: string }> = {
-  ok: { fondo: 'bg-[var(--ok)]', texto: 'sin interrupciones medidas' },
-  degradado: { fondo: 'bg-[var(--warn)]', texto: 'con degradación medida' },
-  caido: { fondo: 'bg-[var(--bad)] ', texto: 'con al menos una interrupción medida' },
-  sin_medicion: { fondo: 'bg-[var(--line)] opacity-55', texto: 'sin medición' },
-};
-
-function resumenGeneral(e: EstadoPublico): { titulo: string; estado: EstadoMedido | 'sin_medicion' } {
+function resumenGeneral(e: EstadoPublico, t: TrPublico['t']): { titulo: string; estado: EstadoMedido | 'sin_medicion' } {
   const vistos = Object.values(e.actual).filter((v): v is EstadoMedido => v !== null);
-  if (!e.reciente || vistos.length === 0) return { titulo: 'Sin medición reciente', estado: 'sin_medicion' };
-  if (vistos.includes('caido')) return { titulo: 'Hay una interrupción en curso', estado: 'caido' };
-  if (vistos.includes('degradado')) return { titulo: 'Rendimiento degradado', estado: 'degradado' };
-  return { titulo: 'Todos los componentes medidos operan con normalidad', estado: 'ok' };
+  if (!e.reciente || vistos.length === 0) return { titulo: t('est.res.sin_medicion'), estado: 'sin_medicion' };
+  if (vistos.includes('caido')) return { titulo: t('est.res.caido'), estado: 'caido' };
+  if (vistos.includes('degradado')) return { titulo: t('est.res.degradado'), estado: 'degradado' };
+  return { titulo: t('est.res.ok'), estado: 'ok' };
 }
 
-function Etiqueta({ estado }: { estado: EstadoMedido | 'sin_medicion' }) {
+function Etiqueta({ estado, t }: { estado: EstadoMedido | 'sin_medicion'; t: TrPublico['t'] }) {
   const e = ESTADO[estado];
   return (
     <span className={`rounded-full px-2.5 py-0.5 text-[12px] font-medium whitespace-nowrap ${e.clases}`}>
-      {e.etiqueta}
+      {t(`est.e.${estado}`)}
     </span>
   );
 }
 
-function fechaLegible(iso: string): string {
-  return fechaHoraMx(iso);
+function fechaLegible(iso: string, idioma: TrPublico['idioma']): string {
+  return fechaHoraMx(iso, idioma);
 }
 
 /**
@@ -81,65 +76,66 @@ async function dentroDelLimite(): Promise<boolean> {
 }
 
 export default async function PaginaEstado() {
+  const { t, idioma } = await getT('publico');
   const estado = (await dentroDelLimite()) ? await cargarEstadoPublico().catch((): null => null) : estadoMemoizado();
 
   if (estado === null) {
     return (
       <MarcoPublico
-        titulo="Estado de Likida"
-        apoyo="No pudimos leer las mediciones en este momento. Que esta página no cargue no significa que el servicio esté bien ni que esté mal: significa que no podemos decirlo desde aquí. Vuelve a intentar en unos minutos."
+        titulo={t('est.titulo')}
+        apoyo={t('est.apoyo.error')}
       />
     );
   }
 
-  const general = resumenGeneral(estado);
+  const general = resumenGeneral(estado, t);
   return (
     <MarcoPublico
       ancho="lectura"
-      rotulo="Estado"
-      titulo="Estado de Likida"
-      apoyo="Medido por nuestra propia guardia cada 5 minutos, desde el servidor. Solo lectura: esta página no tiene controles ni datos de clientes. Lo que no se mide, se dice."
+      rotulo={t('est.rotulo')}
+      titulo={t('est.titulo')}
+      apoyo={t('est.apoyo')}
     >
         <section aria-live="polite" className={`mt-8 flex items-center justify-between gap-4 rounded-xl px-5 py-4 ${ESTADO[general.estado].fondo}`}>
           <h2 className={`font-display text-[17px] font-semibold ${ESTADO[general.estado].texto}`}>{general.titulo}</h2>
-          <Etiqueta estado={general.estado} />
+          <Etiqueta estado={general.estado} t={t} />
         </section>
         <p className="mt-2 text-[12px] text-muted">
           {estado.latidoIlegible
-            ? 'No se pudo leer la última medición.'
+            ? t('est.ult.ilegible')
             : estado.ultimaMedicion
-              ? `Última medición: ${fechaLegible(estado.ultimaMedicion)} (hora de la Ciudad de México).${estado.reciente ? '' : ' Es anterior a 15 minutos: no se muestra como estado actual.'}`
-              : 'Todavía no hay ninguna medición.'}
+              ? `${t('est.ult.fecha', { fecha: fechaLegible(estado.ultimaMedicion, idioma) })}${estado.reciente ? '' : t('est.ult.vieja')}`
+              : t('est.ult.ninguna')}
         </p>
 
         <div className="mt-8 space-y-6">
           {estado.resumen.map((r) => {
             const actual = estado.actual[r.componente] ?? 'sin_medicion';
-            const info = COMPONENTES[r.componente];
+            const nombre = t(`est.c.${r.componente}.nombre`);
             return (
               <section key={r.componente} aria-labelledby={`c-${r.componente}`}>
                 <div className="flex items-center justify-between gap-3">
-                  <h2 id={`c-${r.componente}`} className="font-display text-[16px] font-semibold">{info.nombre}</h2>
-                  <Etiqueta estado={actual} />
+                  <h2 id={`c-${r.componente}`} className="font-display text-[16px] font-semibold">{nombre}</h2>
+                  <Etiqueta estado={actual} t={t} />
                 </div>
-                <p className="mt-1 text-[13px] text-muted">{info.mide}</p>
+                <p className="mt-1 text-[13px] text-muted">{t(`est.c.${r.componente}.mide`)}</p>
                 {/* 30 celdas, de la más antigua a hoy. Cada una dice su día y su estado en texto, no solo en color. */}
-                <ul className="mt-3 flex gap-[3px]" aria-label={`Últimos 30 días de ${info.nombre}`}>
+                <ul className="mt-3 flex gap-[3px]" aria-label={t('est.dias.aria', { nombre })}>
                   {r.dias.map((d) => (
                     <li
                       key={d.dia}
                       className={`h-7 flex-1 rounded-[3px] ${CELDA[d.celda].fondo}`}
-                      title={`${d.dia}: ${CELDA[d.celda].texto}`}
-                      aria-label={`${d.dia}: ${CELDA[d.celda].texto}`}
+                      title={`${d.dia}: ${t(`est.dia.${d.celda}`)}`}
+                      aria-label={`${d.dia}: ${t(`est.dia.${d.celda}`)}`}
                     />
                   ))}
                 </ul>
                 <p className="mt-2 text-[12px] text-muted">
                   {estado.historialIlegible
-                    ? 'No se pudo leer el historial.'
+                    ? t('est.hist.ilegible')
                     : r.disponibilidadPct === null
-                      ? 'Sin mediciones en los últimos 30 días.'
-                      : `Disponibilidad medida: ${r.disponibilidadPct.toFixed(2)} % · ${numero(r.muestras)} mediciones en ${r.diasMedidos} de 30 días.`}
+                      ? t('est.hist.sin')
+                      : t('est.hist.disp', { pct: r.disponibilidadPct.toFixed(2), muestras: numero(r.muestras, idioma), dias: r.diasMedidos })}
                 </p>
               </section>
             );
@@ -147,10 +143,7 @@ export default async function PaginaEstado() {
         </div>
 
         <p className="mt-10 text-[12px] leading-relaxed text-muted">
-          Cómo leerlo: la disponibilidad es la proporción de mediciones sin interrupción; un día en gris no tiene
-          mediciones (no cuenta como bueno ni como malo) y un día en rojo tuvo al menos una interrupción medida, aunque
-          haya durado minutos. Si toda la plataforma cayera, esta página tampoco respondería. Más sobre cómo cuidamos
-          tu información en <Link href="/seguridad" className="underline">Seguridad</Link>.
+          {rico(t('est.como'), { enlace: (c) => <Link href="/seguridad" className="underline">{c}</Link> })}
         </p>
     </MarcoPublico>
   );

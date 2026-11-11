@@ -84,7 +84,7 @@ test.describe('con la UI v2 forzada', () => {
     expect((await page.locator('aside').boundingBox())?.width).toBe(232);
     await page.getByRole('button', { name: 'Plegar el menú' }).first().click();
     await expect.poll(async () => (await page.locator('aside').boundingBox())?.width, { timeout: 3000 }).toBe(72);
-    await expect(page.locator('.rv-cab-esc__plegar')).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.locator('aside .rv-sb__plegar')).toHaveAttribute('aria-expanded', 'false');
     // Todos los destinos siguen alcanzables en el riel (el texto se oculta de forma visual, el enlace y su nombre accesible quedan).
     await expect(page.getByRole('navigation', { name: 'Navegación principal' }).getByRole('link', { name: 'Viajes', exact: true })).toHaveCount(1);
   });

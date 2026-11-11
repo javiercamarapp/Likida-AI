@@ -106,25 +106,63 @@ describe.each(TEMAS)('tokens v2, modo %s: controles y marcas ≥ 3:1', (_nombre,
     expect(r, `${a} sobre ${b} mide ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_COMPONENTE);
   });
 
-  // Las 8 tintas de DATOS (barras, líneas, filete de KPI) sobre la tarjeta. Una marca de color nunca va sola:
-  // siempre lleva etiqueta/patrón (regla E-10), pero el umbral de la marca en sí también se mide.
-  it.each([1, 2, 3, 5, 6, 7, 8])('--chart-%i sobre --surface', (n) => {
-    const r = contraste(resolver(t, `--chart-${n}`), resolver(t, '--surface'));
-    expect(r, `--chart-${n} mide ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_COMPONENTE);
+  // PALETA DE ALTO CONTRASTE (11-nov-2026, punto 10 del dueño): las series DURAS (1, 2, 3, 5, 7) miden ≥3:1 sobre la tarjeta y sobre el fondo.
+  it.each([1, 2, 3, 5, 7])('--chart-%i sobre --surface y --bg (series duras)', (n) => {
+    for (const fondo of ['--surface', '--bg']) {
+      const r = contraste(resolver(t, `--chart-${n}`), resolver(t, fondo));
+      expect(r, `--chart-${n} sobre ${fondo} mide ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_COMPONENTE);
+    }
+  });
+  // Las series CLARAS (4, 6, 8) se identifican por contorno: --chart-borde (≥3:1) las delimita.
+  it('--chart-borde (contorno de las series claras) sobre --surface y --bg', () => {
+    for (const fondo of ['--surface', '--bg']) {
+      const r = contraste(resolver(t, '--chart-borde'), resolver(t, fondo));
+      expect(r, `--chart-borde sobre ${fondo} mide ${r.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA_COMPONENTE);
+    }
+  });
+  it('--kpi-filete (filete de las tiras de KPI) sobre --surface', () => {
+    expect(contraste(resolver(t, '--kpi-filete'), resolver(t, '--surface'))).toBeGreaterThanOrEqual(AA_COMPONENTE);
+  });
+  it('la barra del ítem activo contrasta con el fondo del menú y con el contenido', () => {
+    for (const fondo of ['--surface', '--ui-activo-bg', '--bg']) {
+      expect(contraste(resolver(t, '--nav-activo-barra'), resolver(t, fondo))).toBeGreaterThanOrEqual(AA_COMPONENTE);
+    }
+  });
+  it('el anillo del estado activo (--seg-activo-borde) contrasta ≥3:1 con la superficie y su fondo', () => {
+    for (const fondo of ['--surface', '--seg-activo-bg']) {
+      expect(contraste(resolver(t, '--seg-activo-borde'), resolver(t, fondo))).toBeGreaterThanOrEqual(AA_COMPONENTE);
+    }
+  });
+  // Texto de cabecera de tabla NEGRO (claro) / blanco (oscuro): contraste alto, no solo AA.
+  it('la cabecera de tabla pasa AAA (≥7:1) y el texto es la tinta pura', () => {
+    expect(contraste(resolver(t, '--tabla-cab-ink'), resolver(t, '--tabla-cab-bg'))).toBeGreaterThanOrEqual(7);
+    expect(resolver(t, '--tabla-cab-ink')).toBe(resolver(t, '--ink'));
+  });
+  // Semáforos como MARCA (no solo texto): 1.4.11 ≥3:1 sobre la tarjeta; siempre acompañados de texto o icono (1.4.1).
+  it.each(['--ok', '--warn', '--bad'])('semáforo %s como marca sobre --surface', (v) => {
+    expect(contraste(resolver(t, v), resolver(t, '--surface'))).toBeGreaterThanOrEqual(AA_COMPONENTE);
   });
 });
 
-describe('tokens v2: excepción declarada', () => {
-  // --chart-4 (ámbar) es el matiz que NO llega a 3:1 como marca sobre la tarjeta clara. Su par de texto (--ink-4 sobre
-  // --soft-4) sí pasa 4.5:1 arriba; como relleno de barra o de punto siempre lleva etiqueta de texto al lado (E-10).
-  // Si alguien lo oscurece hasta 3:1, esta prueba lo avisa para que la excepción se retire.
-  it('--chart-4 claro: medido y documentado', () => {
-    const r = contraste(resolver(CLARO, '--chart-4'), resolver(CLARO, '--surface'));
-    expect(r).toBeGreaterThan(1.5);
-    if (r >= AA_COMPONENTE) throw new Error('--chart-4 ya pasa 3:1: retira esta excepción y súmalo a la lista de marcas');
+describe('tokens v2: la paleta de datos y del cromo es monocroma', () => {
+  // Decisión del dueño (11-nov-2026): NEGRO, GRIS y BLANCO; sin azul, teal ni naranja en las series. Solo los semáforos y la señal llevan matiz.
+  const matiz = (hex: string) => { const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)); return Math.max(...c) - Math.min(...c); };
+  const FAMILIAS = ['chart', 'soft', 'ink', 'on'];
+  it.each(TEMAS)('modo %s: --chart/--soft/--ink/--on-N, --heat-N y el cromo activo son grises (diferencia entre canales ≤ 8)', (_n, t) => {
+    const nombres = [
+      ...FAMILIAS.flatMap((f) => [1, 2, 3, 4, 5, 6, 7, 8].map((n) => `--${f}-${n}`)),
+      ...[0, 1, 2, 3, 4].map((n) => `--heat-${n}`),
+      '--chart-borde', '--kpi-filete', '--nav-activo-barra', '--seg-activo-bg', '--seg-activo-borde', '--seg-activo-fg', '--seg-activo-hover',
+      '--tabla-cab-bg', '--tabla-cab-ink', '--g1', '--g2', '--g3', '--g4', '--g5',
+    ];
+    for (const n of nombres) expect(matiz(resolver(t, n)), `${n} = ${resolver(t, n)} no es gris`).toBeLessThanOrEqual(8);
   });
-  it('--chart-4 oscuro pasa 3:1', () => {
-    expect(contraste(resolver(OSCURO, '--chart-4'), resolver(OSCURO, '--surface'))).toBeGreaterThanOrEqual(AA_COMPONENTE);
+  it('las 8 series claras y oscuras son distintas entre sí (ninguna repetida) y las vecinas difieren en luminosidad ≥1.25:1', () => {
+    for (const [, t] of TEMAS) {
+      const hex = [1, 2, 3, 4, 5, 6, 7, 8].map((n) => resolver(t, `--chart-${n}`));
+      expect(new Set(hex).size).toBe(8);
+      for (let n = 0; n < 7; n++) expect(contraste(hex[n], hex[n + 1]), `${hex[n]} vs ${hex[n + 1]}`).toBeGreaterThanOrEqual(1.25);
+    }
   });
 });
 

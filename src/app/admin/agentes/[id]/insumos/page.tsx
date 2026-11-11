@@ -14,6 +14,8 @@ import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { Aviso, EstadoVacio, MarcoPagina, Tarjeta } from '../../../../ui-v2/componentes';
 import { type ResultadoAccion } from '../../../ui/forma';
 import { FormularioInsumo, ListaInsumos } from './zona-insumos';
+import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,7 @@ export const dynamic = 'force-dynamic';
  * tarjeta enseña "qué le has dado, qué usó, qué aprendió de eso".
  */
 export default async function PaginaInsumosAgente({ params }: { params: Promise<{ id: string }> }) {
+  const { t, idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   const { id } = await params;
 
@@ -46,44 +49,46 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
 
   async function accionSubirArchivo(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('admin_sistema');
     const { userId } = await requireSuperadmin();
     try {
       const tipo = String(fd.get('tipo') ?? '');
       const titulo = String(fd.get('titulo') ?? '').trim();
       const archivo = fd.get('archivo');
-      if (!esTipoInsumo(tipo) || !TIPOS_ARCHIVO.includes(tipo)) throw new DatoInvalido('Tipo de insumo inválido.');
-      if (!titulo) throw new DatoInvalido('Ponle un título al insumo.');
-      if (!(archivo instanceof File) || archivo.size === 0) throw new DatoInvalido('Elige un archivo para subir.');
+      if (!esTipoInsumo(tipo) || !TIPOS_ARCHIVO.includes(tipo)) throw new DatoInvalido(t('agentes_insumos.tipo_de_insumo_invalido'));
+      if (!titulo) throw new DatoInvalido(t('agentes_insumos.ponle_un_titulo_al_insumo'));
+      if (!(archivo instanceof File) || archivo.size === 0) throw new DatoInvalido(t('agentes_insumos.elige_un_archivo_para_subir'));
       const ruta = await subirArchivoInsumo(id, archivo, tipo as 'documento' | 'imagen' | 'video', departamento);
       await crearInsumoArchivo({
         agente: id, departamento, titulo, tipo: tipo as 'documento' | 'imagen' | 'video',
         storagePath: ruta, subidoPor: userId,
       });
       revalidatePath(`/admin/agentes/${id}/insumos`);
-      return { ok: (AGENTES_FINANCIEROS as readonly string[]).includes(id) ? `"${titulo}" quedó guardado — se procesa en la siguiente corrida de este agente.` : `"${titulo}" quedó guardado. Este agente aún no lee insumos, así que ninguna corrida lo usa todavía.` };
+      return { ok: (AGENTES_FINANCIEROS as readonly string[]).includes(id) ? t('agentes_insumos.quedo_guardado_se_procesa_en_la', { titulo }) : t('agentes_insumos.quedo_guardado_este_agente_aun_no', { titulo }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'subir el insumo') };
+      return { error: mensajeParaPantalla(e, 'subir el insumo', idioma) };
     }
   }
 
   async function accionSubirTexto(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('admin_sistema');
     const { userId } = await requireSuperadmin();
     try {
       const tipo = String(fd.get('tipo') ?? '');
       const titulo = String(fd.get('titulo') ?? '').trim();
       const contenido = String(fd.get('contenido') ?? '').trim();
-      if (!esTipoInsumo(tipo) || !TIPOS_TEXTO.includes(tipo)) throw new DatoInvalido('Tipo de insumo inválido.');
-      if (!titulo) throw new DatoInvalido('Ponle un título al insumo.');
-      if (!contenido) throw new DatoInvalido(tipo === 'link' ? 'Pega el link.' : 'Escribe la idea.');
+      if (!esTipoInsumo(tipo) || !TIPOS_TEXTO.includes(tipo)) throw new DatoInvalido(t('agentes_insumos.tipo_de_insumo_invalido'));
+      if (!titulo) throw new DatoInvalido(t('agentes_insumos.ponle_un_titulo_al_insumo'));
+      if (!contenido) throw new DatoInvalido(tipo === 'link' ? t('agentes_insumos.pega_el_link') : t('agentes_insumos.escribe_la_idea'));
       await crearInsumoTexto({
         agente: id, departamento, titulo, tipo: tipo as 'link' | 'texto',
         contenido, subidoPor: userId,
       });
       revalidatePath(`/admin/agentes/${id}/insumos`);
-      return { ok: (AGENTES_FINANCIEROS as readonly string[]).includes(id) ? `"${titulo}" quedó guardado — se procesa en la siguiente corrida de este agente.` : `"${titulo}" quedó guardado. Este agente aún no lee insumos, así que ninguna corrida lo usa todavía.` };
+      return { ok: (AGENTES_FINANCIEROS as readonly string[]).includes(id) ? t('agentes_insumos.quedo_guardado_se_procesa_en_la', { titulo }) : t('agentes_insumos.quedo_guardado_este_agente_aun_no', { titulo }) };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar el insumo') };
+      return { error: mensajeParaPantalla(e, 'guardar el insumo', idioma) };
     }
   }
 
@@ -93,18 +98,14 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
   }));
 
   return (
-    <MarcoPagina titulo={`${agente.nombre} — bandeja de contexto`}>
-      <Aviso tono="info">
-        {rotuloDepartamento} · id <code className="cifra-mono">{agente.id}</code> — entre más le das, más entiende.{' '}
-        {LEE_INSUMOS
-          ? <>Todo lo que sueltes aquí se procesa en la SIGUIENTE corrida de este agente; sesión actual: {s.nombre ?? 'superadmin'}.</>
-          : <><strong>Este agente aún no lee insumos.</strong> Lo que subas se guarda, pero ninguna corrida lo usa todavía: hoy solo los leen los cuatro agentes financieros. Sesión actual: {s.nombre ?? 'superadmin'}.</>}
+    <MarcoPagina titulo={t('agentes_insumos.bandeja_de_contexto', { agente: agente.nombre })}>
+      <Aviso tono="info">{t('agentes_insumos.id', { rotuloDepartamento })}{' '}<code className="cifra-mono">{agente.id}</code>{' '}{t('agentes_insumos.entre_mas_le_das_mas_entiende')}{' '}{LEE_INSUMOS
+          ? <>{t('agentes_insumos.todo_lo_que_sueltes_aqui_se')}{' '}{s.nombre ?? 'superadmin'}.</>
+          : <>{rico(t('agentes_insumos.strong_este_agente_aun_no_lee'), { strong: (c) => <strong>{c}</strong> })}{' '}{s.nombre ?? 'superadmin'}.</>}
       </Aviso>
 
-      <Tarjeta titulo="Soltar un insumo nuevo">
-        <p className="m-0 mb-3 text-xs text-muted">
-          Este agente acepta: {tiposAceptados.join(', ')}.
-        </p>
+      <Tarjeta titulo={t('agentes_insumos.soltar_un_insumo_nuevo')}>
+        <p className="m-0 mb-3 text-xs text-muted">{t('agentes_insumos.este_agente_acepta', { tiposAceptados: tiposAceptados.join(', ') })}</p>
         <FormularioInsumo
           tiposAceptados={tiposAceptados}
           accionArchivo={accionSubirArchivo}
@@ -112,9 +113,9 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
         />
       </Tarjeta>
 
-      <Tarjeta titulo={`Qué le has dado — ${totalInsumos > insumos.length ? `${insumos.length} de ${totalInsumos}` : insumos.length}`}>
+      <Tarjeta titulo={t('agentes_insumos.que_le_has_dado', { v: totalInsumos > insumos.length ? t('agentes_insumos.n_de_total', { n: insumos.length, total: totalInsumos }) : insumos.length })}>
         {insumos.length === 0 ? (
-          <EstadoVacio titulo="Sin insumos" contenido>Sin insumos todavía — suelta el primero arriba.</EstadoVacio>
+          <EstadoVacio titulo={t('agentes_insumos.sin_insumos')} contenido>{t('agentes_insumos.sin_insumos_todavia_suelta_el_primero')}</EstadoVacio>
         ) : (
           <ListaInsumos insumos={insumosConUrl} />
         )}
@@ -123,4 +124,7 @@ export default async function PaginaInsumosAgente({ params }: { params: Promise<
   );
 }
 
-export const metadata: Metadata = { title: 'Insumos del agente' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('agentes_insumos.insumos_del_agente') };
+}

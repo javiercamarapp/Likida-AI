@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { mensajeParaPantalla } from '@/lib/likida/errores';
 import { appUrl } from '@/lib/env';
-import { nombreDeRol } from '@/lib/auth/roles';
+import { nombreDeRolTr } from '@/lib/i18n/rotulos_tr';
 import { mensajeDeBaja } from '@/lib/auth/mensaje_baja';
 import { pasoExtraSuperadmin } from '@/lib/admin/acciones_riesgo';
 import {
@@ -12,6 +12,8 @@ import {
 } from '@/lib/auth/gestion_admin';
 import { darDeBajaPersonalLikida, reactivarPersonalLikida } from '@/lib/auth/baja_acceso';
 import type { ResultadoAccion } from '../ui/forma';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 
 // Gestión de personas de las flotas desde /admin: cambiar rol, dar de baja, reactivar, reenviar el acceso y cerrar sesiones. Misma lógica
 // que /dashboard/usuarios?tenant=… (`usuarios_escritura.ts`), con la flota leída de la base por el id de la persona. Cada acción re-gatea
@@ -27,6 +29,7 @@ function refrescar() {
 }
 
 export async function accionCambiarRolUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t, idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
   if (pasoMfa) return { error: pasoMfa };
@@ -34,26 +37,28 @@ export async function accionCambiarRolUsuario(_previo: ResultadoAccion, fd: Form
     const r = await cambiarRolDesdeAdmin(id(fd), String(fd.get('rol') ?? ''), s);
     refrescar();
     const llaves = r.llavesApiSinRevocar
-      ? ' ATENCIÓN: NO se pudieron revocar sus llaves de API de Administración y siguen vivas: revócalas a mano.'
-      : (r.llavesApiRevocadas?.length ? ` Se revocaron sus llaves de API de Administración: ${r.llavesApiRevocadas.join(', ')}.` : '');
-    return { ok: `Rol cambiado: de ${nombreDeRol(r.de)} a ${nombreDeRol(r.a)}. Aplica en su siguiente clic.${llaves}` };
+      ? t('usuarios_acciones.atencion_no_se_pudieron_revocar_sus')
+      : (r.llavesApiRevocadas?.length ? t('usuarios_acciones.se_revocaron_sus_llaves_de_api', { r: r.llavesApiRevocadas.join(', ') }) : '');
+    return { ok: t('usuarios_acciones.rol_cambiado_de_a_aplica_en', { nombreDeRol: nombreDeRolTr(r.de, t), nombreDeRol2: nombreDeRolTr(r.a, t), llaves }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'cambiar el rol') };
+    return { error: mensajeParaPantalla(e, 'cambiar el rol', idioma) };
   }
 }
 
 export async function accionDarDeBajaUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   try {
     const r = await darDeBajaDesdeAdmin(id(fd), s);
     refrescar();
     return { ok: mensajeDeBaja(r).mensaje };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'dar de baja la cuenta') };
+    return { error: mensajeParaPantalla(e, 'dar de baja la cuenta', idioma) };
   }
 }
 
 export async function accionReactivarUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t, idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   // Reactivar devuelve el acceso con el rol que la cuenta tenía (puede ser dueño o contador): mismo paso que cambiar el rol.
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
@@ -62,45 +67,48 @@ export async function accionReactivarUsuario(_previo: ResultadoAccion, fd: FormD
     const r = await reactivarDesdeAdmin(id(fd), s);
     refrescar();
     return r.accesoRestaurado
-      ? { ok: 'Cuenta reactivada: ya puede volver a entrar con su correo.' }
-      : { error: 'Cuenta reactivada en el panel, pero el servicio de autenticación no confirmó levantar el bloqueo: puede que todavía no pueda entrar. Vuelve a intentarlo en un minuto.' };
+      ? { ok: t('usuarios_acciones.cuenta_reactivada_ya_puede_volver_a') }
+      : { error: t('usuarios_acciones.cuenta_reactivada_en_el_panel_pero') };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'reactivar la cuenta') };
+    return { error: mensajeParaPantalla(e, 'reactivar la cuenta', idioma) };
   }
 }
 
 export async function accionReenviarAccesoUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t, idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   try {
     const r = await reenviarAccesoDesdeAdmin(id(fd), s);
-    if (r.enviado) return { ok: `Le mandamos el correo de acceso a ${r.email}. El enlace que le llega vale 60 minutos.` };
+    if (r.enviado) return { ok: t('usuarios_acciones.le_mandamos_el_correo_de_acceso', { email: r.email }) };
     return {
       error: r.motivo === 'sin_configurar'
-        ? `NO salió correo: el canal de correo (Resend) no está configurado en este ambiente. Pásale tú la liga del panel, ${appUrl()}.`
-        : `El correo de acceso NO salió. Pásale tú la liga del panel, ${appUrl()}, o vuelve a intentar.`,
+        ? t('usuarios_acciones.no_salio_correo_el_canal_de', { appUrl: appUrl() })
+        : t('usuarios_acciones.el_correo_de_acceso_no_salio', { appUrl: appUrl() }),
     };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'reenviar el acceso') };
+    return { error: mensajeParaPantalla(e, 'reenviar el acceso', idioma) };
   }
 }
 
 export async function accionCerrarSesionesUsuario(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t, idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   try {
     const r = await cerrarSesionesDesdeAdmin(id(fd), s);
     return r.sesionesCerradas
-      ? { ok: 'Listo: todas sus sesiones quedaron cerradas. Va a tener que volver a entrar con su correo.' }
-      : { error: 'No se pudo confirmar el cierre de sesiones — quedó registrado; vuelve a intentarlo.' };
+      ? { ok: t('usuarios_acciones.listo_todas_sus_sesiones_quedaron_cerradas') }
+      : { error: t('usuarios_acciones.no_se_pudo_confirmar_el_cierre') };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'cerrar sus sesiones') };
+    return { error: mensajeParaPantalla(e, 'cerrar sus sesiones', idioma) };
   }
 }
 
 // ── 4b: PERSONAL DE LIKIDA (superadmin y vendedor). Marcado para revisión del dueño: la lógica y sus candados viven en
 // `lib/auth/baja_acceso.ts` (nunca a uno mismo, nunca el último superadmin) y nace apagada (LIKIDA_BAJA_PERSONAL_LIKIDA).
-const SIN_ASIENTO = ' OJO: el acto ya se hizo, pero NO se pudo escribir en la bitácora; avísale a quien administra la base.';
+const sinAsiento = (t: TSistema = T_SISTEMA_ES) => (t('usuarios_acciones.ojo_el_acto_ya_se_hizo'));
 
 export async function accionDarDeBajaPersonalLikida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t, idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
   if (pasoMfa) return { error: pasoMfa };
@@ -108,15 +116,16 @@ export async function accionDarDeBajaPersonalLikida(_previo: ResultadoAccion, fd
     const r = await darDeBajaPersonalLikida(id(fd), s);
     refrescar();
     const sesion = r.sesionRevocada
-      ? ' Sus sesiones quedaron cerradas.'
-      : ' La cuenta quedó de baja, pero NO se pudo confirmar el cierre de sus sesiones: vuelve a intentarlo.';
-    return { ok: `Baja hecha (${nombreDeRol(r.rol)}).${sesion}${r.bitacora ? '' : SIN_ASIENTO}` };
+      ? t('usuarios_acciones.sus_sesiones_quedaron_cerradas')
+      : t('usuarios_acciones.la_cuenta_quedo_de_baja_pero');
+    return { ok: t('usuarios_acciones.baja_hecha', { rol: nombreDeRolTr(r.rol, t), sesion, asiento: r.bitacora ? '' : sinAsiento(t) }) };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'dar de baja al personal de Likida') };
+    return { error: mensajeParaPantalla(e, 'dar de baja al personal de Likida', idioma) };
   }
 }
 
 export async function accionReactivarPersonalLikida(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
+  const { t, idioma } = await getT('admin_sistema');
   const s = await requireSuperadmin();
   const pasoMfa = await pasoExtraSuperadmin('cambio_rol', s);
   if (pasoMfa) return { error: pasoMfa };
@@ -124,9 +133,9 @@ export async function accionReactivarPersonalLikida(_previo: ResultadoAccion, fd
     const r = await reactivarPersonalLikida(id(fd), s);
     refrescar();
     return r.accesoRestaurado
-      ? { ok: `Cuenta reactivada (${nombreDeRol(r.rol)}): ya puede volver a entrar.${r.bitacora ? '' : SIN_ASIENTO}` }
-      : { error: 'Cuenta reactivada en el panel, pero el servicio de autenticación no confirmó levantar el bloqueo. Vuelve a intentarlo en un minuto.' };
+      ? { ok: t('usuarios_acciones.cuenta_reactivada_rol', { rol: nombreDeRolTr(r.rol, t), asiento: r.bitacora ? '' : sinAsiento(t) }) }
+      : { error: t('usuarios_acciones.cuenta_reactivada_en_el_panel_pero_2') };
   } catch (e) {
-    return { error: mensajeParaPantalla(e, 'reactivar al personal de Likida') };
+    return { error: mensajeParaPantalla(e, 'reactivar al personal de Likida', idioma) };
   }
 }

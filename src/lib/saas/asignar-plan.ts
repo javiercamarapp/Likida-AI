@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { esUuidValido } from '@/lib/likida/intake/cfdi';
 import { anotarAccionAdmin, type ActorAdmin } from '@/lib/admin/acciones_riesgo';
 
@@ -84,33 +84,27 @@ async function leerSuscripcionViva(tenantId: string): Promise<SuscripcionViva | 
 
 /** El plan debe poder cobrarse por `emitirMensualidad`: price ligado, precio > 0, en pesos y con el criterio de IVA declarado. */
 async function leerPlanCobrable(planClave: string): Promise<{ clave: string; nombre: string }> {
-  if (!planClave.trim()) throw new DatoInvalido('Elige un plan.');
+  if (!planClave.trim()) throw datoInvalido('asignar_plan.elige_un_plan');
   const { data, error } = await supabaseAdmin()
     .from('plan')
     .select('clave, nombre, precio_mensual, moneda, precio_iva_incluido, stripe_price_id, activo')
     .eq('clave', planClave)
     .maybeSingle();
   if (error) throw new Error(`gestionarSuscripcion.plan: ${error.message}`);
-  if (!data || data.activo === false) throw new DatoInvalido('Ese plan no existe o ya no está disponible.');
+  if (!data || data.activo === false) throw datoInvalido('asignar_plan.ese_plan_no_existe_o');
   const nombre = String(data.nombre ?? data.clave);
   if (!data.stripe_price_id) {
-    throw new DatoInvalido(
-      `El plan "${nombre}" no tiene un price de Stripe ligado, así que no se le puede asignar a una flota: no habría monto que cobrar. `
-      + 'Liga primero el price en Costos y facturación (el monto se lee de Stripe, no se teclea).',
-    );
+    throw datoInvalido('asignar_plan.el_plan_no_tiene_un', { nombre });
   }
   const precio = data.precio_mensual === null || data.precio_mensual === undefined ? null : Number(data.precio_mensual);
   if (precio === null || !(precio > 0)) {
-    throw new DatoInvalido(`El plan "${nombre}" no tiene precio mensual mayor a cero. Vuelve a guardar su price en Costos y facturación.`);
+    throw datoInvalido('asignar_plan.el_plan_no_tiene_precio', { nombre });
   }
   if ((data.moneda ?? 'MXN') !== 'MXN') {
-    throw new DatoInvalido(`El plan "${nombre}" está en ${String(data.moneda)} y el cobro por transferencia es solo en pesos. Corrige el price en Stripe.`);
+    throw datoInvalido('asignar_plan.el_plan_esta_en_y', { nombre, v: String(data.moneda) });
   }
   if (data.precio_iva_incluido === null || data.precio_iva_incluido === undefined) {
-    throw new DatoInvalido(
-      `El plan "${nombre}" no declara si su precio incluye IVA (tax_behavior sin definir en Stripe): la mensualidad no se podría emitir. `
-      + 'Ponle "inclusive" o "exclusive" en Stripe y vuelve a guardar el price.',
-    );
+    throw datoInvalido('asignar_plan.el_plan_no_declara_si', { nombre });
   }
   return { clave: String(data.clave), nombre };
 }
@@ -122,10 +116,7 @@ async function sincronizarPlanDelTenant(tenantId: string, planClave: string): Pr
 
 function exigirGestionLocal(sus: SuscripcionViva): void {
   if (sus.stripeSubscriptionId) {
-    throw new DatoInvalido(
-      `Esa flota cobra por Stripe (suscripción ${sus.stripeSubscriptionId.slice(0, 14)}…): su plan y su estado se gestionan en Stripe o desde su `
-      + 'propio panel. Moverlos solo en la base dejaría a Likida diciendo una cosa mientras Stripe cobra otra.',
-    );
+    throw datoInvalido('asignar_plan.esa_flota_cobra_por_stripe', { v: sus.stripeSubscriptionId.slice(0, 14) });
   }
 }
 
@@ -147,7 +138,6 @@ async function moverEstado(
   return Array.isArray(data) && data.length > 0;
 }
 
-const CONFLICTO = 'La suscripción de esa flota cambió mientras tanto. Recarga la pantalla y vuelve a intentarlo.';
 
 /**
  * Gestiona la suscripción de UNA flota. `tenantId` viene del objetivo elegido por el superadmin; todo UPDATE va anclado a él.
@@ -160,12 +150,12 @@ export async function gestionarSuscripcionDeFlota(p: {
   actor: ActorAdmin;
 }): Promise<ResultadoGestionPlan> {
   const { tenantId, operacion, actor } = p;
-  if (!esUuidValido(tenantId)) throw new DatoInvalido('Elige una flota.');
-  if (!OPERACIONES_PLAN.includes(operacion)) throw new DatoInvalido('Esa operación no existe.');
+  if (!esUuidValido(tenantId)) throw datoInvalido('asignar_plan.elige_una_flota');
+  if (!OPERACIONES_PLAN.includes(operacion)) throw datoInvalido('asignar_plan.esa_operacion_no_existe');
 
   const { data: t, error: errT } = await supabaseAdmin().from('tenant').select('id, plan').eq('id', tenantId).maybeSingle();
   if (errT) throw new Error(`gestionarSuscripcion.tenant: ${errT.message}`);
-  if (!t) throw new DatoInvalido('Esa flota ya no existe.');
+  if (!t) throw datoInvalido('asignar_plan.esa_flota_ya_no_existe');
 
   const sus = await leerSuscripcionViva(tenantId);
 
@@ -192,7 +182,7 @@ export async function gestionarSuscripcionDeFlota(p: {
         .is('stripe_subscription_id', null)
         .select('id');
       if (error) throw new Error(`gestionarSuscripcion.cambiar: ${error.message}`);
-      if (!Array.isArray(data) || data.length === 0) throw new DatoInvalido(CONFLICTO);
+      if (!Array.isArray(data) || data.length === 0) throw datoInvalido('asignar_plan.conflicto');
       await sincronizarPlanDelTenant(tenantId, plan.clave);
       const bitacora = await asentar('suscripcion.plan_cambiado', sus.id, { de: sus.planClave, a: plan.clave, estado: sus.estado });
       return { operacion, cambio: true, suscripcionId: sus.id, planClave: plan.clave, estadoAntes: sus.estado, estadoDespues: sus.estado, bitacora };
@@ -211,7 +201,7 @@ export async function gestionarSuscripcionDeFlota(p: {
           await sincronizarPlanDelTenant(tenantId, plan.clave);
           return { operacion, cambio: false, suscripcionId: ganadora.id, planClave: plan.clave, estadoAntes: ganadora.estado, estadoDespues: ganadora.estado, bitacora: true };
         }
-        throw new DatoInvalido(CONFLICTO);
+        throw datoInvalido('asignar_plan.conflicto');
       }
       throw new Error(`gestionarSuscripcion.crear: ${errIns.message}`);
     }
@@ -223,14 +213,14 @@ export async function gestionarSuscripcionDeFlota(p: {
   }
 
   // activar / pausar / cancelar actúan sobre la suscripción viva que ya existe.
-  if (!sus) throw new DatoInvalido('Esa flota no tiene una suscripción viva. Asígnale un plan primero.');
+  if (!sus) throw datoInvalido('asignar_plan.esa_flota_no_tiene_una');
   exigirGestionLocal(sus);
 
   const destino = operacion === 'activar' ? 'activa' : operacion === 'pausar' ? 'pausada' : 'cancelada';
   if (sus.estado === destino) {
     return { operacion, cambio: false, suscripcionId: sus.id, planClave: sus.planClave, estadoAntes: sus.estado, estadoDespues: sus.estado, bitacora: true };
   }
-  if (!(await moverEstado(sus, tenantId, destino))) throw new DatoInvalido(CONFLICTO);
+  if (!(await moverEstado(sus, tenantId, destino))) throw datoInvalido('asignar_plan.conflicto');
   if (operacion === 'cancelar') await sincronizarPlanDelTenant(tenantId, PLAN_SIN_SUSCRIPCION);
   const accion = operacion === 'activar' ? 'suscripcion.activada' : operacion === 'pausar' ? 'suscripcion.pausada' : 'suscripcion.cancelada';
   const bitacora = await asentar(accion, sus.id, { plan: sus.planClave, de: sus.estado, a: destino });

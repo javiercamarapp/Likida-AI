@@ -33,8 +33,8 @@ const ROLES = [
   {
     nombre: 'dueño', correo: CORREOS.perfilDueno, ip: '10.77.0.1',
     menu: ['/dashboard/despacho', '/dashboard/viajes', '/dashboard/operadores', '/dashboard/unidades', '/dashboard/mapa', '/dashboard/carta-porte',
-      '/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/agentes/carta-porte', '/dashboard/conexiones', '/dashboard/usuarios', '/dashboard/mi-perfil'],
-    negadas: ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/rentabilidad', '/dashboard/suscripcion'],
+      '/dashboard/chat', '/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/agentes/carta-porte', '/dashboard/conexiones', '/dashboard/usuarios', '/dashboard/mi-perfil'],
+    negadas: ['/dashboard/facturacion', '/dashboard/rentabilidad', '/dashboard/suscripcion'],
   },
   {
     nombre: 'encargado', correo: CORREOS.perfilEncargado, ip: '10.77.0.2',
@@ -43,8 +43,8 @@ const ROLES = [
   },
   {
     nombre: 'contador', correo: CORREOS.perfilContador, ip: '10.77.0.3',
-    menu: ['/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/notificaciones', '/dashboard/mi-perfil'],
-    negadas: ['/dashboard/despacho', '/dashboard/viajes', '/dashboard/conexiones', '/dashboard/usuarios', '/dashboard/chat'],
+    menu: ['/dashboard/chat', '/dashboard/agentes/liquidacion', '/dashboard/agentes/peajes', '/dashboard/notificaciones', '/dashboard/mi-perfil'],
+    negadas: ['/dashboard/despacho', '/dashboard/viajes', '/dashboard/conexiones', '/dashboard/usuarios'],
   },
 ] as const;
 

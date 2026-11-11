@@ -19,7 +19,7 @@
 
 import { logger } from '@/lib/logger';
 import { anotarBitacora } from '../bitacora_escritura';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido, etiqueta } from '../errores';
 import { CAMPOS_DOC, CAMPOS_MERCANCIA, MAX_MERCANCIAS, campoDoc, campoMercancia, etiquetaCampo, type CampoValor, type Extraccion } from './campos';
 import { detectarFormato, prepararContenido, type ContenidoDoc } from './contenido';
 import { completarDerivados } from './derivar';
@@ -66,12 +66,12 @@ export function aplicarCambiosAExtraccion(base: Extraccion, cambios: CambioCampo
 
   for (const c of cambios) {
     const def = c.renglon === null ? campoDoc(c.campo) : campoMercancia(c.campo);
-    if (!def) throw new DatoInvalido(`«${c.campo}» no es un campo del ${c.renglon === null ? 'documento' : 'renglón de mercancía'}.`);
+    if (!def) throw datoInvalido('bandeja.campo_desconocido', { campo: c.campo, donde: etiqueta(c.renglon === null ? 'bandeja.donde_documento' : 'bandeja.donde_renglon') });
     if (c.renglon !== null) {
-      if (!Number.isInteger(c.renglon) || c.renglon < 0 || c.renglon > e.mercancias.length) throw new DatoInvalido(`El renglón ${(c.renglon ?? 0) + 1} no existe.`);
+      if (!Number.isInteger(c.renglon) || c.renglon < 0 || c.renglon > e.mercancias.length) throw datoInvalido('bandeja.el_renglon_no_existe', { v: (c.renglon ?? 0) + 1 });
       if (c.renglon === e.mercancias.length) {
         if ((c.valor ?? '').trim() === '') continue; // un renglón nuevo sin dato no se crea
-        if (e.mercancias.length >= MAX_MERCANCIAS) throw new DatoInvalido(`Un documento admite hasta ${MAX_MERCANCIAS} mercancías.`);
+        if (e.mercancias.length >= MAX_MERCANCIAS) throw datoInvalido('bandeja.un_documento_admite_hasta_mercancias', { MAX_MERCANCIAS });
         e.mercancias.push({});
       }
     }
@@ -88,7 +88,7 @@ export function aplicarCambiosAExtraccion(base: Extraccion, cambios: CambioCampo
       continue;
     }
     const n = normalizarValor(def, crudo);
-    if (n.valor === null) throw new DatoInvalido(`${rotulo}: no entendí «${crudo.slice(0, 40)}».`);
+    if (n.valor === null) throw datoInvalido('bandeja.no_entendi', { rotulo, v: crudo.slice(0, 40) });
     if (n.valor === actual?.valor) {
       if (c.confirmar && actual.origen !== 'humano') {
         destino[c.campo] = { ...actual, confianza: 1, origen: 'humano', notas: [...(actual.notas ?? []), 'Confirmado por una persona.'] };
@@ -106,7 +106,7 @@ export function aplicarCambiosAExtraccion(base: Extraccion, cambios: CambioCampo
 
 /** Quita un renglón de mercancía (otra clase de corrección: se registra con el campo `mercancia`). PURA. */
 export function quitarRenglonDeExtraccion(base: Extraccion, renglon: number): ResultadoCambios {
-  if (!Number.isInteger(renglon) || renglon < 0 || renglon >= base.mercancias.length) throw new DatoInvalido(`El renglón ${renglon + 1} no existe.`);
+  if (!Number.isInteger(renglon) || renglon < 0 || renglon >= base.mercancias.length) throw datoInvalido('bandeja.el_renglon_no_existe', { v: renglon + 1 });
   const e = copiar(base);
   const [quitado] = e.mercancias.splice(renglon, 1);
   return {
@@ -118,15 +118,15 @@ export function quitarRenglonDeExtraccion(base: Extraccion, renglon: number): Re
 
 async function cargar(tenantId: string, id: string): Promise<DocumentoFila> {
   const d = await repo.leerDocumento(tenantId, id);
-  if (!d) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+  if (!d) throw datoInvalido('bandeja.ese_documento_no_esta_en');
   return d;
 }
 
 function exigirEditable(d: DocumentoFila): void {
   if (d.estado !== 'por_revisar') {
-    throw new DatoInvalido(d.estado === 'aprobado' ? 'El documento ya está aprobado. Reábrelo para corregirlo.' : `El documento está «${d.estado}»: solo se corrigen los que están por revisar.`);
+    throw d.estado === 'aprobado' ? datoInvalido('bandeja.ya_aprobado') : datoInvalido('bandeja.solo_por_revisar', { estado: d.estado });
   }
-  if (!d.extraccion) throw new DatoInvalido('El documento todavía no tiene extracción.');
+  if (!d.extraccion) throw datoInvalido('bandeja.el_documento_todavia_no_tiene');
 }
 
 /** Marca la PRIMERA apertura (idempotente): es el inicio del tiempo de revisión medido. No cambia la versión. */
@@ -162,7 +162,7 @@ export async function asignarCliente(
   exigirEditable(d);
   if (d.version !== versionVista) throw new ConflictoDeVersion();
   if ((d.clienteId ?? null) === clienteId) return d;
-  if (clienteId !== null && !(await repo.clientePropio(tenantId, clienteId))) throw new DatoInvalido('Ese cliente no pertenece a tu flota.');
+  if (clienteId !== null && !(await repo.clientePropio(tenantId, clienteId))) throw datoInvalido('bandeja.ese_cliente_no_pertenece_a');
   let extraccion = d.extraccion as Extraccion;
   let aplicados = 0;
   const meta = d.extraccion?.meta;
@@ -325,7 +325,7 @@ export async function aprobarDocumento(
   const validacion = conservarHallazgosTms(await validarDocumento(tenantId, d, d.extraccion as Extraccion), d.validacion);
   if (!validacion.listoParaAprobar) {
     const motivos = validacion.hallazgos.filter((h) => h.severidad !== 'aviso').map((h) => h.mensaje).slice(0, 5);
-    throw new DatoInvalido(`No se puede aprobar todavía: ${motivos.join(' ')}`);
+    throw datoInvalido('bandeja.no_se_puede_aprobar_todavia', { v: motivos.join(' ') });
   }
   const segundos = d.abiertoEn ? Math.round((ahora.getTime() - new Date(d.abiertoEn).getTime()) / 1000) : null;
   const medible = segundos !== null && segundos >= 0 && segundos <= MAX_SEGUNDOS_REVISION_MEDIBLE ? segundos : null;
@@ -394,7 +394,7 @@ export async function crearViajeDeDocumento(
   // Stand-by bajo el perfil: se responde ANTES de leer nada de la base.
   if (await flotaBajoPerfil(tenantId)) return { ok: false, motivo: 'datos_invalidos', mensaje: MENSAJE_FUNCION_NO_DISPONIBLE };
   const d = await cargar(tenantId, id);
-  if (d.estado !== 'aprobado') throw new DatoInvalido('Solo se crea el viaje de un documento aprobado.');
+  if (d.estado !== 'aprobado') throw datoInvalido('bandeja.solo_se_crea_el_viaje');
   return (await intentarSalida(tenantId, d, actor, operadorId)) as ResultadoSalida;
 }
 
@@ -403,11 +403,11 @@ export async function rechazarDocumento(
 ): Promise<DocumentoFila> {
   // T-A3-37: la causa clasificada que elige la persona manda sobre la sugerida; vacía = se usa la sugerida (si la hay).
   const elegida = causaElegida?.trim() || null;
-  if (elegida !== null && !esCausaRechazo(elegida)) throw new DatoInvalido('Elige una causa de rechazo de la lista.');
+  if (elegida !== null && !esCausaRechazo(elegida)) throw datoInvalido('bandeja.elige_una_causa_de_rechazo');
   const m = motivo.replace(/\s+/g, ' ').trim();
-  if (m.length < 3 || m.length > 500) throw new DatoInvalido('Escribe el motivo del rechazo (entre 3 y 500 caracteres).');
+  if (m.length < 3 || m.length > 500) throw datoInvalido('bandeja.escribe_el_motivo_del_rechazo');
   const d = await cargar(tenantId, id);
-  if (d.estado !== 'por_revisar' && d.estado !== 'fallido') throw new DatoInvalido(`Un documento «${d.estado}» no se rechaza.`);
+  if (d.estado !== 'por_revisar' && d.estado !== 'fallido') throw datoInvalido('bandeja.un_documento_no_se_rechaza', { estado: d.estado });
   if (d.version !== versionVista) throw new ConflictoDeVersion();
   const causa = elegida ?? causaSugeridaDeRechazo(d);
   const r = await repo.actualizarDocumento(tenantId, id, versionVista, {
@@ -426,7 +426,7 @@ export async function rechazarDocumento(
  */
 export async function reintentarLectura(tenantId: string, id: string, versionVista: number, actorId: string | null): Promise<DocumentoFila> {
   const d = await cargar(tenantId, id);
-  if (d.estado !== 'fallido') throw new DatoInvalido(`Un documento «${d.estado}» no se reintenta: solo los que no se pudieron leer.`);
+  if (d.estado !== 'fallido') throw datoInvalido('bandeja.un_documento_no_se_reintenta', { estado: d.estado });
   if (d.version !== versionVista) throw new ConflictoDeVersion();
   const r = await reintentarDocumento(tenantId, d, actorId, 'Reintentar lectura (botón)');
   if (!r.ok) throw new DatoInvalido(r.mensaje);
@@ -443,8 +443,8 @@ async function reabrir(
   extra: { cambios?: (d: DocumentoFila) => Record<string, unknown>; evento?: Record<string, unknown> },
 ): Promise<DocumentoFila> {
   const d = await cargar(tenantId, id);
-  if (d.estado !== 'aprobado' && d.estado !== 'rechazado') throw new DatoInvalido('Solo se reabren los documentos aprobados o rechazados.');
-  if (!d.extraccion) throw new DatoInvalido('Este documento no tiene extracción que revisar.');
+  if (d.estado !== 'aprobado' && d.estado !== 'rechazado') throw datoInvalido('bandeja.solo_se_reabren_los_documentos');
+  if (!d.extraccion) throw datoInvalido('bandeja.este_documento_no_tiene_extraccion');
   if (d.version !== versionVista) throw new ConflictoDeVersion();
   const r = await repo.actualizarDocumento(tenantId, id, versionVista, {
     estado: 'por_revisar', aprobado_en: null, aprobado_por: null, rechazo_motivo: null, tiempo_revision_seg: null, exportado_en: null,
@@ -499,7 +499,7 @@ export async function reabrirPorRechazoTms(
 export async function eliminarDocumento(tenantId: string, id: string, actor: { id: string | null; email?: string }): Promise<void> {
   const d = await cargar(tenantId, id);
   if (d.estado === 'procesando' && d.procesandoHasta && new Date(d.procesandoHasta) > new Date()) {
-    throw new DatoInvalido('El documento se está leyendo ahora mismo. Espera un momento y vuelve a intentarlo.');
+    throw datoInvalido('bandeja.el_documento_se_esta_leyendo');
   }
   // Un archivo dividido (0670): sus hijos contienen los MISMOS datos personales y la base los arrastra en cascada, pero sus
   // archivos en Storage no: se borran uno por uno ANTES, o quedarían huérfanos con datos de terceros.
@@ -507,7 +507,7 @@ export async function eliminarDocumento(tenantId: string, id: string, actor: { i
   if (d.estado === 'dividido') {
     for (const h of await repo.hijosDeDocumento(tenantId, id)) {
       if (h.documento.estado === 'procesando' && h.documento.procesandoHasta && new Date(h.documento.procesandoHasta) > new Date()) {
-        throw new DatoInvalido('Uno de los embarques de este archivo se está leyendo ahora mismo. Espera un momento y vuelve a intentarlo.');
+        throw datoInvalido('bandeja.uno_de_los_embarques_de');
       }
     }
     for (const h of await repo.hijosDeDocumento(tenantId, id)) {
@@ -524,7 +524,7 @@ export async function eliminarDocumento(tenantId: string, id: string, actor: { i
     ccpUuidsEliminados.push(x.uuid);
   }
   if (d.storageRuta) await repo.borrarArchivo(d.storageRuta);
-  if (!(await repo.borrarDocumento(tenantId, id))) throw new DatoInvalido('Ese documento ya no existe.');
+  if (!(await repo.borrarDocumento(tenantId, id))) throw datoInvalido('bandeja.ese_documento_ya_no_existe');
   await anotarBitacora(
     { tenantId, actor: { id: actor.id ?? undefined, email: actor.email }, accion: 'ccp.documento_eliminado', entidad: 'tenant', entidadId: tenantId, detalle: { documentoId: id, formato: d.formato, estado: d.estado, conViaje: d.viajeId !== null, ...(d.estado === 'dividido' ? { hijosBorrados } : {}), ...(ccpUuidsEliminados.length > 0 ? { ccpUuidsEliminados } : {}) } },
     { evento: 'carta_porte_docs.bitacora_no_escribio' },

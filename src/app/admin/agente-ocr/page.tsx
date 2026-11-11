@@ -10,6 +10,7 @@ import { MarcoPagina, FilaTarjetas, Tarjeta, Aviso, BotonEnlace } from '@/app/ui
 import { TiraCifras, Columnas } from '@/app/ui-v2/graficas';
 import { TarjetaFase } from '../tarjeta-fase';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -19,6 +20,7 @@ export const dynamic = 'force-dynamic';
  * no es «no hay medición»).
  */
 export default async function AgenteOcrPage() {
+  const { t } = await getT('admin_agentes');
   await requireSuperadmin();
   const [r, porFaseModelo] = await Promise.all([getResumenNegocio(), getCostoPorFaseModelo()]);
   const lecturas = await leerUltimasLecturas(supabaseAdmin()).catch((e) => ({ ok: false as const, error: String(e) }));
@@ -39,36 +41,37 @@ export default async function AgenteOcrPage() {
   return (
     <MarcoPagina
       area="Agentes"
-      titulo="Agentes"
-      apoyo="OCR: la lectura de comprobantes: monto, folio y CFDI. Costo real, histórico, y qué tan bien lee."
-      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">Medir en Calidad</BotonEnlace>}
+      titulo={t('agente_ocr.agentes')}
+      apoyo={t('agente_ocr.ocr_la_lectura_de')}
+      acciones={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.medir_en_calidad')}</BotonEnlace>}
     >
       <TiraCifras
         etiqueta="OCR"
         items={[
-          { etiqueta: 'Gastado en OCR', valor: ocr ? ocr.costoUsd : 0, formato: 'usd', nota: 'Costo medido en llm_costo' },
-          { etiqueta: 'Llamadas de OCR', valor: ocr ? ocr.n : 0, formato: 'entero' },
-          { etiqueta: 'Facturas procesadas, histórico', valor: r.facturasTotal, formato: 'entero' },
-          { etiqueta: 'Exactitud global', valor: precision === null ? null : precision.global.exactitud === null ? null : Math.round(precision.global.exactitud * 100), formato: 'porcentaje', estado: precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok', mensaje: precision === null ? undefined : 'Sin medir todavía', nota: 'Contra el banco de verdad' },
+          { etiqueta: t('agente_ocr.gastado_en_ocr'), valor: ocr ? ocr.costoUsd : 0, formato: 'usd', nota: t('agente_ocr.costo_medido_en_llm') },
+          { etiqueta: t('agente_ocr.llamadas_de_ocr'), valor: ocr ? ocr.n : 0, formato: 'entero' },
+          { etiqueta: t('agente_ocr.facturas_procesadas_historico'), valor: r.facturasTotal, formato: 'entero' },
+          { etiqueta: t('agente_ocr.exactitud_global'), valor: precision === null ? null : precision.global.exactitud === null ? null : Math.round(precision.global.exactitud * 100), formato: 'porcentaje', estado: precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok', mensaje: precision === null ? undefined : t('agente_ocr.sin_medir_todavia'), nota: t('agente_ocr.contra_el_banco_de') },
         ]}
       />
 
       <FilaTarjetas variante="8-4">
-        <Tarjeta titulo="Qué tan bien lee" estado={precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok'}
-          mensaje={precision === null ? 'No se pudo leer la medición de precisión, que no es lo mismo que «no hay medición».' : 'El OCR todavía no se ha medido'}
-          detalle="Sin campos medidos no hay exactitud que reportar (esto NO es un 0%). La medición se corre en Calidad, contra fotos reales con verdad de terreno firmada."
-          accionVacio={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">Abrir Calidad</BotonEnlace>}
+        <Tarjeta titulo={t('agente_ocr.que_tan_bien_lee')} estado={precision === null ? 'error' : precision.global.exactitud === null ? 'vacio' : 'ok'}
+          mensaje={precision === null ? t('agente_ocr.no_se_pudo_leer') : t('agente_ocr.el_ocr_todavia_no')}
+          detalle={t('agente_ocr.sin_campos_medidos_no')}
+          accionVacio={<BotonEnlace href="/admin/qa" variante="secondary" tamano="sm">{t('agente_ocr.abrir_calidad')}</BotonEnlace>}
         >
           {precision !== null && precision.global.exactitud !== null ? (
             <>
               <p>
-                <strong>{pct(precision.global.exactitud)}</strong> de exactitud global: {numero(precision.global.medidos)} campos medidos sobre {numero(precision.fotos)} fotos (última lectura de cada una).
+                <strong>{pct(precision.global.exactitud)}</strong> de exactitud global: {numero(precision.global.medidos)} campos medidos sobre {numero(precision.fotos)}  {t('agente_ocr.fotos_ultima_lectura_de')}
               </p>
               {peores.length > 0 ? (
                 <p>
-                  Lo que peor se lee:{' '}
+                  
+                  {t('agente_ocr.lo_que_peor_se')}{' '}
                   {peores.map((c, i) => (
-                    <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? 'medición' : 'mediciones'})</span>
+                    <span key={c.clave}>{i > 0 && ' · '}<strong>{c.clave} {pct(c.exactitud)}</strong> ({numero(c.medidos)} {c.medidos === 1 ? t('agente_ocr.medicion') : 'mediciones'})</span>
                   ))}
                 </p>
               ) : null}
@@ -77,18 +80,18 @@ export default async function AgenteOcrPage() {
           ) : null}
         </Tarjeta>
         <TarjetaFase
-          titulo={desgloseSeparable ? 'Costo por modelo, OCR' : 'Costo por modelo, todas las fases'}
+          titulo={desgloseSeparable ? t('agente_ocr.costo_por_modelo_ocr') : t('agente_ocr.costo_por_modelo_todas')}
           queHace="Lee la foto de un comprobante y extrae monto, folio y CFDI."
           datos={ocr}
           modelos={desgloseSeparable ? modelosOcr : r.porModelo}
         />
       </FilaTarjetas>
 
-      <Tarjeta titulo="Facturas procesadas, últimos 7 días" estado={r.facturasPorDia.some((d) => d.n > 0) ? 'ok' : 'vacio'} mensaje="Sin facturas en 7 días" detalle="Aparecen cuando una flota manda comprobantes por WhatsApp.">
-        <Columnas etiqueta="Facturas procesadas por día" datos={r.facturasPorDia.map((d) => ({ etiqueta: d.dia, valor: d.n }))} formato="numero" />
+      <Tarjeta titulo={t('agente_ocr.facturas_procesadas_ultimos_7')} estado={r.facturasPorDia.some((d) => d.n > 0) ? 'ok' : 'vacio'} mensaje={t('agente_ocr.sin_facturas_en_7')} detalle={t('agente_ocr.aparecen_cuando_una_flota')}>
+        <Columnas etiqueta={t('agente_ocr.facturas_procesadas_por_dia')} datos={r.facturasPorDia.map((d) => ({ etiqueta: d.dia, valor: d.n }))} formato="numero" />
       </Tarjeta>
 
-      {!desgloseSeparable ? <Aviso tono="info">El costo por modelo de arriba cubre todas las fases: con los datos de hoy no se puede aislar solo el de OCR.</Aviso> : null}
+      {!desgloseSeparable ? <Aviso tono="info">{t('agente_ocr.el_costo_por_modelo')}</Aviso> : null}
     </MarcoPagina>
   );
 }

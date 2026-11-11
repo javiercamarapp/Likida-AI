@@ -11,7 +11,11 @@ import {
 } from '@/lib/likida/liquidacion_externa/repo_correo';
 import { VistaConfiguracionLiquidacion, leerFormularioConfig } from './vista';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Configuración del desglose' };
+import { getT } from '@/lib/i18n/servidor';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('agentes');
+  return { title: t('rest.configuracion_del_desglose') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -20,9 +24,10 @@ const RUTA = '/dashboard/agentes/liquidacion/configuracion';
 /** La puerta de TODA action: una action es un endpoint alcanzable por POST directo, no un botón.
  *  Cambiar a quién le llega el desglose es administrar (dueño), no solo ver dinero. */
 async function puerta(sp: { vista?: string; tenant?: string; rol?: string } | undefined, tenantId: string): Promise<{ por: string } | { error: string }> {
+  const { t: tx } = await getT('agentes');
   const sesion = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
-  if (!puedeVerArea(sesion.rol, 'administracion')) return { error: 'Solo el dueño de la flota cambia la configuración de la entrega del desglose.' };
-  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: 'Esta configuración no es de tu flota.' };
+  if (!puedeVerArea(sesion.rol, 'administracion')) return { error: tx('rest.solo_el_dueno_de_la_flota_3') };
+  if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) return { error: tx('rest.esta_configuracion_no_es_de_tu') };
   return { por: sesion.userId };
 }
 
@@ -48,6 +53,7 @@ export default async function PaginaConfiguracionLiquidacion({
 }: {
   searchParams: Promise<{ tenant?: string; rol?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -66,11 +72,12 @@ export default async function PaginaConfiguracionLiquidacion({
   } catch (e) {
     logger.error('liqext.config_pagina_lectura', { err: e instanceof Error ? e.message : String(e) });
     disponible = false;
-    errorLectura = 'No se pudo leer la configuración guardada. Inténtalo de nuevo en un momento; no se cambió nada.';
+    errorLectura = tx('rest.no_se_pudo_leer_la_configuracion');
   }
 
   async function accionGuardar(fd: FormData) {
     'use server';
+    const { t: tx } = await getT('agentes');
     const p = await puerta(sp, tenantId);
     if ('error' in p) return volver(sufijo, `error:${p.error}`);
     const f = leerFormularioConfig(fd);
@@ -78,7 +85,7 @@ export default async function PaginaConfiguracionLiquidacion({
     let cambios: string[] = [];
     try {
       const previa = await leerConfigCorreo(tenantId);
-      if (!previa.ok) return volver(sufijo, 'error:La configuración de la entrega por correo todavía no está disponible en esta base.');
+      if (!previa.ok) return volver(sufijo, tx('rest.error_la_configuracion_de_la_entrega'));
       cambios = camposCambiados(previa.valor, f.config);
       await exigirContactosParaActivar(tenantId, f.config);
       await guardarConfigCorreo(tenantId, f.config, p.por);
@@ -86,12 +93,12 @@ export default async function PaginaConfiguracionLiquidacion({
       // `redirect` lanza: se deja pasar. Lo demás se dice llano, sin correos ni detalles de base.
       if (e instanceof Error && e.message === 'NEXT_REDIRECT') throw e;
       if (typeof e === 'object' && e !== null && 'digest' in e && String((e as { digest: unknown }).digest).startsWith('NEXT_REDIRECT')) throw e;
-      return volver(sufijo, `error:${mensajeParaPantalla(e, 'guardar la configuración')}`);
+      return volver(sufijo, `error:${mensajeParaPantalla(e, tx('rest.guardar_la_configuracion'))}`);
     }
     logger.info('liqext.config_correo_guardada', { tenantId, por: p.por, campos: cambios, activa: f.config.activa, canal: f.config.canal });
     return volver(sufijo, f.config.activa
-      ? 'Configuración guardada. El envío por correo está ACTIVO: los desgloses nuevos saldrán según estas reglas.'
-      : 'Configuración guardada. El envío por correo sigue apagado: no sale ningún correo hasta que lo actives.');
+      ? tx('rest.configuracion_guardada_el_envio_por_correo')
+      : tx('rest.configuracion_guardada_el_envio_por_correo_2'));
   }
 
   return (

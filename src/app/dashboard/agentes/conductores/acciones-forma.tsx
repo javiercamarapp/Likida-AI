@@ -5,6 +5,9 @@ import { useFormStatus } from 'react-dom';
 import { CheckCircle2, TriangleAlert } from 'lucide-react';
 import './conductores.css';
 import { Boton, Campo, CampoSelect, CampoTexto, Disclosure, Icono } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS ACCIONES DEL JEFE SOBRE UN HITO (0385) — capturar a mano, validar, marcar atendido.
@@ -21,11 +24,11 @@ export type ModoAccion = 'capturar' | 'validar' | 'atender';
 
 const TITULO: Record<ModoAccion, string> = { capturar: 'Capturar a mano', validar: 'Validar', atender: 'Marcar atendido' };
 const BOTON: Record<ModoAccion, string> = { capturar: 'Guardar captura', validar: 'Validar hito', atender: 'Marcar atendido' };
-const AYUDA: Record<ModoAccion, string> = {
-  capturar: 'El chofer no avisó y tú lo confirmaste por otro medio. Queda marcado como captura de oficina.',
-  validar: 'Confirmas que el aviso del chofer es correcto (p. ej. lo verificaste con el cliente).',
-  atender: 'Ya hablaste con el chofer o con el patio: el agente deja de insistir por este viaje.',
-};
+const ayuda = (tx: TAgentes = TR_ES.t): Record<ModoAccion, string> => ({
+  capturar: tx('rest.el_chofer_no_aviso_y_tu'),
+  validar: tx('rest.confirmas_que_el_aviso_del_chofer'),
+  atender: tx('rest.ya_hablaste_con_el_chofer_o'),
+});
 
 function Enviar({ texto }: { texto: string }) {
   const { pending } = useFormStatus();
@@ -46,19 +49,20 @@ function Resultado({ r }: { r: ResultadoOficina }) {
 }
 
 function FormaAccion({ modo, accion, hitoId, viajeId }: { modo: ModoAccion; accion: AccionOficinaServidor; hitoId: string | null; viajeId: string }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, enviar] = useActionState(accion, null);
   return (
     <Disclosure titulo={TITULO[modo]} variante="linea">
       <form action={enviar} className="rv-cd__form">
         <input type="hidden" name="tipo" value={modo} />
         {modo === 'atender' ? <input type="hidden" name="viajeId" value={viajeId} /> : <input type="hidden" name="hitoId" value={hitoId ?? ''} />}
-        <p className="rv-cd__micro">{AYUDA[modo]}</p>
+        <p className="rv-cd__micro">{ayuda(tx)[modo]}</p>
         {modo === 'capturar' && (
-          <Campo etiqueta="Hora del hito (hora de México)">
+          <Campo etiqueta={tx('rest.hora_del_hito_hora_de_mexico')}>
             <input type="datetime-local" name="hora" required className="rv-ctl" />
           </Campo>
         )}
-        <CampoTexto etiqueta="Motivo (queda en la bitácora con tu nombre)" name="motivo" required minLength={5} maxLength={200} placeholder="p. ej. avisó por radio" />
+        <CampoTexto etiqueta={tx('rest.motivo_queda_en_la_bitacora_con')} name="motivo" required minLength={5} maxLength={200} placeholder={tx('rest.p_ej_aviso_por_radio')} />
         <div className="rv-cd__linea">
           <Enviar texto={BOTON[modo]} />
           <Resultado r={estado} />
@@ -86,30 +90,28 @@ export type ResultadoSitios = ResultadoOficina;
 export interface OpcionSitio { id: string; nombre: string; tipo: string }
 
 export function FormaAsignarSitios({ accion, viajeId, sitios, hayMas = false }: { accion: AccionOficinaServidor; viajeId: string; sitios: OpcionSitio[]; hayMas?: boolean }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, enviar] = useActionState(accion, null);
   const opciones = (
     <>
-      <option value="">(sin cambio)</option>
-      <option value="__quitar">Quitar el sitio</option>
+      <option value="">{tx('rest.sin_cambio')}</option>
+      <option value="__quitar">{tx('rest.quitar_el_sitio')}</option>
       {sitios.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
     </>
   );
   return (
-    <Disclosure titulo="Asignar sitios" variante="linea">
+    <Disclosure titulo={tx('rest.asignar_sitios')} variante="linea">
       <form action={enviar} className="rv-cd__form">
         <input type="hidden" name="viajeId" value={viajeId} />
-        <p className="rv-cd__micro">Contra estos sitios se compara cada «ya llegué». Sin sitio, la llegada queda «sin dato» (nunca «no coincide»).</p>
+        <p className="rv-cd__micro">{tx('rest.contra_estos_sitios_se_compara_cada')}</p>
         {hayMas && (
-          <p role="status" className="rv-cd__micro" data-tono="warn">
-            Hay más sitios activos de los que caben en esta lista (solo salen los primeros {sitios.length} por nombre). Si no aparece el que buscas, ligarlo
-            desde aquí no es posible todavía: avisa a soporte o asígnalo con las equivalencias de «Textos sin sitio» en el catálogo.
-          </p>
+          <p role="status" className="rv-cd__micro" data-tono="warn">{tx('rest.hay_mas_sitios_activos_de_los', { length: sitios.length })}</p>
         )}
         <div className="rv-cd__cuad">
-          <CampoSelect etiqueta="Sitio de carga" name="origen" defaultValue="">{opciones}</CampoSelect>
-          <CampoSelect etiqueta="Sitio de descarga" name="destino" defaultValue="">{opciones}</CampoSelect>
+          <CampoSelect etiqueta={tx('rest.sitio_de_carga')} name="origen" defaultValue="">{opciones}</CampoSelect>
+          <CampoSelect etiqueta={tx('rest.sitio_de_descarga')} name="destino" defaultValue="">{opciones}</CampoSelect>
         </div>
-        <div className="rv-cd__linea"><Enviar texto="Guardar sitios" /><Resultado r={estado} /></div>
+        <div className="rv-cd__linea"><Enviar texto={tx('rest.guardar_sitios')} /><Resultado r={estado} /></div>
       </form>
     </Disclosure>
   );

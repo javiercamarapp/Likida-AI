@@ -3,6 +3,7 @@ import { contarParaNomina, type ConteosNomina } from '@/lib/likida/liquidacion_e
 import { Tarjeta } from '@/app/ui-v2/componentes';
 import './liquidacion.css';
 import { Ficha, VistaDesgloses } from './desgloses';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA VISTA DEL ROL `nomina` (0949) — Liquidaciones, SOLO CONTEOS.
@@ -34,20 +35,19 @@ export async function leerConteosNomina(tenantId: string): Promise<ConteosNomina
   }
 }
 
-export function SeccionConteosNomina({ conteos }: { conteos: ConteosNomina }) {
+export function SeccionConteosNomina({ conteos, tr = TR_ES }: { conteos: ConteosNomina; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
     <div id="desgloses">
-      <Tarjeta titulo="Desgloses de pago">
-        <p className="rv-liq-sub">
-          Cuántos desgloses de pago hay en cada estado. Este resumen solo muestra conteos.
-        </p>
+      <Tarjeta titulo={tx('rest.desgloses_de_pago')}>
+        <p className="rv-liq-sub">{tx('rest.cuantos_desgloses_de_pago_hay_en')}</p>
         <div className="rv-liq-fichas">
-          <Ficha etiqueta="Recibidos hoy" valor={conteos.recibidosHoy} ayuda="Desgloses que llegaron hoy del sistema de tu empresa." />
-          <Ficha etiqueta="Enviados · 30 días" valor={conteos.enviados} ayuda="Correos que salieron en los últimos 30 días y esperan confirmación de entrega. Se cuenta un correo por destinatario." />
-          <Ficha etiqueta="Entregados · 30 días" valor={conteos.entregados} ayuda="Correos de los últimos 30 días que el buzón de destino ya recibió. Se cuenta un correo por destinatario." />
-          <Ficha etiqueta="Rebotados · 30 días" valor={conteos.rebotados} tono="bad" ayuda="Correos de los últimos 30 días que no llegaron. Se cuenta un correo por destinatario." />
-          <Ficha etiqueta="Retenidos" valor={conteos.retenidos} tono="bad" ayuda="Desgloses detenidos antes de enviarse." />
-          <Ficha etiqueta="Sin póliza" valor={conteos.sinPoliza} tono="bad" ayuda="Bitácoras que esperan su póliza para poder enviarse." />
+          <Ficha tr={tr} etiqueta={tx('rest.recibidos_hoy')} valor={conteos.recibidosHoy} ayuda={tx('rest.desgloses_que_llegaron_hoy_del_sistema')} />
+          <Ficha tr={tr} etiqueta={tx('rest.enviados_30_dias')} valor={conteos.enviados} ayuda={tx('rest.correos_que_salieron_en_los_ultimos')} />
+          <Ficha tr={tr} etiqueta={tx('rest.entregados_30_dias')} valor={conteos.entregados} ayuda={tx('rest.correos_de_los_ultimos_30_dias')} />
+          <Ficha tr={tr} etiqueta={tx('rest.rebotados_30_dias')} valor={conteos.rebotados} tono="bad" ayuda={tx('rest.correos_de_los_ultimos_30_dias_2')} />
+          <Ficha tr={tr} etiqueta={tx('rest.retenidos')} valor={conteos.retenidos} tono="bad" ayuda={tx('rest.desgloses_detenidos_antes_de_enviarse')} />
+          <Ficha tr={tr} etiqueta={tx('rest.sin_poliza')} valor={conteos.sinPoliza} tono="bad" ayuda={tx('rest.bitacoras_que_esperan_su_poliza_para')} />
         </div>
       </Tarjeta>
     </div>

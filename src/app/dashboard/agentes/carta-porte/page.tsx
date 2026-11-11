@@ -83,6 +83,7 @@ export default async function PaginaAgenteCartaPorte({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t: tx } = await getT('agentes');
   const sp = await searchParams;
   const tr = await getT('agentes');
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
@@ -132,10 +133,10 @@ export default async function PaginaAgenteCartaPorte({
       diasVentana={DIAS_INSIGHTS}
       notificaciones={
         <>
-          <Bloque mensaje="No se pudo leer la bitácora de corridas." esqueleto={<EsqTabla filas={3} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_bitacora')} esqueleto={<EsqTabla filas={3} />}>
             <BloqueCorridas pCorridas={pCorridas} />
           </Bloque>
-          <Bloque mensaje="No se pudo leer la configuración de avisos." esqueleto={<EsqTabla filas={4} />}>
+          <Bloque mensaje={tx('rest.no_se_pudo_leer_la_configuracion_2')} esqueleto={<EsqTabla filas={4} />}>
             <SeccionNotificaciones tenantId={tenantId} sp={sp} agenteId="carta_porte" />
           </Bloque>
         </>

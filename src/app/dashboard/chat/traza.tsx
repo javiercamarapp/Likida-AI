@@ -3,7 +3,10 @@
 import { useId, useState } from 'react';
 import { Check, ChevronRight } from 'lucide-react';
 import MarcaLikida from './marca';
+import { Boton } from '../../ui-v2/componentes/boton';
 import { rotuloTool, type PasoTraza } from './respuestas';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 /** «850 ms» / «3.2 s»: solo lo que MIDIÓ el navegador entre el inicio y el fin del paso; nunca texto del modelo. */
 export function textoMs(ms?: number | null): string {
@@ -13,6 +16,7 @@ export function textoMs(ms?: number | null): string {
 }
 
 function ListaPasos({ pasos }: { pasos: PasoTraza[] }) {
+  const { t } = useT('resto', restoEs);
   return (
     <ol className="rv-traza__lista">
       {pasos.map((p, i) => (
@@ -21,7 +25,7 @@ function ListaPasos({ pasos }: { pasos: PasoTraza[] }) {
             {p.listo ? <Check width={12} height={12} strokeWidth={2} /> : <span className="rv-traza__punto" />}
           </span>
           <span className="rv-traza__titulo">
-            {rotuloTool(p.tool)}{p.listo ? '' : '…'}
+            {rotuloTool(p.tool, t)}{p.listo ? '' : '…'}
             {p.listo && p.ms !== undefined && <span className="rv-traza__meta">{textoMs(p.ms)}</span>}
           </span>
         </li>
@@ -42,10 +46,10 @@ export function TrazaViva({ fase, pasos }: { fase: string; pasos: PasoTraza[] })
         <p className="rv-traza__fase">{fase}</p>
         {pasos.length > 0 && (
           <>
-            <button type="button" className="rv-traza__alternar" aria-expanded={abierta} aria-controls={id} onClick={() => setAbierta((v) => !v)}>
+            <Boton variante="ghost" className="rv-traza__alternar" aria-expanded={abierta} aria-controls={id} onClick={() => setAbierta((v) => !v)}>
               <ChevronRight width={12} height={12} aria-hidden="true" />
               {pasos.length === 1 ? '1 paso en vivo' : `${pasos.length} pasos en vivo`}
-            </button>
+            </Boton>
             {abierta && <div id={id}><ListaPasos pasos={pasos} /></div>}
           </>
         )}
@@ -56,15 +60,15 @@ export function TrazaViva({ fase, pasos }: { fase: string; pasos: PasoTraza[] })
 
 /** El desglose guardado bajo una respuesta terminada: colapsado, con el tiempo total medido. */
 export function TrazaFinal({ pasos, ms }: { pasos: PasoTraza[]; ms?: number }) {
+  const { t } = useT('resto', restoEs);
   if (pasos.length === 0) return null;
   const total = ms !== undefined ? ` · ${textoMs(ms)}` : '';
   return (
     <details className="rv-traza__final">
-      <summary className="rv-btn rv-btn--secondary rv-chat__resumen">
-        Cómo llegué a esto ({pasos.length === 1 ? '1 paso' : `${pasos.length} pasos`}{total})
+      <summary className="rv-btn rv-btn--secondary rv-chat__resumen">{t('ch.como_llegue_a_esto')}{pasos.length === 1 ? '1 paso' : `${pasos.length} pasos`}{total})
       </summary>
       <ListaPasos pasos={pasos} />
-      <p className="rv-chat__nota">Los pasos y los tiempos son los que midió tu navegador mientras el agente consultaba; no incluyen texto del modelo.</p>
+      <p className="rv-chat__nota">{t('ch.los_pasos_y_los_tiempos_son')}</p>
     </details>
   );
 }

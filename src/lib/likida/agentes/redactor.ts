@@ -22,7 +22,7 @@ import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { acotada } from '../presupuesto';
-import { DatoInvalido } from '../errores';
+import { DatoInvalido, datoInvalido } from '../errores';
 import { estaApagado } from '../interruptores';
 import { generateStructured, StructuredError } from '@/lib/llm/openrouter';
 import { createLlmBudget, esErrorDePresupuesto, type LlmBudget } from '@/lib/llm/budget';
@@ -147,7 +147,7 @@ function presupuestoDelRedactor(contexto: RedactorExecutionContext | undefined):
   if (contexto?.budget) {
     if (contexto.tenantId !== undefined && contexto.tenantId !== null
       && contexto.tenantId !== contexto.budget.tenantId) {
-      throw new DatoInvalido('El presupuesto del Redactor no coincide con el tenant autenticado.');
+      throw datoInvalido('redactor.el_presupuesto_del_redactor_no');
     }
     return contexto.budget;
   }
@@ -264,10 +264,7 @@ export function variantesDeSalida(
   };
   const a = limpiar(d.variante_a);
   if (!a) {
-    throw new DatoInvalido(
-      'El Redactor devolvió una salida sin variante A legible — no se encoló nada. Reintenta. '
-      + `Lo que contestó el modelo: ${textoDelModelo(raw)}`,
-    );
+    throw datoInvalido('redactor.el_redactor_devolvio_una_salida', { v: textoDelModelo(raw) });
   }
   return {
     a,
@@ -294,7 +291,7 @@ export async function redactarCorreoFrio(
 
   // 1) El kill switch — fail closed, como todos (interruptores.ts).
   if (await estaApagado('agente:redactor')) {
-    throw new DatoInvalido('El Redactor está apagado — se enciende desde /admin/observabilidad o ⌘K.');
+    throw datoInvalido('redactor.el_redactor_esta_apagado_se');
   }
 
   // El presupuesto se resuelve ANTES de leer/gastar el modelo. Un Redactor
@@ -309,18 +306,18 @@ export async function redactarCorreoFrio(
     .is('duplicado_de', null)
     .eq('id', prospectoId).maybeSingle(), 'redactor.prospecto');
   if (error) throw new Error(`redactarCorreoFrio: ${error.message}`);
-  if (!p) throw new DatoInvalido('Ese prospecto no existe — recarga el tablero.');
+  if (!p) throw datoInvalido('redactor.ese_prospecto_no_existe_recarga');
   const prospecto = p as { id: string; empresa: string; contacto_nombre: string | null; correo: string | null; ciudad: string | null; estado: string; fuente: string; notas: string | null; scian: string | null; similitud_icp_pct: number | null };
   const estadoCanonico = normalizarEstadoProspecto(prospecto.estado);
   if (estadoCanonico === 'won' || estadoCanonico === 'lost') {
-    throw new DatoInvalido(`Este prospecto está ${prospecto.estado} — a un ${prospecto.estado} no se le redacta correo frío.`);
+    throw datoInvalido('redactor.este_prospecto_esta_a_un', { estado: prospecto.estado });
   }
   // AGB-6: compuerta de ICP ANTES de gastar modelo — fail closed, como la
   // cadencia de abajo. Sin giro de autotransporte, fuente vetada o score
   // suficiente, este prospecto no es a quien se le escribe "liquidación de
   // viajes" (el caso real: vacantes de Computrabajo sin relación con carga).
   if (!pasaCompuertaIcp({ scian: prospecto.scian, fuente: prospecto.fuente, similitudIcpPct: prospecto.similitud_icp_pct })) {
-    throw new DatoInvalido('Este prospecto no pasa la compuerta de ICP (sin SCIAN de autotransporte, sin fuente vetada y sin similitud ICP suficiente) — no se le redacta correo frío.');
+    throw datoInvalido('redactor.este_prospecto_no_pasa_la');
   }
 
   // 3) La regla del censo finito: contactado hace <48h NO se vuelve a tocar
@@ -333,16 +330,16 @@ export async function redactarCorreoFrio(
     .from('prospecto_contacto').select('ocurrio_en')
     .eq('prospecto_id', prospectoId).eq('direccion', 'salida')
     .gte('ocurrio_en', hace48h).limit(1);
-  if (errHist) throw new DatoInvalido('No se pudo leer el historial del prospecto — sin él no se redacta (la cadencia no se verifica a ciegas). Reintenta.');
+  if (errHist) throw datoInvalido('redactor.no_se_pudo_leer_el');
   if ((recientes ?? []).length > 0) {
-    throw new DatoInvalido('A este prospecto se le escribió hace menos de 48 horas — la cadencia lo protege. Reintenta cuando pase la ventana.');
+    throw datoInvalido('redactor.a_este_prospecto_se_le');
   }
   const { data: pendientes, error: errPend } = await supabaseAdmin()
     .from('cola_aprobacion').select('id')
     .eq('prospecto_id', prospectoId).eq('estado', 'pendiente').limit(1);
-  if (errPend) throw new DatoInvalido('No se pudo verificar la cola — reintenta.');
+  if (errPend) throw datoInvalido('redactor.no_se_pudo_verificar_la');
   if ((pendientes ?? []).length > 0) {
-    throw new DatoInvalido('Este prospecto ya tiene una pieza esperando aprobación — resuélvela antes de redactar otra.');
+    throw datoInvalido('redactor.este_prospecto_ya_tiene_una');
   }
 
   // 4) El dossier: SOLO los hechos de la fila, declarados como tales.
@@ -511,7 +508,7 @@ export async function redactarCorreoFrio(
       err: e instanceof Error ? e.message : String(e),
       ...(rawDelError ? { crudo: rawDelError } : {}),
     });
-    throw new DatoInvalido('El Redactor no pudo escribir en este momento — inténtalo de nuevo.');
+    throw datoInvalido('redactor.el_redactor_no_pudo_escribir');
   }
 
   // 6) Parsear, SUSTITUIR el marcador por el nombre de pila real (nunca visto
@@ -559,7 +556,7 @@ export async function redactarCorreoFrio(
     const msg = e instanceof Error ? e.message : String(e);
     const esCarreraDuplicada = msg.includes('cola_correo_frio_por_prospecto') || msg.includes('duplicate key');
     const error = esCarreraDuplicada
-      ? new DatoInvalido('Este prospecto ya tiene una pieza esperando aprobación — resuélvela antes de redactar otra.')
+      ? datoInvalido('redactor.este_prospecto_ya_tiene_una')
       : e;
     await registrarCorrida(null, 'redactor', {
       inicio, fin: new Date(), estado: 'fallo', disparo, costoUsd,

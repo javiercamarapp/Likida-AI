@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { mxn } from '@/lib/formato';
 import { Boton } from '../../ui-v2/componentes/boton';
+import { useIdioma, useT } from '@/lib/i18n/proveedor';
+import { publico } from '@/lib/i18n/es/publico';
 // SOLO EL TIPO de `portal_pago.ts`: ese módulo importa `node:crypto` para
 // generar y hashear tokens, y un import de VALOR lo arrastraría al bundle del
 // navegador — el build de webpack lo rechaza de plano, que es la forma dura de
@@ -35,6 +37,8 @@ export function FormaDePago({ token, saldo, metodos }: {
    *  acepta — el navegador de un tercero puede mandar cualquier cosa. */
   metodos: ReadonlyArray<{ id: MetodoPortal; rotulo: string }>;
 }) {
+  const { t } = useT('publico', publico);
+  const idioma = useIdioma();
   const [fecha, setFecha] = useState('');
   const [monto, setMonto] = useState('');
   const [referencia, setReferencia] = useState('');
@@ -56,17 +60,17 @@ export function FormaDePago({ token, saldo, metodos }: {
       if (!res.ok) {
         setMensaje(typeof cuerpo.error === 'string'
           ? cuerpo.error
-          : 'No pudimos registrar tu pago. Vuelve a intentarlo.');
+          : t('pg.f.error'));
         setEnvio('error');
         return;
       }
-      setMensaje(typeof cuerpo.mensaje === 'string' ? cuerpo.mensaje : 'Listo, ya quedó registrado.');
+      setMensaje(typeof cuerpo.mensaje === 'string' ? cuerpo.mensaje : t('pg.f.listo'));
       setEnvio('listo');
     } catch {
       // Un fallo de red aquí es AMBIGUO: pudo haber llegado. Se dice tal cual
       // en vez de afirmar que no quedó — recargar la página muestra la verdad,
       // y el índice único de la base absorbe un segundo intento idéntico.
-      setMensaje('No pudimos confirmar el envío. Recarga esta página: si tu pago aparece en la lista, ya quedó.');
+      setMensaje(t('pg.f.red'));
       setEnvio('error');
     }
   };
@@ -81,7 +85,7 @@ export function FormaDePago({ token, saldo, metodos }: {
 
   return (
     <div className="mt-4 space-y-3">
-      <Campo etiqueta="¿Qué día pagaste?">
+      <Campo etiqueta={t('pg.f.dia')}>
         <input
           type="date"
           value={fecha}
@@ -90,7 +94,7 @@ export function FormaDePago({ token, saldo, metodos }: {
         />
       </Campo>
 
-      <Campo etiqueta={`¿Cuánto? (el saldo pendiente es ${mxn(saldo)})`}>
+      <Campo etiqueta={t('pg.f.monto', { saldo: mxn(saldo, idioma) })}>
         <input
           type="text"
           inputMode="decimal"
@@ -101,22 +105,21 @@ export function FormaDePago({ token, saldo, metodos }: {
         />
       </Campo>
 
-      <Campo etiqueta="Referencia bancaria">
+      <Campo etiqueta={t('pg.f.referencia')}>
         <input
           type="text"
           maxLength={80}
-          placeholder="Clave de rastreo, número de operación o folio del depósito"
+          placeholder={t('pg.f.referencia.ph')}
           value={referencia}
           onChange={(e) => setReferencia(e.target.value)}
           className="rv-pub__campo"
         />
         <p className="mt-1 text-[12px]">
-          Es el dato con el que quien te facturó va a encontrar tu depósito en su
-          estado de cuenta. Sin él, no hay cómo cruzarlo.
+          {t('pg.f.referencia.nota')}
         </p>
       </Campo>
 
-      <Campo etiqueta="¿Cómo pagaste?">
+      <Campo etiqueta={t('pg.f.metodo')}>
         <select
           value={metodo}
           onChange={(e) => setMetodo(e.target.value)}
@@ -136,7 +139,7 @@ export function FormaDePago({ token, saldo, metodos }: {
         aria-hidden="true"
         value={sitioWeb}
         onChange={(e) => setSitioWeb(e.target.value)}
-        placeholder="Sitio web"
+        placeholder={t('pg.f.honeypot')}
       />
 
       {mensaje && envio === 'error' && (
@@ -144,7 +147,7 @@ export function FormaDePago({ token, saldo, metodos }: {
       )}
 
       <Boton variante="primary" onClick={mandar} disabled={envio === 'mandando'} loading={envio === 'mandando'}>
-        {envio === 'mandando' ? 'Registrando…' : 'Registrar mi pago'}
+        {envio === 'mandando' ? t('pg.f.registrando') : t('pg.f.registrar')}
       </Boton>
     </div>
   );

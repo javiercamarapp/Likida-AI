@@ -18,7 +18,7 @@ beforeAll(async () => { browser = await lanzarNavegador(); }, 60_000);
 afterAll(async () => { await browser?.close(); });
 
 const css = () => ['tokens.css', 'movimiento.css', 'componentes.css', 'graficas.css'].map((f) => readFileSync(join(f === 'componentes.css' || f === 'graficas.css' || f === 'movimiento.css' ? DIR : __dirname, f), 'utf8')).join('\n');
-// El punto final lleva un anillo de la superficie de 2 px (como en Vexa) que tapa la línea a ambos lados: hasta 3 columnas sin azul junto a él;
+// El punto final lleva un anillo de la superficie de 2 px (como en Vexa) que tapa la línea a ambos lados: hasta 3 columnas sin línea junto a él;
 // una línea PARTIDA (el defecto que esta prueba vigila) deja decenas.
 const ANILLO = 3;
 const SERIE = [12, 14, 13, 17, 16, 21, 19, 24, 22, 27];
@@ -36,7 +36,7 @@ async function pagina(ancho: number, opts: { reducedMotion?: 'reduce' | 'no-pref
   return p;
 }
 
-/** Columnas de la zona de la línea (en px de pantalla) que NO tienen ningún píxel de la línea azul. */
+/** Columnas de la zona de la línea (en px de pantalla) que NO tienen ningún píxel de la línea (negra). */
 async function columnasSinLinea(p: Page, mitad = false): Promise<number> {
   const r = await diagnostico(p, mitad);
   if (r.vacias > ANILLO) throw new Error(`línea del área con ${r.vacias} columnas sin línea (máx. ${ANILLO}). Ancho ${r.ancho}px, primera=${r.primera}, ultima=${r.ultima}, vacías=[${r.huecos.join(',')}]\nColores no blancos más frecuentes: ${r.colores}\nMapa (# = línea, o = otro pixel con tinta):\n${r.mapa}`);
@@ -67,7 +67,7 @@ async function diagnostico(p: Page, mitad: boolean) {
       for (let fila = fila0; fila < fila1 && !hay; fila++) {
         const i = (fila * c.width + col) * 4;
         const [r, g, bl] = [d[i], d[i + 1], d[i + 2]];
-        if (bl > 70 && r < 110 && g < 150 && bl - r > 30) hay = true; // azul de la métrica 1 (#2f6bd8, paleta de datos de Vexa)
+        if (r < 140 && g < 140 && bl < 140) hay = true; // tinta de la métrica 1 (#0e0e10, paleta de alto contraste 11-nov-2026)
       }
       cubiertas.push(hay);
     }
@@ -122,9 +122,9 @@ describe.skipIf(SIN_NAVEGADOR)('gráficas y vacíos · pintados en Chromium', ()
       await p.close();
     });
   }
-  it('el texto del eje y de la etiqueta directa en el azul de la serie (franjas LCD del CI) no cuenta como línea ni mueve los extremos', async () => {
+  it('el texto del eje y de la etiqueta directa en el color de la serie (franjas LCD del CI) no cuenta como línea ni mueve los extremos', async () => {
     const p = await pagina(1280);
-    await p.addStyleTag({ content: '[data-ui="v2"] .rv-gr__marca, [data-ui="v2"] .rv-gr__directa { fill: rgb(32,96,208) !important }' });
+    await p.addStyleTag({ content: '[data-ui="v2"] .rv-gr__marca, [data-ui="v2"] .rv-gr__directa { fill: rgb(24,24,28) !important }' });
     expect(await columnasSinLinea(p)).toBeLessThanOrEqual(ANILLO);
     await p.close();
   });

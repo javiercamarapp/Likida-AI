@@ -10,7 +10,7 @@ import { getDatosFiscales } from '@/lib/saas/fiscal';
 import { rutasPdfVersionadas, rutaPdfOperador } from './liquidacion/rutas_pdf';
 import { estadiasParaLiquidacion } from './conductor/servicios';
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import type { Gasto, Liquidacion } from '@/types/likida';
 
 export interface AjustePedido { gastoId: string; montoNuevo: number }
@@ -69,11 +69,7 @@ export async function recalcularParaAjuste(
     const g = porId.get(a.gastoId)!;
     const conCfdi = g.xmlVerificado === true || Boolean(g.cfdiUuid);
     if (conCfdi && Math.abs(Number(g.monto) - a.montoNuevo) >= 0.005) {
-      throw new DatoInvalido(
-        'Ese comprobante tiene CFDI verificado: su monto, IVA e IEPS salen del XML y no se pueden ajustar a mano '
-        + '(el IVA acreditable quedaría con la cifra del XML y no con la ajustada). Rechaza la liquidación para que '
-        + 'se corrija el comprobante, o ajusta otro.',
-      );
+      throw datoInvalido('revision_recal.ese_comprobante_tiene_cfdi_verificado');
     }
   }
   const nuevos = new Map(ajustes.map((a) => [a.gastoId, a.montoNuevo]));

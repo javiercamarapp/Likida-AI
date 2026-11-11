@@ -25,10 +25,10 @@ describe('destinos de la barra inferior móvil', () => {
     }
   }
 
-  it('el dueño con el perfil de cinco agentes ve Resumen, Liquidación, Viajes y Equipo (más «Más»)', () => {
+  it('el dueño con el perfil de cinco agentes ve Resumen, Liquidación, Viajes y Preguntar (más «Más»)', () => {
     const d = destinosMovil('flota_admin', menuPorPerfil('flota_admin', 'cinco_agentes'));
-    expect(d.map((x) => x.href)).toEqual(['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/operadores']);
-    expect(d.map((x) => x.etiqueta)).toEqual(['Resumen', 'Liquidación', 'Viajes', 'Equipo']);
+    expect(d.map((x) => x.href)).toEqual(['/dashboard', '/dashboard/agentes/liquidacion', '/dashboard/despacho', '/dashboard/chat']);
+    expect(d.map((x) => x.etiqueta)).toEqual(['Resumen', 'Liquidación', 'Viajes', 'Preguntar']);
   });
 
   it('una preferencia que nombra una PESTAÑA obtiene la entrada que la contiene, una sola vez (Despacho y Registro son «Viajes»)', () => {

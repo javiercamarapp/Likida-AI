@@ -13,9 +13,9 @@ const AHORA = Date.parse('2026-08-16T18:00:00Z');
 const hace = (horas: number) => new Date(AHORA - horas * 3_600_000).toISOString();
 
 let prospectos: Array<Record<string, unknown>> = [];
-vi.mock('@/lib/likida/vendedores', async (importOriginal) => ({
-  ...await importOriginal<typeof import('@/lib/likida/vendedores')>(),
-  listarProspectos: async () => prospectos,
+// w15/perf: la fuente de las filas es el ÍNDICE LIGERO compartido (Ventas, Crecimiento y Adquisición leen lo mismo), no `listarProspectos`.
+vi.mock('./prospectos-mapa', () => ({
+  indiceProspectos: async () => ({ filas: prospectos, generadoEn: 'x' }),
 }));
 
 let contactos: Array<{ prospecto_id: string }> | 'error' = [];

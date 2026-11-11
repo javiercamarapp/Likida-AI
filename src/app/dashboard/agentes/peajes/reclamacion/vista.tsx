@@ -15,6 +15,8 @@ import {
   AvisoCompacto, Boton, BotonEnlace, CampoTexto, EstadoVacio, Icono, MarcoPagina, StatusChip, TablaBase, Tarjeta,
 } from '@/app/ui-v2/componentes';
 import '../peajes.css';
+import { type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 export type EstadoReclamacion = 'sin_desglose' | 'no_existe' | 'error' | 'ok';
 
@@ -53,66 +55,61 @@ export interface CandidatoReclamacion {
   guardarMargen?: (fd: FormData) => void | Promise<void>;
 }
 
-export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extras, candidato }: {
-  sufijo: string; desglose: string | null; estado: EstadoReclamacion; reporte: ReporteReclamacion | null; extras?: ExtrasReclamacion; candidato?: CandidatoReclamacion;
+export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extras, candidato, tr = TR_ES }: {
+  sufijo: string; desglose: string | null; estado: EstadoReclamacion; reporte: ReporteReclamacion | null; extras?: ExtrasReclamacion; candidato?: CandidatoReclamacion; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const ctx = sufijo ? `&${sufijo.slice(1)}` : '';
   const motivosVisibles = (Object.keys(ETIQUETA_MOTIVO_RECLAMACION) as MotivoReclamacion[]).filter((m) => !candidato || candidato.motivos.includes(m));
   // Sin nada evaluado (ni una línea confirmada ni un cruce) no hay con qué comparar: no se pinta como «todo bien».
   const faltanDatos = !!candidato && !!reporte && reporte.resumen.reclamables === 0 && reporte.resumen.confirmadas === 0;
   return (
-    <MarcoPagina titulo="Reporte de reclamación de peajes" apoyo="Los cruces candidatos a reclamo de un desglose de peajes, el cierre mensual y el seguimiento de reclamos." acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<Icono icono={ArrowLeft} />}>Volver al agente</BotonEnlace>}>
+    <MarcoPagina titulo={tx('rest.reporte_de_reclamacion_de_peajes')} apoyo={tx('rest.los_cruces_candidatos_a_reclamo_de')} acciones={<BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/agentes/peajes${sufijo}`} icono={<Icono icono={ArrowLeft} />}>{tx('rest.volver_al_agente')}</BotonEnlace>}>
       {estado === 'sin_desglose' && (
-        <EstadoVacio icono={ShieldAlert} titulo="Elige un desglose">
-          Elige un desglose en el agente de Peajes y abre «Reporte de reclamación». Aquí también puedes ver el cierre mensual y el seguimiento de reclamos.
-        </EstadoVacio>
+        <EstadoVacio icono={ShieldAlert} titulo={tx('rest.elige_un_desglose')}>{tx('rest.elige_un_desglose_en_el_agente')}</EstadoVacio>
       )}
-      {estado === 'no_existe' && <AvisoCompacto tono="error" resumen="Ese desglose no existe en tu flota (o fue anulado)." />}
-      {estado === 'error' && <AvisoCompacto tono="error" resumen="No se pudo armar el reporte ahora mismo. No es que no haya nada que reclamar: inténtalo de nuevo en un momento." />}
+      {estado === 'no_existe' && <AvisoCompacto tono="error" resumen={tx('rest.ese_desglose_no_existe_en_tu')} />}
+      {estado === 'error' && <AvisoCompacto tono="error" resumen={tx('rest.no_se_pudo_armar_el_reporte')} />}
 
       {extras?.aviso && <AvisoCompacto tono="ok" resumen={extras.aviso} />}
       {extras?.error && <AvisoCompacto tono="error" resumen={extras.error} />}
 
       {estado === 'ok' && extras?.revision && desglose && (
-        <SeccionRevisionCobros revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
+        <SeccionRevisionCobros tr={tr} revision={extras.revision} desglose={desglose} sufijo={sufijo} justificarCruce={extras.acciones.justificarCruce} />
       )}
       {estado === 'ok' && extras?.candidatos && desglose && (
-        <TablaCandidatosCobros tabla={extras.candidatos.tabla} error={extras.candidatos.error} desglose={desglose} sufijo={sufijo}
+        <TablaCandidatosCobros tr={tr} tabla={extras.candidatos.tabla} error={extras.candidatos.error} desglose={desglose} sufijo={sufijo}
           decidir={extras.candidatos.decidir} aplicables={extras.candidatos.aplicables} />
       )}
       {extras && (estado === 'ok' || estado === 'sin_desglose') && (
         <>
-          <SeccionCierreMensual mes={extras.mes} cierre={extras.cierre} error={extras.errorCierre === true} sufijo={sufijo} desglose={desglose}
+          <SeccionCierreMensual tr={tr} mes={extras.mes} cierre={extras.cierre} error={extras.errorCierre === true} sufijo={sufijo} desglose={desglose}
             opciones={extras.mesesOpciones} dosMeses={extras.dosMeses === true} cierreDos={extras.cierreDos ?? null} />
-          <SeccionSeguimiento
+          <SeccionSeguimiento tr={tr}
             reclamos={extras.seguimiento?.reclamos ?? null} resumen={extras.seguimiento?.resumen ?? null} acciones={extras.acciones}
             desglose={estado === 'ok' ? desglose : null} revision={extras.revision} error={extras.errorSeguimiento === true}
             propuestaNota={extras.propuestaNota ?? null} sufijo={sufijo} mes={extras.mes} />
         </>
       )}
       {estado === 'ok' && !reporte && extras?.errorGps && (
-        <AvisoCompacto tono="error" resumen="El reporte con evidencia de GPS no se pudo armar ahora mismo. No es que no haya nada que reclamar: la revisión de cobros de arriba no depende del GPS." />
+        <AvisoCompacto tono="error" resumen={tx('rest.el_reporte_con_evidencia_de_gps')} />
       )}
 
       {estado === 'ok' && reporte && desglose && (
         <>
           <Tarjeta
             titulo={candidato
-              ? (reporte.resumen.reclamables === 0 ? 'Sin cruces candidatos' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce candidato' : 'cruces candidatos'} para pedir revisión`)
-              : (reporte.resumen.reclamables === 0 ? 'Sin cruces para reclamar' : `${numero(reporte.resumen.reclamables)} ${reporte.resumen.reclamables === 1 ? 'cruce' : 'cruces'} para pedir revisión`)}
+              ? (reporte.resumen.reclamables === 0 ? tx('rest.sin_cruces_candidatos') : tx(reporte.resumen.reclamables === 1 ? 'rest.n_cruce_candidato_para_pedir_revision.uno' : 'rest.n_cruce_candidato_para_pedir_revision.otros', { n: numero(reporte.resumen.reclamables) }))
+              : (reporte.resumen.reclamables === 0 ? tx('rest.sin_cruces_para_reclamar') : tx(reporte.resumen.reclamables === 1 ? 'rest.n_cruce_para_pedir_revision.uno' : 'rest.n_cruce_para_pedir_revision.otros', { n: numero(reporte.resumen.reclamables) }))}
             info="peajes_reclamacion.cruces"
             acciones={(
-              <span className="rv-pj-total">
-                <span className="rv-pj-rotulo">Monto reclamable</span>
-                <strong className="cifra-mono rv-pj-total__valor">{mxn(reporte.resumen.montoReclamable)}</strong>
+              <span className="rv-pj-total">{ricoT(tx('rest.e0_monto_reclamable_e0'), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}<strong className="cifra-mono rv-pj-total__valor">{mxn(reporte.resumen.montoReclamable)}</strong>
               </span>
             )}
           >
             <p className="rv-pj-sub">
               {reporte.proveedor ? `Proveedor ${reporte.proveedor} · ` : ''}
-              {reporte.periodoDesde && reporte.periodoHasta ? `Periodo ${reporte.periodoDesde} a ${reporte.periodoHasta} · ` : ''}
-              {numero(reporte.resumen.lineas)} líneas en el desglose
-            </p>
+              {reporte.periodoDesde && reporte.periodoHasta ? `Periodo ${reporte.periodoDesde} a ${reporte.periodoHasta} · ` : ''}{tx('rest.lineas_en_el_desglose', { numero: numero(reporte.resumen.lineas) })}</p>
             {!candidato && <div className="rv-pj-acciones">
               <BotonEnlace variante="primary" href={`/api/export/peajes-reclamacion?desglose=${desglose}&formato=xlsx${ctx}`} icono={<Icono icono={FileDown} />}>
                 Excel
@@ -125,10 +122,8 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
             {candidato?.guardarMargen && (
               <form action={candidato.guardarMargen} className="rv-pj-forma">
                 <input type="hidden" name="desglose" value={desglose} />
-                <CampoTexto tipo="number" etiqueta="Margen de distancia a la caseta (m)" name="margen" inputMode="numeric" min={100} max={5000} step={1} defaultValue={candidato.margenLejosM} />
-                <Boton type="submit">Guardar margen</Boton>
-                <span className="rv-pj-sub">Un cruce se marca como candidato si la unidad pasó a más de ese margen (sumado al radio de la caseta). Por omisión 1,000 m; fíjalo en 200 o 500 m cuando se decida.</span>
-              </form>
+                <CampoTexto tipo="number" etiqueta={tx('rest.margen_de_distancia_a_la_caseta')} name="margen" inputMode="numeric" min={100} max={5000} step={1} defaultValue={candidato.margenLejosM} />
+                <Boton type="submit">{tx('rest.guardar_margen')}</Boton>{ricoT(tx('rest.e0_un_cruce_se_marca_como'), { e0: (c) => <span className="rv-pj-sub">{c}</span> })}</form>
             )}
             <div className="rv-pj-categorias">
               {motivosVisibles.map((m) => (
@@ -138,27 +133,24 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
                 </div>
               ))}
             </div>
-            <p className="rv-pj-nota">
-              No se reclaman (sin evidencia en contra del cobro): {numero(reporte.resumen.confirmadas)} confirmadas por el GPS · {numero(reporte.resumen.sinDatos)} sin datos suficientes
-              {reporte.resumen.sinEvaluar > 0 ? ` · ${numero(reporte.resumen.sinEvaluar)} sin evaluar (vuelve a conciliar el desglose)` : ''}. Sin datos no es evidencia en contra de nadie.
-              {!candidato && reporte.resumen.sinCurso > 0 ? ` ${numero(reporte.resumen.sinCurso)} de ${numero(reporte.resumen.lineas)} líneas no tienen curso declarado y no se evaluaron por curso: cárgalos en Configuración, sección Cursos.` : ''}
+            <p className="rv-pj-nota">{tx('rest.no_se_reclaman_sin_evidencia_en', { numero: numero(reporte.resumen.confirmadas), numero2: numero(reporte.resumen.sinDatos) })}{reporte.resumen.sinEvaluar > 0 ? tx('rest.sin_evaluar_vuelve_a_conciliar_el', { numero: numero(reporte.resumen.sinEvaluar) }) : ''}{tx('rest.sin_datos_no_es_evidencia_en')}{!candidato && reporte.resumen.sinCurso > 0 ? tx('rest.de_lineas_no_tienen_curso_declarado', { numero: numero(reporte.resumen.sinCurso), numero2: numero(reporte.resumen.lineas) }) : ''}
             </p>
           </Tarjeta>
 
           {reporte.cruces.length > 0 && (
-            <Tarjeta titulo="Cruces de caseta en reclamación" info="peajes_reclamacion.cruces">
+            <Tarjeta titulo={tx('rest.cruces_de_caseta_en_reclamacion')} info="peajes_reclamacion.cruces">
               <TablaBase<ReporteReclamacion['cruces'][number]>
-                etiqueta="Cruces de caseta en reclamación"
+                etiqueta={tx('rest.cruces_de_caseta_en_reclamacion')}
                 filas={reporte.cruces}
                 idFila={(c) => String(c.indice)}
                 altoMaximo={false}
                 columnas={[
-                  { id: 'fecha', titulo: 'Fecha y hora', principal: true, celda: (c) => <>{c.fecha}{c.hora && <span className="rv-pj-nota">{c.hora.slice(0, 8)}</span>}</> },
-                  { id: 'caseta', titulo: 'Caseta', celda: (c) => c.casetaCatalogo || c.caseta || '—' },
-                  { id: 'tag', titulo: 'TAG / unidad', celda: (c) => <>{c.tag || '—'}{c.unidad && <span className="rv-pj-nota">{c.unidad}</span>}</> },
-                  { id: 'monto', titulo: 'Monto', alinear: 'der', celda: (c) => <span className="cifra-mono">{mxn(c.monto)}</span> },
+                  { id: 'fecha', titulo: tx('rest.fecha_y_hora'), principal: true, celda: (c) => <>{c.fecha}{c.hora && <span className="rv-pj-nota">{c.hora.slice(0, 8)}</span>}</> },
+                  { id: 'caseta', titulo: tx('rest.caseta'), celda: (c) => c.casetaCatalogo || c.caseta || '—' },
+                  { id: 'tag', titulo: tx('rest.tag_unidad'), celda: (c) => <>{c.tag || '—'}{c.unidad && <span className="rv-pj-nota">{c.unidad}</span>}</> },
+                  { id: 'monto', titulo: tx('rest.monto'), alinear: 'der', celda: (c) => <span className="cifra-mono">{mxn(c.monto)}</span> },
                   {
-                    id: 'porque', titulo: candidato ? 'Por qué es candidato' : 'Por qué se reclama',
+                    id: 'porque', titulo: candidato ? tx('rest.por_que_es_candidato') : tx('rest.por_que_se_reclama'),
                     celda: (c) => (
                       <div className="rv-pj-que rv-pj-que--ancho">
                         <StatusChip tono={c.confianza === 'alta' ? 'bad' : 'warn'}>
@@ -178,7 +170,7 @@ export function VistaReclamacionPeajes({ sufijo, desglose, estado, reporte, extr
             </Tarjeta>
           )}
 
-          <Tarjeta titulo="Qué significa y qué NO afirma" info="peajes_reclamacion.leyendas">
+          <Tarjeta titulo={tx('rest.que_significa_y_que_no_afirma')} info="peajes_reclamacion.leyendas">
             <ul className="rv-pj-notas">
               {reporte.leyendas.map((l) => <li key={l}>{l}</li>)}
             </ul>

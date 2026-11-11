@@ -74,50 +74,51 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 @media (max-height: 560px) { .rv-chat__hero .rv-chat__logo, .rv-chat__sub { display: none; } .rv-chat__preguntas .rv-chat__q:nth-child(n+3) { display: none; } }
 @media (max-height: 480px) {
   .rv-chat__hero { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; }
-  .rv-chat__preguntas .rv-chat__q:nth-child(n+2) { display: none; }
+  .rv-chat__preguntas .rv-btn.rv-chat__q:nth-child(n+2) { display: none; }
 }
 
 /* ── Sugerencias: UNA fila de temas y debajo las preguntas del tema elegido ── */
 .rv-chat__temas, .rv-chat__preguntas { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; width: 100%; }
-.rv-chat__tema, .rv-chat__q {
+[data-ui="v2"] .rv-btn.rv-chat__tema, [data-ui="v2"] .rv-btn.rv-chat__q {
   position: relative; display: inline-flex; align-items: center; box-sizing: border-box; min-height: 32px; max-width: 100%; margin: 0;
   border: 1px solid var(--line2, var(--line)); border-radius: 8px; background: var(--surface); color: var(--ink);
   font: 600 13px/1 var(--font-sans-ui, inherit); letter-spacing: 0; cursor: pointer; -webkit-tap-highlight-color: transparent;
 }
-.rv-chat__tema { gap: 8px; padding: 0 12px; color: var(--muted); }
-.rv-chat__tema i { flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--cat, var(--muted)); }
-.rv-chat__tema[data-tema="1"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema { gap: 8px; padding: 0 12px; color: var(--muted); }
+[data-ui="v2"] .rv-btn.rv-chat__tema i { flex: none; inline-size: 8px; block-size: 8px; border-radius: 50%; background: var(--cat, var(--muted)); }
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="1"] {
   --cat: var(--chart-3, var(--muted));
 }
-.rv-chat__tema[data-tema="2"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="2"] {
   --cat: var(--chart-4, var(--muted));
 }
-.rv-chat__tema[data-tema="3"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="3"] {
   --cat: var(--chart-5, var(--muted));
 }
-.rv-chat__tema[data-tema="4"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="4"] {
   --cat: var(--chart-7, var(--muted));
 }
-.rv-chat__tema[data-tema="5"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="5"] {
   --cat: var(--chart-6, var(--muted));
 }
-.rv-chat__tema[data-tema="6"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="6"] {
   --cat: var(--chart-2, var(--muted));
 }
-.rv-chat__tema[data-tema="7"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="7"] {
   --cat: var(--chart-1, var(--muted));
 }
-.rv-chat__tema[data-tema="8"] {
+[data-ui="v2"] .rv-btn.rv-chat__tema[data-tema="8"] {
   --cat: var(--chart-8, var(--muted));
 }
-.rv-chat__tema[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); background: var(--canvas); }
-.rv-chat__q { justify-content: flex-start; padding: 7px 12px; font-weight: 500; text-align: left; line-height: 16px; white-space: normal; }
+[data-ui="v2"] .rv-btn.rv-chat__tema[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); background: color-mix(in srgb, var(--ink) 10%, var(--surface)); }
+/* Tema activo en ALTO CONTRASTE NEUTRO (11-nov-2026, punto 10 del dueño; anula el azul de Rovaq del 10-nov): borde de 1 px en tinta y fondo tinta al 10 % sobre la superficie. */
+[data-ui="v2"] .rv-btn.rv-chat__q { justify-content: flex-start; padding: 7px 12px; font-weight: 500; text-align: left; line-height: 16px; white-space: normal; }
 /* Zona táctil de 44 px por un ::after invisible. */
-.rv-chat__tema::after, .rv-chat__q::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
-.rv-chat__tema:hover, .rv-chat__q:hover:not(:disabled) { background: var(--canvas); border-color: var(--input); color: var(--ink); }
-.rv-chat__tema[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--cat) 14%, var(--surface)); border-color: var(--cat, var(--ink)); }
-.rv-chat__tema:focus-visible, .rv-chat__q:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
-.rv-chat__q:disabled { opacity: .5; cursor: not-allowed; }
+[data-ui="v2"] .rv-btn.rv-chat__tema::after, [data-ui="v2"] .rv-btn.rv-chat__q::after { content: ""; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+[data-ui="v2"] .rv-btn.rv-chat__tema:hover, [data-ui="v2"] .rv-btn.rv-chat__q:hover:not(:disabled) { background: var(--canvas); border-color: var(--input); color: var(--ink); }
+[data-ui="v2"] .rv-btn.rv-chat__tema[aria-pressed="true"]:hover { background: color-mix(in srgb, var(--ink) 14%, var(--surface)); border-color: var(--ink); }
+[data-ui="v2"] .rv-btn.rv-chat__tema:focus-visible, [data-ui="v2"] .rv-btn.rv-chat__q:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
+[data-ui="v2"] .rv-btn.rv-chat__q:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ── Recuadro de escribir: campo grande redondeado, adjuntar a la izquierda y enviar a la derecha ── */
 .rv-chat__composer {
@@ -146,9 +147,9 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
   border: 1px solid var(--line); border-radius: 999px; background: var(--canvas); font: 500 12px/16px var(--font-sans-ui, inherit); color: var(--ink);
 }
 .rv-chat__documento-nombre { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rv-chat__documento button { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
-.rv-chat__documento button:hover { background: var(--line2, var(--line)); color: var(--ink); }
-.rv-chat__documento button:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 1px; }
+[data-ui="v2"] .rv-btn.rv-chat__quitar { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: transparent; color: var(--muted); cursor: pointer; }
+[data-ui="v2"] .rv-btn.rv-chat__quitar:hover { background: var(--line2, var(--line)); color: var(--ink); }
+[data-ui="v2"] .rv-btn.rv-chat__quitar:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 1px; }
 /* Botones de icono de 32 px (adjuntar, cerrar el historial) y píldora (enviar, bajar) */
 .rv-chat .rv-btn.rv-chat__redondo { width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; justify-content: center; }
 .rv-chat .rv-btn.rv-chat__enviar, .rv-chat .rv-btn.rv-chat__bajar { border-radius: 999px; }
@@ -166,7 +167,7 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
   .rv-chat__temas::-webkit-scrollbar { display: none; }
   .rv-chat__temas > :first-child { margin-left: auto; } .rv-chat__temas > :last-child { margin-right: auto; }
   .rv-chat__preguntas { flex-direction: column; align-items: stretch; }
-  .rv-chat__preguntas .rv-chat__q { width: 100%; }
+  .rv-chat__preguntas .rv-btn.rv-chat__q { width: 100%; }
 }
 
 /* ── Hilo: SOLO él scrollea, anclado abajo; el borde se difumina en vez de cortarse ── */
@@ -215,11 +216,11 @@ html:has(.rv-chat-pagina), html:has(.rv-chat-pagina) body { height: 100dvh; over
 .rv-chat__kpi { margin: 0; font: 700 20px/24px var(--font-sans-ui, inherit); letter-spacing: 0; font-variant-numeric: tabular-nums; color: var(--ink); overflow-wrap: anywhere; }
 .rv-chat__tabla { overflow-x: auto; border-radius: 12px; }
 .rv-chat__tabla:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: -2px; }
-.rv-chat__tabla table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
-.rv-chat__tabla th, .rv-chat__tabla td { height: 32px; padding: 0 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.rv-chat__tabla th { font-weight: 400; text-align: left; color: var(--muted); }
-.rv-chat__tabla td.num { text-align: right; font-weight: 500; color: var(--ink); }
-.rv-chat__tabla tr:last-child th, .rv-chat__tabla tr:last-child td { border-bottom: 0; }
+.rv-chat__kv { margin: 0; font-size: 13px; font-variant-numeric: tabular-nums; }
+.rv-chat__kv-fila { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 32px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.rv-chat__kv-fila:last-child { border-bottom: 0; }
+.rv-chat__kv dt { margin: 0; font-weight: 400; color: var(--muted); }
+.rv-chat__kv dd { margin: 0; font-weight: 500; text-align: right; color: var(--ink); }
 
 /* La dona usa la serie de matices de DATOS (no una rampa de un solo azul): un matiz distinto por gajo, con la cifra impresa en la leyenda. */
 .rv-chat__bloque .rv-tono-0 { --tono: var(--chart-5, var(--g4)); }
@@ -238,10 +239,10 @@ summary.rv-chat__resumen::marker { content: ""; }
 .rv-traza { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; line-height: 20px; color: var(--muted); }
 .rv-traza__cuerpo { min-width: 0; display: grid; gap: 4px; }
 .rv-traza__fase { margin: 0; font-weight: 400; color: var(--muted); }
-.rv-traza__alternar { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 2px 4px; margin-left: -4px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: 500 12px var(--font-sans-ui, inherit); cursor: pointer; }
-.rv-traza__alternar:hover { color: var(--ink); }
-.rv-traza__alternar:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 1px; }
-.rv-traza__alternar[aria-expanded="true"] svg { transform: rotate(90deg); }
+[data-ui="v2"] .rv-btn.rv-traza__alternar { display: inline-flex; align-items: center; gap: 4px; min-height: 28px; padding: 2px 4px; margin-left: -4px; border: 0; border-radius: 8px; background: none; color: var(--muted); font: 500 12px var(--font-sans-ui, inherit); cursor: pointer; }
+[data-ui="v2"] .rv-btn.rv-traza__alternar:hover { color: var(--ink); }
+[data-ui="v2"] .rv-btn.rv-traza__alternar:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 1px; }
+[data-ui="v2"] .rv-btn.rv-traza__alternar[aria-expanded="true"] svg { transform: rotate(90deg); }
 .rv-traza__lista { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; }
 .rv-traza__paso { display: grid; grid-template-columns: 16px minmax(0, 1fr); gap: 8px; align-items: start; font-size: 12px; }
 .rv-traza__icono { display: grid; place-items: center; height: 18px; color: var(--ink); }
@@ -252,6 +253,8 @@ summary.rv-chat__resumen::marker { content: ""; }
 
 /* ── Historial: columna en flujo sobre `lg`; bajo `lg` lo pinta el Drawer del motor único ── */
 .rv-chat__hist-boton[data-oculto] { visibility: hidden; }
+/* Botón «Historial» de 32 px como el `.ctl` de Rovaq (medido en vivo: 122×32; el nuestro medía 123×34 porque el contador de 20 px + padding 6 + borde lo estiraba). */
+[data-ui="v2"] .rv-chat .rv-btn.rv-chat__hist-boton { box-sizing: border-box; height: 32px; padding-block: 0; }
 .rv-chat__hist-cuenta { display: inline-block; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: var(--canvas); font: 600 12px/20px var(--font-sans-ui, inherit); text-align: center; color: var(--ink); }
 .rv-chat__hist { display: none; }
 @media (min-width: 1024px) {
@@ -272,10 +275,10 @@ summary.rv-chat__resumen::marker { content: ""; }
 .rv-chat__hist-error { margin: 0; padding: 0 4px; font-size: 12px; color: var(--bad); }
 .rv-chat__hist-titulo { margin: 0 0 4px; padding: 0 4px; font: 600 12px/16px var(--font-sans-ui, inherit); color: var(--muted); }
 .rv-chat__hist-grupo ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-.rv-chat__hist-fila { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; color: var(--ink); font: 400 13px/18px var(--font-sans-ui, inherit); cursor: pointer; }
-.rv-chat__hist-fila:hover { background: var(--canvas); }
-.rv-chat__hist-fila[aria-current="true"] { background: var(--ui-activo-bg, var(--canvas)); font-weight: 500; }
-.rv-chat__hist-fila:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: -2px; }
+[data-ui="v2"] .rv-btn.rv-chat__hist-fila { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; text-align: left; color: var(--ink); font: 400 13px/18px var(--font-sans-ui, inherit); cursor: pointer; }
+[data-ui="v2"] .rv-btn.rv-chat__hist-fila:hover { background: var(--canvas); }
+[data-ui="v2"] .rv-btn.rv-chat__hist-fila[aria-current="true"] { background: var(--ui-activo-bg, var(--canvas)); font-weight: 500; }
+[data-ui="v2"] .rv-btn.rv-chat__hist-fila:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: -2px; }
 .rv-chat__hist-nombre { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rv-chat__hist-fecha { display: block; margin-top: 2px; font-size: 12px; line-height: 16px; color: var(--muted); }
 
@@ -303,15 +306,15 @@ summary.rv-chat__resumen::marker { content: ""; }
   .rv-chat .rv-chat__bajar { animation: rv-chat-aparece var(--ui-motion) var(--ui-ease) both; }
 
   /* Sugerencias: entrada escalonada 0 / 50 / 100 ms. */
-  .rv-chat__preguntas .rv-chat__q { animation: rv-chat-entra var(--chat-chip) var(--ui-ease) both; }
-  .rv-chat__preguntas .rv-chat__q:nth-child(2) { animation-delay: var(--chat-escalon); }
-  .rv-chat__preguntas .rv-chat__q:nth-child(3) { animation-delay: calc(var(--chat-escalon) * 2); }
+  .rv-chat__preguntas .rv-btn.rv-chat__q { animation: rv-chat-entra var(--chat-chip) var(--ui-ease) both; }
+  .rv-chat__preguntas .rv-btn.rv-chat__q:nth-child(2) { animation-delay: var(--chat-escalon); }
+  .rv-chat__preguntas .rv-btn.rv-chat__q:nth-child(3) { animation-delay: calc(var(--chat-escalon) * 2); }
 
   /* Gráficas de una respuesta: el trazo de la línea (380 ms, por recorte) viene del kit; la dona barre en 700 ms. */
   .rv-chat__respuesta[data-nuevo="true"] .rv-chat__bloque .rv-dona__gajo { animation: rv-barrido var(--t-sweep) var(--ui-ease) both; }
 
   /* Controles: color, borde y fondo a 150 ms como los de Vexa. */
-  .rv-chat__tema, .rv-chat__q, .rv-chat__composer, .rv-chat__documento button, .rv-chat__hist-fila, .rv-traza__alternar svg {
+  [data-ui="v2"] .rv-btn.rv-chat__tema, [data-ui="v2"] .rv-btn.rv-chat__q, .rv-chat__composer, [data-ui="v2"] .rv-btn.rv-chat__quitar, [data-ui="v2"] .rv-btn.rv-chat__hist-fila, [data-ui="v2"] .rv-btn.rv-traza__alternar svg {
     transition: background-color var(--chat-control) ease, border-color var(--chat-control) ease, color var(--chat-control) ease, box-shadow var(--chat-control) ease, transform var(--chat-control) ease;
   }
   .rv-chat[data-has] .rv-chat__pixeles { transition: opacity var(--ui-slow) var(--ui-ease); }
@@ -377,8 +380,12 @@ summary.rv-chat__resumen::marker { content: ""; }
 }
 
 /* «Decide hoy» en la portada del Copiloto (F5): tarjetas con la decisión propuesta; el aspecto de la tarjeta es el del kit (.rv-tarjeta). */
-.rv-chat__briefing { order: 2; width: 100%; max-width: var(--col-chat, 46rem); margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
-.rv-chat__briefing-titulo { margin: 0; font-size: var(--t-card); font-weight: 600; }
+.rv-chat__briefing { order: 7; width: 100%; max-width: var(--col-chat, 46rem); margin-top: 14px; padding: 10px 14px; }
+.rv-chat__briefing-resumen { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; cursor: pointer; list-style: none; }
+.rv-chat__briefing-resumen::-webkit-details-marker { display: none; }
+.rv-chat__briefing-resumen:focus-visible { outline: 2px solid var(--ui-focus, var(--ink)); outline-offset: 2px; }
+.rv-chat__briefing-cuerpo { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; max-height: min(40vh, 22rem); overflow-y: auto; }
+.rv-chat__briefing-titulo { margin: 0; font-size: var(--t-card); font-weight: 600; margin-right: auto; }
 .rv-chat__briefing-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .rv-chat__briefing-tarjeta { display: flex; flex-direction: column; gap: 6px; }
 .rv-chat__briefing-cab { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

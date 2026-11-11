@@ -7,7 +7,7 @@ import {
   type DatosFiscales,
 } from './stripe';
 import { cancelarCfdi, facturapiConfigurado } from './facturapi';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 import { hoyMx, inicioDiaMx } from '@/lib/formato';
 import { alertarOperador } from '@/lib/observability/alerta';
 
@@ -300,28 +300,24 @@ export async function guardarPriceDePlan(
   priceId: string,
 ): Promise<{ montoMensual: number; moneda: string; ivaIncluido: boolean | null }> {
   const limpio = priceId.trim();
-  if (!limpio) throw new DatoInvalido('Falta el ID del price de Stripe.');
+  if (!limpio) throw datoInvalido('suscripcion.falta_el_id_del_price');
   if (!limpio.startsWith('price_')) {
-    throw new DatoInvalido(`"${limpio}" no parece un price de Stripe: empiezan con "price_". Un product (prod_…) no sirve para cobrar.`);
+    throw datoInvalido('suscripcion.no_parece_un_price_de', { limpio });
   }
 
   const precio = await leerPrecio(limpio);
   if (!precio.recurrente) {
-    throw new DatoInvalido('Ese price es de pago único, no de suscripción. Cobraría una vez y la flota se quedaría con el plan activo para siempre.');
+    throw datoInvalido('suscripcion.ese_price_es_de_pago');
   }
   // A37-S61-04: `precio_mensual` alimenta la pantalla y `emitirMensualidad`. Un
   // price anual de $24,000 se guardaba como mensual y se cobraba/imprimía $24,000
   // cada mes. No se normaliza a mensual (dividir es una decisión de precio del
   // negocio, no de este código): se pide un price mensual.
   if (!precio.cobraCadaMes) {
-    throw new DatoInvalido(
-      `Ese price cobra ${precio.periodicidad ?? 'con otra periodicidad'}, no cada mes. El plan guarda el precio MENSUAL ` +
-      'y de ahí salen la pantalla del cliente y la mensualidad que se emite: un price anual, semanal o cada varios ' +
-      'meses se imprimiría y se cobraría como mensual. Crea en Stripe un price mensual (interval month, cada 1).',
-    );
+    throw datoInvalido('suscripcion.ese_price_cobra_no_cada', { v: precio.periodicidad ?? 'con otra periodicidad' });
   }
   if (!precio.activo) {
-    throw new DatoInvalido('Ese price está archivado en Stripe: no se puede cobrar con él.');
+    throw datoInvalido('suscripcion.ese_price_esta_archivado_en');
   }
   // UN PLAN DE $0 NO ES UN PLAN, ES UN REGALO SILENCIOSO (DAT-40). `precio_mensual`
   // NULL ya significa "sin configurar" y la pantalla lo dice; un 0 se ve
@@ -329,17 +325,10 @@ export async function guardarPriceDePlan(
   // pueden timbrar— y la flota queda con plan activo sin cobro para siempre.
   // Si algún día hay plan de cortesía, se asigna a mano, no se teclea un price.
   if (!(precio.montoMensual > 0)) {
-    throw new DatoInvalido(
-      'Ese price cobra $0. Un plan en cero se ve contratado y no cobra nunca: si es cortesía, se asigna la ' +
-      'suscripción a mano; si es un error del price, corrígelo en Stripe.',
-    );
+    throw datoInvalido('suscripcion.ese_price_cobra_0_un');
   }
   if (precio.moneda !== 'MXN') {
-    throw new DatoInvalido(
-      `Ese price cobra en ${precio.moneda}, no en pesos. Todo el panel imprime con formato de peso mexicano, así que ` +
-      `un price en ${precio.moneda} se vería idéntico a uno en MXN y el cliente descubriría la diferencia en su ` +
-      'estado de cuenta. Crea el price en MXN.',
-    );
+    throw datoInvalido('suscripcion.ese_price_cobra_en_no', { moneda: precio.moneda });
   }
 
   const admin = supabaseAdmin();
@@ -470,11 +459,7 @@ export async function cambiarPlan(opciones: {
       logger.error('stripe.suscripciones_duplicadas', {
         tenantId, customerId, subs: vivas.map((s) => s.id),
       });
-      throw new DatoInvalido(
-        `Esta flota tiene ${vivas.length} suscripciones vivas en Stripe al mismo tiempo, así que se le está `
-        + 'cobrando de más. No se toca ninguna desde aquí: escríbele a Likida para que cancele la que sobra antes '
-        + 'de cambiar de plan.',
-      );
+      throw datoInvalido('suscripcion.esta_flota_tiene_suscripciones_vivas', { length: vivas.length });
     }
 
     if (vivas.length === 1) {

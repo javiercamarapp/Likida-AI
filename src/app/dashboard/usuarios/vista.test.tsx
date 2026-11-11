@@ -104,12 +104,10 @@ describe('la lista dice la verdad de cada renglón', () => {
 // textual; ahora se fija lo contrario, y a quién se le ofrece.
 // ═══════════════════════════════════════════════════════════════════════════
 describe('gestión del equipo: baja, rol y reenvío', () => {
-  it('el dueño ve Dar de baja, Cambiar rol, Reenviar acceso y Cerrar sus sesiones en cada cuenta activa ajena', () => {
+  it('el dueño ve el menú «Acciones» en cada cuenta activa ajena (las cuatro formas viven en su popover, cerrado hasta abrirlo)', () => {
     const html = pintar({ usuarios: [CONTADOR_CON_TEL], puedeInvitar: true });
-    expect(html).toContain('Dar de baja');
-    expect(html).toContain('Cambiar rol');
-    expect(html).toContain('Reenviar acceso');
-    expect(html).toContain('Cerrar sus sesiones');
+    expect(html).toMatch(/<button[^>]*aria-label="Acciones de [^"]+"/);
+    expect(html).not.toContain('<details class="rv-usu__menu"');
     expect(html).not.toContain('todavía no existe');
   });
 

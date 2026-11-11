@@ -9,6 +9,7 @@ import { AvisoSinFlota } from './sin-flota';
 import { ATAJOS_RESUMEN, coberturaDe, filasAtencion, leerDatosResumen, type RangoResumen } from './resumen-datos';
 import { FiltrosResumen, ListaAtencion, SiguienteAccion } from './resumen-cliente';
 import { itemsKpi, TarjetaCierres, TarjetaDiferencias, TarjetaHizoSolo } from './resumen-tarjetas';
+import { getT } from '@/lib/i18n/servidor';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // RESUMEN v2 DEL DUEÑO, página CANÓNICA del contrato visual (MarcoPagina + FilaTarjetas + TiraCifras; 0 style=, 0 .card):
@@ -44,6 +45,7 @@ export async function ResumenV2({
   /** Flota normal con el perfil fiscal sin declarar («lo confirmo con mi contador»): el estímulo de peaje sigue en $0. */
   avisoFiscalPospuesto?: boolean;
 }) {
+  const { t, idioma } = await getT('resto');
   const diaMx = hoyMx(new Date(ahoraMs()));
   const [d, senales] = await Promise.all([
     leerDatosResumen(tenantId, rango, veDinero),
@@ -51,7 +53,7 @@ export async function ResumenV2({
   ]);
   // Ningún enlace de la pantalla rebota: cada ruta se ofrece solo si este rol, en este perfil, la abre.
   const puede = (ruta: string) => puedeVerRuta(rol, ruta.split('?')[0], perfil);
-  const filas = filasAtencion(d, principales, sufijo, 3, { puede, fallidos });
+  const filas = filasAtencion(d, principales, sufijo, 3, { puede, fallidos }, t);
   const atajos = ATAJOS_RESUMEN.filter((a) => puede(a.href));
   const cob = coberturaDe(d);
   const ambito = `${tenantId}:${userId}`;
@@ -59,33 +61,31 @@ export async function ResumenV2({
   return (
     <MarcoPagina
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
-      titulo="Resumen"
-      apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? 'Tus cinco agentes, de un vistazo.' : 'Tu flota, de un vistazo.'}`}
-      acciones={<Chip>{fechaMx(diaMx)}</Chip>}
+      titulo={t('op.resumen')}
+      apoyo={`${saludo()}, ${nombre ?? 'equipo'}. ${perfil ? t('op.tus_cinco_agentes_de_un_vistazo_3') : t('op.tu_flota_de_un_vistazo')}`}
+      acciones={<Chip>{fechaMx(diaMx, idioma)}</Chip>}
     >
       {!tenantExiste && <AvisoSinFlota tenantId={tenantId} />}
 
       {avisoFiscalPospuesto && (
-        <Aviso tono="warn" acciones={puede('/dashboard/onboarding') ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/onboarding${sufijo}`}>Declararlo ahora</BotonEnlace> : undefined}>
-          Tu perfil fiscal sigue sin declararse, así que el estímulo de peaje se muestra en $0 y no se acredita hasta que lo hagas.
-        </Aviso>
+        <Aviso tono="warn" acciones={puede('/dashboard/onboarding') ? <BotonEnlace tamano="sm" variante="secondary" href={`/dashboard/onboarding${sufijo}`}>{t('op.declararlo_ahora')}</BotonEnlace> : undefined}>{t('op.tu_perfil_fiscal_sigue_sin_declararse')}</Aviso>
       )}
 
       <FiltrosResumen rango={rango} fuentes={`Fuentes ${cob.ok} de ${cob.total}`} />
 
-      <TiraCifras items={itemsKpi(d, sufijo, puede)} etiqueta="Tu flota en Likida" />
+      <TiraCifras items={itemsKpi(d, sufijo, puede, t)} etiqueta={t('op.tu_flota_en_likida')} />
 
       <FilaTarjetas variante="8-4">
-        <TarjetaCierres d={d} />
-        <Tarjeta titulo="Requiere tu atención" info="resumen.requiere_atencion">
+        <TarjetaCierres t={t} d={d} />
+        <Tarjeta titulo={t('op.requiere_tu_atencion')} info="resumen.requiere_atencion">
           <ListaAtencion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} />
         </Tarjeta>
       </FilaTarjetas>
 
       <FilaTarjetas variante="4-4-4" llena>
-        <TarjetaDiferencias d={d} />
-        <TarjetaHizoSolo d={d} sufijo={sufijo} puede={puede} />
-        <Tarjeta titulo="Siguiente mejor acción" info="resumen.siguiente_mejor_accion">
+        <TarjetaDiferencias t={t} d={d} />
+        <TarjetaHizoSolo t={t} d={d} sufijo={sufijo} puede={puede} />
+        <Tarjeta titulo={t('op.siguiente_mejor_accion')} info="resumen.siguiente_mejor_accion">
           <SiguienteAccion filas={filas} senales={senales} ambito={ambito} soloLectura={soloLectura} sufijo={sufijo} atajos={atajos} />
         </Tarjeta>
       </FilaTarjetas>

@@ -58,8 +58,10 @@ const ACCIONES_GUIA = {
 const PUERTA_DASHBOARD = /\b(resolverTenantEfectivo|resolverTenantAtadoAccion|resolverTenantAtadoOLanza|resolverTenantAtadoFirmado|requireSessionTenant|requireSession|resolverTenantApi)\(/;
 /** Archivos de acciones que NO cuelgan de una página y gatean con una ruta distinta a su carpeta. */
 const ACCIONES_RUTA_EXPLICITA = {
-  'src/app/dashboard/inicio-contenido.tsx': '/dashboard',                    // el Resumen de siempre; bajo el perfil no se monta
   'src/app/dashboard/agentes/seccion-notificaciones.tsx': '/dashboard/notificaciones', // el aviso por agente gatea con la ruta de su agente
+  // Avisos (marcar leído, preferencias, silencio) vive en ui-v2 porque la comparten /admin y /dashboard: el panel de flota resuelve la
+  // flota con `resolverTenantEfectivo('/dashboard/notificaciones')` (misma ruta y mismo veredicto que la pantalla) y el panel admin exige requireSuperadmin.
+  'src/app/ui-v2/avisos/acciones.ts': '/dashboard/notificaciones',
 };
 
 /** Páginas que no son una ruta del perfil (no hay llave propia ni padre) y gatean con una ruta SIEMPRE permitida: se acepta solo si su fuente lo demuestra. */
@@ -166,7 +168,14 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
   const mcpHerr = fuente('src/lib/mcp/herramientas.ts');
   const chatRoute = fuente('src/app/api/dashboard/chat/route.ts');
   const todoElMcpNiega = /perfilRestringido\(/.test(mcpRoute) && /perfilRestringido\(/.test(mcpHerr);
-  const chatNiega = !API_PERFIL_CINCO_AGENTES.dashboard.includes('chat') && /respuestaSiPerfilNiegaApi\(/.test(chatRoute);
+  // 11-nov: el chat se ABRE para el perfil, pero solo con la lista cerrada de herramientas (`HERRAMIENTAS_PERFIL_CINCO_AGENTES`),
+  // recortada en el analista (`perfilDeTenant` + `herramientaPermitidaEnPerfil`) y otra vez dentro del ejecutor.
+  const listaChatPerfil = (() => {
+    const m = /export const HERRAMIENTAS_PERFIL_CINCO_AGENTES[^=]*=\s*\[([\s\S]*?)\];/.exec(fuente('src/lib/likida/orquestador/permisos.ts'));
+    return m ? [...m[1].matchAll(/'([a-z_0-9]+)'/g)].map((x) => x[1]) : [];
+  })();
+  const analistaRecorta = /herramientasDelPerfil\(/.test(fuente('src/lib/agents/analista.ts')) && /herramientaPermitidaEnPerfil\(/.test(fuente('src/lib/agents/analista.ts'));
+  const chatAbierto = API_PERFIL_CINCO_AGENTES.dashboard.includes('chat');
 
   return elementos.map((e) => {
     let r;
@@ -227,10 +236,14 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
           : { veredicto: NO_CLASIFICADO, nota: 'el MCP no aplica perfilRestringido en endpoint y despacho' };
         break;
       case 'herramienta del chat':
+        if (!analistaRecorta) r = { veredicto: NO_CLASIFICADO, nota: 'el analista no recorta las herramientas por perfil' };
+        else if (listaChatPerfil.includes(e.id)) r = { veredicto: 'permitido', nota: 'herramienta de los cinco agentes: el chat «Pregunta a tus datos» la conserva bajo el perfil' };
+        else r = { veredicto: 'negado', nota: 'no está en HERRAMIENTAS_PERFIL_CINCO_AGENTES: ni se ofrece al modelo ni se ejecuta bajo el perfil' };
+        break;
       case 'analista del chat':
-        r = chatNiega
-          ? { veredicto: 'negado', nota: 'el chat (/api/dashboard/chat) está fuera de la lista y niega con respuestaSiPerfilNiegaApi' }
-          : { veredicto: NO_CLASIFICADO, nota: 'el chat no está negado por el perfil' };
+        r = chatAbierto && analistaRecorta && /respuestaSiPerfilNiegaApi\(/.test(chatRoute)
+          ? { veredicto: 'permitido', nota: 'el chat está abierto al perfil con herramientas recortadas; la ruta sigue validando sesión, rol, tenant y tope' }
+          : { veredicto: NO_CLASIFICADO, nota: 'el chat no está bien acotado bajo el perfil' };
         break;
       case "'use server'": {
         if (ACCIONES_GUIA[e.archivo]) { r = { veredicto: 'permitido', nota: ACCIONES_GUIA[e.archivo] }; break; }
@@ -253,7 +266,7 @@ export function clasificar(elementos, raiz = RAIZ_DEFECTO) {
             : { veredicto: NO_CLASIFICADO, nota: 'sin perfilRestringido' };
           break;
         }
-        if (e.archivo.startsWith('src/app/dashboard/')) {
+        if (e.archivo.startsWith('src/app/dashboard/') || ACCIONES_RUTA_EXPLICITA[e.archivo]) {
           // A37-S04-06: clasificar por la carpeta no prueba nada si el archivo no llama a la puerta. Se exige, al menos a
           // nivel de archivo, una llamada a la puerta de sesión/flota (la comprobación por acción exportada requiere un
           // parser; ver «pendientes» del PR).

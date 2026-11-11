@@ -10,6 +10,10 @@ import {
   ETIQUETA_DOCS, ETIQUETA_ESTADO, ROTULO_DERIVADO,
   type ComparacionTT, type DiaImportacion, type Incoherencia,
 } from '@/lib/likida/vigia/importacion/derivar';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TABLERO DE ESTATUS DE IMPORTACIÓN (Agente 4, T-A4-37).
@@ -62,16 +66,18 @@ function dia(fecha: string): string {
 
 const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios);
 
-const VACIO = 'Carga el programa del día para ver el estatus.';
+const vacioTr = (tx: TAgentes = TR_ES.t) => (tx('rest.carga_el_programa_del_dia_para'));
 
 function Enviar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
   return (
-    <Boton type="submit" loading={pending} icono={<Icono icono={Upload} tam={14} />}>{pending ? 'Leyendo el archivo…' : 'Subir y ver el estatus'}</Boton>
+    <Boton type="submit" loading={pending} icono={<Icono icono={Upload} tam={14} />}>{pending ? 'Leyendo el archivo…' : tx('rest.subir_y_ver_el_estatus')}</Boton>
   );
 }
 
 function DescargarCsv({ csv }: { csv: string }) {
+  const { t: tx } = useT('agentes', agentesEs);
   function descargar() {
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a');
@@ -81,101 +87,94 @@ function DescargarCsv({ csv }: { csv: string }) {
     URL.revokeObjectURL(url);
   }
   return (
-    <Boton onClick={descargar} icono={<Icono icono={Download} tam={14} />}>Descargar CSV</Boton>
+    <Boton onClick={descargar} icono={<Icono icono={Download} tam={14} />}>{tx('rest.descargar_csv')}</Boton>
   );
 }
 
 function Forma({ accion }: { accion: AccionImportacion }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, despachar] = useActionState(accion, null);
   return (
     <div className="rv-vg__pila">
       <form action={despachar} className="rv-vg__pila">
         <div className="rv-vg__cuad">
-          <CampoTexto etiqueta="Terminal" name="terminal" required maxLength={40} placeholder="Por ejemplo, GDL" autoComplete="off" />
+          <CampoTexto etiqueta={tx('rest.terminal')} name="terminal" required maxLength={40} placeholder={tx('rest.por_ejemplo_gdl')} autoComplete="off" />
           <CampoArchivo etiqueta={`Archivo del programa (CSV, hasta ${TOPE_ARCHIVO_IMPORTACION_BYTES / (1024 * 1024)} MB)`} name="archivo" required accept=".csv,.txt,text/csv" />
         </div>
-        <p className="rv-vg__nota">
-          Aquí solo se lee el archivo para calcular el estatus: no se guarda ni se escribe en ningún otro sistema.
-          El Excel con colores (.xlsx) todavía no se puede leer: guárdalo como CSV.
-        </p>
+        <p className="rv-vg__nota">{tx('rest.aqui_solo_se_lee_el_archivo')}</p>
         <div><Enviar /></div>
       </form>
-      <Salida estado={estado} />
+      <Salida estado={estado} tx={tx} />
     </div>
   );
 }
 
 /** Lo que hay debajo del formulario: el error en llano, el tablero, o el estado vacío. */
-export function Salida({ estado }: { estado: ResultadoImportacion }) {
+export function Salida({ estado, tx = TR_ES.t }: { estado: ResultadoImportacion; tx?: TAgentes }) {
   if (estado && !estado.ok) return <AvisoResultado estado={estado} />;
   if (estado?.ok) return <Tablero r={estado.resumen} />;
-  return <p className="rv-vg__nota" data-testid="vacio">{VACIO}</p>;
+  return <p className="rv-vg__nota" data-testid="vacio">{vacioTr(tx)}</p>;
 }
 
 function Tablero({ r }: { r: ResumenImportacion }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const c = r.comparacion;
   const columnas: readonly ColumnaBase<DiaImportacion>[] = [
-    { id: 'dia', titulo: 'Día', principal: true, celda: (d) => <span data-dia={d.fecha}>{dia(d.fecha)}</span> },
-    { id: 'cajas', titulo: 'Cajas', alinear: 'der', celda: (d) => miles(d.cajas) },
+    { id: 'dia', titulo: tx('rest.dia'), principal: true, celda: (d) => <span data-dia={d.fecha}>{dia(d.fecha)}</span> },
+    { id: 'cajas', titulo: tx('rest.cajas'), alinear: 'der', celda: (d) => miles(d.cajas) },
     { id: 'patio', titulo: ETIQUETA_ESTADO.patio, alinear: 'der', celda: (d) => miles(d.porEstado.patio) },
     { id: 'cruce', titulo: ETIQUETA_ESTADO.pend_cruce, alinear: 'der', celda: (d) => miles(d.porEstado.pend_cruce) },
     { id: 'ruta', titulo: ETIQUETA_ESTADO.en_ruta, alinear: 'der', celda: (d) => miles(d.porEstado.en_ruta) },
     { id: 'listo', titulo: ETIQUETA_DOCS.listo, alinear: 'der', celda: (d) => miles(d.porDocs.listo) },
     { id: 'pend', titulo: ETIQUETA_DOCS.pend_requisito, alinear: 'der', celda: (d) => miles(d.porDocs.pend_requisito) },
-    { id: 'sin', titulo: 'Sin estatus', alinear: 'der', celda: (d) => miles(d.porEstado.desconocido) },
+    { id: 'sin', titulo: tx('rest.sin_estatus'), alinear: 'der', celda: (d) => miles(d.porEstado.desconocido) },
   ];
   return (
     <div className="rv-vg__pila" aria-live="polite">
-      <Tarjeta titulo="Estatus por día" info="vigia_importacion.estatus_dia">
+      <Tarjeta titulo={tx('rest.estatus_por_dia')} info="vigia_importacion.estatus_dia">
         <div className="rv-vg__pila">
           <p data-testid="resumen">
             {r.totalCajas === 0
-              ? `No encontré cajas de importación en la terminal ${r.terminal}.`
-              : `${miles(r.totalCajas)} ${plural(r.totalCajas, 'caja', 'cajas')} de importación en ${miles(r.dias.length)} ${plural(r.dias.length, 'día', 'días')}, terminal ${r.terminal}.`}
+              ? tx('rest.no_encontre_cajas_de_importacion_en', { terminal: r.terminal })
+              : tx('rest.de_importacion_en_terminal', { miles: miles(r.totalCajas), plural: plural(r.totalCajas, tx('rest.w_caja'), tx('rest.w_cajas')), miles2: miles(r.dias.length), plural2: plural(r.dias.length, tx('rest.w_dia'), tx('rest.w_dias')), terminal: r.terminal })}
             {r.filasOtrasSecciones > 0
-              ? ` ${miles(r.filasOtrasSecciones)} ${plural(r.filasOtrasSecciones, 'fila', 'filas')} de otras secciones no cuentan aquí.`
+              ? tx('rest.de_otras_secciones_no_cuentan_aqui', { miles: miles(r.filasOtrasSecciones), plural: plural(r.filasOtrasSecciones, tx('rest.w_fila'), tx('rest.w_filas')) })
               : ''}
           </p>
           {r.sinFecha > 0 ? (
-            <p className="rv-vg__nota" data-tono="bad">
-              {miles(r.sinFecha)} {plural(r.sinFecha, 'fila', 'filas')} no tenían fecha de sección y no se contaron.
-            </p>
+            <p className="rv-vg__nota" data-tono="bad">{tx('rest.no_tenian_fecha_de_seccion_y', { miles: miles(r.sinFecha), plural: plural(r.sinFecha, tx('rest.w_fila'), tx('rest.w_filas')) })}</p>
           ) : null}
           {r.dias.length > 0 ? (
-            <TablaBase etiqueta="Cajas por estatus y por día" columnas={columnas} filas={r.dias} idFila={(d) => d.fecha} densa tarjetaMovil />
+            <TablaBase etiqueta={tx('rest.cajas_por_estatus_y_por_dia')} columnas={columnas} filas={r.dias} idFila={(d) => d.fecha} densa tarjetaMovil />
           ) : null}
         </div>
       </Tarjeta>
 
-      <Tarjeta titulo="Filas que no cuadran" info="vigia_importacion.incoherencias">
+      <Tarjeta titulo={tx('rest.filas_que_no_cuadran')} info="vigia_importacion.incoherencias">
         {r.totalIncoherencias === 0 ? (
-          <p className="rv-vg__nota" data-testid="sin-incoherencias">Ninguna fila se contradice: lo que dice TRANSITO y lo que dice CCP es coherente.</p>
+          <p className="rv-vg__nota" data-testid="sin-incoherencias">{tx('rest.ninguna_fila_se_contradice_lo_que')}</p>
         ) : (
           <div className="rv-vg__pila">
             <ul className="rv-vg__lista rv-vg__nota" data-testid="incoherencias">
               {r.incoherencias.map((i, n) => (
                 <li key={`${i.lineaCsv}-${i.codigo}-${n}`}>
-                  <span className="rv-vg__medio">Línea {miles(i.lineaCsv)} ({dia(i.fecha)}){i.caja ? `, caja ${i.caja}` : ''}:</span>{' '}
+                  <span className="rv-vg__medio">{tx('rest.linea', { miles: miles(i.lineaCsv), dia: dia(i.fecha) })}{i.caja ? `, caja ${i.caja}` : ''}:</span>{' '}
                   {i.mensaje}
                 </li>
               ))}
             </ul>
             {r.totalIncoherencias > r.incoherencias.length ? (
-              <p className="rv-vg__micro">Y {miles(r.totalIncoherencias - r.incoherencias.length)} más en el CSV.</p>
+              <p className="rv-vg__micro">{tx('rest.y_mas_en_el_csv', { miles: miles(r.totalIncoherencias - r.incoherencias.length) })}</p>
             ) : null}
           </div>
         )}
       </Tarjeta>
 
-      <Tarjeta titulo="Comparación con Track & Trace" info="vigia_importacion.track_trace">
+      <Tarjeta titulo={tx('rest.comparacion_con_track_trace')} info="vigia_importacion.track_trace">
         {c === null ? (
-          <p className="rv-vg__nota" data-testid="sin-tt">
-            Track &amp; Trace todavía no está conectado: no hay con qué comparar. Cuando lo esté, aquí aparecerán las cajas donde no coincidan.
-          </p>
+          <p className="rv-vg__nota" data-testid="sin-tt">{tx('rest.track_amp_trace_todavia_no_esta')}</p>
         ) : (
-          <p className="rv-vg__nota" data-testid="con-tt">
-            {miles(c.comparadas)} {plural(c.comparadas, 'caja comparada', 'cajas comparadas')}: {miles(c.coinciden)} coinciden y {miles(c.difieren.length)} no.
-            {c.difieren.length > 0 ? ` No coinciden: ${c.difieren.slice(0, 20).join(', ')}.` : ''}
+          <p className="rv-vg__nota" data-testid="con-tt">{tx('rest.coinciden_y_no', { miles: miles(c.comparadas), plural: plural(c.comparadas, tx('rest.w_caja_comparada'), tx('rest.w_cajas_comparadas')), miles2: miles(c.coinciden), miles3: miles(c.difieren.length) })}{c.difieren.length > 0 ? ` No coinciden: ${c.difieren.slice(0, 20).join(', ')}.` : ''}
           </p>
         )}
       </Tarjeta>
@@ -183,7 +182,7 @@ function Tablero({ r }: { r: ResumenImportacion }) {
       {r.totalCajas > 0 ? (
         <div className="rv-vg__pila--s">
           <div><DescargarCsv csv={r.csv} /></div>
-          <p className="rv-vg__micro">Para que el equipo lo pegue en su programa, en lugar de escribirlo a mano.</p>
+          <p className="rv-vg__micro">{tx('rest.para_que_el_equipo_lo_pegue')}</p>
         </div>
       ) : null}
     </div>
@@ -191,17 +190,16 @@ function Tablero({ r }: { r: ResumenImportacion }) {
 }
 
 export function VistaImportacionVigia({ sufijo, accion }: { sufijo: string; accion: AccionImportacion }) {
+  const { t: tx } = useT('agentes', agentesEs);
   return (
-    <MarcoPagina titulo="Estatus de importación" apoyo="Sube el programa del día y ve el estatus de cada viaje, derivado del archivo.">
-      <nav aria-label="Volver">
-        <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">Volver a servicio al cliente</Link>
-      </nav>
+    <MarcoPagina titulo={tx('rest.estatus_de_importacion')} apoyo={tx('rest.sube_el_programa_del_dia_y')}>
+      <nav aria-label={tx('rest.volver')}>{ricoT(tx('rest.e0_volver_a_servicio_al_cliente'), { e0: (c) => <Link href={`/dashboard/agentes/vigia${sufijo}`} className="rv-vg__enlace">{c}</Link> })}</nav>
 
       <p role="note" className="rv-vg__icono-linea rv-vg__nota" data-testid="rotulo">
         <Icono icono={TriangleAlert} tam={14} />{ROTULO_DERIVADO}
       </p>
 
-      <Tarjeta titulo="Subir el programa del día" info="vigia_importacion.subir">
+      <Tarjeta titulo={tx('rest.subir_el_programa_del_dia')} info="vigia_importacion.subir">
         <Forma accion={accion} />
       </Tarjeta>
     </MarcoPagina>

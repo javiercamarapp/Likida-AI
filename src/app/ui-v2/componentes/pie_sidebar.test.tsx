@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { Settings } from 'lucide-react';
 
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(), usePathname: () => '/dashboard' }));
-const { default: PieSidebar, TarjetaUsuario, etiquetaAvisos, inicialesDe, ConmutadorIdioma } = await import('./pie-sidebar');
+const { default: PieSidebar, TarjetaUsuario, etiquetaAvisos, inicialesDe, ConmutadorIdioma, organizacionVigente } = await import('./pie-sidebar');
 const { IdiomaProvider } = await import('@/lib/i18n/proveedor');
 const { IDIOMA_EN_DISPONIBLE, idiomaElegible } = await import('@/lib/i18n/idioma');
 const { shell: shellEn } = await import('@/lib/i18n/en/shell');
@@ -38,6 +38,18 @@ describe('PieSidebar: estados', () => {
     expect(sin).not.toContain('rv-ps-acceso');
     expect(con).toContain('Administración de Likida');
   });
+  it('Avisos: punto de no leídos solo si hay pendientes; sin dato es «?»; la cifra va en el aria-label, no pintada', () => {
+    const base = { organizacion: org([]), tarjeta };
+    const con = pintar({ ...base, avisos: { href: '/av', pendientes: 18 } });
+    expect(con).toContain('rv-ps-punto');
+    expect(con).not.toContain('rv-contador');
+    expect(con).toContain('aria-label="Avisos: 18 pendientes"');
+    expect(pintar({ ...base, avisos: { href: '/av', pendientes: 0 } })).not.toContain('rv-ps-punto');
+    expect(pintar({ ...base, avisos: { href: '/av' } })).not.toContain('rv-ps-punto');
+    const caida = pintar({ ...base, avisos: { href: '/av', pendientes: null } });
+    expect(caida).not.toContain('rv-ps-punto');
+    expect(caida).toContain('rv-ps-sindato');
+  });
   it('sin pantalla de avisos la fila no existe', () => {
     expect(pintar({ organizacion: org([]), avisos: null, tarjeta })).not.toContain('rv-ps-avisos');
   });
@@ -47,7 +59,26 @@ describe('PieSidebar: estados', () => {
     expect(h).toContain('title="Flota A"');
     expect(h).toContain('rv-ps-tema__riel');
     expect(h).toMatch(/aria-label="Tema claro\. Cambiar a: Seguir al sistema"/);
-    expect(h).toContain('title="Avisos: 2 pendientes"');
+    expect(h).toMatch(/role="tooltip"[^>]*>Avisos: 2 pendientes</);
+  });
+});
+
+describe('PieSidebar: la organización sigue a la prop', () => {
+  const dos = [{ valor: 'a', nombre: 'Flota A' }, { valor: 'b', nombre: 'Flota B' }];
+  it('al cambiar `actual` el nombre y el destino de «Ir» cambian con ella (no se queda con la flota inicial)', () => {
+    const a = pintar({ organizacion: org(dos, 'a'), avisos: { href: '/av' }, tarjeta });
+    const b = pintar({ organizacion: org(dos, 'b'), avisos: { href: '/av' }, tarjeta });
+    expect(a).toContain('href="/ir/a"');
+    expect(b).toContain('href="/ir/b"');
+    expect(b).not.toContain('href="/ir/a"');
+  });
+  it('una elección del usuario vale solo contra la `actual` con que se hizo', () => {
+    expect(organizacionVigente({ de: 'a', valor: 'b' }, 'a')).toBe('b');
+    expect(organizacionVigente({ de: 'a', valor: 'b' }, 'c')).toBe('c');
+    expect(organizacionVigente(null, 'c')).toBe('c');
+  });
+  it('flota única que cambia: muestra la nueva', () => {
+    expect(pintar({ organizacion: org([{ valor: 'b', nombre: 'Flota B' }], 'b'), avisos: { href: '/av' }, tarjeta })).toContain('Flota B');
   });
 });
 
@@ -66,7 +97,9 @@ describe('PieSidebar: conmutadores', () => {
     expect(bloque).toMatch(/value="en"[^>]*disabled=""|disabled=""[^>]*value="en"/);
     expect(bloque).not.toMatch(/value="es"[^>]*disabled=""|disabled=""[^>]*value="es"/);
     expect(bloque).toContain('aria-label="Inglés: próximamente"');
-    expect(bloque).toContain('title="Inglés: próximamente"');
+    // Tooltip del sistema (tarjeta, lateral): nunca el title nativo oscuro, que tapaba la fila Avisos.
+    expect(bloque).not.toContain('title=');
+    expect(bloque).toMatch(/role="tooltip"[^>]*>Inglés: próximamente</);
     expect(bloque).not.toContain('aria-label="English (US)"');
     expect(bloque).toMatch(/value="es"[^>]*checked|checked=""[^>]*value="es"/);
     expect(bloque).not.toMatch(/value="en"[^>]*checked=""|checked=""[^>]*value="en"/);

@@ -1,5 +1,6 @@
 import type { InfoTexto } from '../info-catalogo';
 import { V } from './constructores';
+import { resto } from '@/lib/i18n/es/resto';
 
 // Textos de ⓘ: administración y cuenta. Claves `<pagina>.<recuadro>`; tono de guía (ANEXO C), solo lo que el lector hace de verdad.
 export const INFO_ADMIN = {
@@ -228,6 +229,9 @@ export const INFO_ADMIN = {
     'Estímulo de peaje 50%', 'Estímulo de peaje de tus liquidaciones del ejercicio, sujeto a elegibilidad.',
     'Suma el estímulo de peaje guardado en cada liquidación de tu flota, desde el 1 de enero hasta hoy. La nota indica que la base es el subtotal sin IVA de casetas con CFDI.',
     'Liquidaciones de tu flota, ejercicio en curso. No es un derecho ya ganado: depende de la elegibilidad.',
+  ),
+  'contador.en_riesgo': V(
+    resto['op.mf_info_titulo'], resto['op.mf_info_que_es'], resto['op.mf_info_como'], resto['op.mf_info_fuente'], resto['op.mf_info_hacer'],
   ),
   'contador.recuperable': V(
     'Recuperable pidiendo factura', 'Gasto cuya factura aún se puede pedir.',

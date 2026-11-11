@@ -12,6 +12,7 @@ import { Aviso, AvisoCompacto, Disclosure, MarcoPagina, StatusChip, Tarjeta, Tab
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import '../dinero.css';
 
+import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -48,6 +49,7 @@ async function leer<T>(nombre: string, f: () => Promise<T>): Promise<{ dato: T |
 
 
 export default async function CobranzaPage() {
+  const { t } = await getT('admin_dinero');
   // La puerta de la PÁGINA, no solo la del layout: en Next un layout no se vuelve a ejecutar si la petición RSC declara que el cliente
   // ya lo tiene, así que lo único que protege estos datos de TODAS las flotas (service role) es esta llamada.
   await requireSuperadmin();
@@ -72,13 +74,14 @@ export default async function CobranzaPage() {
   const hayError = facturas.error || piezas.error || corrida.error;
 
   return (
-    <MarcoPagina titulo="Facturación" apoyo="Seguimiento de lo que las flotas deben: recordatorios preparados, toques sin propuesta y la última corrida del agente.">
+    <MarcoPagina titulo={t('cobranza.facturacion')} apoyo={t('cobranza.seguimiento_de_lo_que')}>
       {hayError ? (
-        <Aviso tono="error" titulo="No se pudo leer todo el estado del dunning">
-          {facturas.error && 'Las facturas por cobrar no cargaron (no se afirma que no haya ninguna). '}
-          {piezas.error && 'Las propuestas de recordatorio no cargaron (los toques no pueden mostrarse como «con propuesta» ni «sin propuesta»). '}
-          {corrida.error && 'La última corrida del agente no cargó. '}
-          Recarga la página; si persiste, revisa los registros.
+        <Aviso tono="error" titulo={t('cobranza.no_se_pudo_leer')}>
+          {facturas.error && t('cobranza.las_facturas_por_cobrar')}
+          {piezas.error && t('cobranza.las_propuestas_de_recordatorio')}
+          {corrida.error && t('cobranza.la_ultima_corrida_del')}
+          
+          {t('cobranza.recarga_la_pagina_si')}
         </Aviso>
       ) : null}
 
@@ -96,31 +99,29 @@ export default async function CobranzaPage() {
         )}
       />
 
-      {estado ? (
-        /* Sin una sola factura ni propuesta no hay base que medir: cuatro «0 · $0.00» se leerían como medición. Se marcan «—» y lo dicen. */
-        <TiraCifras etiqueta="Cobranza de las mensualidades" items={sinBase
-          ? ['Por cobrar', 'Vencidas', 'Toques sin propuesta', 'Propuestas pendientes / enviadas por el sistema'].map((e) => ({ etiqueta: e, valor: null, estado: 'vacio' as const, mensaje: 'Sin facturas que medir todavía' }))
-          : [
-            { etiqueta: 'Por cobrar', valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? 'Incompleto: hay más facturas de las que se leyeron.' : undefined, tono: truncada ? 'warn' as const : undefined },
-            { etiqueta: 'Vencidas', valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
+      {estado && !sinBase ? (
+        /* Sin una sola factura ni propuesta no hay base que medir: no se pintan cuatro celdas vacías; el estado vacío de «Facturas por cobrar» (abajo) lo dice una vez. */
+        <TiraCifras etiqueta={t('cobranza.cobranza_de_las_mensualidades')} items={[
+            { etiqueta: t('cobranza.por_cobrar'), valor: `${totalBase} · ${mxn(estado.montoPorCobrar)}`, nota: truncada ? t('cobranza.incompleto_hay_mas_facturas') : undefined, tono: truncada ? 'warn' as const : undefined },
+            { etiqueta: t('cobranza.vencidas'), valor: `${estado.vencidas} · ${mxn(estado.montoVencido)}`, tono: estado.vencidas > 0 ? 'bad' as const : undefined },
             {
-              etiqueta: 'Toques sin propuesta', valor: String(estado.toquesSinPropuesta),
-              nota: estado.toquesSinPropuesta > 0 ? 'El agente no ha preparado toques que ya tocaban.' : undefined,
+              etiqueta: t('cobranza.toques_sin_propuesta'), valor: String(estado.toquesSinPropuesta),
+              nota: estado.toquesSinPropuesta > 0 ? t('cobranza.el_agente_no_ha') : undefined,
               tono: estado.toquesSinPropuesta > 0 && !piezas.error ? 'warn' as const : undefined,
             },
-            { etiqueta: 'Propuestas pendientes / enviadas por el sistema', valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
+            { etiqueta: t('cobranza.propuestas_pendientes_enviadas_por'), valor: `${estado.propuestasPendientes} / ${estado.propuestasEnviadas}` },
           ]} />
       ) : null}
 
-      <Tarjeta titulo="Última corrida del agente" estado={corrida.error ? 'error' : 'ok'} mensaje="No se pudo leer la última corrida" reintentar>
+      <Tarjeta titulo={t('cobranza.ultima_corrida_del_agente')} estado={corrida.error ? 'error' : 'ok'} mensaje={t('cobranza.no_se_pudo_leer_2')} reintentar>
         {corrida.dato === null ? (
           <p className="adm-din-nota">
-            <StatusChip tono="warn">Nunca ha corrido</StatusChip> No hay una sola corrida registrada de cobranza: ningún toque se ha preparado todavía.
+            <StatusChip tono="warn">{t('cobranza.nunca_ha_corrido')}</StatusChip>  {t('cobranza.no_hay_una_sola')}
           </p>
         ) : (
           <>
             <p className="adm-din-nota">
-              <StatusChip tono={corrida.dato.estado === 'ok' ? 'ok' : 'bad'}>{corrida.dato.estado === 'ok' ? 'Última corrida OK' : 'Última corrida con fallo'}</StatusChip>{' '}
+              <StatusChip tono={corrida.dato.estado === 'ok' ? 'ok' : 'bad'}>{corrida.dato.estado === 'ok' ? t('cobranza.ultima_corrida_ok') : t('cobranza.ultima_corrida_con_fallo')}</StatusChip>{' '}
               {corrida.dato.fin.slice(0, 16).replace('T', ' ')} UTC
             </p>
             {corrida.dato.error ? <Aviso tono="error">{corrida.dato.error}</Aviso> : null}
@@ -130,8 +131,8 @@ export default async function CobranzaPage() {
 
       {estado ? (
         <Tarjeta
-          titulo="Facturas por cobrar y su cadencia" estado={estado.facturas.length === 0 ? 'vacio' : 'ok'}
-          mensaje="0 mensualidades por cobrar" detalle="No hay ninguna factura pendiente ni fallida. Es el estado real del negocio, no un error de lectura."
+          titulo={t('cobranza.facturas_por_cobrar_y')} estado={estado.facturas.length === 0 ? 'vacio' : 'ok'}
+          mensaje="0 mensualidades por cobrar" detalle={t('cobranza.no_hay_ninguna_factura')}
         >
           {estado.facturas.length > filasVistas.length || truncada ? (
             <p className="adm-din-nota" role="note">
@@ -139,28 +140,28 @@ export default async function CobranzaPage() {
             </p>
           ) : null}
           <TablaBase
-            etiqueta="Facturas por cobrar y su cadencia" idFila={(f) => f.factura.id} tarjetaMovil densa filas={filasVistas}
+            etiqueta={t('cobranza.facturas_por_cobrar_y')} idFila={(f) => f.factura.id} tarjetaMovil densa filas={filasVistas}
             columnas={[
-              { id: 'flota', titulo: 'Flota', principal: true, celda: (f) => f.factura.tenantNombre },
-              { id: 'monto', titulo: 'Total', alinear: 'der', celda: (f) => mxn(f.factura.monto) },
+              { id: 'flota', titulo: t('cobranza.flota'), principal: true, celda: (f) => f.factura.tenantNombre },
+              { id: 'monto', titulo: t('cobranza.total'), alinear: 'der', celda: (f) => mxn(f.factura.monto) },
               {
-                id: 'corte', titulo: 'Corte',
+                id: 'corte', titulo: t('cobranza.corte'),
                 celda: (f) => (
                   <>
-                    <StatusChip tono={f.vencida ? 'bad' : 'neutral'}>{f.dias >= 0 ? `${f.dias} días desde el corte` : `faltan ${-f.dias} días`}</StatusChip>
+                    <StatusChip tono={f.vencida ? 'bad' : 'neutral'}>{f.dias >= 0 ? t('cobranza.dias_desde_el_corte', { dias: f.dias }) : t('cobranza.faltan_dias', { dias: -f.dias })}</StatusChip>
                     <span className="adm-din-sub">{f.factura.estado} · {f.factura.periodoInicio} a {f.factura.periodoFin}</span>
                   </>
                 ),
               },
               {
-                id: 'toques', titulo: 'Toques',
+                id: 'toques', titulo: t('cobranza.toques'),
                 celda: (f) => (f.toques.length === 0 ? (
                   <>Aún no alcanza el primer toque ({hito(f.proximoHito ?? -3)}).</>
                 ) : (
                   <span className="adm-din-acciones">
-                    {f.toques.map((t) => (
-                      <StatusChip key={t.hito} tono={piezas.error ? 'neutral' : ROTULO_SELLO[t.sello].tono}>
-                        {hito(t.hito)} · {piezas.error ? 'estado de la propuesta no disponible' : ROTULO_SELLO[t.sello].texto}
+                    {f.toques.map((toque) => (
+                      <StatusChip key={toque.hito} tono={piezas.error ? 'neutral' : ROTULO_SELLO[toque.sello].tono}>
+                        {hito(toque.hito)} · {piezas.error ? t('cobranza.estado_de_la_propuesta') : ROTULO_SELLO[toque.sello].texto}
                       </StatusChip>
                     ))}
                     {f.proximoHito !== null ? <span className="adm-din-sub">siguiente: {hito(f.proximoHito)}</span> : null}
@@ -172,14 +173,17 @@ export default async function CobranzaPage() {
         </Tarjeta>
       ) : null}
 
-      <Disclosure titulo="Qué no se mide todavía" resumen="Días de cobro y recuperación">
+      <Disclosure titulo={t('cobranza.que_no_se_mide')} resumen="Días de cobro y recuperación">
         <p className="adm-din-nota">
-          Pendiente de construir: los días promedio de cobro y la tasa de recuperación de vencidos necesitan historial de facturas pagadas que aún no existe. El monto facturado y el
-          cobrado por estado están en la pestaña Facturas.
+          
+          {t('cobranza.pendiente_de_construir_los')}
         </p>
       </Disclosure>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Cobranza' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_dinero');
+  return { title: t('cobranza.facturacion') };
+}

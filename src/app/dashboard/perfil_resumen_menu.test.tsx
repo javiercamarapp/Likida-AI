@@ -21,7 +21,7 @@ const enlacesPermitidos = () => [...Object.keys(RUTAS_PERFIL_CINCO_AGENTES), ...
 
 const hrefsDe = (html: string) => [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
 const PROHIBIDAS = [
-  '/dashboard/chat', '/dashboard/facturacion', '/dashboard/clientes', '/dashboard/suscripcion',
+  '/dashboard/facturacion', '/dashboard/clientes', '/dashboard/suscripcion',
   '/dashboard/sesiones-mcp', '/dashboard/agentes/facturas', '/dashboard/agentes/cobranza',
   '/dashboard/agentes/proveedores', '/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/configuracion',
   '/dashboard/rentabilidad', '/dashboard/reglas', '/dashboard/convenios', '/dashboard/jornada',
@@ -43,7 +43,10 @@ describe('sidebar', () => {
     expect(hrefs.length).toBeGreaterThan(5);
     for (const h of hrefs) expect(enlacesPermitidos(), h).toContain(h);
     for (const p of PROHIBIDAS) expect(hrefs).not.toContain(p);
-    expect(html).not.toContain('Pregunta a tus datos');
+    // «Pregunta a tus datos» se abrió al perfil el 11-nov (D12) y va justo debajo de Resumen; el widget de uso de IA sigue sin pintarse.
+    expect(hrefs).toContain('/dashboard/chat');
+    const i = hrefs.indexOf('/dashboard');
+    expect(hrefs[i + 1]).toBe('/dashboard/chat');
     expect(html).not.toContain('Análisis con IA');
   });
 
@@ -76,18 +79,13 @@ describe('Resumen', () => {
 describe('/dashboard bajo el perfil', () => {
   beforeEach(() => vi.resetModules());
 
-  async function pagina(perfil: string | null, onboardingCompleto: boolean, ui: 'v1' | 'v2' = 'v1') {
+  async function pagina(perfil: string | null, onboardingCompleto: boolean) {
     vi.doMock('@/lib/auth/tenant-efectivo', () => ({
       resolverTenantEfectivo: async () => ({ tenantId: 't1', tenantNombre: null, nombre: 'Ana', rol: 'flota_admin', tenantExiste: true }),
     }));
     vi.doMock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => perfil }));
-    // El Resumen elige v1/v2 con la cookie de la petición: aquí no hay petición, y lo que se prueba es qué Resumen sale.
-    vi.doMock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
-    vi.doMock('@/lib/auth/version_ui', () => ({ versionUi: async () => ui }));
     vi.doMock('@/lib/likida/repo', () => ({ getPerfilCrudo: async () => ({}) }));
     vi.doMock('@/lib/likida/perfil/preguntas', () => ({ onboardingFiscalListo: () => onboardingCompleto, onboardingPospuesto: () => false }));
-    vi.doMock('./inicio-contenido', () => ({ InicioContenido: function InicioContenido() { return null; } }));
-    vi.doMock('./inicio-operacion', () => ({ InicioOperacion: function InicioOperacion() { return null; } }));
     vi.doMock('./inicio-cinco-agentes', () => ({ InicioCincoAgentes: function InicioCincoAgentes() { return null; }, leerInsightsResumen: async () => ({ principales: [], fallidos: [] }) }));
     vi.doMock('./resumen-v2', () => ({ ResumenV2: function ResumenV2() { return null; } }));
     const { default: Pagina } = await import('./page');
@@ -100,14 +98,14 @@ describe('/dashboard bajo el perfil', () => {
   });
 
   it('con perfil el Inicio recibe el rol (que decide los pesos) y ya no un veDinero fijo', async () => {
-    const el = await pagina('cinco_agentes', false, 'v2');
+    const el = await pagina('cinco_agentes', false);
     expect(el.type.name).toBe('InicioCincoAgentes');
     expect(el.props.veDinero).toBeUndefined(); // decisión 31-oct: los pesos los decide el rol dentro del lector, no un booleano fijo
     expect(el.props.rol).toBe('flota_admin');
   });
 
-  it('sin perfil y con la interfaz v2 el dueño recibe el Resumen v2, no el de siempre', async () => {
-    const el = await pagina(null, true, 'v2');
+  it('sin perfil el dueño recibe el Resumen v2 (el respaldo v1 se retiró el 11-nov-2026)', async () => {
+    const el = await pagina(null, true);
     expect(el.type.name).toBe('ResumenV2');
     expect(el.props).toMatchObject({ veDinero: true, perfil: null, veAsistente: false });
   });
@@ -116,10 +114,6 @@ describe('/dashboard bajo el perfil', () => {
     await expect(pagina(null, false)).rejects.toThrow('REDIRECT:/dashboard/onboarding');
   });
 
-  it('sin perfil y con el onboarding listo muestra el Resumen del dueño, como siempre', async () => {
-    const el = await pagina(null, true);
-    expect(el.type.name).toBe('InicioContenido');
-  });
 });
 
 describe('«Próximamente» en el menú y en el Resumen (A4/A5 encendidos el 18-oct-2026)', () => {

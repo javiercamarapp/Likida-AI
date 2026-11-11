@@ -14,7 +14,7 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { leerConfigSalida } from './salida_config';
 import * as repo from './repo';
 import type { DocumentoFila } from './repo';
@@ -70,13 +70,13 @@ export async function reasignarRevisor(
   tenantId: string, documentoId: string, usuarioId: string | null, actor: { id: string | null },
 ): Promise<{ cambio: boolean; usuarioId: string | null }> {
   const doc = await repo.leerDocumento(tenantId, documentoId);
-  if (!doc) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+  if (!doc) throw datoInvalido('revisor.ese_documento_no_esta_en');
   if (usuarioId !== null && !(await repo.usuarioRevisor(tenantId, usuarioId))) {
-    throw new DatoInvalido('Esa persona no está en tu flota o no puede revisar documentos. Elige a alguien de la lista.');
+    throw datoInvalido('revisor.esa_persona_no_esta_en');
   }
   const actual = (await repo.revisoresDeDocumentos(tenantId, [documentoId])).get(documentoId) ?? null;
   if (actual === usuarioId) return { cambio: false, usuarioId };
-  if (!(await repo.asignarRevisorDoc(tenantId, documentoId, usuarioId))) throw new DatoInvalido('Ese documento no está en tu flota, o alguien lo borró. Recarga la pantalla.');
+  if (!(await repo.asignarRevisorDoc(tenantId, documentoId, usuarioId))) throw datoInvalido('revisor.ese_documento_no_esta_en');
   await repo.registrarEvento(tenantId, documentoId, 'revisor_asignado', actor.id, { origen: 'manual', desde: actual, hacia: usuarioId });
   return { cambio: true, usuarioId };
 }

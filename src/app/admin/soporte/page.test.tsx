@@ -217,3 +217,10 @@ it('la pantalla no imprime claves internas (tablas ni columnas)', async () => {
   const salida = await html();
   expect(salida).not.toMatch(/vence_en|ticket_mensaje|ticket_soporte|bitacora_auditoria/);
 });
+
+it('D11/D12 (auditoría 11-nov): una cola sin un solo ticket NO pinta cuatro ceros: un solo estado vacío dentro de una tarjeta', async () => {
+  dobles.getTicketsCruzados.mockResolvedValue([]);
+  const h = await html();
+  expect(h).not.toContain('Con SLA vencido');
+  expect(h).toMatch(/rv-tarjeta[\s\S]*La cola está vacía/);
+});

@@ -5,6 +5,7 @@ import { resolverTenantAtadoFirmado, CAMPO_FLOTA_PINTADA, MENSAJE_FLOTA_CAMBIO }
 import { puedeVerArea } from '@/lib/auth/visibilidad';
 import { iniciarVinculacion, cancelarVinculacion, estadoVisible } from '@/lib/likida/autofactura/vinculacion_remota';
 import { crearDepsVinculacion } from '@/lib/likida/autofactura/vinculacion_remota_repo';
+import { getT } from '@/lib/i18n/servidor';
 
 // Server actions de la vinculación asistida (0540). A NIVEL DE MÓDULO (no closures): cada
 // una vuelve a resolver sesión, rol y flota desde la cookie y NUNCA acepta un tenant_id del
@@ -29,8 +30,9 @@ async function sesionDeVinculacion(flotaFirmada: unknown): Promise<{ s: NonNulla
 }
 
 export async function accionIniciarVinculacion(_prev: ResultadoVincular | null, fd: FormData): Promise<ResultadoVincular> {
+  const { t: tx } = await getT('agentes');
   const puerta = await sesionDeVinculacion(fd.get(CAMPO_FLOTA_PINTADA));
-  if (!puerta) return { ok: false, error: 'Tu rol no puede vincular portales de la flota.' };
+  if (!puerta) return { ok: false, error: tx('rest.tu_rol_no_puede_vincular_portales') };
   if ('error' in puerta) return { ok: false, error: puerta.error };
   const { s } = puerta;
   const comercio = String(fd.get('comercio') ?? '').trim().slice(0, 64);
@@ -41,14 +43,15 @@ export async function accionIniciarVinculacion(_prev: ResultadoVincular | null, 
 }
 
 export async function accionCancelarVinculacion(_prev: { ok?: string; error?: string } | null, fd: FormData): Promise<{ ok?: string; error?: string }> {
+  const { t: tx } = await getT('agentes');
   const r = await sesionDeVinculacion(fd.get(CAMPO_FLOTA_PINTADA));
-  if (!r) return { error: 'Tu rol no puede cancelar vinculaciones.' };
+  if (!r) return { error: tx('rest.tu_rol_no_puede_cancelar_vinculaciones') };
   if ('error' in r) return { error: r.error };
   const { s } = r;
   const comercio = String(fd.get('comercio') ?? '').trim().slice(0, 64);
   const n = await cancelarVinculacion({ tenantId: s.tenantId, userId: s.userId, comercio }, crearDepsVinculacion());
   revalidatePath(RUTA);
-  return n > 0 ? { ok: 'Vinculación cancelada: el código dejó de servir.' } : { error: 'No había una vinculación en curso para este portal.' };
+  return n > 0 ? { ok: tx('rest.vinculacion_cancelada_el_codigo_dejo_de') } : { error: tx('rest.no_habia_una_vinculacion_en_curso') };
 }
 
 /** El sondeo de la pantalla mientras el contralor entra al portal (cada pocos segundos). */

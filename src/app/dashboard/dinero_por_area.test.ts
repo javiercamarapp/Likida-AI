@@ -77,14 +77,14 @@ function rutasDeOperacion(): Array<{ ruta: string; archivos: string[] }> {
       salida.push({ ruta, archivos: tsx });
     }
   }
-  // La raíz también es `operacion`. `inicio-contenido.tsx` va en la lista
-  // desde el 12-ago-2026: el contenido con pesos se mudó ahí (page.tsx quedó
-  // como puerta) y SIN esta línea el escaneo dejó de ver dinero en /dashboard
+  // La raíz también es `operacion`. El Resumen v2 va en la lista (11-nov-2026,
+  // cuando se retiró `inicio-contenido.tsx`): el contenido con pesos vive en
+  // sus archivos `resumen-*` (page.tsx es la puerta) y SIN esta línea el escaneo dejó de ver dinero en /dashboard
   // y borró su propia aserción de gateo en silencio — se notó porque el
   // conteo de la suite bajó en 1, no porque algo fallara.
   salida.push({
     ruta: '/dashboard',
-    archivos: [`${DIR}page.tsx`, `${DIR}inicio-contenido.tsx`, `${DIR}inicio-operacion.tsx`],
+    archivos: [`${DIR}page.tsx`, `${DIR}resumen-v2.tsx`, `${DIR}resumen-tarjetas.tsx`, `${DIR}resumen-datos.ts`],
   });
   return salida;
 }

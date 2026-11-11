@@ -8,6 +8,8 @@ import { ControlApagar } from '../ui/control-apagar';
 import { fechaHoraMx } from '@/lib/formato';
 import { etiquetaInterruptor } from './etiquetas';
 import '../sistema.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LOS TOGGLES DEL KILL SWITCH — la parte de /admin/observabilidad que Javier
@@ -55,6 +57,7 @@ export function SeccionInterruptores({
 }
 
 function FilaInterruptor({ interruptor: i, accion }: { interruptor: InterruptorParaUi; accion: AccionDeForma }) {
+  const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
 
   return (
@@ -63,19 +66,19 @@ function FilaInterruptor({ interruptor: i, accion }: { interruptor: InterruptorP
         <div className="adm-sis-bloque">
           <span className="adm-sis-fila__nombre">
             <Power width={13} height={13} strokeWidth={1.75} aria-hidden="true" />
-            {etiquetaInterruptor(i.id)}
+            {etiquetaInterruptor(i.id, t)}
           </span>
           {/* Quién y cuándo, VISIBLES: una palanca sin firma a la vista invita a preguntar en el chat "¿quién apagó esto?" en pleno incidente. */}
           <span className="adm-sis-fila__texto">
-            {i.apagado && i.motivo ? <>Motivo: {i.motivo} · </> : null}
+            {i.apagado && i.motivo ? <>{t('observabilidad_interruptores_ui.motivo', { motivo: i.motivo })}</> : null}
             {i.cambiadoEn
-              ? <>{i.apagado ? 'Apagado' : 'Último cambio'} por {i.cambiadoPorNombre ?? 'cuenta borrada'} · {fechaHoraMx(i.cambiadoEn)}</>
-              : 'Nunca se ha tocado — encendido por default (sin fila = encendido).'}
+              ? <>{t(i.apagado ? 'observabilidad_interruptores_ui.apagado_por' : 'observabilidad_interruptores_ui.ultimo_cambio_por', { quien: i.cambiadoPorNombre ?? t('observabilidad_interruptores_ui.cuenta_borrada'), cuando: fechaHoraMx(i.cambiadoEn, idioma) })}</>
+              : t('observabilidad_interruptores_ui.nunca_se_ha_tocado_encendido_por')}
           </span>
         </div>
 
         <div className="adm-sis-acciones">
-          <StatusChip tono={i.apagado ? 'bad' : 'ok'}>{i.apagado ? 'APAGADO' : 'Encendido'}</StatusChip>
+          <StatusChip tono={i.apagado ? 'bad' : 'ok'}>{i.apagado ? t('observabilidad_interruptores_ui.apagado_estado') : t('observabilidad_interruptores_ui.encendido')}</StatusChip>
           <ControlApagar id={i.id} apagado={i.apagado} pendiente={pendiente} enviar={enviar} />
         </div>
       </div>

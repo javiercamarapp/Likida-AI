@@ -15,7 +15,8 @@
 // invente un `terminalId` no mueve el alcance.
 // ═══════════════════════════════════════════════════════════════════════════
 
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
+import { trMensajes } from '@/lib/i18n/mensajes_tr';
 import { terminalDeUsuario } from '@/lib/likida/terminales';
 import { puedeEditarCatalogoOperativo } from './permisos';
 
@@ -75,11 +76,10 @@ export function movimientoPermitido(alcance: AlcancePatio, destino: string | nul
   return destino === alcance.terminalId;
 }
 
-export const MENSAJE_FUERA_DE_PATIO =
-  'Ese registro no es de tu patio. Pídele a quien administra la flota que lo corrija o que te lo asigne.';
+export const MENSAJE_FUERA_DE_PATIO = trMensajes('es').t('patio.fuera_de_patio');
 
 /** Lanza `DatoInvalido` (con el mensaje que la pantalla enseña tal cual) si el
  *  registro cae fuera del alcance. */
 export function exigirDentroDelAlcance(alcance: AlcancePatio | null, terminalDelRegistro: string | null): void {
-  if (!dentroDelAlcance(alcance, terminalDelRegistro)) throw new DatoInvalido(MENSAJE_FUERA_DE_PATIO);
+  if (!dentroDelAlcance(alcance, terminalDelRegistro)) throw datoInvalido('patio.fuera_de_patio');
 }

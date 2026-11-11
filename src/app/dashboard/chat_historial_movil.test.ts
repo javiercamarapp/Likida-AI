@@ -2,6 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { resto } from '@/lib/i18n/es/resto';
+
+// El texto de pantalla vive en el diccionario es: se busca la clave cuyo valor es el rótulo.
+const claveDe = (texto: string): string => Object.entries(resto).find(([, v]) => v === texto)?.[0] ?? '';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // AUDITORÍA 24 · H12 (resuelto en L3 con el Drawer del motor único; reubicado en L5 al partir `chat.tsx` en `chat/*`) — el cajón
@@ -20,14 +24,14 @@ const css = readFileSync(path.join(__dirname, '../ui-v2/chat.css'), 'utf8');
 
 describe('chat: el historial en móvil es un Drawer del motor único (L3)', () => {
   it('bajo `lg` monta el Drawer con su estado y su cierre; no queda ninguna cortina fixed a mano', () => {
-    expect(historial).toMatch(/<Drawer abierto=\{abierto\} onCerrar=\{onCerrar\} titulo="Historial">/);
+    expect(historial).toMatch(new RegExp(`<Drawer abierto=\\{abierto\\} onCerrar=\\{onCerrar\\} titulo=\\{t\\('${claveDe('Historial')}'\\)\\}>`));
     expect(historial).not.toMatch(/max-lg:!fixed|max-lg:z-40|fixed inset-0/);
     expect(flota).toMatch(/\(max-width: 1023\.98px\)/); // el mismo corte `lg` de antes
   });
 
   it('el contenido del historial se define UNA vez y la X propia de la columna no se duplica en la hoja', () => {
     expect(historial.match(/function CuerpoHistorial/g)?.length).toBe(1);
-    expect(historial).toMatch(/\{escritorio && \(\s*<button type="button" aria-label="Cerrar historial"/);
+    expect(historial).toMatch(new RegExp(`\\{escritorio && \\(\\s*<Tooltip texto=\\{t\\('${claveDe('Cerrar historial')}'\\)\\}>\\s*<Boton variante="ghost" aria-label=\\{t\\('${claveDe('Cerrar historial')}'\\)\\}`));
     expect(historial).toMatch(/escritorio=\{false\}/);
   });
 

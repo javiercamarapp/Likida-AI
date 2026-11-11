@@ -31,10 +31,14 @@ import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
 import { MarcoPublico } from '../../ui-v2/componentes/marco-publico';
 import { Boton } from '../../ui-v2/componentes/boton';
 import { perfilRestringido } from '@/lib/auth/perfil_tenant';
+import { getT } from '@/lib/i18n/servidor';
+import { rico } from '@/lib/i18n/rico';
 
 export const dynamic = 'force-dynamic';
 
-export const metadata = { title: 'Autorizar conexión — Likida' };
+export async function generateMetadata() {
+  return { title: (await getT('publico')).t('mcp.meta.titulo') };
+}
 
 interface ParamsAutorizar {
   client_id: string;
@@ -58,27 +62,21 @@ function volverA(redirectUri: string, extras: Record<string, string | null>): st
   return u.toString();
 }
 
-function Marco({ titulo, children }: { titulo: string; children: ReactNode }) {
+function Marco({ titulo, rotulo, children }: { titulo: string; rotulo: string; children: ReactNode }) {
   return (
-    <MarcoPublico rotulo="Conectar con Likida" titulo={titulo} ancho="lectura">
+    <MarcoPublico rotulo={rotulo} titulo={titulo} ancho="lectura">
       <div className="rv-pub__prosa">{children}</div>
     </MarcoPublico>
   );
 }
 
-function PaginaError({ titulo, detalle }: { titulo: string; detalle: string }) {
+function PaginaError({ titulo, detalle, rotulo }: { titulo: string; detalle: string; rotulo: string }) {
   return (
-    <Marco titulo={titulo}>
+    <Marco titulo={titulo} rotulo={rotulo}>
       <p>{detalle}</p>
     </Marco>
   );
 }
-
-const ROTULO_AREA: Record<string, string> = {
-  operacion: 'la operación (viajes, unidades y sus papeles)',
-  dinero: 'el dinero (cuadres, facturación, estado fiscal y métricas)',
-  administracion: 'la administración de la cuenta',
-};
 
 export default async function Autorizar({
   searchParams,
@@ -86,6 +84,8 @@ export default async function Autorizar({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  const { t } = await getT('publico');
+  const rotulo = t('mcp.rotulo');
   const clientId = uno(sp.client_id);
   const redirectUri = uno(sp.redirect_uri);
   const state = uno(sp.state);
@@ -96,16 +96,16 @@ export default async function Autorizar({
 
   // ── 1. El cliente y su redirect, ANTES que nada (sin redirect de error) ──
   if (!clientId || !redirectUri) {
-    return <PaginaError titulo="Falta con quién conectar" detalle="A esta pantalla se llega desde Claude o ChatGPT al conectar Likida, no directamente. Falta client_id o redirect_uri." />;
+    return <PaginaError rotulo={rotulo} titulo={t('mcp.falta.titulo')} detalle={t('mcp.falta.detalle')} />;
   }
   const rc = await leerCliente(clientId);
   if (!rc.ok) {
     return rc.error === 'no_disponible'
-      ? <PaginaError titulo="No se pudo verificar el cliente" detalle="Hubo un problema temporal leyendo el registro. Cierra esta pestaña e intenta conectar de nuevo." />
-      : <PaginaError titulo="Cliente desconocido" detalle="El cliente que pide acceso no está registrado. Vuelve a intentar la conexión desde tu aplicación." />;
+      ? <PaginaError rotulo={rotulo} titulo={t('mcp.verificar.titulo')} detalle={t('mcp.verificar.detalle')} />
+      : <PaginaError rotulo={rotulo} titulo={t('mcp.desconocido.titulo')} detalle={t('mcp.desconocido.detalle')} />;
   }
   if (!redirectUriRegistrada(redirectUri, rc.cliente.redirectUris)) {
-    return <PaginaError titulo="Dirección de retorno no registrada" detalle="La dirección a la que habría que devolver la autorización no coincide con la que este cliente registró. Por seguridad no se redirige a direcciones no verificadas." />;
+    return <PaginaError rotulo={rotulo} titulo={t('mcp.retorno.titulo')} detalle={t('mcp.retorno.detalle')} />;
   }
 
   // 0440: un cliente que Likida no ha aprobado NO llega a la pantalla de
@@ -115,14 +115,13 @@ export default async function Autorizar({
   if (rc.cliente.estado !== 'aprobado' || !destino) {
     return (
       <PaginaError
-        titulo={rc.cliente.estado === 'rechazado' ? 'Cliente no autorizado' : 'Cliente pendiente de aprobación'}
-        detalle={
-          `Este cliente (${destino ? `devolvería la autorización a «${destino.host}»` : 'dirección inválida'}) ` +
-          'no es uno de los conocidos por Likida (Claude, ChatGPT) y todavía no ha sido aprobado por el equipo de Likida, ' +
-          'así que no se puede conectar. Si lo conectaste tú a propósito, pide su aprobación a soporte; ' +
-          'si recibiste este enlace por correo o mensaje sin esperarlo, ciérralo: puede ser un intento de acceder a los datos de tu flota.'
-        }
+        rotulo={rotulo}
+        titulo={rc.cliente.estado === 'rechazado' ? t('mcp.rechazado.titulo') : t('mcp.pendiente.titulo')}
+        detalle={t('mcp.noaprobado.detalle', {
+          destino: destino ? t('mcp.noaprobado.destino', { host: destino.host }) : t('mcp.noaprobado.destino_invalido'),
+        })}
       />
+
     );
   }
 
@@ -148,20 +147,20 @@ export default async function Autorizar({
     redirect(`/login?next=${encodeURIComponent(`/mcp/autorizar${propia.search}`)}`);
   }
   if (s.rol === 'superadmin') {
-    return <PaginaError titulo="El superadmin no conecta por aquí" detalle="Un acceso MCP queda atado a UNA flota, y tu cuenta cruza todas. Para conectar una flota concreta usa una llave de API emitida desde su panel (Dashboard → Llaves de API)." />;
+    return <PaginaError rotulo={rotulo} titulo={t('mcp.superadmin.titulo')} detalle={t('mcp.superadmin.detalle')} />;
   }
   if (!s.tenantId || s.rol === SIN_ROL || areasDe(s.rol).length === 0) {
-    return <PaginaError titulo="Tu cuenta aún no tiene flota" detalle="Iniciaste sesión, pero esta cuenta no está vinculada a ninguna flota con un rol activo. Pídele a tu administrador que te dé de alta y vuelve a conectar." />;
+    return <PaginaError rotulo={rotulo} titulo={t('mcp.sinflota.titulo')} detalle={t('mcp.sinflota.detalle')} />;
   }
 
   // El perfil de la flota (0770) no ofrece MCP: no se autoriza un acceso que el endpoint negaría.
   if (await perfilRestringido(s.tenantId)) {
-    return <PaginaError titulo="Esta cuenta no incluye acceso MCP" detalle="El plan de tu cuenta no incluye conectar asistentes externos. Si lo necesitas, pídelo a quien administra tu cuenta." />;
+    return <PaginaError rotulo={rotulo} titulo={t('mcp.sinplan.titulo')} detalle={t('mcp.sinplan.detalle')} />;
   }
 
   const areas = areasDe(s.rol);
   const reforzada = requiereConfirmacionReforzada(areas);
-  const nombreCliente = rc.cliente.nombre ?? 'Un cliente MCP';
+  const nombreCliente = rc.cliente.nombre ?? t('mcp.cliente_por_omision');
   const params: ParamsAutorizar = { client_id: clientId, redirect_uri: redirectUri, state, code_challenge: codeChallenge, resource };
 
   // ── El server action: re-valida TODO y emite el código ───────────────────
@@ -254,36 +253,30 @@ export default async function Autorizar({
   }
 
   return (
-    <Marco titulo={`¿Dejar que ${nombreCliente} lea los datos de tu flota?`}>
+    <Marco rotulo={rotulo} titulo={t('mcp.consent.titulo', { cliente: nombreCliente })}>
       <p>
-        Estás conectado como <strong>{s.nombre ?? 'usuario del panel'}</strong> ({s.rol.replace('_', ' ')}).
-        Si autorizas, este cliente podrá <strong>leer</strong> — nunca cambiar — lo que tu rol ya ve en el panel:
+        {rico(t('mcp.consent.conectado', { nombre: s.nombre ?? t('mcp.consent.usuario_por_omision'), rol: s.rol.replace('_', ' ') }), { strong: (c) => <strong>{c}</strong> })}
       </p>
       <ul className="rv-pub__vinetas">
         {areas.map((a) => (
-          <li key={a}>{ROTULO_AREA[a] ?? a}</li>
+          <li key={a}>{['operacion', 'dinero', 'administracion'].includes(a) ? t(`mcp.area.${a as 'operacion' | 'dinero' | 'administracion'}`) : a}</li>
         ))}
       </ul>
       {uno(sp.error) === 'falta_confirmacion' ? (
         <p role="alert"><strong>
-          El dominio que escribiste no coincide con el de destino. Revísalo y vuelve a intentar.
+          {t('mcp.consent.dominio_no_coincide')}
         </strong></p>
       ) : null}
       <div className="rv-pub__tarjeta" role="note">
         <p>
-          El código de autorización se entregará a: <strong>{destino.host}</strong>
-          {destino.loopback ? ' (tu propia máquina)' : ''}
+          {rico(t('mcp.consent.entrega', { host: destino.host, propia: destino.loopback ? t('mcp.consent.propia_maquina') : '' }), { strong: (c) => <strong>{c}</strong> })}
         </p>
         <p className="rv-pub__nota">
-          {destino.conocido
-            ? 'Likida reconoce este destino como el de un cliente conocido.'
-            : 'Cliente no verificado por Likida: aprobado manualmente por el equipo. Si ese dominio no es el de la aplicación que estás conectando, pulsa «No autorizar».'}
+          {destino.conocido ? t('mcp.consent.conocido') : t('mcp.consent.no_verificado')}
         </p>
       </div>
       <p className="rv-pub__nota">
-        El nombre «{nombreCliente}» lo declaró quien se registró, no Likida. El acceso expira solo y las
-        acciones con efecto (cerrar liquidaciones, timbrar, enviar mensajes) seguirán firmándose en el panel.
-        Alcance: {SCOPE_LECTURA}.
+        {t('mcp.consent.nota', { cliente: nombreCliente, alcance: SCOPE_LECTURA })}
       </p>
       <form action={autorizar} className="rv-pub__acciones">
         <input type="hidden" name="client_id" value={params.client_id} />
@@ -294,8 +287,7 @@ export default async function Autorizar({
         {reforzada ? (
           <label className="rv-pub__etiqueta">
             <span>
-              Este acceso incluye <strong>dinero</strong> (cuadres, facturación, estado fiscal). Para confirmar,
-              escribe el dominio de destino: <strong>{destino.hostname}</strong>
+              {rico(t('mcp.consent.reforzada', { dominio: destino.hostname }), { strong: (c) => <strong>{c}</strong> })}
             </span>
             <input
               name="confirmacion" type="text" autoComplete="off" spellCheck={false}
@@ -304,10 +296,10 @@ export default async function Autorizar({
           </label>
         ) : null}
         <Boton type="submit" name="decision" value="autorizar" variante="primary">
-          Autorizar lectura
+          {t('mcp.consent.autorizar')}
         </Boton>
         <Boton type="submit" name="decision" value="denegar">
-          No autorizar
+          {t('mcp.consent.denegar')}
         </Boton>
       </form>
     </Marco>

@@ -16,11 +16,15 @@ import { useEffect, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import { COLOR_EMBUDO, NOMBRE_GIRO, type ProspectoMapa, type TextosProspecto } from '@/lib/admin/prospectos-mapa-client';
+import { COLOR_EMBUDO, type ProspectoMapa, type TextosProspecto } from '@/lib/admin/prospectos-mapa-client';
 import { Undo2 } from 'lucide-react';
-import { Icono, clasesBoton } from '../../ui-v2/componentes';
+import { Boton, Icono } from '../../ui-v2/componentes';
 import { hrefWa, hrefCorreo, esperandoTextos } from './mensajes';
 import './cerebro.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { rico } from '@/lib/i18n/rico';
+import { nombreEtapaTr, nombreGiroTr } from '@/lib/i18n/rotulos_tr';
 
 function escapar(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -36,6 +40,7 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
   pedirTextos: (ids: string[]) => Promise<void>;
   onCerrar: () => void;
 }) {
+  const { t: tx } = useT('admin_sistema', admin_sistemaEs);
   const ref = useRef<HTMLDivElement>(null);
   const obtenerTextosRef = useRef(obtenerTextos);
   const pedirTextosRef = useRef(pedirTextos);
@@ -74,7 +79,7 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
           const boton = (href: string, texto: string) =>
             `<a href="${escapar(href)}" target="_blank" rel="noreferrer">${texto}</a>`;
           const apagado = (texto: string) =>
-            `<span title="El mensaje del agente experto viene en camino">${texto}</span>`;
+            tx('mapa_prospectos_calles.span_title_el_mensaje_del_agente', { texto });
           // El contenido se arma AL ABRIR (FE-16): las notas y el mensaje redactado son textos largos que ya no viajan en el listado, y
           // armar dos mil popups por adelantado los pediría todos.
           const contenido = () => {
@@ -85,17 +90,17 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
             return `
             <div class="cer-pop cer-e-${etapa}">
               <strong>${escapar(p.empresa)}</strong>
-              <span class="cer-pop__linea"><i class="cer-punto" aria-hidden="true"></i> ${escapar(COLOR_EMBUDO[p.estado]?.nombre ?? p.estado)} · ${escapar(NOMBRE_GIRO[p.giro])}</span>
-              ${p.contacto ? `<span class="cer-pop__linea">Contacto: ${escapar(p.contacto)}</span>` : ''}
-              ${p.telefono ? `<span class="cer-pop__linea">Teléfono: <a href="tel:${escapar(p.telefono)}">${escapar(p.telefono)}</a></span>` : ''}
-              ${p.correo ? `<span class="cer-pop__linea">Correo: ${escapar(p.correo)}</span>` : ''}
-              <span class="cer-pop__linea">Urgencia <strong>${p.urgencia}%</strong> · Cierre <strong>${p.cierre}%</strong></span>
+              <span class="cer-pop__linea"><i class="cer-punto" aria-hidden="true"></i> ${escapar(COLOR_EMBUDO[p.estado] ? nombreEtapaTr(p.estado, tx) : p.estado)} · ${escapar(nombreGiroTr(p.giro, tx))}</span>
+              ${p.contacto ? `<span class="cer-pop__linea">${escapar(tx('mapa_prospectos_calles.contacto', { v: p.contacto }))}</span>` : ''}
+              ${p.telefono ? tx('mapa_prospectos_calles.span_class_cer_pop_linea_telefono', { escapar: escapar(p.telefono), escapar2: escapar(p.telefono) }) : ''}
+              ${p.correo ? `<span class="cer-pop__linea">${escapar(tx('mapa_prospectos_calles.correo', { v: p.correo }))}</span>` : ''}
+              <span class="cer-pop__linea">${tx('mapa_prospectos_calles.urgencia_cierre', { urgencia: p.urgencia, cierre: p.cierre })}</span>
               <span class="cer-pop__tenue">${escapar(p.ciudad ?? '')}</span>
               ${t?.notas ? `<span class="cer-pop__tenue">${escapar(t.notas)}</span>` : ''}
               <div class="cer-pop__acciones">
-                ${wa && !espera ? boton(wa, 'WhatsApp →') : p.telefono ? apagado('WhatsApp …') : ''}
-                ${correo && !espera ? boton(correo, 'Correo →') : p.correo ? apagado('Correo …') : ''}
-                ${p.lat !== null ? boton(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`, 'Cómo llegar') : ''}
+                ${wa && !espera ? boton(wa, tx('mapa_prospectos_calles.whatsapp_flecha')) : p.telefono ? apagado(tx('mapa_prospectos_calles.whatsapp_espera')) : ''}
+                ${correo && !espera ? boton(correo, tx('mapa_prospectos_calles.correo_flecha')) : p.correo ? apagado(tx('mapa_prospectos_calles.correo_espera')) : ''}
+                ${p.lat !== null ? boton(`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}`, tx('mapa_prospectos_calles.como_llegar')) : ''}
               </div>
             </div>`;
           };
@@ -116,18 +121,14 @@ export default function Calles({ prospectos, titulo, obtenerTextos, pedirTextos,
       }
     })();
     return () => { vivo = false; mapa?.remove(); };
-  }, [prospectos]);
+  }, [prospectos, tx]);
 
   const conCoords = prospectos.filter((p) => p.lat !== null).length;
 
   return (
     <div className="cer-calles">
-      <div className="cer-calles__cab">
-        <strong>{titulo}: nivel calle</strong>
-        <span>{conCoords} de {prospectos.length} con dirección real (DENUE); al resto no se le inventa lugar</span>
-        <button type="button" onClick={onCerrar} className={clasesBoton('secondary', 'sm')}>
-          <Icono icono={Undo2} tam={14} />Volver al país
-        </button>
+      <div className="cer-calles__cab">{rico(tx('mapa_prospectos_calles.strong_nivel_calle_strong_e1_de', { titulo, conCoords, length: prospectos.length }), { strong: (c) => <strong>{c}</strong>, e1: (c) => <span>{c}</span> })}<Boton tamano="sm" onClick={onCerrar} icono={<Icono icono={Undo2} tam={14} />}>
+          {tx('mapa_prospectos_calles.volver_al_pais')}</Boton>
       </div>
       <div ref={ref} className="cer-calles__mapa" />
     </div>

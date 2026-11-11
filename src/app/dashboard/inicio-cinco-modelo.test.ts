@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { CorridaRegistrada } from '@/lib/likida/agentes/corridas';
 import {
-  cifraDeAgente, cuandoMx, esFlotaNueva, estadoDeAgente, filaViajesEnCurso, hechosUltimas24h, pesosCompletos,
+  cifraDeAgente, contarCorridas, cuandoMx, esFlotaNueva, estadoDeAgente, filaViajesEnCurso, hechosUltimas24h, pesosCompletos,
 } from './inicio-cinco-modelo';
 import { cifrasSinDato } from './cinco-agentes-cifras-modelo';
 
@@ -112,5 +112,13 @@ describe('filaViajesEnCurso y cuandoMx', () => {
     expect(cuandoMx('2026-10-31T13:02:00Z', AHORA)).toBe('hoy 07:02');
     expect(cuandoMx('2026-10-30T16:10:00Z', AHORA)).toBe('ayer 10:10');
     expect(cuandoMx('basura', AHORA)).toBe('—');
+  });
+});
+
+describe('contarCorridas: una lectura caída no es «no corrió»', () => {
+  const c = { id: 'x' } as unknown as CorridaRegistrada;
+  it('cuenta aparte las legibles y las que no se pudieron leer', () => {
+    expect(contarCorridas([c, undefined, null, null, undefined])).toEqual({ conCorrida: 1, sinLectura: 2 });
+    expect(contarCorridas([undefined, undefined])).toEqual({ conCorrida: 0, sinLectura: 0 });
   });
 });

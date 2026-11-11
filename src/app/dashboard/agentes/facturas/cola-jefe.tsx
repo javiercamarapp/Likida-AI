@@ -8,6 +8,8 @@ import { Boton, CampoTexto, clasesBoton, Icono, StatusChip } from '@/app/ui-v2/c
 import { mxn, fechaCorta } from '@/lib/formato';
 import { PillPlazo } from './pills';
 import type { TicketPorFacturar } from '@/lib/likida/facturacion/pendientes';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
 
 /** Una fila de la cola del jefe, ya SERIALIZADA por el server (la vista no
  *  manda el ticket entero al cliente — solo lo que esta cola pinta y usa). */
@@ -46,6 +48,7 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
   maxFilas: number;
   totalFilas: number;
 }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [abierta, setAbierta] = useState<string | null>(null);
 
   return (
@@ -53,7 +56,7 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
       <div className="rv-fact__cola">
         {filas.map((f) => (
           <div key={f.gastoId} className="rv-fact__item" data-abierta={abierta === f.gastoId || undefined}>
-            <button type="button" onClick={() => setAbierta((v) => (v === f.gastoId ? null : f.gastoId))} aria-expanded={abierta === f.gastoId}
+            <Boton type="button" variante="ghost" onClick={() => setAbierta((v) => (v === f.gastoId ? null : f.gastoId))} aria-expanded={abierta === f.gastoId}
               className="rv-fact__cab">
               <span className="rv-fact__tenue">{fechaCorta(f.fecha)}</span>
               <span className="rv-fact__dos">
@@ -64,28 +67,25 @@ export function ColaJefe({ filas, marcarFacturada, maxFilas, totalFilas }: {
               <span className="cifra-mono rv-fact__der">{mxn(f.monto)}</span>
               <PillPlazo c={f.caducidad} />
               {f.motivo === 'requiere_cuenta' ? (
-                <StatusChip tono="muted">Tu cuenta</StatusChip>
+                <StatusChip tono="muted">{tx('rest.tu_cuenta')}</StatusChip>
               ) : f.motivo === 'sin_robot' ? (
                 // NO va en rojo de alerta: no está roto ni bloqueado, y el
                 // encargado no hizo nada mal. Falta que ESCRIBAMOS el portal, y
                 // mientras tanto el ticket se factura igual — a mano, con la
                 // liga y los campos que ya trae esta misma fila.
-                <StatusChip tono="muted" title="Todavía no sabemos llenar ese portal solos">A mano</StatusChip>
+                <StatusChip tono="muted" title={tx('rest.todavia_no_sabemos_llenar_ese_portal')}>{tx('rest.a_mano')}</StatusChip>
               ) : (
-                <StatusChip tono="warn" title={f.detalle}>Bloqueado</StatusChip>
+                <StatusChip tono="warn" title={f.detalle}>{tx('rest.bloqueado')}</StatusChip>
               )}
               <Icono icono={abierta === f.gastoId ? ChevronUp : ChevronDown} tam={16} />
-            </button>
+            </Boton>
 
             {abierta === f.gastoId && <MesaDeTrabajo fila={f} marcarFacturada={marcarFacturada} />}
           </div>
         ))}
       </div>
       {totalFilas > maxFilas && (
-        <p className="rv-fact__nota" data-tono="faint">
-          Se muestran los {maxFilas} que vencen primero — hay {totalFilas - maxFilas} más
-          (el encabezado los suma todos).
-        </p>
+        <p className="rv-fact__nota" data-tono="faint">{tx('rest.se_muestran_los_que_vencen_primero', { maxFilas, v: totalFilas - maxFilas })}</p>
       )}
     </>
   );
@@ -115,6 +115,7 @@ export function ligaDelPortal(fila: Pick<FilaJefe, 'urlTicket' | 'portal'>): str
 /** El detalle expandido: exactamente lo que el jefe necesita para capturar
  *  en el portal, y la salida de la cola cuando ya quedó. */
 function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFacturada: AccionMarcarFacturada }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(marcarFacturada, null);
   const [copiado, setCopiado] = useState<string | null>(null);
   const liga = ligaDelPortal(fila);
@@ -131,15 +132,12 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
   return (
     <div className="rv-fact__mesa">
       {fila.motivo === 'bloqueado' && fila.detalle && (
-        <p className="rv-fact__nota" data-tono="warn">
-          La máquina se rindió a propósito: {fila.detalle}. Te dejó todo listo para que lo
-          termines tú.
-        </p>
+        <p className="rv-fact__nota" data-tono="warn">{tx('rest.la_maquina_se_rindio_a_proposito', { detalle: fila.detalle })}</p>
       )}
 
       {conValor.length > 0 ? (
         <div className="rv-fact__campos">
-          <p className="rv-fact__rotulo">Lo que el portal te va a pedir, tal cual</p>
+          <p className="rv-fact__rotulo">{tx('rest.lo_que_el_portal_te_va')}</p>
           {conValor.map((c) => (
             <div key={c.etiqueta} className="rv-fact__campo">
               <span className="rv-fact__tenue">{c.etiqueta}</span>
@@ -153,20 +151,15 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
           ))}
         </div>
       ) : (
-        <p className="rv-fact__nota" data-tono="faint">
-          Este portal se captura con tu sesión — no pide más datos que los de tu cuenta.
-        </p>
+        <p className="rv-fact__nota" data-tono="faint">{tx('rest.este_portal_se_captura_con_tu')}</p>
       )}
 
       <div className="rv-fact__linea">
         <a href={liga} target="_blank" rel="noopener noreferrer" className={clasesBoton('secondary', 'sm')}>
-          <Icono icono={ExternalLink} tam={14} /> Abrir el portal
-        </a>
+          <Icono icono={ExternalLink} tam={14} />{' '}{tx('rest.abrir_el_portal')}</a>
         {conValor.length > 0 && (
           <Boton tamano="sm" onClick={() => copiar('__todo__', conValor.map((c) => `${c.etiqueta}: ${c.valor}`).join('\n'))} data-copiado={copiado === '__todo__' || undefined}
-            icono={<Icono icono={copiado === '__todo__' ? Check : Copy} tam={14} />}>
-            Copiar todo
-          </Boton>
+            icono={<Icono icono={copiado === '__todo__' ? Check : Copy} tam={14} />}>{tx('rest.copiar_todo')}</Boton>
         )}
       </div>
 
@@ -174,7 +167,7 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
           la cola DE VERDAD (escribe el CFDI en la base, anclado al tenant). */}
       <form action={accion} className="rv-fact__linea">
         <input type="hidden" name="gastoId" value={fila.gastoId} />
-        <CampoTexto etiqueta="Folio fiscal del CFDI" etiquetaOculta name="uuid" placeholder="Folio fiscal (UUID) del CFDI que te dio el portal" claseControl="cifra-mono" />
+        <CampoTexto etiqueta={tx('rest.folio_fiscal_del_cfdi')} etiquetaOculta name="uuid" placeholder={tx('rest.folio_fiscal_uuid_del_cfdi_que')} claseControl="cifra-mono" />
         <BotonGuardar />
       </form>
       {estado?.error && <p role="alert" className="rv-fact__nota" data-tono="bad">{estado.error}</p>}
@@ -183,6 +176,7 @@ function MesaDeTrabajo({ fila, marcarFacturada }: { fila: FilaJefe; marcarFactur
 }
 
 function BotonGuardar() {
+  const { t: tx } = useT('agentes', agentesEs);
   const { pending } = useFormStatus();
-  return <Boton type="submit" variante="primary" loading={pending}>{pending ? 'Guardando…' : 'Ya quedó'}</Boton>;
+  return <Boton type="submit" variante="primary" loading={pending}>{pending ? 'Guardando…' : tx('rest.ya_quedo')}</Boton>;
 }

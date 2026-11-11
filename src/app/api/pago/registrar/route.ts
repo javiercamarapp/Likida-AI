@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { rateLimit, clientIp, bodyExcede } from '@/lib/ratelimit';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from '@/lib/likida/errores';
-import { esCarnada, validarPropuesta, identificaFactura, TEXTO_LIGA_NO_VALIDA } from '@/lib/likida/portal_pago';
+import { DatoInvalido, textoDeDato } from '@/lib/likida/errores';
+import { getT } from '@/lib/i18n/servidor';
+import { esCarnada, validarPropuesta, identificaFactura } from '@/lib/likida/portal_pago';
 import { resolverLiga, vistaDelPortal, anotarAcceso } from '@/lib/likida/portal_pago_lectura';
 // `portal_pago_propuesta` y NO `portal_pago_escritura`: aquél trae SOLO el
 // verbo del cliente. Importar el de las escrituras del contralor metería
@@ -56,18 +57,21 @@ interface Cuerpo {
   sitioWeb?: unknown;
 }
 
+/** El traductor, pedido SOLO cuando hay un texto que decir (así una petición que no falla no paga la lectura del idioma). */
+const T = () => getT('mensajes');
+
 const s = (v: unknown): string => (typeof v === 'string' ? v : '');
 
 export async function POST(req: Request) {
   // Rechazo barato de tamaño declarado; el stream sigue acotado tras la cuota.
-  if (bodyExcede(req, 4_000)) return NextResponse.json({ error: 'Envío demasiado grande.' }, { status: 413 });
+  if (bodyExcede(req, 4_000)) return NextResponse.json({ error: (await T()).t('pago.api.grande') }, { status: 413 });
   if (!(await rateLimit(`portal-pago:${clientIp(req)}`, 10, 10 * 60_000))) {
-    return NextResponse.json({ error: 'Demasiados intentos. Espera unos minutos y vuelve a intentarlo.' }, { status: 429 });
+    return NextResponse.json({ error: (await T()).t('pago.api.intentos') }, { status: 429 });
   }
   const lectura = await leerTextoAcotado(req, 4_000);
   if (!lectura.ok) {
     return NextResponse.json(
-      { error: lectura.motivo === 'demasiado_grande' ? 'El cuerpo es demasiado grande.' : 'No se entendió el envío. Recarga la página.' },
+      { error: (await T()).t(lectura.motivo === 'demasiado_grande' ? 'pago.api.cuerpo_grande' : 'pago.api.no_se_entendio') },
       { status: lectura.motivo === 'demasiado_grande' ? 413 : 400 },
     );
   }
@@ -76,13 +80,13 @@ export async function POST(req: Request) {
   try {
     c = JSON.parse(lectura.texto) as Cuerpo;
   } catch {
-    return NextResponse.json({ error: 'No se entendió el envío. Recarga la página.' }, { status: 400 });
+    return NextResponse.json({ error: (await T()).t('pago.api.no_se_entendio') }, { status: 400 });
   }
 
   // Honeypot: 200 sin escribir, y el log queda para poder medir el ruido.
   if (esCarnada(c.sitioWeb)) {
     logger.info('portal_pago.honeypot', {});
-    return NextResponse.json({ ok: true, mensaje: 'Listo. Ya quedó registrado tu pago.' });
+    return NextResponse.json({ ok: true, mensaje: (await T()).t('pago.api.listo_carnada') });
   }
 
   const resolucion = await resolverLiga(s(c.token));
@@ -91,11 +95,11 @@ export async function POST(req: Request) {
     // cliente legítimo que su enlace murió y mandarlo a pedir otro.
     if (resolucion.motivo === 'no_disponible') {
       return NextResponse.json(
-        { error: 'Ahora mismo no podemos consultar tu factura. Vuelve a intentarlo en unos minutos.' },
+        { error: (await T()).t('pago.api.no_consulta') },
         { status: 503 },
       );
     }
-    return NextResponse.json({ error: TEXTO_LIGA_NO_VALIDA }, { status: 404 });
+    return NextResponse.json({ error: (await getT('publico')).t('pg.enlace.texto') }, { status: 404 });
   }
   const liga = resolucion.liga;
 
@@ -104,7 +108,7 @@ export async function POST(req: Request) {
   if (!vista.ok) {
     if (vista.motivo === 'no_disponible') {
       return NextResponse.json(
-        { error: 'Ahora mismo no podemos consultar tu factura. Vuelve a intentarlo en unos minutos.' },
+        { error: (await T()).t('pago.api.no_consulta') },
         { status: 503 },
       );
     }
@@ -115,14 +119,12 @@ export async function POST(req: Request) {
       // envío se entiende perfectamente, lo que ya no existe es la deuda.
       return NextResponse.json(
         {
-          error: vista.estatus === 'cancelada'
-            ? 'Esa factura fue cancelada, así que aquí ya no se puede registrar un pago. Si ya la pagaste, escríbele directamente a quien te la emitió.'
-            : 'Esa factura todavía no está emitida, así que aquí no se puede registrar un pago.',
+          error: (await T()).t(vista.estatus === 'cancelada' ? 'pago.api.cancelada' : 'pago.api.sin_emitir'),
         },
         { status: 409 },
       );
     }
-    return NextResponse.json({ error: TEXTO_LIGA_NO_VALIDA }, { status: 404 });
+    return NextResponse.json({ error: (await getT('publico')).t('pg.enlace.texto') }, { status: 404 });
   }
   const v = vista.vista;
 
@@ -134,10 +136,11 @@ export async function POST(req: Request) {
     );
   } catch (e) {
     if (e instanceof DatoInvalido) {
-      return NextResponse.json({ error: e.message }, { status: 400 });
+      const tr = await T();
+      return NextResponse.json({ error: textoDeDato(e, tr.idioma) }, { status: 400 });
     }
     logger.error('portal_pago.validacion', { err: e instanceof Error ? e.message : String(e) });
-    return NextResponse.json({ error: 'No pudimos registrar tu pago. Vuelve a intentarlo.' }, { status: 500 });
+    return NextResponse.json({ error: (await T()).t('pago.api.falla') }, { status: 500 });
   }
 
   const r = await registrarPropuesta(liga, valores);
@@ -157,7 +160,7 @@ export async function POST(req: Request) {
     // volver a la bandeja de nadie.
     return NextResponse.json({
       ok: true,
-      mensaje: 'Ese pago ya estaba registrado con la misma fecha, monto y referencia, y sigue por confirmar. No hace falta hacer nada más.',
+      mensaje: (await T()).t('pago.api.repetida'),
     });
   }
 
@@ -183,6 +186,6 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    mensaje: 'Listo. Tu pago quedó registrado y le avisamos a quien te emitió la factura. Todavía tiene que confirmarlo contra su estado de cuenta — cuando lo haga, lo verás aquí mismo.',
+    mensaje: (await T()).t('pago.api.listo'),
   });
 }

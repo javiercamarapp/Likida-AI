@@ -23,9 +23,8 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 
-/* Paleta Likida (decisión de Javier, 31-oct): el CROMO es NEGRO, GRIS y BLANCO (sin naranja, marino ni crema de marca). El color vive en los
-   DATOS, como en Vexa AI: 8 matices de series, tintes, estados y filete de KPI (ESTILO-LIKIDA §2 = paleta medida de Vexa). Cromo: primario
-   negro, ítem activo con barra gris y señal burdeos (--senal) como único acento puntual de atención. */
+/* Paleta Likida de ALTO CONTRASTE (decisión del dueño, 11-nov-2026, punto 10): cromo Y datos son NEGRO, GRIS y BLANCO. El único color que
+   queda son los semáforos de estado (--ok/--warn/--bad, siempre con texto o icono) y la señal burdeos (--senal) de «requiere acción». */
 :root [data-ui="v2"] {
   /* Marco y superficies */
   --bg: #f6f6f7;
@@ -87,37 +86,40 @@
   /* Cascada (Waterfall): las bajas flotan con el gris medio (≥3:1 contra la superficie); --g2 se perdía en oscuro (#1f1f23 sobre #17171a) */
   --casc-baja: var(--g3);
 
-  /* Ocho matices de DATOS (identidad de MÉTRICA, fijos; ESTILO-LIKIDA §2 = Vexa). Solo gráficas, chips de categoría y filete de KPI;
-     nunca en el cromo. 6 = burdeos = señal «requiere acción». */
-  --chart-1: #2f6bd8; --chart-2: #f25d22; --chart-3: #1f7a55; --chart-4: #d9a441;
-  --chart-5: #0a84a6; --chart-6: #a6264a; --chart-7: #7b5cd6; --chart-8: #0e0e10;
-  --soft-1: #e6edfa; --soft-2: #fdece4; --soft-3: #e4efeb; --soft-4: #faf4e8;
-  --soft-5: #e2f0f4; --soft-6: #f4e5e9; --soft-7: #efebfa;
-  --soft-8: #e2e2e2;
-  --ink-1: #2c65cb; --ink-2: #b14418; --ink-3: #1d7350; --ink-4: #8c6a2a;
-  --ink-5: #087593; --ink-6: #a6264a; --ink-7: #7456c9;
-  --ink-8: #0e0e10;
+  /* PALETA DE ALTO CONTRASTE (decisión del dueño, 11-nov-2026, punto 10; ANULA a Rovaq): las 8 series de DATOS son NEGRO y GRISES, ordenadas para que
+     las vecinas se separen por LUMINOSIDAD (1 negro · 2 gris medio · 3 grafito · 4 gris claro · 5 pizarra · 6 gris perla · 7 acero · 8 casi blanco).
+     Las series DURAS (1, 2, 3, 5, 7) miden ≥3:1 contra la tarjeta (1.4.11). Las CLARAS (4, 6, 8) no llegan a 3:1 por construcción (en una escala de grises,
+     ocho niveles no caben todos sobre el piso de 3:1): se identifican SIEMPRE por contorno --chart-borde (≥3:1, ver graficas.css) y llevan etiqueta de
+     texto (regla E-10; nunca color solo). Ningún matiz es azul, teal ni naranja. */
+  --chart-1: #0e0e10; --chart-2: #8a8a90; --chart-3: #3a3a40; --chart-4: #b4b4ba;
+  --chart-5: #5a5a61; --chart-6: #a3a3ab; --chart-7: #707078; --chart-8: #d9d9dc;
+  --chart-borde: #5a5a61;
+  --soft-1: #d0d0d4; --soft-2: #e4e4e6; --soft-3: #dadade; --soft-4: #eeeef0;
+  --soft-5: #e0e0e3; --soft-6: #f2f2f3; --soft-7: #e8e8ea;
+  --soft-8: #f6f6f7;
+  --ink-1: #0e0e10; --ink-2: #17171a; --ink-3: #0e0e10; --ink-4: #26262b;
+  --ink-5: #17171a; --ink-6: #26262b; --ink-7: #17171a;
+  --ink-8: #3a3a40;
+  /* Filete superior de las tiras de KPI: NEGRO para todas las métricas (el color por métrica de la ola anterior queda anulado). */
+  --kpi-filete: #0e0e10;
 
   /* Alias del sistema v2 (ESTILO-LIKIDA §1) */
-  /* Ítem activo = fondo suave + barra izquierda de 3 px GRIS neutra (nunca bloque negro ni barra de color). El rojo/burdeos (--senal) es un
+  /* Ítem activo = fondo suave + barra izquierda NEGRA (--nav-activo-barra; en oscuro, blanca). El burdeos (--senal) es un
      acento puntual de atención (contador, punto de «requiere acción»), no la barra fija del activo. */
   --chip-activo-bg: var(--soft-8);
   --chip-activo-fg: var(--ink-8);
   --ui-activo-bg: var(--ui-soft);
   --ui-activo-ink: var(--ink);
-  --ui-activo-barra: var(--n-500);
+  --ui-activo-barra: var(--nav-activo-barra);
 
-  /* ── Estados activos y acción principal del cajón (controles finos, K1-0) ──
-     AZUL DE ROVAQ, decisión del dueño del 7-nov-2026: el azul SOLO vive aquí, en el estado activo de segmentados, chips y filtros
-     (--seg-activo-*) y en la acción primaria del cajón (--accion-cajon-*). El resto del cromo sigue negro/gris/blanco y el burdeos
-     (--senal) solo para «requiere acción». La guarda sin_azul_cromo.test.ts acota la excepción a ESTAS dos familias de variables.
-     Claro: fondo e6edfa, texto 1f4fb0 (6.37:1), anillo de 1 px = 2F6BD8 al 30 %, hover d8e3f8 (5.80:1).
-     Oscuro (bloque oscuro más abajo): fondo 1d2433, texto a9c1f2, anillo al 45 %, hover 26314a.
-     Para volver al neutro: bg var(--ui-soft), borde var(--line2), fg var(--ink). */
-  --seg-activo-bg: #e6edfa;
-  --seg-activo-borde: color-mix(in srgb, #2f6bd8 30%, transparent);
-  --seg-activo-fg: #1f4fb0;
-  --seg-activo-hover: #d8e3f8;
+  /* ── Estados activos y acción principal del cajón (controles finos) ──
+     ALTO CONTRASTE NEUTRO (11-nov-2026, punto 10 del dueño; revierte el azul de Rovaq del 7-nov): el estado activo de segmentados, chips y filtros
+     (--seg-activo-*) y la acción del cajón (--accion-cajon-*) son gris claro con ANILLO NEGRO de 1 px y texto negro (≥15:1). Oscuro: gris
+     profundo con anillo y texto claros. Sin azul en ningún estado de interfaz. */
+  --seg-activo-bg: #e4e4e6;
+  --seg-activo-borde: #0e0e10;
+  --seg-activo-fg: #0e0e10;
+  --seg-activo-hover: #d6d6d9;
   /* Acción principal del cajón (Aplicar) y botón «suave»: mismo trío que el estado activo (un cambio mueve ambos). */
   --accion-cajon-bg: var(--seg-activo-bg);
   --accion-cajon-borde: var(--seg-activo-borde);
@@ -143,12 +145,12 @@
   --foco-sep-campo: 2px;
   --foco-sep-dentro: 1px;
 
-  /* Navegación (R8, estilo Rovaq): ítem activo = barra izquierda inset de 2 px + fondo tinta al 7 % + peso 500. UN solo token para el color de la barra
-     (--nav-activo-barra): por omisión el rojo de Rovaq, rgb(232, 36, 28); cambiarlo aquí cambia todos los menús (aside, riel y hoja). Lo lee shell.css. */
+  /* Navegación: ítem activo = barra izquierda inset + fondo tinta al 7 % + peso 500. UN solo token para el color de la barra (--nav-activo-barra): NEGRA
+     (decisión del dueño, 11-nov-2026, que anula el rojo de Rovaq; en oscuro, blanca). Cambiarlo aquí cambia todos los menús (aside, riel y hoja). Lo lee shell.css. */
   --nav-activo-bg: color-mix(in srgb, var(--ink) 7%, transparent);
   --nav-activo-fg: var(--ink);
   --nav-activo-peso: 500;
-  --nav-activo-barra: rgb(232, 36, 28);
+  --nav-activo-barra: #0e0e10;
   /* Sombra suave del marco (sidebar flotante), como Vexa; las tarjetas del flujo siguen sin sombra. */
   --sh-marco: 0 1px 2px #0e0e1005, 0 8px 24px -16px #0e0e1020;
 
@@ -168,10 +170,10 @@
   --ui-tip-ink: var(--tip-ink);
   /* ÚNICO color de la capa de carga (= el fondo de la app) */
   --carga-fondo: #ffffff;
-  /* Cabecera de tabla: tinte NEUTRO sólido (gris muy suave en claro; el oscuro se redefine abajo) con texto tinta. Antes petróleo (#eef6f9). */
+  /* Cabecera de tabla: texto NEGRO sobre fondo neutro (decisión del dueño, 11-nov-2026, que anula el petróleo de Rovaq y el gris). Medido: 17:1. */
   --tint-info: #f4f4f5;
-  --tabla-cab-bg: var(--ui-soft);
-  --tabla-cab-ink: var(--muted);
+  --tabla-cab-bg: #f1f1f2;
+  --tabla-cab-ink: #0e0e10;
   /* Líneas de aviso = tono al 24–26 % (R01 de Vexa) */
   --aviso-linea-info: color-mix(in srgb, var(--info) 24%, transparent);
   --aviso-linea-warn: color-mix(in srgb, var(--warn) 26%, transparent);
@@ -197,10 +199,10 @@
   --on-2: #0e0e10;
   --on-3: #ffffff;
   --on-4: #0e0e10;
-  --on-5: #000000;
-  --on-6: #ffffff;
+  --on-5: #ffffff;
+  --on-6: #0e0e10;
   --on-7: #ffffff;
-  --on-8: #ffffff;
+  --on-8: #0e0e10;
 
   /* Neutros de gráfica */
   --chart-barra: #2f2f33;
@@ -368,11 +370,13 @@
   --info: #d6d6d9;
   --infobg: #26262b;
 
-  /* Azul de Rovaq en oscuro (ver el bloque claro): estado activo y acción del cajón. */
-  --seg-activo-bg: #1d2433;
-  --seg-activo-borde: color-mix(in srgb, #2f6bd8 45%, transparent);
-  --seg-activo-fg: #a9c1f2;
-  --seg-activo-hover: #26314a;
+  /* Estado activo en oscuro (ver el bloque claro): gris profundo, anillo y texto claros. */
+  --seg-activo-bg: #34343a;
+  --seg-activo-borde: #f4f4f5;
+  --seg-activo-fg: #f4f4f5;
+  --seg-activo-hover: #3e3e45;
+  --nav-activo-barra: #f4f4f5;
+  --kpi-filete: #f4f4f5;
 
   --g1: #17171a;
   --g2: #1f1f23;
@@ -380,20 +384,23 @@
   --g4: #d4d4d8;
   --g5: #f4f4f5;
 
-  --chart-1: #4a85ea; --chart-2: #e8602b; --chart-3: #2a9468; --chart-4: #b98526;
-  --chart-5: #1d93b0; --chart-6: #cc4a6c; --chart-7: #8d75e0; --chart-8: #f4f4f5;
-  --soft-1: #1d2433; --soft-2: #30201c; --soft-3: #192623; --soft-4: #2a241b;
-  --soft-5: #18262c; --soft-6: #2d1d24; --soft-7: #252232;
-  --soft-8: #323234;
-  --ink-1: #558ceb; --ink-2: #e8602b; --ink-3: #43a07a; --ink-4: #b98526;
-  --ink-5: #2b99b5; --ink-6: #d56985; --ink-7: #947de2;
-  --ink-8: #f4f4f5;
+  /* Oscuro: la misma lógica invertida (1 blanco · 3 gris claro · 5 y 7 medios duros; 4, 6 y 8 son las series tenues, con contorno --chart-borde). */
+  --chart-1: #f4f4f5; --chart-2: #7f7f87; --chart-3: #c4c4ca; --chart-4: #55555c;
+  --chart-5: #a0a0a8; --chart-6: #66666e; --chart-7: #909098; --chart-8: #3a3a40;
+  --chart-borde: #a3a3ab;
+  --soft-1: #3e3e45; --soft-2: #2a2a2f; --soft-3: #34343a; --soft-4: #222226;
+  --soft-5: #2e2e33; --soft-6: #1f1f23; --soft-7: #27272c;
+  --soft-8: #1b1b1f;
+  --ink-1: #f4f4f5; --ink-2: #f4f4f5; --ink-3: #f4f4f5; --ink-4: #e4e4e6;
+  --ink-5: #f4f4f5; --ink-6: #e4e4e6; --ink-7: #f4f4f5;
+  --ink-8: #d6d6d9;
 
   --ui-elevated: #1f1f23;
   --ui-sunken: #0e0e10;
   --carga-fondo: #0e0e10;
   --tint-info: #1b1b1f;
-  --tabla-cab-bg: var(--ui-soft);
+  --tabla-cab-bg: #1f1f23;
+  --tabla-cab-ink: #f4f4f5;
 
   --n-950: #0e0e10;
   --n-900: #17171a;
@@ -411,11 +418,11 @@
   --on-1: #0e0e10;
   --on-2: #0e0e10;
   --on-3: #0e0e10;
-  --on-4: #0e0e10;
-  --on-5: #000000;
-  --on-6: #000000;
+  --on-4: #f4f4f5;
+  --on-5: #0e0e10;
+  --on-6: #f4f4f5;
   --on-7: #0e0e10;
-  --on-8: #0e0e10;
+  --on-8: #f4f4f5;
 
   --chart-barra: #d2d2d6;
   --chart-fuerte: #f4f4f5;

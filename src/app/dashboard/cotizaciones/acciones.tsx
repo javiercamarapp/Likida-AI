@@ -5,7 +5,7 @@ import { dinero } from '@/lib/i18n/es/dinero';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
 import './cotizaciones.css';
-import { clasesBoton, type AccionDeForma, type ResultadoAccion } from '@/app/ui-v2/componentes';
+import { Boton as BotonUi, Tooltip, type AccionDeForma, type ResultadoAccion } from '@/app/ui-v2/componentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // FE-13b (auditoría 24) — "Marcar enviada" / "Crear viaje" / "Perdida" /
@@ -16,15 +16,16 @@ import { clasesBoton, type AccionDeForma, type ResultadoAccion } from '@/app/ui-
 // intacta tras el clic y no sabía si pasó algo.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function Boton({ texto, pendienteTexto, className, disabled, title }: {
+function BotonAccion({ texto, pendienteTexto, className, disabled, title }: {
   texto: string; pendienteTexto: string; className?: string; disabled?: boolean; title?: string;
 }) {
   const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending || disabled} title={title} className={clasesBoton('secondary', 'sm', className)}>
+  const boton = (
+    <BotonUi type="submit" variante="secondary" tamano="sm" disabled={pending || disabled} className={className}>
       {pending ? pendienteTexto : texto}
-    </button>
+    </BotonUi>
   );
+  return title ? <Tooltip texto={title}>{boton}</Tooltip> : boton;
 }
 
 
@@ -54,13 +55,13 @@ export function FilaAccionesCotizacion({
         {puedeEnviar && (
           <form action={accEnviada}>
             <input type="hidden" name="id" value={id} />
-            <Boton texto={tr('cotizaciones.acciones.marcarEnviada')} pendienteTexto="Marcando…" />
+            <BotonAccion texto={tr('cotizaciones.acciones.marcarEnviada')} pendienteTexto="Marcando…" />
           </form>
         )}
         {puedeCrearViaje && (
           <form action={accConvertir}>
             <input type="hidden" name="id" value={id} />
-            <Boton
+            <BotonAccion
               texto={tr('cotizaciones.acciones.crearViaje')} pendienteTexto="Creando…"
               disabled={precio === null}
               title={precio === null ? tr('cotizaciones.acciones.sinPrecioNoHay') : tr('cotizaciones.acciones.creaElViajeCon')}
@@ -70,12 +71,12 @@ export function FilaAccionesCotizacion({
         <form action={accPerdida}>
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="como" value="perdida" />
-          <Boton texto={tr('cotizaciones.acciones.perdida')} pendienteTexto="…" />
+          <BotonAccion texto={tr('cotizaciones.acciones.perdida')} pendienteTexto="…" />
         </form>
         <form action={accVencida}>
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="como" value="vencida" />
-          <Boton texto={tr('cotizaciones.acciones.vencida')} pendienteTexto="…" />
+          <BotonAccion texto={tr('cotizaciones.acciones.vencida')} pendienteTexto="…" />
         </form>
       </span>
       {error && <span className="rv-cot__error" role="alert">{error}</span>}

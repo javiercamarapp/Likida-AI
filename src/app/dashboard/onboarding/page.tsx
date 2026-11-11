@@ -22,20 +22,23 @@ import { ChatEntrevista } from './chat';
 import { estadoEntrevista, mensajeBienvenida } from '@/lib/likida/perfil/entrevista';
 import { Boton, Disclosure, MarcoPagina, type ResultadoAccion } from '@/app/ui-v2/componentes';
 import './entrevista.css';
+import { getT } from '@/lib/i18n/servidor';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 export const dynamic = 'force-dynamic';
 
-const EXTRA: Opcion[] = [
-  { valor: '', texto: 'Elige una' },
-  { valor: 'ninguno', texto: 'No usamos' },
-];
-const OTRO: Opcion = { valor: 'otro', texto: 'Otro (escríbelo abajo)' };
+const extra = (t: TResto = T_RESTO_ES): Opcion[] => ([
+  { valor: '', texto: t('op.elige_una') },
+  { valor: 'ninguno', texto: t('op.no_usamos') },
+]);
+const otroTr = (t: TResto = T_RESTO_ES): Opcion => ({ valor: 'otro', texto: t('op.otro_escribelo_abajo') });
 
-function opciones(cat: CategoriaConector): Opcion[] {
+function opciones(cat: CategoriaConector, t: TResto): Opcion[] {
   return [
-    ...EXTRA,
+    ...extra(t),
     ...CONECTORES.filter((c) => c.categoria === cat).map((c) => ({ valor: c.id, texto: c.nombre })),
-    OTRO,
+    otroTr(t),
   ];
 }
 
@@ -44,6 +47,7 @@ export default async function OnboardingFlotaPage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t } = await getT('resto');
   const sp = await searchParams;
   const s = await resolverTenantEfectivo('/dashboard/onboarding', sp);
   if (!puedeVerRuta(s.rol, '/dashboard/onboarding')) redirect('/dashboard');
@@ -56,9 +60,10 @@ export default async function OnboardingFlotaPage({
 
   async function accion(_prev: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('resto');
     const ses = await resolverTenantAtadoOLanza('/dashboard/onboarding', sp, s.tenantId);
     if (!puedeVerRuta(ses.rol, '/dashboard/onboarding')) {
-      return { error: 'Tu rol no puede declarar el perfil de la flota.' };
+      return { error: t('op.tu_rol_no_puede_declarar_el') };
     }
     const parsed = parseOnboarding(fd);
     if (!parsed.ok) return { error: parsed.error };
@@ -100,26 +105,22 @@ export default async function OnboardingFlotaPage({
     redirect(`/dashboard${sufijoTenant(sp)}`);
   }
 
-  const gps = opciones('Rastreo GPS');
-  const erp = opciones('ERP y contabilidad');
-  const tag = opciones('Peaje y monederos').filter((o) => o.valor !== 'monedero_diesel' && o.valor !== 'powergas');
+  const gps = opciones('Rastreo GPS', t);
+  const erp = opciones('ERP y contabilidad', t);
+  const tag = opciones('Peaje y monederos', t).filter((o) => o.valor !== 'monedero_diesel' && o.valor !== 'powergas');
   const monedero = [
-    ...EXTRA,
+    ...extra(t),
     ...CONECTORES.filter((c) => c.id === 'monedero_diesel' || c.id === 'powergas')
       .map((c) => ({ valor: c.id, texto: c.nombre })),
-    OTRO,
+    otroTr(t),
   ];
 
   const entrevista = estadoEntrevista(perfil);
   const bien = mensajeBienvenida(entrevista);
   const preguntaInicial = entrevista.siguiente?.pregunta ?? null;
   const formulario = (
-    <Disclosure titulo="Prefiero el formulario" variante="linea">
-      <p className="rv-ob__form-apoyo">
-        Las mismas declaraciones, sin conversación. Vacío no se inventa como no.
-        Los topes de gasto se capturan en{' '}
-        <a href={`/dashboard/politicas${sufijo}`} className="rv-ob__form-enlace">Políticas</a>.
-      </p>
+    <Disclosure titulo={t('op.prefiero_el_formulario')} variante="linea">
+      <p className="rv-ob__form-apoyo">{rico(t('op.las_mismas_declaraciones_sin_conversacion_vacio'), { e0: (c) => <a href={`/dashboard/politicas${sufijo}`} className="rv-ob__form-enlace">{c}</a> })}</p>
       <FormaOnboarding
         accion={accion}
         gps={gps} erp={erp} tag={tag} monedero={monedero}
@@ -138,14 +139,10 @@ export default async function OnboardingFlotaPage({
   );
 
   return (
-    <MarcoPagina titulo="Perfil de la flota" apoyo="Lo que Likida necesita saber de tu operación para cuadrar tus viajes. Lo que no sepas, déjalo vacío.">
+    <MarcoPagina titulo={t('op.perfil_de_la_flota')} apoyo={t('op.lo_que_likida_necesita_saber_de')}>
       <div className="rv-ob">
         {puedeAdministrar(s.rol) && !onboardingFiscalListo(perfil) && (
-          <form action={posponer} className="rv-ob__pospuesto">
-            ¿No tienes a la mano tus ingresos anuales o no sabes si eres parte relacionada?{' '}
-            <Boton type="submit" variante="ghost" tamano="sm">Lo confirmo con mi contador</Boton>
-            {' '}— el Resumen se abre con un aviso permanente: el estímulo de peaje queda en $0 hasta que lo declares.
-          </form>
+          <form action={posponer} className="rv-ob__pospuesto">{t('op.no_tienes_a_la_mano_tus')}{' '}<Boton type="submit" variante="ghost" tamano="sm">{t('op.lo_confirmo_con_mi_contador')}</Boton>{' '}{t('op.el_resumen_se_abre_con_un')}</form>
         )}
         <ChatEntrevista
           preguntaInicial={preguntaInicial}
@@ -161,4 +158,7 @@ export default async function OnboardingFlotaPage({
   );
 }
 
-export const metadata: Metadata = { title: 'Configuración inicial' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('op.configuracion_inicial') };
+}

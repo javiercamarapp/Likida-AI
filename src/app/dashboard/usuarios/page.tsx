@@ -25,7 +25,12 @@ import { conPisoDeTiempo } from '../../login/respuesta_otp';
 import { VistaUsuarios, type UsuarioRow } from './vista';
 import type { ResultadoForma } from './forma';
 import type { Metadata } from 'next';
-export const metadata: Metadata = { title: 'Usuarios del equipo' };
+import { getT } from '@/lib/i18n/servidor';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('resto');
+  return { title: t('cfg.usuarios_del_equipo') };
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -73,20 +78,20 @@ async function contextoDeAcceso(s: TenantEfectivo): Promise<ContextoAcceso> {
 
 /** Lo que se le dice al dueño sobre el correo — la verdad de `enviarCorreo`,
  *  nunca «le llegó» sin `ok`. (Reenviar acceso: ahí la cuenta ES de esta flota.) */
-function fraseCorreo(r: ResultadoCorreoAcceso, email: string): string {
-  if (r.enviado) return `Le mandamos el correo de acceso a ${email}.`;
+function fraseCorreo(r: ResultadoCorreoAcceso, email: string, t: TResto = T_RESTO_ES): string {
+  if (r.enviado) return t('cfg.le_mandamos_el_correo_de_acceso', { email });
   if (r.motivo === 'sin_configurar') {
-    return `No le llega correo (el canal de correo no está encendido en este ambiente): pásale tú la liga del panel, ${appUrl()}.`;
+    return t('cfg.no_le_llega_correo_el_canal', { appUrl: appUrl() });
   }
-  return `El correo de acceso NO salió: pásale tú la liga del panel, ${appUrl()}, o vuelve a intentar «Reenviar acceso».`;
+  return t('cfg.el_correo_de_acceso_no_salio', { appUrl: appUrl() });
 }
 
 /** A37-S21-02: la frase del ALTA es el MISMO texto salga el correo, falle, o no
  *  se haya intentado (correo que ya tenía cuenta); cualquier diferencia
  *  convertía el alta en un oráculo de qué correos ya son clientes. La verdad
  *  del envío queda en el log. */
-function fraseAlta(email: string): string {
-  return `Si es una cuenta nueva, el correo de acceso le llega a ${email} en unos minutos; si no lo recibe, pásale tú la liga del panel, ${appUrl()}, o usa «Reenviar acceso».`;
+function fraseAlta(email: string, t: TResto = T_RESTO_ES): string {
+  return t('cfg.si_es_una_cuenta_nueva_el', { email, appUrl: appUrl() });
 }
 
 /** Desde dónde se invita: el rol REAL de la sesión (un superadmin que previsualiza `?rol=flota_admin` NO invita `nomina`) y el perfil de la flota. */
@@ -108,11 +113,12 @@ async function puertaAdministrar(
   sp: { vista?: string; tenant?: string; rol?: string },
   tenantPintado: string,
 ): Promise<{ s: TenantEfectivo } | { error: string }> {
+  const { t } = await getT('resto');
   // MX-002: roles y bajas escriben SOLO en la flota que esta pantalla pintó (otra pestaña pudo cambiar la cookie).
   const s = await resolverTenantAtadoAccion(RUTA, sp, tenantPintado);
   if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { error: 'Tu rol no puede ver el equipo de la flota.' };
-  if (!puedeAdministrar(s.rol)) return { error: 'Solo el dueño de la flota administra a su equipo.' };
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: t('cfg.tu_rol_no_puede_ver_el') };
+  if (!puedeAdministrar(s.rol)) return { error: t('cfg.solo_el_dueno_de_la_flota_9') };
   return { s };
 }
 
@@ -139,6 +145,7 @@ export default async function UsuariosPage({
 }: {
   searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
 }) {
+  const { t } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, userId, rol, rolReal } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -155,6 +162,7 @@ export default async function UsuariosPage({
 
   async function invitarUsuario(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -162,7 +170,7 @@ export default async function UsuariosPage({
     // SEG-7: techo por flota. Sin él, el alta es un oráculo de qué correos
     // ya son clientes de Likida a la velocidad que el dueño quiera probar.
     if (!(await rateLimit(`invitar:${s.tenantId}`, TOPE_INVITACIONES_HORA, 3_600_000))) {
-      return { ok: false, error: `Demasiadas invitaciones en una hora (tope ${TOPE_INVITACIONES_HORA}). Espera un rato y vuelve a intentar.` };
+      return { ok: false, error: t('cfg.demasiadas_invitaciones_en_una_hora_tope', { TOPE_INVITACIONES_HORA }) };
     }
 
     // `nomina` (0949) solo se invita a una flota con perfil `cinco_agentes` y solo por su dueño (rol REAL de la sesión).
@@ -222,11 +230,12 @@ export default async function UsuariosPage({
     });
     if (!r.ok) return { ok: false, error: r.error };
     revalidatePath(RUTA);
-    return { ok: true, mensaje: `${mensajeAltaNeutro(v.email)} ${fraseAlta(v.email)}` };
+    return { ok: true, mensaje: `${mensajeAltaNeutro(v.email)} ${fraseAlta(v.email, t)}` };
   }
 
   async function cambiarRol(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -236,9 +245,9 @@ export default async function UsuariosPage({
       const r = await cambiarRolUsuario(s.tenantId, String(fd.get('id') ?? ''), String(fd.get('rol') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
       const llaves = r.llavesApiSinRevocar
-        ? ' ATENCIÓN: NO se pudieron revocar sus llaves de API de Administración y siguen vivas: revócalas a mano.'
-        : (r.llavesApiRevocadas?.length ? ` Se revocaron sus llaves de API de Administración: ${r.llavesApiRevocadas.join(', ')}.` : '');
-      return { ok: true, mensaje: `Rol cambiado: de ${nombreDeRol(r.de)} a ${nombreDeRol(r.a)}. Aplica en su siguiente clic.${llaves}` };
+        ? t('cfg.atencion_no_se_pudieron_revocar_sus')
+        : (r.llavesApiRevocadas?.length ? t('cfg.se_revocaron_sus_llaves_de_api', { r: r.llavesApiRevocadas.join(', ') }) : '');
+      return { ok: true, mensaje: t('cfg.rol_cambiado_de_a_aplica_en', { nombreDeRol: nombreDeRol(r.de), nombreDeRol2: nombreDeRol(r.a), llaves }) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'cambiar el rol') };
     }
@@ -246,6 +255,7 @@ export default async function UsuariosPage({
 
   async function darDeBaja(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -254,20 +264,21 @@ export default async function UsuariosPage({
       revalidatePath(RUTA);
       return mensajeDeBaja(r);
     } catch (e) {
-      return { ok: false, error: mensajeParaPantalla(e, 'dar de baja la cuenta') };
+      return { ok: false, error: mensajeParaPantalla(e, t('cfg.dar_de_baja_la_cuenta')) };
     }
   }
 
   async function cerrarSesiones(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     try {
       const r = await cerrarSesionesUsuario(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
       return r.sesionesCerradas
-        ? { ok: true, mensaje: 'Listo: todas sus sesiones quedaron cerradas. Va a tener que volver a entrar con su correo.' }
-        : { ok: false, error: 'No se pudo confirmar el cierre de sesiones — quedó registrado; vuelve a intentarlo.' };
+        ? { ok: true, mensaje: t('cfg.listo_todas_sus_sesiones_quedaron_cerradas') }
+        : { ok: false, error: t('cfg.no_se_pudo_confirmar_el_cierre_2') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'cerrar sus sesiones') };
     }
@@ -275,6 +286,7 @@ export default async function UsuariosPage({
 
   async function reactivar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
@@ -285,8 +297,8 @@ export default async function UsuariosPage({
       const r = await reactivarUsuario(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId });
       revalidatePath(RUTA);
       return r.accesoRestaurado
-        ? { ok: true, mensaje: 'Cuenta reactivada: ya puede volver a entrar con su correo.' }
-        : { ok: true, mensaje: 'Cuenta reactivada en el panel, pero el servicio de autenticación no confirmó levantar el bloqueo: puede que todavía no pueda entrar. Vuelve a intentarlo en un minuto.' };
+        ? { ok: true, mensaje: t('cfg.cuenta_reactivada_ya_puede_volver_a') }
+        : { ok: true, mensaje: t('cfg.cuenta_reactivada_en_el_panel_pero') };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'reactivar la cuenta') };
     }
@@ -294,24 +306,25 @@ export default async function UsuariosPage({
 
   async function reenviar(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t } = await getT('resto');
     const p = await puertaAdministrar(sp, tenantId);
     if ('error' in p) return { ok: false, error: p.error };
     const { s } = p;
     if (!(await rateLimit(`invitar:${s.tenantId}`, TOPE_INVITACIONES_HORA, 3_600_000))) {
-      return { ok: false, error: `Demasiados correos de acceso en una hora (tope ${TOPE_INVITACIONES_HORA}). Espera un rato.` };
+      return { ok: false, error: t('cfg.demasiados_correos_de_acceso_en_una', { TOPE_INVITACIONES_HORA }) };
     }
     try {
       const r = await reenviarAcceso(s.tenantId, String(fd.get('id') ?? ''), { id: s.userId }, await contextoDeAcceso(s));
       return r.enviado
-        ? { ok: true, mensaje: fraseCorreo(r, r.email) }
-        : { ok: false, error: fraseCorreo(r, r.email) };
+        ? { ok: true, mensaje: fraseCorreo(r, r.email, t) }
+        : { ok: false, error: fraseCorreo(r, r.email, t) };
     } catch (e) {
       return { ok: false, error: mensajeParaPantalla(e, 'reenviar el acceso') };
     }
   }
 
   return (
-    <VistaUsuarios
+    <VistaUsuarios t={t}
       usuarios={usuarios}
       userId={userId}
       puedeInvitar={puedeAdministrar(rol)}

@@ -4,8 +4,10 @@ import { resolverTenantAtadoFirmado, MENSAJE_FLOTA_CAMBIO } from '@/lib/auth/ten
 import { CAMPO_FLOTA_PINTADA } from '@/lib/auth/flota_cambio';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
 import { appUrl } from '@/lib/env';
+import { getT } from '@/lib/i18n/servidor';
 import { emailDeUsuario } from '@/lib/likida/conductor/trabajo';
 import { enviarResumenPanel, guardarConfigPanel, revisarPanel, type ContextoSinAtender, type EstadoRevisionUI, type ResultadoEnvioUI, type ResultadoGuardadoUI } from '@/lib/likida/vigia/sin_atender_aviso/acciones';
+import { type TAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Acciones de servidor A NIVEL DE MÓDULO: vuelven a resolver sesión, rol y flota desde la cookie y la flota pintada firmada;
@@ -13,14 +15,14 @@ import { enviarResumenPanel, guardarConfigPanel, revisarPanel, type ContextoSinA
 // ═══════════════════════════════════════════════════════════════════════════
 
 const RUTA = '/dashboard/agentes/vigia/sin-atender';
-const SIN_ACCESO = 'No tienes acceso a esta pantalla.';
+const sinAcceso = (tx: TAgentes = TR_ES.t) => (tx('rest.no_tienes_acceso_a_esta_pantalla'));
 
 type ResultadoContexto = { readonly error: string } | { readonly ctx: ContextoSinAtender };
 
 async function contexto(fd: FormData): Promise<ResultadoContexto> {
   const s = await resolverTenantAtadoFirmado(RUTA, fd.get(CAMPO_FLOTA_PINTADA));
   if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
-  if (!puedeVerRuta(s.rol, RUTA)) return { error: SIN_ACCESO };
+  if (!puedeVerRuta(s.rol, RUTA)) return { error: sinAcceso((await getT('agentes')).t) };
   const email = (await emailDeUsuario(s.userId).catch(() => null)) ?? null;
   return { ctx: { tenantId: s.tenantId, rol: s.rol, usuarioId: s.userId, email, liga: `${appUrl()}${RUTA}` } };
 }

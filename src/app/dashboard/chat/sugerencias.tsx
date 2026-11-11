@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Boton } from '../../ui-v2/componentes/boton';
 import type { TemaAgente } from './perfiles';
 
 /**
@@ -15,16 +16,16 @@ export default function TemasRapidos({ temas, onPreguntar, deshabilitado }: { te
     <section className="rv-chat__sug" aria-label="Temas para preguntar">
       <div className="rv-chat__temas" role="group" aria-label="Temas">
         {temas.map((t, k) => (
-          <button type="button" key={t.categoria} className="rv-chat__tema" data-tema={(k % 8) + 1} aria-pressed={k === i} onClick={() => setI(k)}>
+          <Boton key={t.categoria} className="rv-chat__tema" data-tema={(k % 8) + 1} aria-pressed={k === i} onClick={() => setI(k)}>
             <i aria-hidden="true" /><span>{t.categoria}</span>
-          </button>
+          </Boton>
         ))}
       </div>
       <div className="rv-chat__preguntas" role="group" aria-label={tema.categoria} key={tema.categoria}>
         {tema.preguntas.slice(0, 3).map((q) => (
-          <button type="button" key={q} className="rv-chat__q" title={q} disabled={deshabilitado} onClick={() => onPreguntar(q)}>
+          <Boton key={q} className="rv-chat__q" disabled={deshabilitado} onClick={() => onPreguntar(q)}>
             <span>{q}</span>
-          </button>
+          </Boton>
         ))}
       </div>
     </section>

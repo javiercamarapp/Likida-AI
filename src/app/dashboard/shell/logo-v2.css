@@ -1,0 +1,8 @@
+/* El logo vectorial: bloque sin interlínea y color por tono (sin estilos en línea). */
+.rv-logo2 { display: block; flex: none; line-height: 0; }
+.rv-logo2__svg { display: block; }
+.rv-logo2[data-tono="positivo"] { color: #0E0E10; }
+.rv-logo2[data-tono="negativo"] { color: #F4F4F5; }
+.rv-logo2[data-tono="marca"] { color: var(--marca); }
+.rv-logo2[data-tono="bg"] { color: var(--bg); }
+.rv-logo2[data-tono="ink"] { color: var(--ink); }

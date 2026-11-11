@@ -2,13 +2,16 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import type { DashboardKpis, Acreditables } from '@/lib/likida/analytics';
+import type { DashboardKpis } from '@/lib/likida/analytics';
+import type { AcreditablesOFuera } from './respuestas';
 import { mxn, litros, horaMx } from '@/lib/formato';
 import { leerRespuestaAgente, cerrarPaso } from './transporte';
 import {
   FASES_PENSANDO, respuestaDeBloques, respuestaLocal,
   type PasoTraza, type Respuesta,
 } from './respuestas';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // El estado y el transporte del chat (L5: salieron de `chat.tsx` SIN cambiar la lógica de datos). Mismas rutas, mismos cuerpos,
@@ -36,7 +39,8 @@ function leerDataUrl(archivo: File): Promise<string> {
   });
 }
 
-export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: { kpis: DashboardKpis | null; acred: Acreditables | null; endpoint?: string }) {
+export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: { kpis: DashboardKpis | null; acred: AcreditablesOFuera; endpoint?: string }) {
+  const { t: tx } = useT('resto', restoEs);
   const sp = useSearchParams();
   const tenant = sp.get('tenant');
   const [historial, setHistorial] = useState<Turno[]>([]);
@@ -80,16 +84,16 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
         });
         const d = await resp.json().catch(() => null);
         if (!resp.ok || !d?.extracto) {
-          agregar(etiqueta, { texto: d?.error ?? 'No se pudo leer el archivo en este momento.' });
+          agregar(etiqueta, { texto: d?.error ?? tx('op.no_se_pudo_leer_el_archivo') });
           return;
         }
         setDocumento({ nombre: archivo.name, extracto: d.extracto });
         agregar(etiqueta, {
-          texto: `Listo, leí «${archivo.name}» y lo tengo a la mano en esta conversación — pregúntame lo que quieras sobre él.`,
+          texto: tx('ch.listo_lei_y_lo_tengo_a', { name: archivo.name }),
           visual: Array.isArray(d.meta) && d.meta.length > 0 ? { tipo: 'tabla', filas: d.meta as Array<[string, string]> } : undefined,
         });
       } catch {
-        agregar(etiqueta, { texto: 'No se pudo leer el archivo en este momento.' });
+        agregar(etiqueta, { texto: tx('op.no_se_pudo_leer_el_archivo') });
       } finally {
         setOcupado(false);
         limpiar();
@@ -108,11 +112,11 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       });
       const d = await resp.json().catch(() => null);
       if (!resp.ok || !d) {
-        agregar(etiquetaQ, { texto: d?.error ?? 'No se pudo leer la imagen en este momento.' });
+        agregar(etiquetaQ, { texto: d?.error ?? tx('op.no_se_pudo_leer_la_imagen') });
         return;
       }
       if (!d.legible) {
-        agregar(etiquetaQ, { texto: `El motor no pudo leer este papel${d.motivo ? ` (${d.motivo})` : ''}. Con una foto más cercana y sin reflejos suele salir.` });
+        agregar(etiquetaQ, { texto: tx('op.el_motor_no_pudo_leer_este', { v: d.motivo ? ` (${d.motivo})` : '' }) });
         return;
       }
       const filas: Array<[string, string]> = [];
@@ -124,11 +128,11 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       if (typeof d.campos.litros === 'number') filas.push(['Litros', litros(d.campos.litros)]);
       if (typeof d.campos.confianza === 'number') filas.push(['Confianza del OCR', `${Math.round(d.campos.confianza * 100)}%`]);
       agregar(etiquetaQ, {
-        texto: 'Esto fue lo que el motor leyó del papel — lectura de prueba, no se registró ningún gasto.',
+        texto: tx('ch.esto_fue_lo_que_el_motor'),
         visual: filas.length > 0 ? { tipo: 'tabla', filas } : undefined,
       });
     } catch {
-      agregar(etiquetaQ, { texto: 'No se pudo leer la imagen en este momento.' });
+      agregar(etiquetaQ, { texto: tx('op.no_se_pudo_leer_la_imagen') });
     } finally {
       setOcupado(false);
       limpiar();
@@ -159,7 +163,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       setDocumento(null);
       return true;
     } catch {
-      setErrorCarga('No se pudo abrir esa conversación — inténtalo de nuevo.');
+      setErrorCarga(tx('ch.no_se_pudo_abrir_esa_conversacion'));
       return false;
     }
   }
@@ -203,7 +207,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
     const ctl = new AbortController();
     control.current = ctl;
     const idTurno = reemplazar ?? nuevoId();
-    const pendiente: Turno = { id: idTurno, q, r: { texto: 'Pensando…', pendiente: true }, nuevo: true };
+    const pendiente: Turno = { id: idTurno, q, r: { texto: tx('op.pensando'), pendiente: true }, nuevo: true };
     // Lo previo es lo ANTERIOR al turno que se pregunta (al reintentar, solo lo que iba antes de él).
     const base = reemplazar ? historial.slice(0, historial.findIndex((x) => x.id === reemplazar)) : historial;
     setHistorial(reemplazar ? [...base, pendiente] : [...historial, pendiente]);
@@ -253,7 +257,7 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       const delAnalista = bloques !== null;
       const r: Respuesta = bloques
         ? respuestaDeBloques(bloques as Array<Record<string, unknown>>)
-        : respuestaLocal(q, kpis, acred, motivo);
+        : respuestaLocal(q, kpis, acred, motivo, tx);
       r.origen = delAnalista ? 'analista' : 'reserva';
       r.hora = hora();
       r.ms = Math.round(performance.now() - t0);
@@ -274,10 +278,10 @@ export function useAnalista({ kpis, acred, endpoint = '/api/dashboard/chat' }: {
       reemplazarTurno(r);
     } catch {
       if (detenido.current) {
-        reemplazarTurno({ texto: 'Generación detenida. Puedes volver a preguntar cuando quieras.', cancelada: true, hora: hora() });
+        reemplazarTurno({ texto: tx('ch.generacion_detenida_puedes_volver_a_preguntar'), cancelada: true, hora: hora() });
       } else {
         // Mismo caso que arriba: el `fetch` reventó (red, timeout de 75 s) — el analista tampoco corrió, y hay que decirlo.
-        const r = respuestaLocal(q, kpis, acred, 'no se pudo conectar con el analista');
+        const r = respuestaLocal(q, kpis, acred, tx('ch.no_se_pudo_conectar_con_el'), tx);
         reemplazarTurno({ ...r, origen: 'reserva', fallo: true, hora: hora(), ms: Math.round(performance.now() - t0) });
       }
     } finally {

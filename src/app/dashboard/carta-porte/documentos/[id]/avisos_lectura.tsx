@@ -21,7 +21,7 @@ export function AvisosLectura({ meta, tr = trEs }: { meta: MetaExtraccion | unde
   const otros = avisos.filter((a) => !perdidas.has(a));
   if (otros.length === 0 && notas.length === 0 && revision.length === 0 && perdidas.size === 0) return null;
   return (
-    <section className="text-[12px] px-3 py-2 rounded-lg space-y-1.5" role="status" aria-label={tr('cartaPorte.documentos.id.avisosLectura.avisosDeLaLectura')} style={{ background: 'var(--warnbg, var(--canvas))', color: 'var(--warn)' }}>
+    <section className="text-[12px] px-3 py-2 rounded-lg space-y-1.5 bg-[var(--warnbg)] text-[var(--warn)]" role="status" aria-label={tr('cartaPorte.documentos.id.avisosLectura.avisosDeLaLectura')}>
       <p className="font-semibold flex items-center gap-1.5">
         <TriangleAlert width={14} height={14} strokeWidth={1.75} className="shrink-0" />
         {tr('cartaPorte.documentos.id.avisosLectura.laLecturaDeEste')}

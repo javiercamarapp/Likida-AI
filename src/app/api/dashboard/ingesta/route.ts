@@ -37,10 +37,13 @@ import { gastoSondaHoyUsd, topeSondaDiaUsd, SONDAS_POR_MINUTO } from './tope';
 import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { tenantEfectivoChat } from '../chat/tenant';
 import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
+import { getT } from '@/lib/i18n/servidor';
+
+/** El traductor, pedido SOLO cuando hay un texto que decir. */
+const T = () => getT('mensajes');
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
-const ERROR_TAMANO = 'La imagen pesa demasiado (máx ~3 MB de foto). Vuelve a tomarla en calidad normal o recórtala al ticket.';
 
 
 /** E1-A: la latencia de esta ruta (p50/p95 en /admin/observabilidad). Muestreada y sin riesgo: ver `medirRuta`. */
@@ -54,7 +57,7 @@ async function manejarPOST(req: NextRequest) {
   // de modelo por llamada (visión).
   if (!vieneDeNuestroSitio(req)) {
     logger.warn('ingesta.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
-    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+    return NextResponse.json({ error: (await T()).t('dash.otro_sitio') }, { status: 403 });
   }
 
   const sesion = await getSessionTenant();
@@ -69,20 +72,20 @@ async function manejarPOST(req: NextRequest) {
   }
 
   const lectura = await leerTextoAcotado(req, MAX_CUERPO_BYTES);
-  if (!lectura.ok) return NextResponse.json({ error: lectura.motivo === 'demasiado_grande' ? ERROR_TAMANO : 'cuerpo inválido' },
+  if (!lectura.ok) return NextResponse.json({ error: (await T()).t(lectura.motivo === 'demasiado_grande' ? 'dash.ingesta.tamano' : 'dash.cuerpo_invalido') },
     { status: lectura.motivo === 'demasiado_grande' ? 413 : 400 });
   let imagen: unknown;
   try {
     ({ imagen } = JSON.parse(lectura.texto));
   } catch {
-    return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 });
+    return NextResponse.json({ error: (await T()).t('dash.cuerpo_invalido') }, { status: 400 });
   }
   if (typeof imagen !== 'string' || !imagen.startsWith('data:image/')) {
     return NextResponse.json({ error: 'se espera una imagen (data URL)' }, { status: 400 });
   }
   if (imagen.length > MAX_DATAURL) {
     return NextResponse.json({
-      error: ERROR_TAMANO,
+      error: (await T()).t('dash.ingesta.tamano'),
     }, { status: 413 });
   }
 
@@ -105,10 +108,10 @@ async function manejarPOST(req: NextRequest) {
     gastadoHoy = await gastoSondaHoyUsd(tenantId);
   } catch (e) {
     logger.error('ingesta.tope_dia.error', { tenantId, err: e instanceof Error ? e.message : String(e) });
-    return NextResponse.json({ error: 'no pude verificar el presupuesto del día; inténtalo en un momento' }, { status: 503 });
+    return NextResponse.json({ error: (await T()).t('dash.ingesta.sin_presupuesto') }, { status: 503 });
   }
   if (gastadoHoy >= topeSondaDiaUsd()) {
-    return NextResponse.json({ error: 'la lectura de prueba llegó a su tope diario (existe para cuidar tu costo); mañana se renueva', agotado: true }, { status: 429 });
+    return NextResponse.json({ error: (await T()).t('dash.ingesta.tope'), agotado: true }, { status: 429 });
   }
 
   try {

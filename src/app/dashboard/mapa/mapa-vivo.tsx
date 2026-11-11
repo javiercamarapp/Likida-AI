@@ -3,7 +3,7 @@
 import { nivelDePosicion, ROTULO_FRESCURA, type NivelFrescura } from '@/lib/likida/gps_salud';
 import { useState } from 'react';
 import { numero } from '@/lib/formato';
-import { StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
+import { Boton, StatusChip, Tarjeta } from '@/app/ui-v2/componentes';
 import { VIEWBOX, TRAZO_MEXICO, PUNTOS_MEXICO } from './mexico-geo';
 import './mapa.css';
 
@@ -195,10 +195,10 @@ export function MapaVivo({ viajes, pines = [] }: {
           ) : viajes.map((v) => {
             const esActivo = v.id === activoId;
             return (
-              <button key={v.id} type="button"
+              <Boton key={v.id} variante="ghost"
                 onMouseEnter={() => setHover(v.id)} onMouseLeave={() => setHover(null)}
                 onClick={() => setFijo((f) => (f === v.id ? null : v.id))}
-                className="rv-mp__card" data-activo={esActivo || undefined} aria-pressed={esActivo}>
+                className="rv-mp__card !flex !h-auto !w-full !flex-col !items-stretch !justify-start !whitespace-normal !text-left" data-activo={esActivo || undefined} aria-pressed={esActivo}>
                 <div className="rv-mp__card-cab">
                   <strong>{v.folio}</strong>
                   {v.escalado ? <StatusChip tono="bad">Escalado</StatusChip> : <StatusChip tono="ok">En ruta</StatusChip>}
@@ -212,7 +212,7 @@ export function MapaVivo({ viajes, pines = [] }: {
                   {' · '}≈ {numero(v.kmRecta)} km en línea recta
                   {v.fotos > 0 && <> · {numero(v.fotos)} {v.fotos === 1 ? 'foto' : 'fotos'} en proceso</>}
                 </div>
-              </button>
+              </Boton>
             );
           })}
         </div>

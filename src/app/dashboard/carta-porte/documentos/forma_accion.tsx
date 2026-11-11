@@ -3,26 +3,26 @@
 import type { ReactNode } from 'react';
 import { useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { TriangleAlert, CheckCircle2 } from 'lucide-react';
-import { clasesBoton } from '@/app/ui-v2/componentes';
-import { BotonConfirmar } from '@/app/admin/ui/confirmar';
+import { Aviso as AvisoSistema, Boton, BotonConfirmar, clasesBoton } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { dinero } from '@/lib/i18n/es/dinero';
+import './documentos.css';
 
 export type ResultadoAccion = { ok: true; mensaje: string; detalles?: string[] } | { ok: false; error: string } | null;
 export type AccionDoc = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
 
+/** El resultado de una acción, con el aviso ÚNICO del sistema (icono + texto; el error es `role="alert"`). */
 export function Aviso({ estado }: { estado: ResultadoAccion }) {
   if (!estado) return null;
   return estado.ok ? (
-    <div role="status" className="text-[12px] px-3.5 py-2.5 rounded-lg space-y-1" style={{ background: 'var(--okbg)', color: 'var(--ok)' }}>
-      <p className="flex items-start gap-2"><CheckCircle2 width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{estado.mensaje}</p>
+    <AvisoSistema tono="ok">
+      {estado.mensaje}
       {estado.detalles && estado.detalles.length > 0 && (
-        <ul className="pl-6 list-disc space-y-0.5">{estado.detalles.map((d) => <li key={d}>{d}</li>)}</ul>
+        <ul className="rv-doc__detalles">{estado.detalles.map((d) => <li key={d}>{d}</li>)}</ul>
       )}
-    </div>
+    </AvisoSistema>
   ) : (
-    <div role="alert" className="flex items-start gap-2 text-[12px] px-3.5 py-2.5 rounded-lg" style={{ background: 'var(--badbg)', color: 'var(--bad)' }}>
-      <TriangleAlert width={15} height={15} strokeWidth={1.75} className="mt-0.5 shrink-0" />{estado.error}
-    </div>
+    <AvisoSistema tono="error">{estado.error}</AvisoSistema>
   );
 }
 
@@ -37,37 +37,30 @@ export function FormaAccion({ accion, children, className = 'space-y-3', enctype
   );
 }
 
-const COLOR: Record<string, { bg: string; fg: string }> = {
-  primario: { bg: 'var(--marca)', fg: 'var(--marca-fg)' },
-  secundario: { bg: 'var(--surface)', fg: 'var(--ink)' },
-  peligro: { bg: 'var(--badbg)', fg: 'var(--bad)' },
-};
-
 /** Un botón de envío; `intencion` viaja como `name="intencion"` para que UNA acción atienda varios botones. */
-export function BotonEnvio({ etiqueta, pendiente = 'Procesando…', intencion, variante = 'primario', icono, confirmar }: {
+export function BotonEnvio({ etiqueta, pendiente, intencion, variante = 'primario', icono, confirmar }: {
   etiqueta: string; pendiente?: string; intencion?: string; variante?: 'primario' | 'secundario' | 'peligro'; icono?: ReactNode;
   /** A37-S16-04: para lo irreversible. El botón abre un diálogo con el alcance; el envío (con `intencion`) es el botón del diálogo. */
   confirmar?: { titulo: string; descripcion: ReactNode; etiquetaConfirmar: string };
 }) {
+  const { t: tr } = useT('dinero', dinero);
   const { pending } = useFormStatus();
-  const c = COLOR[variante];
+  const textoPendiente = pendiente ?? tr('cartaPorte.documentos.forma.procesando');
+  const sistema = variante === 'primario' ? 'primary' : variante === 'peligro' ? 'danger' : 'secondary';
   if (confirmar) {
     return (
       <BotonConfirmar
-        etiqueta={pending ? pendiente : etiqueta} deshabilitado={pending} icono={icono}
+        etiqueta={pending ? textoPendiente : etiqueta} deshabilitado={pending} icono={icono}
         titulo={confirmar.titulo} descripcion={confirmar.descripcion} etiquetaConfirmar={confirmar.etiquetaConfirmar}
         nombreConfirmar={intencion ? 'intencion' : undefined} valorConfirmar={intencion}
-        className={clasesBoton(variante === 'primario' ? 'primary' : 'secondary')}
-        style={{ background: c.bg, color: c.fg }}
+        className={clasesBoton(sistema)}
       />
     );
   }
   return (
-    <button type="submit" name={intencion ? 'intencion' : undefined} value={intencion} disabled={pending}
-      className={clasesBoton(variante === 'primario' ? 'primary' : 'secondary')}
-      style={{ background: c.bg, color: c.fg }}>
-      {icono}{pending ? pendiente : etiqueta}
-    </button>
+    <Boton type="submit" name={intencion ? 'intencion' : undefined} value={intencion} variante={sistema} loading={pending} icono={icono}>
+      {pending ? textoPendiente : etiqueta}
+    </Boton>
   );
 }
 

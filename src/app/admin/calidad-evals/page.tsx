@@ -7,6 +7,10 @@ import { ahoraMs } from '@/lib/saludo';
 import { numero, porcentaje, fechaHoraMx } from '@/lib/formato';
 import { Aviso, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
+import type { Idioma } from '@/lib/i18n/idioma';
 export const dynamic = 'force-dynamic';
 
 /**
@@ -37,59 +41,51 @@ const DIAS_VENTANA = 7;
 type AgenteCorridas = NonNullable<Awaited<ReturnType<typeof getCalidadCorridas>>>['porAgente'][number];
 
 /** El veredicto del examen como chip de la casa. */
-function estadoDeVeredicto(v: string | null): { tono: TonoEstado; texto: string } {
-  if (v === 'paso') return { tono: 'ok', texto: 'pasó' };
-  if (v === 'fallo') return { tono: 'bad', texto: 'falló' };
-  if (v === 'revisar') return { tono: 'warn', texto: 'en revisión (juez humano)' };
-  return { tono: 'neutral', texto: 'sin veredicto' };
+function estadoDeVeredicto(v: string | null, tx: TSistema = T_SISTEMA_ES): { tono: TonoEstado; texto: string } {
+  if (v === 'paso') return { tono: 'ok', texto: tx('calidad_evals.paso') };
+  if (v === 'fallo') return { tono: 'bad', texto: tx('qa_medicion_corrida.fallo_2') };
+  if (v === 'revisar') return { tono: 'warn', texto: tx('calidad_evals.en_revision_juez_humano') };
+  return { tono: 'neutral', texto: tx('calidad_evals.sin_veredicto') };
 }
 
 type EstadoEvals = NonNullable<Awaited<ReturnType<typeof getEstadoEvals>>>;
 
 /** Una tarjeta de examen (analista o contador): drift de prompt, última corrida, casos activos y cómo correrlo. Las dos comparten
  *  forma; solo cambian el aviso de drift, las notas del runner y el script. */
-function TarjetaExamen({ titulo, estado, avisoDrift, script, conNotas }: {
+function TarjetaExamen({ titulo, estado, avisoDrift, conNotas, tx = T_SISTEMA_ES, idioma }: {
   titulo: string;
   estado: EstadoEvals | null;
   avisoDrift: string;
-  script: string;
-  conNotas?: boolean;
+  conNotas?: boolean; tx?: TSistema; idioma?: Idioma;
 }) {
   return (
     <Tarjeta titulo={titulo}>
       {estado === null ? (
-        <p className="m-0 text-sm text-[var(--bad)]">
-          No se pudo leer el estado del examen — esto NO significa que el examen esté bien ni mal.
-        </p>
+        <p className="m-0 text-sm text-[var(--bad)]">{tx('calidad_evals.no_se_pudo_leer_el_estado')}</p>
       ) : (
         <>
           {estado.driftDePrompt && (
             <Aviso tono="warn">
-              {estado.ultima === null ? 'El examen NUNCA se ha corrido: el prompt vivo no está examinado.' : avisoDrift}
+              {estado.ultima === null ? tx('calidad_evals.el_examen_nunca_se_ha_corrido') : avisoDrift}
             </Aviso>
           )}
           <div className="mt-2.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
             {estado.ultima === null ? (
-              <span className="text-muted">Sin corridas registradas.</span>
+              <span className="text-muted">{tx('calidad_evals.sin_corridas_registradas')}</span>
             ) : (
               <>
-                <span className="flex items-center gap-1.5">
-                  Última corrida:{' '}
-                  <StatusChip tono={estadoDeVeredicto(estado.ultima.veredicto).tono}>
-                    {estadoDeVeredicto(estado.ultima.veredicto).texto}
+                <span className="flex items-center gap-1.5">{tx('calidad_evals.ultima_corrida')}{' '}<StatusChip tono={estadoDeVeredicto(estado.ultima.veredicto, tx).tono}>
+                    {estadoDeVeredicto(estado.ultima.veredicto, tx).texto}
                   </StatusChip>
                 </span>
-                <span className="text-muted">{fechaHoraMx(estado.ultima.iniciadaEn)}</span>
-                {estado.ultima.casos !== null && <span className="text-muted">{numero(estado.ultima.casos)} caso(s)</span>}
+                <span className="text-muted">{fechaHoraMx(estado.ultima.iniciadaEn, idioma)}</span>
+                {estado.ultima.casos !== null && <span className="text-muted">{tx('calidad_evals.n_casos', { n: numero(estado.ultima.casos, idioma) })}</span>}
               </>
-            )}
-            <span className="text-muted">{numero(estado.casosActivos)} caso(s) activos en el banco</span>
-          </div>
+            )}{rico(tx('calidad_evals.e0_caso_s_activos_en_el', { numero: numero(estado.casosActivos, idioma) }), { e0: (c) => <span className="text-muted">{c}</span> })}</div>
           {/* La calificación desglosada, tal cual la dejó el runner — buena o mala, aquí no se maquilla. */}
           {conNotas && estado.ultima?.notas && <p className="m-0 mt-2 text-xs text-muted">{estado.ultima.notas}</p>}
           <p className="m-0 mt-2 text-xs text-muted">
-            El detalle y el juez humano viven en <Link href="/admin/evals" className="underline">Evals</Link>.
-            El examen se corre a mano (gasta llamadas reales): <code>{script}</code>.
+            {rico(tx('calidad_evals.el_detalle_y_el_juez_humano'), { e0: (c) => <Link href="/admin/evals" className="underline">{c}</Link> })}
           </p>
         </>
       )}
@@ -97,14 +93,16 @@ function TarjetaExamen({ titulo, estado, avisoDrift, script, conNotas }: {
   );
 }
 
-const COLUMNAS_TROPIEZOS: ColumnaBase<AgenteCorridas>[] = [
-  { id: 'agente', titulo: 'Agente con tropiezos', principal: true, celda: (a) => <span className="cifra-mono">{a.agente}</span> },
-  { id: 'ok', titulo: 'Ok', alinear: 'der', celda: (a) => <span className="tabular">{numero(a.ok)}</span> },
-  { id: 'parcial', titulo: 'Parciales', alinear: 'der', celda: (a) => <span className={`tabular ${a.parcial > 0 ? 'text-[var(--warn)]' : ''}`}>{numero(a.parcial)}</span> },
-  { id: 'fallo', titulo: 'Fallos', alinear: 'der', celda: (a) => <span className={`tabular ${a.fallo > 0 ? 'text-[var(--bad)]' : ''}`}>{numero(a.fallo)}</span> },
-];
+const columnasTropiezos = (tx: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<AgenteCorridas>[] => ([
+  { id: 'agente', titulo: tx('calidad_evals.agente_con_tropiezos'), principal: true, celda: (a) => <span className="cifra-mono">{a.agente}</span> },
+  { id: 'ok', titulo: 'Ok', alinear: 'der', celda: (a) => <span className="tabular">{numero(a.ok, idioma)}</span> },
+  { id: 'parcial', titulo: tx('calidad_evals.parciales'), alinear: 'der', celda: (a) => <span className={`tabular ${a.parcial > 0 ? 'text-[var(--warn)]' : ''}`}>{numero(a.parcial, idioma)}</span> },
+  { id: 'fallo', titulo: tx('observabilidad.fallos'), alinear: 'der', celda: (a) => <span className={`tabular ${a.fallo > 0 ? 'text-[var(--bad)]' : ''}`}>{numero(a.fallo, idioma)}</span> },
+]);
 
 export default async function CalidadEvalsPage() {
+  const { t: tx, idioma } = await getT('admin_sistema');
+  const { t } = await getT('admin_agentes');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const desdeIso = new Date(ahoraMs() - DIAS_VENTANA * 24 * 3600 * 1000).toISOString();
@@ -119,119 +117,102 @@ export default async function CalidadEvalsPage() {
   ]);
 
   return (
-    <MarcoPagina titulo="Calidad & Evals">
-      <Tarjeta titulo="La calidad que ya se mide, junta">
+    <MarcoPagina titulo={t('calidad_evals.calidad_evals')}>
+      <Tarjeta titulo={t('calidad_evals.la_calidad_que_ya')}>
         <p className="m-0 text-sm leading-relaxed text-muted">
-          Cuatro fuentes reales: el examen del analista (EVALOPS), el examen fiscal del contador
-          (las 32 preguntas doradas de 22-evaluacion.md), el veredicto de cada corrida de agente,
-          y la precisión del OCR contra verdad de terreno etiquetada a mano. Nada aquí se mide nuevo —
-          cada tarjeta enlaza a su detalle. Lo que sigue sin fuente está abajo, con su razón.
+          
+          {t('calidad_evals.cuatro_fuentes_reales_el')}
         </p>
       </Tarjeta>
 
       {/* ── 1 · El examen del analista (EVALOPS 0134) ─────────────────── */}
-      <TarjetaExamen
-        titulo="El examen del analista"
+      <TarjetaExamen tx={tx} idioma={idioma}
+        titulo={t('calidad_evals.el_examen_del_analista')}
         estado={evals}
-        avisoDrift="El prompt vivo NO es el examinado — la regla de re-examen (22-evaluacion.md) exige volver a correrlo antes de desplegar cambios del agente."
-        script="npx tsx scripts/evals/correr-analista.ts"
+        avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el')}
       />
 
       {/* ── 1b · El examen fiscal del contador (E.26, 0254) ───────────── */}
-      <TarjetaExamen
-        titulo="El examen del contador — 32 preguntas doradas"
+      <TarjetaExamen tx={tx} idioma={idioma}
+        titulo={t('calidad_evals.el_examen_del_contador')}
         estado={evalsContador}
-        avisoDrift="El prompt vivo NO es el examinado (el hash cubre reglas + corpus de normas/) — re-examina antes de desplegar cambios del agente o de las fichas."
-        script="npx tsx scripts/evals/correr-contador.ts"
+        avisoDrift={tx('calidad_evals.el_prompt_vivo_no_es_el_2')}
         conNotas
       />
 
       {/* ── 2 · Los veredictos de las corridas de agentes (0102) ──────── */}
-      <Tarjeta titulo={`Corridas de agentes — últimos ${DIAS_VENTANA} días`}>
+      <Tarjeta titulo={t('calidad_evals.corridas_de_agentes_ultimos', { DIAS_VENTANA })}>
         {corridas === null ? (
           <p className="m-0 text-sm text-[var(--bad)]">
-            No se pudieron leer las corridas — esto NO significa que no haya fallos.
+            
+            {t('calidad_evals.no_se_pudieron_leer')}
           </p>
         ) : corridas.total === 0 ? (
-          <p className="m-0 text-sm text-muted">
-            Cero corridas en la ventana. Eso no dice que los agentes estén sanos: dice que no corrieron —
-            si deberían haber corrido, el lugar para investigarlo es <Link href="/admin/crons" className="underline">Crons</Link>.
-          </p>
+          <p className="m-0 text-sm text-muted">{rico(tx('calidad_evals.cero_corridas_en_la_ventana_eso'), { e0: (c) => <Link href="/admin/crons" className="underline">{c}</Link> })}</p>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-              <span className="tabular">{numero(corridas.total)} corridas</span>
-              <StatusChip tono="ok">{numero(corridas.ok)} ok</StatusChip>
-              {corridas.parcial > 0 && <StatusChip tono="warn">{numero(corridas.parcial)} parciales</StatusChip>}
+              <span className="tabular">{tx('calidad_evals.n_corridas', { n: numero(corridas.total, idioma) })}</span>
+              <StatusChip tono="ok">{tx('calidad_evals.n_ok', { n: numero(corridas.ok, idioma) })}</StatusChip>
+              {corridas.parcial > 0 && <StatusChip tono="warn">{tx('calidad_evals.n_parciales', { n: numero(corridas.parcial, idioma) })}</StatusChip>}
               {corridas.fallo > 0
-                ? <StatusChip tono="bad">{numero(corridas.fallo)} fallos</StatusChip>
-                : <span className="text-muted">0 fallos</span>}
+                ? <StatusChip tono="bad">{tx('calidad_evals.n_fallos', { n: numero(corridas.fallo, idioma) })}</StatusChip>
+                : <span className="text-muted">{tx('calidad_evals.0_fallos')}</span>}
             </div>
             {corridas.porAgente.some((a) => a.fallo > 0 || a.parcial > 0) && (
               <div className="mt-2">
                 <TablaBase
-                  etiqueta="Agentes con tropiezos en la evaluación"
-                  columnas={COLUMNAS_TROPIEZOS}
+                  etiqueta={t('calidad_evals.agentes_con_tropiezos_en')}
+                  columnas={columnasTropiezos(tx, idioma)}
                   filas={corridas.porAgente.filter((a) => a.fallo > 0 || a.parcial > 0)}
                   idFila={(a) => a.agente}
                   altoMaximo={false}
                 />
               </div>
             )}
-            <p className="m-0 mt-2 text-xs text-muted">
-              El detalle corrida por corrida vive en <Link href="/admin/corridas" className="underline">Corridas</Link>;
-              la ficha de cada agente, en <Link href="/admin/agentes" className="underline">Agentes</Link>.
-            </p>
+            <p className="m-0 mt-2 text-xs text-muted">{rico(tx('calidad_evals.el_detalle_corrida_por_corrida_vive'), { e0: (c) => <Link href="/admin/corridas" className="underline">{c}</Link>, e1: (c) => <Link href="/admin/agentes" className="underline">{c}</Link> })}</p>
           </>
         )}
       </Tarjeta>
 
       {/* ── 3 · La precisión del OCR contra verdad de terreno (0239/0246) ─ */}
-      <Tarjeta titulo="Precisión del OCR — banco de verdad de terreno">
+      <Tarjeta titulo={t('calidad_evals.precision_del_ocr_banco')}>
         {ocr === null ? (
           <p className="m-0 text-sm text-[var(--bad)]">
-            No se pudo leer la medición del OCR — esto NO significa que no haya medición.
+            
+            {t('calidad_evals.no_se_pudo_leer')}
           </p>
         ) : ocr.fotosMedidas === 0 ? (
-          <p className="m-0 text-sm text-muted">
-            El banco existe y ninguna foto tiene medición todavía — la medición se corre
-            desde <Link href="/admin/qa" className="underline">QA</Link> y gasta llamadas reales.
-          </p>
+          <p className="m-0 text-sm text-muted">{rico(tx('calidad_evals.el_banco_existe_y_ninguna_foto'), { e0: (c) => <Link href="/admin/qa" className="underline">{c}</Link> })}</p>
         ) : (
           <>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
-              <span>
-                Precisión de campos:{' '}
-                <span className="tabular font-semibold">
-                  {ocr.precisionPct === null ? 'sin medir' : porcentaje(ocr.precisionPct)}
+              <span>{tx('calidad_evals.precision_de_campos')}{' '}<span className="tabular font-semibold">
+                  {ocr.precisionPct === null ? tx('qa_medicion_corrida.sin_medir') : porcentaje(ocr.precisionPct, 1, idioma)}
                 </span>
                 {ocr.precisionPct !== null && (
-                  <span className="text-muted"> ({numero(ocr.camposOk)} ok / {numero(ocr.camposOk + ocr.camposMal)} medidos)</span>
+                  <span className="text-muted">{tx('calidad_evals.ok_medidos', { numero: numero(ocr.camposOk, idioma), numero2: numero(ocr.camposOk + ocr.camposMal, idioma) })}</span>
                 )}
-              </span>
-              <span className="tabular text-muted">{numero(ocr.fotosMedidas)} foto(s) medidas</span>
-              {ocr.alucinaciones > 0
-                ? <StatusChip tono="bad">{numero(ocr.alucinaciones)} alucinación(es)</StatusChip>
-                : <StatusChip tono="ok">0 alucinaciones</StatusChip>}
+              </span>{rico(tx('calidad_evals.e0_foto_s_medidas_e0', { numero: numero(ocr.fotosMedidas, idioma) }), { e0: (c) => <span className="tabular text-muted">{c}</span> })}{ocr.alucinaciones > 0
+                ? <StatusChip tono="bad">{numero(ocr.alucinaciones, idioma)}{' '}{tx('calidad_evals.alucinacion_es')}</StatusChip>
+                : <StatusChip tono="ok">{tx('calidad_evals.0_alucinaciones')}</StatusChip>}
               {ocr.camposNoMedidos > 0 && (
-                <span className="text-muted">{numero(ocr.camposNoMedidos)} campo(s) sin medir</span>
+                <span className="text-muted">{numero(ocr.camposNoMedidos, idioma)}{' '}{tx('calidad_evals.campo_s_sin_medir')}</span>
               )}
             </div>
-            <p className="m-0 mt-2 text-xs text-muted">
-              Misma aritmética que el panel de <Link href="/admin/qa" className="underline">QA</Link> (ok/(ok+mal), lo
-              no medido fuera del denominador). Última medición: {ocr.ultimaMedicionEn ? fechaHoraMx(ocr.ultimaMedicionEn) : '—'}.
+            <p className="m-0 mt-2 text-xs text-muted">{rico(tx('calidad_evals.misma_aritmetica_que_el_panel_de'), { e0: (c) => <Link href="/admin/qa" className="underline">{c}</Link> })}{' '}{ocr.ultimaMedicionEn ? fechaHoraMx(ocr.ultimaMedicionEn, idioma) : '—'}.
             </p>
           </>
         )}
       </Tarjeta>
 
       {/* ── Lo que SIGUE sin fuente — con su razón, no con gráfica vacía ─ */}
-      <Tarjeta titulo="Lo que este tablero todavía no puede mostrar">
+      <Tarjeta titulo={t('calidad_evals.lo_que_este_tablero')}>
         <ul className="m-0 list-none space-y-2 p-0 text-sm">
           {[
-            'Feedback 👍/👎 del contralor sobre respuestas del analista — necesita su tabla propia (migración) y el control en la pantalla del chat; no existe y no se finge.',
-            'CSAT — necesita encuestas a usuarios reales, que no existen.',
-            'Drift de calidad EN PRODUCCIÓN (muestreo de conversaciones reales con juez) — el diseño está en 22-evaluacion.md (J2/J4); hoy solo se examina el banco, no el tráfico.',
+            t('calidad_evals.feedback_del_contralor_sobre'),
+            t('calidad_evals.csat_necesita_encuestas_a'),
+            t('calidad_evals.drift_de_calidad_en'),
           ].map((item) => (
             <li key={item} className="flex items-start gap-2.5">
               <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[var(--muted)]" />
@@ -244,4 +225,7 @@ export default async function CalidadEvalsPage() {
   );
 }
 
-export const metadata: Metadata = { title: 'Calidad & Evals' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_agentes');
+  return { title: t('calidad_evals.calidad_evals') };
+}

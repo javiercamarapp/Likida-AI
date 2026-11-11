@@ -4,12 +4,11 @@ import CabeceraAdmin, { ProveedorRequiereAccion, etiquetaCampana } from './cabec
 import { PieAdmin } from './sidebar-nav';
 
 // Antes /admin no tenía cabecera: al plegar el sidebar a riel no había ningún control para volver a abrirlo.
-describe('CabeceraAdmin: la misma barra superior del dashboard (como Rovaq: solo plegar)', () => {
+describe('CabeceraAdmin: la misma barra superior del dashboard (como Rovaq: sin botón de plegar)', () => {
   const html = renderToStaticMarkup(<CabeceraAdmin />);
-  it('trae el botón de plegar/expandir el menú, accesible y con su estado', () => {
-    expect(html).toContain('rv-cab-esc__plegar');
-    expect(html).toMatch(/aria-label="(Plegar|Expandir) el menú"/);
-    expect(html).toContain('aria-expanded');
+  it('NO trae botón de plegar: vive solo en la marca del sidebar, como Rovaq (un único control)', () => {
+    expect(html).not.toContain('rv-cab-esc__plegar');
+    expect(html).not.toMatch(/aria-label="(Plegar|Expandir) el menú"/);
   });
   it('ya no trae la campana ni la fecha de hoy: la campana vive como «Avisos» en el pie', () => {
     expect(html).not.toContain('href="/admin/notificaciones"');
@@ -33,17 +32,22 @@ describe('«Avisos» del pie de /admin: el contador real', () => {
     expect(html).not.toContain('data-estado="sin-dato"');
     expect(html).toContain('aria-label="Avisos: nada pendiente"');
   });
-  it('con 3 pendientes pinta el 3', () => {
+  it('con 3 pendientes pinta el punto (sin cifra) y dice cuántos en la etiqueta', () => {
     const html = con(3);
-    expect(html).toMatch(/data-urgente="no"[^>]*>3</);
+    expect(html).toMatch(/class="rv-ps-punto" data-urgente="no"/);
+    expect(html).not.toContain('rv-contador');
     expect(html).toContain('aria-label="Avisos: 3 pendientes"');
   });
-  it('con 12 pendientes y algo urgente pinta el 12 en modo urgente', () => {
+  it('con 12 pendientes y algo urgente pinta el punto en modo urgente', () => {
     const html = con(12, true);
-    expect(html).toMatch(/data-urgente="si"[^>]*>12</);
+    expect(html).toMatch(/class="rv-ps-punto" data-urgente="si"/);
     expect(html).toContain('12 pendientes, hay algo urgente');
   });
-  it('más de 99 se topa', () => { expect(con(250)).toMatch(/>99\+</); });
+  it('con muchos pendientes sigue siendo un punto: no pinta cifra y la etiqueta dice el total real', () => {
+    const html = con(250);
+    expect(html).not.toMatch(/>99\+</);
+    expect(html).toContain('aria-label="Avisos: 250 pendientes"');
+  });
   it('con la lectura caída dice «sin dato» y nunca pinta 0', () => {
     const html = con(null);
     expect(html).toContain('aria-label="Avisos: sin dato"');

@@ -7,7 +7,10 @@ import { useRouter } from 'next/navigation';
 import { Upload, Check, X, Copy, Mail } from 'lucide-react';
 import './proveedores.css';
 import { validarArchivoElegido } from '@/lib/http/subidas_formulario';
-import { Boton, CampoArchivo, Disclosure, Icono } from '@/app/ui-v2/componentes';
+import { Boton, CampoArchivo, Disclosure, Icono, Tooltip } from '@/app/ui-v2/componentes';
+import { useT } from '@/lib/i18n/proveedor';
+import { agentes as agentesEs } from '@/lib/i18n/es/agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 export type AccionProveedores = (
   prev: { error?: string; aviso?: string; confirmar?: boolean } | null,
@@ -17,6 +20,7 @@ export type AccionProveedores = (
 /** Subida del XML. Tras guardar, la página se refresca para que la bandeja
  *  y los KPIs cuenten la factura nueva. */
 export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(subirFactura, null);
   const router = useRouter();
 
@@ -27,7 +31,7 @@ export function SubirFactura({ subirFactura }: { subirFactura: AccionProveedores
   return (
     <div>
       <form action={accion} className="rv-prov__linea">
-        <CampoArchivo etiqueta="XML de la factura de proveedor" name="archivo" accept=".xml,text/xml,application/xml" required />
+        <CampoArchivo etiqueta={tx('rest.xml_de_la_factura_de_proveedor')} name="archivo" accept=".xml,text/xml,application/xml" required />
         <BotonSubir />
       </form>
       <ResultadoSubida estado={estado} />
@@ -61,6 +65,7 @@ function BotonSubir({ rotulo = 'Subir a la bandeja', pendienteRotulo = 'Leyendo�
  * action manda a revisarlas contra el papel antes de aprobar.
  */
 export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(subirFoto, null);
   const router = useRouter();
 
@@ -71,11 +76,11 @@ export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }
   return (
     <div>
       <form action={accion} className="rv-prov__linea">
-        <CampoArchivo etiqueta="Foto de la factura de proveedor" name="archivo" accept="image/jpeg,image/png,image/webp" required
+        <CampoArchivo etiqueta={tx('rest.foto_de_la_factura_de_proveedor')} name="archivo" accept="image/jpeg,image/png,image/webp" required
           onChange={(e) => validarArchivoElegido(e.currentTarget)} />
-        <BotonSubir rotulo="Leer foto con IA" pendienteRotulo="Leyendo la foto…" />
+        <BotonSubir rotulo={tx('rest.leer_foto_con_ia')} pendienteRotulo={tx('rest.leyendo_la_foto')} />
       </form>
-      <p className="rv-prov__nota" data-tono="faint">Máximo 4 MB por foto.</p>
+      <p className="rv-prov__nota" data-tono="faint">{tx('rest.maximo_4_mb_por_foto')}</p>
       <ResultadoSubida estado={estado} />
     </div>
   );
@@ -84,6 +89,7 @@ export function SubirFotoFactura({ subirFoto }: { subirFoto: AccionProveedores }
 /** Aprobar / rechazar, con confirmación de dos pasos en el rechazo (aprobar
  *  es reversible en el ERP; rechazar la saca del export sin vuelta aquí). */
 export function BotonesDecision({ facturaId, decidir }: { facturaId: string; decidir: AccionProveedores }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(decidir, null);
   const [confirmando, setConfirmando] = useState(false);
 
@@ -92,9 +98,7 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
       {confirmando ? (
         <form action={accion} onSubmit={() => setConfirmando(false)} className="rv-prov__linea">
           <input type="hidden" name="facturaId" value={facturaId} />
-          <input type="hidden" name="decision" value="rechazada" />
-          <span className="rv-prov__nota">¿Rechazarla?</span>
-          <BotonMini texto="Sí" pendienteTexto="…" destructivo />
+          <input type="hidden" name="decision" value="rechazada" />{ricoT(tx('rest.e0_rechazarla_e0'), { e0: (c) => <span className="rv-prov__nota">{c}</span> })}<BotonMini texto={tx('rest.si')} pendienteTexto="…" destructivo />
           <Boton tamano="sm" onClick={() => setConfirmando(false)}>No</Boton>
         </form>
       ) : (
@@ -104,9 +108,9 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
             <input type="hidden" name="decision" value="aprobada" />
             {/* A37-S55-03: tras la advertencia del servidor, el siguiente clic ya es una confirmación. */}
             {estado?.confirmar && <input type="hidden" name="confirmar" value="1" />}
-            <BotonMini texto={estado?.confirmar ? 'Aprobar de todos modos' : 'Aprobar'} pendienteTexto="Guardando…" IconoOk />
+            <BotonMini texto={estado?.confirmar ? tx('rest.aprobar_de_todos_modos') : tx('rest.aprobar')} pendienteTexto={tx('cobranza.formagasto.guardando')} IconoOk />
           </form>
-          <Boton tamano="sm" onClick={() => setConfirmando(true)} title="Rechazar la factura" icono={<Icono icono={X} tam={14} />}>Rechazar</Boton>
+          <Tooltip texto={tx('rest.rechazar_la_factura')}><Boton tamano="sm" onClick={() => setConfirmando(true)} icono={<Icono icono={X} tam={14} />}>{tx('rest.rechazar')}</Boton></Tooltip>
         </div>
       )}
       {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}
@@ -117,6 +121,7 @@ export function BotonesDecision({ facturaId, decidir }: { facturaId: string; dec
 /** La dirección del buzón en mono con su botón de copiar — el mismo patrón
  *  `copiar()` de la cola del jefe: confirmación de 1.5 s, sin alertas. */
 export function DireccionBuzon({ direccion }: { direccion: string }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [copiado, setCopiado] = useState(false);
 
   function copiar() {
@@ -129,7 +134,7 @@ export function DireccionBuzon({ direccion }: { direccion: string }) {
   return (
     <div className="rv-prov__linea">
       <code className="cifra-mono rv-prov__direccion">{direccion}</code>
-      <Boton variante="ghost" tamano="sm" aria-label="Copiar la dirección del buzón" onClick={copiar} data-copiado={copiado || undefined}>
+      <Boton variante="ghost" tamano="sm" aria-label={tx('rest.copiar_la_direccion_del_buzon')} onClick={copiar} data-copiado={copiado || undefined}>
         <Icono icono={copiado ? Check : Copy} tam={14} />
       </Boton>
     </div>
@@ -139,11 +144,12 @@ export function DireccionBuzon({ direccion }: { direccion: string }) {
 /** Generar la dirección por primera vez. La action redirige al terminar, así
  *  que aquí solo se enseña el error si lo hubo. */
 export function GenerarBuzon({ generar }: { generar: AccionProveedores }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(generar, null);
   return (
     <div>
       <form action={accion}>
-        <BotonBuzon texto="Generar dirección" pendienteTexto="Generando…" />
+        <BotonBuzon texto={tx('rest.generar_direccion')} pendienteTexto={tx('rest.generando')} />
       </form>
       {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}
     </div>
@@ -157,17 +163,14 @@ export function GenerarBuzon({ generar }: { generar: AccionProveedores }) {
  * advertencia va ANTES del botón, no en un tooltip.
  */
 export function RotarBuzon({ rotar }: { rotar: AccionProveedores }) {
+  const { t: tx } = useT('agentes', agentesEs);
   const [estado, accion] = useActionState(rotar, null);
   return (
-    <Disclosure titulo="¿Necesitas rotar la dirección?" variante="linea">
+    <Disclosure titulo={tx('rest.necesitas_rotar_la_direccion')} variante="linea">
       <div className="rv-prov__pila">
-        <p className="rv-prov__nota" data-tono="warn">
-          Rotar genera una dirección nueva e <strong>invalida la actual en el acto</strong>: los
-          correos que lleguen al buzón viejo se ignoran sin avisarle a quien los mandó. Hazlo solo
-          si la dirección se filtró a donde no debía, y pásales la nueva a tus proveedores.
-        </p>
+        <p className="rv-prov__nota" data-tono="warn">{ricoT(tx('rest.rotar_genera_una_direccion_nueva_e'), { strong: (c) => <strong>{c}</strong> })}</p>
         <form action={accion}>
-          <BotonBuzon texto="Rotar e invalidar la anterior" pendienteTexto="Rotando…" destructivo />
+          <BotonBuzon texto={tx('rest.rotar_e_invalidar_la_anterior')} pendienteTexto={tx('rest.rotando')} destructivo />
         </form>
         {estado?.error && <p role="alert" className="rv-prov__nota" data-tono="bad">{estado.error}</p>}
       </div>

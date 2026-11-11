@@ -63,7 +63,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
 
   async function guardar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
-    const { t: tr } = await getT('dinero');
+    const { t: tr, idioma } = await getT('dinero');
     const s = await resolverTenantAtadoAccion('/dashboard/contador', searchParams, tenantId);
     if (!s) return { error: MENSAJE_FLOTA_CAMBIO };
     if (!puedeVerRuta(s.rol, '/dashboard/contador')) {
@@ -93,7 +93,7 @@ export async function Timbrado({ searchParams, tenantExiste, sufijo = '' }: {
     try {
       await guardarPerfilFiscal(s.tenantId, nuevo, { id: s.userId });
     } catch (e) {
-      return { error: mensajeParaPantalla(e, 'guardar el perfil de timbrado') };
+      return { error: mensajeParaPantalla(e, tr('contador.timbrado.operacionGuardar'), idioma) };
     }
     revalidatePath('/dashboard/contador');
     return { ok: tr('contador.timbrado.perfilDeTimbradoGuardado') };

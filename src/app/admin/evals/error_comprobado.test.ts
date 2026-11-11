@@ -32,7 +32,7 @@ function cuerpo(inicio: string, fin: string): string {
 }
 
 describe('admin/evals: marcarResultado comprueba las TRES escrituras', () => {
-  const accion = cuerpo('async function marcarResultado', '\nconst AGENTES');
+  const accion = cuerpo('async function marcarResultado', '\nconst agentesTr');
 
   it('comprueba el error del UPDATE que marca el veredicto', () => {
     expect(accion).toMatch(/const \{ data, error: errMarcar \} = await admin\.from\('eval_resultado'\)/);
@@ -60,7 +60,7 @@ describe('admin/evals: la pantalla dice "no se pudo leer" cuando de verdad no se
   });
 
   it('la lectura de eval_corrida comprueba r.error antes de pintar "Ninguna todavía"', () => {
-    const bloque = cuerpo("const r = await admin.from('eval_corrida')", 'secciones.push(...await Promise.all(AGENTES.map');
+    const bloque = cuerpo("const r = await admin.from('eval_corrida')", 'secciones.push(...await Promise.all(agentesTr(t).map');
     expect(bloque).toMatch(/if \(r\.error\) throw new Error\(r\.error\.message\)/);
     expect(PAGINA).toMatch(/corridasError/);
   });
@@ -73,7 +73,7 @@ describe('admin/evals: la pantalla dice "no se pudo leer" cuando de verdad no se
 
 // A37-S06-10
 describe('admin/evals: el juez queda registrado y la corrida se deriva de la base', () => {
-  const accion = cuerpo('async function marcarResultado', '\nconst AGENTES');
+  const accion = cuerpo('async function marcarResultado', '\nconst agentesTr');
   it('toma la corrida de eval_resultado, no del formulario', () => {
     expect(accion).not.toMatch(/fd\.get\('corridaId'\)/);
     expect(accion).toMatch(/from\('eval_resultado'\)\.select\('corrida_id'\)\.eq\('id', id\)/);

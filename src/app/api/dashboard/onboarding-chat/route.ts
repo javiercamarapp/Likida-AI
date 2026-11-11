@@ -12,6 +12,10 @@ import { vieneDeNuestroSitio } from '@/lib/auth/csrf';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { MAX_CHAT_BYTES } from '../chat/limites';
 import { respuestaSiPerfilNiegaApi } from '@/lib/auth/perfil_tenant';
+import { getT } from '@/lib/i18n/servidor';
+
+/** El traductor, pedido SOLO cuando hay un texto que decir. */
+const T = () => getT('mensajes');
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 120;
@@ -45,7 +49,7 @@ export async function POST(req: NextRequest) {
   // /api/admin/palette y /v1/*. Autenticada solo por cookie de sesión.
   if (!vieneDeNuestroSitio(req)) {
     logger.warn('onboarding_chat.origen_ajeno', { origen: req.headers.get('origin'), sitio: req.headers.get('sec-fetch-site') });
-    return NextResponse.json({ error: 'Petición de otro sitio.' }, { status: 403 });
+    return NextResponse.json({ error: (await T()).t('dash.otro_sitio') }, { status: 403 });
   }
 
   const sesion = await getSessionTenant();
@@ -71,12 +75,12 @@ export async function POST(req: NextRequest) {
   }
 
   const lectura = await leerTextoAcotado(req, MAX_CHAT_BYTES);
-  if (!lectura.ok) return NextResponse.json({ error: lectura.motivo === 'demasiado_grande' ? 'cuerpo demasiado grande' : 'cuerpo inválido' },
+  if (!lectura.ok) return NextResponse.json({ error: (await T()).t(lectura.motivo === 'demasiado_grande' ? 'dash.cuerpo_grande' : 'dash.cuerpo_invalido') },
     { status: lectura.motivo === 'demasiado_grande' ? 413 : 400 });
   let cuerpo: unknown;
-  try { cuerpo = JSON.parse(lectura.texto); } catch { return NextResponse.json({ error: 'cuerpo inválido' }, { status: 400 }); }
+  try { cuerpo = JSON.parse(lectura.texto); } catch { return NextResponse.json({ error: (await T()).t('dash.cuerpo_invalido') }, { status: 400 }); }
   const mensajes = validarMensajes((cuerpo as { mensajes?: unknown })?.mensajes);
-  if (!mensajes) return NextResponse.json({ error: 'mensajes inválidos' }, { status: 400 });
+  if (!mensajes) return NextResponse.json({ error: (await T()).t('dash.mensajes_invalidos') }, { status: 400 });
 
   // Mismo recorte que /api/dashboard/chat: el cliente no es frontera.
   const docCrudo = (cuerpo as { documento?: { nombre?: unknown; extracto?: unknown } | null })?.documento;
@@ -109,8 +113,8 @@ export async function POST(req: NextRequest) {
           manda({
             t: 'fin',
             texto: vigente.siguiente
-              ? `Tu respuesta anterior ya se guardó, así que esta pregunta es otra. No apliqué lo que acabas de escribir; revisa tu perfil si dudas.\n\n${textoPregunta(vigente.siguiente)}`
-              : 'Esa declaración ya se guardó y no queda nada pendiente. No apliqué lo que acabas de escribir.',
+              ? (await T()).t('dash.onb.ya_guardada', { pregunta: textoPregunta(vigente.siguiente) })
+              : (await T()).t('dash.onb.nada_pendiente'),
             chips: vigente.siguiente?.chips ?? [],
             perfilListo: vigente.perfilListo,
             elegiblePeaje: vigente.elegiblePeaje,
@@ -143,7 +147,7 @@ export async function POST(req: NextRequest) {
         // OPERABILIDAD-19C2-6: sin tenantId/userId, un fallo aquí es un
         // issue de log genérico sin forma de saber a qué flota afectó.
         logger.error('onboarding_chat.turno', { tenantId: efectivo.tenantId, userId: sesion.userId, err: e instanceof Error ? e.message : String(e) });
-        manda({ t: 'error', error: 'no pude guardar esa declaración' });
+        manda({ t: 'error', error: (await T()).t('dash.onb.no_guardo') });
       } finally {
         try { controlador.close(); } catch { /* ya cerrado */ }
       }

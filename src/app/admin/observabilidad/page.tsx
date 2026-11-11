@@ -10,19 +10,22 @@ import { fechaHoraMx, numero } from '@/lib/formato';
 import { BotonEnlace, EstadoError, MarcoPagina, StatusChip, Tarjeta, TablaBase, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
 import { SeccionInterruptores, type InterruptorParaUi } from './interruptores-ui';
 import { etiquetaInterruptor, notaDeLatenciaRuta } from './etiquetas';
-import { NOMBRE_RELOJ } from '../crons/estado-relojes';
+import { nombreReloj as nombreRelojTr } from '../crons/estado-relojes';
 import { CRONS, type CronId } from '@/lib/admin/salud';
 import type { ResultadoAccion } from '../ui/forma';
 import '../sistema.css';
+import { getT } from '@/lib/i18n/servidor';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import type { Idioma } from '@/lib/i18n/idioma';
 
 export const dynamic = 'force-dynamic';
 
 /** El estado de la corrida como chip; un valor fuera del dominio se pinta crudo en neutro — visible, no roto. */
-const CHIP_CORRIDA: Record<string, { tono: TonoEstado; etiqueta: string }> = {
+const chipCorrida = (t: TSistema = T_SISTEMA_ES): Record<string, { tono: TonoEstado; etiqueta: string }> => ({
   ok: { tono: 'ok', etiqueta: 'OK' },
-  parcial: { tono: 'warn', etiqueta: 'Parcial' },
-  fallo: { tono: 'bad', etiqueta: 'Fallo' },
-};
+  parcial: { tono: 'warn', etiqueta: t('observabilidad.parcial') },
+  fallo: { tono: 'bad', etiqueta: t('observabilidad.fallo') },
+});
 
 /** "3 s" / "2.4 min" — para la tabla. `null` (sin fin) se pinta '—'. */
 function duracion(ms: number | null): string {
@@ -39,37 +42,37 @@ function msLegible(ms: number | null): string {
 }
 
 /** Un reloj se llama como en Relojes; lo que no es un reloj conocido se muestra tal cual (visible, no roto). */
-const nombreReloj = (id: string): string => ((CRONS as readonly string[]).includes(id) ? NOMBRE_RELOJ[id as CronId] : id);
+const nombreReloj = (id: string, t: TSistema = T_SISTEMA_ES): string => ((CRONS as readonly string[]).includes(id) ? nombreRelojTr(t)[id as CronId] : id);
 
-function columnasLatencia(etiqueta: string, nombre: (n: string) => string, notas?: (n: string) => string | null): ColumnaBase<FilaLatencia>[] {
+function columnasLatencia(etiqueta: string, nombre: (n: string) => string, notas?: (n: string) => string | null, t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<FilaLatencia>[] {
   return [
-    { id: 'nombre', titulo: etiqueta, principal: true, celda: (f) => <>{nombre(f.nombre)}{notas?.(f.nombre) ? <span className="adm-sis-sub">mide {notas(f.nombre)}</span> : null}</> },
-    { id: 'muestras', titulo: 'Muestras', alinear: 'der', celda: (f) => numero(f.muestras) },
+    { id: 'nombre', titulo: etiqueta, principal: true, celda: (f) => <>{nombre(f.nombre)}{notas?.(f.nombre) ? <span className="adm-sis-sub">{t('observabilidad.mide', { nota: notas(f.nombre) ?? '' })}</span> : null}</> },
+    { id: 'muestras', titulo: t('observabilidad.muestras'), alinear: 'der', celda: (f) => numero(f.muestras, idioma) },
     { id: 'p50', titulo: 'p50', alinear: 'der', celda: (f) => msLegible(f.p50Ms) },
     { id: 'p95', titulo: 'p95', alinear: 'der', celda: (f) => msLegible(f.p95Ms) },
-    { id: 'max', titulo: 'Máx.', alinear: 'der', celda: (f) => msLegible(f.maxMs) },
-    { id: 'fallos', titulo: 'Fallos', alinear: 'der', celda: (f) => (f.fallos > 0 ? <StatusChip tono="bad">{numero(f.fallos)}</StatusChip> : numero(f.fallos)) },
+    { id: 'max', titulo: t('observabilidad.max'), alinear: 'der', celda: (f) => msLegible(f.maxMs) },
+    { id: 'fallos', titulo: t('observabilidad.fallos'), alinear: 'der', celda: (f) => (f.fallos > 0 ? <StatusChip tono="bad">{numero(f.fallos, idioma)}</StatusChip> : numero(f.fallos, idioma)) },
   ];
 }
 
-const COLUMNAS_IA: ColumnaBase<FilaLatenciaIa>[] = [
-  { id: 'fase', titulo: 'Fase', principal: true, celda: (f) => f.fase },
-  { id: 'muestras', titulo: 'Medidas', alinear: 'der', celda: (f) => numero(f.muestras) },
-  { id: 'sin', titulo: 'Sin duración', alinear: 'der', celda: (f) => numero(f.sinDuracion) },
+const columnasIa = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<FilaLatenciaIa>[] => ([
+  { id: 'fase', titulo: t('observabilidad.fase'), principal: true, celda: (f) => f.fase },
+  { id: 'muestras', titulo: t('observabilidad.medidas'), alinear: 'der', celda: (f) => numero(f.muestras, idioma) },
+  { id: 'sin', titulo: t('observabilidad.sin_duracion'), alinear: 'der', celda: (f) => numero(f.sinDuracion, idioma) },
   { id: 'p50', titulo: 'p50', alinear: 'der', celda: (f) => msLegible(f.p50Ms) },
   { id: 'p95', titulo: 'p95', alinear: 'der', celda: (f) => msLegible(f.p95Ms) },
-  { id: 'max', titulo: 'Máx.', alinear: 'der', celda: (f) => msLegible(f.maxMs) },
-];
+  { id: 'max', titulo: t('observabilidad.max'), alinear: 'der', celda: (f) => msLegible(f.maxMs) },
+]);
 
-const COLUMNAS_CORRIDAS: ColumnaBase<CorridaCruzada>[] = [
-  { id: 'agente', titulo: 'Agente', principal: true, celda: (c) => <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(`agente:${c.agente}`)}</Link> },
+const columnasCorridas = (t: TSistema = T_SISTEMA_ES, idioma?: Idioma): ColumnaBase<CorridaCruzada>[] => ([
+  { id: 'agente', titulo: t('observabilidad.agente'), principal: true, celda: (c) => <Link href={`/admin/corridas/${c.id}`}>{etiquetaInterruptor(`agente:${c.agente}`, t)}</Link> },
   // Corrida sin flota = del negocio (ventas, 0105): se dice, no se deja en blanco.
-  { id: 'flota', titulo: 'Flota', celda: (c) => c.tenantNombre ?? (c.tenantId === null ? 'Likida (negocio)' : '—') },
-  { id: 'estado', titulo: 'Estado', celda: (c) => { const e = CHIP_CORRIDA[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }; return <StatusChip tono={e.tono}>{e.etiqueta}</StatusChip>; } },
-  { id: 'tareas', titulo: 'Tareas', alinear: 'der', celda: (c) => (c.tareasHechas !== null && c.tareasTotal !== null ? `${c.tareasHechas} de ${c.tareasTotal}` : '—') },
-  { id: 'duracion', titulo: 'Duración', alinear: 'der', celda: (c) => duracion(c.duracionMs) },
-  { id: 'inicio', titulo: 'Inicio', celda: (c) => fechaHoraMx(c.inicio) },
-];
+  { id: 'flota', titulo: t('observabilidad.flota'), celda: (c) => c.tenantNombre ?? (c.tenantId === null ? t('observabilidad.likida_negocio') : '—') },
+  { id: 'estado', titulo: t('salud_sistema.estado'), celda: (c) => { const e = chipCorrida(t)[c.estado] ?? { tono: 'neutral' as TonoEstado, etiqueta: c.estado }; return <StatusChip tono={e.tono}>{e.etiqueta}</StatusChip>; } },
+  { id: 'tareas', titulo: t('observabilidad.tareas'), alinear: 'der', celda: (c) => (c.tareasHechas !== null && c.tareasTotal !== null ? t('observabilidad.tareas_de', { hechas: c.tareasHechas, total: c.tareasTotal }) : '—') },
+  { id: 'duracion', titulo: t('observabilidad.duracion'), alinear: 'der', celda: (c) => duracion(c.duracionMs) },
+  { id: 'inicio', titulo: t('observabilidad.inicio'), celda: (c) => fechaHoraMx(c.inicio, idioma) },
+]);
 
 /**
  * Observabilidad — la casa de OPERAR el sistema: el kill switch (0110), la traza de corridas y la latencia medida. `requireSuperadmin()`
@@ -81,10 +84,12 @@ const COLUMNAS_CORRIDAS: ColumnaBase<CorridaCruzada>[] = [
  * `page.test.tsx`.
  */
 export default async function ObservabilidadPage() {
+  const { t, idioma } = await getT('admin_sistema');
   // A39-S05-01/S06-01: puerta PROPIA en el render (el layout no se re-ejecuta en una petición RSC parcial).
   await requireSuperadmin();
   async function accionInterruptor(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
     'use server';
+    const { t } = await getT('admin_sistema');
     // RE-GATEO: el action es un endpoint público en la práctica — el layout
     // solo protegió el render.
     const { userId } = await requireSuperadmin();
@@ -94,15 +99,15 @@ export default async function ObservabilidadPage() {
     try {
       if (operacion === 'apagar') await apagar(id, motivo, userId);
       else if (operacion === 'encender') await encender(id, userId);
-      else return { error: 'Operación desconocida.' };
+      else return { error: t('observabilidad.operacion_desconocida') };
     } catch (e) {
-      return { error: mensajeParaPantalla(e, `${operacion} el interruptor ${id}`) };
+      return { error: mensajeParaPantalla(e, `${operacion} el interruptor ${id}`, idioma) };
     }
     revalidatePath('/admin/observabilidad');
     return {
       ok: operacion === 'apagar'
-        ? `${etiquetaInterruptor(id)} APAGADO. Los crons lo saltan desde su siguiente corrida (responden 200 con "saltado" — apagado a propósito no es fallo). Quedó firmado en la bitácora.`
-        : `${etiquetaInterruptor(id)} encendido. Vuelve a correr en la siguiente corrida programada.`,
+        ? t('observabilidad.apagado_los_crons_lo_saltan_desde', { etiquetaInterruptor: etiquetaInterruptor(id, t) })
+        : t('observabilidad.encendido_vuelve_a_correr_en_la', { etiquetaInterruptor: etiquetaInterruptor(id, t) }),
     };
   }
 
@@ -118,65 +123,59 @@ export default async function ObservabilidadPage() {
   const dias = latencias?.ventanaDias ?? 7;
 
   return (
-    <MarcoPagina titulo="Observabilidad" apoyo="Apagar un agente en segundos, ver sus corridas recientes y cuánto tarda el sistema.">
-      <Tarjeta titulo="Interruptores"
+    <MarcoPagina titulo={t('observabilidad.observabilidad')} apoyo={t('observabilidad.apagar_un_agente_en_segundos_ver')}>
+      <Tarjeta titulo={t('observabilidad.interruptores')}
         estado={interruptores === null ? 'error' : 'ok'} reintentar
-        mensaje="No se pudieron leer los interruptores. La consulta falló: no es que estén todos encendidos, es que no se pudo mirar. Los relojes, ante lo mismo, NO corren (fallan cerrado)."
+        mensaje={t('observabilidad.no_se_pudieron_leer_los_interruptores')}
       >
-        <p className="adm-sis-nota">
-          Sin fila = encendido: lo seguro es que el sistema corra. Apagar exige motivo. La palanca es global por agente, no por flota, y los relojes fallan cerrado: si no pueden leerla, no corren.
-          Desde ⌘K también se mueven.
-        </p>
+        <p className="adm-sis-nota">{t('observabilidad.sin_fila_encendido_lo_seguro_es')}</p>
         {interruptores !== null ? <SeccionInterruptores interruptores={interruptores} accion={accionInterruptor} /> : null}
       </Tarjeta>
 
-      <Tarjeta titulo="Corridas recientes" acciones={<BotonEnlace href="/admin/corridas" variante="ghost" tamano="sm">Ver todas</BotonEnlace>}
+      <Tarjeta titulo={t('observabilidad.corridas_recientes')} acciones={<BotonEnlace href="/admin/corridas" variante="ghost" tamano="sm">{t('observabilidad.ver_todas')}</BotonEnlace>}
         estado={corridas === null ? 'error' : corridas.length === 0 ? 'vacio' : 'ok'} reintentar
-        mensaje={corridas === null ? 'No se pudo leer el historial de corridas. La consulta falló: no es que los agentes no hayan corrido, es que no se pudo mirar.' : 'Los agentes no han corrido todavía'}
-        detalle="El historial existe y está vacío de verdad: la base está en cero porque no hay clientes operando, no porque falte código.">
-        {corridas !== null ? <TablaBase etiqueta="Corridas de agentes recientes" columnas={COLUMNAS_CORRIDAS} filas={corridas} idFila={(c) => c.id} densa tarjetaMovil /> : null}
+        mensaje={corridas === null ? t('observabilidad.no_se_pudo_leer_el_historial') : t('observabilidad.los_agentes_no_han_corrido_todavia')}
+        detalle={t('observabilidad.el_historial_existe_y_esta_vacio')}>
+        {corridas !== null ? <TablaBase etiqueta={t('observabilidad.corridas_de_agentes_recientes')} columnas={columnasCorridas(t, idioma)} filas={corridas} idFila={(c) => c.id} densa tarjetaMovil /> : null}
       </Tarjeta>
 
       {/* ── Latencias medidas (0700) ─────────────────────────────────────── */}
-      <Tarjeta titulo={`Latencia por ruta (p50 y p95, ${dias} días)`}
+      <Tarjeta titulo={t('observabilidad.latencia_por_ruta_p50_y_p95', { dias })}
         estado={latencias === null || latencias.rutas === null ? 'error' : latencias.rutas.length === 0 ? 'vacio' : 'ok'} reintentar
-        mensaje={latencias === null || latencias.rutas === null ? 'No se pudo leer la latencia de rutas. La consulta falló: no es que no haya tráfico, es que no se pudo mirar.' : 'Sin muestras todavía'}
-        detalle="La tabla existe y está vacía de verdad. Se llena sola con el tráfico de las rutas medidas (salud, webhook de WhatsApp, chat e ingesta del panel).">
-        <p className="adm-sis-nota">
-          Percentiles calculados en la base (rango más cercano: un valor que de verdad ocurrió). Solo se mide una de cada diez peticiones, sin sesgo hacia lo lento: el p95 de pocas muestras es una estimación, no una garantía.
-          Cada ruta mide hasta que devuelve su respuesta; en las que contestan antes de terminar su trabajo (WhatsApp, chat) la nota junto al nombre dice hasta dónde.
-        </p>
-        {latencias?.rutas ? <TablaBase etiqueta="Latencia por ruta" columnas={columnasLatencia('Ruta', (n) => n, notaDeLatenciaRuta)} filas={latencias.rutas} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
+        mensaje={latencias === null || latencias.rutas === null ? t('observabilidad.no_se_pudo_leer_la_latencia') : t('observabilidad.sin_muestras_todavia')}
+        detalle={t('observabilidad.la_tabla_existe_y_esta_vacia')}>
+        <p className="adm-sis-nota">{t('observabilidad.percentiles_calculados_en_la_base_rango')}</p>
+        {latencias?.rutas ? <TablaBase etiqueta={t('observabilidad.latencia_por_ruta')} columnas={columnasLatencia(t('observabilidad.ruta'), (n) => n, (n) => notaDeLatenciaRuta(n, t), t, idioma)} filas={latencias.rutas} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
       </Tarjeta>
 
-      <Tarjeta titulo={`Latencia por reloj (p50 y p95, ${dias} días)`}
+      <Tarjeta titulo={t('observabilidad.latencia_por_reloj_p50_y_p95', { dias })}
         estado={latencias === null || latencias.crons === null ? 'error' : latencias.crons.length === 0 ? 'vacio' : 'ok'} reintentar
-        mensaje={latencias === null || latencias.crons === null ? 'No se pudo leer la latencia de los relojes. La consulta falló: no es que no hayan corrido, es que no se pudo mirar.' : 'Sin muestras todavía'}
-        detalle="Ningún reloj ha corrido desde que existe la medición.">
-        <p className="adm-sis-nota">Una muestra por corrida, de la puerta del reloj a su latido. Los saltos por palanca no cuentan (responden en milisegundos sin trabajar y hundirían el p50).</p>
-        {latencias?.crons ? <TablaBase etiqueta="Latencia por reloj" columnas={columnasLatencia('Reloj', nombreReloj)} filas={latencias.crons} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
+        mensaje={latencias === null || latencias.crons === null ? t('observabilidad.no_se_pudo_leer_la_latencia_2') : t('observabilidad.sin_muestras_todavia')}
+        detalle={t('observabilidad.ningun_reloj_ha_corrido_desde_que')}>
+        <p className="adm-sis-nota">{t('observabilidad.una_muestra_por_corrida_de_la')}</p>
+        {latencias?.crons ? <TablaBase etiqueta={t('observabilidad.latencia_por_reloj')} columnas={columnasLatencia(t('observabilidad.reloj'), (n) => nombreReloj(n, t), undefined, t, idioma)} filas={latencias.crons} idFila={(f) => f.nombre} densa tarjetaMovil /> : null}
       </Tarjeta>
 
-      <Tarjeta titulo={`Latencia de la IA por fase (p50 y p95, ${dias} días)`}
+      <Tarjeta titulo={t('observabilidad.latencia_de_la_ia_por_fase', { dias })}
         estado={latencias === null || latencias.ia === null ? 'error' : latencias.ia.length === 0 ? 'vacio' : 'ok'} reintentar
-        mensaje={latencias === null || latencias.ia === null ? 'No se pudo leer la latencia de la IA. La consulta falló: no es que no haya llamadas, es que no se pudo mirar.' : 'Sin llamadas de IA en la ventana'}
-        detalle="La base está en cero porque no hay clientes operando, no porque falte código.">
-        <p className="adm-sis-nota">
-          Las llamadas anteriores a esta medición, y las fases cuyo código aún no lleva cronómetro, quedan SIN duración: se cuentan aparte, no como cero.
-          Siguen sin medirse la tasa de éxito de las herramientas, la de escalamiento a humano y el tiempo de resolución de punta a punta. La traza de una corrida sí existe: se abre desde la lista de arriba.
-        </p>
-        {latencias?.ia ? <TablaBase etiqueta="Duración por fase" columnas={COLUMNAS_IA} filas={latencias.ia} idFila={(f) => f.fase} densa tarjetaMovil /> : null}
+        mensaje={latencias === null || latencias.ia === null ? t('observabilidad.no_se_pudo_leer_la_latencia_3') : t('observabilidad.sin_llamadas_de_ia_en_la')}
+        detalle={t('observabilidad.la_base_esta_en_cero_porque')}>
+        <p className="adm-sis-nota">{t('observabilidad.las_llamadas_anteriores_a_esta_medicion')}</p>
+        {latencias?.ia ? <TablaBase etiqueta={t('observabilidad.duracion_por_fase')} columnas={columnasIa(t, idioma)} filas={latencias.ia} idFila={(f) => f.fase} densa tarjetaMovil /> : null}
       </Tarjeta>
 
-      {interruptores === null && corridas === null && latencias === null ? <EstadoError reintentar>Ninguna de las tres fuentes respondió: probablemente la base está caída.</EstadoError> : null}
+      {interruptores === null && corridas === null && latencias === null ? <EstadoError reintentar>{t('observabilidad.ninguna_de_las_tres_fuentes_respondio')}</EstadoError> : null}
 
       <div className="adm-sis-acciones">
-        <BotonEnlace href="/admin/bitacora" variante="secondary" tamano="sm">Ver la bitácora de acciones</BotonEnlace>
-        <BotonEnlace href="/admin/salud-sistema" variante="secondary" tamano="sm">Estado del sistema</BotonEnlace>
-        <BotonEnlace href="/admin/consumo" variante="secondary" tamano="sm">Gasto de IA por día</BotonEnlace>
+        <BotonEnlace href="/admin/bitacora" variante="secondary" tamano="sm">{t('observabilidad.ver_la_bitacora_de_acciones')}</BotonEnlace>
+        <BotonEnlace href="/admin/salud-sistema" variante="secondary" tamano="sm">{t('observabilidad.estado_del_sistema')}</BotonEnlace>
+        <BotonEnlace href="/admin/consumo" variante="secondary" tamano="sm">{t('observabilidad.gasto_de_ia_por_dia')}</BotonEnlace>
       </div>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Observabilidad' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('observabilidad.observabilidad') };
+}

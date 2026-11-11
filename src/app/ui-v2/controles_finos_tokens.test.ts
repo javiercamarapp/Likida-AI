@@ -56,18 +56,18 @@ describe('controles finos · bordes y foco', () => {
   });
 });
 
-describe('controles finos · color de estados activos y acción del cajón (azul de Rovaq, decisión del dueño 7-nov-2026)', () => {
-  it('claro: azul suave e6edfa con texto 1f4fb0, anillo del azul al 30 % y hover d8e3f8', () => {
-    expect(valor('--seg-activo-bg')).toBe('#e6edfa');
-    expect(valor('--seg-activo-borde')).toBe('color-mix(in srgb, #2f6bd8 30%, transparent)');
-    expect(valor('--seg-activo-fg')).toBe('#1f4fb0');
-    expect(valor('--seg-activo-hover')).toBe('#d8e3f8');
+describe('controles finos · color de estados activos y acción del cajón (alto contraste neutro, punto 10 del dueño 11-nov-2026; anula el azul de Rovaq del 7-nov)', () => {
+  it('claro: gris e4e4e6 con texto y anillo negros y hover d6d6d9', () => {
+    expect(valor('--seg-activo-bg')).toBe('#e4e4e6');
+    expect(valor('--seg-activo-borde')).toBe('#0e0e10');
+    expect(valor('--seg-activo-fg')).toBe('#0e0e10');
+    expect(valor('--seg-activo-hover')).toBe('#d6d6d9');
   });
-  it('oscuro: 1d2433 con texto a9c1f2, anillo al 45 % y hover 26314a', () => {
-    expect(valor('--seg-activo-bg', oscuro)).toBe('#1d2433');
-    expect(valor('--seg-activo-borde', oscuro)).toBe('color-mix(in srgb, #2f6bd8 45%, transparent)');
-    expect(valor('--seg-activo-fg', oscuro)).toBe('#a9c1f2');
-    expect(valor('--seg-activo-hover', oscuro)).toBe('#26314a');
+  it('oscuro: 34343a con texto y anillo f4f4f5 y hover 3e3e45', () => {
+    expect(valor('--seg-activo-bg', oscuro)).toBe('#34343a');
+    expect(valor('--seg-activo-borde', oscuro)).toBe('#f4f4f5');
+    expect(valor('--seg-activo-fg', oscuro)).toBe('#f4f4f5');
+    expect(valor('--seg-activo-hover', oscuro)).toBe('#3e3e45');
   });
   it('la acción del cajón reutiliza el mismo trío (un cambio de una línea mueve ambos)', () => {
     for (const k of ['bg', 'borde', 'fg', 'hover']) expect(valor(`--accion-cajon-${k}`)).toBe(`var(--seg-activo-${k})`);
@@ -75,7 +75,7 @@ describe('controles finos · color de estados activos y acción del cajón (azul
   it('el comentario junto a la variable documenta la decisión, el alcance y cómo volver al neutro', () => {
     const i = tokens.indexOf('\n  --seg-activo-bg:');
     const com = tokens.slice(tokens.lastIndexOf('/*', i), i);
-    for (const t of ['2F6BD8', 'e6edfa', '1f4fb0', 'd8e3f8', '7-nov-2026', 'var(--ui-soft)']) expect(com, t).toContain(t);
+    for (const t of ['11-nov-2026', 'punto 10', 'ANILLO NEGRO', 'Sin azul']) expect(com, t).toContain(t);
   });
   it('mini barras y tooltip: acento neutro por omisión y tooltip como tarjeta blanca de Rovaq (superficie, tinta y línea)', () => {
     expect(valor('--barra-acento')).toBe('var(--ink2)');
@@ -107,13 +107,13 @@ describe('controles finos · tipografía, iconos y marco', () => {
     expect(valor('--sb-w')).toBe('232px');
     expect(valor('--rail-w')).toBe('72px');
   });
-  it('navegación (Rovaq): activo = tinta al 7 %, peso 500 y UN token para la barra (rgb 232,36,28)', () => {
+  it('navegación: activo = tinta al 7 %, peso 500 y UN token para la barra (NEGRA en claro, blanca en oscuro; punto 10 del dueño)', () => {
     expect(valor('--nav-activo-bg')).toBe('color-mix(in srgb, var(--ink) 7%, transparent)');
     expect(valor('--nav-activo-fg')).toBe('var(--ink)');
     expect(valor('--nav-activo-peso')).toBe('500');
-    expect(valor('--nav-activo-barra')).toBe('rgb(232, 36, 28)');
-    // El color de la barra se declara UNA vez: ni el oscuro ni shell.css lo repiten.
-    expect(valor('--nav-activo-barra', oscuro)).toBeUndefined();
+    expect(valor('--nav-activo-barra')).toBe('#0e0e10');
+    expect(valor('--nav-activo-barra', oscuro)).toBe('#f4f4f5');
+    // shell.css solo lee el token: ni rojo de Rovaq ni un valor propio.
     expect(sinComentarios(leer('shell.css'))).not.toMatch(/rgb\(\s*232/);
   });
   it('grupo del menú: 11/500 mayúsculas con tracking 0.66 px', () => {

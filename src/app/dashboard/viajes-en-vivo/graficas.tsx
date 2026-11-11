@@ -1,6 +1,7 @@
 import { numero } from '@/lib/formato';
 import { resumenDeBloque, type BloqueVista } from './respuesta';
 import './en-vivo.css';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // Las gráficas que el asistente puede entregar (P6): una dona se pinta como una barra de proporciones con su leyenda y una serie como una línea
 // sencilla con sus extremos. Ambas llevan su resumen en palabras (`resumenDeBloque`) como etiqueta accesible y la leyenda dice los números: nada
@@ -37,7 +38,7 @@ export function Dona({ b }: { b: Extract<BloqueVista, { tipo: 'dona' }> }) {
   );
 }
 
-export function Serie({ b }: { b: Extract<BloqueVista, { tipo: 'serie' }> }) {
+export function Serie({ b, t = T_RESTO_ES }: { b: Extract<BloqueVista, { tipo: 'serie' }>; t?: TResto }) {
   const W = 240; const H = 56; const P = 4;
   const v = b.puntos.map((p) => p.valor);
   const min = Math.min(...v); const max = Math.max(...v);
@@ -46,7 +47,7 @@ export function Serie({ b }: { b: Extract<BloqueVista, { tipo: 'serie' }> }) {
   const y = (val: number) => H - P - ((val - min) / rango) * (H - 2 * P);
   const puntos = b.puntos.map((p, i) => `${x(i).toFixed(1)},${y(p.valor).toFixed(1)}`).join(' ');
   const primero = b.puntos[0]; const ultimo = b.puntos[b.puntos.length - 1];
-  const rotulo = resumenDeBloque(b) ?? 'Serie';
+  const rotulo = resumenDeBloque(b, t) ?? 'Serie';
   return (
     <figure className="rv-vv__fig" aria-label={rotulo}>
       <svg role="img" aria-label={rotulo} viewBox={`0 0 ${W} ${H}`} className="rv-vv__serie">
@@ -55,7 +56,7 @@ export function Serie({ b }: { b: Extract<BloqueVista, { tipo: 'serie' }> }) {
       </svg>
       <div className="rv-vv__ext">
         <span>{primero.dia}: <span className="rv-vv__num">{numero(primero.valor)}</span></span>
-        <span>mín <span className="rv-vv__num">{numero(min)}</span> · máx <span className="rv-vv__num">{numero(max)}</span></span>
+        <span>{t('op.min')}{' '}<span className="rv-vv__num">{numero(min)}</span>{' '}{t('op.max')}{' '}<span className="rv-vv__num">{numero(max)}</span></span>
         <span>{ultimo.dia}: <span className="rv-vv__num">{numero(ultimo.valor)}</span></span>
       </div>
     </figure>

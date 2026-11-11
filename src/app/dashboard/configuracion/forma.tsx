@@ -14,6 +14,9 @@ import type { EstadoCatalogo } from './inicial';
 // distinto en dos pantallas se lee como dos cálculos. (Este archivo hizo fallar
 // esa prueba en su primera versión: el guardia sirve.)
 import { mxn, numero, litros } from '@/lib/formato';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { rico } from '@/lib/i18n/rico';
 
 export type ResultadoGuardar = { ok: true } | { ok: false; error: string } | null;
 export type AccionGuardar = (previo: ResultadoGuardar, fd: FormData) => Promise<ResultadoGuardar>;
@@ -55,6 +58,7 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
    *  guardar reemplazaría un catálogo que sí existe. */
   catalogo: EstadoCatalogo;
 }) {
+  const { t, idioma } = useT('resto', restoEs);
   const [estado, accion] = useActionState(guardar, null);
   const [v, setV] = useState<AjustesCrudos>(inicial);
 
@@ -83,28 +87,28 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
 
   return (
     <div className="rv-cfg__split">
-      <Tarjeta titulo="Ajustes de tu operación" info="configuracion.ajustes">
+      <Tarjeta titulo={t('cfg.ajustes_de_tu_operacion')} info="configuracion.ajustes">
       <form action={accion} className="rv-cfg__forma">
         <input type="hidden" name="salida" value={v.salida} />
 
-        <Fieldset leyenda="Tabulador — con esto el motor calcula el diésel esperado">
+        <Fieldset leyenda={t('cfg.tabulador_con_esto_el_motor_calcula')}>
           <div className="rv-forma__rejilla">
-            <CampoTexto id="aj-rend" name="rendimientoPorDefecto" etiqueta="Rendimiento (km/L)" value={v.rendimientoPorDefecto}
+            <CampoTexto id="aj-rend" name="rendimientoPorDefecto" etiqueta={t('cfg.rendimiento_km_l')} value={v.rendimientoPorDefecto}
               onChange={set('rendimientoPorDefecto')}
-              ayuda="El de una unidad sin catálogo propio. Un tractocamión full anda entre 2 y 3.5." />
-            <CampoTexto id="aj-factor" name="factorCarga" etiqueta="Factor de carga" value={v.factorCarga}
+              ayuda={t('cfg.el_de_una_unidad_sin_catalogo')} />
+            <CampoTexto id="aj-factor" name="factorCarga" etiqueta={t('cfg.factor_de_carga')} value={v.factorCarga}
               onChange={set('factorCarga')}
-              ayuda="Cuánto rinde cargado contra vacío (0.78 = rinde 78%). Siempre menor o igual a 1." />
-            <CampoTexto id="aj-diesel" name="precioDieselPorDefecto" etiqueta="Precio del diésel (MXN/L)" value={v.precioDieselPorDefecto}
+              ayuda={t('cfg.cuanto_rinde_cargado_contra_vacio_0')} />
+            <CampoTexto id="aj-diesel" name="precioDieselPorDefecto" etiqueta={t('cfg.precio_del_diesel_mxn_l')} value={v.precioDieselPorDefecto}
               onChange={set('precioDieselPorDefecto')}
-              ayuda="Se usa cuando el ticket no trae precio por litro." />
-            <CampoTexto id="aj-umbral" name="umbralDesviacionPct" etiqueta="Umbral de desviación (%)" value={v.umbralDesviacionPct}
+              ayuda={t('cfg.se_usa_cuando_el_ticket_no')} />
+            <CampoTexto id="aj-umbral" name="umbralDesviacionPct" etiqueta={t('cfg.umbral_de_desviacion')} value={v.umbralDesviacionPct}
               onChange={set('umbralDesviacionPct')}
-              ayuda="A partir de cuánta diferencia se marca un viaje para revisión." />
+              ayuda={t('cfg.a_partir_de_cuanta_diferencia_se')} />
           </div>
         </Fieldset>
 
-        <Fieldset leyenda="Formato de salida al ERP">
+        <Fieldset leyenda={t('cfg.formato_de_salida_al_erp')}>
           {FORMATOS.map((f) => (
             <Radio key={f.valor} name="formato_salida_ui" form="sin-formulario" disabled={!f.implementado}
               checked={v.salida === f.valor}
@@ -114,8 +118,8 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
           ))}
         </Fieldset>
 
-        <Fieldset leyenda="Catálogo de cuentas de tu contador">
-          <CampoTextarea id="aj-cuentas" name="cuentas" etiqueta="Catálogo de cuentas" etiquetaOculta value={v.cuentas} onChange={set('cuentas')} rows={8}
+        <Fieldset leyenda={t('cfg.catalogo_de_cuentas_de_tu_contador')}>
+          <CampoTextarea id="aj-cuentas" name="cuentas" etiqueta={t('cfg.catalogo_de_cuentas')} etiquetaOculta value={v.cuentas} onChange={set('cuentas')} rows={8}
             spellCheck={false} claseControl="cifra-mono"
             ayuda={<>Una por línea: <span className="cifra-mono">concepto=cuenta</span>. Puedes pegar el bloque entero desde tu Excel.</>} />
           {/* AUDITORÍA 24, ARQ-3: antes esto llegaba prellenado con las cuentas
@@ -125,13 +129,13 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
               políticas. */}
           {catalogo === 'sin_declarar' && (
             <AvisoCompacto tono="warn"
-              resumen="Todavía no declaraste tu catálogo. Mientras esté vacío, el export de póliza no puede escribir el archivo para tu ERP."
-              mas="Estas cuentas son las de tu contador y nadie más las conoce, así que Likida no las inventa." />
+              resumen={t('cfg.todavia_no_declaraste_tu_catalogo_mientras')}
+              mas={t('cfg.estas_cuentas_son_las_de_tu')} />
           )}
           {catalogo === 'ilegible' && (
             <AvisoCompacto tono="error"
-              resumen="No se pudo leer tu catálogo de cuentas. Vuelve a cargar la pantalla antes de guardar, o reemplazarías el catálogo que ya tienes."
-              mas="Vacío aquí no quiere decir vacío allá." />
+              resumen={t('cfg.no_se_pudo_leer_tu_catalogo')}
+              mas={t('cfg.vacio_aqui_no_quiere_decir_vacio')} />
           )}
           {/* Sin estas cinco, el export de póliza para CONTPAQi y SAP no puede
               cuadrar el asiento y devuelve 409 diciendo cuál falta. Se listan
@@ -140,71 +144,47 @@ export function FormaAjustes({ inicial, ejemploKm, ejemploIlegible = false, guar
               `iva_no_acreditable` se agregó en la AUDITORÍA 21 (ALTO): sin
               ella, un viaje con IVA no acreditado (o con IEPS de diésel, que
               este motor nunca acredita) descuadraba el periodo entero. */}
-          <Disclosure variante="linea" titulo="Cuentas de balance que hacen falta">
-            <p className="rv-cfg__texto">
-              Para exportar la póliza a tu ERP hacen falta, además de tus conceptos de gasto, estas
-              cinco cuentas de balance:{' '}
-              <span className="cifra-mono">iva_acreditable</span>,{' '}
-              <span className="cifra-mono">iva_no_acreditable</span>,{' '}
-              <span className="cifra-mono">anticipo_operador</span>,{' '}
-              <span className="cifra-mono">por_cobrar_operador</span> y{' '}
-              <span className="cifra-mono">por_pagar_operador</span>.
-            </p>
+          <Disclosure variante="linea" titulo={t('cfg.cuentas_de_balance_que_hacen_falta')}>
+            <p className="rv-cfg__texto">{rico(t('cfg.para_exportar_la_poliza_a_tu'), { e0: (c) => <span className="cifra-mono">{c}</span>, e1: (c) => <span className="cifra-mono">{c}</span>, e2: (c) => <span className="cifra-mono">{c}</span>, e3: (c) => <span className="cifra-mono">{c}</span>, e4: (c) => <span className="cifra-mono">{c}</span> })}</p>
           </Disclosure>
         </Fieldset>
 
         {!revision.ok && <Aviso tono="warn">{revision.error}</Aviso>}
         {estado && !estado.ok && <Aviso tono="error">{estado.error}</Aviso>}
-        {estado && estado.ok && <Aviso tono="ok">Ajustes guardados. Aplican a los viajes que se cuadren de aquí en adelante.</Aviso>}
+        {estado && estado.ok && <Aviso tono="ok">{t('cfg.ajustes_guardados_aplican_a_los_viajes')}</Aviso>}
 
         <div><BotonGuardar /></div>
       </form>
       </Tarjeta>
 
       <aside className="rv-cfg__lateral">
-        <Tarjeta titulo="Qué cambia esto">
+        <Tarjeta titulo={t('cfg.que_cambia_esto')}>
           {previo === null ? (
             <p className="rv-cfg__texto">
               {!revision.ok
-                ? 'Corrige lo de la izquierda para ver el efecto.'
+                ? t('cfg.corrige_lo_de_la_izquierda_para')
                 : ejemploIlegible
-                  ? 'No se pudo leer un viaje de tu flota para enseñar el efecto. No es que no haya viajes: la lectura falló. Recarga; si sigue, es cosa nuestra.'
-                  : 'Todavía no hay un viaje con kilómetros capturados con el cual enseñar el efecto. En cuanto exista, aquí se ve.'}
+                  ? t('cfg.no_se_pudo_leer_un_viaje')
+                  : t('cfg.todavia_no_hay_un_viaje_con')}
             </p>
           ) : (
             <>
-              <p className="rv-cfg__texto">
-                En un viaje de <span className="cifra-mono">{numero(ejemploKm!)} km</span> de
-                tu operación, el motor va a esperar:
-              </p>
+              <p className="rv-cfg__texto">{rico(t('cfg.en_un_viaje_de_e0_km', { numero: numero(ejemploKm!, idioma) }), { e0: (c) => <span className="cifra-mono">{c}</span> })}</p>
               <div className="rv-cfg__lineas">
-                <div className="rv-cfg__linea">
-                  <span>Diésel esperado</span>
-                  <span className="cifra-mono">{litros(Math.round(previo.litros))}</span>
+                <div className="rv-cfg__linea">{rico(t('cfg.e0_diesel_esperado_e0'), { e0: (c) => <span>{c}</span> })}<span className="cifra-mono">{litros(Math.round(previo.litros), idioma)}</span>
                 </div>
-                <div className="rv-cfg__linea">
-                  <span>A tu precio</span>
-                  <span className="cifra-mono">{mxn(Math.round(previo.pesos))}</span>
+                <div className="rv-cfg__linea">{rico(t('cfg.e0_a_tu_precio_e0'), { e0: (c) => <span>{c}</span> })}<span className="cifra-mono">{mxn(Math.round(previo.pesos), idioma)}</span>
                 </div>
-                <div className="rv-cfg__linea" data-total>
-                  <span>Se marca si se pasa de</span>
-                  <span className="cifra-mono">{mxn(Math.round(previo.pesos * (1 + previo.margen / 100)))}</span>
+                <div className="rv-cfg__linea" data-total>{rico(t('cfg.e0_se_marca_si_se_pasa'), { e0: (c) => <span>{c}</span> })}<span className="cifra-mono">{mxn(Math.round(previo.pesos * (1 + previo.margen / 100)), idioma)}</span>
                 </div>
               </div>
-              <p className="rv-cfg__pie">
-                Cuenta ilustrativa con el rendimiento por defecto. Una unidad con catálogo propio usa el suyo,
-                y el precio real del ticket gana sobre el de aquí.
-              </p>
+              <p className="rv-cfg__pie">{t('cfg.cuenta_ilustrativa_con_el_rendimiento_por')}</p>
             </>
           )}
         </Tarjeta>
 
-        <Tarjeta titulo="Lo que no se edita aquí">
-          <p className="rv-cfg__texto">
-            El estímulo del 50% de peaje, las claves de combustible del SAT y los topes de deducibilidad
-            no tienen formulario a propósito: los fija la ley, no tu flota. Si la ley cambia, lo cambiamos
-            nosotros para todos.
-          </p>
+        <Tarjeta titulo={t('cfg.lo_que_no_se_edita_aqui')}>
+          <p className="rv-cfg__texto">{t('cfg.el_estimulo_del_50_de_peaje')}</p>
         </Tarjeta>
       </aside>
     </div>

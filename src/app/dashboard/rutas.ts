@@ -320,7 +320,7 @@ export const ENTRADAS_DASHBOARD: readonly Entrada[] = [
   ], ['arco', 'privacidad', 'términos', 'mandato', 'conocimiento normativo']),
 
   // Pie (4)
-  entrada('notificaciones', 'pie', 'Notificaciones', BellRing, [p('/dashboard/notificaciones', 'Ahora'), p('/dashboard/reglas', 'Mis reglas')], ['alertas', 'avisos', 'reglas']),
+  entrada('notificaciones', 'pie', 'Notificaciones', BellRing, [p('/dashboard/notificaciones', 'Avisos'), p('/dashboard/reglas', 'Mis reglas')], ['alertas', 'avisos', 'reglas']),
   entrada('mi-perfil', 'pie', 'Mi perfil', UserRound, [p('/dashboard/mi-perfil', 'Mi perfil')], ['cuenta', 'foto']),
   entrada('plan', 'pie', 'Plan y facturación', CreditCard, [p('/dashboard/suscripcion', 'Plan y facturación')], ['suscripción', 'suscripcion', 'plan']),
   entrada('ayuda', 'pie', 'Centro de ayuda', LifeBuoy, [p('/dashboard/soporte', 'Centro de ayuda')], ['soporte', 'tickets']),

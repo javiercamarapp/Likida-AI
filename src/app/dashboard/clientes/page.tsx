@@ -58,6 +58,7 @@ export default async function PaginaClientes({
     qt?: string; pt?: string; editarT?: string;
   }>;
 }) {
+  const { t: tx } = await getT('resto');
   const sp = await searchParams;
   const { tenantId, rol } = await resolverTenantEfectivo(RUTA, sp);
   if (!puedeVerRuta(rol, RUTA)) redirect('/dashboard');
@@ -103,6 +104,7 @@ export default async function PaginaClientes({
 
   async function guardarCliente(_previo: ResultadoForma, fd: FormData): Promise<ResultadoForma> {
     'use server';
+    const { t: tx } = await getT('resto');
   const { t } = await getT('operacion');
     const s = await resolverTenantAtadoOLanza(RUTA, sp, tenantId);
     if (!puedeVerRuta(s.rol, RUTA)) return { ok: false, error: t('cli.a.rolver') };
@@ -141,7 +143,7 @@ export default async function PaginaClientes({
       // `DatoInvalido` sale VERBATIM (dice qué corregir); cualquier otra cosa
       // se loguea y sale como falla del sistema, para no acusar al usuario de
       // un error de base de datos.
-      return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar el cliente' : 'dar de alta el cliente') };
+      return { ok: false, error: mensajeParaPantalla(e, id ? 'guardar el cliente' : tx('op.dar_de_alta_el_cliente')) };
     }
   }
 
@@ -184,7 +186,7 @@ export default async function PaginaClientes({
   }
 
   return (
-    <VistaClientes
+    <VistaClientes t={tx}
       panel={panel}
       sp={sp}
       sufijo={sufijo}

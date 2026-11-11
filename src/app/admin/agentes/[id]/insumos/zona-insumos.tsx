@@ -11,6 +11,9 @@ import { Aviso, type AccionDeForma, type ResultadoAccion } from '../../../ui/for
 // importar un VALOR desde ahí arrastra ese módulo entero al bundle del
 // navegador y revienta el build ("UnhandledSchemeError: node:async_hooks").
 import { TIPOS_ARCHIVO as TIPOS_ARCHIVO_LISTA, type InsumoAgente, type TipoInsumo } from '@/lib/likida/agentes/insumos_tipos';
+import { useT } from '@/lib/i18n/proveedor';
+import { admin_sistema as admin_sistemaEs } from '@/lib/i18n/es/admin_sistema';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 
 const ICONO_TIPO: Record<TipoInsumo, React.ReactNode> = {
   documento: <FileText width={15} height={15} strokeWidth={1.75} />,
@@ -20,9 +23,9 @@ const ICONO_TIPO: Record<TipoInsumo, React.ReactNode> = {
   texto: <MessageSquare width={15} height={15} strokeWidth={1.75} />,
 };
 
-const ROTULO_TIPO: Record<TipoInsumo, string> = {
-  documento: 'Documento', imagen: 'Imagen', video: 'Video', link: 'Link', texto: 'Idea (texto libre)',
-};
+const rotuloTipo = (t: TSistema = T_SISTEMA_ES): Record<TipoInsumo, string> => ({
+  documento: t('agentes_insumos_zona_insumos.documento'), imagen: t('agentes_insumos_zona_insumos.imagen'), video: t('agentes_insumos_zona_insumos.video'), link: t('agentes_insumos_zona_insumos.link'), texto: t('agentes_insumos_zona_insumos.idea_texto_libre'),
+});
 
 const ACEPTA_POR_TIPO: Record<'documento' | 'imagen' | 'video', string> = {
   documento: '.pdf,.csv,.xls,.xlsx,.doc,.docx',
@@ -47,15 +50,16 @@ export function FormularioInsumo({
   accionArchivo: AccionDeForma;
   accionTexto: AccionDeForma;
 }) {
+  const { t } = useT('admin_sistema', admin_sistemaEs);
   const [tipo, setTipo] = useState<TipoInsumo>(tiposAceptados[0] ?? 'texto');
 
   return (
     <div className="space-y-3">
       <SegmentedControl
-        etiqueta="Tipo de insumo"
+        etiqueta={t('agentes_insumos_zona_insumos.tipo_de_insumo')}
         valor={tipo}
         onChange={setTipo}
-        opciones={tiposAceptados.map((t) => ({ valor: t, etiqueta: ROTULO_TIPO[t] }))}
+        opciones={tiposAceptados.map((tp) => ({ valor: tp, etiqueta: rotuloTipo(t)[tp] }))}
       />
 
       {TIPOS_ARCHIVO.has(tipo)
@@ -66,6 +70,7 @@ export function FormularioInsumo({
 }
 
 function FormaArchivo({ tipo, accion }: { tipo: 'documento' | 'imagen' | 'video'; accion: AccionDeForma }) {
+  const { t } = useT('admin_sistema', admin_sistemaEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [nombreArchivo, setNombreArchivo] = useState<string | null>(null);
@@ -95,7 +100,7 @@ function FormaArchivo({ tipo, accion }: { tipo: 'documento' | 'imagen' | 'video'
       >
         <UploadCloud width={22} height={22} strokeWidth={1.5} className="text-muted" aria-hidden="true" />
         <p className="text-sm text-center px-4">
-          {nombreArchivo ?? <>Arrastra un {ROTULO_TIPO[tipo].toLowerCase()} aquí, o haz click para elegirlo</>}
+          {nombreArchivo ?? <>{t('agentes_insumos_zona_insumos.arrastra_un_aqui_o_haz_click', { rotuloTipo: rotuloTipo(t)[tipo].toLowerCase() })}</>}
         </p>
         <input
           ref={inputRef}
@@ -106,29 +111,30 @@ function FormaArchivo({ tipo, accion }: { tipo: 'documento' | 'imagen' | 'video'
           onChange={(e) => setNombreArchivo(e.target.files?.[0]?.name ?? null)}
         />
       </div>
-      <CampoTexto name="titulo" required obligatorio etiqueta="Título del insumo — qué es esto para el agente" />
+      <CampoTexto name="titulo" required obligatorio etiqueta={t('agentes_insumos_zona_insumos.titulo_del_insumo_que_es_esto')} />
       <Aviso estado={estado} />
       <Boton type="submit" variante="primary" loading={pendiente}>
-        {pendiente ? 'Subiendo…' : 'Agregar insumo'}
+        {pendiente ? t('agentes_insumos_zona_insumos.subiendo') : t('agentes_insumos_zona_insumos.agregar_insumo')}
       </Boton>
     </form>
   );
 }
 
 function FormaTexto({ tipo, accion }: { tipo: 'link' | 'texto'; accion: AccionDeForma }) {
+  const { t } = useT('admin_sistema', admin_sistemaEs);
   const [estado, enviar, pendiente] = useActionState<ResultadoAccion, FormData>(accion, null);
   return (
     <form action={enviar} className="space-y-3">
       <input type="hidden" name="tipo" value={tipo} />
-      <CampoTexto name="titulo" required obligatorio etiqueta="Título del insumo" />
+      <CampoTexto name="titulo" required obligatorio etiqueta={t('agentes_insumos_zona_insumos.titulo_del_insumo')} />
       {tipo === 'link' ? (
-        <CampoTexto name="contenido" required obligatorio tipo="url" etiqueta={ROTULO_TIPO.link} placeholder="https://…" />
+        <CampoTexto name="contenido" required obligatorio tipo="url" etiqueta={rotuloTipo(t).link} placeholder="https://…" />
       ) : (
-        <CampoTextarea name="contenido" required obligatorio rows={4} etiqueta="La idea, en tus palabras — el agente la lee en su siguiente corrida" />
+        <CampoTextarea name="contenido" required obligatorio rows={4} etiqueta={t('agentes_insumos_zona_insumos.la_idea_en_tus_palabras_el')} />
       )}
       <Aviso estado={estado} />
       <Boton type="submit" variante="primary" loading={pendiente}>
-        {pendiente ? 'Guardando…' : 'Agregar insumo'}
+        {pendiente ? t('agentes_insumos_zona_insumos.guardando') : t('agentes_insumos_zona_insumos.agregar_insumo')}
       </Boton>
     </form>
   );
@@ -138,6 +144,7 @@ function FormaTexto({ tipo, accion }: { tipo: 'link' | 'texto'; accion: AccionDe
  *  literal. `Procesado` con su resumen cuando el agente ya lo consumió;
  *  `Pendiente` mientras espera la siguiente corrida. */
 export function ListaInsumos({ insumos }: { insumos: Array<InsumoAgente & { url: string | null }> }) {
+  const { t, idioma } = useT('admin_sistema', admin_sistemaEs);
   return (
     <ul className="m-0 list-none divide-y divide-[var(--line2)] p-0">
       {insumos.map((i) => (
@@ -148,21 +155,19 @@ export function ListaInsumos({ insumos }: { insumos: Array<InsumoAgente & { url:
               <span className="truncate text-sm font-medium">{i.titulo}</span>
               {i.url && (
                 <a href={i.url} target="_blank" rel="noreferrer" className="shrink-0 text-xs text-[var(--marca)] hover:underline">
-                  ver
+                  {t('agentes_insumos_zona_insumos.ver')}
                 </a>
               )}
             </div>
             <StatusChip tono={i.procesadoEn ? 'ok' : 'neutral'}>
-              {i.procesadoEn ? 'Procesado' : 'Pendiente'}
+              {i.procesadoEn ? t('agentes_insumos_zona_insumos.procesado') : t('trust_safety.pendiente')}
             </StatusChip>
           </div>
-          <div className="text-xs text-muted">
-            Subido {fechaHoraMx(i.subidoEn)}
-            {i.tipo === 'link' && i.contenidoTexto && <> · <a href={i.contenidoTexto} target="_blank" rel="noreferrer" className="hover:underline">{i.contenidoTexto}</a></>}
+          <div className="text-xs text-muted">{t('agentes_insumos_zona_insumos.subido', { fechaHoraMx: fechaHoraMx(i.subidoEn, idioma) })}{i.tipo === 'link' && i.contenidoTexto && <> · <a href={i.contenidoTexto} target="_blank" rel="noreferrer" className="hover:underline">{i.contenidoTexto}</a></>}
             {i.tipo === 'texto' && i.contenidoTexto && <> · {i.contenidoTexto.slice(0, 140)}{i.contenidoTexto.length > 140 ? '…' : ''}</>}
           </div>
           {i.resumenUso && (
-            <AvisoLinea tono="ok">Qué usó el agente: {i.resumenUso}</AvisoLinea>
+            <AvisoLinea tono="ok">{t('agentes_insumos_zona_insumos.que_uso_el_agente')}{' '}{i.resumenUso}</AvisoLinea>
           )}
         </li>
       ))}

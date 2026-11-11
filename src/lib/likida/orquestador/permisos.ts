@@ -65,6 +65,31 @@ export function rolPuedeUsar(rol: string | undefined, herramienta: string): bool
   return puedeVerArea(rol, area);
 }
 
+/**
+ * Herramientas del chat que un tenant con perfil `cinco_agentes` conserva (11-nov, «Pregunta a tus datos» se abre para el perfil).
+ * Solo las que leen lo de los cinco agentes (liquidación, peajes, Carta Porte, Vigía, operadores) y la base de viajes; todo lo
+ * que lee dinero fiscal, gasto, cobranza, autofactura, buzón de proveedores, convenios, jornada o rentabilidad queda FUERA
+ * (son del stand-by) y se niega también dentro del ejecutor. Lista cerrada: una herramienta nueva no entra sola.
+ */
+export const HERRAMIENTAS_PERFIL_CINCO_AGENTES: readonly string[] = [
+  'kpis_flota', 'liquidaciones_flota', 'serie_liquidado', // A1
+  'estado_liquidacion_externa', 'reclamacion_peajes',      // A1 / A2
+  'consultar_carta_porte',                                 // A3
+  'estado_vigia',                                          // A4
+  'tablero_viajes', 'detalle_viaje', 'salud_agentes',      // base y A5
+  'consultar_normas',
+];
+
+/** ¿Esta herramienta existe bajo el perfil? Sin perfil: sí (lo decide el rol). Perfil conocido: solo la lista cerrada. */
+export function herramientaPermitidaEnPerfil(perfil: string | null | undefined, herramienta: string): boolean {
+  if (perfil === null || perfil === undefined) return true;
+  return perfil === 'cinco_agentes' && HERRAMIENTAS_PERFIL_CINCO_AGENTES.includes(herramienta);
+}
+
+export function herramientasDelPerfil<T extends string>(perfil: string | null | undefined, todas: readonly T[]): T[] {
+  return todas.filter((t) => herramientaPermitidaEnPerfil(perfil, t));
+}
+
 /** Las herramientas de `todas` que el rol puede ver, en el mismo orden. */
 export function herramientasDelRol<T extends string>(rol: string | undefined, todas: readonly T[]): T[] {
   return todas.filter((t) => rolPuedeUsar(rol, t));

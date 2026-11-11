@@ -184,7 +184,7 @@ export function VistaAgenteFacturas({ tickets, extra, marcarFacturada, notificac
       </FilaTarjetas>
 
       {/* ── El VÍNCULO por portal: lo que decide si esta cola crece sola ── */}
-      <SeccionPortales filas={portales} vinculos={vinculosLeidos}
+      <SeccionPortales tr={tr} filas={portales} vinculos={vinculosLeidos}
         autorizarRelogin={autorizarRelogin} revocarRelogin={revocarRelogin} flota={control.flotaPintada} />
 
       {/* ── La emisión real: encender, límites, lotes por confirmar, fase por portal (0542) ── */}

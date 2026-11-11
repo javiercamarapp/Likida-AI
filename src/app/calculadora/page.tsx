@@ -10,19 +10,20 @@ import type { Metadata } from 'next';
 import { Calculadora } from './calc';
 import { PulsoSitio } from './pulso';
 import { MarcoPublico } from '../ui-v2/componentes/marco-publico';
+import { trPublico } from '@/lib/i18n/publico_tr';
 
-export const metadata: Metadata = {
-  title: 'Calculadora de recuperación fiscal — Likida',
-  description:
-    'Cuánto estás dejando ir en el 50% de peajes y el estímulo IEPS de diésel. Con los supuestos a la vista y la advertencia que otros omiten: el estímulo es ingreso acumulable.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await trPublico();
+  return { title: t('cal.meta.titulo'), description: t('cal.meta.descripcion') };
+}
 
-export default function PaginaCalculadora() {
+export default async function PaginaCalculadora() {
+  const { t } = await trPublico();
   return (
     <MarcoPublico
-      rotulo="Calculadora de recuperación fiscal"
-      titulo="Likida"
-      apoyo="Tres datos que tu flota sí tiene a la mano. El resultado sale aquí mismo, con cada supuesto junto a su cifra y la advertencia que casi todos omiten. Sin RFC, sin registro."
+      rotulo={t('cal.rotulo')}
+      titulo={t('cal.titulo')}
+      apoyo={t('cal.apoyo')}
     >
       <PulsoSitio pagina="calculadora" />
       <div className="rv-pub__prosa">

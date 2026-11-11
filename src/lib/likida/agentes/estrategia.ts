@@ -11,7 +11,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { anotarBitacora } from '@/lib/likida/bitacora_escritura';
-import { DatoInvalido } from '../errores';
+import { datoInvalido } from '../errores';
 import { acotada } from '../presupuesto';
 
 // ── Validación (pura) ──────────────────────────────────────────────────────
@@ -23,9 +23,9 @@ import { acotada } from '../presupuesto';
  */
 export function validarHorasEscalacion(crudo: string): number {
   const t = crudo.trim();
-  if (!/^\d+$/.test(t)) throw new DatoInvalido('Las horas de escalación tienen que ser un número entero (sin decimales).');
+  if (!/^\d+$/.test(t)) throw datoInvalido('estrategia.las_horas_de_escalacion_tienen');
   const n = Number(t);
-  if (n < 1 || n > 48) throw new DatoInvalido('Las horas de escalación viven entre 1 y 48. Con menos de una hora se le escala al jefe todo; con más de dos días el aviso llega tarde para servir.');
+  if (n < 1 || n > 48) throw datoInvalido('estrategia.las_horas_de_escalacion_viven');
   return n;
 }
 
@@ -37,11 +37,11 @@ export function validarHorasEscalacion(crudo: string): number {
 export function validarUmbralConfianza(crudo: string): number {
   const t = crudo.trim().replace(',', '.');
   if (!/^0?\.\d{1,2}$|^0\.\d{1,2}$/.test(t) && !/^\d(\.\d{1,2})?$/.test(t)) {
-    throw new DatoInvalido('El umbral tiene que ser un número entre 0.50 y 0.99 (hasta dos decimales).');
+    throw datoInvalido('estrategia.el_umbral_tiene_que_ser');
   }
   const n = Number(t);
   if (!Number.isFinite(n) || n < 0.5 || n > 0.99) {
-    throw new DatoInvalido('El umbral vive entre 0.50 y 0.99: más abajo, una lectura al aire cuenta como medición; en 1.00, todo comprobante iría a revisión manual y el agente dejaría de liquidar.');
+    throw datoInvalido('estrategia.el_umbral_vive_entre_0');
   }
   return Math.round(n * 100) / 100;
 }
@@ -93,7 +93,7 @@ export async function guardarEstrategiaAgente(
   );
   if (errUpd) {
     if ((errUpd as { code?: string }).code === 'CU013') {
-      throw new DatoInvalido('No se encontró tu flota. Recarga la pantalla.');
+      throw datoInvalido('estrategia.no_se_encontro_tu_flota');
     }
     throw new Error(`guardarEstrategiaAgente: ${errUpd.message}`);
   }

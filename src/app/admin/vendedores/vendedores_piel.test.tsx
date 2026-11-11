@@ -10,6 +10,13 @@ vi.mock('@/lib/likida/vendedores', async (importOriginal) => {
   const real = await importOriginal<typeof import('@/lib/likida/vendedores')>();
   return { ...real, listarProspectos: async () => [], listarVendedores: async () => [] };
 });
+vi.mock('@/lib/supabase/admin', () => ({ supabaseAdmin: () => ({ from: () => ({}) }) }));
+vi.mock('@/lib/likida/pg', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/likida/pg')>()),
+  conteo: () => ({}),
+  traerTodoEnParalelo: async () => [],
+  traerPorIds: async () => [],
+}));
 vi.mock('@/lib/likida/agentes/corridas', () => ({ ultimasCorridasNegocio: async () => [], duracionLegible: () => '' }));
 vi.mock('./acciones', () => ({
   accionMover: async () => ({ ok: true }), accionAsignar: async () => ({ ok: true }), accionNota: async () => ({ ok: true }),

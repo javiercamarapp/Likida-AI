@@ -17,11 +17,8 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { traerTodo, conteo } from '@/lib/likida/pg';
-import {
-  listarProspectos,
-  normalizarEstadoProspecto,
-  type ProspectoRow,
-} from '@/lib/likida/vendedores';
+import { normalizarEstadoProspecto } from '@/lib/likida/vendedores';
+import { indiceProspectos, type FilaIndice } from './prospectos-mapa';
 
 export interface FuenteAdquisicion {
   fuente: string;
@@ -82,7 +79,10 @@ const PCT_LEADS_QUEMADOS = 10;
 /** LANZA si el pipeline no se puede leer — un panel de adquisición vacío por
  *  base caída afirmaría "no hay pipeline". */
 export async function getAdquisicion(ahoraMs: number): Promise<Adquisicion> {
-  const prospectos = await listarProspectos();
+  // w15/perf: antes `listarProspectos()` bajaba las ~33 mil filas con `notas` (11-16 s en /admin/crecimiento) para agrupar por fuente y
+  // contar estados. Aquí solo hacen falta id, fuente, estado y alta: el ÍNDICE LIGERO compartido con Ventas y el embudo, que además
+  // garantiza que `totalProspectos` es la misma cifra en las tres pantallas.
+  const { filas: prospectos } = await indiceProspectos();
 
   // Los prospectos que YA recibieron un primer toque (salida en 0118).
   // Fail-closed: si el historial no se puede leer, LANZA — calcular el SLA
@@ -98,7 +98,7 @@ export async function getAdquisicion(ahoraMs: number): Promise<Adquisicion> {
   );
 
   // ── Por fuente ───────────────────────────────────────────────────────────
-  const grupos = new Map<string, ProspectoRow[]>();
+  const grupos = new Map<string, FilaIndice[]>();
   for (const p of prospectos) {
     const g = grupos.get(p.fuente) ?? [];
     g.push(p);

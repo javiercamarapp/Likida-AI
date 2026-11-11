@@ -34,12 +34,12 @@ describe('shell.css ↔ marco-v2.ts', () => {
     expect(regla('[data-ui="v2"] .rv-cab-movil')).toContain(`height: ${ALTO_CABECERA_MOVIL_PX}px`);
     expect(regla('[data-ui="v2"] .rv-cab-esc', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`height: ${ALTO_CABECERA_ESCRITORIO_PX}px`);
     expect(regla('[data-ui="v2"] .rv-item', sinComentarios.indexOf('.rv-item {'))).toContain(`height: ${ALTO_ITEM_PX}px`);
-    // Activo estilo Rovaq (R8): barra inset de 2 px por el token --nav-activo-barra + fondo tinta al 7 % + peso 500, todo por tokens --nav-activo-*.
+    // Activo de alto contraste (punto 10 del dueño, 11-nov): barra inset de 3 px NEGRA por el token --nav-activo-barra + fondo tinta al 7 % + peso 500, todo por tokens --nav-activo-*.
     const activo = regla('[data-ui="v2"] .rv-item[aria-current="page"]');
     expect(activo).toContain('background: var(--nav-activo-bg)');
     expect(activo).toContain('color: var(--nav-activo-fg)');
     expect(activo).toContain('font-weight: var(--nav-activo-peso)');
-    expect(activo).toContain('box-shadow: inset 2px 0 0 var(--nav-activo-barra)');
+    expect(activo).toContain('box-shadow: inset 3px 0 0 var(--nav-activo-barra)');
     expect(regla('[data-ui="v2"] .rv-puesta[aria-current="page"]')).not.toMatch(/box-shadow|inset/);
     expect(activo).not.toMatch(/background:\s*var\(--marca\)/);
     expect(regla('[data-ui="v2"] .rv-fila', sinComentarios.indexOf('@media (min-width: 768px)'))).toContain(`padding: ${MARCO_PX}px`);
@@ -84,6 +84,12 @@ describe('movimiento', () => {
 });
 
 describe('pie del sidebar y tokens de shell', () => {
+  it('el pie es GRIS como el de Rovaq: fondo hundido (--ui-sunken, claro y oscuro), borde superior y sin franja blanca debajo', () => {
+    const r = regla('[data-ui="v2"] .rv-sb__pie', sinComentarios.indexOf('@media (min-width: 768px)'));
+    expect(r).toMatch(/background:\s*var\(--ui-sunken\)/);
+    expect(r).toMatch(/border-top:\s*1px solid var\(--ui-border\)/);
+    expect(sinComentarios).toMatch(/\.rv-sb \{[^}]*padding-bottom: 0;/);
+  });
   it('el pie es UN solo bloque y cabe en el techo: la suma sale de las reglas del CSS (no de números escritos a mano)', () => {
     const alto = (sel: string) => Number(/(?:^|[\s;{])height:\s*(\d+)px/.exec(regla(sel))?.[1]);
     const filas = [alto('[data-ui="v2"] .rv-puesta'), alto('[data-ui="v2"] .rv-cuenta')];
@@ -121,11 +127,13 @@ describe('clases del menú de cuenta', () => {
 
 describe('paleta: cromo negro/gris/blanco, color en los datos como Vexa (decisión de Javier, 31-oct)', () => {
   const tokens = readFileSync(fileURLToPath(new URL('../../ui-v2/tokens.css', import.meta.url)), 'utf8');
-  it('primario negro, activo del sidebar gris sin barra y señal burdeos como acento puntual', () => {
+  it('primario negro, barra del activo NEGRA (blanca en oscuro) y señal burdeos como acento puntual', () => {
     expect(tokens).toMatch(/--btn-bg:\s*#0e0e10/); // primario negro
     expect(tokens).toMatch(/--marca:\s*#0e0e10/);
     expect(tokens).toMatch(/--ink:\s*#0e0e10/);
-    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--n-500\)/); // token que se conserva (otros consumidores); el sidebar ya no lo usa
+    expect(tokens).toMatch(/--ui-activo-barra:\s*var\(--nav-activo-barra\)/); // alias que sigue a la barra negra
+    expect(tokens).toMatch(/--nav-activo-barra:\s*#0e0e10/);
+    expect(tokens).toMatch(/--nav-activo-barra:\s*#f4f4f5/); // oscuro: blanca
     expect(tokens).not.toMatch(/--acento-marca/);
     expect(tokens).toMatch(/--senal:\s*#a6264a/);
     // oscuro: negro neutro #0e0e10, señal #cc4a6c
@@ -174,7 +182,7 @@ describe('riel, topbar y barra inferior móvil (lote L2a)', () => {
     const bloque = dentro.slice(0, cierre);
     expect(bloque).toMatch(/\.rv-sb \{ transition: width 180ms cubic-bezier\(0\.22, 1, 0\.36, 1\); \}/);
     expect(bloque).toMatch(/\.rv-chev-plegar \{ transition: transform 180ms/);
-    expect(sinComentarios).toMatch(/\.rv-cab-esc__plegar\[aria-expanded="false"\] \.rv-chev-plegar[^{]*\{ transform: rotate\(180deg\)/);
+    expect(sinComentarios).toMatch(/\.rv-sb__plegar\[aria-expanded="false"\] \.rv-chev-plegar[^{]*\{ transform: rotate\(180deg\)/);
   });
 
   it('el riel conserva todos los ítems alcanzables: el acordeón se abre completo y el texto se oculta de forma visual', () => {

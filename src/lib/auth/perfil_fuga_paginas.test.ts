@@ -146,9 +146,9 @@ describe('(a) bajo el perfil, cada página no permitida rebota y cada permitida 
   const proximamente = permitidasEnLista.filter((p) => rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
   const abiertas = permitidasEnLista.filter((p) => !rutaProximamenteEnPerfil('cinco_agentes', clave(p)));
 
-  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 28 negadas, 44 abiertas (+1: conversaciones sin atender del Vigía, ronda 5) (+1: /dashboard/puesta-en-marcha, rediseño UI v2 Fase 1; +3: llaves-api, usuarios y patios, Ola 1 · A1; +1: la referencia de Carta Porte, Ola 1 · A3) (ARCO pasó a base: A37-TRANSVERSAL-06) (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
-    expect(negadas.length).toBe(28);
-    expect(abiertas.length).toBe(44);
+  it('el reparto es el de la matriz de T-PER-01 con A4/A5 encendidos: 27 negadas, 45 abiertas (+1: /dashboard/chat, «Pregunta a tus datos», 11-nov) (+1: conversaciones sin atender del Vigía, ronda 5) (+1: /dashboard/puesta-en-marcha, rediseño UI v2 Fase 1; +3: llaves-api, usuarios y patios, Ola 1 · A1; +1: la referencia de Carta Porte, Ola 1 · A3) (ARCO pasó a base: A37-TRANSVERSAL-06) (+2: el catálogo y la configuración del Agente de Carta Porte, A3) y 0 «Próximamente»', () => {
+    expect(negadas.length).toBe(27);
+    expect(abiertas.length).toBe(45);
     expect(proximamente.length).toBe(0);
     expect(negadas.length + abiertas.length + proximamente.length + 1).toBe(73);
   });
@@ -212,7 +212,7 @@ describe('(b) ⌘K / paleta: TODAS_LAS_RUTAS', () => {
     expect(visibles.length).toBeGreaterThan(5);
     for (const h of visibles) expect(permitidas, h).toContain(h);
     for (const h of visibles) expect(RUTAS_STAND_BY_PERFIL_CINCO_AGENTES, h).not.toContain(h);
-    for (const prohibida of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/timbrado']) {
+    for (const prohibida of ['/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/timbrado']) {
       expect(visibles, prohibida).not.toContain(prohibida);
     }
   });
@@ -256,7 +256,7 @@ describe('(b) inicioDe bajo el perfil: a dónde se rebota a cada rol', () => {
 
   it('rutas de stand-by del dueño rebotan a /dashboard, no a otra pantalla de stand-by (sin bucle)', async () => {
     getSessionTenant.mockResolvedValue(sesion(CON));
-    for (const ruta of ['/dashboard/chat', '/dashboard/suscripcion', '/dashboard/contador']) {
+    for (const ruta of ['/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/contador']) {
       redirect.mockClear();
       await expect(resolverTenantEfectivo(ruta, {}), ruta).rejects.toThrow('NEXT_REDIRECT');
       expect(redirect).toHaveBeenCalledTimes(1);

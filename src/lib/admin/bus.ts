@@ -17,7 +17,7 @@
 
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { datoInvalido } from '@/lib/likida/errores';
 
 // ── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -251,7 +251,7 @@ export async function crearOrden(
     const { data: previas, error: errPrevia } = await q.order('id').limit(1);
     if (errPrevia) throw new Error(`No se pudo comprobar si ya hay una orden pendiente: ${errPrevia.message}`);
     if (previas && previas.length > 0) {
-      throw new DatoInvalido('Ya hay una orden idéntica esperando el latido de la Mac; no se encola otra.');
+      throw datoInvalido('bus.ya_hay_una_orden_identica');
     }
   }
   const { error } = await supabaseAdmin()
@@ -274,7 +274,7 @@ export async function resolverPieza(
     .eq('estado', 'pendiente')
     .select('id');
   if (error) throw new Error(`No se pudo resolver la pieza: ${error.message}`);
-  if (!data?.length) throw new DatoInvalido('Esa pieza ya estaba resuelta.'); // DatoInvalido: el comando de WhatsApp lo distingue de un fallo de la base (A37-S25-10)
+  if (!data?.length) throw datoInvalido('bus.esa_pieza_ya_estaba_resuelta'); // DatoInvalido: el comando de WhatsApp lo distingue de un fallo de la base (A37-S25-10)
 }
 
 // ── PRs abiertos (GitHub) — la fuente que depende de una llave de Javier ────

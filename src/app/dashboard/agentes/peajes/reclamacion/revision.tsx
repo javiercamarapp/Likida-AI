@@ -17,6 +17,8 @@ import {
 import { ETIQUETA_SENAL } from '@/lib/likida/peajes/cruces_atipicos';
 import { ETIQUETA_DOBLE_ENTRE_ARCHIVOS } from '@/lib/likida/peajes/doble_entre_archivos';
 import { FormaRegistrarReclamo } from './forma-registrar-reclamo';
+import { type TAgentes, type TrAgentes, TR_ES } from '@/app/dashboard/agentes/i18n-agentes';
+import { rico as ricoT } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA REVISIÓN DE COBROS EN PANTALLA — lo que finanzas hace primero con el archivo
@@ -39,48 +41,49 @@ export interface AccionesSeguimiento {
 export const MAX_FILAS_POR_CATEGORIA = 100;
 
 /** Qué significa la categoría, en general (cada candidato trae además su explicación). */
-const EXPLICACION_CATEGORIA: Record<CategoriaCobro, string> = {
-  unidad_inmovilizada: 'Cruces con el TAG de una unidad que la flota declaró en taller, siniestrada o de baja en esa fecha. Es la categoría más importante: basta teclear el número del TAG para pasar una caseta. Es un candidato a validar, no una acusación.',
-  clase_fuera_de_3_5: 'Lo esperado es clase 3 (tracto solo) o 5 (tracto con caja de 2 ejes). Otra clase puede ser un error de clasificación del proveedor. La clase 1 suele ser la tarifa por pasada de algunas casetas: decláralas en «Reglas de cobro» para que no aparezcan.',
-  extemporaneo: 'El cruce es anterior al periodo de este archivo: el proveedor lo cobró tarde. Hay que revisarlo junto con el mes en que ocurrió.',
-  duplicado_exacto: 'Mismo TAG, mismo segundo, misma caseta y mismo importe. Dos cobros seguidos en minutos (posible retorno o reintento) se revisan aparte.',
-  tag_dado_de_baja: 'Cruces posteriores a la fecha de baja del TAG (unidad siniestrada o TAG cancelado).',
-  caseta_no_debe_cruzarse: 'Casetas que la flota marcó como «no debe cruzarse».',
-};
+const explicacionCategoria = (tx: TAgentes = TR_ES.t): Record<CategoriaCobro, string> => ({
+  unidad_inmovilizada: tx('rest.cruces_con_el_tag_de_una'),
+  clase_fuera_de_3_5: tx('rest.lo_esperado_es_clase_3_tracto'),
+  extemporaneo: tx('rest.el_cruce_es_anterior_al_periodo'),
+  duplicado_exacto: tx('rest.mismo_tag_mismo_segundo_misma_caseta'),
+  tag_dado_de_baja: tx('rest.cruces_posteriores_a_la_fecha_de'),
+  caseta_no_debe_cruzarse: tx('rest.casetas_que_la_flota_marco_como'),
+});
 
-function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: CandidatoCobro[]; justificar?: Accion; desglose?: string }) {
+function FilasCandidatos({ candidatos, justificar, desglose, tr = TR_ES }: { candidatos: CandidatoCobro[]; justificar?: Accion; desglose?: string; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   const visibles = candidatos.slice(0, MAX_FILAS_POR_CATEGORIA);
   return (
     <>
       <TablaBase<CandidatoCobro>
-        etiqueta="Cruces de caseta en revisión"
+        etiqueta={tx('rest.cruces_de_caseta_en_revision')}
         filas={visibles}
         idFila={(c) => `${c.indice}-${c.categoria}`}
         altoMaximo={false}
         columnas={[
-          { id: 'fecha', titulo: 'Fecha y hora', principal: true, celda: (c) => <>{c.fecha ?? '—'}{c.hora && <span className="rv-pj-nota">{c.hora}</span>}</> },
-          { id: 'caseta', titulo: 'Caseta', celda: (c) => c.caseta ?? '—' },
-          { id: 'tag', titulo: 'TAG / unidad', celda: (c) => <>{c.tag ?? '—'}{c.unidad && <span className="rv-pj-nota">{c.unidad}</span>}</> },
-          { id: 'clase', titulo: 'Clase', alinear: 'der', celda: (c) => <span className="cifra-mono">{c.clase ?? '—'}</span> },
-          { id: 'importe', titulo: 'Importe', alinear: 'der', celda: (c) => <span className="cifra-mono">{mxn(c.monto)}</span> },
+          { id: 'fecha', titulo: tx('rest.fecha_y_hora'), principal: true, celda: (c) => <>{c.fecha ?? '—'}{c.hora && <span className="rv-pj-nota">{c.hora}</span>}</> },
+          { id: 'caseta', titulo: tx('rest.caseta'), celda: (c) => c.caseta ?? '—' },
+          { id: 'tag', titulo: tx('rest.tag_unidad'), celda: (c) => <>{c.tag ?? '—'}{c.unidad && <span className="rv-pj-nota">{c.unidad}</span>}</> },
+          { id: 'clase', titulo: tx('rest.clase'), alinear: 'der', celda: (c) => <span className="cifra-mono">{c.clase ?? '—'}</span> },
+          { id: 'importe', titulo: tx('rest.importe'), alinear: 'der', celda: (c) => <span className="cifra-mono">{mxn(c.monto)}</span> },
           {
-            id: 'quepaso', titulo: 'Qué pasó · qué significa · qué hacer',
+            id: 'quepaso', titulo: tx('rest.que_paso_que_significa_que_hacer'),
             celda: (c) => (
               <div className="rv-pj-que rv-pj-que--ancho">
                 <StatusChip tono="warn">{ROTULO_CANDIDATO}</StatusChip>
-                <p className="rv-pj-texto"><b>Qué pasó:</b> {c.quePaso}</p>
-                <p className="rv-pj-sub"><b>Qué significa:</b> {c.queSignifica}</p>
-                <p className="rv-pj-sub"><b>Qué hacer:</b> {c.queHacer}</p>
+                <p className="rv-pj-texto">{ricoT(tx('rest.b_que_paso_b'), { b: (c) => <b>{c}</b> })}{' '}{c.quePaso}</p>
+                <p className="rv-pj-sub">{ricoT(tx('rest.b_que_significa_b'), { b: (c) => <b>{c}</b> })}{' '}{c.queSignifica}</p>
+                <p className="rv-pj-sub">{ricoT(tx('rest.b_que_hacer_b'), { b: (c) => <b>{c}</b> })}{' '}{c.queHacer}</p>
                 {c.categoria === 'caseta_no_debe_cruzarse' && c.justificacion && (
-                  <p className="rv-pj-texto"><StatusChip tono="muted">Justificado</StatusChip> <b>Motivo:</b> {c.justificacion}</p>
+                  <p className="rv-pj-texto"><StatusChip tono="muted">{tx('rest.justificado')}</StatusChip>{' '}{ricoT(tx('rest.b_motivo_b'), { b: (c) => <b>{c}</b> })}{' '}{c.justificacion}</p>
                 )}
                 {c.categoria === 'caseta_no_debe_cruzarse' && !c.justificacion && justificar && desglose && (
                   <form action={justificar} className="rv-pj-forma">
                     <input type="hidden" name="desglose" value={desglose} />
                     <input type="hidden" name="indice" value={c.indice} />
-                    <CampoTexto etiqueta="Motivo" name="motivo" required minLength={3} maxLength={300} placeholder="Salida de servicio autorizada"
-                      aria-label={`Motivo para justificar el cruce del renglón ${c.indice + 1}`} />
-                    <Boton type="submit">Justificar este cruce</Boton>
+                    <CampoTexto etiqueta={tx('rest.motivo')} name="motivo" required minLength={3} maxLength={300} placeholder={tx('rest.salida_de_servicio_autorizada')}
+                      aria-label={tx('rest.motivo_para_justificar_el_cruce_del', { v: c.indice + 1 })} />
+                    <Boton type="submit">{tx('rest.justificar_este_cruce')}</Boton>
                   </form>
                 )}
               </div>
@@ -89,15 +92,14 @@ function FilasCandidatos({ candidatos, justificar, desglose }: { candidatos: Can
         ]}
       />
       {candidatos.length > visibles.length && (
-        <p className="rv-pj-sub">
-          Se muestran los primeros {numero(visibles.length)} de {numero(candidatos.length)}; el Excel trae todos.
-        </p>
+        <p className="rv-pj-sub">{tx('rest.se_muestran_los_primeros_de_el', { numero: numero(visibles.length), numero2: numero(candidatos.length) })}</p>
       )}
     </>
   );
 }
 
-export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCruce }: { revision: ReporteRevision; desglose: string; sufijo: string; justificarCruce?: Accion }) {
+export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCruce, tr = TR_ES }: { revision: ReporteRevision; desglose: string; sufijo: string; justificarCruce?: Accion; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   const ctx = sufijo ? `&${sufijo.slice(1)}` : '';
   const r = revision.revision;
   const cal = revision.calidad as {
@@ -106,21 +108,19 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
   } | null;
   const avisosCalidad: string[] = [];
   if (cal) {
-    if ((cal.sinEncabezadoConDatos?.length ?? 0) > 0) avisosCalidad.push(`${cal.sinEncabezadoConDatos?.length} columnas sin encabezado con datos (${cal.sinEncabezadoConDatos?.join(', ')}) no se importan.`);
-    if ((cal.columnasFaltantes?.length ?? 0) > 0) avisosCalidad.push(`El archivo no trae columna de: ${cal.columnasFaltantes?.join(', ')}.`);
-    if ((cal.lineasSinTag ?? 0) > 0) avisosCalidad.push(`${numero(cal.lineasSinTag ?? 0)} líneas sin TAG.`);
-    if ((cal.lineasSinUnidad ?? 0) > 0) avisosCalidad.push(`${numero(cal.lineasSinUnidad ?? 0)} líneas sin unidad.`);
-    if ((cal.lineasSinClase ?? 0) > 0) avisosCalidad.push(`${numero(cal.lineasSinClase ?? 0)} líneas sin clase legible: no se les pudo validar la clase.`);
-    if ((cal.hojasIgnoradas?.length ?? 0) > 0) avisosCalidad.push(`Se leyó solo la hoja «${cal.hojaLeida}»; «${cal.hojasIgnoradas?.join('», «')}» repite filas y leerla duplicaría cruces.`);
+    if ((cal.sinEncabezadoConDatos?.length ?? 0) > 0) avisosCalidad.push(tx('rest.columnas_sin_encabezado_con_datos_no', { length: cal.sinEncabezadoConDatos?.length ?? 0, cal: cal.sinEncabezadoConDatos?.join(', ') ?? '' }));
+    if ((cal.columnasFaltantes?.length ?? 0) > 0) avisosCalidad.push(tx('rest.el_archivo_no_trae_columna_de', { cal: cal.columnasFaltantes?.join(', ') ?? '' }));
+    if ((cal.lineasSinTag ?? 0) > 0) avisosCalidad.push(tx('rest.lineas_sin_tag', { numero: numero(cal.lineasSinTag ?? 0) }));
+    if ((cal.lineasSinUnidad ?? 0) > 0) avisosCalidad.push(tx('rest.lineas_sin_unidad', { numero: numero(cal.lineasSinUnidad ?? 0) }));
+    if ((cal.lineasSinClase ?? 0) > 0) avisosCalidad.push(tx('rest.lineas_sin_clase_legible_no_se', { numero: numero(cal.lineasSinClase ?? 0) }));
+    if ((cal.hojasIgnoradas?.length ?? 0) > 0) avisosCalidad.push(tx('rest.se_leyo_solo_la_hoja_repite', { hojaLeida: cal.hojaLeida ?? '', cal: cal.hojasIgnoradas?.join('», «') ?? '' }));
   }
   return (
     <div id="revision-cobros">
     <Tarjeta
-      titulo="Revisión de cobros del archivo"
+      titulo={tx('rest.revision_de_cobros_del_archivo')}
       acciones={(
-        <span className="rv-pj-total">
-          <span className="rv-pj-rotulo">Cruces con algún candidato</span>
-          <strong className="cifra-mono rv-pj-total__valor">{numero(r.lineasConCandidato)}</strong>
+        <span className="rv-pj-total">{ricoT(tx('rest.e0_cruces_con_algun_candidato_e0'), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}<strong className="cifra-mono rv-pj-total__valor">{numero(r.lineasConCandidato)}</strong>
           <span className="rv-pj-nota">{mxn(r.montoConCandidato)}</span>
         </span>
       )}
@@ -129,28 +129,18 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
         {revision.archivoNombre ? `${revision.archivoNombre} · ` : ''}
         {revision.periodoOficialDesde && revision.periodoOficialHasta
           ? `Periodo ${revision.periodoOficialDesde} a ${revision.periodoOficialHasta} (${rotuloOrigenPeriodo(revision.periodoOrigen)}) · `
-          : 'Periodo del archivo no declarado · '}
-        {numero(r.lineasRevisadas)} cruces · {mxn(r.montoRevisado)}
-      </p>
+          : tx('rest.periodo_del_archivo_no_declarado')}{tx('rest.cruces', { numero: numero(r.lineasRevisadas), mxn: mxn(r.montoRevisado) })}</p>
       <div><StatusChip tono="warn">{ROTULO_CANDIDATO}</StatusChip></div>
       <div className="rv-pj-acciones">
-        <BotonEnlace variante="primary" href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} icono={<Icono icono={FileDown} />}>
-          Excel de la revisión
-        </BotonEnlace>
-        <BotonEnlace href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} icono={<Icono icono={FileDown} />}>
-          Reporte para el portal del proveedor
-        </BotonEnlace>
-        <BotonEnlace href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`}>
-          Sin lo que ya reclamaste
-        </BotonEnlace>
+        <BotonEnlace variante="primary" href={`/api/export/peajes-revision?desglose=${desglose}${ctx}`} icono={<Icono icono={FileDown} />}>{tx('rest.excel_de_la_revision')}</BotonEnlace>
+        <BotonEnlace href={`/api/export/peajes-candidatos?desglose=${desglose}${ctx}`} icono={<Icono icono={FileDown} />}>{tx('rest.reporte_para_el_portal_del_proveedor')}</BotonEnlace>
+        <BotonEnlace href={`/api/export/peajes-candidatos?desglose=${desglose}&excluirReclamados=1${ctx}`}>{tx('rest.sin_lo_que_ya_reclamaste')}</BotonEnlace>
         <BotonEnlace href={`/api/export/peajes-candidatos?desglose=${desglose}&formato=csv${ctx}`}>
           CSV
         </BotonEnlace>
       </div>
 
-      <p className="rv-pj-nota">
-        Son candidatos, no cobros indebidos: sin el tarifario por caseta y clase ninguna regla puede afirmar que un monto esté mal. Valida cada uno con el proveedor por su portal (tienes {PLAZO_RECLAMO_MESES} meses desde el cobro para reclamar).
-      </p>
+      <p className="rv-pj-nota">{tx('rest.son_candidatos_no_cobros_indebidos_sin', { plazoReclamoMeses: PLAZO_RECLAMO_MESES })}</p>
 
       <div className="rv-pj-categorias">
         {CATEGORIAS_COBRO.map((c) => (
@@ -163,24 +153,17 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
       </div>
 
       {r.reglasNoAplicadas.length > 0 && (
-        <div role="note" className="rv-pj-caja">
-          <b>Reglas que no se pudieron aplicar a este archivo:</b>
-          <ul className="rv-pj-notas">
+        <div role="note" className="rv-pj-caja">{ricoT(tx('rest.b_reglas_que_no_se_pudieron'), { b: (c) => <b>{c}</b> })}<ul className="rv-pj-notas">
             {r.reglasNoAplicadas.map((n) => <li key={n.regla}>{ETIQUETA_CATEGORIA_COBRO[n.regla]}: {n.motivo}</li>)}
           </ul>
         </div>
       )}
       {avisosCalidad.length > 0 && (
-        <div role="note" className="rv-pj-caja">
-          <b>Calidad del archivo:</b>
-          <ul className="rv-pj-notas">{avisosCalidad.map((a) => <li key={a}>{a}</li>)}</ul>
+        <div role="note" className="rv-pj-caja">{ricoT(tx('rest.b_calidad_del_archivo_b'), { b: (c) => <b>{c}</b> })}<ul className="rv-pj-notas">{avisosCalidad.map((a) => <li key={a}>{a}</li>)}</ul>
         </div>
       )}
       {r.sugerenciasPasada.length > 0 && (
-        <div role="note" className="rv-pj-caja rv-pj-sub">
-          <b>¿Tarifa por pasada?</b> En estas casetas casi todos los cruces son clase 1: {r.sugerenciasPasada.map((s) => `${s.caseta} (${numero(s.cruces)})`).join(', ')}.
-          Si cobran por pasada, decláralo en «Reglas de cobro» (Configuración) y dejarán de aparecer como candidatos.
-        </div>
+        <div role="note" className="rv-pj-caja rv-pj-sub">{ricoT(tx('rest.b_tarifa_por_pasada_b_en', { r: r.sugerenciasPasada.map((s) => `${s.caseta} (${numero(s.cruces)})`).join(', ') }), { b: (c) => <b>{c}</b> })}</div>
       )}
 
       {CATEGORIAS_COBRO.map((c) => {
@@ -191,8 +174,8 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
             <summary className="rv-pj-det__cab">
               {ETIQUETA_CATEGORIA_COBRO[c]} · {numero(lista.length)} · {mxn(r.porCategoria[c].monto)}
             </summary>
-            <p className="rv-pj-sub">{EXPLICACION_CATEGORIA[c]}</p>
-            <FilasCandidatos candidatos={lista} justificar={justificarCruce} desglose={desglose} />
+            <p className="rv-pj-sub">{explicacionCategoria(tx)[c]}</p>
+            <FilasCandidatos tr={tr} candidatos={lista} justificar={justificarCruce} desglose={desglose} />
           </details>
         );
       })}
@@ -202,16 +185,13 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
           <summary className="rv-pj-det__cab">
             {ETIQUETA_DOBLE_ENTRE_ARCHIVOS} · {numero(revision.dobleEntreArchivos.candidatos.length)} · {mxn(revision.dobleEntreArchivos.montoCandidatos)}
           </summary>
-          <p className="rv-pj-sub">
-            El proveedor cobró tarde un cruce que ya aparece, con el mismo TAG, segundo, caseta e importe, en un archivo anterior de los últimos {revision.dobleEntreArchivos.ventanaMeses} meses.
-            El monto es el del segundo cobro; confírmalo con el proveedor antes de reclamarlo. El Excel del portal lo trae en su propia hoja.
-          </p>
+          <p className="rv-pj-sub">{tx('rest.el_proveedor_cobro_tarde_un_cruce', { ventanaMeses: revision.dobleEntreArchivos.ventanaMeses })}</p>
           <ul className="rv-pj-lista">
             {revision.dobleEntreArchivos.candidatos.slice(0, MAX_FILAS_POR_CATEGORIA).map((c) => (
               <li key={`${c.indice}-${c.archivoPrevioId}`} className="rv-pj-caja">
                 <StatusChip tono="warn">{mxn(c.monto)} · {ROTULO_CANDIDATO}</StatusChip>
-                <p className="rv-pj-texto"><b>Qué pasó:</b> {c.quePaso}</p>
-                <p className="rv-pj-sub"><b>Qué hacer:</b> {c.queHacer}</p>
+                <p className="rv-pj-texto">{ricoT(tx('rest.b_que_paso_b'), { b: (c) => <b>{c}</b> })}{' '}{c.quePaso}</p>
+                <p className="rv-pj-sub">{ricoT(tx('rest.b_que_hacer_b'), { b: (c) => <b>{c}</b> })}{' '}{c.queHacer}</p>
               </li>
             ))}
           </ul>
@@ -220,24 +200,22 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
 
       {revision.atipicos.atipicos.length > 0 && (
         <details className="rv-pj-det" id="atipicos">
-          <summary className="rv-pj-det__cab">Cruces atípicos · {numero(revision.atipicos.atipicos.length)}</summary>
-          <p className="rv-pj-sub">Patrones poco comunes de una misma unidad. Son avisos para el despacho, no cobros indebidos confirmados.</p>
+          <summary className="rv-pj-det__cab">{tx('rest.cruces_atipicos_2')}{' '}{numero(revision.atipicos.atipicos.length)}</summary>
+          <p className="rv-pj-sub">{tx('rest.patrones_poco_comunes_de_una_misma')}</p>
           <ul className="rv-pj-lista">
             {revision.atipicos.atipicos.slice(0, MAX_FILAS_POR_CATEGORIA).map((a) => (
               <li key={`${a.senal}-${a.indices.join('-')}`} className="rv-pj-caja">
                 <StatusChip tono="warn">{ETIQUETA_SENAL[a.senal]} · {ROTULO_CANDIDATO}</StatusChip>
-                <p className="rv-pj-texto"><b>Qué pasó:</b> {a.quePaso}</p>
-                <p className="rv-pj-sub"><b>Qué significa:</b> {a.queSignifica}</p>
-                <p className="rv-pj-sub"><b>Qué hacer:</b> {a.queHacer}</p>
+                <p className="rv-pj-texto">{ricoT(tx('rest.b_que_paso_b'), { b: (c) => <b>{c}</b> })}{' '}{a.quePaso}</p>
+                <p className="rv-pj-sub">{ricoT(tx('rest.b_que_significa_b'), { b: (c) => <b>{c}</b> })}{' '}{a.queSignifica}</p>
+                <p className="rv-pj-sub">{ricoT(tx('rest.b_que_hacer_b'), { b: (c) => <b>{c}</b> })}{' '}{a.queHacer}</p>
               </li>
             ))}
           </ul>
         </details>
       )}
       {revision.atipicos.noAplicadas.length > 0 && (
-        <p className="rv-pj-nota">
-          Señales de cruces atípicos sin aplicar: {revision.atipicos.noAplicadas.map((n) => `${ETIQUETA_SENAL[n.senal]} (${n.motivo})`).join(' · ')}
-        </p>
+        <p className="rv-pj-nota">{tx('rest.senales_de_cruces_atipicos_sin_aplicar', { revision: revision.atipicos.noAplicadas.map((n) => `${ETIQUETA_SENAL[n.senal]} (${n.motivo})`).join(' · ') })}</p>
       )}
     </Tarjeta>
     </div>
@@ -246,50 +224,46 @@ export function SeccionRevisionCobros({ revision, desglose, sufijo, justificarCr
 
 // ── El cierre mensual ───────────────────────────────────────────────────────
 
-export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opciones = [], dosMeses = false, cierreDos = null }: {
+export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opciones = [], dosMeses = false, cierreDos = null, tr = TR_ES }: {
   mes: string | null; cierre: CierreMensual | null; error: boolean; sufijo: string; desglose: string | null;
   /** Los meses que ofrece el selector (del más reciente al más viejo). Vacío = campo de texto AAAA-MM. */
   opciones?: string[];
   /** Vista de DOS meses juntos (el pedido y el anterior). */
   dosMeses?: boolean;
-  cierreDos?: CierreDosMeses | null;
+  cierreDos?: CierreDosMeses | null; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const lista = mes && opciones.length > 0 && !opciones.includes(mes) ? [mes, ...opciones] : opciones;
   return (
     <div id="cierre-mensual">
-    <Tarjeta titulo="Cierre mensual">
-      <p className="rv-pj-sub">
-        Junta las tres decenas de un mes (y compara los cobros tardíos con el mes anterior si también lo subiste). Un mes con una decena faltante se dice incompleto.
-        Con «dos meses juntos» se consolidan el mes elegido y el anterior para que los cobros tardíos se acomoden en la misma ventana.
-      </p>
-      <BarraFiltros accion="?" etiqueta="Periodo del cierre mensual" ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ...(desglose ? [['desglose', desglose] as const] : [])]}>
+    <Tarjeta titulo={tx('rest.cierre_mensual')}>
+      <p className="rv-pj-sub">{tx('rest.junta_las_tres_decenas_de_un')}</p>
+      <BarraFiltros accion="?" etiqueta={tx('rest.periodo_del_cierre_mensual')} ocultos={[...new URLSearchParams(sufijo.replace(/^\?/, '')).entries(), ...(desglose ? [['desglose', desglose] as const] : [])]}>
         {lista.length > 0 ? (
           <FiltroOpciones nombre="mes" etiqueta="Mes" valor={mes ?? lista[0]} porDefecto="" opciones={lista.map((m) => ({ valor: m, rotulo: m }))} />
         ) : (
           <FiltroCampo etiqueta="Mes"><input className="border-0 bg-transparent" name="mes" defaultValue={mes ?? ''} placeholder="2026-09" pattern="\d{4}-(0[1-9]|1[0-2])" required data-anillo="envolvente" /></FiltroCampo>
         )}
-        <FiltroOpciones nombre="meses" etiqueta="Ventana" valor={dosMeses ? '2' : '1'} porDefecto="1"
-          opciones={[{ valor: '1', rotulo: 'Un mes' }, { valor: '2', rotulo: 'Dos meses juntos' }]} />
+        <FiltroOpciones nombre="meses" etiqueta={tx('rest.ventana')} valor={dosMeses ? '2' : '1'} porDefecto="1"
+          opciones={[{ valor: '1', rotulo: tx('rest.un_mes') }, { valor: '2', rotulo: tx('rest.dos_meses_juntos') }]} />
       </BarraFiltros>
-      {error && <p role="alert" className="rv-pj-sub rv-pj-malo">No se pudo armar el cierre ahora mismo. No es que no haya cobros: inténtalo de nuevo.</p>}
-      {dosMeses && cierreDos && <CierreDosMesesVista c={cierreDos} />}
+      {error && <p role="alert" className="rv-pj-sub rv-pj-malo">{tx('rest.no_se_pudo_armar_el_cierre')}</p>}
+      {dosMeses && cierreDos && <CierreDosMesesVista tr={tr} c={cierreDos} />}
       {!dosMeses && cierre && (
         <div className="rv-pj-bloque">
           <div className="rv-pj-cab">
             <div>
               <strong>{cierre.mes}</strong>{' '}
-              <StatusChip tono={cierre.completo ? 'ok' : 'warn'}>{cierre.completo ? 'Mes completo' : 'Mes incompleto'}</StatusChip>
+              <StatusChip tono={cierre.completo ? 'ok' : 'warn'}>{cierre.completo ? tx('rest.mes_completo') : tx('rest.mes_incompleto')}</StatusChip>
             </div>
             <div className="rv-pj-der">
-              <strong className="cifra-mono rv-pj-caja__monto">{numero(cierre.cruces)}</strong> cruces · <span className="cifra-mono">{mxn(cierre.monto)}</span>
+              <strong className="cifra-mono rv-pj-caja__monto">{numero(cierre.cruces)}</strong>{' '}{tx('rest.cruces_2')}{' '}<span className="cifra-mono">{mxn(cierre.monto)}</span>
             </div>
           </div>
           <div className="rv-pj-decenas">
-            {cierre.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
+            {cierre.decenas.map((d) => <TarjetaDecena tr={tr} key={d.etiqueta} d={d} />)}
           </div>
-          <p className="rv-pj-texto">
-            Cobros tardíos (candidatos: validar con el proveedor): {numero(cierre.tardiosMesAnterior.n)} del mes anterior ({mxn(cierre.tardiosMesAnterior.monto)}) y {numero(cierre.tardiosDecenaAnterior.n)} de una decena anterior de este mes ({mxn(cierre.tardiosDecenaAnterior.monto)}).
-            {cierre.repetidosEntreArchivos.length > 0 && <> <b>{numero(cierre.repetidosEntreArchivos.length)} cobros aparecen en más de un archivo.</b></>}
+          <p className="rv-pj-texto">{tx('rest.cobros_tardios_candidatos_validar_con_el', { numero: numero(cierre.tardiosMesAnterior.n), mxn: mxn(cierre.tardiosMesAnterior.monto), numero2: numero(cierre.tardiosDecenaAnterior.n), mxn2: mxn(cierre.tardiosDecenaAnterior.monto) })}{cierre.repetidosEntreArchivos.length > 0 && <>{ricoT(tx('rest.b_cobros_aparecen_en_mas_de', { numero: numero(cierre.repetidosEntreArchivos.length) }), { b: (c) => <b>{c}</b> })}</>}
           </p>
           {cierre.avisos.length > 0 && (
             <ul className="rv-pj-notas">{cierre.avisos.map((a) => <li key={a}>{a}</li>)}</ul>
@@ -301,35 +275,33 @@ export function SeccionCierreMensual({ mes, cierre, error, sufijo, desglose, opc
   );
 }
 
-function TarjetaDecena({ d }: { d: CierreMensual['decenas'][number] }) {
+function TarjetaDecena({ d, tr = TR_ES }: { d: CierreMensual['decenas'][number]; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
-    <div className="rv-pj-caja">
-      <span className="rv-pj-rotulo">Decena {d.etiqueta}</span>
-      {d.cubierta
+    <div className="rv-pj-caja">{ricoT(tx('rest.e0_decena_e0', { etiqueta: d.etiqueta }), { e0: (c) => <span className="rv-pj-rotulo">{c}</span> })}{d.cubierta
         ? <span><strong className="rv-pj-caja__monto cifra-mono">{numero(d.cruces)}</strong> <span className="rv-pj-nota">{mxn(d.monto)}</span></span>
-        : <span className="rv-pj-sub rv-pj-malo">Falta el archivo</span>}
+        : <span className="rv-pj-sub rv-pj-malo">{tx('rest.falta_el_archivo_2')}</span>}
     </div>
   );
 }
 
-function CierreDosMesesVista({ c }: { c: CierreDosMeses }) {
+function CierreDosMesesVista({ c, tr = TR_ES }: { c: CierreDosMeses; tr?: TrAgentes }) {
+  const { t: tx } = tr;
   return (
     <div className="rv-pj-bloque" id="cierre-dos-meses">
       <div className="rv-pj-cab">
         <div>
           <strong>{c.meses[0]} + {c.meses[1]}</strong>{' '}
-          <StatusChip tono={c.completo ? 'ok' : 'warn'}>{c.completo ? 'Dos meses completos' : 'Ventana incompleta'}</StatusChip>
+          <StatusChip tono={c.completo ? 'ok' : 'warn'}>{c.completo ? tx('rest.dos_meses_completos') : tx('rest.ventana_incompleta')}</StatusChip>
         </div>
         <div className="rv-pj-der">
-          <strong className="cifra-mono rv-pj-caja__monto">{numero(c.cruces)}</strong> cruces · <span className="cifra-mono">{mxn(c.monto)}</span>
+          <strong className="cifra-mono rv-pj-caja__monto">{numero(c.cruces)}</strong>{' '}{tx('rest.cruces_2')}{' '}<span className="cifra-mono">{mxn(c.monto)}</span>
         </div>
       </div>
       <div className="rv-pj-decenas">
-        {c.decenas.map((d) => <TarjetaDecena key={d.etiqueta} d={d} />)}
+        {c.decenas.map((d) => <TarjetaDecena tr={tr} key={d.etiqueta} d={d} />)}
       </div>
-      <p className="rv-pj-texto">
-        Cobros tardíos que caen dentro de la ventana (se acomodan): {numero(c.acomodados.n)} ({mxn(c.acomodados.monto)}). Anteriores a {c.meses[0]} (candidatos: validar con el proveedor): {numero(c.tardiosFueraDeVentana.n)} ({mxn(c.tardiosFueraDeVentana.monto)}).
-        {c.repetidosEntreArchivos.length > 0 && <> <b>{numero(c.repetidosEntreArchivos.length)} cobros aparecen en más de un archivo.</b></>}
+      <p className="rv-pj-texto">{tx('rest.cobros_tardios_que_caen_dentro_de', { numero: numero(c.acomodados.n), mxn: mxn(c.acomodados.monto), v: c.meses[0], numero2: numero(c.tardiosFueraDeVentana.n), mxn2: mxn(c.tardiosFueraDeVentana.monto) })}{c.repetidosEntreArchivos.length > 0 && <>{ricoT(tx('rest.b_cobros_aparecen_en_mas_de', { numero: numero(c.repetidosEntreArchivos.length) }), { b: (c) => <b>{c}</b> })}</>}
       </p>
       {c.avisos.length > 0 && (
         <ul className="rv-pj-notas">{c.avisos.map((a) => <li key={a}>{a}</li>)}</ul>
@@ -356,17 +328,18 @@ export interface PropuestaNota {
   fallo?: boolean;
 }
 
-function etiquetaReclamo(r: ReclamoVista | undefined, id: string): string {
+function etiquetaReclamo(r: ReclamoVista | undefined, id: string, tx: TAgentes = TR_ES.t): string {
   if (!r) return `reclamo ${id.slice(0, 8)}`;
   const cat = (CATEGORIAS_COBRO as readonly string[]).includes(r.categoria) ? ETIQUETA_CATEGORIA_COBRO[r.categoria as CategoriaCobro] : r.categoria;
   const falta = Math.round((r.montoReclamado - r.montoAcreditado) * 100) / 100;
-  return `${cat} · ${numero(r.nCruces)} cruces · por acreditar ${mxn(falta)} · cobro más antiguo ${r.fechaCobroMasAntiguo}${r.referenciaPortal ? ` · folio ${r.referenciaPortal}` : ''}`;
+  return tx('rest.cruces_por_acreditar_cobro_mas_antiguo', { cat, numero: numero(r.nCruces), mxn: mxn(falta), fechaCobroMasAntiguo: r.fechaCobroMasAntiguo, v: r.referenciaPortal ? ` · folio ${r.referenciaPortal}` : '' });
 }
 
 /** «¿A qué reclamo corresponde esta nota?»: formulario GET (no escribe nada) y, si hay importe, la propuesta de `casarNota`. */
-export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
-  propuesta: PropuestaNota | null; reclamos: ReclamoVista[]; sufijo: string; desglose: string | null; mes: string | null;
+export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes, tr = TR_ES }: {
+  propuesta: PropuestaNota | null; reclamos: ReclamoVista[]; sufijo: string; desglose: string | null; mes: string | null; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const previos = new URLSearchParams(sufijo.replace(/^\?/, ''));
   if (desglose) previos.set('desglose', desglose);
   if (mes) previos.set('mes', mes);
@@ -376,38 +349,35 @@ export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
   return (
     <div className="rv-pj-caja" id="casar-nota">
       {/* sin-info: rótulo de un bloque dentro de la tarjeta de seguimiento */}
-      <h3 className="rv-pj-rotulo">¿A qué reclamo corresponde una nota de crédito?</h3>
-      <p className="rv-pj-sub">
-        El proveedor manda la nota sin decir qué cruces cubre. Escribe su importe y el sistema propone a qué reclamo(s) enviados les cuadra la suma exacta.
-        Es solo una sugerencia: no registra nada; la nota se captura en el reclamo que tú confirmes.
-      </p>
+      <h3 className="rv-pj-rotulo">{tx('rest.a_que_reclamo_corresponde_una_nota')}</h3>
+      <p className="rv-pj-sub">{tx('rest.el_proveedor_manda_la_nota_sin')}</p>
       <form method="get" action="/dashboard/agentes/peajes/reclamacion" className="rv-pj-forma">
         {[...previos.entries()].map(([k, v]) => <input key={k} type="hidden" name={k} value={v} />)}
-        <CampoTexto etiqueta="Importe de la nota (MXN)" name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} />
-        <Boton type="submit">Proponer reclamo</Boton>
+        <CampoTexto etiqueta={tx('rest.importe_de_la_nota_mxn')} name="nota" inputMode="decimal" required maxLength={20} defaultValue={propuesta?.texto ?? ''} />
+        <Boton type="submit">{tx('rest.proponer_reclamo')}</Boton>
       </form>
-      {propuesta?.fallo && <p role="alert" className="rv-pj-sub rv-pj-malo">No se pudo calcular la propuesta ahora mismo. No es que no haya coincidencia: inténtalo de nuevo.</p>}
-      {propuesta && !propuesta.fallo && propuesta.importe === null && <p role="alert" className="rv-pj-sub rv-pj-malo">{propuesta.motivo ?? 'El importe no es válido.'}</p>}
+      {propuesta?.fallo && <p role="alert" className="rv-pj-sub rv-pj-malo">{tx('rest.no_se_pudo_calcular_la_propuesta')}</p>}
+      {propuesta && !propuesta.fallo && propuesta.importe === null && <p role="alert" className="rv-pj-sub rv-pj-malo">{propuesta.motivo ?? tx('rest.el_importe_no_es_valido')}</p>}
       {r && propuesta?.importe != null && (
         <div className="rv-pj-bloque" role="status">
           {r.alertas.includes('nota_mayor_que_reclamado') && (
-            <p className="rv-pj-sub rv-pj-tono" data-tono="warn">La nota ({mxn(propuesta.importe)}) es mayor que todo lo que falta por acreditar: revisa si falta registrar un reclamo.</p>
+            <p className="rv-pj-sub rv-pj-tono" data-tono="warn">{tx('rest.la_nota_es_mayor_que_todo', { mxn: mxn(propuesta.importe) })}</p>
           )}
           {r.tipo === 'seguro' && (
-            <p className="rv-pj-texto">Coincide exactamente con: <b>{etiquetaReclamo(porId.get(r.reclamoIds[0]), r.reclamoIds[0])}</b>. Confírmalo capturando la nota en ese reclamo.</p>
+            <p className="rv-pj-texto">{tx('rest.coincide_exactamente_con')}{' '}<b>{etiquetaReclamo(porId.get(r.reclamoIds[0]), r.reclamoIds[0])}</b>{tx('rest.confirmalo_capturando_la_nota_en_ese')}</p>
           )}
           {r.tipo === 'sugerido' && (
             <>
-              <p className="rv-pj-texto">{r.ambiguo ? 'Hay más de una combinación posible; ninguna se elige sola:' : 'Podría corresponder a la suma de estos reclamos:'}</p>
+              <p className="rv-pj-texto">{r.ambiguo ? tx('rest.hay_mas_de_una_combinacion_posible') : tx('rest.podria_corresponder_a_la_suma_de')}</p>
               <ul className="rv-pj-notas">
                 {r.opciones.map((op, i) => <li key={i}>{op.map((id) => etiquetaReclamo(porId.get(id), id)).join(' + ')}</li>)}
               </ul>
-              {r.truncado && <p className="rv-pj-sub">Hay más combinaciones de las que se muestran: casa la nota a mano.</p>}
+              {r.truncado && <p className="rv-pj-sub">{tx('rest.hay_mas_combinaciones_de_las_que')}</p>}
             </>
           )}
           {r.tipo === 'demasiados' && <p className="rv-pj-sub">{r.mensaje}</p>}
           {r.tipo === 'sin_casar' && !r.alertas.includes('importe_invalido') && (
-            <p className="rv-pj-sub">Ningún reclamo enviado ni combinación de ellos suma {mxn(propuesta.importe)}. Puede ser una nota parcial: captúrala en el reclamo que creas que corresponde.</p>
+            <p className="rv-pj-sub">{tx('rest.ningun_reclamo_enviado_ni_combinacion_de', { mxn: mxn(propuesta.importe) })}</p>
           )}
         </div>
       )}
@@ -415,28 +385,24 @@ export function CasarNota({ propuesta, reclamos, sufijo, desglose, mes }: {
   );
 }
 
-export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revision, error, propuestaNota, sufijo = '', mes = null }: {
+export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revision, error, propuestaNota, sufijo = '', mes = null, tr = TR_ES }: {
   reclamos: ReclamoVista[] | null; resumen: ResumenSeguimiento | null; acciones: AccionesSeguimiento; desglose: string | null;
-  revision: ReporteRevision | null; error: boolean; propuestaNota?: PropuestaNota | null; sufijo?: string; mes?: string | null;
+  revision: ReporteRevision | null; error: boolean; propuestaNota?: PropuestaNota | null; sufijo?: string; mes?: string | null; tr?: TrAgentes;
 }) {
+  const { t: tx } = tr;
   const conCandidatos = revision ? CATEGORIAS_COBRO.filter((c) => revision.revision.porCategoria[c].n > 0) : [];
   return (
     <div id="seguimiento">
-    <Tarjeta titulo="Seguimiento de reclamos y notas de crédito">
-      <p className="rv-pj-sub">
-        El proveedor no atiende por teléfono: se reclama por su portal y, si procede, devuelve una nota de crédito sin detalle. Aquí queda qué reclamaste, qué te acreditaron y cuánto falta.
-        El plazo es de {PLAZO_RECLAMO_MESES} meses desde el cobro más antiguo del reclamo (regla dicha por el cliente: confírmala con el proveedor).
-      </p>
-      {error && <p role="alert" className="rv-pj-sub rv-pj-malo">No se pudo leer el seguimiento ahora mismo. No es que no haya reclamos: inténtalo de nuevo.</p>}
+    <Tarjeta titulo={tx('rest.seguimiento_de_reclamos_y_notas_de')}>
+      <p className="rv-pj-sub">{tx('rest.el_proveedor_no_atiende_por_telefono', { plazoReclamoMeses: PLAZO_RECLAMO_MESES })}</p>
+      {error && <p role="alert" className="rv-pj-sub rv-pj-malo">{tx('rest.no_se_pudo_leer_el_seguimiento')}</p>}
       {resumen && reclamos && (
-        <p className="rv-pj-texto">
-          {numero(resumen.reclamos)} reclamos · reclamado {mxn(resumen.montoReclamado)} · acreditado {mxn(resumen.montoAcreditado)} · <b>por acreditar {mxn(resumen.pendienteAcreditar)}</b>
-          {resumen.preparados > 0 && <> · <span className="rv-pj-apagado">{numero(resumen.preparados)} preparados sin enviar ({mxn(resumen.montoPreparado)}, aún no exigidos al proveedor)</span></>}
-          {resumen.porVencer > 0 && <> · <span className="rv-pj-tono" data-tono="warn">{numero(resumen.porVencer)} por vencer</span></>}
-          {resumen.vencidos > 0 && <> · <span className="rv-pj-malo">{numero(resumen.vencidos)} vencidos</span></>}
+        <p className="rv-pj-texto">{ricoT(tx('rest.reclamos_reclamado_acreditado_b_por_acreditar', { numero: numero(resumen.reclamos), mxn: mxn(resumen.montoReclamado), mxn2: mxn(resumen.montoAcreditado), mxn3: mxn(resumen.pendienteAcreditar) }), { b: (c) => <b>{c}</b> })}{resumen.preparados > 0 && <>{ricoT(tx('rest.e0_preparados_sin_enviar_aun_no', { numero: numero(resumen.preparados), mxn: mxn(resumen.montoPreparado) }), { e0: (c) => <span className="rv-pj-apagado">{c}</span> })}</>}
+          {resumen.porVencer > 0 && <>{ricoT(tx('rest.e0_por_vencer_e0', { numero: numero(resumen.porVencer) }), { e0: (c) => <span className="rv-pj-tono" data-tono="warn">{c}</span> })}</>}
+          {resumen.vencidos > 0 && <>{ricoT(tx('rest.e0_vencidos_e0', { numero: numero(resumen.vencidos) }), { e0: (c) => <span className="rv-pj-malo">{c}</span> })}</>}
         </p>
       )}
-      {reclamos && reclamos.length === 0 && <p className="rv-pj-sub">Aún no registras reclamos.</p>}
+      {reclamos && reclamos.length === 0 && <p className="rv-pj-sub">{tx('rest.aun_no_registras_reclamos')}</p>}
       {reclamos && reclamos.length > 0 && (
         <div className="rv-pj-bloque">
           {reclamos.map((r) => (
@@ -445,19 +411,16 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                 <strong>{(CATEGORIAS_COBRO as readonly string[]).includes(r.categoria) ? ETIQUETA_CATEGORIA_COBRO[r.categoria as CategoriaCobro] : r.categoria}</strong>
                 <StatusChip tono={TONO_ALERTA[r.evaluacion.alerta]}>{ROTULO_ALERTA[r.evaluacion.alerta]}</StatusChip>
                 <span className="rv-pj-apagado">{ETIQUETA_ESTADO_RECLAMO[r.estado]}</span>
-                {r.referenciaPortal && <span className="cifra-mono rv-pj-nota">Folio {r.referenciaPortal}</span>}
+                {r.referenciaPortal && <span className="cifra-mono rv-pj-nota">{tx('rest.folio')}{' '}{r.referenciaPortal}</span>}
               </div>
-              <p className="rv-pj-texto">
-                {numero(r.nCruces)} cruces · reclamado {mxn(r.montoReclamado)} · acreditado {mxn(r.montoAcreditado)}
-                {r.evaluacion.pctAcreditado !== null && ` (${r.evaluacion.pctAcreditado}%)`} · cobro más antiguo {r.fechaCobroMasAntiguo} · vence {r.evaluacion.fechaLimite}
-              </p>
+              <p className="rv-pj-texto">{tx('rest.cruces_reclamado_acreditado', { numero: numero(r.nCruces), mxn: mxn(r.montoReclamado), mxn2: mxn(r.montoAcreditado) })}{r.evaluacion.pctAcreditado !== null && ` (${r.evaluacion.pctAcreditado}%)`}{' '}{tx('rest.cobro_mas_antiguo_vence', { fechaCobroMasAntiguo: r.fechaCobroMasAntiguo, fechaLimite: r.evaluacion.fechaLimite })}</p>
               <p className="rv-pj-sub">{r.evaluacion.mensaje}</p>
               {r.estado === 'preparado' && (
                 <form action={acciones.marcarEnviado} className="rv-pj-forma">
                   <input type="hidden" name="reclamo" value={r.id} />
-                  <CampoFecha etiqueta="Enviado el" name="enviado_en" required />
-                  <CampoTexto etiqueta="Folio del portal (opc.)" name="referencia" maxLength={120} />
-                  <Boton type="submit" variante="primary">Marcar como enviado</Boton>
+                  <CampoFecha etiqueta={tx('rest.enviado_el')} name="enviado_en" required />
+                  <CampoTexto etiqueta={tx('rest.folio_del_portal_opc')} name="referencia" maxLength={120} />
+                  <Boton type="submit" variante="primary">{tx('rest.marcar_como_enviado')}</Boton>
                 </form>
               )}
               {(r.estado === 'enviado' || r.estado === 'acreditado_parcial') && (
@@ -466,14 +429,14 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
                     <input type="hidden" name="reclamo" value={r.id} />
                     {/* A33-06: lo que esta pantalla vio; un doble clic o pestaña repetida manda lo mismo y la base lo registra una sola vez. */}
                     <input type="hidden" name="version_vista" value={`${r.estado}:${r.montoAcreditado}`} />
-                    <CampoTexto etiqueta="Nota de crédito (MXN)" name="monto" inputMode="decimal" required />
-                    <CampoFecha etiqueta="Fecha" name="fecha" required />
-                    <CampoTexto etiqueta="Folio de la nota (opc.)" name="referencia" maxLength={120} />
-                    <Boton type="submit" variante="primary">Registrar nota de crédito</Boton>
+                    <CampoTexto etiqueta={tx('rest.nota_de_credito_mxn')} name="monto" inputMode="decimal" required />
+                    <CampoFecha etiqueta={tx('proveedores.vista.fecha')} name="fecha" required />
+                    <CampoTexto etiqueta={tx('rest.folio_de_la_nota_opc')} name="referencia" maxLength={120} />
+                    <Boton type="submit" variante="primary">{tx('rest.registrar_nota_de_credito')}</Boton>
                   </form>
                   <form action={acciones.rechazar}>
                     <input type="hidden" name="reclamo" value={r.id} />
-                    <Boton type="submit">El proveedor lo rechazó</Boton>
+                    <Boton type="submit">{tx('rest.el_proveedor_lo_rechazo')}</Boton>
                   </form>
                 </div>
               )}
@@ -482,7 +445,7 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
         </div>
       )}
       {reclamos && reclamos.some((r) => r.estado === 'enviado' || r.estado === 'acreditado_parcial') && (
-        <CasarNota propuesta={propuestaNota ?? null} reclamos={reclamos} sufijo={sufijo} desglose={desglose} mes={mes} />
+        <CasarNota tr={tr} propuesta={propuestaNota ?? null} reclamos={reclamos} sufijo={sufijo} desglose={desglose} mes={mes} />
       )}
       {desglose && conCandidatos.length > 0 && (
         <FormaRegistrarReclamo
@@ -491,7 +454,7 @@ export function SeccionSeguimiento({ reclamos, resumen, acciones, desglose, revi
         />
       )}
       {desglose && conCandidatos.length > 0 && (
-        <p className="rv-pj-nota">El número de cruces, el importe y el cobro más antiguo se toman de los candidatos de la categoría, no de lo que escribas.</p>
+        <p className="rv-pj-nota">{tx('rest.el_numero_de_cruces_el_importe')}</p>
       )}
     </Tarjeta>
     </div>

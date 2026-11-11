@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cadaCuantas, colocarLado, compactEs, esConteoPequeno, geometriaColumnas, indicesEtiquetados, niceScale, ranuraEn, variacionVsAnterior } from './escala';
+import { cadaCuantas, colocarLado, compactEs, esConteoPequeno, geometriaColumnas, indicesEtiquetados, marcasEje, niceScale, ranuraEn, unidadDeFormato, variacionVsAnterior } from './escala';
 
 describe('compactEs', () => {
   it('compacta con es-MX y conserva el signo', () => {
@@ -114,5 +114,27 @@ describe('ranuraEn', () => {
     expect(ranuraEn(-20, 4, 400)).toBe(0);
     expect(ranuraEn(900, 4, 400)).toBe(3);
     expect(ranuraEn(10, 0, 400)).toBe(-1);
+  });
+});
+
+describe('marcasEje · eje Y sin marcas repetidas', () => {
+  it('tope < 1: la mitad ya no se redondea al mismo entero («0, 1, 1»)', () => {
+    expect(marcasEje([0, 0.5, 1])).toEqual(['0', '0.5', '1.0']);
+    expect(marcasEje([0, 0.4, 0.8])).toEqual(['0', '0.4', '0.8']);
+    expect(marcasEje([0, 0.04, 0.08])).toEqual(['0', '0.04', '0.08']);
+  });
+  it('enteros y miles compactos se conservan y nunca se repiten', () => {
+    expect(marcasEje([0, 50, 100])).toEqual(['0', '50', '100']);
+    expect(marcasEje([0, 1500, 3000])).toEqual(['0', '1.5 mil', '3 mil']);
+    for (const max of [0.03, 0.2, 0.6, 1, 2, 7, 90, 1200, 5e6]) {
+      const m = marcasEje(niceScale(max).ticks);
+      expect(new Set(m).size, `max ${max}: ${m.join(' | ')}`).toBe(3);
+    }
+  });
+  it('la unidad se deduce del id de formato', () => {
+    expect(unidadDeFormato('usd')).toBe('US$');
+    expect(unidadDeFormato('mxnCompacto')).toBe('MXN');
+    expect(unidadDeFormato('numero')).toBeUndefined();
+    expect(unidadDeFormato((v: number) => String(v))).toBeUndefined();
   });
 });

@@ -20,11 +20,15 @@ import { NextResponse } from 'next/server';
 import { rateLimit, clientIp } from '@/lib/ratelimit';
 import { leerTextoAcotado } from '@/lib/http/cuerpo_acotado';
 import { crearProspecto, validarProspecto } from '@/lib/likida/vendedores';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, textoDeDato } from '@/lib/likida/errores';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { logger } from '@/lib/logger';
 import { atribucionDe, canalDe } from '@/lib/marketing/atribucion';
+import { getT } from '@/lib/i18n/servidor';
+
+/** El traductor, pedido SOLO cuando hay un texto que decir. */
+const T = () => getT('mensajes');
 
 export const dynamic = 'force-dynamic';
 
@@ -45,12 +49,12 @@ const n = (v: unknown): number | null =>
 
 export async function POST(req: Request) {
   if (!(await rateLimit(`marketing-prospecto:${clientIp(req)}`, 5, 10 * 60_000))) {
-    return NextResponse.json({ error: 'Demasiados intentos. Espera unos minutos.' }, { status: 429 });
+    return NextResponse.json({ error: (await T()).t('mk.intentos') }, { status: 429 });
   }
   const lectura = await leerTextoAcotado(req, 10_000);
   if (!lectura.ok) {
     return NextResponse.json(
-      { error: lectura.motivo === 'demasiado_grande' ? 'El cuerpo es demasiado grande.' : 'Cuerpo inválido.' },
+      { error: (await T()).t(lectura.motivo === 'demasiado_grande' ? 'mk.cuerpo_grande' : 'mk.cuerpo_invalido') },
       { status: lectura.motivo === 'demasiado_grande' ? 413 : 400 },
     );
   }
@@ -59,7 +63,7 @@ export async function POST(req: Request) {
   try {
     c = JSON.parse(lectura.texto) as Cuerpo;
   } catch {
-    return NextResponse.json({ error: 'Cuerpo inválido.' }, { status: 400 });
+    return NextResponse.json({ error: (await T()).t('mk.cuerpo_invalido') }, { status: 400 });
   }
 
   // Honeypot: 200 sin escribir. El log queda para medir el ruido.
@@ -72,7 +76,7 @@ export async function POST(req: Request) {
   const telefono = s(c.telefono).trim();
   if (correo === '' && telefono === '') {
     return NextResponse.json(
-      { error: 'Déjanos tu correo o tu WhatsApp: sin uno de los dos no hay a dónde mandarte tu copia.' },
+      { error: (await T()).t('mk.sin_contacto') },
       { status: 400 },
     );
   }
@@ -125,12 +129,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof DatoInvalido) {
-      return NextResponse.json({ error: e.message }, { status: 400 });
+      const tr = await T();
+      return NextResponse.json({ error: textoDeDato(e, tr.idioma) }, { status: 400 });
     }
     const error = e instanceof Error ? e.message : String(e);
     logger.error('marketing.prospecto_fallo', { error });
     return NextResponse.json(
-      { error: 'No pudimos registrar tus datos. Inténtalo de nuevo en un momento.' },
+      { error: (await T()).t('mk.falla') },
       { status: 500 },
     );
   }

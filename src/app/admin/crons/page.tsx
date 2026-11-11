@@ -3,6 +3,7 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { detalleLatidos } from '@/lib/admin/salud';
 import { logger } from '@/lib/logger';
 import { VistaCrons } from './vista';
+import { getT } from '@/lib/i18n/servidor';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,6 +16,7 @@ export const dynamic = 'force-dynamic';
 export default async function CronsPage() {
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
+  const { t, idioma } = await getT('admin_sistema');
   // El `.catch(() => null)` de la casa: `null` significa «no se pudo leer», y
   // la vista lo DICE. Lo que no se hace es devolver una tabla vacía — una
   // tabla de renglones grises se leería como relojes tranquilos, que es la
@@ -24,7 +26,10 @@ export default async function CronsPage() {
     return null;
   });
 
-  return <VistaCrons latidos={latidos} />;
+  return <VistaCrons latidos={latidos} t={t} idioma={idioma} />;
 }
 
-export const metadata: Metadata = { title: 'Relojes' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('crons.relojes') };
+}

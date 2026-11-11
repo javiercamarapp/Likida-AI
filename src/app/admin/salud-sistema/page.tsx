@@ -24,6 +24,8 @@ import { obtenerPanoramaAccion } from '../requiere-accion';
 import { resumenRelojes } from '../crons/estado-relojes';
 import { TarjetaRenglon, type RenglonSistema } from '../renglon-sistema';
 import '../sistema.css';
+import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
+import { rico } from '@/lib/i18n/rico';
 
 export const dynamic = 'force-dynamic';
 
@@ -84,9 +86,10 @@ function ofuscado(correo: string): string {
  * La consulta más barata que prueba el camino completo hasta Postgres: HEAD + count no trae filas, solo la cabecera con el conteo.
  */
 async function medirSupabase(): Promise<RenglonSistema> {
+  const { t: tx } = await getT('admin_sistema');
   const base = {
-    titulo: 'Base de datos (Supabase)',
-    link: { href: 'https://supabase.com/dashboard', texto: 'Abrir el panel de Supabase' },
+    titulo: tx('salud_sistema.base_de_datos_supabase'),
+    link: { href: 'https://supabase.com/dashboard', texto: tx('salud_sistema.abrir_el_panel_de_supabase') },
   };
   try {
     // supabase-js reporta POR VALOR: sin comprobar `error`, una base caída se leería como "respondió". Ver `exigir()` en analytics.ts.
@@ -95,120 +98,122 @@ async function medirSupabase(): Promise<RenglonSistema> {
       'salud.tenant',
     );
     if (error) {
-      return { ...base, tono: 'bad', etiqueta: 'No respondió', detalle: `No respondió: ${error.message}` };
+      return { ...base, tono: 'bad', etiqueta: tx('salud_sistema.no_respondio'), detalle: tx('salud_sistema.no_respondio_2', { message: error.message }) };
     }
-    return { ...base, tono: 'ok', etiqueta: 'Respondió', detalle: 'Se hizo una consulta real al abrir esta pantalla y contestó.' };
+    return { ...base, tono: 'ok', etiqueta: tx('salud_sistema.respondio'), detalle: tx('salud_sistema.se_hizo_una_consulta_real_al') };
   } catch (e) {
     // `supabaseAdmin()` lanza si faltan sus variables; también es "no respondió".
-    return { ...base, tono: 'bad', etiqueta: 'No respondió', detalle: `No respondió: ${e instanceof Error ? e.message : String(e)}` };
+    return { ...base, tono: 'bad', etiqueta: tx('salud_sistema.no_respondio'), detalle: tx('salud_sistema.no_respondio_3', { v: e instanceof Error ? e.message : String(e) }) };
   }
 }
 
-function renglonAlerta(): RenglonSistema {
-  const titulo = 'Aviso al operador cuando algo falla';
+function renglonAlerta(tx: TSistema = T_SISTEMA_ES): RenglonSistema {
+  const titulo = tx('salud_sistema.aviso_al_operador_cuando_algo_falla');
   const correo = process.env.ALERTA_EMAIL;
   if (alertaConfigurada() && correo) {
     return {
-      titulo, tono: 'ok', etiqueta: `Avisos a ${ofuscado(correo)}`,
-      detalle: 'Cuando un reloj falla, sale un correo al operador (máximo uno por evento por hora).',
+      titulo, tono: 'ok', etiqueta: tx('salud_sistema.avisos_a', { correo: ofuscado(correo) }),
+      detalle: tx('salud_sistema.cuando_un_reloj_falla_sale_un'),
     };
   }
   if (!correo) {
     return {
-      titulo, tono: 'warn', etiqueta: 'Sin destinatario',
-      detalle: 'Los fallos de los relojes no le llegan a nadie por correo.',
-      arreglo: 'Falta la variable ALERTA_EMAIL en el servidor.',
+      titulo, tono: 'warn', etiqueta: tx('salud_sistema.sin_destinatario'),
+      detalle: tx('salud_sistema.los_fallos_de_los_relojes_no'),
+      arreglo: tx('salud_sistema.falta_la_variable_alerta_email_en'),
     };
   }
   // Hay dirección pero el correo (Resend) no está configurado: la alerta no tiene por dónde salir. Decirlo "listo" sería el mismo verde de adorno.
   return {
-    titulo, tono: 'warn', etiqueta: 'Correo sin configurar',
-    detalle: 'Hay dirección de aviso, pero el correo no está configurado: la alerta no puede salir.',
-    arreglo: 'Faltan RESEND_API_KEY o RESEND_EMAIL_DOMAIN en el servidor.',
+    titulo, tono: 'warn', etiqueta: tx('salud_sistema.correo_sin_configurar'),
+    detalle: tx('salud_sistema.hay_direccion_de_aviso_pero_el'),
+    arreglo: tx('salud_sistema.faltan_resend_api_key_o_resend'),
   };
 }
 
 /** El cofre de credenciales de conectores. La medición es la misma que usa la pantalla de conectores: `cofreConfigurado()` — presente Y
  *  de al menos 32 caracteres, no solo presente. */
-function renglonCofre(): RenglonSistema {
-  const titulo = 'Cofre de credenciales';
+function renglonCofre(tx: TSistema = T_SISTEMA_ES): RenglonSistema {
+  const titulo = tx('salud_sistema.cofre_de_credenciales');
   return cofreConfigurado()
-    ? { titulo, tono: 'ok', etiqueta: 'Llave puesta', detalle: 'Las credenciales de los conectores (rastreo GPS) se pueden cifrar y guardar.' }
+    ? { titulo, tono: 'ok', etiqueta: tx('salud_sistema.llave_puesta'), detalle: tx('salud_sistema.las_credenciales_de_los_conectores_rastreo') }
     : {
-      titulo, tono: 'warn', etiqueta: 'Ausente o demasiado corta',
-      detalle: 'El cofre no puede guardar credenciales de conectores. A propósito no las guarda sin cifrar: el modo de falla aceptable es «no se guardó», nunca «se guardó en claro».',
-      arreglo: 'Falta LIKIDA_COFRE_LLAVE, o tiene menos de 32 caracteres.',
+      titulo, tono: 'warn', etiqueta: tx('salud_sistema.ausente_o_demasiado_corta'),
+      detalle: tx('salud_sistema.el_cofre_no_puede_guardar_credenciales'),
+      arreglo: tx('salud_sistema.falta_likida_cofre_llave_o_tiene'),
     };
 }
 
 /** Sin `CRON_SECRET`, TODOS los relojes devuelven error A PROPÓSITO (`puertaCron`): un 200 dejaría el reloj verde en Vercel sin haber
  *  hecho nada. La cuenta sale de `CRONS`, la misma constante que `salud.test.ts` cruza contra vercel.json: no se puede desfasar. */
-function renglonCronSecret(): RenglonSistema {
-  const titulo = 'Clave de los relojes';
+function renglonCronSecret(tx: TSistema = T_SISTEMA_ES): RenglonSistema {
+  const titulo = tx('salud_sistema.clave_de_los_relojes');
   return process.env.CRON_SECRET
     ? {
-      titulo, tono: 'ok', etiqueta: 'Configurada',
-      detalle: `Los ${CRONS.length} relojes la exigen en cada disparo y Vercel la manda sola.`,
+      titulo, tono: 'ok', etiqueta: tx('salud_sistema.configurada'),
+      detalle: tx('salud_sistema.los_relojes_la_exigen_en_cada', { length: CRONS.length }),
     }
     : {
-      titulo, tono: 'bad', etiqueta: 'Sin clave: los relojes no corren',
-      detalle: `Los ${CRONS.length} relojes devuelven error sin ella (a propósito: un éxito dejaría el reloj en verde sin hacer nada). Ninguno está corriendo.`,
-      arreglo: 'Falta CRON_SECRET en el servidor.',
+      titulo, tono: 'bad', etiqueta: tx('salud_sistema.sin_clave_los_relojes_no_corren'),
+      detalle: tx('salud_sistema.los_relojes_devuelven_error_sin_ella', { length: CRONS.length }),
+      arreglo: tx('salud_sistema.falta_cron_secret_en_el_servidor'),
     };
 }
 
 /** QStash: presencia de las TRES variables. El estado parcial (token sin llaves) es el peligroso: el reloj encola y la respuesta de vuelta se rechaza. */
-function renglonQstash(): RenglonSistema {
-  const titulo = 'Cola de facturación (QStash)';
+function renglonQstash(tx: TSistema = T_SISTEMA_ES): RenglonSistema {
+  const titulo = tx('salud_sistema.cola_de_facturacion_qstash');
   const token = !!process.env.UPSTASH_QSTASH_TOKEN;
   const llaves = !!process.env.QSTASH_CURRENT_SIGNING_KEY && !!process.env.QSTASH_NEXT_SIGNING_KEY;
   if (token && llaves) {
     return {
-      titulo, tono: 'ok', etiqueta: 'Token y llaves de firma presentes',
-      detalle: 'El reloj de facturación puede encolar lotes grandes, hasta 10 minutos por lote, y la vuelta verifica la firma.',
+      titulo, tono: 'ok', etiqueta: tx('salud_sistema.token_y_llaves_de_firma_presentes'),
+      detalle: tx('salud_sistema.el_reloj_de_facturacion_puede_encolar'),
     };
   }
   if (token && !llaves) {
     return {
-      titulo, tono: 'bad', etiqueta: 'Token SIN llaves de firma',
-      detalle: 'El reloj encola el lote pero la vuelta lo rechaza (error 503) porque no puede verificar la firma: lo encolado no se procesa.',
-      arreglo: 'Faltan QSTASH_CURRENT_SIGNING_KEY y QSTASH_NEXT_SIGNING_KEY.',
+      titulo, tono: 'bad', etiqueta: tx('salud_sistema.token_sin_llaves_de_firma'),
+      detalle: tx('salud_sistema.el_reloj_encola_el_lote_pero'),
+      arreglo: tx('salud_sistema.faltan_qstash_current_signing_key_y_qstash_next_signing_key'),
     };
   }
   return {
-    titulo, tono: 'warn', etiqueta: 'Sin configurar',
-    detalle: 'Sin la cola, el reloj de facturación procesa el lote en la misma pasada, bajo el tope de 300 s: funciona, pero un lote grande se corta. La cola existe para romper ese tope.',
-    arreglo: 'Falta UPSTASH_QSTASH_TOKEN.',
+    titulo, tono: 'warn', etiqueta: tx('salud_sistema.sin_configurar'),
+    detalle: tx('salud_sistema.sin_la_cola_el_reloj_de'),
+    arreglo: tx('salud_sistema.falta_upstash_qstash_token'),
   };
 }
 
 /** Límite de intentos distribuido (auditoría externa 15-ago, P1). Sin las dos variables de Upstash Redis, `rateLimit` sigue funcionando
  *  pero cae al Map en memoria de CADA instancia — en Vercel, "10 intentos" se vuelven "10 × instancias en paralelo": no hay límite
  *  global. Mismo `bad` que Sentry: no es "un lote grande se corta", es "la protección contra fuerza bruta no protege". */
-function renglonRatelimit(): RenglonSistema {
-  const titulo = 'Límite de intentos (Upstash Redis)';
+function renglonRatelimit(tx: TSistema = T_SISTEMA_ES): RenglonSistema {
+  const titulo = tx('salud_sistema.limite_de_intentos_upstash_redis');
   return redisConfigurado()
     ? {
-      titulo, tono: 'ok', etiqueta: 'Configurado',
-      detalle: 'El conteo de intentos de login, exportaciones y del webhook de WhatsApp es global entre instancias, no por instancia.',
+      titulo, tono: 'ok', etiqueta: tx('salud_sistema.configurado'),
+      detalle: tx('salud_sistema.el_conteo_de_intentos_de_login'),
     }
     : {
-      titulo, tono: 'bad', etiqueta: 'Sin configurar — límite solo por instancia',
-      detalle: 'El límite vive en la memoria de cada instancia y en Vercel eso ya no es un límite global: la protección contra intentos repetidos no protege.',
-      arreglo: 'Faltan UPSTASH_REDIS_REST_URL y UPSTASH_REDIS_REST_TOKEN.',
+      titulo, tono: 'bad', etiqueta: tx('salud_sistema.sin_configurar_limite_solo_por_instancia'),
+      detalle: tx('salud_sistema.el_limite_vive_en_la_memoria'),
+      arreglo: tx('salud_sistema.faltan_upstash_redis_rest_url_y_token'),
     };
 }
 
-const NOMBRE_GRUPO: Record<EnvGroup, string> = {
-  llm: 'IA (OpenRouter)',
+const nombreGrupo = (tx: TSistema = T_SISTEMA_ES): Record<EnvGroup, string> => ({
+  llm: tx('salud_sistema.ia_openrouter'),
   whatsapp: 'WhatsApp Cloud API',
-  supabase: 'Supabase (llaves)',
-};
+  supabase: tx('salud_sistema.supabase_llaves'),
+});
 
 export default async function SaludSistemaPage() {
+  const { t: tx } = await getT('admin_sistema');
   // A37-S05-01/S06-01: puerta propia; el layout puede no ejecutarse en una petición RSC parcial.
   await requireSuperadmin();
   const salud = envHealth();
+  const NOMBRE_GRUPO = nombreGrupo(tx);
   const falta = faltantes();
   // Las cuatro lecturas caen cada una por su lado y NINGUNA tumba la pantalla: una fuente ciega se dice «sin dato», nunca un cero.
   const [supabase, latidos, slos, panorama, quemaSlo, silencio, { t: tf }] = await Promise.all([
@@ -235,74 +240,74 @@ export default async function SaludSistemaPage() {
   const renglones: RenglonSistema[] = [
     sentryActivo()
       ? {
-        titulo: 'Errores (Sentry)', tono: 'ok', etiqueta: 'Destino de errores puesto',
-        detalle: 'Hay a dónde mandar los errores. Que Sentry los reciba de verdad se comprueba en su panel, no desde aquí.',
-        link: { href: 'https://sentry.io', texto: 'Abrir Sentry' },
+        titulo: tx('salud_sistema.errores_sentry'), tono: 'ok', etiqueta: tx('salud_sistema.destino_de_errores_puesto'),
+        detalle: tx('salud_sistema.hay_a_donde_mandar_los_errores'),
+        link: { href: 'https://sentry.io', texto: tx('salud_sistema.abrir_sentry') },
       }
       : {
-        titulo: 'Errores (Sentry)', tono: 'bad', etiqueta: 'Sin DSN — ciego',
-        detalle: 'Los errores solo quedan en el registro de ejecución de Vercel, sin alerta y con retención corta.',
-        arreglo: 'Falta el DSN de Sentry en el servidor.',
-        link: { href: 'https://sentry.io', texto: 'Abrir Sentry' },
+        titulo: tx('salud_sistema.errores_sentry'), tono: 'bad', etiqueta: tx('salud_sistema.sin_dsn_ciego'),
+        detalle: tx('salud_sistema.los_errores_solo_quedan_en_el'),
+        arreglo: tx('salud_sistema.falta_el_dsn_de_sentry_en'),
+        link: { href: 'https://sentry.io', texto: tx('salud_sistema.abrir_sentry') },
       },
     supabase,
     correoConfigurado()
-      ? { titulo: 'Correo (Resend)', tono: 'ok', etiqueta: 'Configurado', detalle: 'Hay llave y dominio remitente: los avisos por correo pueden salir.' }
+      ? { titulo: tx('salud_sistema.correo_resend'), tono: 'ok', etiqueta: tx('salud_sistema.configurado'), detalle: tx('salud_sistema.hay_llave_y_dominio_remitente_los') }
       : {
-        titulo: 'Correo (Resend)', tono: 'warn', etiqueta: 'Sin configurar',
-        detalle: 'Ningún aviso por correo sale (esperado en local).',
-        arreglo: 'Faltan RESEND_API_KEY o RESEND_EMAIL_DOMAIN en el servidor.',
+        titulo: tx('salud_sistema.correo_resend'), tono: 'warn', etiqueta: tx('salud_sistema.sin_configurar'),
+        detalle: tx('salud_sistema.ningun_aviso_por_correo_sale_esperado'),
+        arreglo: tx('salud_sistema.faltan_resend_api_key_o_resend'),
       },
-    renglonAlerta(),
-    renglonCronSecret(),
-    renglonCofre(),
-    renglonQstash(),
-    renglonRatelimit(),
+    renglonAlerta(tx),
+    renglonCronSecret(tx),
+    renglonCofre(tx),
+    renglonQstash(tx),
+    renglonRatelimit(tx),
     {
-      titulo: 'Disponibilidad y despliegues (Vercel)', tono: 'neutral', etiqueta: 'No medido',
+      titulo: tx('salud_sistema.disponibilidad_y_despliegues_vercel'), tono: 'neutral', etiqueta: tx('salud_sistema.no_medido'),
       // Un verde fijo aquí es mentira; un neutral honesto no. Desde adentro no hay nada que medir: si esta página renderiza, Vercel ya contestó.
-      detalle: 'No se mide desde aquí. Abre el panel: historial de despliegues, registros de construcción y de ejecución.',
-      link: { href: 'https://vercel.com/dashboard', texto: 'Abrir el panel de Vercel' },
+      detalle: tx('salud_sistema.no_se_mide_desde_aqui_abre'),
+      link: { href: 'https://vercel.com/dashboard', texto: tx('salud_sistema.abrir_el_panel_de_vercel') },
     },
     {
-      titulo: 'Cobro, timbrado y cuenta de transferencias', tono: 'neutral', etiqueta: 'Medidos en Planes y cobro',
+      titulo: tx('salud_sistema.cobro_timbrado_y_cuenta_de_transferencias'), tono: 'neutral', etiqueta: tx('salud_sistema.medidos_en_planes_y_cobro'),
       // Se ENLAZA, no se duplica: esos tres ya tienen semáforo medido allá, y dos copias del mismo semáforo se desincronizan al primer cambio.
-      detalle: 'El cobro (Stripe), el timbrado de facturas (Facturapi) y la cuenta de transferencias ya tienen su semáforo medido en su propia pantalla.',
-      link: { href: '/admin/costos-facturacion', texto: 'Ir a Planes y cobro' },
+      detalle: tx('salud_sistema.el_cobro_stripe_el_timbrado_de'),
+      link: { href: '/admin/costos-facturacion', texto: tx('salud_sistema.ir_a_planes_y_cobro') },
     },
     ...(Object.keys(NOMBRE_GRUPO) as EnvGroup[]).map((g): RenglonSistema => (
       salud[g]
-        ? { titulo: `Variables de ${NOMBRE_GRUPO[g]}`, tono: 'ok', etiqueta: 'Completas', detalle: 'Todas las variables del grupo están puestas en este entorno.' }
+        ? { titulo: tx('salud_sistema.variables_de', { grupo: NOMBRE_GRUPO[g] }), tono: 'ok', etiqueta: tx('salud_sistema.completas'), detalle: tx('salud_sistema.todas_las_variables_del_grupo_estan') }
         : {
-          titulo: `Variables de ${NOMBRE_GRUPO[g]}`, tono: 'bad', etiqueta: 'Incompletas',
-          detalle: 'Faltan variables de este grupo en este entorno.',
-          arreglo: `Faltan: ${(falta[g] ?? []).join(', ')}.`,
+          titulo: tx('salud_sistema.variables_de', { grupo: NOMBRE_GRUPO[g] }), tono: 'bad', etiqueta: tx('salud_sistema.incompletas'),
+          detalle: tx('salud_sistema.faltan_variables_de_este_grupo_en'),
+          arreglo: tx('salud_sistema.faltan_variables', { lista: (falta[g] ?? []).join(', ') }),
         }
     )),
   ];
 
   return (
-    <MarcoPagina titulo="Estado" apoyo="Si el sistema está vivo, hoy: relojes, objetivos de servicio y cada pieza de la que depende. Todo está medido o dice que no lo está.">
-      <TiraCifras etiqueta="Resumen de salud" items={[
+    <MarcoPagina titulo={tx('salud_sistema.estado')} apoyo={tx('salud_sistema.si_el_sistema_esta_vivo_hoy')}>
+      <TiraCifras etiqueta={tx('salud_sistema.resumen_de_salud')} items={[
         relojes === null
-          ? { etiqueta: 'Relojes a tiempo', valor: null, estado: 'error', mensaje: 'No se pudo leer el pulso de los relojes.', reintentar: true }
-          : { etiqueta: 'Relojes a tiempo', valor: CRONS.length - relojesMalos, formato: 'entero', tono: relojesMalos > 0 ? 'bad' : relojes.parciales.length > 0 ? 'warn' : 'ok', nota: relojesMalos > 0 ? `${relojesMalos} de ${CRONS.length} no laten o fallaron.` : relojes.parciales.length > 0 ? `${relojes.parciales.length} con corrida parcial.` : `Los ${CRONS.length} latieron en su cadencia.`, href: '/admin/crons' },
+          ? { etiqueta: tx('salud_sistema.relojes_a_tiempo'), valor: null, estado: 'error', mensaje: tx('salud_sistema.no_se_pudo_leer_el_pulso'), reintentar: true }
+          : { etiqueta: tx('salud_sistema.relojes_a_tiempo'), valor: CRONS.length - relojesMalos, formato: 'entero', tono: relojesMalos > 0 ? 'bad' : relojes.parciales.length > 0 ? 'warn' : 'ok', nota: relojesMalos > 0 ? tx('salud_sistema.de_no_laten_o_fallaron', { relojesMalos, length: CRONS.length }) : relojes.parciales.length > 0 ? tx('salud_sistema.con_corrida_parcial', { n: relojes.parciales.length }) : tx('salud_sistema.los_latieron_en_su_cadencia', { length: CRONS.length }), href: '/admin/crons' },
         slos === null
-          ? { etiqueta: 'Objetivos que se cumplen', valor: null, estado: 'error', mensaje: 'No se pudieron medir los objetivos.', reintentar: true }
+          ? { etiqueta: tx('salud_sistema.objetivos_que_se_cumplen'), valor: null, estado: 'error', mensaje: tx('salud_sistema.no_se_pudieron_medir_los_objetivos'), reintentar: true }
           : medidos.length === 0
-            ? { etiqueta: 'Objetivos que se cumplen', valor: null, estado: 'vacio', mensaje: 'Sin muestra suficiente para medirlos todavía.' }
-            : { etiqueta: 'Objetivos que se cumplen', valor: medidos.length - incumplidos, formato: 'entero', tono: incumplidos > 0 ? 'bad' : 'ok', nota: `De ${medidos.length} medidos${slos.length > medidos.length ? `; ${slos.length - medidos.length} sin muestra` : ''}.`, href: '/admin/observabilidad' },
+            ? { etiqueta: tx('salud_sistema.objetivos_que_se_cumplen'), valor: null, estado: 'vacio', mensaje: tx('salud_sistema.sin_muestra_suficiente_para_medirlos_todavia') }
+            : { etiqueta: tx('salud_sistema.objetivos_que_se_cumplen'), valor: medidos.length - incumplidos, formato: 'entero', tono: incumplidos > 0 ? 'bad' : 'ok', nota: slos.length > medidos.length ? tx('salud_sistema.de_medidos_sin_muestra', { medidos: medidos.length, sin: slos.length - medidos.length }) : tx('salud_sistema.de_medidos', { medidos: medidos.length }), href: '/admin/observabilidad' },
         pendientes === null
-          ? { etiqueta: 'Pendientes de la consola', valor: null, estado: 'error', mensaje: 'No se pudo leer lo que espera a una persona.', reintentar: true }
-          : { etiqueta: 'Pendientes de la consola', valor: pendientes, formato: 'entero', tono: panorama?.resumen.hayUrgente ? 'bad' : pendientes > 0 ? 'warn' : undefined, nota: 'Lo mismo que cuenta la campana.', href: '/admin/escalaciones' },
+          ? { etiqueta: tx('salud_sistema.pendientes_de_la_consola'), valor: null, estado: 'error', mensaje: tx('salud_sistema.no_se_pudo_leer_lo_que'), reintentar: true }
+          : { etiqueta: tx('salud_sistema.pendientes_de_la_consola'), valor: pendientes, formato: 'entero', tono: panorama?.resumen.hayUrgente ? 'bad' : pendientes > 0 ? 'warn' : undefined, nota: tx('salud_sistema.lo_mismo_que_cuenta_la_campana'), href: '/admin/escalaciones' },
       ]} />
 
       {slos !== null && incumplidos > 0 ? (
         <section className="adm-sis-bloque" aria-labelledby="slo-incumplidos">
-          <h2 className="adm-sis-titulo" id="slo-incumplidos">Objetivos que no se cumplen</h2>
+          <h2 className="adm-sis-titulo" id="slo-incumplidos">{tx('salud_sistema.objetivos_que_no_se_cumplen')}</h2>
           <ul className="adm-sis-lista">
             {slos.filter((x) => x.cumple === false).map((x) => (
-              <li key={x.clave}><span>{x.nombre}</span><span>{x.medido} (objetivo {x.objetivo}, {x.ventana})</span></li>
+              <li key={x.clave}><span>{x.nombre}</span>{rico(tx('salud_sistema.e0_objetivo_e0', { medido: x.medido, objetivo: x.objetivo, ventana: x.ventana }), { e0: (c) => <span>{c}</span> })}</li>
             ))}
           </ul>
         </section>
@@ -321,21 +326,22 @@ export default async function SaludSistemaPage() {
       </section>
 
       <section className="adm-sis-bloque" aria-labelledby="piezas-sistema">
-        <h2 className="adm-sis-titulo" id="piezas-sistema">Cada pieza, medida o declarada sin medir</h2>
+        <h2 className="adm-sis-titulo" id="piezas-sistema">{tx('salud_sistema.cada_pieza_medida_o_declarada_sin')}</h2>
         <div className="adm-sis-rejilla">
           {renglones.map((r) => <TarjetaRenglon key={r.titulo} r={r} />)}
         </div>
       </section>
 
-      <EstadoVacio titulo="Lo que aún no se instrumenta">
-        Línea de incidentes, guardia y consumo contra límites de proveedores agregado no están medidos aquí. Sentry y Vercel miden lo suyo en sus propios paneles, enlazados arriba.
-      </EstadoVacio>
+      <EstadoVacio titulo={tx('salud_sistema.lo_que_aun_no_se_instrumenta')}>{tx('salud_sistema.linea_de_incidentes_guardia_y_consumo')}</EstadoVacio>
       <div className="adm-sis-acciones">
-        <BotonEnlace href="/admin/crons" variante="secondary" tamano="sm">Ver los relojes uno por uno</BotonEnlace>
-        <BotonEnlace href="/admin/observabilidad" variante="secondary" tamano="sm">Interruptores y latencias</BotonEnlace>
+        <BotonEnlace href="/admin/crons" variante="secondary" tamano="sm">{tx('salud_sistema.ver_los_relojes_uno_por_uno')}</BotonEnlace>
+        <BotonEnlace href="/admin/observabilidad" variante="secondary" tamano="sm">{tx('salud_sistema.interruptores_y_latencias')}</BotonEnlace>
       </div>
     </MarcoPagina>
   );
 }
 
-export const metadata: Metadata = { title: 'Estado' };
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getT('admin_sistema');
+  return { title: t('salud_sistema.estado') };
+}

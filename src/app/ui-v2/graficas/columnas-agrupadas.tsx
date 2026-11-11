@@ -3,7 +3,7 @@
 import { useId, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { TooltipGrafica } from '../componentes/overlay';
 import type { Matiz } from '../metricas';
-import { cadaCuantas, compactEs, esConteoPequeno, niceScale, ranuraEn } from './escala';
+import { cadaCuantas, esConteoPequeno, marcasEje, niceScale, ranuraEn, unidadDeFormato } from './escala';
 import { CintaLectura, LecturaSeries, LeyendaFina, TablaGrafica, TEXTO_SIN_DATO, useAncho } from './partes';
 import { resolverFormato, type FormatoGrafica } from './formatos';
 
@@ -15,14 +15,14 @@ const PAD_T = 20, PAD_B = 22, PAD_R = 6;
 /** Columnas agrupadas (varias series por periodo, UN matiz en tonos): mismo plano, eje, rejilla, tooltip, foco con flechas y
  *  «Ver como tabla» que `Columnas`. Cada serie lleva su tono y su nombre en la leyenda (el color no es la única señal). El tooltip
  *  lista todas las series del periodo con su total. Crecen una vez al montar (420 ms, escalón de 14 ms por periodo). */
-export function ColumnasAgrupadas({ categorias, series, matiz = 2, etiqueta, formato: formatoProp, formatoEje = compactEs, unidad, parciales = [] }: {
+export function ColumnasAgrupadas({ categorias, series, matiz = 2, etiqueta, formato: formatoProp, formatoEje, unidad, parciales = [] }: {
   categorias: readonly string[];
   series: readonly SerieAgrupada[];
   matiz?: Matiz;
   etiqueta: string;
   /** Cifra exacta (tooltip, tabla, aria). */
   formato?: FormatoGrafica;
-  /** Cifra compacta del eje Y. */
+  /** Cifra compacta del eje Y. Sin ella, `marcasEje` (marcas únicas, con los decimales que haga falta). */
   formatoEje?: (v: number) => string;
   unidad?: string;
   /** Índices de periodos incompletos: trama 45°, rótulo «parcial», sin total comparable. */
@@ -39,7 +39,8 @@ export function ColumnasAgrupadas({ categorias, series, matiz = 2, etiqueta, for
   const esParcial = (ci: number) => parciales.includes(ci);
   const max = Math.max(0, ...todos);
   const eje = niceScale(max, { entero: esConteoPequeno(todos) });
-  const marcas = eje.ticks.map((t) => (t === 0 ? '0' : formatoEje(t)));
+  const marcas = formatoEje ? eje.ticks.map((t) => (t === 0 ? '0' : formatoEje(t))) : marcasEje(eje.ticks);
+  const unidadEje = unidad ?? unidadDeFormato(formatoProp);
   const alto = 200;
   const padL = Math.max(34, Math.max(...marcas.map((t) => t.length)) * 6.4 + 14);
   const W = Math.max(ancho || 560, 240);
@@ -101,6 +102,7 @@ export function ColumnasAgrupadas({ categorias, series, matiz = 2, etiqueta, for
               <text className="rv-gr__marca" x={padL - 8} y={Y(t) + 4} textAnchor="end">{marcas[i]}</text>
             </g>
           ))}
+          {unidadEje ? <text className="rv-gr__unidad" x="0" y="8" textAnchor="start">{unidadEje}</text> : null}
           {categorias.map((c, ci) => {
             const x0 = padL + ranura * ci + (ranura - anchoGrupo) / 2;
             return (

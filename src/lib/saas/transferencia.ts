@@ -1,5 +1,5 @@
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { DatoInvalido } from '@/lib/likida/errores';
+import { DatoInvalido, datoInvalido } from '@/lib/likida/errores';
 import { logger } from '@/lib/logger';
 import { alertarOperador } from '@/lib/observability/alerta';
 import { facturapiConfigurado, timbrarMensualidad, enviarPorCorreo } from './facturapi';
@@ -136,7 +136,7 @@ export async function emitirMensualidad(
     .in('estado', ['prueba', 'activa', 'morosa', 'pausada'])
     .maybeSingle();
   if (errSus) throw new Error(`emitirMensualidad.suscripcion: ${errSus.message}`);
-  if (!sus) throw new DatoInvalido('Esa flota no tiene una suscripción activa. Primero asígnale un plan.');
+  if (!sus) throw datoInvalido('transferencia.esa_flota_no_tiene_una');
 
   // ── NO SE COBRA DOS VECES EL MISMO MES POR DOS CAMINOS (DAT-25) ──────────
   //
@@ -148,11 +148,7 @@ export async function emitirMensualidad(
   // atrapa: las de Stripe llevan `metodo_cobro = 'stripe'` (0163, DAT-12) y
   // quedan fuera de ese índice a propósito.
   if (sus.stripe_subscription_id) {
-    throw new DatoInvalido(
-      'Esa flota cobra por Stripe (suscripción ' + String(sus.stripe_subscription_id).slice(0, 14) + '…), así que '
-      + 'Stripe ya le emite su factura de este periodo. Emitirla también a mano le cobraría el mismo mes dos veces. '
-      + 'Si quieres cobrarle por transferencia directa, primero hay que cancelar su suscripción en Stripe.',
-    );
+    throw datoInvalido('transferencia.cobra_por_stripe', { suscripcion: String(sus.stripe_subscription_id).slice(0, 14) });
   }
 
   type FilaPlan = {
@@ -167,9 +163,7 @@ export async function emitirMensualidad(
   const nombrePlan = plan?.nombre ?? sus.plan_clave;
 
   if (precio === null || precio === undefined) {
-    throw new DatoInvalido(
-      `El plan "${nombrePlan}" no tiene precio configurado, así que no hay monto que cobrar. Ponle precio antes de emitir.`,
-    );
+    throw datoInvalido('transferencia.el_plan_no_tiene_precio', { nombrePlan });
   }
 
   // La moneda se guardaba y no la miraba nadie. `mxn()` imprime TODO como pesos,
@@ -177,10 +171,7 @@ export async function emitirMensualidad(
   // cliente descubre la diferencia cuando ya transfirió.
   const moneda = plan?.moneda ?? 'MXN';
   if (moneda !== 'MXN') {
-    throw new DatoInvalido(
-      `El plan "${nombrePlan}" está en ${moneda} y todo el cobro por transferencia está en pesos: la pantalla lo ` +
-      'imprimiría con signo de peso y la flota transferiría la cifra equivocada. Configura el plan en MXN.',
-    );
+    throw datoInvalido('transferencia.el_plan_esta_en_y', { nombrePlan, moneda });
   }
 
   // LANZA `DatoInvalido` si el plan no declara el criterio del IVA: sin él no se
@@ -189,7 +180,7 @@ export async function emitirMensualidad(
   try {
     d = desglosarPrecio(Number(precio), plan?.precio_iva_incluido ?? null);
   } catch (e) {
-    if (e instanceof DatoInvalido) throw new DatoInvalido(`Plan "${nombrePlan}": ${e.message}`);
+    if (e instanceof DatoInvalido) throw datoInvalido('transferencia.plan', { nombrePlan, message: e.message });
     throw e;
   }
 
@@ -214,7 +205,7 @@ export async function emitirMensualidad(
 
   if (error) {
     if ((error as { code?: string }).code === '23505') {
-      throw new DatoInvalido(`Esa flota ya tiene una factura de ese periodo (referencia ${referencia}). No se cobra dos veces el mismo mes.`);
+      throw datoInvalido('transferencia.esa_flota_ya_tiene_una', { referencia });
     }
     throw new Error(`emitirMensualidad: ${error.message}`);
   }
@@ -237,7 +228,7 @@ export async function conciliar(
 ): Promise<void> {
   const ref = referenciaBanco.trim();
   if (ref.length < 3) {
-    throw new DatoInvalido('Pon la referencia del movimiento del banco: es la prueba de que el dinero existe.');
+    throw datoInvalido('transferencia.pon_la_referencia_del_movimiento');
   }
 
   const admin = supabaseAdmin();
@@ -278,10 +269,10 @@ export async function conciliar(
   const { data: f, error: errLee } = await admin
     .from('factura_saas').select('estado').eq('id', facturaId).maybeSingle();
   if (errLee) throw new Error(`conciliar.leer: ${errLee.message}`);
-  if (!f) throw new DatoInvalido('Esa factura ya no existe.');
-  if (f.estado === 'pagada') throw new DatoInvalido('Esa factura ya estaba marcada como pagada.');
-  if (f.estado === 'cancelada') throw new DatoInvalido('Esa factura está cancelada (el cobro se anuló o se reembolsó): no se puede marcar como pagada. Si el depósito es real, emite una factura nueva.');
-  throw new DatoInvalido(`Esa factura está "${String(f.estado)}" y no se pudo marcar como pagada.`);
+  if (!f) throw datoInvalido('transferencia.esa_factura_ya_no_existe');
+  if (f.estado === 'pagada') throw datoInvalido('transferencia.esa_factura_ya_estaba_marcada');
+  if (f.estado === 'cancelada') throw datoInvalido('transferencia.esa_factura_esta_cancelada_el');
+  throw datoInvalido('transferencia.esa_factura_esta_y_no', { v: String(f.estado) });
 }
 
 /**
@@ -329,37 +320,29 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     .eq('id', facturaId)
     .maybeSingle();
   if (error) throw new Error(`timbrarFactura.leer: ${error.message}`);
-  if (!f) throw new DatoInvalido('Esa factura ya no existe.');
-  if (f.cfdi_uuid) throw new DatoInvalido(`Esa factura ya está timbrada (UUID ${String(f.cfdi_uuid).slice(0, 8)}…). Timbrarla otra vez crearía un segundo CFDI que habría que cancelar.`);
-  if (f.estado !== 'pagada') throw new DatoInvalido('Solo se timbra lo que ya está pagado.');
+  if (!f) throw datoInvalido('transferencia.esa_factura_ya_no_existe');
+  if (f.cfdi_uuid) throw datoInvalido('transferencia.esa_factura_ya_esta_timbrada', { v: String(f.cfdi_uuid).slice(0, 8) });
+  if (f.estado !== 'pagada') throw datoInvalido('transferencia.solo_se_timbra_lo_que');
   // A37-S61-08: un CFDI cancelado ya cerró ese cobro (reembolso): no se emite otro por el mismo dinero.
-  if (f.cfdi_cancelado_en) throw new DatoInvalido('El CFDI de esta factura ya fue cancelado (el dinero se devolvió o el cobro se anuló): no se timbra otro por el mismo cobro.');
+  if (f.cfdi_cancelado_en) throw datoInvalido('transferencia.el_cfdi_de_esta_factura');
 
   const total = Number(f.monto);
   const subtotal = f.subtotal === null || f.subtotal === undefined ? null : Number(f.subtotal);
   const iva = f.iva === null || f.iva === undefined ? null : Number(f.iva);
 
   if (subtotal === null || iva === null) {
-    throw new DatoInvalido(
-      'Esta factura no trae el desglose de IVA guardado, así que no se sabe si el monto cobrado ya lo incluía. ' +
-      'Timbrar a ciegas emite un CFDI que puede salir 16% arriba o abajo del depósito, y eso solo se corrige ' +
-      'cancelándolo ante el SAT. Emítela de nuevo desde /admin con el plan ya declarando su criterio de IVA, o ' +
-      'timbra esta a mano en Facturapi.',
-    );
+    throw datoInvalido('transferencia.esta_factura_no_trae_el');
   }
   // La base ya lo garantiza con un CHECK; se vuelve a comprobar aquí porque una
   // corrección a mano en Supabase no pasa por este código y el timbrado no se
   // puede deshacer.
   if (!desgloseCuadra(total, subtotal, iva)) {
-    throw new DatoInvalido(
-      `El desglose de esta factura no cuadra: subtotal ${subtotal} + IVA ${iva} no da el total ${total} que se cobró. ` +
-      'No se timbra un CFDI por una cifra que no es la que entró al banco.',
-    );
+    throw datoInvalido('transferencia.el_desglose_de_esta_factura', { subtotal, iva, total });
   }
 
   const fiscales = await getDatosFiscales(f.tenant_id as string);
   if (!estanCompletos(fiscales)) {
-    throw new DatoInvalido('Esa flota no tiene sus datos fiscales completos: sin RFC, razón social, régimen, código postal y uso de CFDI el SAT rechaza el timbrado.');
+    throw datoInvalido('transferencia.esa_flota_no_tiene_sus');
   }
 
   // ── LA RESERVA, ANTES DE LLAMAR AL PAC (auditoría prod, DAT-13) ──────────
@@ -386,11 +369,7 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
     .select('id');
   if (errReserva) throw new Error(`timbrarFactura.reservar: ${errReserva.message}`);
   if ((reservadas ?? []).length === 0) {
-    throw new DatoInvalido(
-      'Esa factura se está timbrando en este momento (o acaba de timbrarse). No se manda un segundo timbrado: '
-      + 'serían dos CFDI reales de la misma mensualidad y uno habría que cancelarlo ante el SAT. Recarga en un '
-      + 'minuto para ver el UUID.',
-    );
+    throw datoInvalido('transferencia.esa_factura_se_esta_timbrando');
   }
 
   let cfdi;
@@ -431,11 +410,7 @@ export async function timbrarFactura(facturaId: string): Promise<{ uuid: string 
       });
       // A37-L-03: la marca `ambiguo` viaja para que la pantalla NO diga «el CFDI NO se
       // timbró» (puede que sí): ver `accionConciliar`.
-      throw Object.assign(new DatoInvalido(
-        'El PAC no contestó y NO se sabe si el CFDI se creó. Se bloquea un segundo timbrado para no emitir dos CFDI '
-        + `reales de la misma mensualidad. Busca en el panel de Facturapi la referencia ${(f.referencia as string) ?? facturaId}: `
-        + 'si existe, liga su UUID a mano; si no existe, el bloqueo se libera solo en 24 horas.',
-      ), { ambiguo: true as const });
+      throw Object.assign(datoInvalido('transferencia.el_pac_no_contesto_y', { v: (f.referencia as string) ?? facturaId }), { ambiguo: true as const });
     }
     // El PAC dijo que no: NO hay CFDI, así que la reserva se suelta para que el
     // siguiente intento (con el dato corregido) pueda entrar sin esperar los 10

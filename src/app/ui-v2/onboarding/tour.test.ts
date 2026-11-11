@@ -79,9 +79,9 @@ describe('recorrido derivado del menú', () => {
     expect(dueno.pasos.length).toBeLessThanOrEqual(16);
   });
 
-  it('reporta los conteos por rol (cinco agentes): dueño ≈ 25 pantallas, encargado 18, contador 5, nómina 3', () => {
+  it('reporta los conteos por rol (cinco agentes): dueño ≈ 26 pantallas, encargado 18, contador 6, nómina 3', () => {
     const n = (rol: string) => pantallasDeRecorrido(construirRecorrido(rol, 'cinco_agentes', 'completo')!).length;
-    expect([n('flota_admin'), n('encargado'), n('contador'), n('nomina')]).toEqual([25, 18, 5, 3]);
+    expect([n('flota_admin'), n('encargado'), n('contador'), n('nomina')]).toEqual([26, 18, 6, 3]);
     // Pasos sin contar los saltos de menú: lo que muestra la tarjeta.
     expect(contarPasos(construirRecorrido('flota_admin', 'cinco_agentes', 'completo')!.pasos)).toBeGreaterThan(50);
   });

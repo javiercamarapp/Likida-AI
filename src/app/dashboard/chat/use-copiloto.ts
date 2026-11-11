@@ -8,6 +8,9 @@ import { PERFIL_SUPERADMIN } from './perfiles';
 import { cerrarPaso, leerRespuestaAgente } from './transporte';
 import type { Motor } from './motor';
 import type { Conversacion, Turno } from './use-analista';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // ADAPTADOR SUPERADMIN del agente de conversación: el estado y el transporte del Copiloto del fundador (/api/admin/copiloto).
@@ -20,11 +23,12 @@ import type { Conversacion, Turno } from './use-analista';
 // ═══════════════════════════════════════════════════════════════════════════
 
 const TIEMPO_MAXIMO_MS = 75_000;
-const MENSAJE_FALLO = 'El copiloto no pudo responder en este momento — inténtalo de nuevo.';
+const mensajeFallo = (tx: TResto = T_RESTO_ES) => (tx('ch.el_copiloto_no_pudo_responder_en'));
 let contador = 0;
 const nuevoId = () => `c-${Date.now().toString(36)}-${++contador}`;
 
 export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = true }: { endpoint?: string; listaAlMontar?: boolean } = {}): Motor {
+  const { t: tx } = useT('resto', restoEs);
   const [historial, setHistorial] = useState<Turno[]>([]);
   const [ocupado, setOcupado] = useState(false);
   const [generando, setGenerando] = useState(false);
@@ -81,7 +85,7 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
       setConversacionId(id);
       return true;
     } catch {
-      setErrorCarga('No se pudo abrir esa conversación — inténtalo de nuevo.');
+      setErrorCarga(tx('ch.no_se_pudo_abrir_esa_conversacion'));
       return false;
     }
   }
@@ -123,7 +127,7 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
     setFasePensando('Pensando…');
     setPasosVivos([]);
     const idTurno = reemplazar ?? nuevoId();
-    const pendiente: Turno = { id: idTurno, q, r: { texto: 'Pensando…', pendiente: true }, nuevo: true };
+    const pendiente: Turno = { id: idTurno, q, r: { texto: tx('op.pensando'), pendiente: true }, nuevo: true };
     const base = reemplazar ? historial.slice(0, historial.findIndex((x) => x.id === reemplazar)) : historial;
     setHistorial([...base, pendiente]);
     let ticks = 0;
@@ -174,7 +178,7 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
         if (pasosFinales.length > 0) r.pasos = pasosFinales;
       } else {
         // No hay respondedor de reserva en este modo: se declara el fallo y se ofrece Reintentar.
-        r = { texto: MENSAJE_FALLO, fallo: true };
+        r = { texto: mensajeFallo(tx), fallo: true };
       }
       r.hora = horaMx(new Date().toISOString());
       r.ms = Math.round(performance.now() - t0);
@@ -192,9 +196,9 @@ export function useCopiloto({ endpoint = '/api/admin/copiloto', listaAlMontar = 
       reemplazarTurno(r);
     } catch {
       if (detenido.current) {
-        reemplazarTurno({ texto: 'Generación detenida. Puedes volver a preguntar cuando quieras.', cancelada: true, hora: horaMx(new Date().toISOString()) });
+        reemplazarTurno({ texto: tx('ch.generacion_detenida_puedes_volver_a_preguntar'), cancelada: true, hora: horaMx(new Date().toISOString()) });
       } else if (!control.signal.aborted) {
-        reemplazarTurno({ texto: MENSAJE_FALLO, fallo: true, hora: horaMx(new Date().toISOString()), ms: Math.round(performance.now() - t0) });
+        reemplazarTurno({ texto: mensajeFallo(tx), fallo: true, hora: horaMx(new Date().toISOString()), ms: Math.round(performance.now() - t0) });
       }
       // Un abort por desmontar/nuevo chat NO es un fallo del copiloto: nadie espera ya la respuesta; no se acusa al sistema.
     } finally {

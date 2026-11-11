@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useActionState } from 'react';
 import { useFormStatus } from 'react-dom';
-import { AvisoCompacto, Boton, Casilla, Fieldset } from '@/app/ui-v2/componentes';
+import { AvisoCompacto, Boton, Casilla, Fieldset, Tooltip } from '@/app/ui-v2/componentes';
 import './agentes.css';
 // SOLO TIPOS, y no es una preferencia de estilo: `notificaciones.ts` importa
 // `supabaseAdmin` y, por `correo/enviar.ts`, el PNG del logo en base64. Un
@@ -13,6 +13,10 @@ import './agentes.css';
 import type {
   ConfigNotificaciones, EventoDeclarado, EventoId, RolAvisable, Reparto, UsuarioAvisable,
 } from '@/lib/likida/agentes/notificaciones';
+import { useT } from '@/lib/i18n/proveedor';
+import { resto as restoEs } from '@/lib/i18n/es/resto';
+import { type TResto, T_RESTO_ES } from '@/lib/i18n/resto_tr';
+import { rico } from '@/lib/i18n/rico';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LA PESTAÑA «NOTIFICACIONES» — una sola, para los seis agentes.
@@ -43,11 +47,11 @@ export type AccionNotificaciones = (
  * tres cadenas; el día que aparezca un cuarto sitio, el mapa se muda a un
  * módulo compartido y los tres lo importan.
  */
-const ROTULO_ROL: Record<string, string> = {
-  flota_admin: 'Dueño de la flota',
-  encargado: 'Jefe de tráfico',
-  contador: 'Contador',
-};
+const rotuloRol = (t: TResto = T_RESTO_ES): Record<string, string> => ({
+  flota_admin: t('op.dueno_de_la_flota'),
+  encargado: t('ch.jefe_de_trafico'),
+  contador: t('ch.contador'),
+});
 
 export interface DatosNotificaciones {
   /** El agente al que pertenece esta pestaña. */
@@ -79,6 +83,7 @@ export function FormaNotificaciones({ datos, guardar }: {
   datos: DatosNotificaciones;
   guardar: AccionNotificaciones;
 }) {
+  const { t } = useT('resto', restoEs);
   const [estado, accion] = useActionState(guardar, null);
   const inicial = datos.config ?? datos.configDefault;
   const [eventos, setEventos] = useState<EventoId[]>([...inicial.eventos]);
@@ -120,8 +125,8 @@ export function FormaNotificaciones({ datos, guardar }: {
   return (
     <div className="rv-ag-notif">
       {apagado && (
-        <AvisoCompacto tono="warn" resumen={<>El correo no está configurado en este entorno: <strong>no sale ningún aviso</strong>, se marque lo que se marque.</>}
-          mas="Se enciende conectando Resend en Conexiones. Hasta entonces esta pantalla prefiere decirlo a ofrecer un interruptor que no hace nada." />
+        <AvisoCompacto tono="warn" resumen={<>{rico(t('ch.el_correo_no_esta_configurado_en_2'), { strong: (c) => <strong>{c}</strong> })}</>}
+          mas={t('ch.se_enciende_conectando_resend_en_conexiones')} />
       )}
 
       {datos.errorConfig && <AvisoCompacto tono="error" resumen={datos.errorConfig} />}
@@ -131,8 +136,8 @@ export function FormaNotificaciones({ datos, guardar }: {
           <input type="hidden" name="agente" value={datos.agente.id} />
 
           {/* ── DE QUÉ avisa ── «el» a mano: los seis se llaman "Agente de …", así que el artículo siempre cuadra. */}
-          <Fieldset leyenda={`De qué te avisa el ${datos.agente.nombre}`}
-            ayuda="No hay casilla para «la corrida salió bien»: un aviso que llega cuando todo está en orden es el que más rápido enseña a ignorar los que sí piden algo.">
+          <Fieldset leyenda={t('ch.de_que_te_avisa_el', { nombre: datos.agente.nombre })}
+            ayuda={t('ch.no_hay_casilla_para_la_corrida')}>
             <div className="rv-ag-notif__lista" data-apagado={apagado || undefined}>
               {datos.eventos.map((e) => {
                 // `conectado === false` = este agente declara el evento pero todavía no hay código que lo emita. Se enseña APAGADO y
@@ -167,8 +172,8 @@ export function FormaNotificaciones({ datos, guardar }: {
           </Fieldset>
 
           {/* ── A QUIÉN ── */}
-          <Fieldset leyenda="A quién le llega"
-            ayuda="Solo cuentas del panel de esta flota. No se puede teclear una dirección suelta: cada destinatario es alguien que ya puede ver este dato adentro. Los operadores no aparecen: no tienen cuenta ni correo, hablan por WhatsApp.">
+          <Fieldset leyenda={t('ch.a_quien_le_llega')}
+            ayuda={t('ch.solo_cuentas_del_panel_de_esta')}>
             <div className="rv-ag-notif__lista" data-apagado={apagado || undefined}>
               {datos.rolesPosibles.map((rol) => {
                 const c = porRol[rol];
@@ -180,9 +185,9 @@ export function FormaNotificaciones({ datos, guardar }: {
                     checked={roles.includes(rol)}
                     disabled={apagado}
                     onChange={() => alternar(roles, setRoles, rol)}
-                    etiqueta={ROTULO_ROL[rol] ?? rol}
+                    etiqueta={rotuloRol(t)[rol] ?? rol}
                     ayuda={!c || c.total === 0
-                      ? 'nadie con este rol en la flota'
+                      ? t('ch.nadie_con_este_rol_en_la')
                       : c.sinCorreo > 0
                         ? `${c.total} ${c.total === 1 ? 'cuenta' : 'cuentas'} · ${c.sinCorreo} sin correo`
                         : `${c.total} ${c.total === 1 ? 'cuenta' : 'cuentas'}`}
@@ -192,7 +197,7 @@ export function FormaNotificaciones({ datos, guardar }: {
             </div>
           </Fieldset>
 
-          {sinNadie && <AvisoCompacto tono="warn" resumen="Tienes avisos encendidos y nadie que los reciba. Marca un rol, o apaga los avisos." />}
+          {sinNadie && <AvisoCompacto tono="warn" resumen={t('ch.tienes_avisos_encendidos_y_nadie_que')} />}
 
           <div className="rv-ag-notif__acciones">
             <BotonGuardar apagado={apagado} sucio={sucio} />
@@ -202,53 +207,48 @@ export function FormaNotificaciones({ datos, guardar }: {
 
         {/* ── La verdad medida: a quién le llega hoy y a quién no ── */}
         <div className="rv-ag-notif__verdad">
-          <section className="rv-ag-notif__bloque" aria-label="Hoy le llega a">
+          <section className="rv-ag-notif__bloque" aria-label={t('ch.hoy_le_llega_a')}>
             {/* sin-info: rótulo de bloque de lectura dentro de la sección Notificaciones */}
-            <h3 className="rv-ag-notif__rotulo">Hoy le llega a</h3>
+            <h3 className="rv-ag-notif__rotulo">{t('ch.hoy_le_llega_a')}</h3>
             {apagado ? (
-              <Nota>Hoy no le llega a nadie: el canal de correo está apagado en este entorno.</Nota>
+              <Nota>{t('ch.hoy_no_le_llega_a_nadie')}</Nota>
             ) : datos.config === null ? (
-              <Nota>No se pudo leer la configuración, así que no sale ningún aviso. Guarda de nuevo para reactivarlos.</Nota>
+              <Nota>{t('ch.no_se_pudo_leer_la_configuracion')}</Nota>
             ) : datos.reparto.reciben.length === 0 ? (
               <Nota>{datos.config.eventos.length === 0
-                ? 'Este agente no manda ningún correo: todos sus avisos están apagados.'
-                : 'Nadie lo recibe todavía. Revisa los roles marcados y que esas cuentas tengan correo.'}</Nota>
+                ? t('ch.este_agente_no_manda_ningun_correo')
+                : t('ch.nadie_lo_recibe_todavia_revisa_los')}</Nota>
             ) : (
               <ul className="rv-ag-notif__personas">
                 {datos.reparto.reciben.map((d) => (
                   <li key={d.id}>
                     <strong>{d.nombre ?? d.email}</strong>
                     <span>{d.email}</span>
-                    <em>{ROTULO_ROL[d.rol] ?? d.rol}</em>
+                    <em>{rotuloRol(t)[d.rol] ?? d.rol}</em>
                   </li>
                 ))}
               </ul>
             )}
-            {sucio && !apagado && <Nota tono="warn">Esta lista es la de la configuración guardada. Guarda para que aplique lo que acabas de marcar.</Nota>}
+            {sucio && !apagado && <Nota tono="warn">{t('ch.esta_lista_es_la_de_la')}</Nota>}
           </section>
 
           {datos.reparto.excluidos.length > 0 && (
-            <section className="rv-ag-notif__bloque" aria-label="A quién no, y por qué">
+            <section className="rv-ag-notif__bloque" aria-label={t('ch.a_quien_no_y_por_que')}>
               {/* sin-info: rótulo de bloque de lectura dentro de la sección Notificaciones */}
-            <h3 className="rv-ag-notif__rotulo">A quién no, y por qué</h3>
+            <h3 className="rv-ag-notif__rotulo">{t('ch.a_quien_no_y_por_que')}</h3>
               {datos.reparto.excluidos.map((x) => (
                 <p key={x.id} className="rv-ag-notif__nota">
-                  <strong>{x.nombre ?? ROTULO_ROL[x.rol] ?? x.rol}</strong> — {x.porque}
+                  <strong>{x.nombre ?? rotuloRol(t)[x.rol] ?? x.rol}</strong> — {x.porque}
                 </p>
               ))}
             </section>
           )}
 
           {/* El anti-ruido, con los números del motor: es la pregunta que sigue a "¿lo enciendo?" y la razón por la que se puede encender. */}
-          <section className="rv-ag-notif__bloque" aria-label="Cuántos correos, como máximo">
+          <section className="rv-ag-notif__bloque" aria-label={t('ch.cuantos_correos_como_maximo')}>
             {/* sin-info: rótulo de bloque de lectura dentro de la sección Notificaciones */}
-            <h3 className="rv-ag-notif__rotulo">Cuántos correos, como máximo</h3>
-            <p className="rv-ag-notif__nota">
-              Si algo se rompe y sigue roto, no llega un correo por corrida. Llegan <strong>{datos.antiRuido.marcas.length} como máximo</strong>{' '}
-              por incidente: el primero, y luego solo cuando la cosa empeora de verdad ({datos.antiRuido.marcas.join(', ')} veces). Entre dos
-              avisos siempre pasan al menos {datos.antiRuido.pisoMinutos} minutos, también cuando algo se rompe, se arregla y se vuelve a
-              romper. La cuenta vuelve a cero en cuanto el problema se resuelve, así que el siguiente incidente te avisa desde el primero.
-            </p>
+            <h3 className="rv-ag-notif__rotulo">{t('ch.cuantos_correos_como_maximo')}</h3>
+            <p className="rv-ag-notif__nota">{rico(t('ch.si_algo_se_rompe_y_sigue', { length: datos.antiRuido.marcas.length, datos: datos.antiRuido.marcas.join(', '), pisoMinutos: datos.antiRuido.pisoMinutos }), { strong: (c) => <strong>{c}</strong> })}</p>
           </section>
         </div>
       </div>
@@ -257,13 +257,14 @@ export function FormaNotificaciones({ datos, guardar }: {
 }
 
 function BotonGuardar({ apagado, sucio }: { apagado: boolean; sucio: boolean }) {
+  const { t } = useT('resto', restoEs);
   const { pending } = useFormStatus();
-  return (
-    <Boton type="submit" variante="primary" loading={pending} disabled={pending || apagado}
-      title={apagado ? 'El correo no está configurado en este entorno' : undefined}>
-      {pending ? 'Guardando…' : sucio ? 'Guardar cambios' : 'Guardar notificaciones'}
+  const boton = (
+    <Boton type="submit" variante="primary" loading={pending} disabled={pending || apagado}>
+      {pending ? 'Guardando…' : sucio ? t('op.guardar_cambios') : t('ch.guardar_notificaciones')}
     </Boton>
   );
+  return apagado ? <Tooltip texto={t('ch.el_correo_no_esta_configurado_en')}>{boton}</Tooltip> : boton;
 }
 
 function Nota({ children, tono }: { children: React.ReactNode; tono?: 'warn' }) {

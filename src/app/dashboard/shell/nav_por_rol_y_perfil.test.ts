@@ -225,8 +225,9 @@ describe('⌘K', () => {
     expect(filtrarPaleta(p, 'usuarios').map((d) => d.href)).not.toContain('/dashboard/usuarios');
   });
 
-  it('bajo cinco_agentes tampoco ofrece el stand-by (chat, rentabilidad, descarga del SAT)', () => {
+  it('bajo cinco_agentes tampoco ofrece el stand-by (rentabilidad, descarga del SAT) y SÍ ofrece «Pregunta a tus datos»', () => {
     const h = new Set(paletaDelDashboard('flota_admin', 'cinco_agentes').map((d) => d.href));
-    for (const sb of ['/dashboard/chat', '/dashboard/rentabilidad', '/dashboard/descarga-sat', '/dashboard/facturacion']) expect(h.has(sb), sb).toBe(false);
+    for (const sb of ['/dashboard/rentabilidad', '/dashboard/descarga-sat', '/dashboard/facturacion']) expect(h.has(sb), sb).toBe(false);
+    expect(h.has('/dashboard/chat')).toBe(true);
   });
 });
