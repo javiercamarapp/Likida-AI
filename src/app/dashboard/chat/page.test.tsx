@@ -22,6 +22,8 @@ let sesion: { tenantId: string; rol: string; tenantNombre: string | null; tenant
   tenantId: 't-1', rol: 'flota_admin', tenantNombre: null, tenantExiste: true,
 };
 
+let perfilDelTenant: string | null = null;
+vi.mock('@/lib/auth/perfil_tenant', () => ({ perfilDeTenant: async () => perfilDelTenant }));
 vi.mock('@/lib/auth/tenant-efectivo', () => ({ resolverTenantEfectivo: async () => sesion }));
 vi.mock('next/navigation', () => ({
   redirect: (ruta: string) => { throw new Error(`REDIRECT:${ruta}`); },
@@ -49,6 +51,7 @@ const SP = Promise.resolve({});
 
 beforeEach(() => {
   vi.clearAllMocks();
+  perfilDelTenant = null;
   sesion = { tenantId: 't-1', rol: 'flota_admin', tenantNombre: null, tenantExiste: true };
   dobles.getKpis.mockResolvedValue({ porRevisar: 0 });
   dobles.getAcreditables.mockResolvedValue({ litros: 0 });
@@ -99,4 +102,21 @@ it('flota que sí existe: no se muestra el aviso de flota inexistente', async ()
 
 it('el título de la pestaña es el nombre de la entrada del menú (Pregunta a tus datos)', () => {
   expect(metadata.title).toBe('Pregunta a tus datos');
+});
+
+it('flota con perfil cinco_agentes: lo fiscal NI SE LEE ni se ofrece como tema; los KPIs de liquidación sí', async () => {
+  perfilDelTenant = 'cinco_agentes';
+  const pagina = await PaginaChat({ searchParams: SP });
+  expect(dobles.getAcreditables).not.toHaveBeenCalled();
+  expect(dobles.getKpis).toHaveBeenCalledWith('t-1');
+  const chat = buscar(pagina, ChatFlota)[0];
+  expect(chat.props.acred).toBeNull();
+  const temas = chat.props.temas as Array<{ categoria: string }>;
+  expect(temas.map((x) => x.categoria)).not.toContain('Fiscal y acreditables');
+  expect(temas.map((x) => x.categoria)).toContain('Cuadre y liquidaciones');
+});
+
+it('sin perfil el chat conserva todos sus temas (no pasa `temas`)', async () => {
+  const chat = buscar(await PaginaChat({ searchParams: SP }), ChatFlota)[0];
+  expect(chat.props.temas).toBeUndefined();
 });

@@ -100,7 +100,8 @@ export function menuPorPerfil(rol: string, perfil?: PerfilTenant | null): MenuV2
   const resumenDueno = ve('resumen');
   const panelContador = ve('contador');
   const resumenPropio: Item | null = resumenDueno ?? (panelContador ? { ...panelContador, nombre: 'Resumen', Icono: LayoutGrid } : null);
-  const chat = resumenPropio ? ve('chat') : null;
+  // «Pregunta a tus datos» va justo debajo de Resumen; si el rol no tiene Resumen bajo el perfil (el contador), queda de primera.
+  const chat = ve('chat');
   const resumen = [...(resumenPropio ? [resumenPropio] : []), ...(chat ? [chat] : [])];
 
   if (perfil) {

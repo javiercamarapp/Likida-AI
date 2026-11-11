@@ -84,7 +84,7 @@ describe('resolverTenantEfectivo (páginas y acciones)', () => {
 
   it('SIN perfil nada cambia: las mismas rutas de stand-by abren para el dueño', async () => {
     getSessionTenant.mockResolvedValue(dueno(SIN));
-    for (const ruta of ['/dashboard/chat', '/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/llaves-api']) {
+    for (const ruta of ['/dashboard/facturacion', '/dashboard/suscripcion', '/dashboard/llaves-api']) {
       redirect.mockClear();
       const r = await resolverTenantEfectivo(ruta, {});
       expect(r.tenantId).toBe(SIN);
@@ -99,7 +99,7 @@ describe('resolverTenantEfectivo (páginas y acciones)', () => {
 
   it('el superadmin que mira la flota con perfil (?tenant=) ve lo mismo que el cliente', async () => {
     getSessionTenant.mockResolvedValue({ userId: 'su', tenantId: null, rol: 'superadmin', nombre: 'Su', operadorId: null, avatarUrl: null });
-    await expect(resolverTenantEfectivo('/dashboard/chat', { tenant: CON })).rejects.toThrow('NEXT_REDIRECT');
+    await expect(resolverTenantEfectivo('/dashboard/facturacion', { tenant: CON })).rejects.toThrow('NEXT_REDIRECT');
     redirect.mockClear();
     const r = await resolverTenantEfectivo('/dashboard/agentes/peajes', { tenant: CON });
     expect(r.tenantId).toBe(CON);
@@ -107,7 +107,7 @@ describe('resolverTenantEfectivo (páginas y acciones)', () => {
 
   it('el superadmin que mira una flota SIN perfil no se ve afectado', async () => {
     getSessionTenant.mockResolvedValue({ userId: 'su', tenantId: null, rol: 'superadmin', nombre: 'Su', operadorId: null, avatarUrl: null });
-    const r = await resolverTenantEfectivo('/dashboard/chat', { tenant: SIN });
+    const r = await resolverTenantEfectivo('/dashboard/facturacion', { tenant: SIN });
     expect(r.tenantId).toBe(SIN);
   });
 });

@@ -57,12 +57,12 @@ describe.each(ROLES)('menú v2 de %s bajo cinco_agentes', (rol) => {
 });
 
 describe('contenido por rol', () => {
-  it('el contador aterriza en Liquidación (inicioDe) y ese enlace está en su menú; sin Resumen ni stand-by', () => {
+  it('el contador aterriza en Liquidación (inicioDe) y ese enlace está en su menú; sin Resumen ni stand-by (el chat queda de primera)', () => {
     const menu = menuPorPerfil('contador', 'cinco_agentes');
     const h = hrefsDelMenu(menu);
     expect(inicioDe('contador', 'cinco_agentes')).toBe('/dashboard/agentes/liquidacion');
     expect(h).toContain('/dashboard/agentes/liquidacion');
-    expect(menu.resumen).toHaveLength(0);
+    expect(menu.resumen.map((i) => i.href)).toEqual(['/dashboard/chat']); // 11-nov: «Pregunta a tus datos» se abre al perfil
     expect(h).not.toContain('/dashboard');
     expect(h).not.toContain('/dashboard/contador');
   });

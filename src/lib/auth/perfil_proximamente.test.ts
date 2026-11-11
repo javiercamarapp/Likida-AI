@@ -122,7 +122,7 @@ describe('exigirRutaDePerfil con A4/A5 ya encendidos', () => {
 
   it('una ruta de stand-by (ajena al perfil) sigue rebotando a /dashboard', async () => {
     perfilDeFila = 'cinco_agentes';
-    await expect(m.exigirRutaDePerfil('t', '/dashboard/chat')).rejects.toThrow('NEXT_REDIRECT');
+    await expect(m.exigirRutaDePerfil('t', '/dashboard/facturacion')).rejects.toThrow('NEXT_REDIRECT');
     expect(redirect).toHaveBeenCalledWith('/dashboard');
   });
 
@@ -130,7 +130,7 @@ describe('exigirRutaDePerfil con A4/A5 ya encendidos', () => {
     perfilDeFila = null;
     await expect(m.exigirRutaDePerfil('t', '/dashboard/agentes/vigia')).resolves.toBeUndefined();
     await expect(m.exigirRutaDePerfil('t', '/dashboard/agentes/conductores')).resolves.toBeUndefined();
-    await expect(m.exigirRutaDePerfil('t', '/dashboard/chat')).resolves.toBeUndefined();
+    await expect(m.exigirRutaDePerfil('t', '/dashboard/facturacion')).resolves.toBeUndefined();
     expect(redirect).not.toHaveBeenCalled();
   });
 
@@ -146,7 +146,7 @@ describe('exigirRutaDePerfil con A4/A5 ya encendidos', () => {
   it('chat y MCP: la flota con perfil sigue restringida (stand-by general, no ligado a A4/A5)', async () => {
     perfilDeFila = 'cinco_agentes';
     expect(await m.perfilRestringido('t')).toBe(true);
-    expect(await m.apiDenegadaPorPerfil('t', '/api/dashboard/chat')).toBe(true);
+    expect(await m.apiDenegadaPorPerfil('t', '/api/dashboard/archivo')).toBe(true);
     expect(await m.apiDenegadaPorPerfil('t', '/api/v1/hitos')).toBe(false);
     expect(await m.apiDenegadaPorPerfil('t', '/api/v1/liquidaciones')).toBe(false);
   });

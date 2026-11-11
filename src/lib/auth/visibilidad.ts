@@ -464,6 +464,9 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
   '/dashboard/integraciones': 'base',
   '/dashboard/whatsapp': 'base',
   '/dashboard/notificaciones': 'base',
+  // «Pregunta a tus datos» (decisión del dueño 11-nov, D12): se abre para el perfil, justo debajo de Resumen. Conserva TODAS sus guardas:
+  // área `dinero` por rol (el encargado no entra), `rolPuedeConversar`, tenant efectivo y el tope diario de IA, en la página y en la API.
+  '/dashboard/chat': 'base',
   '/dashboard/mi-perfil': 'base',
   '/dashboard/soporte': 'base',
   '/dashboard/legal': 'base',
@@ -485,7 +488,7 @@ export const RUTAS_PERFIL_CINCO_AGENTES: Readonly<Record<string, ModuloPerfil>> 
  * quien lea sepa que lo ausente de arriba es deliberado y no un descuido.
  */
 export const RUTAS_STAND_BY_PERFIL_CINCO_AGENTES: readonly string[] = [
-  '/dashboard/chat', '/dashboard/reglas', '/dashboard/rentabilidad', '/dashboard/clientes',
+  '/dashboard/reglas', '/dashboard/rentabilidad', '/dashboard/clientes',
   '/dashboard/facturacion', '/dashboard/agentes/cobranza', '/dashboard/agentes/facturas',
   '/dashboard/agentes/proveedores', '/dashboard/huerfanos', '/dashboard/combustible-casetas',
   '/dashboard/timbrado', '/dashboard/descarga-sat', '/dashboard/descarga-sat/bandeja',
@@ -570,9 +573,9 @@ export function rutaProximamente(modulo: ModuloPerfil): string {
  *
  *  · /api/v1/<recurso>  — los recursos de los cinco agentes y la base.
  *  · /api/export/<x>    — las descargas de los cinco agentes.
- *  · /api/dashboard/<x> — solo lo que no abre una puerta a lo demás: el chat,
- *    la ingesta de comprobantes, el chat de onboarding y el historial del chat
- *    quedan fuera (son del stand-by).
+ *  · /api/dashboard/<x> — solo lo que no abre una puerta a lo demás: el chat
+ *    («Pregunta a tus datos», abierto el 11-nov) y el pageview; la ingesta de comprobantes,
+ *    el chat de onboarding y el historial del chat siguen fuera (son del stand-by).
  */
 export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashboard', readonly string[]>> = {
   v1: [
@@ -590,6 +593,8 @@ export const API_PERFIL_CINCO_AGENTES: Readonly<Record<'v1' | 'export' | 'dashbo
   ],
   dashboard: [
     'evento', // el pageview del panel: cero datos, 204 siempre
+    'conversaciones', // el historial del chat: por usuario y tenant, mismas guardas
+    'chat',   // «Pregunta a tus datos» (11-nov): la ruta valida sesión, rol, tenant efectivo y tope diario por su cuenta
   ],
 };
 
