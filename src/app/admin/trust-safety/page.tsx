@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
 import { requireSuperadmin } from '@/lib/auth/guard';
 import { ShieldAlert } from 'lucide-react';
-import { Disclosure, EstadoError, EstadoVacio, MarcoPagina, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../ui-v2/graficas';
+import { Disclosure, EstadoError, EstadoVacio, StatusChip, TablaBase, Tarjeta, type ColumnaBase, type TonoEstado } from '../../ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '../../ui-v2/esqueletos';
 import {
   getEventosSeguridad, resumenEventosSeguridad,
   type FilaSeguridad, type ResumenSeguridad,
@@ -111,18 +111,18 @@ export default async function TrustSafetyPage() {
   ]);
 
   return (
-    <MarcoPagina titulo={t('trust_safety.trust_safety')}>
-      {/* ── Los conteos, medidos en la base ── */}
-      {resumen === null ? (
-        <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_conteos')}</EstadoError>
-      ) : (
-        <TiraCifras etiqueta={t('trust_safety.ultimos_30_dias_por_severidad')}>
-          <Cifra etiqueta={t('trust_safety.severidad_alta_30_dias')} valor={resumen.d30.alta} tono={resumen.d30.alta > 0 ? 'bad' : undefined} />
-          <Cifra etiqueta={t('trust_safety.severidad_media_30_dias')} valor={resumen.d30.media} tono={resumen.d30.media > 0 ? 'warn' : undefined} />
-          <Cifra etiqueta={t('trust_safety.informativos_30_dias')} valor={resumen.d30.info} />
-          <Cifra etiqueta={t('trust_safety.total_historico')} valor={resumen.total} />
-        </TiraCifras>
-      )}
+    <EsqueletoTablaMaestra
+      titulo={t('trust_safety.trust_safety')}
+      /* ── Los conteos, medidos en la base ── */
+      avisos={resumen === null ? <EstadoError>{t('trust_safety.no_se_pudieron_leer_los_conteos')}</EstadoError> : null}
+      etiquetaCifras={t('trust_safety.ultimos_30_dias_por_severidad')}
+      cifras={resumen === null ? undefined : [
+        { etiqueta: t('trust_safety.severidad_alta_30_dias'), valor: resumen.d30.alta, tono: resumen.d30.alta > 0 ? 'bad' : undefined },
+        { etiqueta: t('trust_safety.severidad_media_30_dias'), valor: resumen.d30.media, tono: resumen.d30.media > 0 ? 'warn' : undefined },
+        { etiqueta: t('trust_safety.informativos_30_dias'), valor: resumen.d30.info },
+        { etiqueta: t('trust_safety.total_historico'), valor: resumen.total },
+      ]}
+    >
 
       {/* ── La cobertura REAL, medida ── */}
       <Tarjeta titulo={t('trust_safety.cobertura_que_fuentes_escriben_aqui_y')}>
@@ -171,7 +171,7 @@ export default async function TrustSafetyPage() {
         )}
         <p className="m-0 mt-2 text-xs text-muted">{rico(t('trust_safety.tampoco_hay_un_pipeline_dedicado_de'), { e0: (c) => <code className="font-mono">{c}</code>, e1: (c) => <code className="font-mono">{c}</code>, e2: (c) => <code className="font-mono">{c}</code> })}</p>
       </Tarjeta>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 

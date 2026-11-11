@@ -13,10 +13,10 @@ import { usd } from '@/lib/utils';
 import { fechaHoraMx } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import {
-  Aviso, Chip, Disclosure, FormaConAviso, MarcoPagina, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
+  Aviso, Chip, Disclosure, FormaConAviso, StatusChip, Tarjeta, TablaBase, CampoTexto, CampoSelect, type ColumnaBase,
   type ResultadoAccion, type TonoEstado,
 } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
 import { AccionesAgente } from './acciones-agente';
 import { getT } from '@/lib/i18n/servidor';
 import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
@@ -192,12 +192,11 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   ];
 
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       area="Agentes"
       titulo={t('agentes_contenido.agentes')}
       apoyo={t('agentes_contenido.que_agentes_hay_cuales')}
-    >
-      {parados === null ? (
+      avisos={parados === null ? (
         <Aviso tono="warn">{t('agentes_contenido.no_se_pudo_leer_2')}</Aviso>
       ) : bloqueados + parados72 > 0 ? (
         <Aviso tono="warn">
@@ -205,17 +204,15 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
           {bloqueados > 0 ? `; ${bloqueados} por la bandeja de aprobaciones llena` : ''}. Vaciar la bandeja los destraba; no se reabren por sí solos.
         </Aviso>
       ) : null}
-
-      <TiraCifras
-        etiqueta={t('agentes_contenido.estado_de_los_agentes')}
-        items={[
+      etiquetaCifras={t('agentes_contenido.estado_de_los_agentes')}
+      cifras={[
           { etiqueta: t('agentes_contenido.agentes_vivos'), valor: vivos.length, estado: 'ok', nota: t('agentes_contenido.en_el_catalogo', { length: agentes.length }) },
           { etiqueta: t('agentes_contenido.corriendo_de_verdad'), valor: parados === null || interruptores === null ? null : corriendo, estado: parados === null || interruptores === null ? 'error' : 'ok', nota: t('agentes_contenido.con_corrida_reciente_y') },
           { etiqueta: t('agentes_contenido.bloqueados_o_parados'), valor: parados === null ? null : bloqueados + parados72, estado: parados === null ? 'error' : 'ok', tono: parados !== null && bloqueados + parados72 > 0 ? 'warn' : undefined, nota: t('agentes_contenido.h_sin_correr_o', { umbralHoras: parados?.umbralHoras ?? 72 }) },
           { etiqueta: t('agentes_contenido.apagados'), valor: apagados, estado: apagados === null ? 'error' : 'ok', tono: apagados ? 'bad' : undefined, nota: t('agentes_contenido.con_el_kill_switch') },
           { etiqueta: t('agentes_contenido.costo_de_ia_30'), valor: costo30 === null ? null : usd(costo30), estado: costo30 === null ? 'error' : 'ok', nota: t('agentes_contenido.suma_de_los_agentes') },
-        ]}
-      />
+      ]}
+    >
 
       <Tarjeta
         titulo={t('agentes_contenido.catalogo_de_agentes')}
@@ -263,6 +260,6 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
         </ul>
         <p className="rv-agente-sub">{t('agentes_contenido.la_autonomia_es_el')}</p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }

@@ -58,7 +58,8 @@
 
 /* Vistas de Aprobaciones: los paneles inactivos se ocultan, todos quedan en el documento. */
 .bj-vistas { display: flex; flex-direction: column; gap: 12px; }
-.bj-vistas > [hidden] { display: none; }
+.bj-vistas .rv-tabs__panel { display: flex; flex-direction: column; gap: 12px; padding-top: 12px; }
+.bj-vistas .rv-tabs__panel[hidden] { display: none; }
 .bj-panel { display: flex; flex-direction: column; gap: 12px; }
 
 @media (max-width: 767px) {

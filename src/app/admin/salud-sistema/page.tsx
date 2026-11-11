@@ -13,13 +13,13 @@ import { getT } from '@/lib/i18n/servidor';
 import { QuemaSlo, leerQuema } from '../quema-slo';
 import { getSLOs } from '@/lib/admin/slo';
 import { logger } from '@/lib/logger';
-import { BotonEnlace, MarcoPagina, EstadoVacio, ListaFuentes } from '../../ui-v2/componentes';
+import { BotonEnlace, EstadoVacio, ListaFuentes } from '../../ui-v2/componentes';
 import { ahoraMs } from '@/lib/saludo';
 import { evaluarFuentes, resumirFuentes } from '@/lib/likida/fuentes/estado';
 import { entradasDeLatidos, RELOJ_DE_FUENTE } from '@/lib/likida/fuentes/desde_latidos';
 import { filasDeEvaluaciones } from '@/lib/likida/fuentes/texto';
 import { leerSilencioWebhook } from '@/lib/likida/fuentes/leer';
-import { TiraCifras } from '../../ui-v2/graficas';
+import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { obtenerPanoramaAccion } from '../requiere-accion';
 import { resumenRelojes } from '../crons/estado-relojes';
 import { TarjetaRenglon, type RenglonSistema } from '../renglon-sistema';
@@ -287,8 +287,7 @@ export default async function SaludSistemaPage() {
   ];
 
   return (
-    <MarcoPagina titulo={tx('salud_sistema.estado')} apoyo={tx('salud_sistema.si_el_sistema_esta_vivo_hoy')}>
-      <TiraCifras etiqueta={tx('salud_sistema.resumen_de_salud')} items={[
+    <EsqueletoPanelCifras titulo={tx('salud_sistema.estado')} apoyo={tx('salud_sistema.si_el_sistema_esta_vivo_hoy')} etiquetaCifras={tx('salud_sistema.resumen_de_salud')} cifras={[
         relojes === null
           ? { etiqueta: tx('salud_sistema.relojes_a_tiempo'), valor: null, estado: 'error', mensaje: tx('salud_sistema.no_se_pudo_leer_el_pulso'), reintentar: true }
           : { etiqueta: tx('salud_sistema.relojes_a_tiempo'), valor: CRONS.length - relojesMalos, formato: 'entero', tono: relojesMalos > 0 ? 'bad' : relojes.parciales.length > 0 ? 'warn' : 'ok', nota: relojesMalos > 0 ? tx('salud_sistema.de_no_laten_o_fallaron', { relojesMalos, length: CRONS.length }) : relojes.parciales.length > 0 ? tx('salud_sistema.con_corrida_parcial', { n: relojes.parciales.length }) : tx('salud_sistema.los_latieron_en_su_cadencia', { length: CRONS.length }), href: '/admin/crons' },
@@ -300,8 +299,7 @@ export default async function SaludSistemaPage() {
         pendientes === null
           ? { etiqueta: tx('salud_sistema.pendientes_de_la_consola'), valor: null, estado: 'error', mensaje: tx('salud_sistema.no_se_pudo_leer_lo_que'), reintentar: true }
           : { etiqueta: tx('salud_sistema.pendientes_de_la_consola'), valor: pendientes, formato: 'entero', tono: panorama?.resumen.hayUrgente ? 'bad' : pendientes > 0 ? 'warn' : undefined, nota: tx('salud_sistema.lo_mismo_que_cuenta_la_campana'), href: '/admin/escalaciones' },
-      ]} />
-
+      ]}>
       {slos !== null && incumplidos > 0 ? (
         <section className="adm-sis-bloque" aria-labelledby="slo-incumplidos">
           <h2 className="adm-sis-titulo" id="slo-incumplidos">{tx('salud_sistema.objetivos_que_no_se_cumplen')}</h2>
@@ -337,7 +335,7 @@ export default async function SaludSistemaPage() {
         <BotonEnlace href="/admin/crons" variante="secondary" tamano="sm">{tx('salud_sistema.ver_los_relojes_uno_por_uno')}</BotonEnlace>
         <BotonEnlace href="/admin/observabilidad" variante="secondary" tamano="sm">{tx('salud_sistema.interruptores_y_latencias')}</BotonEnlace>
       </div>
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 
