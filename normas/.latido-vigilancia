@@ -1,36 +1,42 @@
 ---
-fecha_corrida: 2026-09-20 (domingo)
+fecha_corrida: 2026-11-11 (miércoles)
 ultimo_dia_barrido: 2026-09-10
-rango_pendiente: 2026-09-11 — 2026-09-19 (9 días, incluye 3 viernes:
-  11, 18-sep, y el 12 previamente reportado) sin barrer. Sigue
-  arrancando en 09-11 para la próxima corrida.
+rango_pendiente: 2026-09-11 — 2026-11-10 (61 días naturales, incluye
+  ~8 viernes de cuota de diésel adicionales desde el último latido y
+  ningún corte de trimestre nuevo desde el 01-oct-2026, que tampoco se
+  pudo correr) sin barrer. Sigue arrancando en 09-11 para la próxima
+  corrida.
 notas_revisadas: 0 — ningún endpoint respondió.
 anti_silencio: no_evaluable — sin acceso a notas/ ni a diarios/porFecha
   no hay con qué cruzar.
 fichas_disparadas: 0 — no evaluable, no confirmado "sin cambios".
-cuota_diesel: no_evaluable_hoy — hoy no es viernes, y las cuotas de los
-  viernes 11 y 18-sep tampoco se pudieron verificar (mismo bloqueo).
-  Sigue sin verificar desde el 05-sep.
-etag_sat: no_aplica_hoy — no es lunes.
-deriva_ley_check: no_aplica — no es día 1 de trimestre (próxima: 01-oct-2026)
+cuota_diesel: no_evaluable_hoy — hoy es miércoles, no viernes. Sigue
+  sin verificarse ningún viernes desde el 05-sep-2026.
+etag_sat: no_aplica_hoy — no es lunes (hoy es miércoles).
+deriva_ley_check: no_aplica_hoy — no es día 1 de trimestre.
 estado: >
-  INFRA — TERCERA corrida consecutiva bloqueada (12-sep y 15-sep
-  reportaron el mismo corte; ver latido anterior). Probado con dos rutas
-  de red independientes: curl directo por HTTPS_PROXY y la herramienta
-  WebFetch (infraestructura propia de Anthropic, no el proxy de la
-  sesión) — AMBAS devuelven bloqueo de política de egreso, no timeout ni
-  reset. curl: "CONNECT tunnel failed, response 403" contra
-  sidofqa.segob.gob.mx (notas y diarios/porFecha) y www.google.com como
-  control (también 403 — confirma que el bloqueo cubre dominios no
-  permitidos en general, no que el sitio del SIDOF esté caído). WebFetch:
-  {"error_type":"EGRESS_BLOCKED","domain":"sidofqa.segob.gob.mx"} contra
-  el mismo endpoint. /root/.ccr/__agentproxy/status muestra
-  recentRelayFailures vacío, o sea no es una caída de conexión sino un
-  rechazo de política. Per README del proxy: un 403 de política no se
-  reintenta ni se rodea, se reporta. No se leyó ninguna nota del DOF en
-  esta corrida ni en las dos anteriores. No se tocó ninguna ficha de
-  normas/. El rango sin verificar ya cubre 9 días hábiles y 3 viernes de
-  cuota de diésel. Requiere intervención humana: permitir
-  sidofqa.segob.gob.mx (y el resto de references/fuentes.md) en la
-  política de egreso de este entorno programado, o correr esta rutina
-  desde un entorno con esos dominios permitidos.
+  INFRA — el bloqueo de egreso sigue exactamente igual que en todas las
+  corridas registradas desde el 20-sep-2026. Confirmado hoy con pruebas
+  directas, no heredadas de latidos anteriores: curl por HTTPS_PROXY
+  contra sidofqa.segob.gob.mx/dof/sidof/diarios/porFecha/10-11-2026 →
+  "CONNECT tunnel failed, response 403"; contra
+  www.sat.gob.mx/minisitio/NormatividadRMFyRGCE/… → mismo 403; contra
+  www.diputados.gob.mx/LeyesBiblio/pdf/CFF.pdf → mismo 403. El agente
+  proxy reporta explícitamente "connect_rejected" para los tres hosts
+  ("the egress proxy refused the connection; a refusal most often means
+  that the host is not allowed for this session"). `curl
+  $HTTPS_PROXY/__agentproxy/status` confirma `"selective": false` y que
+  `noProxy` solo cubre infraestructura de Anthropic y gestores de
+  paquetes (npm/pypi/crates/go) — ninguno de los tres dominios de
+  references/fuentes.md está en la lista. No se leyó ninguna nota del
+  DOF. No se tocó ninguna ficha de normas/. El bloqueo lleva YA MÁS DE
+  DOS MESES (desde al menos el 20-sep-2026, con ~15 corridas
+  intermedias documentadas en `git log --all` bajo
+  claude/normativa-*, claude/latido-vigilancia-*,
+  claude/cuota-diesel-*, todas reportando el mismo corte). Requiere
+  intervención humana: añadir sidofqa.segob.gob.mx, www.sat.gob.mx y
+  www.diputados.gob.mx a la política de egreso de este entorno
+  programado (o mover la rutina a un entorno/cuenta con esos dominios
+  permitidos). Esta corrida commitea este latido directamente a master
+  (sin PR, por regla — no hay hallazgos que reportar) para que el
+  próximo intento no herede un rango de "última corrida" mentiroso.
