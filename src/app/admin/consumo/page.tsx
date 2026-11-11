@@ -6,8 +6,9 @@ import { avisosDeTopeEncendidos, DIAS_SIN_REGISTRO_AVISO, diasSinRegistroIa, lee
 import { listarAlertasTopeRecientes, type FilaAlertaTope } from '@/lib/llm/repo';
 import { ahoraMs } from '@/lib/saludo';
 import { hoyMx, numero, usd } from '@/lib/formato';
-import { Aviso, BotonEnlace, Disclosure, EstadoError, FilaTarjetas, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { BarList, Columnas, ColumnasApiladas, TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, BotonEnlace, Disclosure, EstadoError, FilaTarjetas, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { BarList, Columnas, ColumnasApiladas, type PropsCifra } from '@/app/ui-v2/graficas';
+import { EsqueletoPanelCifras } from '@/app/ui-v2/esqueletos';
 import { getT } from '@/lib/i18n/servidor';
 import { gastoApiladoPorFlota } from './apilado';
 
@@ -100,49 +101,53 @@ export default async function ConsumoPage() {
   const fallos = consumo ? consumo.agentes.reduce((s, a) => s + a.fallos30d, 0) : null;
   const gastoAgentes = consumo ? consumo.agentes.reduce((s, a) => s + a.gastado30dUsd, 0) : null;
 
+  const cifras: PropsCifra[] | undefined = todoCaido ? undefined : [
+    r
+      ? { etiqueta: ta('consumo.gastado_en_ia_historico'), valor: r.costoIaUsd, formato: 'usd', deltaPct: r.tendenciaCosto === null ? null : { pct: r.tendenciaCosto, bueno: r.tendenciaCosto < 0 }, deltaNota: ta('consumo.ultimos_7_dias_vs') }
+      : { etiqueta: ta('consumo.gastado_en_ia_historico'), valor: null, estado: 'error', reintentar: true },
+    r
+      ? { etiqueta: ta('consumo.costo_por_viaje_procesado'), valor: costoPorViaje, formato: 'usd', nota: costoPorViaje === null ? ta('consumo.aun_no_hay_viajes') : ta('consumo.estimado_gasto_total_de'), tipo: 'estimado' }
+      : { etiqueta: ta('consumo.costo_por_viaje_procesado'), valor: null, estado: 'error', reintentar: true },
+    consumo
+      ? { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: gastoAgentes, formato: 'usd', nota: `${numero(corridas ?? 0)} corridas, ${numero(fallos ?? 0)} en fallo.` }
+      : { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: null, estado: 'error', mensaje: ta('consumo.la_medicion_por_agente'), reintentar: true },
+    { etiqueta: ta('consumo.credito_del_proveedor'), valor: cifraCred.valor, nota: cifraCred.nota, tono: cifraCred.tono, estado: cifraCred.valor === null ? 'vacio' : 'ok', mensaje: ta('consumo.no_se_pudo_comprobar_2') },
+  ];
+
   return (
-    <MarcoPagina titulo={ta('consumo.consumo_de_ia')} apoyo={ta('consumo.a_donde_se_va')}>
-      {todoCaido ? <EstadoError reintentar>{ta('consumo.no_se_pudo_leer')}</EstadoError> : <>
-      {textoCred.tono ? <Aviso tono={textoCred.tono} titulo={textoCred.titulo}>{textoCred.texto}</Aviso> : null}
-      {!avisosEncendidos ? (
-        <Aviso tono="warn" titulo={ta('consumo.los_avisos_de_tope')}>
-          
-          {ta('consumo.una_flota_puede_llegar')}
-        </Aviso>
-      ) : null}
-      {diasSin !== null && diasSin >= DIAS_SIN_REGISTRO_AVISO ? (
-        <Aviso tono="warn" titulo={ta('consumo.sin_llamadas_de_ia', { diasSin: numero(diasSin) })}>
-          
-          {ta('consumo.puede_ser_que_no')}
-        </Aviso>
-      ) : null}
-      {problemas.map((i) => <Aviso key={i.titulo} tono="error" titulo={i.titulo}>{i.detalle}</Aviso>)}
+    <EsqueletoPanelCifras
+      titulo={ta('consumo.consumo_de_ia')} apoyo={ta('consumo.a_donde_se_va')} variante="8-4"
+      etiquetaCifras={ta('consumo.gasto_de_ia')} cifras={cifras}
+      avisos={todoCaido ? undefined : (
+        <>
+          {textoCred.tono ? <Aviso tono={textoCred.tono} titulo={textoCred.titulo}>{textoCred.texto}</Aviso> : null}
+          {!avisosEncendidos ? (
+            <Aviso tono="warn" titulo={ta('consumo.los_avisos_de_tope')}>
+              {ta('consumo.una_flota_puede_llegar')}
+            </Aviso>
+          ) : null}
+          {diasSin !== null && diasSin >= DIAS_SIN_REGISTRO_AVISO ? (
+            <Aviso tono="warn" titulo={ta('consumo.sin_llamadas_de_ia', { diasSin: numero(diasSin) })}>
+              {ta('consumo.puede_ser_que_no')}
+            </Aviso>
+          ) : null}
+          {problemas.map((i) => <Aviso key={i.titulo} tono="error" titulo={i.titulo}>{i.detalle}</Aviso>)}
 
-      <TiraCifras etiqueta={ta('consumo.gasto_de_ia')} items={[
-        r
-          ? { etiqueta: ta('consumo.gastado_en_ia_historico'), valor: r.costoIaUsd, formato: 'usd', deltaPct: r.tendenciaCosto === null ? null : { pct: r.tendenciaCosto, bueno: r.tendenciaCosto < 0 }, deltaNota: ta('consumo.ultimos_7_dias_vs') }
-          : { etiqueta: ta('consumo.gastado_en_ia_historico'), valor: null, estado: 'error', reintentar: true },
-        r
-          ? { etiqueta: ta('consumo.costo_por_viaje_procesado'), valor: costoPorViaje, formato: 'usd', nota: costoPorViaje === null ? ta('consumo.aun_no_hay_viajes') : ta('consumo.estimado_gasto_total_de'), tipo: 'estimado' }
-          : { etiqueta: ta('consumo.costo_por_viaje_procesado'), valor: null, estado: 'error', reintentar: true },
-        consumo
-          ? { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: gastoAgentes, formato: 'usd', nota: `${numero(corridas ?? 0)} corridas, ${numero(fallos ?? 0)} en fallo.` }
-          : { etiqueta: ta('consumo.agentes_ultimos_30_dias'), valor: null, estado: 'error', mensaje: ta('consumo.la_medicion_por_agente'), reintentar: true },
-        { etiqueta: ta('consumo.credito_del_proveedor'), valor: cifraCred.valor, nota: cifraCred.nota, tono: cifraCred.tono, estado: cifraCred.valor === null ? 'vacio' : 'ok', mensaje: ta('consumo.no_se_pudo_comprobar_2') },
-      ]} />
-
-      <FilaTarjetas variante="8-4">
-        <Tarjeta titulo={ta('consumo.gasto_de_ia_por')} estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} contenida={!!r && r.porDia.length <= 1} mensaje={r ? ta('consumo.sin_historial_suficiente') : undefined} detalle={ta('consumo.hacen_falta_al_menos')} reintentar>
+        </>
+      )}
+      graficas={todoCaido ? undefined : [
+        <Tarjeta key="gasto" titulo={ta('consumo.gasto_de_ia_por')} estado={r && r.porDia.length > 1 ? 'ok' : r ? 'vacio' : 'error'} contenida={!!r && r.porDia.length <= 1} mensaje={r ? ta('consumo.sin_historial_suficiente') : undefined} detalle={ta('consumo.hacen_falta_al_menos')} reintentar>
           {r ? (
             <>
               <Columnas etiqueta={ta('consumo.gasto_de_ia_por')} datos={r.porDia.map((d) => ({ etiqueta: d.dia.slice(5), largo: dia(d.dia), valor: d.costoUsd }))} formato="usd" vacio="Sin gasto registrado" />
               <p className="adm-din-nota">Tokens usados, histórico: {numero(r.tokensIn)} de entrada y {numero(r.tokensOut)} de salida.</p>
             </>
           ) : null}
-        </Tarjeta>
-        <AvisosDeTope ta={ta} avisos={avisos} encendidos={avisosEncendidos} />
-      </FilaTarjetas>
-
+        </Tarjeta>,
+        <AvisosDeTope key="tope" ta={ta} avisos={avisos} encendidos={avisosEncendidos} />,
+      ]}
+    >
+      {todoCaido ? <EstadoError reintentar>{ta('consumo.no_se_pudo_leer')}</EstadoError> : <>
       <FilaTarjetas variante="6-6">
         <Tarjeta titulo={ta('consumo.por_modelo')} estado={!r ? 'error' : r.porModelo.length === 0 ? 'vacio' : 'ok'} mensaje={r ? ta('consumo.sin_llamadas_registradas') : ta('consumo.no_se_pudo_leer_2')} detalle={ta('consumo.aparece_en_cuanto_el')} reintentar
           acciones={<BotonEnlace href="/admin/costos-facturacion" variante="ghost" tamano="sm">{ta('consumo.ver_cobro')}</BotonEnlace>}>
@@ -245,7 +250,7 @@ export default async function ConsumoPage() {
         </p>
       </Disclosure>
       </>}
-    </MarcoPagina>
+    </EsqueletoPanelCifras>
   );
 }
 

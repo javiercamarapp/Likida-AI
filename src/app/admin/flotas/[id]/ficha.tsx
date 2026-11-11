@@ -8,7 +8,7 @@ import type { CasillaArranque } from '@/lib/admin/arranque';
 import type { Persona } from '@/lib/admin/personas';
 import { nombreDeRol } from '@/lib/auth/roles';
 import { BotonEnlace, Icono, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '../../../ui-v2/componentes';
-import { Cifra, TiraCifras } from '../../../ui-v2/graficas';
+import type { PropsCifra } from '../../../ui-v2/graficas';
 import { FormaConAviso, type AccionDeForma } from '../../ui/forma';
 import { CampoTexto } from '../../../ui-v2/componentes/campos';
 import { SeccionInterruptores } from '../../observabilidad/interruptores-ui';
@@ -59,15 +59,6 @@ export function Ficha360({
 
   const resumen = (
     <div className="rv-pila">
-      <TiraCifras etiqueta={t('flotas_ficha.resumen_de', { nombre: f.tenant.nombre })}>
-        <Cifra etiqueta={t('flotas_ficha.viajes_liquidados')} valor={f.operacion?.viajesLiquidados ?? null} formato="entero" estado={f.operacion ? 'ok' : 'error'} icono={<Icono icono={Activity} />} />
-        <Cifra etiqueta={t('flotas_ficha.monto_comprobado')} valor={f.operacion?.montoComprobado ?? null} formato="mxn" estado={f.operacion ? 'ok' : 'error'} icono={<Icono icono={Wallet} />} />
-        <Cifra etiqueta={t('flotas_ficha.liquidaciones_por_revisar')} valor={f.operacion?.porRevisar ?? null} formato="entero" estado={f.operacion ? 'ok' : 'error'} icono={<Icono icono={Receipt} />} />
-        <Cifra
-          etiqueta={t('flotas_ficha.costo_de_ia_30')} valor={f.consumoIa?.d30Usd ?? null} formato="usd" estado={f.consumoIa ? 'ok' : 'error'}
-          nota={f.consumoIa ? t('flotas_ficha.usd_historico', { historicoUsd: numero(f.consumoIa.historicoUsd) }) : undefined} icono={<Icono icono={Cpu} />}
-        />
-      </TiraCifras>
       <Tarjeta titulo={t('flotas_ficha.origen')}>
         {!f.origenLegible ? <p>{t('flotas_ficha.origen_ilegible_ahora_mismo')}</p>
           : f.origen ? <p>{t('flotas_ficha.nacio_del_pipeline')} {f.origen.empresa} ({f.origen.fuente}{f.origen.cerradoEn ? `, cerrado ${fechaCorta(f.origen.cerradoEn)}` : ''}).</p>
@@ -262,16 +253,35 @@ export function Ficha360({
   );
 }
 
-/** El encabezado de la ficha (lo monta `page.tsx` dentro del ÚNICO `MarcoPagina` de la ruta, también cuando la lectura falla). */
+/** Las cuatro cifras de la ficha (Rovaq «Ficha 360»: los tiles van ANTES de las secciones, bajo el encabezado). `null` = la lectura falló: «No disponible ahora», nunca 0. */
+export function cifrasFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdminFlotasEs): PropsCifra[] {
+  return [
+    { etiqueta: t('flotas_ficha.viajes_liquidados'), valor: f.operacion?.viajesLiquidados ?? null, formato: 'entero', estado: f.operacion ? 'ok' : 'error', icono: <Icono icono={Activity} /> },
+    { etiqueta: t('flotas_ficha.monto_comprobado'), valor: f.operacion?.montoComprobado ?? null, formato: 'mxn', estado: f.operacion ? 'ok' : 'error', icono: <Icono icono={Wallet} /> },
+    { etiqueta: t('flotas_ficha.liquidaciones_por_revisar'), valor: f.operacion?.porRevisar ?? null, formato: 'entero', estado: f.operacion ? 'ok' : 'error', icono: <Icono icono={Receipt} /> },
+    {
+      etiqueta: t('flotas_ficha.costo_de_ia_30'), valor: f.consumoIa?.d30Usd ?? null, formato: 'usd', estado: f.consumoIa ? 'ok' : 'error',
+      nota: f.consumoIa ? t('flotas_ficha.usd_historico', { historicoUsd: numero(f.consumoIa.historicoUsd) }) : undefined, icono: <Icono icono={Cpu} />,
+    },
+  ];
+}
+
+/** Los chips de la ficha: el plan y el estado de la suscripción, solo si se pudieron leer. */
+export function chipsFicha(f: FichaCliente): ReactNode {
+  return (
+    <>
+      <li><StatusChip tono="neutral">{f.suscripcion?.planNombre ?? f.tenant.plan}</StatusChip></li>
+      {f.suscripcion ? <li><StatusChip tono={TONO_SUSCRIPCION[f.suscripcion.estado] ?? 'neutral'}>{f.suscripcion.estado}</StatusChip></li> : null}
+    </>
+  );
+}
+
+/** El encabezado de la ficha (lo monta `page.tsx` dentro del ÚNICO `EsqueletoFicha` de la ruta, también cuando la lectura falla). El «Volver» lo pone el esqueleto. */
 export function encabezadoFicha(f: FichaCliente, t: TrDe<'admin_flotas'> = trAdminFlotasEs) {
   return {
     titulo: f.tenant.nombre,
     apoyo: t('flotas_ficha.plan', { plan: f.tenant.plan, creadoEn: f.tenant.creadoEn ? t('ficha.alta_fecha', { fecha: fechaCorta(f.tenant.creadoEn) }) : '' }),
-    acciones: (
-      <>
-        <BotonEnlace href="/admin/flotas" variante="ghost">{t('flotas_ficha.volver_a_clientes')}</BotonEnlace>
-        <BotonEnlace href={`/dashboard?tenant=${f.tenant.id}&rol=flota_admin`} variante="secondary">{t('flotas_ficha.ver_su_panel')}</BotonEnlace>
-      </>
-    ),
+    volver: { href: '/admin/flotas', etiqueta: t('flotas_ficha.volver_a_clientes') },
+    acciones: <BotonEnlace href={`/dashboard?tenant=${f.tenant.id}&rol=flota_admin`} variante="secondary" tamano="sm">{t('flotas_ficha.ver_su_panel')}</BotonEnlace>,
   };
 }
