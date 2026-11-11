@@ -1,4 +1,5 @@
 import { Inbox, Download, Mail } from 'lucide-react';
+import '../agentes.css';
 import './proveedores.css';
 import type { FacturaProveedor } from '@/lib/likida/proveedores';
 import type { BuzonDeFlota } from '@/lib/correo/buzon_escritura';
@@ -84,6 +85,11 @@ export function VistaAgenteProveedores({
     {
       info: 'proveedores.aprobadas', etiqueta: tx('proveedores.vista.aprobadas'), valor: numero(aprobadas.length),
       nota: aprobadas.length === 0 ? undefined : tx('proveedores.vista.sin_exportar_ya_exportadas', { sinExportar: numero(sinExportar), exportadas: numero(exportadas) }),
+      // Barra de 6 px (Rovaq pc-kpis): lo aprobado que aún espera exportación contra lo ya exportado.
+      segmentos: aprobadas.length === 0 ? undefined : [
+        { etiqueta: tx('proveedores.vista.est_aprobada'), valor: sinExportar },
+        { etiqueta: tx('proveedores.vista.est_exportada'), valor: exportadas },
+      ],
     },
     { info: 'proveedores.rechazadas', etiqueta: tx('proveedores.vista.rechazadas'), valor: numero(rechazadas.length) },
     { info: 'proveedores.receptor_ajeno', etiqueta: tx('proveedores.vista.con_receptor_ajeno'), valor: numero(receptorAjeno), nota: tx('proveedores.vista.el_cfdi_no_es_a'), tono: receptorAjeno > 0 ? 'bad' : undefined },
@@ -102,7 +108,7 @@ export function VistaAgenteProveedores({
         </>} />
       ) : undefined}
     >
-      <div className="flex flex-col gap-3">
+      <div className="rv-ag-pila">
         {/* La bandeja primero: es lo que se decide todos los días. Subir y el buzón son la puerta de entrada y van debajo, lado a lado. */}
       <Tarjeta titulo={tx('proveedores.vista.la_bandeja')} info="proveedores.bandeja">
         <p className="rv-prov__nota">{tx('proveedores.vista.pendientes_arriba_lo_decidido_queda')}</p>

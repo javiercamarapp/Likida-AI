@@ -57,9 +57,9 @@ export function VistaAgenteCobranza({
   const ventana = `${rotuloDiasTr(config.diasSemana, tx)} · ${config.horaInicio}–${config.horaFin} ${tx('comun.horas_sufijo')}`;
 
   const cifras: PropsCifra[] = ([
-    { info: 'cobranza.para_contactar', etiqueta: tx('cobranza.vista.para_contactar'), valor: numero(cola.paraContactar.length), nota: tx('cobranza.vista.alcanzaron_un_tier_sin_contacto') },
+    { info: 'cobranza.para_contactar', etiqueta: tx('cobranza.vista.para_contactar'), valor: numero(cola.paraContactar.length), nota: tx('cobranza.vista.alcanzaron_un_tier_sin_contacto'), tono: cola.paraContactar.length > 0 ? 'warn' : undefined },
     { info: 'cobranza.no_puede_contactar', etiqueta: tx('cobranza.vista.no_puede_contactar'), valor: numero(cola.sinTelefono.length), nota: tx('cobranza.vista.sin_telefono_capturado'), tono: cola.sinTelefono.length > 0 ? 'warn' : undefined },
-    { info: 'cobranza.viajes_vigilados', etiqueta: tx('cobranza.vista.viajes_vigilados'), valor: numero(cola.vigilados), nota: tx('cobranza.vista.abiertos_o_en_cuadre') },
+    { info: 'cobranza.viajes_vigilados', etiqueta: tx('cobranza.vista.viajes_vigilados'), valor: numero(cola.vigilados), nota: tx('cobranza.vista.abiertos_o_en_cuadre'), segmentos: segmentosVigilados(cola, tx) },
     { info: 'cobranza.estado', etiqueta: tx('cobranza.vista.estado'), valor: config.activo ? tx('cobranza.vista.activo') : tx('cobranza.vista.pausado'), nota: ventana, tono: config.activo ? undefined : 'warn' },
   ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }));
 
@@ -82,7 +82,7 @@ export function VistaAgenteCobranza({
         </>
       )}
     >
-      <div className="flex flex-col gap-3">
+      <div className="rv-ag-pila">
       <FilaTarjetas variante="8-4">
         {/* ── La cola honesta ── */}
         <Tarjeta
@@ -139,7 +139,6 @@ export function VistaAgenteCobranza({
       <Tarjeta
         titulo={tx('cobranza.vista.bitacora_de_contactos')}
         info="cobranza.bitacora"
-        contenida
         estado={bitacora === null ? 'error' : bitacora.length === 0 ? 'vacio' : 'ok'}
         mensaje={bitacora === null ? tx('cobranza.vista.no_se_pudo_leer_la') : tx('cobranza.vista.aun_sin_contactos')}
         detalle={tx('cobranza.vista.cada_intento_del_agente_queda')}
@@ -161,6 +160,19 @@ export function VistaAgenteCobranza({
       </div>
     </EsqueletoTablaMaestra>
   );
+}
+
+/** La barra de 6 px de «viajes vigilados»: cuántos tocan contacto, cuántos no tienen teléfono y el resto. Solo si las partes caben en el total
+ *  (un conteo que no cuadra no se dibuja como proporción). */
+function segmentosVigilados(cola: ColaCobranza, tx: TAgentes) {
+  const a = cola.paraContactar.length;
+  const b = cola.sinTelefono.length;
+  if (cola.vigilados <= 0 || a + b > cola.vigilados) return undefined;
+  return [
+    { etiqueta: tx('cobranza.vista.para_contactar'), valor: a },
+    { etiqueta: tx('cobranza.vista.no_puede_contactar'), valor: b },
+    { etiqueta: tx('cobranza.vista.viajes_vigilados'), valor: cola.vigilados - a - b },
+  ];
 }
 
 const columnasCola = (tx: TAgentes): readonly ColumnaBase<FilaCola>[] => [
