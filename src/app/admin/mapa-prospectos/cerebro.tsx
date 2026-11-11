@@ -992,7 +992,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
         </Tarjeta>
         {/* La tabla equivalente del mapa (Rovaq: el mismo dato en filas, para leerlo exacto y con teclado). */}
         <Tarjeta titulo={tx('mapa_prospectos_cerebro.donde_vive_la_cartera')} className="cer-tabla-estados">
-          <TablaBase
+          <TablaBase tarjetaMovil
             etiqueta={tx('mapa_prospectos_cerebro.prospectos_por_estado')} idFila={(f) => f.nombre} filas={filasEstado}
             vacio={{ titulo: tr.t('mapa.rankingVacio') }}
             columnas={[

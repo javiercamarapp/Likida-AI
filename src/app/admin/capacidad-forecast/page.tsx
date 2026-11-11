@@ -105,7 +105,7 @@ export default async function CapacidadForecastPage({ searchParams }: { searchPa
                 ? <>{t('capacidad_forecast.costo_de_ia_medido_por_viaje', { usd: usd(unidades.costoIaPorViaje), numero: numero(unidades.muestraViajes, idioma) })}{unidades.muestraViajes < 30 ? t('capacidad_forecast.muestra_chica_apenas_indicativo') : ''}).</>
                 : <>{t('capacidad_forecast.sin_liquidaciones_en_30d_el_costo')}</>}
             </p>
-            <TablaBase
+            <TablaBase tarjetaMovil
               etiqueta={t('capacidad_forecast.proyeccion_de_capacidad_por_escenario')}
               columnas={columnasEscenario(unidades.costoIaPorViaje, t, idioma)}
               filas={ESCENARIOS_VIAJES_DIA}
