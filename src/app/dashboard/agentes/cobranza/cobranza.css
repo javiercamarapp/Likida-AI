@@ -3,3 +3,10 @@
 .rv-cob__cajon > section { display: grid; gap: 8px; min-width: 0; }
 .rv-cob__cajon h3 { margin: 0; font: 600 var(--t-card, 14px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
 .rv-cob__seccion { margin: 0; font: 600 var(--t-card, 14px)/1.3 var(--font-sans-ui, inherit); color: var(--ink); }
+
+/* Resumen por gasto: filas rótulo-valor dentro de una tarjeta (Rovaq HB), sin segunda tira de KPI. */
+.rv-cob__resumen { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); column-gap: 24px; }
+.rv-cob__resumen-fila { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); min-height: 41px; }
+.rv-cob__resumen-fila dt { margin: 0; font-size: var(--t-body, 14px); font-weight: 600; color: var(--ink); display: grid; gap: 2px; }
+.rv-cob__resumen-fila dt small { font-size: var(--t-small, 12px); font-weight: 400; color: var(--muted); }
+.rv-cob__resumen-fila dd { margin: 0; font-size: var(--t-body, 14px); font-weight: 600; color: var(--ink); }
