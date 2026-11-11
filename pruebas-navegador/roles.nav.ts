@@ -134,24 +134,33 @@ test.describe('vendedor: sólo su cartera, ningún dato de flota', () => {
   });
   test('guarda una nota propia y la conserva al recargar', async ({ page }) => {
     await page.goto('/vendedor');
-    const tarjeta = page.locator('.card').filter({ has: page.getByText('Cartera propia E2E', { exact: true }) }).last();
-    await tarjeta.locator('summary').click();
-    const entrada = tarjeta.locator('textarea');
+    // El panel nuevo: la tarjeta del prospecto es un botón que abre su cajón; la nota vive dentro del cajón (diálogo con el nombre de la empresa).
+    const tarjeta = page.locator('.ven-tarjeta').filter({ has: page.getByText('Cartera propia E2E', { exact: true }) }).last();
+    const cajon = page.getByRole('dialog', { name: 'Cartera propia E2E' });
+    const entrada = cajon.getByRole('textbox', { name: 'Nota de Cartera propia E2E' });
+    const abrir = async () => {
+      if (!(await entrada.isVisible())) await tarjeta.getByRole('button').first().click();
+      await expect(entrada).toBeVisible();
+    };
+    await abrir();
     const anterior = await entrada.inputValue();
     const nota = `Seguimiento sintético E2E ${Date.now()}`;
     try {
       await entrada.fill(nota);
       const respuesta = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/vendedor');
-      await tarjeta.getByRole('button', { name: 'Guardar nota', exact: true }).click();
+      await cajon.getByRole('button', { name: 'Guardar nota', exact: true }).click();
       expect((await respuesta).status()).toBe(200);
       await page.reload();
+      // La nota persistida se ve en la tarjeta y también al reabrir el cajón.
       await expect(tarjeta).toContainText(nota);
+      await abrir();
+      await expect(entrada).toHaveValue(nota);
       await expect(page.locator('body')).not.toContainText('Cartera ajena E2E');
     } finally {
-      if (!(await tarjeta.locator('textarea').isVisible())) await tarjeta.locator('summary').click();
-      await tarjeta.locator('textarea').fill(anterior);
+      await abrir();
+      await entrada.fill(anterior);
       const respuesta = page.waitForResponse((r) => r.request().method() === 'POST' && new URL(r.url()).pathname === '/vendedor');
-      await tarjeta.getByRole('button', { name: 'Guardar nota', exact: true }).click();
+      await cajon.getByRole('button', { name: 'Guardar nota', exact: true }).click();
       expect((await respuesta).status()).toBe(200);
     }
   });
