@@ -122,13 +122,6 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
 
       {insights !== undefined && <InsightsDelAgente tr={tr} insights={insights} nombresCliente={nombresCliente} diasVentana={diasVentana} />}
 
-      <p className="rv-cp__nota">
-        {rico(tx('cartaporte.vista.lo_que_el_agente_aprende'), { v0: ' ', Link: <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="rv-cp__enlace">{tx('cartaporte.vista.catalogo_del_cliente')}</Link> })}
-      </p>
-      <p className="rv-cp__nota">
-        {rico(tx('cartaporte.vista.los_clientes_que_necesitan_su'), { v0: ' ', Link: <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="rv-cp__enlace">{tx('cartaporte.vista.referencia_del_cliente')}</Link> })}
-      </p>
-
       <Tarjeta titulo={tx('cartaporte.vista.lo_que_hace_y_lo')} info="carta_porte_agente.alcance">
         <Disclosure titulo={tx('cartaporte.vista.alcance_del_agente')} resumen={tx('cartaporte.vista.al_despachar_con_lo_capturado')} abierto variante="linea">
           <div className="rv-cp__tres">
@@ -155,6 +148,15 @@ export function VistaAgenteCartaPorte({ datos, sufijo = '', notificaciones, buzo
       </Tarjeta>
 
       {notificaciones}
+
+      <div className="rv-cp__metodo">
+        <p className="rv-cp__nota">
+        {rico(tx('cartaporte.vista.lo_que_el_agente_aprende'), { v0: ' ', Link: <Link href={`/dashboard/agentes/carta-porte/catalogo${sufijo}`} className="rv-cp__enlace">{tx('cartaporte.vista.catalogo_del_cliente')}</Link> })}
+      </p>
+        <p className="rv-cp__nota">
+        {rico(tx('cartaporte.vista.los_clientes_que_necesitan_su'), { v0: ' ', Link: <Link href={`/dashboard/agentes/carta-porte/referencia${sufijo}`} className="rv-cp__enlace">{tx('cartaporte.vista.referencia_del_cliente')}</Link> })}
+      </p>
+      </div>
     </EsqueletoTablaMaestra>
   );
 }

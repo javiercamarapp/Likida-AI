@@ -7,7 +7,8 @@ import { resumirAcreditacion } from '@/lib/likida/peajes/notas_credito';
 import { ETIQUETA_ESTADO_RECLAMO } from '@/lib/likida/peajes/reclamos_seguimiento';
 // SOLO tipos: estos módulos importan supabaseAdmin y no deben entrar al bundle de la vista.
 import type { ReporteRevision, ReclamoVista } from '@/lib/likida/peajes/revision_cobros';
-import { AvisoCompacto, EstadoVacio, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
+import { VacioAgente } from '../vacio-agente';
+import { AvisoCompacto, StatusChip, TablaBase, Tarjeta } from '@/app/ui-v2/componentes';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
 import type { InfoClave } from '@/app/ui-v2/info-catalogo';
 import './peajes.css';
@@ -199,7 +200,7 @@ export function RevisionCobros({ estado, tr = TR_ES }: { estado: EstadoRevisionC
         <p className="rv-pj-nota">{ROTULO_CANDIDATO}{tx('rest.lo_que_el_sistema_marca_son')}</p>
 
         {estado.tipo === 'sin_archivo' && (
-          <EstadoVacio titulo={tx('rest.aun_nada_que_revisar')}>{tx('rest.aun_no_hay_nada_que_revisar')}</EstadoVacio>
+          <VacioAgente titulo={tx('rest.aun_nada_que_revisar')}>{tx('rest.aun_no_hay_nada_que_revisar')}</VacioAgente>
         )}
 
         {estado.tipo === 'error' && (

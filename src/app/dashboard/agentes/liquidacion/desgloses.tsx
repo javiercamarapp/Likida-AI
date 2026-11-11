@@ -391,9 +391,13 @@ export function cifrasDeFichas({ fichas, tx, contexto, desde30 }: { fichas: Fich
   const provisional = fichas.polizaProvisional;
   return [
     celda(tx('rest.recibidos_hoy'), fichas.recibidosHoy, { nota: tx('rest.desgloses_que_llegaron_hoy_del_sistema'), ...enlace([]) }),
-    celda(tx('rest.enviados_30_dias'), fichas.enviados, { nota: tx('f26d2.liq.nota_enviados'), ...enlace([['des_estado', 'enviado'], ...(desde30 ? [['des_desde', desde30] as [string, string]] : [])]) }),
-    celda(tx('rest.entregados_30_dias'), fichas.entregados, { nota: tx('f26d2.liq.nota_entregados'), ...enlace([['des_estado', 'entregado'], ...(desde30 ? [['des_desde', desde30] as [string, string]] : [])]) }),
-    celda(tx('rest.rebotados_30_dias'), fichas.rebotados, { alerta: true, nota: tx('f26d2.liq.nota_rebotados'), ...enlace([['des_estado', 'rebotado'], ...(desde30 ? [['des_desde', desde30] as [string, string]] : [])]) }),
+    // Rovaq `pc-kpis`: 4 celdas. Entregados y rebotados (30 días) viajan en la nota de «Enviados», con su cifra medida (null = «—», nunca 0).
+    celda(tx('rest.enviados_30_dias'), fichas.enviados, {
+      alerta: false,
+      nota: tx('f26d4.liq.nota_enviados_detalle', { e: fichas.entregados === null ? '—' : numero(fichas.entregados), r: fichas.rebotados === null ? '—' : numero(fichas.rebotados) }),
+      ...(typeof fichas.rebotados === 'number' && fichas.rebotados > 0 ? { tono: 'bad' as const } : {}),
+      ...enlace([['des_estado', 'enviado'], ...(desde30 ? [['des_desde', desde30] as [string, string]] : [])]),
+    }),
     celda(tx('rest.retenidos'), fichas.retenidos, {
       alerta: true,
       nota: typeof provisional === 'number' && provisional > 0 ? tx('f26d2.liq.nota_retenidos_provisional', { n: numero(provisional) }) : tx('f26d2.liq.nota_retenidos'),

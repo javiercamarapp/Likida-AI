@@ -135,3 +135,5 @@
 .rv-pj-paso__ayuda { margin: 0; font-size: var(--t-small, 12px); color: var(--muted); line-height: 1.4; }
 @media (max-width: 900px) { .rv-pj-pasos { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .rv-pj-pasos { grid-template-columns: minmax(0, 1fr); } }
+.rv-pj-forma-pila { display: grid; gap: 10px; width: 100%; }
+.rv-pj-forma--rejilla { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
