@@ -530,7 +530,7 @@ export function AlertaTopeSeccion({ tr = TR_OPERACION_ES,
       {puedeConfigurar && !configIlegible && <FormaAlertaTope config={config} guardarAlerta={guardarAlerta} />}
 
       {/* sin-info: subtítulo de la lista dentro de «Alerta de tope de jornada», que ya se explica arriba */}
-      <h3 className="rv-jn__sub">{t('jor.emitidas.titulo')}</h3>
+      <h3 className="rv-jn__sub rv-jn__sep">{t('jor.emitidas.titulo')}</h3>
       {alertas === null ? (
         <Aviso tono="error">{t('jor.emitidas.noleyo')}</Aviso>
       ) : ordenadas.length === 0 ? (
