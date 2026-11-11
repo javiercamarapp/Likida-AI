@@ -3,13 +3,12 @@
 import { createContext, useContext, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronsLeft, CircleHelp, LayoutGrid, LifeBuoy, Users } from 'lucide-react';
+import { CircleHelp, LayoutGrid, LifeBuoy, Users } from 'lucide-react';
 import { shell as shellEs } from '@/lib/i18n/es/shell';
 import { useT } from '@/lib/i18n/proveedor';
-import { Popover, MenuList, Tooltip } from '../ui-v2/componentes/overlay';
+import { Popover, MenuList } from '../ui-v2/componentes/overlay';
 import BotonBuscar from '../dashboard/shell/boton-buscar';
 import { entradaDeRuta } from './rutas';
-import { useRiel } from '../dashboard/shell/colapso';
 import { TRAZO_ICONO } from '../ui-v2/componentes/icono';
 import type { RequiereAccion } from './requiere-accion';
 import { etiquetaNav } from '@/lib/i18n/nav';
@@ -75,27 +74,19 @@ function GuiaAdmin() {
 }
 
 /**
- * La cabecera de /admin, como la de Rovaq y como la del dashboard (`CabeceraEscritorio`, clases `.rv-cab-esc`): botón de plegar/expandir
- * el menú (sin él, al plegar a riel no habría NINGÚN control para volver a abrirlo), el título de la pantalla (icono y nombre de su
+ * La cabecera de /admin, como la de Rovaq y como la del dashboard (`CabeceraEscritorio`, clases `.rv-cab-esc`): el título de la pantalla (icono y nombre de su
  * entrada del sidebar; el Resumen en `/admin`; nada si la ruta no es de ninguna entrada), la Guía y, a la derecha, el disparador visible
  * del buscador ⌘K. La campana y la fecha se retiraron: la campana vive como «Avisos» en el pie del sidebar (mismo conteo real,
- * `useRequiereAccion`; lectura caída = «sin dato», nunca 0). Entre 768 y 1023 px el riel es obligatorio por CSS y el botón de plegar se oculta.
+ * `useRequiereAccion`; lectura caída = «sin dato», nunca 0).  El botón de plegar vive SOLO en la marca del sidebar (como Rovaq).
  */
 export default function CabeceraAdmin() {
-  const { riel, alternar } = useRiel();
   const tr = useT('shell', shellEs);
   const { t } = tr;
   const pathname = usePathname() ?? '';
   const entrada = pathname === '/admin' ? { nombre: 'Resumen', Icono: LayoutGrid } : entradaDeRuta(pathname);
-  const etiqueta = riel ? t('cab.expandir') : t('cab.plegar');
   return (
     <header className="rv-cab-esc">
       <div className="rv-cab-esc__izq">
-        <Tooltip texto={etiqueta}>
-          <button type="button" className="rv-icono-boton rv-cab-esc__plegar" onClick={alternar} aria-label={etiqueta} aria-expanded={!riel}>
-            <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-          </button>
-        </Tooltip>
         {entrada && (
           <span className="rv-cab-esc__titulo" aria-hidden>
             <entrada.Icono width={15} height={15} strokeWidth={TRAZO_ICONO} aria-hidden />

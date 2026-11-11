@@ -38,8 +38,8 @@ export default function SidebarV2({ rol, rolEtiqueta, nombre, perfil, usoIa, cer
           <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
           <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
         </Link>
-        <Tooltip texto={t('cab.plegar')}>
-          <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={t('cab.plegar')} aria-expanded={!riel}>
+        <Tooltip texto={riel ? t('cab.expandir') : t('cab.plegar')}>
+          <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={riel ? t('cab.expandir') : t('cab.plegar')} aria-expanded={!riel}>
             <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
           </button>
         </Tooltip>

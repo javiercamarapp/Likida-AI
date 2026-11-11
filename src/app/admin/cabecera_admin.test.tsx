@@ -4,12 +4,11 @@ import CabeceraAdmin, { ProveedorRequiereAccion, etiquetaCampana } from './cabec
 import { PieAdmin } from './sidebar-nav';
 
 // Antes /admin no tenía cabecera: al plegar el sidebar a riel no había ningún control para volver a abrirlo.
-describe('CabeceraAdmin: la misma barra superior del dashboard (como Rovaq: solo plegar)', () => {
+describe('CabeceraAdmin: la misma barra superior del dashboard (como Rovaq: sin botón de plegar)', () => {
   const html = renderToStaticMarkup(<CabeceraAdmin />);
-  it('trae el botón de plegar/expandir el menú, accesible y con su estado', () => {
-    expect(html).toContain('rv-cab-esc__plegar');
-    expect(html).toMatch(/aria-label="(Plegar|Expandir) el menú"/);
-    expect(html).toContain('aria-expanded');
+  it('NO trae botón de plegar: vive solo en la marca del sidebar, como Rovaq (un único control)', () => {
+    expect(html).not.toContain('rv-cab-esc__plegar');
+    expect(html).not.toMatch(/aria-label="(Plegar|Expandir) el menú"/);
   });
   it('ya no trae la campana ni la fecha de hoy: la campana vive como «Avisos» en el pie', () => {
     expect(html).not.toContain('href="/admin/notificaciones"');
