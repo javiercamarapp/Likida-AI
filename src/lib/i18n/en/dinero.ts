@@ -1632,6 +1632,7 @@ export const dinero: Record<keyof typeof dineroEs, string> = {
   'politicas.page.aPartirDeAqui': 'From here on the engine raises its hand.',
   'politicas.page.concepto': 'Category',
   'politicas.page.configuracion': 'Settings',
+  'politicas.page.topesDeGasto': 'Spending caps',
   'politicas.page.deSoloLecturaEl': 'Read-only: the editor above works by category and has nowhere to put the route. They are kept intact when saving; they cannot be edited from here yet.',
   'politicas.page.desviacionDeConsumo': 'Consumption deviation',
   'politicas.page.estaFlotaNoTiene': 'This fleet has no limits configured: the engine will not flag anything by policy.',

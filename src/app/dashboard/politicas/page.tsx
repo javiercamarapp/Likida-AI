@@ -11,7 +11,7 @@ import { puedeAdministrar } from '@/lib/auth/permisos';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import type { Metadata } from 'next';
 import {
-  AvisoCompacto, CamposSistema, CampoTexto, Casilla, EstadoError, EstadoVacio, FormaConAviso, StatusChip, TablaBase,
+  AvisoCompacto, CampoTexto, Casilla, EstadoError, EstadoVacio, FormaConAviso, StatusChip, TablaBase,
   type ColumnaBase, type ResultadoAccion,
 } from '@/app/ui-v2/componentes';
 import { EsqueletoConfiguracion } from '@/app/ui-v2/esqueletos';
@@ -183,9 +183,22 @@ export default async function PoliticasPage({
     { id: 'tope', titulo: tr('politicas.page.tope'), alinear: 'der', celda: (p) => (p.topeMonto === undefined ? '—' : mxn(p.topeMonto)) },
   ];
 
+  type FilaFiscal = { concepto: string; valor: string; nota: string };
+  const filasFiscales: FilaFiscal[] = config === null ? [] : [
+    { concepto: tr('politicas.page.topeDiarioDeAlimentacion'), valor: mxn(config.estimulos.viaticosTopeFiscalDiarioMxn), nota: tr('politicas.page.lisrArt28V') },
+    { concepto: tr('politicas.page.topeDeGastoEn'), valor: mxn(config.estimulos.efectivoTopeMxn), nota: tr('politicas.page.lisrArt27Iii') },
+    { concepto: 'Peaje acreditable', valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: tr('politicas.page.estimuloDeAutopistasLif') },
+    { concepto: tr('politicas.page.desviacionDeConsumo'), valor: `${Math.round(config.tabulador.umbralDesviacion * 100)}%`, nota: tr('politicas.page.aPartirDeAqui') },
+  ];
+  const columnasFiscales: ColumnaBase<FilaFiscal>[] = [
+    { id: 'concepto', titulo: tr('politicas.page.concepto'), principal: true, celda: (f) => f.concepto },
+    { id: 'tope', titulo: tr('politicas.page.tope'), alinear: 'der', celda: (f) => <span className="tabular">{f.valor}</span> },
+    { id: 'nota', titulo: 'Fundamento', celda: (f) => <span className="rv-pol__sin">{f.nota}</span> },
+  ];
+
   return (
     <EsqueletoConfiguracion
-      titulo={tr('politicas.page.configuracion')} apoyo={tr('politicas.page.losTopesContraLos')}
+      titulo={tr('politicas.page.topesDeGasto')} apoyo={tr('politicas.page.losTopesContraLos')}
       avisos={config === null ? <EstadoError reintentar>{tr('politicas.page.noSePudoLeer')}</EstadoError> : undefined}
       secciones={config === null ? [] : [
         {
@@ -199,7 +212,7 @@ export default async function PoliticasPage({
               <>
                 <FormaConAviso accion={accionGuardar} boton={tr('politicas.page.guardarPolitica')} columnas="md:grid-cols-1">
                   <TablaBase<(typeof CONCEPTOS)[number]> etiqueta={tr('politicas.page.topesPorComprobanteMxn')} columnas={columnasEditor} filas={CONCEPTOS}
-                    idFila={(c) => c} altoMaximo={false} tarjetaMovil />
+                    idFila={(c) => c} altoMaximo={false} tarjetaMovil className="rv-pol__tabla" />
                 </FormaConAviso>
                 <p className="rv-pol__nota">
                   {rico(tr('politicas.page.vacioEsNota'), { strong: (c) => <strong>{c}</strong>, strong2: (c) => <strong>{c}</strong> })}
@@ -214,7 +227,7 @@ export default async function PoliticasPage({
               </EstadoVacio>
             ) : (
               <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.topesPorComprobantePor')} columnas={columnasLectura} filas={politica}
-                idFila={(p) => `${p.concepto}-${p.ruta ?? ''}`} altoMaximo={false} tarjetaMovil />
+                idFila={(p) => `${p.concepto}-${p.ruta ?? ''}`} altoMaximo={false} tarjetaMovil className="rv-pol__tabla" />
             )}
             </>
           ),
@@ -225,7 +238,7 @@ export default async function PoliticasPage({
             <>
               {/* H39 (auditoría 24): con nombres de ruta largos en un celular la fila se cortaba sin forma de deslizar; la región de TablaBase desliza y se alcanza con teclado. */}
               <TablaBase<PoliticaGasto> etiqueta={tr('politicas.page.reglasPorRuta')} columnas={columnasRuta} filas={porRuta}
-                idFila={(p) => `${p.concepto}-${p.ruta}`} altoMaximo={false} tarjetaMovil />
+                idFila={(p) => `${p.concepto}-${p.ruta}`} altoMaximo={false} tarjetaMovil className="rv-pol__tabla" />
               <p className="rv-pol__nota">
                 {tr('politicas.page.deSoloLecturaEl')}
               </p>
@@ -236,12 +249,9 @@ export default async function PoliticasPage({
           id: 'fiscales', titulo: tr('politicas.page.topesFiscalesQueAplica'),
           contenido: (
             <>
-            <CamposSistema etiqueta={tr('politicas.page.topesFiscales')} campos={[
-              { etiqueta: tr('politicas.page.topeDiarioDeAlimentacion'), valor: mxn(config.estimulos.viaticosTopeFiscalDiarioMxn), nota: tr('politicas.page.lisrArt28V') },
-              { etiqueta: tr('politicas.page.topeDeGastoEn'), valor: mxn(config.estimulos.efectivoTopeMxn), nota: tr('politicas.page.lisrArt27Iii') },
-              { etiqueta: 'Peaje acreditable', valor: `${Math.round(config.estimulos.peajeFactor * 100)}%`, nota: tr('politicas.page.estimuloDeAutopistasLif') },
-              { etiqueta: tr('politicas.page.desviacionDeConsumo'), valor: `${Math.round(config.tabulador.umbralDesviacion * 100)}%`, nota: tr('politicas.page.aPartirDeAqui') },
-            ]} />
+            {/* Tabla compacta (concepto | tope | fundamento) en lugar de una rejilla de cajas grises con texto corto. */}
+            <TablaBase<FilaFiscal> etiqueta={tr('politicas.page.topesFiscales')} columnas={columnasFiscales} filas={filasFiscales}
+              idFila={(f) => f.concepto} altoMaximo={false} tarjetaMovil className="rv-pol__tabla" />
             </>
           ),
           pie: undefined,
