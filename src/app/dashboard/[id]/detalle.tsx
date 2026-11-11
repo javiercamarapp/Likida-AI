@@ -289,9 +289,9 @@ export function DetalleLiquidacion({ d, sufijo, estatus, etiqueta, pdfHref, revi
             </div>
           )}
         </Tarjeta>
-        /* ── Acreditable / recuperable ──
+        {/* ── Acreditable / recuperable ──
             Litros, no pesos: el estímulo del LIF 20-A es cuota semanal del DOF × litros y esa cuota no la tenemos. `ieps` solo puede venir de
-            filas viejas escritas antes del cambio; se conserva para no ocultarlas. */
+            filas viejas escritas antes del cambio; se conserva para no ocultarlas. */}
         <Tarjeta titulo={tr('liquidacion.detalle.acreditableTitulo')} info="liquidacion_detalle.acreditable">
           <CamposSistema
             etiqueta={tr('liquidacion.detalle.acreditableTabla')}
