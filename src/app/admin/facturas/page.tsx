@@ -3,8 +3,9 @@ import { requireSuperadmin } from '@/lib/auth/guard';
 import { logger } from '@/lib/logger';
 import { fechaMx, mxn, numero } from '@/lib/formato';
 import { listarFacturasSaas, type FacturaSaasFila } from '@/lib/saas/transferencia';
-import { Aviso, BarraFiltros, Disclosure, EstadoError, FiltroFecha, FiltroOpciones, MarcoPagina, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
-import { TiraCifras } from '@/app/ui-v2/graficas';
+import { Aviso, BarraFiltros, Disclosure, EstadoError, FiltroFecha, FiltroOpciones, StatusChip, Tarjeta, TablaBase, type TonoEstado } from '@/app/ui-v2/componentes';
+import { EsqueletoTablaMaestra } from '@/app/ui-v2/esqueletos';
+import type { PropsCifra } from '@/app/ui-v2/graficas';
 import { BotonExportarFacturas } from './boton-exportar';
 import { leerFiltros, rangoAlReves } from './filtros';
 import '../dinero.css';
@@ -58,44 +59,51 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
   const completa = lectura !== null && !recortada;
   const errorCifra = (etiqueta: string) => ({ etiqueta, valor: null, estado: 'error' as const, mensaje: recortada ? t('facturas.la_lista_esta_recortada') : t('facturas.no_se_pudo_leer'), reintentar: true });
 
+  const cifras: PropsCifra[] = [
+    completa
+      ? { etiqueta: t('facturas.facturado'), valor: suma((f) => f.estado !== 'cancelada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado !== 'cancelada'))} facturas, sin contar canceladas.` }
+      : errorCifra('Facturado'),
+    completa
+      ? { etiqueta: t('facturas.cobrado'), valor: suma((f) => f.estado === 'pagada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pagada'))} pagadas.`, tono: 'ok' }
+      : errorCifra('Cobrado'),
+    completa
+      ? { etiqueta: t('facturas.por_cobrar'), valor: suma((f) => f.estado === 'pendiente' || f.estado === 'fallida'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida'))} pendientes o fallidas.`, tono: cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida') > 0 ? 'warn' : undefined }
+      : errorCifra(t('facturas.por_cobrar')),
+    completa
+      ? { etiqueta: t('facturas.pagadas_sin_cfdi'), valor: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid), nota: t('facturas.cobradas_pero_sin_timbrar'), tono: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid) > 0 ? 'warn' : 'ok' }
+      : errorCifra(t('facturas.pagadas_sin_cfdi')),
+  ];
+
   return (
-    <MarcoPagina
+    <EsqueletoTablaMaestra
       titulo={t('facturas.facturacion')}
       apoyo={t('facturas.las_mensualidades_que_likida')}
       acciones={<BotonExportarFacturas estado={filtros.estado} desde={filtros.desde} hasta={filtros.hasta} deshabilitado={alReves || lectura === null || (completa && filas.length === 0)} />}
-    >
-      {alReves ? <Aviso tono="warn" titulo={t('facturas.el_rango_esta_al')}>{t('facturas.la_fecha_desde_es')}</Aviso> : null}
-      {recortada ? (
-        <Aviso tono="warn" titulo={t('facturas.se_muestran_de_facturas', { length: numero(filas.length), lectura: numero(lectura!.total) })}>
+      filtros={(
+        <BarraFiltros accion="/admin/facturas" enLinea etiqueta={t('facturas.filtrar_facturas')} nActivos={nFiltros} limpiarHref="/admin/facturas">
+          <FiltroOpciones
+            etiqueta={t('facturas.estado')} nombre="estado" valor={filtros.estado ?? ''}
+            opciones={[{ valor: 'pendiente', rotulo: 'Pendiente' }, { valor: 'pagada', rotulo: 'Pagada' }, { valor: 'fallida', rotulo: 'Fallida' }, { valor: 'cancelada', rotulo: 'Cancelada' }]}
+          />
+          <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} />
+          <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} />
+        </BarraFiltros>
+      )}
+      avisos={(
+        <>
+          {alReves ? <Aviso tono="warn" titulo={t('facturas.el_rango_esta_al')}>{t('facturas.la_fecha_desde_es')}</Aviso> : null}
+          {recortada ? (
+            <Aviso tono="warn" titulo={t('facturas.se_muestran_de_facturas', { length: numero(filas.length), lectura: numero(lectura!.total) })}>
           
-          {t('facturas.la_lista_esta_recortada_2')}
-        </Aviso>
-      ) : null}
+              {t('facturas.la_lista_esta_recortada_2')}
+            </Aviso>
+          ) : null}
 
-      <BarraFiltros accion="/admin/facturas" enLinea etiqueta={t('facturas.filtrar_facturas')} nActivos={nFiltros} limpiarHref="/admin/facturas">
-        <FiltroOpciones
-          etiqueta={t('facturas.estado')} nombre="estado" valor={filtros.estado ?? ''}
-          opciones={[{ valor: 'pendiente', rotulo: 'Pendiente' }, { valor: 'pagada', rotulo: 'Pagada' }, { valor: 'fallida', rotulo: 'Fallida' }, { valor: 'cancelada', rotulo: 'Cancelada' }]}
-        />
-        <FiltroFecha nombre="desde" etiqueta={t('facturas.periodo_desde')} valor={filtros.desde} />
-        <FiltroFecha nombre="hasta" etiqueta={t('facturas.periodo_hasta')} valor={filtros.hasta} />
-      </BarraFiltros>
-
-      <TiraCifras etiqueta={t('facturas.facturas_de_la_mensualidad')} items={[
-        completa
-          ? { etiqueta: t('facturas.facturado'), valor: suma((f) => f.estado !== 'cancelada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado !== 'cancelada'))} facturas, sin contar canceladas.` }
-          : errorCifra('Facturado'),
-        completa
-          ? { etiqueta: t('facturas.cobrado'), valor: suma((f) => f.estado === 'pagada'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pagada'))} pagadas.`, tono: 'ok' }
-          : errorCifra('Cobrado'),
-        completa
-          ? { etiqueta: t('facturas.por_cobrar'), valor: suma((f) => f.estado === 'pendiente' || f.estado === 'fallida'), formato: 'mxn', nota: `${numero(cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida'))} pendientes o fallidas.`, tono: cuenta((f) => f.estado === 'pendiente' || f.estado === 'fallida') > 0 ? 'warn' : undefined }
-          : errorCifra(t('facturas.por_cobrar')),
-        completa
-          ? { etiqueta: t('facturas.pagadas_sin_cfdi'), valor: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid), nota: t('facturas.cobradas_pero_sin_timbrar'), tono: cuenta((f) => f.estado === 'pagada' && !f.cfdiUuid) > 0 ? 'warn' : 'ok' }
-          : errorCifra(t('facturas.pagadas_sin_cfdi')),
-      ]} />
-
+        </>
+      )}
+      etiquetaCifras={t('facturas.facturas_de_la_mensualidad')}
+      cifras={cifras}
+    >
       {lectura === null && !alReves ? (
         <EstadoError reintentar>{t('facturas.no_se_pudieron_leer')}</EstadoError>
       ) : (
@@ -134,7 +142,7 @@ export default async function FacturasPage({ searchParams }: { searchParams: Pro
           {t('facturas.el_archivo_del_contador')}
         </p>
       </Disclosure>
-    </MarcoPagina>
+    </EsqueletoTablaMaestra>
   );
 }
 
