@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight, ExternalLink } from 'lucide-react';
-import { Disclosure, StatusChip, type TonoEstado } from '../ui-v2/componentes';
+import { Disclosure, StatusChip, TablaBase, type ColumnaBase, type TonoEstado } from '../ui-v2/componentes';
 import { MarcaIntegracion, type MarcaId } from '../ui-v2/componentes/marca-integracion';
 import './sistema.css';
 
@@ -42,6 +42,48 @@ export function TarjetaRenglon({ r }: { r: RenglonSistema }) {
             {r.link.texto} <ExternalLink width={12} height={12} strokeWidth={1.75} aria-hidden="true" />
           </a>
         )
+      ) : null}
+    </div>
+  );
+}
+
+function EnlaceRenglon({ link }: { link: NonNullable<RenglonSistema['link']> }) {
+  return link.href.startsWith('/') ? (
+    <Link href={link.href} className="adm-sis-fila__enlace">
+      {link.texto} <ArrowRight width={12} height={12} strokeWidth={1.75} aria-hidden="true" />
+    </Link>
+  ) : (
+    <a href={link.href} target="_blank" rel="noopener noreferrer" className="adm-sis-fila__enlace">
+      {link.texto} <ExternalLink width={12} height={12} strokeWidth={1.75} aria-hidden="true" />
+    </a>
+  );
+}
+
+/** El semáforo por servicio como TABLA de 40 px (cabecera negra, un servicio por fila) en vez de una rejilla de tarjetas de 150-350 px.
+ *  Lo que cuesta arreglar (nombres de variables) queda plegado y aparte, nunca en el cuerpo. `columnas` trae los rótulos del diccionario. */
+export function TablaRenglones({ renglones, etiqueta, columnas, rotuloArreglo, rotuloEnlace }: {
+  renglones: readonly RenglonSistema[];
+  etiqueta: string;
+  columnas: { servicio: string; estado: string; significa: string; enlace: string };
+  rotuloArreglo: (n: number) => string;
+  rotuloEnlace?: string;
+}) {
+  const cols: ColumnaBase<RenglonSistema>[] = [
+    { id: 'servicio', titulo: columnas.servicio, principal: true, celda: (r) => <span className="adm-sis-fila__nombre">{r.marca ? <MarcaIntegracion id={r.marca} tam={16} /> : null}{r.titulo}</span> },
+    { id: 'estado', titulo: columnas.estado, celda: (r) => <StatusChip tono={r.tono}>{r.etiqueta}</StatusChip> },
+    { id: 'significa', titulo: columnas.significa, celda: (r) => <span className="adm-sis-celda-texto" title={r.detalle}>{r.detalle}</span> },
+    { id: 'enlace', titulo: rotuloEnlace ?? columnas.enlace, alinear: 'der', celda: (r) => (r.link ? <EnlaceRenglon link={r.link} /> : null) },
+  ];
+  const conArreglo = renglones.filter((r) => r.arreglo);
+  return (
+    <div className="adm-sis-bloque">
+      <TablaBase etiqueta={etiqueta} columnas={cols} filas={renglones} idFila={(r) => r.titulo} tarjetaMovil altoMaximo={false} />
+      {conArreglo.length > 0 ? (
+        <Disclosure variante="linea" titulo={rotuloArreglo(conArreglo.length)}>
+          <ul className="adm-sis-lista">
+            {conArreglo.map((r) => <li key={r.titulo}><span>{r.titulo}</span><span>{r.arreglo}</span></li>)}
+          </ul>
+        </Disclosure>
       ) : null}
     </div>
   );

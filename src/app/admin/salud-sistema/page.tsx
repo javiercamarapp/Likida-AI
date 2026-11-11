@@ -11,9 +11,11 @@ import { redisConfigurado } from '@/lib/ratelimit';
 import { CRONS, detalleLatidos } from '@/lib/admin/salud';
 import { getT } from '@/lib/i18n/servidor';
 import { QuemaSlo, leerQuema } from '../quema-slo';
-import { getSLOs } from '@/lib/admin/slo';
+import { getSLOs, getLatencias, type LatenciasMedidas } from '@/lib/admin/slo';
 import { logger } from '@/lib/logger';
-import { BotonEnlace, EstadoVacio, ListaFuentes } from '../../ui-v2/componentes';
+import { BotonEnlace, EstadoVacio, ListaFuentes, Tarjeta } from '../../ui-v2/componentes';
+import { BarList } from '../../ui-v2/graficas';
+import { numero } from '@/lib/formato';
 import { ahoraMs } from '@/lib/saludo';
 import { evaluarFuentes, resumirFuentes } from '@/lib/likida/fuentes/estado';
 import { entradasDeLatidos, RELOJ_DE_FUENTE } from '@/lib/likida/fuentes/desde_latidos';
@@ -22,7 +24,7 @@ import { leerSilencioWebhook } from '@/lib/likida/fuentes/leer';
 import { EsqueletoPanelCifras } from '../../ui-v2/esqueletos';
 import { obtenerPanoramaAccion } from '../requiere-accion';
 import { resumenRelojes } from '../crons/estado-relojes';
-import { TarjetaRenglon, type RenglonSistema } from '../renglon-sistema';
+import { TablaRenglones, type RenglonSistema } from '../renglon-sistema';
 import '../sistema.css';
 import { type TSistema, T_SISTEMA_ES } from '@/lib/i18n/sistema_tr';
 import { rico } from '@/lib/i18n/rico';
@@ -216,13 +218,14 @@ export default async function SaludSistemaPage() {
   const NOMBRE_GRUPO = nombreGrupo(tx);
   const falta = faltantes();
   // Las cuatro lecturas caen cada una por su lado y NINGUNA tumba la pantalla: una fuente ciega se dice «sin dato», nunca un cero.
-  const [supabase, latidos, slos, panorama, quemaSlo, silencio, { t: tf }] = await Promise.all([
+  const [supabase, latidos, slos, panorama, quemaSlo, silencio, latencias, { t: tf }] = await Promise.all([
     medirSupabase(),
     detalleLatidos().catch((e: unknown) => { logger.error('admin.salud.latidos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     getSLOs().catch((e: unknown) => { logger.error('admin.salud.slos', { err: e instanceof Error ? e.message : String(e) }); return null; }),
     obtenerPanoramaAccion().catch(() => null),
     leerQuema(),
     leerSilencioWebhook().catch(() => null),
+    getLatencias(7).catch((): LatenciasMedidas | null => null),
     getT('fuentes'),
   ]);
   const { t: tMon } = await getT('monitoreo');
@@ -286,6 +289,10 @@ export default async function SaludSistemaPage() {
     )),
   ];
 
+  const mayorP95 = <T extends { p95Ms: number | null }>(f: readonly T[] | null | undefined) => (f ?? []).filter((x) => x.p95Ms !== null).sort((a, b) => (b.p95Ms ?? 0) - (a.p95Ms ?? 0)).slice(0, 6);
+  const p95Rutas = mayorP95(latencias?.rutas);
+  const p95Relojes = mayorP95(latencias?.crons);
+
   return (
     <EsqueletoPanelCifras titulo={tx('salud_sistema.estado')} apoyo={tx('salud_sistema.si_el_sistema_esta_vivo_hoy')} etiquetaCifras={tx('salud_sistema.resumen_de_salud')} cifras={[
         relojes === null
@@ -299,6 +306,23 @@ export default async function SaludSistemaPage() {
         pendientes === null
           ? { etiqueta: tx('salud_sistema.pendientes_de_la_consola'), valor: null, estado: 'error', mensaje: tx('salud_sistema.no_se_pudo_leer_lo_que'), reintentar: true }
           : { etiqueta: tx('salud_sistema.pendientes_de_la_consola'), valor: pendientes, formato: 'entero', tono: panorama?.resumen.hayUrgente ? 'bad' : pendientes > 0 ? 'warn' : undefined, nota: tx('salud_sistema.lo_mismo_que_cuenta_la_campana'), href: '/admin/escalaciones' },
+        // Servicios con semáforo MEDIDO: los «no medido» (neutral) no cuentan ni a favor ni en contra.
+        { etiqueta: tx('salud_sistema.kpi_servicios'), valor: renglones.filter((r) => r.tono === 'ok').length, formato: 'entero', tono: renglones.some((r) => r.tono === 'bad') ? 'bad' : renglones.some((r) => r.tono === 'warn') ? 'warn' : 'ok', nota: tx('salud_sistema.kpi_servicios_nota', { medidos: renglones.filter((r) => r.tono !== 'neutral').length, total: renglones.length }) },
+      ]}
+      variante="6-6"
+      graficas={[
+        <Tarjeta key="rutas" titulo={tx('salud_sistema.grafica_rutas')} contenida reintentar
+          estado={latencias === null || latencias.rutas === null ? 'error' : p95Rutas.length === 0 ? 'vacio' : 'ok'}
+          mensaje={latencias === null || latencias.rutas === null ? tx('observabilidad.no_se_pudo_leer_la_latencia') : tx('observabilidad.sin_muestras_todavia')}
+          detalle={tx('observabilidad.la_tabla_existe_y_esta_vacia')}>
+          <BarList etiqueta={tx('salud_sistema.grafica_rutas')} items={p95Rutas.map((r) => ({ clave: r.nombre, etiqueta: r.nombre, valor: r.p95Ms, texto: `${numero(r.p95Ms ?? 0)} ms` }))} />
+        </Tarjeta>,
+        <Tarjeta key="relojes" titulo={tx('salud_sistema.grafica_relojes')} contenida reintentar
+          estado={latencias === null || latencias.crons === null ? 'error' : p95Relojes.length === 0 ? 'vacio' : 'ok'}
+          mensaje={latencias === null || latencias.crons === null ? tx('observabilidad.no_se_pudo_leer_la_latencia_2') : tx('observabilidad.sin_muestras_todavia')}
+          detalle={tx('observabilidad.ningun_reloj_ha_corrido_desde_que')}>
+          <BarList etiqueta={tx('salud_sistema.grafica_relojes')} items={p95Relojes.map((r) => ({ clave: r.nombre, etiqueta: r.nombre, valor: r.p95Ms, texto: `${numero(r.p95Ms ?? 0)} ms` }))} />
+        </Tarjeta>,
       ]}>
       {slos !== null && incumplidos > 0 ? (
         <section className="adm-sis-bloque" aria-labelledby="slo-incumplidos">
@@ -323,12 +347,13 @@ export default async function SaludSistemaPage() {
         />
       </section>
 
-      <section className="adm-sis-bloque" aria-labelledby="piezas-sistema">
-        <h2 className="adm-sis-titulo" id="piezas-sistema">{tx('salud_sistema.cada_pieza_medida_o_declarada_sin')}</h2>
-        <div className="adm-sis-rejilla">
-          {renglones.map((r) => <TarjetaRenglon key={r.titulo} r={r} />)}
-        </div>
-      </section>
+      <Tarjeta titulo={tx('salud_sistema.cada_pieza_medida_o_declarada_sin')}>
+        <TablaRenglones
+          renglones={renglones} etiqueta={tx('salud_sistema.semaforo_por_servicio')}
+          columnas={{ servicio: tx('salud_sistema.col_servicio'), estado: tx('salud_sistema.estado'), significa: tx('salud_sistema.col_significa'), enlace: tx('salud_sistema.col_enlace') }}
+          rotuloArreglo={(n) => tx('salud_sistema.como_arreglar_n', { n })}
+        />
+      </Tarjeta>
 
       <EstadoVacio titulo={tx('salud_sistema.lo_que_aun_no_se_instrumenta')}>{tx('salud_sistema.linea_de_incidentes_guardia_y_consumo')}</EstadoVacio>
       <div className="adm-sis-acciones">

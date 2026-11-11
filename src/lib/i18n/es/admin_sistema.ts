@@ -1402,4 +1402,13 @@ export const admin_sistema = {
   'compliance.ob_al_dia': 'Al día',
   'compliance.ob_por_ejecutar': '{n} por ejecutar',
   'compliance.ob_sin_medicion': 'Sin medición',
+  'salud_sistema.kpi_servicios': 'Servicios en orden',
+  'salud_sistema.kpi_servicios_nota': 'de {medidos} medidos ({total} renglones)',
+  'salud_sistema.grafica_rutas': 'Latencia p95 por ruta (7 d)',
+  'salud_sistema.grafica_relojes': 'Latencia p95 por reloj (7 d)',
+  'salud_sistema.semaforo_por_servicio': 'Semáforo por servicio',
+  'salud_sistema.col_servicio': 'Servicio',
+  'salud_sistema.col_significa': 'Qué significa',
+  'salud_sistema.col_enlace': 'Dónde verlo',
+  'salud_sistema.como_arreglar_n': 'Cómo arreglarlo ({n})',
 } as const;

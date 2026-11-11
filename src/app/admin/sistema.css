@@ -44,3 +44,4 @@
 /* Una cifra sin dato conserva la escala de la tira (26/700, tracking -.03em): solo el color la apaga. */
 [data-ui="v2"] .adm-escala-kpi { display: contents; }
 [data-ui="v2"] .adm-escala-kpi .rv-kpi__valor[data-vacio] { font-size: 26px; font-weight: 700; letter-spacing: -.03em; }
+[data-ui="v2"] .adm-sis-celda-texto { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; max-width: 64ch; font-size: 12px; line-height: 1.4; color: var(--muted); }

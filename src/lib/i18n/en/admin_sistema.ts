@@ -1404,4 +1404,13 @@ export const admin_sistema: Record<keyof typeof admin_sistemaEs, string> = {
   'compliance.ob_al_dia': 'Up to date',
   'compliance.ob_por_ejecutar': '{n} to carry out',
   'compliance.ob_sin_medicion': 'Not measured',
+  'salud_sistema.kpi_servicios': 'Services in order',
+  'salud_sistema.kpi_servicios_nota': 'of {medidos} measured ({total} rows)',
+  'salud_sistema.grafica_rutas': 'p95 latency by route (7 d)',
+  'salud_sistema.grafica_relojes': 'p95 latency by clock (7 d)',
+  'salud_sistema.semaforo_por_servicio': 'Traffic light by service',
+  'salud_sistema.col_servicio': 'Service',
+  'salud_sistema.col_significa': 'What it means',
+  'salud_sistema.col_enlace': 'Where to see it',
+  'salud_sistema.como_arreglar_n': 'How to fix it ({n})',
 };
