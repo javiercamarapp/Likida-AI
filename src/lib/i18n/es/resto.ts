@@ -485,7 +485,7 @@ export const resto = {
   'op.e0_descargar_instrucciones_csv_sin_dinero': '<e0>Descargar instrucciones (CSV, sin dinero)</e0><e1>Descargar texto para tu sistema</e1>',
   'op.descargar_completo_con_tarifa': 'Descargar completo (con tarifa)',
   'op.todavia_no_hay_convenios': 'Todavía no hay convenios',
-  'op.importa_tu_archivo_mas_abajo_hasta': 'Importa tu archivo más abajo: hasta entonces los viajes se despachan sin instrucciones.',
+  'op.importa_tu_archivo_mas_abajo_hasta': 'Captura el primero o importa tu archivo desde los botones de arriba: hasta entonces los viajes se despachan sin instrucciones.',
   'op.origen': '¿origen?',
   'op.destino': '¿destino?',
   'op.sitios': '· sitios:',

@@ -487,7 +487,7 @@ export const resto: Record<keyof typeof restoEs, string> = {
   'op.e0_descargar_instrucciones_csv_sin_dinero': '<e0>Download instructions (CSV, no money)</e0><e1>Download text for your system</e1>',
   'op.descargar_completo_con_tarifa': 'Download full (with rate)',
   'op.todavia_no_hay_convenios': 'No agreements yet',
-  'op.importa_tu_archivo_mas_abajo_hasta': 'Import your file below: until then trips are dispatched without instructions.',
+  'op.importa_tu_archivo_mas_abajo_hasta': 'Add the first one or import your file with the buttons above: until then trips are dispatched without instructions.',
   'op.origen': 'origin?',
   'op.destino': 'destination?',
   'op.sitios': '· sites:',
