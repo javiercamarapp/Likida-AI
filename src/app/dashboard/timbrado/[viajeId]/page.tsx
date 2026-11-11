@@ -84,7 +84,7 @@ export default async function PaginaTimbradoViaje({
     >
       <section className="rv-esq__paso rv-timb__paso" aria-label={tr('e26b.timb_paso_borrador')}>
         <div className="rv-esq__paso-cab">
-          <h2>{tr('e26b.timb_paso_borrador')}</h2>
+          <p role="heading" aria-level={2} className="rv-timb__paso-titulo">{tr('e26b.timb_paso_borrador')}</p>
           <Chip tono={borradorListo ? 'ok' : 'warn'} tamano="estado">{borradorListo ? tr('e26b.timb_paso_hecho') : tr('e26b.timb_paso_revisar')}</Chip>
         </div>
         <p className="rv-esq__paso-quien">{borradorListo ? tr('e26b.timb_borrador_ok') : tr('e26b.timb_borrador_falta', { n: numero(v.borrador.faltantes.length + v.borrador.fallas.length) })}</p>

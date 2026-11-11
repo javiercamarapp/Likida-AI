@@ -62,7 +62,7 @@ function PasoTimbre({ titulo, chip, tono, bloqueado, actual, children }: {
   return (
     <section className="rv-esq__paso rv-timb__paso" data-actual={actual || undefined} data-bloqueado={bloqueado || undefined} aria-label={titulo}>
       <div className="rv-esq__paso-cab">
-        <h2>{titulo}</h2>
+        <p role="heading" aria-level={2} className="rv-timb__paso-titulo">{titulo}</p>
         <Chip tono={tono} tamano="estado">{chip}</Chip>
       </div>
       {children}
