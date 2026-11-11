@@ -14,7 +14,7 @@ import { variablesDe } from './traducir';
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Palabras con acento que SÍ pueden aparecer en inglés: nombres propios y el nombre de cada idioma en su idioma. */
-const NOMBRES_PROPIOS = ['Español', 'México', 'Querétaro', 'Nuevo León', 'Yucatán', 'Michoacán', 'San Luis Potosí', 'Jalisco'];
+const NOMBRES_PROPIOS = ['Español', 'México', 'Querétaro', 'Nuevo León', 'Yucatán', 'Michoacán', 'San Luis Potosí', 'Jalisco', 'Vigía', 'Pérez', 'TeleVía'];
 const ACENTOS = /[áéíóúüñ¿¡]/i;
 
 function sinPropios(texto: string): string {
