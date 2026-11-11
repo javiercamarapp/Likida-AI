@@ -8,6 +8,8 @@ import { ROTULO_PROCEDENCIA, type Asiento, type JornadaCompuesta } from '@/lib/l
 import type { RiesgoDia, PoliticaFlota } from '@/lib/likida/jornada/riesgo';
 import { AvisoResultado, Boton as BotonDs, Campo, Casilla, CampoSelect, CampoTexto, Disclosure, Icono, Tarjeta } from '@/app/ui-v2/componentes';
 import './jornada.css';
+import { useT } from '@/lib/i18n/proveedor';
+import { operacion as operacionEs } from '@/lib/i18n/es/operacion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // LAS CORRECCIONES DEL CONTRALOR — y por qué ninguna sobreescribe una hora.
@@ -79,6 +81,7 @@ export function FormasJornada({
   capturarMarca: AccionJornada;
   cerrarElDia: AccionJornada;
 }) {
+  const { t } = useT('operacion', operacionEs);
   // `sueltos` VA EN LA LISTA. Son marcas vivas que no encajaron (un regreso de
   // descanso sin salida, típicamente). Dejarlas fuera las volvería invisibles e
   // imposibles de anular desde aquí: seguirían en la base, fuera del documento
@@ -96,12 +99,12 @@ export function FormasJornada({
       <div className="rv-jn__bloque">
         <p className="rv-jn__nota">
           {fila.estado === 'cerrado'
-            ? `Día cerrado por ${fila.cerradoPorEmail ?? 'sin firma'}. Sigue siendo corregible, y la corrección queda anotada.`
-            : 'Día abierto.'}
+            ? t('jor.f.cerrado', { quien: fila.cerradoPorEmail ?? t('jor.f.cerrado.sinfirma') })
+            : t('jor.f.abierto')}
           {' '}
           {fila.conformeOperadorEn
-            ? 'El operador confirmó este registro.'
-            : 'El operador todavía no lo ha confirmado.'}
+            ? t('jor.f.confirmo')
+            : t('jor.f.noconfirmo')}
         </p>
 
         {/* LO QUE EL MOTOR VIO, CON SU ARTÍCULO. Cada señal trae su fundamento para que el contralor pueda ir a leerlo, no para adornar. */}
@@ -157,15 +160,16 @@ function MarcasDelDia({
   puedeCorregir: boolean;
   anularMarca: AccionJornada;
 }) {
+  const { t, tp } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(anularMarca, VACIO);
 
   return (
     <div className="rv-jn__bloque">
       {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
-      <h3 className="rv-jn__sub">Las marcas del día</h3>
+      <h3 className="rv-jn__sub">{t('jor.f.marcas')}</h3>
       {vivos.length === 0 && (
         <p className="rv-jn__nota">
-          No hay ninguna marca viva. Nadie reportó y no hubo de dónde derivarla: eso no son cero horas.
+          {t('jor.f.sinmarcas')}
         </p>
       )}
       <Aviso estado={estado} />
@@ -178,16 +182,16 @@ function MarcasDelDia({
                 {ROTULO_PROCEDENCIA[a.procedencia]}
                 {a.registradoPorEmail ? ` · ${a.registradoPorEmail}` : ''}
                 {a.nota ? ` · ${a.nota}` : ''}
-                {a.corrigeA ? ' · corrige una marca anulada' : ''}
+                {a.corrigeA ? t('jor.f.corrige') : ''}
               </span>
             </div>
             {puedeCorregir && (
               <form action={accion} className="rv-forma__fila">
                 <input type="hidden" name="asientoId" value={a.id} />
                 <input type="hidden" name="jornadaId" value={jornadaId} />
-                <CampoTexto name="motivo" etiqueta="Motivo de la corrección" minLength={5} obligatorio
-                  placeholder="Por qué esta marca no es correcta" className="rv-forma__crece" />
-                <Boton texto="Anular" cargando="Anulando…" icono={<Icono icono={Ban} />} />
+                <CampoTexto name="motivo" etiqueta={t('jor.f.motivo')} minLength={5} obligatorio
+                  placeholder={t('jor.f.motivo.ph')} className="rv-forma__crece" />
+                <Boton texto={t('jor.f.anular')} cargando="Anulando…" icono={<Icono icono={Ban} />} />
               </form>
             )}
           </li>
@@ -197,13 +201,13 @@ function MarcasDelDia({
       {/* LAS ANULADAS SE ENSEÑAN. Esconderlas dejaría la pantalla más limpia y el expediente incompleto: la historia de las
           correcciones es parte de lo que hace creíble al documento. */}
       {anulados.length > 0 && (
-        <Disclosure variante="linea" titulo={`${anulados.length} marca(s) anulada(s) — siguen en el expediente`}>
+        <Disclosure variante="linea" titulo={tp('jor.f.anuladas', anulados.length)}>
           <ul className="rv-jn__marcas">
             {anulados.map((a) => (
               <li key={a.id} className="rv-jn__anulada">
                 <s>{ROTULO_TIPO[a.tipo] ?? a.tipo} · {hora(a.momento)}</s>
                 <span className="rv-jn__tenue">
-                  Anulada por {a.anuladoPorEmail ?? 'sin firma'}
+                  {t('jor.f.anuladapor')} {a.anuladoPorEmail ?? t('jor.f.sinfirma')}
                   {a.anuladoEn ? ` el ${hora(a.anuladoEn)}` : ''} · {a.anuladoMotivo}
                 </span>
               </li>
@@ -223,6 +227,7 @@ function FormaCaptura({
   anulados: Asiento[];
   capturarMarca: AccionJornada;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(capturarMarca, VACIO);
 
   // Solo se ofrece corregir lo que YA está anulado. Una marca viva no se
@@ -233,31 +238,29 @@ function FormaCaptura({
   return (
     <form action={accion} className="rv-forma">
       {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
-      <h3 className="rv-jn__sub">Capturar una marca</h3>
+      <h3 className="rv-jn__sub">{t('jor.f.capturar.titulo')}</h3>
       <p className="rv-jn__nota">
-        Queda con tu nombre y la hora en que la capturaste. Escribe la hora en horario del
-        centro de México (hora de CDMX, sin horario de verano): si el operador está en otra zona
-        (Pacífico, Sonora, frontera), conviértela antes de capturarla.
+        {t('jor.f.capturar.nota')}
       </p>
       <Aviso estado={estado} />
       <input type="hidden" name="jornadaId" value={jornadaId} />
       <div className="rv-forma__rejilla">
-        <CampoSelect name="tipo" etiqueta="Qué" defaultValue="inicio_jornada">
-          <option value="inicio_jornada">Inicio de jornada</option>
-          <option value="fin_jornada">Fin de jornada</option>
-          <option value="inicio_descanso">Inicio de descanso</option>
-          <option value="fin_descanso">Fin de descanso</option>
+        <CampoSelect name="tipo" etiqueta={t('jor.f.que')} defaultValue="inicio_jornada">
+          <option value="inicio_jornada">{t('jor.f.tipo.inicio')}</option>
+          <option value="fin_jornada">{t('jor.f.tipo.fin')}</option>
+          <option value="inicio_descanso">{t('jor.f.tipo.inidesc')}</option>
+          <option value="fin_descanso">{t('jor.f.tipo.findesc')}</option>
         </CampoSelect>
         {/* A37-S19-02: SIN hora precargada. Una hora por omisión firmada sin mirar es una cifra inventada. */}
-        <Campo etiqueta={`Cuándo (expediente del ${dia})`} obligatorio>
+        <Campo etiqueta={t('jor.f.cuando', { dia })} obligatorio>
           <input name="momento" type="datetime-local" className="rv-ctl rv-ctl--fecha" />
         </Campo>
         {/* LA OTRA MITAD DE LA CORRECCIÓN. Anular deja el motivo y la firma; esto deja el VÍNCULO — `corrige_a` — que dice cuál de las
             marcas anuladas sustituye esta hora. Sin él, el expediente enseña una anulada y una nueva sin decir que son la misma marca
             corregida, y reconstruir la historia queda a criterio de quien la lea. */}
         {corregibles.length > 0 && (
-          <CampoSelect name="corrigeA" etiqueta="¿Corrige una marca anulada?" defaultValue="">
-            <option value="">No, es una marca nueva</option>
+          <CampoSelect name="corrigeA" etiqueta={t('jor.f.corrigeq')} defaultValue="">
+            <option value="">{t('jor.f.nueva')}</option>
             {corregibles.map((a) => (
               <option key={a.id} value={a.id}>
                 {ROTULO_TIPO[a.tipo] ?? a.tipo} · {hora(a.momento)}
@@ -265,26 +268,26 @@ function FormaCaptura({
             ))}
           </CampoSelect>
         )}
-        <CampoTexto name="nota" etiqueta="Nota (de dónde sacaste la hora, obligatoria)" obligatorio minLength={5} placeholder="Ej.: me lo dijo por teléfono a las 8:05" />
+        <CampoTexto name="nota" etiqueta={t('jor.f.nota')} obligatorio minLength={5} placeholder={t('jor.f.nota.ph')} />
       </div>
-      <Boton texto="Capturar" cargando="Guardando…" icono={<Icono icono={Plus} />} />
+      <Boton texto={t('jor.f.capturar')} cargando="Guardando…" icono={<Icono icono={Plus} />} />
     </form>
   );
 }
 
 function FormaCierre({ jornadaId, cerrarElDia }: { jornadaId: string; cerrarElDia: AccionJornada }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(cerrarElDia, VACIO);
   return (
     <form action={accion} className="rv-forma">
       {/* sin-info: subtítulo dentro del recuadro de la jornada del día */}
-      <h3 className="rv-jn__sub">Cerrar el día</h3>
+      <h3 className="rv-jn__sub">{t('jor.f.cerrar.titulo')}</h3>
       <p className="rv-jn__nota">
-        Cerrar es firmar que revisaste este día. No borra ni congela nada: si después hay que
-        corregir algo, se puede, y la corrección queda anotada con quién la hizo.
+        {t('jor.f.cerrar.nota')}
       </p>
       <Aviso estado={estado} />
       <input type="hidden" name="jornadaId" value={jornadaId} />
-      <Boton texto="Cerrar el día" cargando="Cerrando…" icono={<Icono icono={Lock} />} />
+      <Boton texto={t('jor.f.cerrar')} cargando="Cerrando…" icono={<Icono icono={Lock} />} />
     </form>
   );
 }
@@ -295,21 +298,22 @@ export function FormaPolitica({
   politica: PoliticaFlota | null;
   declararPolitica: AccionJornada;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(declararPolitica, VACIO);
   return (
     <form action={accion} className="rv-forma">
       <Aviso estado={estado} />
       <div className="rv-forma__rejilla">
-        <CampoTexto name="horasMaxJornada" tipo="number" etiqueta="Jornada máxima (horas)" step="0.25" min="0.25" max="24"
-          defaultValue={politica?.horasMaxJornada ?? ''} placeholder="sin declarar" />
-        <CampoTexto name="minutosMinDescanso" tipo="number" etiqueta="Descanso mínimo (minutos)" step="1" min="0" max="1440"
-          defaultValue={politica?.minutosMinDescanso ?? ''} placeholder="sin declarar" />
-        <CampoTexto name="horasMinEntreJornadas" tipo="number" etiqueta="Entre jornadas (horas)" step="0.25" min="0" max="24"
-          defaultValue={politica?.horasMinEntreJornadas ?? ''} placeholder="sin declarar" />
-        <CampoTexto name="fundamento" etiqueta="En qué se fundan (lo transcribimos sin validarlo)"
-          defaultValue={politica?.fundamento ?? ''} placeholder="Ej.: cláusula 14 del contrato colectivo" />
+        <CampoTexto name="horasMaxJornada" tipo="number" etiqueta={t('jor.f.umbral.jornada')} step="0.25" min="0.25" max="24"
+          defaultValue={politica?.horasMaxJornada ?? ''} placeholder={t('jor.f.sindeclarar')} />
+        <CampoTexto name="minutosMinDescanso" tipo="number" etiqueta={t('jor.f.umbral.descanso')} step="1" min="0" max="1440"
+          defaultValue={politica?.minutosMinDescanso ?? ''} placeholder={t('jor.f.sindeclarar')} />
+        <CampoTexto name="horasMinEntreJornadas" tipo="number" etiqueta={t('jor.f.umbral.entre')} step="0.25" min="0" max="24"
+          defaultValue={politica?.horasMinEntreJornadas ?? ''} placeholder={t('jor.f.sindeclarar')} />
+        <CampoTexto name="fundamento" etiqueta={t('jor.f.fundamento')}
+          defaultValue={politica?.fundamento ?? ''} placeholder={t('jor.f.fundamento.ph')} />
       </div>
-      <Boton texto="Guardar umbrales" cargando="Guardando…" />
+      <Boton texto={t('jor.f.umbral.guardar')} cargando="Guardando…" />
     </form>
   );
 }
@@ -337,32 +341,33 @@ export function FormaAlertaTope({
   config: ConfigAlertaForma | null;
   guardarAlerta: AccionJornada;
 }) {
+  const { t } = useT('operacion', operacionEs);
   const [estado, accion] = useActionState(guardarAlerta, VACIO);
   return (
     <form action={accion} className="rv-forma">
       <Aviso estado={estado} />
-      <Casilla name="activa" etiqueta="Avisar cuando una jornada en curso se acerque al tope" defaultChecked={config?.activa ?? false} />
+      <Casilla name="activa" etiqueta={t('jor.f.alerta.titulo')} defaultChecked={config?.activa ?? false} />
       <div className="rv-forma__rejilla">
-        <CampoTexto name="topeHoras" tipo="number" etiqueta="Tope propio (horas, máx. 12)" step="0.25" min="0.25" max="12"
-          defaultValue={config?.topeHoras ?? ''} placeholder="el de la ley (12 h)" />
-        <CampoTexto name="umbralAvisoPct" tipo="number" etiqueta="Aviso al (%)" step="1" min="1" max="98" obligatorio
+        <CampoTexto name="topeHoras" tipo="number" etiqueta={t('jor.f.alerta.tope')} step="0.25" min="0.25" max="12"
+          defaultValue={config?.topeHoras ?? ''} placeholder={t('jor.f.alerta.ley')} />
+        <CampoTexto name="umbralAvisoPct" tipo="number" etiqueta={t('jor.f.alerta.aviso')} step="1" min="1" max="98" obligatorio
           defaultValue={config?.umbralAvisoPct ?? 80} />
-        <CampoTexto name="umbralCriticoPct" tipo="number" etiqueta="Crítico al (%)" step="1" min="2" max="99" obligatorio
+        <CampoTexto name="umbralCriticoPct" tipo="number" etiqueta={t('jor.f.alerta.critico')} step="1" min="2" max="99" obligatorio
           defaultValue={config?.umbralCriticoPct ?? 95} />
-        <CampoSelect name="canalEncargado" etiqueta="Avisar al encargado por" defaultValue={config?.canalEncargado ?? 'whatsapp'}>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="correo">Correo</option>
-          <option value="ambos">WhatsApp y correo</option>
-          <option value="ninguno">No avisarle</option>
+        <CampoSelect name="canalEncargado" etiqueta={t('jor.f.alerta.encargado')} defaultValue={config?.canalEncargado ?? 'whatsapp'}>
+          <option value="whatsapp">{t('jor.f.canal.wa')}</option>
+          <option value="correo">{t('jor.f.canal.correo')}</option>
+          <option value="ambos">{t('jor.f.canal.ambos')}</option>
+          <option value="ninguno">{t('jor.f.canal.ninguno')}</option>
         </CampoSelect>
-        <CampoSelect name="canalOperador" etiqueta="Avisar al operador por" defaultValue={config?.canalOperador ?? 'whatsapp'}>
-          <option value="whatsapp">WhatsApp</option>
-          <option value="ninguno">No avisarle</option>
+        <CampoSelect name="canalOperador" etiqueta={t('jor.f.alerta.operador')} defaultValue={config?.canalOperador ?? 'whatsapp'}>
+          <option value="whatsapp">{t('jor.f.canal.wa')}</option>
+          <option value="ninguno">{t('jor.f.canal.ninguno')}</option>
         </CampoSelect>
-        <CampoTexto name="correoEncargado" tipo="email" etiqueta="Correo del encargado (si el canal incluye correo)" maxLength={254}
+        <CampoTexto name="correoEncargado" tipo="email" etiqueta={t('jor.f.alerta.correo')} maxLength={254}
           defaultValue={config?.correoEncargado ?? ''} placeholder="encargado@tu-flota.mx" />
       </div>
-      <Boton texto="Guardar la alerta" cargando="Guardando…" />
+      <Boton texto={t('jor.f.alerta.guardar')} cargando="Guardando…" />
     </form>
   );
 }
