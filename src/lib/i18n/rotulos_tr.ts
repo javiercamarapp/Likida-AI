@@ -1,7 +1,7 @@
 import { nombreDeRol } from '@/lib/auth/roles';
 import { NOMBRE_NIVEL, type Nivel } from '@/lib/likida/agentes/autonomia';
 import { ROTULO_ESTADO_REAL, type EstadoReal } from '@/lib/likida/agentes/estado-real';
-import { NOMBRE_FUENTE, type FuenteEscalacion } from '@/lib/admin/escalaciones';
+import { NOMBRE_FUENTE, type FuenteEscalacion } from '@/lib/admin/escalaciones-fuentes';
 import { COLOR_EMBUDO, NOMBRE_GIRO, CRITERIO_SCORES, type Giro } from '@/lib/admin/prospectos-mapa-client';
 import { T_SISTEMA_ES, type TSistema } from './sistema_tr';
 

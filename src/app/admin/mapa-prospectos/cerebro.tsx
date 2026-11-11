@@ -381,7 +381,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
-      }).then(leerRespuestaMensaje, () => ({ ok: false as const, error: tx('mapa_prospectos_detalle.no_se_pudo_contactar_al_servidor') }));
+      }).then((resp) => leerRespuestaMensaje(resp, tx), () => ({ ok: false as const, error: tx('mapa_prospectos_detalle.no_se_pudo_contactar_al_servidor') }));
       if (!r.ok) { ponerAviso(id, { texto: r.error, error: true }); return; } // el boton sigue con la plantilla
       if (r.aviso) ponerAviso(id, { texto: r.aviso, error: false });
       const m = r.datos;

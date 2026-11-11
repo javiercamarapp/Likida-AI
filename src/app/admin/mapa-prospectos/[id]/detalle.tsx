@@ -61,7 +61,7 @@ export function Detalle({ p }: { p: DetalleProspecto }) {
       const r = await fetch('/api/admin/mapa-prospectos/mensaje', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: p.id }),
-      }).then(leerRespuestaMensaje, () => ({ ok: false as const, error: t('mapa_prospectos_detalle.no_se_pudo_contactar_al_servidor') }));
+      }).then((resp) => leerRespuestaMensaje(resp, t), () => ({ ok: false as const, error: t('mapa_prospectos_detalle.no_se_pudo_contactar_al_servidor') }));
       if (!r.ok) { setAvisoIa({ texto: r.error, error: true }); return; }
       if (r.aviso) setAvisoIa({ texto: r.aviso, error: false });
       setDatos((d) => ({ ...d, ...r.datos }));
