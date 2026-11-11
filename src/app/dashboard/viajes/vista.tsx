@@ -1,4 +1,5 @@
 import { cifrasUniformes } from '../formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { TarjetaTabla } from '../bloque';
 import { CajonAlta } from '../cajon-alta';
 import { Eye, Inbox } from 'lucide-react';
@@ -166,6 +167,7 @@ export function VistaViajes({ tr = TR_OPERACION_ES,
       titulo={t('viajes.titulo')}
       apoyo={t('viajes.apoyo')}
       cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy('Registro de viajes')}
       etiquetaCifras={t('viajes.sello')}
       filtros={(
         // GET puro: la búsqueda vive en la URL y sobrevive a recargar, compartir y volver atrás. El sufijo y el filtro viajan como

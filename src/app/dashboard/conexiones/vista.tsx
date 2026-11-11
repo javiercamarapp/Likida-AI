@@ -1,4 +1,5 @@
 import { cifrasUniformes } from '../formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import type { Conector } from '@/lib/likida/conexiones';
 import { Tarjeta } from '@/app/ui-v2/componentes';
 import type { PropsCifra } from '@/app/ui-v2/graficas';
@@ -40,7 +41,7 @@ export function VistaConexiones({ conectores, estado, credenciales, integracione
     { etiqueta: rotulos.no_medible.rotulo, valor: n('no_medible'), tono: n('no_medible') > 0 ? 'warn' : undefined },
   ];
   return (
-    <EsqueletoTablaMaestra titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')} cifras={cifrasUniformes(cifras)}>
+    <EsqueletoTablaMaestra titulo={t('cfg.conexiones')} apoyo={t('cfg.lo_que_tu_flota_tiene_conectado')} cifras={cifrasUniformes(cifras)} selloCifras={selloHoy('Estado de las conexiones')}>
       <div data-tour="conexiones.estado">
         <Tarjeta titulo={t('cfg.estado_de_las_conexiones')}>
           <ConectoresDetalle conectores={conectores} />

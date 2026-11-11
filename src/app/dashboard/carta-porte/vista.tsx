@@ -1,4 +1,5 @@
 import { cifrasUniformes } from '../formato';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { trEs, type Tr } from '@/lib/i18n/dinero_tr';
 import { rico } from '@/lib/i18n/rico';
 import { TriangleAlert, CircleCheck, CircleHelp, Printer } from 'lucide-react';
@@ -73,6 +74,7 @@ export function VistaCartaPorte({ datos, declarar = null, agregarMercancia = nul
       titulo={tr('cartaPorte.vista.cartaPorte')}
       apoyo={tr('cartaPorte.vista.porCadaViajeEn')}
       cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy('Viajes evaluados')}
       vistaRapida={sel ? (
         <CajonVistaRapida
           titulo={sel.folio ?? sel.viajeId.slice(0, 8)}

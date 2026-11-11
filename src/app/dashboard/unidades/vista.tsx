@@ -1,4 +1,5 @@
 import { TarjetaTabla } from '../bloque';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { cifrasUniformes } from '../formato';
 import { Satellite, Truck } from 'lucide-react';
 import type { UnidadRow, UnidadCruda } from '@/lib/likida/operacion';
@@ -248,6 +249,7 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
       apoyo={t('un.apoyo')}
       acciones={acciones}
       cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy('Parque de unidades')}
       filtros={vacio ? undefined : (
         <FiltroRegistro ruta="/dashboard/unidades" sufijo={sufijo} pagina={pag}
           sustantivo="unidades" camposOcultos={camposOcultos} />

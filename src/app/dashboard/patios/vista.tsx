@@ -1,4 +1,5 @@
 import { TarjetaTabla } from '../bloque';
+import { selloHoy } from '@/app/dashboard/sello-hoy';
 import { cifrasUniformes } from '../formato';
 import Link from 'next/link';
 import { numero } from '@/lib/formato';
@@ -105,6 +106,7 @@ export function VistaPatios({ tr = TR_OPERACION_ES,
         </CajonAlta>
       ) : undefined}
       cifras={cifrasUniformes(cifras)}
+      selloCifras={selloHoy('Patios de la flota')}
       avisos={(
         <AvisoCompacto tono="info"
           resumen={<>{t('patios.aviso')}
