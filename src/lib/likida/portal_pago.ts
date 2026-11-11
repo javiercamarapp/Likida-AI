@@ -1,7 +1,7 @@
 import { publico as publicoEs } from '@/lib/i18n/es/publico';
 import { TR_PUBLICO_ES, type TrPublico } from '@/lib/i18n/publico_tr';
 import { createHash, randomBytes } from 'node:crypto';
-import { DatoInvalido } from './errores';
+import { datoInvalido } from './errores';
 import { hoyMx, mxn, round2, TOLERANCIA_ABONO_MXN } from '@/lib/formato';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -233,13 +233,8 @@ function enteroSano(entero: string): boolean {
   return grupos.slice(1).every((g) => g.length === 3);
 }
 
-/**
- * El instructivo que se le da a quien tecleó algo que no se entiende. Se dice
- * CÓMO escribirlo en vez de solo "está mal": el cliente está mirando el
- * comprobante de su banco y lo único que quiere es copiar una cifra.
- */
-const COMO_ESCRIBIR_EL_MONTO =
-  'Escríbelo con punto para los centavos y sin puntos de millares, así: 1234.50';
+// El instructivo de «pp.monto_no_se_entiende» dice CÓMO escribir el monto en vez de solo «está mal»: el cliente está mirando el
+// comprobante de su banco y lo único que quiere es copiar una cifra.
 
 /**
  * Un monto tecleado por una persona, o un error que dice cómo escribirlo.
@@ -264,9 +259,9 @@ const COMO_ESCRIBIR_EL_MONTO =
  * redondeo de la casa. Con el filtro de arriba ya no entran tres decimales,
  * pero el redondeo correcto no depende de que el filtro nunca cambie.
  */
-export function montoTecleado(crudo: string, queEs = 'el monto que pagaste'): number {
+export function montoTecleado(crudo: string, queEs?: string): number {
   const limpio = crudo.replace(/[$\s]/g, '');
-  if (limpio === '') throw new DatoInvalido(`Escribe ${queEs}.`);
+  if (limpio === '') throw queEs === undefined ? datoInvalido('pp.escribe_monto') : datoInvalido('pp.escribe', { queEs });
 
   const partes = limpio.split('.');
   const centavos = partes.length === 2 ? partes[1] : '';
@@ -279,7 +274,7 @@ export function montoTecleado(crudo: string, queEs = 'el monto que pagaste'): nu
     // pesos para media América Latina, y 1.23 para `Number`).
     || (partes.length === 2 && (centavos.length > 2 || !SOLO_DIGITOS.test(centavos)));
   if (malEscrito) {
-    throw new DatoInvalido(`Ese monto no se entiende. ${COMO_ESCRIBIR_EL_MONTO}`);
+    throw datoInvalido('pp.monto_no_se_entiende');
   }
 
   const n = Number(limpio.replace(/,/g, ''));
@@ -287,7 +282,7 @@ export function montoTecleado(crudo: string, queEs = 'el monto que pagaste'): nu
   // `Number` podría leer como NaN o Infinity, y aun así no se devuelve una
   // cifra de dinero sin comprobar que es finita.
   if (!Number.isFinite(n)) {
-    throw new DatoInvalido(`Ese monto no se entiende. ${COMO_ESCRIBIR_EL_MONTO}`);
+    throw datoInvalido('pp.monto_no_se_entiende');
   }
   return round2(n);
 }
@@ -304,27 +299,23 @@ export function montoTecleado(crudo: string, queEs = 'el monto que pagaste'): nu
  */
 export function validarPropuesta(c: PropuestaCruda, ctx: ContextoFactura): PropuestaValida {
   if (ctx.saldo === null) {
-    throw new DatoInvalido(
-      'Ahora mismo no podemos mostrar el saldo de esta factura, así que tampoco podemos registrar tu pago. Vuelve a intentarlo en unos minutos.',
-    );
+    throw datoInvalido('pp.sin_saldo');
   }
 
   const fecha = c.fecha.trim();
   if (!RE_FECHA.test(fecha) || Number.isNaN(Date.parse(`${fecha}T00:00:00Z`))) {
-    throw new DatoInvalido('La fecha del pago no se entiende. Usa el calendario.');
+    throw datoInvalido('pp.fecha_no_se_entiende');
   }
   const hoy = ctx.hoy ?? hoyMx();
   if (fecha > hoy) {
-    throw new DatoInvalido('La fecha del pago no puede ser posterior a hoy.');
+    throw datoInvalido('pp.fecha_futura');
   }
   if (fecha < ctx.fechaFactura) {
-    throw new DatoInvalido(
-      `La fecha del pago no puede ser anterior a la de la factura (${ctx.fechaFactura}). Revisa el comprobante de tu banco.`,
-    );
+    throw datoInvalido('pp.fecha_anterior', { fecha: ctx.fechaFactura });
   }
 
   const monto = montoTecleado(c.monto);
-  if (monto <= 0) throw new DatoInvalido('El monto tiene que ser mayor que cero.');
+  if (monto <= 0) throw datoInvalido('pp.monto_cero');
   // LA MISMA TOLERANCIA QUE LA BASE, importada de un solo sitio.
   //
   // AUDITORÍA 7, `c7-6`: aquí decía `+ 0.01` y `registrar_pago_tx` dice
@@ -336,24 +327,20 @@ export function validarPropuesta(c: PropuestaCruda, ctx: ContextoFactura): Propu
   // MÁS estricto que la base no puede pasar tampoco, y por eso no se copia el
   // número: se importa.
   if (monto > ctx.saldo + TOLERANCIA_ABONO_MXN) {
-    throw new DatoInvalido(
-      `El saldo pendiente de esta factura es ${mxn(ctx.saldo)}. Si pagaste de más, o si ese depósito cubre varias facturas, escríbele directamente a quien te la emitió: aquí solo se puede registrar el pago de ESTA factura.`,
-    );
+    throw datoInvalido('pp.monto_excede', { saldo: mxn(ctx.saldo) });
   }
 
   const referencia = c.referencia.trim();
   if (referencia.length < REFERENCIA_MIN) {
-    throw new DatoInvalido(
-      'Escribe la referencia bancaria de tu pago (la clave de rastreo, el número de operación o el folio del depósito). Sin ella nadie puede encontrar el movimiento.',
-    );
+    throw datoInvalido('pp.referencia_falta');
   }
   if (referencia.length > REFERENCIA_MAX) {
-    throw new DatoInvalido(`La referencia no puede pasar de ${REFERENCIA_MAX} caracteres.`);
+    throw datoInvalido('pp.referencia_larga', { max: REFERENCIA_MAX });
   }
 
   const metodo = c.metodo.trim();
   if (!esMetodoPortal(metodo)) {
-    throw new DatoInvalido('Elige cómo pagaste.');
+    throw datoInvalido('pp.metodo_falta');
   }
 
   return { fecha, monto, referencia, metodo };

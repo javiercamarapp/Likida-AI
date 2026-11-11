@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { trMensajes, type ClaveMensaje, type Variables } from '@/lib/i18n/mensajes_tr';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // EL ERROR QUE SE LE ENSEÑA A QUIEN LLENÓ EL FORMULARIO.
@@ -13,10 +14,24 @@ import { logger } from '@/lib/logger';
 
 /** Error de captura: el mensaje es para enseñárselo a quien llenó el formulario. */
 export class DatoInvalido extends Error {
-  constructor(mensaje: string) {
+  /**
+   * `mensaje` es SIEMPRE el texto en español (lo que ven las pruebas, los logs y quien no tiene idioma). Si el error nació de una
+   * clave del diccionario `mensajes` (`datoInvalido()`), trae además `clave` y `vars` para decirlo en el idioma de quien lo lee.
+   */
+  constructor(mensaje: string, public readonly clave?: ClaveMensaje, public readonly vars?: Variables) {
     super(mensaje);
     this.name = 'DatoInvalido';
   }
+}
+
+/** Un `DatoInvalido` hecho de una clave: el texto en español sale del diccionario y la clave viaja para traducirlo al mostrarlo. */
+export function datoInvalido(clave: ClaveMensaje, vars?: Variables): DatoInvalido {
+  return new DatoInvalido(trMensajes('es').t(clave, vars), clave, vars);
+}
+
+/** El texto de un `DatoInvalido` en el idioma pedido; sin clave (los miles de sitios aún por migrar) es su mensaje en español. */
+export function textoDeDato(e: DatoInvalido, idioma?: unknown): string {
+  return e.clave ? trMensajes(idioma).t(e.clave, e.vars) : e.message;
 }
 
 /** El operador existe pero está de baja (A37-A1-liquidaciones-12): distinto de «no existe» aunque se muestre igual al capturista. */
@@ -80,11 +95,14 @@ export class AbonoYaRegistrado extends Error {
  * falló y que no fue culpa de lo capturado, que es la diferencia que decide si
  * vuelve a intentarlo o corrige algo que estaba bien.
  */
-export function mensajeParaPantalla(e: unknown, operacion: string): string {
-  if (e instanceof DatoInvalido) return e.message;
+export function mensajeParaPantalla(e: unknown, operacion: string, idioma?: unknown): string {
+  if (e instanceof DatoInvalido) return textoDeDato(e, idioma);
   logger.error('administracion.falla', {
     operacion,
     err: e instanceof Error ? e.message : String(e),
   });
-  return `No se pudo ${operacion}, y no es por lo que capturaste: es una falla del sistema y quedó registrada. Vuelve a intentarlo; si se repite, avísale a Likida.`;
+  // `operacion` es una frase en español escrita por quien llama: en otro idioma no se puede insertar sin mezclar idiomas, así
+  // que ahí se dice la versión genérica. En español, exactamente lo de siempre.
+  const tr = trMensajes(idioma);
+  return tr.idioma === 'es' ? tr.t('err.sistema', { operacion }) : tr.t('err.sistema.generico');
 }

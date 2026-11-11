@@ -11,6 +11,7 @@ import type { dinero as dineroEs } from './es/dinero';
 import type { agentes as agentesEs } from './es/agentes';
 import type { publico as publicoEs } from './es/publico';
 import type { correo as correoEs } from './es/correo';
+import type { mensajes as mensajesEs } from './es/mensajes';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CATÁLOGO DE NAMESPACES — el único lugar donde se registra un diccionario nuevo.
@@ -37,6 +38,7 @@ export interface Diccionarios {
   agentes: typeof agentesEs;
   publico: typeof publicoEs;
   correo: typeof correoEs;
+  mensajes: typeof mensajesEs;
 }
 export type Namespace = keyof Diccionarios;
 
@@ -44,7 +46,7 @@ export type Namespace = keyof Diccionarios;
 export type DiccionarioDe<N extends Namespace> = { readonly [K in keyof Diccionarios[N]]: string };
 export type ClaveDe<N extends Namespace> = keyof Diccionarios[N] & string;
 
-export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login', 'operacion', 'dinero', 'agentes', 'publico', 'correo'] as const satisfies readonly Namespace[];
+export const NAMESPACES = ['shell', 'errores', 'graficas', 'avisos', 'monitoreo', 'fuentes', 'login', 'operacion', 'dinero', 'agentes', 'publico', 'correo', 'mensajes'] as const satisfies readonly Namespace[];
 
 type Cargadores = { [I in Idioma]: { [N in Namespace]: () => Promise<DiccionarioDe<N>> } };
 
@@ -58,7 +60,8 @@ export const CARGADORES: Cargadores = {
     dinero: () => import('./es/dinero').then((m) => m.dinero),
     agentes: () => import('./es/agentes').then((m) => m.agentes),
     publico: () => import('./es/publico').then((m) => m.publico),
-    correo: () => import('./es/correo').then((m) => m.correo) },
+    correo: () => import('./es/correo').then((m) => m.correo),
+    mensajes: () => import('./es/mensajes').then((m) => m.mensajes) },
   en: { shell: () => import('./en/shell').then((m) => m.shell), errores: () => import('./en/errores').then((m) => m.errores),
     graficas: () => import('./en/graficas').then((m) => m.graficas), avisos: () => import('./en/avisos').then((m) => m.avisos),
     monitoreo: () => import('./en/monitoreo').then((m) => m.monitoreo),
@@ -68,7 +71,8 @@ export const CARGADORES: Cargadores = {
     dinero: () => import('./en/dinero').then((m) => m.dinero),
     agentes: () => import('./en/agentes').then((m) => m.agentes),
     publico: () => import('./en/publico').then((m) => m.publico),
-    correo: () => import('./en/correo').then((m) => m.correo) },
+    correo: () => import('./en/correo').then((m) => m.correo),
+    mensajes: () => import('./en/mensajes').then((m) => m.mensajes) },
 };
 
 /** Carga SOLO los namespaces pedidos, y SOLO en el idioma pedido. */
