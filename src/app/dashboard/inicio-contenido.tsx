@@ -41,6 +41,8 @@ import { PrimeraLiquidacion } from './primera-liquidacion';
 import { OperaWhatsApp } from './opera-whatsapp';
 import { Bloque, Barra, EsqCifras, EsqTabla, EsqGrafica } from './bloque';
 import { Cifra, TiraCifras } from '@/app/ui-v2/graficas';
+import { getT } from '@/lib/i18n/servidor';
+import { TR_OPERACION_ES, saludoTr, type TrOperacion } from '@/lib/i18n/operacion_tr';
 
 /** Resiliencia por sección: si una consulta falla, devuelve null y la
  *  tarjeta muestra un fallback en vez de tirar toda la pantalla. */
@@ -104,6 +106,8 @@ export async function InicioContenido({
    *  reales. Lo arma `page.tsx`, que es quien tiene los searchParams. */
   sufijo?: string;
 }) {
+  const tr = await getT('operacion');
+  const { t, idioma } = tr;
   // AUDITORÍA DE DISEÑO, 8-AGO-2026 — sin filtro operativo global 7d/30d:
   //   - `getKpis` sin ventana: "por revisar" y "comprobantes duplicados"
   //     nunca esconden un pendiente real solo por ser viejo.
@@ -235,9 +239,10 @@ export async function InicioContenido({
    */
   async function buscarViajes(q: string): Promise<ItemBusqueda[]> {
     'use server';
+  const { t } = await getT('operacion');
     const sesion = await resolverTenantAtadoOLanza('/dashboard', sp, tenantId);
     if (sesion.rol !== 'superadmin' && sesion.tenantId !== tenantId) {
-      throw new Error('Esa flota no es la tuya.');
+      throw new Error(t('ini.ajena'));
     }
     const texto = typeof q === 'string' ? q.trim().slice(0, 80) : '';
     if (!texto) return [];
@@ -263,22 +268,22 @@ export async function InicioContenido({
     // contenido es TENUE (`--g1`) y las piezas son tarjetas blancas encima —
     // la anatomía de la referencia; la barra y el saludo van sobre blanco.
     <MarcoPagina
-      titulo="Resumen"
+      titulo={t('ini.titulo')}
       area={tenantNombre ? `Resumen · viendo como superadmin · ${tenantNombre}` : undefined}
-      apoyo={`${saludo()}, ${nombre ?? 'flota'}. Todo listo para que sigas moviendo tu flota.`}
+      apoyo={t('ini.apoyo', { saludo: saludoTr(tr), nombre: nombre ?? t('ini.flota') })}
       acciones={(
         <>
           {/* La campana enseña PENDIENTES reales, y para saberlos hay que
               leer kpis + anomalías. Su hueco se reserva con un fantasma
               del MISMO tamaño (h-8) para que la barra no dé el brinco al
               aterrizar los tres controles. */}
-          <Bloque mensaje="No se pudo cargar la barra de acciones." esqueleto={<FantasmaAcciones />}>
+          <Bloque mensaje={t('ini.err.barra')} esqueleto={<FantasmaAcciones tr={tr} />}>
             <AccionesResumen buscar={buscarViajes} pKpis={pKpis} pAnomalias={pAnomalias} sufijo={sufijo} />
           </Bloque>
           {/* A DESPACHO (13-ago): ahí vive la forma de crear — junto con asignar, avisar y el alta de operadores. La página
               suelta /viajes/nuevo se retiró: era la misma forma con menos contexto, y dos puertas se desincronizan. */}
           <BotonEnlace variante="primary" tamano="sm" href={`/dashboard/despacho${sufijo}`} icono={<Plus width={15} height={15} strokeWidth={2} />}>
-            Nuevo viaje
+            {t('ini.nuevoviaje')}
           </BotonEnlace>
         </>
       )}
@@ -297,9 +302,8 @@ export async function InicioContenido({
               contestarse, el estímulo de peaje del 50 % no se acredita. */}
           {avisoFiscalPospuesto && (
             <p role="status" className="rounded-lg px-3.5 py-2.5 text-[12px]" style={{ background: 'var(--warnbg)', color: 'var(--warn)' }}>
-              Tu perfil fiscal sigue sin declararse, así que el <strong>estímulo de peaje</strong> se muestra en $0 y no se acredita
-              hasta que lo hagas.{' '}
-              <a href={`/dashboard/onboarding${sufijo}`} className="underline">Declararlo cuando ya tengas los datos</a>.
+              {t('ini.perfil.pre')} <strong>{t('ini.perfil.estimulo')}</strong> {t('ini.perfil.post')}{' '}
+              <a href={`/dashboard/onboarding${sufijo}`} className="underline">{t('ini.perfil.declarar')}</a>.
             </p>
           )}
 
@@ -309,7 +313,7 @@ export async function InicioContenido({
               en "nada" sería un salto de layout garantizado en vez de uno
               excepcional. */}
           {tenantExiste && (
-            <Bloque mensaje="No se pudo leer el avance del arranque." esqueleto={null}>
+            <Bloque mensaje={t('ini.err.arranque')} esqueleto={null}>
               <BloqueArranque pPasos={pPasos} sufijo={sufijo} />
             </Bloque>
           )}
@@ -318,11 +322,11 @@ export async function InicioContenido({
               noticia del negocio abre; los pendientes accionables siguen
               justo debajo, cada uno con su puerta. Los dos son condicionales
               (solo con dato real), por lo mismo van sin esqueleto. */}
-          <Bloque mensaje="No se pudo calcular el insight de la semana." esqueleto={null}>
+          <Bloque mensaje={t('ini.err.insight')} esqueleto={null}>
             <BloqueInsight pLiquidadoSemanal={pLiquidadoSemanal} />
           </Bloque>
 
-          <Bloque mensaje="No se pudieron leer las alertas." esqueleto={null}>
+          <Bloque mensaje={t('ini.err.alertas')} esqueleto={null}>
             <BloqueAlertas pKpis={pKpis} pEscalados={pEscalados} pHuerfanos={pHuerfanos}
               pAnomalias={pAnomalias} sufijo={sufijo} />
           </Bloque>
@@ -332,7 +336,7 @@ export async function InicioContenido({
               el streaming ya no puede seguir gobernando el render: cada
               tarjeta de abajo degrada sola y dice lo suyo. Éste queda como lo
               que siempre fue en el fondo, un AVISO, y llega cuando puede. */}
-          <Bloque mensaje="No se pudo evaluar el estado de la pantalla." esqueleto={null}>
+          <Bloque mensaje={t('ini.err.estado')} esqueleto={null}>
             <AvisoEstado
               pAcred={pAcred} pKpis={pKpis} pAnomalias={pAnomalias} pViajes={pViajes}
               pSeriesKpis={pSeriesKpis} pGastoSemanal={pGastoSemanal}
@@ -349,7 +353,7 @@ export async function InicioContenido({
               dirección buena/mala no es igual para las tres: gastar
               más no es bueno aunque el número suba. */}
           <div>
-            <Bloque mensaje="No se pudieron cargar las cifras del periodo."
+            <Bloque mensaje={t('ini.err.cifras')}
               esqueleto={<EsqCifras n={3} rejilla="grid grid-cols-1 sm:grid-cols-3 gap-2" />}>
               <BloqueKpis pKpis={pKpis} pSeriesKpis={pSeriesKpis} pResumenPerdidas={pResumenPerdidas}
                 periodoFiscal={periodoFiscal} />
@@ -359,7 +363,7 @@ export async function InicioContenido({
           {/* ── Motor fiscal — el diferenciador real, no un TMS
               genérico. Todo lo fiscal vive junto, en UNA tarjeta. */}
           <div>
-            <Bloque mensaje="No se pudo cargar el motor fiscal." esqueleto={<EsqMotorFiscal />}>
+            <Bloque mensaje={t('ini.err.fiscal')} esqueleto={<EsqMotorFiscal tr={tr} />}>
               <BloqueFiscal pAcred={pAcred} pResumenPerdidas={pResumenPerdidas}
                 pResumenPerdidasSeries={pResumenPerdidasSeries} periodoFiscal={periodoFiscal} />
             </Bloque>
@@ -367,7 +371,7 @@ export async function InicioContenido({
 
           {/* ── La tabla protagonista, con los viajes REALES y su botón
               de abrir (despliega los 100 cargados ahí mismo). */}
-          <Bloque mensaje="No se pudieron cargar los viajes recientes." esqueleto={<div><EsqTabla filas={6} /></div>}>
+          <Bloque mensaje={t('ini.err.recientes')} esqueleto={<div><EsqTabla filas={6} /></div>}>
             <BloqueViajes pFilasViajes={pFilasViajes} sufijo={sufijo} />
           </Bloque>
 
@@ -376,7 +380,7 @@ export async function InicioContenido({
               mueve las 5 juntas (pedido explícito, 8-ago-2026). El id
               es el ancla del BannerInsight de arriba. */}
           <div id="estadisticas">
-            <Bloque mensaje="No se pudieron cargar las estadísticas del periodo." esqueleto={<EsqGrafica alto={260} />}>
+            <Bloque mensaje={t('ini.err.estadisticas')} esqueleto={<EsqGrafica alto={260} />}>
               <BloqueEstadisticas
                 pViajesPorDia={pViajesPorDia} pViajesPorMes={pViajesPorMes} pSeriesKpis={pSeriesKpis}
                 pGastoSemanal={pGastoSemanal} pLiquidadoSemanal={pLiquidadoSemanal} pTopRutas={pTopRutas} />
@@ -397,9 +401,10 @@ export async function InicioContenido({
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** El hueco de los tres controles de la barra, del mismo alto (h-8). */
-function FantasmaAcciones() {
+function FantasmaAcciones({ tr = TR_OPERACION_ES }: { tr?: TrOperacion }) {
+  const { t } = tr;
   return (
-    <div className="flex items-center gap-2 shrink-0" role="status" aria-label="Cargando">
+    <div className="flex items-center gap-2 shrink-0" role="status" aria-label={t('ini.cargando')}>
       <Barra alto={32} ancho={148} className="rounded-lg" />
       <Barra alto={32} ancho={32} className="rounded-lg" />
       <Barra alto={32} ancho={32} className="rounded-lg" />
@@ -413,13 +418,14 @@ async function AccionesResumen({ buscar, pKpis, pAnomalias, sufijo }: {
   pAnomalias: Promise<Anomalia[] | null>;
   sufijo: string;
 }) {
+  const { tp } = await getT('operacion');
   const [kpis, anomalias] = await Promise.all([pKpis, pAnomalias]);
   // La campana enseña PENDIENTES reales — los mismos que perdieron su
   // tarjeta cuando Cuadre se borró el 10-ago. Aquí son texto: el link
   // regresa cuando esa página exista.
   const pendientes: string[] = [];
   if (kpis && kpis.porRevisar > 0) {
-    pendientes.push(`${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? '' : 'es'} por revisar`);
+    pendientes.push(tp('ini.porrevisar', kpis.porRevisar));
   }
   if (anomalias && anomalias.length > 0) {
     pendientes.push(`${anomalias.length} comprobante${anomalias.length === 1 ? '' : 's'} repetido${anomalias.length === 1 ? '' : 's'} entre viajes distintos`);
@@ -447,6 +453,7 @@ async function BloqueArranque({ pPasos, sufijo }: {
 async function BloqueInsight({ pLiquidadoSemanal }: {
   pLiquidadoSemanal: Promise<LiquidadoSemanalSeries | null>;
 }) {
+  const { t, idioma } = await getT('operacion');
   // ── El insight de la semana (BannerInsight, 16-ago-2026) ────────────────
   // La noticia POSITIVA del periodo, con la regla de siempre: solo se monta
   // con dato real. La serie semanal ya está cargada para la gráfica
@@ -461,8 +468,8 @@ async function BloqueInsight({ pLiquidadoSemanal }: {
   if (actual <= 0) return null;
   return (
     <div>
-      <BannerInsight etiqueta="Esta semana" deltaPct={pctCambio(actual, anterior)} href="#estadisticas">
-        Tu flota liquidó <b className="tabular">{mxn(actual)}</b> en viajes cerrados
+      <BannerInsight etiqueta={t('ini.semana')} deltaPct={pctCambio(actual, anterior)} href="#estadisticas">
+        {t('ini.liquido.pre')} <b className="tabular">{mxn(actual, idioma)}</b> {t('ini.liquido.post')}
       </BannerInsight>
     </div>
   );
@@ -475,6 +482,7 @@ async function BloqueAlertas({ pKpis, pEscalados, pHuerfanos, pAnomalias, sufijo
   pAnomalias: Promise<Anomalia[] | null>;
   sufijo: string;
 }) {
+  const { t, tp } = await getT('operacion');
   const [kpis, escalados, huerfanosPendientes, anomalias] =
     await Promise.all([pKpis, pEscalados, pHuerfanos, pAnomalias]);
 
@@ -485,19 +493,19 @@ async function BloqueAlertas({ pKpis, pEscalados, pHuerfanos, pAnomalias, sufijo
   const alertas: Array<{ texto: string; href: string }> = [];
   if (kpis && kpis.porRevisar > 0) {
     alertas.push({
-      texto: `${kpis.porRevisar} liquidación${kpis.porRevisar === 1 ? ' espera' : 'es esperan'} tu revisión`,
+      texto: tp('ini.espera', kpis.porRevisar),
       href: `/dashboard/agentes/liquidacion${sufijo}`,
     });
   }
   if (escalados !== null && escalados !== undefined && escalados > 0) {
     alertas.push({
-      texto: `${escalados} viaje${escalados === 1 ? '' : 's'} escalado${escalados === 1 ? '' : 's'} sin chofer que acepte — se resuelve en Despacho`,
+      texto: tp('ini.escalados', escalados),
       href: `/dashboard/despacho${sufijo}`,
     });
   }
   if (huerfanosPendientes !== null && huerfanosPendientes !== undefined && huerfanosPendientes > 0) {
     alertas.push({
-      texto: `${huerfanosPendientes} comprobante${huerfanosPendientes === 1 ? ' sin viaje espera que alguien lo acomode' : 's sin viaje esperan que alguien los acomode'}`,
+      texto: tp('ini.sinviaje', huerfanosPendientes),
       href: `/dashboard/huerfanos${sufijo}`,
     });
   }
@@ -517,7 +525,7 @@ async function BloqueAlertas({ pKpis, pEscalados, pHuerfanos, pAnomalias, sufijo
           style={{ borderColor: 'var(--warn)' }}>
           <span className="inline-block w-1.5 h-1.5 rounded-full shrink-0" style={{ background: 'var(--warn)' }} />
           <span className="text-[13px]">{a.texto}</span>
-          <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>Ver →</span>
+          <span className="ml-auto text-[11px] shrink-0" style={{ color: 'var(--muted)' }}>{t('ini.ver')}</span>
         </Link>
       ))}
     </div>
@@ -547,6 +555,7 @@ export async function AvisoEstado({
   pEscalados: Promise<number | null>;
   pHuerfanos: Promise<number | null>;
 }) {
+  const { t } = await getT('operacion');
   const [
     acred, kpis, anomalias, viajes, seriesKpis, gastoSemanalSeries,
     liquidadoSemanalSeries, topRutasSeries, viajesPorMes, cfgFiscal, gastosFiscales,
@@ -574,7 +583,7 @@ export async function AvisoEstado({
   if (estado === 'error') {
     return (
       <AvisoCompacto tono="error"
-        resumen="No se pudieron cargar los datos. Recarga la página en un momento."
+        resumen={t('ini.err.datos')}
         mas="Hubo un problema al leer del sistema. Esto no significa que no haya liquidaciones, significa que no se pudieron leer." />
     );
   }
@@ -584,7 +593,7 @@ export async function AvisoEstado({
   // propios ceros honestos.
   return (
     <AvisoCompacto tono="warn"
-      resumen="Faltan datos por cargar: esta pantalla está incompleta."
+      resumen={t('ini.err.faltan')}
       mas="Una o más secciones no respondieron. No tomes estas cifras como el corte del periodo." />
   );
 }
@@ -595,30 +604,31 @@ async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal 
   pResumenPerdidas: Promise<ResumenPerdidas | null>;
   periodoFiscal: Periodo;
 }) {
+  const { t } = await getT('operacion');
   const [kpis, seriesKpis, resumenPerdidas] = await Promise.all([pKpis, pSeriesKpis, pResumenPerdidas]);
   if (!kpis) return null;
   return (
     <>
       {seriesKpis ? (
-        <TiraCifras sello={selloHoy('Gastos y liquidaciones de la flota')}>
+        <TiraCifras sello={selloHoy(t('ini.gastos'))}>
           <KpiPeriodo icono={<Wallet width={15} height={15} strokeWidth={1.75} />}
             nombre="Gasto total" campo="gastoTotal" formato="mxn" subeEsBueno={false} series={seriesKpis} />
           <KpiPeriodo icono={<Calculator width={15} height={15} strokeWidth={1.75} />}
             nombre="Costo por viaje" campo="costoPorViaje" formato="mxn" subeEsBueno={false} series={seriesKpis} />
           <Cifra icono={<PiggyBank width={15} height={15} strokeWidth={1.75} />}
-            etiqueta={`Por recuperar — ${periodoFiscal.etiqueta}`}
+            etiqueta={t('ini.recuperar', { periodo: periodoFiscal.etiqueta })}
             // AUDITORÍA 1, ALTO: si la lectura fiscal falló (o no hay
             // config), es `null` — se PRESERVA y la tarjeta dice "—",
             // en vez de afirmar "$0.00 de ahorro" que suena a medición.
             valor={resumenPerdidas ? resumenPerdidas.montoRecuperable : null}
-            mensaje="no se pudo leer el dato fiscal"
+            mensaje={t('ini.err.fiscal.dato')}
             info="inicio.ahorro_generado"
             // Sin `delta`: esta cifra va fija al ejercicio completo,
             // no hay "periodo anterior" contra el que compararla (A12).
             formato="mxn" />
         </TiraCifras>
       ) : (
-        <p className="text-sm" style={{ color: 'var(--muted)' }}>No se pudo cargar el comparativo de KPIs.</p>
+        <p className="text-sm" style={{ color: 'var(--muted)' }}>{t('ini.err.kpis')}</p>
       )}
       {/* El fantasma "Ver estadísticas →" (ref. shadcn): la puerta
           al bloque de gráficas — mismo ancla que el BannerInsight. */}
@@ -631,9 +641,10 @@ async function BloqueKpis({ pKpis, pSeriesKpis, pResumenPerdidas, periodoFiscal 
 
 /** El esqueleto del motor fiscal: título, la fila de tarjetas y el cuerpo del
  *  desglose — el mismo bulto que la tarjeta real, para que nada brinque. */
-function EsqMotorFiscal() {
+function EsqMotorFiscal({ tr = TR_OPERACION_ES }: { tr?: TrOperacion }) {
+  const { t } = tr;
   return (
-    <div className="card p-3" role="status" aria-label="Cargando">
+    <div className="card p-3" role="status" aria-label={t('ini.cargando')}>
       <Barra alto={13} ancho="38%" />
       <div className="mt-2 flex flex-wrap gap-2 items-stretch">
         <div className="flex-1 min-w-[200px]"><Barra alto={100} className="rounded-xl" /></div>
@@ -651,11 +662,12 @@ async function BloqueFiscal({ pAcred, pResumenPerdidas, pResumenPerdidasSeries, 
   pResumenPerdidasSeries: Promise<Record<'semanal' | 'mensual' | 'historico', ResumenPerdidas> | null>;
   periodoFiscal: Periodo;
 }) {
+  const { t } = await getT('operacion');
   const [acred, resumenPerdidas, resumenPerdidasSeries] =
     await Promise.all([pAcred, pResumenPerdidas, pResumenPerdidasSeries]);
   return (
     <div className="card p-3">
-      <TituloSeccion>Tu motor fiscal — {periodoFiscal.etiqueta}</TituloSeccion>
+      <TituloSeccion>{t('ini.motor')} {periodoFiscal.etiqueta}</TituloSeccion>
       {/* Las 3 tarjetas en la MISMA línea, todo el ancho (pedido
           explícito, 8-ago-2026), misma altura (`h-full`). El
           diésel elegible va en LITROS, no en pesos — el estímulo
@@ -666,7 +678,7 @@ async function BloqueFiscal({ pAcred, pResumenPerdidas, pResumenPerdidasSeries, 
         {acred && (
           <div className="flex-1 min-w-[200px]">
             <StatCard icono={<Fuel width={15} height={15} strokeWidth={1.75} />}
-              etiqueta="Diésel elegible para el estímulo" valor={acred.litrosDiesel} formato="litros" />
+              etiqueta={t('ini.diesel')} valor={acred.litrosDiesel} formato="litros" />
           </div>
         )}
       </div>
@@ -680,11 +692,12 @@ async function BloqueFiscal({ pAcred, pResumenPerdidas, pResumenPerdidasSeries, 
 async function BloqueViajes({ pFilasViajes, sufijo }: {
   pFilasViajes: Promise<FilaViaje[] | null>; sufijo: string;
 }) {
+  const { t } = await getT('operacion');
   const filas = await pFilasViajes;
   if (filas === null) {
     return (
       <div className="card p-6 text-sm" style={{ color: 'var(--muted)' }}>
-        No se pudieron leer los viajes recientes — no significa que no haya viajes.
+        {t('ini.err.recientes2')}
       </div>
     );
   }
