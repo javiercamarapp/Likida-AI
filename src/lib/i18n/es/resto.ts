@@ -391,6 +391,7 @@ export const resto = {
   'op.cerrar': 'Cerrar',
   'op.cl.nueva_tarifa': 'Nueva tarifa',
   'op.cl.nuevo_cliente': 'Nuevo cliente',
+  'op.cl.alcance': 'Todos los clientes y tarifas',
   'op.cl.cartera': 'Cartera de clientes',
   'op.cl.k.sin_cliente': 'Viajes sin cliente',
   'op.cl.k.sin_cliente.nota': 'Sin cliente no hay margen por cliente',

@@ -1117,7 +1117,7 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'cli.f.opcional': 'Optional',
   'cli.f.rfc.ayuda': 'Its check digit is verified. It is the RFC you will invoice them with.',
   'cli.f.credito': 'Credit days',
-  'cli.f.credito.ph': 'Leave empty if no credit was agreed',
+  'cli.f.credito.ph': 'Empty = no credit',
   'cli.f.credito.ayuda': 'Empty = no agreed terms (their invoices carry no due date). A 0 means cash.',
   'cli.f.contacto': 'Contact',
   'cli.f.contacto.ph': 'Who authorizes payments',
