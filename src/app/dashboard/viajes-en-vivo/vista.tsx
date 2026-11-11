@@ -48,7 +48,7 @@ const gravedadTr = (t: TResto = T_RESTO_ES): Record<1 | 2 | 3, { texto: string; 
 function Filtros({ f, c, accionUrl, ocultos, t = T_RESTO_ES }: { f: FiltrosVistaViajes; c: CatalogoVista; accionUrl: string; ocultos: Record<string, string>; t?: TResto }) {
   const hay = Boolean(f.terminalId || f.clienteId || f.soloExcepciones);
   return (
-    <BarraFiltros accion={accionUrl} ocultos={ocultos} etiqueta={t('op.filtros_de_viajes_en_vivo')} nActivos={hay ? 1 : 0} limpiarHref={accionUrl}>
+    <BarraFiltros enLinea accion={accionUrl} ocultos={ocultos} etiqueta={t('op.filtros_de_viajes_en_vivo')} nActivos={hay ? 1 : 0} limpiarHref={accionUrl}>
       <FiltroOpciones nombre="terminal" etiqueta={t('op.terminal')} valor={f.terminalId} opciones={[{ valor: '', rotulo: t('cfg.todas') }, ...c.terminales.map((t) => ({ valor: t.id, rotulo: t.nombre }))]} />
       <FiltroOpciones nombre="cliente" etiqueta={t('cfg.cliente')} valor={f.clienteId} opciones={[{ valor: '', rotulo: t('op.todos') }, ...c.clientes.map((x) => ({ valor: x.id, rotulo: x.nombre }))]} />
       <FiltroInterruptor nombre="vista" valor="excepciones" etiqueta={t('op.solo_con_excepciones')} marcado={f.soloExcepciones} />

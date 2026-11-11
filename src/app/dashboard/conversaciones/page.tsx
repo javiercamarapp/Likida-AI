@@ -104,7 +104,7 @@ export default async function ConversacionesFlotaPage({ searchParams }: {
       titulo={t('conv.titulo')}
       apoyo={t('conv.apoyo')}
       filtros={errorCarga === null && todosLosHilos.length > 0 ? (
-        <BarraFiltros accion={RUTA} buscar etiqueta={t('conv.filtros')} nActivos={q ? 1 : 0} limpiarHref={`${RUTA}${sufijoTenant(sp)}`}
+        <BarraFiltros enLinea accion={RUTA} buscar etiqueta={t('conv.filtros')} nActivos={q ? 1 : 0} limpiarHref={`${RUTA}${sufijoTenant(sp)}`}
           ocultos={[...new URLSearchParams(sufijoTenant(sp).replace(/^\?/, '')).entries()]}>
           <FiltroBusqueda nombre="q" valor={q} placeholder={t('conv.buscar.ph')} etiqueta={t('conv.buscar.aria')} />
         </BarraFiltros>

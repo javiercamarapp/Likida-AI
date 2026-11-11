@@ -166,7 +166,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
       filtros={(
         // FE-2: buscador por folio — antes no había forma de llegar a un viaje en curso que no estuviera entre los 12 más urgentes
         // de la primera página. GET plano, con el sufijo de previsualización como hidden para no perderlo al buscar.
-        <BarraFiltros buscar accion="/dashboard/despacho" etiqueta={t('dsp.buscar.aria')} nActivos={folioPedido ? 1 : 0}
+        <BarraFiltros enLinea buscar accion="/dashboard/despacho" etiqueta={t('dsp.buscar.aria')} nActivos={folioPedido ? 1 : 0}
           limpiarHref={`/dashboard/despacho${sufijo}`}
           ocultos={[...new URLSearchParams(sufijo.startsWith('?') ? sufijo.slice(1) : sufijo).entries()]}>
           <FiltroBusqueda nombre="q" valor={folioPedido} placeholder={t('dsp.buscar.ph')} etiqueta={t('dsp.buscar.folio')} />
@@ -242,7 +242,7 @@ export function VistaDespacho({ tr = TR_OPERACION_ES,
       {/* A todo el ancho: con 7 columnas (select de unidad y botón de acción incluidos) no cabe en 8/12 y la acción quedaba cortada. */}
       <FilaTarjetas variante="12">
         {/* ── Lo vivo, con el estado del aviso ── */}
-        <Tarjeta titulo={t('dsp.encurso')} info="despacho.en_curso">
+        <Tarjeta titulo={t('dsp.encurso')} info="despacho.en_curso" className="rv-tarjeta--tabla">
           <p className="rv-dsp__nota">{t('dsp.encurso.orden')}</p>
           {activos.error !== null ? (
             <EstadoVacio contenido icono={Truck} titulo={t('dsp.encurso.noleyo')}>
