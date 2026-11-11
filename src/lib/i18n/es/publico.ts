@@ -133,8 +133,8 @@ export const publico = {
   // ── /calculadora ───────────────────────────────────────────────────────────
   'cal.meta.titulo': 'Calculadora de recuperación fiscal — Likida',
   'cal.meta.descripcion': 'Cuánto estás dejando ir en el 50% de peajes y el estímulo IEPS de diésel. Con los supuestos a la vista y la advertencia que otros omiten: el estímulo es ingreso acumulable.',
-  'cal.rotulo': 'Calculadora de recuperación fiscal',
-  'cal.titulo': 'Likida',
+  'cal.rotulo': 'Likida',
+  'cal.titulo': 'Calculadora de recuperación fiscal',
   'cal.apoyo': 'Tres datos que tu flota sí tiene a la mano. El resultado sale aquí mismo, con cada supuesto junto a su cifra y la advertencia que casi todos omiten. Sin RFC, sin registro.',
   'cal.litros': 'Litros de diésel al mes',
   'cal.litros.ph': 'p. ej. 40,000',
@@ -254,4 +254,5 @@ export const publico = {
   'mcp.consent.reforzada': 'Este acceso incluye <strong>dinero</strong> (cuadres, facturación, estado fiscal). Para confirmar, escribe el dominio de destino: <strong>{dominio}</strong>',
   'mcp.consent.autorizar': 'Autorizar lectura',
   'mcp.consent.denegar': 'No autorizar',
+  'cal.datos.titulo': 'Tus números del mes',
 } as const;

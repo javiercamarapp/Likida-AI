@@ -126,8 +126,8 @@ export const publico: Record<keyof typeof publicoEs, string> = {
 
   'cal.meta.titulo': 'Tax recovery calculator — Likida',
   'cal.meta.descripcion': 'How much you are leaving on the table in the 50% toll credit and the diesel IEPS incentive. With the assumptions in plain sight and the warning others omit: the incentive is taxable income.',
-  'cal.rotulo': 'Tax recovery calculator',
-  'cal.titulo': 'Likida',
+  'cal.rotulo': 'Likida',
+  'cal.titulo': 'Tax recovery calculator',
   'cal.apoyo': 'Three data points your fleet has at hand. The result appears right here, with each assumption next to its figure and the warning almost everyone omits. No RFC (tax ID), no sign-up.',
   'cal.litros': 'Liters of diesel per month',
   'cal.litros.ph': 'e.g. 40,000',
@@ -244,4 +244,5 @@ export const publico: Record<keyof typeof publicoEs, string> = {
   'mcp.consent.reforzada': 'This access includes <strong>money</strong> (reconciliations, invoicing, tax status). To confirm, type the destination domain: <strong>{dominio}</strong>',
   'mcp.consent.autorizar': 'Authorize read access',
   'mcp.consent.denegar': 'Do not authorize',
+  'cal.datos.titulo': 'Your monthly numbers',
 };

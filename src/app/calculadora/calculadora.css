@@ -1,9 +1,13 @@
 /* Calculadora pública: formulario y resultado con las piezas del sistema; solo la rejilla y el tipo de cifra viven aquí. */
-.rv-calc { display: grid; gap: 24px; margin-top: 24px; }
-.rv-calc__datos { display: grid; gap: 12px; }
+.rv-calc { display: grid; gap: 16px; margin-top: 20px; }
+.rv-calc__datos { display: grid; gap: 14px; }
+/* Rótulo 12/500 sobre el campo de 32, ayuda de 12 debajo (Rovaq PU/FM): fila a fila, nunca en línea. */
+.rv-calc .rv-campo__etq { font-size: 12px; font-weight: 500; color: var(--ink); }
+.rv-calc .rv-campo__ayuda { font-size: 12px; line-height: 1.4; color: var(--muted); }
 .rv-calc__dos { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 560px) { .rv-calc__dos { grid-template-columns: minmax(0, 1fr); } }
 .rv-calc__resultado { display: grid; gap: 12px; }
+.rv-calc__resultado .rv-kind { white-space: nowrap; }
 .rv-calc__pila { display: grid; gap: 8px; }
 .rv-calc__texto { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
 .rv-calc__texto strong { color: var(--ink); }

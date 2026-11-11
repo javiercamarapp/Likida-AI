@@ -33,4 +33,6 @@ export const login = {
   'error.caducado_reciente': 'Ese enlace ya se usó o ya caducó, y te mandamos uno nuevo hace unos minutos. Abre el correo más reciente.',
   'error.navegador': 'Ese enlace se pidió desde otro navegador. Ábrelo en el navegador donde escribiste tu correo, o pide uno nuevo desde aquí.',
   'error.generico': 'Algo falló. Intenta otra vez.',
+  'idioma.titulo': 'Idioma',
+  'idioma.pronto': 'Inglés: próximamente',
 } as const;
