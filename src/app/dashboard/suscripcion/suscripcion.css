@@ -22,7 +22,12 @@
 /* Botón de envío de las formas de esta pantalla a la medida de Rovaq (32 px, 13/500, padding 6x12, radio 8): el de `FormaConAviso` trae text-sm de Tailwind (36 px). */
 [data-ui="v2"] form button[type="submit"].px-4.py-2.text-sm { min-height: 32px; padding: 6px 12px; font-size: var(--t-body, 13px); font-weight: 500; line-height: 1.3; border-radius: 8px; }
 
-/* Estado del plan, datos fiscales y planes en UNA columna de ≤780 px (Rovaq CF): ninguna tarjeta queda suelta a un tercio del ancho ni junto a otra de distinta altura. La tabla de facturas va debajo, de lado a lado. */
-.rv-sus__dos { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; max-width: 780px; }
+/* Todo a ancho completo (Rovaq CF: no se alternan anchos): la tira, el cobro pendiente, las facturas y el aviso miden lo mismo que este bloque. Datos fiscales y planes van en DOS columnas
+   iguales (sin hueco a la derecha) y se apilan bajo 1100 px; una tarjeta que queda sola en la última fila ocupa las dos columnas. */
+.rv-sus__dos { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 1100px) {
+  .rv-sus__dos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rv-sus__dos > :last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
 .rv-sus__fiscales form > div.grid { gap: 0; }
 .rv-sus__rejilla { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
