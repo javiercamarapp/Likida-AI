@@ -272,16 +272,15 @@ export function VistaUnidades({ tr = TR_OPERACION_ES,
             { etiqueta: 'Km', valor: editada.kmActual !== null ? `${numero(editada.kmActual, idioma)} km` : '—' },
             { etiqueta: t('un.col.taller'), valor: editada.ordenesAbiertas > 0 ? tp('un.orden', editada.ordenesAbiertas) : t('un.sinordenes') },
           ]}
-        >
-          {puedeCorregir ? (
-            <div className="rv-un__editor">
-              <p className="rv-un__nota">{t('un.corregir', { eco: editada.numeroEconomico })}</p>
+          // La vista rápida es de LECTURA (2x2 y pie); corregir la unidad es otro cajón que se abre desde el pie.
+          pie={puedeCorregir ? (
+            <CajonAlta id={`editar-${editada.id}`} titulo={t('un.corregir', { eco: editada.numeroEconomico })} disparador={t('op.editar')} primario tamano="xl">
               <FormaUnidad accion={guardar} id={editada.id} inicial={aInicial(editada)} idPrefijo={`u-${editada.id}`}
                 proveedoresGps={proveedoresGps} gpsVistoEn={editada.gpsVistoEn}
                 patios={patios} terminalId={terminalPorUnidad[editada.id] ?? ''} patioFijo={patioDelJefe !== null} />
-            </div>
-          ) : null}
-        </CajonVistaRapida>
+            </CajonAlta>
+          ) : undefined}
+        />
       ) : null}
     >
       {vacio ? (
