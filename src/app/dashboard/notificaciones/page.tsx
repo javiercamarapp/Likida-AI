@@ -1,21 +1,13 @@
 import { redirect } from 'next/navigation';
+import type { Metadata } from 'next';
 import { resolverTenantEfectivo } from '@/lib/auth/tenant-efectivo';
 import { puedeVerRuta } from '@/lib/auth/visibilidad';
-import { esRolNomina } from '@/lib/auth/roles';
-import { perfilDeTenant } from '@/lib/auth/perfil_tenant';
-import { getKpis, detectarAnomalias, contarEscalados } from '@/lib/likida/analytics';
-import { contarHuerfanosPendientes } from '@/lib/likida/repo';
-import { getConexiones } from '@/lib/likida/conexiones';
-import { fuentes } from '@/lib/likida/orquestador/fuentes';
-import '@/lib/likida/orquestador/fuentes_reales';
-import { rolPuedeLeerTarea } from '@/lib/likida/orquestador/permisos';
-import { armarTableroViajes } from '@/lib/likida/orquestador/tablero_viajes';
-import { ahoraMs } from '@/lib/saludo';
-import { calcularAlertasFlota } from '../calcular-alertas-flota';
+import { leerAvisosFlota } from '@/lib/avisos/fuente-flota';
+import { MarcoPagina } from '@/app/ui-v2/componentes';
+import PaginaAvisos from '@/app/ui-v2/avisos/pagina-avisos';
 import { sufijoTenant } from '../sufijo';
-import { ListaAlertas } from './lista';
 import { getT } from '@/lib/i18n/servidor';
-import type { Metadata } from 'next';
+
 export async function generateMetadata(): Promise<Metadata> {
   const { t } = await getT('operacion');
   return { title: t('meta.notificaciones') };
@@ -24,66 +16,31 @@ export async function generateMetadata(): Promise<Metadata> {
 export const dynamic = 'force-dynamic';
 
 /**
- * NOTIFICACIONES DE LA FLOTA — "alertas que necesitan tu atención" ANTES
- * del panorama, aquí con página propia como ya la tiene /admin.
- *
- * Antes de esto el panel del cliente tenía una campana que solo abría un
- * dropdown con dos textos sin liga, y solo existía en el Inicio: para
- * enterarte de que un viaje se escaló tenías que ir a buscarlo.
- *
- * CADA señal se lee por separado y CADA una puede fallar por su cuenta. Se
- * lee con `catch → null`, no con `catch → 0`: `calcularAlertasFlota` sabe
- * distinguirlos y confiesa lo que no pudo revisar. Un `Promise.all` que se
- * cae entero por una consulta rota dejaría la pantalla en blanco cuando
- * justamente hay algo que avisar.
+ * AVISOS DE LA FLOTA — «lo que requiere a un humano HOY», con la misma pantalla que /admin/notificaciones (clon del panel de Rovaq):
+ * pestañas No leídas / Leídas / Todas, origen, hora, enlace a la pantalla que lo resuelve, marcar leído, filtros y configuración
+ * (`?seccion=configuracion`). Las señales se leen en `lib/avisos/fuente-flota.ts` (cada una falla por su lado: `catch → null`, jamás 0),
+ * la MISMA función que usa el pie del panel para su número, así que no pueden discrepar.
  */
 export default async function PaginaNotificaciones({
   searchParams,
 }: {
-  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string }>;
+  searchParams: Promise<{ vista?: string; tenant?: string; rol?: string; seccion?: string }>;
 }) {
   const sp = await searchParams;
-  const { tenantId, rol } = await resolverTenantEfectivo('/dashboard/notificaciones', sp);
-  if (!puedeVerRuta(rol, '/dashboard/notificaciones')) redirect('/dashboard');
+  const t = await resolverTenantEfectivo('/dashboard/notificaciones', sp);
+  if (!puedeVerRuta(t.rol, '/dashboard/notificaciones')) redirect('/dashboard');
 
-  // `nomina` (0949) solo ve conteos de Liquidaciones: no se leen KPIs, anomalías ni tablero (consultan dinero y operación). Sin alertas.
-  if (esRolNomina(rol)) return <ListaAlertas alertas={[]} />;
-
-  const sufijo = sufijoTenant(sp);
-  // El perfil de la flota (0770) recorta también las alertas: las de módulos en
-  // stand-by no se enseñan (un aviso cuyo botón rebota es peor que no avisar).
-  const perfil = await perfilDeTenant(tenantId);
-
-  // P6: las tareas del asistente y las excepciones del Conductor también son notificaciones (solo si el rol abre viajes en vivo; una tarea
-  // de dinero solo la cuenta quien ve dinero). Se leen aparte y con `catch → null`, como el resto: una fuente caída se confiesa, no se calla.
-  const veViajesEnVivo = puedeVerRuta(rol, '/dashboard/viajes-en-vivo', perfil);
-  const [kpis, anomalias, escalados, huerfanos, conectores, tareas, tablero] = await Promise.all([
-    getKpis(tenantId).catch(() => null),
-    detectarAnomalias(tenantId).catch(() => null),
-    contarEscalados(tenantId).catch(() => null),
-    contarHuerfanosPendientes(tenantId).catch(() => null),
-    getConexiones(tenantId).catch(() => null),
-    veViajesEnVivo ? fuentes().escalacionesAbiertas(tenantId, 60).then((l) => (l === null ? null : l.filter((t) => rolPuedeLeerTarea(rol, t)).length)).catch(() => null) : Promise.resolve(undefined),
-    veViajesEnVivo
-      ? fuentes().entradaTablero(tenantId, new Date(ahoraMs())).then((e) => armarTableroViajes({ ...e, filtros: { terminalId: null, clienteId: null, soloExcepciones: false } }).conteos).catch(() => null)
-      : Promise.resolve(undefined),
-  ]);
-
-  const alertas = calcularAlertasFlota(
-    {
-      porRevisar: kpis ? kpis.porRevisar : null,
-      duplicados: anomalias ? anomalias.length : null,
-      escalados,
-      huerfanos,
-      conectores,
-      // `undefined` = este rol no ve esa pantalla (la señal no existe); `null` = no se pudo leer (se confiesa).
-      tareasAsistente: tareas,
-      excepcionesConductor: tablero === undefined ? undefined : tablero === null ? null : tablero.conExcepcion,
-      sinSenalDeVida: tablero == null ? undefined : tablero.sinSenal,
-    },
-    sufijo,
-    (href) => puedeVerRuta(rol, href, perfil),
+  const fuente = await leerAvisosFlota(t.tenantId, t.rol);
+  const params: Record<string, string> = {};
+  if (sp.tenant) params.tenant = sp.tenant; else if (sp.vista) params.vista = sp.vista;
+  if (sp.rol) params.rol = sp.rol;
+  const { t: tr } = await getT('avisos');
+  return (
+    <MarcoPagina titulo={tr('notif.titulo')} apoyo={tr('notif.apoyo')}>
+      <PaginaAvisos
+        destino={{ panel: 'flota', tenant: sp.tenant ?? null }} ambito={{ tipo: 'flota', tenantId: t.tenantId }} userId={t.userId} fuente={fuente}
+        base="/dashboard/notificaciones" params={params} sufijo={sufijoTenant(sp)} seccion={sp.seccion === 'configuracion' ? 'configuracion' : 'avisos'}
+      />
+    </MarcoPagina>
   );
-
-  return <ListaAlertas alertas={alertas} />;
 }

@@ -375,6 +375,7 @@ jobs:
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0998_tenant_exportacion_offboarding.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0999_vigia_sin_atender_config.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/1001_poliza_provisional.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/1002_avisos_leidos_y_preferencias.sql
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/1000_equipo_baja_personal_likida.sql
           PGUSER=postgres bash supabase/tests/1000_equipo_baja_personal_likida_concurrencia.sh localhost 5432 postgres
           psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f supabase/tests/0673_vigia_directores_correo.sql
