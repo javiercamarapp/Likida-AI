@@ -751,6 +751,8 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'jor.abierto': 'Open',
   'jor.conformidad.si': 'With driver’s confirmation',
   'jor.conformidad.no': 'Without driver’s confirmation',
+  'jor.vr.ver': 'Quick view',
+  'jor.vr.sub': 'Shift {n} of {total}',
   'jor.titulo': 'Team',
   'jor.apoyo': 'Shift record under art. 132 sec. XXXIV of the Federal Labor Law (LFT), per driver. It records and warns; it does not replace the hours-of-service log.',
   'jor.nota.ley': 'Record under article 132, section XXXIV of the Federal Labor Law (LFT)',

@@ -751,6 +751,8 @@ export const operacion = {
   'jor.abierto': 'Abierto',
   'jor.conformidad.si': 'Con conformidad del operador',
   'jor.conformidad.no': 'Sin conformidad del operador',
+  'jor.vr.ver': 'Vista rápida',
+  'jor.vr.sub': 'Jornada {n} de {total}',
   'jor.titulo': 'Equipo',
   'jor.apoyo': 'Registro de jornada del art. 132 fr. XXXIV de la LFT, por operador. Registra y avisa; no sustituye la bitácora de horas.',
   'jor.nota.ley': 'Registro del artículo 132 fracción XXXIV de la Ley Federal del Trabajo',
