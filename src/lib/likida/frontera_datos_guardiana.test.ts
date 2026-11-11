@@ -344,7 +344,9 @@ import { join, relative } from 'node:path';
 // «Sin dato», nunca una lista vacía). Cuenta neta porque `dashboard/contador/inicio-contador.tsx` dejó de leer. Lecturas legítimas de presentación, no código migrado.
 // F20 (w7, 10-nov-2026): +1 archivo (347 -> 348) y +4 llamadas (2,539 -> 2,543): `lib/saas/salidas_flota.ts`, la ÚNICA lectura del estado de salidas de una flota (suscripcion por tenant; operador y
 // app_user por teléfono, todas por `acotada`, con límite y falla cerrado) y la lectura de agentes del runner cuando la vuelta de una flota está frenada. Lecturas nuevas del freno por plan, no código migrado.
-const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 348;
+// Entrega 2 (w9, 10-nov-2026): +1 archivo (348 -> 349), `lib/admin/alertas-ia.ts` (w7/f16): las alertas empujadas de IA leen `llm_costo` (sin registro de costo y tasa de respaldo) y `viaje` (viaje abierto vigente) en solo lectura, con head/limit, y solo se evalúan con el interruptor encendido. Lectura de vigilancia, no código migrable a repo.ts sin que éste aprenda de alertas de IA.
+// `ui-v2/componentes/forma-en-cajon.tsx` (w8/bd) contaba 2 `Array.from(` de DOM como `.from(`: falso positivo corregido con spread, no cuenta.
+const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 349;
 // Agente 4 (Vigía), T-A4-06: +1 archivo (288 → 289), `vigia/programa/repo.ts`: el acceso a datos del programa de despacho (0795: carga, filas, cambios). Es su propio
 // `repo.ts` por frente pero la frontera de este guardia solo exime el de la raíz; todo pasa por `acotada`/`traerTodo` con `tenant_id`. Funcionalidad nueva. Un techo de integración es la SUMA de los tramos.
 // WS1 «perfil de tenant» (0770): +1 archivo y +1 llamada (288 → 289 y 1,916 → 1,917). El módulo nuevo es `lib/auth/perfil_tenant.ts`: la lectura de
@@ -717,7 +719,8 @@ const TECHO_ARCHIVOS_FUERA_DE_LA_FRONTERA = 348;
 //   que sale de la sesión en `puesta-en-marcha/page.tsx` -> `leerLecturasListo(s.tenantId)`) y `liquidacion_externa/poliza_provisional.ts` +2 (leer y guardar la perilla `poliza_provisional` de
 //   `liquidacion_correo_config`, por `acotada` y `.eq('tenant_id')`); -1 en agentes/liquidacion/vista.tsx y -1 en agentes/conductores/vista.tsx (w5/liq y w5/cpv ya no consultan ahí).
 //   `ensayo_local.ts` dejó de contar: era un `from` de Buffer (falso positivo), ahora decodifica base64 con `atob`.
-const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_543;
+// Entrega 2 (w9, 10-nov-2026): +3 llamadas (2,543 -> 2,546), todas de `lib/admin/alertas-ia.ts` (`llm_costo` x2 y `viaje` x1, ver arriba). Las 2 `Array.from(` de `forma-en-cajon.tsx` dejaron de contar (falso positivo de DOM).
+const TECHO_LLAMADAS_FUERA_DE_LA_FRONTERA = 2_546;
 // Auditoría 37, lote M-Z-resto-07 (medido con el barrido real, 2,315 → 2,317, +2, 0 archivos nuevos): `portal_pago_propuesta.ts` +1 (¿ya hay un abono equivalente?, S54-02) y
 // `portal_pago_escritura.ts` +1 (la factura contra la que se coteja el XML del REP, S54-03). Ambas por `acotada` y con `tenant_id`.
 // LOTE A37 z-resto-12 (+2, 2,315 → 2,317; medido): `.storage.from('comprobantes').remove` para no dejar huérfano el documento de política (S19-08, perfil/documentos.ts) y `.storage.from('avatares').remove` de la foto anterior (S19-06, mi-perfil/page.tsx). Ambas acotadas por ruta con el id de la sesión/tenant.

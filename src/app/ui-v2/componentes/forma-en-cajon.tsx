@@ -94,12 +94,12 @@ export function FormaEnCajon({ id, titulo, descripcion, accion, boton, disparado
 
 /** Devuelve a los campos con nombre lo que la persona había escrito. Los `hidden` no se tocan (los pone el servidor). */
 function restaurar(forma: HTMLFormElement, datos: FormData) {
-  for (const el of Array.from(forma.elements)) {
+  for (const el of [...forma.elements]) {
     if (!(el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement || el instanceof HTMLSelectElement) || !el.name) continue;
     if (el instanceof HTMLInputElement && (el.type === 'hidden' || el.type === 'file' || el.type === 'password')) continue;
     const valores = datos.getAll(el.name).filter((v): v is string => typeof v === 'string');
     if (el instanceof HTMLInputElement && (el.type === 'checkbox' || el.type === 'radio')) el.checked = valores.includes(el.value);
-    else if (el instanceof HTMLSelectElement && el.multiple) for (const o of Array.from(el.options)) o.selected = valores.includes(o.value);
+    else if (el instanceof HTMLSelectElement && el.multiple) for (const o of [...el.options]) o.selected = valores.includes(o.value);
     else el.value = valores[0] ?? '';
   }
 }
