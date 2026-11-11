@@ -257,16 +257,18 @@ export default async function CombustibleCasetasPage({
       ] as PropsCifra[]).map((c) => ({ ...c, matiz: c.matiz ?? 8 }))}
       variante="8-4"
       graficas={porConcepto === null ? undefined : porConcepto.length > 1 ? [
-        // Una sola barra no es una serie: con menos de dos meses la tarjeta de «Gasto por mes» (680 px para una barra) no se pinta y el
-        // reparto toma el ancho completo; el desglose por concepto ya va debajo de la dona (sin repetirlo en otra tarjeta).
-        ...(meses.length >= 2 ? [(
-          <Tarjeta key="b" titulo={tr('combustibleCasetas.panel.gastoPorMes')} info="combustible_casetas.gastado_combustible">
-            <Columnas etiqueta={tr('combustibleCasetas.panel.gastoPorMes')} datos={meses} formato="mxn" matiz={2} variacion={false} />
-            <p className="rv-comb__nota">{tr('combustibleCasetas.panel.ventanaNota', { n: numero(VENTANA_DOCUMENTOS) })}</p>
-          </Tarjeta>
-        )] : []),
+        // Plantilla PC de Rovaq: la gráfica principal (barras mensuales de 168 px) y la secundaria (dona con su lista) en 8-4. Sin comprobantes con
+        // fecha la tarjeta mensual dice qué falta (vacío punteado que la llena), no se inventa una serie.
+        <Tarjeta key="b" titulo={tr('combustibleCasetas.panel.gastoPorMes')} info="combustible_casetas.gastado_combustible"
+          estado={meses.length === 0 ? 'vacio' : 'ok'} mensaje={tr('combustibleCasetas.page.sinComprobantesDeEstos')}
+          detalle={tr('combustibleCasetas.panel.ventanaNota', { n: numero(VENTANA_DOCUMENTOS) })} iconoVacio={Fuel}>
+          <Columnas etiqueta={tr('combustibleCasetas.panel.gastoPorMes')} datos={meses} formato="mxn" matiz={2} variacion={false} />
+          <p className="rv-comb__nota">{tr('combustibleCasetas.panel.ventanaNota', { n: numero(VENTANA_DOCUMENTOS) })}</p>
+        </Tarjeta>,
         <Tarjeta key="d" titulo={tr('combustibleCasetas.page.repartoDelGasto')}>
-          <DonaMini matiz={1} etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
+          <div className="rv-comb__dona">
+            <DonaMini matiz={1} etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} gajos={itemsConcepto.map((i) => ({ etiqueta: i.etiqueta, valor: i.valor }))} formato="mxn" />
+          </div>
           {/* Rovaq (Brechas «Por canal»): la dona lleva debajo su lista de barras y llena el alto de la tarjeta vecina. */}
           <BarList etiqueta={tr('combustibleCasetas.page.repartoDelGastoPor')} items={itemsConcepto} formato={mxn} />
         </Tarjeta>,
@@ -336,7 +338,7 @@ export default async function CombustibleCasetasPage({
       )}
 
       {/* Cargas y casetas: los últimos comprobantes leídos (la ventana se declara en el título), con su CFDI. */}
-      <Tarjeta titulo={tr('combustibleCasetas.panel.tablaCargas', { n: numero(VENTANA_DOCUMENTOS) })}
+      <Tarjeta className="rv-tarjeta--tabla" titulo={tr('combustibleCasetas.panel.tablaCargas', { n: numero(VENTANA_DOCUMENTOS) })}
         estado={docs === null ? 'error' : cargas.length === 0 ? 'vacio' : 'ok'}
         mensaje={docs === null ? tr('combustibleCasetas.page.noSePudoLeer2') : tr('combustibleCasetas.page.sinComprobantesDeEstos')} reintentar>
         <TablaBase<DocumentoRow> etiqueta={tr('combustibleCasetas.panel.tablaCargas', { n: numero(VENTANA_DOCUMENTOS) })} columnas={colCargas}
