@@ -94,6 +94,15 @@ describe('Inicio rediseñado: jerarquía, iconos animados y estados honestos', (
     expect(trozo).toContain('data-vivo="true"');
   });
 
+  it('con la lectura de corridas caída el encabezado dice «sin dato», nunca «Ninguno ha corrido todavía»', async () => {
+    dobles.corridas.mockResolvedValue({ ...VACIAS, liquidacion: null, peajes: null });
+    dobles.enCurso.mockResolvedValue(0);
+    dobles.datos.mockResolvedValue(DATOS_VACIOS);
+    const t = texto(await html('flota_admin'));
+    expect(t).not.toContain('Ninguno ha corrido todavía');
+    expect(t).toContain('Sin dato de corridas · 2 sin lectura');
+  });
+
   it('flota recién conectada (todo vacío): se ve completa y honesta, sin cifras inventadas ni gráfica de ceros', async () => {
     dobles.corridas.mockResolvedValue(VACIAS);
     dobles.enCurso.mockResolvedValue(0);

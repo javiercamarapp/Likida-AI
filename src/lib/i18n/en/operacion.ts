@@ -1068,6 +1068,8 @@ export const operacion: Record<keyof typeof operacionEs, string> = {
   'ini5a.agentes.titulo': 'Your five agents',
   'ini5a.agentes.resumen': '{n} of 5 with recorded runs',
   'ini5a.agentes.resumen.cero': 'None has run yet',
+  'ini5a.agentes.resumen.sinDato': 'No run data',
+  'ini5a.agentes.resumen.sinLectura': '{n} unreadable',
   'ini5a.abrir': 'Open panel',
   'ini5a.fase.corriendo': 'Running now',
   'ini5a.falta.titulo': 'To get it started',

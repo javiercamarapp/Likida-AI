@@ -130,6 +130,11 @@ export function esFlotaNueva(e: {
   return true;
 }
 
+/** Cuenta aparte las corridas LEGIBLES y las que no se pudieron leer (`null`): una lectura caída no es «no corrió». */
+export function contarCorridas(corridas: ReadonlyArray<CorridaRegistrada | null | undefined>): { conCorrida: number; sinLectura: number } {
+  return { conCorrida: corridas.filter((c) => c).length, sinLectura: corridas.filter((c) => c === null).length };
+}
+
 // ── Atajos ────────────────────────────────────────────────────────────────
 
 export const ATAJOS_CINCO: ReadonlyArray<{ href: string; nombre: string }> = [
