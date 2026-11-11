@@ -15,3 +15,16 @@
 }
 [data-ui="v2"] .rv-vacio[data-pantalla] .rv-vacio__icono svg { width: 28px; height: 28px; }
 [data-ui="v2"] .rv-vacio[data-pantalla][data-contenido] { max-height: none; overflow: visible; }
+
+/* Tabla dentro de tarjeta (Rovaq «Problemas»): la tarjeta no lleva relleno; la cabecera (título + contador + acciones) lleva el suyo y la tabla,
+   con su cabecera de 36 px y filas de 40, llega al borde. Esquinas recortadas al radio de 12. */
+[data-ui="v2"] .rv-tarjeta.rv-tarjeta--tabla { padding: 0; gap: 0; overflow: hidden; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cab { height: auto; min-height: 44px; padding: 6px 14px; border-bottom: 1px solid var(--line); }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cab .rv-tarjeta__acciones { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo { padding: 0; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tl__pie, [data-ui="v2"] .rv-tarjeta--tabla .rv-reg__pie { padding: 10px 14px; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tl__sellos { padding: 0 14px; }
+[data-ui="v2"] .rv-tarjeta--tabla .rv-tl__nota { padding: 0 14px 10px; }
+[data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo > .rv-vacio { margin: 14px; }
+[data-ui="v2"] .rv-tarjeta__contador { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+@media (max-width: 819px) { [data-ui="v2"] .rv-tarjeta--tabla > .rv-tarjeta__cuerpo { padding: 10px; } }
