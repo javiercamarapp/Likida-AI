@@ -28,8 +28,9 @@
   color: inherit; text-decoration: none; border-top: 3px solid var(--cat, transparent);
   box-shadow: -1px 0 0 var(--line), 0 -1px 0 var(--line);
 }
-/* El filete superior es de tinta en todas las tiras (como en el admin): el matiz de cada celda vive en su sparkline y en el punto móvil, no en un filete de color. */
-[data-ui="v2"] .rv-kpi { border-top-color: var(--ink); }
+/* Como Rovaq (`.ui-kpi[data-c]`): el filete de 3 px existe SOLO cuando la celda declara un matiz de datos (y se pinta con ese matiz, --cat). Una celda sin
+   matiz no lleva filete: el negro grueso de las tiras del admin se retira (11-nov, dueño). Quitar el ancho también quita su alto (3 px) a esas celdas. */
+[data-ui="v2"] .rv-kpi:not([data-matiz]) { border-top-width: 0; }
 a.rv-kpi:hover { background: var(--canvas); }
 a.rv-kpi:focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 .rv-kpi[data-matiz="1"] { --cat: var(--chart-1, var(--muted)); } .rv-kpi[data-matiz="2"] { --cat: var(--chart-2, var(--muted)); }

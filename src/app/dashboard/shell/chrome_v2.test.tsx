@@ -130,10 +130,10 @@ describe('DashboardChromeV2: el contrato que no se rompe', () => {
     expect(pie).not.toContain('Administración de Likida'); // solo el superadmin ve el acceso cruzado
   });
 
-  it('la topbar de escritorio queda como la de Rovaq: plegar y «Guía»; sin campana ni fecha, sin miga de pan', () => {
+  it('la topbar de escritorio queda como la de Rovaq: título y «Guía», sin plegar (vive en el sidebar); sin campana ni fecha, sin miga de pan', () => {
     const top = html.slice(html.indexOf('<header class="rv-cab-esc"'), html.indexOf('</header>', html.indexOf('<header class="rv-cab-esc"')));
     expect(top).not.toContain('rv-migas');
-    expect(top).toContain('rv-cab-esc__plegar');
+    expect(top).not.toContain('rv-cab-esc__plegar');
     expect(top).toContain('>Guía<');
     expect(top).not.toContain('Notificaciones');
     expect(top).not.toContain('rv-cab-esc__fecha');

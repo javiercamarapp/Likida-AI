@@ -914,4 +914,11 @@ export const agentes: Record<keyof typeof agentesEs, string> = {
   'vigia.vista.vigia': 'Vigía: {v0}',
   'vigia.vista.whatsapp': 'WhatsApp …{v0}',
   'vigia.vista.yo_me_encargo': 'I will handle it',
+  'catalogo.corrida.ok': 'Finished OK',
+  'catalogo.corrida.parcial': 'Finished partially',
+  'catalogo.corrida.fallo': 'Finished with a failure',
+  'catalogo.corrida.otro': 'Finished: {estado}',
+  'catalogo.corrida.hace_menos_1h': 'less than 1 h ago',
+  'catalogo.corrida.hace_horas': '{n} h ago',
+  'catalogo.corrida.hace_dias': '{n} days ago',
 };

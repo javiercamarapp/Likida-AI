@@ -39,6 +39,12 @@ describe('Navegación móvil de /admin: cabecera, barra inferior y hoja «Más»
     expect(MENU_ADMIN.grupos.flatMap((g) => g.items).length).toBe(SECCIONES.flatMap((s) => s.items).length);
   });
 
+  it('la hoja «Más» pone Copiloto justo debajo de Resumen, fuera de los grupos', () => {
+    expect(MENU_ADMIN.resumen.map((i) => i.nombre)).toEqual(['Resumen', 'Copiloto']);
+    expect(MENU_ADMIN.grupos.flatMap((g) => g.items).map((i) => i.nombre)).not.toContain('Copiloto');
+    expect(destinosBarraAdmin().map((d) => d.href)).not.toContain('/admin/copiloto');
+  });
+
   it('el CSS ya no deja el riel de 56 px bajo 768 px y deja aire inferior para la barra flotante', () => {
     const css = readFileSync(new URL('./admin-shell.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
     expect(css).not.toMatch(/width:\s*56px/);

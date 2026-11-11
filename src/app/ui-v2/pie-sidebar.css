@@ -123,3 +123,7 @@
 }
 [data-ui="v2"] .rv-cab-esc .rv-guia__btn:hover,
 [data-ui="v2"] .rv-cab-esc .rv-guia__btn[aria-expanded="true"] { background: var(--ui-surface); color: var(--ink); border-color: var(--ui-border); box-shadow: 0 0 0 1px var(--ui-border); }
+
+/* Fila con Tooltip del sistema (Avisos): el envoltorio ocupa la fila completa para no cambiar el ancho ni el alto del ítem. */
+[data-ui="v2"] .rv-ps .rv-ps-tip-fila { display: flex; width: 100%; }
+[data-ui="v2"] .rv-ps .rv-ps-tip-fila > .rv-item { flex: 1 1 auto; min-width: 0; }

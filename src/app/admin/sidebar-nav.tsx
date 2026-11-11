@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { LayoutGrid, ChevronDown, ChevronsLeft, ArrowLeftRight, UserRound, Workflow, Briefcase, SlidersHorizontal, Activity } from 'lucide-react';
-import { type Item, SECCIONES, entradaDeRuta } from './rutas';
+import { type Item, COPILOTO, SECCIONES, entradaDeRuta } from './rutas';
 import PieSidebar, { TarjetaUsuario, inicialesDe } from '../ui-v2/componentes/pie-sidebar';
 import { useRequiereAccion } from './cabecera-admin';
 import LogoV2 from '../dashboard/shell/logo-v2';
@@ -89,8 +89,8 @@ export function MarcaAdmin() {
         <span className="rv-logo-h"><LogoV2 alto={ALTO_LOGO_PX.sidebar} /></span>
         <span className="rv-logo-s"><LogoV2 alto={ALTO_LOGO_PX.riel} variante="simbolo" /></span>
       </Link>
-      <Tooltip texto={t('cab.plegar')}>
-        <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={t('cab.plegar')} aria-expanded={!riel}>
+      <Tooltip texto={riel ? t('cab.expandir') : t('cab.plegar')}>
+        <button type="button" className="rv-icono-boton rv-sb__plegar" onClick={alternar} aria-label={riel ? t('cab.expandir') : t('cab.plegar')} aria-expanded={!riel}>
           <ChevronsLeft className="rv-chev-plegar" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
         </button>
       </Tooltip>
@@ -135,6 +135,8 @@ export default function SidebarNav() {
             <span className="rv-item__txt">{etiquetaNav({ t }, 'Resumen')}</span>
           </Link>
         </li>
+        {/* Copiloto: primer nivel, justo debajo de Resumen (no vive en el grupo Agentes). */}
+        <Fila item={COPILOTO} pathname={pathname} />
       </ul>
       {itemActual && (
         <section aria-labelledby="rv-g-pagina-actual" className="rv-grupo rv-pagina-actual" data-estatico>

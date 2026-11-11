@@ -26,9 +26,11 @@ export type Item = { href: string; nombre: string; Icono: typeof LayoutGrid; pes
 // 16 entradas (antes 43 en el sidebar): el dueño pidió menos páginas pero poder hacer lo mismo o más. Nada se pierde: cada pantalla
 // sigue viva como pestaña de su grupo (misma ruta) y todas siguen en ⌘K. Es el árbol final 3.1 del plan maestro del admin: cuatro
 // secciones (Agentes, Negocio, Control, Sistema); «Plataforma» ya no existe (Integraciones pasó a Sistema).
+/** El Copiloto es entrada de PRIMER NIVEL: va justo debajo de «Resumen», fuera de las cuatro secciones (decisión del dueño, 11-nov-2026). Es la puerta que
+ *  sustituye recorrer pantallas. Lo pintan el sidebar y la hoja «Más» del móvil tras el Resumen; ⌘K lo lista en `todasLasRutas`. */
+export const COPILOTO: Item = { href: '/admin/copiloto', nombre: 'Copiloto', Icono: Sparkles };
+
 export const AGENTES: Item[] = [
-  // El copiloto va PRIMERO: es la puerta que sustituye recorrer pantallas.
-  { href: '/admin/copiloto', nombre: 'Copiloto', Icono: Sparkles },
   { href: '/admin/agentes', nombre: 'Agentes', Icono: Bot, pestanas: [
     { href: '/admin/agentes', nombre: 'Panel' },
     { href: '/admin/agente-ocr', nombre: 'OCR' },
@@ -124,7 +126,7 @@ export const FUERA_DEL_MENU: ReadonlyArray<{ href: string; nombre: string; Icono
   { href: '/admin/elegir-flota', nombre: 'Ver como una flota', Icono: Eye, alias: ['elegir flota', 'ver como'] },
 ];
 
-const ENTRADAS: Item[] = SECCIONES.flatMap((s) => s.items);
+const ENTRADAS: Item[] = [COPILOTO, ...SECCIONES.flatMap((s) => s.items)];
 const coincide = (pathname: string, href: string): boolean => pathname === href || pathname.startsWith(`${href}/`);
 /** La entrada del sidebar a la que pertenece una ruta (por la ruta de la entrada o la de cualquiera de sus pestañas; las rutas con
  *  parámetro, p. ej. `/admin/flotas/<id>`, cuentan por prefijo). `null` si no es de ninguna (Inicio, Mi perfil, Notificaciones…). */

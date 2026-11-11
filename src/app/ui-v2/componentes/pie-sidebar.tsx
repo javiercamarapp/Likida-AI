@@ -88,7 +88,7 @@ function Organizacion({ org, alNavegar }: { org: OrganizacionPie; alNavegar?: ()
           <span className="rv-ps-campo" title={nombre ?? undefined}>{nombre ?? t('pie.org.sinOrganizacion')}</span>
         )}
         {destino && (
-          <Link href={destino} className="rv-ps-ir" aria-label={nombre ? t('pie.org.irA', { ir: textoIr, nombre }) : textoIr} title={textoIr} onClick={alNavegar}>
+          <Link href={destino} className="rv-ps-ir" aria-label={nombre ? t('pie.org.irA', { ir: textoIr, nombre }) : textoIr} onClick={alNavegar}>
             {textoIr} <span aria-hidden>↗</span>
           </Link>
         )}
@@ -112,10 +112,12 @@ export function ConmutadorTema() {
     <fieldset className="rv-ps-seg" data-conmutador="tema">
       <legend className="rv-ps-sr">{t('pie.tema.titulo')}</legend>
       {OPCIONES_TEMA.map(({ valor, Icono }) => (
-        <label key={valor} title={t(`pie.tema.${valor}`)}>
-          <input type="radio" className="rv-ps-sr" name={nombre} value={valor} checked={tema === valor} onChange={() => elegir(valor)} aria-label={t(`pie.tema.${valor}`)} />
-          <Icono width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
-        </label>
+        <Tooltip key={valor} lado="derecha" texto={t(`pie.tema.${valor}`)}>
+          <label>
+            <input type="radio" className="rv-ps-sr" name={nombre} value={valor} checked={tema === valor} onChange={() => elegir(valor)} aria-label={t(`pie.tema.${valor}`)} />
+            <Icono width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
+          </label>
+        </Tooltip>
       ))}
     </fieldset>
   );
@@ -186,17 +188,19 @@ export function ConmutadorIdioma() {
     setFallo(true);
   }
   return (
-    <fieldset className="rv-ps-seg" data-conmutador="idioma" disabled={pendiente} aria-busy={pendiente || undefined} title={t('pie.idioma.titulo')}>
+    <fieldset className="rv-ps-seg" data-conmutador="idioma" disabled={pendiente} aria-busy={pendiente || undefined}>
       <legend className="rv-ps-sr">{t('pie.idioma.titulo')}</legend>
       {IDIOMAS.map((idioma) => {
         const bloqueado = !idiomaElegible(idioma);
         const nombreIdioma = bloqueado ? t('pie.idioma.proximamente') : t(`pie.idioma.${idioma}`);
         return (
-          <label key={idioma} title={nombreIdioma} data-no-disponible={bloqueado || undefined}>
-            <input type="radio" className="rv-ps-sr" name={nombre} value={idioma} checked={activo === idioma} disabled={bloqueado}
-              onChange={() => { void elegir(idioma); }} aria-label={nombreIdioma} />
-            <Bandera pais={idioma === 'es' ? 'mx' : 'us'} />
-          </label>
+          <Tooltip key={idioma} lado="derecha" texto={nombreIdioma}>
+            <label data-no-disponible={bloqueado || undefined}>
+              <input type="radio" className="rv-ps-sr" name={nombre} value={idioma} checked={activo === idioma} disabled={bloqueado}
+                onChange={() => { void elegir(idioma); }} aria-label={nombreIdioma} />
+              <Bandera pais={idioma === 'es' ? 'mx' : 'us'} />
+            </label>
+          </Tooltip>
         );
       })}
       <span className="rv-ps-sr" role="status">{fallo ? t('pie.idioma.error') : ''}</span>
@@ -289,16 +293,16 @@ export default function PieSidebar({ organizacion, avisos, acceso, tarjeta, extr
     <div className="rv-pie rv-ps" data-pie="sidebar">
       {extra}
       <Organizacion org={organizacion} alNavegar={alNavegar} />
-      {avisos && <Link href={avisos.href} className="rv-item rv-ps-avisos" aria-label={etiqueta} title={etiqueta} data-tour="nav-notificaciones" onClick={alNavegar}>
+      {avisos && <Tooltip lado="derecha" className="rv-ps-tip-fila" texto={etiqueta}><Link href={avisos.href} className="rv-item rv-ps-avisos" aria-label={etiqueta} data-tour="nav-notificaciones" onClick={alNavegar}>
         <Bell className="rv-item__ico" width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
         <span className="rv-item__txt">{tr.t('pie.avisos.titulo')}</span>
         {p === null && <span className="rv-ps-sindato" data-estado="sin-dato" aria-hidden>?</span>}
         {typeof p === 'number' && p > 0 && (
           <span className="rv-contador" data-urgente={avisos.urgente ? 'si' : 'no'} aria-hidden>{p > TOPE_VISIBLE ? `${TOPE_VISIBLE}+` : p}</span>
         )}
-      </Link>}
+      </Link></Tooltip>}
       {acceso && (
-        <Link href={acceso.href} className="rv-ps-acceso" aria-label={acceso.texto} title={acceso.texto} onClick={alNavegar}>
+        <Link href={acceso.href} className="rv-ps-acceso" aria-label={acceso.texto} onClick={alNavegar}>
           <acceso.Icono width={16} height={16} strokeWidth={TRAZO_ICONO} aria-hidden />
           <span className="rv-ps-acceso__txt">{acceso.texto}</span>
         </Link>
