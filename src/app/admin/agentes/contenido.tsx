@@ -19,7 +19,7 @@ import {
 import { TiraCifras } from '@/app/ui-v2/graficas';
 import { AccionesAgente } from './acciones-agente';
 import { getT } from '@/lib/i18n/servidor';
-import { haceTiempo, resultadoCorrida } from './corrida-visual';
+import { corridaDe, haceTiempo, leerCorridas, resultadoCorrida } from './corrida-visual';
 import './agentes.css';
 
 export type AccionAlta = (previo: ResultadoAccion, fd: FormData) => Promise<ResultadoAccion>;
@@ -81,13 +81,10 @@ export async function PanelAgentesContenido({ accionAlta, accionPalanca, accionC
   const apagadoDe = new Map<string, boolean>((interruptores ?? []).map((i) => [i.id as string, i.apagado]));
   const motivoDe = new Map<string, string | null>((parados?.parados ?? []).map((p) => [p.agente, p.motivo]));
 
-  const corridas = new Map<string, Corrida>();
-  await Promise.all(agentes.map(async (a) => {
-    try { corridas.set(a.id, await ultimaCorridaDe(a.id)); } catch { corridas.set(a.id, 'error'); }
-  }));
+  const corridas = await leerCorridas(agentes.map((a) => a.id), ultimaCorridaDe);
 
   const filas: Fila[] = agentes.map((a) => {
-    const c = corridas.get(a.id) ?? 'error';
+    const c: Corrida = corridaDe(corridas, a.id); // null = sin corridas (neutro); 'error' = la consulta falló
     const apagado = interruptores === null ? null : apagadoDe.get(`agente:${a.id}`);
     const motivo = motivoDe.get(a.id) ?? null;
     const real = estadoRealDeAgente({
