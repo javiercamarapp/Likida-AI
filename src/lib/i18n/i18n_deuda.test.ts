@@ -47,6 +47,22 @@ const MIGRADOS = [
   'src/app/admin/command-palette.tsx',
   'src/app/admin/salir-admin.tsx',
   'src/app/login/vista-login.tsx',
+  // P11 (admin en inglés): archivos de /admin que quedaron sin texto suelto.
+  'src/app/admin/agentes/acciones-agente.tsx',
+  'src/app/admin/aprobaciones/rebotes.tsx',
+  'src/app/admin/bitacora/page.tsx',
+  'src/app/admin/consola.tsx',
+  'src/app/admin/crecimiento/page.tsx',
+  'src/app/admin/equipo/gestion-persona.tsx',
+  'src/app/admin/equipo/page.tsx',
+  'src/app/admin/escalaciones/page.tsx',
+  'src/app/admin/flotas/[id]/ficha.tsx',
+  'src/app/admin/flotas/[id]/page.tsx',
+  'src/app/admin/flotas/alta.tsx',
+  'src/app/admin/flotas/page.tsx',
+  'src/app/admin/notificaciones/lista.tsx',
+  'src/app/admin/resumen-mando.tsx',
+  'src/app/admin/tu-turno/vista.tsx',
 ];
 
 interface Base { version: 1; descripcion: string; archivos: Record<string, number> }

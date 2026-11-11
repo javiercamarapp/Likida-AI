@@ -12,8 +12,8 @@ import { getT } from '@/lib/i18n/servidor';
 export const dynamic = 'force-dynamic';
 
 async function accionAlta(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t } = await getT('admin_agentes');
   'use server';
+  const { t } = await getT('admin_agentes');
   const s = await requireSuperadmin();
   try {
     const v = validarDefinicion({
@@ -43,8 +43,8 @@ async function accionAlta(_previo: ResultadoAccion, fd: FormData): Promise<Resul
  * único que cambia es desde dónde se alcanza.
  */
 async function accionPalanca(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t } = await getT('admin_agentes');
   'use server';
+  const { t } = await getT('admin_agentes');
   // RE-GATEO: el action es un endpoint público en la práctica — el layout
   // solo protegió el render (patrón de administracion.ts).
   const { userId } = await requireSuperadmin();

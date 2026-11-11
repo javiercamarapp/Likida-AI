@@ -99,8 +99,8 @@ function periodoMesActualMx(): { ini: string; fin: string } {
  * Emite la mensualidad de una flota.
  */
 async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t } = await getT('admin_dinero');
   'use server';
+  const { t } = await getT('admin_dinero');
   const s = await requireSuperadmin();
   const tenantId = String(fd.get('tenantId') ?? '');
   if (!tenantId) return { error: t('costos_facturacion.elige_una_flota') };
@@ -136,8 +136,8 @@ async function accionEmitir(_previo: ResultadoAccion, fd: FormData): Promise<Res
  * queda registrado quién y con qué movimiento.
  */
 async function accionConciliar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t } = await getT('admin_dinero');
   'use server';
+  const { t } = await getT('admin_dinero');
   const s = await requireSuperadmin();
   // Confirmación extra (step-up reutilizado): marcar pagada dispara además el timbrado de un CFDI real.
   const pasoMfa = await pasoExtraSuperadmin('dinero_saas', s);

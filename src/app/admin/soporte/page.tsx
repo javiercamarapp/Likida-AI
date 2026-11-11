@@ -128,8 +128,8 @@ export default async function SoportePage({
   // renderizar no dice nada de quién manda el POST.
 
   async function accionResponder(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t: ta } = await getT('admin_flotas');
     'use server';
+  const { t: ta } = await getT('admin_flotas');
     const s = await requireSuperadmin();
     try {
       const { id, tenantId } = await flotaDelTicket(fd);
@@ -153,8 +153,8 @@ export default async function SoportePage({
   }
 
   async function accionTomar(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t: ta } = await getT('admin_flotas');
     'use server';
+  const { t: ta } = await getT('admin_flotas');
     const s = await requireSuperadmin();
     try {
       const { id, tenantId } = await flotaDelTicket(fd);
@@ -167,8 +167,8 @@ export default async function SoportePage({
   }
 
   async function accionEstado(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t: ta } = await getT('admin_flotas');
     'use server';
+  const { t: ta } = await getT('admin_flotas');
     const s = await requireSuperadmin();
     try {
       const { id, tenantId } = await flotaDelTicket(fd);

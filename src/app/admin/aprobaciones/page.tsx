@@ -48,8 +48,8 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   ]);
 
   async function accionResolver(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
-  const { t } = await getT('admin_inicio');
     'use server';
+  const { t } = await getT('admin_inicio');
     const s = await requireSuperadmin();
     const id = String(fd.get('pieza') ?? '');
     const operacion = String(fd.get('operacion') ?? '');
@@ -77,8 +77,8 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   }
 
   async function accionEnviar(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
-  const { t } = await getT('admin_inicio');
     'use server';
+  const { t } = await getT('admin_inicio');
     const s = await requireSuperadmin();
     try {
       const r = await enviarPiezaPorCorreo(String(fd.get('pieza') ?? ''), s.userId);
@@ -92,8 +92,8 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   // A36-R11-01: salida del callejón del envío ambiguo. Quien aprieta el botón
   // afirma que verificó en Resend que el correo NO salió.
   async function accionLiberar(_previo: ResultadoPieza, fd: FormData): Promise<ResultadoPieza> {
-  const { t } = await getT('admin_inicio');
     'use server';
+  const { t } = await getT('admin_inicio');
     const s = await requireSuperadmin();
     try {
       const r = await liberarEnvioAmbiguo(String(fd.get('pieza') ?? ''), s.userId);
@@ -124,8 +124,8 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
   }
 
   async function accionVaciarLote(_previo: ResultadoVaciado, fd: FormData): Promise<ResultadoVaciado> {
-  const { t } = await getT('admin_inicio');
     'use server';
+  const { t } = await getT('admin_inicio');
     const s = await requireSuperadmin();
     try {
       const params = leerParametrosLote(fd);
@@ -234,7 +234,7 @@ export default async function PaginaAprobaciones({ searchParams }: { searchParam
       {/* REBOTES Y QUEJAS: el webhook de Resend (0124) llevaba meses escribiendo `entrega_estado` y llenando `correo_suprimido` (0217)
           y NINGÚN .tsx lo pintaba. Aquí porque es la misma tabla, el mismo operador y la misma sesión: quien aprueba lo que sale es
           quien tiene que ver qué no llegó. Sin botón de «reactivar»: suprimir es para siempre (0217). */}
-      <RebotesYBajas rebotes={rebotes} suprimidos={suprimidos} />
+      <RebotesYBajas rebotes={rebotes} suprimidos={suprimidos} t={t} />
     </>
   );
 

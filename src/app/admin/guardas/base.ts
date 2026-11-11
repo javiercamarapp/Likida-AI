@@ -6,8 +6,7 @@ export const BASE_PESTANAS_PROPIAS: Record<string, number> = {};
 
 /** admin_encabezados_contrato: un MarcoPagina por pantalla, sin BarraPagina, sin h1 propio, apoyo <= 140. */
 export const BASE_BARRA_PAGINA: Record<string, number> = {};
-export const BASE_H1_PROPIO: Record<string, number> = {
-};
+export const BASE_H1_PROPIO: Record<string, number> = {};
 export const BASE_APOYO_LARGO: Record<string, number> = {};
 export const BASE_MARCOS_MULTIPLES: Record<string, number> = {};
 /** Pantallas (carpetas con page.tsx) que todavía no usan MarcoPagina. */
@@ -22,7 +21,7 @@ export const BASE_PAGINAS_FUERA_DEL_MENU: string[] = [
 
 /** sin_emojis_en_producto: emoji por archivo (src/app y src/lib, sin pruebas). */
 export const BASE_EMOJIS: Record<string, number> = {
-  'app/admin/calidad-evals/page.tsx': 4,
+  'app/admin/calidad-evals/page.tsx': 2,
   'app/api/demo/route.ts': 1,
   'app/api/export/jornada/route.ts': 1,
   'app/api/export/poliza/route.ts': 1,

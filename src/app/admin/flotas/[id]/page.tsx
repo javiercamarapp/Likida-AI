@@ -50,8 +50,8 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
   // SeccionInterruptores lo exige — así que vive aquí, con acceso a `id`
   // por closure, y no en ficha.tsx, que es puro presentacional).
   async function accionInterruptorPipeline(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t } = await getT('admin_flotas');
     'use server';
+  const { t } = await getT('admin_flotas');
     // RE-GATEO: el action es un endpoint público en la práctica — el layout
     // solo protegió el render (mismo patrón que observabilidad/page.tsx).
     const { userId } = await requireSuperadmin();
@@ -76,8 +76,8 @@ export default async function PaginaFicha({ params, searchParams }: { params: Pr
 
   // A5-01: el interruptor `agente_chofer_habilitado` (0859). SOLO superadmin (re-gateado aquí: la acción es un endpoint), con motivo y bitácora.
   async function accionAgenteChofer(_previo: ResultadoAccion, fd: FormData): Promise<ResultadoAccion> {
-  const { t } = await getT('admin_flotas');
     'use server';
+  const { t } = await getT('admin_flotas');
     const { userId } = await requireSuperadmin();
     const operacion = String(fd.get('operacion') ?? '');
     if (operacion !== 'habilitar' && operacion !== 'deshabilitar') return { error: t('flotas.operacion_desconocida') };
