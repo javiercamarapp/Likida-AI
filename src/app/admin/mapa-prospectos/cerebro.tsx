@@ -502,7 +502,6 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
   // ── LAS CIFRAS: del resumen del servidor hasta que llega el detalle; después, de la cartera filtrada ──────────
   // Mismo universo y misma definición de «vivo» (ver prospectos-mapa.ts › indiceProspectos): al llegar el detalle sin filtros, las cifras
   // no cambian. Lo que SOLO el detalle sabe (urgentes: sale de las notas) se dice «cargando» y no se rellena con un cero.
-  const desdeResumen = !listo && resumen !== null;
   const totalCifra = listo ? filtrados.length : resumen?.total ?? null;
   const conTelefono = listo ? conTelefonoDetalle : resumen?.conTelefono ?? null;
   const conDecisor = listo ? conDecisorDetalle : resumen?.conDecisor ?? null;
@@ -936,7 +935,7 @@ export function Cerebro({ resumen = null, inicial, estadoInicial }: {
         </Tarjeta>
       </FilaTarjetas>
 
-      <Tarjeta titulo="Los 12 más cerrables del país" estado={!listo ? 'cargando' : ordenados.length === 0 ? 'vacio' : 'ok'} esqueleto={<EsqTarjetaV2 alto={220} />}
+      <Tarjeta titulo="Los 12 más cerrables del país" estado={!listo ? 'cargando' : ordenados.length === 0 ? 'vacio' : 'ok'} esqueleto={<EsqTarjetaV2 alto={240} />}
         mensaje="Ningún prospecto pasa el filtro" detalle="Quita criterios del cajón de filtros para ver la cartera.">
         <div className="cer-grid">
           {ordenados.slice(0, 12).map((p) => (

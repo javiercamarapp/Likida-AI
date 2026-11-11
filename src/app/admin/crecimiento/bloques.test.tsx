@@ -26,7 +26,6 @@ import { BloqueActivacion, BloqueCohortes, BloqueCostoYCampanas, BloqueEmbudoAdq
 import { ControlCampanas } from './campanas';
 import CrecimientoPage from './page';
 
-const ESTADOS = Object.fromEntries(['nuevo', 'contactado', 'appointment', 'rescheduled', 'cancelled', 'no-show', 'demo', 'proposal', 'pilot', 'won', 'lost'].map((e) => [e, 0])) as Record<string, number>;
 const resumen = (total: number, porEtapa: Record<string, number>) => ({ generadoEn: 'x', total, porEtapa, conTelefono: 0, conDecisor: 0, sinPlaza: 0, porEntidad: {} });
 const html = async (bloque: () => Promise<React.ReactElement> | React.ReactElement) => renderToStaticMarkup(await bloque());
 const CAMPANA = { id: 'c-1', canal: 'meta' as const, idExterno: 'x', nombre: 'Campaña A', presupuestoAprobadoUsd: 100, cplObjetivoUsd: 5, estado: 'activa' as const, aprobadoPorEmail: null, aprobadoEn: null, gastoRealUsd: null, gastoMedidoEn: null };
